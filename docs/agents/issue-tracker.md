@@ -6,7 +6,7 @@ Use the Atlassian MCP tools (`createJiraIssue`, `editJiraIssue`, `getJiraIssue`,
 
 ## Conventions
 
-- **Hierarchy**: Epic → Story / Task / Bug. Every Story or Task has an Epic as `parent`. The first epics come from `planning/backlog.py` (one per plan epic, labelled with its phase, e.g. `phase-1-foundations`).
+- **Hierarchy**: Epic → Task / Bug (RP has no Story type; plan stories are Tasks). Every Task has an Epic as `parent`. Epics are RP-9 … RP-39. The first epics come from `planning/backlog.py` (one per plan epic, labelled with its phase, e.g. `phase-1-foundations`).
 - **Create an issue**: `createJiraIssue` with `projectKey: "RP"`, `issueType`, `summary`, markdown `description`, `parent` (the Epic key), `labels`.
 - **Read an issue**: `getJiraIssue` with `view: "evidence"` (includes links); comments via `listJiraIssueComments`.
 - **List issues**: `searchJiraIssuesUsingJql`, e.g. `project = RP AND labels = ready-for-agent AND statusCategory != Done ORDER BY rank`.
@@ -14,7 +14,7 @@ Use the Atlassian MCP tools (`createJiraIssue`, `editJiraIssue`, `getJiraIssue`,
 - **Labels**: edit the `labels` field with `editJiraIssue` (add/remove the triage labels in `docs/agents/triage-labels.md`).
 - **Close**: `transitionJiraIssue` to a Done-category status, with a comment saying why.
 - **Blocking edges**: Jira issue links of type **"Blocks"** (blocker *blocks* blocked). A ticket is unblocked when every issue that blocks it is Done.
-- **Specs** (`/to-spec`): one Jira issue (type Task, label `spec`) under the Epic, holding the spec in its description; tickets from `/to-tickets` are Stories under the same Epic that link back to the spec.
+- **Specs** (`/to-spec`): one Jira issue (type Task, label `spec`) under the Epic, holding the spec in its description; tickets from `/to-tickets` are Tasks under the same Epic that link back to the spec.
 - **Code ↔ ticket**: branch names and commit messages start with the key, e.g. `RP-42-project-rls`; PRs in GitHub mention the key.
 
 ## When a skill says "publish to the issue tracker"
