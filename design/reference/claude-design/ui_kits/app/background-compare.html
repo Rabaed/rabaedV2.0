@@ -1,0 +1,53 @@
+<!-- @dsCard group="App" viewport="1440x820" name="Background — 4 options" subtitle="1 grey · 2 warm · 3 white page + cream boxes · 4 brand-correlated tomato family · light + dark" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Rabaed — Background comparison</title>
+<link rel="stylesheet" href="../../styles.css">
+<style>
+html,body{margin:0}a{color:var(--tomato-600)}a:hover{color:var(--tomato-700)}
+body{background:#e4e6ea;font-family:var(--font-ui);color:#1f2430;-webkit-font-smoothing:antialiased}
+.bar{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 20px;background:#fff;border-bottom:1px solid #e2e3e7}
+.bar b{font-size:15px;margin-inline-end:6px}
+.seg{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:#f1f2f4;box-shadow:inset 0 0 0 1px #e2e3e7}
+.seg button{height:30px;padding:0 12px;border:0;border-radius:6px;background:transparent;font:inherit;font-size:13px;font-weight:600;color:#6a6e7a;cursor:pointer;white-space:nowrap}
+.seg button.on{background:#fff;color:#1f2430;box-shadow:0 1px 2px rgba(0,0,0,.1)}
+.sp{flex:1}
+.wrap{display:grid;gap:16px;padding:16px 20px 24px}
+.wrap.two{grid-template-columns:repeat(2,minmax(0,1fr))}.wrap.three{grid-template-columns:repeat(3,minmax(0,1fr))}.wrap.four{grid-template-columns:repeat(2,minmax(0,1fr))}
+.pane{display:flex;flex-direction:column;gap:8px;min-width:0}
+.lbl{display:flex;align-items:center;gap:10px;font-size:13px;font-weight:600}
+.sw{width:22px;height:22px;border-radius:6px;box-shadow:inset 0 0 0 1px rgba(0,0,0,.12)}
+.lbl code{font:600 12px ui-monospace,Menlo,monospace;color:#6a6e7a}
+.fr{position:relative;width:100%;aspect-ratio:1440/900;border-radius:12px;overflow:hidden;box-shadow:0 0 0 1px #d5d8de,0 8px 24px rgba(31,36,48,.10);background:#fff}
+.fr iframe{position:absolute;left:0;top:0;width:1440px;height:900px;border:0;transform-origin:0 0}
+</style>
+</head>
+<body>
+<div class="bar"><b>Background</b>
+<span class="seg" id="scr"><button data-s="saas-shell.html" class="on">Home</button><button data-s="submittals-kanban.html">Kanban</button><button data-s="submittals-list.html">List</button><button data-s="snag-list.html">Snag List</button><button data-s="reports.html">Reports</button><button data-s="settings-numbering.html">Settings</button></span>
+<span class="sp"></span>
+<span class="seg" id="thm"><button data-t="light">Light</button><button data-t="dark">Dark</button></span>
+<span class="seg" id="mode"><button data-m="four">All four</button><button data-m="three">1 · 2 · 3</button><button data-m="w4">2 vs 4</button><button data-m="i4">3 vs 4</button><button data-m="two">1 vs 2</button><button data-m="w3">2 vs 3</button><button data-m="grey">1 only</button><button data-m="warm">2 only</button><button data-m="inv">3 only</button><button data-m="br">4 only</button></span>
+</div>
+<div class="wrap two" id="wrap">
+<div class="pane" data-p="grey"><div class="lbl"><span class="sw" style="background:#f6f7f9"></span>1 · Current grey <code>#F6F7F9</code> · <span style="font-weight:500;color:#6a6e7a">dark: navy</span></div><div class="fr"><iframe id="fg" title="Grey background"></iframe></div></div>
+<div class="pane" data-p="warm"><div class="lbl"><span class="sw" style="background:#fdf9f5"></span>2 · Warm <code>#FDF9F5</code> · <span style="font-weight:500;color:#6a6e7a">dark: espresso</span></div><div class="fr"><iframe id="fw" title="Warm background"></iframe></div></div>
+<div class="pane" data-p="inv"><div class="lbl"><span class="sw" style="background:#fff"></span><span class="sw" style="background:#fdf9f5"></span>3 · White page, <code>#FDF9F5</code> boxes &amp; header · espresso sidebar</div><div class="fr"><iframe id="fi" title="Inverted warm"></iframe></div></div>
+<div class="pane" data-p="br"><div class="lbl"><span class="sw" style="background:#2c1711"></span><span class="sw" style="background:#fff3ee"></span><span class="sw" style="background:#fffbf9"></span>4 · Brand-correlated · tomato-brown sidebar, tomato-50 header, blush boxes</div><div class="fr"><iframe id="fb" title="Brand correlated"></iframe></div></div>
+</div>
+<script>
+const K='rb-bgcmp';let st={s:'saas-shell.html',m:'four'};try{Object.assign(st,JSON.parse(localStorage.getItem(K)||'{}'))}catch(e){}
+function fit(){document.querySelectorAll('.fr').forEach(f=>{const i=f.querySelector('iframe');i.style.transform='scale('+(f.clientWidth/1440)+')'})}
+function thm(){try{return (JSON.parse(localStorage.getItem('rb-shell-v1')||'{}').mode)||'light'}catch(e){return 'light'}}
+function load(){document.getElementById('fg').src=st.s;document.getElementById('fw').src=st.s+'?bg=warm';document.getElementById('fi').src=st.s+'?bg=inv';document.getElementById('fb').src=st.s+'?bg=br';}
+function ui(){document.querySelectorAll('#scr button').forEach(b=>b.classList.toggle('on',b.dataset.s===st.s));document.querySelectorAll('#thm button').forEach(b=>b.classList.toggle('on',b.dataset.t===thm()));document.querySelectorAll('#mode button').forEach(b=>b.classList.toggle('on',b.dataset.m===st.m));
+ const w=document.getElementById('wrap');const vis={four:['grey','warm','inv','br'],w4:['warm','br'],i4:['inv','br'],three:['grey','warm','inv'],two:['grey','warm'],w3:['warm','inv']}[st.m]||[st.m];w.className='wrap'+(vis.length===4?' four':vis.length===3?' three':vis.length===2?' two':'');document.querySelectorAll('.pane').forEach(p=>p.style.display=vis.includes(p.dataset.p)?'':'none');localStorage.setItem(K,JSON.stringify(st));requestAnimationFrame(fit)}
+document.getElementById('scr').onclick=e=>{const b=e.target.closest('button');if(!b)return;st.s=b.dataset.s;ui();load()};
+document.getElementById('thm').onclick=e=>{const b=e.target.closest('button');if(!b)return;let o={};try{o=JSON.parse(localStorage.getItem('rb-shell-v1')||'{}')}catch(x){}o.mode=b.dataset.t;localStorage.setItem('rb-shell-v1',JSON.stringify(o));ui();load()};
+document.getElementById('mode').onclick=e=>{const b=e.target.closest('button');if(!b)return;st.m=b.dataset.m;ui()};
+addEventListener('resize',fit);ui();load();
+</script>
+</body>
+</html>

@@ -1,0 +1,612 @@
+﻿Issue Id,Parent Id,Issue Type,Summary,Epic Name,Description,Labels,Labels,Priority
+E1,,Epic,UX research & information architecture,UX research & information architecture,Understand the people who will use Rabaed on real projects and design the structure of the product before any UI is built.,rabaed,phase-0-ux,High
+E1-S1,E1,Story,Define personas,,"*Acceptance criteria*
+Personas written for: Contractor Engineer (site, phone), Contractor PM, Document Controller, Consultant Engineer, Consultant Manager, Owner Representative, Owner executive, Authorized Person, Rabaed Engineer. Each has goals, devices, frequency and pains.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-0-ux,High
+E1-S2,E1,Story,"Interview 6–10 real users across Contractor, Consultant and Owner",,"*Acceptance criteria*
+Claude prepares the interview guide and note template; product owner runs interviews (no designer on the team); at least 2 per side; Claude synthesises findings with quotes and top 10 pains.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-0-ux,High
+E1-S3,E1,Story,Map core journeys,,"*Acceptance criteria*
+Journey maps for: submittal lifecycle incl. Code C revision, package, inspection request (WIR) on site, daily site report, snag closure, drawing review with markups.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-0-ux,High
+E1-S4,E1,Story,Information architecture & navigation,,"*Acceptance criteria*
+Sitemap for platform level (home, projects, company) and project tabs; navigation model agreed for desktop and phone; Rabaed Admin IA separate.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-0-ux,High
+E1-S5,E1,Story,Screen inventory & MVP screen list,,"*Acceptance criteria*
+Every screen listed with persona, device, priority; MVP cut agreed with product owner.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-0-ux,Medium
+E2,,Epic,"Design system (bilingual, RTL-first)","Design system (bilingual, RTL-first)","One visual language and component library for web and future app, designed Arabic/RTL and English from day one.",rabaed,phase-0-ux,High
+E2-S1,E2,Story,Collect existing design sources,,"*Acceptance criteria*
+Existing Claude-made designs and the old Figma file (colours, components) gathered into design/reference/ in the repo; inventory of what to keep, refine or drop.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-0-ux,Highest
+E2-S2,E2,Story,Brand foundations,,"*Acceptance criteria*
+Starting from the existing Figma colours and components: logo usage, colour palette (incl. Stage, Review Code and Step Age colours), typography pairing for Arabic and Latin, iconography, tone of voice.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-0-ux,High
+E2-S3,E2,Story,Design tokens,,"*Acceptance criteria*
+Colour, spacing, radius, type scale and elevation tokens defined and exported for code (Tailwind theme).
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-0-ux,High
+E2-S4,E2,Story,RTL & bilingual rules,,"*Acceptance criteria*
+Mirroring rules, bidirectional text handling, number/date display (incl. optional Hijri), bilingual label patterns documented with examples.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-0-ux,High
+E2-S5,E2,Story,Core component specs,,"*Acceptance criteria*
+Specs for buttons, inputs, selects, tables, Kanban card, Stage badge, Review Code badge, Step Age dots, avatar/company chip, file tile, empty/error/loading states.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-0-ux,High
+E2-S6,E2,Story,Accessibility baseline,,"*Acceptance criteria*
+WCAG 2.2 AA targets: contrast, focus, keyboard, touch sizes (≥44px on phone) documented and checked in components.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-0-ux,Medium
+E2-S7,E2,Story,Component library in code with Storybook,,"*Acceptance criteria*
+Components implemented (shadcn/ui + Tailwind), each with EN and AR stories, light theme; visual regression snapshot per component.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-0-ux,High
+E3,,Epic,Key flow prototypes & usability testing,Key flow prototypes & usability testing,"High-fidelity, clickable prototypes of the flows that make or break the product, tested with real users before build.",rabaed,phase-0-ux,High
+E3-S1,E3,Story,Logic prototype: workflow and visibility simulator,,"*Acceptance criteria*
+Single HTML file (mattpocock prototype skill, LOGIC branch): play Contractor/Consultant/Owner members, move a submittal through Send, Submit, codes, Revision and Package, and see live who can see what. Used to validate docs/visibility.md with users before build.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-0-ux,Highest
+E3-S2,E3,Story,Coded app shell with mock data for UI variants,,"*Acceptance criteria*
+Minimal app shell + design system + mock data so screen prototypes are judged inside the real layout (prototype skill, UI branch, ?variant= switcher, hidden in production).
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-0-ux,Highest
+E3-S3,E3,Story,Prototype: project workspace shell and tabs,,"*Acceptance criteria*
+Project header, tab bar (Dashboard, Submittals, Inspections, Snag List, Site Reports, Drawings, Files, Views, Schedule (coming), Settings; Packages inside Submittals, Activity Feed inside Dashboard, Approved Supplier List inside Settings), Need My Action entry, phone variant.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-0-ux,Highest
+E3-S4,E3,Story,"Prototype: submittal list, Kanban and detail",,"*Acceptance criteria*
+List and Kanban (Stages as columns, Steps as swimlanes), detail with Details / Chat / Internal Communication tabs, approvals log, Linked items.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-0-ux,Highest
+E3-S5,E3,Story,Prototype: Transition pop-ups and signing,,"*Acceptance criteria*
+Send for Review, Return, Submit, Recommend Code, Issue Code A–D with comments, signing confirmation, missing-signature error.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-0-ux,Highest
+E3-S6,E3,Story,Prototype: Revision flow,,"*Acceptance criteria*
+Create Rev 1 from Code C, previous-revision panel, carried Markups needing replies.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-0-ux,High
+E3-S7,E3,Story,Prototype: inspection on phone,,"*Acceptance criteria*
+Request inspection, link approved submittals, on-site checklist with photos, Failed → Snag creation, result.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-0-ux,Highest
+E3-S8,E3,Story,Prototype: daily site report on phone,,"*Acceptance criteria*
+Fill a large report quickly (manpower/equipment tables, weather, photos), autosave, submit.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-0-ux,High
+E3-S9,E3,Story,Prototype: Form builder,,"*Acceptance criteria*
+Palette, sections, field properties, conditions, EN/AR/phone/PDF previews, publish errors.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-0-ux,High
+E3-S10,E3,Story,Prototype: Workflow builder (React Flow),,"*Acceptance criteria*
+Stage bands, Steps, Transitions, side panel (actor rule, outcome, action form, notifications), validation errors, publish.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-0-ux,High
+E3-S11,E3,Story,"Prototype: drawings viewer, Markups and overlay",,"*Acceptance criteria*
+Viewer, Markup placing/answering, overlay two revisions, Pins.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-0-ux,Medium
+E3-S12,E3,Story,Prototype: Floor and Plan views,,"*Acceptance criteria*
+Tower → floors with Location Status, plan with Pins filtered by visibility.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-0-ux,Medium
+E3-S13,E3,Story,Prototype: Document Numbering settings page,,"*Acceptance criteria*
+Clickable design of Settings → Document Numbering: segment chips (add, drag to reorder, remove, max 6), per-segment options, separator, sequence digits, sequence-scope ticks, live preview with example values, per-type override list, 'applies to new items only' confirmation, read-only view for non-admins, EN and AR (RTL) versions. Based on the existing 'Document Numbering' design.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-0-ux,High
+E3-S14,E3,Story,Prototype: Project Settings,,"*Acceptance criteria*
+Participants and roles, Visibility grants with Visibility Gap warnings, Positions, numbering pattern builder with live preview, Stages.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-0-ux,High
+E3-S15,E3,Story,Prototype: Rabaed Admin,,"*Acceptance criteria*
+Company onboarding, member support, reassign/reset with reason, monitoring screens.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-0-ux,Medium
+E3-S16,E3,Story,Usability test round 1,,"*Acceptance criteria*
+5+ participants across roles run tasks on the prototypes; success rate and issues logged; top issues fixed in designs.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-0-ux,Highest
+E3-S17,E3,Story,Usability test round 2,,"*Acceptance criteria*
+Re-test fixed flows; sign-off that MVP flows are ready for build.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-0-ux,High
+E4,,Epic,Platform foundations & DevOps,Platform foundations & DevOps,"Repository, environments and delivery pipeline on AWS, ready for two Instances (ADR 0005).",rabaed,phase-1-foundations,High
+E4-S1,E4,Story,Repository and project structure,,"*Acceptance criteria*
+Monorepo with web app, API, workers and shared packages; lint, format, type-check; CONTRIBUTING and CLAUDE.md.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-1-foundations,Highest
+E4-S2,E4,Story,CI pipeline,,"*Acceptance criteria*
+Every PR runs lint, type-check, unit, integration and visibility test suites; failing visibility test blocks merge.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-1-foundations,Highest
+E4-S3,E4,Story,Infrastructure as code for AWS,,"*Acceptance criteria*
+Dev, staging and production environments defined as code in a Gulf region; the same code can deploy a second Instance.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-1-foundations,High
+E4-S4,E4,Story,"PostgreSQL, object storage and KMS",,"*Acceptance criteria*
+Managed Postgres with backups and PITR; S3 buckets with Project-prefixed keys; KMS keys for encryption and PDF sealing.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-1-foundations,High
+E4-S5,E4,Story,Background workers and outbox processor,,"*Acceptance criteria*
+Worker service processes the outbox with retries and dead-letter; jobs visible for the Job Monitor.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-1-foundations,High
+E4-S6,E4,Story,Observability,,"*Acceptance criteria*
+Structured logs, metrics, traces and alerting; no customer content in logs.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-1-foundations,Medium
+E4-S7,E4,Story,Transactional email,,"*Acceptance criteria*
+Email provider set up with domain authentication; templates are i18n; delivery events captured into the Delivery Log.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-1-foundations,Medium
+E5,,Epic,"Identity, Companies & Members","Identity, Companies & Members","Companies onboarded by Rabaed, Members invited by the Authorized Person, signatures on file.",rabaed,phase-1-foundations,High
+E5-S1,E5,Story,Authentication,,"*Acceptance criteria*
+Email + password sign-in with MFA option, password reset, session management, lockout after failed attempts.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-1-foundations,Highest
+E5-S2,E5,Story,Company model and onboarding API,,"*Acceptance criteria*
+Company with CR, VAT (unique), official name (EN/AR), Authorized Person; created only via Rabaed Admin.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-1-foundations,Highest
+E5-S3,E5,Story,Member invitation and management,,"*Acceptance criteria*
+Authorized Person invites, deactivates Members; Member belongs to one Company; can_create_projects flag.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-1-foundations,Highest
+E5-S4,E5,Story,Member profile and signature,,"*Acceptance criteria*
+Member uploads/draws a Signature; versioned (member_signature); signing blocked without one with a clear message.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-1-foundations,High
+E5-S5,E5,Story,Authorized Person transfer,,"*Acceptance criteria*
+Only via Rabaed Admin with reason; history kept.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-1-foundations,Medium
+E6,,Epic,Tenancy & Visibility,Tenancy & Visibility,Project-level isolation with RLS and the visibility rules in docs/visibility.md. The #1 requirement.,rabaed,phase-1-foundations,High
+E6-S1,E6,Story,RLS framework,,"*Acceptance criteria*
+Every tenant table has project_id or company_id and an RLS policy; request sets member context transaction-locally; a query without context returns nothing.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-1-foundations,Highest
+E6-S2,E6,Story,work_item_access and visibility grants,,"*Acceptance criteria*
+Access rows maintained by the engine; Member grants ⊆ Participant grants enforced on write; Location grants include subtree.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-1-foundations,Highest
+E6-S3,E6,Story,Visibility test suite,,"*Acceptance criteria*
+All 22 scenarios in docs/visibility.md automated against the API; runs in CI; blocks release on failure.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-1-foundations,Highest
+E6-S4,E6,Story,404-not-403 and ID policy,,"*Acceptance criteria*
+Inaccessible resources return 404; all public IDs are UUIDv7.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-1-foundations,High
+E6-S5,E6,Story,Signed file URLs,,"*Acceptance criteria*
+Files served only through short-lived signed URLs after an access check; expired links fail.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-1-foundations,High
+E6-S6,E6,Story,Leak-channel checklist in PR template,,"*Acceptance criteria*
+PR template asks which leak channels a change touches (counts, search, emails, pins…) and requires scenario updates.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-1-foundations,Medium
+E7,,Epic,Audit trail & compliance baseline,Audit trail & compliance baseline,"Append-only, hash-chained history and SOC 2 / ISO 27001-ready controls (ADR 0001).",rabaed,phase-1-foundations,High
+E7-S1,E7,Story,Hash-chained work_item_event,,"*Acceptance criteria*
+Insert-only for the app role; seq gap-free per item; prev_hash/hash chain; verification job detects tampering.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-1-foundations,Highest
+E7-S2,E7,Story,project_event and Activity Feed source,,"*Acceptance criteria*
+Project-level events recorded append-only.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-1-foundations,High
+E7-S3,E7,Story,admin_action log,,"*Acceptance criteria*
+Every Rabaed Admin read of customer data and every action logged with engineer and reason.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-1-foundations,High
+E7-S4,E7,Story,Security controls baseline,,"*Acceptance criteria*
+Encryption at rest/in transit, least-privilege IAM, secrets management, dependency scanning, access review procedure documented.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-1-foundations,High
+E8,,Epic,Internationalisation & RTL,Internationalisation & RTL,"Arabic and English from day one, ready for more languages via Lokalise keys.",rabaed,phase-1-foundations,High
+E8-S1,E8,Story,Translation key framework with Lokalise,,"*Acceptance criteria*
+All UI strings are keys; Lokalise sync in CI; missing keys fail the build for EN/AR.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-1-foundations,High
+E8-S2,E8,Story,Locale and direction switching,,"*Acceptance criteria*
+Per-Member language; full RTL layout mirroring; bidi-safe components.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-1-foundations,High
+E8-S3,E8,Story,"Dates, numbers and optional Hijri",,"*Acceptance criteria*
+Locale formatting; Project setting to show Hijri beside Gregorian.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-1-foundations,Medium
+E9,,Epic,"Projects, Participants & Settings","Projects, Participants & Settings",Creating Projects and configuring who takes part and who sees what.,rabaed,phase-2-engines,High
+E9-S1,E9,Story,Create Project,,"*Acceptance criteria*
+Project Creator creates a Project; Host Company and per-company Project Number assigned; creator becomes Project Admin; defaults copied in.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-2-engines,Highest
+E9-S2,E9,Story,Participants and Project Roles,,"*Acceptance criteria*
+Invite Companies in a role (incl. Owner, custom roles based on a built-in role); withdraw Participant.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-2-engines,Highest
+E9-S3,E9,Story,Project Members and Positions,,"*Acceptance criteria*
+Company adds its Members to the Project; Positions with Function Permissions per Work Item Type; defaults copied.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-2-engines,Highest
+E9-S4,E9,Story,"Trades, Locations and Scopes",,"*Acceptance criteria*
+Default Trades extended per Project; Location tree with configurable levels; Scopes/Sub-scopes under Trades.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-2-engines,High
+E9-S5,E9,Story,Visibility settings and Visibility Gap warnings,,"*Acceptance criteria*
+Grant 'all' or chosen values per dimension for Participants and Members; warnings for gaps and overlaps.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-2-engines,Highest
+E9-S6,E9,Story,Stages per Module,,"*Acceptance criteria*
+Default Stages per Module; rename/extend by Project Admin.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-2-engines,High
+E9-S7,E9,Story,Project Admins and closing a Project,,"*Acceptance criteria*
+Appoint Admins; close Project makes everything read-only; Signatory Access still works.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-2-engines,Medium
+E10,,Epic,Form engine,Form engine,Schema-driven forms per docs/form-engine.md.,rabaed,phase-2-engines,High
+E10-S1,E10,Story,Schema format and shared validator,,"*Acceptance criteria*
+Schema types defined; one validator used in browser and server; hidden fields ignored; draft save skips required checks.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-2-engines,Highest
+E10-S2,E10,Story,Core field types,,"*Acceptance criteria*
+text, textarea, number, currency, date/time, yes_no, select, multi_select, member, participant, headings.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-2-engines,Highest
+E10-S3,E10,Story,Attachments and photos,,"*Acceptance criteria*
+Files become Documents; camera capture on phone; EXIF time/GPS kept; frozen at first Send/Submit.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-2-engines,Highest
+E10-S4,E10,Story,Tables and calculated fields,,"*Acceptance criteria*
+Repeating rows with totals; formulas over numeric fields, no circular refs.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-2-engines,High
+E10-S5,E10,Story,Checklists,,"*Acceptance criteria*
+Answer sets, comment/photo on negative, create Snag on negative; checklist templates copied from library.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-2-engines,Highest
+E10-S6,E10,Story,Pick lists and work item references,,"*Acceptance criteria*
+Sources: Approved Supplier List, Scopes, Locations, custom; work_item_ref creates a Link with type/outcome filters.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-2-engines,High
+E10-S7,E10,Story,Conditions,,"*Acceptance criteria*
+visible_if / required_if using the shared rule language.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-2-engines,High
+E10-S8,E10,Story,Section editability by Step,,"*Acceptance criteria*
+editable_at enforced server-side; field diffs recorded as events.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-2-engines,High
+E10-S9,E10,Story,Aggregate field,,"*Acceptance criteria*
+Weekly pulls totals from issued Dailies; flags missing days with add-late/ignore.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-2-engines,Medium
+E10-S10,E10,Story,Form versioning,,"*Acceptance criteria*
+Draft/publish; immutable versions; keys stable forever; Revision copies by key.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-2-engines,Highest
+E10-S11,E10,Story,Autosave and reporting projection,,"*Acceptance criteria*
+Autosave with per-field updated_at; reportable fields into work_item_field_value.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-2-engines,Medium
+E11,,Epic,Form builder UI,Form builder UI,Visual builder for Forms and Action Forms.,rabaed,phase-2-engines,High
+E11-S1,E11,Story,Builder canvas and palette,,"*Acceptance criteria*
+Drag sections and fields; reorder; properties panel.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-2-engines,High
+E11-S2,E11,Story,Bilingual editing and previews,,"*Acceptance criteria*
+Edit EN/AR labels side by side; preview EN, AR (RTL), phone and PDF.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-2-engines,High
+E11-S3,E11,Story,Publish with validation,,"*Acceptance criteria*
+Live validation; server re-validates; clear error list linking to fields.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-2-engines,High
+E12,,Epic,Workflow engine,Workflow engine,Run-time engine per docs/workflow-engine.md (ADR 0008).,rabaed,phase-2-engines,High
+E12-S1,E12,Story,Definition model and publish validation,,"*Acceptance criteria*
+Steps, Transitions, Stages mapping; all §1 checks enforced; immutable published versions.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-2-engines,Highest
+E12-S2,E12,Story,take_transition command,,"*Acceptance criteria*
+Single transaction with row lock and idempotency key; all checks and effects in §5.1; outbox for side effects.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-2-engines,Highest
+E12-S3,E12,Story,Actor resolution and Step Pool,,"*Acceptance criteria*
+Participant by role + Visibility; pool by permission + Visibility; default holder rules; overlap/gap handling.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-2-engines,Highest
+E12-S4,E12,Story,Claim and release,,"*Acceptance criteria*
+Only one claimer wins; Need My Action query.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-2-engines,High
+E12-S5,E12,Story,Recommended and Issued Codes,,"*Acceptance criteria*
+Recommend is internal; Issued Code on final step; outcomes A–D, inspection results.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-2-engines,Highest
+E12-S6,E12,Story,Outcome hooks,,"*Acceptance criteria*
+B creates Comments; C allows Revision; D allows replacement; supplier and drawing effects; package recompute.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-2-engines,High
+E12-S7,E12,Story,Revisions and replacements,,"*Acceptance criteria*
+create_revision and replace_rejected per §5.4–5.5.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-2-engines,High
+E12-S8,E12,Story,Vacancies and withdrawal,,"*Acceptance criteria*
+Member removal → vacant; Participant withdrawal cancels raised items and leaves Participant-level vacancies.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-2-engines,High
+E12-S9,E12,Story,Conditions routing,,"*Acceptance criteria*
+Rule evaluation over form, action form and attributes; blocked with clear message if none match.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-2-engines,Medium
+E12-S10,E12,Story,Workflow version notice,,"*Acceptance criteria*
+Items on older versions show 'Workflow updated to vN' with a view of the new version.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-2-engines,Low
+E13,,Epic,Workflow builder UI (React Flow),Workflow builder UI (React Flow),Visual editor for Workflows.,rabaed,phase-2-engines,High
+E13-S1,E13,Story,Canvas with Stage bands,,"*Acceptance criteria*
+Steps as nodes inside Stage bands; Transitions as edges; zoom/pan; layout saved.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-2-engines,High
+E13-S2,E13,Story,Step and Transition side panels,,"*Acceptance criteria*
+Actor rule, outcome mode, signing; label, kind, condition builder, outcome, Action Form (form builder), notifications.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-2-engines,High
+E13-S3,E13,Story,"Validate, publish, version history",,"*Acceptance criteria*
+Live validation, publish, compare versions.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-2-engines,Medium
+E14,,Epic,Document numbering,Document numbering,Configurable Document Numbers per Project.,rabaed,phase-2-engines,High
+E14-S1,E14,Story,Numbering pattern settings with live preview,,"*Acceptance criteria*
+Settings → Document Numbering. Project Admin builds the pattern from up to 6 segments + the sequence (segments: Project code, Work Item Type code e.g. MAR, Trade code, Company code, a Location level e.g. Zone/Building/Floor, a fixed text). Reorder/remove segments; choose separator (- or /); sequence digits 3–7 (zero-padded); tick which segments the counter counts separately for (sequence scope). Live preview with a real example (e.g. TWR-TMC-EL-MAR-001). One Project default pattern, optional override per Work Item Type. Saving warns that the change applies only to new items; existing numbers never change. Revisions keep the base number with the fixed 'Rev n' suffix (not configurable). Codes are 2–6 characters and come from each Trade/Location/Company/Type. Warn if the pattern has no Company segment and several Contractors share it (their counters would reveal each other's volume, visibility rule). Only Project Admins can edit; everyone else sees it read-only.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-2-engines,High
+E14-S2,E14,Story,Gap-free assignment,,"*Acceptance criteria*
+Assigned at first exit from Draft in the same transaction; never reused; Rev suffix for revisions.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-2-engines,Highest
+E15,,Epic,Signing & Documental Records,Signing & Documental Records,"Sealed, verifiable PDFs per ADR 0003.",rabaed,phase-2-engines,High
+E15-S1,E15,Story,Signing on Transitions,,"*Acceptance criteria*
+Confirmation pop-up; event records signature version and content hash.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-2-engines,Highest
+E15-S2,E15,Story,PDF rendering pipeline,,"*Acceptance criteria*
+HTML template → PDF in record language (AR/EN/bilingual); appended PDFs/images; other files listed with hashes.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-2-engines,Highest
+E15-S3,E15,Story,PDF Templates,,"*Acceptance criteria*
+Several templates per Form; Rabaed Default portal and paper styles; versioned; engine always adds signing trail and QR.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-2-engines,High
+E15-S4,E15,Story,PAdES sealing and timestamp,,"*Acceptance criteria*
+KMS-held key signs PDF; RFC 3161 timestamp; tamper shows as broken in Adobe Reader.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-2-engines,High
+E15-S5,E15,Story,Verification page,,"*Acceptance criteria*
+QR opens a public page confirming the record's hash, outcome and date; no other data exposed.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-2-engines,Medium
+E15-S6,E15,Story,Distribution by secure link,,"*Acceptance criteria*
+Distribution List defaults per type; expiring tracked links; Delivery Log.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-2-engines,Medium
+E16,,Epic,Library & Rabaed Defaults,Library & Rabaed Defaults,"Three-level library (Rabaed, Company, Project) with copy semantics, and the default content.",rabaed,phase-2-engines,High
+E16-S1,E16,Story,Library copy mechanics,,"*Acceptance criteria*
+Copy Forms, Workflows, Types, Positions, checklists, templates down a level with provenance.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-2-engines,High
+E16-S2,E16,Story,Default submittal types,,"*Acceptance criteria*
+MAR, SAR, DAR with Forms and Workflows as agreed (engineer → PM → consultant engineer → consultant manager).
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-2-engines,Highest
+E16-S3,E16,Story,"Default inspection (WIR), Snag, Comment types",,"*Acceptance criteria*
+Forms, checklists, Workflows and results.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-2-engines,High
+E16-S4,E16,Story,Default site reports,,"*Acceptance criteria*
+Daily Site Report, Weekly, Quality, Safety forms and Workflows; Expected Frequency set.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-2-engines,High
+E16-S5,E16,Story,"Default Trades, Scopes, Stages, Positions",,"*Acceptance criteria*
+Seeded bilingual defaults.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-2-engines,High
+E17,,Epic,Work item views & navigation,Work item views & navigation,How people find and act on work.,rabaed,phase-3-modules,High
+E17-S1,E17,Story,Project workspace shell,,"*Acceptance criteria*
+Header, tabs, breadcrumbs, per design.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-3-modules,Highest
+E17-S2,E17,Story,List view,,"*Acceptance criteria*
+Grouped by Stage, filters (Type, Trade, Location, date), sorting, counts from visible items only.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-3-modules,Highest
+E17-S3,E17,Story,Kanban view,,"*Acceptance criteria*
+Stages as columns, Steps as swimlanes, Step Age dots, Review Code badges.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-3-modules,High
+E17-S4,E17,Story,Need My Action,,"*Acceptance criteria*
+Everything assigned to me or in my pools, across Projects.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-3-modules,Highest
+E17-S5,E17,Story,Work item detail,,"*Acceptance criteria*
+Details, Chat, Internal Communication, approvals log, Links, Subtasks, revisions panel, inline file preview.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-3-modules,Highest
+E17-S6,E17,Story,Search,,"*Acceptance criteria*
+Postgres FTS over visible items only.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-3-modules,Medium
+E18,,Epic,Submittals & Packages,Submittals & Packages,The first module to ship end to end.,rabaed,phase-3-modules,High
+E18-S1,E18,Story,Submittals module end to end,,"*Acceptance criteria*
+Create, send, submit, review, issue code, revise, reject/replace using default types.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-3-modules,Highest
+E18-S2,E18,Story,Packages,,"*Acceptance criteria*
+Group submittals; Open/In Progress/Closed computed; progress counts.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-3-modules,High
+E18-S3,E18,Story,Submittal Register Import,,"*Acceptance criteria*
+Excel upload, column mapping, Drafts created; available to Rabaed Admin during onboarding.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-3-modules,Medium
+E19,,Epic,Inspections (WIR),Inspections (WIR),Inspection requests from site to result.,rabaed,phase-3-modules,High
+E19-S1,E19,Story,Inspection request and required links,,"*Acceptance criteria*
+Request with Location/Trade/date; required links to approved submittals enforced.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-3-modules,Highest
+E19-S2,E19,Story,On-site inspection on phone,,"*Acceptance criteria*
+Checklist, photos, Snags from failures, result, re-inspection as Revision.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-3-modules,Highest
+E20,,Epic,Snag List,Snag List,"Snags, Comments and other follow-up types.",rabaed,phase-3-modules,High
+E20-S1,E20,Story,Snag and Comment types,,"*Acceptance criteria*
+Configurable Stages; raised_from links; source shows 'x of y comments closed'.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-3-modules,High
+E20-S2,E20,Story,Snag views with Pins,,"*Acceptance criteria*
+List, Kanban and plan Pins.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-3-modules,Medium
+E21,,Epic,Site Reports,Site Reports,"Daily, weekly and checklist reports.",rabaed,phase-3-modules,High
+E21-S1,E21,Story,Daily Site Report,,"*Acceptance criteria*
+Large form on phone, review workflow, sealed PDF, distribution.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-3-modules,Highest
+E21-S2,E21,Story,Weekly and other reports,,"*Acceptance criteria*
+Weekly with aggregates, Quality, Safety.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-3-modules,High
+E21-S3,E21,Story,Expected Frequency gaps and reminders,,"*Acceptance criteria*
+Missing reports shown and reminded; add-late/ignore decisions.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-3-modules,Medium
+E22,,Epic,Drawings,Drawings,"Drawing register, revisions, markups and overlay.",rabaed,phase-3-modules,High
+E22-S1,E22,Story,Drawing register and revisions,,"*Acceptance criteria*
+Any file type; current/superseded; approved via drawing submittals.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-3-modules,High
+E22-S2,E22,Story,Viewer and Markups,,"*Acceptance criteria*
+In-browser viewer for PDF/images (DWG via conversion); Markups with replies; carry over; open Markups → Comments on B.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-3-modules,High
+E22-S3,E22,Story,Overlay compare,,"*Acceptance criteria*
+Overlay two revisions with difference highlighting.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-3-modules,Medium
+E23,,Epic,Files,Files,OneDrive-style file management.,rabaed,phase-3-modules,High
+E23-S1,E23,Story,Work item folders,,"*Acceptance criteria*
+Virtual folders per visible Work Item with Documents and Documental Records.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-3-modules,High
+E23-S2,E23,Story,Free folders and File Versions,,"*Acceptance criteria*
+Folder permissions per Participant; file history.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-3-modules,Medium
+E23-S3,E23,Story,Inline preview,,"*Acceptance criteria*
+View PDFs, images and Office files without downloading.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-3-modules,High
+E24,,Epic,"Locations, Floor and Plan views","Locations, Floor and Plan views",The spatial experience.,rabaed,phase-3-modules,High
+E24-S1,E24,Story,Site map upload and zone drawing,,"*Acceptance criteria*
+Upload plan image; draw zone/villa polygons linked to Locations.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-3-modules,Medium
+E24-S2,E24,Story,Floor view with Location Status,,"*Acceptance criteria*
+Buildings → floors with Complete/In Progress/Issues/Pending from visible items.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-3-modules,Medium
+E24-S3,E24,Story,Plan view with Pins,,"*Acceptance criteria*
+Pins on plan Drawings, filtered by visibility.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-3-modules,Medium
+E25,,Epic,"Dashboard, Activity & notifications","Dashboard, Activity & notifications",Overview for each role.,rabaed,phase-3-modules,High
+E25-S1,E25,Story,Project dashboard (fixed widgets),,"*Acceptance criteria*
+Role-appropriate widgets computed over visible items only.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-3-modules,High
+E25-S2,E25,Story,Activity Feed,,"*Acceptance criteria*
+Project-level feed filtered by visibility and audience.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-3-modules,Medium
+E25-S3,E25,Story,In-app and email notifications,,"*Acceptance criteria*
+Per-Member preferences; recipients re-checked at send time.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-3-modules,High
+E25-S4,E25,Story,Weekly Step Age report,,"*Acceptance criteria*
+Per-Participant and Owner-level reports.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-3-modules,Medium
+E26,,Epic,Approved Supplier List,Approved Supplier List,Project register of approved suppliers.,rabaed,phase-3-modules,High
+E26-S1,E26,Story,Supplier register,,"*Acceptance criteria*
+Preloaded list or built from approved supplier submittals; usable as pick list; visible Project-wide (name + approval only).
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-3-modules,Medium
+E27,,Epic,Chat & Internal Communication,Chat & Internal Communication,Conversation around a Work Item.,rabaed,phase-3-modules,High
+E27-S1,E27,Story,Chat,,"*Acceptance criteria*
+Immutable messages visible to Participants with access; attachments; notifications.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-3-modules,High
+E27-S2,E27,Story,Internal Communication tab,,"*Acceptance criteria*
+Internal notes and history visible only inside the Participant.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-3-modules,High
+E28,,Epic,Rabaed Admin portal,Rabaed Admin portal,Separate internal portal for Rabaed Engineers.,rabaed,phase-4-admin,High
+E28-S1,E28,Story,Admin authentication and roles,,"*Acceptance criteria*
+Separate identity; MFA required; separate DB role; every action logged.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-4-admin,Highest
+E28-S2,E28,Story,Company onboarding,,"*Acceptance criteria*
+Create Company with CR/VAT, Authorized Person invite, initial Project setup assistance.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-4-admin,Highest
+E28-S3,E28,Story,Support actions,,"*Acceptance criteria*
+Reassign, reset stuck step, transfer Authorized Person, unlock account, fix visibility; reason required.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-4-admin,High
+E28-S4,E28,Story,Template authoring,,"*Acceptance criteria*
+Publish library Forms, Workflows, checklists and paper-matching PDF Templates.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-4-admin,High
+E28-S5,E28,Story,Monitoring,,"*Acceptance criteria*
+Activity Log, Delivery Log, Job Monitor, audit-chain verification results.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-4-admin,Medium
+E29,,Epic,Security & compliance readiness,Security & compliance readiness,Evidence for SOC 2 and ISO 27001.,rabaed,phase-5-launch,High
+E29-S1,E29,Story,Penetration test,,"*Acceptance criteria*
+External pen test incl. cross-tenant and visibility attempts; findings fixed.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-5-launch,High
+E29-S2,E29,Story,SOC 2 readiness,,"*Acceptance criteria*
+Policies, controls mapping and evidence collection set up.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-5-launch,Medium
+E29-S3,E29,Story,Backup and restore drill,,"*Acceptance criteria*
+Restore rehearsed and timed.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-5-launch,Medium
+E30,,Epic,Pilot & launch,Pilot & launch,First real project on Rabaed.,rabaed,phase-5-launch,High
+E30-S1,E30,Story,Pilot project onboarding,,"*Acceptance criteria*
+One real project with Contractor, Consultant and Owner onboarded via Rabaed Admin.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-5-launch,High
+E30-S2,E30,Story,Pilot feedback loop,,"*Acceptance criteria*
+Weekly feedback sessions; issues triaged into backlog.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-5-launch,High
+E30-S3,E30,Story,Launch checklist,,"*Acceptance criteria*
+Support process, status page, runbooks, go/no-go.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-5-launch,Medium
+E31,,Epic,Personalisation,Personalisation,Features that let each Member tailor Rabaed to how they work. Not in the first release.,rabaed,phase-6-later,High
+E31-S1,E31,Story,User-selectable themes (4 themes),,"*Acceptance criteria*
+Four themes (e.g. warm light, cool light, dark, high-contrast for site/sunlight) built only from design tokens; each Member picks theme in their profile; choice saved per Member and applied on web and app; every component passes WCAG AA contrast in all four; Stage, Review Code and Step Age colours stay recognisable in every theme. Until then the product ships one theme and no hard-coded colours.
+
+See CONTEXT.md and docs/ in the repo.",rabaed,phase-6-later,Medium

@@ -1,0 +1,339 @@
+# Rabaed
+
+Rabaed is a B2B construction management platform where companies collaborate on construction projects. Each company takes a different role on each project.
+
+## Language
+
+### Platform and tenancy
+
+**Company**:
+A legal business registered on Rabaed, identified by its official name, CR (Commercial Registration) number, and VAT number. Companies are onboarded by Rabaed Engineers; there is no self sign-up yet.
+_Avoid_: Tenant, organization, account, customer
+
+**Authorized Person**:
+The one Member who legally represents a Company on Rabaed. Only the Authorized Person edits the Company profile and adds Members.
+_Avoid_: Representative, company admin, owner (clashes with Owner Representative)
+
+**Project Creator**:
+A Member whom the Authorized Person allows to create Projects on the Company's behalf.
+
+**Member**:
+A person who signs in to Rabaed. A Member belongs to exactly one Company and keeps a Signature in their profile.
+_Avoid_: User, employee, staff
+
+### Projects
+
+**Project**:
+A construction project on which several Companies collaborate, each in a Project Role. It is created directly or from a Tendering award, and is Active until it is Closed, after which everything in it is archived and read-only.
+
+**Active Project**:
+A Project that is not Closed. Subscriptions will be sold as bundles of Active Projects.
+_Avoid_: Live project, open project
+
+**Host Company**:
+The Company whose subscription a Project counts against and whose Project Number series it uses; normally the Company that created it.
+_Avoid_: Account, tenant, customer, subscriber
+
+**Project Number**:
+A Project's number within its Host Company's own series (1, 2, 3…); two Host Companies can each have a Project 1.
+_Avoid_: Project ID
+
+**Project Admin**:
+A Member who configures a Project's Settings. The Project's creator is the first one and can appoint others; Rabaed Engineers can too.
+_Avoid_: Project owner, project manager
+
+**Project Participant**:
+One Company taking part in one Project, in one Project Role. A Project can have any number of Participants in each role. When a Participant is withdrawn, all its in-progress Work Items are Cancelled, and its replacement starts them afresh.
+_Avoid_: Project company, party
+
+**Position**:
+A named bundle of Function Permissions (View, Create, Submit, Review, Approve, Assign, Close, Attach) that a Member holds on a Project, such as Engineer or Project Manager. Rabaed supplies defaults; Project Admins can add their own, and a Member can hold several.
+_Avoid_: Role, job title, permission set
+
+**Project Role**:
+The part a Company plays on one Project: Contractor, Consultant, Owner or Owner Representative, or a custom role (e.g. Subcontractor, PMC) that is based on one of these and can do no more than it. A Company can hold different Project Roles on different Projects.
+_Avoid_: Company role, company type
+
+**Contractor**:
+The Project Role of a Company that builds the works for its Trades.
+
+**Consultant**:
+The Project Role of a Company that designs and/or supervises the works for its Trades on the owner's behalf.
+
+**Owner**:
+The Project Role of the Company that owns and pays for the project.
+_Avoid_: Client, employer, developer
+
+**Owner Representative**:
+The Project Role of a Company that acts for the Owner on the project, such as a PMC.
+_Avoid_: Client representative
+
+### Visibility and scope of works
+
+**Visibility Dimension**:
+A way a Project is divided that controls who sees which Work Items, such as Trade or Location; more can be added.
+_Avoid_: Filter, category, scope
+
+**Trade**:
+A discipline of the works, such as Civil, Architectural, Electrical or Mechanical. Rabaed supplies a default list that each Project can extend.
+_Avoid_: Discipline, package
+
+**Location**:
+A place in the Project's physical breakdown, such as a Zone, Building, Villa or Floor, or a Sector on infrastructure projects. A Location can be drawn on the Project's site map or floor plans so Work Items and Drawings can be shown on it.
+_Avoid_: Area, WBS
+
+**Visibility**:
+The values of each Visibility Dimension a Participant or a Member covers on a Project, each either "all" or a chosen list; a Work Item is visible only if all its values are covered. A Member never covers more than their Company does. A value that nobody covers is a Visibility Gap, which Project Settings warns about.
+_Avoid_: Scope, access, coverage
+
+**Scope**:
+A defined piece of work within a Trade (e.g. under Electrical: lighting), broken down further into Sub-scopes. Rabaed supplies defaults; Project Admins can add more.
+_Avoid_: Work package, visibility
+
+**Sub-scope**:
+A finer piece of work within a Scope.
+_Avoid_: Sub-package
+
+### Work Items
+
+**View**:
+A way of displaying Work Items: List, Kanban, Floor (by building and floor), Plan (pinned on a floor plan Drawing) or Map (zones on the site map). Floor, Plan and Map show Work Items from several Modules together and live in the Project's Views tab.
+_Avoid_: Layout, screen, Multiple View
+
+**Pin**:
+The optional point where a Work Item sits on a plan Drawing of its Location, used by the Plan View.
+_Avoid_: Marker, tag
+
+**Location Status**:
+A Location's progress picture (Complete, In Progress, Issues, Pending) worked out from the Work Items at that Location.
+_Avoid_: Progress percentage
+
+**Module**:
+One tab of a Project: Dashboard, Submittals, Inspections, Snag List, Site Reports, Drawings, Files, Views, Schedule, Settings. Submittals, Inspections, Snag List and Site Reports hold Work Items. Packages live inside Submittals, the Activity Feed inside the Dashboard, and the Approved Supplier List inside Settings.
+_Avoid_: Section, app
+
+**Work Item**:
+One trackable item in a Project, such as a submittal, an inspection or a snag, made from a Form and routed through a Workflow. Each Work Item has exactly one Trade and may cover several Scopes within it.
+_Avoid_: Ticket, request, form (for the instance)
+
+**Work Item Type**:
+A kind of Work Item within a Module, such as Material Submittal, Inspection Request, Snag or Comment, with a short code (e.g. MAR, SAR, DAR) used in filters and Document Numbers. It fixes which Form and which Workflow its Work Items use.
+_Avoid_: Form type, category
+
+**Subtask**:
+A Work Item created under another Work Item, of any Type in the same Module and with its own Workflow. There is only one level, and the parent cannot close while a Subtask is open.
+_Avoid_: Child item
+
+**Link**:
+A reference from one Work Item to another in any Module, which opens the other item; for example an Inspection linking the approved material, drawing and method submittals it relies on, instead of attaching their PDFs. A viewer who cannot see the linked item can still open its Documental Record, but not the item itself. A Work Item Type can require certain Links, optionally to approved items. A Link is not a parent–child relationship and does not block anything.
+_Avoid_: Relationship, dependency
+
+**Inspection**:
+A Work Item in the Inspections Module, such as a Work Inspection Request (WIR), in which the Contractor requests an inspection of work at a Location and Trade, and the Consultant carries it out against its Checklist and gives an Inspection Result. A Failed inspection is re-inspected as a Revision.
+_Avoid_: Site visit, check, IR (as a term on its own)
+
+**Inspection Result**:
+The outcome of an Inspection: Passed, Passed with Comments, or Failed. Each Work Item Type uses Review Codes, Inspection Results, or neither.
+_Avoid_: Review Code, grade
+
+**Expected Frequency**:
+How often a Work Item Type, such as the Daily Site Report, must be issued. A missing one shows as a gap, triggers reminders, and is flagged when the next Weekly report is prepared, where it can be added late or ignored.
+_Avoid_: Recurrence, schedule
+
+**Site Report**:
+A Work Item in the Site Reports Module that records site conditions or findings, such as a Daily Site Report (weather, manpower, equipment, materials, work done, problems), a Weekly report, a Quality report or a Safety report. It is Submitted by the Contractor and Acknowledged by the Consultant, who can instead Return it with comments; it carries no Review Code.
+_Avoid_: Site log, diary, Affirm
+
+**Checklist**:
+A Form field made of predefined check items, each answered and optionally evidenced with photos.
+_Avoid_: Tick list
+
+**Snag List**:
+The Module holding follow-up Work Item Types: Snags, Comments, and others such as Questions or plain tasks.
+_Avoid_: Comment list, punch list
+
+**Snag**:
+A Work Item in the Snag List recording a defect or an action to be done.
+_Avoid_: Punch item, defect
+
+**Comment**:
+A Work Item in the Snag List created from a reviewer's comment on a Code B approval, linked to the reviewed Work Item.
+_Avoid_: Remark, note
+
+**Cancelled**:
+The outcome of a Work Item stopped before it finished, such as when its Participant is withdrawn from the Project. It cannot be reopened.
+_Avoid_: Deleted, voided
+
+
+**Form**:
+The field layout, built in the form builder, that a Work Item Type captures. Field labels are in Arabic and English.
+_Avoid_: Template (on its own)
+
+**Workflow**:
+The versioned graph of Steps and Transitions, drawn in the visual workflow builder, that a Work Item passes through. A Work Item stays on the Workflow version it started with.
+
+**Stage**:
+A named phase that shows where a Work Item is overall, such as Drafts, Internal Review, Revised & Resubmitted, Pending Approval, Approved, Rejected or Cancelled. Each Module has one shared set of Stages (Rabaed Defaults the Project can rename or extend), and every Workflow places its Steps into them. Stages are the Kanban columns.
+_Avoid_: Status, state, phase
+
+**Step**:
+One point in a Workflow where a Work Item waits for a person or Step Pool to act, such as "Contractor Project Manager review". A Step belongs to one Stage.
+_Avoid_: Node, task, state
+
+**Transition**:
+A move of a Work Item from one Step to another, shown as a button whose label the Workflow sets, such as "Send for Review", "Request More Information" or "Submit". Each Transition has its own Action Form and notifications.
+_Avoid_: Action, button
+
+**Action Form**:
+The pop-up form a Member fills in when taking a Transition, such as choosing a Review Code, writing comments or attaching files; each Transition defines its own.
+_Avoid_: Dialog, modal
+
+**Submit**:
+The Transition that hands a Work Item from one Participant to another, such as from the Contractor to the Consultant.
+
+**Return**:
+A Transition that sends a Work Item back to an earlier step within the same Participant, such as a Contractor manager asking their engineer for more information.
+_Avoid_: Reject, RFI
+
+**Step Age**:
+How many weeks a Work Item has sat at its current step (1, 2, 3, 4+), shown as dots and sent in a periodic ageing report. Rabaed shows age only; it sets no due dates or SLAs.
+_Avoid_: Overdue, SLA, deadline
+
+**Vacancy**:
+A Workflow step whose assignee (a Member) has left the Project. The step waits, and the assignee's Company is notified to name a replacement.
+_Avoid_: Orphaned task, unassigned
+
+**Submittal Register Import**:
+Uploading the list of submittals a contract requires (as a spreadsheet now, later as a PDF read by an AI agent) and mapping each row to a Work Item Type and fields, which creates Draft Work Items.
+_Avoid_: Bulk upload, migration
+
+**Step Pool**:
+The group of Members who can pick up a Workflow step, such as all Consultant engineers on the Work Item's Trade. One of them claims it, unless the step already has a default assignee.
+_Avoid_: Queue, group inbox
+
+**Rabaed Default**:
+The Forms, Workflows and Work Item Types that Rabaed supplies ready-made, which Companies can use or copy into their own.
+_Avoid_: System template, built-in
+
+**Review Code**:
+The formal outcome of reviewing a Work Item such as a submittal: A (Approved), B (Approved with Comments), C (Revise and Resubmit) or D (Rejected). Every code closes the Work Item; with B, its Comments continue in the Snag List.
+_Avoid_: Status, result
+
+**Recommended Code**:
+A Review Code a reviewer proposes to the next reviewer, for information only; the next reviewer can accept it, override it, or send it back.
+_Avoid_: Draft code, proposed status
+
+**Issued Code**:
+The Review Code given at the Workflow's final review step, which is the one that counts and appears on the Documental Record. Which step is final depends on the Workflow (e.g. the Consultant manager, or an Owner Representative after them).
+_Avoid_: Final status
+
+**Revision**:
+A resubmission of a Work Item that ended with Code C, keeping the same number with a revision suffix (MS-003 → MS-003 Rev 1) and linked to the one before it. The earlier one stays closed at Code C.
+_Avoid_: Version (reserved for Workflows), resubmittal
+
+**Document Number**:
+The identifier a Work Item gets when it first leaves Draft (e.g. WH-CCM-0000001); numbers are never reused, built from a numbering pattern each Project configures from segments such as project, Work Item Type, Trade, Company and Location codes, plus a sequence. A pattern change applies only to new Work Items.
+_Avoid_: ID, reference number
+
+**Package**:
+A named group of submittals covering one piece of work (e.g. bathrooms), submitted together, with each submittal still getting its own Review Code. It is Open, In Progress or Closed, and closes by itself once every submittal in it ends at Code A or B, after any Revisions or replacements.
+_Avoid_: Bundle, batch, transmittal
+
+**Approved Supplier List**:
+A Project's register of suppliers and manufacturers that may be used, either loaded as a pre-approved list or built up as supplier submittals are approved through their Workflow.
+_Avoid_: Vendor list, AVL
+
+**Chat**:
+The discussion thread on a Work Item, visible to every Participant who can see the Work Item, for talking without moving it between Steps. Messages cannot be edited or deleted.
+_Avoid_: Comments (reserved for the Snag List), messages
+
+**Internal Communication**:
+The part of a Work Item's history (notes, Step changes, Returns, approvals) that happens inside one Participant and is visible only to that Participant. Other Participants see only the Transitions between Participants, such as Submit and the Issued Code.
+_Avoid_: Private log, internal notes
+
+**Activity Feed**:
+The Project-level log of what happened across the Project, filtered by each viewer's Visibility and Internal Communication rules.
+_Avoid_: Activity (reserved for the Schedule), audit log
+
+### Files and signing
+
+**Document**:
+A file attached to a Work Item.
+_Avoid_: Attachment, file
+
+**File Version**:
+An earlier copy of a free file in the Files Module, kept when a new copy is uploaded. Documents attached to a submitted Work Item are frozen and have no File Versions.
+_Avoid_: Revision, Drawing Revision
+
+**Signature**:
+A Member's signature, kept in their profile and applied, together with who acted and when, every time they take a signing Transition on a Work Item. A Member without one cannot take signing Transitions.
+_Avoid_: Stamp, initials
+
+**Documental Record**:
+The certified PDF produced when a Work Item closes, whatever its outcome (approved, issued, Code C or D, Failed, Cancelled): its Form content, all Documents, the Signature of everyone who acted on it and the events between Participants, in one file. Internal Communication and Chat are left out. It is printed in Arabic, English or both, as the Project's settings choose.
+_Avoid_: Output, report, printout
+
+**PDF Template**:
+A layout a Documental Record is printed with, such as a portal-style or a paper-matching layout. A Form can have several, and each Project chooses one per Work Item Type.
+_Avoid_: Print template, report format
+
+**Distribution List**:
+The people, including email addresses outside Rabaed, who receive a Work Item's Documental Record when it is issued, as an expiring, tracked link. Each Work Item Type has a default list per Project that can be edited on each item.
+_Avoid_: CC list, mailing list
+
+**Signatory Access**:
+The permanent right of every Member who signed a Work Item to see the Project's name and open the Documental Records they signed, even after removal from the Project or its closure. The Company keeps the same right, through its Authorized Person, for everything its Members signed.
+_Avoid_: Legacy access, archive access
+
+### Drawings
+
+**Drawing**:
+A controlled design file (of any file type) in the Drawings Module that keeps every Drawing Revision uploaded for it. Drawings are reviewed through drawing-submittal Work Items; approved Drawing Revisions become current in the register.
+_Avoid_: Plan, sheet, document
+
+**Drawing Revision**:
+One uploaded issue of a Drawing; the newest is current and earlier ones are kept. Two Drawing Revisions can be overlaid to see exactly what changed.
+_Avoid_: Version, Revision (reserved for Work Items)
+
+**Markup**:
+An annotation a reviewer places on a spot of a Drawing Revision. Every open Markup must be answered (fixed, or replied to) before the next revision can be resubmitted; Markups carry over to the next Drawing Revision, and open ones become Comments on Code B.
+_Avoid_: Redline, annotation, comment (reserved for the Snag List)
+
+### Modules
+
+**Project Module**:
+The part of Rabaed for running Projects.
+
+**Schedule Module**:
+The Project tab for planning and tracking the programme of works. To be designed in its own session.
+
+**Tendering Module**:
+The part of Rabaed where a project's specs and BOQ are put out to tender. The award creates the Project, onboards the winner, and carries over the specs, BOQ and required submittals. Not designed yet.
+
+**Financial Module**:
+The part of Rabaed that holds a Project's BOQ, Claims, invoices and payments, synced with the Company's invoicing system (e.g. Oracle, SAP). Not designed yet.
+
+**BOQ**:
+The Bill of Quantities: the priced list of every item of work in a Project.
+_Avoid_: POQ, price list
+
+**Claim**:
+A Contractor's request for payment for quantities done, built from the BOQ quantities recorded on passed WIRs.
+_Avoid_: Invoice (that belongs to the invoicing system), payment application
+
+**Executive Report**:
+A high-level periodic report for management meetings: schedule milestones against target, claimed against plan, and spend against budget.
+_Avoid_: Management summary
+
+### Operations
+
+**Rabaed Admin**:
+The separate internal portal where Rabaed Engineers onboard and support Companies and Members.
+_Avoid_: Back office, super admin
+
+**Instance**:
+One independent deployment of Rabaed: the standard one hosted outside Saudi Arabia, or the premium one hosted inside it. Each Project lives on the Instance its Owner requires; its Companies and Members are onboarded on that Instance, separately from any account on the other. Data is never migrated between Instances.
+_Avoid_: Region, tenant, environment
+
+**Rabaed Engineer**:
+A Rabaed staff member who uses Rabaed Admin. Not a Member of any Company. May reassign or reset a stuck step but never makes a decision in a Workflow, and never moves a Work Item to another Workflow version.

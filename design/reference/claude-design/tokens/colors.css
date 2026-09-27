@@ -1,0 +1,174 @@
+/* ============================================================
+   Rabaed — Color tokens
+   Primary  : Tomato  (#F95738)   — dominant brand colour
+   Secondary: Delft Blue (#3D405B) — complements / ink
+   Accent   : Naples Yellow (#F4D35E)
+   Warm     : Orange  (#EE964B)   — gradient partner to Tomato
+   Values lifted from the Rabaed Figma variable collection.
+   ============================================================ */
+
+:root {
+  /* ---- Base neutrals ---- */
+  --white: #ffffff;
+  --black: #121212;
+
+  /* ---- Primary · Tomato ---- */
+  --tomato-50:  #fff4f1;
+  --tomato-100: #feddd7;
+  --tomato-200: #fdc3b7;
+  --tomato-300: #fca898;
+  --tomato-400: #fb8d78;
+  --tomato-500: #fa7258;
+  --tomato-600: #f95738; /* ◀ brand primary */
+  --tomato-700: #d1492f;
+  --tomato-800: #a93b26;
+  --tomato-900: #7e2c1d;
+
+  /* ---- Secondary · Delft Blue ---- */
+  --delft-50:  #eff0f3;
+  --delft-100: #dcdee4;
+  --delft-200: #a8abbe;
+  --delft-300: #80849d;
+  --delft-400: #696f8c;
+  --delft-500: #525677;
+  --delft-600: #3d405b; /* ◀ secondary base */
+  --delft-700: #33364c;
+  --delft-800: #2a2d40;
+  --delft-900: #20212f;
+
+  /* ---- Accent · Naples Yellow ---- */
+  --naples-100: #fdf6df;
+  --naples-300: #f8e192;
+  --naples-500: #f4d35e; /* ◀ accent base */
+  --naples-700: #cdb14f;
+  --naples-800: #a68f40;
+
+  /* ---- Warm · Orange (logo gradient partner) ---- */
+  --orange-100: #fceadb;
+  --orange-200: #f9d9be;
+  --orange-300: #f6c8a1;
+  --orange-500: #f1a768;
+  --orange-600: #ee964b;
+
+  /* ---- Neutral grays ---- */
+  --gray-50:  #f7f7f7;
+  --gray-100: #f2f2f2;
+  --gray-200: #e8e8e8;
+  --gray-300: #dddddd; /* default border / divider */
+  --gray-400: #d2d2d2;
+  --gray-500: #c8c8c8;
+  --gray-600: #9f9f9f;
+  --gray-700: #818181;
+  --gray-800: #626262;
+  --gray-900: #1e1e1e;
+
+  /* ---- Espresso (marketing "enterprise" section) ---- */
+  --espresso: #2a1610;
+  --espresso-deep: #1f150f;
+
+  /* ---- Semantic · status ---- */
+  /* Success — a clean, fresh green. Lighter variant (#27b86e, hue ~146°,
+     airy & bright) chosen over the deeper #15a35c after side-by-side. */
+  --success-50:  #eefbf3;
+  --success-100: #dff6e7;
+  --success-200: #bfeccf;  /* tint border (approved card edge) */
+  --success-400: #54cd8a;
+  --success-500: #2fc079;
+  --success-600: #27b86e;  /* ◀ lighter fresh green base — pills, checks, dots */
+  --success-700: #1a9a57;  /* text on light */
+  --success-800: #15803f;
+
+  --danger-100: #f7d4d8;
+  --danger-500: #dd495c;
+  --danger-600: #d81212; /* NCR / reject red */
+
+  --info-500: #0085ff;   /* active / link blue */
+  --blue-action:      #2f6fe0;  /* process blue — "Pending Approval" */
+  --blue-action-tint: #e9f0fc;
+
+  --warning-500: #ee964b;
+
+  /* ---- Tonal hue set (chips · status · codes) ----
+     One harmonised set: every hue has a tint (bg), fg (text on tint) and
+     solid (dots, solid pills). Same lightness/chroma across hues. */
+  --tone-green-tint:#e6f7ee;  --tone-green-fg:#16874f;  --tone-green-solid:#27b86e;
+  --tone-amber-tint:#fdf3dc;  --tone-amber-fg:#9a6206;  --tone-amber-solid:#e9a23b;
+  --tone-red-tint:#fdebea;    --tone-red-fg:#c8322b;    --tone-red-solid:#e5484d;
+  --tone-blue-tint:#e8f0fd;   --tone-blue-fg:#2f62c9;   --tone-blue-solid:#3b6fd8;
+  --tone-violet-tint:#f0ecfe; --tone-violet-fg:#6547d6; --tone-violet-solid:#7a5af0;
+  --tone-cyan-tint:#e2f5f8;   --tone-cyan-fg:#0f7688;   --tone-cyan-solid:#1aa3b8;
+  --tone-orange-tint:#fdeee2; --tone-orange-fg:#b8560f; --tone-orange-solid:#ee964b;
+  --tone-gray-tint:#eff0f2;   --tone-gray-fg:#555a66;   --tone-gray-solid:#6a6e7a;
+  --tone-tomato-tint:#fff1ec; --tone-tomato-fg:#c9432a; --tone-tomato-solid:#f95738;
+
+  /* ---- Discipline chips (5 distinct hues) ---- */
+  --chip-cv-bg:var(--tone-amber-tint);  --chip-cv-fg:var(--tone-amber-fg);   /* CV Civil */
+  --chip-ar-bg:var(--tone-violet-tint); --chip-ar-fg:var(--tone-violet-fg);  /* AR Architecture */
+  --chip-el-bg:var(--tone-cyan-tint);   --chip-el-fg:var(--tone-cyan-fg);    /* EL Electrical */
+  --chip-me-bg:var(--tone-green-tint);  --chip-me-fg:var(--tone-green-fg);   /* ME Mechanical */
+  --chip-su-bg:var(--tone-orange-tint); --chip-su-fg:var(--tone-orange-fg);  /* SU Surveying */
+  --chip-das-bg:var(--chip-me-bg);      --chip-das-fg:var(--chip-me-fg);     /* legacy alias */
+  /* ---- Document types — neutral outline lozenge (never coloured) ---- */
+  --doctype-fg:#555a66; --doctype-ring:#d5d8de;
+  --chip-mar-bg:transparent; --chip-mar-fg:var(--doctype-fg);
+  --chip-sar-bg:transparent; --chip-sar-fg:var(--doctype-fg);
+  --chip-npd-bg:transparent; --chip-npd-fg:var(--doctype-fg);
+
+  /* ---- Submittal workflow status (tint bg / fg / dot) ---- */
+  --status-draft-bg:var(--tone-gray-tint);        --status-draft-fg:var(--tone-gray-fg);        --status-draft-dot:#9aa0ad;
+  --status-internal-bg:var(--tone-blue-tint);     --status-internal-fg:var(--tone-blue-fg);     --status-internal-dot:var(--tone-blue-solid);
+  --status-resubmitted-bg:var(--tone-amber-tint); --status-resubmitted-fg:var(--tone-amber-fg); --status-resubmitted-dot:var(--tone-amber-solid);
+  --status-pending-bg:var(--tone-violet-tint);    --status-pending-fg:var(--tone-violet-fg);    --status-pending-dot:var(--tone-violet-solid);
+  --status-approved-bg:var(--tone-green-tint);    --status-approved-fg:var(--tone-green-fg);    --status-approved-dot:var(--tone-green-solid);
+  --status-rejected-bg:var(--tone-red-tint);      --status-rejected-fg:var(--tone-red-fg);      --status-rejected-dot:var(--tone-red-solid);
+  --status-cancelled-bg:var(--tone-gray-tint);    --status-cancelled-fg:var(--tone-gray-fg);    --status-cancelled-dot:var(--tone-gray-solid);
+  /* legacy aliases */
+  --status-submitted-bg:var(--status-resubmitted-bg); --status-submitted-fg:var(--status-resubmitted-fg);
+  --status-created-bg:var(--status-internal-bg);      --status-created-fg:var(--status-internal-fg);
+  --status-notstarted-bg:var(--status-draft-bg);      --status-notstarted-fg:var(--status-draft-fg);
+
+  /* ---- Approval codes + revision ---- */
+  --code-a-bg:var(--tone-green-solid); --code-a-fg:#ffffff;              /* Approved — solid */
+  --code-b-bg:var(--tone-green-tint);  --code-b-fg:var(--tone-green-fg); /* Approved as noted */
+  --code-c-bg:var(--tone-amber-tint);  --code-c-fg:var(--tone-amber-fg); /* Revise & resubmit */
+  --code-d-bg:var(--tone-red-solid);   --code-d-fg:#ffffff;              /* Rejected — solid */
+  --code-a-ring:transparent; --code-b-ring:transparent; --code-c-ring:transparent; --code-d-ring:transparent;
+  --rev-pill-bg:var(--tone-tomato-tint); --rev-pill-fg:var(--tone-tomato-fg); /* R1, R2… */
+  --code-pill-bg:var(--code-a-bg);  --code-pill-fg:var(--code-a-fg);
+
+  /* ---- Chip geometry (shared by status, discipline, code) ---- */
+  --chip-h:24px; --chip-r:7px; --chip-px:9px; --chip-fs:12px;
+  --lozenge-h:20px; --lozenge-r:4px;
+
+  /* ============================================================
+     Semantic aliases — reference these in components, not raw ramps
+     ============================================================ */
+  --color-primary:        var(--tomato-600);
+  --color-primary-hover:  var(--tomato-700);
+  --color-primary-soft:   var(--tomato-100);
+  --color-primary-tint:   var(--tomato-50);
+  --color-secondary:      var(--delft-600);
+  --color-accent:         var(--naples-500);
+
+  --text-heading:  #292d32;          /* near-black ink for titles */
+  --text-body:     var(--delft-600); /* default body copy */
+  --text-muted:    var(--delft-300); /* secondary / captions */
+  --text-faint:    var(--gray-700);  /* placeholders / meta */
+  --text-on-primary: var(--white);
+  --text-link:     var(--tomato-600);
+
+  --surface-page:   #fdf9f5;         /* warm off-white app canvas */
+  --surface-card:   var(--white);
+  --surface-subtle: var(--gray-50);
+  --surface-sunken: var(--gray-100);
+  --surface-board:  #f6f7f9;         /* board / workspace canvas behind white columns */
+  --surface-brand-tint: var(--tomato-50);
+
+  --border-default: var(--gray-300);
+  --border-strong:  var(--gray-400);
+  --border-subtle:  var(--gray-200);
+  --border-focus:   var(--tomato-600);
+
+  --icon-default: #292d32;
+  --icon-muted:   var(--delft-300);
+}

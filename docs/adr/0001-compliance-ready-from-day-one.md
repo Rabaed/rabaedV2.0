@@ -1,0 +1,3 @@
+# Build for SOC 2 and ISO 27001 from day one
+
+Rabaed handles contractual construction records (approvals, signatures, audit trails) for many companies on one platform, and customers will require SOC 2 and ISO 27001 evidence. We build the platform so that it is ready for these audits from the first release instead of retrofitting later. This means: an append-only audit log of every data change and admin action, strict isolation between Companies, least-privilege access for Rabaed Engineers, encryption in transit and at rest, and documented change management. Adding these afterwards would mean reworking the data model and every module.

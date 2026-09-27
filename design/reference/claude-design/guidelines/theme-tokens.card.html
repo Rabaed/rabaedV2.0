@@ -1,0 +1,22 @@
+<!-- @dsCard group="Themes" viewport="700x330" name="Dark theme tokens" subtitle="--ui-* surfaces & text, --btn-*, tonal tints — light vs dark" -->
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><link rel="stylesheet" href="../styles.css">
+<style>
+body{margin:0;font-family:var(--font-ui);background:#fff;padding:18px 20px;color:#1f2430}
+.g{display:grid;grid-template-columns:150px 1fr 1fr;gap:5px 10px;align-items:center}
+.h{font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#9aa0ad}
+.n{font:12px ui-monospace,Menlo,monospace;color:#3a3f4b}
+.sw{height:24px;border-radius:6px;box-shadow:inset 0 0 0 1px rgba(0,0,0,.08);display:flex;align-items:center;padding:0 8px;font:600 11px var(--font-ui)}
+.theme-dark{display:contents}
+</style></head>
+<body>
+<div class="g" id="g"><span></span><span class="h">Light</span><span class="h">Dark</span></div>
+<script>
+const K=['ui-canvas','ui-surface','ui-border','ui-text','ui-muted','btn-sec','btn-pri','tone-green-tint','tone-violet-tint','tone-red-tint'];
+const g=document.getElementById('g');
+K.forEach(k=>{g.insertAdjacentHTML('beforeend',`<span class="n">--${k}</span><span class="sw" style="background:var(--${k});color:${k.includes('tint')?`var(--tone-${k.split('-')[1]}-fg)`:k==='ui-text'||k==='ui-muted'?'#fff':'var(--ui-text)'}">${k.includes('tint')?'Aa':''}</span><span class="theme-dark"><span class="sw" style="background:var(--${k});color:${k.includes('tint')?`var(--tone-${k.split('-')[1]}-fg)`:'var(--ui-canvas)'};${k.includes('tint')?'box-shadow:inset 0 0 0 100px #161e31;background-blend-mode:normal':''}">${k.includes('tint')?'Aa':''}</span></span>`)});
+// tints are translucent in dark — composite them over the dark surface
+document.querySelectorAll('.theme-dark .sw').forEach((el,i)=>{if(K[i].includes('tint')){el.style.boxShadow='none';el.style.background=`linear-gradient(var(--${K[i]}),var(--${K[i]})),#161e31`}});
+</script>
+</body></html>

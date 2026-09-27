@@ -1,0 +1,56 @@
+/* ============================================================
+   Rabaed — Spacing, radii, shadows, borders, motion
+   4px base grid. Cards: white, ~12-16px radius, soft shadow + hairline.
+   ============================================================ */
+
+:root {
+  /* ---- Spacing scale (4px base) ---- */
+  --space-0: 0;
+  --space-1: 2px;
+  --space-2: 4px;
+  --space-3: 6px;
+  --space-4: 8px;
+  --space-5: 10px;
+  --space-6: 12px;
+  --space-8: 16px;
+  --space-10: 20px;
+  --space-12: 24px;
+  --space-16: 32px;
+  --space-20: 40px;
+  --space-24: 48px;
+  --space-32: 64px;
+  --space-40: 80px;
+
+  /* ---- Radii ---- */
+  --radius-xs: 4px;
+  --radius-sm: 8px;    /* buttons, inputs, chips */
+  --radius-md: 12px;   /* cards, dropdowns */
+  --radius-lg: 16px;   /* large surfaces / KPI cards */
+  --radius-xl: 24px;
+  --radius-pill: 999px;
+
+  /* ---- Border widths ---- */
+  --border-thin: 1px;
+  --border-thick: 1.5px;
+
+  /* ---- Shadows (warm, low-contrast — sit on the off-white canvas) ---- */
+  --shadow-xs: 0 1px 2px rgba(61, 64, 91, 0.06);
+  --shadow-sm: 0 1px 3px rgba(61, 64, 91, 0.08), 0 1px 2px rgba(61, 64, 91, 0.04);
+  --shadow-md: 0 4px 12px rgba(61, 64, 91, 0.08);
+  --shadow-lg: 0 12px 28px rgba(61, 64, 91, 0.12);
+  --shadow-xl: 0 24px 48px rgba(61, 64, 91, 0.16);
+  --shadow-primary: 0 8px 20px rgba(249, 87, 56, 0.28); /* lifted tomato CTA */
+  --shadow-focus-ring: 0 0 0 3px rgba(249, 87, 56, 0.20);
+
+  /* ---- Layout ---- */
+  --app-rail-w: 72px;       /* slim left icon rail */
+  --app-header-h: 64px;
+  --container-max: 1200px;
+
+  /* ---- Motion ---- */
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1); /* @kind other */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1); /* @kind other */
+  --dur-fast: 120ms; /* @kind other */
+  --dur-base: 200ms; /* @kind other */
+  --dur-slow: 320ms; /* @kind other */
+}

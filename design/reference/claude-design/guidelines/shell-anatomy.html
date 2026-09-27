@@ -1,0 +1,128 @@
+<!-- @dsCard group="App" viewport="1200x900" name="SaaS shell — anatomy" subtitle="Sidebar dark/light/collapsed/RTL · item states · header · tabs" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Rabaed — Shell anatomy</title>
+<link rel="stylesheet" href="../styles.css">
+<link rel="stylesheet" href="../ui_kits/app/shell/shell.css">
+<style>
+html,body{margin:0}a{color:var(--tomato-600)}a:hover{color:var(--tomato-700)}
+body{background:#f6f7f9;font-family:var(--font-ui);color:#1f2430;padding:32px;-webkit-font-smoothing:antialiased}
+h3{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:#6a6e7a;margin:30px 0 12px;font-weight:600}h3:first-child{margin-top:0}
+.row{display:flex;gap:24px;flex-wrap:wrap;align-items:flex-start}
+.fr{display:flex;flex-direction:column;gap:10px}
+.fr>.cap{font-size:13px;font-weight:600;color:#3a3f4b}.fr>.cap small{display:block;font-weight:400;color:#6a6e7a;font-size:12px;margin-top:2px}
+.box{position:relative;height:760px;border-radius:16px;overflow:visible;box-shadow:0 1px 3px rgba(31,36,48,.08);background:#f6f7f9}
+.box .rs{min-height:0;height:100%;border-radius:16px;background:transparent}
+.box .sb{position:relative;height:100%;border-radius:16px}
+.box .rs[dir=ltr] .sb{border-radius:16px}
+.mk{position:absolute;width:20px;height:20px;border-radius:50%;background:#d6409f;color:#fff;font:700 10.5px/20px var(--font-ui);text-align:center;box-shadow:0 0 0 2px #fff;z-index:60}
+.legend{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px;margin-top:16px}
+.lg{display:flex;gap:10px;background:#fff;border:1px solid #e7e9ed;border-radius:12px;padding:12px}
+.lg .mk{position:static;flex:none;box-shadow:none;color:#fff;font-size:10.5px}.lg span b{display:inline;font-size:inherit}
+.lg b{display:block;font-size:13.5px}.lg span{font-size:12.5px;color:#6a6e7a;line-height:1.45}
+/* forced states */
+.rs .it.f-hov{background:var(--sb-hov);color:var(--sb-act-fg)}.rs.light .it.f-hov{color:var(--ink)}
+.rs .it.f-press{background:var(--sb-press);transform:scale(.985)}
+.pin-tip .tip{opacity:1!important;transform:translateY(-50%)!important}
+.pin-fly .fly{display:block!important}
+.states{display:grid;grid-template-columns:repeat(2,300px);gap:24px}
+.stl{border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:6px}
+.stl .rw{display:grid;grid-template-columns:90px minmax(0,1fr);align-items:center;gap:10px}
+.stl .rw>small{font-size:11.5px;color:#9aa0ad;font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+.hdbox{background:#fff;border:1px solid #e7e9ed;border-radius:14px;overflow:visible;position:relative;max-width:1120px}
+.hdbox .rs{min-height:0;display:block;background:transparent}
+.hdbox .hd{position:relative;border-radius:14px 14px 0 0}
+.hdbox .tabs{border-radius:0 0 14px 14px;border-bottom:0}
+.umbox{position:relative;width:340px;height:600px;background:#fff;border:1px solid #e7e9ed;border-radius:14px;padding:14px 18px}.umbox .me{position:relative}.umbox .menu{inset-inline-end:0}
+.spec{display:flex;gap:18px;flex-wrap:wrap;margin-top:10px;font-size:12px;color:#6a6e7a}.spec span{white-space:nowrap}.spec b{color:#1f2430;font-weight:600}
+</style>
+</head>
+<body>
+<h3>Sidebar · states</h3>
+<div class="row" id="sbs"></div>
+<div class="legend">
+ <div class="lg"><span class="mk">1</span><div><b>Workspace switcher</b><span>Logo mark + product + current company. Opens a menu to switch company workspace.</span></div></div>
+ <div class="lg"><span class="mk">2</span><div><b>Modules</b><span>Home, Projects, Payment Requests, Map View — the product's working areas.</span></div></div>
+ <div class="lg"><span class="mk">3</span><div><b>Active item</b><span>Tomato tint + 3px start-edge bar + tomato icon.</span></div></div>
+ <div class="lg"><span class="mk">4</span><div><b>My Company (general)</b><span>Section below a divider: company-wide settings that apply to every module. Collapsible group.</span></div></div>
+ <div class="lg"><span class="mk">5</span><div><b>Count badge</b><span>Red pill for pending items (Request To Join). Moves to the icon corner when collapsed.</span></div></div>
+ <div class="lg"><span class="mk">6</span><div><b>User card + collapse</b><span>Name + current role; tomato button collapses to a 72px rail (animated 240ms).</span></div></div>
+ <div class="lg"><span class="mk">7</span><div><b>Tooltip (collapsed)</b><span>Dark label on hover beside each icon.</span></div></div>
+ <div class="lg"><span class="mk">8</span><div><b>Flyout (collapsed)</b><span>Hovering My Company opens its sub-items as a menu.</span></div></div>
+</div>
+<div class="spec"><span>Expanded <b>264px</b></span><span>Collapsed <b>72px</b></span><span>Item <b>44h · r10 · 14.5/500</b></span><span>Sub-item <b>40h · 14/500</b></span><span>Dark bg <b>#131B2E</b></span><span>Light bg <b>#FFFFFF</b></span></div>
+
+<h3>Sidebar · item states</h3>
+<div class="states" id="states"></div>
+
+<h3>Header + project tabs</h3>
+<div class="hdbox" id="hdbox"></div>
+<div class="legend">
+ <div class="lg"><span class="mk">A</span><div><b>Context</b><span>Back + project avatar + name / company on project pages; page title + subtitle elsewhere.</span></div></div>
+ <div class="lg"><span class="mk">B</span><div><b>Global search · ⌘K</b><span>Opens the command palette: pages, projects, submittals, keyboard navigable.</span></div></div>
+ <div class="lg"><span class="mk">C</span><div><b>Project role</b><span>Small tomato-tint tag showing your role in this project. Project pages only; not a switcher.</span></div></div>
+ 
+ <div class="lg"><span class="mk">D</span><div><b>User menu</b><span>Profile, settings, help, <b>Language (عربي / English)</b>, sidebar theme (Dark / Light), sign out.</span></div></div>
+ <div class="lg"><span class="mk">E</span><div><b>Project tabs</b><span>All 9 modules, 52h, tomato underline 2.5px on the active tab.</span></div></div>
+</div>
+<h3>User menu</h3>
+<div class="row" id="umenus"></div>
+<div class="legend">
+ <div class="lg"><span class="mk">1</span><div><b>Identity</b><span>Avatar, full name, work email.</span></div></div>
+ <div class="lg"><span class="mk">2</span><div><b>Account</b><span>My profile · Account settings · Help &amp; support.</span></div></div>
+ <div class="lg"><span class="mk">3</span><div><b>Language</b><span>Segmented عربي / English — flips the whole app RTL ↔ LTR.</span></div></div>
+ <div class="lg"><span class="mk">4</span><div><b>Sidebar theme</b><span>Segmented Dark / Light.</span></div></div>
+ <div class="lg"><span class="mk">5</span><div><b>Sign out</b><span>Red, always last, separated.</span></div></div>
+</div>
+<div class="spec"><span>Width <b>260</b></span><span>Radius <b>12</b></span><span>Item <b>13.5 · 9/10 pad · r8</b></span><span>Shadow <b>0 14 34 / 16%</b></span><span>Opens <b>8px below trigger, end-aligned</b></span></div>
+<script src="../ui_kits/app/shell/shell.js"></script>
+<script>
+RS.base='../';
+const base={lang:'en',col:false,theme:'dark',page:'home',project:null,tab:1,role:0,open:{company:true},menu:null,joinCount:5,ws:0};
+function sb(o,cls){Object.assign(RS.S,base,o);return `<div class="rs${o.col?' col':''}${o.theme==='light'?' light':''} ${cls||''}" lang="${o.lang||'en'}" dir="${o.lang==='ar'?'rtl':'ltr'}">${RS.sidebar(RS.S)}</div>`}
+const V=[
+ {cap:'Expanded · Dark',sub:'Default',o:{},w:264,mk:1},
+ {cap:'Expanded · Light',sub:'Theme from user menu',o:{theme:'light',page:'roles'},w:264},
+ {cap:'Collapsed · tooltip',sub:'Hover an icon',o:{col:true},w:72,cls:'pin-tip-one',mk:2},
+ {cap:'Collapsed · flyout',sub:'Hover My Company',o:{col:true,page:'join'},w:72,cls:'pin-fly',mk:3},
+ {cap:'Arabic · RTL',sub:'Mirrors to the right',o:{lang:'ar',page:'projects'},w:264}
+];
+document.getElementById('sbs').innerHTML=V.map((v,i)=>`<div class="fr" style="${v.cls==='pin-fly'?'margin-inline-end:250px':v.cls==='pin-tip-one'?'margin-inline-end:130px':''}"><div class="cap">${v.cap}<small>${v.sub}</small></div><div class="box" data-i="${i}" style="width:${v.w}px">${sb(v.o,v.cls)}</div></div>`).join('');
+// pin one tooltip
+const tipBox=document.querySelector('[data-i="2"] .it[data-nav="projects"] .tip');if(tipBox){tipBox.style.opacity=1;tipBox.style.transform='translateY(-50%)'}
+// markers on the first sidebar
+function mk(sel,n,pos,root){const r=root||document.querySelector('[data-i="0"]');const el=r.querySelector(sel);if(!el)return;const bx=r.getBoundingClientRect(),e=el.getBoundingClientRect();const m=document.createElement('span');m.className='mk';m.textContent=n;m.style.left=(pos==='r'?e.right-bx.left-10:e.left-bx.left-10)+'px';m.style.top=(e.top-bx.top+e.height/2-10)+'px';r.appendChild(m)}
+function marks(){document.querySelectorAll('.box>.mk,.hdbox>.mk').forEach(m=>m.remove());
+ mk('.ws-btn',1,'r');mk('.sb-lbl',2,'r');mk('.it.on',3,'r');mk('.grp>.it',4,'r');mk('.sub .bd',5,'r');mk('.cbtn',6,'r');
+ mk('.it[data-nav="projects"] .tip',7,'r',document.querySelector('[data-i="2"]'));mk('.fly',8,'r',document.querySelector('[data-i="3"]'));
+ const h=document.getElementById('hdbox');mk('.hd-pav','A','l',h);mk('.srch','B','l',h);mk('.role-tag','C','l',h);mk('.me-btn','D','r',h);mk('.tab.on','E','l',h);}
+// item states
+function stl(theme){Object.assign(RS.S,base,{theme});const it=(cls,id,extra)=>{const m=[...RS.MODULES,...RS.COMPANY].find(x=>x.id===id);return `<button class="it ${cls}"><i class="ti ${m.ic}"></i><span class="lb">${RS.t(id)}</span>${extra||''}</button>`};
+ return `<div class="rs${theme==='light'?' light':''}" style="display:block;min-height:0;background:transparent"><div class="stl" style="background:var(--sb-bg);border:1px solid var(--sb-bd)">
+ <div class="rw"><small style="color:var(--sb-lbl)">Default</small>${it('','projects')}</div>
+ <div class="rw"><small style="color:var(--sb-lbl)">Hover</small>${it('f-hov','projects')}</div>
+ <div class="rw"><small style="color:var(--sb-lbl)">Pressed</small>${it('f-press','projects')}</div>
+ <div class="rw"><small style="color:var(--sb-lbl)">Active</small><div style="position:relative;padding-inline-start:14px;margin-inline-start:-14px">${it('on','projects')}</div></div>
+ <div class="rw"><small style="color:var(--sb-lbl)">Badge</small>${it('','join','<span class="bd">5</span>')}</div>
+ <div class="rw"><small style="color:var(--sb-lbl)">Sub active</small><div class="sub" style="display:flex;padding:0">${it('on','users')}</div></div>
+ </div></div>`}
+document.getElementById('states').innerHTML=stl('dark')+stl('light');
+// header
+Object.assign(RS.S,base);
+document.getElementById('hdbox').innerHTML=`<div class="rs" lang="en" dir="ltr">${RS.header(RS.S,{project:{l:'D',n:'Dubai Marina Tower – Phase 2',c:'Al Futtaim Construction Co.'}})}${RS.tabs(RS.S)}</div>`;
+
+['en','ar'].forEach(lg=>{Object.assign(RS.S,base,{lang:lg,menu:'me'});const w=document.createElement('div');w.className='fr';
+ w.innerHTML='<div class="cap">'+(lg==='en'?'English · LTR':'Arabic · RTL')+'<small>Open state</small></div><div class="umbox" data-lg="'+lg+'"><div class="rs" lang="'+lg+'" dir="'+(lg==='ar'?'rtl':'ltr')+'" style="display:block;min-height:0;background:transparent"><div class="me" style="display:flex;justify-content:flex-end">'+RS.header(RS.S,{}).match(/<div class="me">([\s\S]*)<\/div>\s*<\/header>/)[1]+'</div></div></div>';
+ document.getElementById('umenus').appendChild(w)});
+Object.assign(RS.S,base);
+function umarks(){document.querySelectorAll('.umbox>.mk').forEach(m=>m.remove());const r=document.querySelector('.umbox[data-lg="en"]');
+ const seps=r.querySelectorAll('.menu .seg2');mk('.menu .mhd',1,'l',r);mk('.menu .mi',2,'l',r);if(seps[0])mk('.menu .seg2',3,'l',r);
+ const s2=seps[1];if(s2){const bx=r.getBoundingClientRect(),e=s2.getBoundingClientRect();const m=document.createElement('span');m.className='mk';m.textContent=4;m.style.left=(e.left-bx.left-10)+'px';m.style.top=(e.top-bx.top+e.height/2-10)+'px';r.appendChild(m)}
+ mk('.menu .mi.danger',5,'l',r)}
+document.fonts.ready.then(umarks);setTimeout(umarks,300);addEventListener('resize',umarks);
+document.fonts.ready.then(marks);addEventListener('resize',marks);setTimeout(marks,300);marks();
+</script>
+</body>
+</html>

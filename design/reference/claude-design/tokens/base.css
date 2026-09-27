@@ -1,0 +1,35 @@
+/* ============================================================
+   Rabaed — base element defaults (off the token layer)
+   ============================================================ */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  font-family: var(--font-ui);
+  font-size: var(--fs-body);
+  line-height: var(--lh-normal);
+  color: var(--text-body);
+  background: var(--surface-page);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  margin: 0;
+  font-family: var(--font-display);
+  color: var(--text-heading);
+  line-height: var(--lh-tight);
+}
+
+p { margin: 0; }
+a { color: var(--text-link); text-decoration: none; }
+button { font-family: inherit; }
+
+::selection { background: var(--tomato-200); color: var(--tomato-900); }
+
+[dir="rtl"] { font-family: var(--font-arabic); }
+
+@keyframes rb-spin { to { transform: rotate(360deg); } }

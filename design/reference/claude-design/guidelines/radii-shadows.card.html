@@ -1,0 +1,29 @@
+<!-- @dsCard group="Spacing" viewport="700x160" name="Radii & shadows" subtitle="Corner radii and the warm elevation system" -->
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><link rel="stylesheet" href="../styles.css">
+<style>
+  body { margin: 0; background: var(--surface-page); padding: 24px; font-family: var(--font-ui); display:flex; flex-direction:column; gap:18px; }
+  .lbl { font-size: var(--fs-notes); font-weight: var(--fw-semibold); letter-spacing: var(--ls-wide); text-transform: uppercase; color: var(--text-muted); margin-bottom:10px; }
+  .row { display:flex; gap:16px; align-items:flex-end; }
+  .cell { display:flex; flex-direction:column; gap:8px; align-items:center; }
+  .box { width:70px; height:54px; background: var(--surface-card); border:1px solid var(--border-default); }
+  .sh { width:90px; height:54px; background: var(--surface-card); border-radius: var(--radius-md); }
+  .n { font-size: var(--fs-notes); color: var(--text-muted); }
+</style></head>
+<body>
+<div><div class="lbl">Radii</div><div class="row">
+  <div class="cell"><div class="box" style="border-radius:var(--radius-xs)"></div><span class="n">xs · 4</span></div>
+  <div class="cell"><div class="box" style="border-radius:var(--radius-sm)"></div><span class="n">sm · 8</span></div>
+  <div class="cell"><div class="box" style="border-radius:var(--radius-md)"></div><span class="n">md · 12</span></div>
+  <div class="cell"><div class="box" style="border-radius:var(--radius-lg)"></div><span class="n">lg · 16</span></div>
+  <div class="cell"><div class="box" style="border-radius:var(--radius-pill)"></div><span class="n">pill</span></div>
+</div></div>
+<div><div class="lbl">Shadows</div><div class="row">
+  <div class="cell"><div class="sh" style="box-shadow:var(--shadow-xs)"></div><span class="n">xs</span></div>
+  <div class="cell"><div class="sh" style="box-shadow:var(--shadow-sm)"></div><span class="n">sm</span></div>
+  <div class="cell"><div class="sh" style="box-shadow:var(--shadow-md)"></div><span class="n">md</span></div>
+  <div class="cell"><div class="sh" style="box-shadow:var(--shadow-lg)"></div><span class="n">lg</span></div>
+  <div class="cell"><div class="sh" style="box-shadow:var(--shadow-primary)"></div><span class="n">primary</span></div>
+</div></div>
+</body></html>

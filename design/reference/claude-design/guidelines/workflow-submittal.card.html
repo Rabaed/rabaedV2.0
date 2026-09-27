@@ -1,0 +1,29 @@
+<!-- @dsCard group="Colors" viewport="700x330" name="Submittal workflow palette" subtitle="Tonal tints · status · codes · disciplines · doc types · EN + AR" -->
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><link rel="stylesheet" href="../styles.css">
+<style>
+body{margin:0;background:#fff;padding:18px 22px;font-family:var(--font-ui);color:#1f2430;display:grid;grid-template-columns:1fr 1fr;gap:0 26px}
+[dir=rtl]{font-family:var(--font-arabic)}
+.lbl{font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#9aa0ad;margin:12px 0 7px}
+[dir=rtl] .lbl{letter-spacing:0;font-size:11.5px}
+.row{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.c{display:inline-flex;align-items:center;gap:5px;height:var(--chip-h);padding:0 var(--chip-px);border-radius:var(--chip-r);font-size:var(--chip-fs);font-weight:600;white-space:nowrap}
+.c i{width:6px;height:6px;border-radius:50%}.c .ti{font-size:14px}
+.dt{display:inline-flex;align-items:center;height:var(--lozenge-h);padding:0 6px;border-radius:var(--lozenge-r);box-shadow:inset 0 0 0 1px var(--doctype-ring);color:var(--doctype-fg);font:700 10.5px var(--font-ui);letter-spacing:.03em}
+.hd{font-size:12px;font-weight:600;color:#3a3f4b;margin-top:2px}
+</style></head>
+<body>
+<div id="en"></div><div id="ar" dir="rtl"></div>
+<script>
+const S=[['draft','Draft','مسودة'],['internal','Internal Review','مراجعة داخلية'],['resubmitted','Revised & Resubmitted','معاد تقديمها'],['pending','Pending Approval','بانتظار الاعتماد'],['approved','Approved','معتمدة'],['rejected','Rejected','مرفوضة'],['cancelled','Cancelled','ملغاة']];
+const C=[['a','ti-circle-check','Code A'],['b','ti-circle-check','Code B'],['c','ti-refresh','Code C'],['d','ti-circle-x','Code D']];
+const D=[['cv','CV','Civil Works','أعمال مدنية'],['ar','AR','Architecture','أعمال معمارية'],['el','EL','Electrical Works','أعمال كهربائية'],['me','ME','Mechanical Works','أعمال ميكانيكية'],['su','SU','Surveying','أعمال المساحة']];
+function col(ar){const L=(e,a)=>ar?a:e;return `<div class="hd">${L('English · LTR','عربي · RTL')}</div>
+<div class="lbl">${L('Workflow status','حالة سير العمل')}</div><div class="row">${S.map(s=>`<span class="c" style="background:var(--status-${s[0]}-bg);color:var(--status-${s[0]}-fg)"><i style="background:var(--status-${s[0]}-dot)"></i>${L(s[1],s[2])}</span>`).join('')}</div>
+<div class="lbl">${L('Approval codes · revision','رموز الاعتماد · المراجعة')}</div><div class="row">${C.map(c=>`<span class="c" style="background:var(--code-${c[0]}-bg);color:var(--code-${c[0]}-fg)"><span class="ti ${c[1]}"></span>${c[2]}</span>`).join('')}<span class="c" style="background:var(--rev-pill-bg);color:var(--rev-pill-fg);font-weight:700">R2</span></div>
+<div class="lbl">${L('Disciplines','التخصصات')}</div><div class="row">${D.map(d=>`<span class="c" style="background:var(--chip-${d[0]}-bg);color:var(--chip-${d[0]}-fg)">${L(d[2],d[3])} (${d[1]})</span>`).join('')}</div>
+<div class="lbl">${L('Document types','أنواع المستندات')}</div><div class="row">${['MAR','SAR','DAR','DAS','NPD'].map(t=>`<span class="dt">${t}</span>`).join('')}</div>`}
+document.getElementById('en').innerHTML=col(false);document.getElementById('ar').innerHTML=col(true);
+</script>
+</body></html>

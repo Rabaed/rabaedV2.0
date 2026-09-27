@@ -1,0 +1,650 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rabaed: Workflow & Visibility Simulator (PROTOTYPE)</title>
+<style>
+  :root { --accent:#E8552B; --accent-soft:#FDEEE8; --ink:#1F2430; --muted:#6B7280; --line:#E5E7EB; --bg:#F7F7F8; --card:#fff;
+          --ok:#0F8A5F; --ok-soft:#E6F6EF; --warn:#B45309; --warn-soft:#FEF3E2; --bad:#B42318; --bad-soft:#FDECEA; --info:#1D4ED8; --info-soft:#E8EFFD; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color:var(--ink); background:var(--bg); }
+  header { background:var(--card); border-bottom:1px solid var(--line); padding:18px 24px; }
+  header h1 { margin:0 0 4px; font-size:20px; }
+  header p { margin:0; color:var(--muted); max-width:980px; }
+  .tag { display:inline-block; font-size:11px; font-weight:600; letter-spacing:.04em; padding:2px 8px; border-radius:99px; background:var(--accent-soft); color:var(--accent); margin-left:8px; vertical-align:middle; }
+  main { padding:16px 24px 40px; display:grid; gap:16px; grid-template-columns: minmax(0,1.35fr) minmax(0,1fr); align-items:start; }
+  @media (max-width: 1100px) { main { grid-template-columns: 1fr; } }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; }
+  .card h2 { font-size:15px; margin:0 0 10px; }
+  .card h3 { font-size:13px; margin:14px 0 6px; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; }
+  .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  select, input[type=text] { font:inherit; padding:6px 8px; border:1px solid var(--line); border-radius:8px; background:#fff; }
+  button { font:inherit; padding:6px 10px; border:1px solid var(--line); border-radius:8px; background:#fff; cursor:pointer; }
+  button:hover { border-color:var(--accent); }
+  button.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+  button.step { text-align:left; width:100%; margin:4px 0; }
+  button.step.done { background:var(--ok-soft); border-color:#B7E4CF; color:#285E47; }
+  button.step.next { border-color:var(--accent); box-shadow:0 0 0 2px var(--accent-soft); }
+  button:disabled { opacity:.45; cursor:default; }
+  .msg { padding:10px 12px; border-radius:8px; margin-bottom:12px; }
+  .msg.ok { background:var(--ok-soft); color:#285E47; }
+  .msg.err { background:var(--bad-soft); color:var(--bad); }
+  .msg.info { background:var(--info-soft); color:var(--info); }
+  table { border-collapse:collapse; width:100%; font-size:13px; }
+  th, td { border-bottom:1px solid var(--line); padding:6px 6px; text-align:left; vertical-align:top; }
+  th { font-weight:600; color:var(--muted); font-size:12px; }
+  td.cell { text-align:center; }
+  .see { color:var(--ok); font-weight:700; }
+  .pdf { color:var(--warn); font-weight:600; font-size:12px; }
+  .none { color:#C4C7CE; }
+  .me { background:var(--accent-soft); }
+  .pill { display:inline-block; padding:1px 8px; border-radius:99px; font-size:12px; background:#F1F2F4; }
+  .pill.stage { background:var(--info-soft); color:var(--info); }
+  .pill.A, .pill.B, .pill.closed { background:var(--ok-soft); color:var(--ok); }
+  .pill.C { background:var(--warn-soft); color:var(--warn); }
+  .pill.D, .pill.cancelled { background:var(--bad-soft); color:var(--bad); }
+  .kv { display:grid; grid-template-columns: 150px 1fr; gap:4px 12px; }
+  .kv div:nth-child(odd) { color:var(--muted); }
+  .hist { list-style:none; padding:0; margin:0; }
+  .hist li { padding:6px 0; border-bottom:1px dashed var(--line); }
+  .hist .who { font-weight:600; }
+  .hist .aud { font-size:11px; padding:1px 6px; border-radius:99px; margin-left:6px; }
+  .aud.shared { background:var(--info-soft); color:var(--info); }
+  .aud.internal { background:#F1F2F4; color:var(--muted); }
+  .signed { font-size:11px; color:var(--ok); margin-left:6px; }
+  .hidden-note { color:var(--muted); font-style:italic; font-size:12px; margin-top:6px; }
+  .tabs { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px; }
+  .tabs button.active { background:var(--ink); color:#fff; border-color:var(--ink); }
+  .scenario-desc { color:var(--muted); margin:6px 0 8px; }
+  .muted { color:var(--muted); }
+  .changed { background:#FFF7D6; }
+  .notfound { padding:18px; text-align:center; border:1px dashed var(--line); border-radius:10px; color:var(--muted); }
+  .legend span { margin-right:14px; }
+  details summary { cursor:pointer; color:var(--muted); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Workflow &amp; Visibility Simulator <span class="tag">PROTOTYPE, throwaway</span></h1>
+  <p><b>Question this answers:</b> as a submittal moves through its Workflow, including internal reviews, Review Codes, Revisions, Code B comments, people leaving and companies being replaced, does every person see exactly what Rabaed's visibility rules promise, and nothing more?
+  Pick who you are acting as, press actions or run a walkthrough, and watch the <b>visibility matrix</b>.</p>
+</header>
+
+<main>
+  <section>
+    <div id="message"></div>
+
+    <div class="card">
+      <h2>Who sees what: visibility matrix</h2>
+      <div class="legend muted" style="margin-bottom:8px;font-size:12px">
+        <span><span class="see">●</span> sees the item</span>
+        <span><span class="pdf">PDF</span> only the sealed PDF they signed</span>
+        <span><span class="none">·</span> nothing (the item doesn't exist for them)</span>
+      </div>
+      <div id="matrix"></div>
+    </div>
+
+    <div class="card" style="margin-top:16px">
+      <div class="row" style="justify-content:space-between">
+        <h2 style="margin:0">What <span id="viewerName"></span> sees</h2>
+        <div class="row">
+          <label class="muted">Acting as</label><select id="viewer"></select>
+          <label class="muted">Item</label><select id="itemSel"></select>
+        </div>
+      </div>
+      <div id="detail" style="margin-top:12px"></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="card">
+      <h2>Guided walkthroughs</h2>
+      <div class="tabs" id="tabs"></div>
+      <div id="scenario"></div>
+    </div>
+
+    <div class="card" style="margin-top:16px">
+      <h2>Free play: actions for the person you're acting as</h2>
+      <p class="muted" style="margin-top:0">Every button is always available. If Rabaed wouldn't allow it, you'll see the reason in red.</p>
+      <h3>Contractor side</h3>
+      <div class="row">
+        <button data-act="create">Create Material Submittal</button>
+        <button data-act="send">Send for Review</button>
+        <button data-act="return">Return to Engineer</button>
+        <button data-act="submit">Submit to Consultant ✍</button>
+        <button data-act="revise">Create Revision</button>
+        <button data-act="resolveComment">Mark comment resolved</button>
+      </div>
+      <h3>Consultant side</h3>
+      <div class="row">
+        <button data-act="claim">Claim from pool</button>
+        <button data-act="recommend" data-code="A">Recommend A → manager</button>
+        <button data-act="recommend" data-code="B">Recommend B → manager</button>
+        <button data-act="recommend" data-code="C">Recommend C → manager</button>
+        <button data-act="mgrReturn">Return to Consultant Engineer</button>
+      </div>
+      <div class="row" style="margin-top:6px">
+        <button data-act="issue" data-code="A">Issue Code A ✍</button>
+        <button data-act="issue" data-code="B">Issue Code B ✍</button>
+        <button data-act="issue" data-code="C">Issue Code C ✍</button>
+        <button data-act="issue" data-code="D">Issue Code D ✍</button>
+        <button data-act="closeComment">Close comment</button>
+      </div>
+      <h3>Anyone who can see the item</h3>
+      <div class="row">
+        <input type="text" id="text" placeholder="Message or note…" value="Please confirm the IP rating.">
+        <button data-act="chat">Post in Chat</button>
+        <button data-act="note">Add internal note</button>
+      </div>
+      <h3>Project changes (Settings / Rabaed Admin)</h3>
+      <div class="row">
+        <button data-admin="removeMember" data-mid="ali">Remove Ali (C1 PM) from Project</button>
+        <button data-admin="grantTrade" data-mid="layla" data-trade="Electrical">Give Layla Electrical</button>
+        <button data-admin="withdraw" data-pid="K1">Withdraw consultant K1</button>
+        <button data-admin="addConsultant">Add consultant K2 (Electrical)</button>
+        <button data-admin="reset" class="primary">Reset everything</button>
+      </div>
+      <details style="margin-top:12px"><summary>Who's in this Project</summary><div id="people" style="margin-top:8px"></div></details>
+    </div>
+  </section>
+</main>
+
+<!-- ===================== PURE LOGIC MODULE (liftable) =====================
+     No DOM access in here. The page calls Sim.dispatch / Sim.visibility / Sim.pool.
+======================================================================= -->
+<script>
+const Sim = (() => {
+  const STAGE = { draft:'Drafts', pm_review:'Internal Review', k_eng:'Pending Approval', k_mgr:'Pending Approval',
+    approved:'Approved', revise:'Revise & Resubmit', rejected:'Rejected', cancelled:'Cancelled',
+    c_open:'Open', c_resolved:'Resolved', c_closed:'Closed' };
+  const STEP = { draft:'Contractor Engineer', pm_review:'Contractor Project Manager', k_eng:'Consultant Engineer',
+    k_mgr:'Consultant Manager', c_open:'Contractor (fix the comment)', c_resolved:'Consultant (verify)' };
+  const POSITION_FOR_STEP = { draft:'Engineer', pm_review:'Project Manager', k_eng:'Engineer', k_mgr:'Manager', c_open:'Engineer', c_resolved:'Engineer' };
+  const OPEN_STEPS = ['draft','pm_review','k_eng','k_mgr','c_open','c_resolved'];
+
+  function initialState() {
+    return {
+      participants: {
+        C1: { name:'TMC Constructions', role:'Contractor', trades:['Electrical'], locations:'all', status:'active', code:'TMC' },
+        C2: { name:'Gulf Builders', role:'Contractor', trades:['Electrical'], locations:['Building B'], status:'active', code:'GLF' },
+        K1: { name:'Design Consultants LLC', role:'Consultant', trades:['Electrical','Mechanical'], locations:'all', status:'active', code:'DCL' },
+        OR: { name:'Al Futtaim PMC', role:'Owner Representative', trades:['Electrical'], locations:'all', status:'active', code:'AFP' },
+      },
+      members: {
+        hafiz:    { name:'Hafiz',    pid:'C1', position:'Engineer',        trades:['Electrical'], locations:'all', signature:true,  active:true },
+        ali:      { name:'Ali',      pid:'C1', position:'Project Manager', trades:['Electrical'], locations:'all', signature:true,  active:true },
+        omar:     { name:'Omar',     pid:'C2', position:'Engineer',        trades:['Electrical'], locations:['Building B'], signature:true, active:true },
+        yusuf:    { name:'Yusuf',    pid:'C2', position:'Project Manager', trades:['Electrical'], locations:['Building B'], signature:false, active:true },
+        ahmed:    { name:'Ahmed',    pid:'K1', position:'Engineer',        trades:['Electrical'], locations:'all', signature:true,  active:true },
+        layla:    { name:'Layla',    pid:'K1', position:'Engineer',        trades:['Mechanical'], locations:'all', signature:true,  active:true },
+        mohammed: { name:'Mohammed', pid:'K1', position:'Manager',         trades:['Electrical','Mechanical'], locations:'all', signature:true, active:true },
+        sarah:    { name:'Sarah',    pid:'OR', position:'Owner Rep',       trades:['Electrical'], locations:'all', signature:true,  active:true },
+      },
+      defaultHolder: { pm_review:{ C1:'ali', C2:'yusuf' }, k_mgr:{ K1:'mohammed' } },
+      items: [], counters: {}, nextId: 1,
+    };
+  }
+
+  const covers = (who, item) => who.trades.includes(item.trade) && (who.locations === 'all' || who.locations.includes(item.location));
+  const isOpen = item => item.outcome === null;
+
+  function pool(s, item) {
+    if (!isOpen(item) || !item.holder || !item.holder.pid) return [];
+    const pos = POSITION_FOR_STEP[item.step];
+    return Object.entries(s.members)
+      .filter(([, m]) => m.active && m.pid === item.holder.pid && m.position === pos && covers(m, item))
+      .map(([id]) => id);
+  }
+
+  // 'full' | 'pdf' | 'none'
+  function visibility(s, mid, item) {
+    const m = s.members[mid]; const p = s.participants[m.pid];
+    const signed = item.events.some(e => e.by === mid && e.signed);
+    const pdfOnly = signed && item.pdf ? 'pdf' : 'none';
+    if (!m.active || p.status !== 'active') return pdfOnly;           // E2 Signatory Access
+    if (!item.access[m.pid]) return pdfOnly;                             // layer 3
+    if (!covers(m, item)) return pdfOnly;                                // layer 4
+    return 'full';
+  }
+  const eventVisible = (s, mid, ev) => ev.audience === 'shared' || ev.audience === s.members[mid].pid; // layer 5
+  const canSeeRecommendation = (s, mid, item) => item.reviewerPid && s.members[mid].pid === item.reviewerPid;
+
+  function ev(item, by, text, { audience, signed = false, actorPid } = {}) {
+    item.events.push({ seq: item.events.length + 1, by, actorPid, text, audience, signed });
+  }
+  function assignNumber(s, item) {
+    const p = s.participants[item.raisedBy];
+    const key = `TWR-${p.code}-MAR`;
+    s.counters[key] = (s.counters[key] || 0) + 1;
+    item.number = `${key}-${String(s.counters[key]).padStart(3, '0')}`;
+  }
+  function defaultOrPool(s, item, step, pid) {
+    const d = s.defaultHolder[step] && s.defaultHolder[step][pid];
+    const tmp = { ...item, step, holder: { pid } };
+    return d && pool(s, tmp).includes(d) ? d : null;
+  }
+  function grantOversight(s, item) {
+    for (const [pid, p] of Object.entries(s.participants))
+      if (p.status === 'active' && (p.role === 'Owner Representative' || p.role === 'Owner') && covers(p, item) && !item.access[pid])
+        item.access[pid] = 'oversight';
+  }
+  function resolveConsultant(s, item) {
+    return Object.entries(s.participants).filter(([, p]) => p.status === 'active' && p.role === 'Consultant' && covers(p, item)).map(([pid]) => pid);
+  }
+
+  function fail(msg) { throw new Error(msg); }
+  function find(s, id, by) {
+    const item = s.items.find(i => i.id === id);
+    if (!item || (by && visibility(s, by, item) !== 'full')) fail('404: Not found. For this person the item does not exist.');
+    return item;
+  }
+  function mustHold(s, item, by) {
+    if (!isOpen(item)) fail(`This item is closed (${item.outcome}).`);
+    if (item.holder.memberId !== by) {
+      if (item.holder.memberId === null && pool(s, item).includes(by)) fail('It is in your pool. Claim it first.');
+      fail(`Only the current holder can act. It is at "${STEP[item.step]}".`);
+    }
+  }
+  function mustSign(s, by) {
+    if (!s.members[by].signature) fail('Please add your signature to your profile before you can sign this.');
+  }
+
+  function dispatch(state, action) {
+    const s = structuredClone(state);
+    const by = action.by; const m = by && s.members[by];
+    try {
+      switch (action.type) {
+        case 'create': {
+          const p = s.participants[m.pid];
+          if (!m.active) fail('You are no longer on this Project.');
+          if (p.role !== 'Contractor' || m.position !== 'Engineer') fail('Only a Contractor Engineer can create a Material Submittal.');
+          const location = action.location || (m.locations === 'all' ? 'Building A' : m.locations[0]);
+          const item = { id: `I${s.nextId++}`, type:'MAR', title: action.title || 'Material submittal', trade:'Electrical', location,
+            raisedBy: m.pid, createdBy: by, number: null, rev: 0, revisionOf: null, step:'draft', holder:{ pid:m.pid, memberId:by },
+            access:{ [m.pid]:'raised' }, events:[], chat:[], outcome:null, recommended:null, reviewerPid:null, pdf:false, comments:[], parentOf:null };
+          if (!covers(m, item)) fail(`${location} is outside your visibility.`);
+          ev(item, by, `created "${item.title}" (${location})`, { audience: m.pid, actorPid: m.pid });
+          s.items.push(item);
+          return { state: s, ok: `Draft created by ${m.name}. Only ${p.name} can see it.`, focus: item.id };
+        }
+        case 'send': {
+          const item = find(s, action.id, by); mustHold(s, item, by);
+          if (item.step !== 'draft') fail('Send for Review is only possible from Draft.');
+          let numberMsg = '';
+          if (!item.number) { assignNumber(s, item); numberMsg = ` Document Number ${item.number} assigned now (first time leaving Draft).`; }
+          else if (item.rev) numberMsg = ` Keeps number ${item.number} Rev ${item.rev}.`;
+          item.step = 'pm_review';
+          item.holder = { pid: item.raisedBy, memberId: defaultOrPool(s, item, 'pm_review', item.raisedBy) };
+          ev(item, by, 'sent it for internal review', { audience: item.raisedBy, actorPid: m.pid });
+          return { state: s, ok: `Sent for review.${numberMsg}` };
+        }
+        case 'return': {
+          const item = find(s, action.id, by); mustHold(s, item, by);
+          if (item.step !== 'pm_review') fail('Return to Engineer is only possible at Internal Review.');
+          item.step = 'draft'; item.holder = { pid: item.raisedBy, memberId: item.createdBy };
+          ev(item, by, 'returned it to the engineer: "please attach the datasheet"', { audience: item.raisedBy, actorPid: m.pid });
+          return { state: s, ok: 'Returned inside the Contractor. Nobody else sees this.' };
+        }
+        case 'submit': {
+          const item = find(s, action.id, by); mustHold(s, item, by);
+          if (item.step !== 'pm_review') fail('Submit is only possible at Internal Review.');
+          mustSign(s, by);
+          const ks = resolveConsultant(s, item);
+          if (ks.length === 0) fail(`No Consultant covers ${item.trade} / ${item.location}. Visibility Gap: Project Admins are warned.`);
+          const k = ks[0];
+          item.step = 'k_eng'; item.reviewerPid = k;
+          item.holder = { pid: k, memberId: null };
+          item.access[k] = 'handling'; grantOversight(s, item);
+          ev(item, by, `submitted it to ${s.participants[k].name}`, { audience:'shared', signed:true, actorPid: m.pid });
+          return { state: s, ok: `Submitted and signed. ${s.participants[k].name} can now see it (pool: ${pool(s, item).map(x => s.members[x].name).join(', ') || 'nobody!'}). Owner Representative sees it as oversight.` };
+        }
+        case 'claim': {
+          const item = find(s, action.id, by);
+          if (!isOpen(item) || item.holder.memberId) fail('Nothing to claim: the step already has a holder.');
+          if (!pool(s, item).includes(by)) fail('You are not in the pool for this step (wrong company, position or visibility).');
+          item.holder.memberId = by;
+          ev(item, by, 'claimed the review', { audience: m.pid, actorPid: m.pid });
+          return { state: s, ok: `${m.name} claimed it.` };
+        }
+        case 'recommend': {
+          const item = find(s, action.id, by); mustHold(s, item, by);
+          if (item.step !== 'k_eng') fail('Recommending a code is the Consultant Engineer step.');
+          item.recommended = action.code; item.step = 'k_mgr';
+          item.holder = { pid: item.holder.pid, memberId: defaultOrPool(s, item, 'k_mgr', item.holder.pid) };
+          ev(item, by, `recommended Code ${action.code} and sent it to the manager`, { audience: m.pid, actorPid: m.pid });
+          return { state: s, ok: `Recommended Code ${action.code}. This is internal to the Consultant: the Contractor never sees it.` };
+        }
+        case 'mgrReturn': {
+          const item = find(s, action.id, by); mustHold(s, item, by);
+          if (item.step !== 'k_mgr') fail('Only possible at the Consultant Manager step.');
+          const lastEng = [...item.events].reverse().find(e => e.text.startsWith('recommended'))?.by || null;
+          item.step = 'k_eng'; item.holder = { pid: item.holder.pid, memberId: lastEng };
+          ev(item, by, 'returned it to the consultant engineer: "check clause 4.2 again"', { audience: m.pid, actorPid: m.pid });
+          return { state: s, ok: 'Returned inside the Consultant. Internal: the Contractor sees nothing.' };
+        }
+        case 'issue': {
+          const item = find(s, action.id, by); mustHold(s, item, by);
+          if (item.step !== 'k_mgr') fail('Only the Consultant Manager step can issue the final Review Code.');
+          mustSign(s, by);
+          item.outcome = action.code;
+          item.step = { A:'approved', B:'approved', C:'revise', D:'rejected' }[action.code];
+          item.holder = null; item.pdf = true;
+          ev(item, by, `issued Code ${action.code}${item.recommended && item.recommended !== action.code ? ` (overriding the engineer's recommendation)` : ''}`, { audience:'shared', signed:true, actorPid: m.pid });
+          let extra = '';
+          if (action.code === 'B') {
+            ['Provide IP65 certificate', 'Update luminaire schedule'].forEach(t => {
+              const c = { id:`I${s.nextId++}`, type:'Comment', title:t, trade:item.trade, location:item.location, raisedBy:m.pid, createdBy:by,
+                number:null, rev:0, revisionOf:null, step:'c_open', holder:{ pid:item.raisedBy, memberId:null },
+                access:{ [m.pid]:'raised', [item.raisedBy]:'handling' }, events:[], chat:[], outcome:null, recommended:null,
+                reviewerPid:m.pid, pdf:false, comments:[], parentOf:item.id };
+              grantOversight(s, c);
+              ev(c, by, `raised this Comment from Code B on ${item.number}${item.rev ? ' Rev ' + item.rev : ''}`, { audience:'shared', actorPid:m.pid });
+              s.items.push(c); item.comments.push(c.id);
+            });
+            extra = ' Two Comment items were created in the Snag List and assigned to the Contractor.';
+          }
+          if (action.code === 'C') extra = ' The Contractor can now create a Revision.';
+          return { state: s, ok: `Code ${action.code} issued and signed. The sealed Documental Record PDF was produced.${extra}` };
+        }
+        case 'revise': {
+          const item = find(s, action.id, by);
+          if (item.outcome !== 'C') fail('A Revision is only possible after Code C.');
+          if (m.pid !== item.raisedBy) fail('Only the company that raised it can revise it.');
+          if (s.items.some(i => i.revisionOf === item.id)) fail('A Revision already exists for this one.');
+          const r = structuredClone(item);
+          Object.assign(r, { id:`I${s.nextId++}`, rev:item.rev + 1, revisionOf:item.id, step:'draft', holder:{ pid:m.pid, memberId:by },
+            access:{ [m.pid]:'raised' }, events:[], chat:[], outcome:null, recommended:null, reviewerPid:null, pdf:false, comments:[], createdBy:by });
+          ev(r, by, `created Rev ${r.rev} from ${item.number}${item.rev ? ' Rev ' + item.rev : ''} (Code C)`, { audience:m.pid, actorPid:m.pid });
+          s.items.push(r);
+          return { state: s, ok: `${item.number} Rev ${r.rev} created as a Draft: same number, linked to the original, which stays closed at Code C.`, focus: r.id };
+        }
+        case 'resolveComment': {
+          const item = find(s, action.id, by);
+          if (item.type !== 'Comment' || item.step !== 'c_open') fail('Only an open Comment can be marked resolved.');
+          if (m.pid !== item.holder.pid || m.position !== 'Engineer') fail('Only a Contractor Engineer on this item can resolve it.');
+          item.step = 'c_resolved'; item.holder = { pid:item.reviewerPid, memberId:null };
+          ev(item, by, 'marked it resolved', { audience:'shared', actorPid:m.pid });
+          return { state: s, ok: 'Comment resolved. It goes back to the Consultant to verify.' };
+        }
+        case 'closeComment': {
+          const item = find(s, action.id, by);
+          if (item.type !== 'Comment' || item.step !== 'c_resolved') fail('Only a resolved Comment can be closed.');
+          if (!pool(s, item).includes(by)) fail('Only a Consultant Engineer covering this item can close it.');
+          item.step = 'c_closed'; item.outcome = 'closed'; item.holder = null;
+          ev(item, by, 'verified and closed it', { audience:'shared', actorPid:m.pid });
+          const src = s.items.find(i => i.id === item.parentOf);
+          const closed = src.comments.filter(id => s.items.find(i => i.id === id).outcome === 'closed').length;
+          return { state: s, ok: `Comment closed. ${src.number}: ${closed} of ${src.comments.length} comments closed.` };
+        }
+        case 'chat': {
+          const item = find(s, action.id, by);
+          item.chat.push({ by, text: action.text || '…' });
+          return { state: s, ok: 'Chat posted. Every company that can see the item sees it. It cannot be edited or deleted.' };
+        }
+        case 'note': {
+          const item = find(s, action.id, by);
+          ev(item, by, `internal note: "${action.text || '…'}"`, { audience:m.pid, actorPid:m.pid });
+          return { state: s, ok: `Internal note added. Only ${s.participants[m.pid].name} can see it.` };
+        }
+        // ---- Project changes ----
+        case 'removeMember': {
+          const r = s.members[action.mid]; r.active = false;
+          let vac = 0;
+          s.items.forEach(i => { if (isOpen(i) && i.holder && i.holder.memberId === action.mid) { i.holder.memberId = null; i.holder.vacant = true; vac++; } });
+          return { state: s, ok: `${r.name} removed from the Project.${vac ? ` ${vac} step(s) became a Vacancy; ${s.participants[r.pid].name}'s Authorized Person is notified.` : ''} Anything ${r.name} signed stays available to them as PDF (Signatory Access).` };
+        }
+        case 'grantTrade': {
+          const r = s.members[action.mid];
+          if (!r.trades.includes(action.trade)) r.trades.push(action.trade);
+          return { state: s, ok: `${r.name} now covers ${action.trade}, and immediately sees ${action.trade} items her company has access to, including older ones.` };
+        }
+        case 'withdraw': {
+          const p = s.participants[action.pid]; p.status = 'withdrawn';
+          let cancelled = 0, waiting = 0;
+          s.items.forEach(i => {
+            if (!isOpen(i)) return;
+            if (i.raisedBy === action.pid) { i.outcome = 'cancelled'; i.step = 'cancelled'; i.holder = null; i.pdf = true;
+              ev(i, null, `cancelled because ${p.name} was withdrawn`, { audience:'shared' }); cancelled++; }
+            else if (i.holder && i.holder.pid === action.pid) { i.holder = { pid:null, memberId:null, awaiting:p.role };
+              ev(i, null, `waiting: ${p.name} was withdrawn; a replacement ${p.role} is needed`, { audience:'shared' }); waiting++; }
+          });
+          return { state: s, ok: `${p.name} withdrawn. ${cancelled} item(s) it raised were cancelled; ${waiting} item(s) it was reviewing now wait for a replacement ${p.role}.` };
+        }
+        case 'addConsultant': {
+          if (s.participants.K2) fail('K2 is already on the Project.');
+          s.participants.K2 = { name:'Riyadh Consulting', role:'Consultant', trades:['Electrical'], locations:'all', status:'active', code:'RYC' };
+          s.members.khalid = { name:'Khalid', pid:'K2', position:'Engineer', trades:['Electrical'], locations:'all', signature:true, active:true };
+          s.members.noura  = { name:'Noura',  pid:'K2', position:'Manager',  trades:['Electrical'], locations:'all', signature:true, active:true };
+          s.defaultHolder.k_mgr.K2 = 'noura';
+          let moved = 0;
+          s.items.forEach(i => {
+            if (isOpen(i) && i.holder && i.holder.awaiting === 'Consultant' && covers(s.participants.K2, i)) {
+              i.holder = { pid:'K2', memberId: i.step === 'k_mgr' ? 'noura' : null }; i.access.K2 = 'handling'; i.reviewerPid = 'K2';
+              ev(i, null, 'handed to Riyadh Consulting (replacement Consultant)', { audience:'shared' }); moved++;
+            }
+          });
+          return { state: s, ok: `Riyadh Consulting (K2) added for Electrical. ${moved} waiting item(s) moved to K2's pool. K2 does not see K1's internal notes.` };
+        }
+        default: fail('Unknown action');
+      }
+    } catch (e) { return { state, error: e.message }; }
+  }
+
+  return { initialState, dispatch, visibility, pool, eventVisible, canSeeRecommendation, STAGE, STEP };
+})();
+</script>
+
+<!-- ===================== THROWAWAY PAGE SHELL ===================== -->
+<script>
+let state = Sim.initialState();
+let viewer = 'hafiz';
+let selected = null;
+let lastMsg = { kind:'info', text:'Start a walkthrough on the right, or act as someone and press buttons.' };
+let prevMatrix = {};
+
+const $ = id => document.getElementById(id);
+const personLabel = mid => { const m = state.members[mid]; const p = state.participants[m.pid];
+  return `${m.name}: ${p.name.split(' ')[0]} ${m.position}${m.trades.length ? ' · ' + m.trades.join('+') : ''}${m.locations !== 'all' ? ' · ' + m.locations.join(',') : ''}${!m.active ? ' (removed)' : ''}${p.status !== 'active' ? ' (company withdrawn)' : ''}`; };
+const itemLabel = i => `${i.number ? i.number + (i.rev ? ' Rev ' + i.rev : '') : 'Draft'} · ${i.type === 'Comment' ? 'Comment: ' : ''}${i.title}`;
+
+function run(action, opts = {}) {
+  const res = Sim.dispatch(state, action);
+  if (res.error) lastMsg = { kind:'err', text:`${state.members[action.by]?.name || 'Rabaed'}: ${res.error}` };
+  else { state = res.state; lastMsg = { kind:'ok', text: res.ok }; if (res.focus) selected = res.focus; }
+  if (opts.viewAs) viewer = opts.viewAs;
+  render();
+  return !res.error;
+}
+
+function render() {
+  if (!state.members[viewer]) viewer = 'hafiz';
+  // message
+  $('message').innerHTML = `<div class="msg ${lastMsg.kind}">${lastMsg.text}</div>`;
+  // viewer select
+  $('viewer').innerHTML = Object.keys(state.members).map(mid => `<option value="${mid}" ${mid === viewer ? 'selected' : ''}>${personLabel(mid)}</option>`).join('');
+  $('viewerName').textContent = state.members[viewer].name;
+  // item select (simulator god-view list)
+  if (!selected && state.items.length) selected = state.items[0].id;
+  $('itemSel').innerHTML = state.items.length ? state.items.map(i => `<option value="${i.id}" ${i.id === selected ? 'selected' : ''}>${itemLabel(i)}</option>`).join('') : '<option>(no items yet)</option>';
+  renderMatrix(); renderDetail(); renderPeople();
+}
+
+function renderMatrix() {
+  const mids = Object.keys(state.members);
+  if (!state.items.length) { $('matrix').innerHTML = '<p class="muted">No items yet.</p>'; return; }
+  const now = {};
+  let h = '<table><tr><th>Item</th><th>Stage</th>' + mids.map(mid => `<th class="${mid === viewer ? 'me' : ''}" title="${personLabel(mid)}">${state.members[mid].name}<br><span class="muted" style="font-weight:400">${state.members[mid].pid}</span></th>`).join('') + '</tr>';
+  for (const i of state.items) {
+    h += `<tr><td>${itemLabel(i)}</td><td>${stagePill(i)}</td>`;
+    for (const mid of mids) {
+      const v = Sim.visibility(state, mid, i); const key = i.id + mid; now[key] = v;
+      const changed = prevMatrix[key] !== undefined && prevMatrix[key] !== v;
+      const holds = i.holder && i.holder.memberId === mid;
+      const inPool = i.holder && !i.holder.memberId && Sim.pool(state, i).includes(mid);
+      h += `<td class="cell ${mid === viewer ? 'me' : ''} ${changed ? 'changed' : ''}">${v === 'full' ? `<span class="see">●</span>${holds ? ' <span class="pill" title="holds the step">holds</span>' : inPool ? ' <span class="pill" title="in the pool">pool</span>' : ''}` : v === 'pdf' ? '<span class="pdf">PDF</span>' : '<span class="none">·</span>'}</td>`;
+    }
+    h += '</tr>';
+  }
+  $('matrix').innerHTML = h + '</table><p class="muted" style="font-size:12px;margin:8px 0 0">Yellow cells changed with the last action.</p>';
+  prevMatrix = now;
+}
+function stagePill(i) {
+  const o = i.outcome;
+  return `<span class="pill stage">${Sim.STAGE[i.step]}</span>${o ? ` <span class="pill ${o}">${o === 'cancelled' ? 'Cancelled' : o === 'closed' ? 'Closed' : 'Code ' + o}</span>` : ''}`;
+}
+
+function renderDetail() {
+  const i = state.items.find(x => x.id === selected);
+  if (!i) { $('detail').innerHTML = '<p class="muted">No item selected.</p>'; return; }
+  const v = Sim.visibility(state, viewer, i); const m = state.members[viewer];
+  if (v === 'none') { $('detail').innerHTML = `<div class="notfound"><b>404: Not found</b><br>For ${m.name}, this item does not exist. Not in lists, counts, search, notifications or Pins.</div>`; return; }
+  if (v === 'pdf') { $('detail').innerHTML = `<div class="notfound"><b>Signatory Access</b><br>${m.name} can open only the sealed Documental Record PDF of <b>${itemLabel(i)}</b> (outcome ${i.outcome}), because they signed it. No live item, no history, no chat.</div>`; return; }
+  const holder = !i.holder ? '(closed)' : i.holder.awaiting ? `<b style="color:var(--bad)">Waiting for a replacement ${i.holder.awaiting}</b>` :
+    i.holder.memberId ? `${state.members[i.holder.memberId].name} (${state.participants[i.holder.pid].name})` :
+    `${i.holder.vacant ? '<b style="color:var(--bad)">Vacancy</b>: ' : ''}Pool of ${state.participants[i.holder.pid].name}: ${Sim.pool(state, i).map(x => state.members[x].name).join(', ') || '<b style="color:var(--bad)">nobody eligible</b>'}`;
+  const visibleEvents = i.events.filter(e => Sim.eventVisible(state, viewer, e));
+  const hidden = i.events.length - visibleEvents.length;
+  const comments = i.comments.length ? `${i.comments.filter(id => state.items.find(x => x.id === id).outcome === 'closed').length} of ${i.comments.length} closed` : '-';
+  const src = i.revisionOf ? state.items.find(x => x.id === i.revisionOf) : null;
+  $('detail').innerHTML = `
+    <div class="kv">
+      <div>Document Number</div><div>${i.number ? `<b>${i.number}${i.rev ? ' Rev ' + i.rev : ''}</b>` : '<span class="muted">none yet (Draft)</span>'}</div>
+      <div>Type · Trade · Location</div><div>${i.type} · ${i.trade} · ${i.location}</div>
+      <div>Raised by</div><div>${state.participants[i.raisedBy].name}</div>
+      <div>Stage / Step</div><div>${stagePill(i)} ${i.holder ? '· ' + Sim.STEP[i.step] : ''}</div>
+      <div>Held by</div><div>${holder}</div>
+      <div>Recommended Code</div><div>${Sim.canSeeRecommendation(state, viewer, i) ? (i.recommended ? `Code ${i.recommended} <span class="muted">(internal to ${state.participants[i.reviewerPid].name})</span>` : '-') : '<span class="muted">not visible to your company</span>'}</div>
+      <div>Code B comments</div><div>${comments}</div>
+      <div>Previous revision</div><div>${src ? `${src.number}${src.rev ? ' Rev ' + src.rev : ''}: ${src.outcome ? 'Code ' + src.outcome : ''}` : '-'}</div>
+      <div>Documental Record</div><div>${i.pdf ? 'Sealed PDF available: signatures + events between companies only (no internal notes, no chat)' : '-'}</div>
+      <div>Why ${m.name} sees it</div><div>${state.participants[m.pid].name} has access as <b>${i.access[m.pid]}</b>; ${m.name}'s visibility covers ${i.trade} / ${i.location}</div>
+    </div>
+    <h3>History ${m.name} can see</h3>
+    <ul class="hist">${visibleEvents.map(e => `<li><span class="who">${e.by ? state.members[e.by].name : 'Rabaed'}</span> ${e.text}
+      <span class="aud ${e.audience === 'shared' ? 'shared' : 'internal'}">${e.audience === 'shared' ? 'shared' : 'internal to ' + state.participants[e.audience].name}</span>${e.signed ? '<span class="signed">✍ signed</span>' : ''}</li>`).join('') || '<li class="muted">nothing</li>'}</ul>
+    ${hidden ? `<div class="hidden-note">Simulator insight (not shown in the real product): ${hidden} history entr${hidden > 1 ? 'ies are' : 'y is'} internal to another company and hidden from ${m.name}.</div>` : ''}
+    <h3>Chat</h3>
+    <ul class="hist">${i.chat.map(c => `<li><span class="who">${state.members[c.by].name}</span> <span class="muted">(${state.participants[state.members[c.by].pid].name})</span>: ${c.text}</li>`).join('') || '<li class="muted">no messages</li>'}</ul>`;
+}
+
+function renderPeople() {
+  $('people').innerHTML = '<table><tr><th>Company</th><th>Role</th><th>Covers</th><th>Status</th></tr>' +
+    Object.entries(state.participants).map(([pid, p]) => `<tr><td>${pid}: ${p.name}</td><td>${p.role}</td><td>${p.trades.join(', ')} / ${p.locations === 'all' ? 'all locations' : p.locations.join(', ')}</td><td>${p.status}</td></tr>`).join('') +
+    '</table><table style="margin-top:8px"><tr><th>Person</th><th>Signature on file</th></tr>' +
+    Object.keys(state.members).map(mid => `<tr><td>${personLabel(mid)}</td><td>${state.members[mid].signature ? 'yes' : '<b style="color:var(--bad)">no</b>'}</td></tr>`).join('') + '</table>';
+}
+
+// ---------- free play wiring ----------
+document.querySelectorAll('[data-act]').forEach(b => b.onclick = () => {
+  const a = { type: b.dataset.act, by: viewer, id: selected, code: b.dataset.code, text: $('text').value };
+  if (a.type === 'create') a.title = 'Lighting Fixtures';
+  run(a);
+});
+document.querySelectorAll('[data-admin]').forEach(b => b.onclick = () => {
+  if (b.dataset.admin === 'reset') { state = Sim.initialState(); selected = null; prevMatrix = {}; lastMsg = { kind:'info', text:'Reset.' }; render(); return; }
+  run({ type: b.dataset.admin, mid: b.dataset.mid, trade: b.dataset.trade, pid: b.dataset.pid });
+});
+$('viewer').onchange = e => { viewer = e.target.value; render(); };
+$('itemSel').onchange = e => { selected = e.target.value; render(); };
+
+// ---------- guided walkthroughs ----------
+// step: { label, as, do: {type,...}, item: index into items (default: selected), look: true for view-only }
+const S = (label, as, act, extra = {}) => ({ label, as, act, ...extra });
+const look = (label, as, item) => ({ label, as, look: true, item });
+const base = [
+  S('Hafiz (C1 Engineer) creates "Lighting Fixtures" in Building A', 'hafiz', { type:'create', title:'Lighting Fixtures' }),
+  S('Hafiz sends it for review → gets its Document Number', 'hafiz', { type:'send' }),
+  S('Ali (C1 PM) submits it to the Consultant ✍', 'ali', { type:'submit' }),
+];
+const SCENARIOS = [
+  { name:'1. Happy path', desc:'A material submittal goes from draft to Code A. Watch the matrix: only C1 sees the draft; at Submit the Consultant\'s Electrical people and the Owner Representative start seeing it; Layla (Mechanical) and C2 never do.',
+    steps:[...base, S('Ahmed (K1 Electrical engineer) claims it from the pool', 'ahmed', { type:'claim' }),
+      S('Ahmed recommends Code A and sends it to his manager', 'ahmed', { type:'recommend', code:'A' }),
+      S('Mohammed (K1 Manager) issues Code A ✍', 'mohammed', { type:'issue', code:'A' }),
+      look('Look as Hafiz: history shows only what crossed between companies', 'hafiz', 0)] },
+  { name:'2. Two contractors, same trade', desc:'C1 and C2 both do Electrical. Each must be blind to the other\'s submittals, even in the same Project and Trade.',
+    steps:[...base, S('Omar (C2 Engineer, Building B) creates "Cable Tray" in Building B', 'omar', { type:'create', title:'Cable Tray' }),
+      look('Look as Omar at C1\'s submittal', 'omar', 0),
+      S('Omar tries to post in C1\'s submittal chat', 'omar', { type:'chat', text:'hello?' }, { item:0 }),
+      look('Look as Ali at C2\'s draft', 'ali', 1)] },
+  { name:'3. Consultant\'s internal back-and-forth', desc:'The consultant engineer recommends, the manager disagrees and returns it, then issues C. The Contractor sees only the final Code C, never the recommendations or the internal return.',
+    steps:[...base, S('Ahmed claims it', 'ahmed', { type:'claim' }),
+      S('Ahmed recommends Code B', 'ahmed', { type:'recommend', code:'B' }),
+      S('Mohammed returns it to Ahmed', 'mohammed', { type:'mgrReturn' }),
+      S('Ahmed now recommends Code C', 'ahmed', { type:'recommend', code:'C' }),
+      S('Mohammed issues Code C ✍', 'mohammed', { type:'issue', code:'C' }),
+      look('Look as Ali (Contractor PM)', 'ali', 0), look('Look as Mohammed (Consultant)', 'mohammed', 0)] },
+  { name:'4. Code C → Revision', desc:'After Code C the Contractor creates Rev 1: same number, linked to the original, which stays closed at C. Rev 1 runs the whole workflow again.',
+    steps:[...base, S('Ahmed claims', 'ahmed', { type:'claim' }), S('Ahmed recommends C', 'ahmed', { type:'recommend', code:'C' }),
+      S('Mohammed issues Code C ✍', 'mohammed', { type:'issue', code:'C' }),
+      S('Hafiz creates Rev 1', 'hafiz', { type:'revise' }, { item:0 }),
+      look('Look as Ahmed: Rev 1 is still an internal C1 draft', 'ahmed', 1),
+      S('Hafiz sends Rev 1 for review (number kept)', 'hafiz', { type:'send' }, { item:1 }),
+      S('Ali submits Rev 1 ✍', 'ali', { type:'submit' }, { item:1 }),
+      S('Ahmed claims Rev 1', 'ahmed', { type:'claim' }, { item:1 }), S('Ahmed recommends A', 'ahmed', { type:'recommend', code:'A' }, { item:1 }),
+      S('Mohammed issues Code A on Rev 1 ✍', 'mohammed', { type:'issue', code:'A' }, { item:1 })] },
+  { name:'5. Code B → comments', desc:'Code B approves with comments. Each comment becomes a Comment item in the Snag List, assigned to the Contractor and linked to the submittal, which tracks "x of y closed".',
+    steps:[...base, S('Ahmed claims', 'ahmed', { type:'claim' }), S('Ahmed recommends B', 'ahmed', { type:'recommend', code:'B' }),
+      S('Mohammed issues Code B ✍ (2 comments)', 'mohammed', { type:'issue', code:'B' }),
+      S('Hafiz marks the first comment resolved', 'hafiz', { type:'resolveComment' }, { item:1 }),
+      S('Ahmed verifies and closes it', 'ahmed', { type:'closeComment' }, { item:1 }),
+      look('Look at the submittal as Ali: 1 of 2 comments closed', 'ali', 0),
+      look('Look at a comment as Omar (C2)', 'omar', 2)] },
+  { name:'6. Mechanical-only engineer', desc:'Layla works for the same Consultant but only covers Mechanical. She must not see Electrical items until she is given Electrical. Then she sees them, including older ones.',
+    steps:[...base, look('Look as Layla', 'layla', 0),
+      S('Layla tries to claim it', 'layla', { type:'claim' }),
+      { label:'Project Admin gives Layla Electrical', admin:{ type:'grantTrade', mid:'layla', trade:'Electrical' }, as:'layla' },
+      look('Look as Layla again: now visible, and she is in the pool', 'layla', 0),
+      S('Layla claims it', 'layla', { type:'claim' })] },
+  { name:'7. Consultant replaced mid-review', desc:'K1 is withdrawn while reviewing C1\'s submittal. C1\'s work is not cancelled: it waits for a replacement Consultant, then goes to their pool. The new Consultant does not see K1\'s internal notes.',
+    steps:[...base, S('Ahmed claims', 'ahmed', { type:'claim' }),
+      S('Ahmed writes an internal note', 'ahmed', { type:'note', text:'Datasheet looks outdated' }),
+      { label:'K1 is withdrawn from the Project', admin:{ type:'withdraw', pid:'K1' }, as:'ali' },
+      look('Look as Ali: waiting for a replacement Consultant', 'ali', 0),
+      { label:'Riyadh Consulting (K2) is added for Electrical', admin:{ type:'addConsultant' }, as:'khalid' },
+      look('Look as Khalid (K2): no K1 internal note', 'khalid', 0),
+      S('Khalid claims it', 'khalid', { type:'claim' })] },
+  { name:'8. Signed, then removed', desc:'Ali signs the Submit, the item is approved, then Ali is removed. He keeps his right to the sealed PDF he signed, and nothing else.',
+    steps:[...base, S('Ahmed claims', 'ahmed', { type:'claim' }), S('Ahmed recommends A', 'ahmed', { type:'recommend', code:'A' }),
+      S('Mohammed issues Code A ✍', 'mohammed', { type:'issue', code:'A' }),
+      { label:'Ali is removed from the Project', admin:{ type:'removeMember', mid:'ali' }, as:'ali' },
+      look('Look as Ali', 'ali', 0), look('Look as Hafiz (never signed; still on the Project)', 'hafiz', 0)] },
+  { name:'9. Things that must fail', desc:'Attempts Rabaed must refuse: acting out of turn, the Contractor issuing a code, signing without a signature on file, acting on an item you cannot see.',
+    steps:[S('Omar creates "Cable Tray" (Building B)', 'omar', { type:'create', title:'Cable Tray' }),
+      S('Omar sends it for review', 'omar', { type:'send' }),
+      S('Yusuf (C2 PM, no signature on file) tries to Submit ✍', 'yusuf', { type:'submit' }),
+      S('Omar tries to issue Code A himself', 'omar', { type:'issue', code:'A' }),
+      S('Hafiz (C1) tries to add a note on C2\'s item', 'hafiz', { type:'note', text:'peek' }),
+      S('Ahmed (Consultant) tries to claim an item still inside C2', 'ahmed', { type:'claim' })] },
+];
+
+let activeScenario = 0, stepIndex = 0;
+function renderScenarios() {
+  $('tabs').innerHTML = SCENARIOS.map((sc, k) => `<button class="${k === activeScenario ? 'active' : ''}" data-k="${k}">${sc.name}</button>`).join('');
+  $('tabs').querySelectorAll('button').forEach(b => b.onclick = () => startScenario(+b.dataset.k));
+  const sc = SCENARIOS[activeScenario];
+  $('scenario').innerHTML = `<p class="scenario-desc">${sc.desc}</p>` + sc.steps.map((st, k) =>
+    `<button class="step ${k < stepIndex ? 'done' : k === stepIndex ? 'next' : ''}" data-k="${k}" ${k !== stepIndex ? 'disabled' : ''}>${k + 1}. ${st.look ? '👁 ' : st.admin ? '⚙ ' : ''}${st.label}</button>`).join('') +
+    `<div class="row" style="margin-top:8px"><button class="primary" id="restart">Restart this walkthrough</button><span class="muted">Each walkthrough starts from a clean Project.</span></div>`;
+  $('scenario').querySelectorAll('button.step').forEach(b => b.onclick = () => doStep(+b.dataset.k));
+  $('restart').onclick = () => startScenario(activeScenario);
+}
+function startScenario(k) {
+  activeScenario = k; stepIndex = 0; state = Sim.initialState(); selected = null; prevMatrix = {};
+  lastMsg = { kind:'info', text:`Walkthrough "${SCENARIOS[k].name}" started from a clean Project. Press step 1.` };
+  render(); renderScenarios();
+}
+function doStep(k) {
+  const st = SCENARIOS[activeScenario].steps[k];
+  if (st.item !== undefined && state.items[st.item]) selected = state.items[st.item].id;
+  if (st.look) { viewer = st.as; lastMsg = { kind:'info', text:`Now looking as ${state.members[st.as].name}.` }; render(); }
+  else if (st.admin) { run(st.admin); if (state.members[st.as]) viewer = st.as; render(); }
+  else { run({ ...st.act, by: st.as, id: selected }, { viewAs: st.as }); }
+  stepIndex = k + 1; renderScenarios();
+}
+
+render(); renderScenarios();
+</script>
+</body>
+</html>

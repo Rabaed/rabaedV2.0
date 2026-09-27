@@ -1,0 +1,19 @@
+/* ============================================================
+   Rabaed — Fonts
+   Brand display + UI faces. Montserrat and IBM Plex Sans are the
+   genuine brand families (both on Google Fonts). The Arabic faces
+   in the source ("Montserrat-Arabic", "IBM Plex Sans Arabic") map to
+   IBM Plex Sans Arabic. "Caveat" substitutes the hand-marker face
+   used on marketing headlines  ——  FLAGGED in readme.md.
+   ============================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&family=IBM+Plex+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&family=Caveat:wght@500;600;700&display=swap');
+
+/* Icon webfont — Tabler Icons substitutes the product's Vuesax/Iconsax
+   linear set (same 1.5px rounded-outline aesthetic). FLAGGED in readme.
+   Self-hosted (same-origin) so the per-icon content rules actually apply;
+   a cross-origin @import only registers the @font-face. See icons.css. */
+@import "./icons.css";
+
+/* Arabic brand face — Thmanyah Sans (UI) + Serif Display (headlines). */
+@import "./thmanyah.css";

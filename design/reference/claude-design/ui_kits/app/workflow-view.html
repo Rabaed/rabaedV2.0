@@ -1,0 +1,71 @@
+<!-- @dsCard group="App" viewport="1440x900" name="Submittal — View workflow" subtitle="Item path on its pinned version · current step · next actions · company-private steps collapsed per viewer · revisions · phone timeline" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rabaed — Submittal · View workflow</title>
+<link rel="stylesheet" href="../../styles.css">
+<link rel="stylesheet" href="shell/shell.css">
+<link rel="stylesheet" href="shell/pages.css">
+<link rel="stylesheet" href="list/list.css">
+<link rel="stylesheet" href="settings/numbering.css">
+<link rel="stylesheet" href="snag/snag.css">
+<link rel="stylesheet" href="plan/mobile.css">
+<link rel="stylesheet" href="wf/wf.css">
+<style>html,body{margin:0}a{color:var(--tomato-600)}a:hover{color:var(--tomato-700)}.segv a{display:contents}.sp-hd{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px}.sp-hd h1{margin:4px 0 0;font-size:22px}
+.sp-body{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:14px;align-items:start}
+.alog{display:flex;gap:10px;padding:10px 0;border-bottom:1px solid var(--ui-border-2);font-size:13px}.alog:last-child{border-bottom:0}.alog small{color:var(--ui-muted);font-size:11.5px}
+.wvd{position:fixed;top:0;bottom:0;right:0;width:min(1100px,72vw);min-width:min(100vw,640px);height:100%;background:var(--ui-canvas);display:flex;flex-direction:column;box-shadow:var(--ui-shadow-lg)}
+[dir=rtl] .wvd{right:auto;left:0}
+.wvh{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:14px 18px;background:var(--ui-surface);border-bottom:1px solid var(--ui-border)}.wvh h3{margin:4px 0 0;font-size:16px}
+.wvb{flex:1;min-height:0;display:flex;flex-direction:column;gap:10px;padding:14px 18px;overflow:auto}
+.rch{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ui-muted)}.rch button{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border:0;border-radius:7px;background:var(--ui-surface);box-shadow:inset 0 0 0 1px var(--ui-border);font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;color:var(--ui-text)}.rch button.on{box-shadow:inset 0 0 0 2px var(--btn-pri)}
+[dir=rtl] .rch .ti-chevron-right{transform:scaleX(-1)}
+.gnote{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--ui-muted)}
+.sm-hd2{position:absolute;top:50px;left:0;right:0;padding:6px 16px 10px;border-bottom:1px solid var(--ui-border-2);background:var(--ui-surface)}.sm-hd2 b{display:block;font-size:17px}.sm-hd2 small{font-size:11.5px;color:var(--ui-muted)}
+.ptl{display:flex;flex-direction:column;margin-top:12px}.pti{display:flex;gap:12px;position:relative;padding-bottom:14px}.pti::before{content:"";position:absolute;inset-inline-start:13px;top:28px;bottom:0;width:2px;background:var(--ui-border)}.pti:last-child::before{display:none}
+.pti .d{width:28px;height:28px;border-radius:50%;background:var(--tone-green-solid);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;flex:none}
+.pti .c{flex:1;min-width:0;background:var(--ui-surface);border-radius:12px;box-shadow:inset 0 0 0 1px var(--ui-border);padding:10px 12px}.pti .c b{font-size:14px}.pti .c small{display:block;font-size:11.5px;color:var(--ui-muted)}.pti .an{font-size:12px;color:var(--ui-text-2);margin-top:4px;line-height:1.45}
+.pti.cur .c{box-shadow:inset 0 0 0 2px var(--btn-pri)}.pti.cur .d{background:var(--btn-pri)}.pti.fade{opacity:.45}.pti .nx{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script src="shell/shell.js"></script>
+<script src="shell/pages.js"></script>
+<script src="list/list.js"></script>
+<script src="wf/data.js"></script>
+<script src="wf/view.js"></script>
+<script>
+const S=RS.S,KEY='rb-shell-v1';
+try{Object.assign(S,JSON.parse(localStorage.getItem(KEY)||'{}'),{menu:null,pal:false})}catch(e){}
+S.project='dmt';S.tab=1;
+const save=()=>{let o={};try{o=JSON.parse(localStorage.getItem(KEY)||'{}')}catch(e){}localStorage.setItem(KEY,JSON.stringify(Object.assign(o,{mode:S.mode,lang:S.lang,col:S.col,theme:S.theme,role:S.role,open:S.open,ws:S.ws})))};
+function goShell(o){let st={};try{st=JSON.parse(localStorage.getItem(KEY)||'{}')}catch(e){}Object.assign(st,o);localStorage.setItem(KEY,JSON.stringify(st));location.href='saas-shell.html'}
+function render(){
+ const L=(e,a)=>S.lang==='ar'?a:e;const p=RP.PROJECTS.find(x=>x.id==='dmt');
+ document.documentElement.lang=S.lang;document.documentElement.dir=S.lang==='ar'?'rtl':'ltr';
+ document.body.style.background=S.mode==='dark'?'#0f1524':'';
+ document.getElementById('app').innerHTML=`<div class="rs${S.col?' col':''}${S.theme==='light'&&S.mode!=='dark'?' light':''}${S.mode==='dark'?' theme-dark':''}" lang="${S.lang}" dir="${S.lang==='ar'?'rtl':'ltr'}">${RS.sidebar()}<div class="mn">${RS.header(S,{project:{l:p.l,n:L(p.n,p.na),c:L(p.co,p.coa)}})}${RS.tabs()}<main class="ct" id="lvroot">${WV.page()}</main></div></div>`;
+ save();
+}
+document.addEventListener('click',e=>{const b=e.target.closest('button,[data-act]');if(!b||b.closest('#lvroot'))return;const d=b.dataset;
+ if(d.nav)return goShell({page:d.nav,project:null});
+ if(d.tab!==undefined){if(+d.tab===8)return;if(+d.tab===1){location.href='submittals-list.html';return}return goShell({project:'dmt',tab:+d.tab})}
+ if(d.act==='back')return goShell({page:'projects',project:null});
+ if(d.toggle){if(S.col){S.col=false;S.open[d.toggle]=true}else S.open[d.toggle]=!S.open[d.toggle];return render()}
+ if(d.menu){S.menu=S.menu===d.menu?null:d.menu;return render()}
+ if(d.ws){S.ws=+d.ws;S.menu=null;return render()}
+ if(d.lang){S.lang=d.lang;S.menu=null;return render()}
+ if(d.theme){S.theme=d.theme;return render()}
+ if(d.mode){S.mode=d.mode;return render()}
+ if(d.act==='collapse'){S.col=!S.col;return render()}
+ if(d.act==='pal')return goShell({pal:false});
+});
+document.addEventListener('click',e=>{if(S.menu&&!e.target.closest('.menu,[data-menu]')&&!e.target.closest('#lvroot')){S.menu=null;render()}});
+WV.bind(document.getElementById('app'),()=>{document.getElementById('lvroot').innerHTML=WV.page();requestAnimationFrame(WV.applyFit)});
+render();
+</script>
+</body>
+</html>

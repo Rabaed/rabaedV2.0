@@ -1,0 +1,111 @@
+/* ============================================================
+   Rabaed — UI theme tokens (light default + .theme-dark)
+   Components read --ui-* / --btn-* / --tone-*. Put .theme-dark on
+   <html>, <body> or any region to switch it (and everything inside).
+   ============================================================ */
+:root {
+  --ui-canvas: #f6f7f9;        /* page / board canvas */
+  --ui-surface: #ffffff;       /* cards, header, tabs, columns */
+  --ui-surface-2: #fafbfc;     /* table heads, footers, subtle rows */
+  --ui-border: #e7e9ed;
+  --ui-border-2: #ececef;      /* hairlines inside cards */
+  --ui-border-strong: #d5d8de;
+  --ui-text: #1f2430;
+  --ui-text-2: #3a3f4b;
+  --ui-muted: #6a6e7a;
+  --ui-faint: #9aa0ad;
+  --ui-hover: #f6f7f9;
+  --ui-press: #eef0f3;
+  --ui-overlay: rgba(15, 20, 35, .38);
+  --ui-shadow: 0 1px 2px rgba(31, 36, 48, .05);
+  --ui-shadow-lg: 0 14px 34px rgba(15, 20, 35, .16);
+  --focus-ring: #3b6fd8;
+  --focus-offset: #ffffff;
+
+  --btn-pri: #f95738;  --btn-pri-h: #e84c2e;  --btn-pri-p: #d1492f;  --btn-pri-fg: #ffffff;
+  --btn-sec: #eff0f2;  --btn-sec-h: #e4e6ea;  --btn-sec-p: #d8dbe0;  --btn-sec-fg: #1f2430;
+  --btn-ter: transparent; --btn-ter-h: #eff0f2; --btn-ter-p: #e4e6ea; --btn-ter-fg: #3a3f4b;
+  --btn-dan: #e5484d;  --btn-dan-h: #d63b40;  --btn-dan-p: #bf3136;  --btn-dan-fg: #ffffff;
+  --btn-dis: #eff0f2;  --btn-dis-fg: #a8adb8;
+}
+
+.theme-dark {
+  color-scheme: dark;
+  --ui-canvas: #0f1524;
+  --ui-surface: #161e31;
+  --ui-surface-2: #1a2336;
+  --ui-border: #26314a;
+  --ui-border-2: #222c43;
+  --ui-border-strong: #34405c;
+  --ui-text: #eef0f5;
+  --ui-text-2: #c5cad6;
+  --ui-muted: #8c94a8;
+  --ui-faint: #6b7488;
+  --ui-hover: #1c2539;
+  --ui-press: #232e47;
+  --ui-overlay: rgba(4, 7, 15, .6);
+  --ui-shadow: 0 1px 2px rgba(0, 0, 0, .3);
+  --ui-shadow-lg: 0 16px 40px rgba(0, 0, 0, .45);
+  --focus-ring: #6f97f0;
+  --focus-offset: #161e31;
+
+  --btn-pri: #f95738;  --btn-pri-h: #ff6a4d;  --btn-pri-p: #e0492c;  --btn-pri-fg: #ffffff;
+  --btn-sec: #232e47;  --btn-sec-h: #2b3753;  --btn-sec-p: #33405f;  --btn-sec-fg: #eef0f5;
+  --btn-ter: transparent; --btn-ter-h: #1f2940; --btn-ter-p: #273250; --btn-ter-fg: #c5cad6;
+  --btn-dan: #e5484d;  --btn-dan-h: #f05a5f;  --btn-dan-p: #cc3a3f;  --btn-dan-fg: #ffffff;
+  --btn-dis: #1c2539;  --btn-dis-fg: #4f5870;
+
+  /* tonal hues — translucent tints + lifted text for dark surfaces */
+  --tone-green-tint: rgba(39, 184, 110, .16);  --tone-green-fg: #5ad594;
+  --tone-amber-tint: rgba(233, 162, 59, .16);  --tone-amber-fg: #f2c26b;
+  --tone-red-tint: rgba(229, 72, 77, .18);     --tone-red-fg: #ff8a8d;
+  --tone-blue-tint: rgba(59, 111, 216, .20);   --tone-blue-fg: #8fb2f6;
+  --tone-violet-tint: rgba(122, 90, 240, .20); --tone-violet-fg: #b7a6fb;
+  --tone-cyan-tint: rgba(26, 163, 184, .18);   --tone-cyan-fg: #62d0e1;
+  --tone-orange-tint: rgba(238, 150, 75, .18); --tone-orange-fg: #f6b681;
+  --tone-gray-tint: rgba(170, 177, 191, .14);  --tone-gray-fg: #aab1bf;
+  --tone-tomato-tint: rgba(249, 87, 56, .18);  --tone-tomato-fg: #ff9580;
+  --doctype-fg: #aab1bf; --doctype-ring: #34405c;
+  --status-draft-dot: #6b7488;
+
+  /* re-declare aliases so they resolve against the dark tones */
+  --chip-cv-bg:var(--tone-amber-tint);  --chip-cv-fg:var(--tone-amber-fg);   /* CV Civil */
+  --chip-ar-bg:var(--tone-violet-tint); --chip-ar-fg:var(--tone-violet-fg);  /* AR Architecture */
+  --chip-el-bg:var(--tone-cyan-tint);   --chip-el-fg:var(--tone-cyan-fg);    /* EL Electrical */
+  --chip-me-bg:var(--tone-green-tint);  --chip-me-fg:var(--tone-green-fg);   /* ME Mechanical */
+  --chip-su-bg:var(--tone-orange-tint); --chip-su-fg:var(--tone-orange-fg);  /* SU Surveying */
+  --chip-das-bg:var(--chip-me-bg);      --chip-das-fg:var(--chip-me-fg);     /* legacy alias */
+  --status-draft-bg:var(--tone-gray-tint);        --status-draft-fg:var(--tone-gray-fg);        --status-draft-dot:#9aa0ad;
+  --status-internal-bg:var(--tone-blue-tint);     --status-internal-fg:var(--tone-blue-fg);     --status-internal-dot:var(--tone-blue-solid);
+  --status-resubmitted-bg:var(--tone-amber-tint); --status-resubmitted-fg:var(--tone-amber-fg); --status-resubmitted-dot:var(--tone-amber-solid);
+  --status-pending-bg:var(--tone-violet-tint);    --status-pending-fg:var(--tone-violet-fg);    --status-pending-dot:var(--tone-violet-solid);
+  --status-approved-bg:var(--tone-green-tint);    --status-approved-fg:var(--tone-green-fg);    --status-approved-dot:var(--tone-green-solid);
+  --status-rejected-bg:var(--tone-red-tint);      --status-rejected-fg:var(--tone-red-fg);      --status-rejected-dot:var(--tone-red-solid);
+  --status-cancelled-bg:var(--tone-gray-tint);    --status-cancelled-fg:var(--tone-gray-fg);    --status-cancelled-dot:var(--tone-gray-solid);
+  --status-submitted-bg:var(--status-resubmitted-bg); --status-submitted-fg:var(--status-resubmitted-fg);
+  --status-created-bg:var(--status-internal-bg);      --status-created-fg:var(--status-internal-fg);
+  --status-notstarted-bg:var(--status-draft-bg);      --status-notstarted-fg:var(--status-draft-fg);
+  --code-a-bg:var(--tone-green-solid); --code-a-fg:#ffffff;              /* Approved — solid */
+  --code-b-bg:var(--tone-green-tint);  --code-b-fg:var(--tone-green-fg); /* Approved as noted */
+  --code-c-bg:var(--tone-amber-tint);  --code-c-fg:var(--tone-amber-fg); /* Revise & resubmit */
+  --code-d-bg:var(--tone-red-solid);   --code-d-fg:#ffffff;              /* Rejected — solid */
+  --rev-pill-bg:var(--tone-tomato-tint); --rev-pill-fg:var(--tone-tomato-fg); /* R1, R2… */
+  --code-pill-bg:var(--code-a-bg);  --code-pill-fg:var(--code-a-fg);
+
+  /* legacy semantic aliases used by older components */
+  --surface-card: #161e31;
+  --surface-page: #0f1524;
+  --surface-board: #0f1524;
+  --surface-subtle: #1a2336;
+  --surface-sunken: #1a2336;
+  --border-default: #34405c;
+  --border-subtle: #26314a;
+  --text-heading: #eef0f5;
+  --text-body: #c5cad6;
+  --text-muted: #8c94a8;
+  --text-faint: #6b7488;
+  --icon-default: #c5cad6;
+  --icon-muted: #8c94a8;
+  --color-primary-soft: rgba(249, 87, 56, .18);
+  --color-primary-tint: rgba(249, 87, 56, .12);
+}

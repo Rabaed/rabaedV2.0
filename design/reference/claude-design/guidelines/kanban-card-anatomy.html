@@ -1,0 +1,259 @@
+<!-- @dsCard group="Kanban" viewport="1200x900" name="Card anatomy" subtitle="Submittal card · header, subject, tags, progress, footer · states" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Rabaed — Kanban card anatomy</title>
+<link rel="stylesheet" href="../styles.css">
+<style>
+*{box-sizing:border-box}html,body{margin:0}
+a{color:var(--tomato-600)}a:hover{color:var(--tomato-700)}
+body{font-family:var(--font-ui);background:#f6f7f9;color:#1f2430;-webkit-font-smoothing:antialiased;padding:40px}
+:root{--ink:#1f2430;--ink2:#3a3f4b;--mut:#6a6e7a;--faint:#9aa0ad;--t:#f8552f;--red:#d6409f}
+.stage{max-width:1120px;background:#fff;border:1px solid #e7e9ed;border-radius:20px;padding:90px 24px;display:flex;justify-content:center;background-image:radial-gradient(#e6e8ec 1px,transparent 1px);background-size:16px 16px;overflow:hidden}
+.av{border-radius:50%;display:inline-flex;align-items:center;justify-content:center;color:#fff;font-weight:600;flex:none;font-family:var(--font-ui)}
+.chip{font-size:12px;font-weight:600;border-radius:7px;padding:3px 9px;white-space:nowrap}
+.chip.cv{background:var(--chip-cv-bg);color:var(--chip-cv-fg)}.chip.el{background:var(--chip-el-bg);color:var(--chip-el-fg)}
+.code{font-size:12px;font-weight:600;color:var(--mut);font-family:var(--font-ui)}
+.rev{background:#fce1da;color:#e0492c;font-size:11px;font-weight:700;border-radius:6px;padding:2px 7px;font-family:var(--font-ui)}
+.meta{display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--mut);font-family:var(--font-ui)}.meta .ti{font-size:15px}
+.late{color:#d8412a;font-weight:600}
+.dic{display:inline-flex;gap:3px;align-items:center;position:relative;padding:4px 2px;opacity:0;transition:opacity .15s;cursor:default}
+.dic i{width:6px;height:6px;border-radius:50%;background:transparent;box-shadow:inset 0 0 0 1px #c9cdd4}
+.dic i.g{background:#9aa0ad;box-shadow:none}.dic i.y{background:#f0b429;box-shadow:none}.dic i.r{background:#e5492c;box-shadow:none}
+.kc:hover .dic,.kc.pin .dic,body.dic-always .dic{opacity:1}body.dic-off .dic{display:none}
+.dic::after{content:attr(data-tip);position:absolute;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);background:#1f2430;color:#fff;font:500 11px/1 var(--font-ui);padding:6px 8px;border-radius:6px;white-space:nowrap;opacity:0;pointer-events:none;transition:opacity .12s;z-index:5}
+.dic:hover::after{opacity:1}
+.scale{max-width:1120px;display:flex;flex-wrap:wrap;gap:10px}.scale .it{background:#fff;border:1px solid #e7e9ed;border-radius:10px;padding:10px 14px;display:flex;align-items:center;gap:10px;font-size:12.5px;color:var(--ink2)}.scale .dic{opacity:1;padding:0}.dt{white-space:nowrap}
+.kc{direction:rtl;width:320px;background:#fff;border:1px solid #e9eaed;border-radius:12px;padding:12px 14px;box-shadow:0 1px 2px rgba(31,36,48,.05);position:relative;font-family:var(--font-arabic)}
+.kc .r1{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--faint);font-family:var(--font-ui)}
+.kc .r1 .rev,.kc .r1 .cpill,.kc .r1 .apc{margin-inline-start:auto}
+.kc .tt{font-weight:700;font-size:15px;margin:6px 0 10px;line-height:1.4}
+.kc .r2{display:flex;gap:6px;align-items:center}
+.ctr{display:flex;align-items:center;gap:6px;margin-top:10px;font-size:12.5px;color:var(--ink2);font-weight:500}.ctr .ti{font-size:15px;color:var(--mut)}
+body:not(.opt-contractor) [data-opt="contractor"]{display:none}body.opt-location-off [data-opt="location"]{display:none}body.opt-date-off .dt{display:none}
+.cvl{max-width:1120px;display:grid;grid-template-columns:360px minmax(0,1fr);gap:24px;align-items:start}
+.set{background:#fff;border:1px solid #e7e9ed;border-radius:14px;overflow:hidden}
+.set .hd{padding:14px 16px;border-bottom:1px solid #ececef;display:flex;align-items:center;gap:8px;font-weight:700;font-size:14px}.set .hd .ti{color:var(--mut);font-size:18px}
+.set .hd small{margin-left:auto;font-weight:400;font-size:12px;color:var(--mut)}
+.opt-row{display:flex;align-items:center;gap:10px;padding:11px 16px;border-bottom:1px solid #f1f1f3;font-size:13.5px}.opt-row:last-child{border-bottom:0}
+.opt-row .ti{font-size:17px;color:var(--mut)}.opt-row .a{font-family:var(--font-arabic);font-size:12px;color:var(--mut);margin-left:6px}
+.opt-row.lock{color:var(--mut)}.opt-row .tag{margin-left:auto;font-size:11px;color:var(--faint)}
+.sw{margin-left:auto;width:34px;height:20px;border-radius:20px;background:#d5d8de;position:relative;cursor:pointer;border:0;padding:0;flex:none;transition:background .15s}
+.sw::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.2);transition:left .15s}
+.sw[aria-checked=true]{background:var(--t)}.sw[aria-checked=true]::after{left:16px}
+.cmp{display:grid;grid-template-columns:repeat(2,minmax(0,300px));gap:16px;align-items:start}
+.cvl .note{font-size:12.5px;color:var(--mut);line-height:1.5;text-wrap:pretty}.cvl .note b{color:var(--ink)}
+.kc .loc{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+.lt{display:inline-flex;align-items:center;gap:4px;background:#f3f4f6;color:var(--ink2);border-radius:6px;padding:3px 8px;font-size:11.5px;font-weight:500;white-space:nowrap}.lt .ti{font-size:13px;color:var(--mut)}
+.kc.ok .lt{background:#fff}
+.kc .steps{display:flex;gap:4px;margin-top:12px}.kc .steps i{flex:1;height:4px;border-radius:4px;background:#eceef1}.kc .steps i.on{background:var(--c,#2f6fe0)}
+.kc .r3{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:13px;color:var(--ink2)}
+.kc .r3 .sp{margin-inline-start:auto;display:flex;gap:10px}
+/* anatomy */
+.ana{position:relative;display:grid;grid-template-columns:230px 320px 230px;column-gap:0;direction:ltr}
+.ana .kc{grid-column:2;grid-row:1}
+.labs{grid-row:1;position:relative}
+.labs.r{grid-column:3}.labs.l{grid-column:1}
+.part{position:relative;outline:1.5px dashed var(--red);outline-offset:3px;border-radius:4px}
+.lab:nth-child(1){top:0}.lab:nth-child(2){top:50px}.lab:nth-child(3){top:100px}.lab:nth-child(4){top:150px}.lab:nth-child(5){top:200px}
+.labs{min-height:156px}
+.lab{position:absolute;display:flex;align-items:center;gap:0;transform:translateY(-50%);white-space:nowrap}
+.labs.r .lab{left:40px}.labs.l .lab{right:40px;flex-direction:row-reverse}
+.wires{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible}
+.lab .ln{display:none;width:46px;border-top:1px solid var(--red);position:relative}
+.lab .ln::before{content:"";position:absolute;top:-3.5px;width:6px;height:6px;border-radius:50%;background:var(--red)}
+.labs.r .lab .ln::before{left:-3px}.labs.l .lab .ln::before{right:-3px}
+.lab .tx{background:var(--red);color:#fff;border-radius:6px;padding:4px 9px;font-size:12px;font-weight:600;line-height:1.25}
+.lab .tx small{display:block;font-family:var(--font-arabic);font-weight:500;font-size:11px;opacity:.9}
+.lab.sub .tx{background:#fff;color:var(--red);border:1px solid var(--red)}
+.lab.sub .tx small{opacity:1}
+.lab.sub .ln{border-top-style:dashed}
+/* details */
+h3{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--mut);margin:32px 0 12px;font-weight:600}
+.tbl{max-width:1120px;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px}
+.cell{background:#fff;border:1px solid #e7e9ed;border-radius:12px;padding:12px 14px}
+.cell b{display:block;font-size:13.5px}.cell .a{font-family:var(--font-arabic);font-size:12.5px;color:var(--ink2)}
+.cell p{margin:6px 0 0;font-size:12px;color:var(--mut);line-height:1.45;text-wrap:pretty}
+.cell em{display:block;margin-top:8px;font-style:normal;font-size:11px;color:var(--faint);font-family:ui-monospace,Menlo,monospace}
+.states{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;max-width:1120px}
+.st{display:flex;flex-direction:column;gap:10px}
+.st .lb{font-size:12.5px;font-weight:600;color:var(--ink2)}.st .lb small{display:block;font-weight:400;color:var(--mut);font-size:11.5px;margin-top:2px}
+.st .kc{width:100%}
+.kc.hov{box-shadow:0 6px 16px rgba(31,36,48,.10);transform:translateY(-1px)}
+.kc.ok{background:var(--success-50);border-color:var(--success-200)}
+.kc.od{border-color:#f6c3b7}
+.kc.sel{box-shadow:0 0 0 2px var(--t)}
+.apc{display:inline-flex;align-items:center;gap:3px;font:600 11px var(--font-ui);border-radius:6px;padding:2px 7px;white-space:nowrap}.apc .ti{font-size:13px}
+.apc.ca{background:var(--success-600);color:#fff}
+.apc.cb{background:var(--success-50);color:var(--success-700,#1c7f4c);box-shadow:inset 0 0 0 1px var(--success-200)}
+.apc.cc{background:#fdf1dc;color:#a8650a;box-shadow:inset 0 0 0 1px #f6d9a5}
+.apc.cd{background:#e5492c;color:#fff}
+.dirs{max-width:1120px;display:grid;grid-template-columns:repeat(2,minmax(0,320px)) minmax(0,1fr);gap:16px;align-items:start}
+.dnote{font-size:12.5px;color:var(--mut);line-height:1.5;text-wrap:pretty}.dnote b{color:var(--ink)}
+.dircard[dir=ltr] .r1 .rev,.dircard[dir=ltr] .r1 .cpill{margin-inline-start:0;order:-1;margin-inline-end:4px}
+body.badge-mirror .dircard[dir=ltr] .r1 .rev{order:0;margin-inline-end:0;margin-inline-start:auto}
+@media (max-width:1000px){.dirs{grid-template-columns:minmax(0,1fr)}}
+.codes{max-width:1120px;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px}
+.cd-it{background:#fff;border:1px solid #e7e9ed;border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:10px;align-items:flex-start}
+.cd-it b{display:block;font-size:13.5px}.cd-it small{display:block;font-family:var(--font-arabic);font-size:12px;color:var(--mut);margin-top:2px}
+.cd-it .apc,.rv-set .rev{font-size:12.5px;padding:4px 10px}
+.rv-set{display:flex;gap:6px}
+.cd-hdr{direction:rtl;align-self:stretch;display:flex;align-items:center;gap:6px;font:12px var(--font-ui);color:var(--faint);border-top:1px dashed #e7e9ed;padding-top:10px}.cd-hdr>:last-child{margin-inline-start:auto}
+.cd-note{max-width:1120px;font-size:12.5px;color:var(--mut);margin:10px 0 0}.cd-note b{color:var(--ink)}
+@media (max-width:1000px){.codes{grid-template-columns:repeat(auto-fill,minmax(190px,1fr))}}
+.cpill{background:var(--success-600);color:#fff;font-size:11px;font-weight:600;border-radius:6px;padding:2px 7px;display:inline-flex;gap:3px;align-items:center;font-family:var(--font-ui)}
+@media (max-width:1000px){.tbl,.states{grid-template-columns:repeat(auto-fill,minmax(190px,1fr))}}
+</style>
+</head>
+<body>
+<div class="stage">
+  <div class="ana">
+    <div class="kc pin" id="card">
+      <div class="r1 part" data-k="header"><i class="ti ti-file-text"></i><span data-k="id">12789331</span><span class="rev" data-k="rev">R2</span></div>
+      <div class="tt part" data-k="subject">نظام إطفاء الحريق</div>
+      <div class="r2 part" data-k="tags"><span class="chip el">أعمال كهربائية (EL)</span><span class="code" data-k="type">MAR</span></div>
+      <div class="ctr part opt" data-k="contractor" data-opt="contractor"><i class="ti ti-briefcase"></i>شركة الفطيم للمقاولات</div>
+      <div class="loc part" data-k="location" data-opt="location"><span class="lt"><i class="ti ti-map"></i>المنطقة A</span><span class="lt"><i class="ti ti-building"></i>المبنى 2</span><span class="lt"><i class="ti ti-stairs"></i>الطابق 5</span></div>
+      <div class="r3 part" data-k="footer"><span class="av" style="width:24px;height:24px;font-size:10px;background:#e98b45">NA</span>ناصر الكعبي<span class="sp" data-k="signals"><span class="meta dt" data-d="2026-09-08"><i class="ti ti-calendar-event"></i><span></span></span><span class="dic" data-days="9"></span></span></div>
+    </div>
+    <svg class="wires" id="wires"></svg>
+    <div class="labs r" id="labsR">
+      <div class="lab" data-for="header"><span class="ln"></span><span class="tx">Header<small>الترويسة</small></span></div>
+      <div class="lab" data-for="subject"><span class="ln"></span><span class="tx">Subject<small>الموضوع</small></span></div>
+      <div class="lab" data-for="tags"><span class="ln"></span><span class="tx">Tags<small>الوسوم</small></span></div>
+      <div class="lab" data-for="location"><span class="ln"></span><span class="tx">Plan location<small>الموقع في المخطط</small></span></div>
+      <div class="lab" data-for="footer"><span class="ln"></span><span class="tx">Footer · Owner<small>التذييل · المسؤول</small></span></div>
+    </div>
+    <div class="labs l" id="labsL">
+      <div class="lab sub" data-for="rev"><span class="ln"></span><span class="tx">Revision badge<small>رقم المراجعة</small></span></div>
+      <div class="lab sub" data-for="contractor"><span class="ln"></span><span class="tx">Contractor · optional<small>اسم المقاول · اختياري</small></span></div>
+      <div class="lab sub" data-for="type"><span class="ln"></span><span class="tx">Document type<small>نوع المستند</small></span></div>
+      <div class="lab sub" data-for="signals"><span class="ln"></span><span class="tx">Signals · date, days<small>المؤشرات</small></span></div>
+    </div>
+  </div>
+</div>
+
+<h3>Card view layout · تخطيط عرض البطاقة</h3>
+<div class="cvl">
+  <div class="set">
+    <div class="hd"><i class="ti ti-layout-grid"></i>Card view layout<small>Board settings</small></div>
+    <div class="opt-row lock"><i class="ti ti-lock"></i>Header, subject, tags, owner<span class="tag">Always shown</span></div>
+    <div class="opt-row"><i class="ti ti-briefcase"></i>Contractor name<span class="a">اسم المقاول</span><button class="sw" data-o="contractor" aria-checked="false"></button></div>
+    <div class="opt-row"><i class="ti ti-map"></i>Plan location<span class="a">الموقع</span><button class="sw" data-o="location" aria-checked="true"></button></div>
+    <div class="opt-row"><i class="ti ti-calendar-event"></i>Creation date<span class="a">تاريخ الإنشاء</span><button class="sw" data-o="date" aria-checked="true"></button></div>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:16px">
+  <div class="cmp"><div class="st"><div class="lb">Default<small>Contractor name off</small></div><div class="kc pin" style="width:100%"><div class="r1"><i class="ti ti-file-text"></i>12789331<span class="rev">R2</span></div><div class="tt">نظام إطفاء الحريق</div><div class="r2"><span class="chip el">أعمال كهربائية (EL)</span><span class="code">MAR</span></div><div class="loc"><span class="lt"><i class="ti ti-map"></i>المنطقة A</span><span class="lt"><i class="ti ti-building"></i>المبنى 2</span><span class="lt"><i class="ti ti-stairs"></i>الطابق 5</span></div><div class="r3"><span class="av" style="width:24px;height:24px;font-size:10px;background:#e98b45">NA</span>ناصر الكعبي<span class="sp"><span class="meta"><i class="ti ti-calendar-event"></i>8 Sep</span></span></div></div></div><div class="st"><div class="lb">With contractor name<small>+1 line · +28px height</small></div><div class="kc pin" style="width:100%"><div class="r1"><i class="ti ti-file-text"></i>12789331<span class="rev">R2</span></div><div class="tt">نظام إطفاء الحريق</div><div class="r2"><span class="chip el">أعمال كهربائية (EL)</span><span class="code">MAR</span></div><div class="ctr" style="outline:1.5px dashed #d6409f;outline-offset:3px;border-radius:4px"><i class="ti ti-briefcase"></i>شركة الفطيم للمقاولات</div><div class="loc"><span class="lt"><i class="ti ti-map"></i>المنطقة A</span><span class="lt"><i class="ti ti-building"></i>المبنى 2</span><span class="lt"><i class="ti ti-stairs"></i>الطابق 5</span></div><div class="r3"><span class="av" style="width:24px;height:24px;font-size:10px;background:#e98b45">NA</span>ناصر الكعبي<span class="sp"><span class="meta"><i class="ti ti-calendar-event"></i>8 Sep</span></span></div></div></div></div>
+  <div class="note"><b>Optional fields</b> are switched per board by each user from <b>Card view layout</b>. Contractor name is <b>off by default</b>; when on, it sits between Tags and Plan location as one muted line with the company icon. Toggle the switches to preview the card above. Header, subject, tags and owner can't be hidden.</div>
+  </div>
+</div>
+
+<h3>Regions</h3>
+<div class="tbl">
+  <div class="cell"><b>Header</b><span class="a">الترويسة</span><p>File icon + submittal number on the start (right) side; revision badge — or approval code pill — pinned to the end (left).</p><em>12px · Plex · faint</em></div>
+  <div class="cell"><b>Subject</b><span class="a">الموضوع</span><p>The submittal title. Reads first. Max 2 lines, then ellipsis.</p><em>15px · Thmanyah Bold</em></div>
+  <div class="cell"><b>Tags</b><span class="a">الوسوم</span><p>Discipline chip in its trade colour (CV / EL / ME) + document type code (MAR / SAR / DAR).</p><em>12px · 600 · r7</em></div>
+  <div class="cell"><b>Plan location</b><span class="a">الموقع في المخطط</span><p>Where the submittal applies on the plan: Zone → Building → Floor, always in that order. Omit a level that doesn't apply.</p><em>11.5px · neutral chip · r6</em></div>
+  <div class="cell"><b>Footer</b><span class="a">التذييل</span><p>Current owner (avatar + name) on the start side; signals on the end: creation date, then the days-in-column dots (shown on hover). No comment or attachment counts on the card.</p><em>24 avatar · 12px meta · Plex digits</em></div>
+</div>
+
+<h3>Days in column · الأيام في العمود</h3>
+<div class="scale"><div class="it"><span class="dic" data-days="1"></span>1 day</div><div class="it"><span class="dic" data-days="2"></span>2 days</div><div class="it"><span class="dic" data-days="3"></span>3 days</div><div class="it"><span class="dic" data-days="5"></span>5 days</div><div class="it"><span class="dic" data-days="8"></span>8 days</div><div class="it"><span class="dic" data-days="12"></span>12 days</div><div class="it"><span class="dic" data-days="20"></span>20+ days</div></div>
+
+<h3>Layout direction · Arabic RTL &amp; English LTR</h3>
+<div class="dirs">
+  <div class="st"><div class="lb">Arabic · RTL<small>Thmanyah Sans · reference on the right, badge in the left corner</small></div><div class="kc pin dircard" dir="rtl" style="direction:rtl;width:100%;"><div class="r1"><i class="ti ti-file-text"></i>12789331<span class="rev">R2</span></div><div class="tt">نظام إطفاء الحريق</div><div class="r2"><span class="chip el" style="">أعمال كهربائية (EL)</span><span class="code">MAR</span></div><div class="loc"><span class="lt"><i class="ti ti-map"></i>المنطقة A</span><span class="lt"><i class="ti ti-building"></i>المبنى 2</span><span class="lt"><i class="ti ti-stairs"></i>الطابق 5</span></div><div class="r3"><span class="av" style="width:24px;height:24px;font-size:10px;background:#e98b45">NA</span>ناصر الكعبي<span class="sp"><span class="meta"><i class="ti ti-calendar-event"></i>8 Sep</span><span class="dic" data-days="9"></span></span></div></div></div>
+  <div class="st"><div class="lb">English · LTR<small>IBM Plex Sans · badge in the left corner (mirrored option in Tweaks)</small></div><div class="kc pin dircard" dir="ltr" style="direction:ltr;width:100%;font-family:var(--font-ui)"><div class="r1"><i class="ti ti-file-text"></i>12789331<span class="rev">R2</span></div><div class="tt">Fire Suppression System</div><div class="r2"><span class="chip el" style="font-family:var(--font-ui)">Electrical Works (EL)</span><span class="code">MAR</span></div><div class="loc"><span class="lt"><i class="ti ti-map"></i>Zone A</span><span class="lt"><i class="ti ti-building"></i>Building 2</span><span class="lt"><i class="ti ti-stairs"></i>Floor 5</span></div><div class="r3"><span class="av" style="width:24px;height:24px;font-size:10px;background:#e98b45">NA</span>Nasser Al Kaabi<span class="sp"><span class="meta"><i class="ti ti-calendar-event"></i>8 Sep</span><span class="dic" data-days="9"></span></span></div></div></div>
+  <div class="note dnote"><b>Mirroring rules.</b> Everything flows from the reading start: reference number, title, tags, location and owner start at the right in Arabic and at the left in English. <b>The revision / approval-code badge is pinned to the left corner in both languages</b> so it's found in the same place on every board. Digits, IDs and codes always stay LTR in IBM Plex Sans.</div>
+</div>
+
+<h3>Header badges · Approval codes &amp; revisions</h3>
+<div class="codes">
+  <div class="cd-it"><span class="apc ca"><i class="ti ti-circle-check"></i>Code A</span><div><b>Approved</b><small>معتمد</small></div><div class="cd-hdr"><i class="ti ti-file-text"></i>12789320<span class="apc ca"><i class="ti ti-circle-check"></i>Code A</span></div></div>
+  <div class="cd-it"><span class="apc cb"><i class="ti ti-circle-check"></i>Code B</span><div><b>Approved as noted</b><small>معتمد مع ملاحظات</small></div><div class="cd-hdr"><i class="ti ti-file-text"></i>12789320<span class="apc cb"><i class="ti ti-circle-check"></i>Code B</span></div></div>
+  <div class="cd-it"><span class="apc cc"><i class="ti ti-refresh"></i>Code C</span><div><b>Revise & resubmit</b><small>يُعدَّل ويُعاد تقديمه</small></div><div class="cd-hdr"><i class="ti ti-file-text"></i>12789320<span class="apc cc"><i class="ti ti-refresh"></i>Code C</span></div></div>
+  <div class="cd-it"><span class="apc cd"><i class="ti ti-circle-x"></i>Code D</span><div><b>Rejected</b><small>مرفوض</small></div><div class="cd-hdr"><i class="ti ti-file-text"></i>12789320<span class="apc cd"><i class="ti ti-circle-x"></i>Code D</span></div></div>
+  <div class="cd-it rv"><span class="rv-set"><span class="rev">R1</span><span class="rev">R2</span><span class="rev">R3</span></span><div><b>Revision</b><small>رقم المراجعة · shown until a code is issued</small></div><div class="cd-hdr"><i class="ti ti-file-text"></i>12789331<span class="rev">R2</span></div></div>
+</div>
+<p class="cd-note">One badge sits at the end of the header: the <b>revision</b> (R1, R2…) while the submittal is in review, replaced by the <b>approval code</b> once the consultant responds. Only Code A turns the whole card green.</p>
+
+<h3>States</h3>
+<div class="states">
+  <div class="st"><div class="lb">Default<small>Resting in a column</small></div><div class="kc"><div class="r1"><i class="ti ti-file-text"></i>12789328</div><div class="tt">نظام الصرف</div><div class="r2"><span class="chip cv">أعمال مدنية (CV)</span><span class="code">SAR</span></div><div class="loc"><span class="lt"><i class="ti ti-map"></i>المنطقة B</span><span class="lt"><i class="ti ti-building"></i>المبنى 1</span><span class="lt"><i class="ti ti-stairs"></i>الطابق G</span></div><div class="r3"><span class="av" style="width:24px;height:24px;font-size:10px;background:#7a5c3a">AA</span>عبدالله<span class="sp"><span class="meta dt" data-d="2026-09-24"><i class="ti ti-calendar-event"></i><span></span></span><span class="dic" data-days="1"></span></span></div></div></div>
+  <div class="st"><div class="lb">Hover<small>Lift 1px, shadow 6/16 · dots appear</small></div><div class="kc hov pin"><div class="r1"><i class="ti ti-file-text"></i>12789328</div><div class="tt">نظام الصرف</div><div class="r2"><span class="chip cv">أعمال مدنية (CV)</span><span class="code">SAR</span></div><div class="loc"><span class="lt"><i class="ti ti-map"></i>المنطقة B</span><span class="lt"><i class="ti ti-building"></i>المبنى 1</span><span class="lt"><i class="ti ti-stairs"></i>الطابق G</span></div><div class="r3"><span class="av" style="width:24px;height:24px;font-size:10px;background:#7a5c3a">AA</span>عبدالله<span class="sp"><span class="meta dt" data-d="2026-09-24"><i class="ti ti-calendar-event"></i><span></span></span><span class="dic" data-days="3"></span></span></div></div></div>
+  <div class="st"><div class="lb">Selected / dragging<small>2px tomato ring</small></div><div class="kc sel"><div class="r1"><i class="ti ti-file-text"></i>12789328</div><div class="tt">نظام الصرف</div><div class="r2"><span class="chip cv">أعمال مدنية (CV)</span><span class="code">SAR</span></div><div class="loc"><span class="lt"><i class="ti ti-map"></i>المنطقة B</span><span class="lt"><i class="ti ti-building"></i>المبنى 1</span><span class="lt"><i class="ti ti-stairs"></i>الطابق G</span></div><div class="r3"><span class="av" style="width:24px;height:24px;font-size:10px;background:#7a5c3a">AA</span>عبدالله<span class="sp"><span class="meta dt" data-d="2026-09-24"><i class="ti ti-calendar-event"></i><span></span></span><span class="dic" data-days="5"></span></span></div></div></div>
+  <div class="st"><div class="lb">Overdue<small>Warm border + red dots</small></div><div class="kc od pin"><div class="r1"><i class="ti ti-file-text"></i>12789319</div><div class="tt">مجاري التكييف</div><div class="r2"><span class="chip el">أعمال كهربائية (EL)</span><span class="code">MAR</span></div><div class="loc"><span class="lt"><i class="ti ti-map"></i>المنطقة C</span><span class="lt"><i class="ti ti-building"></i>المبنى 3</span><span class="lt"><i class="ti ti-stairs"></i>الطابق B1</span></div><div class="r3"><span class="av" style="width:24px;height:24px;font-size:10px;background:#3d6db5">AB</span>أحمد<span class="sp"><span class="meta dt" data-d="2026-09-15"><i class="ti ti-calendar-event"></i><span></span></span><span class="dic" data-days="14"></span></span></div></div></div>
+  <div class="st"><div class="lb">Approved<small>Green surface + code pill</small></div><div class="kc ok" style="--c:#27b86e"><div class="r1"><i class="ti ti-file-text"></i>12789320<span class="cpill"><i class="ti ti-circle-check"></i>Code A</span></div><div class="tt">تصميم خلطة الخرسانة</div><div class="r2"><span class="chip cv">أعمال مدنية (CV)</span><span class="code">SAR</span></div><div class="loc"><span class="lt"><i class="ti ti-map"></i>المنطقة A</span><span class="lt"><i class="ti ti-building"></i>المبنى 1</span><span class="lt"><i class="ti ti-stairs"></i>الطابق 3</span></div><div class="r3"><span class="av" style="width:24px;height:24px;font-size:10px;background:#3d6db5">MS</span>محمد<span class="sp"><span class="meta dt" data-d="2026-09-02"><i class="ti ti-calendar-event"></i><span></span></span></span></div></div></div>
+</div>
+<script>
+window.place=place;function place(){
+  const ana=document.querySelector('.ana'),A=ana.getBoundingClientRect(),card=document.getElementById('card'),C=card.getBoundingClientRect();
+  if(!C.width)return;const svg=document.getElementById('wires');let out='';const col='#d6409f';
+  ['r','l'].forEach(side=>{
+    const labs=[...document.querySelectorAll('.labs.'+side+' .lab')].filter(l=>{const t=card.querySelector('[data-k="'+l.dataset.for+'"]');const vis=!!(t&&t.getClientRects().length);l.style.display=vis?'':'none';return vis}).map(l=>{const t=card.querySelector('[data-k="'+l.dataset.for+'"]'),r=t.getBoundingClientRect();return {l,r,y:r.top+r.height/2-A.top}});
+    labs.sort((a,b)=>a.y-b.y);
+    const gap=50,mid=(C.top+C.bottom)/2-A.top,n=labs.length;
+    labs.forEach((o,i)=>{o.ly=n===1?o.y:mid+(i-(n-1)/2)*gap});
+    labs.forEach(o=>{
+      const box=o.l.parentElement.getBoundingClientRect();
+      o.l.style.top=(o.ly-(box.top-A.top))+'px';
+      const x0=side==='r'?(o.r.right-A.left+4):(o.r.left-A.left-4);
+      const edge=side==='r'?(C.right-A.left+14):(C.left-A.left-14);
+      const x1=side==='r'?(box.left-A.left+40):(box.right-A.left-40);
+      out+='<circle cx="'+x0+'" cy="'+o.y+'" r="3" fill="'+col+'"/><polyline fill="none" stroke="'+col+'" stroke-width="1" '+(o.l.classList.contains('sub')?'stroke-dasharray="3 3" ':'')+'points="'+x0+','+o.y+' '+edge+','+o.y+' '+(edge+(side==='r'?14:-14))+','+o.ly+' '+x1+','+o.ly+'"/>';
+    });
+  });
+  svg.innerHTML=out;
+}
+document.fonts.ready.then(place);window.addEventListener('resize',place);window.addEventListener('load',place);new ResizeObserver(()=>requestAnimationFrame(place)).observe(document.querySelector('.ana'));
+document.querySelectorAll('.sw').forEach(b=>b.onclick=()=>{const on=b.getAttribute('aria-checked')!=='true';b.setAttribute('aria-checked',on);const o=b.dataset.o;
+  if(o==='contractor')document.body.classList.toggle('opt-contractor',on);else document.body.classList.toggle('opt-'+o+'-off',!on);place();setTimeout(place,50)});
+function tryPlace(n){n=n||0;const w=document.getElementById('card').getBoundingClientRect().width;if(w)place();if(!document.getElementById('wires').innerHTML){if(n<120)requestAnimationFrame(()=>tryPlace(n+1));else setTimeout(()=>tryPlace(0),250)}}tryPlace();[100,300,1000,2500].forEach(t=>setTimeout(place,t));
+</script>
+<div id="tw"></div>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script type="text/babel" src="tweaks-panel.jsx"></script>
+<script type="text/babel">
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "dateFormat": "Short",
+  "calendar": "Gregorian",
+  "digits": "Latin",
+  "dicMode": "On hover",
+  "ltrBadge": "Left corner"
+}/*EDITMODE-END*/;
+const TODAY=new Date('2026-09-26T12:00:00');
+function fmt(d,t){
+  if(t.dateFormat==='Relative'){const n=Math.round((TODAY-d)/864e5);return n<=0?'Today':n===1?'Yesterday':n+'d ago';}
+  const o=t.dateFormat==='Full'?{day:'numeric',month:'short',year:'numeric'}:{day:'numeric',month:'short'};
+  o.calendar=t.calendar==='Hijri'?'islamic-umalqura':'gregory';o.numberingSystem=t.digits==='Arabic'?'arab':'latn';
+  try{return new Intl.DateTimeFormat(t.digits==='Arabic'?'ar':'en-GB',o).format(d)}catch(e){return d.toISOString().slice(0,10)}
+}
+function dots(n){if(n>=20)return 'rrrr';if(n>=12)return 'rrr_';if(n>=8)return 'rr__';if(n>=5)return 'r___';if(n>=3)return 'y___';if(n>=2)return 'g___';return '____';}
+function apply(t){
+  document.querySelectorAll('.dic').forEach(e=>{const n=+e.dataset.days;e.innerHTML=dots(n).split('').map(c=>'<i class="'+(c==='_'?'':c)+'"></i>').join('');e.dataset.tip=(t.digits==='Arabic'?n.toLocaleString('ar-EG')+' يوم في هذا العمود':n+(n===1?' day':' days')+' in this column');});
+  document.body.classList.toggle('badge-mirror',t.ltrBadge==='Mirrored');
+  document.body.classList.toggle('dic-always',t.dicMode==='Always');document.body.classList.toggle('dic-off',t.dicMode==='Off');
+  document.querySelectorAll('.dt').forEach(e=>{e.querySelector('span').textContent=fmt(new Date(e.dataset.d+'T12:00:00'),t);e.title='Created';});
+  if(window.place){window.place();setTimeout(window.place,50)}
+}
+function Tw(){
+  const [t,set]=useTweaks(TWEAK_DEFAULTS);
+  React.useEffect(()=>apply(t),[t]);
+  return <TweaksPanel>
+    <TweakSection label="Creation date" />
+    <TweakRadio label="Format" value={t.dateFormat} options={['Relative','Short','Full']} onChange={v=>set('dateFormat',v)} />
+    <TweakRadio label="Calendar" value={t.calendar} options={['Gregorian','Hijri']} onChange={v=>set('calendar',v)} />
+    <TweakRadio label="Digits" value={t.digits} options={['Latin','Arabic']} onChange={v=>set('digits',v)} />
+    <TweakSection label="Signals" />
+    <TweakRadio label="LTR badge" value={t.ltrBadge} options={['Left corner','Mirrored']} onChange={v=>set('ltrBadge',v)} />
+    <TweakRadio label="Days in column" value={t.dicMode} options={['On hover','Always','Off']} onChange={v=>set('dicMode',v)} />
+  </TweaksPanel>;
+}
+apply(TWEAK_DEFAULTS);
+ReactDOM.createRoot(document.getElementById('tw')).render(<Tw />);
+</script>
+</body>
+</html>

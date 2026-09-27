@@ -1,0 +1,35 @@
+<!-- @dsCard group="Components" viewport="760x470" name="Data — KPI tiles" subtitle="White tiles · tonal icon · trend pill · EN + AR" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../../styles.css">
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="../../_ds_bundle.js"></script>
+<style>
+body{margin:0;background:var(--surface-board);padding:22px;font-family:var(--font-ui)}
+.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.lbl{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#9aa0ad;margin:0 0 10px}
+[dir=rtl]{font-family:var(--font-arabic)}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { StatCard } = window.RabaedDesignSystem_a8093d;
+const K=[
+ ['tomato','clock','4.5 Days','Median Cycle Time','متوسط زمن الدورة','This month','هذا الشهر',{value:'0.8d',dir:'down',good:true}],
+ ['green','check','95%','Finished In Time','أُنجزت في الوقت','This month','هذا الشهر',{value:'3%',dir:'up'}],
+ ['red','warning','2','Open NCR & SI','ملاحظات عدم مطابقة مفتوحة','5 of 10 closed','٥ من ١٠ مغلقة',{value:'1',dir:'up',good:false}],
+];
+const K2=[['violet','message','10','Closed Comments','تعليقات مغلقة','20 / 64 closed','٢٠ / ٦٤ مغلقة'],['blue','clock','10,920','Total Working Hours','إجمالي ساعات العمل','This month','هذا الشهر'],['gray','chart-bar','2,113','Total Submittals','إجمالي التقديمات','Since project start','منذ بدء المشروع']];
+const Row=({rows,ar})=><div className="grid" dir={ar?'rtl':'ltr'} style={{marginBottom:14}}>{rows.map((k,i)=><StatCard key={i} tint={k[0]} icon={k[1]} value={k[2]} label={ar?k[4]:k[3]} sublabel={ar?k[6]:k[5]} trend={k[7]}/>)}</div>;
+ReactDOM.createRoot(document.getElementById('root')).render(<>
+ <p className="lbl">English · LTR</p><Row rows={K}/><Row rows={K2}/>
+ <p className="lbl">عربي · RTL</p><Row rows={K} ar/>
+</>);
+</script>
+</body>
+</html>

@@ -1,0 +1,26 @@
+<!-- @dsCard group="Colors" viewport="700x150" name="Delft Blue scale" subtitle="Secondary ramp · ink & UI text (600 base)" -->
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><link rel="stylesheet" href="../styles.css">
+<style>
+  body { margin: 0; background: var(--surface-card); padding: 24px; font-family: var(--font-ui); }
+  .ramp { display: flex; gap: 6px; }
+  .step { flex: 1; display: flex; flex-direction: column; gap: 8px; align-items: center; }
+  .b { width: 100%; height: 72px; border-radius: var(--radius-sm); }
+  .n { font-size: var(--fs-notes); color: var(--text-muted); font-weight: var(--fw-medium); }
+  .star { color: var(--delft-600); }
+</style></head>
+<body>
+<div class="ramp">
+  <div class="step"><div class="b" style="background:var(--delft-50)"></div><span class="n">50</span></div>
+  <div class="step"><div class="b" style="background:var(--delft-100)"></div><span class="n">100</span></div>
+  <div class="step"><div class="b" style="background:var(--delft-200)"></div><span class="n">200</span></div>
+  <div class="step"><div class="b" style="background:var(--delft-300)"></div><span class="n">300</span></div>
+  <div class="step"><div class="b" style="background:var(--delft-400)"></div><span class="n">400</span></div>
+  <div class="step"><div class="b" style="background:var(--delft-500)"></div><span class="n">500</span></div>
+  <div class="step"><div class="b" style="background:var(--delft-600)"></div><span class="n star">600 ★</span></div>
+  <div class="step"><div class="b" style="background:var(--delft-700)"></div><span class="n">700</span></div>
+  <div class="step"><div class="b" style="background:var(--delft-800)"></div><span class="n">800</span></div>
+  <div class="step"><div class="b" style="background:var(--delft-900)"></div><span class="n">900</span></div>
+</div>
+</body></html>

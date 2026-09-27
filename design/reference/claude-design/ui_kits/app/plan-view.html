@@ -1,0 +1,56 @@
+<!-- @dsCard group="App" viewport="1440x900" name="Multiple View — Plan View" subtitle="CAD sheet · typed pins + clusters · popover · add-pin flow · filters · synced list · revisions · EN/AR" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rabaed — Multiple View · Plan View</title>
+<link rel="stylesheet" href="../../styles.css">
+<link rel="stylesheet" href="shell/shell.css">
+<link rel="stylesheet" href="shell/pages.css">
+<link rel="stylesheet" href="list/list.css">
+<link rel="stylesheet" href="plan/plan.css">
+<style>html,body{margin:0}a{color:var(--tomato-600)}a:hover{color:var(--tomato-700)}a.cb{color:var(--btn-sec-fg)}</style>
+</head>
+<body>
+<div id="app"></div>
+<script src="shell/shell.js"></script>
+<script src="shell/pages.js"></script>
+<script src="plan/data.js"></script>
+<script src="plan/plan.js"></script>
+<script>
+const S=RS.S,KEY='rb-shell-v1';
+try{Object.assign(S,JSON.parse(localStorage.getItem(KEY)||'{}'),{menu:null,pal:false})}catch(e){}
+S.project='dmt';S.tab=9;S.page='projects';S.mv='plan';
+const save=()=>{let o={};try{o=JSON.parse(localStorage.getItem(KEY)||'{}')}catch(e){}localStorage.setItem(KEY,JSON.stringify(Object.assign(o,{mode:S.mode,lang:S.lang,col:S.col,theme:S.theme,role:S.role,open:S.open,ws:S.ws})))};
+function goShell(o){let st={};try{st=JSON.parse(localStorage.getItem(KEY)||'{}')}catch(e){}Object.assign(st,o);localStorage.setItem(KEY,JSON.stringify(st));location.href='saas-shell.html'}
+let colBefore=null;
+function render(){
+ const L=(e,a)=>S.lang==='ar'?a:e;
+ if(PV.V.tablet&&colBefore===null){colBefore=S.col;S.col=true}else if(!PV.V.tablet&&colBefore!==null){S.col=colBefore;colBefore=null}
+ document.documentElement.lang=S.lang;document.documentElement.dir=S.lang==='ar'?'rtl':'ltr';
+ document.body.style.background=S.mode==='dark'?'#0f1524':(PV.V.tablet?'#dfe2e7':'');
+ document.getElementById('app').innerHTML=`<div class="rs${S.col?' col':''}${S.theme==='light'&&S.mode!=='dark'?' light':''}${S.mode==='dark'?' theme-dark':''}${PV.V.tablet?' tablet':''}" lang="${S.lang}" dir="${S.lang==='ar'?'rtl':'ltr'}">${RS.sidebar()}<div class="mn">${RS.header(S,{project:{l:'D',n:L('Dubai Marina Tower – Phase 2','برج دبي مارينا – المرحلة ٢'),c:L('Al Futtaim Construction Co.','شركة الفطيم للمقاولات')}})}${RS.tabs()}<main class="ct pv-ct" id="mvroot">${PV.view()}</main></div></div>`;
+ requestAnimationFrame(PV.after);
+ save();
+}
+function inner(){const l=document.querySelector('.ilist'),y=l?l.scrollTop:0;document.getElementById('mvroot').innerHTML=PV.view();const n=document.querySelector('.ilist');if(n)n.scrollTop=y;PV.after()}
+document.addEventListener('click',e=>{const b=e.target.closest('button,[data-act]');if(!b||b.closest('#mvroot'))return;const d=b.dataset;
+ if(d.nav)return goShell({page:d.nav,project:null});
+ if(d.tab!==undefined){const t=+d.tab;if(t===1){location.href='submittals-list.html';return}if(t===8){location.href='settings-numbering.html';return}return goShell({project:'dmt',tab:t})}
+ if(d.act==='back')return goShell({page:'projects',project:null});
+ if(d.toggle){if(S.col){S.col=false;S.open[d.toggle]=true}else S.open[d.toggle]=!S.open[d.toggle];return render()}
+ if(d.menu){S.menu=S.menu===d.menu?null:d.menu;return render()}
+ if(d.ws){S.ws=+d.ws;S.menu=null;return render()}
+ if(d.lang){S.lang=d.lang;S.menu=null;return render()}
+ if(d.theme){S.theme=d.theme;return render()}
+ if(d.mode){S.mode=d.mode;return render()}
+ if(d.act==='collapse'){S.col=!S.col;if(PV.V.tablet)colBefore=S.col;return render()}
+ if(d.act==='pal')return goShell({pal:false});
+});
+document.addEventListener('click',e=>{if(S.menu&&!e.target.closest('.menu,[data-menu]')&&!e.target.closest('#mvroot')){S.menu=null;render()}});
+PV.bind(document.getElementById('app'),{inner,full:render});
+render();
+</script>
+</body>
+</html>

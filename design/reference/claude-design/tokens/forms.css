@@ -1,0 +1,60 @@
+/* ============================================================
+   Rabaed — Form field tokens (surface-aware)
+   Default = white card. Wrap a region in .surface-gray (board canvas)
+   or .theme-dark (navy) and every field/control adapts.
+   ============================================================ */
+:root {
+  --fld-bg: #ffffff;         /* outline field background */
+  --fld-bd: #d5d8de;         /* resting border */
+  --fld-bd-h: #b4b9c3;       /* hover border */
+  --fld-fill: #f1f2f4;       /* filled variant background */
+  --fld-fill-h: #e9ebee;
+  --fld-fill-bd: transparent;
+  --fld-dis: #f6f7f9;
+  --fld-txt: #1f2430;
+  --fld-label: #1f2430;
+  --fld-mut: #6a6e7a;
+  --fld-ph: #9aa0ad;
+  --fld-dis-txt: #a8adb8;
+  --fld-ring: #3b6fd8;
+  --fld-ring-a: rgba(59, 111, 216, .22);
+  --fld-err: #e5484d;
+  --fld-err-a: rgba(229, 72, 77, .20);
+  --fld-ok: #27b86e;
+  --fld-r: 6px;
+  --fld-h: 34px;
+  --fld-h-sm: 28px;
+  --fld-h-inset: 48px;
+  --ctl-off: #c9cdd4;
+  --ctl-on: #f95738;
+  --menu-bg: #ffffff;
+  --menu-bd: #e2e3e7;
+  --menu-hov: #f6f7f9;
+  --ring-offset: #ffffff;
+}
+.surface-gray {
+  --fld-fill: #ffffff;
+  --fld-fill-h: #fbfbfc;
+  --fld-fill-bd: #e7e9ed;
+  --fld-dis: #eef0f3;
+  --ring-offset: #f6f7f9;
+}
+.theme-dark {
+  --fld-bg: #1b2438;
+  --fld-bd: #2f3a55;
+  --fld-bd-h: #46526f;
+  --fld-fill: #1f2940;
+  --fld-fill-h: #253050;
+  --fld-fill-bd: transparent;
+  --fld-dis: #161e31;
+  --fld-txt: #eef0f5;
+  --fld-label: #eef0f5;
+  --fld-mut: #8c94a8;
+  --fld-ph: #6b7488;
+  --fld-dis-txt: #4f5870;
+  --ctl-off: #3a4562;
+  --menu-bg: #1b2438;
+  --menu-bd: #2f3a55;
+  --menu-hov: #243049;
+  --ring-offset: #131b2e;
+}

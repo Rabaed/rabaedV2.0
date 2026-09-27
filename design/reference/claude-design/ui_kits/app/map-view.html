@@ -1,0 +1,56 @@
+<!-- @dsCard group="App" viewport="1440x900" name="Multiple View — Map View" subtitle="Site map · zone status polygons · pan/zoom · zone panel · filters · executive dark · admin draw/edit · empty · EN/AR · tablet" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rabaed — Multiple View · Map View</title>
+<link rel="stylesheet" href="../../styles.css">
+<link rel="stylesheet" href="shell/shell.css">
+<link rel="stylesheet" href="shell/pages.css">
+<link rel="stylesheet" href="list/list.css">
+<link rel="stylesheet" href="map/map.css">
+<style>html,body{margin:0}a{color:var(--tomato-600)}a:hover{color:var(--tomato-700)}a.cb{color:var(--btn-sec-fg)}</style>
+</head>
+<body>
+<div id="app"></div>
+<script src="shell/shell.js"></script>
+<script src="shell/pages.js"></script>
+<script src="map/data.js"></script>
+<script src="map/map.js"></script>
+<script>
+const S=RS.S,KEY='rb-shell-v1';
+try{Object.assign(S,JSON.parse(localStorage.getItem(KEY)||'{}'),{menu:null,pal:false})}catch(e){}
+S.project='nak';S.tab=9;S.page='projects';S.mv=MV.V.view;
+const save=()=>{let o={};try{o=JSON.parse(localStorage.getItem(KEY)||'{}')}catch(e){}localStorage.setItem(KEY,JSON.stringify(Object.assign(o,{mode:S.mode,lang:S.lang,col:S.col,theme:S.theme,role:S.role,open:S.open,ws:S.ws})))};
+function goShell(o){let st={};try{st=JSON.parse(localStorage.getItem(KEY)||'{}')}catch(e){}Object.assign(st,o);localStorage.setItem(KEY,JSON.stringify(st));location.href='saas-shell.html'}
+let colBefore=null;
+function render(){
+ const L=(e,a)=>S.lang==='ar'?a:e;
+ if(MV.V.tablet&&colBefore===null){colBefore=S.col;S.col=true}else if(!MV.V.tablet&&colBefore!==null){S.col=colBefore;colBefore=null}
+ document.documentElement.lang=S.lang;document.documentElement.dir=S.lang==='ar'?'rtl':'ltr';
+ document.body.style.background=S.mode==='dark'?'#0f1524':(MV.V.tablet?'#dfe2e7':'');
+ document.getElementById('app').innerHTML=`<div class="rs${S.col?' col':''}${S.theme==='light'&&S.mode!=='dark'?' light':''}${S.mode==='dark'?' theme-dark':''}${MV.V.tablet?' tablet':''}" lang="${S.lang}" dir="${S.lang==='ar'?'rtl':'ltr'}">${RS.sidebar()}<div class="mn">${RS.header(S,{project:{l:'N',n:L('Al Nakheel Villas Compound','مجمع فلل النخيل'),c:L('Riyadh · 113 villas · 8 zones','الرياض · 113 فيلا · 8 مناطق')}})}${RS.tabs()}<main class="ct mv-ct" id="mvroot">${MV.view()}</main></div></div>`;
+ requestAnimationFrame(MV.after);
+ save();
+}
+function inner(){document.getElementById('mvroot').innerHTML=MV.view();MV.after()}
+document.addEventListener('click',e=>{const b=e.target.closest('button,[data-act]');if(!b||b.closest('#mvroot'))return;const d=b.dataset;
+ if(d.nav)return goShell({page:d.nav,project:null});
+ if(d.tab!==undefined){const t=+d.tab;if(t===1){location.href='submittals-list.html';return}if(t===8){location.href='settings-numbering.html';return}return goShell({project:'dmt',tab:t})}
+ if(d.act==='back')return goShell({page:'projects',project:null});
+ if(d.toggle){if(S.col){S.col=false;S.open[d.toggle]=true}else S.open[d.toggle]=!S.open[d.toggle];return render()}
+ if(d.menu){S.menu=S.menu===d.menu?null:d.menu;return render()}
+ if(d.ws){S.ws=+d.ws;S.menu=null;return render()}
+ if(d.lang){S.lang=d.lang;S.menu=null;return render()}
+ if(d.theme){S.theme=d.theme;return render()}
+ if(d.mode){S.mode=d.mode;if(S.mode!=='dark')MV.V.exec=false;return render()}
+ if(d.act==='collapse'){S.col=!S.col;if(MV.V.tablet)colBefore=S.col;MV.V.auto=true;return render()}
+ if(d.act==='pal')return goShell({pal:false});
+});
+document.addEventListener('click',e=>{if(S.menu&&!e.target.closest('.menu,[data-menu]')&&!e.target.closest('#mvroot')){S.menu=null;render()}});
+MV.bind(document.getElementById('app'),{inner,full:render});
+render();
+</script>
+</body>
+</html>

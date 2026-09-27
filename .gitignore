@@ -1,0 +1,40 @@
+# --- Secrets: never commit ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+credentials*.json
+service-account*.json
+secrets/
+.aws/
+*.tfstate
+*.tfstate.*
+.terraform/
+
+# --- Licensed or bulky design material (kept locally only) ---
+# Thmanyah font licence forbids hosting/redistributing the font files.
+design/reference/claude-design/assets/fonts/thmanyah/*.woff2
+design/reference/claude-design/assets/fonts/thmanyah/*.otf
+design/reference/claude-design/uploads/
+*.zip
+
+# --- Tooling ---
+node_modules/
+dist/
+build/
+coverage/
+.turbo/
+.next/
+.vercel/
+*.log
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+.scratch/
+design/reference/claude-design/assets/fonts/thmanyah/LICENSE.pdf

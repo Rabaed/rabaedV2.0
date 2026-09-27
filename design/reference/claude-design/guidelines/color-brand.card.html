@@ -1,0 +1,27 @@
+<!-- @dsCard group="Colors" viewport="700x190" name="Brand palette" subtitle="Tomato · Delft Blue · Naples Yellow · Orange" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../styles.css">
+<style>
+  body { margin: 0; background: var(--surface-card); padding: 24px; font-family: var(--font-ui); }
+  .row { display: flex; gap: 16px; }
+  .sw { flex: 1; display: flex; flex-direction: column; gap: 10px; }
+  .chip { height: 96px; border-radius: var(--radius-md); box-shadow: var(--shadow-sm); position: relative; }
+  .name { font-size: var(--fs-body); font-weight: var(--fw-semibold); color: var(--text-heading); }
+  .meta { font-size: var(--fs-caption); color: var(--text-muted); }
+  .role { position: absolute; left: 12px; bottom: 10px; font-size: var(--fs-notes); font-weight: var(--fw-semibold);
+          letter-spacing: var(--ls-wide); text-transform: uppercase; color: rgba(255,255,255,.85); }
+</style>
+</head>
+<body>
+<div class="row">
+  <div class="sw"><div class="chip" style="background:var(--tomato-600)"><span class="role">Primary</span></div><span class="name">Tomato</span><span class="meta">#F95738</span></div>
+  <div class="sw"><div class="chip" style="background:var(--delft-600)"><span class="role">Secondary</span></div><span class="name">Delft Blue</span><span class="meta">#3D405B</span></div>
+  <div class="sw"><div class="chip" style="background:var(--naples-500)"><span class="role" style="color:rgba(61,64,91,.7)">Accent</span></div><span class="name">Naples Yellow</span><span class="meta">#F4D35E</span></div>
+  <div class="sw"><div class="chip" style="background:var(--orange-600)"><span class="role">Warm</span></div><span class="name">Orange</span><span class="meta">#EE964B</span></div>
+  <div class="sw"><div class="chip" style="background:var(--espresso)"><span class="role">Surface</span></div><span class="name">Espresso</span><span class="meta">#2A1610</span></div>
+</div>
+</body>
+</html>

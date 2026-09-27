@@ -1,0 +1,78 @@
+<!-- @dsCard group="App" viewport="1440x900" name="SaaS shell — prototype" subtitle="Sidebar dark/light · collapse + flyouts · ⌘K · role + user menus · AR/EN · 8 pages" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rabaed — SaaS shell</title>
+<link rel="stylesheet" href="../../styles.css">
+<link rel="stylesheet" href="shell/shell.css">
+<link rel="stylesheet" href="shell/pages.css">
+<style>html,body{margin:0}a{color:var(--tomato-600)}a:hover{color:var(--tomato-700)}</style>
+</head>
+<body>
+<div id="app"></div>
+<script src="shell/shell.js"></script>
+<script src="shell/pages.js"></script>
+<script>
+const S=RS.S,KEY='rb-shell-v1';
+try{Object.assign(S,JSON.parse(localStorage.getItem(KEY)||'{}'),{menu:null,pal:false})}catch(e){}
+const save=()=>localStorage.setItem(KEY,JSON.stringify({mode:S.mode,lang:S.lang,col:S.col,theme:S.theme,page:S.page,project:S.project,tab:S.tab,role:S.role,open:S.open,ws:S.ws}));
+let toastT;
+function toast(m){clearTimeout(toastT);let el=document.getElementById('toast');if(!el){el=document.createElement('div');el.id='toast';document.body.appendChild(el)}el.className='toast';el.innerHTML='<i class="ti ti-circle-check"></i>'+m;toastT=setTimeout(()=>el.remove(),2200)}
+function palItems(){const L=(e,a)=>S.lang==='ar'?a:e;const q=S.palQ.trim().toLowerCase();
+ const pages=[...RS.MODULES,...RS.COMPANY].map(m=>({g:'pages',ic:m.ic,n:RS.t(m.id),go:{page:m.id}}));
+ const prj=RP.PROJECTS.map(p=>({g:'projectsG',ic:'ti-buildings',n:L(p.n,p.na),s:L(p.co,p.coa),go:{project:p.id}}));
+ const sub=[['Fire Suppression System','نظام إطفاء الحريق','12789331'],['HVAC Ducting','مجاري التكييف','12789319'],['Concrete Mix Design','تصميم خلطة الخرسانة','12789320']].map(s=>({g:'subsG',ic:'ti-file-text',n:L(s[0],s[1]),s:s[2],go:{project:'dmt',tab:1}}));
+ return [...pages,...prj,...sub].filter(i=>!q||(i.n+' '+(i.s||'')).toLowerCase().includes(q))}
+function palette(){if(!S.pal)return '';const items=palItems();S.palSel=Math.min(S.palSel,Math.max(0,items.length-1));let g='',i=0;
+ const ls=items.map(it=>{const h=it.g!==g?`<h6>${RS.t(it.g)}</h6>`:'';g=it.g;return h+`<button class="pal-it${i===S.palSel?' sel':''}" data-pi="${i++}"><i class="ti ${it.ic}"></i>${RS.esc(it.n)}${it.s?`<small>${RS.esc(it.s)}</small>`:''}</button>`}).join('');
+ return `<div class="pal-scrim${S.mode==='dark'?' theme-dark':''}" lang="${S.lang}" dir="${S.lang==='ar'?'rtl':'ltr'}" data-act="palclose"><div class="pal" data-stop><div class="pal-in"><i class="ti ti-search"></i><input id="palq" placeholder="${RS.t('searchPh')}" value="${RS.esc(S.palQ)}"><kbd>Esc</kbd></div><div class="pal-ls">${ls||`<div class="pal-none">${RS.t('noRes')}</div>`}</div><div class="pal-ft"><span><kbd>↑</kbd><kbd>↓</kbd>${RS.t('nav')}</span><span><kbd>↵</kbd>${RS.t('open')}</span><span><kbd>Esc</kbd>${RS.t('close')}</span></div></div></div>`}
+function go(o){S.menu=null;S.pal=false;if(o.project){S.project=o.project;S.tab=o.tab||0}else if(o.page){S.page=o.page;S.project=null}render();scrollTo(0,0)}
+function render(){
+ const L=(e,a)=>S.lang==='ar'?a:e;
+ let ctx,body;
+ if(S.project){const p=RP.PROJECTS.find(x=>x.id===S.project);ctx={project:{l:p.l,n:L(p.n,p.na),c:L(p.co,p.coa)}};body=RS.tabs()+`<main class="ct">${RP.project(p,S.tab)}</main>`}
+ else{const r=RP[S.page]();ctx={title:r.title,sub:r.sub};body=`<main class="ct">${r.html}</main>`}
+ document.documentElement.lang=S.lang;
+ const app=document.getElementById('app');
+ app.innerHTML=`<div class="rs${S.col?' col':''}${S.theme==='light'&&S.mode!=='dark'?' light':''}${S.mode==='dark'?' theme-dark':''}" lang="${S.lang}" dir="${S.lang==='ar'?'rtl':'ltr'}">${RS.sidebar()}<div class="mn">${RS.header(S,ctx)}${body}</div></div>${palette()}`;
+ document.body.style.background=S.mode==='dark'?'#0f1524':'';
+ document.documentElement.dir=S.lang==='ar'?'rtl':'ltr';
+ const pi=document.getElementById('palq');if(pi){pi.focus();pi.setSelectionRange(pi.value.length,pi.value.length)}
+ save();
+}
+document.addEventListener('click',e=>{
+ const b=e.target.closest('button,[data-act]');
+ if(!b){if(S.menu){S.menu=null;render()}return}
+ const d=b.dataset;
+ if(d.nav)return go({page:d.nav});
+ if(d.project)return go({project:d.project});
+ if(d.toggle){if(S.col){S.col=false;S.open[d.toggle]=true}else S.open[d.toggle]=!S.open[d.toggle];return render()}
+ if(d.menu){S.menu=S.menu===d.menu?null:d.menu;return render()}
+ if(d.ws){S.ws=+d.ws;S.menu=null;render();return toast(RS.esc(S.lang==='ar'?RS.WS[S.ws].a:RS.WS[S.ws].n))}
+ if(d.role){S.role=+d.role;S.menu=null;return render()}
+ if(d.lang){S.lang=d.lang;return render()}
+ if(d.theme){S.theme=d.theme;return render()}
+ if(d.mode){S.mode=d.mode;return render()}
+ if(d.tab){S.tab=+d.tab;return render()}
+ if(d.pf){RP._pf=d.pf;return render()}
+ if(d.roleview){RP._role=+d.roleview;return render()}
+ if(d.req){const [k,i]=d.req.split(':');const q=RP._reqs.splice(+i,1)[0];S.joinCount=RP._reqs.length;render();return toast((k==='ok'?(S.lang==='ar'?'تمت الموافقة على ':'Approved '):(S.lang==='ar'?'تم رفض ':'Declined '))+RS.esc(q[0]))}
+ if(d.pi!==undefined){const it=palItems()[+d.pi];return go(it.go)}
+ if(d.act==='collapse'){S.col=!S.col;S.menu=null;return render()}
+ if(d.act==='back')return go({page:'projects'});
+ if(d.act==='pal'){S.pal=true;S.palQ='';S.palSel=0;S.menu=null;return render()}
+ if(d.act==='palclose'&&!e.target.closest('[data-stop]')){S.pal=false;return render()}
+ if(S.menu&&!b.closest('.menu')){S.menu=null;render()}
+});
+document.addEventListener('input',e=>{if(e.target.id==='palq'){S.palQ=e.target.value;S.palSel=0;render()}});
+document.addEventListener('keydown',e=>{
+ if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='k'){e.preventDefault();S.pal=!S.pal;S.palQ='';S.palSel=0;return render()}
+ if(e.key==='Escape'&&(S.pal||S.menu)){S.pal=false;S.menu=null;return render()}
+ if(S.pal){const n=palItems().length;if(e.key==='ArrowDown'){e.preventDefault();S.palSel=(S.palSel+1)%Math.max(1,n);render()}else if(e.key==='ArrowUp'){e.preventDefault();S.palSel=(S.palSel-1+n)%Math.max(1,n);render()}else if(e.key==='Enter'){const it=palItems()[S.palSel];if(it)go(it.go)}}
+});
+render();
+</script>
+</body>
+</html>

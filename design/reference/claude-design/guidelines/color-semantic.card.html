@@ -1,0 +1,21 @@
+<!-- @dsCard group="Colors" viewport="700x300" name="Semantic & workflow chips" subtitle="Tonal hue set — tint · text · solid for every role" -->
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><link rel="stylesheet" href="../styles.css">
+<style>
+body{margin:0;background:#fff;padding:20px 22px;font-family:var(--font-ui);color:#1f2430}
+.g{display:grid;grid-template-columns:110px repeat(3,minmax(0,1fr)) 150px;gap:6px 10px;align-items:center}
+.h{font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#9aa0ad}
+.n{font-size:12.5px;font-weight:600}
+.sw{height:26px;border-radius:6px;display:flex;align-items:center;padding:0 8px;font:600 10.5px ui-monospace,Menlo,monospace}
+.use{font-size:11.5px;color:#6a6e7a}
+</style></head>
+<body>
+<div class="g" id="g"><span></span><span class="h">Tint · bg</span><span class="h">Text · fg</span><span class="h">Solid · dot</span><span class="h">Used for</span></div>
+<script>
+const H=[['tomato','Brand · revision R1/R2'],['green','Approved · Code A/B · ME'],['amber','Resubmitted · Code C · CV'],['red','Rejected · Code D'],['blue','Internal Review'],['violet','Pending Approval · AR'],['cyan','EL Electrical'],['orange','SU Surveying'],['gray','Draft · Cancelled']];
+const g=document.getElementById('g');
+H.forEach(([h,u])=>{const cs=getComputedStyle(document.documentElement);const v=k=>cs.getPropertyValue(`--tone-${h}-${k}`).trim();
+ g.insertAdjacentHTML('beforeend',`<span class="n">${h}</span><span class="sw" style="background:var(--tone-${h}-tint);color:var(--tone-${h}-fg)">${v('tint')}</span><span class="sw" style="background:var(--tone-${h}-fg);color:#fff">${v('fg')}</span><span class="sw" style="background:var(--tone-${h}-solid);color:#fff">${v('solid')}</span><span class="use">${u}</span>`)});
+</script>
+</body></html>

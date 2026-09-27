@@ -1,0 +1,47 @@
+<!-- @dsCard group="Themes" viewport="1200x760" name="Light & dark" subtitle="Same components, .theme-dark on the right · buttons, chips, fields, KPI, tabs, card" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../styles.css">
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="../_ds_bundle.js"></script>
+<style>
+body{margin:0;font-family:var(--font-ui)}
+.wrap{display:grid;grid-template-columns:1fr 1fr;min-height:100vh}
+.pane{background:var(--ui-canvas);color:var(--ui-text);padding:20px;display:flex;flex-direction:column;gap:14px}
+.hd{font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ui-muted)}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.box{background:var(--ui-surface);border:1px solid var(--ui-border);border-radius:14px;overflow:hidden}
+.g3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.g2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.kc{background:var(--ui-surface);border:1px solid var(--ui-border);border-radius:12px;padding:12px 14px;box-shadow:var(--ui-shadow)}
+.kc .r1{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--ui-faint)}.kc .r1>:last-child{margin-inline-start:auto}
+.kc .tt{font-weight:700;font-size:15px;margin:6px 0 10px}
+.kc .r3{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:13px;color:var(--ui-text-2)}
+.lt{display:inline-flex;align-items:center;gap:4px;background:var(--tone-gray-tint);color:var(--ui-text-2);border-radius:6px;padding:3px 8px;font-size:11.5px;font-weight:500}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { Button, IconButton, Badge, Tag, Input, Select, Checkbox, Switch, Segmented, StatCard, Tabs, Icon, Avatar } = window.RabaedDesignSystem_a8093d;
+function Pane({dark}){const [v,setV]=React.useState('1');const [sw,setSw]=React.useState(true);const [seg,setSeg]=React.useState('k');
+ return <div className={'pane'+(dark?' theme-dark':'')}>
+  <div className="hd">{dark?'Dark · .theme-dark':'Light · default'}</div>
+  <div className="box"><Tabs items={[{label:'Overview',value:'0',icon:'chart'},{label:'Submittals',value:'1',icon:'document'},{label:'Snag List',value:'2',icon:'flag'},{label:'Files',value:'3',icon:'folder'}]} value={v} onChange={setV}/></div>
+  <div className="row"><Button iconLeft={<Icon name="add" size={16}/>}>Add Submittal</Button><Button variant="secondary">Save draft</Button><Button variant="tertiary">Cancel</Button><Button variant="danger">Reject</Button><Button disabled>Disabled</Button><IconButton icon="filter" variant="secondary" label="Filter"/></div>
+  <div className="row"><Badge tone="info" dot>Internal Review</Badge><Badge tone="pending" dot>Pending Approval</Badge><Badge tone="success" dot>Approved</Badge><Badge tone="danger" dot>Rejected</Badge><Badge tone="success" variant="solid">Code A</Badge><Badge tone="warning">Code C</Badge><Badge tone="brand">R2</Badge></div>
+  <div className="row"><Tag code="CV"/><Tag code="AR"/><Tag code="EL"/><Tag code="ME"/><Tag code="MAR"/><Tag code="SAR"/></div>
+  <div className="g2"><Input label="Submittal title" placeholder="e.g. HVAC ducting" required/><Select label="Submittal type" value="mar" options={[{code:'MAR',label:'Material Approval',value:'mar'}]}/></div>
+  <div className="row"><Checkbox checked label="Notify consultant"/><Switch checked={sw} onChange={setSw} label="Need my action"/><Segmented options={[{label:'Kanban',value:'k'},{label:'List',value:'l'}]} value={seg} onChange={setSeg}/></div>
+  <div className="g3"><StatCard tint="tomato" icon="clock" value="4.5d" label="Median cycle time" trend={{value:'0.8d',dir:'down',good:true}}/><StatCard tint="green" icon="check" value="95%" label="Finished in time"/>
+   <div className="kc"><div className="r1"><Icon name="document" size={14}/>12789331<Badge tone="brand">R2</Badge></div><div className="tt">Fire Suppression</div><div className="row"><Tag code="EL"/><Tag code="MAR"/></div><div className="row" style={{marginTop:8}}><span className="lt"><Icon name="map-pin" size={12}/>Zone A</span><span className="lt">Floor 5</span></div><div className="r3"><Avatar name="Nasser Al Kaabi" size={22}/>Nasser</div></div>
+  </div>
+ </div>}
+ReactDOM.createRoot(document.getElementById('root')).render(<div className="wrap"><Pane/><Pane dark/></div>);
+</script>
+</body>
+</html>

@@ -1,0 +1,52 @@
+<!-- @dsCard group="App" viewport="1440x900" name="Settings — Document Numbering" subtitle="Segment builder · live preview · scope · per-type overrides · save modal · read-only · EN/AR · dark" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rabaed — Settings · Document Numbering</title>
+<link rel="stylesheet" href="../../styles.css">
+<link rel="stylesheet" href="shell/shell.css">
+<link rel="stylesheet" href="shell/pages.css">
+<link rel="stylesheet" href="list/list.css">
+<link rel="stylesheet" href="settings/numbering.css">
+<style>html,body{margin:0}a{color:var(--tomato-600)}a:hover{color:var(--tomato-700)}.segv a{display:contents}</style>
+</head>
+<body>
+<div id="app"></div>
+<script src="shell/shell.js"></script>
+<script src="shell/pages.js"></script>
+<script src="list/list.js"></script>
+<script src="settings/numbering.js"></script>
+<script>
+const S=RS.S,KEY='rb-shell-v1';
+try{Object.assign(S,JSON.parse(localStorage.getItem(KEY)||'{}'),{menu:null,pal:false})}catch(e){}
+S.project='dmt';S.tab=8;
+const save=()=>{let o={};try{o=JSON.parse(localStorage.getItem(KEY)||'{}')}catch(e){}localStorage.setItem(KEY,JSON.stringify(Object.assign(o,{mode:S.mode,lang:S.lang,col:S.col,theme:S.theme,role:S.role,open:S.open,ws:S.ws})))};
+function goShell(o){let st={};try{st=JSON.parse(localStorage.getItem(KEY)||'{}')}catch(e){}Object.assign(st,o);localStorage.setItem(KEY,JSON.stringify(st));location.href='saas-shell.html'}
+function render(){
+ const L=(e,a)=>S.lang==='ar'?a:e;const p=RP.PROJECTS.find(x=>x.id==='dmt');
+ document.documentElement.lang=S.lang;document.documentElement.dir=S.lang==='ar'?'rtl':'ltr';
+ document.body.style.background=S.mode==='dark'?'#0f1524':'';
+ document.getElementById('app').innerHTML=`<div class="rs${S.col?' col':''}${S.theme==='light'&&S.mode!=='dark'?' light':''}${S.mode==='dark'?' theme-dark':''}" lang="${S.lang}" dir="${S.lang==='ar'?'rtl':'ltr'}">${RS.sidebar()}<div class="mn">${RS.header(S,{project:{l:p.l,n:L(p.n,p.na),c:L(p.co,p.coa)}})}${RS.tabs()}<main class="ct" id="lvroot">${DN.view()}</main></div></div>`;
+ save();
+}
+document.addEventListener('click',e=>{const b=e.target.closest('button,[data-act]');if(!b||b.closest('#lvroot'))return;const d=b.dataset;
+ if(d.nav)return goShell({page:d.nav,project:null});
+ if(d.tab!==undefined){if(+d.tab===8)return;if(+d.tab===1){location.href='submittals-list.html';return}return goShell({project:'dmt',tab:+d.tab})}
+ if(d.act==='back')return goShell({page:'projects',project:null});
+ if(d.toggle){if(S.col){S.col=false;S.open[d.toggle]=true}else S.open[d.toggle]=!S.open[d.toggle];return render()}
+ if(d.menu){S.menu=S.menu===d.menu?null:d.menu;return render()}
+ if(d.ws){S.ws=+d.ws;S.menu=null;return render()}
+ if(d.lang){S.lang=d.lang;S.menu=null;return render()}
+ if(d.theme){S.theme=d.theme;return render()}
+ if(d.mode){S.mode=d.mode;return render()}
+ if(d.act==='collapse'){S.col=!S.col;return render()}
+ if(d.act==='pal')return goShell({pal:false});
+});
+document.addEventListener('click',e=>{if(S.menu&&!e.target.closest('.menu,[data-menu]')&&!e.target.closest('#lvroot')){S.menu=null;render()}});
+DN.bind(document.getElementById('app'),()=>{document.getElementById('lvroot').innerHTML=DN.view()});
+render();
+</script>
+</body>
+</html>

@@ -1,0 +1,75 @@
+<!-- @dsCard group="Components" viewport="1200x980" name="Forms — Input, Select, Checkbox, Radio, Switch" subtitle="Outline · Filled · Inset — on white, gray & dark · all states · EN + AR" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../../styles.css">
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="../../_ds_bundle.js"></script>
+<style>
+body{margin:0;background:#e9ebef;padding:20px;font-family:var(--font-ui);color:#1f2430}
+.bar{display:flex;gap:10px;align-items:center;margin-bottom:14px;flex-wrap:wrap}
+.seg{display:flex;background:#fff;border:1px solid #d9dce2;border-radius:9px;padding:3px;gap:2px}
+.seg button{font:inherit;font-size:12.5px;font-weight:600;border:0;background:transparent;color:#6a6e7a;padding:6px 11px;border-radius:6px;cursor:pointer;white-space:nowrap}
+.seg button.on{background:#1f2430;color:#fff}
+.use{font-size:12.5px;color:#3a3f4b;margin-inline-start:6px}
+.surfs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.sf{border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:14px}
+.sf.white{background:#fff;box-shadow:0 0 0 1px #e2e3e7}.sf.surface-gray{background:#f6f7f9;box-shadow:0 0 0 1px #e2e3e7}.sf.theme-dark{background:#131b2e}
+.hd{font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--fld-mut)}
+.g2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.st{display:flex;flex-direction:column;gap:3px}.st>em{font-style:normal;font-size:10.5px;font-weight:600;color:var(--fld-mut)}
+.row{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center}
+[dir=rtl]{font-family:var(--font-arabic)}[dir=rtl] .hd{letter-spacing:0}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { Input, Select, Checkbox, Radio, Switch, Segmented, Icon } = window.RabaedDesignSystem_a8093d;
+const T={en:{st:['Default','Focus','Filled','Error','Disabled','Read-only'],title:'Submittal title',ph:'e.g. HVAC ducting',val:'Fire Suppression System',err:'Title is required',amt:'Contract value',vat:'Excludes VAT',opt:'Optional',srch:'Search submittals',desc:'Description',descV:'Please review the attached drawings…',type:'Submittal type',choose:'Choose type',types:[['MAR','Material Approval'],['SAR','Shop Drawing'],['DAR','Design Approval']],c1:'Notify consultant',c2:'Mark urgent',c3:'Some selected',c4:'Locked',ra:'Code A',rb:'Code B',s1:'Need my action',s2:'Email updates',views:['Kanban','List','Timeline'],surf:['White card','Gray canvas','Dark'],text:'Text field · states',more:'Addons · textarea · select',ctl:'Checkbox · radio · switch · segmented'},
+ ar:{st:['افتراضي','تركيز','ممتلئ','خطأ','معطّل','للقراءة فقط'],title:'عنوان التقديم',ph:'مثال: مجاري التكييف',val:'نظام إطفاء الحريق',err:'العنوان مطلوب',amt:'قيمة العقد',vat:'لا يشمل الضريبة',opt:'اختياري',srch:'ابحث في التقديمات',desc:'الوصف',descV:'يُرجى مراجعة المخططات المرفقة…',type:'نوع التقديم',choose:'اختر النوع',types:[['MAR','اعتماد مواد'],['SAR','مخططات تنفيذية'],['DAR','اعتماد تصميم']],c1:'إشعار الاستشاري',c2:'تحديد كعاجل',c3:'تحديد جزئي',c4:'مقفل',ra:'Code A',rb:'Code B',s1:'بحاجة لإجرائي',s2:'تحديثات البريد',views:['كانبان','قائمة','جدول زمني'],surf:['بطاقة بيضاء','خلفية رمادية','داكن'],text:'الحقل النصي · الحالات',more:'إضافات · نص طويل · قائمة',ctl:'اختيار · راديو · مفتاح · تبديل'}};
+const USE={outline:'Default — tables, filters, toolbars, dense screens (34px, matches buttons).',filled:'Long forms on white cards; turns white + hairline on the gray canvas.',inset:'Create / edit wizards — label inside, 48px. Not for toolbars.'};
+function Surface({cls,idx,v,t}){
+ const [sel,setSel]=React.useState('mar');const [c1,sc1]=React.useState(true);const [r,sr]=React.useState('A');const [s1,ss1]=React.useState(true);const [view,setView]=React.useState(0);
+ const opts=t.types.map(x=>({code:x[0],label:x[1],value:x[0].toLowerCase()}));
+ const lg=v==='inset'?'lg':'md';
+ return <section className={'sf '+cls}>
+  <div className="hd">{t.surf[idx]}</div>
+  <div><div className="hd" style={{marginBottom:8}}>{t.text}</div><div className="g2">
+   <div className="st"><em>{t.st[0]}</em><Input variant={v} label={t.title} placeholder={t.ph} required/></div>
+   <div className="st"><em>{t.st[1]}</em><Input variant={v} label={t.title} defaultValue={t.val} autoFocus={idx===0&&v!=='x'} onFocus={()=>{}} /></div>
+   <div className="st"><em>{t.st[2]}</em><Input variant={v} label={t.title} defaultValue={t.val} success/></div>
+   <div className="st"><em>{t.st[3]}</em><Input variant={v} label={t.title} placeholder={t.ph} required error={t.err}/></div>
+   <div className="st"><em>{t.st[4]}</em><Input variant={v} label={t.title} defaultValue={t.val} disabled/></div>
+   <div className="st"><em>{t.st[5]}</em><Input variant={v} label={t.title} defaultValue={t.val} readOnly/></div>
+  </div></div>
+  <div><div className="hd" style={{marginBottom:8}}>{t.more}</div><div className="g2">
+   <Input variant={v} label={t.amt} prefix="AED" defaultValue="1,240,000" optional optionalText={t.opt} hint={t.vat}/>
+   <Input variant={v} label={t.srch} icon="search" placeholder={t.srch} shortcut="/"/>
+   <div style={{gridColumn:'1/-1'}}><Input variant={v} label={t.desc} multiline rows={2} defaultValue={t.descV} maxLength={500}/></div>
+   <div style={{gridColumn:'1/-1'}}><Select variant={v} label={t.type} placeholder={t.choose} options={opts} value={sel} onChange={setSel}/></div>
+  </div></div>
+  <div><div className="hd" style={{marginBottom:8}}>{t.ctl}</div>
+   <div className="row" style={{marginBottom:8}}><Checkbox size={lg} checked={c1} onChange={sc1} label={t.c1}/><Checkbox size={lg} label={t.c2}/><Checkbox size={lg} indeterminate label={t.c3}/><Checkbox size={lg} checked disabled label={t.c4}/></div>
+   <div className="row" style={{marginBottom:8}}><Radio size={lg} name={'r'+idx+v} value="A" checked={r==='A'} onChange={sr} label={t.ra}/><Radio size={lg} name={'r'+idx+v} value="B" checked={r==='B'} onChange={sr} label={t.rb}/><Switch size={lg} checked={s1} onChange={ss1} label={t.s1}/><Switch size={lg} label={t.s2} disabled/></div>
+   <Segmented options={t.views.map((x,i)=>({label:x,value:i,icon:['layout-grid','list','calendar'][i]}))} value={view} onChange={setView}/>
+  </div>
+ </section>}
+function App(){const [v,setV]=React.useState('outline');const [l,setL]=React.useState('en');const t=T[l];
+ return <>
+  <div className="bar">
+   <div className="seg">{['outline','filled','inset'].map(x=><button key={x} className={v===x?'on':''} onClick={()=>setV(x)}>{x[0].toUpperCase()+x.slice(1)}</button>)}</div>
+   <div className="seg"><button className={l==='en'?'on':''} onClick={()=>setL('en')}>English · LTR</button><button className={l==='ar'?'on':''} onClick={()=>setL('ar')}>عربي · RTL</button></div>
+   <span className="use"><b>{v}:</b> {USE[v]}</span>
+  </div>
+  <div className="surfs" dir={l==='ar'?'rtl':'ltr'} key={v+l}>
+   <Surface cls="white" idx={0} v={v} t={t}/><Surface cls="surface-gray" idx={1} v={v} t={t}/><Surface cls="theme-dark" idx={2} v={v} t={t}/>
+  </div>
+ </>}
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>
