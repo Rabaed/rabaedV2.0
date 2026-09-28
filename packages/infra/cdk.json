@@ -8,6 +8,7 @@
   },
   "context": {
     "@aws-cdk/core:checkSecretUsage": true,
+    "@aws-cdk/core:defaultCrossStackReferences": "strong",
     "@aws-cdk/core:target-partitions": [
       "aws"
     ],

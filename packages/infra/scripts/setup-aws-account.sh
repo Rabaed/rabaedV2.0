@@ -190,9 +190,10 @@ finish() {
 # Re-runnable: every stage either checks first or is safe to repeat, and the
 # answers you give are remembered in .env.aws (git-ignored, never committed).
 # Nothing secret is written to the repo or to GitHub: GitHub only receives
-# role ARNs and the region, as repository variables.
+# role ARNs, the region and the interim certificate (public) and its ARN, as
+# repository variables.
 
-TOTAL_STAGES=7
+TOTAL_STAGES=8
 
 cd "$(git rev-parse --show-toplevel)"
 ENV_FILE=".env.aws"
@@ -221,11 +222,12 @@ banner "Rabaed AWS account setup: ${RABAED_ENV}"
 
 # ── 1 ────────────────────────────────────────────────────────────────────
 stage "Tools on this computer"
-say "You need a current AWS CLI v2 (one that has 'aws login'), the GitHub CLI and Node 24."
+say "You need a current AWS CLI v2 (one that has 'aws login'), the GitHub CLI, OpenSSL and Node 24."
 while true; do
   missing=()
   aws login help >/dev/null 2>&1 || missing+=("AWS CLI v2, latest: https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html")
   command -v gh >/dev/null 2>&1 || missing+=("GitHub CLI: https://cli.github.com")
+  command -v openssl >/dev/null 2>&1 || missing+=("OpenSSL (comes with Git for Windows; on macOS/Linux install it with your package manager)")
   [[ "$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0)" -ge 24 ]] \
     || missing+=("Node 24 or later: https://nodejs.org")
   (( ${#missing[@]} )) || break
@@ -319,7 +321,8 @@ pause
 stage "GitHub access and budget ($STACK)"
 say "Deploys the account stack from packages/infra/src/account-stack.ts:"
 step "trust for GitHub Actions through OIDC (no AWS keys stored in GitHub);"
-step "rabaed-${RABAED_ENV}-github-deploy: usable only from $REPOSITORY main;"
+step "rabaed-${RABAED_ENV}-github-deploy: usable only from $REPOSITORY main, to deploy,"
+step "  push images and run the migration task;"
 step "rabaed-${RABAED_ENV}-github-diff: read-only, for cdk diff on pull requests;"
 step "the monthly budget alert to $BUDGET_ALERT_EMAIL."
 # The roles trust only tokens whose subject starts with the prefix in config.ts.
@@ -338,6 +341,48 @@ fi
 pause
 
 # ── 7 ────────────────────────────────────────────────────────────────────
+stage "Interim HTTPS certificate"
+say "The load balancer serves HTTPS only. Until Rabaed has a domain, no public"
+say "certificate authority can issue one for its AWS address, so this stage makes"
+say "a self-signed certificate for *.$REGION.elb.amazonaws.com and imports it into"
+say "AWS Certificate Manager. Browsers warn once (\"not private\"); continue past it."
+say "The private key goes straight to AWS and is deleted here; it is never saved."
+# Git Bash hands Windows programs (the AWS CLI) Windows paths.
+native_path() { if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else printf '%s' "$1"; fi; }
+CERT_ARN=$(_existing AWS_CERTIFICATE_ARN || true)
+cert_expiry() {
+  aws acm describe-certificate --region "$REGION" --certificate-arn "$1" --query Certificate.NotAfter --output text 2>/dev/null
+}
+if [[ -n "$CERT_ARN" ]] && fresh_credentials && expiry=$(cert_expiry "$CERT_ARN"); then
+  note "✓ current certificate expires $expiry"
+  confirm "Replace it with a new one (do this within a month of expiry)?" || CERT_ARN_KEEP=1
+fi
+if [[ -z "${CERT_ARN_KEEP:-}" ]]; then
+  if confirm "Create and import the certificate now?"; then
+    certdir=$(mktemp -d)
+    # Git Bash would otherwise rewrite "/CN=…" as a Windows path.
+    MSYS_NO_PATHCONV=1 openssl req -x509 -newkey rsa:2048 -nodes -days 397 \
+      -keyout "$(native_path "$certdir/key.pem")" -out "$(native_path "$certdir/cert.pem")" \
+      -subj "/CN=rabaed-${RABAED_ENV} interim" \
+      -addext "subjectAltName=DNS:*.$REGION.elb.amazonaws.com" 2>/dev/null
+    fresh_credentials
+    if CERT_ARN=$(aws acm import-certificate --region "$REGION" \
+        --certificate "fileb://$(native_path "$certdir/cert.pem")" \
+        --private-key "fileb://$(native_path "$certdir/key.pem")" \
+        --tags "Key=rabaed-environment,Value=$RABAED_ENV" \
+        --query CertificateArn --output text); then
+      write_env AWS_CERTIFICATE_ARN "$CERT_ARN"
+    else
+      SKIPPED+=("interim HTTPS certificate (re-run this wizard)")
+    fi
+    rm -rf "$certdir"
+  else
+    SKIPPED+=("interim HTTPS certificate (re-run this wizard)")
+  fi
+fi
+pause
+
+# ── 8 ────────────────────────────────────────────────────────────────────
 stage "GitHub repository variables"
 say "Pull request and deploy workflows read these non-secret values."
 arn_ok() { [[ -n "$1" && "$1" != None ]]; }
@@ -349,6 +394,15 @@ if fresh_credentials && DEPLOY_ROLE_ARN=$(stack_output DeployRoleArn) && DIFF_RO
 else
   warn "Could not read the role ARNs from $STACK (not deployed yet, or the sign-in expired)."
   SKIPPED+=("GitHub variables AWS_REGION, AWS_DEPLOY_ROLE_ARN, AWS_DIFF_ROLE_ARN (re-run after stage 6)")
+fi
+# The certificate itself is public; the deploy's smoke test trusts it (and only it).
+CERT_ARN=$(_existing AWS_CERTIFICATE_ARN || true)
+if [[ -n "$CERT_ARN" ]] && fresh_credentials \
+    && CERT_PEM=$(aws acm get-certificate --region "$REGION" --certificate-arn "$CERT_ARN" --query Certificate --output text); then
+  set_var AWS_CERTIFICATE_ARN "$CERT_ARN"
+  set_var AWS_CERTIFICATE_PEM "$CERT_PEM"
+else
+  SKIPPED+=("GitHub variables AWS_CERTIFICATE_ARN, AWS_CERTIFICATE_PEM (re-run after stage 7)")
 fi
 pause
 

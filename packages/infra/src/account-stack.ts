@@ -2,7 +2,7 @@ import { CfnOutput, CfnParameter, DefaultStackSynthesizer, Stack, type StackProp
 import * as budgets from "aws-cdk-lib/aws-budgets";
 import * as iam from "aws-cdk-lib/aws-iam";
 import type { Construct } from "constructs";
-import { oidcSubjectPrefix, repositoryName, type EnvironmentConfig } from "./config.ts";
+import { oidcSubjectPrefix, repositoryName, resourceNames, type EnvironmentConfig } from "./config.ts";
 
 const GITHUB_OIDC_HOST = "token.actions.githubusercontent.com";
 const BOOTSTRAP_ROLES = ["deploy", "file-publishing", "image-publishing", "lookup"] as const;
@@ -53,6 +53,48 @@ export class AccountStack extends Stack {
       assumedBy: githubPrincipal(`${subject}:ref:refs/heads/main`),
     });
     deploy.addToPolicy(new iam.PolicyStatement({ actions: ["sts:AssumeRole"], resources: BOOTSTRAP_ROLES.map(bootstrapRoleArn) }));
+
+    // Outside CloudFormation, the deploy workflow pushes the images and runs
+    // the migration task before the app stack is updated. For that it may only
+    // push to this environment's repositories, run the migration task
+    // definition in this environment's cluster, pass that task its own two
+    // roles, and read its log. The names come from config.ts, so these grants
+    // exist before the resources do.
+    const names = resourceNames(config);
+    const regional = (service: string, resource: string) => `arn:${this.partition}:${service}:${this.region}:${this.account}:${resource}`;
+    deploy.addToPolicy(new iam.PolicyStatement({ actions: ["ecr:GetAuthorizationToken"], resources: ["*"] }));
+    deploy.addToPolicy(
+      new iam.PolicyStatement({
+        actions: [
+          "ecr:BatchCheckLayerAvailability",
+          "ecr:BatchGetImage",
+          "ecr:CompleteLayerUpload",
+          "ecr:DescribeImages",
+          "ecr:InitiateLayerUpload",
+          "ecr:PutImage",
+          "ecr:UploadLayerPart",
+        ],
+        resources: [regional("ecr", `repository/${names.repositoryPattern}`)],
+      }),
+    );
+    deploy.addToPolicy(
+      new iam.PolicyStatement({
+        actions: ["ecs:RunTask"],
+        resources: [regional("ecs", `task-definition/${names.migrationTaskFamily}:*`)],
+        conditions: { ArnEquals: { "ecs:cluster": regional("ecs", `cluster/${names.cluster}`) } },
+      }),
+    );
+    deploy.addToPolicy(new iam.PolicyStatement({ actions: ["ecs:DescribeTasks"], resources: [regional("ecs", `task/${names.cluster}/*`)] }));
+    deploy.addToPolicy(
+      new iam.PolicyStatement({
+        actions: ["iam:PassRole"],
+        resources: [`arn:${this.partition}:iam::${this.account}:role/${names.migrationRolePrefix}*`],
+        conditions: { StringEquals: { "iam:PassedToService": "ecs-tasks.amazonaws.com" } },
+      }),
+    );
+    deploy.addToPolicy(
+      new iam.PolicyStatement({ actions: ["logs:GetLogEvents"], resources: [regional("logs", `log-group:${names.logGroup("migrate")}:*`)] }),
+    );
 
     // Runs `cdk diff` on pull requests. The lookup role is read-only (AWS
     // ReadOnlyAccess, kms:Decrypt denied), so a pull request can read what is

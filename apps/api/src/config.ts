@@ -1,3 +1,4 @@
+import { appVersion } from "@rabaed/domain";
 import { z } from "zod";
 
 export interface ApiConfig {
@@ -5,6 +6,8 @@ export interface ApiConfig {
   invitationTtlMs: number;
   /** Send the session cookie over HTTPS only. True everywhere except local http. */
   cookieSecure: boolean;
+  /** The deployed commit, reported by /health; `local` in development. */
+  version: string;
 }
 
 const HOUR = 3_600_000;
@@ -15,11 +18,13 @@ export function apiConfigFromEnv(source: NodeJS.ProcessEnv = process.env): ApiCo
       SESSION_TTL_HOURS: z.coerce.number().positive().default(12),
       INVITATION_TTL_HOURS: z.coerce.number().positive().default(72),
       SESSION_COOKIE_SECURE: z.enum(["true", "false"]).default("true"),
+      APP_VERSION: appVersion.default("local"),
     })
     .parse(source);
   return {
     sessionTtlMs: env.SESSION_TTL_HOURS * HOUR,
     invitationTtlMs: env.INVITATION_TTL_HOURS * HOUR,
     cookieSecure: env.SESSION_COOKIE_SECURE === "true",
+    version: env.APP_VERSION,
   };
 }
