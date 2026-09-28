@@ -314,7 +314,7 @@ Each created Draft carries `import_id` for traceability.
 **rabaed_engineer**: separate identity table. Engineers are never Members.
 
 **admin_action**: `id`, `engineer_id`, `action`, `target_kind/target_id`, `reason` (required), `before jsonb`, `after jsonb`, `at`.
-Allowed actions are an explicit list: reassign, reset step, transfer Authorized Person, unlock, run import, fix visibility, publish library template.
+Allowed actions are an explicit list: onboard Company, reassign, reset step, transfer Authorized Person, unlock, run import, fix visibility, publish library template.
 
 **job**: background jobs (PDF sealing, imports, deliveries) with status and error, which is the Job Monitor.
 

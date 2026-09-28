@@ -3,7 +3,7 @@
   "private": true,
   "packageManager": "pnpm@10.34.5",
   "engines": {
-    "node": ">=24"
+    "node": ">=24.7"
   },
   "scripts": {
     "dev": "docker compose up -d --wait db && pnpm db:setup && pnpm dev:apps",
@@ -14,7 +14,8 @@
     "test": "vitest run",
     "test:unit": "vitest run --project unit",
     "test:seam1": "vitest run --project seam1",
-    "test:seam2": "vitest run --project seam2"
+    "test:seam2": "vitest run --project seam2",
+    "engineer:create": "pnpm --filter @rabaed/api run engineer:create"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

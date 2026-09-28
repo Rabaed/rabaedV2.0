@@ -1,12 +1,12 @@
 import { healthResponse, type HealthResponse, type Locale } from "@rabaed/domain";
 import { getTranslations, setRequestLocale } from "next-intl/server";
+import { apiUrl } from "@/lib/api-url";
 import { cn } from "@/lib/utils";
 
 // Always live: this page exists to show the API and database are up right now.
 export const dynamic = "force-dynamic";
 
 async function fetchHealth(): Promise<HealthResponse | null> {
-  const apiUrl = process.env.API_URL ?? "http://127.0.0.1:4000";
   try {
     const res = await fetch(`${apiUrl}/health`, { cache: "no-store", signal: AbortSignal.timeout(3000) });
     return healthResponse.parse(await res.json());

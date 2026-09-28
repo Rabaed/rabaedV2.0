@@ -1,9 +1,6 @@
 import { Kysely, PostgresDialect, sql, type Transaction } from "kysely";
 import pg from "pg";
-
-// Tables are added here as their migrations land.
-// eslint-disable-next-line @typescript-eslint/no-empty-object-type
-export interface Database {}
+import type { Database } from "./schema.ts";
 
 export type Db = Kysely<Database>;
 

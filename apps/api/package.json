@@ -6,9 +6,11 @@
   "scripts": {
     "dev": "tsx watch --env-file-if-exists=../../.env src/server.ts",
     "start": "tsx src/server.ts",
-    "typecheck": "tsc -p tsconfig.json"
+    "typecheck": "tsc -p tsconfig.json",
+    "engineer:create": "tsx --env-file-if-exists=../../.env src/cli/create-engineer.ts"
   },
   "dependencies": {
+    "@fastify/cookie": "^11.1.2",
     "@rabaed/db": "workspace:*",
     "@rabaed/domain": "workspace:*",
     "fastify": "^5.12.5",
