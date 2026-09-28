@@ -195,7 +195,8 @@ finish() {
 
 TOTAL_STAGES=8
 
-cd "$(git rev-parse --show-toplevel)"
+# The repository this script is in, wherever it is run from.
+cd "$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)"
 ENV_FILE=".env.aws"
 RABAED_ENV="${1:-dev}"
 
