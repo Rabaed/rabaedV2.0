@@ -69,20 +69,15 @@ export async function smokeTest({ url, version, arabicFont, fetch: get = fetch }
 // given: the page's stylesheets name it, and its file loads from our origin,
 // as a browser would fetch it.
 async function arabicFontChecks(html: string, page: URL, request: (url: string) => Promise<Response>, expected?: string): Promise<string[]> {
-  const stylesheets = [...html.matchAll(/<link\s[^>]*>/g)]
-    .map(([tag]) => tag)
-    .filter((tag) => /\srel="stylesheet"/.test(tag))
-    .map((tag) => /\shref="([^"]+)"/.exec(tag)?.[1])
-    .filter((href): href is string => !!href)
-    .map((href) => new URL(href, page).toString());
   const faces: Face[] = [];
   let arabic: string | undefined;
-  for (const sheet of stylesheets) {
+  for (const sheet of stylesheetUrls(html, page)) {
     const res = await request(sheet);
     if (res.status !== 200) return [`stylesheet ${sheet} answered ${res.status}`];
     const css = await res.text();
     faces.push(...fontFaces(css, sheet));
-    arabic ??= /--font-arabic:\s*([^;}]+)/.exec(css)?.[1]?.split(",")[0]?.trim().replace(/^["']|["']$/g, "");
+    const stack = /--font-arabic:\s*([^;}]+)/.exec(css)?.[1];
+    arabic ??= stack && unquote(stack.split(",")[0] ?? "");
   }
 
   const failures = faces
@@ -94,11 +89,26 @@ async function arabicFontChecks(html: string, page: URL, request: (url: string) 
   const file = faces.find((face) => face.family === arabic)?.urls[0];
   if (!file) return [...failures, `no @font-face for ${arabic}`];
   const res = await request(file);
+  if (res.status !== 200) return [...failures, `${arabic} font ${file} answered ${res.status}`];
   // woff2 and woff files start with these signatures.
   const signature = new TextDecoder().decode((await res.arrayBuffer()).slice(0, 4));
-  if (res.status !== 200) failures.push(`${arabic} font ${file} answered ${res.status}`);
-  else if (signature !== "wOF2" && signature !== "wOFF") failures.push(`${arabic} font ${file} is not a web font`);
+  if (signature !== "wOF2" && signature !== "wOFF") failures.push(`${arabic} font ${file} is not a web font`);
   return failures;
+}
+
+/** The page's stylesheets, as absolute URLs. */
+function stylesheetUrls(html: string, page: URL): string[] {
+  return [...html.matchAll(/<link\s[^>]*>/g)]
+    .map(([tag]) => tag)
+    .filter((tag) => /\srel="stylesheet"/.test(tag))
+    .map((tag) => /\shref="([^"]+)"/.exec(tag)?.[1])
+    .filter((href): href is string => !!href)
+    .map((href) => new URL(href, page).toString());
+}
+
+/** A CSS font family name without its quotes, if any. */
+function unquote(family: string): string {
+  return family.trim().replace(/^["']|["']$/g, "");
 }
 
 interface Face {
@@ -110,7 +120,7 @@ interface Face {
 /** The @font-face rules of a stylesheet, with URLs resolved against it. */
 function fontFaces(css: string, sheetUrl: string): Face[] {
   return [...css.matchAll(/@font-face\s*\{([^}]*)\}/g)].map(([, body = ""]) => ({
-    family: (/font-family:\s*([^;]+)/.exec(body)?.[1] ?? "").trim().replace(/^["']|["']$/g, ""),
+    family: unquote(/font-family:\s*([^;]+)/.exec(body)?.[1] ?? ""),
     urls: [...body.matchAll(/url\(\s*["']?([^"')]+)["']?\s*\)/g)].map(([, url = ""]) => new URL(url, sheetUrl).toString()),
   }));
 }

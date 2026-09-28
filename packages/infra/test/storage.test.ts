@@ -129,7 +129,7 @@ describe("build assets", () => {
     return grants;
   }
 
-  it("the CI build (the deploy role) can read only the fonts/ prefix of the build assets bucket", () => {
+  it("the deploy role, which builds the images, can read only the fonts/ prefix of the build assets bucket", () => {
     const grants = grantsOn(buildAssets);
     expect(grants.flatMap((g) => g.roles)).toEqual(["rabaed-dev-github-deploy", "rabaed-dev-github-deploy"]);
     const byAction = Object.fromEntries(grants.map(({ statement }) => [String(statement.Action), statement]));
@@ -143,7 +143,7 @@ describe("build assets", () => {
     expect(byAction["s3:ListBucket"]!.Condition).toEqual({ StringLike: { "s3:prefix": "fonts/*" } });
   });
 
-  it("the CI build may decrypt with the storage key only through S3, for the build assets bucket", () => {
+  it("the deploy role may decrypt with the storage key only through S3, for the build assets bucket", () => {
     // (The api's task role uses the key too, for Project files.)
     const grants = grantsOn(storageKey).filter((g) => g.roles.includes("rabaed-dev-github-deploy"));
     expect(grants).toHaveLength(1);

@@ -422,8 +422,11 @@ if fresh_credentials && BUCKET=$(stack_output BuildAssetsBucket "$STORAGE_STACK"
   note "The thmanyahsans-{Light,Regular,Medium,Bold,Black}.woff2 files, in a folder outside"
   note "the repo or in design/reference/claude-design/assets/fonts/thmanyah (git-ignored)."
   ask_required THMANYAH_FONTS_DIR "Folder with the Thmanyah Sans .woff2 files:"
+  # Accept a pasted Windows path (C:\…) or ~ in Git Bash.
+  fonts_dir="${THMANYAH_FONTS_DIR/#\~/$HOME}"
+  if command -v cygpath >/dev/null 2>&1; then fonts_dir=$(cygpath -u "$fonts_dir"); fi
   shopt -s nocaseglob nullglob
-  font_files=("$THMANYAH_FONTS_DIR"/thmanyahsans-*.woff2)
+  font_files=("$fonts_dir"/thmanyahsans-*.woff2)
   shopt -u nocaseglob nullglob
   if (( ${#font_files[@]} == 0 )); then
     warn "No thmanyahsans-*.woff2 files in $THMANYAH_FONTS_DIR."

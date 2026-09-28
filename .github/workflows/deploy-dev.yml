@@ -99,6 +99,8 @@ jobs:
             if (( attempt == 6 )); then echo "::error::cannot read the private fonts"; exit 1; fi
             sleep 10
           done
+          # Names in any case, as the font switch accepts them (packages/ui/src/fonts/arabic-font.ts).
+          shopt -s nocaseglob
           if compgen -G "$dir/thmanyahsans-*.woff2" >/dev/null; then
             echo "arabic_font=Thmanyah Sans" >> "$GITHUB_OUTPUT"
           else
@@ -129,12 +131,12 @@ jobs:
               echo "$repo:$VERSION already pushed"
               continue
             fi
-            fonts=()
+            font_context=()
             if [[ "$service" == web ]]; then
-              fonts=(--build-context "fonts=$RUNNER_TEMP/fonts")
+              font_context=(--build-context "fonts=$RUNNER_TEMP/fonts")
               echo "arabic_font=$ARABIC_FONT" >> "$GITHUB_OUTPUT"
             fi
-            docker buildx build . --target "$service" "${fonts[@]}" --platform linux/amd64 --tag "$REGISTRY/$repo:$VERSION" --push
+            docker buildx build . --target "$service" "${font_context[@]}" --platform linux/amd64 --tag "$REGISTRY/$repo:$VERSION" --push
           done
           rm -rf "$RUNNER_TEMP/fonts"
 
