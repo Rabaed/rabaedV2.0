@@ -113,6 +113,9 @@ export const ReadOnly: Story = {
     await userEvent.keyboard("{Enter}");
     await userEvent.click(trigger);
     await expect(screen.queryByRole("listbox")).toBeNull();
+    // Typeahead on the closed trigger changes nothing either.
+    await userEvent.keyboard("c");
+    await expect(trigger).toHaveTextContent(options(context)[2]!.label);
   },
 };
 

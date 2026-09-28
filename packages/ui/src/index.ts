@@ -3,9 +3,9 @@ export { SignButton, type SignButtonProps } from "./components/button/sign-butto
 export { DocNo, type DocNoProps } from "./components/doc-no/doc-no.tsx";
 export { Checkbox, type CheckboxProps } from "./components/form/checkbox.tsx";
 export { DirectionProvider } from "./components/form/direction.tsx";
-export { Field, useFieldControl, type FieldControlProps, type FieldProps } from "./components/form/field.tsx";
+export { Field, type ChoiceOption, type FieldProps } from "./components/form/field.tsx";
 export { Input, type InputProps } from "./components/form/input.tsx";
-export { RadioGroup, type Option, type RadioGroupProps } from "./components/form/radio-group.tsx";
+export { RadioGroup, type RadioGroupProps } from "./components/form/radio-group.tsx";
 export { SegmentedControl, type SegmentedControlProps } from "./components/form/segmented-control.tsx";
 export { Select, type SelectProps } from "./components/form/select.tsx";
 export { Switch, type SwitchProps } from "./components/form/switch.tsx";

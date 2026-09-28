@@ -1,16 +1,15 @@
 "use client";
 
-import { Select as SelectPrimitive } from "radix-ui";
+import * as SelectPrimitive from "@radix-ui/react-select";
 import type { ComponentProps, ReactNode } from "react";
 import { cn } from "../../lib/cn.ts";
 import { Icon } from "../icon/icon.tsx";
 import { textBox } from "./control-styles.ts";
-import { useFieldControl, type FieldControlProps } from "./field.tsx";
-import type { Option } from "./radio-group.tsx";
+import { useFieldControl, type ChoiceOption, type FieldControlProps } from "./field.tsx";
 
 export type SelectProps = Omit<ComponentProps<typeof SelectPrimitive.Root>, keyof FieldControlProps | "children"> &
   FieldControlProps & {
-    options: Option[];
+    options: ChoiceOption[];
     /** Shown until a value is chosen. */
     placeholder?: ReactNode;
     className?: string;
@@ -32,7 +31,8 @@ export function Select({ options, placeholder, className, value, defaultValue, o
     ...root
   } = useFieldControl(props);
   const state = readOnly
-    ? { value: value ?? defaultValue, open: false }
+    ? // Always controlled, so typeahead on the closed trigger can't change it either.
+      { value: value ?? defaultValue ?? "", open: false }
     : { value, defaultValue, onValueChange, open, onOpenChange };
   return (
     <SelectPrimitive.Root disabled={disabled} required={required} {...state} {...root}>

@@ -18,6 +18,9 @@ type FieldContextValue = {
 
 const FieldContext = createContext<FieldContextValue | null>(null);
 
+/** One choice in a Select, RadioGroup or SegmentedControl. */
+export type ChoiceOption = { value: string; label: ReactNode; disabled?: boolean };
+
 /** Props a control takes from its Field, merged under its own. */
 export type FieldControlProps = {
   id?: string;

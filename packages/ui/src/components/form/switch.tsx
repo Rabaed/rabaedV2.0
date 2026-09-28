@@ -1,6 +1,6 @@
 "use client";
 
-import { Switch as SwitchPrimitive } from "radix-ui";
+import * as SwitchPrimitive from "@radix-ui/react-switch";
 import type { ComponentProps } from "react";
 import { cn } from "../../lib/cn.ts";
 import { focusRing, touchArea } from "./control-styles.ts";
@@ -23,7 +23,7 @@ export function Switch({ className, checked, defaultChecked, onCheckedChange, ..
       className={cn(
         "group inline-flex h-5 w-9 shrink-0 items-center rounded-full border-2 border-transparent bg-control-border transition-colors",
         "hover:bg-control-border-hover data-[state=checked]:bg-primary data-[state=checked]:hover:bg-primary-hover",
-        "aria-invalid:outline-1 aria-invalid:outline-danger",
+        "aria-invalid:border-danger",
         "aria-readonly:bg-muted aria-readonly:data-[state=checked]:bg-muted",
         "disabled:cursor-not-allowed disabled:bg-disabled disabled:data-[state=checked]:bg-disabled",
         focusRing,

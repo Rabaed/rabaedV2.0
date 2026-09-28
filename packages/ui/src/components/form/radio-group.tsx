@@ -1,15 +1,13 @@
 "use client";
 
-import { RadioGroup as RadioGroupPrimitive } from "radix-ui";
-import { useId, type ComponentProps, type ReactNode } from "react";
+import * as RadioGroupPrimitive from "@radix-ui/react-radio-group";
+import { useId, type ComponentProps } from "react";
 import { cn } from "../../lib/cn.ts";
 import { focusRing, touchArea } from "./control-styles.ts";
-import { useFieldControl, type FieldControlProps } from "./field.tsx";
-
-export type Option = { value: string; label: ReactNode; disabled?: boolean };
+import { useFieldControl, type ChoiceOption, type FieldControlProps } from "./field.tsx";
 
 export type RadioGroupProps = Omit<ComponentProps<typeof RadioGroupPrimitive.Root>, keyof FieldControlProps | "children"> &
-  FieldControlProps & { options: Option[] };
+  FieldControlProps & { options: ChoiceOption[] };
 
 /**
  * One choice from a short list, all options visible. Put it in a Field with

@@ -1,17 +1,16 @@
 "use client";
 
-import { RadioGroup as RadioGroupPrimitive } from "radix-ui";
+import * as RadioGroupPrimitive from "@radix-ui/react-radio-group";
 import { useId, type ComponentProps } from "react";
 import { cn } from "../../lib/cn.ts";
 import { focusRing } from "./control-styles.ts";
-import { useFieldControl, type FieldControlProps } from "./field.tsx";
-import type { Option } from "./radio-group.tsx";
+import { useFieldControl, type ChoiceOption, type FieldControlProps } from "./field.tsx";
 
 export type SegmentedControlProps = Omit<
   ComponentProps<typeof RadioGroupPrimitive.Root>,
   keyof FieldControlProps | "children" | "orientation"
 > &
-  FieldControlProps & { options: Option[] };
+  FieldControlProps & { options: ChoiceOption[] };
 
 /**
  * One choice from two to five short options shown side by side, such as a
