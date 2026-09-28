@@ -1,0 +1,234 @@
+// Seam 1: Participants and Project Members (RP-190; RP-185 stories 18–21;
+// RP-185 scenario 10: a removed Project Member loses access immediately).
+import { randomUUID } from "node:crypto";
+import { beforeAll, afterAll, describe, expect, it } from "vitest";
+import { createTestApi, uniqueCr, type Caller, type OnboardedCompany } from "./support/harness.ts";
+
+const api = await createTestApi();
+afterAll(() => api.close());
+
+type Company = { company: OnboardedCompany; caller: Caller };
+
+let host: Company; // The Host Company: its Authorized Person is a Project Creator and the Project Admin.
+let consultant: Company; // Another Company, added as a Participant.
+let projectId: string;
+let consultantParticipantId: string;
+
+beforeAll(async () => {
+  host = await api.projectCreator();
+  consultant = await api.authorizedPerson();
+  projectId = (await api.createProject(host.caller)).id;
+  consultantParticipantId = await api.addParticipant(host.caller, projectId, consultant.company, "consultant");
+});
+
+/** A fresh Project hosted by `host`, with `consultant` added in `role`. */
+async function projectWithConsultant(role: "consultant" | "contractor" = "consultant") {
+  const id = (await api.createProject(host.caller)).id;
+  return { projectId: id, participantId: await api.addParticipant(host.caller, id, consultant.company, role) };
+}
+
+describe("adding a Participant", () => {
+  it("lists it on the Project with its Company's name and Project Role", async () => {
+    const res = await host.caller.get(`/v1/projects/${projectId}/participants`);
+    expect(res.statusCode).toBe(200);
+    expect(res.json().participants).toEqual([
+      {
+        id: expect.any(String),
+        company: { id: host.company.companyId, legalName: { en: "Test Constructions", ar: "إنشاءات الاختبار" } },
+        projectRole: { baseRole: "contractor", name: { en: "Contractor", ar: "المقاول" } },
+        isOwnCompany: true,
+      },
+      {
+        id: consultantParticipantId,
+        company: { id: consultant.company.companyId, legalName: { en: "Test Constructions", ar: "إنشاءات الاختبار" } },
+        projectRole: { baseRole: "consultant", name: { en: "Consultant", ar: "الاستشاري" } },
+        isOwnCompany: false,
+      },
+    ]);
+  });
+
+  it("rejects the same Company twice on one Project, in any role", async () => {
+    for (const role of ["consultant", "owner"]) {
+      const res = await host.caller.post(`/v1/projects/${projectId}/participants`, {
+        crNumber: consultant.company.crNumber,
+        role,
+      });
+      expect(res.statusCode).toBe(409);
+      expect(res.json()).toEqual({ error: "already_participant" });
+    }
+    const hostAgain = await host.caller.post(`/v1/projects/${projectId}/participants`, {
+      crNumber: host.company.crNumber,
+      role: "owner",
+    });
+    expect(hostAgain.statusCode).toBe(409);
+  });
+
+  it("lets a Company be Contractor on one Project and Consultant on another", async () => {
+    const asContractor = await projectWithConsultant("contractor");
+    const asConsultant = await projectWithConsultant("consultant");
+    const roleOn = async (id: string) =>
+      (await host.caller.get(`/v1/projects/${id}/participants`)).json().participants.find(
+        (p: { company: { id: string } }) => p.company.id === consultant.company.companyId,
+      ).projectRole.baseRole;
+    expect(await roleOn(asContractor.projectId)).toBe("contractor");
+    expect(await roleOn(asConsultant.projectId)).toBe("consultant");
+  });
+
+  it("answers an unknown CR number without adding anything", async () => {
+    const res = await host.caller.post(`/v1/projects/${projectId}/participants`, { crNumber: uniqueCr(), role: "owner" });
+    expect(res.statusCode).toBe(422);
+    expect(res.json()).toEqual({ error: "unknown_company" });
+  });
+
+  it("rejects a malformed request", async () => {
+    expect((await host.caller.post(`/v1/projects/${projectId}/participants`, { crNumber: "123", role: "owner" })).statusCode).toBe(400);
+    expect(
+      (await host.caller.post(`/v1/projects/${projectId}/participants`, { crNumber: uniqueCr(), role: "pmc" })).statusCode,
+    ).toBe(400);
+  });
+
+  it("is only for a Project Admin", async () => {
+    const { member, caller } = await api.member(host.caller);
+    const hostParticipantId = (await host.caller.get(`/v1/projects/${projectId}/participants`)).json().participants[0].id;
+    await api.addProjectMember(host.caller, hostParticipantId, member.id);
+    const other = await api.authorizedPerson();
+    const res = await caller.post(`/v1/projects/${projectId}/participants`, { crNumber: other.company.crNumber, role: "owner" });
+    expect(res.statusCode).toBe(403);
+    expect(res.json()).toEqual({ error: "forbidden" });
+  });
+
+  it("does not exist for a Member who is not on the Project", async () => {
+    const outsider = await api.projectCreator();
+    const other = await api.authorizedPerson();
+    for (const id of [projectId, randomUUID()]) {
+      const res = await outsider.caller.post(`/v1/projects/${id}/participants`, { crNumber: other.company.crNumber, role: "owner" });
+      expect(res.statusCode).toBe(404);
+      expect(res.json()).toEqual({ error: "not_found" });
+      expect((await outsider.caller.get(`/v1/projects/${id}/participants`)).statusCode).toBe(404);
+    }
+  });
+});
+
+describe("the Authorized Person of a Participant", () => {
+  it("sees the Projects their Company takes part in, before being on them", async () => {
+    const res = await consultant.caller.get("/v1/participants");
+    expect(res.statusCode).toBe(200);
+    expect(res.json().participants).toContainEqual({
+      id: consultantParticipantId,
+      project: { id: projectId, projectNumber: expect.any(Number), code: "TWR", name: expect.any(Object) },
+      projectRole: { baseRole: "consultant", name: { en: "Consultant", ar: "الاستشاري" } },
+    });
+    // Not on the Project yet, so it is not among their own Projects.
+    expect((await consultant.caller.get(`/v1/projects/${projectId}`)).statusCode).toBe(404);
+  });
+
+  it("adds their own Members, who then see the Project in their Company's role", async () => {
+    const { participantId, projectId: id } = await projectWithConsultant();
+    const { member, caller } = await api.member(consultant.caller);
+    expect((await caller.get(`/v1/projects/${id}`)).statusCode).toBe(404);
+
+    expect((await consultant.caller.post(`/v1/participants/${participantId}/members`, { memberId: member.id })).statusCode).toBe(204);
+    const project = await caller.get(`/v1/projects/${id}`);
+    expect(project.statusCode).toBe(200);
+    expect(project.json()).toMatchObject({ projectRole: { baseRole: "consultant" }, isProjectAdmin: false });
+
+    const list = await consultant.caller.get(`/v1/participants/${participantId}/members`);
+    expect(list.json().members).toEqual([{ id: member.id, email: member.email, fullName: { en: "Test Member", ar: "عضو الاختبار" } }]);
+  });
+
+  it("can add themselves", async () => {
+    const { participantId, projectId: id } = await projectWithConsultant();
+    await api.addProjectMember(consultant.caller, participantId, consultant.company.authorizedPerson.id);
+    expect((await consultant.caller.get(`/v1/projects/${id}`)).statusCode).toBe(200);
+  });
+
+  it("cannot add Members of another Company", async () => {
+    const { participantId } = await projectWithConsultant();
+    const { member: hostMember } = await api.member(host.caller);
+    const res = await consultant.caller.post(`/v1/participants/${participantId}/members`, { memberId: hostMember.id });
+    expect(res.statusCode).toBe(404);
+    expect(res.json()).toEqual({ error: "member_not_found" });
+  });
+
+  it("cannot manage another Participant's Project Members", async () => {
+    const hostParticipantId = (await host.caller.get(`/v1/projects/${projectId}/participants`)).json().participants[0].id;
+    const { member: consultantMember } = await api.member(consultant.caller);
+    for (const res of [
+      await consultant.caller.post(`/v1/participants/${hostParticipantId}/members`, { memberId: consultantMember.id }),
+      await consultant.caller.delete(`/v1/participants/${hostParticipantId}/members/${host.company.authorizedPerson.id}`),
+      await consultant.caller.get(`/v1/participants/${hostParticipantId}/members`),
+    ]) {
+      expect(res.statusCode).toBe(404);
+      expect(res.json()).toEqual({ error: "not_found" });
+    }
+  });
+
+  it("is the only one: a Project Admin or a plain Member cannot add or remove", async () => {
+    const { participantId } = await projectWithConsultant();
+    const { member, caller: plain } = await api.member(consultant.caller);
+    await api.addProjectMember(consultant.caller, participantId, member.id);
+
+    // The host's Project Admin: the Participant is another Company's, so it's not theirs to see.
+    expect((await host.caller.post(`/v1/participants/${participantId}/members`, { memberId: member.id })).statusCode).toBe(404);
+    // A Member of the Participant who is not the Authorized Person.
+    const add = await plain.post(`/v1/participants/${participantId}/members`, { memberId: consultant.company.authorizedPerson.id });
+    expect(add.statusCode).toBe(403);
+    expect((await plain.delete(`/v1/participants/${participantId}/members/${member.id}`)).statusCode).toBe(403);
+    expect((await plain.get("/v1/participants")).statusCode).toBe(403);
+  });
+});
+
+describe("removing a Project Member", () => {
+  it("cuts their access to the Project at once (scenario 10)", async () => {
+    const { participantId, projectId: id } = await projectWithConsultant();
+    const { member, caller } = await api.member(consultant.caller);
+    await api.addProjectMember(consultant.caller, participantId, member.id);
+    expect((await caller.get(`/v1/projects/${id}`)).statusCode).toBe(200);
+
+    expect((await consultant.caller.delete(`/v1/participants/${participantId}/members/${member.id}`)).statusCode).toBe(204);
+
+    for (const url of [`/v1/projects/${id}`, `/v1/projects/${id}/participants`, `/v1/participants/${participantId}/members`]) {
+      const res = await caller.get(url);
+      expect(res.statusCode, url).toBe(404);
+      expect(res.json()).toEqual({ error: "not_found" });
+    }
+    expect((await caller.get("/v1/projects")).json().projects.map((p: { id: string }) => p.id)).not.toContain(id);
+    expect((await consultant.caller.get(`/v1/participants/${participantId}/members`)).json().members).toEqual([]);
+  });
+
+  it("can be undone by adding them again", async () => {
+    const { participantId, projectId: id } = await projectWithConsultant();
+    const { member, caller } = await api.member(consultant.caller);
+    await api.addProjectMember(consultant.caller, participantId, member.id);
+    await consultant.caller.delete(`/v1/participants/${participantId}/members/${member.id}`);
+    await api.addProjectMember(consultant.caller, participantId, member.id);
+    expect((await caller.get(`/v1/projects/${id}`)).statusCode).toBe(200);
+  });
+
+  it("answers a Member who is not on the Project as not found", async () => {
+    const { participantId } = await projectWithConsultant();
+    const { member } = await api.member(consultant.caller);
+    const res = await consultant.caller.delete(`/v1/participants/${participantId}/members/${member.id}`);
+    expect(res.statusCode).toBe(404);
+    expect(res.json()).toEqual({ error: "member_not_found" });
+  });
+});
+
+describe("a Participant's Project Members list", () => {
+  it("is visible to that Participant's own Members on the Project, and to no other Participant", async () => {
+    const { participantId, projectId: id } = await projectWithConsultant();
+    const { member, caller: consultantMember } = await api.member(consultant.caller);
+    await api.addProjectMember(consultant.caller, participantId, member.id);
+
+    const own = await consultantMember.get(`/v1/participants/${participantId}/members`);
+    expect(own.statusCode).toBe(200);
+    expect(own.json().members.map((m: { id: string }) => m.id)).toEqual([member.id]);
+
+    // The host sees the Participant on the Project, but not who its Members are.
+    const hostView = (await host.caller.get(`/v1/projects/${id}/participants`)).json();
+    expect(JSON.stringify(hostView)).not.toContain(member.id);
+    const res = await host.caller.get(`/v1/participants/${participantId}/members`);
+    expect(res.statusCode).toBe(404);
+    expect(res.json()).toEqual({ error: "not_found" });
+  });
+});
