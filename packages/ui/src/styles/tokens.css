@@ -105,6 +105,8 @@
   --on-disabled: var(--palette-slate-400);
   --focus: var(--palette-blue-500);
   --focus-offset: var(--palette-white);
+  --inverse: var(--palette-slate-900);
+  --on-inverse: var(--palette-white);
   --success: var(--palette-green-700);
   --success-tint: var(--palette-green-50);
   --danger-tint: var(--palette-red-50);
@@ -183,6 +185,8 @@
   --color-on-disabled: var(--on-disabled);
   --color-focus: var(--focus);
   --color-focus-offset: var(--focus-offset);
+  --color-inverse: var(--inverse);
+  --color-on-inverse: var(--on-inverse);
   --color-success: var(--success);
   --color-success-tint: var(--success-tint);
   --color-danger-tint: var(--danger-tint);

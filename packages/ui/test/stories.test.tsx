@@ -8,7 +8,10 @@
  *   4. have no axe violations under WCAG 2.2 AA,
  *   5. match its committed screenshot (Linux only; see vitest.config.ts).
  * Stories with `parameters.phone` render 390px wide on a touch screen
- * (pointer: coarse), so they can check 44px touch targets.
+ * (pointer: coarse), so they can check 44px touch targets. Stories with
+ * `parameters.overlay` (dialogs, sheets, toasts) leave their overlay open and
+ * are screenshotted as a 1024 × 768 page, portals included. Motion is reduced,
+ * so animations never reach a screenshot.
  * Update screenshots on purpose with the "update-screenshots" PR label.
  */
 import { directionOf, locales } from "@rabaed/domain";
@@ -26,6 +29,7 @@ declare module "vitest" {
 
 const annotations = setProjectAnnotations([preview]);
 beforeAll(annotations.beforeAll);
+beforeAll(() => cdp().send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] }));
 
 type StoriesModule = Parameters<typeof composeStories>[0];
 type ComposedStory = ReturnType<typeof composeStory>;
@@ -35,16 +39,24 @@ const modules = import.meta.glob<StoriesModule>("../src/**/*.stories.tsx", { eag
 const deadlineWords = /overdue|\bdue\b|deadline|\blate\b|\bSLA\b|متأخر|موعد نهائي|تاريخ الاستحقاق/i;
 const nonLatinDigits = /[٠-٩۰-۹]/;
 
-/** A phone (390px, touch screen, coarse pointer) or the default desktop viewport. */
-async function emulatePhone(on: boolean) {
-  const width = on ? 390 : 1024;
-  if (innerWidth !== width) {
+const viewports = {
+  // Tall, so a long story fits in its element screenshot.
+  desktop: { width: 1024, height: 2400 },
+  // A screen-sized page, for overlays screenshotted with the page behind them.
+  overlay: { width: 1024, height: 768 },
+  // A phone with a touch screen (coarse pointer).
+  phone: { width: 390, height: 844 },
+};
+
+async function emulate(kind: keyof typeof viewports) {
+  const { width, height } = viewports[kind];
+  if (innerWidth !== width || innerHeight !== height) {
     // Wait for the resize event too: some components (e.g. Select) close their popups on resize.
     const resized = new Promise((resolve) => addEventListener("resize", resolve, { once: true }));
-    await page.viewport(width, on ? 844 : 2400);
+    await page.viewport(width, height);
     await resized;
   }
-  await cdp().send("Emulation.setTouchEmulationEnabled", { enabled: on, maxTouchPoints: 5 });
+  await cdp().send("Emulation.setTouchEmulationEnabled", { enabled: kind === "phone", maxTouchPoints: 5 });
 }
 
 for (const locale of locales) {
@@ -54,18 +66,25 @@ for (const locale of locales) {
 
       describe(file.replace("../src/", ""), () => {
         test.each(stories.map((story) => [story.storyName, story] as const))("%s", async (_name, Story) => {
-          await emulatePhone(Story.parameters.phone === true);
+          const overlay = Story.parameters.overlay === true;
+          await emulate(Story.parameters.phone === true ? "phone" : overlay ? "overlay" : "desktop");
+          // An overlay's screenshot is the whole viewport, not just the page's content height.
+          document.documentElement.style.minHeight = overlay ? "100vh" : "";
           const canvasElement = document.createElement("div");
           canvasElement.dataset.testid = "story";
-          document.body.replaceChildren(canvasElement);
+          document.body.append(canvasElement);
           // Record only this story's requests (the buffer holds 250 entries by default).
           performance.clearResourceTimings();
 
+          // Storybook unmounts the previous story at the start of run(), which also removes its
+          // portals and undoes what its overlays did to <body>; only then drop its empty canvas.
           await Story.run({ canvasElement });
+          for (const stale of document.querySelectorAll("[data-testid=story]")) if (stale !== canvasElement) stale.remove();
 
           expect(document.documentElement.lang).toBe(locale);
           expect(document.documentElement.dir).toBe(directionOf(locale));
-          const text = canvasElement.textContent ?? "";
+          // The whole page, so overlays rendered in portals are checked too.
+          const text = document.body.textContent ?? "";
           expect(text).not.toMatch(deadlineWords);
           expect(text).not.toMatch(nonLatinDigits);
 
@@ -77,13 +96,14 @@ for (const locale of locales) {
             .filter((url) => new URL(url).origin !== location.origin);
           expect(crossOrigin).toEqual([]);
 
-          const { violations } = await axe.run(canvasElement, (Story.parameters.a11y?.options ?? {}) as RunOptions);
+          const { violations } = await axe.run(document.body, (Story.parameters.a11y?.options ?? {}) as RunOptions);
           expect(
             violations.map((v) => `${v.id}: ${v.help} (${v.nodes.map((n) => n.target.join(" ")).join(", ")})`),
           ).toEqual([]);
 
           if (inject("compareScreenshots")) {
-            await expect.element(page.getByTestId("story")).toMatchScreenshot(`${Story.id}--${locale}`);
+            const target = overlay ? page.elementLocator(document.documentElement) : page.getByTestId("story");
+            await expect.element(target).toMatchScreenshot(`${Story.id}--${locale}`);
           }
         });
       });

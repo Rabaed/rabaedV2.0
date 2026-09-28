@@ -67,6 +67,10 @@ export const coolLight = {
   focus: "blue-500",
   "focus-offset": "white",
 
+  // Inverse: dark surfaces on the light page (tooltips; the dimmed backdrop behind a dialog, at reduced opacity).
+  inverse: "slate-900",
+  "on-inverse": "white",
+
   // Feedback
   success: "green-700",
   "success-tint": "green-50",
