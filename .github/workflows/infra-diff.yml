@@ -1,0 +1,58 @@
+name: Infra diff
+on:
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: infra-diff-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  cdk-diff:
+    name: cdk diff (dev)
+    # Needs the repository variables the AWS setup wizard records
+    # (packages/infra/scripts/setup-aws-account.sh), and an OIDC token, which
+    # GitHub issues only to pull requests from this repository, never forks.
+    if: vars.AWS_DIFF_ROLE_ARN != '' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 24, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      # Read-only: the diff role can only assume the CDK lookup role.
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DIFF_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          mask-aws-account-id: true
+      - name: cdk diff
+        id: diff
+        working-directory: packages/infra
+        # --method=template compares with the deployed templates and creates
+        # no change set, so it needs no write access.
+        run: |
+          set -o pipefail
+          pnpm --silent cdk diff --all --method=template --no-color -c env=dev 2>&1 | tee "$RUNNER_TEMP/diff.txt"
+      - name: Post the diff on the pull request
+        if: ${{ !cancelled() && steps.diff.outcome != 'skipped' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          OUTCOME: ${{ steps.diff.outcome }}
+        run: |
+          account=$(aws sts get-caller-identity --query Account --output text)
+          {
+            echo "### cdk diff (dev): $OUTCOME"
+            echo
+            echo '```'
+            # The account ID stays out of the public comment; keep under GitHub's size limit.
+            sed "s/$account/<account>/g" "$RUNNER_TEMP/diff.txt" | tail -c 60000
+            echo '```'
+          } > "$RUNNER_TEMP/comment.md"
+          gh pr comment "$PR" --edit-last --create-if-none --body-file "$RUNNER_TEMP/comment.md"

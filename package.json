@@ -16,6 +16,7 @@
     "test:unit": "vitest run --project unit",
     "test:seam1": "vitest run --project seam1",
     "test:seam2": "vitest run --project seam2",
+    "test:infra": "vitest run --project infra",
     "engineer:create": "pnpm --filter @rabaed/api run engineer:create"
   },
   "devDependencies": {

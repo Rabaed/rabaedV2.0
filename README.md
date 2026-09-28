@@ -49,6 +49,31 @@ Open each lane's web app at `http://laneN.localhost:<web port>/en`. Browsers kee
 | `apps/worker` | Outbox processor (in-app notifications, from RP-195). |
 | `packages/domain` | Shared rules and types, no I/O. |
 | `packages/db` | Kysely, the migration runner, role bootstrap and `withMember`. Migrations are plain SQL in `packages/db/migrations`, named `YYYYMMDDHHMMSS_what.sql`. |
+| `packages/infra` | AWS CDK (TypeScript). One entry per environment in `src/config.ts` (name, region, GitHub repository, budget); dev is `eu-central-1`. `pnpm --filter @rabaed/infra cdk synth` prints the templates. |
+
+## AWS account setup
+
+Each environment has its own AWS account. The steps only a person can do are one re-runnable wizard; run it from Git Bash (Windows), macOS or Linux:
+
+```bash
+bash packages/infra/scripts/setup-aws-account.sh dev
+```
+
+| Stage | What happens |
+|---|---|
+| 1. Tools | Checks for the AWS CLI v2 (with `aws login`), the GitHub CLI and Node, and signs `gh` in. |
+| 2. AWS account | Optionally walks you through creating the account and putting MFA on the root user, then signs the CLI in with `aws login` (short-lived console credentials; no access keys) and confirms the account ID. |
+| 3. Billing contact | Sets the account's billing alternate contact with `aws account put-alternate-contact`. |
+| 4. Budget alert email | Asks where budget alerts go. The amount is `monthlyBudgetUsd` in `src/config.ts`. |
+| 5. CDK bootstrap | `cdk bootstrap` for the account and region: the CDK's own deploy, publishing and lookup roles and asset bucket. |
+| 6. Account stack | Deploys `Rabaed-<env>-Account` (`src/account-stack.ts`): GitHub's OIDC provider; `rabaed-<env>-github-deploy`, assumable only from `Rabaed/rabaedV2.0` `main`; `rabaed-<env>-github-diff`, assumable only from this repository's pull requests and read-only (it can only assume the CDK lookup role); and the monthly budget, alerting at 80% of actual and 100% of forecast spend. The CDK shows the IAM changes for approval. |
+| 7. GitHub variables | Records `AWS_REGION`, `AWS_DEPLOY_ROLE_ARN` and `AWS_DIFF_ROLE_ARN` as repository variables. |
+
+Your answers are remembered in `.env.aws` (git-ignored), so a re-run offers them as defaults; every stage is safe to repeat. Nothing secret goes into the repo or GitHub: the budget email is a `NoEcho` deploy-time parameter, never in a template or a diff, and GitHub holds only role ARNs and the region.
+
+Once the variables exist, every pull request from this repository gets a `cdk diff` comment (account ID removed). Pull requests from forks get no AWS access and skip it.
+
+Note for later environments: CloudFormation has no `AWS::Budgets::Budget` in `me-central-1`, so a Gulf-region environment will need its budget created from another region.
 
 ## Database roles
 
@@ -85,13 +110,14 @@ All config comes from environment variables. The database suites use `<database>
 pnpm test:unit    # pure logic, no database
 pnpm test:seam1   # the API called as a given signed-in Member (apps/api/test)
 pnpm test:seam2   # the database as the app role with a Member set (packages/db/test)
+pnpm test:infra   # assertions on the synthesised AWS templates (packages/infra/test)
 pnpm lint
 pnpm typecheck
 ```
 
 Seam 1 is the primary suite: scenarios call the API through `createTestApi()` (`apps/api/test/support/harness.ts`) with real sign-in: `api.authorizedPerson()` onboards a Company and signs its Authorized Person in, `api.engineer()` gives a signed-in Rabaed Engineer, and `api.advanceClock()` moves time to test expiry.
 
-CI (`.github/workflows/ci.yml`) runs lint, typecheck, unit, web build, seam 1 and seam 2 against Postgres 16 on every push and pull request; `secret-scan.yml` runs gitleaks. For a failure to block merging, `main`'s branch protection must list these jobs as required status checks.
+CI (`.github/workflows/ci.yml`) runs lint, typecheck, unit, web build, seam 1 and seam 2 against Postgres 16, and the infra assertions, on every push and pull request; `secret-scan.yml` runs gitleaks; `infra-diff.yml` posts `cdk diff` on pull requests once the AWS account is set up. For a failure to block merging, `main`'s branch protection must list these jobs as required status checks.
 
 ## Secrets
 
