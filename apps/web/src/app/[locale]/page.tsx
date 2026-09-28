@@ -15,10 +15,15 @@ export default async function Home({ params }: { params: Promise<{ locale: Local
     <div className="space-y-6">
       <h1 className="text-h3 font-semibold">{t("title")}</h1>
       {me ? (
-        <p data-testid="signed-in-as">
-          {t("signedInAs", { name: me.member.fullName[locale], company: me.company.legalName[locale] })}
-          {me.member.isAuthorizedPerson && <span className="text-muted"> · {t("authorizedPerson")}</span>}
-        </p>
+        <>
+          <p data-testid="signed-in-as">
+            {t("signedInAs", { name: me.member.fullName[locale], company: me.company.legalName[locale] })}
+            {me.member.isAuthorizedPerson && <span className="text-muted"> · {t("authorizedPerson")}</span>}
+          </p>
+          <Link href="/members" className={buttonVariants({ variant: "secondary" })}>
+            {t("membersLink")}
+          </Link>
+        </>
       ) : (
         <>
           <p className="text-muted">{t("tagline")}</p>
