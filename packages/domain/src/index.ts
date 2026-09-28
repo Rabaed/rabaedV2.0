@@ -3,3 +3,4 @@ export * from "./company.ts";
 export * from "./health.ts";
 export * from "./locale.ts";
 export * from "./member.ts";
+export * from "./project.ts";

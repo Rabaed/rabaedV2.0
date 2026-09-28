@@ -1,7 +1,7 @@
 import { randomInt, randomUUID } from "node:crypto";
 import { createDb } from "@rabaed/db";
 import { testDatabaseUrls } from "@rabaed/db/test-support";
-import type { InviteMemberRequest, OnboardCompanyRequest } from "@rabaed/domain";
+import type { CreateProjectRequest, InviteMemberRequest, OnboardCompanyRequest } from "@rabaed/domain";
 import type { FastifyInstance, LightMyRequestResponse } from "fastify";
 import { buildApp, SESSION_COOKIE } from "../../src/app.ts";
 import type { ApiConfig } from "../../src/config.ts";
@@ -44,6 +44,11 @@ export interface InvitedMember {
   invitationToken: string;
 }
 
+export interface CreatedProject {
+  id: string;
+  projectNumber: number;
+}
+
 export interface TestApi {
   /** A caller with no session. */
   anonymous(): Caller;
@@ -59,6 +64,10 @@ export interface TestApi {
   inviteMember(by: Caller, overrides?: Partial<InviteMemberRequest>): Promise<InvitedMember>;
   /** The Authorized Person (`by`) invites a Member, who accepts and is signed in. */
   member(by: Caller): Promise<{ member: InvitedMember; caller: Caller }>;
+  /** Onboards a Company and signs its Authorized Person in, flagged as a Project Creator. */
+  projectCreator(): Promise<{ company: OnboardedCompany; caller: Caller }>;
+  /** `by` (a Project Creator) creates a Project; overrides replace parts of the request. */
+  createProject(by: Caller, overrides?: Partial<CreateProjectRequest>): Promise<CreatedProject>;
   signIn(email: string, password: string): Promise<Caller>;
   /** Moves the API's clock forward. */
   advanceClock(ms: number): void;
@@ -194,6 +203,26 @@ export async function createTestApi(options: { databaseUrl?: string } = {}): Pro
     async member(by) {
       const member = await api.inviteMember(by);
       return { member, caller: await api.acceptInvitation(member.invitationToken) };
+    },
+
+    async projectCreator() {
+      const { company, caller } = await api.authorizedPerson();
+      const res = await caller.patch(`/v1/members/${company.authorizedPerson.id}`, { canCreateProjects: true });
+      expectStatus(res, 200, "flag project creator");
+      return { company, caller };
+    },
+
+    async createProject(by, overrides = {}) {
+      const body: CreateProjectRequest = {
+        name: { en: "Riyadh Gate Tower", ar: "برج بوابة الرياض" },
+        code: "TWR",
+        role: "contractor",
+        ...overrides,
+      };
+      const res = await by.post("/v1/projects", body);
+      expectStatus(res, 201, "create project");
+      const json = res.json();
+      return { id: json.projectId, projectNumber: json.projectNumber };
     },
 
     async signIn(email, password) {

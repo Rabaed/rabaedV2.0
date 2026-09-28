@@ -12,7 +12,8 @@
     "signIn": "Sign in",
     "signedInAs": "Signed in as {name}, {company}",
     "authorizedPerson": "Authorized Person",
-    "membersLink": "Members"
+    "membersLink": "Members",
+    "projectsLink": "My Projects"
   },
   "health": {
     "title": "System health",
@@ -71,5 +72,29 @@
     "removeProjectCreator": "Remove Project Creator",
     "deactivate": "Deactivate",
     "confirmDeactivate": "Deactivate {name}? They will be signed out at once and can no longer sign in."
+  },
+  "projects": {
+    "title": "My Projects",
+    "empty": "You are not on any Project yet.",
+    "emptyCreator": "You are not on any Project yet. Create one below.",
+    "projectAdmin": "Project Admin",
+    "createTitle": "Create a Project",
+    "nameEn": "Project name (English)",
+    "nameAr": "Project name (Arabic)",
+    "code": "Project code",
+    "codeHint": "2 to 10 letters or digits, used in Document Numbers.",
+    "projectNumber": "Project Number",
+    "role": "Your Company's role",
+    "yourRole": "Your Company's role",
+    "create": "Create Project",
+    "roles": {
+      "contractor": "Contractor",
+      "consultant": "Consultant",
+      "owner": "Owner",
+      "owner_representative": "Owner Representative"
+    },
+    "invalid": "Check both names and the project code.",
+    "notCreator": "Only a Project Creator can create a Project.",
+    "unavailable": "Something went wrong. Try again."
   }
 }

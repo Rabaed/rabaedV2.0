@@ -1,5 +1,5 @@
 import "server-only";
-import type { CompanyMembers, SignedInMember } from "@rabaed/domain";
+import type { CompanyMembers, MyProjects, ProjectSummary, SignedInMember } from "@rabaed/domain";
 import { cookies } from "next/headers";
 import { apiUrl } from "./api-url.ts";
 
@@ -27,4 +27,14 @@ export function getMe(): Promise<SignedInMember | null> {
 /** The signed-in Member's Company's Members; null if signed out. */
 export function getMembers(): Promise<CompanyMembers | null> {
   return apiGet<CompanyMembers>("/v1/members");
+}
+
+/** The signed-in Member's Projects; null if signed out. */
+export function getMyProjects(): Promise<MyProjects | null> {
+  return apiGet<MyProjects>("/v1/projects");
+}
+
+/** One of the signed-in Member's Projects; null if it isn't one of theirs (or doesn't exist). */
+export function getProject(projectId: string): Promise<ProjectSummary | null> {
+  return apiGet<ProjectSummary>(`/v1/projects/${encodeURIComponent(projectId)}`);
 }

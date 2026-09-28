@@ -2,16 +2,10 @@ import { companyMember, companyMembers, invitedMember, inviteMemberRequest, upda
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import type { AppContext } from "../app.ts";
-import { forbidden, HttpError, notFound } from "../http-error.ts";
+import { forbidden, HttpError, idOrNotFound, notFound } from "../http-error.ts";
 import { deactivateMember, inviteMember, listMembers, setProjectCreator, type InviteResult, type UpdateResult } from "../identity/members.ts";
 
 const memberParams = z.object({ memberId: z.string() });
-
-/** A Member id from the URL, or a 404 exactly like one that doesn't exist. */
-function targetId(value: string): string {
-  if (!z.uuid().safeParse(value).success) throw notFound();
-  return value;
-}
 
 /** A refusal as an HTTP error: 403 for anyone but the Authorized Person, 404 for another Company's Member, else 409. */
 function refusal(result: Exclude<InviteResult | UpdateResult, { ok: true }>): HttpError {
@@ -51,7 +45,7 @@ export const memberRoutes =
       { schema: { params: memberParams, body: updateMemberRequest, response: { 200: companyMember } } },
       async (request) => {
         const memberId = ctx.requireMember(request);
-        const target = targetId(request.params.memberId);
+        const target = idOrNotFound(request.params.memberId);
         return unwrap(await setProjectCreator(ctx.db, memberId, target, request.body.canCreateProjects));
       },
     );
@@ -61,7 +55,7 @@ export const memberRoutes =
       { schema: { params: memberParams, response: { 200: companyMember } } },
       async (request) => {
         const memberId = ctx.requireMember(request);
-        const target = targetId(request.params.memberId);
+        const target = idOrNotFound(request.params.memberId);
         return unwrap(await deactivateMember(ctx.db, memberId, target, ctx.now()));
       },
     );
