@@ -68,8 +68,6 @@ for (const locale of locales) {
         test.each(stories.map((story) => [story.storyName, story] as const))("%s", async (_name, Story) => {
           const overlay = Story.parameters.overlay === true;
           await emulate(Story.parameters.phone === true ? "phone" : overlay ? "overlay" : "desktop");
-          // An overlay's screenshot is the whole viewport, not just the page's content height.
-          document.documentElement.style.minHeight = overlay ? "100vh" : "";
           const canvasElement = document.createElement("div");
           canvasElement.dataset.testid = "story";
           document.body.append(canvasElement);
@@ -102,8 +100,22 @@ for (const locale of locales) {
           ).toEqual([]);
 
           if (inject("compareScreenshots")) {
-            const target = overlay ? page.elementLocator(document.documentElement) : page.getByTestId("story");
-            await expect.element(target).toMatchScreenshot(`${Story.id}--${locale}`);
+            if (overlay) {
+              // The whole viewport, overlays included: a transparent box over it to screenshot
+              // (the test iframe's <html> can't be located).
+              const frame = document.createElement("div");
+              frame.dataset.testid = "viewport";
+              frame.setAttribute("aria-hidden", "true");
+              frame.style.cssText = "position: fixed; inset: 0; pointer-events: none;";
+              document.body.append(frame);
+              try {
+                await expect.element(page.getByTestId("viewport")).toMatchScreenshot(`${Story.id}--${locale}`);
+              } finally {
+                frame.remove();
+              }
+            } else {
+              await expect.element(page.getByTestId("story")).toMatchScreenshot(`${Story.id}--${locale}`);
+            }
           }
         });
       });
