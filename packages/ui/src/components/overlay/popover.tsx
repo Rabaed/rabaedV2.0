@@ -3,6 +3,7 @@
 import * as PopoverPrimitive from "@radix-ui/react-popover";
 import type { ComponentProps } from "react";
 import { cn } from "../../lib/cn.ts";
+import { focusRing } from "../form/control-styles.ts";
 
 /** A non-modal panel anchored to its trigger. Compose: `<Popover><PopoverTrigger asChild>…</PopoverTrigger><PopoverContent aria-label="…">…</PopoverContent></Popover>`. */
 export const Popover = PopoverPrimitive.Root;
@@ -23,7 +24,7 @@ export function PopoverContent({ className, align = "start", sideOffset = 6, ...
         sideOffset={sideOffset}
         className={cn(
           "z-50 w-72 max-w-[calc(100vw-2rem)] rounded-sm border border-border bg-surface p-4 text-text shadow-md",
-          "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus",
+          focusRing,
           className,
         )}
         {...props}

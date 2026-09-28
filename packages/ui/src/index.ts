@@ -1,7 +1,16 @@
 export { Button, IconButton, buttonVariants, type ButtonProps, type IconButtonProps } from "./components/button/button.tsx";
 export { SignButton, type SignButtonProps } from "./components/button/sign-button.tsx";
 export { DocNo, type DocNoProps } from "./components/doc-no/doc-no.tsx";
-export { EmptyState, ErrorState, Loading, Skeleton } from "./components/feedback/states.tsx";
+export {
+  EmptyState,
+  ErrorState,
+  Loading,
+  Skeleton,
+  type EmptyStateProps,
+  type ErrorStateProps,
+  type LoadingProps,
+  type StateProps,
+} from "./components/feedback/states.tsx";
 export { Checkbox, type CheckboxProps } from "./components/form/checkbox.tsx";
 export { DirectionProvider } from "./components/form/direction.tsx";
 export { Field, type ChoiceOption, type FieldProps } from "./components/form/field.tsx";

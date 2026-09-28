@@ -56,8 +56,8 @@ const trigger = (context: PlayContext) => context.canvas.getByRole("button", { n
 const sheet = (context: PlayContext) => screen.findByRole("dialog", { name: storyText(context, copy.title) });
 
 /**
- * Open: slides in from the inline-end side, the right in English and the left
- * in Arabic, full height; focus is trapped inside. Left open for the screenshot.
+ * Open: a full-height panel on the inline-end side, the right in English and
+ * the left in Arabic; focus is trapped inside. Left open for the screenshot.
  */
 export const Open: Story = {
   parameters: overlay,

@@ -3,7 +3,7 @@ import { expect, screen, userEvent, waitFor } from "storybook/test";
 import { storyLocale, storyText } from "../../storybook/locale.ts";
 import { overlay } from "../../storybook/overlay.ts";
 import { Button } from "../button/button.tsx";
-import { Popover, PopoverContent, PopoverTrigger } from "./popover.tsx";
+import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "./popover.tsx";
 
 const copy = {
   trigger: { en: "About Step Age", ar: "عن عمر الخطوة" },
@@ -26,9 +26,11 @@ function StepAgePopover({ context }: { context: StoryContext }) {
         <PopoverContent aria-label={t(copy.title)}>
           <h3 className="mb-1 text-body font-semibold">{t(copy.title)}</h3>
           <p className="text-sm text-muted">{t(copy.body)}</p>
-          <Button size="sm" className="mt-3">
-            {t(copy.done)}
-          </Button>
+          <PopoverClose asChild>
+            <Button size="sm" className="mt-3">
+              {t(copy.done)}
+            </Button>
+          </PopoverClose>
         </PopoverContent>
       </Popover>
     </div>
@@ -65,7 +67,7 @@ export const Open: Story = {
   },
 };
 
-/** Keyboard: Enter opens it and moves focus inside; Escape closes it and returns focus to the trigger. */
+/** Keyboard: Enter opens it and moves focus inside; Escape, or its own close button, closes it and returns focus to the trigger. */
 export const Keyboard: Story = {
   play: async (context) => {
     trigger(context).focus();
@@ -73,6 +75,12 @@ export const Keyboard: Story = {
     const content = await panel(context);
     await waitFor(() => expect(content.contains(document.activeElement)).toBe(true));
     await userEvent.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    await expect(trigger(context)).toHaveFocus();
+
+    await userEvent.keyboard("{Enter}");
+    await panel(context);
+    await userEvent.click(screen.getByRole("button", { name: storyText(context, copy.done) }));
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     await expect(trigger(context)).toHaveFocus();
   },

@@ -98,6 +98,8 @@ export const LoadingList: Story = {
   play: async (context) => {
     const status = context.canvas.getByRole("status", { name: storyText(context, copy.loading) });
     await expect(status).toHaveAttribute("aria-busy", "true");
+    // The live region's own text is the label, so it is what gets read.
+    await expect(status).toHaveTextContent(storyText(context, copy.loading));
     // The placeholders themselves are not in the accessibility tree.
     await expect(context.canvas.queryAllByRole("presentation")).toHaveLength(0);
     for (const skeleton of status.querySelectorAll("[data-skeleton]")) await expect(skeleton.closest("[aria-hidden=true]")).not.toBeNull();

@@ -4,6 +4,7 @@ import { useDirection } from "@radix-ui/react-direction";
 import * as ToastPrimitive from "@radix-ui/react-toast";
 import { createContext, useCallback, useContext, useState, type ReactNode } from "react";
 import { cn } from "../../lib/cn.ts";
+import { focusRing } from "../form/control-styles.ts";
 import { Icon, type IconName } from "../icon/icon.tsx";
 
 export type ToastTone = "info" | "success" | "danger";
@@ -13,6 +14,8 @@ export type ToastInput = { title: ReactNode; description?: ReactNode; tone?: Toa
 type ShowToast = (toast: ToastInput) => void;
 
 const ToastContext = createContext<ShowToast | null>(null);
+
+let nextToastId = 0;
 
 const icons: Record<ToastTone, IconName> = { info: "info-circle", success: "circle-check", danger: "alert-circle" };
 const iconColour: Record<ToastTone, string> = { info: "text-muted", success: "text-success", danger: "text-danger" };
@@ -34,7 +37,7 @@ export type ToastProviderProps = {
  */
 export function ToastProvider({ label, closeLabel, duration = 5000, children }: ToastProviderProps) {
   const [toasts, setToasts] = useState<(ToastInput & { id: number })[]>([]);
-  const show = useCallback<ShowToast>((toast) => setToasts((list) => [...list, { ...toast, id: Date.now() + Math.random() }]), []);
+  const show = useCallback<ShowToast>((toast) => setToasts((list) => [...list, { ...toast, id: nextToastId++ }]), []);
   const swipeDirection = useDirection() === "rtl" ? "left" : "right";
 
   return (
@@ -58,13 +61,14 @@ export function ToastProvider({ label, closeLabel, duration = 5000, children }: 
             </div>
             <ToastPrimitive.Close
               aria-label={closeLabel}
-              className="-m-1 rounded-xs p-1 text-muted hover:bg-hover hover:text-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+              className={cn("-m-1 rounded-xs p-1 text-muted hover:bg-hover hover:text-text", focusRing)}
             >
               <Icon name="x" size={16} />
             </ToastPrimitive.Close>
           </ToastPrimitive.Root>
         ))}
-        <ToastPrimitive.Viewport className="fixed bottom-0 end-0 z-[100] flex w-full max-w-sm flex-col gap-2 p-4 outline-none" />
+        {/* Above dialogs (z-50), so feedback from inside a dialog is visible. */}
+        <ToastPrimitive.Viewport className="fixed bottom-0 end-0 z-[60] flex w-full max-w-sm flex-col gap-2 p-4 outline-none" />
       </ToastPrimitive.Provider>
     </ToastContext.Provider>
   );

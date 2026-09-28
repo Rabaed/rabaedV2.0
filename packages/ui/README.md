@@ -105,7 +105,7 @@ Every control sits in a `Field`, which gives it a label, optional help text, the
 </Dialog>
 ```
 
-The package has no translations of its own: pass every label (`closeLabel`, the toast region `label`, …) from the app's messages. Copy never uses deadline language; the story tests check it.
+The package has no translations of its own: pass every label (`closeLabel`, the toast region `label`, …) from the app's messages. Copy never uses deadline language: the story tests check story copy, and the `json-no-deadline-words` lint rule checks the app's messages.
 
 ## Storybook and story tests
 
