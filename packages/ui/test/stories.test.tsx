@@ -7,13 +7,15 @@
  *   3. load nothing from another origin (fonts and icons are self-hosted, no CDN),
  *   4. have no axe violations under WCAG 2.2 AA,
  *   5. match its committed screenshot (Linux only; see vitest.config.ts).
+ * Stories with `parameters.phone` render 390px wide on a touch screen
+ * (pointer: coarse), so they can check 44px touch targets.
  * Update screenshots on purpose with the "update-screenshots" PR label.
  */
 import { directionOf, locales } from "@rabaed/domain";
 import { composeStories, type composeStory, setProjectAnnotations } from "@storybook/react-vite";
 import axe, { type RunOptions } from "axe-core";
 import { beforeAll, describe, expect, inject, test } from "vitest";
-import { page } from "vitest/browser";
+import { cdp, page } from "vitest/browser";
 import preview from "../.storybook/preview.tsx";
 
 declare module "vitest" {
@@ -33,6 +35,18 @@ const modules = import.meta.glob<StoriesModule>("../src/**/*.stories.tsx", { eag
 const deadlineWords = /overdue|\bdue\b|deadline|\blate\b|\bSLA\b|متأخر|موعد نهائي|تاريخ الاستحقاق/i;
 const nonLatinDigits = /[٠-٩۰-۹]/;
 
+/** A phone (390px, touch screen, coarse pointer) or the default desktop viewport. */
+async function emulatePhone(on: boolean) {
+  const width = on ? 390 : 1024;
+  if (innerWidth !== width) {
+    // Wait for the resize event too: some components (e.g. Select) close their popups on resize.
+    const resized = new Promise((resolve) => addEventListener("resize", resolve, { once: true }));
+    await page.viewport(width, on ? 844 : 2400);
+    await resized;
+  }
+  await cdp().send("Emulation.setTouchEmulationEnabled", { enabled: on, maxTouchPoints: 5 });
+}
+
 for (const locale of locales) {
   describe(locale, () => {
     for (const [file, module] of Object.entries(modules)) {
@@ -40,6 +54,7 @@ for (const locale of locales) {
 
       describe(file.replace("../src/", ""), () => {
         test.each(stories.map((story) => [story.storyName, story] as const))("%s", async (_name, Story) => {
+          await emulatePhone(Story.parameters.phone === true);
           const canvasElement = document.createElement("div");
           canvasElement.dataset.testid = "story";
           document.body.replaceChildren(canvasElement);

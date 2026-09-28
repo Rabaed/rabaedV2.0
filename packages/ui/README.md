@@ -44,10 +44,47 @@ All fonts are self-hosted: bundled from npm (`@fontsource…`) onto our own orig
 - **DocNo**: `<DocNo value="TWR-TMC-EL-MAR-041" rev={2} />`. A Document Number (with optional `Rev n`), left-to-right and isolated, so it never scrambles inside Arabic text. Always use it for Document Numbers.
 - **Icon**: `<Icon name="chevron-right" />`, from the Tabler outline set, bundled as SVG (no icon font, no CDN). Decorative by default; pass `label` when the icon means something on its own. Arrows and chevrons that follow the reading direction flip in Arabic; override with `mirrorInRtl`. To add an icon, register it in `src/components/icon/icon.tsx`.
 
+## Forms
+
+Every control sits in a `Field`, which gives it a label, optional help text, the required marker and an error message, all tied to the control (`aria-describedby`, `aria-invalid`, `required`). The control takes `disabled` and `readOnly` from the Field too.
+
+```tsx
+<Field label={t("projectName")} help={t("asOnContract")} error={errors.name} required>
+  <Input name="name" />
+</Field>
+
+<Field label={t("trade")}>
+  <Select name="trade" options={trades} placeholder={t("chooseTrade")} />
+</Field>
+
+<Field label={t("notifyConsultant")} layout="inline">
+  <Checkbox name="notify" />
+</Field>
+
+<Field label={t("reviewCode")} group>
+  <RadioGroup name="code" options={codes} />
+</Field>
+```
+
+| Control | Use for | Field |
+|---|---|---|
+| `Input`, `Textarea` | Text | stacked |
+| `Select` | One choice from a longer list | stacked |
+| `RadioGroup` | One choice, all options visible | `group` |
+| `SegmentedControl` | Two to five short options side by side (a view switch) | `group` |
+| `Checkbox` | Yes/no that takes effect on submit | `layout="inline"` |
+| `Switch` | On/off that takes effect at once | `layout="inline"` |
+
+- **Read-only** keeps the value, stays focusable and is announced read-only (for every control, not only text boxes).
+- **Touch**: on a touch screen (`pointer: coarse`) every control and option is at least 44 × 44px. Small controls (checkbox, radio, switch) keep their size and get a larger hit area.
+- **Direction**: wrap the app once in `<DirectionProvider dir={directionOf(locale)}>` so arrow keys and the Select menu follow Arabic (`apps/web` does this in its layout).
+- Form control borders use `control-border` (3:1 against the background, WCAG 1.4.11); `border` is for decorative lines only.
+
 ## Storybook and story tests
 
 - `pnpm storybook` opens Storybook; the **Language** toolbar switches EN (LTR) / AR (RTL).
 - `pnpm test:stories` runs every story in Chromium, once per language: its play function (behaviour), direction, Latin digits, no deadline words, no requests to another origin, axe (WCAG 2.2 AA) and a screenshot comparison.
+- Stories with `parameters: phone` (from `src/storybook/form.ts`) render 390px wide on an emulated touch screen, so they can check 44px touch targets with `expectTouchTarget`.
 - Screenshot baselines are Linux renders in `test/__screenshots__/`, compared on Linux only (CI). When you change the UI on purpose, add the `update-screenshots` label to your PR (or run `gh workflow run update-screenshots.yml --ref <branch>`); the **Update screenshots** workflow commits the new baselines to the PR for review.
 
 ## Lint guard rails

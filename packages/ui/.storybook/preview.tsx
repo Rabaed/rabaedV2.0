@@ -1,5 +1,6 @@
 import { directionOf } from "@rabaed/domain";
 import type { Decorator, Preview } from "@storybook/react-vite";
+import { DirectionProvider } from "../src/components/form/direction.tsx";
 import { storyLocale } from "../src/storybook/locale.ts";
 import "./preview.css";
 
@@ -10,9 +11,11 @@ const withLocale: Decorator = (Story, context) => {
   document.documentElement.lang = locale;
   document.documentElement.dir = dir;
   return (
-    <div lang={locale} dir={dir}>
-      <Story />
-    </div>
+    <DirectionProvider dir={dir}>
+      <div lang={locale} dir={dir}>
+        <Story />
+      </div>
+    </DirectionProvider>
   );
 };
 

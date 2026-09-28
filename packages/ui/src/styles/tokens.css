@@ -33,6 +33,7 @@
   --palette-slate-300: #d8dbe0;
   --palette-slate-350: #d5d8de;
   --palette-slate-400: #a8adb8;
+  --palette-slate-450: #868c98;
   --palette-slate-500: #9aa0ad;
   --palette-slate-600: #6a6e7a;
   --palette-slate-700: #555a66;
@@ -76,6 +77,8 @@
   --border: var(--palette-slate-200);
   --border-subtle: var(--palette-slate-150);
   --border-strong: var(--palette-slate-350);
+  --control-border: var(--palette-slate-450);
+  --control-border-hover: var(--palette-slate-600);
   --text: var(--palette-slate-900);
   --text-secondary: var(--palette-slate-800);
   --muted: var(--palette-slate-600);
@@ -152,6 +155,8 @@
   --color-border: var(--border);
   --color-border-subtle: var(--border-subtle);
   --color-border-strong: var(--border-strong);
+  --color-control-border: var(--control-border);
+  --color-control-border-hover: var(--control-border-hover);
   --color-text: var(--text);
   --color-text-secondary: var(--text-secondary);
   --color-muted: var(--muted);
