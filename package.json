@@ -22,8 +22,11 @@
     "engineer:create": "pnpm --filter @rabaed/api run engineer:create"
   },
   "devDependencies": {
+    "@eslint/css": "^2.0.0",
     "@eslint/js": "^10.0.1",
+    "@eslint/json": "^2.1.0",
     "@next/eslint-plugin-next": "^16.3.6",
+    "@rabaed/eslint-plugin": "workspace:*",
     "@types/node": "^24.19.0",
     "eslint": "^10.11.0",
     "globals": "^17.12.0",
