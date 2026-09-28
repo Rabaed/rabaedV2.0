@@ -132,6 +132,8 @@ export function resourceNames(config: EnvironmentConfig) {
     /** Both migration roles start with this, so the deploy role can pass only them. */
     migrationRolePrefix: `${prefix}-migrate-`,
     logGroup: (service: ServiceName | "migrate") => `/rabaed/${config.name}/${service}`,
+    /** GitHub Actions' deploy role, which also builds the images (account stack). */
+    deployRole: `${prefix}-github-deploy`,
     /** The api's task role; the Project files bucket refuses everyone else. */
     apiTaskRole: `${prefix}-api-task`,
     /** Every Secrets Manager secret of the environment starts with this. */

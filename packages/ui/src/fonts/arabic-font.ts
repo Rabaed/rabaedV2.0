@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 
 /**
  * The Arabic font switch. Thmanyah Sans is licensed and never committed; when
- * its .woff2 files are present at build time (put there privately by CI, RP-211)
+ * its .woff2 files are present at build time (the deploy puts them there from the private build assets bucket, RP-211)
  * Arabic uses it, otherwise the free IBM Plex Sans Arabic. Storybook, the story
  * tests and the web build all call this before bundling CSS.
  */

@@ -3,7 +3,7 @@ import createNextIntlPlugin from "next-intl/plugin";
 import { prepareArabicFont } from "@rabaed/ui/fonts";
 
 // Arabic in Thmanyah Sans when its private files are present at build time
-// (supplied by CI, RP-211), otherwise IBM Plex Sans Arabic. Fonts are self-hosted.
+// (the deploy supplies them, RP-211), otherwise IBM Plex Sans Arabic. Fonts are self-hosted.
 prepareArabicFont();
 
 const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");

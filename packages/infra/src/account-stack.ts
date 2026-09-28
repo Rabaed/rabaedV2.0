@@ -47,8 +47,9 @@ export class AccountStack extends Stack {
 
     // Deploys on merge to main. It cannot be assumed from any other branch,
     // tag, pull request or fork.
+    const names = resourceNames(config);
     const deploy = new iam.Role(this, "GithubDeployRole", {
-      roleName: `rabaed-${config.name}-github-deploy`,
+      roleName: names.deployRole,
       description: `GitHub Actions deploys ${config.name} from ${repository} main only`,
       assumedBy: githubPrincipal(`${subject}:ref:refs/heads/main`),
     });
@@ -59,8 +60,8 @@ export class AccountStack extends Stack {
     // push to this environment's repositories, run the migration task
     // definition in this environment's cluster, pass that task its own two
     // roles, and read its log. The names come from config.ts, so these grants
-    // exist before the resources do.
-    const names = resourceNames(config);
+    // exist before the resources do. Reading the private fonts is granted by
+    // the storage stack, next to the bucket.
     const regional = (service: string, resource: string) => `arn:${this.partition}:${service}:${this.region}:${this.account}:${resource}`;
     deploy.addToPolicy(new iam.PolicyStatement({ actions: ["ecr:GetAuthorizationToken"], resources: ["*"] }));
     deploy.addToPolicy(

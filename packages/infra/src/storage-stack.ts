@@ -1,4 +1,4 @@
-import { Duration, RemovalPolicy, Stack, type StackProps } from "aws-cdk-lib";
+import { CfnOutput, Duration, RemovalPolicy, Stack, type StackProps } from "aws-cdk-lib";
 import * as iam from "aws-cdk-lib/aws-iam";
 import * as kms from "aws-cdk-lib/aws-kms";
 import * as s3 from "aws-cdk-lib/aws-s3";
@@ -12,6 +12,9 @@ export interface StorageStackProps extends StackProps {
 /** Project files live under this prefix, then the Project's `project_id` (ADR 0007). */
 export const PROJECT_FILES_PREFIX = "projects/";
 
+/** The licensed fonts in the build assets bucket; the Thmanyah files go under `fonts/thmanyah/`. */
+export const FONTS_PREFIX = "fonts/";
+
 // Files and the keys that protect them. Every bucket is private, versioned,
 // owner-enforced (no ACLs) and refuses requests not made over TLS.
 //
@@ -19,7 +22,9 @@ export const PROJECT_FILES_PREFIX = "projects/";
 //   can read or write objects, only under projects/, and the bucket policy
 //   refuses everyone else, administrators included. Browsers get files
 //   through signed URLs the api creates, refused once 15 minutes old.
-// - Build assets: private files the build needs (the Thmanyah fonts, RP-211).
+// - Build assets: private files the build needs. The setup wizard uploads
+//   the licensed Thmanyah fonts under fonts/; the deploy workflow, which
+//   builds the images, may read that prefix and nothing else (RP-211).
 // - Logs: S3 access logs of the other two buckets, and later the load
 //   balancer's. Encrypted with S3-managed keys, because neither S3 access
 //   logs nor load-balancer logs can be written to a KMS-encrypted bucket.
@@ -89,6 +94,32 @@ export class StorageStack extends Stack {
         conditions: { StringNotEquals: { "aws:PrincipalArn": apiTaskRole } },
       }),
     );
+    // The deploy role (account stack) builds the web image, which bundles the
+    // fonts. Granted here, by name, next to the bucket and key it reads.
+    new iam.Policy(this, "DeployReadsFonts", {
+      roles: [iam.Role.fromRoleName(this, "DeployRole", names.deployRole)],
+      statements: [
+        new iam.PolicyStatement({ actions: ["s3:GetObject"], resources: [this.buildAssets.arnForObjects(`${FONTS_PREFIX}*`)] }),
+        new iam.PolicyStatement({
+          actions: ["s3:ListBucket"],
+          resources: [this.buildAssets.bucketArn],
+          conditions: { StringLike: { "s3:prefix": `${FONTS_PREFIX}*` } },
+        }),
+        // With bucket keys, S3 asks KMS in the bucket's name, not the object's.
+        new iam.PolicyStatement({
+          actions: ["kms:Decrypt"],
+          resources: [this.storageKey.keyArn],
+          conditions: {
+            StringEquals: {
+              "kms:ViaService": `s3.${this.region}.amazonaws.com`,
+              "kms:EncryptionContext:aws:s3:arn": this.buildAssets.bucketArn,
+            },
+          },
+        }),
+      ],
+    });
+    new CfnOutput(this, "BuildAssetsBucket", { value: this.buildAssets.bucketName });
+
     // A signed URL carries the api role's permissions until it expires; S3 refuses it after 15 minutes whatever expiry it was signed with.
     this.projectFiles.addToResourcePolicy(
       new iam.PolicyStatement({
