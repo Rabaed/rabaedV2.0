@@ -107,6 +107,62 @@ describe("Project files", () => {
   });
 });
 
+describe("build assets", () => {
+  const buildAssets = bucketLogicalId("BuildAssets");
+  const storageKey = byName("AWS::KMS::Key").StorageKey!.logicalId;
+
+  // Every IAM statement, in any stack, that names the resource, with the roles it is attached to.
+  function grantsOn(logicalId: string) {
+    const grants: { roles: string[]; statement: Statement }[] = [];
+    for (const part of Object.keys(stackNames(environments.dev)) as (keyof ReturnType<typeof stackNames>)[]) {
+      for (const policy of Object.values(env.template(part).findResources("AWS::IAM::Policy")) as Resource[]) {
+        for (const statement of (policy.Properties?.PolicyDocument as { Statement: Statement[] }).Statement) {
+          if (!references(statement.Resource).some((ref) => env.tryResolve(ref, part)?.logicalId === logicalId)) continue;
+          // A role from another stack is attached by name.
+          const roles = (policy.Properties?.Roles as unknown[]).map((role) =>
+            typeof role === "string" ? role : String(env.resolve(role, part).resource.Properties?.RoleName),
+          );
+          grants.push({ roles, statement });
+        }
+      }
+    }
+    return grants;
+  }
+
+  it("the deploy role, which builds the images, can read only the fonts/ prefix of the build assets bucket", () => {
+    const grants = grantsOn(buildAssets);
+    expect(grants.flatMap((g) => g.roles)).toEqual(["rabaed-dev-github-deploy", "rabaed-dev-github-deploy"]);
+    const byAction = Object.fromEntries(grants.map(({ statement }) => [String(statement.Action), statement]));
+    expect(Object.keys(byAction).sort()).toEqual(["s3:GetObject", "s3:ListBucket"]);
+
+    // Objects: under fonts/ only.
+    expect(String(render(byAction["s3:GetObject"]!.Resource))).toMatch(/\/fonts\/\*$/);
+    expect(byAction["s3:GetObject"]!.Condition).toBeUndefined();
+    // Listing: the bucket itself, and only keys under fonts/.
+    expect(env.resolve(byAction["s3:ListBucket"]!.Resource, "storage").logicalId).toBe(buildAssets);
+    expect(byAction["s3:ListBucket"]!.Condition).toEqual({ StringLike: { "s3:prefix": "fonts/*" } });
+  });
+
+  it("the deploy role may decrypt with the storage key only through S3, for the build assets bucket", () => {
+    // (The api's task role uses the key too, for Project files.)
+    const grants = grantsOn(storageKey).filter((g) => g.roles.includes("rabaed-dev-github-deploy"));
+    expect(grants).toHaveLength(1);
+    const statement = grants[0]!.statement;
+    expect(statement).toMatchObject({ Effect: "Allow", Action: "kms:Decrypt" });
+    const condition = statement.Condition as { StringEquals: Record<string, unknown> };
+    expect(Object.keys(condition)).toEqual(["StringEquals"]);
+    expect(condition.StringEquals["kms:ViaService"]).toBe("s3.eu-central-1.amazonaws.com");
+    // With S3 bucket keys, the encryption context is the bucket's ARN.
+    const bucketArn = condition.StringEquals["kms:EncryptionContext:aws:s3:arn"];
+    expect(env.resolve(bucketArn, "storage").logicalId).toBe(buildAssets);
+  });
+
+  it("names the bucket in an output, for the setup wizard and the deploy workflow", () => {
+    const outputs = storage.toJSON().Outputs as Record<string, { Value: unknown }>;
+    expect(env.resolve(outputs.BuildAssetsBucket?.Value, "storage").logicalId).toBe(buildAssets);
+  });
+});
+
 describe("keys", () => {
   const keysByName = byName("AWS::KMS::Key");
   const keys = Object.fromEntries(Object.entries(keysByName).map(([name, { resource }]) => [name, resource.Properties ?? {}]));

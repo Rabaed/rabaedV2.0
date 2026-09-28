@@ -1,0 +1,12 @@
+# gitleaks: the default rules, plus one of our own. Run by secret-scan.yml.
+[extend]
+useDefault = true
+
+# A font inlined into CSS, HTML or JS as base64. Font files themselves are
+# binary, which gitleaks skips: scripts/check-no-fonts.ts refuses those by path.
+# The licensed Thmanyah fonts come only from the private build assets bucket (RP-211).
+[[rules]]
+id = "inlined-font"
+description = "Font inlined as base64; fonts are never committed (Thmanyah is licensed)"
+regex = '''data:(?:font/|application/(?:font-|x-font-?))[a-z0-9.+-]*(?:;[a-z0-9=-]+)*;base64,[A-Za-z0-9+/]{16}'''
+keywords = ["base64"]

@@ -56,6 +56,12 @@ jobs:
         with: { node-version: 24, cache: pnpm }
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @rabaed/web build
+      # Like a fork's pull request, CI has no access to the private Thmanyah
+      # fonts (RP-211): the build must still succeed, with the free fallback.
+      - name: Built with the fallback Arabic font
+        run: |
+          grep -q "IBM Plex Sans Arabic" packages/ui/src/styles/arabic-font.css
+          ! grep -q "Thmanyah" packages/ui/src/styles/arabic-font.css
 
   stories:
     name: story tests (behaviour, axe, screenshots)

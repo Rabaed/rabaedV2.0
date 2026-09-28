@@ -191,9 +191,10 @@ finish() {
 # answers you give are remembered in .env.aws (git-ignored, never committed).
 # Nothing secret is written to the repo or to GitHub: GitHub only receives
 # role ARNs, the region and the interim certificate (public) and its ARN, as
-# repository variables.
+# repository variables. The licensed Thmanyah fonts go from this computer
+# straight to the private build assets bucket.
 
-TOTAL_STAGES=8
+TOTAL_STAGES=9
 
 # The repository this script is in, wherever it is run from.
 cd "$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)"
@@ -214,10 +215,14 @@ ask_required() {
 # only; called before each AWS step so they have not expired.
 fresh_credentials() { eval "$(aws configure export-credentials --profile "$AWS_PROFILE" --format env)"; }
 
+# stack_output OUTPUT [STACK]: an output of the account stack, or of STACK.
 stack_output() {
-  aws cloudformation describe-stacks --region "$REGION" --stack-name "$STACK" \
+  aws cloudformation describe-stacks --region "$REGION" --stack-name "${2:-$STACK}" \
     --query "Stacks[0].Outputs[?OutputKey=='$1'].OutputValue" --output text
 }
+
+# Git Bash hands Windows programs (the AWS CLI) Windows paths.
+native_path() { if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else printf '%s' "$1"; fi; }
 
 banner "Rabaed AWS account setup: ${RABAED_ENV}"
 
@@ -323,7 +328,8 @@ stage "GitHub access and budget ($STACK)"
 say "Deploys the account stack from packages/infra/src/account-stack.ts:"
 step "trust for GitHub Actions through OIDC (no AWS keys stored in GitHub);"
 step "rabaed-${RABAED_ENV}-github-deploy: usable only from $REPOSITORY main, to deploy,"
-step "  push images and run the migration task;"
+step "  push images and run the migration task (the storage stack, deployed on merge,"
+step "  also lets it read the private fonts);"
 step "rabaed-${RABAED_ENV}-github-diff: read-only, for cdk diff on pull requests;"
 step "the monthly budget alert to $BUDGET_ALERT_EMAIL."
 # The roles trust only tokens whose subject starts with the prefix in config.ts.
@@ -348,8 +354,6 @@ say "certificate authority can issue one for its AWS address, so this stage make
 say "a self-signed certificate for *.$REGION.elb.amazonaws.com and imports it into"
 say "AWS Certificate Manager. Browsers warn once (\"not private\"); continue past it."
 say "The private key goes straight to AWS and is deleted here; it is never saved."
-# Git Bash hands Windows programs (the AWS CLI) Windows paths.
-native_path() { if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else printf '%s' "$1"; fi; }
 CERT_ARN=$(_existing AWS_CERTIFICATE_ARN || true)
 cert_expiry() {
   aws acm describe-certificate --region "$REGION" --certificate-arn "$1" --query Certificate.NotAfter --output text 2>/dev/null
@@ -404,6 +408,51 @@ if [[ -n "$CERT_ARN" ]] && fresh_credentials \
   set_var AWS_CERTIFICATE_PEM "$CERT_PEM"
 else
   SKIPPED+=("GitHub variables AWS_CERTIFICATE_ARN, AWS_CERTIFICATE_PEM (re-run after stage 7)")
+fi
+pause
+
+# ── 9 ────────────────────────────────────────────────────────────────────
+stage "Thmanyah fonts (private)"
+say "Arabic is shown in Thmanyah Sans, which is licensed: its files must never be"
+say "in the repo. This stage uploads them to the private build assets bucket; the"
+say "deploy bundles them into the web image, which serves them from Rabaed's own"
+say "address. Without them, Arabic falls back to IBM Plex Sans Arabic."
+STORAGE_STACK="Rabaed-${RABAED_ENV}-Storage"
+if fresh_credentials && BUCKET=$(stack_output BuildAssetsBucket "$STORAGE_STACK" 2>/dev/null) && arn_ok "$BUCKET"; then
+  note "The thmanyahsans-{Light,Regular,Medium,Bold,Black}.woff2 files, in a folder outside"
+  note "the repo or in design/reference/claude-design/assets/fonts/thmanyah (git-ignored)."
+  ask_required THMANYAH_FONTS_DIR "Folder with the Thmanyah Sans .woff2 files:"
+  # Accept a pasted Windows path (C:\…) or ~ in Git Bash.
+  fonts_dir="${THMANYAH_FONTS_DIR/#\~/$HOME}"
+  if command -v cygpath >/dev/null 2>&1; then fonts_dir=$(cygpath -u "$fonts_dir"); fi
+  shopt -s nocaseglob nullglob
+  font_files=("$fonts_dir"/thmanyahsans-*.woff2)
+  shopt -u nocaseglob nullglob
+  if (( ${#font_files[@]} == 0 )); then
+    warn "No thmanyahsans-*.woff2 files in $THMANYAH_FONTS_DIR."
+    SKIPPED+=("Thmanyah fonts (re-run this wizard with the folder that holds them)")
+  else
+    write_env THMANYAH_FONTS_DIR "$THMANYAH_FONTS_DIR"
+    for f in "${font_files[@]}"; do note "  $(basename "$f")"; done
+    if confirm "Upload these ${#font_files[@]} files to s3://$BUCKET/fonts/thmanyah/?"; then
+      fresh_credentials
+      failed=0
+      for f in "${font_files[@]}"; do
+        aws s3 cp "$(native_path "$f")" "s3://$BUCKET/fonts/thmanyah/$(basename "$f")" --region "$REGION" --only-show-errors \
+          || failed=$((failed + 1))
+      done
+      if (( failed == 0 )); then
+        note "✓ uploaded; the next merge to main builds dev's web image with them"
+      else
+        SKIPPED+=("Thmanyah fonts: $failed file(s) failed to upload (re-run this wizard)")
+      fi
+    else
+      SKIPPED+=("Thmanyah fonts (re-run this wizard)")
+    fi
+  fi
+else
+  warn "$STORAGE_STACK is not deployed yet (or the sign-in expired); the first deploy creates it."
+  SKIPPED+=("Thmanyah fonts (re-run this wizard after the first deploy)")
 fi
 pause
 

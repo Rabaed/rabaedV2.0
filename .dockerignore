@@ -13,6 +13,10 @@ secrets/
 **/*.tsbuildinfo
 *.log
 
+# Licensed fonts reach only the web build, through its own build context (Dockerfile).
+packages/ui/fonts/
+packages/ui/src/styles/arabic-font.css
+
 # Not needed to run the app.
 .claude/
 .github/

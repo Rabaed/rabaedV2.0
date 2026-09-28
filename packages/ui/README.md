@@ -36,7 +36,7 @@ All fonts are self-hosted: bundled from npm (`@fontsource…`) onto our own orig
 | Display | Montserrat | `font-display` |
 | Arabic | Thmanyah Sans when its files are present at build time, otherwise IBM Plex Sans Arabic | `--font-arabic`, the second family in both stacks |
 
-**Thmanyah Sans is licensed and never committed.** The switch happens at build time: put the `thmanyahsans-{Light,Regular,Medium,Bold,Black}.woff2` files in `packages/ui/fonts/thmanyah/` (git-ignored; CI supplies them privately, RP-211). `prepareArabicFont()` (`src/fonts/arabic-font.ts`, also exported as `@rabaed/ui/fonts`) then writes the git-ignored `src/styles/arabic-font.css`. Storybook, the story tests and `apps/web`'s `next.config.ts` call it on start, so no extra step is needed; without the files everything builds with IBM Plex Sans Arabic.
+**Thmanyah Sans is licensed and never committed.** The switch happens at build time: put the `thmanyahsans-{Light,Regular,Medium,Bold,Black}.woff2` files in `packages/ui/fonts/thmanyah/` (git-ignored; for dev, the deploy workflow supplies them from the private build assets bucket, see "Thmanyah fonts" in the root README). `prepareArabicFont()` (`src/fonts/arabic-font.ts`, also exported as `@rabaed/ui/fonts`) then writes the git-ignored `src/styles/arabic-font.css`. Storybook, the story tests and `apps/web`'s `next.config.ts` call it on start, so no extra step is needed; without the files everything builds with IBM Plex Sans Arabic.
 
 ## Digits, dates and direction
 

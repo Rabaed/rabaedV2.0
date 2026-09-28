@@ -81,6 +81,32 @@ jobs:
         run: >-
           pnpm --silent cdk deploy -c env=dev --exclusively --require-approval never --no-color --progress events
           "$STACK_PREFIX-Network" "$STACK_PREFIX-Data" "$STACK_PREFIX-Registry" "$STACK_PREFIX-Storage"
+          --outputs-file "$RUNNER_TEMP/infra.json"
+
+      # The licensed Thmanyah fonts, uploaded by the setup wizard to the private
+      # build assets bucket. This role may read only its fonts/ prefix. None
+      # uploaded yet: the web build falls back to IBM Plex Sans Arabic. The
+      # fonts never enter the repo or the workspace, only the web build.
+      - name: Private fonts
+        id: fonts
+        run: |
+          bucket=$(jq -r --arg s "$STACK_PREFIX-Storage" '.[$s].BuildAssetsBucket' "$RUNNER_TEMP/infra.json")
+          dir="$RUNNER_TEMP/fonts/thmanyah"
+          mkdir -p "$dir"
+          # Retried: on the first deploy the grant was only just created.
+          for attempt in 1 2 3 4 5 6; do
+            aws s3 cp "s3://$bucket/fonts/thmanyah/" "$dir" --recursive --only-show-errors && break
+            if (( attempt == 6 )); then echo "::error::cannot read the private fonts"; exit 1; fi
+            sleep 10
+          done
+          # Names in any case, as the font switch accepts them (packages/ui/src/fonts/arabic-font.ts).
+          shopt -s nocaseglob
+          if compgen -G "$dir/thmanyahsans-*.woff2" >/dev/null; then
+            echo "arabic_font=Thmanyah Sans" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::No Thmanyah fonts in the build assets bucket (setup wizard, last stage); Arabic falls back to IBM Plex Sans Arabic."
+            echo "arabic_font=IBM Plex Sans Arabic" >> "$GITHUB_OUTPUT"
+          fi
 
       - id: ecr
         uses: aws-actions/amazon-ecr-login@v2
@@ -90,9 +116,14 @@ jobs:
 
       # Tags are immutable, so a commit's images are built once; a re-run reuses
       # them. The three builds share their dependency layers in this builder.
+      # Only web gets the fonts. The smoke test then expects the Arabic font
+      # web was built with; a web image reused from an earlier run is only
+      # checked for serving its fonts from our origin.
       - name: Build and push images
+        id: images
         env:
           REGISTRY: ${{ steps.ecr.outputs.registry }}
+          ARABIC_FONT: ${{ steps.fonts.outputs.arabic_font }}
         run: |
           for service in web api worker; do
             repo="rabaed-dev/$service"
@@ -100,8 +131,14 @@ jobs:
               echo "$repo:$VERSION already pushed"
               continue
             fi
-            docker buildx build . --target "$service" --platform linux/amd64 --tag "$REGISTRY/$repo:$VERSION" --push
+            font_context=()
+            if [[ "$service" == web ]]; then
+              font_context=(--build-context "fonts=$RUNNER_TEMP/fonts")
+              echo "arabic_font=$ARABIC_FONT" >> "$GITHUB_OUTPUT"
+            fi
+            docker buildx build . --target "$service" "${font_context[@]}" --platform linux/amd64 --tag "$REGISTRY/$repo:$VERSION" --push
           done
+          rm -rf "$RUNNER_TEMP/fonts"
 
       - name: Migration task
         working-directory: packages/infra
@@ -143,6 +180,7 @@ jobs:
           # The interim self-signed certificate (public, not secret), trusted
           # for this check only. Empty once dev has a real certificate.
           CERTIFICATE_PEM: ${{ vars.AWS_CERTIFICATE_PEM }}
+          ARABIC_FONT: ${{ steps.images.outputs.arabic_font }}
         run: |
           if [[ -n "$CERTIFICATE_PEM" ]]; then
             printf '%s\n' "$CERTIFICATE_PEM" > "$RUNNER_TEMP/dev-ca.pem"
@@ -150,5 +188,6 @@ jobs:
           fi
           export SMOKE_URL=$(jq -r --arg s "$STACK_PREFIX-App" '.[$s].Url' "$RUNNER_TEMP/app.json")
           export SMOKE_VERSION="$VERSION"
+          export SMOKE_ARABIC_FONT="$ARABIC_FONT"
           pnpm --filter @rabaed/infra smoke
           echo "### Deployed \`${VERSION:0:7}\` to $SMOKE_URL" >> "$GITHUB_STEP_SUMMARY"

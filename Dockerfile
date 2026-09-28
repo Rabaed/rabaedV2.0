@@ -37,7 +37,14 @@ FROM node-service AS worker
 WORKDIR /app/apps/worker
 CMD ["./node_modules/.bin/tsx", "src/main.ts"]
 
+# The licensed Thmanyah fonts, never in the repo or the build context: the
+# deploy workflow passes them with `--build-context fonts=<folder>` (holding
+# thmanyah/*.woff2). Without them this stage is empty and Arabic falls back to
+# IBM Plex Sans Arabic (packages/ui/src/fonts/arabic-font.ts).
+FROM scratch AS fonts
+
 FROM deps AS web-build
+COPY --from=fonts / packages/ui/fonts/
 RUN pnpm --filter @rabaed/web build
 
 FROM web-build AS web
