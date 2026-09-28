@@ -56,7 +56,7 @@ pnpm typecheck
 
 Seam 1 is the primary suite: scenarios call the API through `createTestApi()` (`apps/api/test/support/harness.ts`) as `api.as(memberId)` or `api.anonymous()`. Until sign-in lands (RP-187) the identity is a test-only stub.
 
-CI (`.github/workflows/ci.yml`) runs lint, typecheck, unit, web build, seam 1 and seam 2 against Postgres 16 on every push and pull request; `secret-scan.yml` runs gitleaks.
+CI (`.github/workflows/ci.yml`) runs lint, typecheck, unit, web build, seam 1 and seam 2 against Postgres 16 on every push and pull request; `secret-scan.yml` runs gitleaks. For a failure to block merging, `main`'s branch protection must list these jobs as required status checks.
 
 ## Secrets
 

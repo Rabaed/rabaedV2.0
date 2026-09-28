@@ -12,7 +12,7 @@ create function app.current_member_id() returns uuid
   as $$ select nullif(current_setting('app.member_id', true), '')::uuid $$;
 
 -- Every table the migrator creates in public is usable by the app role, but only
--- through row-level security: each tenant table must enable RLS in its migration
+-- through row-level security: each Project- or Company-owned table must enable RLS in its migration
 -- (the seam-2 suite fails on any table without it). Tables that must be
 -- append-only revoke UPDATE and DELETE in their own migration.
 alter default privileges in schema public

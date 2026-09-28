@@ -2,10 +2,10 @@
 // Defence in depth for docs/visibility.md: even if an API query forgets a
 // filter, row-level security must return nothing it shouldn't.
 import { randomUUID } from "node:crypto";
-import { sql } from "kysely";
+import { sql, type Transaction } from "kysely";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { APP_ROLE, createDb, withMember, type Db } from "../src/index.ts";
+import { APP_ROLE, createDb, withMember, type Database, type Db } from "../src/index.ts";
 import { testDatabaseUrls } from "../test-support/index.ts";
 
 const urls = testDatabaseUrls();
@@ -16,7 +16,7 @@ const memberB = randomUUID();
 let migrator: pg.Client;
 let app: Db;
 
-async function rowsSeenBy(trx: Parameters<Parameters<typeof withMember>[2]>[0]): Promise<string[]> {
+async function rowsSeenBy(trx: Transaction<Database>): Promise<string[]> {
   const result = await sql<{ note: string }>`select note from ${sql.table(probe)} order by note`.execute(trx);
   return result.rows.map((r) => r.note);
 }
@@ -24,7 +24,7 @@ async function rowsSeenBy(trx: Parameters<Parameters<typeof withMember>[2]>[0]):
 beforeAll(async () => {
   migrator = new pg.Client({ connectionString: urls.migrator });
   await migrator.connect();
-  // A sample tenant table, created the way every migration creates one.
+  // A sample RLS-protected table, created the way every migration creates one.
   await migrator.query(`
     create table public.${probe} (
       id uuid primary key default gen_random_uuid(),

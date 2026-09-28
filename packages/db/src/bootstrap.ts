@@ -3,6 +3,9 @@ import { APP_ROLE, MIGRATOR_ROLE, databaseNameOf, withDatabaseName, type Databas
 
 const identifier = /^[a-z_][a-z0-9_]*$/;
 
+// Any constant; distinct from the migration lock.
+const BOOTSTRAP_LOCK_KEY = 718_200_185;
+
 function checkIdentifier(name: string): string {
   if (!identifier.test(name)) throw new Error(`Unsafe SQL identifier: ${name}`);
   return name;
@@ -42,6 +45,9 @@ export async function bootstrap(urls: DatabaseUrls): Promise<void> {
   ];
 
   await withClient(urls.superuser, async (client) => {
+    // Several processes may bootstrap at once (e.g. both seam suites); roles are
+    // cluster-wide, so serialise the check-then-create. Released when the session ends.
+    await client.query("select pg_advisory_lock($1)", [BOOTSTRAP_LOCK_KEY]);
     for (const role of roles) {
       const exists = await client.query("select 1 from pg_roles where rolname = $1", [role.name]);
       const verb = exists.rowCount ? "alter" : "create";

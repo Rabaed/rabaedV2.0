@@ -20,7 +20,7 @@ const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /**
  * Runs `fn` in a transaction acting as `memberId`: RLS policies see this Member
  * through app.current_member_id(). The setting is transaction-local, so it never
- * leaks to the next user of the pooled connection.
+ * leaks to the next request that borrows the pooled connection.
  */
 export async function withMember<T>(db: Db, memberId: string, fn: (trx: Transaction<Database>) => Promise<T>): Promise<T> {
   if (!uuid.test(memberId)) throw new Error("memberId must be a UUID");
