@@ -101,7 +101,8 @@
     "projectMembers": "Project Members",
     "settings": "Project Settings",
     "tradesLocations": "Trades & Locations",
-    "visibility": "Visibility"
+    "visibility": "Visibility",
+    "membersVisibility": "Your Members' Visibility"
   },
   "participants": {
     "title": "Company Projects",

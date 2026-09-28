@@ -36,7 +36,7 @@ export default async function MemberVisibilityPage({
         <p className="text-muted">{t("memberHint")}</p>
       </div>
       <VisibilityEditor
-        options={data.participant.coverage}
+        options={data.participant.covered}
         visibility={data.visibility}
         endpoint={
           me.member.isAuthorizedPerson ? `/api/v1/participants/${participantId}/members/${memberId}/visibility` : null

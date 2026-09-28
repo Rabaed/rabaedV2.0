@@ -157,11 +157,11 @@ create policy member_reads_visibility_grants on visibility_grant for select to r
 create policy member_reads_visibility_grant_values on visibility_grant_value for select to rabaed_app
   using (grant_id in (select id from visibility_grant));
 
--- Coverage -------------------------------------------------------------------
+-- What a grant covers -------------------------------------------------------------------
 
 -- The values a grant covers: all of its dimension's when is_all, otherwise the
 -- granted values and everything beneath them.
-create function app.grant_coverage(p_grant_id uuid) returns setof uuid
+create function app.values_covered_by_grant(p_grant_id uuid) returns setof uuid
   language sql stable security definer
   set search_path = pg_catalog, public
   as $$
@@ -178,24 +178,24 @@ create function app.grant_coverage(p_grant_id uuid) returns setof uuid
   $$;
 
 -- What a Participant covers in one dimension; nothing without a grant.
-create function app.participant_coverage(p_participant_id uuid, p_dimension_id uuid) returns setof uuid
+create function app.values_covered_by_participant(p_participant_id uuid, p_dimension_id uuid) returns setof uuid
   language sql stable security definer
   set search_path = pg_catalog, public
   as $$
-    select c.id from visibility_grant g cross join lateral app.grant_coverage(g.id) as c (id)
+    select c.id from visibility_grant g cross join lateral app.values_covered_by_grant(g.id) as c (id)
     where g.participant_id = p_participant_id and g.project_member_id is null and g.dimension_id = p_dimension_id
   $$;
 
 -- What a Project Member covers in one dimension: their own grant, within their
 -- Participant's (V4). Nothing without a grant.
-create function app.project_member_coverage(p_project_member_id uuid, p_dimension_id uuid) returns setof uuid
+create function app.values_covered_by_project_member(p_project_member_id uuid, p_dimension_id uuid) returns setof uuid
   language sql stable security definer
   set search_path = pg_catalog, public
   as $$
-    select c.id from visibility_grant g cross join lateral app.grant_coverage(g.id) as c (id)
+    select c.id from visibility_grant g cross join lateral app.values_covered_by_grant(g.id) as c (id)
     where g.project_member_id = p_project_member_id and g.dimension_id = p_dimension_id
     intersect
-    select c.id from project_member pm cross join lateral app.participant_coverage(pm.participant_id, p_dimension_id) as c (id)
+    select c.id from project_member pm cross join lateral app.values_covered_by_participant(pm.participant_id, p_dimension_id) as c (id)
     where pm.id = p_project_member_id
   $$;
 
@@ -208,7 +208,7 @@ create function app.my_visibility(p_project_id uuid) returns table (kind text, v
     select d.kind, c.id
     from project_member pm
     join visibility_dimension d on d.project_id = pm.project_id
-    cross join lateral app.project_member_coverage(pm.id, d.id) as c (id)
+    cross join lateral app.values_covered_by_project_member(pm.id, d.id) as c (id)
     where pm.project_id = p_project_id and pm.member_id = app.current_member_id() and pm.status = 'active'
       and p_project_id in (select app.current_project_ids())
   $$;
@@ -235,7 +235,7 @@ create function app.participant_grants(p_participant_id uuid)
 -- The values a Participant covers, with what the screens show of them, for the
 -- same people as app.participant_grants. Its Authorized Person needs these to
 -- narrow its Members' Visibility even before they are on the Project (V15).
-create function app.participant_coverage_values(p_participant_id uuid)
+create function app.participant_covered_values(p_participant_id uuid)
   returns table (kind text, id uuid, parent_id uuid, depth smallint, code text, name jsonb, level_name jsonb)
   language sql stable security definer
   set search_path = pg_catalog, public
@@ -243,7 +243,7 @@ create function app.participant_coverage_values(p_participant_id uuid)
     select d.kind, v.id, v.parent_id, v.depth, v.code, v.name, v.level_name
     from participant p
     join visibility_dimension d on d.project_id = p.project_id
-    cross join lateral app.participant_coverage(p.id, d.id) as c (id)
+    cross join lateral app.values_covered_by_participant(p.id, d.id) as c (id)
     join dimension_value v on v.id = c.id
     where p.id = p_participant_id and p.status = 'active'
       and (p.id in (select app.current_participant_ids()) or p.project_id in (select app.current_admin_project_ids()))
@@ -268,6 +268,23 @@ create function app.member_grants(p_participant_id uuid, p_member_id uuid)
   $$;
 
 -- Writes -----------------------------------------------------------------------
+
+-- The Project's trade or location dimension; any other kind is a bug in the caller (22023).
+create function app.project_dimension_id(p_project_id uuid, p_kind text) returns uuid
+  language plpgsql stable security definer
+  set search_path = pg_catalog, public
+  as $$
+    declare
+      v_id uuid;
+    begin
+      select id into v_id from visibility_dimension
+      where project_id = p_project_id and kind = p_kind and kind in ('trade', 'location');
+      if v_id is null then
+        raise exception 'unknown dimension %', p_kind using errcode = '22023';
+      end if;
+      return v_id;
+    end
+  $$;
 
 -- A Project Admin adds a Trade, or a Location under p_parent_id (null: a Zone).
 -- Outcome: 'added' (with the value), 'not_found' (not one of the acting Member's
@@ -297,11 +314,7 @@ create function app.add_dimension_value(p_project_id uuid, p_kind text, p_parent
         return query select 'project_closed'::text, null::uuid;
         return;
       end if;
-      select id into v_dimension_id from visibility_dimension
-      where project_id = p_project_id and kind = p_kind and kind in ('trade', 'location');
-      if v_dimension_id is null then
-        raise exception 'unknown dimension %', p_kind using errcode = '22023';
-      end if;
+      v_dimension_id := app.project_dimension_id(p_project_id, p_kind);
 
       if p_parent_id is not null then
         select v.depth + 1 into v_depth from dimension_value v
@@ -371,8 +384,11 @@ create function app.set_participant_visibility(
       v_grant_id uuid;
       v_member_grant record;
     begin
+      -- Locked, so a Member's grant is never checked against a Participant grant
+      -- that is changing at the same time (see app.set_member_visibility).
       select project_id into v_project_id from participant
-      where id = p_participant_id and status = 'active' and project_id in (select app.current_project_ids());
+      where id = p_participant_id and status = 'active' and project_id in (select app.current_project_ids())
+      for update;
       if v_project_id is null then
         return 'not_found';
       end if;
@@ -382,11 +398,7 @@ create function app.set_participant_visibility(
       if exists (select 1 from project where id = v_project_id and status = 'closed') then
         return 'project_closed';
       end if;
-      select id into v_dimension_id from visibility_dimension
-      where project_id = v_project_id and kind = p_kind and kind in ('trade', 'location');
-      if v_dimension_id is null then
-        raise exception 'unknown dimension %', p_kind using errcode = '22023';
-      end if;
+      v_dimension_id := app.project_dimension_id(v_project_id, p_kind);
       if exists (select unnest(v_values) except select id from dimension_value where dimension_id = v_dimension_id) then
         return 'value_not_found';
       end if;
@@ -398,7 +410,7 @@ create function app.set_participant_visibility(
       returning g.id into v_grant_id;
       perform app.replace_grant_values(v_grant_id, v_values);
 
-      -- Each Member's grant becomes its intersection with the new coverage, stored
+      -- Each Member's grant becomes its intersection with what the Participant now covers, stored
       -- as the topmost values, so widening the Participant again doesn't widen them.
       -- A Member's "all" already means all of the Participant's.
       for v_member_grant in
@@ -408,9 +420,9 @@ create function app.set_participant_visibility(
       loop
         perform app.replace_grant_values(v_member_grant.id, array(
           with kept as (
-            select app.grant_coverage(v_member_grant.id) as id
+            select app.values_covered_by_grant(v_member_grant.id) as id
             intersect
-            select app.participant_coverage(p_participant_id, v_dimension_id)
+            select app.values_covered_by_participant(p_participant_id, v_dimension_id)
           )
           select v.id from kept k join dimension_value v on v.id = k.id
           where v.parent_id is null or v.parent_id not in (select id from kept)
@@ -442,8 +454,10 @@ create function app.set_member_visibility(
       v_dimension_id uuid;
       v_grant_id uuid;
     begin
+      -- Locked, so the Participant's grant can't narrow between the check below and the write.
       select project_id into v_project_id from participant
-      where id = p_participant_id and company_id = v_company_id and status = 'active';
+      where id = p_participant_id and company_id = v_company_id and status = 'active'
+      for update;
       if v_project_id is null then
         return 'not_found';
       end if;
@@ -455,15 +469,11 @@ create function app.set_member_visibility(
       if v_project_member_id is null then
         return 'member_not_found';
       end if;
-      select id into v_dimension_id from visibility_dimension
-      where project_id = v_project_id and kind = p_kind and kind in ('trade', 'location');
-      if v_dimension_id is null then
-        raise exception 'unknown dimension %', p_kind using errcode = '22023';
-      end if;
+      v_dimension_id := app.project_dimension_id(v_project_id, p_kind);
       if exists (select unnest(v_values) except select id from dimension_value where dimension_id = v_dimension_id) then
         return 'value_not_found';
       end if;
-      if exists (select unnest(v_values) except select app.participant_coverage(p_participant_id, v_dimension_id)) then
+      if exists (select unnest(v_values) except select app.values_covered_by_participant(p_participant_id, v_dimension_id)) then
         return 'exceeds_participant';
       end if;
 
@@ -482,13 +492,14 @@ create function app.set_member_visibility(
 revoke all on function
   app.create_project_dimensions(),
   app.current_admin_project_ids(),
-  app.grant_coverage(uuid),
-  app.participant_coverage(uuid, uuid),
-  app.project_member_coverage(uuid, uuid),
+  app.project_dimension_id(uuid, text),
+  app.values_covered_by_grant(uuid),
+  app.values_covered_by_participant(uuid, uuid),
+  app.values_covered_by_project_member(uuid, uuid),
   app.replace_grant_values(uuid, uuid[]),
   app.my_visibility(uuid),
   app.participant_grants(uuid),
-  app.participant_coverage_values(uuid),
+  app.participant_covered_values(uuid),
   app.member_grants(uuid, uuid),
   app.add_dimension_value(uuid, text, uuid, text, jsonb),
   app.set_participant_visibility(uuid, text, boolean, uuid[], timestamptz),
@@ -498,7 +509,7 @@ grant execute on function
   app.current_admin_project_ids(),
   app.my_visibility(uuid),
   app.participant_grants(uuid),
-  app.participant_coverage_values(uuid),
+  app.participant_covered_values(uuid),
   app.member_grants(uuid, uuid),
   app.add_dimension_value(uuid, text, uuid, text, jsonb),
   app.set_participant_visibility(uuid, text, boolean, uuid[], timestamptz),

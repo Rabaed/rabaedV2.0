@@ -15,8 +15,10 @@ describe("Trade and Location code", () => {
 describe("a Visibility grant", () => {
   it("is either all or a list of values", () => {
     const id = "0199a3b4-0000-7000-8000-000000000001";
-    expect(setVisibilityRequest.safeParse({ isAll: true, valueIds: [] }).success).toBe(true);
-    expect(setVisibilityRequest.safeParse({ isAll: false, valueIds: [id] }).success).toBe(true);
-    expect(setVisibilityRequest.safeParse({ isAll: true, valueIds: [id] }).success).toBe(false);
+    const all = { isAll: true, valueIds: [] };
+    expect(setVisibilityRequest.safeParse({ trade: all, location: all }).success).toBe(true);
+    expect(setVisibilityRequest.safeParse({ trade: all, location: { isAll: false, valueIds: [id] } }).success).toBe(true);
+    expect(setVisibilityRequest.safeParse({ trade: all, location: { isAll: true, valueIds: [id] } }).success).toBe(false);
+    expect(setVisibilityRequest.safeParse({ trade: all }).success).toBe(false);
   });
 });

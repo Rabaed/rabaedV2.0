@@ -45,19 +45,22 @@ export type AddLocationRequest = z.infer<typeof addLocationRequest>;
 export const visibilityGrant = z.object({ isAll: z.boolean(), valueIds: z.array(z.uuid()) });
 export type VisibilityGrant = z.infer<typeof visibilityGrant>;
 
-export const setVisibilityRequest = visibilityGrant.refine((g) => !g.isAll || g.valueIds.length === 0, {
-  message: "Either all, or a list of values",
-});
-export type SetVisibilityRequest = z.infer<typeof setVisibilityRequest>;
-
 export const visibility = z.object({ trade: visibilityGrant, location: visibilityGrant });
 export type Visibility = z.infer<typeof visibility>;
 
+const grantToSet = visibilityGrant.refine((g) => !g.isAll || g.valueIds.length === 0, {
+  message: "Either all, or a list of values",
+});
+
+/** Sets Visibility in every dimension at once: saved whole, or not at all. */
+export const setVisibilityRequest = z.object({ trade: grantToSet, location: grantToSet });
+export type SetVisibilityRequest = z.infer<typeof setVisibilityRequest>;
+
 /** A Participant's Visibility and the values it covers (for narrowing its Members'). */
-export const participantVisibility = z.object({ visibility, coverage: dimensionValues });
+export const participantVisibility = z.object({ visibility, covered: dimensionValues });
 export type ParticipantVisibility = z.infer<typeof participantVisibility>;
 
-/** A Project Member's Visibility, with their Participant's coverage to choose within. */
+/** A Project Member's Visibility, with the values their Participant covers to choose within. */
 export const memberVisibility = z.object({
   member: z.object({ id: z.uuid(), fullName: bilingualText }),
   visibility,

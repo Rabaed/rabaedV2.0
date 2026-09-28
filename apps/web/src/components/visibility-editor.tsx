@@ -17,8 +17,8 @@ const draftOf = (visibility: Visibility): Draft => ({
 
 /**
  * Visibility in each dimension: "all", or chosen Trades and Locations. A chosen
- * Location covers everything inside it, shown ticked and locked. `endpoint` is
- * the grant's URL, without the dimension; no endpoint means read-only.
+ * Location covers everything inside it, shown ticked and locked. Saved whole to
+ * `endpoint`, every dimension at once; no endpoint means read-only.
  */
 export function VisibilityEditor({
   options,
@@ -59,26 +59,26 @@ export function VisibilityEditor({
     setPending(true);
     setMessage(null);
     try {
-      for (const kind of dimensionKinds) {
+      const grantOf = (kind: DimensionKind) => {
         const { isAll, selected } = draft[kind];
         // Values inside a chosen Location are covered through it; store only the chosen ones.
         const implied = impliedBySelection(options[kind], selected);
-        const valueIds = isAll ? [] : [...selected].filter((id) => !implied.has(id));
-        const res = await fetch(`${endpoint}/${kind}`, {
-          method: "PUT",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ isAll, valueIds }),
-        });
-        if (!res.ok) {
-          const { error } = (await res.json().catch(() => ({}))) as { error?: string };
-          const errors: Record<string, string> = {
-            exceeds_participant: t("exceedsParticipant"),
-            forbidden: t("notAllowed"),
-            project_closed: t("projectClosed"),
-          };
-          setMessage({ kind: "error", text: errors[error ?? ""] ?? t("unavailable") });
-          return;
-        }
+        return { isAll, valueIds: isAll ? [] : [...selected].filter((id) => !implied.has(id)) };
+      };
+      const res = await fetch(endpoint, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(Object.fromEntries(dimensionKinds.map((kind) => [kind, grantOf(kind)]))),
+      });
+      if (!res.ok) {
+        const { error } = (await res.json().catch(() => ({}))) as { error?: string };
+        const errors: Record<string, string> = {
+          exceeds_participant: t("exceedsParticipant"),
+          forbidden: t("notAllowed"),
+          project_closed: t("projectClosed"),
+        };
+        setMessage({ kind: "error", text: errors[error ?? ""] ?? t("unavailable") });
+        return;
       }
       setMessage({ kind: "saved", text: t("saved") });
       router.refresh();
@@ -95,6 +95,7 @@ export function VisibilityEditor({
         {dimensionKinds.map((kind) => (
           <DimensionFieldset
             key={kind}
+            kind={kind}
             legend={t(kind === "trade" ? "trades" : "locations")}
             allLabel={allLabel[kind]}
             values={options[kind]}
@@ -124,6 +125,7 @@ export function VisibilityEditor({
 }
 
 function DimensionFieldset({
+  kind,
   legend,
   allLabel,
   values,
@@ -134,6 +136,7 @@ function DimensionFieldset({
   onAll,
   onToggle,
 }: {
+  kind: DimensionKind;
   legend: string;
   allLabel: string;
   values: DimensionValue[];
@@ -146,7 +149,7 @@ function DimensionFieldset({
 }) {
   const implied = impliedBySelection(values, draft.selected);
   return (
-    <fieldset className="space-y-2 rounded-md border border-border p-4" data-testid={`visibility-${legend}`}>
+    <fieldset className="space-y-2 rounded-md border border-border p-4" data-testid={`visibility-${kind}`}>
       <legend className="px-1 font-medium">{legend}</legend>
       <label className="flex items-center gap-2">
         <input type="checkbox" checked={draft.isAll} disabled={readOnly} onChange={(e) => onAll(e.target.checked)} />

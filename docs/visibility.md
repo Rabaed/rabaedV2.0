@@ -86,6 +86,11 @@ Setup, Project "Tower": Contractors **C1** (Electrical) and **C2** (Electrical, 
 | 20 | Rabaed Engineer opens the MAR to fix a stuck Step | Engineer | Allowed through Rabaed Admin. The read and the action are logged with a reason |
 | 21 | Weekly Step Age report | C1 PM | Lists only C1-accessible items |
 | 22 | Consultant engineer later granted Mechanical | Same engineer | Sees Mechanical items from then on, including earlier ones (access follows current Visibility, not grant date) |
+| 23 | K1's Authorized Person gives a K1 engineer a Trade K1 doesn't have | K1 Authorized Person | Rejected (V4) |
+| 24 | Project Admin narrows K1 from Tower 1 to Building A | K1 engineer who had Tower 1 | Now covers Building A only; widening K1 again doesn't widen them (V4) |
+| 25 | C1 member opens K1's Visibility, or a K1 engineer's | C1 member | 404 (V16) |
+| 26 | Project Admin (C1 Company) opens a K1 engineer's Visibility | Project Admin | 404; K1's own Participant grant is visible to them (V16) |
+| 27 | K1's Authorized Person, not a Project Member, narrows a K1 engineer | K1 Authorized Person | Sees only the Trades and Locations K1 covers, nothing else of the Project (V15, V16) |
 
 Every change to rules or channels must add or update rows here and in the test suite. A failing visibility test blocks release.
 

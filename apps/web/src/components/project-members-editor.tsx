@@ -69,19 +69,19 @@ export function ProjectMembersEditor({
                   {m.email}
                 </bdi>
               </span>
-              <span className="flex items-center gap-2">
-                <Link
-                  href={`/participants/${participantId}/members/${m.id}/visibility`}
-                  className="text-sm text-primary underline underline-offset-4"
-                >
-                  {t("visibility")}
-                </Link>
-                {canManage && (
+              {canManage && (
+                <span className="flex items-center gap-2">
+                  <Link
+                    href={`/participants/${participantId}/members/${m.id}/visibility`}
+                    className="text-sm text-primary underline underline-offset-4"
+                  >
+                    {t("visibility")}
+                  </Link>
                   <Button variant="ghost" size="sm" className="text-danger" disabled={pending} onClick={() => remove(m)}>
                     {t("remove")}
                   </Button>
-                )}
-              </span>
+                </span>
+              )}
             </li>
           ))}
         </ul>

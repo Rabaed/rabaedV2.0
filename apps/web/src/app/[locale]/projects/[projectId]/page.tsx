@@ -17,6 +17,8 @@ export default async function ProjectPage({ params }: { params: Promise<{ locale
   ]);
   if (!me) return redirect({ href: "/sign-in", locale });
   if (!project) notFound();
+  // The Authorized Person narrows Visibility for their own Company's Project Members.
+  const ownParticipant = me.member.isAuthorizedPerson ? participants?.participants.find((p) => p.isOwnCompany) : undefined;
 
   return (
     <div className="space-y-6">
@@ -69,6 +71,13 @@ export default async function ProjectPage({ params }: { params: Promise<{ locale
             <li>
               <Link href={`/projects/${project.id}/settings/visibility`} className="text-primary underline underline-offset-4">
                 {t("visibility")}
+              </Link>
+            </li>
+          )}
+          {ownParticipant && (
+            <li>
+              <Link href={`/participants/${ownParticipant.id}`} className="text-primary underline underline-offset-4">
+                {t("membersVisibility")}
               </Link>
             </li>
           )}

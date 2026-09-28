@@ -6,6 +6,10 @@ import { Link, redirect } from "@/i18n/navigation";
 import { treeOrder } from "@/lib/dimension-tree";
 import { getMe, getProject, getProjectDimensions } from "@/lib/session";
 
+// Unicode left-to-right isolate and its closing pop, for codes inside <option> text.
+const LRI = String.fromCodePoint(0x2066);
+const PDI = String.fromCodePoint(0x2069);
+
 /** Project Settings → Trades & Locations. Every Project Member sees them; a Project Admin adds them. */
 export default async function TradesLocationsPage({
   params,
@@ -19,7 +23,8 @@ export default async function TradesLocationsPage({
   if (!me) return redirect({ href: "/sign-in", locale });
   if (!project || !dimensions) notFound();
 
-  const label = (v: DimensionValue) => `${v.name[locale]} (${v.code})`;
+  // An <option> can't hold <bdi>: isolate the code left-to-right with LRI/PDI instead.
+  const label = (v: DimensionValue) => `${v.name[locale]} (${LRI}${v.code}${PDI})`;
   const locations = treeOrder(dimensions.location);
   // A Floor has nothing inside it; Zones and Buildings do.
   const parents = locations

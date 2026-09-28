@@ -1,12 +1,13 @@
 import { withMember, type Database, type Db } from "@rabaed/db";
-import type {
-  BilingualText,
-  DimensionKind,
-  DimensionValues,
-  MemberVisibility,
-  ParticipantVisibility,
-  SetVisibilityRequest,
-  Visibility,
+import {
+  dimensionKinds,
+  type BilingualText,
+  type DimensionKind,
+  type DimensionValues,
+  type MemberVisibility,
+  type ParticipantVisibility,
+  type SetVisibilityRequest,
+  type Visibility,
 } from "@rabaed/domain";
 import { sql, type Transaction } from "kysely";
 import { refusedAsForbidden } from "../db-error.ts";
@@ -123,8 +124,8 @@ async function participantVisibilityIn(trx: Trx, participantId: string): Promise
   const grants = await sql<GrantRow>`select * from app.participant_grants(${participantId}::uuid)`.execute(trx);
   const visibility = toVisibility(grants.rows);
   if (!visibility) return null;
-  const coverage = await sql<ValueRow>`select * from app.participant_coverage_values(${participantId}::uuid)`.execute(trx);
-  return { visibility, coverage: toValues(coverage.rows) };
+  const covered = await sql<ValueRow>`select * from app.participant_covered_values(${participantId}::uuid)`.execute(trx);
+  return { visibility, covered: toValues(covered.rows) };
 }
 
 /**
@@ -139,24 +140,53 @@ export function getParticipantVisibility(
   return withMember(db, memberId, (trx) => participantVisibilityIn(trx, participantId));
 }
 
-/** A Project Admin sets a Participant's Visibility in one dimension. */
+type SetRefusal = Exclude<SetVisibilityResult, { ok: true } | Forbidden>["reason"];
+
+/** An app.set_*_visibility outcome other than 'set': rolls the whole save back. */
+class Refused extends Error {
+  constructor(readonly reason: SetRefusal) {
+    super(reason);
+  }
+}
+
+/** Sets every dimension with `setOne` in one transaction: all of them, or none. */
+async function setEveryDimension(
+  db: Db,
+  memberId: string,
+  request: SetVisibilityRequest,
+  setOne: (trx: Trx, kind: DimensionKind, grant: SetVisibilityRequest[DimensionKind]) => Promise<string>,
+): Promise<SetVisibilityResult> {
+  try {
+    return await refusedAsForbidden(() =>
+      withMember(db, memberId, async (trx) => {
+        for (const kind of dimensionKinds) {
+          const outcome = await setOne(trx, kind, request[kind]);
+          if (outcome !== "set") throw new Refused(outcome as SetRefusal);
+        }
+        return { ok: true } as const;
+      }),
+    );
+  } catch (error) {
+    if (error instanceof Refused) return { ok: false, reason: error.reason };
+    throw error;
+  }
+}
+
+/** A Project Admin sets a Participant's Visibility. */
 export function setParticipantVisibility(
   db: Db,
   memberId: string,
   participantId: string,
-  kind: DimensionKind,
-  grant: SetVisibilityRequest,
+  request: SetVisibilityRequest,
   now: Date,
 ): Promise<SetVisibilityResult> {
-  return refusedAsForbidden(() =>
-    withMember(db, memberId, async (trx) => {
-      const { rows } = await sql<{ outcome: string }>`
-        select app.set_participant_visibility(
-          ${participantId}::uuid, ${kind}, ${grant.isAll}, ${grant.valueIds}::uuid[], ${now}) as outcome
-      `.execute(trx);
-      return setResult(rows[0]!.outcome);
-    }),
-  );
+  return setEveryDimension(db, memberId, request, async (trx, kind, grant) => {
+    const { rows } = await sql<{ outcome: string }>`
+      select app.set_participant_visibility(
+        ${participantId}::uuid, ${kind}, ${grant.isAll}, ${grant.valueIds}::uuid[], ${now}) as outcome
+    `.execute(trx);
+    return rows[0]!.outcome;
+  });
 }
 
 /**
@@ -184,29 +214,20 @@ export function getMemberVisibility(
   });
 }
 
-/** The Participant's Authorized Person sets a Project Member's Visibility in one dimension, within the Participant's. */
+/** The Participant's Authorized Person sets a Project Member's Visibility, within the Participant's. */
 export function setMemberVisibility(
   db: Db,
   memberId: string,
   participantId: string,
   targetId: string,
-  kind: DimensionKind,
-  grant: SetVisibilityRequest,
+  request: SetVisibilityRequest,
   now: Date,
 ): Promise<SetVisibilityResult> {
-  return refusedAsForbidden(() =>
-    withMember(db, memberId, async (trx) => {
-      const { rows } = await sql<{ outcome: string }>`
-        select app.set_member_visibility(
-          ${participantId}::uuid, ${targetId}::uuid, ${kind}, ${grant.isAll}, ${grant.valueIds}::uuid[], ${now}) as outcome
-      `.execute(trx);
-      return setResult(rows[0]!.outcome);
-    }),
-  );
-}
-
-function setResult(outcome: string): SetVisibilityResult {
-  return outcome === "set"
-    ? { ok: true }
-    : { ok: false, reason: outcome as Exclude<SetVisibilityResult, { ok: true } | Forbidden>["reason"] };
+  return setEveryDimension(db, memberId, request, async (trx, kind, grant) => {
+    const { rows } = await sql<{ outcome: string }>`
+      select app.set_member_visibility(
+        ${participantId}::uuid, ${targetId}::uuid, ${kind}, ${grant.isAll}, ${grant.valueIds}::uuid[], ${now}) as outcome
+    `.execute(trx);
+    return rows[0]!.outcome;
+  });
 }

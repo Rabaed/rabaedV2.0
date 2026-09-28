@@ -295,7 +295,7 @@ describe("the Visibility read functions", () => {
     const tableRows = await withMember(app, ap, (trx) => sql`select id from dimension_value`.execute(trx));
     expect(tableRows.rows).toEqual([]);
     const covered = await withMember(app, ap, (trx) =>
-      sql<{ id: string }>`select id from app.participant_coverage_values(${consultantParticipant}::uuid) where kind = 'trade'`
+      sql<{ id: string }>`select id from app.participant_covered_values(${consultantParticipant}::uuid) where kind = 'trade'`
         .execute(trx)
         .then((r) => r.rows.map((x) => x.id)),
     );

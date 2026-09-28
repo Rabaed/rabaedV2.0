@@ -38,11 +38,17 @@ async function created(res: Promise<{ statusCode: number; json(): { id: string }
   return r.json().id;
 }
 
-const setParticipantVisibility = (by: Caller, participantId: string, kind: string, body: unknown) =>
-  by.request("PUT", `/v1/participants/${participantId}/visibility/${kind}`, body);
+type Grant = { isAll: boolean; valueIds: string[] };
+const none: Grant = { isAll: false, valueIds: [] };
+const all: Grant = { isAll: true, valueIds: [] };
+const only = (...valueIds: string[]): Grant => ({ isAll: false, valueIds });
 
-const setMemberVisibility = (by: Caller, memberId: string, kind: string, body: unknown) =>
-  by.request("PUT", `/v1/participants/${consultantParticipantId}/members/${memberId}/visibility/${kind}`, body);
+/** Sets a Visibility whole: every dimension at once. */
+const setParticipantVisibility = (by: Caller, participantId: string, visibility: { trade: Grant; location: Grant }) =>
+  by.request("PUT", `/v1/participants/${participantId}/visibility`, visibility);
+
+const setMemberVisibility = (by: Caller, memberId: string, visibility: { trade: Grant; location: Grant }) =>
+  by.request("PUT", `/v1/participants/${consultantParticipantId}/members/${memberId}/visibility`, visibility);
 
 const ids = (values: DimensionValue[]) => values.map((v) => v.id).sort();
 const sorted = (...values: string[]) => [...values].sort();
@@ -115,94 +121,90 @@ describe("a Participant's Visibility", () => {
   it("covers nothing until a Project Admin grants it", async () => {
     const res = await consultant.caller.get(`/v1/participants/${consultantParticipantId}/visibility`);
     expect(res.statusCode).toBe(200);
-    expect(res.json().visibility).toEqual({
-      trade: { isAll: false, valueIds: [] },
-      location: { isAll: false, valueIds: [] },
-    });
+    expect(res.json().visibility).toEqual({ trade: none, location: none });
   });
 
   it("granting Tower 1 covers all its Buildings and Floors", async () => {
-    const put = await setParticipantVisibility(host.caller, consultantParticipantId, "location", {
-      isAll: false,
-      valueIds: [loc.tower1],
-    });
+    const put = await setParticipantVisibility(host.caller, consultantParticipantId, { trade: none, location: only(loc.tower1) });
     expect(put.statusCode, put.body).toBe(204);
     const res = await host.caller.get(`/v1/participants/${consultantParticipantId}/visibility`);
-    expect(res.json().visibility.location).toEqual({ isAll: false, valueIds: [loc.tower1] });
-    expect(ids(res.json().coverage.location)).toEqual(sorted(loc.tower1, loc.buildingA, loc.floor1, loc.buildingB));
+    expect(res.json().visibility.location).toEqual(only(loc.tower1));
+    expect(ids(res.json().covered.location)).toEqual(sorted(loc.tower1, loc.buildingA, loc.floor1, loc.buildingB));
 
     // And so does the engineer given all of their Participant's Locations.
-    expect((await setMemberVisibility(consultant.caller, engineer.member.id, "location", { isAll: true, valueIds: [] })).statusCode).toBe(204);
+    expect((await setMemberVisibility(consultant.caller, engineer.member.id, { trade: none, location: all })).statusCode).toBe(204);
     const mine = (await engineer.caller.get(`/v1/projects/${projectId}/visibility`)).json();
     expect(ids(mine.location)).toEqual(sorted(loc.tower1, loc.buildingA, loc.floor1, loc.buildingB));
     expect(mine.trade).toEqual([]);
   });
 
   it("is granted only by a Project Admin", async () => {
-    const body = { isAll: true, valueIds: [] };
-    expect((await setParticipantVisibility(hostMember.caller, consultantParticipantId, "trade", body)).statusCode).toBe(403);
-    expect((await setParticipantVisibility(consultant.caller, consultantParticipantId, "trade", body)).statusCode).toBe(404);
-    expect((await setParticipantVisibility(engineer.caller, consultantParticipantId, "trade", body)).statusCode).toBe(403);
+    const body = { trade: all, location: all };
+    expect((await setParticipantVisibility(hostMember.caller, consultantParticipantId, body)).statusCode).toBe(403);
+    expect((await setParticipantVisibility(consultant.caller, consultantParticipantId, body)).statusCode).toBe(404);
+    expect((await setParticipantVisibility(engineer.caller, consultantParticipantId, body)).statusCode).toBe(403);
   });
 
-  it("rejects values that aren't the dimension's", async () => {
-    const res = await setParticipantVisibility(host.caller, consultantParticipantId, "trade", {
-      isAll: false,
-      valueIds: [loc.tower1],
+  it("rejects values that aren't the dimension's, and then saves nothing", async () => {
+    const res = await setParticipantVisibility(host.caller, consultantParticipantId, {
+      trade: all,
+      location: only(trade.electrical),
     });
     expect(res.statusCode).toBe(422);
     expect(res.json()).toEqual({ error: "value_not_found" });
-    expect((await setParticipantVisibility(host.caller, consultantParticipantId, "zone", { isAll: true, valueIds: [] })).statusCode).toBe(404);
+    // The Trades part was valid, but the whole save was rolled back.
+    const after = await host.caller.get(`/v1/participants/${consultantParticipantId}/visibility`);
+    expect(after.json().visibility).toEqual({ trade: none, location: only(loc.tower1) });
+  });
+
+  it("must give every dimension", async () => {
+    expect((await setParticipantVisibility(host.caller, consultantParticipantId, { trade: all } as never)).statusCode).toBe(400);
   });
 });
 
 describe("a Member's Visibility", () => {
   beforeAll(async () => {
-    const put = await setParticipantVisibility(host.caller, consultantParticipantId, "trade", {
-      isAll: false,
-      valueIds: [trade.electrical],
+    const put = await setParticipantVisibility(host.caller, consultantParticipantId, {
+      trade: only(trade.electrical),
+      location: only(loc.tower1),
     });
     expect(put.statusCode).toBe(204);
   });
 
   it("can't include a Trade or Location the Participant doesn't have (V4)", async () => {
-    for (const [kind, valueIds] of [
-      ["trade", [trade.mechanical]],
-      ["location", [loc.tower2]],
-    ] as const) {
-      const res = await setMemberVisibility(consultant.caller, engineer.member.id, kind, { isAll: false, valueIds });
+    for (const visibility of [
+      { trade: only(trade.mechanical), location: all },
+      { trade: all, location: only(loc.tower2) },
+    ]) {
+      const res = await setMemberVisibility(consultant.caller, engineer.member.id, visibility);
       expect(res.statusCode).toBe(422);
       expect(res.json()).toEqual({ error: "exceeds_participant" });
     }
   });
 
   it("narrows within the Participant's", async () => {
-    expect(
-      (await setMemberVisibility(consultant.caller, engineer.member.id, "location", { isAll: false, valueIds: [loc.buildingA] })).statusCode,
-    ).toBe(204);
-    expect(
-      (await setMemberVisibility(consultant.caller, engineer.member.id, "trade", { isAll: false, valueIds: [trade.electrical] })).statusCode,
-    ).toBe(204);
+    const put = await setMemberVisibility(consultant.caller, engineer.member.id, {
+      trade: only(trade.electrical),
+      location: only(loc.buildingA),
+    });
+    expect(put.statusCode).toBe(204);
     const res = await consultant.caller.get(`/v1/participants/${consultantParticipantId}/members/${engineer.member.id}/visibility`);
     expect(res.statusCode).toBe(200);
-    expect(res.json().visibility).toEqual({
-      trade: { isAll: false, valueIds: [trade.electrical] },
-      location: { isAll: false, valueIds: [loc.buildingA] },
-    });
+    expect(res.json().visibility).toEqual({ trade: only(trade.electrical), location: only(loc.buildingA) });
     // The Authorized Person, not on the Project, still sees what the Participant covers, to choose from.
-    expect(ids(res.json().participant.coverage.trade)).toEqual([trade.electrical]);
+    expect(ids(res.json().participant.covered.trade)).toEqual([trade.electrical]);
     const mine = (await engineer.caller.get(`/v1/projects/${projectId}/visibility`)).json();
     expect(ids(mine.location)).toEqual(sorted(loc.buildingA, loc.floor1));
     expect(ids(mine.trade)).toEqual([trade.electrical]);
   });
 
   it("is granted only by the Participant's own Authorized Person", async () => {
-    const body = { isAll: true, valueIds: [] };
-    expect((await setMemberVisibility(engineer.caller, engineer.member.id, "trade", body)).statusCode).toBe(403);
+    const body = { trade: all, location: all };
+    expect((await setMemberVisibility(engineer.caller, engineer.member.id, body)).statusCode).toBe(403);
     // The Project Admin of another Company: not theirs, so not found.
-    expect((await setMemberVisibility(host.caller, engineer.member.id, "trade", body)).statusCode).toBe(404);
+    expect((await setMemberVisibility(host.caller, engineer.member.id, body)).statusCode).toBe(404);
     const notOnProject = await api.inviteMember(consultant.caller);
-    const res = await setMemberVisibility(consultant.caller, notOnProject.id, "trade", body);
+    const res = await setMemberVisibility(consultant.caller, notOnProject.id, body);
     expect(res.statusCode).toBe(404);
     expect(res.json()).toEqual({ error: "member_not_found" });
   });
@@ -210,7 +212,7 @@ describe("a Member's Visibility", () => {
 
 describe("other Participants' grants", () => {
   beforeAll(async () => {
-    const put = await setParticipantVisibility(host.caller, hostParticipantId, "trade", { isAll: true, valueIds: [] });
+    const put = await setParticipantVisibility(host.caller, hostParticipantId, { trade: all, location: none });
     expect(put.statusCode).toBe(204);
   });
 
@@ -230,4 +232,3 @@ describe("other Participants' grants", () => {
     expect(ids(mine.trade)).toEqual([trade.electrical]);
   });
 });
-
