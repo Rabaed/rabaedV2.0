@@ -4,15 +4,17 @@ import { getTranslations, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
 import { AgeDots } from "@/components/age-dots";
 import { StagePill } from "@/components/stage-pill";
+import { WorkItemActions } from "@/components/work-item-actions";
+import { WorkItemHistory } from "@/components/work-item-history";
 import { Link, redirect } from "@/i18n/navigation";
-import { getMe, getWorkItem } from "@/lib/session";
+import { getMe, getWorkItem, getWorkItemHistory } from "@/lib/session";
 
 /** One Work Item. One the Member can't see is not found, exactly like one that doesn't exist. */
 export default async function WorkItemPage({ params }: { params: Promise<{ locale: Locale; workItemId: string }> }) {
   const { locale, workItemId } = await params;
   setRequestLocale(locale);
   const t = await getTranslations("workItems");
-  const [me, item] = await Promise.all([getMe(), getWorkItem(workItemId)]);
+  const [me, item, history] = await Promise.all([getMe(), getWorkItem(workItemId), getWorkItemHistory(workItemId)]);
   if (!me) return redirect({ href: "/sign-in", locale });
   if (!item) notFound();
 
@@ -29,6 +31,8 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
           <span className="text-sm text-muted">{t("stepAge", { weeks: item.stepAgeWeeks })}</span>
         </div>
       </div>
+
+      <WorkItemActions workItemId={item.id} actions={item.actions} locale={locale} />
 
       <dl className="grid grid-cols-[max-content_1fr] gap-x-6 gap-y-2">
         <dt className="text-muted">{t("fields.type")}</dt>
@@ -69,6 +73,8 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
           <p className="text-muted">{t("noDescription")}</p>
         )}
       </section>
+
+      {history && <WorkItemHistory events={history.events} locale={locale} />}
     </div>
   );
 }

@@ -11,6 +11,7 @@ import type {
   ProjectSummary,
   SignedInMember,
   WorkItemDetail,
+  WorkItemHistory,
   WorkItemList,
 } from "@rabaed/domain";
 import { cookies } from "next/headers";
@@ -97,4 +98,9 @@ export function getWorkItems(projectId: string): Promise<WorkItemList | null> {
 /** One Work Item; null if the signed-in Member can't see it (exactly as if it didn't exist). */
 export function getWorkItem(workItemId: string): Promise<WorkItemDetail | null> {
   return apiGet<WorkItemDetail>(`/v1/work-items/${encodeURIComponent(workItemId)}`);
+}
+
+/** A Work Item's history as the signed-in Member may see it; null if they can't see the item. */
+export function getWorkItemHistory(workItemId: string): Promise<WorkItemHistory | null> {
+  return apiGet<WorkItemHistory>(`/v1/work-items/${encodeURIComponent(workItemId)}/history`);
 }

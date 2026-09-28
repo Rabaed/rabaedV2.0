@@ -36,7 +36,8 @@ export default async function ParticipantPage({
       </div>
       <ProjectMembersEditor
         participantId={data.participant.id}
-        members={data.members.map((m) => ({ id: m.id, name: m.fullName[locale], email: m.email }))}
+        members={data.members.map((m) => ({ id: m.id, name: m.fullName[locale], email: m.email, positions: m.positions }))}
+        positions={data.positions.map((p) => ({ key: p.key, name: p.name[locale] }))}
         candidates={candidates}
       />
     </div>

@@ -50,6 +50,33 @@ export const workItemList = z.object({
 });
 export type WorkItemList = z.infer<typeof workItemList>;
 
+/** A Transition's kind (workflow-engine.md §1). */
+export const transitionKinds = ["send", "submit", "return", "close", "cancel"] as const;
+
+/**
+ * The holder of the current Step takes one of its Transitions. The key makes a
+ * repeated request (a double-click, a retry) apply only once.
+ */
+export const takeTransitionRequest = z.object({
+  transition: z.string().regex(/^[a-z][a-z0-9_]*$/),
+  /** Required for a Return. */
+  reason: z.string().trim().max(2000).default(""),
+  idempotencyKey: z.uuid(),
+});
+export type TakeTransitionRequest = z.input<typeof takeTransitionRequest>;
+
+/** Exactly what the viewer may press on the item now. */
+export const workItemActions = z.object({
+  /** Take the pooled Step. */
+  claim: z.boolean(),
+  /** Give the Step they claimed back to its pool. */
+  release: z.boolean(),
+  transitions: z.array(
+    z.object({ key: z.string(), label: bilingualText, kind: z.enum(transitionKinds), needsReason: z.boolean() }),
+  ),
+});
+export type WorkItemActions = z.infer<typeof workItemActions>;
+
 /** One Work Item, for someone who can see it. */
 export const workItemDetail = workItemSummary.extend({
   description: z.string(),
@@ -61,6 +88,8 @@ export const workItemDetail = workItemSummary.extend({
    */
   heldBy: z.object({ companyName: bilingualText, memberName: bilingualText.nullable() }).nullable(),
   createdAt: z.iso.datetime(),
+  /** What the viewer may press now. */
+  actions: workItemActions,
 });
 export type WorkItemDetail = z.infer<typeof workItemDetail>;
 
@@ -75,3 +104,42 @@ export function stepAgeWeeks(enteredAt: Date, now: Date): number {
 export function stepAgeDots(weeks: number): number {
   return Math.min(Math.max(weeks, 1), 4);
 }
+
+export const workItemEventTypes = [
+  "created",
+  "transition",
+  "recommend_code",
+  "issue_code",
+  "assigned",
+  "claimed",
+  "released",
+  "vacated",
+  "admin_reassigned",
+  "admin_reset",
+  "internal_note",
+  "cancelled",
+] as const;
+
+/**
+ * The item's history as the viewer may see it: shared events, and internal ones
+ * only within the viewer's own Participant (visibility.md V5).
+ */
+export const workItemHistory = z.object({
+  events: z.array(
+    z.object({
+      seq: z.number().int().positive(),
+      type: z.enum(workItemEventTypes),
+      at: z.iso.datetime(),
+      audience: z.enum(["shared", "internal"]),
+      /** Another Company by its name only; a person only within the viewer's own (V14). */
+      by: z.object({ companyName: bilingualText.nullable(), memberName: bilingualText.nullable() }),
+      transition: bilingualText.nullable(),
+      fromStep: bilingualText.nullable(),
+      toStep: bilingualText.nullable(),
+      reason: z.string().nullable(),
+      /** Set on the event that assigned it. */
+      documentNumber: z.string().nullable(),
+    }),
+  ),
+});
+export type WorkItemHistory = z.infer<typeof workItemHistory>;

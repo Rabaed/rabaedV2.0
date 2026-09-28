@@ -35,10 +35,29 @@ export type CompanyParticipations = z.infer<typeof companyParticipations>;
 /** A Participant's Project Members; private to that Participant's Company. */
 export const participantMembers = z.object({
   participant: companyParticipation,
-  members: z.array(z.object({ id: z.uuid(), email: z.string(), fullName: bilingualText })),
+  members: z.array(
+    z.object({
+      id: z.uuid(),
+      email: z.string(),
+      fullName: bilingualText,
+      /** Keys of the Positions they hold on this Project. */
+      positions: z.array(z.string()),
+    }),
+  ),
+  /** The Positions of the Participant's base role, to choose from. */
+  positions: z.array(z.object({ key: z.string(), name: bilingualText })),
 });
 export type ParticipantMembers = z.infer<typeof participantMembers>;
 
 /** The Participant's Authorized Person adds a Member of their own Company to the Project. */
 export const addProjectMemberRequest = z.object({ memberId: z.uuid() });
 export type AddProjectMemberRequest = z.infer<typeof addProjectMemberRequest>;
+
+/**
+ * The Participant's Authorized Person sets a Project Member's Positions (e.g.
+ * Engineer, Project Manager): what they may do on the Project's Work Items.
+ */
+export const setMemberPositionsRequest = z.object({
+  positions: z.array(z.string().regex(/^[a-z][a-z0-9_]*$/)).max(10),
+});
+export type SetMemberPositionsRequest = z.infer<typeof setMemberPositionsRequest>;

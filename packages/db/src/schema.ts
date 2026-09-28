@@ -109,6 +109,8 @@ export interface ParticipantTable {
   project_id: string;
   company_id: string;
   project_role_id: string;
+  /** Its place on the Project (1, 2, 3…), set by a trigger. */
+  ordinal: Generated<number>;
   status: Generated<"active" | "withdrawn">;
   withdrawn_at: Timestamp | null;
   created_at: Generated<Timestamp>;
@@ -327,6 +329,30 @@ export interface WorkItemEventTable {
   created_at: Generated<Timestamp>;
 }
 
+/** A Rabaed Default Position of one base role. */
+export interface PositionTable {
+  id: Generated<string>;
+  owner_kind: "rabaed";
+  base_role: "contractor" | "consultant" | "owner" | "owner_representative";
+  key: string;
+  name: ColumnType<Bilingual, string, string>;
+  sort: number;
+  created_at: Generated<Timestamp>;
+}
+
+export interface PositionPermissionTable {
+  position_id: string;
+  module_key: string;
+  permission: string;
+}
+
+export interface ProjectMemberPositionTable {
+  project_id: string;
+  project_member_id: string;
+  position_id: string;
+  created_at: Generated<Timestamp>;
+}
+
 export interface Database {
   rabaed_engineer: RabaedEngineerTable;
   company: CompanyTable;
@@ -355,4 +381,7 @@ export interface Database {
   step_assignment: StepAssignmentTable;
   work_item_access: WorkItemAccessTable;
   work_item_event: WorkItemEventTable;
+  position: PositionTable;
+  position_permission: PositionPermissionTable;
+  project_member_position: ProjectMemberPositionTable;
 }

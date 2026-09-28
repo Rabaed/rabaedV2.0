@@ -133,7 +133,7 @@ describe("the Authorized Person of a Participant", () => {
     expect(project.json()).toMatchObject({ projectRole: { baseRole: "consultant" }, isProjectAdmin: false });
 
     const list = await consultant.caller.get(`/v1/participants/${participantId}/members`);
-    expect(list.json().members).toEqual([{ id: member.id, email: member.email, fullName: { en: "Test Member", ar: "عضو الاختبار" } }]);
+    expect(list.json().members).toEqual([{ id: member.id, email: member.email, fullName: { en: "Test Member", ar: "عضو الاختبار" }, positions: [] }]);
   });
 
   it("can add themselves", async () => {

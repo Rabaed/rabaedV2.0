@@ -7,18 +7,22 @@ import { Label } from "@/components/ui/label";
 import { Link, useRouter } from "@/i18n/navigation";
 
 type Person = { id: string; name: string };
+type Position = { key: string; name: string };
 
 /**
- * A Participant's Project Members. `candidates` (the Company's Members not yet on
- * the Project) is given only to the Authorized Person, who alone adds and removes.
+ * A Participant's Project Members and their Positions. `candidates` (the
+ * Company's Members not yet on the Project) is given only to the Authorized
+ * Person, who alone adds, removes and gives Positions.
  */
 export function ProjectMembersEditor({
   participantId,
   members,
+  positions,
   candidates,
 }: {
   participantId: string;
-  members: (Person & { email: string })[];
+  members: (Person & { email: string; positions: string[] })[];
+  positions: Position[];
   candidates: Person[] | null;
 }) {
   const t = useTranslations("participants");
@@ -27,7 +31,7 @@ export function ProjectMembersEditor({
   const [error, setError] = useState(false);
   const canManage = candidates !== null;
 
-  async function send(method: "POST" | "DELETE", path: string, body?: unknown) {
+  async function send(method: "POST" | "PUT" | "DELETE", path: string, body?: unknown) {
     setPending(true);
     setError(false);
     try {
@@ -51,6 +55,11 @@ export function ProjectMembersEditor({
     if (memberId) void send("POST", "", { memberId });
   }
 
+  function togglePosition(member: Person & { positions: string[] }, key: string, on: boolean) {
+    const next = on ? [...member.positions, key] : member.positions.filter((p) => p !== key);
+    void send("PUT", `/${member.id}/positions`, { positions: next });
+  }
+
   function remove(member: Person) {
     if (window.confirm(t("confirmRemove", { name: member.name }))) void send("DELETE", `/${member.id}`);
   }
@@ -63,11 +72,37 @@ export function ProjectMembersEditor({
         <ul className="divide-y divide-border border-y border-border" data-testid="project-members">
           {members.map((m) => (
             <li key={m.id} className="flex flex-wrap items-center justify-between gap-4 py-3">
-              <span>
-                <span className="font-medium">{m.name}</span>{" "}
-                <bdi dir="ltr" className="text-muted">
-                  {m.email}
-                </bdi>
+              <span className="space-y-1">
+                <span className="block">
+                  <span className="font-medium">{m.name}</span>{" "}
+                  <bdi dir="ltr" className="text-muted">
+                    {m.email}
+                  </bdi>
+                </span>
+                {canManage ? (
+                  <fieldset className="flex flex-wrap gap-4 text-sm">
+                    <legend className="sr-only">{t("positions")}</legend>
+                    {positions.map((p) => (
+                      <label key={p.key} className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          className="size-4 accent-primary"
+                          checked={m.positions.includes(p.key)}
+                          disabled={pending}
+                          onChange={(e) => togglePosition(m, p.key, e.target.checked)}
+                        />
+                        {p.name}
+                      </label>
+                    ))}
+                  </fieldset>
+                ) : (
+                  <span className="block text-sm text-muted">
+                    {positions
+                      .filter((p) => m.positions.includes(p.key))
+                      .map((p) => p.name)
+                      .join(" · ")}
+                  </span>
+                )}
               </span>
               {canManage && (
                 <span className="flex items-center gap-2">
