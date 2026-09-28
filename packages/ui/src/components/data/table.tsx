@@ -1,4 +1,6 @@
-import type { ComponentProps, ReactNode } from "react";
+"use client";
+
+import { useEffect, useRef, useState, type ComponentProps, type ReactNode, type RefObject } from "react";
 import { cn } from "../../lib/cn.ts";
 import { focusRing } from "../form/control-styles.ts";
 import { Icon } from "../icon/icon.tsx";
@@ -15,16 +17,20 @@ export type TableProps = ComponentProps<"table"> & {
 /**
  * A data table with real table semantics (table, row, column header, cell),
  * inside a named region that scrolls when the table is wider or taller than
- * its space. The region takes keyboard focus so it can be scrolled without a
- * mouse; controls in the table (sort buttons, checkboxes, links) follow in Tab
- * order. Columns run in the reading direction, so they mirror in Arabic.
+ * its space. While it scrolls, the region takes keyboard focus so it can be
+ * scrolled without a mouse; controls in the table (sort buttons, checkboxes,
+ * links) follow in Tab order. Columns run in the reading direction, so they mirror in Arabic.
  */
 export function Table({ label, stickyHeader = false, containerClassName, className, children, ...props }: TableProps) {
+  const region = useRef<HTMLDivElement>(null);
+  const scrollable = useScrollable(region);
   return (
     <div
+      ref={region}
       role="region"
       aria-label={label}
-      tabIndex={0}
+      // A tab stop only where there is something to scroll.
+      tabIndex={scrollable ? 0 : undefined}
       data-sticky-header={stickyHeader || undefined}
       className={cn("group/table overflow-auto rounded-sm border border-border bg-surface", focusRing, containerClassName)}
     >
@@ -34,6 +40,23 @@ export function Table({ label, stickyHeader = false, containerClassName, classNa
       </table>
     </div>
   );
+}
+
+/** Whether the element's content overflows it, kept up to date as either resizes. */
+function useScrollable(ref: RefObject<HTMLElement | null>) {
+  const [scrollable, setScrollable] = useState(false);
+  useEffect(() => {
+    const element = ref.current;
+    if (!element) return;
+    const measure = () =>
+      setScrollable(element.scrollWidth > element.clientWidth || element.scrollHeight > element.clientHeight);
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    for (const child of element.children) observer.observe(child);
+    measure();
+    return () => observer.disconnect();
+  }, [ref]);
+  return scrollable;
 }
 
 export function TableHeader({ className, ...props }: ComponentProps<"thead">) {
@@ -67,11 +90,14 @@ export function TableRow({ selected = false, className, ...props }: TableRowProp
 type Align = "start" | "center" | "end";
 const alignClass: Record<Align, string> = { start: "text-start", center: "text-center", end: "text-end" };
 
-export type TableSort = "ascending" | "descending" | "none";
-
-export type TableHeadProps = Omit<ComponentProps<"th">, "align"> & {
+type AlignProp = {
   /** `end` for numbers, so they line up; it mirrors in Arabic. */
   align?: Align;
+};
+
+export type TableSort = "ascending" | "descending" | "none";
+
+export type TableHeadProps = Omit<ComponentProps<"th">, "align"> & AlignProp & {
   /**
    * Makes the column sortable: the header becomes a button, and `aria-sort`
    * tells screen readers the column's current order. `none` when the table is
@@ -104,7 +130,7 @@ export function TableHead({ align = "start", sort, onSort, className, children, 
           onClick={onSort}
           className={cn(
             "-mx-1 inline-flex items-center gap-1 rounded-xs px-1 py-0.5 font-semibold hover:text-text",
-            "pointer-coarse:min-h-11",
+            "pointer-coarse:min-h-11 pointer-coarse:min-w-11",
             sort !== "none" && "text-text",
             focusRing,
           )}
@@ -119,10 +145,7 @@ export function TableHead({ align = "start", sort, onSort, className, children, 
   );
 }
 
-export type TableCellProps = Omit<ComponentProps<"td">, "align"> & {
-  /** `end` for numbers, so they line up; it mirrors in Arabic. */
-  align?: Align;
-};
+export type TableCellProps = Omit<ComponentProps<"td">, "align"> & AlignProp;
 
 export function TableCell({ align = "start", className, ...props }: TableCellProps) {
   return (

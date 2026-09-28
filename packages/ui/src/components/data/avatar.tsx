@@ -3,8 +3,8 @@
 import { useState } from "react";
 import { cn } from "../../lib/cn.ts";
 import type { Tone } from "../../tokens/themes.ts";
-import { toneClasses } from "./badge.tsx";
 import { initials } from "./initials.ts";
+import { toneClasses } from "./tone.ts";
 
 // A person's initials sit on a tint picked from their name, so the same person always gets the same one.
 const personTones: Tone[] = ["brand", "info", "success", "warning", "neutral"];

@@ -5,12 +5,12 @@ import { toneKeys } from "../../tokens/themes.ts";
 import { Badge } from "./badge.tsx";
 
 const labels = {
-  neutral: { en: "Draft", ar: "مسودة" },
+  neutral: { en: "Read-only", ar: "للقراءة فقط" },
   brand: { en: "Contractor Engineer", ar: "مهندس المقاول" },
-  info: { en: "In review", ar: "قيد المراجعة" },
-  success: { en: "Closed", ar: "مغلق" },
-  warning: { en: "On hold", ar: "معلّق" },
-  danger: { en: "Rejected", ar: "مرفوض" },
+  info: { en: "New", ar: "جديد" },
+  success: { en: "Signed", ar: "موقّع" },
+  warning: { en: "Unsaved changes", ar: "تغييرات غير محفوظة" },
+  danger: { en: "Removed", ar: "محذوف" },
 };
 
 const meta = {

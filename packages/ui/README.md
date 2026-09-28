@@ -139,7 +139,7 @@ Every control sits in a `Field`, which gives it a label, optional help text, the
 </Table>
 ```
 
-- **Sorting**: a column with `sort` (`ascending`, `descending` or `none`) and `onSort` gets a sort button and `aria-sort`, which screen readers announce. The app sorts the rows and decides the next order.
+- **Sorting**: a column with `sort` (`ascending`, `descending` or `none`) and `onSort` gets a sort button, and `aria-sort` on the column header, which screen readers read with the header (the WAI-ARIA sortable table pattern). The app sorts the rows and decides the next order.
 - **Selection**: put a `Checkbox` named after the row (e.g. its Document Number) in the first cell and mark the row `selected`; a header checkbox selects all (`"indeterminate"` when some are).
 - **Alignment**: `align="end"` for numbers, so they line up with tabular digits; columns and alignment mirror in Arabic.
 - **Tabs**: name the list (`<TabsList aria-label={t("project")}>`); a trigger takes an `icon` and a `count` (pass it formatted with `formatNumber`).

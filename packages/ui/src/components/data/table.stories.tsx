@@ -1,7 +1,7 @@
 import { formatNumber, type Locale } from "@rabaed/domain";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { useState, type ReactNode } from "react";
-import { expect, userEvent, within } from "storybook/test";
+import { expect, userEvent, waitFor, within } from "storybook/test";
 import { expectTabFocusRing, expectTouchTarget, phone, press } from "../../storybook/form.ts";
 import { storyLocale, storyText } from "../../storybook/locale.ts";
 import { Button } from "../button/button.tsx";
@@ -99,9 +99,8 @@ type PlayContext = Parameters<NonNullable<Story["play"]>>[0];
 const table = (context: PlayContext) => context.canvas.getByRole("table", { name: storyText(context, copy.label) });
 
 /**
- * Real table roles: a named table, column headers and cells. The table's
- * region takes keyboard focus, so a table wider than the screen can be
- * scrolled with the arrow keys.
+ * Real table roles: a named table, column headers and cells. The table fits,
+ * so its region is not a tab stop (see StickyHeader and Phone for one that scrolls).
  */
 export const Default: Story = {
   play: async (context) => {
@@ -110,7 +109,7 @@ export const Default: Story = {
     );
     await expect(within(table(context)).getAllByRole("row")).toHaveLength(submittals.length + 1);
     await expect(context.canvas.getByRole("cell", { name: storyText(context, submittals[1]!.title) })).toBeVisible();
-    await expectTabFocusRing(context.canvas.getByRole("region", { name: storyText(context, copy.label) }));
+    await expect(context.canvas.getByRole("region", { name: storyText(context, copy.label) })).not.toHaveAttribute("tabindex");
   },
 };
 
@@ -299,7 +298,10 @@ const manyRows = Array.from({ length: 12 }, (_, index) => ({
   number: `TWR-TMC-EL-MAR-${String(index + 1).padStart(3, "0")}`,
 }));
 
-/** A sticky header stays in view while the rows scroll inside the table's region. */
+/**
+ * A sticky header stays in view while the rows scroll inside the table's
+ * region. The region scrolls, so it takes keyboard focus: the arrow keys scroll it.
+ */
 export const StickyHeader: Story = {
   args: { stickyHeader: true, containerClassName: "max-h-72" },
   render: (args, context) => {
@@ -324,6 +326,8 @@ export const StickyHeader: Story = {
   play: async (context) => {
     const region = context.canvas.getByRole("region", { name: storyText(context, copy.label) });
     await expect(region.scrollHeight).toBeGreaterThan(region.clientHeight);
+    await waitFor(() => expect(region).toHaveAttribute("tabindex", "0"));
+    await expectTabFocusRing(region);
     region.scrollTop = region.scrollHeight;
     await expect(region.scrollTop).toBeGreaterThan(0);
     const header = context.canvas.getAllByRole("columnheader")[0]!.getBoundingClientRect();
@@ -332,13 +336,23 @@ export const StickyHeader: Story = {
   },
 };
 
-/** On a phone: the table scrolls sideways in its region, and sort buttons and checkboxes are 44px touch targets. */
+/** On a phone: the table scrolls sideways in its region (a tab stop), and checkboxes are 44px touch targets. */
 export const Phone: Story = {
   parameters: phone,
   render: (_args, context) => <SelectableTable context={context} />,
   play: async (context) => {
     const region = context.canvas.getByRole("region", { name: storyText(context, copy.label) });
     await expect(region.scrollWidth).toBeGreaterThan(region.clientWidth);
+    await waitFor(() => expect(region).toHaveAttribute("tabindex", "0"));
     for (const checkbox of context.canvas.getAllByRole("checkbox")) await expectTouchTarget(checkbox);
+  },
+};
+
+/** On a phone: sort buttons are 44px touch targets. */
+export const PhoneSortable: Story = {
+  parameters: phone,
+  render: (_args, context) => <SortableTable context={context} />,
+  play: async (context) => {
+    for (const button of context.canvas.getAllByRole("button")) await expectTouchTarget(button);
   },
 };

@@ -4,6 +4,7 @@ import * as TabsPrimitive from "@radix-ui/react-tabs";
 import type { ComponentProps, ReactNode } from "react";
 import { cn } from "../../lib/cn.ts";
 import { focusRing } from "../form/control-styles.ts";
+import { toneClasses } from "../data/tone.ts";
 import { Icon, type IconName } from "../icon/icon.tsx";
 
 /**
@@ -58,7 +59,9 @@ export function TabsTrigger({ icon, count, className, children, ...props }: Tabs
         <span
           className={cn(
             "rounded-full px-2 text-caption font-semibold",
-            "bg-neutral-tint text-neutral-fg group-data-[state=active]:bg-brand-tint group-data-[state=active]:text-brand-fg",
+            toneClasses.neutral,
+            // The brand tone on the selected tab.
+            "group-data-[state=active]:bg-brand-tint group-data-[state=active]:text-brand-fg",
           )}
         >
           {/* A space, so the name reads "Submittals 231", not "Submittals231". */}

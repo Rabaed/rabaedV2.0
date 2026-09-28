@@ -5,7 +5,7 @@ import { storyText } from "../../storybook/locale.ts";
 import { Avatar, CompanyChip } from "./avatar.tsx";
 
 const people = {
-  mohamed: { en: "Mohamed Alhalees", ar: "محمد الحليس" },
+  faisal: { en: "Faisal Al Harbi", ar: "فيصل الحربي" },
   hala: { en: "Hala Abdullah", ar: "هالة عبدالله" },
   nasser: { en: "Nasser Al Qahtani", ar: "ناصر القحطاني" },
 };
@@ -24,14 +24,14 @@ type Story = StoryObj<typeof meta>;
 export const Initials: Story = {
   render: (args, context) => (
     <div className="flex items-center gap-3">
-      <Avatar {...args} name={storyText(context, people.mohamed)} size="sm" />
+      <Avatar {...args} name={storyText(context, people.faisal)} size="sm" />
       <Avatar {...args} name={storyText(context, people.hala)} size="md" />
       <Avatar {...args} name={storyText(context, people.nasser)} size="lg" />
     </div>
   ),
   play: async (context) => {
-    const avatar = context.canvas.getByRole("img", { name: storyText(context, people.mohamed) });
-    await expect(avatar).toHaveTextContent(context.globals.locale === "ar" ? "م" : "MA");
+    const avatar = context.canvas.getByRole("img", { name: storyText(context, people.faisal) });
+    await expect(avatar).toHaveTextContent(context.globals.locale === "ar" ? "ف" : "FA");
     await expect(context.canvas.getAllByRole("img")).toHaveLength(3);
   },
 };
@@ -63,13 +63,13 @@ export const BrokenImage: Story = {
 export const Decorative: Story = {
   render: (args, context) => (
     <div className="flex items-center gap-2">
-      <Avatar {...args} name={storyText(context, people.mohamed)} decorative />
-      <span className="text-body text-text">{storyText(context, people.mohamed)}</span>
+      <Avatar {...args} name={storyText(context, people.faisal)} decorative />
+      <span className="text-body text-text">{storyText(context, people.faisal)}</span>
     </div>
   ),
   play: async (context) => {
     await expect(context.canvas.queryByRole("img")).toBeNull();
-    await expect(context.canvas.getByText(storyText(context, people.mohamed))).toBeVisible();
+    await expect(context.canvas.getByText(storyText(context, people.faisal))).toBeVisible();
   },
 };
 
