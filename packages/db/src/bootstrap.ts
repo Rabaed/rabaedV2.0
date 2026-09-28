@@ -58,6 +58,9 @@ export async function bootstrap(urls: DatabaseUrls): Promise<void> {
         `${verb} role ${role.name} login nosuperuser nocreatedb nocreaterole noreplication ${role.bypassRls ? "bypassrls" : "nobypassrls"} ${password}`,
       );
     }
+    // On RDS the bootstrap user is not a superuser, and PostgreSQL 16 lets it
+    // give the database and schema to rabaed_migrator only as a member of it.
+    await client.query(`grant ${MIGRATOR_ROLE} to current_user`);
     const db = await client.query("select 1 from pg_database where datname = $1", [database]);
     if (!db.rowCount) await client.query(`create database ${database} owner ${MIGRATOR_ROLE}`);
   });

@@ -1,24 +1,15 @@
-import { healthResponse, type HealthResponse, type Locale } from "@rabaed/domain";
+import type { Locale } from "@rabaed/domain";
 import { getTranslations, setRequestLocale } from "next-intl/server";
-import { apiUrl } from "@/lib/api-url";
+import { fetchApiHealth, webVersion } from "@/lib/health";
 import { cn } from "@/lib/utils";
 
 // Always live: this page exists to show the API and database are up right now.
 export const dynamic = "force-dynamic";
 
-async function fetchHealth(): Promise<HealthResponse | null> {
-  try {
-    const res = await fetch(`${apiUrl}/health`, { cache: "no-store", signal: AbortSignal.timeout(3000) });
-    return healthResponse.parse(await res.json());
-  } catch {
-    return null;
-  }
-}
-
 export default async function HealthPage({ params }: { params: Promise<{ locale: Locale }> }) {
   setRequestLocale((await params).locale);
   const t = await getTranslations("health");
-  const health = await fetchHealth();
+  const health = await fetchApiHealth();
 
   return (
     <div className="space-y-6">
@@ -29,6 +20,12 @@ export default async function HealthPage({ params }: { params: Promise<{ locale:
         <dt className="text-muted">{t("database")}</dt>
         <dd data-testid="database-status" className={cn(health?.database === "ok" ? "text-success" : "text-danger")}>
           {health?.database === "ok" ? t("ok") : t("unavailable")}
+        </dd>
+        <dt className="text-muted">{t("version")}</dt>
+        {/* Commit IDs read left to right in every language. */}
+        <dd data-testid="version" dir="ltr" className="font-mono text-caption">
+          {webVersion()}
+          {health && health.version !== webVersion() ? ` (${t("apiVersion", { version: health.version })})` : ""}
         </dd>
       </dl>
     </div>

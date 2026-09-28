@@ -1,0 +1,154 @@
+name: Deploy dev
+# Every merge to main that passes CI (build, tests, infra assertions) is
+# deployed to dev: infrastructure → images → migrations → app → smoke test.
+# A failed migration stops the deploy before the app changes; a version that
+# never turns healthy is rolled back by ECS and fails the workflow; so does a
+# failed smoke test.
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  # Redeploy main by hand (Actions → Deploy dev → Run workflow).
+  workflow_dispatch:
+permissions:
+  contents: read
+# One deploy at a time, never cancelled half way. A newer merge waits; if
+# several wait, only the newest runs.
+concurrency:
+  group: deploy-dev
+  cancel-in-progress: false
+
+env:
+  STACK_PREFIX: Rabaed-dev
+
+jobs:
+  # CI runs can finish out of order; never deploy an older commit over a newer one.
+  latest:
+    # Needs the repository variables the AWS setup wizard records
+    # (packages/infra/scripts/setup-aws-account.sh). The deploy role trusts
+    # only this repository's main branch, so nothing else could deploy anyway.
+    if: >-
+      vars.AWS_DEPLOY_ROLE_ARN != '' && github.ref == 'refs/heads/main' && (
+        github.event_name == 'workflow_dispatch' || (
+          github.event.workflow_run.conclusion == 'success' &&
+          github.event.workflow_run.event == 'push' &&
+          github.event.workflow_run.head_repository.full_name == github.repository))
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.head.outputs.version }}
+    steps:
+      - id: head
+        env:
+          VERSION: ${{ github.event.workflow_run.head_sha || github.sha }}
+          REPOSITORY: ${{ github.server_url }}/${{ github.repository }}
+        run: |
+          head=$(git ls-remote "$REPOSITORY" refs/heads/main | cut -f1)
+          if [[ "$head" == "$VERSION" ]]; then
+            echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          else
+            echo "main is at $head; its own run deploys it."
+          fi
+
+  deploy:
+    needs: latest
+    if: needs.latest.outputs.version != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      VERSION: ${{ needs.latest.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.VERSION }}
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 24, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          mask-aws-account-id: true
+          role-duration-seconds: 3600
+
+      - name: Infrastructure (network, database, image registry)
+        working-directory: packages/infra
+        run: >-
+          pnpm --silent cdk deploy -c env=dev --exclusively --require-approval never --no-color --progress events
+          "$STACK_PREFIX-Network" "$STACK_PREFIX-Data" "$STACK_PREFIX-Registry"
+
+      - id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+        with:
+          mask-password: true
+      - uses: docker/setup-buildx-action@v3
+
+      # Tags are immutable, so a commit's images are built once; a re-run reuses
+      # them. The three builds share their dependency layers in this builder.
+      - name: Build and push images
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+        run: |
+          for service in web api worker; do
+            repo="rabaed-dev/$service"
+            if aws ecr describe-images --repository-name "$repo" --image-ids "imageTag=$VERSION" >/dev/null 2>&1; then
+              echo "$repo:$VERSION already pushed"
+              continue
+            fi
+            docker buildx build . --target "$service" --platform linux/amd64 --tag "$REGISTRY/$repo:$VERSION" --push
+          done
+
+      - name: Migration task
+        working-directory: packages/infra
+        run: >-
+          pnpm --silent cdk deploy -c env=dev --exclusively --require-approval never --no-color --progress events
+          "$STACK_PREFIX-Migrations" --parameters "ImageTag=$VERSION" --outputs-file "$RUNNER_TEMP/migrations.json"
+
+      - name: Run migrations
+        run: |
+          out() { jq -r --arg s "$STACK_PREFIX-Migrations" --arg k "$1" '.[$s][$k]' "$RUNNER_TEMP/migrations.json"; }
+          cluster=$(out Cluster)
+          task=$(aws ecs run-task --cluster "$cluster" --task-definition "$(out TaskDefinition)" \
+            --launch-type FARGATE --started-by "deploy-${VERSION:0:7}" \
+            --network-configuration "awsvpcConfiguration={subnets=[$(out Subnets)],securityGroups=[$(out SecurityGroup)],assignPublicIp=DISABLED}" \
+            --query 'tasks[0].taskArn' --output text)
+          echo "migration task ${task##*/}"
+          aws ecs wait tasks-stopped --cluster "$cluster" --tasks "$task"
+          # Streams are named <streamPrefix>/<container>/<task id> (src/task.ts).
+          aws logs get-log-events --log-group-name "$(out LogGroup)" --log-stream-name "migrate/migrate/${task##*/}" \
+            --start-from-head --query 'events[].message' --output text || echo "(no log)"
+          read -r code reason < <(aws ecs describe-tasks --cluster "$cluster" --tasks "$task" \
+            --query 'tasks[0].[containers[0].exitCode, stoppedReason]' --output text)
+          if [[ "$code" != "0" ]]; then
+            echo "::error::migrations failed (exit $code: $reason); the app was not changed"
+            exit 1
+          fi
+
+      - name: App
+        working-directory: packages/infra
+        env:
+          CERTIFICATE_ARN: ${{ vars.AWS_CERTIFICATE_ARN }}
+        run: >-
+          pnpm --silent cdk deploy -c env=dev --exclusively --require-approval never --no-color --progress events
+          "$STACK_PREFIX-App" --parameters "ImageTag=$VERSION" --parameters "CertificateArn=$CERTIFICATE_ARN"
+          --outputs-file "$RUNNER_TEMP/app.json"
+
+      - name: Smoke test
+        env:
+          # The interim self-signed certificate (public, not secret), trusted
+          # for this check only. Empty once dev has a real certificate.
+          CERTIFICATE_PEM: ${{ vars.AWS_CERTIFICATE_PEM }}
+        run: |
+          if [[ -n "$CERTIFICATE_PEM" ]]; then
+            printf '%s\n' "$CERTIFICATE_PEM" > "$RUNNER_TEMP/dev-ca.pem"
+            export NODE_EXTRA_CA_CERTS="$RUNNER_TEMP/dev-ca.pem"
+          fi
+          export SMOKE_URL=$(jq -r --arg s "$STACK_PREFIX-App" '.[$s].Url' "$RUNNER_TEMP/app.json")
+          export SMOKE_VERSION="$VERSION"
+          pnpm --filter @rabaed/infra smoke
+          echo "### Deployed \`${VERSION:0:7}\` to $SMOKE_URL" >> "$GITHUB_STEP_SUMMARY"

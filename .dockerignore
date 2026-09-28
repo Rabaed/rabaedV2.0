@@ -1,0 +1,22 @@
+# Never in an image: secrets, local state, and what the build recreates.
+.env
+.env.*
+*.pem
+*.key
+.aws/
+secrets/
+.git/
+**/node_modules/
+**/.next/
+**/cdk.out/
+**/coverage/
+**/*.tsbuildinfo
+*.log
+
+# Not needed to run the app.
+.claude/
+.github/
+design/
+docs/
+planning/
+prototypes/

@@ -22,7 +22,9 @@
     "database": "database",
     "ok": "ok",
     "unavailable": "unavailable",
-    "unreachable": "API unreachable"
+    "unreachable": "API unreachable",
+    "version": "Version",
+    "apiVersion": "api {version}"
   },
   "signIn": {
     "title": "Sign in",

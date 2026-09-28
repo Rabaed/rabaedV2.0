@@ -1,5 +1,5 @@
 import type { NextRequest } from "next/server";
-import { apiUrl } from "@/lib/api-url";
+import { memberApiTarget } from "@/lib/api-url";
 
 // Forwards the browser's /api/v1/* calls to the API, so the session cookie is
 // first-party (HttpOnly, SameSite=Lax) and no CORS is needed. Resolved per
@@ -7,8 +7,8 @@ import { apiUrl } from "@/lib/api-url";
 // Member API (/v1) is exposed here; Rabaed Admin is not reachable from this origin.
 async function forward(request: NextRequest, { params }: { params: Promise<{ path: string[] }> }) {
   const { path } = await params;
-  const target = new URL(`/v1/${path.map(encodeURIComponent).join("/")}`, apiUrl);
-  target.search = request.nextUrl.search;
+  const target = memberApiTarget(path, request.nextUrl.search);
+  if (!target) return Response.json({ error: "not_found" }, { status: 404 });
 
   const headers = new Headers();
   for (const name of ["cookie", "content-type", "accept"]) {

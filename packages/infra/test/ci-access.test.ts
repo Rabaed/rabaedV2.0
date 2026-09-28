@@ -62,16 +62,49 @@ describe("GitHub Actions access", () => {
     trustsOnly(role(accountTemplate(), "rabaed-dev-github-deploy").trust, `${repo}:ref:refs/heads/main`);
   });
 
-  it("the deploy role can only hand over to the CDK bootstrap roles", () => {
+  it("the deploy role can hand over to the CDK bootstrap roles, push images and run migrations, nothing more", () => {
     const deploy = role(accountTemplate(), "rabaed-dev-github-deploy");
     expect(deploy.managedPolicies).toEqual([]);
-    expect(render(deploy.permissions)).toEqual([
+    const regional = (service: string, resource: string) => `arn:aws:${service}:eu-central-1:\${AWS::AccountId}:${resource}`;
+    const expected = [
       {
         Effect: "Allow",
         Action: "sts:AssumeRole",
         Resource: ["deploy", "file-publishing", "image-publishing", "lookup"].map(bootstrapRoleArn),
       },
-    ]);
+      // Logging in to ECR has no resource-level permission.
+      { Effect: "Allow", Action: "ecr:GetAuthorizationToken", Resource: "*" },
+      {
+        Effect: "Allow",
+        Action: [
+          "ecr:BatchCheckLayerAvailability",
+          "ecr:BatchGetImage",
+          "ecr:CompleteLayerUpload",
+          "ecr:DescribeImages",
+          "ecr:InitiateLayerUpload",
+          "ecr:PutImage",
+          "ecr:UploadLayerPart",
+        ],
+        Resource: regional("ecr", "repository/rabaed-dev/*"),
+      },
+      {
+        Effect: "Allow",
+        Action: "ecs:RunTask",
+        Resource: regional("ecs", "task-definition/rabaed-dev-migrate:*"),
+        Condition: { ArnEquals: { "ecs:cluster": regional("ecs", "cluster/rabaed-dev") } },
+      },
+      { Effect: "Allow", Action: "ecs:DescribeTasks", Resource: regional("ecs", "task/rabaed-dev/*") },
+      {
+        Effect: "Allow",
+        Action: "iam:PassRole",
+        Resource: "arn:aws:iam::${AWS::AccountId}:role/rabaed-dev-migrate-*",
+        Condition: { StringEquals: { "iam:PassedToService": "ecs-tasks.amazonaws.com" } },
+      },
+      { Effect: "Allow", Action: "logs:GetLogEvents", Resource: regional("logs", "log-group:/rabaed/dev/migrate:*") },
+    ];
+    const actual = render(deploy.permissions) as unknown[];
+    expect(actual).toHaveLength(expected.length);
+    expect(actual).toEqual(expect.arrayContaining(expected));
   });
 
   it("the pull request role trusts only this repository's pull requests", () => {

@@ -13,6 +13,7 @@ export const testConfig: ApiConfig = {
   sessionTtlMs: 12 * HOUR,
   invitationTtlMs: 72 * HOUR,
   cookieSecure: true,
+  version: "0123abc",
 };
 
 type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
