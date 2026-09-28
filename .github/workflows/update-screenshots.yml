@@ -1,23 +1,33 @@
 # Re-renders the story screenshot baselines on Linux and commits them to the
-# branch it runs on. Use it when a PR changes the UI on purpose:
-#   gh workflow run update-screenshots.yml --ref <your-branch>
+# PR branch. Use it when a PR changes the UI on purpose: add the
+# "update-screenshots" label to the PR (or, once this file is on main, run
+#   gh workflow run update-screenshots.yml --ref <your-branch>).
 # Then review the changed PNGs in the PR like any other change.
 name: Update screenshots
 on:
   workflow_dispatch:
+  pull_request:
+    types: [labeled]
 permissions:
   contents: write
   actions: write
+  pull-requests: write
 concurrency:
-  group: update-screenshots-${{ github.ref }}
+  group: update-screenshots-${{ github.head_ref || github.ref_name }}
 
 jobs:
   update:
-    if: github.ref != 'refs/heads/main'
+    if: >-
+      github.ref != 'refs/heads/main' &&
+      (github.event_name == 'workflow_dispatch' || github.event.label.name == 'update-screenshots')
     # Must match the stories job in ci.yml.
     runs-on: ubuntu-24.04
+    env:
+      BRANCH: ${{ github.head_ref || github.ref_name }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.BRANCH }}
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with: { node-version: 24, cache: pnpm }
@@ -27,16 +37,20 @@ jobs:
       - name: Commit changed baselines
         env:
           GH_TOKEN: ${{ github.token }}
-          BRANCH: ${{ github.ref_name }}
         run: |
           git add packages/ui/test/__screenshots__
           if git diff --cached --quiet; then
             echo "Screenshots are already up to date."
-            exit 0
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git commit -m "Update story screenshot baselines"
+            git push origin "HEAD:$BRANCH"
+            # Pushes made with the workflow token do not start CI; start it explicitly.
+            gh workflow run ci.yml --ref "$BRANCH" || echo "::warning::Could not start CI; push any commit to re-run it."
           fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -m "Update story screenshot baselines"
-          git push origin "HEAD:$BRANCH"
-          # Pushes made with the workflow token do not start CI; start it explicitly.
-          gh workflow run ci.yml --ref "$BRANCH"
+      - name: Remove the label so it can be added again
+        if: always() && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh pr edit ${{ github.event.pull_request.number }} --repo ${{ github.repository }} --remove-label update-screenshots

@@ -6,7 +6,7 @@
  *   2. lay out in the locale's direction, with Latin digits and no deadline words,
  *   3. have no axe violations under WCAG 2.2 AA,
  *   4. match its committed screenshot (Linux only; see vitest.config.ts).
- * Update screenshots on purpose with the "Update screenshots" workflow.
+ * Update screenshots on purpose with the "update-screenshots" PR label.
  */
 import { directionOf, locales } from "@rabaed/domain";
 import { composeStories, type composeStory, setProjectAnnotations } from "@storybook/react-vite";

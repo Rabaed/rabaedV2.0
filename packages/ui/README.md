@@ -30,4 +30,4 @@ Three layers, all in `src/tokens/`:
 
 - `pnpm storybook` opens Storybook; the **Language** toolbar switches EN (LTR) / AR (RTL).
 - `pnpm test:stories` runs every story in Chromium, once per language: its play function (behaviour), direction, Latin digits, no deadline words, axe (WCAG 2.2 AA) and a screenshot comparison.
-- Screenshot baselines are Linux renders in `test/__screenshots__/`, compared on Linux only (CI). When you change the UI on purpose, run the **Update screenshots** workflow on your branch (`gh workflow run update-screenshots.yml --ref <branch>`); it commits the new baselines to the PR for review.
+- Screenshot baselines are Linux renders in `test/__screenshots__/`, compared on Linux only (CI). When you change the UI on purpose, add the `update-screenshots` label to your PR (or run `gh workflow run update-screenshots.yml --ref <branch>`); the **Update screenshots** workflow commits the new baselines to the PR for review.
