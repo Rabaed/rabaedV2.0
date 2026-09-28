@@ -100,7 +100,11 @@
     "notCreator": "Only a Project Creator can create a Project.",
     "unavailable": "Something went wrong. Try again.",
     "participants": "Participants",
-    "projectMembers": "Project Members"
+    "projectMembers": "Project Members",
+    "settings": "Project Settings",
+    "tradesLocations": "Trades & Locations",
+    "visibility": "Visibility",
+    "membersVisibility": "Your Members' Visibility"
   },
   "participants": {
     "title": "Company Projects",
@@ -118,6 +122,47 @@
     "notAdmin": "Only a Project Admin can add Participants.",
     "alreadyParticipant": "That Company is already on this Project.",
     "unknownCompany": "No Company with that CR number is on Rabaed.",
+    "unavailable": "Something went wrong. Try again.",
+    "visibility": "Visibility"
+  },
+  "dimensions": {
+    "title": "Trades & Locations",
+    "trades": "Trades",
+    "locations": "Locations",
+    "noTrades": "No Trades yet.",
+    "noLocations": "No Locations yet.",
+    "parent": "Inside",
+    "newZone": "New Zone (top level)",
+    "nameEn": "Name (English)",
+    "nameAr": "Name (Arabic)",
+    "code": "Code",
+    "codeHint": "2 to 6 letters or digits, used in Document Numbers.",
+    "addTrade": "Add Trade",
+    "addLocation": "Add Location",
+    "invalid": "Check both names and the code.",
+    "notAdmin": "Only a Project Admin can add Trades and Locations.",
+    "duplicateCode": "That code is already used at this level.",
+    "projectClosed": "This Project is closed.",
+    "tooDeep": "Floors are the lowest level.",
+    "unavailable": "Something went wrong. Try again."
+  },
+  "visibility": {
+    "title": "Visibility",
+    "participantsHint": "Choose which Trades and Locations each Participant covers. Choosing a Location covers everything inside it. Each Company's Authorized Person narrows this for its own Members.",
+    "memberTitle": "{name}'s Visibility",
+    "memberHint": "The Trades and Locations this Member covers, chosen from what your Company covers on this Project. Choosing a Location covers everything inside it.",
+    "trades": "Trades",
+    "locations": "Locations",
+    "allTrades": "All Trades",
+    "allLocations": "All Locations",
+    "allOfCompanyTrades": "All of your Company's Trades",
+    "allOfCompanyLocations": "All of your Company's Locations",
+    "noValues": "Nothing to choose from yet.",
+    "save": "Save",
+    "saved": "Saved.",
+    "exceedsParticipant": "A Member can't cover more than their Company does.",
+    "notAllowed": "You can't change this Visibility.",
+    "projectClosed": "This Project is closed.",
     "unavailable": "Something went wrong. Try again."
   }
 }

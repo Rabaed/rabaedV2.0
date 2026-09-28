@@ -18,6 +18,7 @@ import { memberRoutes } from "./routes/members.ts";
 import { participantRoutes } from "./routes/participants.ts";
 import { projectRoutes } from "./routes/projects.ts";
 import { sessionRoutes } from "./routes/session.ts";
+import { visibilityRoutes } from "./routes/visibility.ts";
 
 export const SESSION_COOKIE = "rabaed_session";
 
@@ -115,6 +116,7 @@ export async function buildApp({
   await app.register(memberRoutes(context));
   await app.register(projectRoutes(context));
   await app.register(participantRoutes(context));
+  await app.register(visibilityRoutes(context));
   await app.register(adminRoutes(context), { prefix: "/admin" });
   return app;
 }

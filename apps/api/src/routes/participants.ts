@@ -8,7 +8,7 @@ import {
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import type { AppContext } from "../app.ts";
-import { forbidden, HttpError, idOrNotFound, notFound } from "../http-error.ts";
+import { forbidden, idOrNotFound, notFound } from "../http-error.ts";
 import {
   addParticipant,
   addProjectMember,
@@ -16,27 +16,8 @@ import {
   listParticipantMembers,
   listParticipants,
   removeProjectMember,
-  type AddParticipantResult,
-  type ProjectMemberResult,
 } from "../projects/participants.ts";
-
-/** A refusal as an HTTP error. `not_found` is the Project or Participant itself: a plain 404. */
-function refusal(result: Exclude<AddParticipantResult | ProjectMemberResult, { ok: true }>): HttpError {
-  switch (result.reason) {
-    case "forbidden":
-      return forbidden();
-    case "not_found":
-      return notFound();
-    case "member_not_found":
-      return new HttpError(404, "member_not_found");
-    case "project_closed":
-      return new HttpError(409, "project_closed");
-    case "unknown_company":
-      return new HttpError(422, "unknown_company");
-    case "already_participant":
-      return new HttpError(409, "already_participant");
-  }
-}
+import { refusal } from "../refusals.ts";
 
 const participantParams = z.object({ participantId: z.string() });
 

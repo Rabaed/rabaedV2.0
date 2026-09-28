@@ -109,7 +109,7 @@ Trades, Locations and any future dimension share one generic structure, so addin
 Every Project gets `trade` (required) and `location` at creation.
 
 **dimension_value**
-`id`, `dimension_id`, `parent_id` (Location tree: Zone → Building → Floor; flat for Trades), `level_name i18n` (e.g. "Floor"), `code` (2–6 chars, used in numbering), `name i18n`, `copied_from_id` (Rabaed default Trade list), `sort`.
+`id`, `dimension_id`, `parent_id` (Location tree: Zone → Building → Floor, three levels; flat for Trades), `depth`, `level_name i18n` (e.g. "Floor"), `code` (2–6 chars, used in numbering), `name i18n`, `copied_from_id` (Rabaed default Trade list), `sort`.
 
 **location_shape**
 `dimension_value_id`, `map_file_id → stored_file` (site map or plan image), `polygon jsonb`. Drives the Zone/Plan View.
@@ -122,10 +122,11 @@ Every Project gets `trade` (required) and `location` at creation.
 Rabaed defaults are copied per Project, and only Project Admins add more.
 
 **visibility_grant** / **visibility_grant_value**
-- `visibility_grant`: `id`, `subject_kind {participant, project_member}`, `subject_id`, `dimension_id`, `is_all bool`.
-- `visibility_grant_value`: `grant_id`, `dimension_value_id`. Granting a Location includes its whole subtree.
+- `visibility_grant`: `id`, `project_id`, `subject_kind {participant, project_member}`, `participant_id`, `project_member_id` (set for a Member's grant; `participant_id` is then their Participant), `dimension_id`, `is_all bool`. One per subject and dimension.
+- `visibility_grant_value`: `grant_id`, `dimension_value_id`. Granting a Location includes its whole subtree, including Locations added under it later.
+- No grant in a dimension covers nothing. A Member's `is_all` means all of their Participant's.
 
-The rule "a Member's grant ⊆ their Participant's grant" is enforced on write. A **Visibility Gap** is a query: any dimension value (per role) that no active Participant covers.
+The rule "a Member's grant ⊆ their Participant's grant" is enforced on write: a wider Member grant is rejected, and narrowing a Participant stores each of its Members' grants as the intersection. A Member's effective Visibility (`app.my_visibility`) is also computed as that intersection. A **Visibility Gap** is a query: any dimension value (per role) that no active Participant covers.
 
 ## 4. Engines: Forms, Workflows, Work Item Types
 

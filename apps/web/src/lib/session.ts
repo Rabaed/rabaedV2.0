@@ -2,8 +2,11 @@ import "server-only";
 import type {
   CompanyMembers,
   CompanyParticipations,
+  DimensionValues,
+  MemberVisibility,
   MyProjects,
   ParticipantMembers,
+  ParticipantVisibility,
   ProjectParticipants,
   ProjectSummary,
   SignedInMember,
@@ -60,4 +63,21 @@ export function getCompanyParticipations(): Promise<CompanyParticipations | null
 /** One of the signed-in Member's own Company's Participants and its Project Members; null otherwise. */
 export function getParticipantMembers(participantId: string): Promise<ParticipantMembers | null> {
   return apiGet<ParticipantMembers>(`/v1/participants/${encodeURIComponent(participantId)}/members`);
+}
+
+/** A Project's Trades and Locations; null if it isn't one of the signed-in Member's Projects. */
+export function getProjectDimensions(projectId: string): Promise<DimensionValues | null> {
+  return apiGet<DimensionValues>(`/v1/projects/${encodeURIComponent(projectId)}/dimensions`);
+}
+
+/** A Participant's Visibility, for its own Company and the Project Admins; null otherwise. */
+export function getParticipantVisibility(participantId: string): Promise<ParticipantVisibility | null> {
+  return apiGet<ParticipantVisibility>(`/v1/participants/${encodeURIComponent(participantId)}/visibility`);
+}
+
+/** A Project Member's Visibility, for their Participant's own Company; null otherwise. */
+export function getMemberVisibility(participantId: string, memberId: string): Promise<MemberVisibility | null> {
+  return apiGet<MemberVisibility>(
+    `/v1/participants/${encodeURIComponent(participantId)}/members/${encodeURIComponent(memberId)}/visibility`,
+  );
 }
