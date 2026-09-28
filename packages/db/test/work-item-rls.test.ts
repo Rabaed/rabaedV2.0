@@ -323,7 +323,7 @@ describe("Send for Review and Return", () => {
 
   beforeAll(async () => {
     pm = await member(c1.id, "pm");
-    await call(c1.ap, sql`select app.add_project_member(${participant.c1}::uuid, ${pm}::uuid, now())`);
+    await call<{ outcome: string }>(c1.ap, sql`select app.add_project_member(${participant.c1}::uuid, ${pm}::uuid, now()) as outcome`);
     await grant(c1.ap, "member", [participant.c1, pm], "trade", "all");
     await grant(c1.ap, "member", [participant.c1, pm], "location", "all");
     await setPositions(c1.member, ["engineer"]);
