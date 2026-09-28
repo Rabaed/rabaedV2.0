@@ -160,7 +160,7 @@ This is the shared set per Module. Workflows reference Stages by `key`, so libra
 - `issue_code` marks the final review Step.
 
 **workflow_transition**
-`id`, `workflow_version_id`, `from_step_id`, `to_step_id`, `label i18n`, `kind {send, submit, return, close, cancel}`, `outcome` (nullable: `A, B, C, D, passed, passed_with_comments, failed, closed`; required when `to_step` is terminal), `permission`, `offers_assign_to bool`, `condition jsonb`, `action_form jsonb`, `notifications jsonb`.
+`id`, `workflow_version_id`, `key` (stable within the version, e.g. `send_for_review`), `from_step_id`, `to_step_id`, `label i18n`, `kind {send, submit, return, close, cancel}`, `outcome` (nullable: `A, B, C, D, passed, passed_with_comments, failed, closed`; required when `to_step` is terminal), `permission`, `offers_assign_to bool`, `condition jsonb`, `action_form jsonb`, `notifications jsonb`.
 - `kind = submit` marks a hand-over between Participants.
 - `condition`: routing on Form field values, e.g. `cost_impact > 500000`.
 - `action_form`: the pop-up form schema, e.g. pick a Review Code, comments, files.

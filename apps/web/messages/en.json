@@ -104,7 +104,8 @@
     "settings": "Project Settings",
     "tradesLocations": "Trades & Locations",
     "visibility": "Visibility",
-    "membersVisibility": "Your Members' Visibility"
+    "membersVisibility": "Your Members' Visibility",
+    "submittals": "Submittals"
   },
   "participants": {
     "title": "Company Projects",
@@ -162,6 +163,33 @@
     "saved": "Saved.",
     "exceedsParticipant": "A Member can't cover more than their Company does.",
     "notAllowed": "You can't change this Visibility.",
+    "projectClosed": "This Project is closed.",
+    "unavailable": "Something went wrong. Try again."
+  },
+  "workItems": {
+    "title": "Submittals",
+    "newMar": "New Material Submittal",
+    "empty": "No Work Items you can see yet.",
+    "noNumber": "No number yet",
+    "noLocation": "No Location",
+    "noDescription": "No description.",
+    "noTradesCovered": "Your Visibility on this Project covers no Trade yet, so you can't raise a Work Item. Ask your Company's Authorized Person.",
+    "stepAge": "{weeks, plural, one {# week} other {# weeks}} at this step",
+    "saveDraft": "Save Draft",
+    "fields": {
+      "title": "Title",
+      "trade": "Trade",
+      "location": "Location",
+      "description": "Description",
+      "type": "Type",
+      "documentNumber": "Document Number",
+      "step": "Step",
+      "with": "With",
+      "raisedBy": "Raised by"
+    },
+    "invalid": "Give a title and a Trade.",
+    "notContractor": "Only a Contractor can raise a Material Submittal.",
+    "outsideVisibility": "Choose a Trade and Location your Visibility covers.",
     "projectClosed": "This Project is closed.",
     "unavailable": "Something went wrong. Try again."
   }

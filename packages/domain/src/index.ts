@@ -6,3 +6,4 @@ export * from "./member.ts";
 export * from "./participant.ts";
 export * from "./project.ts";
 export * from "./visibility.ts";
+export * from "./work-item.ts";

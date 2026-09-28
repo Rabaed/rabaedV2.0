@@ -104,7 +104,8 @@
     "settings": "إعدادات المشروع",
     "tradesLocations": "التخصصات والمواقع",
     "visibility": "الرؤية",
-    "membersVisibility": "رؤية أعضاء شركتك"
+    "membersVisibility": "رؤية أعضاء شركتك",
+    "submittals": "الاعتمادات"
   },
   "participants": {
     "title": "مشاريع الشركة",
@@ -162,6 +163,33 @@
     "saved": "تم الحفظ.",
     "exceedsParticipant": "لا يمكن أن يغطي العضو أكثر مما تغطيه شركته.",
     "notAllowed": "لا يمكنك تغيير هذه الرؤية.",
+    "projectClosed": "هذا المشروع مغلق.",
+    "unavailable": "حدث خطأ. حاول مرة أخرى."
+  },
+  "workItems": {
+    "title": "الاعتمادات",
+    "newMar": "اعتماد مواد جديد",
+    "empty": "لا توجد عناصر عمل يمكنك رؤيتها بعد.",
+    "noNumber": "بلا رقم بعد",
+    "noLocation": "بلا موقع",
+    "noDescription": "لا يوجد وصف.",
+    "noTradesCovered": "رؤيتك في هذا المشروع لا تشمل أي تخصص بعد، لذا لا يمكنك إنشاء عنصر عمل. تواصل مع المفوَّض في شركتك.",
+    "stepAge": "{weeks, plural, one {أسبوع واحد} two {أسبوعان} few {# أسابيع} other {# أسبوعًا}} في هذه الخطوة",
+    "saveDraft": "حفظ المسودة",
+    "fields": {
+      "title": "العنوان",
+      "trade": "التخصص",
+      "location": "الموقع",
+      "description": "الوصف",
+      "type": "النوع",
+      "documentNumber": "رقم المستند",
+      "step": "الخطوة",
+      "with": "لدى",
+      "raisedBy": "أنشأه"
+    },
+    "invalid": "أدخل عنوانًا واختر تخصصًا.",
+    "notContractor": "فقط المقاول يمكنه إنشاء اعتماد مواد.",
+    "outsideVisibility": "اختر تخصصًا وموقعًا ضمن رؤيتك.",
     "projectClosed": "هذا المشروع مغلق.",
     "unavailable": "حدث خطأ. حاول مرة أخرى."
   }

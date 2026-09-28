@@ -180,6 +180,153 @@ export interface VisibilityGrantValueTable {
   dimension_value_id: string;
 }
 
+export type ModuleKey = "submittals" | "inspections" | "snag_list" | "site_reports" | "drawings";
+export type StageCategory = "draft" | "in_progress" | "closed_positive" | "closed_negative" | "cancelled";
+type OwnerKind = "rabaed" | "project";
+
+export interface StageTable {
+  id: Generated<string>;
+  owner_kind: OwnerKind;
+  project_id: string | null;
+  module_key: ModuleKey;
+  key: string;
+  name: ColumnType<Bilingual, string, string>;
+  category: StageCategory;
+  sort: number;
+  created_at: Generated<Timestamp>;
+  updated_at: Generated<Timestamp>;
+}
+
+export interface WorkflowDefinitionTable {
+  id: Generated<string>;
+  owner_kind: OwnerKind;
+  project_id: string | null;
+  name: ColumnType<Bilingual, string, string>;
+  created_at: Generated<Timestamp>;
+  updated_at: Generated<Timestamp>;
+}
+
+export interface WorkflowVersionTable {
+  id: Generated<string>;
+  workflow_definition_id: string;
+  version_no: number;
+  status: "draft" | "published";
+  layout: Generated<Json>;
+  published_at: Timestamp | null;
+  created_at: Generated<Timestamp>;
+  updated_at: Generated<Timestamp>;
+}
+
+export interface WorkflowStepTable {
+  id: Generated<string>;
+  workflow_version_id: string;
+  key: string;
+  name: ColumnType<Bilingual, string, string>;
+  stage_key: string;
+  actor_rule: Json;
+  is_signing: Generated<boolean>;
+  outcome_mode: Generated<"none" | "recommend_code" | "issue_code" | "inspection_result">;
+  created_at: Generated<Timestamp>;
+}
+
+export interface WorkflowTransitionTable {
+  id: Generated<string>;
+  workflow_version_id: string;
+  key: string;
+  from_step_id: string;
+  to_step_id: string;
+  label: ColumnType<Bilingual, string, string>;
+  kind: "send" | "submit" | "return" | "close" | "cancel";
+  outcome: string | null;
+  permission: string;
+  sort: Generated<number>;
+  created_at: Generated<Timestamp>;
+}
+
+export interface WorkItemTypeTable {
+  id: Generated<string>;
+  owner_kind: OwnerKind;
+  project_id: string | null;
+  module_key: ModuleKey;
+  code: string;
+  name: ColumnType<Bilingual, string, string>;
+  workflow_definition_id: string;
+  outcome_kind: "review_code" | "inspection_result" | "none";
+  created_at: Generated<Timestamp>;
+  updated_at: Generated<Timestamp>;
+}
+
+export interface WorkItemTable {
+  id: Generated<string>;
+  project_id: string;
+  work_item_type_id: string;
+  raised_by_participant_id: string;
+  created_by_member_id: string;
+  title: string;
+  /** The Form answers; the MAR's `description` until the Form engine. */
+  data: ColumnType<Record<string, unknown>, string, string>;
+  workflow_version_id: string;
+  document_number: string | null;
+  current_step_id: string;
+  current_stage_key: string;
+  step_entered_at: Timestamp;
+  outcome: string | null;
+  closed_at: Timestamp | null;
+  created_at: Generated<Timestamp>;
+  updated_at: Generated<Timestamp>;
+}
+
+export interface WorkItemDimensionValueTable {
+  work_item_id: string;
+  project_id: string;
+  dimension_id: string;
+  dimension_value_id: string;
+}
+
+export interface StepAssignmentTable {
+  id: Generated<string>;
+  project_id: string;
+  work_item_id: string;
+  step_id: string;
+  participant_id: string;
+  assignee_member_id: string | null;
+  status: "pooled" | "claimed" | "done" | "vacant" | "reassigned";
+  claimed_at: Timestamp | null;
+  done_at: Timestamp | null;
+  created_at: Generated<Timestamp>;
+  updated_at: Generated<Timestamp>;
+}
+
+export interface WorkItemAccessTable {
+  work_item_id: string;
+  project_id: string;
+  participant_id: string;
+  since: Timestamp;
+  reason: "raised" | "handling" | "oversight";
+}
+
+/** Append-only: rabaed_app only reads it. */
+export interface WorkItemEventTable {
+  id: Generated<string>;
+  project_id: string;
+  work_item_id: string;
+  seq: Generated<number>;
+  type: string;
+  actor_member_id: string | null;
+  actor_engineer_id: string | null;
+  actor_participant_id: string | null;
+  transition_id: string | null;
+  from_step_id: string | null;
+  to_step_id: string | null;
+  payload: ColumnType<Record<string, unknown>, string, never>;
+  audience: "shared" | "internal";
+  audience_participant_id: string | null;
+  content_sha256: Buffer | null;
+  prev_hash: Buffer | null;
+  hash: Generated<Buffer>;
+  created_at: Generated<Timestamp>;
+}
+
 export interface Database {
   rabaed_engineer: RabaedEngineerTable;
   company: CompanyTable;
@@ -197,4 +344,15 @@ export interface Database {
   dimension_value: DimensionValueTable;
   visibility_grant: VisibilityGrantTable;
   visibility_grant_value: VisibilityGrantValueTable;
+  stage: StageTable;
+  workflow_definition: WorkflowDefinitionTable;
+  workflow_version: WorkflowVersionTable;
+  workflow_step: WorkflowStepTable;
+  workflow_transition: WorkflowTransitionTable;
+  work_item_type: WorkItemTypeTable;
+  work_item: WorkItemTable;
+  work_item_dimension_value: WorkItemDimensionValueTable;
+  step_assignment: StepAssignmentTable;
+  work_item_access: WorkItemAccessTable;
+  work_item_event: WorkItemEventTable;
 }

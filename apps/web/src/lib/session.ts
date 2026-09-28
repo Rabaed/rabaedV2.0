@@ -10,6 +10,8 @@ import type {
   ProjectParticipants,
   ProjectSummary,
   SignedInMember,
+  WorkItemDetail,
+  WorkItemList,
 } from "@rabaed/domain";
 import { cookies } from "next/headers";
 import { apiUrl } from "./api-url.ts";
@@ -80,4 +82,19 @@ export function getMemberVisibility(participantId: string, memberId: string): Pr
   return apiGet<MemberVisibility>(
     `/v1/participants/${encodeURIComponent(participantId)}/members/${encodeURIComponent(memberId)}/visibility`,
   );
+}
+
+/** The values the signed-in Member covers on one of their Projects; null if it isn't one of theirs. */
+export function getMyVisibility(projectId: string): Promise<DimensionValues | null> {
+  return apiGet<DimensionValues>(`/v1/projects/${encodeURIComponent(projectId)}/visibility`);
+}
+
+/** The Work Items of a Project the signed-in Member can see, with Stage counts; null if it isn't one of theirs. */
+export function getWorkItems(projectId: string): Promise<WorkItemList | null> {
+  return apiGet<WorkItemList>(`/v1/projects/${encodeURIComponent(projectId)}/work-items`);
+}
+
+/** One Work Item; null if the signed-in Member can't see it (exactly as if it didn't exist). */
+export function getWorkItem(workItemId: string): Promise<WorkItemDetail | null> {
+  return apiGet<WorkItemDetail>(`/v1/work-items/${encodeURIComponent(workItemId)}`);
 }

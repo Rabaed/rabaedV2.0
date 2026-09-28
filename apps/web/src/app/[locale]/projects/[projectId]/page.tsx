@@ -37,6 +37,10 @@ export default async function ProjectPage({ params }: { params: Promise<{ locale
         </dd>
       </dl>
 
+      <Link href={`/projects/${project.id}/work-items`} className="inline-block text-primary underline underline-offset-4">
+        {t("submittals")}
+      </Link>
+
       <section className="space-y-4">
         <h2 className="text-h6 font-semibold">{t("participants")}</h2>
         {participants && (
