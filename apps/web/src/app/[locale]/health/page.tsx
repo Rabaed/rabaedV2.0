@@ -21,9 +21,9 @@ export default async function HealthPage({ params }: { params: Promise<{ locale:
         <dd data-testid="database-status" className={cn(health?.database === "ok" ? "text-success" : "text-danger")}>
           {health?.database === "ok" ? t("ok") : t("unavailable")}
         </dd>
-        <dt className="text-muted-foreground">{t("version")}</dt>
+        <dt className="text-muted">{t("version")}</dt>
         {/* Commit IDs read left to right in every language. */}
-        <dd data-testid="version" dir="ltr" className="font-mono text-sm">
+        <dd data-testid="version" dir="ltr" className="font-mono text-caption">
           {webVersion()}
           {health && health.version !== webVersion() ? ` (${t("apiVersion", { version: health.version })})` : ""}
         </dd>
