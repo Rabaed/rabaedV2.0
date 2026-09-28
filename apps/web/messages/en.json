@@ -1,0 +1,20 @@
+{
+  "shell": {
+    "appName": "Rabaed",
+    "switchLanguage": "العربية"
+  },
+  "home": {
+    "title": "Rabaed",
+    "tagline": "Construction projects, one place, each company sees only its own work.",
+    "healthLink": "System health",
+    "documentNumberLabel": "Document Numbers read left to right in every language:"
+  },
+  "health": {
+    "title": "System health",
+    "api": "API",
+    "database": "database",
+    "ok": "ok",
+    "unavailable": "unavailable",
+    "unreachable": "API unreachable"
+  }
+}
