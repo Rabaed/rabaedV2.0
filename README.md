@@ -85,7 +85,7 @@ Every merge to `main` that passes CI is deployed to dev by `.github/workflows/de
 | Stack | What it holds |
 |---|---|
 | `Rabaed-dev-Network` | VPC over two zones: public subnets for the load balancer and the NAT gateway only; private subnets for the Fargate tasks; isolated subnets (no route out) for the database. The ECS cluster, the private DNS name `api.rabaed-dev.internal`, and every security group. |
-| `Rabaed-dev-Data` | RDS PostgreSQL 16, single-AZ, not publicly accessible, TLS required, encrypted with a customer-managed KMS key, 7 days of backups, deletion protection on. Generated passwords in Secrets Manager for the master user and the three roles. |
+| `Rabaed-dev-Data` | RDS PostgreSQL 16, single-AZ, not publicly accessible, TLS required, encrypted with a customer-managed KMS key, daily backups kept 1 day (the dev account is on AWS's Free plan, which refuses more; upgrading the plan allows 7), fixed 20 GB storage, deletion protection on. Generated passwords in Secrets Manager for the master user and the three roles. |
 | `Rabaed-dev-Registry` | ECR repositories `rabaed-dev/web`, `api`, `worker`: scanned on push, tags immutable. |
 | `Rabaed-dev-Migrations` | The one-off migration task (`packages/db/src/setup.ts` in the api image). |
 | `Rabaed-dev-App` | The load balancer (HTTPS, HTTP redirected) and the `web`, `api` and `worker` Fargate services at the fixed sizes in `src/config.ts`. |

@@ -21,7 +21,8 @@ export interface DatabaseSize {
   /** RDS instance class without the `db.` prefix, e.g. `t4g.micro`. */
   readonly instanceType: string;
   readonly allocatedStorageGb: number;
-  readonly maxAllocatedStorageGb: number;
+  /** Storage autoscaling up to this size; none when left out. */
+  readonly maxAllocatedStorageGb?: number;
   readonly multiAz: boolean;
   readonly backupRetentionDays: number;
 }
@@ -71,7 +72,10 @@ export const environments = {
     github: rabaedRepository,
     monthlyBudgetUsd: 150,
     natGateways: 1,
-    database: { instanceType: "t4g.micro", allocatedStorageGb: 20, maxAllocatedStorageGb: 50, multiAz: false, backupRetentionDays: 7 },
+    // The dev account is on AWS's Free plan (chosen 2026-09-28), which caps
+    // backup retention at one day; storage autoscaling is left off to stay
+    // inside its limits. Upgrading the plan allows 7 days again.
+    database: { instanceType: "t4g.micro", allocatedStorageGb: 20, multiAz: false, backupRetentionDays: 1 },
     services: {
       web: { cpu: 256, memoryMiB: 1024, desiredCount: 1 },
       api: { cpu: 256, memoryMiB: 512, desiredCount: 1 },
