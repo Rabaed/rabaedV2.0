@@ -144,7 +144,25 @@ Every control sits in a `Field`, which gives it a label, optional help text, the
 - **Alignment**: `align="end"` for numbers, so they line up with tabular digits; columns and alignment mirror in Arabic.
 - **Tabs**: name the list (`<TabsList aria-label={t("project")}>`); a trigger takes an `icon` and a `count` (pass it formatted with `formatNumber`).
 
-The package has no translations of its own: pass every label (`closeLabel`, the toast region `label`, …) from the app's messages. Copy never uses deadline language: the story tests check story copy, and the `json-no-deadline-words` lint rule checks the app's messages.
+The package has no translations of its own: pass every label (`closeLabel`, the toast region `label`, …) from the app's messages. The one exception is the fixed product wording of the status components below (Review Code meanings, "N weeks at this step"), which take a `locale` instead, so no module can word them differently. Copy never uses deadline language: the story tests check story copy, and the `json-no-deadline-words` lint rule checks the app's messages.
+
+## Status
+
+The components that carry Rabaed's product rules, so every module shows status the same way. Use them wherever a Stage, a Review Code, a Step Age or a holder appears.
+
+| Component | Shows | Rule it keeps |
+|---|---|---|
+| `StagePill` | A Stage: `stage` (the colour category, one of `stageKeys`), its `label`, optional `count` | One colour per default Stage in every module; the name carries the meaning. |
+| `CodeBadge` | A Review Code: `code` (`a`–`d`), `locale`, `size` (`sm`, `md`), `variant` (`full`, or `letter` with the meaning for screen readers only) | Icon + colour + text, never colour alone. B always has the comment icon. |
+| `AgeDots` | Step Age: `weeks` (whole weeks at the current Step), `locale` | 0–4 dots (4+), grey turning red, named "N weeks at this step". Age only: there is no due date prop. |
+| `WithChip` | Who holds the Step: `kind` (`person`, `company`), `name`, `companyName`, `inViewerCompany` | Visibility V14: when `inViewerCompany` is false it shows the company name only, whatever else is passed. |
+
+```tsx
+<StagePill stage="internal" label={stage.name[locale]} count={12} locale={locale} />
+<CodeBadge code="b" locale={locale} />
+<AgeDots weeks={item.weeksAtStep} locale={locale} />
+<WithChip kind="person" name={holder.name} companyName={holder.companyName} inViewerCompany={holder.companyId === viewer.companyId} />
+```
 
 ## Storybook and story tests
 
