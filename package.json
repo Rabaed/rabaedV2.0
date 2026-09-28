@@ -3,7 +3,7 @@
   "private": true,
   "packageManager": "pnpm@10.34.5",
   "engines": {
-    "node": ">=24"
+    "node": ">=24.7"
   },
   "scripts": {
     "dev": "docker compose up -d --wait db && pnpm db:setup && pnpm dev:apps",
@@ -16,7 +16,8 @@
     "test:seam1": "vitest run --project seam1",
     "test:seam2": "vitest run --project seam2",
     "test:stories": "pnpm --filter @rabaed/ui test:stories",
-    "storybook": "pnpm --filter @rabaed/ui storybook"
+    "storybook": "pnpm --filter @rabaed/ui storybook",
+    "engineer:create": "pnpm --filter @rabaed/api run engineer:create"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

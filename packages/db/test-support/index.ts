@@ -11,5 +11,6 @@ export function testDatabaseUrls(): DatabaseUrls {
     superuser: urls.superuser,
     migrator: withDatabaseName(urls.migrator, name),
     app: withDatabaseName(urls.app, name),
+    admin: withDatabaseName(urls.admin, name),
   };
 }

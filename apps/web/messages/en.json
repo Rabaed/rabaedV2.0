@@ -1,13 +1,17 @@
 {
   "shell": {
     "appName": "Rabaed",
-    "switchLanguage": "العربية"
+    "switchLanguage": "العربية",
+    "signOut": "Sign out"
   },
   "home": {
     "title": "Rabaed",
     "tagline": "Construction projects, one place, each company sees only its own work.",
     "healthLink": "System health",
-    "documentNumberLabel": "Document Numbers read left to right in every language:"
+    "documentNumberLabel": "Document Numbers read left to right in every language:",
+    "signIn": "Sign in",
+    "signedInAs": "Signed in as {name}, {company}",
+    "authorizedPerson": "Authorized Person"
   },
   "health": {
     "title": "System health",
@@ -16,5 +20,24 @@
     "ok": "ok",
     "unavailable": "unavailable",
     "unreachable": "API unreachable"
+  },
+  "signIn": {
+    "title": "Sign in",
+    "email": "Email",
+    "password": "Password",
+    "submit": "Sign in",
+    "invalid": "That email and password don't match.",
+    "unavailable": "Something went wrong. Try again."
+  },
+  "acceptInvitation": {
+    "title": "Accept your invitation",
+    "hint": "Choose a password of at least {min} characters.",
+    "password": "Password",
+    "confirm": "Confirm password",
+    "submit": "Set password and sign in",
+    "tooShort": "Use at least {min} characters.",
+    "mismatch": "The passwords don't match.",
+    "invalid": "This invitation link is not valid. It may have been used or have expired; ask for a new one.",
+    "unavailable": "Something went wrong. Try again."
   }
 }
