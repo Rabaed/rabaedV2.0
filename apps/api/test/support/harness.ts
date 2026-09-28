@@ -1,7 +1,7 @@
 import { randomInt, randomUUID } from "node:crypto";
 import { createDb } from "@rabaed/db";
 import { testDatabaseUrls } from "@rabaed/db/test-support";
-import type { OnboardCompanyRequest } from "@rabaed/domain";
+import type { InviteMemberRequest, OnboardCompanyRequest } from "@rabaed/domain";
 import type { FastifyInstance, LightMyRequestResponse } from "fastify";
 import { buildApp, SESSION_COOKIE } from "../../src/app.ts";
 import type { ApiConfig } from "../../src/config.ts";
@@ -21,6 +21,7 @@ type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 export interface Caller {
   get(url: string): Promise<LightMyRequestResponse>;
   post(url: string, body?: unknown): Promise<LightMyRequestResponse>;
+  patch(url: string, body?: unknown): Promise<LightMyRequestResponse>;
   delete(url: string): Promise<LightMyRequestResponse>;
   request(method: Method, url: string, body?: unknown): Promise<LightMyRequestResponse>;
   /** The current session token, to replay it after sign-out. */
@@ -37,6 +38,12 @@ export interface OnboardedCompany {
   vatNumber: string;
 }
 
+export interface InvitedMember {
+  id: string;
+  email: string;
+  invitationToken: string;
+}
+
 export interface TestApi {
   /** A caller with no session. */
   anonymous(): Caller;
@@ -48,6 +55,10 @@ export interface TestApi {
   acceptInvitation(token: string, password?: string): Promise<Caller>;
   /** Onboards a Company and signs its Authorized Person in. */
   authorizedPerson(): Promise<{ company: OnboardedCompany; caller: Caller }>;
+  /** The Authorized Person (`by`) invites a Member; overrides replace parts of the request. */
+  inviteMember(by: Caller, overrides?: Partial<InviteMemberRequest>): Promise<InvitedMember>;
+  /** The Authorized Person (`by`) invites a Member, who accepts and is signed in. */
+  member(by: Caller): Promise<{ member: InvitedMember; caller: Caller }>;
   signIn(email: string, password: string): Promise<Caller>;
   /** Moves the API's clock forward. */
   advanceClock(ms: number): void;
@@ -83,6 +94,7 @@ function callerFor(app: FastifyInstance): Caller {
     request,
     get: (url) => request("GET", url),
     post: (url, body) => request("POST", url, body ?? {}),
+    patch: (url, body) => request("PATCH", url, body ?? {}),
     delete: (url) => request("DELETE", url),
     get sessionToken() {
       return token;
@@ -164,6 +176,24 @@ export async function createTestApi(options: { databaseUrl?: string } = {}): Pro
     async authorizedPerson() {
       const company = await api.onboardCompany();
       return { company, caller: await api.acceptInvitation(company.invitationToken) };
+    },
+
+    async inviteMember(by, overrides = {}) {
+      const body: InviteMemberRequest = {
+        email: uniqueEmail("member"),
+        fullName: { en: "Test Member", ar: "عضو الاختبار" },
+        locale: "en",
+        ...overrides,
+      };
+      const res = await by.post("/v1/members", body);
+      expectStatus(res, 201, "invite member");
+      const json = res.json();
+      return { id: json.memberId, email: body.email, invitationToken: json.invitation.token };
+    },
+
+    async member(by) {
+      const member = await api.inviteMember(by);
+      return { member, caller: await api.acceptInvitation(member.invitationToken) };
     },
 
     async signIn(email, password) {
