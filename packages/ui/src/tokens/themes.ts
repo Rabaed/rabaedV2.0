@@ -31,6 +31,9 @@ export const coolLight = {
   border: "slate-200",
   "border-subtle": "slate-150",
   "border-strong": "slate-350",
+  // Form controls: their boundary must show at 3:1 (WCAG 1.4.11); decorative borders need not.
+  "control-border": "slate-450",
+  "control-border-hover": "slate-600",
 
   // Text
   text: "slate-900",

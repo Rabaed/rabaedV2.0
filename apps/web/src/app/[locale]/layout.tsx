@@ -1,4 +1,5 @@
 import { directionOf, isLocale } from "@rabaed/domain";
+import { DirectionProvider } from "@rabaed/ui";
 import type { Metadata } from "next";
 import { NextIntlClientProvider } from "next-intl";
 import { getTranslations, setRequestLocale } from "next-intl/server";
@@ -34,16 +35,18 @@ export default async function LocaleLayout({
     <html lang={locale} dir={directionOf(locale)}>
       <body className="min-h-dvh antialiased">
         <NextIntlClientProvider>
-          <header className="flex items-center justify-between border-b border-border px-6 py-3">
-            <Link href="/" className="text-lg font-semibold">
-              {t("appName")}
-            </Link>
-            <div className="flex items-center gap-2">
-              {me && <SignOutButton />}
-              <LanguageSwitch />
-            </div>
-          </header>
-          <main className="mx-auto max-w-3xl px-6 py-10">{children}</main>
+          <DirectionProvider dir={directionOf(locale)}>
+            <header className="flex items-center justify-between border-b border-border px-6 py-3">
+              <Link href="/" className="text-lg font-semibold">
+                {t("appName")}
+              </Link>
+              <div className="flex items-center gap-2">
+                {me && <SignOutButton />}
+                <LanguageSwitch />
+              </div>
+            </header>
+            <main className="mx-auto max-w-3xl px-6 py-10">{children}</main>
+          </DirectionProvider>
         </NextIntlClientProvider>
       </body>
     </html>

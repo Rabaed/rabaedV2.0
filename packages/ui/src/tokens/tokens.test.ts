@@ -71,9 +71,15 @@ describe("cool light launch theme", () => {
     expect(contrastRatio(resolveRole(coolLight, fg), resolveRole(coolLight, bg))).toBeGreaterThanOrEqual(4.5);
   });
 
+  // Form control boundaries must be visible too (1.4.11), unlike decorative borders.
   const graphicPairs: [fg: SemanticRole, bg: SemanticRole][] = [
     ["focus", "surface"],
     ["focus", "canvas"],
+    ["control-border", "surface"],
+    ["control-border", "canvas"],
+    ["control-border", "surface-subtle"],
+    ["control-border-hover", "surface"],
+    ["primary", "surface"],
     ...([1, 2, 3, 4] as const).flatMap((age) => [
       [`age-${age}`, "surface"] as [SemanticRole, SemanticRole],
       [`age-${age}`, "canvas"] as [SemanticRole, SemanticRole],

@@ -86,6 +86,11 @@ Setup, Project "Tower": Contractors **C1** (Electrical) and **C2** (Electrical, 
 | 20 | Rabaed Engineer opens the MAR to fix a stuck Step | Engineer | Allowed through Rabaed Admin. The read and the action are logged with a reason |
 | 21 | Weekly Step Age report | C1 PM | Lists only C1-accessible items |
 | 22 | Consultant engineer later granted Mechanical | Same engineer | Sees Mechanical items from then on, including earlier ones (access follows current Visibility, not grant date) |
+| 23 | K1's Authorized Person gives a K1 engineer a Trade K1 doesn't have | K1 Authorized Person | Rejected (V4) |
+| 24 | Project Admin narrows K1 from Tower 1 to Building A | K1 engineer who had Tower 1 | Now covers Building A only; widening K1 again doesn't widen them (V4) |
+| 25 | C1 member opens K1's Visibility, or a K1 engineer's | C1 member | 404 (V16) |
+| 26 | Project Admin (C1 Company) opens a K1 engineer's Visibility | Project Admin | 404; K1's own Participant grant is visible to them (V16) |
+| 27 | K1's Authorized Person, not a Project Member, narrows a K1 engineer | K1 Authorized Person | Sees only the Trades and Locations K1 covers, nothing else of the Project (V15, V16) |
 
 Every change to rules or channels must add or update rows here and in the test suite. A failing visibility test blocks release.
 
@@ -98,3 +103,4 @@ Every change to rules or channels must add or update rows here and in the test s
   The same grouping applies to **every screen that shows Steps or holders**: Kanban swimlanes, the list's **"With"** column (never "Current owner"), report and item steppers, notifications. The viewer's own company appears in full; another company appears as one grouped lane or cell with the company name and never a person's name. The build uses one shared component for this.
 - **V12. Access follows current Visibility.** A Member who gains a Trade or Location sees that dimension's items, including earlier ones. A Member who loses it stops seeing them, except under E2.
 - **V15. Company Projects (proposed with RP-190, awaiting approval).** A Participant's Authorized Person sees the name, code and Project Number of every Project their Company takes part in, and manages their Company's Project Members there, even before they are a Project Member themselves. They see nothing else of the Project (its Participants, Work Items or data) until they are a Project Member. Every other Participant sees another Participant's Company name and Project Role only, never its Project Members (V14).
+- **V16. Visibility grants (RP-191).** A Participant's Visibility grant is seen by its own Company and by the Project's Project Admins, who set it. A Project Member's grant is seen only by their own Company, and set only by its Authorized Person, within the Participant's (V4). The Authorized Person also sees the Trades and Locations their Participant covers, so they can narrow it for their Members before they are a Project Member themselves (an addition to V15). Every Project Member sees the Project's Trades and Locations.

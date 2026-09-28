@@ -135,6 +135,51 @@ export interface ProjectAdminTable {
   created_at: Generated<Timestamp>;
 }
 
+export type DimensionKind = "trade" | "location" | "custom";
+
+export interface VisibilityDimensionTable {
+  id: Generated<string>;
+  project_id: string;
+  kind: DimensionKind;
+  name: ColumnType<Bilingual, string, string>;
+  required_on_work_items: Generated<boolean>;
+  created_at: Generated<Timestamp>;
+  updated_at: Generated<Timestamp>;
+}
+
+export interface DimensionValueTable {
+  id: Generated<string>;
+  project_id: string;
+  dimension_id: string;
+  parent_id: string | null;
+  depth: number;
+  level_name: ColumnType<Bilingual | null, string | null, string | null>;
+  code: string;
+  name: ColumnType<Bilingual, string, string>;
+  sort: Generated<number>;
+  created_at: Generated<Timestamp>;
+  updated_at: Generated<Timestamp>;
+}
+
+export interface VisibilityGrantTable {
+  id: Generated<string>;
+  project_id: string;
+  subject_kind: "participant" | "project_member";
+  participant_id: string;
+  project_member_id: string | null;
+  dimension_id: string;
+  is_all: Generated<boolean>;
+  created_at: Generated<Timestamp>;
+  updated_at: Generated<Timestamp>;
+}
+
+export interface VisibilityGrantValueTable {
+  grant_id: string;
+  project_id: string;
+  dimension_id: string;
+  dimension_value_id: string;
+}
+
 export interface Database {
   rabaed_engineer: RabaedEngineerTable;
   company: CompanyTable;
@@ -148,4 +193,8 @@ export interface Database {
   participant: ParticipantTable;
   project_member: ProjectMemberTable;
   project_admin: ProjectAdminTable;
+  visibility_dimension: VisibilityDimensionTable;
+  dimension_value: DimensionValueTable;
+  visibility_grant: VisibilityGrantTable;
+  visibility_grant_value: VisibilityGrantValueTable;
 }
