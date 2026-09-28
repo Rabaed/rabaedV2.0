@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { adminUrlFromEnv, appUrlFromEnv, databaseUrlsFromEnv } from "./config.ts";
+import { adminUrlFromEnv, appUrlFromEnv, connectionFromEnv, databaseUrlsFromEnv } from "./config.ts";
 
 // In AWS each password is its own secret, injected as its own variable, and
 // the host comes from the database instance; locally .env holds whole URLs.
@@ -42,6 +42,26 @@ describe("database URLs from their parts", () => {
       "postgres://rabaed_app:app-pw@db.example.internal:5432/rabaed",
     );
     expect(() => adminUrlFromEnv({ DATABASE_HOST, DATABASE_PORT, DATABASE_NAME, DATABASE_APP_PASSWORD })).toThrow();
+  });
+});
+
+describe("a long-running process's connection", () => {
+  const server = { DATABASE_HOST: "db.example.internal", DATABASE_PORT: "5432", DATABASE_NAME: "rabaed" };
+
+  it("reads its password from a secret when given one, so a rotated password reaches it", () => {
+    expect(connectionFromEnv("app", { ...server, DATABASE_APP_SECRET_ARN: "arn:aws:secretsmanager:eu-central-1:1:secret:app" })).toEqual({
+      url: "postgres://rabaed_app@db.example.internal:5432/rabaed",
+      passwordSecret: "arn:aws:secretsmanager:eu-central-1:1:secret:app",
+    });
+    expect(connectionFromEnv("admin", { ...server, DATABASE_ADMIN_SECRET_ARN: "admin-secret" })).toEqual({
+      url: "postgres://rabaed_admin@db.example.internal:5432/rabaed",
+      passwordSecret: "admin-secret",
+    });
+  });
+
+  it("otherwise uses the URL as before", () => {
+    const url = "postgres://rabaed_app:local@localhost:5432/rabaed";
+    expect(connectionFromEnv("app", { DATABASE_APP_URL: url })).toEqual({ url });
   });
 });
 

@@ -19,15 +19,25 @@ export interface DataStackProps extends StackProps {
   readonly network: NetworkStack;
 }
 
+// Characters a generated or rotated password never contains (RDS's own
+// default list), so no password needs quoting anywhere.
+const EXCLUDED_CHARACTERS = " %+~`#$&*()|[]{}:;<>?!'/@\"\\";
+
 // PostgreSQL and its credentials. The RDS master user only bootstraps: it
 // creates the three roles and the database (packages/db/src/bootstrap.ts),
 // which the migration task runs before every deploy.
+//
+// Every password is a JSON secret (username, password, host, database) that
+// Secrets Manager rotates every 30 days: a Lambda in the VPC signs in as the
+// role and changes its own password. api and worker read the current password
+// when they connect (packages/db/src/rotating-password.ts), so a rotation
+// needs no restart; the migration task gets it at start.
 export class DataStack extends Stack {
   readonly database: rds.DatabaseInstance;
   /** The RDS master user's secret (JSON with `username` and `password`). */
   readonly masterSecret: secretsmanager.ISecret;
-  /** One generated password per database role. */
-  readonly roleSecrets: Record<DatabaseRole, secretsmanager.Secret>;
+  /** One secret per database role (JSON with `username` and `password`). */
+  readonly roleSecrets: Record<DatabaseRole, secretsmanager.ISecret>;
 
   constructor(scope: Construct, id: string, props: DataStackProps) {
     super(scope, id, props);
@@ -58,6 +68,7 @@ export class DataStack extends Stack {
       storageEncryptionKey: key,
       credentials: rds.Credentials.fromGeneratedSecret("rabaed_master", {
         secretName: `${names.secretPrefix}database/master`,
+        excludeCharacters: EXCLUDED_CHARACTERS,
       }),
       parameterGroup: new rds.ParameterGroup(this, "Parameters", {
         engine,
@@ -73,13 +84,30 @@ export class DataStack extends Stack {
     });
     this.masterSecret = this.database.secret!;
 
-    // Letters and digits only, so a password never needs escaping in a connection URL.
+    // Attached to the instance, which adds its host, port and engine: what the rotation needs.
     const roleSecret = (role: DatabaseRole) =>
-      new secretsmanager.Secret(this, `${role}Password`, {
+      new rds.DatabaseSecret(this, `${role}Secret`, {
+        username: role,
+        dbname: DATABASE_NAME,
         secretName: `${names.secretPrefix}database/${role}`,
-        description: `Password of the ${role} database role`,
-        generateSecretString: { passwordLength: 40, excludePunctuation: true },
+        excludeCharacters: EXCLUDED_CHARACTERS,
+      }).attach(this.database);
+    this.roleSecrets = Object.fromEntries(databaseRoles.map((role) => [role, roleSecret(role)])) as Record<DatabaseRole, secretsmanager.ISecret>;
+
+    const rotate = (id: string, secret: secretsmanager.ISecret) =>
+      new secretsmanager.RotationSchedule(this, `${id}Rotation`, {
+        secret,
+        hostedRotation: secretsmanager.HostedRotation.postgreSqlSingleUser({
+          vpc: network.vpc,
+          vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
+          securityGroups: [network.securityGroups.rotation],
+          excludeCharacters: EXCLUDED_CHARACTERS,
+        }),
+        automaticallyAfter: Duration.days(30),
+        // The roles exist only once the migration task has run after the first deploy.
+        rotateImmediatelyOnUpdate: false,
       });
-    this.roleSecrets = Object.fromEntries(databaseRoles.map((role) => [role, roleSecret(role)])) as Record<DatabaseRole, secretsmanager.Secret>;
+    rotate("master", this.masterSecret);
+    for (const role of databaseRoles) rotate(role, this.roleSecrets[role]);
   }
 }

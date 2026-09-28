@@ -35,28 +35,53 @@ const passwordVariable: Record<Role, string> = {
   admin: "DATABASE_ADMIN_PASSWORD",
 };
 
+// api and worker run for weeks, so in AWS they read their passwords from
+// Secrets Manager when connecting (see rotating-password.ts) instead of once at start.
+const secretVariable = {
+  app: "DATABASE_APP_SECRET_ARN",
+  admin: "DATABASE_ADMIN_SECRET_ARN",
+} as const;
+
 const parts = z.object({
   DATABASE_HOST: z.string().min(1),
   DATABASE_PORT: z.coerce.number().int().positive().default(5432),
   DATABASE_NAME: z.string().min(1),
   /** A CA bundle file: when set, TLS is required and the server's certificate verified. */
   DATABASE_SSL_ROOT_CERT: z.string().min(1).optional(),
-  password: z.string().min(1),
   username: z.string().min(1),
 });
+
+/** The role's URL from parts; with no password when it is read from a secret instead. */
+function urlFromParts(source: NodeJS.ProcessEnv, role: Role, password: string | undefined): string {
+  // The superuser (RDS master user) has its own name; the other roles' names are fixed.
+  const username = { superuser: source.DATABASE_SUPERUSER_USERNAME, migrator: MIGRATOR_ROLE, app: APP_ROLE, admin: ADMIN_ROLE }[role];
+  const p = parts.parse({ ...source, username });
+  // The superuser only creates roles and the database, so it connects to the default one.
+  const database = role === "superuser" ? "postgres" : p.DATABASE_NAME;
+  const credentials = password === undefined ? encodeURIComponent(p.username) : `${encodeURIComponent(p.username)}:${encodeURIComponent(password)}`;
+  const url = `postgres://${credentials}@${p.DATABASE_HOST}:${p.DATABASE_PORT}/${database}`;
+  if (!p.DATABASE_SSL_ROOT_CERT) return url;
+  return `${url}?${new URLSearchParams({ sslmode: "verify-full", sslrootcert: p.DATABASE_SSL_ROOT_CERT })}`;
+}
 
 function urlFromEnv(source: NodeJS.ProcessEnv, role: Role): string {
   const whole = source[urlVariable[role]];
   if (whole !== undefined) return z.url().parse(whole);
+  const password = z.string().min(1, `${passwordVariable[role]} is required`).parse(source[passwordVariable[role]] ?? "");
+  return urlFromParts(source, role, password);
+}
 
-  // The superuser (RDS master user) has its own name; the other roles' names are fixed.
-  const username = { superuser: source.DATABASE_SUPERUSER_USERNAME, migrator: MIGRATOR_ROLE, app: APP_ROLE, admin: ADMIN_ROLE }[role];
-  const p = parts.parse({ ...source, username, password: source[passwordVariable[role]] });
-  // The superuser only creates roles and the database, so it connects to the default one.
-  const database = role === "superuser" ? "postgres" : p.DATABASE_NAME;
-  const url = `postgres://${encodeURIComponent(p.username)}:${encodeURIComponent(p.password)}@${p.DATABASE_HOST}:${p.DATABASE_PORT}/${database}`;
-  if (!p.DATABASE_SSL_ROOT_CERT) return url;
-  return `${url}?${new URLSearchParams({ sslmode: "verify-full", sslrootcert: p.DATABASE_SSL_ROOT_CERT })}`;
+export interface Connection {
+  url: string;
+  /** Secrets Manager secret holding the current password; the URL then has none. */
+  passwordSecret?: string;
+}
+
+/** How api and worker connect as the app or admin role. */
+export function connectionFromEnv(role: keyof typeof secretVariable, source: NodeJS.ProcessEnv = process.env): Connection {
+  const passwordSecret = source[secretVariable[role]];
+  if (!passwordSecret || source[urlVariable[role]] !== undefined) return { url: urlFromEnv(source, role) };
+  return { url: urlFromParts(source, role, undefined), passwordSecret };
 }
 
 export function databaseUrlsFromEnv(source: NodeJS.ProcessEnv = process.env): DatabaseUrls {

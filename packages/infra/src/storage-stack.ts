@@ -1,0 +1,93 @@
+import { Duration, RemovalPolicy, Stack, type StackProps } from "aws-cdk-lib";
+import * as iam from "aws-cdk-lib/aws-iam";
+import * as kms from "aws-cdk-lib/aws-kms";
+import * as s3 from "aws-cdk-lib/aws-s3";
+import type { Construct } from "constructs";
+import { resourceNames, type EnvironmentConfig } from "./config.ts";
+
+export interface StorageStackProps extends StackProps {
+  readonly config: EnvironmentConfig;
+}
+
+/** Project files live under this prefix, then the Project's ID (ADR 0007). */
+export const PROJECT_FILES_PREFIX = "projects/";
+
+// Files and the keys that protect them. Every bucket is private, versioned,
+// owner-enforced (no ACLs) and refuses requests not made over TLS.
+//
+// - Project files: encrypted with the storage key. Only the api's task role
+//   can read or write objects, only under projects/, and the bucket policy
+//   refuses everyone else, administrators included. Browsers get files
+//   through short-lived signed URLs the api creates.
+// - Build assets: private files the build needs (the Thmanyah fonts, RP-211).
+// - Logs: S3 access logs of the other two buckets, and later the load
+//   balancer's. Encrypted with S3-managed keys, because neither S3 access
+//   logs nor load-balancer logs can be written to a KMS-encrypted bucket.
+export class StorageStack extends Stack {
+  readonly storageKey: kms.Key;
+  readonly projectFiles: s3.Bucket;
+  readonly buildAssets: s3.Bucket;
+
+  constructor(scope: Construct, id: string, props: StorageStackProps) {
+    super(scope, id, props);
+    const { config } = props;
+    const names = resourceNames(config);
+
+    this.storageKey = new kms.Key(this, "StorageKey", {
+      alias: `alias/rabaed-${config.name}-storage`,
+      description: `Encrypts rabaed-${config.name} Project files and build assets`,
+      enableKeyRotation: true,
+      removalPolicy: RemovalPolicy.RETAIN,
+    });
+
+    // Reserved: sealing issued PDFs (a digital signature) comes later. Nothing may use it yet.
+    new kms.Key(this, "PdfSealingKey", {
+      alias: `alias/rabaed-${config.name}-pdf-sealing`,
+      description: `Reserved for sealing rabaed-${config.name} PDFs; not used yet`,
+      keySpec: kms.KeySpec.RSA_3072,
+      keyUsage: kms.KeyUsage.SIGN_VERIFY,
+      removalPolicy: RemovalPolicy.RETAIN,
+    });
+
+    const privateBucket: s3.BucketProps = {
+      blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
+      enforceSSL: true,
+      versioned: true,
+      objectOwnership: s3.ObjectOwnership.BUCKET_OWNER_ENFORCED,
+      removalPolicy: RemovalPolicy.RETAIN,
+    };
+
+    const logs = new s3.Bucket(this, "Logs", {
+      ...privateBucket,
+      encryption: s3.BucketEncryption.S3_MANAGED,
+      lifecycleRules: [{ expiration: Duration.days(365), noncurrentVersionExpiration: Duration.days(30) }],
+    });
+
+    const encrypted = (id: string, logPrefix: string) =>
+      new s3.Bucket(this, id, {
+        ...privateBucket,
+        encryption: s3.BucketEncryption.KMS,
+        encryptionKey: this.storageKey,
+        bucketKeyEnabled: true,
+        serverAccessLogsBucket: logs,
+        serverAccessLogsPrefix: logPrefix,
+        lifecycleRules: [{ noncurrentVersionExpiration: Duration.days(90) }],
+      });
+    this.projectFiles = encrypted("ProjectFiles", "project-files/");
+    this.buildAssets = encrypted("BuildAssets", "build-assets/");
+
+    // By name, not by reference: the api's role lives in the app stack, which
+    // depends on this one.
+    const apiTaskRole = `arn:${this.partition}:iam::${this.account}:role/${names.apiTaskRole}`;
+    this.projectFiles.addToResourcePolicy(
+      new iam.PolicyStatement({
+        sid: "OnlyTheApiReadsAndWritesProjectFiles",
+        effect: iam.Effect.DENY,
+        principals: [new iam.AnyPrincipal()],
+        actions: ["s3:GetObject*", "s3:PutObject*", "s3:DeleteObject*", "s3:RestoreObject"],
+        resources: [this.projectFiles.arnForObjects("*")],
+        conditions: { StringNotEquals: { "aws:PrincipalArn": apiTaskRole } },
+      }),
+    );
+  }
+}

@@ -110,6 +110,7 @@ export function stackNames(config: EnvironmentConfig) {
     network: name("Network"),
     data: name("Data"),
     registry: name("Registry"),
+    storage: name("Storage"),
     migrations: name("Migrations"),
     app: name("App"),
   };
@@ -131,6 +132,8 @@ export function resourceNames(config: EnvironmentConfig) {
     /** Both migration roles start with this, so the deploy role can pass only them. */
     migrationRolePrefix: `${prefix}-migrate-`,
     logGroup: (service: ServiceName | "migrate") => `/rabaed/${config.name}/${service}`,
+    /** The api's task role; the Project files bucket refuses everyone else. */
+    apiTaskRole: `${prefix}-api-task`,
     /** Every Secrets Manager secret of the environment starts with this. */
     secretPrefix: `rabaed/${config.name}/`,
     /** Private DNS namespace; web reaches the api at `api.<namespace>`. */

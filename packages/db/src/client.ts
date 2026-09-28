@@ -1,15 +1,45 @@
-import { Kysely, PostgresDialect, sql, type Transaction } from "kysely";
+import { Kysely, PostgresDialect, sql, type PostgresPool, type Transaction } from "kysely";
 import pg from "pg";
+import { parseIntoClientConfig } from "pg-connection-string";
+import { connectionFromEnv } from "./config.ts";
+import { connectWithRetry, rotatingPassword, type RotatingPassword } from "./rotating-password.ts";
 import type { Database } from "./schema.ts";
+import { secretPassword } from "./secret-password.ts";
 
 export type Db = Kysely<Database>;
 
-export function createDb(connectionString: string, options: { max?: number } = {}): Db {
+export interface CreateDbOptions {
+  max?: number;
+  /** Read at each new connection instead of the URL's password (see rotating-password.ts). */
+  password?: RotatingPassword;
+}
+
+export function createDb(connectionString: string, options: CreateDbOptions = {}): Db {
+  const max = options.max ?? 10;
+  const { password } = options;
+  if (!password) return new Kysely<Database>({ dialect: new PostgresDialect({ pool: new pg.Pool({ connectionString, max }) }) });
+
+  // The URL's parts, not the URL itself: pg lets a connection string's (empty)
+  // password win over the password function.
+  const { password: _ignored, ...config } = parseIntoClientConfig(connectionString);
+  const pool = new pg.Pool({ ...config, max, password: () => password.get() });
   return new Kysely<Database>({
     dialect: new PostgresDialect({
-      pool: new pg.Pool({ connectionString, max: options.max ?? 10 }),
+      pool: {
+        connect: () => connectWithRetry(() => pool.connect(), () => password.invalidate()),
+        end: () => pool.end(),
+        // Kysely reads these to cancel queries on a separate connection.
+        options: pool.options,
+        Client: (pool as unknown as { Client: PostgresPool["Client"] }).Client,
+      },
     }),
   });
+}
+
+/** How api and worker open the database as the app or admin role: from the URL, or with the password in Secrets Manager. */
+export function createDbFromEnv(role: "app" | "admin", options: Omit<CreateDbOptions, "password"> = {}): Db {
+  const { url, passwordSecret } = connectionFromEnv(role);
+  return createDb(url, { ...options, password: passwordSecret ? rotatingPassword(secretPassword(passwordSecret)) : undefined });
 }
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

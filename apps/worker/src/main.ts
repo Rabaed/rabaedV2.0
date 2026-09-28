@@ -1,5 +1,5 @@
 import { setTimeout as sleep } from "node:timers/promises";
-import { appUrlFromEnv, createDb, pingDatabase } from "@rabaed/db";
+import { createDbFromEnv, pingDatabase } from "@rabaed/db";
 import { z } from "zod";
 
 // The outbox processor. For now it only proves it can reach the database as the
@@ -8,7 +8,7 @@ const env = z
   .object({ WORKER_POLL_INTERVAL_MS: z.coerce.number().int().positive().default(5000) })
   .parse(process.env);
 
-const db = createDb(appUrlFromEnv(), { max: 2 });
+const db = createDbFromEnv("app", { max: 2 });
 const stop = new AbortController();
 process.once("SIGINT", () => stop.abort());
 process.once("SIGTERM", () => stop.abort());

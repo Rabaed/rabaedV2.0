@@ -55,10 +55,11 @@ function injectedSecrets(family: string): Record<string, string> {
 
 type Statement = { Action: string | string[]; Resource: unknown };
 
-// Secrets any role of the task definition (execution or task role) may read.
-function readableSecrets(family: string): string[] {
+// Secrets the task definition's execution role, task role, or either may read.
+function readableSecrets(family: string, which: "execution" | "task" | "any" = "any"): string[] {
   const { part, properties } = taskDefinitions.get(family)!;
-  const roles = [properties.ExecutionRoleArn, properties.TaskRoleArn].filter(Boolean).map((r) => env.resolve(r, part).logicalId);
+  const chosen = { execution: [properties.ExecutionRoleArn], task: [properties.TaskRoleArn], any: [properties.ExecutionRoleArn, properties.TaskRoleArn] }[which];
+  const roles = chosen.filter(Boolean).map((r) => env.resolve(r, part).logicalId);
   const policies = Object.values(env.template(part).findResources("AWS::IAM::Policy")) as Resource[];
   const names = new Set<string>();
   for (const policy of policies) {
@@ -220,31 +221,55 @@ describe("services", () => {
 });
 
 describe("secrets", () => {
-  it("injects into each container only the database passwords it needs", () => {
-    expect(injectedSecrets("rabaed-dev-web")).toEqual({});
-    expect(injectedSecrets("rabaed-dev-api")).toEqual({ DATABASE_APP_PASSWORD: APP, DATABASE_ADMIN_PASSWORD: ADMIN });
-    expect(injectedSecrets("rabaed-dev-worker")).toEqual({ DATABASE_APP_PASSWORD: APP });
+  // api and worker run for weeks, so they read their (rotating) passwords
+  // through their task role when connecting; the environment names the secret.
+  function secretEnvironment(family: string): Record<string, string> {
+    const { part } = taskDefinitions.get(family)!;
+    return Object.fromEntries(
+      (container(family).Environment ?? []).filter((e) => e.Name.endsWith("_SECRET_ARN")).map((e) => [e.Name, secretName(e.Value, part)]),
+    );
+  }
+
+  it("tells api and worker which secrets hold their database passwords", () => {
+    expect(secretEnvironment("rabaed-dev-web")).toEqual({});
+    expect(secretEnvironment("rabaed-dev-api")).toEqual({ DATABASE_APP_SECRET_ARN: APP, DATABASE_ADMIN_SECRET_ARN: ADMIN });
+    expect(secretEnvironment("rabaed-dev-worker")).toEqual({ DATABASE_APP_SECRET_ARN: APP });
+  });
+
+  it("lets each service's task role read only its own secrets; worker and web never the admin one", () => {
+    expect(readableSecrets("rabaed-dev-web")).toEqual([]);
+    expect(readableSecrets("rabaed-dev-api", "task")).toEqual([ADMIN, APP]);
+    expect(readableSecrets("rabaed-dev-worker", "task")).toEqual([APP]);
+    for (const family of ["rabaed-dev-api", "rabaed-dev-worker", "rabaed-dev-web"]) {
+      expect(readableSecrets(family, "execution"), family).toEqual([]);
+      expect(injectedSecrets(family), family).toEqual({});
+    }
+  });
+
+  it("injects the passwords into the one-off migration task at start", () => {
     expect(injectedSecrets("rabaed-dev-migrate")).toEqual({
       DATABASE_SUPERUSER_USERNAME: `${MASTER}:username`,
       DATABASE_SUPERUSER_PASSWORD: `${MASTER}:password`,
-      DATABASE_MIGRATOR_PASSWORD: MIGRATOR,
-      DATABASE_APP_PASSWORD: APP,
-      DATABASE_ADMIN_PASSWORD: ADMIN,
+      DATABASE_MIGRATOR_PASSWORD: `${MIGRATOR}:password`,
+      DATABASE_APP_PASSWORD: `${APP}:password`,
+      DATABASE_ADMIN_PASSWORD: `${ADMIN}:password`,
     });
-  });
-
-  it("lets each service's roles read only its own secrets", () => {
-    expect(readableSecrets("rabaed-dev-web")).toEqual([]);
-    expect(readableSecrets("rabaed-dev-api")).toEqual([ADMIN, APP]);
-    expect(readableSecrets("rabaed-dev-worker")).toEqual([APP]);
     expect(readableSecrets("rabaed-dev-migrate")).toEqual([ADMIN, MASTER, APP, MIGRATOR].sort());
   });
 
   it("puts no password in plain environment variables", () => {
     for (const family of taskDefinitions.keys()) {
       const names = (container(family).Environment ?? []).map((e) => e.Name);
-      expect(names.filter((n) => /PASSWORD|SECRET|_URL$/.test(n) && n !== "API_URL"), family).toEqual([]);
+      expect(names.filter((n) => /PASSWORD|_URL$/.test(n) && n !== "API_URL"), family).toEqual([]);
     }
+  });
+});
+
+describe("Project files", () => {
+  it("the api knows its bucket; nothing else does", () => {
+    const names = (family: string) => (container(family).Environment ?? []).map((e) => e.Name);
+    expect(names("rabaed-dev-api")).toContain("PROJECT_FILES_BUCKET");
+    for (const family of ["rabaed-dev-web", "rabaed-dev-worker", "rabaed-dev-migrate"]) expect(names(family)).not.toContain("PROJECT_FILES_BUCKET");
   });
 });
 

@@ -15,13 +15,13 @@ export interface NetworkStackProps extends StackProps {
 // The VPC, the ECS cluster and every security group. All traffic rules live
 // here, in one place, so the allowed paths can be read (and are tested) together:
 //   internet → load balancer (443, and 80 only to redirect) → web → api → database
-//   worker → database; the migration task → database
+//   worker → database; the migration task → database; password rotation → database
 // Every task may also make outbound HTTPS calls, through the NAT gateway, to pull
 // its image, write logs and read its secrets.
 export class NetworkStack extends Stack {
   readonly vpc: ec2.Vpc;
   readonly cluster: ecs.Cluster;
-  readonly securityGroups: Record<"loadBalancer" | "web" | "api" | "worker" | "migrations" | "database", ec2.SecurityGroup>;
+  readonly securityGroups: Record<"loadBalancer" | "web" | "api" | "worker" | "migrations" | "rotation" | "database", ec2.SecurityGroup>;
 
   constructor(scope: Construct, id: string, props: NetworkStackProps) {
     super(scope, id, props);
@@ -52,19 +52,20 @@ export class NetworkStack extends Stack {
     const api = group("Api", "api tasks");
     const worker = group("Worker", "worker tasks");
     const migrations = group("Migrations", "One-off migration tasks");
-    const database = group("Database", "PostgreSQL: reachable from api, worker and migrations only");
+    const rotation = group("Rotation", "Secrets Manager rotation Lambdas for the database passwords");
+    const database = group("Database", "PostgreSQL: reachable from api, worker, migrations and password rotation only");
 
     loadBalancer.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(443), "HTTPS from anywhere");
     loadBalancer.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(80), "HTTP from anywhere, redirected to HTTPS");
     loadBalancer.connections.allowTo(web, ec2.Port.tcp(WEB_PORT), "load balancer to web");
     web.connections.allowTo(api, ec2.Port.tcp(API_PORT), "web to api");
-    for (const client of [api, worker, migrations]) {
+    for (const client of [api, worker, migrations, rotation]) {
       client.connections.allowTo(database, ec2.Port.tcp(DATABASE_PORT), `${client.node.id} to database`);
     }
-    for (const task of [web, api, worker, migrations]) {
+    for (const task of [web, api, worker, migrations, rotation]) {
       task.addEgressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(443), "HTTPS out: image pulls, logs, secrets");
     }
 
-    this.securityGroups = { loadBalancer, web, api, worker, migrations, database };
+    this.securityGroups = { loadBalancer, web, api, worker, migrations, rotation, database };
   }
 }

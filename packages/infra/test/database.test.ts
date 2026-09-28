@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { environmentTemplates, resourcesOfType } from "./support.ts";
+import { environmentTemplates, references, resourcesOfType } from "./support.ts";
 
 const env = environmentTemplates();
 const [database] = resourcesOfType(env.synthesised, "AWS::RDS::DBInstance");
@@ -55,5 +55,45 @@ describe("database", () => {
       expect(secret.Properties).not.toHaveProperty("SecretString");
       expect(secret.Properties).toHaveProperty("GenerateSecretString");
     }
+  });
+
+  it("keeps each role's credentials as the JSON the rotation needs: its own username, and the database", () => {
+    const templates = Object.fromEntries(
+      resourcesOfType(env.synthesised, "AWS::SecretsManager::Secret").map((s) => [
+        s.Properties?.Name,
+        JSON.parse((s.Properties?.GenerateSecretString as { SecretStringTemplate: string }).SecretStringTemplate),
+      ]),
+    );
+    expect(templates["rabaed/dev/database/rabaed_app"]).toMatchObject({ username: "rabaed_app", dbname: "rabaed" });
+    expect(templates["rabaed/dev/database/rabaed_admin"]).toMatchObject({ username: "rabaed_admin", dbname: "rabaed" });
+    expect(templates["rabaed/dev/database/rabaed_migrator"]).toMatchObject({ username: "rabaed_migrator", dbname: "rabaed" });
+    expect(templates["rabaed/dev/database/master"]).toMatchObject({ username: "rabaed_master" });
+    // Host, port and engine come from attaching each secret to the instance.
+    expect(resourcesOfType(env.synthesised, "AWS::SecretsManager::SecretTargetAttachment")).toHaveLength(4);
+  });
+
+  it("rotates every database password every 30 days, from inside the VPC", () => {
+    const schedules = resourcesOfType(env.synthesised, "AWS::SecretsManager::RotationSchedule");
+    expect(schedules).toHaveLength(4);
+    const rotated = new Set<string>();
+    for (const { Properties: p } of schedules) {
+      const secret = env.resolve(p?.SecretId, "data").resource;
+      const target = secret.Type === "AWS::SecretsManager::SecretTargetAttachment" ? env.resolve(secret.Properties?.SecretId, "data").resource : secret;
+      rotated.add(target.Properties?.Name as string);
+      expect(p).toMatchObject({
+        RotationRules: { ScheduleExpression: "rate(30 days)" },
+        // The roles only exist once the migration task has run, so no rotation on creation.
+        RotateImmediatelyOnUpdate: false,
+        HostedRotationLambda: { RotationType: "PostgreSQLSingleUser" },
+      });
+      const lambda = p?.HostedRotationLambda as { VpcSubnetIds: unknown; VpcSecurityGroupIds: unknown };
+      const subnets = references(lambda.VpcSubnetIds);
+      expect(subnets.length).toBeGreaterThanOrEqual(2);
+      for (const subnet of subnets) expect(env.subnetType(subnet, "data")).toBe("Private");
+      expect(env.resolve(lambda.VpcSecurityGroupIds, "data").logicalId).toMatch(/^RotationSecurityGroup/);
+    }
+    expect([...rotated].sort()).toEqual(
+      ["rabaed/dev/database/master", "rabaed/dev/database/rabaed_admin", "rabaed/dev/database/rabaed_app", "rabaed/dev/database/rabaed_migrator"].sort(),
+    );
   });
 });
