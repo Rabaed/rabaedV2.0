@@ -260,7 +260,8 @@ describe("the Document Number", () => {
 
   it("is the second Contractor's own series", async () => {
     const id = await createDraft(c2Engineer);
-    // c2 has Engineers only: nobody could hold Internal Review, so it can't be sent.
+    // c2 has Engineers only: nobody could hold Internal Review, so it can't be sent, and no button says it can.
+    expect(buttons(await detail(c2Engineer, id))).toEqual([]);
     const res = await take(c2Engineer, id, "send_for_review");
     expect(res.statusCode).toBe(409);
     expect(res.json()).toEqual({ error: "no_step_pool" });
@@ -286,6 +287,18 @@ describe("a Transition", () => {
     const reused = await take(engineer, await createDraft(engineer), "send_for_review", { idempotencyKey });
     expect(reused.statusCode).toBe(422);
     expect(reused.json()).toEqual({ error: "idempotency_key_reused" });
+  });
+
+  it("applies one key to only one of two items, even sent to both at once", async () => {
+    const [a, b] = [await createDraft(engineer, "Sockets"), await createDraft(engineer, "Switches")];
+    const idempotencyKey = randomUUID();
+    const results = await Promise.all([
+      take(engineer, a, "send_for_review", { idempotencyKey }),
+      take(engineer, b, "send_for_review", { idempotencyKey }),
+    ]);
+    expect(results.map((r) => r.statusCode).sort()).toEqual([204, 422]);
+    const stages = [(await detail(engineer, a)).stage.key, (await detail(engineer, b)).stage.key].sort();
+    expect(stages).toEqual(["draft", "internal_review"]);
   });
 
   it("is refused to a holder without the permission, and nothing changes (scenario 11)", async () => {

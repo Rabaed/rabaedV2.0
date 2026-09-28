@@ -342,8 +342,8 @@ export interface PositionTable {
 
 export interface PositionPermissionTable {
   position_id: string;
-  module_key: string;
-  permission: string;
+  module_key: "submittals" | "inspections" | "snag_list" | "site_reports" | "drawings";
+  permission: "view" | "create" | "submit" | "review" | "approve" | "assign" | "close" | "attach";
 }
 
 export interface ProjectMemberPositionTable {

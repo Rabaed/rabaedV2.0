@@ -19,8 +19,9 @@
 -- Skeleton limits: only Transitions to a Step held by the raiser's own role
 -- (send, return); Submit to another Participant and closing come with RP-194,
 -- notifications with RP-195. No Action Forms beyond a Return's reason, no
--- conditions, no signing, no default holders (§3.3 rule 3), no Project or
--- Company Positions, no per-Type permissions.
+-- conditions, no signing, no default holders (§3.3 rule 3), no Documents to
+-- freeze at first exit from Draft, no Project or Company Positions, no per-Type
+-- permissions.
 
 -- Positions --------------------------------------------------------------------------
 
@@ -281,6 +282,7 @@ create function app.takeable_transitions(p_work_item_id uuid)
     where w.id = p_work_item_id and w.closed_at is null
       and app.project_member_has_permission(me.project_member_id, t.module_key, tr.permission)
       and target.actor_rule ->> 'base_role' = raiser_role.base_role
+      and exists (select 1 from app.step_pool(w.id, tr.to_step_id, raiser.id))
   $$;
 
 -- Takes a Transition (§5.1) by its key. Outcome: 'applied' (also for the same
@@ -288,6 +290,8 @@ create function app.takeable_transitions(p_work_item_id uuid)
 -- 'item_closed', 'project_closed', 'not_holder', 'transition_not_available',
 -- 'forbidden' (no permission), 'reason_required', 'no_step_pool' (nobody could
 -- hold the next Step) or 'idempotency_key_reused'. Any refusal writes nothing.
+-- A key is remembered only once applied: a replay answers 'applied' whatever its
+-- reason, and a refused attempt may be retried under the same key.
 create function app.take_transition(
   p_work_item_id uuid, p_transition_key text, p_reason text, p_idempotency_key uuid, p_now timestamptz
 ) returns text
@@ -310,6 +314,12 @@ create function app.take_transition(
       v_seq integer;
       v_audience text;
     begin
+      -- Nobody locks an item they can't see.
+      if not app.sees_work_item(p_work_item_id) then
+        return 'not_found';
+      end if;
+      -- One Member's key is taken by one command at a time, whichever item it names.
+      perform pg_advisory_xact_lock(hashtextextended(v_member_id::text || '/' || p_idempotency_key::text, 0));
       select w.*, t.module_key, t.code as type_code, pr.status as project_status, pr.code as project_code
       into v_item
       from work_item w
@@ -434,7 +444,8 @@ create function app.take_transition(
 -- Claims the item's pooled Step for the acting Member (§5.2). The item row is
 -- locked, so of two simultaneous Claims one wins and the other finds it taken.
 -- Outcome: 'claimed' (also when they already hold it), 'not_found', 'item_closed',
--- 'project_closed', 'already_claimed' (someone else holds it) or 'forbidden' (not in its pool).
+-- 'project_closed', 'already_claimed' (someone else in their Participant holds it)
+-- or 'forbidden' (another Participant's Step, or not in its pool).
 create function app.claim_step(p_work_item_id uuid, p_now timestamptz) returns text
   language plpgsql volatile security definer
   set search_path = pg_catalog, public
@@ -445,6 +456,9 @@ create function app.claim_step(p_work_item_id uuid, p_now timestamptz) returns t
       v_me record;
       v_assignment record;
     begin
+      if not app.sees_work_item(p_work_item_id) then
+        return 'not_found';
+      end if;
       select w.id, w.project_id, w.closed_at, pr.status as project_status into v_item
       from work_item w join project pr on pr.id = w.project_id
       where w.id = p_work_item_id
@@ -461,12 +475,15 @@ create function app.claim_step(p_work_item_id uuid, p_now timestamptz) returns t
       end if;
       select * into v_assignment from step_assignment
       where work_item_id = p_work_item_id and status in ('pooled', 'claimed', 'vacant');
+      -- Another Participant's Step: whether it is claimed is internal to them (§5.2).
+      if v_assignment.participant_id is distinct from v_me.participant_id then
+        return 'forbidden';
+      end if;
       if v_assignment.status = 'claimed' then
         return case when v_assignment.assignee_member_id = app.current_member_id() then 'claimed' else 'already_claimed' end;
       end if;
-      if v_assignment.status is distinct from 'pooled' or v_assignment.participant_id <> v_me.participant_id
-        or v_me.project_member_id not in (
-          select project_member_id from app.step_pool(p_work_item_id, v_assignment.step_id, v_assignment.participant_id))
+      if v_assignment.status <> 'pooled' or v_me.project_member_id not in (
+        select project_member_id from app.step_pool(p_work_item_id, v_assignment.step_id, v_assignment.participant_id))
       then
         return 'forbidden';
       end if;
@@ -511,6 +528,9 @@ create function app.release_step(p_work_item_id uuid, p_now timestamptz) returns
       v_me record;
       v_assignment_id uuid;
     begin
+      if not app.sees_work_item(p_work_item_id) then
+        return 'not_found';
+      end if;
       select w.id, w.project_id, w.closed_at, pr.status as project_status into v_item
       from work_item w join project pr on pr.id = w.project_id
       where w.id = p_work_item_id

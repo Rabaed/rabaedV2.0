@@ -96,10 +96,10 @@ Unique `(project_id, company_id)`. Withdrawal cancels the participant's in-progr
 Removal never deletes access to what the Member signed (§10).
 
 **position** / **position_permission** / **project_member_position**
-- `position`: `id`, `owner_kind/owner_id`, `base_role`, `name i18n`, `copied_from_id`.
+- `position`: `id`, `owner_kind/owner_id`, `base_role`, `key` (stable, e.g. `project_manager`), `name i18n`, `sort`, `copied_from_id`. The walking skeleton has Rabaed Defaults only (no `owner_id`, no `copied_from_id` yet).
 - `position_permission`: `position_id`, `permission {view, create, submit, review, approve, assign, close, attach}`, `module_key`, `work_item_type_id` (null = whole Module).
 - `project_member_position`: `project_id`, `project_member_id`, `position_id` (many-to-many). Set by the Participant's Authorized Person; seen only by that Participant's Company (V14).
-- The walking skeleton seeds Rabaed Default Positions only (e.g. Contractor Engineer, Contractor Project Manager) with Module-wide permissions.
+- The walking skeleton seeds Rabaed Default Positions only (e.g. Contractor Engineer, Contractor Project Manager) with Module-wide permissions (no `work_item_type_id` yet).
 
 ## 3. Visibility, Trades, Locations, Scopes
 
@@ -183,7 +183,7 @@ A pattern change creates a new row, and old numbers stay as issued.
 
 **numbering_counter**
 `project_id`, `counter_key` (resolved prefix), `last_value`.
-Incremented with `UPDATE … RETURNING` in the same transaction as the first Send or Submit, so there are no gaps and no reuse.
+Incremented with `INSERT … ON CONFLICT DO UPDATE … RETURNING` (the first number creates the row) in the same transaction as the first Send or Submit, so there are no gaps and no reuse.
 Until numbering patterns exist, the key is `<project code>-<type code>-<Participant ordinal>`, so each Participant counts on its own (e.g. `TWR-MAR-01-0001`).
 
 **command_idempotency**

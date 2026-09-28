@@ -205,6 +205,11 @@ type TransitionRefusal =
   | "idempotency_key_reused";
 export type TakeTransitionResult = { ok: true } | { ok: false; reason: TransitionRefusal };
 
+/** An app.* command's outcome as a result: `done` is its success word, anything else a refusal. */
+function commandResult<R extends string>(outcome: string, done: string): { ok: true } | { ok: false; reason: R } {
+  return outcome === done ? { ok: true } : { ok: false, reason: outcome as R };
+}
+
 /**
  * The holder of the item's current Step takes one of its Transitions, in one
  * transaction (workflow-engine.md §5.1). The same idempotency key again applies nothing.
@@ -217,37 +222,35 @@ export function takeTransition(
   now: Date,
 ): Promise<TakeTransitionResult> {
   return withMember(db, memberId, async (trx) => {
-    const { rows } = await sql<{ outcome: "applied" | TransitionRefusal }>`
+    const { rows } = await sql<{ outcome: string }>`
       select app.take_transition(
         ${workItemId}::uuid, ${input.transition}, ${input.reason}, ${input.idempotencyKey}::uuid, ${now}) as outcome
     `.execute(trx);
-    const { outcome } = rows[0]!;
-    return outcome === "applied" ? { ok: true } : { ok: false, reason: outcome };
+    return commandResult<TransitionRefusal>(rows[0]!.outcome, "applied");
   });
 }
 
-type StepRefusal = "not_found" | "item_closed" | "project_closed" | "already_claimed" | "forbidden" | "not_holder";
-export type StepResult = { ok: true } | { ok: false; reason: StepRefusal };
+type StepRefusal = "not_found" | "item_closed" | "project_closed";
+export type ClaimResult = { ok: true } | { ok: false; reason: StepRefusal | "already_claimed" | "forbidden" };
+export type ReleaseResult = { ok: true } | { ok: false; reason: StepRefusal | "not_holder" };
 
 /** A Member of its Step Pool claims the item's pooled Step; of two at once, one wins (§5.2). */
-export function claimStep(db: Db, memberId: string, workItemId: string, now: Date): Promise<StepResult> {
+export function claimStep(db: Db, memberId: string, workItemId: string, now: Date): Promise<ClaimResult> {
   return withMember(db, memberId, async (trx) => {
-    const { rows } = await sql<{ outcome: "claimed" | StepRefusal }>`
+    const { rows } = await sql<{ outcome: string }>`
       select app.claim_step(${workItemId}::uuid, ${now}) as outcome
     `.execute(trx);
-    const { outcome } = rows[0]!;
-    return outcome === "claimed" ? { ok: true } : { ok: false, reason: outcome };
+    return commandResult<StepRefusal | "already_claimed" | "forbidden">(rows[0]!.outcome, "claimed");
   });
 }
 
 /** The Member who claimed the item's Step gives it back to its pool. */
-export function releaseStep(db: Db, memberId: string, workItemId: string, now: Date): Promise<StepResult> {
+export function releaseStep(db: Db, memberId: string, workItemId: string, now: Date): Promise<ReleaseResult> {
   return withMember(db, memberId, async (trx) => {
-    const { rows } = await sql<{ outcome: "released" | StepRefusal }>`
+    const { rows } = await sql<{ outcome: string }>`
       select app.release_step(${workItemId}::uuid, ${now}) as outcome
     `.execute(trx);
-    const { outcome } = rows[0]!;
-    return outcome === "released" ? { ok: true } : { ok: false, reason: outcome };
+    return commandResult<StepRefusal | "not_holder">(rows[0]!.outcome, "released");
   });
 }
 

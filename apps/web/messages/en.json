@@ -194,7 +194,7 @@
     "projectClosed": "This Project is closed.",
     "unavailable": "Something went wrong. Try again.",
     "actions": {
-      "title": "Actions",
+      "title": "Transitions",
       "claim": "Claim",
       "release": "Release to pool",
       "reason": "Reason",
@@ -205,7 +205,7 @@
       "reasonRequired": "Give a reason.",
       "forbidden": "Your Position doesn't allow this.",
       "noStepPool": "Nobody in your Company can hold the next step yet. Ask your Authorized Person to give someone the Position.",
-      "notAvailable": "This action isn't available any more.",
+      "notAvailable": "This Transition isn't available any more.",
       "projectClosed": "This Project is closed.",
       "unavailable": "Something went wrong. Try again."
     },
