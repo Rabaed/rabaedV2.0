@@ -165,7 +165,7 @@ export type IconName = keyof typeof icons;
 export const iconNames = Object.keys(icons) as IconName[];
 
 /** Icons that point along the reading direction, so they flip in right-to-left layouts. */
-const directional = new Set<IconName>([
+export const directionalIconNames: ReadonlySet<IconName> = new Set<IconName>([
   "arrow-back-up",
   "arrow-forward-up",
   "arrow-left",
@@ -194,7 +194,7 @@ export type IconProps = Omit<ComponentProps<"svg">, "children" | "ref" | "stroke
 };
 
 /** One icon from the Rabaed set, drawn in the current text colour. */
-export function Icon({ name, size = 20, label, mirrorInRtl = directional.has(name), className, ...props }: IconProps) {
+export function Icon({ name, size = 20, label, mirrorInRtl = directionalIconNames.has(name), className, ...props }: IconProps) {
   const Svg = icons[name];
   return (
     <Svg

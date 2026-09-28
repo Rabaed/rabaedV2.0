@@ -1,5 +1,6 @@
 import { formatDate, formatNumber } from "@rabaed/domain";
 import type { Meta, StoryContext, StoryObj } from "@storybook/react-vite";
+import type { ReactNode } from "react";
 import { expect } from "storybook/test";
 import { storyLocale, storyText } from "../storybook/locale.ts";
 
@@ -13,7 +14,7 @@ type Story = StoryObj<typeof meta>;
 // A fixed moment so the story and its screenshot never change: 28 Sep 2026, 12:05 in Riyadh.
 const sample = new Date("2026-09-28T09:05:00Z");
 
-function Row({ label, children }: { label: string; children: React.ReactNode }) {
+function Row({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="grid grid-cols-[10rem_1fr] items-baseline gap-4 border-b border-border-subtle py-2 last:border-b-0">
       <span className="text-caption text-muted">{label}</span>

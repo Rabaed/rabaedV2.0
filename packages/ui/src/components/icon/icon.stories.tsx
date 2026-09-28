@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect } from "storybook/test";
 import { storyLocale, storyText } from "../../storybook/locale.ts";
-import { Icon, iconNames, type IconName } from "./icon.tsx";
+import { Icon, directionalIconNames, iconNames } from "./icon.tsx";
 
 const meta = {
   title: "Components/Icon",
@@ -47,8 +47,9 @@ export const Labelled: Story = {
   },
 };
 
-const directional: IconName[] = ["arrow-left", "arrow-right", "chevron-left", "chevron-right", "chevrons-left", "chevrons-right", "arrow-back-up", "arrow-forward-up"];
-const fixed: IconName[] = ["search", "check", "plus", "chevron-up", "chevron-down", "arrow-up", "arrow-down"];
+const directional = iconNames.filter((name) => directionalIconNames.has(name));
+// Every other icon keeps its drawing in Arabic, including vertical arrows and chevrons.
+const fixed = iconNames.filter((name) => !directionalIconNames.has(name));
 
 /** Arrows and chevrons point the reading way: flipped in Arabic. Other icons never flip. */
 export const Direction: Story = {
