@@ -4,6 +4,7 @@ import {
   companyParticipations,
   participantMembers,
   projectParticipants,
+  setMemberPositionsRequest,
 } from "@rabaed/domain";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
@@ -16,6 +17,7 @@ import {
   listParticipantMembers,
   listParticipants,
   removeProjectMember,
+  setMemberPositions,
 } from "../projects/participants.ts";
 import { refusal } from "../refusals.ts";
 
@@ -93,6 +95,19 @@ export const participantRoutes =
         const participantId = idOrNotFound(request.params.participantId);
         const target = idOrNotFound(request.params.memberId);
         const result = await removeProjectMember(ctx.db, actorId, participantId, target, ctx.now());
+        if (!result.ok) throw refusal(result);
+        return reply.code(204).send();
+      },
+    );
+
+    app.put(
+      "/v1/participants/:participantId/members/:memberId/positions",
+      { schema: { params: participantParams.extend({ memberId: z.string() }), body: setMemberPositionsRequest } },
+      async (request, reply) => {
+        const actorId = ctx.requireMember(request);
+        const participantId = idOrNotFound(request.params.participantId);
+        const target = idOrNotFound(request.params.memberId);
+        const result = await setMemberPositions(ctx.db, actorId, participantId, target, request.body.positions);
         if (!result.ok) throw refusal(result);
         return reply.code(204).send();
       },

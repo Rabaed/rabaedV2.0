@@ -20,7 +20,7 @@ export type AddParticipantResult =
   | Forbidden
   | { ok: false; reason: "not_found" | "project_closed" | "unknown_company" | "already_participant" };
 
-type ProjectMemberRefusal = "not_found" | "project_closed" | "member_not_found";
+type ProjectMemberRefusal = "not_found" | "project_closed" | "member_not_found" | "position_not_found";
 export type ProjectMemberResult = { ok: true } | Forbidden | { ok: false; reason: ProjectMemberRefusal };
 
 /** An app.*_project_member outcome as a result: `done` is its success word, anything else a refusal. */
@@ -118,14 +118,34 @@ export async function listParticipantMembers(
     const members = await trx
       .selectFrom("project_member as pm")
       .innerJoin("member as m", "m.id", "pm.member_id")
-      .select(["m.id", "m.email", "m.full_name as fullName"])
+      .select((eb) => [
+        "m.id",
+        "m.email",
+        "m.full_name as fullName",
+        eb.fn
+          .coalesce(
+            eb
+              .selectFrom("project_member_position as mp")
+              .innerJoin("position as pos", "pos.id", "mp.position_id")
+              .select(sql<string[]>`array_agg(pos.key order by pos.sort)`.as("keys"))
+              .whereRef("mp.project_member_id", "=", "pm.id"),
+            sql<string[]>`'{}'::text[]`,
+          )
+          .as("positions"),
+      ])
       .where("pm.participant_id", "=", participantId)
       .where("pm.status", "=", "active")
       .where("m.status", "in", ["invited", "active"])
       .orderBy("pm.created_at")
       .orderBy("m.id")
       .execute();
-    return { participant: toParticipation(row), members };
+    const positions = await trx
+      .selectFrom("position")
+      .select(["key", "name"])
+      .where("base_role", "=", row.base_role)
+      .orderBy("sort")
+      .execute();
+    return { participant: toParticipation(row), members, positions };
   });
 }
 
@@ -161,6 +181,24 @@ export function removeProjectMember(
         select app.remove_project_member(${participantId}::uuid, ${targetId}::uuid, ${now}) as outcome
       `.execute(trx);
       return projectMemberResult(rows[0]!.outcome, "removed");
+    }),
+  );
+}
+
+/** The Participant's Authorized Person sets a Project Member's Positions. */
+export function setMemberPositions(
+  db: Db,
+  memberId: string,
+  participantId: string,
+  targetId: string,
+  positions: string[],
+): Promise<ProjectMemberResult> {
+  return refusedAsForbidden(() =>
+    withMember(db, memberId, async (trx) => {
+      const { rows } = await sql<{ outcome: string }>`
+        select app.set_project_member_positions(${participantId}::uuid, ${targetId}::uuid, ${positions}::text[]) as outcome
+      `.execute(trx);
+      return projectMemberResult(rows[0]!.outcome, "set");
     }),
   );
 }

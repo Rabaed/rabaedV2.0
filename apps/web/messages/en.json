@@ -124,7 +124,8 @@
     "alreadyParticipant": "That Company is already on this Project.",
     "unknownCompany": "No Company with that CR number is on Rabaed.",
     "unavailable": "Something went wrong. Try again.",
-    "visibility": "Visibility"
+    "visibility": "Visibility",
+    "positions": "Positions"
   },
   "dimensions": {
     "title": "Trades & Locations",
@@ -191,6 +192,31 @@
     "notContractor": "Only a Contractor can raise a Material Submittal.",
     "outsideVisibility": "Choose a Trade and Location your Visibility covers.",
     "projectClosed": "This Project is closed.",
-    "unavailable": "Something went wrong. Try again."
+    "unavailable": "Something went wrong. Try again.",
+    "actions": {
+      "title": "Transitions",
+      "claim": "Claim",
+      "release": "Release to pool",
+      "reason": "Reason",
+      "reasonHelp": "Only your Company sees this.",
+      "cancel": "Cancel",
+      "notHolder": "Someone else holds this step now.",
+      "alreadyClaimed": "Someone else claimed it first.",
+      "reasonRequired": "Give a reason.",
+      "forbidden": "Your Position doesn't allow this.",
+      "noStepPool": "Nobody in your Company can hold the next step yet. Ask your Authorized Person to give someone the Position.",
+      "notAvailable": "This Transition isn't available any more.",
+      "projectClosed": "This Project is closed.",
+      "unavailable": "Something went wrong. Try again."
+    },
+    "history": {
+      "title": "History",
+      "created": "Created",
+      "claimed": "Claimed",
+      "released": "Released to pool",
+      "other": "Updated",
+      "numbered": "Document Number",
+      "internal": "Internal: only your Company sees this."
+    }
   }
 }

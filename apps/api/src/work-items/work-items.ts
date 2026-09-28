@@ -3,7 +3,10 @@ import {
   stepAgeWeeks,
   type BilingualText,
   type CreateWorkItemRequest,
+  type TakeTransitionRequest,
+  type WorkItemActions,
   type WorkItemDetail,
+  type WorkItemHistory,
   type WorkItemList,
   type WorkItemSummary,
 } from "@rabaed/domain";
@@ -163,6 +166,128 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
       raisedBy: { companyName: d.raised_by },
       heldBy: d.held_by ? { companyName: d.held_by, memberName: d.holder_name } : null,
       createdAt: d.created_at.toISOString(),
+      actions: await actions(trx, workItemId),
+    };
+  });
+}
+
+/** What the acting Member may press on a visible item now, as app.work_item_actions answers. */
+async function actions(trx: Trx, workItemId: string): Promise<WorkItemActions> {
+  const { rows } = await sql<{
+    action: "claim" | "release" | "transition";
+    transition_key: string | null;
+    label: BilingualText | null;
+    transition_kind: WorkItemActions["transitions"][number]["kind"] | null;
+  }>`select * from app.work_item_actions(${workItemId}::uuid)`.execute(trx);
+  return {
+    claim: rows.some((r) => r.action === "claim"),
+    release: rows.some((r) => r.action === "release"),
+    transitions: rows
+      .filter((r) => r.action === "transition")
+      .map((r) => ({
+        key: r.transition_key!,
+        label: r.label!,
+        kind: r.transition_kind!,
+        needsReason: r.transition_kind === "return",
+      })),
+  };
+}
+
+type TransitionRefusal =
+  | "not_found"
+  | "item_closed"
+  | "project_closed"
+  | "not_holder"
+  | "transition_not_available"
+  | "forbidden"
+  | "reason_required"
+  | "no_step_pool"
+  | "idempotency_key_reused";
+export type TakeTransitionResult = { ok: true } | { ok: false; reason: TransitionRefusal };
+
+/** An app.* command's outcome as a result: `done` is its success word, anything else a refusal. */
+function commandResult<R extends string>(outcome: string, done: string): { ok: true } | { ok: false; reason: R } {
+  return outcome === done ? { ok: true } : { ok: false, reason: outcome as R };
+}
+
+/**
+ * The holder of the item's current Step takes one of its Transitions, in one
+ * transaction (workflow-engine.md §5.1). The same idempotency key again applies nothing.
+ */
+export function takeTransition(
+  db: Db,
+  memberId: string,
+  workItemId: string,
+  input: Required<TakeTransitionRequest>,
+  now: Date,
+): Promise<TakeTransitionResult> {
+  return withMember(db, memberId, async (trx) => {
+    const { rows } = await sql<{ outcome: string }>`
+      select app.take_transition(
+        ${workItemId}::uuid, ${input.transition}, ${input.reason}, ${input.idempotencyKey}::uuid, ${now}) as outcome
+    `.execute(trx);
+    return commandResult<TransitionRefusal>(rows[0]!.outcome, "applied");
+  });
+}
+
+type StepRefusal = "not_found" | "item_closed" | "project_closed";
+export type ClaimResult = { ok: true } | { ok: false; reason: StepRefusal | "already_claimed" | "forbidden" };
+export type ReleaseResult = { ok: true } | { ok: false; reason: StepRefusal | "not_holder" };
+
+/** A Member of its Step Pool claims the item's pooled Step; of two at once, one wins (§5.2). */
+export function claimStep(db: Db, memberId: string, workItemId: string, now: Date): Promise<ClaimResult> {
+  return withMember(db, memberId, async (trx) => {
+    const { rows } = await sql<{ outcome: string }>`
+      select app.claim_step(${workItemId}::uuid, ${now}) as outcome
+    `.execute(trx);
+    return commandResult<StepRefusal | "already_claimed" | "forbidden">(rows[0]!.outcome, "claimed");
+  });
+}
+
+/** The Member who claimed the item's Step gives it back to its pool. */
+export function releaseStep(db: Db, memberId: string, workItemId: string, now: Date): Promise<ReleaseResult> {
+  return withMember(db, memberId, async (trx) => {
+    const { rows } = await sql<{ outcome: string }>`
+      select app.release_step(${workItemId}::uuid, ${now}) as outcome
+    `.execute(trx);
+    return commandResult<StepRefusal | "not_holder">(rows[0]!.outcome, "released");
+  });
+}
+
+/**
+ * A visible item's history as the Member may see it (internal events only within
+ * their own Participant), or null when they can't see the item.
+ */
+export function getWorkItemHistory(db: Db, memberId: string, workItemId: string): Promise<WorkItemHistory | null> {
+  return withMember(db, memberId, async (trx) => {
+    const visible = await trx.selectFrom("work_item").select("id").where("id", "=", workItemId).executeTakeFirst();
+    if (!visible) return null;
+    const { rows } = await sql<{
+      seq: number;
+      type: WorkItemHistory["events"][number]["type"];
+      created_at: Date;
+      audience: "shared" | "internal";
+      company_name: BilingualText | null;
+      member_name: BilingualText | null;
+      transition_label: BilingualText | null;
+      from_step_name: BilingualText | null;
+      to_step_name: BilingualText | null;
+      reason: string | null;
+      document_number: string | null;
+    }>`select * from app.work_item_history(${workItemId}::uuid)`.execute(trx);
+    return {
+      events: rows.map((r) => ({
+        seq: r.seq,
+        type: r.type,
+        at: r.created_at.toISOString(),
+        audience: r.audience,
+        by: { companyName: r.company_name, memberName: r.member_name },
+        transition: r.transition_label,
+        fromStep: r.from_step_name,
+        toStep: r.to_step_name,
+        reason: r.reason,
+        documentNumber: r.document_number,
+      })),
     };
   });
 }

@@ -88,7 +88,7 @@ This table is versioned: every signing event points at the exact signature row t
 A custom role (Subcontractor, PMC…) must name a `base_role`. Permission checks cap at what the base role allows.
 
 **participant**
-`id`, `project_id`, `company_id`, `project_role_id`, `status {active, withdrawn}`, `withdrawn_at`, `withdrawn_by`.
+`id`, `project_id`, `company_id`, `project_role_id`, `ordinal` (1, 2, 3… on the Project; the Company segment of Document Numbers until numbering patterns), `status {active, withdrawn}`, `withdrawn_at`, `withdrawn_by`.
 Unique `(project_id, company_id)`. Withdrawal cancels the participant's in-progress Work Items in one transaction (§5).
 
 **project_member**
@@ -96,9 +96,10 @@ Unique `(project_id, company_id)`. Withdrawal cancels the participant's in-progr
 Removal never deletes access to what the Member signed (§10).
 
 **position** / **position_permission** / **project_member_position**
-- `position`: `id`, `owner_kind/owner_id`, `base_role`, `name i18n`, `copied_from_id`.
+- `position`: `id`, `owner_kind/owner_id`, `base_role`, `key` (stable, e.g. `project_manager`), `name i18n`, `sort`, `copied_from_id`. The walking skeleton has Rabaed Defaults only (no `owner_id`, no `copied_from_id` yet).
 - `position_permission`: `position_id`, `permission {view, create, submit, review, approve, assign, close, attach}`, `module_key`, `work_item_type_id` (null = whole Module).
-- `project_member_position`: `project_member_id`, `position_id` (many-to-many).
+- `project_member_position`: `project_id`, `project_member_id`, `position_id` (many-to-many). Set by the Participant's Authorized Person; seen only by that Participant's Company (V14).
+- The walking skeleton seeds Rabaed Default Positions only (e.g. Contractor Engineer, Contractor Project Manager) with Module-wide permissions (no `work_item_type_id` yet).
 
 ## 3. Visibility, Trades, Locations, Scopes
 
@@ -182,7 +183,11 @@ A pattern change creates a new row, and old numbers stay as issued.
 
 **numbering_counter**
 `project_id`, `counter_key` (resolved prefix), `last_value`.
-Incremented with `UPDATE … RETURNING` in the same transaction as the first Send or Submit, so there are no gaps and no reuse.
+Incremented with `INSERT … ON CONFLICT DO UPDATE … RETURNING` (the first number creates the row) in the same transaction as the first Send or Submit, so there are no gaps and no reuse.
+Until numbering patterns exist, the key is `<project code>-<type code>-<Participant ordinal>`, so each Participant counts on its own (e.g. `TWR-MAR-01-0001`).
+
+**command_idempotency**
+`member_id`, `key`, `project_id`, `work_item_id`, `command`, `created_at`. Primary key `(member_id, key)`. Written in the same transaction as the command; the same key again applies nothing.
 
 ## 5. Work Items
 

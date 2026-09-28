@@ -301,3 +301,85 @@ describe("work_item_event", () => {
     expect(await intact(draft)).toBe(true);
   });
 });
+
+// RP-193: Send for Review and Return, called as the app role.
+describe("Send for Review and Return", () => {
+  let item = "";
+  let pm = "";
+  const take = (as: string, transition: string, reason = "") =>
+    call<{ outcome: string }>(
+      as,
+      sql`select app.take_transition(${item}::uuid, ${transition}, ${reason}, ${randomUUID()}::uuid, now()) as outcome`,
+    ).then((rows) => rows[0]!.outcome);
+  const claim = (as: string) =>
+    call<{ outcome: string }>(as, sql`select app.claim_step(${item}::uuid, now()) as outcome`).then((rows) => rows[0]!.outcome);
+  const setPositions = (m: string, keys: string[]) =>
+    call<{ outcome: string }>(
+      c1.ap,
+      sql`select app.set_project_member_positions(${participant.c1}::uuid, ${m}::uuid, ${keys}::text[]) as outcome`,
+    ).then((rows) => expect(rows[0]!.outcome).toBe("set"));
+  const eventCount = async () =>
+    (await migrator.query("select count(*)::int as n from work_item_event where work_item_id = $1", [item])).rows[0].n as number;
+
+  beforeAll(async () => {
+    pm = await member(c1.id, "pm");
+    await call<{ outcome: string }>(c1.ap, sql`select app.add_project_member(${participant.c1}::uuid, ${pm}::uuid, now()) as outcome`);
+    await grant(c1.ap, "member", [participant.c1, pm], "trade", "all");
+    await grant(c1.ap, "member", [participant.c1, pm], "location", "all");
+    await setPositions(c1.member, ["engineer"]);
+    await setPositions(pm, ["project_manager"]);
+    item = (await createDraft(c1.member, { title: "Switchgear" })).work_item_id!;
+    expect(await take(c1.member, "send_for_review")).toBe("applied");
+    expect(await claim(pm)).toBe("claimed");
+    expect(await take(pm, "return", "Wrong rating")).toBe("applied");
+    expect(await take(c1.member, "send_for_review")).toBe("applied");
+  });
+
+  it("keeps the item and every row of it inside the raiser's Participant at Internal Review (V1, V5)", async () => {
+    expect(await seen(pm, "work_item", "id")).toContain(item);
+    for (const who of [c2.member, k1.member, or.member]) {
+      expect(await seen(who, "work_item", "id")).toEqual([]);
+      for (const table of itemTables) expect(await seen(who, table), table).toEqual([]);
+    }
+  });
+
+  it("answers not_found to another Participant's Members, and writes nothing", async () => {
+    const before = await eventCount();
+    for (const who of [c2.member, k1.member, or.member]) {
+      expect(await take(who, "return", "x")).toBe("not_found");
+      expect(await claim(who)).toBe("not_found");
+    }
+    expect(await eventCount()).toBe(before);
+  });
+
+  it("records each move as an internal event of the raiser, still chained", async () => {
+    const { rows } = await migrator.query(
+      "select type, audience, audience_participant_id, payload from work_item_event where work_item_id = $1 order by seq",
+      [item],
+    );
+    expect(rows.map((r) => r.type)).toEqual(["created", "transition", "claimed", "transition", "transition"]);
+    expect(rows.every((r) => r.audience === "internal" && r.audience_participant_id === participant.c1)).toBe(true);
+    expect(rows[3].payload).toEqual({ reason: "Wrong rating" });
+    expect(rows[1].payload.document_number).toMatch(/^TWR-MAR-01-\d{4}$/);
+    expect((await migrator.query("select app.work_item_chain_intact($1) as ok", [item])).rows[0].ok).toBe(true);
+  });
+
+  it("never lets the app role read counters or idempotency keys, or write Positions", async () => {
+    for (const table of ["numbering_counter", "command_idempotency"]) {
+      expect(await seen(c1.member, table, "project_id"), table).toEqual([]);
+    }
+    for (const table of ["position", "position_permission", "project_member_position", "numbering_counter", "command_idempotency"]) {
+      await expect(
+        withMember(app, c1.ap, (trx) => sql`delete from ${sql.table(table)}`.execute(trx)),
+        table,
+      ).rejects.toThrow(/permission denied/);
+    }
+  });
+
+  it("shows a Participant's Project Member Positions only to that Participant's Company (V14)", async () => {
+    expect(await seen(c1.ap, "project_member_position", "project_member_id")).not.toEqual([]);
+    for (const who of [c2.ap, k1.ap, or.member]) {
+      expect(await seen(who, "project_member_position", "project_member_id")).toEqual([]);
+    }
+  });
+});
