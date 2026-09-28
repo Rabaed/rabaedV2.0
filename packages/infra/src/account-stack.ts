@@ -1,6 +1,8 @@
 import { CfnOutput, CfnParameter, DefaultStackSynthesizer, Stack, type StackProps } from "aws-cdk-lib";
 import * as budgets from "aws-cdk-lib/aws-budgets";
 import * as iam from "aws-cdk-lib/aws-iam";
+import * as sns from "aws-cdk-lib/aws-sns";
+import * as subscriptions from "aws-cdk-lib/aws-sns-subscriptions";
 import type { Construct } from "constructs";
 import { oidcSubjectPrefix, repositoryName, resourceNames, type EnvironmentConfig } from "./config.ts";
 
@@ -13,7 +15,7 @@ export interface AccountStackProps extends StackProps {
 
 // Account-level setup, deployed once by a human through the setup wizard
 // (packages/infra/scripts/setup-aws-account.sh): the GitHub OIDC trust, the
-// roles GitHub Actions assumes, and the cost budget.
+// roles GitHub Actions assumes, the cost budget and where alarms are emailed.
 export class AccountStack extends Stack {
   constructor(scope: Construct, id: string, props: AccountStackProps) {
     super(scope, id, props);
@@ -129,6 +131,29 @@ export class AccountStack extends Stack {
       notificationsWithSubscribers: [alert("ACTUAL", 80), alert("FORECASTED", 100)],
     });
 
+    // Every alarm (monitoring stack) notifies this topic, by name. It lives
+    // here because the email, like the budget's, is a parameter only the
+    // wizard passes; AWS asks the address to confirm the subscription once.
+    const alarmEmail = new CfnParameter(this, "AlarmEmail", {
+      type: "String",
+      noEcho: true,
+      description: "Email that receives the CloudWatch alarms",
+    });
+    const alarmTopic = new sns.Topic(this, "AlarmTopic", { topicName: names.alarmTopic, enforceSSL: true });
+    alarmTopic.addSubscription(new subscriptions.EmailSubscription(alarmEmail.valueAsString));
+    alarmTopic.addToResourcePolicy(
+      new iam.PolicyStatement({
+        principals: [new iam.ServicePrincipal("cloudwatch.amazonaws.com")],
+        actions: ["sns:Publish"],
+        resources: [alarmTopic.topicArn],
+        conditions: {
+          ArnLike: { "aws:SourceArn": regional("cloudwatch", "alarm:*") },
+          StringEquals: { "aws:SourceAccount": this.account },
+        },
+      }),
+    );
+
+    new CfnOutput(this, "AlarmTopicArn", { value: alarmTopic.topicArn });
     new CfnOutput(this, "DeployRoleArn", { value: deploy.roleArn });
     new CfnOutput(this, "DiffRoleArn", { value: diff.roleArn });
   }

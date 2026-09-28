@@ -35,6 +35,10 @@ export interface AppStackProps extends StackProps {
 // task roles when connecting, so a rotated password reaches them without a
 // restart. Each task role reads only its own secrets.
 export class AppStack extends Stack {
+  readonly loadBalancer: elbv2.ApplicationLoadBalancer;
+  /** web's targets behind the HTTPS listener. */
+  readonly webTargets: elbv2.ApplicationTargetGroup;
+
   constructor(scope: Construct, id: string, props: AppStackProps) {
     super(scope, id, props);
     const { config, network, data, registry, storage } = props;
@@ -129,13 +133,15 @@ export class AppStack extends Stack {
     data.roleSecrets.rabaed_app.grantRead(workerTask.taskRole);
     service("worker", workerTask, network.securityGroups.worker);
 
-    const loadBalancer = new elbv2.ApplicationLoadBalancer(this, "LoadBalancer", {
+    const loadBalancer = (this.loadBalancer = new elbv2.ApplicationLoadBalancer(this, "LoadBalancer", {
       vpc: network.vpc,
       internetFacing: true,
       vpcSubnets: { subnetType: ec2.SubnetType.PUBLIC },
       securityGroup: network.securityGroups.loadBalancer,
       dropInvalidHeaderFields: true,
-    });
+    }));
+    // Every request, for the audit trail; the logs bucket (storage stack) keeps them a year.
+    loadBalancer.logAccessLogs(storage.logs, "load-balancer");
 
     const https = loadBalancer.addListener("Https", {
       port: 443,
@@ -145,7 +151,7 @@ export class AppStack extends Stack {
       // The security groups (network stack) already hold every rule.
       open: false,
     });
-    https.addTargets("Web", {
+    this.webTargets = https.addTargets("Web", {
       port: WEB_PORT,
       protocol: elbv2.ApplicationProtocol.HTTP,
       targets: [web],

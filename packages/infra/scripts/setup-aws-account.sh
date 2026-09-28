@@ -189,12 +189,13 @@ finish() {
 #
 # Re-runnable: every stage either checks first or is safe to repeat, and the
 # answers you give are remembered in .env.aws (git-ignored, never committed).
-# Nothing secret is written to the repo or to GitHub: GitHub only receives
+# Nothing secret is written to the repo or to GitHub (the budget and alarm
+# emails are deploy-time parameters of the account stack): GitHub only receives
 # role ARNs, the region and the interim certificate (public) and its ARN, as
 # repository variables. The licensed Thmanyah fonts go from this computer
 # straight to the private build assets bucket.
 
-TOTAL_STAGES=9
+TOTAL_STAGES=10
 
 # The repository this script is in, wherever it is run from.
 cd "$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)"
@@ -303,12 +304,16 @@ fi
 pause
 
 # ── 4 ────────────────────────────────────────────────────────────────────
-stage "Budget alert email"
+stage "Alert emails"
 say "A monthly cost budget emails this address at 80% of actual spend and"
 say "when the forecast passes 100%. The amount is monthlyBudgetUsd in"
-say "packages/infra/src/config.ts; the email stays out of the repo."
+say "packages/infra/src/config.ts; the emails stay out of the repo."
 ask_required BUDGET_ALERT_EMAIL "Email for budget alerts:"
 write_env BUDGET_ALERT_EMAIL "$BUDGET_ALERT_EMAIL"
+say "CloudWatch alarms (api errors, unhealthy web, outbox, database) email this"
+say "address when they fire and when they clear. It can be the same one."
+ask_required ALARM_EMAIL "Email for alarms:"
+write_env ALARM_EMAIL "$ALARM_EMAIL"
 pause
 
 # ── 5 ────────────────────────────────────────────────────────────────────
@@ -331,7 +336,8 @@ step "rabaed-${RABAED_ENV}-github-deploy: usable only from $REPOSITORY main, to 
 step "  push images and run the migration task (the storage stack, deployed on merge,"
 step "  also lets it read the private fonts);"
 step "rabaed-${RABAED_ENV}-github-diff: read-only, for cdk diff on pull requests;"
-step "the monthly budget alert to $BUDGET_ALERT_EMAIL."
+step "the monthly budget alert to $BUDGET_ALERT_EMAIL;"
+step "the alarm topic rabaed-${RABAED_ENV}-alarms, which emails $ALARM_EMAIL."
 # The roles trust only tokens whose subject starts with the prefix in config.ts.
 actual_subject=$(gh api "repos/$REPOSITORY/actions/oidc/customization/sub" --jq .sub_claim_prefix 2>/dev/null || true)
 if [[ -n "$actual_subject" && "$actual_subject" != "$OIDC_SUBJECT" ]]; then
@@ -341,7 +347,10 @@ fi
 note "The CDK lists the IAM changes and asks you to approve them."
 if confirm "Deploy $STACK now?"; then
   fresh_credentials
-  cdk_ deploy "$STACK" --parameters "BudgetAlertEmail=$BUDGET_ALERT_EMAIL"
+  cdk_ deploy "$STACK" --parameters "BudgetAlertEmail=$BUDGET_ALERT_EMAIL" --parameters "AlarmEmail=$ALARM_EMAIL"
+  say "AWS Notifications emails $ALARM_EMAIL once to confirm the alarm subscription"
+  say "(subject \"AWS Notification - Subscription Confirmation\"). Alarms reach it only after that."
+  pause "Click \"Confirm subscription\" in that email, then press Enter."
 else
   SKIPPED+=("deploy $STACK (re-run this wizard)")
 fi
@@ -453,6 +462,25 @@ if fresh_credentials && BUCKET=$(stack_output BuildAssetsBucket "$STORAGE_STACK"
 else
   warn "$STORAGE_STACK is not deployed yet (or the sign-in expired); the first deploy creates it."
   SKIPPED+=("Thmanyah fonts (re-run this wizard after the first deploy)")
+fi
+pause
+
+# ── 10 ───────────────────────────────────────────────────────────────────
+stage "Test alarm"
+say "Sets one alarm to ALARM for a moment, to prove notifications arrive."
+say "CloudWatch puts it back within a few minutes, which sends an OK email too."
+TEST_ALARM="rabaed-${RABAED_ENV}-load-balancer-5xx"
+if fresh_credentials && aws cloudwatch describe-alarms --region "$REGION" --alarm-names "$TEST_ALARM"     --query 'MetricAlarms[0].AlarmName' --output text 2>/dev/null | grep -q "$TEST_ALARM"; then
+  if confirm "Trigger $TEST_ALARM now?"; then
+    aws cloudwatch set-alarm-state --region "$REGION" --alarm-name "$TEST_ALARM"       --state-value ALARM --state-reason "Test from the setup wizard: notifications work."
+    note "✓ triggered; an \"ALARM: $TEST_ALARM\" email should reach $ALARM_EMAIL within a minute."
+    confirm "Did it arrive?" || SKIPPED+=("alarm email (check the subscription is confirmed: SNS → Topics → rabaed-${RABAED_ENV}-alarms)")
+  else
+    SKIPPED+=("test alarm (re-run this wizard)")
+  fi
+else
+  warn "The alarms are not deployed yet (or the sign-in expired); the monitoring stack comes with the next deploy."
+  SKIPPED+=("test alarm (re-run this wizard after the next deploy)")
 fi
 pause
 

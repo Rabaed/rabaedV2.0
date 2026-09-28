@@ -15,6 +15,24 @@ export interface EnvironmentConfig {
   readonly services: Record<ServiceName, ServiceSize>;
   /** The one-off migration task that runs before each deploy. */
   readonly migrationTask: Omit<ServiceSize, "desiredCount">;
+  /** Days CloudWatch keeps every log group; one of CloudWatch's allowed values. */
+  readonly logRetentionDays: number;
+  readonly alarms: AlarmThresholds;
+}
+
+/** When each alarm fires (monitoring stack); emailed to the address the setup wizard sets. */
+export interface AlarmThresholds {
+  /** Share of api responses that are 5xx over 5 minutes, in percent. */
+  readonly api5xxPercent: number;
+  /** Age of the oldest unprocessed outbox row. */
+  readonly outboxOldestAgeSeconds: number;
+  /** Unprocessed outbox rows, held for 15 minutes. */
+  readonly outboxBacklog: number;
+  /** Average database CPU, held for 15 minutes. */
+  readonly databaseCpuPercent: number;
+  readonly databaseFreeStorageGb: number;
+  /** Open database connections, held for 10 minutes. */
+  readonly databaseConnections: number;
 }
 
 export interface DatabaseSize {
@@ -82,6 +100,17 @@ export const environments = {
       worker: { cpu: 256, memoryMiB: 512, desiredCount: 1 },
     },
     migrationTask: { cpu: 256, memoryMiB: 512 },
+    logRetentionDays: 30,
+    alarms: {
+      api5xxPercent: 5,
+      outboxOldestAgeSeconds: 300,
+      outboxBacklog: 100,
+      databaseCpuPercent: 80,
+      // 10% of allocatedStorageGb.
+      databaseFreeStorageGb: 2,
+      // A t4g.micro allows about 85.
+      databaseConnections: 60,
+    },
   },
 } as const satisfies Record<string, EnvironmentConfig>;
 
@@ -113,6 +142,7 @@ export function stackNames(config: EnvironmentConfig) {
     storage: name("Storage"),
     migrations: name("Migrations"),
     app: name("App"),
+    monitoring: name("Monitoring"),
   };
 }
 
@@ -132,6 +162,15 @@ export function resourceNames(config: EnvironmentConfig) {
     /** Both migration roles start with this, so the deploy role can pass only them. */
     migrationRolePrefix: `${prefix}-migrate-`,
     logGroup: (service: ServiceName | "migrate") => `/rabaed/${config.name}/${service}`,
+    /** The Lambdas CDK adds for custom resources log here, one group per stack. */
+    lambdaLogGroup: (stack: string) => `/rabaed/${config.name}/lambda/${stack}`,
+    /** Secrets Manager's hosted rotation Lambda for one secret. */
+    rotationFunction: (secret: string) => `${prefix}-rotate-${secret}`,
+    /** Every alarm notifies this SNS topic (account stack), which emails the wizard's address. */
+    alarmTopic: `${prefix}-alarms`,
+    /** Custom metrics the monitoring stack extracts from the services' logs. */
+    metricNamespace: `Rabaed/${config.name}`,
+    trail: prefix,
     /** GitHub Actions' deploy role, which also builds the images (account stack). */
     deployRole: `${prefix}-github-deploy`,
     /** The api's task role; the Project files bucket refuses everyone else. */

@@ -1,6 +1,7 @@
 import { Duration, RemovalPolicy, Stack, type StackProps } from "aws-cdk-lib";
 import * as ec2 from "aws-cdk-lib/aws-ec2";
 import * as kms from "aws-cdk-lib/aws-kms";
+import * as logs from "aws-cdk-lib/aws-logs";
 import * as rds from "aws-cdk-lib/aws-rds";
 import * as secretsmanager from "aws-cdk-lib/aws-secretsmanager";
 import type { Construct } from "constructs";
@@ -96,10 +97,19 @@ export class DataStack extends Stack {
       }).attach(this.database);
     this.roleSecrets = Object.fromEntries(databaseRoles.map((role) => [role, roleSecret(role)])) as Record<DatabaseRole, secretsmanager.ISecret>;
 
-    const rotate = (id: string, secret: secretsmanager.ISecret) =>
-      new secretsmanager.RotationSchedule(this, `${id}Rotation`, {
+    // Named, so its log group can be created first, with a retention: Lambda
+    // would otherwise create one that keeps logs forever.
+    const rotate = (id: string, secret: secretsmanager.ISecret) => {
+      const functionName = names.rotationFunction(id);
+      const logGroup = new logs.LogGroup(this, `${id}RotationLogs`, {
+        logGroupName: `/aws/lambda/${functionName}`,
+        retention: config.logRetentionDays as logs.RetentionDays,
+        removalPolicy: RemovalPolicy.DESTROY,
+      });
+      const schedule = new secretsmanager.RotationSchedule(this, `${id}Rotation`, {
         secret,
         hostedRotation: secretsmanager.HostedRotation.postgreSqlSingleUser({
+          functionName,
           vpc: network.vpc,
           vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
           securityGroups: [network.securityGroups.rotation],
@@ -109,6 +119,8 @@ export class DataStack extends Stack {
         // The roles exist only once the migration task has run after the first deploy.
         rotateImmediatelyOnUpdate: false,
       });
+      schedule.node.addDependency(logGroup);
+    };
     rotate("master", this.masterSecret);
     for (const role of databaseRoles) rotate(role, this.roleSecrets[role]);
 

@@ -11,6 +11,7 @@ import type { ApiConfig } from "./config.ts";
 import { HttpError, notFound, notSignedIn } from "./http-error.ts";
 import { dummyHash } from "./identity/password.ts";
 import { resolveSession, type Principal, type Session } from "./identity/sessions.ts";
+import { loggerOptions } from "./logging.ts";
 import { adminRoutes } from "./routes/admin.ts";
 import { companyRoutes } from "./routes/companies.ts";
 import { healthRoutes } from "./routes/health.ts";
@@ -63,7 +64,7 @@ export async function buildApp({
   logger = true,
 }: AppOptions): Promise<FastifyInstance> {
   await dummyHash();
-  const app = Fastify({ logger }).withTypeProvider<ZodTypeProvider>();
+  const app = Fastify({ logger: logger && loggerOptions() }).withTypeProvider<ZodTypeProvider>();
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);
   await app.register(cookie);

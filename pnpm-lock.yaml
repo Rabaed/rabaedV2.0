@@ -115,6 +115,9 @@ importers:
       '@rabaed/db':
         specifier: workspace:*
         version: link:../../packages/db
+      pino:
+        specifier: ^10.3.1
+        version: 10.3.1
       zod:
         specifier: ^4.6.5
         version: 4.6.5
