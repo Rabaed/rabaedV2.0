@@ -1,10 +1,2 @@
 @import "tailwindcss";
 @import "@rabaed/ui/styles.css";
-
-/* Document Numbers: always LTR, isolated, monospaced digits. */
-.docno {
-  direction: ltr;
-  unicode-bidi: isolate;
-  font-variant-numeric: tabular-nums;
-  font-family: var(--font-mono);
-}

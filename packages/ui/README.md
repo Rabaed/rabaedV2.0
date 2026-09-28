@@ -26,10 +26,28 @@ Three layers, all in `src/tokens/`:
 
 `src/styles/tokens.css` is generated. After editing `src/tokens/`, run `pnpm --filter @rabaed/ui tokens`; a unit test fails if you forget. Another unit test keeps every text/background pair at WCAG AA contrast.
 
+## Fonts
+
+All fonts are self-hosted: bundled from npm (`@fontsource…`) onto our own origin, never loaded from a font CDN.
+
+| Use | Font | Token |
+|---|---|---|
+| Latin UI | IBM Plex Sans | `font-ui` (the default) |
+| Display | Montserrat | `font-display` |
+| Arabic | Thmanyah Sans when its files are present at build time, otherwise IBM Plex Sans Arabic | `--font-arabic`, the second family in both stacks |
+
+**Thmanyah Sans is licensed and never committed.** The switch happens at build time: put the `thmanyahsans-{Light,Regular,Medium,Bold,Black}.woff2` files in `packages/ui/fonts/thmanyah/` (git-ignored; CI supplies them privately, RP-211). `prepareArabicFont()` (`src/fonts/arabic-font.ts`, also exported as `@rabaed/ui/fonts`) then writes the git-ignored `src/styles/arabic-font.css`. Storybook, the story tests and `apps/web`'s `next.config.ts` call it on start, so no extra step is needed; without the files everything builds with IBM Plex Sans Arabic.
+
+## Digits, dates and direction
+
+- Numbers and dates: `formatNumber` and `formatDate` from `@rabaed/domain`. Latin digits in English and Arabic, the Gregorian calendar, Saudi time.
+- **DocNo**: `<DocNo value="TWR-TMC-EL-MAR-041" rev={2} />`. A Document Number (with optional `Rev n`), left-to-right and isolated, so it never scrambles inside Arabic text. Always use it for Document Numbers.
+- **Icon**: `<Icon name="chevron-right" />`, from the Tabler outline set, bundled as SVG (no icon font, no CDN). Decorative by default; pass `label` when the icon means something on its own. Arrows and chevrons that follow the reading direction flip in Arabic; override with `mirrorInRtl`. To add an icon, register it in `src/components/icon/icon.tsx`.
+
 ## Storybook and story tests
 
 - `pnpm storybook` opens Storybook; the **Language** toolbar switches EN (LTR) / AR (RTL).
-- `pnpm test:stories` runs every story in Chromium, once per language: its play function (behaviour), direction, Latin digits, no deadline words, axe (WCAG 2.2 AA) and a screenshot comparison.
+- `pnpm test:stories` runs every story in Chromium, once per language: its play function (behaviour), direction, Latin digits, no deadline words, no requests to another origin, axe (WCAG 2.2 AA) and a screenshot comparison.
 - Screenshot baselines are Linux renders in `test/__screenshots__/`, compared on Linux only (CI). When you change the UI on purpose, add the `update-screenshots` label to your PR (or run `gh workflow run update-screenshots.yml --ref <branch>`); the **Update screenshots** workflow commits the new baselines to the PR for review.
 
 ## Lint guard rails

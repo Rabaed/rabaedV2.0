@@ -5,7 +5,8 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./styles.css": "./src/styles/index.css"
+    "./styles.css": "./src/styles/index.css",
+    "./fonts": "./src/fonts/arabic-font.ts"
   },
   "scripts": {
     "tokens": "node scripts/generate-tokens.ts",
@@ -19,7 +20,11 @@
     "react-dom": "^19.3.0"
   },
   "dependencies": {
+    "@fontsource-variable/ibm-plex-sans": "^5.3.0",
+    "@fontsource-variable/montserrat": "^5.3.0",
+    "@fontsource/ibm-plex-sans-arabic": "^5.3.0",
     "@rabaed/domain": "workspace:*",
+    "@tabler/icons-react": "^3.48.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "tailwind-merge": "^3.7.0"

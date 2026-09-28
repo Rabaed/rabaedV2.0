@@ -1,7 +1,6 @@
 import type { Locale } from "@rabaed/domain";
 import { getTranslations, setRequestLocale } from "next-intl/server";
-import { DocumentNumber } from "@/components/document-number";
-import { buttonVariants } from "@rabaed/ui";
+import { DocNo, buttonVariants } from "@rabaed/ui";
 import { Link } from "@/i18n/navigation";
 import { getMe } from "@/lib/session";
 
@@ -28,7 +27,7 @@ export default async function Home({ params }: { params: Promise<{ locale: Local
         </>
       )}
       <p>
-        {t("documentNumberLabel")} <DocumentNumber value="TWR-MAR-0000001" />
+        {t("documentNumberLabel")} <DocNo value="TWR-MAR-0000001" />
       </p>
       <Link href="/health" className="text-primary underline underline-offset-4">
         {t("healthLink")}

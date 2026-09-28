@@ -5,6 +5,21 @@
  */
 @import "./tokens.css";
 
+/*
+ * Fonts, all self-hosted: bundled from npm onto our own origin, never a font CDN.
+ * Latin UI IBM Plex Sans, display Montserrat, Arabic IBM Plex Sans Arabic.
+ * arabic-font.css is generated at build time by prepareArabicFont
+ * (src/fonts/arabic-font.ts): it switches Arabic to Thmanyah Sans when the
+ * private files are present, and is never committed.
+ */
+@import "@fontsource-variable/ibm-plex-sans/wght.css";
+@import "@fontsource-variable/montserrat/wght.css";
+@import "@fontsource/ibm-plex-sans-arabic/arabic-400.css";
+@import "@fontsource/ibm-plex-sans-arabic/arabic-500.css";
+@import "@fontsource/ibm-plex-sans-arabic/arabic-600.css";
+@import "@fontsource/ibm-plex-sans-arabic/arabic-700.css";
+@import "./arabic-font.css";
+
 /* Let Tailwind see the classes used by ui components. */
 @source "../";
 

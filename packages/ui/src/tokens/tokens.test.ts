@@ -105,6 +105,13 @@ describe("generated tokens.css", () => {
     expect(theme).not.toMatch(/--color-[\w-]+: #/);
   });
 
+  it("sends Arabic glyphs to the build-time Arabic font, with IBM Plex Sans Arabic as the fallback", () => {
+    for (const name of ["ui", "display"]) {
+      expect(css).toMatch(new RegExp(`--font-${name}: '[^']+ Variable', var\\(--font-arabic, 'IBM Plex Sans Arabic'\\),`));
+    }
+    expect(css).not.toContain("Thmanyah");
+  });
+
   it("is up to date with src/tokens (run `pnpm --filter @rabaed/ui tokens`)", () => {
     const committed = readFileSync(new URL("../styles/tokens.css", import.meta.url), "utf8");
     expect(committed).toBe(css);
