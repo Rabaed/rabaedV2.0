@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { environmentTemplates, references, resourcesOfType } from "./support.ts";
 
 const env = environmentTemplates();
+const LEGACY = ["rabaed/dev/database/rabaed_admin", "rabaed/dev/database/rabaed_app", "rabaed/dev/database/rabaed_migrator"];
 const [database] = resourcesOfType(env.synthesised, "AWS::RDS::DBInstance");
 const db = database?.Properties ?? {};
 
@@ -40,6 +41,24 @@ describe("database", () => {
     expect(database).toMatchObject({ DeletionPolicy: "Snapshot", UpdateReplacePolicy: "Snapshot" });
   });
 
+  it("keeps the database security group as deployed: a new description would replace it, which the database refuses", () => {
+    const groups = Object.entries(env.template("network").findResources("AWS::EC2::SecurityGroup"));
+    const [logicalId, group] = groups.find(([id]) => id.startsWith("DatabaseSecurityGroup"))!;
+    expect(logicalId).toBe("DatabaseSecurityGroup7319C0F6");
+    expect((group as { Properties: { GroupDescription: string } }).Properties.GroupDescription).toBe("PostgreSQL: reachable from api, worker and migrations only");
+  });
+
+  it("no secret the migrations stack deployed with loses its export yet", () => {
+    const exports = Object.values(env.template("data").toJSON().Outputs as Record<string, { Export?: { Name: string } }>).map((o) => o.Export?.Name);
+    for (const name of [
+      "Rabaed-dev-Data:ExportsOutputRefrabaedmigratorPassword88D699E6BE532016",
+      "Rabaed-dev-Data:ExportsOutputRefrabaedappPasswordFCBCE57B016F28BA",
+      "Rabaed-dev-Data:ExportsOutputRefrabaedadminPassword4EF7B5D1D21A3419",
+    ]) {
+      expect(exports).toContain(name);
+    }
+  });
+
   it("requires TLS for every connection", () => {
     const parameters = env.resolve(db.DBParameterGroupName, "data").resource;
     expect(parameters.Properties?.Parameters).toMatchObject({ "rds.force_ssl": "1" });
@@ -52,7 +71,14 @@ describe("database", () => {
     expect(JSON.stringify(db.MasterUserPassword)).toContain("resolve:secretsmanager");
     const secrets = resourcesOfType(env.synthesised, "AWS::SecretsManager::Secret");
     expect(secrets.map((s) => s.Properties?.Name).sort()).toEqual(
-      ["rabaed/dev/database/master", "rabaed/dev/database/roles/rabaed_admin", "rabaed/dev/database/roles/rabaed_app", "rabaed/dev/database/roles/rabaed_migrator"].sort(),
+      [
+        "rabaed/dev/database/master",
+        "rabaed/dev/database/roles/rabaed_admin",
+        "rabaed/dev/database/roles/rabaed_app",
+        "rabaed/dev/database/roles/rabaed_migrator",
+        // Legacy plain-password secrets, kept for one deploy (see data-stack.ts); nothing reads them.
+        ...LEGACY,
+      ].sort(),
     );
     for (const secret of secrets) {
       expect(secret.Properties).not.toHaveProperty("SecretString");
@@ -62,7 +88,9 @@ describe("database", () => {
 
   it("keeps each role's credentials as the JSON the rotation needs: its own username, and the database", () => {
     const templates = Object.fromEntries(
-      resourcesOfType(env.synthesised, "AWS::SecretsManager::Secret").map((s) => [
+      resourcesOfType(env.synthesised, "AWS::SecretsManager::Secret")
+        .filter((s) => !LEGACY.includes(s.Properties?.Name as string))
+        .map((s) => [
         s.Properties?.Name,
         JSON.parse((s.Properties?.GenerateSecretString as { SecretStringTemplate: string }).SecretStringTemplate),
       ]),

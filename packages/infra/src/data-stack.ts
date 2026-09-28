@@ -111,5 +111,19 @@ export class DataStack extends Stack {
       });
     rotate("master", this.masterSecret);
     for (const role of databaseRoles) rotate(role, this.roleSecrets[role]);
+
+    // TODO(RP-210 follow-up): delete once this has been deployed to dev.
+    // The plain-password secrets the role secrets replaced, and their exports:
+    // the deployed migrations stack still imports them, and CloudFormation
+    // refuses to delete an export in use. Kept (unused) for one deploy, so the
+    // migrations stack can move to the new secrets first.
+    for (const role of databaseRoles) {
+      const legacy = new secretsmanager.Secret(this, `${role}Password`, {
+        secretName: `${names.secretPrefix}database/${role}`,
+        description: `Password of the ${role} database role`,
+        generateSecretString: { passwordLength: 40, excludePunctuation: true },
+      });
+      this.exportValue(legacy.secretArn);
+    }
   }
 }

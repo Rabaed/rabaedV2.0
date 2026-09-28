@@ -53,7 +53,9 @@ export class NetworkStack extends Stack {
     const worker = group("Worker", "worker tasks");
     const migrations = group("Migrations", "One-off migration tasks");
     const rotation = group("Rotation", "Secrets Manager rotation Lambdas for the database passwords");
-    const database = group("Database", "PostgreSQL: reachable from api, worker, migrations and password rotation only");
+    // Never change a group's description: CloudFormation replaces the group, which
+    // the stacks using it (the database) refuse. Rotation also reaches the database.
+    const database = group("Database", "PostgreSQL: reachable from api, worker and migrations only");
 
     loadBalancer.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(443), "HTTPS from anywhere");
     loadBalancer.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(80), "HTTP from anywhere, redirected to HTTPS");
