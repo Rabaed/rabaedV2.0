@@ -45,3 +45,6 @@ design/reference/claude-design/assets/fonts/thmanyah/LICENSE.pdf
 .claude/settings.local.json
 next-env.d.ts
 *.tsbuildinfo
+
+# AWS CDK synthesis output
+cdk.out/

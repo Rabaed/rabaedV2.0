@@ -18,6 +18,7 @@
     "test:seam2": "vitest run --project seam2",
     "test:stories": "pnpm --filter @rabaed/ui test:stories",
     "storybook": "pnpm --filter @rabaed/ui storybook",
+    "test:infra": "vitest run --project infra",
     "engineer:create": "pnpm --filter @rabaed/api run engineer:create"
   },
   "devDependencies": {

@@ -3,10 +3,11 @@ import { defineConfig } from "vitest/config";
 
 if (existsSync(".env")) process.loadEnvFile(".env");
 
-// Three suites, each run on its own in CI:
+// Four suites, each run on its own in CI:
 // - unit:  pure logic, no database.
 // - seam1: the API called as a given signed-in Member, against a real Postgres.
 // - seam2: the database as the app role with a Member set (RLS defence in depth).
+// - infra: assertions on the synthesised AWS CloudFormation templates.
 export default defineConfig({
   test: {
     projects: [
@@ -30,6 +31,13 @@ export default defineConfig({
           include: ["packages/db/test/**/*.test.ts"],
           globalSetup: ["packages/db/test-support/global-setup.ts"],
           fileParallelism: false,
+        },
+      },
+      {
+        test: {
+          name: "infra",
+          include: ["packages/infra/test/**/*.test.ts"],
+          testTimeout: 30_000,
         },
       },
     ],
