@@ -18,6 +18,10 @@ export const createdWorkItem = z.object({ id: z.uuid() });
 
 export const stageCategories = ["draft", "in_progress", "closed_positive", "closed_negative", "cancelled"] as const;
 
+/** Whether a Stage category is one an item still moves through (not closed or cancelled). */
+export const isOpenStageCategory = (category: (typeof stageCategories)[number]) =>
+  category === "draft" || category === "in_progress";
+
 const stage = z.object({ key: z.string(), name: bilingualText, category: z.enum(stageCategories) });
 
 /** A Trade or Location as a Work Item shows it. */

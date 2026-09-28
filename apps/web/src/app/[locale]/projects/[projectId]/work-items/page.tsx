@@ -1,4 +1,4 @@
-import type { Locale } from "@rabaed/domain";
+import { isOpenStageCategory, type Locale } from "@rabaed/domain";
 import { DocNo, buttonVariants } from "@rabaed/ui";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
@@ -75,7 +75,7 @@ export default async function WorkItemsPage({ params }: { params: Promise<{ loca
                         </span>
                       </span>
                       {/* A closed item doesn't age. */}
-                      {i.stage.category === "draft" || i.stage.category === "in_progress" ? (
+                      {isOpenStageCategory(i.stage.category) ? (
                         <AgeDots weeks={i.stepAgeWeeks} label={t("stepAge", { weeks: i.stepAgeWeeks })} />
                       ) : null}
                     </li>

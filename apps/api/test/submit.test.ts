@@ -39,6 +39,8 @@ let k1Engineer: Caller; // K1 Engineer: sees it, but can't issue a Code.
 let c2Engineer: Caller; // Second Contractor, Electrical too (V3).
 let orEngineer: Caller; // Owner Representative covering Electrical everywhere (oversight).
 let orElsewhere: Caller; // Owner Representative covering Building B only.
+let orMechanical: Caller; // Owner Representative covering Mechanical only.
+let owner: Caller; // Owner, covering the whole Project (oversight).
 
 /** Each Member's email, to sign them in again once the clock has moved past their session. */
 const emails = new Map<Caller, string>();
@@ -73,7 +75,7 @@ async function projectMember(
 
 /** Another Company on the Project in `role`, with the Participant Visibility the Project Admin gives it. */
 async function participant(
-  role: "contractor" | "consultant" | "owner_representative",
+  role: "contractor" | "consultant" | "owner" | "owner_representative",
   coverage: { trade: Coverage; location: Coverage } = { trade: all, location: all },
   legalName = "Test Constructions",
 ) {
@@ -174,6 +176,10 @@ beforeAll(async () => {
   orEngineer = await projectMember(or.company, or.participantId, ["engineer"]);
   const orB = await participant("owner_representative", { trade: all, location: only(buildingB) });
   orElsewhere = await projectMember(orB.company, orB.participantId, ["engineer"]);
+  const orM = await participant("owner_representative", { trade: only(mechanical), location: all });
+  orMechanical = await projectMember(orM.company, orM.participantId, ["engineer"]);
+  const ow = await participant("owner");
+  owner = await projectMember(ow.company, ow.participantId, ["representative"]);
 });
 
 describe("Submit", () => {
@@ -225,16 +231,21 @@ describe("Submit", () => {
     expect((await mechanicalManager.post(`/v1/work-items/${id}/claim`)).statusCode).toBe(404);
   });
 
-  it("shows it as oversight to the Owner Representative whose Visibility covers it, with no actions (V2, scenario 6)", async () => {
-    expect((await listed(orEngineer)).ids).toEqual([id]);
-    expect(buttons(await detail(orEngineer, id))).toEqual([]);
-    expect((await detail(orEngineer, id)).heldBy?.memberName).toBeNull();
+  it("shows it as oversight to the Owner and the Owner Representative whose Visibility covers it, with no actions (V2, scenario 6)", async () => {
+    for (const caller of [orEngineer, owner]) {
+      expect((await listed(caller)).ids).toEqual([id]);
+      const d = await detail(caller, id);
+      expect(buttons(d)).toEqual([]);
+      expect(d.heldBy?.memberName).toBeNull();
+    }
   });
 
-  it("hides it from an Owner Representative whose Visibility doesn't cover its Location: 404", async () => {
-    expect(await listed(orElsewhere)).toMatchObject({ ids: [], counts: { pending_approval: 0 } });
-    expect((await orElsewhere.get(`/v1/work-items/${id}`)).statusCode).toBe(404);
-    expect((await orElsewhere.get(`/v1/work-items/${id}/history`)).statusCode).toBe(404);
+  it("hides it from an Owner Representative whose Visibility doesn't cover its Location, or its Trade: 404", async () => {
+    for (const caller of [orElsewhere, orMechanical]) {
+      expect(await listed(caller)).toMatchObject({ ids: [], counts: { pending_approval: 0 } });
+      expect((await caller.get(`/v1/work-items/${id}`)).statusCode).toBe(404);
+      expect((await caller.get(`/v1/work-items/${id}/history`)).statusCode).toBe(404);
+    }
   });
 
   it("still shows the second Contractor nothing: list, counts, detail, history (V3, scenario 5)", async () => {
@@ -367,14 +378,15 @@ describe("Revise & Resubmit · C", () => {
 });
 
 describe("Submit with no single Consultant to take it", () => {
-  it("is not offered, and refused, when two Consultants cover the item (a Visibility Overlap)", async () => {
+  it("is not offered, and refused without saying why, when two Consultants cover the item (a Visibility Overlap)", async () => {
     const k2 = await participant("consultant", { trade: only(electrical), location: all }, "Second Consultants");
     await projectMember(k2.company, k2.participantId, ["manager"]);
     const id = await readyToSubmit("Switchgear");
     expect(buttons(await detail(pm, id))).toEqual(["release", "return"]);
     const res = await take(pm, id, "submit");
     expect(res.statusCode).toBe(409);
-    expect(res.json()).toEqual({ error: "several_participants" });
+    // The same answer as an empty Consultant pool: another Company's setup stays theirs (V14, V16).
+    expect(res.json()).toEqual({ error: "next_step_unavailable" });
     expect((await detail(pm, id)).stage.key).toBe("internal_review");
     // Narrow the second Consultant away: Submit comes back.
     await ok(c1.caller.request("PUT", `/v1/participants/${k2.participantId}/visibility`, { trade: only(mechanical), location: all }));

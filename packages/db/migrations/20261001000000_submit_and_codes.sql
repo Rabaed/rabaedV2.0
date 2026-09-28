@@ -3,16 +3,18 @@
 --
 -- * Actor resolution, Participant stage (§3.1): a Step of the raiser's own role is
 --   the raiser's. Any other role's Step goes to the one active Participant in that
---   role whose Visibility covers every dimension value of the item. None is a
---   Visibility Gap ('no_participant'); more than one is a Visibility Overlap
---   ('several_participants'), refused until the Action Form lets the submitter
---   pick one. Its Step Pool must not be empty ('no_step_pool').
+--   role whose Visibility covers every dimension value of the item. None (a
+--   Visibility Gap), more than one (a Visibility Overlap, until the Action Form
+--   lets the submitter pick one) or an empty Step Pool there all answer the same
+--   'next_step_unavailable': which it is would tell the submitter about another
+--   Company's Visibility and Positions (V14, V16). An empty pool in the actor's
+--   own Participant is still 'no_step_pool'.
 -- * app.take_transition now takes Transitions to another Participant (Submit) and
 --   into terminal Steps. Submit gives the Consultant 'handling' access and every
 --   Owner and Owner Representative Participant whose Visibility covers the item
 --   'oversight' access (V2). A Transition into a terminal Step sets outcome and
---   closed_at and leaves no open assignment; from an issue_code Step its event is
---   an 'issue_code' event carrying the Code.
+--   closed_at and leaves no open assignment; one that issues a Code (from an
+--   issue_code Step, with an outcome) is an 'issue_code' event carrying the Code.
 -- * app.work_item_history adds each event's outcome, and names the person who
 --   issued a Code to everyone who sees that event: the signer of the final Code is
 --   the one person of another Company anyone sees (V14).
@@ -36,8 +38,10 @@ create function app.participant_covers_item(p_participant_id uuid, p_work_item_i
   $$;
 
 -- Who would hold the Step a Transition leads to (§3.1, §3.2). Outcome: 'terminal'
--- (it closes the item: nobody), 'ok' with the Participant, 'no_participant',
--- 'several_participants' or 'no_step_pool'.
+-- (it closes the item: nobody), 'ok' with the Participant, 'no_step_pool' (the
+-- raiser's own Step, and nobody there could hold it) or 'next_step_unavailable'
+-- (another role's Step: no single Participant covers the item, or nobody there
+-- could hold it; which one stays theirs).
 create function app.next_step_holder(p_work_item_id uuid, p_transition_id uuid)
   returns table (outcome text, participant_id uuid)
   language plpgsql stable security definer
@@ -45,49 +49,44 @@ create function app.next_step_holder(p_work_item_id uuid, p_transition_id uuid)
   as $$
     #variable_conflict use_column
     declare
-      v_base_role text;
-      v_raiser record;
+      v_target record;
       v_candidates uuid[];
     begin
-      select target.actor_rule ->> 'base_role' into v_base_role
+      select tr.to_step_id as step_id, target.actor_rule ->> 'base_role' as base_role,
+        w.raised_by_participant_id as raiser_id, raiser_role.base_role as raiser_base_role
+      into v_target
       from work_item w
       join workflow_transition tr on tr.id = p_transition_id and tr.workflow_version_id = w.workflow_version_id
       join workflow_step target on target.id = tr.to_step_id
+      join participant raiser on raiser.id = w.raised_by_participant_id
+      join project_role raiser_role on raiser_role.id = raiser.project_role_id
       where w.id = p_work_item_id;
-      if v_base_role is null then
+      if v_target.base_role is null then
         return query select 'terminal'::text, null::uuid;
         return;
       end if;
 
-      select p.id, r.base_role into v_raiser
-      from work_item w
-      join participant p on p.id = w.raised_by_participant_id
-      join project_role r on r.id = p.project_role_id
-      where w.id = p_work_item_id;
-      if v_base_role = v_raiser.base_role then
+      if v_target.base_role = v_target.raiser_base_role then
         -- The raiser's own Steps stay with the raiser, never another Participant of its role (V3).
-        v_candidates := array[v_raiser.id];
-      else
-        select coalesce(array_agg(p.id), '{}') into v_candidates
-        from work_item w
-        join participant p on p.project_id = w.project_id and p.status = 'active'
-        join project_role r on r.id = p.project_role_id and r.base_role = v_base_role
-        where w.id = p_work_item_id and app.participant_covers_item(p.id, w.id);
+        if exists (select 1 from app.step_pool(p_work_item_id, v_target.step_id, v_target.raiser_id)) then
+          return query select 'ok'::text, v_target.raiser_id;
+        else
+          return query select 'no_step_pool'::text, null::uuid;
+        end if;
+        return;
       end if;
 
-      if cardinality(v_candidates) = 0 then
-        return query select 'no_participant'::text, null::uuid;
-      elsif cardinality(v_candidates) > 1 then
-        return query select 'several_participants'::text, null::uuid;
-      elsif not exists (
-        select 1 from work_item w
-        join workflow_transition tr on tr.id = p_transition_id
-        cross join lateral app.step_pool(w.id, tr.to_step_id, v_candidates[1])
-        where w.id = p_work_item_id
-      ) then
-        return query select 'no_step_pool'::text, null::uuid;
-      else
+      select coalesce(array_agg(p.id), '{}') into v_candidates
+      from work_item w
+      join participant p on p.project_id = w.project_id and p.status = 'active'
+      join project_role r on r.id = p.project_role_id and r.base_role = v_target.base_role
+      where w.id = p_work_item_id and app.participant_covers_item(p.id, w.id);
+      if cardinality(v_candidates) = 1
+        and exists (select 1 from app.step_pool(p_work_item_id, v_target.step_id, v_candidates[1]))
+      then
         return query select 'ok'::text, v_candidates[1];
+      else
+        return query select 'next_step_unavailable'::text, null::uuid;
       end if;
     end
   $$;
@@ -117,9 +116,10 @@ create or replace function app.takeable_transitions(p_work_item_id uuid)
 -- Takes a Transition (§5.1) by its key. Outcome: 'applied' (also for the same
 -- key again: nothing more happens), 'not_found' (they can't see the item),
 -- 'item_closed', 'project_closed', 'not_holder', 'transition_not_available',
--- 'forbidden' (no permission), 'reason_required', 'no_participant' (no
--- Participant in the next Step's role covers the item), 'several_participants',
--- 'no_step_pool' (nobody could hold the next Step) or 'idempotency_key_reused'.
+-- 'forbidden' (no permission), 'reason_required', 'no_step_pool' (nobody in the
+-- raiser's Participant could hold its next Step), 'next_step_unavailable'
+-- (another Participant's Step can't be handed over; see app.next_step_holder)
+-- or 'idempotency_key_reused'.
 -- Any refusal writes nothing. A key is remembered only once applied: a replay
 -- answers 'applied' whatever its reason, and a refused attempt may be retried
 -- under the same key.
@@ -231,7 +231,11 @@ create or replace function app.take_transition(
       end if;
 
       if v_next.outcome = 'terminal' then
-        v_outcome := coalesce(v_transition.outcome, 'closed');
+        v_outcome := coalesce(v_transition.outcome, case when v_transition.kind = 'cancel' then 'cancelled' end);
+        -- Publish-time validation requires one (workflow-engine.md §1, check 3); never guess it.
+        if v_outcome is null then
+          raise exception 'Transition % closes the item without an outcome', v_transition.key;
+        end if;
       end if;
       v_audience := case
         when v_transition.kind in ('submit', 'close') or v_transition.from_outcome_mode = 'issue_code'
@@ -242,7 +246,9 @@ create or replace function app.take_transition(
         from_step_id, to_step_id, payload, audience, audience_participant_id, content_sha256, created_at
       ) values (
         v_item.project_id, p_work_item_id,
-        case when v_transition.from_outcome_mode = 'issue_code' then 'issue_code' else 'transition' end,
+        -- A Code is issued only where one is set; any other move from that Step is a plain Transition.
+        case when v_transition.from_outcome_mode = 'issue_code' and v_outcome is not null then 'issue_code'
+          else 'transition' end,
         v_member_id, v_me.participant_id, v_transition.id,
         v_item.current_step_id, v_transition.to_step_id,
         jsonb_strip_nulls(jsonb_build_object('reason', v_reason, 'document_number', v_number, 'outcome', v_outcome)),
@@ -294,8 +300,9 @@ create or replace function app.take_transition(
     end
   $$;
 
--- The person who issued a Code, for anyone who sees that shared event; null for
--- any other event. The one person of another Company anyone is shown (V14).
+-- The person who issued the final Code, for anyone who sees that shared event;
+-- null for any other event. The one person of another Company anyone is shown
+-- (V14; visibility.md, Work Item history).
 create function app.code_signer_name(p_event_id uuid) returns jsonb
   language sql stable security definer
   set search_path = pg_catalog, public
@@ -303,7 +310,7 @@ create function app.code_signer_name(p_event_id uuid) returns jsonb
     select m.full_name
     from work_item_event e
     join member m on m.id = e.actor_member_id
-    where e.id = p_event_id and e.type = 'issue_code' and e.audience = 'shared'
+    where e.id = p_event_id and e.type = 'issue_code' and e.audience = 'shared' and e.payload ? 'outcome'
       and app.sees_work_item(e.work_item_id)
   $$;
 

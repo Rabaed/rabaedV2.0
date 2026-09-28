@@ -205,9 +205,8 @@
       "alreadyClaimed": "Someone else claimed it first.",
       "reasonRequired": "Give a reason.",
       "forbidden": "Your Position doesn't allow this.",
-      "noStepPool": "Nobody can hold the next step yet: no one there has the Position for it.",
-      "noParticipant": "No Company covers this item's Trade and Location for the next step. Ask a Project Admin.",
-      "severalParticipants": "More than one Company covers this item for the next step. Ask a Project Admin to narrow their Visibility.",
+      "noStepPool": "Nobody in your Company can hold the next step yet. Ask your Authorized Person to give someone the Position.",
+      "nextStepUnavailable": "This can't be handed over yet: the next step has nobody to take it. Ask a Project Admin.",
       "notAvailable": "This Transition isn't available any more.",
       "projectClosed": "This Project is closed.",
       "unavailable": "Something went wrong. Try again."

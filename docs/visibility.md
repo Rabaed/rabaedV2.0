@@ -27,6 +27,8 @@ A Member sees a thing only if it passes **every** layer, in order.
   - it raised the item, or
   - a Workflow Step is assigned to it, or
   - it is an Owner or Owner Representative, the item has been Submitted, and its Visibility covers the item (*oversight*).
+
+  Walking skeleton (RP-194): oversight is granted when the item is Submitted, from the Owner's or Owner Representative's Visibility at that moment. Narrowing it later hides the item at once (layer 4); widening it doesn't yet reach items already Submitted.
 - **V3.** Two Participants in the same Project Role never see each other's Work Items, even when they share a Trade.
 - **V4.** A Member never sees more than their Participant. A Member's Visibility is a subset of their Participant's.
 - **V5.** Internal Communication (notes, internal Step moves, Returns, internal approvals, Recommended Codes) is visible only to Members of the Participant where it happened.
@@ -52,10 +54,12 @@ Every one of these must apply the same layers. A new feature that adds a channel
 | Notifications and emails | Sent only to Members with access. The subject line holds only what the recipient may see. |
 | Distribution List | Receives the Documental Record link only (E2-style sealed PDF), and the link expires. |
 | Activity Feed | Built from `work_item_event` and `project_event`, filtered through layers 3 to 5. |
+| Work Item history | The item's `work_item_event`s through layers 3 to 5. Another Company appears by name only; the one person of another Company named is the signer of the final Code (V14). |
 | Step Age reports | Each Participant's report covers items it has access to. The Owner-level report covers oversight items. |
 | Exports and handover | An export contains only what the exporter could see, plus their E2 records. |
 | Document Numbers | Numbering patterns that include a Company segment give each Company its own counter, so sequence gaps don't reveal a competitor's volume. |
 | Errors and logs shown to users | Never include another item's title, number or Company. |
+| Refusals of a Transition | Never say why another Participant can't take the next Step (no Participant covers the item, several do, or nobody there holds the Position): one answer for all, so its Visibility and Positions stay its own (V14, V16). |
 | Rabaed Admin | A separate role, with `admin_action` logged on every read of customer data. |
 
 ## Scenario matrix (becomes the automated visibility test suite)

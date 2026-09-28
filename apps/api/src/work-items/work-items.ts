@@ -206,8 +206,7 @@ type TransitionRefusal =
   | "transition_not_available"
   | "forbidden"
   | "reason_required"
-  | "no_participant"
-  | "several_participants"
+  | "next_step_unavailable"
   | "no_step_pool"
   | "idempotency_key_reused";
 export type TakeTransitionResult = { ok: true } | { ok: false; reason: TransitionRefusal };

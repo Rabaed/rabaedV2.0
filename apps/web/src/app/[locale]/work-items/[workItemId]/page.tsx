@@ -1,4 +1,4 @@
-import type { Locale } from "@rabaed/domain";
+import { isOpenStageCategory, type Locale } from "@rabaed/domain";
 import { DocNo } from "@rabaed/ui";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
@@ -28,7 +28,7 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
         <div className="flex flex-wrap items-center gap-3">
           <StagePill stage={item.stage} locale={locale} />
           {/* Step Age only while it waits at a Step; a closed item doesn't age. */}
-          {!item.closedAt && (
+          {isOpenStageCategory(item.stage.category) && (
             <>
               <AgeDots weeks={item.stepAgeWeeks} label={t("stepAge", { weeks: item.stepAgeWeeks })} />
               <span className="text-sm text-muted">{t("stepAge", { weeks: item.stepAgeWeeks })}</span>
