@@ -4,7 +4,7 @@ import { Button } from "@rabaed/ui";
 import { useTranslations } from "next-intl";
 import { useState, type FormEvent } from "react";
 import { Label } from "@/components/ui/label";
-import { useRouter } from "@/i18n/navigation";
+import { Link, useRouter } from "@/i18n/navigation";
 
 type Person = { id: string; name: string };
 
@@ -69,11 +69,19 @@ export function ProjectMembersEditor({
                   {m.email}
                 </bdi>
               </span>
-              {canManage && (
-                <Button variant="ghost" size="sm" className="text-danger" disabled={pending} onClick={() => remove(m)}>
-                  {t("remove")}
-                </Button>
-              )}
+              <span className="flex items-center gap-2">
+                <Link
+                  href={`/participants/${participantId}/members/${m.id}/visibility`}
+                  className="text-sm text-primary underline underline-offset-4"
+                >
+                  {t("visibility")}
+                </Link>
+                {canManage && (
+                  <Button variant="ghost" size="sm" className="text-danger" disabled={pending} onClick={() => remove(m)}>
+                    {t("remove")}
+                  </Button>
+                )}
+              </span>
             </li>
           ))}
         </ul>

@@ -56,6 +56,24 @@ export default async function ProjectPage({ params }: { params: Promise<{ locale
         )}
         {project.isProjectAdmin && <AddParticipantForm projectId={project.id} />}
       </section>
+
+      <section className="space-y-2">
+        <h2 className="text-h6 font-semibold">{t("settings")}</h2>
+        <ul className="flex flex-wrap gap-x-6 gap-y-2">
+          <li>
+            <Link href={`/projects/${project.id}/settings/trades-locations`} className="text-primary underline underline-offset-4">
+              {t("tradesLocations")}
+            </Link>
+          </li>
+          {project.isProjectAdmin && (
+            <li>
+              <Link href={`/projects/${project.id}/settings/visibility`} className="text-primary underline underline-offset-4">
+                {t("visibility")}
+              </Link>
+            </li>
+          )}
+        </ul>
+      </section>
     </div>
   );
 }
