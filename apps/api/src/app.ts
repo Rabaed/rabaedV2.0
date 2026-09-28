@@ -15,6 +15,7 @@ import { adminRoutes } from "./routes/admin.ts";
 import { companyRoutes } from "./routes/companies.ts";
 import { healthRoutes } from "./routes/health.ts";
 import { memberRoutes } from "./routes/members.ts";
+import { participantRoutes } from "./routes/participants.ts";
 import { projectRoutes } from "./routes/projects.ts";
 import { sessionRoutes } from "./routes/session.ts";
 
@@ -113,6 +114,7 @@ export async function buildApp({
   await app.register(companyRoutes(context));
   await app.register(memberRoutes(context));
   await app.register(projectRoutes(context));
+  await app.register(participantRoutes(context));
   await app.register(adminRoutes(context), { prefix: "/admin" });
   return app;
 }

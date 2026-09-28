@@ -1,5 +1,13 @@
 import "server-only";
-import type { CompanyMembers, MyProjects, ProjectSummary, SignedInMember } from "@rabaed/domain";
+import type {
+  CompanyMembers,
+  CompanyParticipations,
+  MyProjects,
+  ParticipantMembers,
+  ProjectParticipants,
+  ProjectSummary,
+  SignedInMember,
+} from "@rabaed/domain";
 import { cookies } from "next/headers";
 import { apiUrl } from "./api-url.ts";
 
@@ -37,4 +45,19 @@ export function getMyProjects(): Promise<MyProjects | null> {
 /** One of the signed-in Member's Projects; null if it isn't one of theirs (or doesn't exist). */
 export function getProject(projectId: string): Promise<ProjectSummary | null> {
   return apiGet<ProjectSummary>(`/v1/projects/${encodeURIComponent(projectId)}`);
+}
+
+/** The Participants of one of the signed-in Member's Projects; null if it isn't one of theirs. */
+export function getProjectParticipants(projectId: string): Promise<ProjectParticipants | null> {
+  return apiGet<ProjectParticipants>(`/v1/projects/${encodeURIComponent(projectId)}/participants`);
+}
+
+/** The Authorized Person's Company's Participants; null for anyone else. */
+export function getCompanyParticipations(): Promise<CompanyParticipations | null> {
+  return apiGet<CompanyParticipations>("/v1/participants");
+}
+
+/** One of the signed-in Member's own Company's Participants and its Project Members; null otherwise. */
+export function getParticipantMembers(participantId: string): Promise<ParticipantMembers | null> {
+  return apiGet<ParticipantMembers>(`/v1/participants/${encodeURIComponent(participantId)}/members`);
 }

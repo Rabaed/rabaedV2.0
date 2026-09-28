@@ -1,7 +1,7 @@
 import { randomInt, randomUUID } from "node:crypto";
 import { createDb } from "@rabaed/db";
 import { testDatabaseUrls } from "@rabaed/db/test-support";
-import type { CreateProjectRequest, InviteMemberRequest, OnboardCompanyRequest } from "@rabaed/domain";
+import type { BaseRole, CreateProjectRequest, InviteMemberRequest, OnboardCompanyRequest } from "@rabaed/domain";
 import type { FastifyInstance, LightMyRequestResponse } from "fastify";
 import { buildApp, SESSION_COOKIE } from "../../src/app.ts";
 import type { ApiConfig } from "../../src/config.ts";
@@ -68,6 +68,10 @@ export interface TestApi {
   projectCreator(): Promise<{ company: OnboardedCompany; caller: Caller }>;
   /** `by` (a Project Creator) creates a Project; overrides replace parts of the request. */
   createProject(by: Caller, overrides?: Partial<CreateProjectRequest>): Promise<CreatedProject>;
+  /** A Project Admin (`by`) adds a Company as a Participant; returns the Participant's id. */
+  addParticipant(by: Caller, projectId: string, company: OnboardedCompany, role: BaseRole): Promise<string>;
+  /** The Participant's Authorized Person (`by`) adds a Member of their Company to the Project. */
+  addProjectMember(by: Caller, participantId: string, memberId: string): Promise<void>;
   signIn(email: string, password: string): Promise<Caller>;
   /** Moves the API's clock forward. */
   advanceClock(ms: number): void;
@@ -223,6 +227,16 @@ export async function createTestApi(options: { databaseUrl?: string } = {}): Pro
       expectStatus(res, 201, "create project");
       const json = res.json();
       return { id: json.projectId, projectNumber: json.projectNumber };
+    },
+
+    async addParticipant(by, projectId, company, role) {
+      const res = await by.post(`/v1/projects/${projectId}/participants`, { crNumber: company.crNumber, role });
+      expectStatus(res, 201, "add participant");
+      return res.json().participantId;
+    },
+
+    async addProjectMember(by, participantId, memberId) {
+      expectStatus(await by.post(`/v1/participants/${participantId}/members`, { memberId }), 204, "add project member");
     },
 
     async signIn(email, password) {

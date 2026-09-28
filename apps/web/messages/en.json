@@ -13,7 +13,8 @@
     "signedInAs": "Signed in as {name}, {company}",
     "authorizedPerson": "Authorized Person",
     "membersLink": "Members",
-    "projectsLink": "My Projects"
+    "projectsLink": "My Projects",
+    "participationsLink": "Company Projects"
   },
   "health": {
     "title": "System health",
@@ -95,6 +96,26 @@
     },
     "invalid": "Check both names and the project code.",
     "notCreator": "Only a Project Creator can create a Project.",
+    "unavailable": "Something went wrong. Try again.",
+    "participants": "Participants",
+    "projectMembers": "Project Members"
+  },
+  "participants": {
+    "title": "Company Projects",
+    "subtitle": "Every Project {company} takes part in. Add your Members to each one.",
+    "empty": "Your Company is not on any Project yet.",
+    "membersTitle": "Project Members",
+    "noMembers": "None of your Members are on this Project yet.",
+    "addMember": "Add a Member of your Company",
+    "add": "Add",
+    "remove": "Remove",
+    "confirmRemove": "Remove {name} from this Project? They lose access at once.",
+    "crNumber": "Company CR number",
+    "role": "Project Role",
+    "invalidCr": "Enter the Company's 10-digit CR number.",
+    "notAdmin": "Only a Project Admin can add Participants.",
+    "alreadyParticipant": "That Company is already on this Project.",
+    "unknownCompany": "No Company with that CR number is on Rabaed.",
     "unavailable": "Something went wrong. Try again."
   }
 }

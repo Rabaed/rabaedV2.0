@@ -27,6 +27,11 @@ export default async function Home({ params }: { params: Promise<{ locale: Local
             <Link href="/members" className={buttonVariants({ variant: "secondary" })}>
               {t("membersLink")}
             </Link>
+            {me.member.isAuthorizedPerson && (
+              <Link href="/participants" className={buttonVariants({ variant: "secondary" })}>
+                {t("participationsLink")}
+              </Link>
+            )}
           </div>
         </>
       ) : (
