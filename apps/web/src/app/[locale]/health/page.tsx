@@ -24,9 +24,9 @@ export default async function HealthPage({ params }: { params: Promise<{ locale:
     <div className="space-y-6">
       <h1 className="text-2xl font-semibold">{t("title")}</h1>
       <dl className="grid grid-cols-[max-content_1fr] gap-x-6 gap-y-2">
-        <dt className="text-muted-foreground">{t("api")}</dt>
+        <dt className="text-muted">{t("api")}</dt>
         <dd className={cn(health ? "text-success" : "text-danger")}>{health ? t("ok") : t("unreachable")}</dd>
-        <dt className="text-muted-foreground">{t("database")}</dt>
+        <dt className="text-muted">{t("database")}</dt>
         <dd data-testid="database-status" className={cn(health?.database === "ok" ? "text-success" : "text-danger")}>
           {health?.database === "ok" ? t("ok") : t("unavailable")}
         </dd>

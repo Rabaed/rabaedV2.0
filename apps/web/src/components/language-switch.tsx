@@ -1,7 +1,7 @@
 "use client";
 
 import { useLocale, useTranslations } from "next-intl";
-import { buttonVariants } from "@/components/ui/button";
+import { buttonVariants } from "@rabaed/ui";
 import { Link, usePathname } from "@/i18n/navigation";
 
 export function LanguageSwitch() {
@@ -16,7 +16,7 @@ export function LanguageSwitch() {
       locale={other}
       hrefLang={other}
       lang={other}
-      className={buttonVariants({ variant: "outline", size: "sm" })}
+      className={buttonVariants({ variant: "secondary", size: "sm" })}
       data-testid="language-switch"
     >
       {t("switchLanguage")}

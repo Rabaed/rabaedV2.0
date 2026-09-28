@@ -12,7 +12,7 @@ export default function Home({ params }: { params: Promise<{ locale: Locale }> }
   return (
     <div className="space-y-6">
       <h1 className="text-3xl font-semibold">{t("title")}</h1>
-      <p className="text-muted-foreground">{t("tagline")}</p>
+      <p className="text-muted">{t("tagline")}</p>
       <p>
         {t("documentNumberLabel")} <DocumentNumber value="TWR-MAR-0000001" />
       </p>

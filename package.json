@@ -14,7 +14,9 @@
     "test": "vitest run",
     "test:unit": "vitest run --project unit",
     "test:seam1": "vitest run --project seam1",
-    "test:seam2": "vitest run --project seam2"
+    "test:seam2": "vitest run --project seam2",
+    "test:stories": "pnpm --filter @rabaed/ui test:stories",
+    "storybook": "pnpm --filter @rabaed/ui storybook"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
