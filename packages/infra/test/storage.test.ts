@@ -1,14 +1,19 @@
 import { describe, expect, it } from "vitest";
+import { environments, stackNames } from "../src/config.ts";
 import { environmentTemplates, references, render, resourcesOfType, type Resource } from "./support.ts";
 
 const env = environmentTemplates();
 const storage = env.template("storage");
 
-// Buckets by purpose (the logical ID CDK gives each).
-const buckets = Object.fromEntries(
-  Object.entries(storage.findResources("AWS::S3::Bucket")).map(([logicalId, resource]) => [logicalId.replace(/[0-9A-F]{8}$/, ""), resource as Resource]),
-);
-const bucketLogicalId = (name: string) => Object.keys(storage.findResources("AWS::S3::Bucket")).find((id) => id.startsWith(name))!;
+// Resources of a type by their construct ID (the logical ID without CDK's hash).
+function byName(type: string): Record<string, { logicalId: string; resource: Resource }> {
+  return Object.fromEntries(
+    Object.entries(storage.findResources(type)).map(([logicalId, resource]) => [logicalId.replace(/[0-9A-F]{8}$/, ""), { logicalId, resource: resource as Resource }]),
+  );
+}
+const bucketsByName = byName("AWS::S3::Bucket");
+const buckets = Object.fromEntries(Object.entries(bucketsByName).map(([name, { resource }]) => [name, resource]));
+const bucketLogicalId = (name: string) => bucketsByName[name]!.logicalId;
 
 type Statement = { Effect: string; Principal?: unknown; Action: string | string[]; Resource: unknown; Condition?: Record<string, Record<string, unknown>> };
 function bucketPolicy(bucket: string): Statement[] {
@@ -72,10 +77,19 @@ describe("Project files", () => {
     });
   });
 
+  it("refuses signed URLs older than 15 minutes, so the api's links are short-lived", () => {
+    const deny = bucketPolicy("ProjectFiles").find((s) => s.Effect === "Deny" && s.Condition?.NumericGreaterThan);
+    expect(render(deny)).toMatchObject({
+      Principal: { AWS: "*" },
+      Action: expect.arrayContaining(["s3:GetObject", "s3:PutObject"]),
+      Condition: { NumericGreaterThan: { "s3:signatureAge": 900000 } },
+    });
+  });
+
   it("only the api task role is granted object access, and only under projects/", () => {
     const projectBucket = bucketLogicalId("ProjectFiles");
     const grants: { role: string; resources: unknown[] }[] = [];
-    for (const part of ["app", "migrations", "storage", "data", "network", "account", "registry"] as const) {
+    for (const part of Object.keys(stackNames(environments.dev)) as (keyof ReturnType<typeof stackNames>)[]) {
       for (const policy of Object.values(env.template(part).findResources("AWS::IAM::Policy")) as Resource[]) {
         for (const statement of (policy.Properties?.PolicyDocument as { Statement: Statement[] }).Statement) {
           if (!actions(statement).some((a) => a.startsWith("s3:"))) continue;
@@ -94,9 +108,8 @@ describe("Project files", () => {
 });
 
 describe("keys", () => {
-  const keys = Object.fromEntries(
-    Object.entries(storage.findResources("AWS::KMS::Key")).map(([id, r]) => [id.replace(/[0-9A-F]{8}$/, ""), (r as Resource).Properties ?? {}]),
-  );
+  const keysByName = byName("AWS::KMS::Key");
+  const keys = Object.fromEntries(Object.entries(keysByName).map(([name, { resource }]) => [name, resource.Properties ?? {}]));
 
   it("has a rotating customer-managed key for storage", () => {
     expect(keys.StorageKey).toMatchObject({ EnableKeyRotation: true });
@@ -104,7 +117,7 @@ describe("keys", () => {
 
   it("reserves an asymmetric signing key for sealing PDFs, which nothing may use yet", () => {
     expect(keys.PdfSealingKey).toMatchObject({ KeySpec: "RSA_3072", KeyUsage: "SIGN_VERIFY" });
-    const sealing = Object.keys(storage.findResources("AWS::KMS::Key")).find((id) => id.startsWith("PdfSealingKey"));
+    const sealing = keysByName.PdfSealingKey!.logicalId;
     for (const policy of resourcesOfType(env.synthesised, "AWS::IAM::Policy")) {
       expect(JSON.stringify(policy.Properties?.PolicyDocument)).not.toContain(sealing);
     }

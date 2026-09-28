@@ -84,9 +84,9 @@ function repositoryOf(family: string): string {
 }
 
 const MASTER = "rabaed/dev/database/master";
-const APP = "rabaed/dev/database/rabaed_app";
-const ADMIN = "rabaed/dev/database/rabaed_admin";
-const MIGRATOR = "rabaed/dev/database/rabaed_migrator";
+const APP = "rabaed/dev/database/roles/rabaed_app";
+const ADMIN = "rabaed/dev/database/roles/rabaed_admin";
+const MIGRATOR = "rabaed/dev/database/roles/rabaed_migrator";
 
 describe("container images", () => {
   it("has one private ECR repository per service, scanned on push, with immutable tags", () => {
@@ -260,7 +260,9 @@ describe("secrets", () => {
   it("puts no password in plain environment variables", () => {
     for (const family of taskDefinitions.keys()) {
       const names = (container(family).Environment ?? []).map((e) => e.Name);
-      expect(names.filter((n) => /PASSWORD|_URL$/.test(n) && n !== "API_URL"), family).toEqual([]);
+      // Allowed: API_URL, secret ARNs (not secret), and DATABASE_ROLE_PASSWORDS (a mode, "on-create").
+      const allowed = (n: string) => n === "API_URL" || n === "DATABASE_ROLE_PASSWORDS" || n.endsWith("_SECRET_ARN");
+      expect(names.filter((n) => /PASSWORD|SECRET|_URL$/.test(n) && !allowed(n)), family).toEqual([]);
     }
   });
 });
@@ -274,6 +276,10 @@ describe("Project files", () => {
 });
 
 describe("migrations", () => {
+  it("leave role passwords to rotation once the roles exist", () => {
+    expect(container("rabaed-dev-migrate").Environment).toContainEqual({ Name: "DATABASE_ROLE_PASSWORDS", Value: "on-create" });
+  });
+
   it("run the database setup (roles, then migrations) from the api image", () => {
     const c = container("rabaed-dev-migrate");
     expect(c.WorkingDirectory).toBe("/app/packages/db");

@@ -9,7 +9,7 @@ export interface StorageStackProps extends StackProps {
   readonly config: EnvironmentConfig;
 }
 
-/** Project files live under this prefix, then the Project's ID (ADR 0007). */
+/** Project files live under this prefix, then the Project's `project_id` (ADR 0007). */
 export const PROJECT_FILES_PREFIX = "projects/";
 
 // Files and the keys that protect them. Every bucket is private, versioned,
@@ -18,7 +18,7 @@ export const PROJECT_FILES_PREFIX = "projects/";
 // - Project files: encrypted with the storage key. Only the api's task role
 //   can read or write objects, only under projects/, and the bucket policy
 //   refuses everyone else, administrators included. Browsers get files
-//   through short-lived signed URLs the api creates.
+//   through signed URLs the api creates, refused once 15 minutes old.
 // - Build assets: private files the build needs (the Thmanyah fonts, RP-211).
 // - Logs: S3 access logs of the other two buckets, and later the load
 //   balancer's. Encrypted with S3-managed keys, because neither S3 access
@@ -63,7 +63,8 @@ export class StorageStack extends Stack {
       lifecycleRules: [{ expiration: Duration.days(365), noncurrentVersionExpiration: Duration.days(30) }],
     });
 
-    const encrypted = (id: string, logPrefix: string) =>
+    // Old versions are kept: recovering an overwritten or deleted file is what versioning is for.
+    const encryptedBucket = (id: string, logPrefix: string) =>
       new s3.Bucket(this, id, {
         ...privateBucket,
         encryption: s3.BucketEncryption.KMS,
@@ -71,10 +72,9 @@ export class StorageStack extends Stack {
         bucketKeyEnabled: true,
         serverAccessLogsBucket: logs,
         serverAccessLogsPrefix: logPrefix,
-        lifecycleRules: [{ noncurrentVersionExpiration: Duration.days(90) }],
       });
-    this.projectFiles = encrypted("ProjectFiles", "project-files/");
-    this.buildAssets = encrypted("BuildAssets", "build-assets/");
+    this.projectFiles = encryptedBucket("ProjectFiles", "project-files/");
+    this.buildAssets = encryptedBucket("BuildAssets", "build-assets/");
 
     // By name, not by reference: the api's role lives in the app stack, which
     // depends on this one.
@@ -87,6 +87,17 @@ export class StorageStack extends Stack {
         actions: ["s3:GetObject*", "s3:PutObject*", "s3:DeleteObject*", "s3:RestoreObject"],
         resources: [this.projectFiles.arnForObjects("*")],
         conditions: { StringNotEquals: { "aws:PrincipalArn": apiTaskRole } },
+      }),
+    );
+    // A signed URL carries the api role's permissions until it expires; S3 refuses it after 15 minutes whatever expiry it was signed with.
+    this.projectFiles.addToResourcePolicy(
+      new iam.PolicyStatement({
+        sid: "SignedUrlsAreShortLived",
+        effect: iam.Effect.DENY,
+        principals: [new iam.AnyPrincipal()],
+        actions: ["s3:GetObject", "s3:PutObject"],
+        resources: [this.projectFiles.arnForObjects("*")],
+        conditions: { NumericGreaterThan: { "s3:signatureAge": 15 * 60 * 1000 } },
       }),
     );
   }

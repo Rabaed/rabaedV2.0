@@ -89,7 +89,9 @@ export class DataStack extends Stack {
       new rds.DatabaseSecret(this, `${role}Secret`, {
         username: role,
         dbname: DATABASE_NAME,
-        secretName: `${names.secretPrefix}database/${role}`,
+        // Under roles/: these replaced plain-password secrets of the old names, and
+        // CloudFormation creates a replacement before deleting what it replaces.
+        secretName: `${names.secretPrefix}database/roles/${role}`,
         excludeCharacters: EXCLUDED_CHARACTERS,
       }).attach(this.database);
     this.roleSecrets = Object.fromEntries(databaseRoles.map((role) => [role, roleSecret(role)])) as Record<DatabaseRole, secretsmanager.ISecret>;

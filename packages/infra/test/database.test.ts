@@ -45,11 +45,14 @@ describe("database", () => {
     expect(parameters.Properties?.Parameters).toMatchObject({ "rds.force_ssl": "1" });
   });
 
+  // The role secrets live under roles/: when they became JSON secrets they were
+  // replaced, and CloudFormation creates a replacement before deleting the old
+  // one, so the new ones needed new names.
   it("generates every password in Secrets Manager; none is in the template", () => {
     expect(JSON.stringify(db.MasterUserPassword)).toContain("resolve:secretsmanager");
     const secrets = resourcesOfType(env.synthesised, "AWS::SecretsManager::Secret");
     expect(secrets.map((s) => s.Properties?.Name).sort()).toEqual(
-      ["rabaed/dev/database/master", "rabaed/dev/database/rabaed_admin", "rabaed/dev/database/rabaed_app", "rabaed/dev/database/rabaed_migrator"].sort(),
+      ["rabaed/dev/database/master", "rabaed/dev/database/roles/rabaed_admin", "rabaed/dev/database/roles/rabaed_app", "rabaed/dev/database/roles/rabaed_migrator"].sort(),
     );
     for (const secret of secrets) {
       expect(secret.Properties).not.toHaveProperty("SecretString");
@@ -64,9 +67,9 @@ describe("database", () => {
         JSON.parse((s.Properties?.GenerateSecretString as { SecretStringTemplate: string }).SecretStringTemplate),
       ]),
     );
-    expect(templates["rabaed/dev/database/rabaed_app"]).toMatchObject({ username: "rabaed_app", dbname: "rabaed" });
-    expect(templates["rabaed/dev/database/rabaed_admin"]).toMatchObject({ username: "rabaed_admin", dbname: "rabaed" });
-    expect(templates["rabaed/dev/database/rabaed_migrator"]).toMatchObject({ username: "rabaed_migrator", dbname: "rabaed" });
+    expect(templates["rabaed/dev/database/roles/rabaed_app"]).toMatchObject({ username: "rabaed_app", dbname: "rabaed" });
+    expect(templates["rabaed/dev/database/roles/rabaed_admin"]).toMatchObject({ username: "rabaed_admin", dbname: "rabaed" });
+    expect(templates["rabaed/dev/database/roles/rabaed_migrator"]).toMatchObject({ username: "rabaed_migrator", dbname: "rabaed" });
     expect(templates["rabaed/dev/database/master"]).toMatchObject({ username: "rabaed_master" });
     // Host, port and engine come from attaching each secret to the instance.
     expect(resourcesOfType(env.synthesised, "AWS::SecretsManager::SecretTargetAttachment")).toHaveLength(4);
@@ -93,7 +96,7 @@ describe("database", () => {
       expect(env.resolve(lambda.VpcSecurityGroupIds, "data").logicalId).toMatch(/^RotationSecurityGroup/);
     }
     expect([...rotated].sort()).toEqual(
-      ["rabaed/dev/database/master", "rabaed/dev/database/rabaed_admin", "rabaed/dev/database/rabaed_app", "rabaed/dev/database/rabaed_migrator"].sort(),
+      ["rabaed/dev/database/master", "rabaed/dev/database/roles/rabaed_admin", "rabaed/dev/database/roles/rabaed_app", "rabaed/dev/database/roles/rabaed_migrator"].sort(),
     );
   });
 });

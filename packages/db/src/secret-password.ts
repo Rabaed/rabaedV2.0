@@ -11,7 +11,8 @@ export function secretPassword(secretId: string): () => Promise<string> {
     client ??= new SecretsManagerClient({});
     const { SecretString } = await client.send(new GetSecretValueCommand({ SecretId: secretId }));
     const password = SecretString ? (JSON.parse(SecretString) as { password?: unknown }).password : undefined;
-    if (typeof password !== "string" || !password) throw new Error(`Secret ${secretId} has no password`);
+    // The secret's name, not its ARN, which carries the account ID into logs.
+    if (typeof password !== "string" || !password) throw new Error(`Secret ${secretId.split(":").at(-1)} has no password`);
     return password;
   };
 }

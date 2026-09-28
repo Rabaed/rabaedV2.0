@@ -39,7 +39,8 @@ export class MigrationsStack extends Stack {
       size: config.migrationTask,
       repository: registry.repositories.api,
       imageTag: imageTagParameter(this),
-      environment: databaseEnvironment(data),
+      // Rotation owns the role passwords once the roles exist.
+      environment: { ...databaseEnvironment(data), DATABASE_ROLE_PASSWORDS: "on-create" },
       secrets: {
         DATABASE_SUPERUSER_USERNAME: ecs.Secret.fromSecretsManager(data.masterSecret, "username"),
         DATABASE_SUPERUSER_PASSWORD: ecs.Secret.fromSecretsManager(data.masterSecret, "password"),
