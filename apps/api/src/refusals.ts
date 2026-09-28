@@ -15,6 +15,9 @@ const answers = {
   too_deep: () => new HttpError(422, "too_deep"),
   value_not_found: () => new HttpError(422, "value_not_found"),
   exceeds_participant: () => new HttpError(422, "exceeds_participant"),
+  type_not_found: () => new HttpError(422, "type_not_found"),
+  trade_required: () => new HttpError(422, "trade_required"),
+  outside_visibility: () => new HttpError(422, "outside_visibility"),
 } satisfies Record<string, () => HttpError>;
 
 export type RefusalReason = keyof typeof answers;
