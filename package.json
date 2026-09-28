@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "docker compose up -d --wait db && pnpm db:setup && pnpm dev:apps",
     "dev:apps": "pnpm --parallel --filter @rabaed/api --filter @rabaed/web --filter @rabaed/worker run dev",
+    "lane:env": "node scripts/lane-env.mjs",
     "db:setup": "pnpm --filter @rabaed/db run setup",
     "lint": "eslint .",
     "typecheck": "pnpm -r run typecheck",

@@ -20,6 +20,26 @@ pnpm dev
 | api | http://127.0.0.1:4000 (`GET /health`) |
 | worker | background process, logs only |
 
+## Several worktrees at once
+
+Parallel Claude Code sessions each work in their own git worktree. Give each worktree its own lane number so they never share a database or a port:
+
+```bash
+pnpm lane:env 1        # in the first extra worktree; 2, 3 … in the others
+pnpm install
+pnpm dev
+```
+
+Lane `n` gets its own Docker Compose project (`rabaed-laneN`, with its own container and volume) and these ports:
+
+| | lane 0 (default) | lane n |
+|---|---|---|
+| Postgres | 5432 | 5432 + 100n |
+| api | 4000 | 4000 + 100n |
+| web | 3000 | 3000 + 100n |
+
+Open each lane's web app at `http://laneN.localhost:<web port>/en`. Browsers keep cookies per host name, not per port, so a separate `laneN.localhost` host stops one lane's sign-in from replacing another's. Tests read the same `.env`, so each lane's test runs use its own database.
+
 ## Layout
 
 | Package | What it holds |
