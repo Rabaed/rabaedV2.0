@@ -5,8 +5,8 @@ export function Input({ className, ...props }: ComponentProps<"input">) {
   return (
     <input
       className={cn(
-        "flex h-9 w-full rounded-md border border-border bg-background px-3 py-1 text-sm shadow-xs outline-none",
-        "placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50",
+        "flex h-9 w-full rounded-sm border border-border bg-surface px-3 py-1 text-sm shadow-xs outline-none",
+        "placeholder:text-muted focus-visible:ring-2 focus-visible:ring-focus disabled:opacity-50",
         "aria-invalid:border-danger",
         className,
       )}

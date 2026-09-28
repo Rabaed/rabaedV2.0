@@ -7,7 +7,7 @@ export default async function AcceptInvitationPage({ params }: { params: Promise
   const t = await getTranslations("acceptInvitation");
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-semibold">{t("title")}</h1>
+      <h1 className="text-h4 font-semibold">{t("title")}</h1>
       <AcceptInvitationForm />
     </div>
   );

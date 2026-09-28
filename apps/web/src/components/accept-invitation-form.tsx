@@ -3,7 +3,7 @@
 import { PASSWORD_MIN_LENGTH as MIN_PASSWORD } from "@rabaed/domain";
 import { useTranslations } from "next-intl";
 import { useEffect, useState, type FormEvent } from "react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@rabaed/ui";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useRouter } from "@/i18n/navigation";
@@ -64,7 +64,7 @@ export function AcceptInvitationForm() {
 
   return (
     <form onSubmit={onSubmit} className="max-w-sm space-y-4" noValidate>
-      <p className="text-sm text-muted-foreground">{t("hint", { min: MIN_PASSWORD })}</p>
+      <p className="text-sm text-muted">{t("hint", { min: MIN_PASSWORD })}</p>
       <div className="space-y-2">
         <Label htmlFor="password">{t("password")}</Label>
         <Input id="password" name="password" type="password" autoComplete="new-password" required minLength={MIN_PASSWORD} />

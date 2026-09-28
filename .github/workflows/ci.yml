@@ -2,6 +2,7 @@ name: CI
 on:
   push:
   pull_request:
+  workflow_dispatch: # started by update-screenshots.yml after it commits new baselines
 permissions:
   contents: read
 concurrency:
@@ -55,6 +56,27 @@ jobs:
         with: { node-version: 24, cache: pnpm }
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @rabaed/web build
+
+  stories:
+    name: story tests (behaviour, axe, screenshots)
+    # Pinned so fonts and rendering match the committed screenshot baselines.
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 24, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @rabaed/ui exec playwright install --with-deps chromium
+      - run: pnpm test:stories
+      - run: pnpm --filter @rabaed/ui build-storybook
+      - name: Upload screenshot diffs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: story-screenshot-diffs
+          path: packages/ui/.vitest/attachments/
+          if-no-files-found: ignore
 
   seam1:
     name: seam 1 (API as a Member)

@@ -11,7 +11,9 @@
     "documentNumberLabel": "Document Numbers read left to right in every language:",
     "signIn": "Sign in",
     "signedInAs": "Signed in as {name}, {company}",
-    "authorizedPerson": "Authorized Person"
+    "authorizedPerson": "Authorized Person",
+    "membersLink": "Members",
+    "projectsLink": "My Projects"
   },
   "health": {
     "title": "System health",
@@ -40,6 +42,61 @@
     "tooShort": "Use at least {min} characters.",
     "mismatch": "The passwords don't match.",
     "invalid": "This invitation link is not valid. It may have been used or have expired; ask for a new one.",
+    "unavailable": "Something went wrong. Try again."
+  },
+  "members": {
+    "title": "Members",
+    "subtitle": "Everyone at {company} on Rabaed. Only your Company sees this list.",
+    "name": "Name",
+    "status": "Status",
+    "projectCreator": "Project Creator",
+    "actions": "Actions",
+    "authorizedPerson": "Authorized Person",
+    "yes": "Yes",
+    "no": "No",
+    "statuses": {
+      "invited": "Invited",
+      "active": "Active",
+      "locked": "Locked",
+      "deactivated": "Deactivated"
+    },
+    "inviteTitle": "Invite a Member",
+    "email": "Email",
+    "nameEn": "Full name (English)",
+    "nameAr": "Full name (Arabic)",
+    "language": "Language",
+    "invite": "Send invitation",
+    "invitationLink": "Invitation created. Send this link to the new Member; it works once and expires.",
+    "duplicateEmail": "That email already belongs to a Member on Rabaed.",
+    "invalid": "Check the email and both names.",
+    "unavailable": "Something went wrong. Try again.",
+    "makeProjectCreator": "Make Project Creator",
+    "removeProjectCreator": "Remove Project Creator",
+    "deactivate": "Deactivate",
+    "confirmDeactivate": "Deactivate {name}? They will be signed out at once and can no longer sign in."
+  },
+  "projects": {
+    "title": "My Projects",
+    "empty": "You are not on any Project yet.",
+    "emptyCreator": "You are not on any Project yet. Create one below.",
+    "projectAdmin": "Project Admin",
+    "createTitle": "Create a Project",
+    "nameEn": "Project name (English)",
+    "nameAr": "Project name (Arabic)",
+    "code": "Project code",
+    "codeHint": "2 to 10 letters or digits, used in Document Numbers.",
+    "projectNumber": "Project Number",
+    "role": "Your Company's role",
+    "yourRole": "Your Company's role",
+    "create": "Create Project",
+    "roles": {
+      "contractor": "Contractor",
+      "consultant": "Consultant",
+      "owner": "Owner",
+      "owner_representative": "Owner Representative"
+    },
+    "invalid": "Check both names and the project code.",
+    "notCreator": "Only a Project Creator can create a Project.",
     "unavailable": "Something went wrong. Try again."
   }
 }

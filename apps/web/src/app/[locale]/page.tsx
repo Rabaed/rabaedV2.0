@@ -1,7 +1,7 @@
 import type { Locale } from "@rabaed/domain";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { DocumentNumber } from "@/components/document-number";
-import { buttonVariants } from "@/components/ui/button";
+import { buttonVariants } from "@rabaed/ui";
 import { Link } from "@/i18n/navigation";
 import { getMe } from "@/lib/session";
 
@@ -13,15 +13,25 @@ export default async function Home({ params }: { params: Promise<{ locale: Local
 
   return (
     <div className="space-y-6">
-      <h1 className="text-3xl font-semibold">{t("title")}</h1>
+      <h1 className="text-h3 font-semibold">{t("title")}</h1>
       {me ? (
-        <p data-testid="signed-in-as">
-          {t("signedInAs", { name: me.member.fullName[locale], company: me.company.legalName[locale] })}
-          {me.member.isAuthorizedPerson && <span className="text-muted-foreground"> · {t("authorizedPerson")}</span>}
-        </p>
+        <>
+          <p data-testid="signed-in-as">
+            {t("signedInAs", { name: me.member.fullName[locale], company: me.company.legalName[locale] })}
+            {me.member.isAuthorizedPerson && <span className="text-muted"> · {t("authorizedPerson")}</span>}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <Link href="/projects" className={buttonVariants()}>
+              {t("projectsLink")}
+            </Link>
+            <Link href="/members" className={buttonVariants({ variant: "secondary" })}>
+              {t("membersLink")}
+            </Link>
+          </div>
+        </>
       ) : (
         <>
-          <p className="text-muted-foreground">{t("tagline")}</p>
+          <p className="text-muted">{t("tagline")}</p>
           <Link href="/sign-in" className={buttonVariants()}>
             {t("signIn")}
           </Link>

@@ -1,0 +1,78 @@
+/**
+ * Layer 1: the base palette. Raw colour values, named by hue and step.
+ * Values come from the Claude Design export (design/reference/claude-design/tokens/colors.css
+ * and theme.css). Components never read these; only themes (layer 2) do.
+ */
+export const palette = {
+  white: "#ffffff",
+
+  // Tomato: the brand primary (#f95738).
+  "tomato-50": "#fff4f1",
+  "tomato-100": "#feddd7",
+  "tomato-200": "#fdc3b7",
+  "tomato-300": "#fca898",
+  "tomato-400": "#fb8d78",
+  "tomato-500": "#fa7258",
+  "tomato-600": "#f95738",
+  "tomato-700": "#d1492f",
+  "tomato-750": "#c9432a",
+  "tomato-800": "#a93b26",
+  "tomato-900": "#7e2c1d",
+
+  // Delft Blue: the brand secondary / ink (#3d405b).
+  "delft-50": "#eff0f3",
+  "delft-100": "#dcdee4",
+  "delft-200": "#a8abbe",
+  "delft-300": "#80849d",
+  "delft-400": "#696f8c",
+  "delft-500": "#525677",
+  "delft-600": "#3d405b",
+  "delft-700": "#33364c",
+  "delft-800": "#2a2d40",
+  "delft-900": "#20212f",
+
+  // Slate: the cool neutrals of the launch theme (canvas #f6f7f9).
+  "slate-25": "#fafbfc",
+  "slate-50": "#f6f7f9",
+  "slate-100": "#eff0f2",
+  "slate-150": "#ececef",
+  "slate-200": "#e7e9ed",
+  "slate-250": "#e4e6ea",
+  "slate-300": "#d8dbe0",
+  "slate-350": "#d5d8de",
+  "slate-400": "#a8adb8",
+  "slate-500": "#9aa0ad",
+  "slate-600": "#6a6e7a",
+  "slate-700": "#555a66",
+  "slate-800": "#3a3f4b",
+  "slate-900": "#1f2430",
+
+  // Tonal hues: 50 = tint, 500 = solid, 700+ = text on tint.
+  "green-50": "#e6f7ee",
+  "green-500": "#27b86e",
+  "green-700": "#16874f",
+  "green-800": "#127043",
+  "amber-50": "#fdf3dc",
+  "amber-500": "#e9a23b",
+  "amber-700": "#9a6206",
+  "orange-50": "#fdeee2",
+  "orange-500": "#ee964b",
+  "orange-700": "#b8560f",
+  "orange-800": "#a24b0c",
+  "red-50": "#fdebea",
+  "red-500": "#e5484d",
+  "red-700": "#c8322b",
+  "red-800": "#bf3136",
+  "red-900": "#9f282c",
+  "blue-50": "#e8f0fd",
+  "blue-500": "#3b6fd8",
+  "blue-700": "#2f62c9",
+  "violet-50": "#f0ecfe",
+  "violet-500": "#7a5af0",
+  "violet-700": "#6547d6",
+  "cyan-50": "#e2f5f8",
+  "cyan-500": "#1aa3b8",
+  "cyan-700": "#0f7688",
+} as const;
+
+export type PaletteColour = keyof typeof palette;

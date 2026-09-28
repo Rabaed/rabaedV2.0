@@ -14,6 +14,8 @@ import { resolveSession, type Principal, type Session } from "./identity/session
 import { adminRoutes } from "./routes/admin.ts";
 import { companyRoutes } from "./routes/companies.ts";
 import { healthRoutes } from "./routes/health.ts";
+import { memberRoutes } from "./routes/members.ts";
+import { projectRoutes } from "./routes/projects.ts";
 import { sessionRoutes } from "./routes/session.ts";
 
 export const SESSION_COOKIE = "rabaed_session";
@@ -109,6 +111,8 @@ export async function buildApp({
   await app.register(healthRoutes(context));
   await app.register(sessionRoutes(context));
   await app.register(companyRoutes(context));
+  await app.register(memberRoutes(context));
+  await app.register(projectRoutes(context));
   await app.register(adminRoutes(context), { prefix: "/admin" });
   return app;
 }

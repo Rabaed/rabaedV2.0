@@ -4,7 +4,7 @@ import createNextIntlPlugin from "next-intl/plugin";
 const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
 
 const config: NextConfig = {
-  transpilePackages: ["@rabaed/domain"],
+  transpilePackages: ["@rabaed/domain", "@rabaed/ui"],
   // Dev only: each worktree is opened at laneN.localhost:<port> (see README), which Next
   // treats as a different origin from plain localhost.
   allowedDevOrigins: ["*.localhost"],

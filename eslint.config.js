@@ -1,15 +1,27 @@
+import css from "@eslint/css";
 import js from "@eslint/js";
+import json from "@eslint/json";
 import nextPlugin from "@next/eslint-plugin-next";
+import rabaed from "@rabaed/eslint-plugin";
 import globals from "globals";
 import tseslint from "typescript-eslint";
 
+const jsTsFiles = ["**/*.{js,mjs,cjs,jsx,ts,mts,cts,tsx}"];
+const forJsTs = (config) => ({ ...config, files: config.files ?? jsTsFiles });
+
+// Design guard rails (packages/ui/README.md, "Lint guard rails") apply to the UI code.
+const uiCode = ["packages/ui/**/*.{ts,tsx}", "apps/web/**/*.{ts,tsx}"];
+// Where raw colour values are allowed to live: the token sources and their tests.
+const tokenSources = ["packages/ui/src/tokens/palette.ts", "packages/ui/src/tokens/scales.ts", "packages/ui/src/tokens/*.test.ts"];
+
 export default tseslint.config(
   {
-    ignores: ["**/node_modules/**", "**/.next/**", "**/dist/**", "**/coverage/**", "**/next-env.d.ts", "**/cdk.out/**", "prototypes/**", "design/**"],
+    ignores: ["**/node_modules/**", "**/.next/**", "**/dist/**", "**/coverage/**", "**/next-env.d.ts", "**/storybook-static/**", "**/cdk.out/**", "prototypes/**", "design/**"],
   },
-  js.configs.recommended,
-  ...tseslint.configs.recommended,
+  forJsTs(js.configs.recommended),
+  ...tseslint.configs.recommended.map(forJsTs),
   {
+    files: jsTsFiles,
     languageOptions: { globals: { ...globals.node } },
     rules: {
       "@typescript-eslint/no-unused-vars": ["error", { argsIgnorePattern: "^_", destructuredArrayIgnorePattern: "^_", varsIgnorePattern: "^_" }],
@@ -24,5 +36,38 @@ export default tseslint.config(
       ...nextPlugin.configs.recommended.rules,
       ...nextPlugin.configs["core-web-vitals"].rules,
     },
+  },
+  {
+    files: uiCode,
+    ignores: tokenSources,
+    plugins: { rabaed },
+    rules: {
+      "rabaed/no-hardcoded-colour": "error",
+      "rabaed/no-physical-direction": "error",
+    },
+  },
+  {
+    files: uiCode,
+    ignores: ["**/*.test.{ts,tsx}"],
+    plugins: { rabaed },
+    rules: { "rabaed/no-deadline-words": "error" },
+  },
+  {
+    files: ["packages/ui/**/*.css", "apps/web/**/*.css"],
+    // The generated token file is where the palette's raw colours live.
+    ignores: ["packages/ui/src/styles/tokens.css"],
+    plugins: { css, rabaed },
+    language: "css/css",
+    languageOptions: { tolerant: true },
+    rules: {
+      "rabaed/css-no-hardcoded-colour": "error",
+      "rabaed/css-no-physical-direction": "error",
+    },
+  },
+  {
+    files: ["apps/web/messages/*.json"],
+    plugins: { json, rabaed },
+    language: "json/json",
+    rules: { "rabaed/json-no-deadline-words": "error" },
   },
 );

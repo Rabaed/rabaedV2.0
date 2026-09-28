@@ -1,0 +1,22 @@
+/*
+ * Rabaed design system styles. Import after Tailwind:
+ *   @import "tailwindcss";
+ *   @import "@rabaed/ui/styles.css";
+ */
+@import "./tokens.css";
+
+/* Let Tailwind see the classes used by ui components. */
+@source "../";
+
+@layer base {
+  html {
+    color-scheme: light;
+  }
+
+  body {
+    background-color: var(--canvas);
+    color: var(--text);
+    font-size: var(--text-body);
+    line-height: var(--text-body--line-height);
+  }
+}

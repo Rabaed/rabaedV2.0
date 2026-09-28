@@ -84,7 +84,7 @@ This table is versioned: every signing event points at the exact signature row t
 `project_id`, `member_id`, `appointed_by` (member or engineer).
 
 **project_role**
-`id`, `owner_kind/owner_id` (Rabaed defaults + project custom), `base_role {contractor, consultant, owner, owner_representative}`, `name i18n`, `code`.
+`id`, `owner_kind {rabaed, project}` + `project_id` (null for Rabaed defaults; the library pattern's `owner_id`, named for RLS), `base_role {contractor, consultant, owner, owner_representative}`, `name i18n`, `code`.
 A custom role (Subcontractor, PMC…) must name a `base_role`. Permission checks cap at what the base role allows.
 
 **participant**
@@ -92,7 +92,7 @@ A custom role (Subcontractor, PMC…) must name a `base_role`. Permission checks
 Unique `(project_id, company_id)`. Withdrawal cancels the participant's in-progress Work Items in one transaction (§5).
 
 **project_member**
-`id`, `participant_id`, `member_id`, `status {active, removed}`, `removed_at`.
+`id`, `project_id` (denormalised for RLS; must match the Participant's), `participant_id`, `member_id`, `status {active, removed}`, `removed_at`.
 Removal never deletes access to what the Member signed (§10).
 
 **position** / **position_permission** / **project_member_position**

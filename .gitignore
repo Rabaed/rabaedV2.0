@@ -29,6 +29,8 @@ build/
 coverage/
 .turbo/
 .next/
+storybook-static/
+.vitest/
 .vercel/
 *.log
 .DS_Store
