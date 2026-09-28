@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { App } from "aws-cdk-lib";
 import { Template } from "aws-cdk-lib/assertions";
+import { AccountStack } from "../src/account-stack.ts";
 import { buildEnvironment } from "../src/environment.ts";
 import { environments, type EnvironmentConfig } from "../src/config.ts";
 
@@ -17,7 +18,7 @@ export function synthesise(config: EnvironmentConfig = environments.dev) {
 }
 
 export function accountTemplate(config: EnvironmentConfig = environments.dev): Template {
-  const found = synthesise(config).find(({ stack }) => stack.stackName === `Rabaed-${config.name}-Account`);
+  const found = synthesise(config).find(({ stack }) => stack instanceof AccountStack);
   if (!found) throw new Error("account stack not synthesised");
   return found.template;
 }

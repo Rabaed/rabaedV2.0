@@ -46,7 +46,9 @@ jobs:
           PR: ${{ github.event.pull_request.number }}
           OUTCOME: ${{ steps.diff.outcome }}
         run: |
+          # Never post without knowing what to redact.
           account=$(aws sts get-caller-identity --query Account --output text)
+          [[ "$account" =~ ^[0-9]{12}$ ]] || { echo "::error::could not read the AWS account ID"; exit 1; }
           {
             echo "### cdk diff (dev): $OUTCOME"
             echo

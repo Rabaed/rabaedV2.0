@@ -2,9 +2,10 @@ import { CfnOutput, CfnParameter, DefaultStackSynthesizer, Stack, type StackProp
 import * as budgets from "aws-cdk-lib/aws-budgets";
 import * as iam from "aws-cdk-lib/aws-iam";
 import type { Construct } from "constructs";
-import type { EnvironmentConfig } from "./config.ts";
+import { oidcSubjectPrefix, repositoryName, type EnvironmentConfig } from "./config.ts";
 
 const GITHUB_OIDC_HOST = "token.actions.githubusercontent.com";
+const BOOTSTRAP_ROLES = ["deploy", "file-publishing", "image-publishing", "lookup"] as const;
 
 export interface AccountStackProps extends StackProps {
   readonly config: EnvironmentConfig;
@@ -31,9 +32,12 @@ export class AccountStack extends Stack {
         },
       });
 
+    const subject = oidcSubjectPrefix(config.github);
+    const repository = repositoryName(config.github);
+
     // The CDK bootstrap roles (created by `cdk bootstrap`) do the actual work;
     // the GitHub roles can only hand over to them.
-    const bootstrapRoleArn = (kind: "deploy" | "file-publishing" | "image-publishing" | "lookup") =>
+    const bootstrapRoleArn = (kind: (typeof BOOTSTRAP_ROLES)[number]) =>
       this.formatArn({
         service: "iam",
         region: "",
@@ -45,23 +49,18 @@ export class AccountStack extends Stack {
     // tag, pull request or fork.
     const deploy = new iam.Role(this, "GithubDeployRole", {
       roleName: `rabaed-${config.name}-github-deploy`,
-      description: `GitHub Actions deploys ${config.name} from ${config.githubRepository} main only`,
-      assumedBy: githubPrincipal(`repo:${config.githubRepository}:ref:refs/heads/main`),
+      description: `GitHub Actions deploys ${config.name} from ${repository} main only`,
+      assumedBy: githubPrincipal(`${subject}:ref:refs/heads/main`),
     });
-    deploy.addToPolicy(
-      new iam.PolicyStatement({
-        actions: ["sts:AssumeRole"],
-        resources: (["deploy", "file-publishing", "image-publishing", "lookup"] as const).map(bootstrapRoleArn),
-      }),
-    );
+    deploy.addToPolicy(new iam.PolicyStatement({ actions: ["sts:AssumeRole"], resources: BOOTSTRAP_ROLES.map(bootstrapRoleArn) }));
 
     // Runs `cdk diff` on pull requests. The lookup role is read-only (AWS
     // ReadOnlyAccess, kms:Decrypt denied), so a pull request can read what is
     // deployed but change nothing.
     const diff = new iam.Role(this, "GithubDiffRole", {
       roleName: `rabaed-${config.name}-github-diff`,
-      description: `GitHub Actions runs cdk diff for ${config.githubRepository} pull requests (read-only)`,
-      assumedBy: githubPrincipal(`repo:${config.githubRepository}:pull_request`),
+      description: `GitHub Actions runs cdk diff for ${repository} pull requests (read-only)`,
+      assumedBy: githubPrincipal(`${subject}:pull_request`),
     });
     diff.addToPolicy(new iam.PolicyStatement({ actions: ["sts:AssumeRole"], resources: [bootstrapRoleArn("lookup")] }));
 

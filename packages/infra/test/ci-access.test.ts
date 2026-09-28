@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 import type { Template } from "aws-cdk-lib/assertions";
 import { accountTemplate, render } from "./support.ts";
 
-const repo = "repo:Rabaed/rabaedV2.0";
+// GitHub's immutable subject for this repository (created after 15 July 2026):
+// owner and repository IDs pinned, so a renamed or re-created repo cannot match.
+// `gh api repos/Rabaed/rabaedV2.0/actions/oidc/customization/sub` shows it.
+const repo = "repo:Rabaed@328426410/rabaedV2.0@1391344568";
 
 type Statement = { Condition?: Record<string, unknown> } & Record<string, unknown>;
 type PolicyDocument = { Statement: Statement[] };

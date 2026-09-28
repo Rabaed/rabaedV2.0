@@ -71,9 +71,11 @@ bash packages/infra/scripts/setup-aws-account.sh dev
 
 Your answers are remembered in `.env.aws` (git-ignored), so a re-run offers them as defaults; every stage is safe to repeat. Nothing secret goes into the repo or GitHub: the budget email is a `NoEcho` deploy-time parameter, never in a template or a diff, and GitHub holds only role ARNs and the region.
 
-Once the variables exist, every pull request from this repository gets a `cdk diff` comment (account ID removed). Pull requests from forks get no AWS access and skip it.
+Both roles check GitHub's immutable OIDC subject, which carries the owner and repository IDs (`repo:Rabaed@328426410/rabaedV2.0@1391344568:…`, set in `src/config.ts`), so a renamed or re-created repository cannot match. The wizard warns if GitHub's subject (`gh api repos/Rabaed/rabaedV2.0/actions/oidc/customization/sub`) ever differs from the config.
 
-Note for later environments: CloudFormation has no `AWS::Budgets::Budget` in `me-central-1`, so a Gulf-region environment will need its budget created from another region.
+Once the variables exist, every pull request from this repository gets a `cdk diff` comment (account ID removed). Pull requests from forks get no AWS access and skip it. Because a pull request runs its own copy of the workflow, anyone who can push a branch here can read the account through the diff role (AWS ReadOnlyAccess, `kms:Decrypt` denied). That is acceptable for dev, which holds only seed data; production accounts need a narrower read role.
+
+Note for later: CloudFormation has no `AWS::Budgets::Budget` in `me-central-1`, so if the standard Instance's production environment goes there, its budget must be created from another region.
 
 ## Database roles
 

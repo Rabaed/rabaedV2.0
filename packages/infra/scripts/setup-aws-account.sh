@@ -197,19 +197,19 @@ TOTAL_STAGES=7
 cd "$(git rev-parse --show-toplevel)"
 ENV_FILE=".env.aws"
 RABAED_ENV="${1:-dev}"
-STACK="Rabaed-${RABAED_ENV}-Account"
 
 # pnpm straight from PATH, or through corepack when it is not installed globally.
 pnpm_() { if command -v pnpm >/dev/null 2>&1; then pnpm "$@"; else corepack pnpm "$@"; fi; }
 cdk_() { pnpm_ --silent --filter @rabaed/infra exec cdk "$@" -c "env=$RABAED_ENV"; }
 
-# The region comes from packages/infra/src/config.ts, the one source of truth.
-REGION=$(node --input-type=module -e "
-  const { environmentConfig } = await import('./packages/infra/src/config.ts');
-  console.log(environmentConfig(process.argv[1]).region);" "$RABAED_ENV")
+# ask_required KEY "Prompt": ask until the answer is not empty.
+ask_required() {
+  ask "$1" "$2"
+  while [[ -z "${!1}" ]]; do warn "an answer is needed"; ask "$1" "$2"; done
+}
 
 # Hands the profile's short-lived credentials to the CDK, in this process
-# only; called before each CDK step so they have not expired.
+# only; called before each AWS step so they have not expired.
 fresh_credentials() { eval "$(aws configure export-credentials --profile "$AWS_PROFILE" --format env)"; }
 
 stack_output() {
@@ -217,7 +217,7 @@ stack_output() {
     --query "Stacks[0].Outputs[?OutputKey=='$1'].OutputValue" --output text
 }
 
-banner "Rabaed AWS account setup: ${RABAED_ENV} (${REGION})"
+banner "Rabaed AWS account setup: ${RABAED_ENV}"
 
 # ── 1 ────────────────────────────────────────────────────────────────────
 stage "Tools on this computer"
@@ -225,17 +225,26 @@ say "You need a current AWS CLI v2 (one that has 'aws login'), the GitHub CLI an
 while true; do
   missing=()
   aws login help >/dev/null 2>&1 || missing+=("AWS CLI v2, latest: https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html")
-  command -v gh   >/dev/null 2>&1 || missing+=("GitHub CLI: https://cli.github.com")
-  command -v node >/dev/null 2>&1 || missing+=("Node 24: https://nodejs.org")
+  command -v gh >/dev/null 2>&1 || missing+=("GitHub CLI: https://cli.github.com")
+  [[ "$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0)" -ge 24 ]] \
+    || missing+=("Node 24 or later: https://nodejs.org")
   (( ${#missing[@]} )) || break
   for m in "${missing[@]}"; do warn "missing $m"; done
   pause "Install them, open a new terminal if needed, then press Enter to check again."
 done
+
+# Region, stack and repository come from packages/infra/src/config.ts, the one
+# source of truth (Node runs the TypeScript directly).
+read -r REGION STACK REPOSITORY OIDC_SUBJECT < <(node --input-type=module -e "
+  const c = await import('./packages/infra/src/config.ts');
+  const env = c.environmentConfig(process.argv[1]);
+  console.log(env.region, c.accountStackName(env), c.repositoryName(env.github), c.oidcSubjectPrefix(env.github));" "$RABAED_ENV")
+
 if ! gh auth status >/dev/null 2>&1; then
-  step "Sign the GitHub CLI in to an account that can administer Rabaed/rabaedV2.0:"
+  step "Sign the GitHub CLI in to an account that can administer $REPOSITORY:"
   gh auth login || warn "gh sign-in failed; stage 7 will list what to set by hand"
 fi
-note "✓ $(aws --version 2>&1 | cut -d' ' -f1), gh, node $(node --version)"
+note "✓ $(aws --version 2>&1 | cut -d' ' -f1), gh, node $(node --version); region $REGION"
 pause
 
 # ── 2 ────────────────────────────────────────────────────────────────────
@@ -251,7 +260,7 @@ if confirm "Do you need to create a new AWS account?"; then
 fi
 say "Now sign the AWS CLI in with the console. Nothing is stored in the repo;"
 say "the CLI keeps short-lived credentials in your home folder."
-ask AWS_PROFILE "AWS CLI profile name to use (e.g. rabaed-${RABAED_ENV}):"
+ask_required AWS_PROFILE "AWS CLI profile name to use (e.g. rabaed-${RABAED_ENV}):"
 export AWS_PROFILE
 write_env AWS_PROFILE "$AWS_PROFILE"
 until aws sts get-caller-identity >/dev/null 2>&1; do
@@ -267,18 +276,22 @@ write_env AWS_ACCOUNT_ID "$AWS_ACCOUNT_ID"
 # ── 3 ────────────────────────────────────────────────────────────────────
 stage "Billing contact"
 say "AWS emails invoices and billing notices to the billing contact."
-ask BILLING_CONTACT_NAME "Billing contact full name:"
-ask BILLING_CONTACT_TITLE "Their job title:"
-ask BILLING_CONTACT_EMAIL "Their email:"
-ask BILLING_CONTACT_PHONE "Their phone, with country code (e.g. +966 5x xxx xxxx):"
-aws account put-alternate-contact --alternate-contact-type BILLING \
-  --name "$BILLING_CONTACT_NAME" --title "$BILLING_CONTACT_TITLE" \
-  --email-address "$BILLING_CONTACT_EMAIL" --phone-number "$BILLING_CONTACT_PHONE"
+ask_required BILLING_CONTACT_NAME "Billing contact full name:"
+ask_required BILLING_CONTACT_TITLE "Their job title:"
+ask_required BILLING_CONTACT_EMAIL "Their email:"
+ask_required BILLING_CONTACT_PHONE "Their phone, with country code (e.g. +966 5x xxx xxxx):"
 write_env BILLING_CONTACT_NAME "$BILLING_CONTACT_NAME"
 write_env BILLING_CONTACT_TITLE "$BILLING_CONTACT_TITLE"
 write_env BILLING_CONTACT_EMAIL "$BILLING_CONTACT_EMAIL"
 write_env BILLING_CONTACT_PHONE "$BILLING_CONTACT_PHONE"
-note "✓ billing contact set (see it under Account → Alternate contacts)"
+fresh_credentials
+if aws account put-alternate-contact --alternate-contact-type BILLING \
+    --name "$BILLING_CONTACT_NAME" --title "$BILLING_CONTACT_TITLE" \
+    --email-address "$BILLING_CONTACT_EMAIL" --phone-number "$BILLING_CONTACT_PHONE"; then
+  note "✓ billing contact set (see it under Account → Alternate contacts)"
+else
+  SKIPPED+=("billing contact (AWS refused it; check the answers and re-run)")
+fi
 pause
 
 # ── 4 ────────────────────────────────────────────────────────────────────
@@ -286,7 +299,7 @@ stage "Budget alert email"
 say "A monthly cost budget emails this address at 80% of actual spend and"
 say "when the forecast passes 100%. The amount is monthlyBudgetUsd in"
 say "packages/infra/src/config.ts; the email stays out of the repo."
-ask BUDGET_ALERT_EMAIL "Email for budget alerts:"
+ask_required BUDGET_ALERT_EMAIL "Email for budget alerts:"
 write_env BUDGET_ALERT_EMAIL "$BUDGET_ALERT_EMAIL"
 pause
 
@@ -306,9 +319,15 @@ pause
 stage "GitHub access and budget ($STACK)"
 say "Deploys the account stack from packages/infra/src/account-stack.ts:"
 step "trust for GitHub Actions through OIDC (no AWS keys stored in GitHub);"
-step "rabaed-${RABAED_ENV}-github-deploy: usable only from Rabaed/rabaedV2.0 main;"
+step "rabaed-${RABAED_ENV}-github-deploy: usable only from $REPOSITORY main;"
 step "rabaed-${RABAED_ENV}-github-diff: read-only, for cdk diff on pull requests;"
 step "the monthly budget alert to $BUDGET_ALERT_EMAIL."
+# The roles trust only tokens whose subject starts with the prefix in config.ts.
+actual_subject=$(gh api "repos/$REPOSITORY/actions/oidc/customization/sub" --jq .sub_claim_prefix 2>/dev/null || true)
+if [[ -n "$actual_subject" && "$actual_subject" != "$OIDC_SUBJECT" ]]; then
+  warn "GitHub signs this repository's tokens as '$actual_subject',"
+  warn "but config.ts expects '$OIDC_SUBJECT'. Fix config.ts before deploying."
+fi
 note "The CDK lists the IAM changes and asks you to approve them."
 if confirm "Deploy $STACK now?"; then
   fresh_credentials
@@ -321,14 +340,14 @@ pause
 # ── 7 ────────────────────────────────────────────────────────────────────
 stage "GitHub repository variables"
 say "Pull request and deploy workflows read these non-secret values."
-fresh_credentials
-if DEPLOY_ROLE_ARN=$(stack_output DeployRoleArn) && DIFF_ROLE_ARN=$(stack_output DiffRoleArn) \
-    && [[ -n "$DEPLOY_ROLE_ARN" && "$DEPLOY_ROLE_ARN" != None ]]; then
+arn_ok() { [[ -n "$1" && "$1" != None ]]; }
+if fresh_credentials && DEPLOY_ROLE_ARN=$(stack_output DeployRoleArn) && DIFF_ROLE_ARN=$(stack_output DiffRoleArn) \
+    && arn_ok "$DEPLOY_ROLE_ARN" && arn_ok "$DIFF_ROLE_ARN"; then
   set_var AWS_REGION "$REGION"
   set_var AWS_DEPLOY_ROLE_ARN "$DEPLOY_ROLE_ARN"
   set_var AWS_DIFF_ROLE_ARN "$DIFF_ROLE_ARN"
 else
-  warn "$STACK is not deployed yet, so there are no role ARNs to record."
+  warn "Could not read the role ARNs from $STACK (not deployed yet, or the sign-in expired)."
   SKIPPED+=("GitHub variables AWS_REGION, AWS_DEPLOY_ROLE_ARN, AWS_DIFF_ROLE_ARN (re-run after stage 6)")
 fi
 pause
