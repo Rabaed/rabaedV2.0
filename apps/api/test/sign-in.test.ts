@@ -134,6 +134,17 @@ describe("sessions", () => {
     expect(res.json()).toEqual({ error: "not_signed_in" });
   });
 
+  it("are replaced, not stacked, when signing in again", async () => {
+    const { company, caller } = await api.authorizedPerson();
+    const first = caller.sessionToken;
+    expect((await caller.post("/v1/session", { email: company.authorizedPerson.email, password: DEFAULT_PASSWORD })).statusCode).toBe(204);
+    expect(caller.sessionToken).not.toBe(first);
+    expect((await caller.get("/v1/me")).statusCode).toBe(200);
+
+    caller.useSessionToken(first);
+    expect((await caller.get("/v1/me")).statusCode).toBe(401);
+  });
+
   it("expire", async () => {
     const { caller } = await api.authorizedPerson();
     api.advanceClock(testConfig.sessionTtlMs - HOUR);

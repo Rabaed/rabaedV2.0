@@ -17,7 +17,8 @@ export interface AdminActionOutcome<T> {
 /**
  * Runs a Rabaed Engineer's action on the admin connection and records it in
  * admin_action, with its reason, in the same transaction (visibility.md V9).
- * Every Rabaed Admin write goes through here.
+ * Every use of the admin connection, reads of customer data included, goes
+ * through here.
  */
 export async function asEngineer<T>(
   adminDb: Db,

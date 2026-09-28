@@ -9,6 +9,7 @@ import {
 } from "fastify-type-provider-zod";
 import type { ApiConfig } from "./config.ts";
 import { HttpError, notFound, notSignedIn } from "./http-error.ts";
+import { dummyHash } from "./identity/password.ts";
 import { resolveSession, type Principal, type Session } from "./identity/sessions.ts";
 import { adminRoutes } from "./routes/admin.ts";
 import { companyRoutes } from "./routes/companies.ts";
@@ -56,6 +57,7 @@ export async function buildApp({
   now = () => new Date(),
   logger = true,
 }: AppOptions): Promise<FastifyInstance> {
+  await dummyHash();
   const app = Fastify({ logger }).withTypeProvider<ZodTypeProvider>();
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);

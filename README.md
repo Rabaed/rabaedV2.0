@@ -37,7 +37,7 @@ pnpm dev
 | superuser (`DATABASE_SUPERUSER_URL`) | `pnpm db:setup` only | create roles and the database |
 | `rabaed_migrator` | migrations, `pnpm engineer:create` | own the schema; as table owner it is not subject to RLS |
 | `rabaed_app` | api, worker | read and write tables only through row-level security; cannot bypass it, create tables or own anything. Before sign-in it reaches sessions, passwords and invitations only through narrow `SECURITY DEFINER` functions (`app.sign_in_candidate`, `app.session_principal`, …). |
-| `rabaed_admin` | Rabaed Admin routes (`/admin/...`) | bypasses RLS (ADR 0007); every write goes through `asEngineer`, which records `admin_action` with a reason in the same transaction. Cannot read passwords or sessions, and `admin_action` is insert-only. |
+| `rabaed_admin` | Rabaed Admin routes (`/admin/...`) | bypasses RLS (ADR 0007); every use (reads of customer data included, per visibility.md V9) goes through `asEngineer`, which records `admin_action` with a reason in the same transaction. The database does not enforce that pairing; the API is this role's only client. Cannot read passwords or sessions, and `admin_action` is insert-only. |
 
 Every request runs in a transaction that sets the acting Member with `withMember` (`set_config('app.member_id', …, true)`); RLS policies read it through `app.current_member_id()`. With no Member set, policies match nothing.
 
@@ -55,7 +55,7 @@ Rabaed Admin has no UI yet, so a Rabaed Engineer works through the API:
 3. Onboard a Company with `POST /admin/v1/companies` (legal name EN/AR, CR number, VAT number, Authorized Person, and a required `reason`). The response holds the invitation token once.
 4. Send the Authorized Person `http://localhost:3000/en/accept-invitation#token=<token>` (`/ar/…` for Arabic). The token sits in the URL fragment, so it never reaches a server log. It works once and expires after `INVITATION_TTL_HOURS`.
 
-Members sign in at `/en/sign-in`. The web app proxies `/api/*` to the API, so the session cookie stays first-party.
+Members sign in at `/en/sign-in`. The web app forwards `/api/v1/*` to the API at runtime, so the session cookie stays first-party; Rabaed Admin (`/admin/...`) is not reachable through the web origin.
 
 ## Tests
 

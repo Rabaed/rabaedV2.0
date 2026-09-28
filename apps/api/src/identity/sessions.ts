@@ -22,7 +22,7 @@ export async function startSession(db: Db, principal: Principal, now: Date, ttlM
 /**
  * Checks an email and password. Every failure (unknown email, wrong password,
  * inactive Member or Company) looks the same and takes the same time, so the
- * response never reveals whether an account exists.
+ * response never reveals whether an email is registered.
  *
  * MFA and lockout slot in here later: a result such as `mfa_required` and a
  * failed-attempt check before verifying.

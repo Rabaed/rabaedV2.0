@@ -1,5 +1,5 @@
 import { withMember } from "@rabaed/db";
-import { bilingualText } from "@rabaed/domain";
+import { bilingualText, signedInMember } from "@rabaed/domain";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import type { AppContext } from "../app.ts";
@@ -14,22 +14,10 @@ const company = z.object({
   authorizedPersonId: z.uuid().nullable(),
 });
 
-const me = z.object({
-  member: z.object({
-    id: z.uuid(),
-    email: z.string(),
-    fullName: bilingualText,
-    locale: z.enum(["en", "ar"]),
-    isAuthorizedPerson: z.boolean(),
-    canCreateProjects: z.boolean(),
-  }),
-  company: company.pick({ id: true, legalName: true }),
-});
-
 export const companyRoutes =
   (ctx: AppContext): FastifyPluginAsyncZod =>
   async (app) => {
-    app.get("/v1/me", { schema: { response: { 200: me } } }, async (request) => {
+    app.get("/v1/me", { schema: { response: { 200: signedInMember } } }, async (request) => {
       const memberId = ctx.requireMember(request);
       // Read through RLS as the Member, so the session provably reaches the database.
       const row = await withMember(ctx.db, memberId, (trx) =>

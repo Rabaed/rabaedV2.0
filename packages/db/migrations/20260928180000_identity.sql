@@ -7,6 +7,9 @@
 --   credential, session, invitation or admin_action directly; the pre-sign-in
 --   steps go through the SECURITY DEFINER functions at the end of this file.
 -- * rabaed_admin (Rabaed Admin) bypasses RLS; admin_action is insert-only for it.
+--   Every use, read or write, must go through the API's asEngineer, which records
+--   admin_action with a reason (visibility.md V9). The database does not enforce
+--   that pairing: it relies on the API being the only client of this role.
 
 grant usage on schema app to rabaed_admin;
 alter default privileges in schema public
@@ -167,7 +170,11 @@ revoke all on credential, session from rabaed_admin;
 
 -- Pre-sign-in steps for rabaed_app ------------------------------------------
 -- Narrow SECURITY DEFINER functions: each does one thing and returns only what
--- the step needs. Times come from the caller so tests can move the clock.
+-- the step needs. The caller passes the time so tests can move the clock
+-- forward, but expiry is never judged earlier than the database's own now().
+--
+-- Accepted risk: password checks run in the API (argon2id), so create_session
+-- trusts the API to call it only after one. It refuses inactive principals.
 
 -- The stored hash for a sign-in attempt, or no row. Only active principals.
 create function app.sign_in_candidate(p_kind text, p_email text)
@@ -186,15 +193,36 @@ create function app.sign_in_candidate(p_kind text, p_email text)
     where p_kind = 'engineer' and e.email = lower(trim(p_email)) and e.status = 'active'
   $$;
 
+-- Is this Member (with their Company) or Engineer allowed to have a session?
+create function app.principal_is_active(p_member_id uuid, p_engineer_id uuid) returns boolean
+  language sql stable security definer
+  set search_path = pg_catalog, public
+  as $$
+    select exists (
+      select 1 from member m join company co on co.id = m.company_id
+      where m.id = p_member_id and m.status = 'active' and co.status = 'active'
+    ) or exists (
+      select 1 from rabaed_engineer e where e.id = p_engineer_id and e.status = 'active'
+    )
+  $$;
+
 create function app.create_session(
   p_token_hash bytea, p_member_id uuid, p_engineer_id uuid, p_expires_at timestamptz
 ) returns uuid
-  language sql volatile security definer
+  language plpgsql volatile security definer
   set search_path = pg_catalog, public
   as $$
-    insert into session (token_hash, member_id, engineer_id, expires_at)
-    values (p_token_hash, p_member_id, p_engineer_id, p_expires_at)
-    returning id
+    declare
+      v_id uuid;
+    begin
+      if not app.principal_is_active(p_member_id, p_engineer_id) then
+        raise exception 'principal is not active';
+      end if;
+      insert into session (token_hash, member_id, engineer_id, expires_at)
+      values (p_token_hash, p_member_id, p_engineer_id, p_expires_at)
+      returning id into v_id;
+      return v_id;
+    end
   $$;
 
 -- Who a session token belongs to, if it is live and its principal still active.
@@ -205,59 +233,57 @@ create function app.session_principal(p_token_hash bytea, p_now timestamptz)
   as $$
     select s.id, s.member_id, s.engineer_id
     from session s
-    left join member m on m.id = s.member_id
-    left join company co on co.id = m.company_id
-    left join rabaed_engineer e on e.id = s.engineer_id
     where s.token_hash = p_token_hash
       and s.revoked_at is null
-      and s.expires_at > p_now
-      and (
-        (m.status = 'active' and co.status = 'active')
-        or e.status = 'active'
-      )
+      and s.expires_at > greatest(p_now, now())
+      and app.principal_is_active(s.member_id, s.engineer_id)
   $$;
 
 create function app.revoke_session(p_token_hash bytea, p_now timestamptz) returns void
   language sql volatile security definer
   set search_path = pg_catalog, public
   as $$
-    update session set revoked_at = p_now
+    update session set revoked_at = greatest(p_now, now())
     where token_hash = p_token_hash and revoked_at is null
   $$;
 
 -- Uses an invitation once: sets the Member's password and activates them.
--- Returns the Member, or null when the token is unknown, used or expired.
+-- Returns the Member, or null when the token is unknown, used or expired, or
+-- the Member or their Company can no longer accept it (the token is then left as is).
 create function app.accept_invitation(p_token_hash bytea, p_password_hash text, p_now timestamptz)
   returns uuid
   language plpgsql volatile security definer
   set search_path = pg_catalog, public
   as $$
     declare
+      v_invitation_id uuid;
       v_member_id uuid;
+      v_at timestamptz := greatest(p_now, now());
     begin
-      update invitation set used_at = p_now
-      where token_hash = p_token_hash and used_at is null and expires_at > p_now
-      returning member_id into v_member_id;
+      select i.id, i.member_id into v_invitation_id, v_member_id
+      from invitation i
+      join member m on m.id = i.member_id
+      join company co on co.id = m.company_id
+      where i.token_hash = p_token_hash and i.used_at is null and i.expires_at > v_at
+        and m.status = 'invited' and co.status = 'active'
+      for update of i, m;
 
-      if v_member_id is null then
+      if v_invitation_id is null then
         return null;
       end if;
 
-      update member set status = 'active', updated_at = p_now
-      where id = v_member_id and status = 'invited';
-      if not found then
-        return null;
-      end if;
-
+      update invitation set used_at = v_at where id = v_invitation_id;
+      update member set status = 'active', updated_at = v_at where id = v_member_id;
       insert into credential (member_id, password_hash) values (v_member_id, p_password_hash)
       on conflict (member_id) do update
-        set password_hash = excluded.password_hash, updated_at = p_now;
+        set password_hash = excluded.password_hash, updated_at = v_at;
       return v_member_id;
     end
   $$;
 
 revoke all on function
   app.sign_in_candidate(text, text),
+  app.principal_is_active(uuid, uuid),
   app.create_session(bytea, uuid, uuid, timestamptz),
   app.session_principal(bytea, timestamptz),
   app.revoke_session(bytea, timestamptz),

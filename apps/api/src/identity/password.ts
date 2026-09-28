@@ -37,7 +37,8 @@ export async function verifyPassword(password: string, stored: string): Promise<
 }
 
 // Verified against when the email is unknown, so a wrong email costs the same
-// time as a wrong password (no account discovery through timing).
+// time as a wrong password (no discovery of registered emails through timing).
+// Computed once at startup (buildApp awaits it), so no request pays for it.
 let dummy: Promise<string> | undefined;
 export function dummyHash(): Promise<string> {
   dummy ??= hashPassword(randomBytes(32).toString("hex"));

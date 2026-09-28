@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { locales } from "./locale.ts";
 
 /** Saudi Commercial Registration number: ten digits. */
 export const crNumber = z
@@ -33,7 +34,7 @@ export const onboardCompanyRequest = z.object({
   authorizedPerson: z.object({
     email,
     fullName: bilingualText,
-    locale: z.enum(["en", "ar"]).default("en"),
+    locale: z.enum(locales).default("en"),
   }),
   /** Every Rabaed Engineer action carries a reason (visibility.md V9). */
   reason: z.string().trim().min(1).max(1000),

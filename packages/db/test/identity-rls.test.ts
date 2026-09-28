@@ -98,6 +98,23 @@ describe("the app role", () => {
   }
 });
 
+describe("the session functions", () => {
+  const token = () => Buffer.from(randomUUID());
+
+  it("never judge expiry by a time earlier than the database's", async () => {
+    const hash = token();
+    await sql`select app.create_session(${hash}, ${ids.a1}::uuid, null, now() - interval '1 minute')`.execute(app);
+    const { rows } = await sql`select * from app.session_principal(${hash}, '2000-01-01'::timestamptz)`.execute(app);
+    expect(rows).toEqual([]);
+  });
+
+  it("refuse a session for a deactivated Member", async () => {
+    await expect(
+      sql`select app.create_session(${token()}, ${ids.aGone}::uuid, null, now() + interval '1 hour')`.execute(app),
+    ).rejects.toThrow(/not active/);
+  });
+});
+
 describe("the admin role", () => {
   it("sees every Company (it bypasses RLS)", async () => {
     const seen = await companiesSeen(admin);

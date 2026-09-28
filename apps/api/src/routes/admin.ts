@@ -4,19 +4,13 @@ import { z } from "zod";
 import type { AppContext } from "../app.ts";
 import { HttpError } from "../http-error.ts";
 import { onboardCompany } from "../identity/onboarding.ts";
-import { signIn } from "../identity/sessions.ts";
+import { signInHandler } from "./session.ts";
 
 // Rabaed Admin. API only in the walking skeleton; its UI comes later.
 export const adminRoutes =
   (ctx: AppContext): FastifyPluginAsyncZod =>
   async (app) => {
-    app.post("/v1/session", { schema: { body: signInRequest } }, async (request, reply) => {
-      const { email, password } = request.body;
-      const session = await signIn(ctx.db, "engineer", email, password, ctx.now(), ctx.config.sessionTtlMs);
-      if (!session) throw new HttpError(401, "invalid_credentials");
-      ctx.setSessionCookie(reply, session);
-      return reply.code(204).send();
-    });
+    app.post("/v1/session", { schema: { body: signInRequest } }, signInHandler(ctx, "engineer"));
 
     app.post(
       "/v1/companies",
