@@ -7,7 +7,7 @@ export default async function SignInPage({ params }: { params: Promise<{ locale:
   const t = await getTranslations("signIn");
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-semibold">{t("title")}</h1>
+      <h1 className="text-h4 font-semibold">{t("title")}</h1>
       <SignInForm />
     </div>
   );
