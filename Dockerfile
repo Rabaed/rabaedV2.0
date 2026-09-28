@@ -21,7 +21,10 @@ RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store pnpm install --offline -
 # api and worker run their TypeScript through tsx, as in development.
 # RDS requires TLS; the CA bundle lets them verify the database's certificate.
 FROM deps AS node-service
-ADD --chmod=644 https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem /etc/ssl/rds/global-bundle.pem
+# Downloaded, then installed: ADD --chmod would also give the folders it creates
+# (/etc/ssl) mode 644, which the node user cannot enter.
+ADD https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem /tmp/rds-global-bundle.pem
+RUN install -D -m 644 /tmp/rds-global-bundle.pem /etc/ssl/rds/global-bundle.pem && rm /tmp/rds-global-bundle.pem
 ENV NODE_ENV=production
 USER node
 
