@@ -18,9 +18,15 @@ type Forbidden = { ok: false; reason: "forbidden" };
 export type AddParticipantResult =
   | { ok: true; participantId: string }
   | Forbidden
-  | { ok: false; reason: "not_found" | "unknown_company" | "already_participant" };
+  | { ok: false; reason: "not_found" | "project_closed" | "unknown_company" | "already_participant" };
 
-export type ProjectMemberResult = { ok: true } | Forbidden | { ok: false; reason: "not_found" | "member_not_found" };
+type ProjectMemberRefusal = "not_found" | "project_closed" | "member_not_found";
+export type ProjectMemberResult = { ok: true } | Forbidden | { ok: false; reason: ProjectMemberRefusal };
+
+/** An app.*_project_member outcome as a result: `done` is its success word, anything else a refusal. */
+function projectMemberResult(outcome: string, done: string): ProjectMemberResult {
+  return outcome === done ? { ok: true } : { ok: false, reason: outcome as ProjectMemberRefusal };
+}
 
 /** The Participants of one of the Member's Projects, or null when it isn't one of theirs. */
 export async function listParticipants(db: Db, memberId: string, projectId: string): Promise<ProjectParticipant[] | null> {
@@ -55,7 +61,7 @@ export function addParticipant(
 ): Promise<AddParticipantResult> {
   return refusedAsForbidden(() =>
     withMember(db, memberId, async (trx): Promise<AddParticipantResult> => {
-      const { rows } = await sql<{ outcome: "added" | "not_found" | "unknown_company" | "already_participant"; participant_id: string | null }>`
+      const { rows } = await sql<{ outcome: "added" | Exclude<AddParticipantResult, { ok: true } | Forbidden>["reason"]; participant_id: string | null }>`
         select outcome, participant_id from app.add_participant(${projectId}::uuid, ${input.crNumber}, ${input.role})
       `.execute(trx);
       const { outcome, participant_id } = rows[0]!;
@@ -83,11 +89,14 @@ function toParticipation(r: ParticipationRow): CompanyParticipation {
 }
 
 /** The Authorized Person's Company's Participants, on every Project it takes part in. */
-export async function listCompanyParticipations(db: Db, memberId: string): Promise<CompanyParticipation[] | Forbidden> {
+export function listCompanyParticipations(
+  db: Db,
+  memberId: string,
+): Promise<{ ok: true; participations: CompanyParticipation[] } | Forbidden> {
   return refusedAsForbidden(() =>
     withMember(db, memberId, async (trx) => {
       const { rows } = await sql<ParticipationRow>`select * from app.company_participants()`.execute(trx);
-      return rows.map(toParticipation);
+      return { ok: true, participations: rows.map(toParticipation) } as const;
     }),
   );
 }
@@ -112,6 +121,7 @@ export async function listParticipantMembers(
       .select(["m.id", "m.email", "m.full_name as fullName"])
       .where("pm.participant_id", "=", participantId)
       .where("pm.status", "=", "active")
+      .where("m.status", "in", ["invited", "active"])
       .orderBy("pm.created_at")
       .orderBy("m.id")
       .execute();
@@ -120,14 +130,19 @@ export async function listParticipantMembers(
 }
 
 /** The Participant's Authorized Person adds a Member of their own Company to the Project. */
-export function addProjectMember(db: Db, memberId: string, participantId: string, targetId: string): Promise<ProjectMemberResult> {
+export function addProjectMember(
+  db: Db,
+  memberId: string,
+  participantId: string,
+  targetId: string,
+  now: Date,
+): Promise<ProjectMemberResult> {
   return refusedAsForbidden(() =>
-    withMember(db, memberId, async (trx): Promise<ProjectMemberResult> => {
-      const { rows } = await sql<{ outcome: "added" | "not_found" | "member_not_found" }>`
-        select app.add_project_member(${participantId}::uuid, ${targetId}::uuid) as outcome
+    withMember(db, memberId, async (trx) => {
+      const { rows } = await sql<{ outcome: string }>`
+        select app.add_project_member(${participantId}::uuid, ${targetId}::uuid, ${now}) as outcome
       `.execute(trx);
-      const { outcome } = rows[0]!;
-      return outcome === "added" ? { ok: true } : { ok: false, reason: outcome };
+      return projectMemberResult(rows[0]!.outcome, "added");
     }),
   );
 }
@@ -141,12 +156,11 @@ export function removeProjectMember(
   now: Date,
 ): Promise<ProjectMemberResult> {
   return refusedAsForbidden(() =>
-    withMember(db, memberId, async (trx): Promise<ProjectMemberResult> => {
-      const { rows } = await sql<{ outcome: "removed" | "not_found" | "member_not_found" }>`
+    withMember(db, memberId, async (trx) => {
+      const { rows } = await sql<{ outcome: string }>`
         select app.remove_project_member(${participantId}::uuid, ${targetId}::uuid, ${now}) as outcome
       `.execute(trx);
-      const { outcome } = rows[0]!;
-      return outcome === "removed" ? { ok: true } : { ok: false, reason: outcome };
+      return projectMemberResult(rows[0]!.outcome, "removed");
     }),
   );
 }

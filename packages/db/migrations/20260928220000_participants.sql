@@ -10,6 +10,8 @@
 --   (visibility.md V14).
 --
 -- As before, rabaed_app writes only through the SECURITY DEFINER functions below.
+-- A Closed Project is read-only: they answer 'project_closed'. As elsewhere, the
+-- caller passes the time (tests move the clock) but it is never earlier than now().
 
 -- The acting Member's own Company's Participants that they may look into: those
 -- on Projects they are a Project Member of, and, for the Authorized Person, all
@@ -37,6 +39,13 @@ create policy member_reads_own_participant_members on project_member for select 
 drop policy member_reads_own_project_participants on participant;
 create policy member_reads_project_participants on participant for select to rabaed_app
   using (project_id in (select app.current_project_ids()) or id in (select app.current_participant_ids()));
+
+-- Project Admins: only those from your own Company (they are people, and
+-- another Company's people are never visible, V14). member's own RLS already
+-- limits the subquery to your Company's Members.
+drop policy member_reads_own_project_admins on project_admin;
+create policy member_reads_own_company_project_admins on project_admin for select to rabaed_app
+  using (project_id in (select app.current_project_ids()) and member_id in (select id from member));
 
 -- The Participants of one of the acting Member's Projects, with each Company's
 -- name (and nothing else of the Company: its CR and VAT numbers stay private).
@@ -93,7 +102,7 @@ create function app.participation(p_participant_id uuid)
 
 -- A Project Admin adds a Company as a Participant in the Rabaed default role for
 -- p_base_role. Outcome: 'added' (with the Participant), 'not_found' (not one of
--- the acting Member's Projects), 'unknown_company' or 'already_participant'.
+-- the acting Member's Projects), 'project_closed', 'unknown_company' or 'already_participant'.
 -- A Project Member who is not a Project Admin is refused (42501).
 create function app.add_participant(p_project_id uuid, p_cr_number text, p_base_role text)
   returns table (outcome text, participant_id uuid)
@@ -114,6 +123,10 @@ create function app.add_participant(p_project_id uuid, p_cr_number text, p_base_
         select 1 from project_admin where project_id = p_project_id and member_id = app.current_member_id()
       ) then
         raise exception 'only a Project Admin can add Participants' using errcode = '42501';
+      end if;
+      if exists (select 1 from project where id = p_project_id and status = 'closed') then
+        return query select 'project_closed'::text, null::uuid;
+        return;
       end if;
 
       select id into v_company_id from company where cr_number = trim(p_cr_number) and status = 'active';
@@ -139,21 +152,25 @@ create function app.add_participant(p_project_id uuid, p_cr_number text, p_base_
   $$;
 
 -- The Participant's Authorized Person adds a Member of their own Company to the
--- Project (again, if they were removed). Outcome: 'added', 'not_found' (not one
+-- Project (again, if they were removed). Outcome: 'added', 'project_closed', 'not_found' (not one
 -- of their Company's Participants) or 'member_not_found' (not an invited or
 -- active Member of their Company). Anyone but an Authorized Person is refused (42501).
-create function app.add_project_member(p_participant_id uuid, p_member_id uuid) returns text
+create function app.add_project_member(p_participant_id uuid, p_member_id uuid, p_now timestamptz) returns text
   language plpgsql volatile security definer
   set search_path = pg_catalog, public
   as $$
     declare
       v_company_id uuid := app.require_authorized_company_id();
+      v_at timestamptz := greatest(p_now, now());
       v_project_id uuid;
     begin
       select project_id into v_project_id from participant
       where id = p_participant_id and company_id = v_company_id and status = 'active';
       if v_project_id is null then
         return 'not_found';
+      end if;
+      if exists (select 1 from project where id = v_project_id and status = 'closed') then
+        return 'project_closed';
       end if;
       if not exists (
         select 1 from member where id = p_member_id and company_id = v_company_id and status in ('invited', 'active')
@@ -164,14 +181,14 @@ create function app.add_project_member(p_participant_id uuid, p_member_id uuid) 
       insert into project_member as pm (project_id, participant_id, member_id)
       values (v_project_id, p_participant_id, p_member_id)
       on conflict (participant_id, member_id) do update
-        set status = 'active', removed_at = null, updated_at = now()
+        set status = 'active', removed_at = null, updated_at = v_at
         where pm.status = 'removed';
       return 'added';
     end
   $$;
 
 -- The Participant's Authorized Person removes a Project Member: their access to
--- the Project ends at once. Outcome: 'removed', 'not_found' or 'member_not_found'
+-- the Project ends at once. Outcome: 'removed', 'project_closed', 'not_found' or 'member_not_found'
 -- (not on the Project through this Participant).
 create function app.remove_project_member(p_participant_id uuid, p_member_id uuid, p_now timestamptz) returns text
   language plpgsql volatile security definer
@@ -180,11 +197,15 @@ create function app.remove_project_member(p_participant_id uuid, p_member_id uui
     declare
       v_company_id uuid := app.require_authorized_company_id();
       v_at timestamptz := greatest(p_now, now());
+      v_project_id uuid;
     begin
-      if not exists (
-        select 1 from participant where id = p_participant_id and company_id = v_company_id and status = 'active'
-      ) then
+      select project_id into v_project_id from participant
+      where id = p_participant_id and company_id = v_company_id and status = 'active';
+      if v_project_id is null then
         return 'not_found';
+      end if;
+      if exists (select 1 from project where id = v_project_id and status = 'closed') then
+        return 'project_closed';
       end if;
       update project_member set status = 'removed', removed_at = v_at, updated_at = v_at
       where participant_id = p_participant_id and member_id = p_member_id and status = 'active';
@@ -201,7 +222,7 @@ revoke all on function
   app.company_participants(),
   app.participation(uuid),
   app.add_participant(uuid, text, text),
-  app.add_project_member(uuid, uuid),
+  app.add_project_member(uuid, uuid, timestamptz),
   app.remove_project_member(uuid, uuid, timestamptz)
   from public;
 grant execute on function
@@ -210,6 +231,6 @@ grant execute on function
   app.company_participants(),
   app.participation(uuid),
   app.add_participant(uuid, text, text),
-  app.add_project_member(uuid, uuid),
+  app.add_project_member(uuid, uuid, timestamptz),
   app.remove_project_member(uuid, uuid, timestamptz)
   to rabaed_app;

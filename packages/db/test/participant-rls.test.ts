@@ -45,7 +45,7 @@ async function company(engineer: string, name: string): Promise<Company> {
 
 const addProjectMember = (as: string, participant: string, member: string) =>
   withMember(app, as, (trx) =>
-    sql<{ outcome: string }>`select app.add_project_member(${participant}::uuid, ${member}::uuid) as outcome`
+    sql<{ outcome: string }>`select app.add_project_member(${participant}::uuid, ${member}::uuid, now()) as outcome`
       .execute(trx)
       .then((r) => r.rows[0]!.outcome),
   );
@@ -95,6 +95,14 @@ describe("project_member", () => {
 
   it("shows nothing with no Member set", async () => {
     expect(await app.transaction().execute(projectMembersSeen)).toEqual([]);
+  });
+});
+
+describe("project_admin", () => {
+  it("shows only your own Company's Project Admins", async () => {
+    const admins = (trx: Db) => sql<{ member_id: string }>`select member_id from project_admin`.execute(trx).then((r) => r.rows.map((x) => x.member_id));
+    expect(await withMember(app, host.member, admins)).toEqual([host.ap]);
+    expect(await withMember(app, consultant.member, admins)).toEqual([]);
   });
 });
 

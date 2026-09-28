@@ -29,6 +29,8 @@ function refusal(result: Exclude<AddParticipantResult | ProjectMemberResult, { o
       return notFound();
     case "member_not_found":
       return new HttpError(404, "member_not_found");
+    case "project_closed":
+      return new HttpError(409, "project_closed");
     case "unknown_company":
       return new HttpError(422, "unknown_company");
     case "already_participant":
@@ -73,10 +75,10 @@ export const participantRoutes =
     );
 
     app.get("/v1/participants", { schema: { response: { 200: companyParticipations } } }, async (request) => {
-      const memberId = ctx.requireMember(request);
-      const participants = await listCompanyParticipations(ctx.db, memberId);
-      if (!Array.isArray(participants)) throw forbidden();
-      return { participants };
+      const actorId = ctx.requireMember(request);
+      const result = await listCompanyParticipations(ctx.db, actorId);
+      if (!result.ok) throw forbidden();
+      return { participants: result.participations };
     });
 
     app.get(
@@ -94,9 +96,9 @@ export const participantRoutes =
       "/v1/participants/:participantId/members",
       { schema: { params: participantParams, body: addProjectMemberRequest } },
       async (request, reply) => {
-        const memberId = ctx.requireMember(request);
+        const actorId = ctx.requireMember(request);
         const participantId = idOrNotFound(request.params.participantId);
-        const result = await addProjectMember(ctx.db, memberId, participantId, request.body.memberId);
+        const result = await addProjectMember(ctx.db, actorId, participantId, request.body.memberId, ctx.now());
         if (!result.ok) throw refusal(result);
         return reply.code(204).send();
       },
@@ -106,10 +108,10 @@ export const participantRoutes =
       "/v1/participants/:participantId/members/:memberId",
       { schema: { params: participantParams.extend({ memberId: z.string() }) } },
       async (request, reply) => {
-        const memberId = ctx.requireMember(request);
+        const actorId = ctx.requireMember(request);
         const participantId = idOrNotFound(request.params.participantId);
         const target = idOrNotFound(request.params.memberId);
-        const result = await removeProjectMember(ctx.db, memberId, participantId, target, ctx.now());
+        const result = await removeProjectMember(ctx.db, actorId, participantId, target, ctx.now());
         if (!result.ok) throw refusal(result);
         return reply.code(204).send();
       },
