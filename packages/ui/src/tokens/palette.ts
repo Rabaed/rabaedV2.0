@@ -41,6 +41,8 @@ export const palette = {
   "slate-300": "#d8dbe0",
   "slate-350": "#d5d8de",
   "slate-400": "#a8adb8",
+  // Not in the design export: the lightest slate with 3:1 on white and canvas, for form control borders (WCAG 1.4.11).
+  "slate-450": "#868c98",
   "slate-500": "#9aa0ad",
   "slate-600": "#6a6e7a",
   "slate-700": "#555a66",

@@ -15,7 +15,7 @@ type Story = StoryObj<typeof meta>;
 
 const roles = Object.keys(coolLight) as SemanticRole[];
 const groups: { en: string; ar: string; roles: SemanticRole[] }[] = [
-  { en: "Surfaces and lines", ar: "الأسطح والحدود", roles: ["canvas", "surface", "surface-subtle", "hover", "press", "border", "border-subtle", "border-strong"] },
+  { en: "Surfaces and lines", ar: "الأسطح والحدود", roles: ["canvas", "surface", "surface-subtle", "hover", "press", "border", "border-subtle", "border-strong", "control-border", "control-border-hover"] },
   { en: "Text", ar: "النص", roles: ["text", "text-secondary", "muted", "faint"] },
   { en: "Brand", ar: "الهوية", roles: ["brand", "brand-ink", "brand-tint"] },
   { en: "Actions", ar: "الإجراءات", roles: roles.filter((r) => /^(primary|secondary|ghost|danger|on-|disabled|focus)/.test(r)) },
