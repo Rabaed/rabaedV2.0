@@ -5,8 +5,10 @@ import { getTranslations, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
 import { LanguageSwitch } from "@/components/language-switch";
+import { SignOutButton } from "@/components/sign-out-button";
 import { Link } from "@/i18n/navigation";
 import { routing } from "@/i18n/routing";
+import { getMe } from "@/lib/session";
 import "../globals.css";
 
 export function generateStaticParams() {
@@ -26,6 +28,7 @@ export default async function LocaleLayout({
   if (!isLocale(locale)) notFound();
   setRequestLocale(locale);
   const t = await getTranslations("shell");
+  const me = await getMe();
 
   return (
     <html lang={locale} dir={directionOf(locale)}>
@@ -35,7 +38,10 @@ export default async function LocaleLayout({
             <Link href="/" className="text-lg font-semibold">
               {t("appName")}
             </Link>
-            <LanguageSwitch />
+            <div className="flex items-center gap-2">
+              {me && <SignOutButton />}
+              <LanguageSwitch />
+            </div>
           </header>
           <main className="mx-auto max-w-3xl px-6 py-10">{children}</main>
         </NextIntlClientProvider>

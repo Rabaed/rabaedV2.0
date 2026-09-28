@@ -51,8 +51,19 @@ Tenancy is per Project (ADR 0007): every Project-owned table has `project_id` an
 `id`, `legal_name i18n`, `cr_number` (unique), `vat_number` (unique), `status {active, suspended}`, `authorized_person_id → member` (exactly one; nullable only while onboarding), `onboarded_by → rabaed_engineer`.
 
 **member**
-`id`, `company_id → company`, `email` (unique per Instance), `full_name i18n`, `phone`, `locale`, `status {invited, active, locked, deactivated}`, `can_create_projects bool` (= Project Creator), `auth_subject` (identity-provider link).
+`id`, `company_id → company`, `email` (unique per Instance), `full_name i18n`, `phone`, `locale`, `status {invited, active, locked, deactivated}`, `can_create_projects bool` (= Project Creator).
 A Member never moves between Companies. Changing employer means a new Member.
+
+**credential**
+`member_id` or `engineer_id` (exactly one), `password_hash` (argon2id, PHC string). Authentication is in-house (email + password); MFA factors and lockout counters get their own table and columns later. The app role never reads it directly.
+
+**session**
+`token_hash` (SHA-256 of the random cookie token), `member_id` or `engineer_id`, `expires_at`, `revoked_at`. Server-side: signing out revokes the row.
+
+**invitation**
+`member_id`, `token_hash`, `invited_by_engineer_id` or `invited_by_member_id`, `expires_at`, `used_at`. One-time and expiring; accepting it sets the password and activates the Member.
+
+Identity tables record who created a row through `company.onboarded_by`, `invitation.invited_by_*` and `admin_action` instead of a generic `created_by`.
 
 **member_signature**
 `id`, `member_id`, `file_id → stored_file`, `active_from`, `active_to`.
@@ -314,7 +325,7 @@ Each created Draft carries `import_id` for traceability.
 **rabaed_engineer**: separate identity table. Engineers are never Members.
 
 **admin_action**: `id`, `engineer_id`, `action`, `target_kind/target_id`, `reason` (required), `before jsonb`, `after jsonb`, `at`.
-Allowed actions are an explicit list: reassign, reset step, transfer Authorized Person, unlock, run import, fix visibility, publish library template.
+Allowed actions are an explicit list: onboard Company, reassign, reset step, transfer Authorized Person, unlock, run import, fix visibility, publish library template.
 
 **job**: background jobs (PDF sealing, imports, deliveries) with status and error, which is the Job Monitor.
 

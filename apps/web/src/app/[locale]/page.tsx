@@ -1,18 +1,32 @@
-import { useTranslations } from "next-intl";
-import { setRequestLocale } from "next-intl/server";
-import { use } from "react";
-import { DocumentNumber } from "@/components/document-number";
-import { Link } from "@/i18n/navigation";
 import type { Locale } from "@rabaed/domain";
+import { getTranslations, setRequestLocale } from "next-intl/server";
+import { DocumentNumber } from "@/components/document-number";
+import { buttonVariants } from "@/components/ui/button";
+import { Link } from "@/i18n/navigation";
+import { getMe } from "@/lib/session";
 
-export default function Home({ params }: { params: Promise<{ locale: Locale }> }) {
-  setRequestLocale(use(params).locale);
-  const t = useTranslations("home");
+export default async function Home({ params }: { params: Promise<{ locale: Locale }> }) {
+  const { locale } = await params;
+  setRequestLocale(locale);
+  const t = await getTranslations("home");
+  const me = await getMe();
 
   return (
     <div className="space-y-6">
       <h1 className="text-3xl font-semibold">{t("title")}</h1>
-      <p className="text-muted-foreground">{t("tagline")}</p>
+      {me ? (
+        <p data-testid="signed-in-as">
+          {t("signedInAs", { name: me.member.fullName[locale], company: me.company.legalName[locale] })}
+          {me.member.isAuthorizedPerson && <span className="text-muted-foreground"> · {t("authorizedPerson")}</span>}
+        </p>
+      ) : (
+        <>
+          <p className="text-muted-foreground">{t("tagline")}</p>
+          <Link href="/sign-in" className={buttonVariants()}>
+            {t("signIn")}
+          </Link>
+        </>
+      )}
       <p>
         {t("documentNumberLabel")} <DocumentNumber value="TWR-MAR-0000001" />
       </p>
