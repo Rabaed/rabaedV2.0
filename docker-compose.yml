@@ -1,5 +1,9 @@
 # Local development database. Credentials here are local-only placeholders
 # (see .env.example); real environments never use them.
+# COMPOSE_PROJECT_NAME and POSTGRES_PORT come from .env, so each worktree gets its own
+# container, volume and port (see "Several worktrees at once" in README.md).
+name: ${COMPOSE_PROJECT_NAME:-rabaed}
+
 services:
   db:
     image: postgres:16
@@ -7,7 +11,7 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-local-dev-only}
     ports:
-      - "127.0.0.1:5432:5432"
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
     volumes:
       - db-data:/var/lib/postgresql/data
     healthcheck:
