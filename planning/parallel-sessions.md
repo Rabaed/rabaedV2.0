@@ -45,6 +45,20 @@ C: 208 → 209 → 210 → ┬ 211 (also needs B's 200)
          209 ────────→ 213 (also needs A's 196)
 ```
 
+## Epic review when a lane's spec is finished
+
+Every ticket already gets a `/code-review` inside `/implement`. When a whole spec's tickets are merged, one more review looks at the lane as a whole against its spec. Each lane has a review ticket that appears on the frontier by itself once its last tickets are Done:
+
+| Lane | Review ticket | Starts after | Command (fresh session on the main folder, no worktree — it only reads) |
+|---|---|---|---|
+| A | RP-217 | RP-196 | `/mattpocock-skills:code-review since tag epic-start/walking-skeleton, only apps/ packages/db packages/domain, against spec RP-185` |
+| B | RP-218 | RP-199, 201, 202, 205, 206 | `/mattpocock-skills:code-review since tag epic-start/design-system, only packages/ui packages/eslint-plugin, against spec RP-197` |
+| C | RP-219 | RP-211, 212, 213 | `/mattpocock-skills:code-review since tag epic-start/aws-dev, only packages/infra .github/workflows, against spec RP-207` |
+
+- The `epic-start/*` tags mark `main` just before each lane's first ticket. Lanes interleave on `main`, so each review is limited to its lane's folders.
+- Every confirmed finding becomes a `ready-for-agent` Task under the same Epic, linked to the review ticket, and goes back to that lane. Visibility and security findings are Highest.
+- For each future spec: tag `epic-start/<name>` on `main` before its first ticket, and add a review ticket blocked by its last tickets when running `/to-tickets`.
+
 ## Rules that keep lanes from colliding
 
 1. One ticket = one app-made worktree session = one branch named with the key (`RP-191-...`) = one PR.
