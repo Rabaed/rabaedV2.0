@@ -16,7 +16,7 @@ export type AgeDotsProps = {
 /**
  * Step Age: one dot per whole week at the current Step, up to 4 (4+), grey
  * turning red. An image named "N weeks at this step", so colour is never the
- * only cue. Age only: Rabaed sets no due dates.
+ * only cue. Rabaed shows age only.
  */
 export function AgeDots({ weeks, locale, className }: AgeDotsProps) {
   const dots = ageDotCount(weeks);
