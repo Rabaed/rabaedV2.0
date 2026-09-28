@@ -38,6 +38,8 @@ export function WorkItemActions({
     reason_required: t("reasonRequired"),
     forbidden: t("forbidden"),
     no_step_pool: t("noStepPool"),
+    no_participant: t("noParticipant"),
+    several_participants: t("severalParticipants"),
     transition_not_available: t("notAvailable"),
     item_closed: t("notAvailable"),
     project_closed: t("projectClosed"),

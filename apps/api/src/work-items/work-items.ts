@@ -8,6 +8,7 @@ import {
   type WorkItemDetail,
   type WorkItemHistory,
   type WorkItemList,
+  type WorkItemOutcome,
   type WorkItemSummary,
 } from "@rabaed/domain";
 import { sql, type RawBuilder, type Transaction } from "kysely";
@@ -146,8 +147,10 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
       raised_by: BilingualText;
       held_by: BilingualText | null;
       holder_name: BilingualText | null;
+      outcome: WorkItemOutcome | null;
+      closed_at: Date | null;
     }>`
-      select w.data, w.created_at, s.key as step_key, s.name as step_name,
+      select w.data, w.created_at, w.outcome, w.closed_at, s.key as step_key, s.name as step_name,
         raiser.legal_name as raised_by, holder.legal_name as held_by, m.full_name as holder_name
       from work_item w
       join workflow_step s on s.id = w.current_step_id
@@ -165,6 +168,8 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
       step: { key: d.step_key, name: d.step_name },
       raisedBy: { companyName: d.raised_by },
       heldBy: d.held_by ? { companyName: d.held_by, memberName: d.holder_name } : null,
+      outcome: d.outcome,
+      closedAt: d.closed_at?.toISOString() ?? null,
       createdAt: d.created_at.toISOString(),
       actions: await actions(trx, workItemId),
     };
@@ -201,6 +206,8 @@ type TransitionRefusal =
   | "transition_not_available"
   | "forbidden"
   | "reason_required"
+  | "no_participant"
+  | "several_participants"
   | "no_step_pool"
   | "idempotency_key_reused";
 export type TakeTransitionResult = { ok: true } | { ok: false; reason: TransitionRefusal };
@@ -274,6 +281,7 @@ export function getWorkItemHistory(db: Db, memberId: string, workItemId: string)
       to_step_name: BilingualText | null;
       reason: string | null;
       document_number: string | null;
+      outcome: WorkItemOutcome | null;
     }>`select * from app.work_item_history(${workItemId}::uuid)`.execute(trx);
     return {
       events: rows.map((r) => ({
@@ -287,6 +295,7 @@ export function getWorkItemHistory(db: Db, memberId: string, workItemId: string)
         toStep: r.to_step_name,
         reason: r.reason,
         documentNumber: r.document_number,
+        outcome: r.outcome,
       })),
     };
   });

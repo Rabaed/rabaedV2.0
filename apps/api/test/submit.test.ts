@@ -1,0 +1,396 @@
+// Seam 1: Submit to the Consultant, and Code A or C closes the item (RP-194;
+// workflow-engine.md §3, §5.1; visibility.md V2, V3, V5, V14; spec scenarios 3–6).
+// The Contractor PM submits; the Consultant's managers pool holds it, the Owner
+// Representative sees it as oversight when their Visibility covers it, and a
+// Consultant manager issues the Code. Nobody sees the other side's internal work.
+import { randomUUID } from "node:crypto";
+import type { WorkItemDetail, WorkItemHistory } from "@rabaed/domain";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { createTestApi, DEFAULT_PASSWORD, type Caller, type OnboardedCompany } from "./support/harness.ts";
+
+const api = await createTestApi();
+afterAll(() => api.close());
+
+type Company = { company: OnboardedCompany; caller: Caller };
+type Coverage = { isAll: boolean; valueIds: string[] };
+
+const bilingual = (text: string) => ({ en: text, ar: text });
+const all: Coverage = { isAll: true, valueIds: [] };
+const only = (...valueIds: string[]): Coverage => ({ isAll: false, valueIds });
+
+const CONSULTANT = "Design Consultants LLC";
+const SIGNER = "Khalid Signer";
+const OTHER_MANAGER = "Sara Reviewer";
+
+let c1: Company; // Contractor; its Authorized Person created the Project.
+let k1: Company; // Consultant: the only one, covering the whole Project.
+let projectId = "";
+let electrical = "";
+let mechanical = "";
+let buildingA = "";
+let buildingB = "";
+
+let engineer: Caller; // C1 Engineer.
+let pm: Caller; // C1 Project Manager.
+let signer: Caller; // K1 Managers: the Consultant review pool.
+let otherManager: Caller;
+let mechanicalManager: Caller; // K1 Manager covering Mechanical only (scenario 4).
+let k1Engineer: Caller; // K1 Engineer: sees it, but can't issue a Code.
+let c2Engineer: Caller; // Second Contractor, Electrical too (V3).
+let orEngineer: Caller; // Owner Representative covering Electrical everywhere (oversight).
+let orElsewhere: Caller; // Owner Representative covering Building B only.
+
+/** Each Member's email, to sign them in again once the clock has moved past their session. */
+const emails = new Map<Caller, string>();
+
+async function ok(res: Promise<{ statusCode: number; body: string }>, status = 204) {
+  const r = await res;
+  expect(r.statusCode, r.body).toBe(status);
+}
+
+/** A signed-in Member of `company` named `name`, on the Project through `participantId`, with `positions`. */
+async function projectMember(
+  company: Company,
+  participantId: string,
+  positions: string[],
+  { name = "Test Member", trade = all }: { name?: string; trade?: Coverage } = {},
+) {
+  const member = await api.inviteMember(company.caller, { fullName: bilingual(name) });
+  const caller = await api.acceptInvitation(member.invitationToken);
+  emails.set(caller, member.email);
+  await api.addProjectMember(company.caller, participantId, member.id);
+  await ok(
+    company.caller.request("PUT", `/v1/participants/${participantId}/members/${member.id}/visibility`, {
+      trade,
+      location: all,
+    }),
+  );
+  if (positions.length) {
+    await ok(company.caller.request("PUT", `/v1/participants/${participantId}/members/${member.id}/positions`, { positions }));
+  }
+  return caller;
+}
+
+/** Another Company on the Project in `role`, with the Participant Visibility the Project Admin gives it. */
+async function participant(
+  role: "contractor" | "consultant" | "owner_representative",
+  coverage: { trade: Coverage; location: Coverage } = { trade: all, location: all },
+  legalName = "Test Constructions",
+) {
+  const onboarded = await api.onboardCompany({ legalName: bilingual(legalName) });
+  const company = { company: onboarded, caller: await api.acceptInvitation(onboarded.invitationToken) };
+  const participantId = await api.addParticipant(c1.caller, projectId, onboarded, role);
+  await ok(c1.caller.request("PUT", `/v1/participants/${participantId}/visibility`, coverage));
+  return { company, participantId };
+}
+
+async function createDraft(by: Caller, title: string): Promise<string> {
+  const res = await by.post(`/v1/projects/${projectId}/work-items`, {
+    type: "MAR",
+    title,
+    tradeId: electrical,
+    locationId: buildingA,
+    description: "Galvanised, 300 mm",
+  });
+  expect(res.statusCode, res.body).toBe(201);
+  return res.json().id;
+}
+
+const take = (by: Caller, id: string, transition: string, extra: { reason?: string } = {}) =>
+  by.post(`/v1/work-items/${id}/transitions`, { transition, idempotencyKey: randomUUID(), ...extra });
+
+async function detail(by: Caller, id: string): Promise<WorkItemDetail> {
+  const res = await by.get(`/v1/work-items/${id}`);
+  expect(res.statusCode, res.body).toBe(200);
+  return res.json();
+}
+
+async function history(by: Caller, id: string): Promise<WorkItemHistory["events"]> {
+  const res = await by.get(`/v1/work-items/${id}/history`);
+  expect(res.statusCode, res.body).toBe(200);
+  return res.json().events;
+}
+
+const buttons = (d: WorkItemDetail) => [
+  ...(d.actions.claim ? ["claim"] : []),
+  ...(d.actions.release ? ["release"] : []),
+  ...d.actions.transitions.map((t) => t.key),
+];
+
+async function listed(by: Caller) {
+  const list = (await by.get(`/v1/projects/${projectId}/work-items`)).json();
+  const counts = Object.fromEntries(list.stages.map((s: { key: string; count: number }) => [s.key, s.count]));
+  return { ids: list.items.map((i: { id: string }) => i.id) as string[], counts };
+}
+
+/** Everything a caller can learn of the item: list, counts, detail and history, as one body. */
+async function everything(by: Caller, id: string) {
+  const parts = await Promise.all([
+    by.get(`/v1/projects/${projectId}/work-items`),
+    by.get(`/v1/work-items/${id}`),
+    by.get(`/v1/work-items/${id}/history`),
+  ]);
+  return parts.map((r) => r.body).join("\n");
+}
+
+/** A Draft, sent, Returned once with a reason, sent again and claimed by the PM: ready to Submit. */
+async function readyToSubmit(title: string) {
+  const id = await createDraft(engineer, title);
+  await ok(take(engineer, id, "send_for_review"));
+  await ok(pm.post(`/v1/work-items/${id}/claim`));
+  await ok(take(pm, id, "return", { reason: "Wrong tray size" }));
+  await ok(take(engineer, id, "send_for_review"));
+  await ok(pm.post(`/v1/work-items/${id}/claim`));
+  return id;
+}
+
+beforeAll(async () => {
+  c1 = await api.projectCreator();
+  projectId = (await api.createProject(c1.caller)).id;
+  const post = async (path: string, body: unknown) => (await c1.caller.post(`/v1/projects/${projectId}/${path}`, body)).json().id;
+  electrical = await post("trades", { code: "EL", name: bilingual("Electrical") });
+  mechanical = await post("trades", { code: "ME", name: bilingual("Mechanical") });
+  const tower = await post("locations", { code: "T1", name: bilingual("Tower 1"), parentId: null });
+  buildingA = await post("locations", { code: "BA", name: bilingual("Building A"), parentId: tower });
+  buildingB = await post("locations", { code: "BB", name: bilingual("Building B"), parentId: tower });
+
+  const c1ParticipantId = (await c1.caller.get(`/v1/projects/${projectId}/participants`))
+    .json()
+    .participants.find((p: { isOwnCompany: boolean }) => p.isOwnCompany).id;
+  await ok(c1.caller.request("PUT", `/v1/participants/${c1ParticipantId}/visibility`, { trade: all, location: all }));
+  engineer = await projectMember(c1, c1ParticipantId, ["engineer"]);
+  pm = await projectMember(c1, c1ParticipantId, ["project_manager"]);
+
+  const consultant = await participant("consultant", { trade: all, location: all }, CONSULTANT);
+  k1 = consultant.company;
+  signer = await projectMember(k1, consultant.participantId, ["manager"], { name: SIGNER });
+  otherManager = await projectMember(k1, consultant.participantId, ["manager"], { name: OTHER_MANAGER });
+  mechanicalManager = await projectMember(k1, consultant.participantId, ["manager"], { trade: only(mechanical) });
+  k1Engineer = await projectMember(k1, consultant.participantId, ["engineer"]);
+
+  const c2 = await participant("contractor");
+  c2Engineer = await projectMember(c2.company, c2.participantId, ["engineer"]);
+  const or = await participant("owner_representative", { trade: only(electrical), location: all });
+  orEngineer = await projectMember(or.company, or.participantId, ["engineer"]);
+  const orB = await participant("owner_representative", { trade: all, location: only(buildingB) });
+  orElsewhere = await projectMember(orB.company, orB.participantId, ["engineer"]);
+});
+
+describe("Submit", () => {
+  let id = "";
+  beforeAll(async () => {
+    id = await readyToSubmit("Cable trays");
+  });
+
+  it("is offered to the PM holding Internal Review, beside Return", async () => {
+    const d = await detail(pm, id);
+    expect(buttons(d)).toEqual(["release", "return", "submit"]);
+    expect(d.actions.transitions.find((t) => t.key === "submit")).toMatchObject({
+      label: { en: "Submit" },
+      kind: "submit",
+      needsReason: false,
+    });
+  });
+
+  it("moves the item to Pending Approval, with the Consultant's pool", async () => {
+    await ok(take(pm, id, "submit"));
+    const d = await detail(pm, id);
+    expect(d).toMatchObject({
+      stage: { key: "pending_approval" },
+      step: { key: "consultant_review" },
+      outcome: null,
+      closedAt: null,
+      stepAgeWeeks: 1,
+    });
+    // "With Design Consultants LLC", never a Consultant person (V14).
+    expect(d.heldBy).toEqual({ companyName: bilingual(CONSULTANT), memberName: null });
+    expect(buttons(d)).toEqual([]);
+  });
+
+  it("shows the item to the Consultant's Members whose Visibility covers it: list, counts and detail (V2, scenario 3)", async () => {
+    for (const caller of [signer, otherManager, k1Engineer]) {
+      const { ids, counts } = await listed(caller);
+      expect(ids).toEqual([id]);
+      expect(counts).toMatchObject({ draft: 0, internal_review: 0, pending_approval: 1 });
+      expect((await detail(caller, id)).documentNumber).toMatch(/^TWR-MAR-01-\d{4}$/);
+    }
+    expect(buttons(await detail(signer, id))).toEqual(["claim"]);
+    // An Engineer can't issue a Code, so isn't in the pool.
+    expect(buttons(await detail(k1Engineer, id))).toEqual([]);
+  });
+
+  it("hides it from a Consultant Member whose Visibility doesn't cover its Trade (scenario 4)", async () => {
+    expect(await listed(mechanicalManager)).toMatchObject({ ids: [], counts: { pending_approval: 0 } });
+    expect((await mechanicalManager.get(`/v1/work-items/${id}`)).statusCode).toBe(404);
+    expect((await mechanicalManager.post(`/v1/work-items/${id}/claim`)).statusCode).toBe(404);
+  });
+
+  it("shows it as oversight to the Owner Representative whose Visibility covers it, with no actions (V2, scenario 6)", async () => {
+    expect((await listed(orEngineer)).ids).toEqual([id]);
+    expect(buttons(await detail(orEngineer, id))).toEqual([]);
+    expect((await detail(orEngineer, id)).heldBy?.memberName).toBeNull();
+  });
+
+  it("hides it from an Owner Representative whose Visibility doesn't cover its Location: 404", async () => {
+    expect(await listed(orElsewhere)).toMatchObject({ ids: [], counts: { pending_approval: 0 } });
+    expect((await orElsewhere.get(`/v1/work-items/${id}`)).statusCode).toBe(404);
+    expect((await orElsewhere.get(`/v1/work-items/${id}/history`)).statusCode).toBe(404);
+  });
+
+  it("still shows the second Contractor nothing: list, counts, detail, history (V3, scenario 5)", async () => {
+    expect(await listed(c2Engineer)).toMatchObject({ ids: [], counts: { pending_approval: 0 } });
+    expect((await c2Engineer.get(`/v1/work-items/${id}`)).statusCode).toBe(404);
+    expect((await c2Engineer.get(`/v1/work-items/${id}/history`)).statusCode).toBe(404);
+    expect((await take(c2Engineer, id, "approve_a")).statusCode).toBe(404);
+  });
+
+  it("shows the Consultant the Submit, never the Contractor's Return or internal moves (V5)", async () => {
+    const events = await history(signer, id);
+    expect(events.map((e) => [e.type, e.transition?.en ?? null, e.audience])).toEqual([["transition", "Submit", "shared"]]);
+    expect(events[0]).toMatchObject({
+      by: { companyName: { en: "Test Constructions" }, memberName: null },
+      fromStep: { en: "Contractor review" },
+      toStep: { en: "Consultant review" },
+      reason: null,
+      outcome: null,
+    });
+    expect(await everything(signer, id)).not.toContain("Wrong tray size");
+  });
+
+  it("keeps the Contractor's own history whole, with the Submit shared", async () => {
+    const events = await history(engineer, id);
+    expect(events.at(-1)).toMatchObject({ type: "transition", transition: { en: "Submit" }, audience: "shared" });
+    expect(events.some((e) => e.reason === "Wrong tray size")).toBe(true);
+  });
+
+  it("is refused to a PM holding nothing, and to the Contractor once the item left it", async () => {
+    expect((await take(pm, id, "submit")).json()).toEqual({ error: "not_holder" });
+  });
+});
+
+describe("Approve · A", () => {
+  let id = "";
+  beforeAll(async () => {
+    id = await readyToSubmit("Lighting fixtures");
+    await ok(take(pm, id, "submit"));
+  });
+
+  it("goes to the Consultant manager who claims it; the Contractor still sees only the Company", async () => {
+    await ok(signer.post(`/v1/work-items/${id}/claim`));
+    const mine = await detail(signer, id);
+    expect(mine.heldBy).toEqual({ companyName: bilingual(CONSULTANT), memberName: bilingual(SIGNER) });
+    expect(buttons(mine)).toEqual(["release", "approve_a", "revise_c"]);
+    expect(buttons(await detail(otherManager, id))).toEqual([]);
+
+    expect((await detail(pm, id)).heldBy).toEqual({ companyName: bilingual(CONSULTANT), memberName: null });
+    expect(await everything(pm, id)).not.toContain(SIGNER);
+  });
+
+  it("is refused to a Consultant Member who doesn't hold the Step", async () => {
+    expect((await take(otherManager, id, "approve_a")).json()).toEqual({ error: "not_holder" });
+  });
+
+  it("closes the item Approved with Code A", async () => {
+    await ok(take(signer, id, "approve_a"));
+    for (const caller of [engineer, pm, signer, otherManager, orEngineer]) {
+      const d = await detail(caller, id);
+      expect(d).toMatchObject({ stage: { key: "approved", category: "closed_positive" }, outcome: "A", heldBy: null });
+      expect(d.closedAt).not.toBeNull();
+      expect(buttons(d)).toEqual([]);
+    }
+  });
+
+  it("shows the Contractor the Code and its signer, never another Consultant person (V5, V14)", async () => {
+    const events = await history(pm, id);
+    expect(events.at(-1)).toMatchObject({
+      type: "issue_code",
+      audience: "shared",
+      transition: { en: "Approve · A" },
+      outcome: "A",
+      by: { companyName: bilingual(CONSULTANT), memberName: bilingual(SIGNER) },
+    });
+    // The Consultant's Claim is theirs alone.
+    expect(events.filter((e) => e.by.companyName?.en === CONSULTANT)).toHaveLength(1);
+    expect(await everything(pm, id)).not.toContain(OTHER_MANAGER);
+  });
+
+  it("shows the Consultant only the Submit and the Code of the Contractor's side, beside its own Claim", async () => {
+    const events = await history(signer, id);
+    expect(events.map((e) => [e.type, e.by.companyName?.en])).toEqual([
+      ["transition", "Test Constructions"],
+      ["claimed", CONSULTANT],
+      ["issue_code", CONSULTANT],
+    ]);
+  });
+
+  it("accepts no more Transitions, Claims or Releases once closed", async () => {
+    for (const [caller, key] of [
+      [signer, "approve_a"],
+      [signer, "revise_c"],
+      [pm, "submit"],
+    ] as const) {
+      const res = await take(caller, id, key);
+      expect(res.statusCode, res.body).toBe(409);
+      expect(res.json()).toEqual({ error: "item_closed" });
+    }
+    expect((await otherManager.post(`/v1/work-items/${id}/claim`)).json()).toEqual({ error: "item_closed" });
+    expect((await signer.post(`/v1/work-items/${id}/release`)).json()).toEqual({ error: "item_closed" });
+  });
+
+  it("is counted under Approved for everyone who sees it, and for nobody else", async () => {
+    expect((await listed(signer)).counts).toMatchObject({ approved: 1, pending_approval: 1 });
+    expect((await listed(orEngineer)).counts).toMatchObject({ approved: 1 });
+    expect((await listed(c2Engineer)).counts).toMatchObject({ approved: 0 });
+    expect((await listed(orElsewhere)).counts).toMatchObject({ approved: 0 });
+  });
+});
+
+describe("Revise & Resubmit · C", () => {
+  let id = "";
+  beforeAll(async () => {
+    id = await readyToSubmit("Busbars");
+    await ok(take(pm, id, "submit"));
+  });
+
+  it("closes the item Revise & Resubmit with Code C", async () => {
+    await ok(otherManager.post(`/v1/work-items/${id}/claim`));
+    await ok(take(otherManager, id, "revise_c"));
+    const d = await detail(engineer, id);
+    expect(d).toMatchObject({ stage: { key: "revise_resubmit", category: "closed_negative" }, outcome: "C", heldBy: null });
+    expect((await history(engineer, id)).at(-1)).toMatchObject({
+      type: "issue_code",
+      outcome: "C",
+      by: { memberName: bilingual(OTHER_MANAGER) },
+    });
+    expect(await everything(engineer, id)).not.toContain(SIGNER);
+  });
+});
+
+describe("Submit with no single Consultant to take it", () => {
+  it("is not offered, and refused, when two Consultants cover the item (a Visibility Overlap)", async () => {
+    const k2 = await participant("consultant", { trade: only(electrical), location: all }, "Second Consultants");
+    await projectMember(k2.company, k2.participantId, ["manager"]);
+    const id = await readyToSubmit("Switchgear");
+    expect(buttons(await detail(pm, id))).toEqual(["release", "return"]);
+    const res = await take(pm, id, "submit");
+    expect(res.statusCode).toBe(409);
+    expect(res.json()).toEqual({ error: "several_participants" });
+    expect((await detail(pm, id)).stage.key).toBe("internal_review");
+    // Narrow the second Consultant away: Submit comes back.
+    await ok(c1.caller.request("PUT", `/v1/participants/${k2.participantId}/visibility`, { trade: only(mechanical), location: all }));
+    expect(buttons(await detail(pm, id))).toEqual(["release", "return", "submit"]);
+  });
+});
+
+// Last: moving the clock ends every session.
+describe("Step Age", () => {
+  it("counts the weeks at the Consultant's Step, for both sides", async () => {
+    const id = await readyToSubmit("Earthing");
+    await ok(take(pm, id, "submit"));
+    api.advanceClock(15 * 86_400_000);
+    for (const caller of [pm, signer]) {
+      const again = await api.signIn(emails.get(caller)!, DEFAULT_PASSWORD);
+      expect((await detail(again, id)).stepAgeWeeks).toBe(3);
+    }
+  });
+});

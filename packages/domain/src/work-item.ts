@@ -50,6 +50,11 @@ export const workItemList = z.object({
 });
 export type WorkItemList = z.infer<typeof workItemList>;
 
+/** How a closed Work Item ended: its Issued Code, Inspection result, or cancelled (workflow-engine.md §1). */
+export const workItemOutcomes = ["A", "B", "C", "D", "passed", "passed_with_comments", "failed", "cancelled", "closed"] as const;
+export const workItemOutcome = z.enum(workItemOutcomes);
+export type WorkItemOutcome = z.infer<typeof workItemOutcome>;
+
 /** A Transition's kind (workflow-engine.md §1). */
 export const transitionKinds = ["send", "submit", "return", "close", "cancel"] as const;
 
@@ -87,6 +92,9 @@ export const workItemDetail = workItemSummary.extend({
    * person's name only within the viewer's own Company (visibility.md V14).
    */
   heldBy: z.object({ companyName: bilingualText, memberName: bilingualText.nullable() }).nullable(),
+  /** Set once closed: the Issued Code (A, C…). */
+  outcome: workItemOutcome.nullable(),
+  closedAt: z.iso.datetime().nullable(),
   createdAt: z.iso.datetime(),
   /** What the viewer may press now. */
   actions: workItemActions,
@@ -131,7 +139,10 @@ export const workItemHistory = z.object({
       type: z.enum(workItemEventTypes),
       at: z.iso.datetime(),
       audience: z.enum(["shared", "internal"]),
-      /** Another Company by its name only; a person only within the viewer's own (V14). */
+      /**
+       * Another Company by its name only; a person only within the viewer's own,
+       * except whoever issued a Code, named to everyone who sees it (V14).
+       */
       by: z.object({ companyName: bilingualText.nullable(), memberName: bilingualText.nullable() }),
       transition: bilingualText.nullable(),
       fromStep: bilingualText.nullable(),
@@ -139,6 +150,8 @@ export const workItemHistory = z.object({
       reason: z.string().nullable(),
       /** Set on the event that assigned it. */
       documentNumber: z.string().nullable(),
+      /** Set on the event that closed the item: the Issued Code. */
+      outcome: workItemOutcome.nullable(),
     }),
   ),
 });

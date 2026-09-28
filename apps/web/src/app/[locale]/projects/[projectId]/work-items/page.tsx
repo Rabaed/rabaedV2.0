@@ -74,7 +74,10 @@ export default async function WorkItemsPage({ params }: { params: Promise<{ loca
                           {i.location && ` · ${i.location.name[locale]}`}
                         </span>
                       </span>
-                      <AgeDots weeks={i.stepAgeWeeks} label={t("stepAge", { weeks: i.stepAgeWeeks })} />
+                      {/* A closed item doesn't age. */}
+                      {i.stage.category === "draft" || i.stage.category === "in_progress" ? (
+                        <AgeDots weeks={i.stepAgeWeeks} label={t("stepAge", { weeks: i.stepAgeWeeks })} />
+                      ) : null}
                     </li>
                   ))}
               </ul>
