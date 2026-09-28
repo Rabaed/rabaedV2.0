@@ -28,8 +28,14 @@ describe("database", () => {
     expect(key.Properties?.EnableKeyRotation).toBe(true);
   });
 
+  it("has fixed storage in dev, with no autoscaling (kept inside AWS's Free plan limits)", () => {
+    expect(db.AllocatedStorage).toBe("20");
+    expect(db).not.toHaveProperty("MaxAllocatedStorage");
+  });
+
   it("keeps automated backups and cannot be deleted by accident", () => {
-    expect(db.BackupRetentionPeriod).toBe(7);
+    // One day in dev: the account is on AWS's Free plan, which refuses more.
+    expect(db.BackupRetentionPeriod).toBe(1);
     expect(db.DeletionProtection).toBe(true);
     expect(database).toMatchObject({ DeletionPolicy: "Snapshot", UpdateReplacePolicy: "Snapshot" });
   });
