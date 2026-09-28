@@ -61,6 +61,7 @@ describe("cool light launch theme", () => {
     ["danger", "surface"],
     ["success", "surface"],
     ["primary", "surface"],
+    ["on-inverse", "inverse"],
     ...stageKeys.map(
       (s) => [`stage-${s}-fg`, `stage-${s}-bg`] as [SemanticRole, SemanticRole],
     ),

@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { playwright } from "@vitest/browser-playwright";
@@ -6,10 +7,16 @@ import { prepareArabicFont } from "./src/fonts/arabic-font.ts";
 
 prepareArabicFont();
 
+// Pre-bundle Radix up front: discovering it mid-run makes Vite reload and fail the tests in flight.
+const radix = Object.keys(JSON.parse(readFileSync(new URL("package.json", import.meta.url), "utf8")).dependencies).filter((name) =>
+  name.startsWith("@radix-ui/"),
+);
+
 // The story test harness: every Storybook story, in English and Arabic, in a
 // real Chromium. See test/stories.test.tsx.
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  optimizeDeps: { include: radix },
   test: {
     name: "stories",
     include: ["test/**/*.test.tsx"],

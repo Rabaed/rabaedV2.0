@@ -80,10 +80,38 @@ Every control sits in a `Field`, which gives it a label, optional help text, the
 - **Direction**: wrap the app once in `<DirectionProvider dir={directionOf(locale)}>` so arrow keys and the Select menu follow Arabic (`apps/web` does this in its layout).
 - Form control borders use `control-border` (3:1 against the background, WCAG 1.4.11); `border` is for decorative lines only.
 
+## Overlays and feedback
+
+| Component | Use for |
+|---|---|
+| `Dialog` | A focused task or confirmation over the page. Traps focus, closes on Escape, returns focus to its trigger. |
+| `Sheet` | A side panel (filters, details) from the inline-end side: right in English, left in Arabic. Same focus rules as Dialog. |
+| `Popover` | A small non-modal panel anchored to a button, aligned to its start edge (mirrors in Arabic). Name it with `aria-label`. |
+| `Tooltip` | A short hint on hover or keyboard focus, read as the trigger's description. Never the only place information lives (touch screens have no hover). |
+| `ToastProvider` + `useToast()` | Brief feedback after an action, at the bottom inline-end corner. Announced politely, or at once for `tone: "danger"`. |
+| `EmptyState`, `ErrorState` | A list or page with nothing yet, or that failed to load: icon, heading, a sentence, optional action. ErrorState is announced. |
+| `Loading` + `Skeleton` | Placeholders in the shape of the content; screen readers hear the `Loading` label instead. |
+
+```tsx
+<Dialog>
+  <DialogTrigger asChild><Button>{t("rename")}</Button></DialogTrigger>
+  <DialogContent title={t("renameProject")} description={t("everyoneSees")} closeLabel={t("close")}>
+    …
+    <DialogFooter>
+      <DialogClose asChild><Button variant="ghost">{t("cancel")}</Button></DialogClose>
+      <Button>{t("save")}</Button>
+    </DialogFooter>
+  </DialogContent>
+</Dialog>
+```
+
+The package has no translations of its own: pass every label (`closeLabel`, the toast region `label`, …) from the app's messages. Copy never uses deadline language: the story tests check story copy, and the `json-no-deadline-words` lint rule checks the app's messages.
+
 ## Storybook and story tests
 
 - `pnpm storybook` opens Storybook; the **Language** toolbar switches EN (LTR) / AR (RTL).
 - `pnpm test:stories` runs every story in Chromium, once per language: its play function (behaviour), direction, Latin digits, no deadline words, no requests to another origin, axe (WCAG 2.2 AA) and a screenshot comparison.
+- Stories with `parameters: overlay` (from `src/storybook/overlay.ts`) leave a dialog, sheet, popover, tooltip or toast open; the harness checks and screenshots the whole 1024 × 768 page, portals included. Motion is reduced in story tests, so animations never reach a screenshot.
 - Stories with `parameters: phone` (from `src/storybook/form.ts`) render 390px wide on an emulated touch screen, so they can check 44px touch targets with `expectTouchTarget`.
 - Screenshot baselines are Linux renders in `test/__screenshots__/`, compared on Linux only (CI). When you change the UI on purpose, add the `update-screenshots` label to your PR (or run `gh workflow run update-screenshots.yml --ref <branch>`); the **Update screenshots** workflow commits the new baselines to the PR for review.
 
