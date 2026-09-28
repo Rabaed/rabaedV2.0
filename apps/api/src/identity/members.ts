@@ -1,6 +1,7 @@
 import { withMember, type Database, type Db } from "@rabaed/db";
 import type { CompanyMember, InviteMemberRequest } from "@rabaed/domain";
 import { sql, type Transaction } from "kysely";
+import { pgError, refusedAsForbidden, UNIQUE_VIOLATION } from "../db-error.ts";
 import type { Invitation } from "./invitations.ts";
 import { newToken } from "./tokens.ts";
 
@@ -17,26 +18,13 @@ export type UpdateResult =
   | Forbidden
   | { ok: false; reason: "not_found" | "member_deactivated" | "authorized_person" };
 
-// SQLSTATEs.
-const INSUFFICIENT_PRIVILEGE = "42501"; // raised by the member functions for anyone but the Authorized Person
-const UNIQUE_VIOLATION = "23505";
-
-function pgError(error: unknown): { code?: string; constraint?: string } {
-  return error as { code?: string; constraint?: string };
-}
-
 /** Runs `fn` as the Member; the database's refusal for not being the Authorized Person becomes `forbidden`. */
-async function asAuthorizedPerson<T>(
+function asAuthorizedPerson<T>(
   db: Db,
   memberId: string,
   fn: (trx: Transaction<Database>) => Promise<T>,
 ): Promise<T | Forbidden> {
-  try {
-    return await withMember(db, memberId, fn);
-  } catch (error) {
-    if (pgError(error).code === INSUFFICIENT_PRIVILEGE) return { ok: false, reason: "forbidden" };
-    throw error;
-  }
+  return refusedAsForbidden(() => withMember(db, memberId, fn));
 }
 
 /** The Company's Members, as RLS lets the acting Member see them: their own Company only. */

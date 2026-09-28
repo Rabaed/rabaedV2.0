@@ -12,7 +12,8 @@
     "signIn": "تسجيل الدخول",
     "signedInAs": "مسجّل الدخول باسم {name}، {company}",
     "authorizedPerson": "المفوَّض",
-    "membersLink": "الأعضاء"
+    "membersLink": "الأعضاء",
+    "projectsLink": "مشاريعي"
   },
   "health": {
     "title": "حالة النظام",
@@ -71,5 +72,29 @@
     "removeProjectCreator": "إلغاء صلاحية إنشاء المشاريع",
     "deactivate": "تعطيل",
     "confirmDeactivate": "تعطيل {name}؟ سيُسجَّل خروجه فورًا ولن يتمكن من تسجيل الدخول."
+  },
+  "projects": {
+    "title": "مشاريعي",
+    "empty": "لست عضوًا في أي مشروع بعد.",
+    "emptyCreator": "لست عضوًا في أي مشروع بعد. أنشئ مشروعًا أدناه.",
+    "projectAdmin": "مسؤول المشروع",
+    "createTitle": "إنشاء مشروع",
+    "nameEn": "اسم المشروع (بالإنجليزية)",
+    "nameAr": "اسم المشروع (بالعربية)",
+    "code": "رمز المشروع",
+    "codeHint": "من 2 إلى 10 أحرف لاتينية أو أرقام، ويُستخدم في أرقام المستندات.",
+    "projectNumber": "رقم المشروع",
+    "role": "دور شركتك",
+    "yourRole": "دور شركتك",
+    "create": "إنشاء المشروع",
+    "roles": {
+      "contractor": "المقاول",
+      "consultant": "الاستشاري",
+      "owner": "المالك",
+      "owner_representative": "ممثل المالك"
+    },
+    "invalid": "تحقّق من الاسمين ورمز المشروع.",
+    "notCreator": "لا يُنشئ المشاريع إلا منشئ المشاريع.",
+    "unavailable": "حدث خطأ. حاول مرة أخرى."
   }
 }

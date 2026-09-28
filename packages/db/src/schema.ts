@@ -73,6 +73,68 @@ export interface AdminActionTable {
   at: Generated<Timestamp>;
 }
 
+export type BaseRole = "contractor" | "consultant" | "owner" | "owner_representative";
+
+export interface ProjectRoleTable {
+  id: Generated<string>;
+  owner_kind: "rabaed" | "project";
+  project_id: string | null;
+  base_role: BaseRole;
+  name: ColumnType<Bilingual, string, string>;
+  code: string;
+  created_at: Generated<Timestamp>;
+  updated_at: Generated<Timestamp>;
+}
+
+export interface ProjectTable {
+  id: Generated<string>;
+  host_company_id: string;
+  project_number: number;
+  code: string;
+  name: ColumnType<Bilingual, string, string>;
+  status: Generated<"active" | "closed">;
+  closed_at: Timestamp | null;
+  creator_member_id: string;
+  created_at: Generated<Timestamp>;
+  updated_at: Generated<Timestamp>;
+}
+
+export interface CompanyProjectCounterTable {
+  company_id: string;
+  last_project_number: number;
+}
+
+export interface ParticipantTable {
+  id: Generated<string>;
+  project_id: string;
+  company_id: string;
+  project_role_id: string;
+  status: Generated<"active" | "withdrawn">;
+  withdrawn_at: Timestamp | null;
+  created_at: Generated<Timestamp>;
+  updated_at: Generated<Timestamp>;
+}
+
+export interface ProjectMemberTable {
+  id: Generated<string>;
+  project_id: string;
+  participant_id: string;
+  member_id: string;
+  status: Generated<"active" | "removed">;
+  removed_at: Timestamp | null;
+  created_at: Generated<Timestamp>;
+  updated_at: Generated<Timestamp>;
+}
+
+export interface ProjectAdminTable {
+  id: Generated<string>;
+  project_id: string;
+  member_id: string;
+  appointed_by_member_id: string | null;
+  appointed_by_engineer_id: string | null;
+  created_at: Generated<Timestamp>;
+}
+
 export interface Database {
   rabaed_engineer: RabaedEngineerTable;
   company: CompanyTable;
@@ -80,4 +142,10 @@ export interface Database {
   credential: CredentialTable;
   invitation: InvitationTable;
   admin_action: AdminActionTable;
+  project_role: ProjectRoleTable;
+  project: ProjectTable;
+  company_project_counter: CompanyProjectCounterTable;
+  participant: ParticipantTable;
+  project_member: ProjectMemberTable;
+  project_admin: ProjectAdminTable;
 }

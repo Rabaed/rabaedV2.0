@@ -20,9 +20,14 @@ export default async function Home({ params }: { params: Promise<{ locale: Local
             {t("signedInAs", { name: me.member.fullName[locale], company: me.company.legalName[locale] })}
             {me.member.isAuthorizedPerson && <span className="text-muted"> · {t("authorizedPerson")}</span>}
           </p>
-          <Link href="/members" className={buttonVariants({ variant: "secondary" })}>
-            {t("membersLink")}
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            <Link href="/projects" className={buttonVariants()}>
+              {t("projectsLink")}
+            </Link>
+            <Link href="/members" className={buttonVariants({ variant: "secondary" })}>
+              {t("membersLink")}
+            </Link>
+          </div>
         </>
       ) : (
         <>
