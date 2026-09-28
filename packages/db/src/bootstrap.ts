@@ -30,11 +30,21 @@ async function withClient<T>(url: string, fn: (client: pg.Client) => Promise<T>)
   }
 }
 
+export interface BootstrapOptions {
+  /**
+   * `always` (local and tests): set each role's password from its URL every
+   * run, so changing .env takes effect. `on-create` (AWS): only when creating
+   * the role; after that Secrets Manager rotation owns the password, and a
+   * deploy must not set it back to what its task read at start.
+   */
+  passwords?: "always" | "on-create";
+}
+
 /**
  * Creates the roles and the database. Idempotent; run before migrations.
  * The app role gets no privileges on tables here: migrations grant them.
  */
-export async function bootstrap(urls: DatabaseUrls): Promise<void> {
+export async function bootstrap(urls: DatabaseUrls, { passwords = "always" }: BootstrapOptions = {}): Promise<void> {
   const database = checkIdentifier(databaseNameOf(urls.migrator));
   if (databaseNameOf(urls.app) !== database || databaseNameOf(urls.admin) !== database) {
     throw new Error("DATABASE_APP_URL, DATABASE_ADMIN_URL and DATABASE_MIGRATOR_URL must name the same database");
@@ -53,7 +63,8 @@ export async function bootstrap(urls: DatabaseUrls): Promise<void> {
     for (const role of roles) {
       const exists = await client.query("select 1 from pg_roles where rolname = $1", [role.name]);
       const verb = exists.rowCount ? "alter" : "create";
-      const password = role.password ? `password ${client.escapeLiteral(role.password)}` : "";
+      const setPassword = role.password && (verb === "create" || passwords === "always");
+      const password = setPassword ? `password ${client.escapeLiteral(role.password)}` : "";
       await client.query(
         `${verb} role ${role.name} login nosuperuser nocreatedb nocreaterole noreplication ${role.bypassRls ? "bypassrls" : "nobypassrls"} ${password}`,
       );

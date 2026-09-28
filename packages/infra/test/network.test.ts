@@ -114,6 +114,8 @@ describe("network", () => {
         "Api -> Database:5432",
         "Worker -> Database:5432",
         "Migrations -> Database:5432",
+        // The secret rotation Lambda signs in as each role to change its password.
+        "Rotation -> Database:5432",
       ].sort(),
     );
   });
@@ -130,6 +132,8 @@ describe("network", () => {
         "Worker -> internet:443",
         "Migrations -> Database:5432",
         "Migrations -> internet:443",
+        "Rotation -> Database:5432",
+        "Rotation -> internet:443",
       ].sort(),
     );
   });

@@ -1,4 +1,4 @@
-import { adminUrlFromEnv, appUrlFromEnv, createDb } from "@rabaed/db";
+import { createDbFromEnv } from "@rabaed/db";
 import { z } from "zod";
 import { buildApp } from "./app.ts";
 import { apiConfigFromEnv } from "./config.ts";
@@ -10,8 +10,8 @@ const env = z
   })
   .parse(process.env);
 
-const db = createDb(appUrlFromEnv());
-const adminDb = createDb(adminUrlFromEnv(), { max: 2 });
+const db = createDbFromEnv("app");
+const adminDb = createDbFromEnv("admin", { max: 2 });
 const app = await buildApp({ db, adminDb, config: apiConfigFromEnv() });
 
 const shutdown = async () => {

@@ -76,11 +76,11 @@ jobs:
           mask-aws-account-id: true
           role-duration-seconds: 3600
 
-      - name: Infrastructure (network, database, image registry)
+      - name: Infrastructure (network, database, image registry, storage)
         working-directory: packages/infra
         run: >-
           pnpm --silent cdk deploy -c env=dev --exclusively --require-approval never --no-color --progress events
-          "$STACK_PREFIX-Network" "$STACK_PREFIX-Data" "$STACK_PREFIX-Registry"
+          "$STACK_PREFIX-Network" "$STACK_PREFIX-Data" "$STACK_PREFIX-Registry" "$STACK_PREFIX-Storage"
 
       - id: ecr
         uses: aws-actions/amazon-ecr-login@v2

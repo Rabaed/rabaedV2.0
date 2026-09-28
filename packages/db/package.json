@@ -12,8 +12,10 @@
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
+    "@aws-sdk/client-secrets-manager": "^3.1141.0",
     "kysely": "^0.29.6",
     "pg": "^8.23.0",
+    "pg-connection-string": "^2.14.0",
     "zod": "^4.6.5"
   },
   "devDependencies": {
