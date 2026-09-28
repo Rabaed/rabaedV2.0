@@ -20,7 +20,7 @@ export class LambdaLogGroups implements IAspect {
       (stack.node.tryFindChild(id) as logs.LogGroup | undefined) ??
       new logs.LogGroup(stack, id, {
         logGroupName: resourceNames(this.config).lambdaLogGroup(stack.stackName),
-        retention: this.config.logRetentionDays as logs.RetentionDays,
+        retention: this.config.logRetentionDays,
         removalPolicy: RemovalPolicy.DESTROY,
       });
     node.addPropertyOverride("LoggingConfig.LogGroup", group.logGroupName);

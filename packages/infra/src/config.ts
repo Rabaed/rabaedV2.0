@@ -1,3 +1,5 @@
+import type { RetentionDays } from "aws-cdk-lib/aws-logs";
+
 // One entry per environment. Everything that differs between environments
 // (and later between Instances) is a parameter here, never a literal in a stack.
 export interface EnvironmentConfig {
@@ -15,23 +17,28 @@ export interface EnvironmentConfig {
   readonly services: Record<ServiceName, ServiceSize>;
   /** The one-off migration task that runs before each deploy. */
   readonly migrationTask: Omit<ServiceSize, "desiredCount">;
-  /** Days CloudWatch keeps every log group; one of CloudWatch's allowed values. */
-  readonly logRetentionDays: number;
+  /** Days CloudWatch keeps every log group. */
+  readonly logRetentionDays: RetentionDays;
   readonly alarms: AlarmThresholds;
 }
 
-/** When each alarm fires (monitoring stack); emailed to the address the setup wizard sets. */
+/**
+ * When each alarm fires; emailed to the address the setup wizard sets. How
+ * long a value must hold is set next to each alarm (monitoring stack).
+ */
 export interface AlarmThresholds {
-  /** Share of api responses that are 5xx over 5 minutes, in percent. */
+  /** Share of api responses that are 5xx, in percent. */
   readonly api5xxPercent: number;
+  /** 5xx answers from the load balancer itself (web down or not answering). */
+  readonly loadBalancer5xxCount: number;
   /** Age of the oldest unprocessed outbox row. */
   readonly outboxOldestAgeSeconds: number;
-  /** Unprocessed outbox rows, held for 15 minutes. */
+  /** Unprocessed outbox rows. */
   readonly outboxBacklog: number;
-  /** Average database CPU, held for 15 minutes. */
+  /** Average database CPU. */
   readonly databaseCpuPercent: number;
   readonly databaseFreeStorageGb: number;
-  /** Open database connections, held for 10 minutes. */
+  /** Open database connections. */
   readonly databaseConnections: number;
 }
 
@@ -103,6 +110,7 @@ export const environments = {
     logRetentionDays: 30,
     alarms: {
       api5xxPercent: 5,
+      loadBalancer5xxCount: 5,
       outboxOldestAgeSeconds: 300,
       outboxBacklog: 100,
       databaseCpuPercent: 80,
@@ -170,6 +178,10 @@ export function resourceNames(config: EnvironmentConfig) {
     alarmTopic: `${prefix}-alarms`,
     /** Custom metrics the monitoring stack extracts from the services' logs. */
     metricNamespace: `Rabaed/${config.name}`,
+    /** e.g. `rabaed-dev-api-5xx-rate`; the wizard's test alarm uses one by name. */
+    alarm: (name: string) => `${prefix}-${name}`,
+    /** The saved Logs Insights query over web, api and worker. */
+    allServicesQuery: `${prefix}/all-services`,
     trail: prefix,
     /** GitHub Actions' deploy role, which also builds the images (account stack). */
     deployRole: `${prefix}-github-deploy`,

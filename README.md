@@ -130,7 +130,7 @@ Rotation takes a few seconds. `describe-secret` shows a new `LastRotatedDate` an
 
   | Alarm | Fires when |
   |---|---|
-  | `rabaed-dev-api-5xx-rate` | more than 5% of api responses in 5 minutes are 5xx (with at least 10 requests), from the api's request log |
+  | `rabaed-dev-api-5xx-rate` | more than 5% of api responses in 5 minutes are 5xx (with at least 10 requests), from the api's request log, which leaves out `/health` |
   | `rabaed-dev-load-balancer-5xx` | the load balancer itself answers 5 or more 5xx in 5 minutes (web down or not answering) |
   | `rabaed-dev-unhealthy-targets` | a web task fails the load balancer's health check for 5 minutes |
   | `rabaed-dev-outbox-age` / `-outbox-backlog` | the oldest unprocessed outbox row is over 5 minutes old / more than 100 rows wait for 15 minutes, from the worker's `outbox` log line. The worker logs it once it processes the outbox (RP-195); until then these alarms have no data and stay OK. |

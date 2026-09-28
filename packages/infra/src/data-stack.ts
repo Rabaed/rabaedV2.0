@@ -103,7 +103,7 @@ export class DataStack extends Stack {
       const functionName = names.rotationFunction(id);
       const logGroup = new logs.LogGroup(this, `${id}RotationLogs`, {
         logGroupName: `/aws/lambda/${functionName}`,
-        retention: config.logRetentionDays as logs.RetentionDays,
+        retention: config.logRetentionDays,
         removalPolicy: RemovalPolicy.DESTROY,
       });
       const schedule = new secretsmanager.RotationSchedule(this, `${id}Rotation`, {

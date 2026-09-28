@@ -62,7 +62,7 @@ export function taskDefinition(stack: Stack, props: TaskProps): ecs.FargateTaskD
   });
   const logGroup = new logs.LogGroup(stack, `${props.name}Logs`, {
     logGroupName: names.logGroup(props.name),
-    retention: props.config.logRetentionDays as logs.RetentionDays,
+    retention: props.config.logRetentionDays,
     removalPolicy: RemovalPolicy.DESTROY,
   });
   task.addContainer(props.name, {

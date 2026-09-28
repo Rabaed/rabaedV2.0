@@ -22,7 +22,7 @@ export function buildEnvironment(app: App, config: EnvironmentConfig): Stack[] {
   const storage = new StorageStack(app, names.storage, { env, config });
   const migrations = new MigrationsStack(app, names.migrations, { env, config, network, data, registry });
   const application = new AppStack(app, names.app, { env, config, network, data, registry, storage });
-  const monitoring = new MonitoringStack(app, names.monitoring, { env, config, data, storage, app: application });
+  const monitoring = new MonitoringStack(app, names.monitoring, { env, config, data, storage, appStack: application });
   Aspects.of(app).add(new LambdaLogGroups(config));
   return [account, network, data, registry, storage, migrations, application, monitoring];
 }

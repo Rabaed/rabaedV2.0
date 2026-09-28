@@ -15,7 +15,7 @@ export interface MonitoringStackProps extends StackProps {
   readonly config: EnvironmentConfig;
   readonly data: DataStack;
   readonly storage: StorageStack;
-  readonly app: AppStack;
+  readonly appStack: AppStack;
 }
 
 // Finding out when dev misbehaves, and the audit trail.
@@ -31,7 +31,7 @@ export interface MonitoringStackProps extends StackProps {
 export class MonitoringStack extends Stack {
   constructor(scope: Construct, id: string, props: MonitoringStackProps) {
     super(scope, id, props);
-    const { config, data, storage, app } = props;
+    const { config, data, storage, appStack } = props;
     const names = resourceNames(config);
     const thresholds = config.alarms;
 
@@ -48,8 +48,9 @@ export class MonitoringStack extends Stack {
     // By name: the topic is in the account stack, which only the wizard deploys.
     const topic = sns.Topic.fromTopicArn(this, "AlarmTopic", this.formatArn({ service: "sns", resource: names.alarmTopic }));
     const notify = new actions.SnsAction(topic);
-    const alarm = (id: string, props: cloudwatch.AlarmProps) => {
-      const created = new cloudwatch.Alarm(this, id, props);
+    // Named `rabaed-<env>-<name>`; the id keeps CloudFormation's logical ID.
+    const alarm = (id: string, name: string, props: Omit<cloudwatch.AlarmProps, "alarmName">) => {
+      const created = new cloudwatch.Alarm(this, id, { alarmName: names.alarm(name), ...props });
       created.addAlarmAction(notify);
       created.addOkAction(notify);
       return created;
@@ -59,27 +60,31 @@ export class MonitoringStack extends Stack {
     const logGroups = Object.fromEntries(
       serviceNames.map((service) => [service, logs.LogGroup.fromLogGroupName(this, `${service}Logs`, names.logGroup(service))]),
     ) as Record<ServiceName, logs.ILogGroup>;
-    const fromLog = (service: ServiceName, metricName: string, filterPattern: string, metricValue = "1", defaultValue?: number) =>
+    /** A custom metric from the JSON lines of a service's log that match `pattern`: 1 per line, or the `value` field. */
+    const fromLog = (metricName: string, from: { service: ServiceName; pattern: string; value?: string; defaultValue?: number }) =>
       new logs.MetricFilter(this, `${metricName}Filter`, {
-        logGroup: logGroups[service],
-        filterPattern: logs.FilterPattern.literal(filterPattern),
+        logGroup: logGroups[from.service],
+        filterPattern: logs.FilterPattern.literal(from.pattern),
         metricNamespace: names.metricNamespace,
         metricName,
-        metricValue,
-        defaultValue,
+        metricValue: from.value ?? "1",
+        defaultValue: from.defaultValue,
       });
     const fiveMinutes = Duration.minutes(5);
 
-    // api: Fastify logs one "request completed" line per response.
-    const apiErrors = fromLog("api", "Api5xx", "{ $.res.statusCode >= 500 }", "1", 0).metric({ statistic: "Sum", period: fiveMinutes });
-    const apiRequests = fromLog("api", "ApiRequests", "{ $.res.statusCode > 0 }").metric({ statistic: "Sum", period: fiveMinutes });
-    alarm("Api5xxRate", {
-      alarmName: `rabaed-${config.name}-api-5xx-rate`,
+    // api: Fastify logs one "request completed" line per response (health
+    // checks aside). Errors default to 0 so the rate has a value when all is well.
+    const apiErrors = fromLog("Api5xx", { service: "api", pattern: "{ $.res.statusCode >= 500 }", defaultValue: 0 });
+    const apiRequests = fromLog("ApiRequests", { service: "api", pattern: "{ $.res.statusCode > 0 }" });
+    alarm("Api5xxRate", "api-5xx-rate", {
       alarmDescription: `More than ${thresholds.api5xxPercent}% of api responses were 5xx over 5 minutes (log group ${names.logGroup("api")}).`,
       // A few requests in a quiet period are not a rate.
       metric: new cloudwatch.MathExpression({
         expression: "IF(requests >= 10, 100 * errors / requests, 0)",
-        usingMetrics: { errors: apiErrors, requests: apiRequests },
+        usingMetrics: {
+          errors: apiErrors.metric({ statistic: "Sum", period: fiveMinutes }),
+          requests: apiRequests.metric({ statistic: "Sum", period: fiveMinutes }),
+        },
         period: fiveMinutes,
         label: "api 5xx %",
       }),
@@ -90,19 +95,17 @@ export class MonitoringStack extends Stack {
     });
 
     // The load balancer answers 5xx itself when web is down or failing.
-    alarm("LoadBalancer5xx", {
-      alarmName: `rabaed-${config.name}-load-balancer-5xx`,
-      alarmDescription: "The load balancer answered 5 or more requests with its own 5xx in 5 minutes: web is down or not answering.",
-      metric: app.loadBalancer.metrics.httpCodeElb(elbv2.HttpCodeElb.ELB_5XX_COUNT, { statistic: "Sum", period: fiveMinutes }),
+    alarm("LoadBalancer5xx", "load-balancer-5xx", {
+      alarmDescription: `The load balancer answered ${thresholds.loadBalancer5xxCount} or more requests with its own 5xx in 5 minutes: web is down or not answering.`,
+      metric: appStack.loadBalancer.metrics.httpCodeElb(elbv2.HttpCodeElb.ELB_5XX_COUNT, { statistic: "Sum", period: fiveMinutes }),
       comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
-      threshold: 5,
+      threshold: thresholds.loadBalancer5xxCount,
       evaluationPeriods: 1,
       treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
     });
-    alarm("UnhealthyTargets", {
-      alarmName: `rabaed-${config.name}-unhealthy-targets`,
+    alarm("UnhealthyTargets", "unhealthy-targets", {
       alarmDescription: "A web task has failed the load balancer's health check for 5 minutes in a row.",
-      metric: app.webTargets.metrics.unhealthyHostCount({ statistic: "Maximum", period: Duration.minutes(1) }),
+      metric: appStack.webTargets.metrics.unhealthyHostCount({ statistic: "Maximum", period: Duration.minutes(1) }),
       comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
       threshold: 1,
       evaluationPeriods: 5,
@@ -113,18 +116,19 @@ export class MonitoringStack extends Stack {
     // No data is not an alarm, because the worker reports these only once it
     // processes the outbox (RP-195).
     const outbox = (metricName: string, field: string) =>
-      fromLog("worker", metricName, `{ $.outbox.${field} >= 0 }`, `$.outbox.${field}`).metric({ statistic: "Maximum", period: fiveMinutes });
-    alarm("OutboxAge", {
-      alarmName: `rabaed-${config.name}-outbox-age`,
-      alarmDescription: `The oldest unprocessed outbox row is more than ${thresholds.outboxOldestAgeSeconds} seconds old: notifications are late.`,
+      fromLog(metricName, { service: "worker", pattern: `{ $.outbox.${field} >= 0 }`, value: `$.outbox.${field}` }).metric({
+        statistic: "Maximum",
+        period: fiveMinutes,
+      });
+    alarm("OutboxAge", "outbox-age", {
+      alarmDescription: `The oldest unprocessed outbox row is more than ${thresholds.outboxOldestAgeSeconds} seconds old: the worker is behind or stopped.`,
       metric: outbox("OutboxOldestAgeSeconds", "oldestAgeSeconds"),
       comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_THRESHOLD,
       threshold: thresholds.outboxOldestAgeSeconds,
       evaluationPeriods: 1,
       treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
     });
-    alarm("OutboxBacklog", {
-      alarmName: `rabaed-${config.name}-outbox-backlog`,
+    alarm("OutboxBacklog", "outbox-backlog", {
       alarmDescription: `More than ${thresholds.outboxBacklog} outbox rows have waited for 15 minutes.`,
       metric: outbox("OutboxBacklog", "backlog"),
       comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_THRESHOLD,
@@ -134,8 +138,7 @@ export class MonitoringStack extends Stack {
     });
 
     const database = data.database;
-    alarm("DatabaseCpu", {
-      alarmName: `rabaed-${config.name}-database-cpu`,
+    alarm("DatabaseCpu", "database-cpu", {
       alarmDescription: `Database CPU averaged over ${thresholds.databaseCpuPercent}% for 15 minutes.`,
       metric: database.metricCPUUtilization({ statistic: "Average", period: fiveMinutes }),
       comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_THRESHOLD,
@@ -143,8 +146,7 @@ export class MonitoringStack extends Stack {
       evaluationPeriods: 3,
       treatMissingData: cloudwatch.TreatMissingData.BREACHING,
     });
-    alarm("DatabaseStorage", {
-      alarmName: `rabaed-${config.name}-database-storage`,
+    alarm("DatabaseStorage", "database-storage", {
       alarmDescription: `The database has less than ${thresholds.databaseFreeStorageGb} GB of storage free.`,
       metric: database.metricFreeStorageSpace({ statistic: "Minimum", period: fiveMinutes }),
       comparisonOperator: cloudwatch.ComparisonOperator.LESS_THAN_THRESHOLD,
@@ -152,8 +154,7 @@ export class MonitoringStack extends Stack {
       evaluationPeriods: 1,
       treatMissingData: cloudwatch.TreatMissingData.BREACHING,
     });
-    alarm("DatabaseConnections", {
-      alarmName: `rabaed-${config.name}-database-connections`,
+    alarm("DatabaseConnections", "database-connections", {
       alarmDescription: `More than ${thresholds.databaseConnections} database connections for 10 minutes.`,
       metric: database.metricDatabaseConnections({ statistic: "Maximum", period: fiveMinutes }),
       comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_THRESHOLD,
@@ -164,7 +165,7 @@ export class MonitoringStack extends Stack {
 
     // Logs Insights → Queries → Saved: every service's log, newest first.
     new logs.CfnQueryDefinition(this, "AllServices", {
-      name: `rabaed-${config.name}/all-services`,
+      name: names.allServicesQuery,
       logGroupNames: serviceNames.map((service) => names.logGroup(service)),
       queryString: "fields @timestamp, @logStream, @message\n| sort @timestamp desc\n| limit 200",
     });
