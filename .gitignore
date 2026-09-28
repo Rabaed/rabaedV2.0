@@ -20,6 +20,12 @@ secrets/
 design/reference/claude-design/assets/fonts/thmanyah/*.woff2
 design/reference/claude-design/assets/fonts/thmanyah/*.otf
 design/reference/claude-design/uploads/
+# Private Thmanyah files supplied at build time (RP-211) and the CSS generated from them.
+packages/ui/fonts/
+packages/ui/src/styles/arabic-font.css
+**/thmanyah*.woff2
+**/thmanyah*.otf
+**/thmanyah*.ttf
 *.zip
 
 # --- Tooling ---

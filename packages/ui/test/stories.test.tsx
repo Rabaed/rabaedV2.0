@@ -4,8 +4,9 @@
  * once in Arabic (RTL), and must
  *   1. pass its play function (behaviour: roles, names, keyboard, focus),
  *   2. lay out in the locale's direction, with Latin digits and no deadline words,
- *   3. have no axe violations under WCAG 2.2 AA,
- *   4. match its committed screenshot (Linux only; see vitest.config.ts).
+ *   3. load nothing from another origin (fonts and icons are self-hosted, no CDN),
+ *   4. have no axe violations under WCAG 2.2 AA,
+ *   5. match its committed screenshot (Linux only; see vitest.config.ts).
  * Update screenshots on purpose with the "update-screenshots" PR label.
  */
 import { directionOf, locales } from "@rabaed/domain";
@@ -42,6 +43,8 @@ for (const locale of locales) {
           const canvasElement = document.createElement("div");
           canvasElement.dataset.testid = "story";
           document.body.replaceChildren(canvasElement);
+          // Record only this story's requests (the buffer holds 250 entries by default).
+          performance.clearResourceTimings();
 
           await Story.run({ canvasElement });
 
@@ -50,6 +53,14 @@ for (const locale of locales) {
           const text = canvasElement.textContent ?? "";
           expect(text).not.toMatch(deadlineWords);
           expect(text).not.toMatch(nonLatinDigits);
+
+          // Fonts load as glyphs are laid out; wait for them, then check where everything came from.
+          await document.fonts.ready;
+          const crossOrigin = performance
+            .getEntriesByType("resource")
+            .map((entry) => entry.name)
+            .filter((url) => new URL(url).origin !== location.origin);
+          expect(crossOrigin).toEqual([]);
 
           const { violations } = await axe.run(canvasElement, (Story.parameters.a11y?.options ?? {}) as RunOptions);
           expect(

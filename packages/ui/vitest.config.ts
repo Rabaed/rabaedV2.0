@@ -2,6 +2,9 @@ import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { playwright } from "@vitest/browser-playwright";
 import { defineConfig } from "vitest/config";
+import { prepareArabicFont } from "./src/fonts/arabic-font.ts";
+
+prepareArabicFont();
 
 // The story test harness: every Storybook story, in English and Arabic, in a
 // real Chromium. See test/stories.test.tsx.

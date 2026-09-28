@@ -3,11 +3,16 @@
  * (typography.css, spacing.css). Spacing uses Tailwind's 4px grid as is.
  */
 
-// Licensed or self-hosted families are wired up in RP-200 (fonts); until then
-// the stacks fall back to system fonts, so every build renders without them.
+// All self-hosted (src/styles/index.css), no font CDN. Latin text uses the first
+// family; Arabic glyphs fall through to --font-arabic, which prepareArabicFont
+// (src/fonts/arabic-font.ts) sets to Thmanyah Sans when its private files are
+// present at build time and to IBM Plex Sans Arabic otherwise.
+const arabic = "var(--font-arabic, 'IBM Plex Sans Arabic')";
+const system = "system-ui, -apple-system, 'Segoe UI', sans-serif";
+
 export const fonts = {
-  ui: "'IBM Plex Sans', 'IBM Plex Sans Arabic', system-ui, -apple-system, 'Segoe UI', sans-serif",
-  display: "'Montserrat', 'IBM Plex Sans Arabic', system-ui, -apple-system, 'Segoe UI', sans-serif",
+  ui: `'IBM Plex Sans Variable', ${arabic}, ${system}`,
+  display: `'Montserrat Variable', ${arabic}, ${system}`,
   mono: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
 } as const;
 

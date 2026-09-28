@@ -220,10 +220,10 @@
 /* Type, radii and shadows, always emitted as variables so pages can read them too. */
 @theme static {
   --font-*: initial;
-  --font-ui: 'IBM Plex Sans', 'IBM Plex Sans Arabic', system-ui, -apple-system, 'Segoe UI', sans-serif;
-  --font-display: 'Montserrat', 'IBM Plex Sans Arabic', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-ui: 'IBM Plex Sans Variable', var(--font-arabic, 'IBM Plex Sans Arabic'), system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-display: 'Montserrat Variable', var(--font-arabic, 'IBM Plex Sans Arabic'), system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  --default-font-family: 'IBM Plex Sans', 'IBM Plex Sans Arabic', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --default-font-family: 'IBM Plex Sans Variable', var(--font-arabic, 'IBM Plex Sans Arabic'), system-ui, -apple-system, 'Segoe UI', sans-serif;
   --default-mono-font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
   --text-*: initial;
