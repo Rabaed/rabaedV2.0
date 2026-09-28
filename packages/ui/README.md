@@ -105,6 +105,45 @@ Every control sits in a `Field`, which gives it a label, optional help text, the
 </Dialog>
 ```
 
+## Data display
+
+| Component | Use for |
+|---|---|
+| `Table` + `TableHeader`, `TableBody`, `TableRow`, `TableHead`, `TableCell`, `TableEmpty` | Lists of records. Real table roles, in a named region that scrolls (and takes keyboard focus) when the table doesn't fit. |
+| `Tabs` + `TabsList`, `TabsTrigger`, `TabsContent` | Switching between views of one area. The ARIA tabs pattern; arrow keys follow the reading direction. |
+| `Badge` | A short label in a tint: `neutral` (default), `brand`, `info`, `success`, `warning`, `danger`; optional `dot`. Not for Stages or Review Codes, which have their own components. |
+| `Avatar` | A person's photo or initials (a circle), or with `kind="company"` a company's logo or initials (a rounded square). Named after them; `decorative` when the name is beside it. |
+| `CompanyChip` | Another company as one block: its mark and name in a pill. Takes no person, so it can't show another company's people. |
+
+```tsx
+<Table label={t("submittals")} stickyHeader containerClassName="max-h-[60vh]">
+  <TableHeader>
+    <TableRow>
+      <TableHead sort={sortOf("number")} onSort={() => sortBy("number")}>{t("number")}</TableHead>
+      <TableHead align="end">{t("sheets")}</TableHead>
+    </TableRow>
+  </TableHeader>
+  <TableBody>
+    {rows.length === 0 && (
+      <TableEmpty colSpan={2}>
+        <EmptyState title={t("noSubmittals")} />
+      </TableEmpty>
+    )}
+    {rows.map((row) => (
+      <TableRow key={row.id} selected={selected.has(row.id)}>
+        <TableCell><DocNo value={row.number} /></TableCell>
+        <TableCell align="end">{formatNumber(row.sheets, locale)}</TableCell>
+      </TableRow>
+    ))}
+  </TableBody>
+</Table>
+```
+
+- **Sorting**: a column with `sort` (`ascending`, `descending` or `none`) and `onSort` gets a sort button and `aria-sort`, which screen readers announce. The app sorts the rows and decides the next order.
+- **Selection**: put a `Checkbox` named after the row (e.g. its Document Number) in the first cell and mark the row `selected`; a header checkbox selects all (`"indeterminate"` when some are).
+- **Alignment**: `align="end"` for numbers, so they line up with tabular digits; columns and alignment mirror in Arabic.
+- **Tabs**: name the list (`<TabsList aria-label={t("project")}>`); a trigger takes an `icon` and a `count` (pass it formatted with `formatNumber`).
+
 The package has no translations of its own: pass every label (`closeLabel`, the toast region `label`, …) from the app's messages. Copy never uses deadline language: the story tests check story copy, and the `json-no-deadline-words` lint rule checks the app's messages.
 
 ## Storybook and story tests
