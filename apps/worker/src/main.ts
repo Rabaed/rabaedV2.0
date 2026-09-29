@@ -32,8 +32,8 @@ while (!stop.signal.aborted) {
       if (run.processed || run.failed || run.dead) log.info({ run }, "outbox run");
       logOutbox(log, await outboxStats(db));
     } catch (error) {
-      // The message only: a database error's detail can quote row values.
-      log.error({ error: error instanceof Error ? error.message : String(error) }, "outbox run failed");
+      // Through the err serializer: a database error by its code only.
+      log.error({ err: error instanceof Error ? error : new Error(String(error)) }, "outbox run failed");
     }
   }
   await sleep(env.WORKER_POLL_INTERVAL_MS, undefined, { signal: stop.signal }).catch(() => undefined);
