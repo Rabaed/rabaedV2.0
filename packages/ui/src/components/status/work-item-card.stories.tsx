@@ -84,8 +84,6 @@ export const WithAnotherCompany: Story = {
         open: true,
         holder: {
           kind: "person",
-          name: storyText(context, text.person),
-          photoSrc: "/people/faisal.png",
           companyName: storyText(context, text.otherCompany),
           inViewerCompany: false,
         },

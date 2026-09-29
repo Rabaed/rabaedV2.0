@@ -8,7 +8,7 @@ import { focusRing } from "../form/control-styles.ts";
 import { Icon } from "../icon/icon.tsx";
 import { AgeDots } from "./age-dots.tsx";
 import { CodeBadge } from "./code-badge.tsx";
-import { WithChip, type WithChipProps } from "./with-chip.tsx";
+import { WithChip, type WithChipHolder } from "./with-chip.tsx";
 
 const densities = {
   comfortable: { card: "gap-2 p-3", title: "line-clamp-2", photo: "size-12" },
@@ -20,7 +20,7 @@ export type WorkItemState =
   | {
       open: true;
       /** Who holds the current Step. Another Company's holder shows as its name only (visibility V14). */
-      holder?: Omit<WithChipProps, "className">;
+      holder?: WithChipHolder;
       /** Step Age: the week at the current Step, from 1. */
       stepAgeWeeks: number;
     }

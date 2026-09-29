@@ -155,18 +155,23 @@ The components that carry Rabaed's product rules, so every module shows status t
 | `StagePill` | A Stage: `stage` (the colour category, one of `stageKeys`), its `label`, optional `count` (formatted for `locale`) | One colour per default Stage in every module; the name carries the meaning. |
 | `CodeBadge` | A Review Code: `code` (`a`–`d`), `locale`, `size` (`sm`, `md`), `variant` (`full`, or `letter` with the meaning for screen readers only) | Icon + colour + text, never colour alone. B always has the comment icon. |
 | `AgeDots` | Step Age: `weeks` (the week at the current Step, from 1), `locale` | 1–4 dots (4+), grey turning red, named "N weeks at this step". Age only: it takes nothing but weeks. |
-| `WithChip` | Who holds the Step: `kind` (`person`, `company`), `name`, `photoSrc`, `companyName`, `logoSrc`, `inViewerCompany` | Visibility V14: when `inViewerCompany` is false it shows the company name only, whatever else is passed. |
+| `WithChip` | Who holds the Step, a `WithChipHolder`: `kind` (`person`, `company`), `inViewerCompany`, `companyName`, `logoSrc`, and only for a person in the viewer's Company, `name` and `photoSrc` | Visibility V14: the props are a union, so another company's holder carries its company only; passing their person's name or photo fails the typecheck. A name forced through with a cast is still dropped, so it shows the company name only. |
 | `WorkItemCard` | A Work Item on a Kanban board: `number`, `rev`, `title`, `trade`, `location`, then `state`: `{ open: true, holder, stepAgeWeeks }` or `{ open: false, code }` (a closed item shows its Issued Code, never a holder or Step Age), optional `photoSrc`; `density` (`comfortable`, `compact`); `href` (a link, with `linkAs={Link}` for Next.js) or `onClick` (a button) | One card on every board. Closed items with an Inspection Result, or Cancelled ones, will need their own outcome here when those Modules come. One focus target, named by its number and title only; the rest is its description. The holder goes through `WithChip`, so another company shows as its name only. |
 
 ```tsx
 <StagePill stage="internal" label={stage.name[locale]} count={12} locale={locale} />
 <CodeBadge code="b" locale={locale} />
 <AgeDots weeks={item.stepAgeWeeks} locale={locale} />
-<WithChip kind="person" name={holder.name} companyName={holder.companyName} inViewerCompany={holder.companyId === viewer.companyId} />
+// On the server: another company's person never gets a name.
+const chip: WithChipHolder =
+  held.companyId === viewer.companyId
+    ? { kind: "person", inViewerCompany: true, name: held.name, companyName: held.companyName }
+    : { kind: "person", inViewerCompany: false, companyName: held.companyName };
+<WithChip {...chip} />
 ```
 
 - `AgeDots` takes Step Age as CONTEXT.md defines it: **1 in the first week** at the Step, 2 in the second, and so on (`stepAgeWeeks` in `@rabaed/domain`). The dots come from the domain's `stepAgeDots`; `stepAgeLabel` gives the same words for places that aren't a component (an email, a report).
-- `WithChip` is the last line of defence, not the first: the API should still never send another company's person to the browser (V14), since props of a client component travel in the page payload.
+- `WithChip` is the last line of defence, not the first. Its types stop a caller from passing another company's person, but the API must still never send that person to the browser (V14): build the holder on the server from what the viewer may see, since props of a client component travel in the page payload.
 
 ## Shell
 
