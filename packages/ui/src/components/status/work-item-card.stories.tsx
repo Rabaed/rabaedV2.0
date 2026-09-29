@@ -29,21 +29,23 @@ function openItem(context: Context): Omit<WorkItemCardProps, "href" | "onClick">
     title: storyText(context, text.title),
     trade: storyText(context, text.trade),
     location: storyText(context, text.location),
-    holder: {
-      kind: "person",
-      name: storyText(context, text.person),
-      companyName: storyText(context, text.ownCompany),
-      inViewerCompany: true,
+    state: {
+      open: true,
+      holder: {
+        kind: "person",
+        name: storyText(context, text.person),
+        companyName: storyText(context, text.ownCompany),
+        inViewerCompany: true,
+      },
+      stepAgeWeeks: 2,
     },
-    stepAgeWeeks: 2,
     locale: storyLocale(context),
   };
 }
 
 /** A closed item: its Issued Code instead of a holder and Step Age. */
 function closedItem(context: Context, code: (typeof reviewCodes)[number]): Omit<WorkItemCardProps, "href" | "onClick"> {
-  const { holder: _holder, stepAgeWeeks: _age, ...rest } = openItem(context);
-  return { ...rest, number: `TWR-TMC-EL-MAR-04${reviewCodes.indexOf(code) + 2}`, code };
+  return { ...openItem(context), number: `TWR-TMC-EL-MAR-04${reviewCodes.indexOf(code) + 2}`, state: { open: false, code } };
 }
 
 const meta = {
@@ -78,12 +80,16 @@ export const WithAnotherCompany: Story = {
     <WorkItemCard
       {...args}
       {...openItem(context)}
-      holder={{
-        kind: "person",
-        name: storyText(context, text.person),
-        photoSrc: "/people/faisal.png",
-        companyName: storyText(context, text.otherCompany),
-        inViewerCompany: false,
+      state={{
+        open: true,
+        holder: {
+          kind: "person",
+          name: storyText(context, text.person),
+          photoSrc: "/people/faisal.png",
+          companyName: storyText(context, text.otherCompany),
+          inViewerCompany: false,
+        },
+        stepAgeWeeks: 2,
       }}
     />
   ),
@@ -123,7 +129,7 @@ export const WithPhoto: Story = {
   },
 };
 
-/** Compact: less padding, a one-line title and no photo, for dense boards. */
+/** Compact, for dense boards: less padding, a one-line title and a smaller photo. */
 export const Compact: Story = {
   args: { density: "compact" },
   render: (args, context) => (
@@ -134,7 +140,7 @@ export const Compact: Story = {
   ),
   play: async (context) => {
     const [open] = context.canvas.getAllByRole("link");
-    await expect(open!.querySelector("img")).toBeNull();
+    await expect(open!.querySelector("img")!.getBoundingClientRect().width).toBe(36);
     const title = open!.querySelector("[data-title]")!;
     await expect(title.getBoundingClientRect().height).toBeLessThan(24);
   },
