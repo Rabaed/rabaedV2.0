@@ -54,3 +54,5 @@ next-env.d.ts
 
 # AWS CDK synthesis output
 cdk.out/
+# Claude Code desktop app worktrees (other sessions' checkouts, incl. their .env)
+.claude/worktrees/
