@@ -85,7 +85,7 @@ Every control sits in a `Field`, which gives it a label, optional help text, the
 | Component | Use for |
 |---|---|
 | `Dialog` | A focused task or confirmation over the page. Traps focus, closes on Escape, returns focus to its trigger. |
-| `Sheet` | A side panel (filters, details) from the inline-end side: right in English, left in Arabic. Same focus rules as Dialog. |
+| `Sheet` | A side panel (filters, details) from the inline-end side: right in English, left in Arabic; `side="start"` for navigation. Same focus rules as Dialog. |
 | `Popover` | A small non-modal panel anchored to a button, aligned to its start edge (mirrors in Arabic). Name it with `aria-label`. |
 | `Tooltip` | A short hint on hover or keyboard focus, read as the trigger's description. Never the only place information lives (touch screens have no hover). |
 | `ToastProvider` + `useToast()` | Brief feedback after an action, at the bottom inline-end corner. Announced politely, or at once for `tone: "danger"`. |
@@ -167,6 +167,36 @@ The components that carry Rabaed's product rules, so every module shows status t
 
 - `AgeDots` takes Step Age as CONTEXT.md defines it: **1 in the first week** at the Step, 2 in the second, and so on (`stepAgeWeeks` in `@rabaed/domain`). The dots come from the domain's `stepAgeDots`; `stepAgeLabel` gives the same words for places that aren't a component (an email, a report).
 - `WithChip` is the last line of defence, not the first: the API should still never send another company's person to the browser (V14), since props of a client component travel in the page payload.
+
+## Shell
+
+Every page sits in the same layout, in English and Arabic, on desktop and phone. Presentational only: the app passes the navigation targets, labels and data.
+
+| Component | Use for |
+|---|---|
+| `AppShell` | The page layout: `Sidebar` on the inline-start side (the right in Arabic), `TopBar` and the page beside it. Below `md` the sidebar becomes a `Sheet` from the start side, opened by a menu button in the top bar; choosing a page closes it. |
+| `Sidebar` / `SidebarNav` | The main navigation: sections of items (`key`, `label`, `icon`, `href`, optional `count`), the `current` one marked `aria-current="page"`. Collapses to icons with a button (mouse or keyboard); collapsed, each item shows its name in a tooltip. `defaultCollapsed` and `onCollapsedChange` let the app remember the choice. |
+| `TopBar` | Slots for `search`, `notifications` and `user`. |
+| `UserMenu` | The Member's avatar and name, opening a menu with the language switch (each language named in itself, the current one pressed) and any extra items, e.g. Sign out. |
+| `PageHeader` | A page's one `h1`, with an optional `eyebrow`, `description`, `actions` and `tabs`. |
+| `ProjectTabs` | A Project's tabs, always in the agreed order (`projectTabKeys`): Dashboard · Submittals · Inspections · Snag List · Site Reports · Drawings · Files · Views · Schedule · Settings. Page navigation, so links in a named `nav` (not ARIA tabs). Schedule isn't built yet: greyed out, `aria-disabled`, described by `comingSoonLabel`. They scroll sideways on a phone. |
+
+```tsx
+<AppShell
+  sidebar={{ brand: "Rabaed", label: t("main"), sections, current: "projects", collapseLabel: t("collapse"), expandLabel: t("expand"), linkAs: Link }}
+  topBar={{ search: <SearchButton />, notifications: <NotificationsButton />, user: <UserMenu … /> }}
+  menuLabel={t("menu")}
+  closeLabel={t("close")}
+>
+  <PageHeader
+    title={project.name}
+    tabs={<ProjectTabs label={t("project")} labels={tabLabels} href={(key) => `/projects/${project.id}/${key}`} current="submittals" comingSoonLabel={t("comingSoon")} linkAs={Link} />}
+  />
+  …
+</AppShell>
+```
+
+The sidebar uses the light variant of the design (surface and brand tint); a dark sidebar would need its own theme roles first.
 
 ## Storybook and story tests
 

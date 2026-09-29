@@ -50,6 +50,18 @@ export { StagePill, type StagePillProps } from "./components/status/stage-pill.t
 export { stepAgeLabel } from "./components/status/step-age.ts";
 export { WithChip, type WithChipProps } from "./components/status/with-chip.tsx";
 export { WorkItemCard, type WorkItemCardProps, type WorkItemState } from "./components/status/work-item-card.tsx";
+export { AppShell, TopBar, type AppShellProps, type TopBarProps } from "./components/shell/app-shell.tsx";
+export { PageHeader, type PageHeaderProps } from "./components/shell/page-header.tsx";
+export { ProjectTabs, projectTabKeys, type ProjectTabKey, type ProjectTabsProps } from "./components/shell/project-tabs.tsx";
+export {
+  Sidebar,
+  SidebarNav,
+  type SidebarItem,
+  type SidebarNavProps,
+  type SidebarProps,
+  type SidebarSection,
+} from "./components/shell/sidebar.tsx";
+export { UserMenu, type UserMenuProps } from "./components/shell/user-menu.tsx";
 export { cn } from "./lib/cn.ts";
 export {
   themes,
