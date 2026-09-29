@@ -63,6 +63,26 @@ jobs:
           grep -q "IBM Plex Sans Arabic" packages/ui/src/styles/arabic-font.css
           ! grep -q "Thmanyah" packages/ui/src/styles/arabic-font.css
 
+  # The deploy runs the web image as the node user, able to write only .next
+  # (Dockerfile). A crash at start-up there shows only as ECS's circuit
+  # breaker, so build the image and start it as ECS does.
+  web-image:
+    name: web image starts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - run: docker buildx build . --target web --load --tag rabaed-web:ci
+      - name: Starts and answers the load balancer's health check
+        run: |
+          docker run -d --name web -p 3000:3000 -e API_URL=http://127.0.0.1:9 -e APP_VERSION=0000000 rabaed-web:ci
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:3000/api/health; then exit 0; fi
+            sleep 2
+          done
+          docker logs web
+          exit 1
+
   stories:
     name: story tests (behaviour, axe, screenshots)
     # Pinned so fonts and rendering match the committed screenshot baselines.
