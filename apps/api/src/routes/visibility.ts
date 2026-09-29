@@ -84,6 +84,8 @@ export const visibilityRoutes =
       },
     );
 
+    // Anyone but a Project Admin gets a 404, exactly like a made-up id, so it
+    // never reveals that a Participant exists (RP-233).
     app.put(
       "/v1/participants/:participantId/visibility",
       { schema: { params: participantParams, body: setVisibilityRequest } },

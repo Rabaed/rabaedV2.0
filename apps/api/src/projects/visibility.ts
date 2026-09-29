@@ -172,7 +172,7 @@ async function setEveryDimension(
   }
 }
 
-/** A Project Admin sets a Participant's Visibility. */
+/** A Project Admin sets a Participant's Visibility; `not_found` for anyone else, as for a made-up id. */
 export function setParticipantVisibility(
   db: Db,
   memberId: string,
