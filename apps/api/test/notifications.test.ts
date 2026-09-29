@@ -43,6 +43,8 @@ let pmNarrowed: Member; // Narrowed to Mechanical before delivery.
 let manager: Member; // K1 Manager: the Consultant review pool.
 let k1Engineer: Member;
 let c2Engineer: Member;
+let engineerPm: Member; // C1 Engineer who is also a PM: in the pool they send to.
+let k1: { company: Company; participantId: string };
 
 async function ok(res: Promise<{ statusCode: number; body: string }>, status = 204) {
   const r = await res;
@@ -70,8 +72,8 @@ async function participant(role: "contractor" | "consultant") {
   return { company, participantId };
 }
 
-async function createDraft(title: string): Promise<string> {
-  const res = await engineer.caller.post(`/v1/projects/${projectId}/work-items`, {
+async function createDraft(title: string, by: Member = engineer): Promise<string> {
+  const res = await by.caller.post(`/v1/projects/${projectId}/work-items`, {
     type: "MAR",
     title,
     tradeId: electrical,
@@ -116,11 +118,12 @@ beforeAll(async () => {
   pm = await projectMember(c1, c1ParticipantId, ["project_manager"]);
   pmRemoved = await projectMember(c1, c1ParticipantId, ["project_manager"]);
   pmNarrowed = await projectMember(c1, c1ParticipantId, ["project_manager"]);
-  const k1 = await participant("consultant");
+  k1 = await participant("consultant");
   manager = await projectMember(k1.company, k1.participantId, ["manager"]);
   k1Engineer = await projectMember(k1.company, k1.participantId, ["engineer"]);
   const c2 = await participant("contractor");
   c2Engineer = await projectMember(c2.company, c2.participantId, ["engineer"]);
+  engineerPm = await projectMember(c1, c1ParticipantId, ["engineer", "project_manager"]);
   // Anything earlier tests left in the outbox is not ours to judge.
   await processOutbox(worker);
 });
@@ -151,11 +154,24 @@ describe("Send for Review", () => {
     expect((await outboxRows(id))[0]!.processed_at).not.toBeNull();
   });
 
-  it("counts unread notifications for the bell, and marks them read", async () => {
+  it("counts unread notifications for the bell, and marks one, or all, read", async () => {
     expect((await notifications(pm)).unread).toBe(1);
-    await ok(pm.caller.post("/v1/notifications/read", {}));
+    const [n] = await about(pm, id);
+    // Another Member's notification id marks nothing of theirs.
+    await ok(engineer.caller.post("/v1/notifications/read", { ids: [n!.id] }));
+    expect((await notifications(pm)).unread).toBe(1);
+    await ok(pm.caller.post("/v1/notifications/read", { ids: [n!.id] }));
     expect(await notifications(pm)).toMatchObject({ unread: 0 });
     expect((await about(pm, id))[0]!.readAt).not.toBeNull();
+    await ok(pm.caller.post("/v1/notifications/read", {}));
+  });
+
+  it("never notifies the Member whose move it was, even when they are in the pool", async () => {
+    const own = await createDraft("Cable ladders", engineerPm);
+    await take(engineerPm, own, "send_for_review");
+    await processOutbox(worker);
+    expect(await about(engineerPm, own)).toEqual([]);
+    expect(await about(pm, own)).toHaveLength(1);
   });
 
   it("is delivered once, however often the worker runs", async () => {
@@ -191,12 +207,20 @@ describe("Return and Submit", () => {
     for (const who of [k1Engineer, c2Engineer]) expect(await about(who, id)).toEqual([]);
   });
 
-  it("shows only the recipient's own notifications, and none of an item they no longer see", async () => {
+  it("shows only the recipient's own notifications, with nothing of items that aren't theirs", async () => {
     const mine = await notifications(manager);
     expect(mine.notifications.every((n) => n.workItemId === id)).toBe(true);
     const body = JSON.stringify(mine);
     expect(body).not.toContain("Cable trays");
     expect(body).not.toContain("Wrong tray size");
+  });
+
+  it("drops a delivered notification from the list and the count once the recipient no longer sees the item (V12)", async () => {
+    expect((await notifications(manager)).unread).toBeGreaterThan(0);
+    await setVisibility(k1.company, k1.participantId, manager.id, only(mechanical));
+    expect(await notifications(manager)).toEqual({ unread: 0, notifications: [] });
+    await setVisibility(k1.company, k1.participantId, manager.id, all);
+    expect(await about(manager, id)).toHaveLength(1);
   });
 });
 
@@ -248,14 +272,19 @@ describe("a failing delivery", () => {
 });
 
 describe("the outbox", () => {
-  it("reports its backlog and oldest age for the worker's log, dead rows aside", async () => {
+  it("reports its backlog and oldest age for the worker's log, dead-lettered rows included", async () => {
     const id = await createDraft("Earthing");
     await take(engineer, id, "send_for_review");
     const before = await outboxStats(worker);
     expect(before.backlog).toBeGreaterThanOrEqual(1);
     expect(before.oldestAgeSeconds).toBeGreaterThanOrEqual(0);
     await processOutbox(worker);
-    expect(await outboxStats(worker)).toEqual({ backlog: 0, oldestAgeSeconds: 0 });
+    // What is left is dead-lettered: still counted, so the alarms see it.
+    const { rows } = await sql<{ n: number }>`select count(*)::int as n from outbox where processed_at is null`.execute(migrator);
+    const after = await outboxStats(worker);
+    expect(after.backlog).toBe(rows[0]!.n);
+    expect(await outboxRows(id)).toEqual([expect.objectContaining({ dead_at: null })]);
+    expect((await outboxRows(id))[0]!.processed_at).not.toBeNull();
   });
 
   it("is read and processed only through the worker's functions, never by a signed-in Member", async () => {

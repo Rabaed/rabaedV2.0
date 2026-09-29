@@ -1,11 +1,42 @@
-import { Icon } from "@rabaed/ui";
-import { getTranslations } from "next-intl/server";
-import { Link } from "@/i18n/navigation";
+"use client";
 
-/** The header bell: a link to the Member's notifications, with how many are unread. */
-export async function NotificationBell({ unread }: { unread: number }) {
-  const t = await getTranslations("notifications");
-  const label = unread ? t("bellUnread", { count: unread }) : t("title");
+import { Icon } from "@rabaed/ui";
+import { useTranslations } from "next-intl";
+import { useEffect, useState } from "react";
+import { Link, usePathname } from "@/i18n/navigation";
+
+const REFRESH_MS = 60_000;
+
+/**
+ * The header bell: a link to the Member's notifications, with how many are
+ * unread. The layout renders it once; it reads the count again on every
+ * navigation and each minute, so it never goes stale while the Member moves around.
+ */
+export function NotificationBell({ unread: initial }: { unread: number }) {
+  const t = useTranslations("notifications");
+  const pathname = usePathname();
+  const [unread, setUnread] = useState(initial);
+
+  useEffect(() => setUnread(initial), [initial]);
+  useEffect(() => {
+    let live = true;
+    const refresh = async () => {
+      try {
+        const res = await fetch("/api/v1/notifications", { cache: "no-store" });
+        if (res.ok && live) setUnread(((await res.json()) as { unread: number }).unread);
+      } catch {
+        // Keep the last count; the next refresh tries again.
+      }
+    };
+    void refresh();
+    const timer = setInterval(() => void refresh(), REFRESH_MS);
+    return () => {
+      live = false;
+      clearInterval(timer);
+    };
+  }, [pathname]);
+
+  const label = unread ? t("bellUnread", { count: unread, shown: String(unread) }) : t("title");
   return (
     <Link
       href="/notifications"

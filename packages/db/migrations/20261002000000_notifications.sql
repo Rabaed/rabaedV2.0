@@ -3,13 +3,14 @@
 --
 -- * When a Work Item reaches someone (a new open Step assignment), an outbox row
 --   is written by a trigger in the same transaction as the Transition: a rolled
---   back Transition leaves none. A Step taken by the acting Member themselves
---   (their own new Draft) notifies nobody. The row holds ids only, never
---   customer text.
+--   back Transition leaves none. The acting Member is never notified of their
+--   own move (their own new Draft, or a pool they are in themselves). The row
+--   holds ids only, never customer text.
 -- * The worker (the app role, with no Member set) takes one due row at a time
 --   (FOR UPDATE SKIP LOCKED), delivers it and marks it processed, or records the
 --   failure: the row is retried later and, after its last attempt,
---   dead-lettered. Other rows are never held up.
+--   dead-lettered. Other rows are never held up. A failure is recorded by its
+--   code, never a database error's text, which can quote row values.
 -- * Delivery decides the recipients then, not when the row was written: the
 --   assignment must still be open; a claimed Step notifies its holder, a pooled
 --   one its Step Pool; and each recipient must still see the item by
@@ -76,7 +77,8 @@ create function app.outbox_step_reached() returns trigger
       if new.status in ('pooled', 'claimed') and new.assignee_member_id is distinct from app.current_member_id() then
         insert into outbox (kind, project_id, payload, created_at, available_at)
         values ('notification', new.project_id,
-          jsonb_build_object('reason', 'step_reached', 'work_item_id', new.work_item_id, 'step_assignment_id', new.id),
+          jsonb_strip_nulls(jsonb_build_object('work_item_id', new.work_item_id, 'step_assignment_id', new.id,
+            'actor_member_id', app.current_member_id())),
           new.created_at, now());
       end if;
       return new;
@@ -88,7 +90,9 @@ create trigger step_assignment_outbox after insert on step_assignment
 -- The worker ---------------------------------------------------------------------------
 
 -- The worker connects as the app role with no Member set; a Member's session is
--- refused, so the API can never process or read the outbox.
+-- refused, so no request acting as a Member can process or read the outbox.
+-- (The API's pre-sign-in paths also run with no Member; they never call these.
+-- A separate worker role would enforce that too.)
 create function app.require_worker() returns void
   language plpgsql stable
   as $$
@@ -143,11 +147,15 @@ create function app.deliver_notification(p_outbox_id uuid) returns integer
       end if;
 
       for v_recipient in
-        select v_assignment.assignee_member_id where v_assignment.status = 'claimed'
-        union
-        select p.member_id
-        from app.step_pool(v_assignment.work_item_id, v_assignment.step_id, v_assignment.participant_id) p
-        where v_assignment.status = 'pooled'
+        select r.member_id from (
+          select v_assignment.assignee_member_id as member_id where v_assignment.status = 'claimed'
+          union
+          select p.member_id
+          from app.step_pool(v_assignment.work_item_id, v_assignment.step_id, v_assignment.participant_id) p
+          where v_assignment.status = 'pooled'
+        ) r
+        -- Never the Member whose move it was.
+        where r.member_id is distinct from (v_row.payload ->> 'actor_member_id')::uuid
       loop
         -- Exactly the visibility every read of this Member applies (layers 2-4).
         perform set_config('app.member_id', v_recipient::text, true);
@@ -176,7 +184,8 @@ create function app.outbox_processed(p_outbox_id uuid) returns void
   $$;
 
 -- Records a failed attempt: due again p_retry_after_ms from now, or
--- dead-lettered once it has had p_max_attempts. Returns 'retry' or 'dead'.
+-- dead-lettered once it has had p_max_attempts. Returns 'retry', 'dead', or
+-- 'gone' when the row is no longer pending.
 create function app.outbox_failed(p_outbox_id uuid, p_error text, p_max_attempts integer, p_retry_after_ms integer)
   returns text
   language plpgsql volatile security definer
@@ -193,12 +202,13 @@ create function app.outbox_failed(p_outbox_id uuid, p_error text, p_max_attempts
         dead_at = case when attempts + 1 >= p_max_attempts then now() end
       where id = p_outbox_id and processed_at is null and dead_at is null
       returning attempts into v_attempts;
-      return case when v_attempts >= p_max_attempts then 'dead' else 'retry' end;
+      return case when v_attempts is null then 'gone' when v_attempts >= p_max_attempts then 'dead' else 'retry' end;
     end
   $$;
 
--- For the worker's log and the outbox alarms: rows still to process (dead ones
--- excluded) and the age of the oldest, 0 when there are none.
+-- For the worker's log and the outbox alarms: rows not processed, dead-lettered
+-- ones included (they need someone to look), and the age of the oldest, 0 when
+-- there are none.
 create function app.outbox_stats() returns table (backlog integer, oldest_age_seconds integer)
   language plpgsql stable security definer
   set search_path = pg_catalog, public
@@ -207,7 +217,7 @@ create function app.outbox_stats() returns table (backlog integer, oldest_age_se
       perform app.require_worker();
       return query
         select count(*)::integer, coalesce(extract(epoch from now() - min(created_at)), 0)::integer
-        from outbox where processed_at is null and dead_at is null;
+        from outbox where processed_at is null;
     end
   $$;
 

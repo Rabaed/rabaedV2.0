@@ -175,7 +175,7 @@
     "noLocation": "No Location",
     "noDescription": "No description.",
     "noTradesCovered": "Your Visibility on this Project covers no Trade yet, so you can't raise a Work Item. Ask your Company's Authorized Person.",
-    "stepAge": "{weeks, plural, one {# week} other {# weeks}} at this step",
+    "stepAge": "{weeks, plural, one {{shown} week} other {{shown} weeks}} at this step",
     "saveDraft": "Save Draft",
     "fields": {
       "title": "Title",
@@ -223,7 +223,7 @@
   },
   "notifications": {
     "title": "Notifications",
-    "bellUnread": "{count, plural, one {Notifications, # unread} other {Notifications, # unread}}",
+    "bellUnread": "Notifications, {shown} unread",
     "empty": "No notifications yet.",
     "reached": "Reached you at {step}",
     "unread": "Unread",

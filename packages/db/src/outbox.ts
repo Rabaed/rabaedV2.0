@@ -41,6 +41,17 @@ export interface OutboxRun {
   dead: number;
 }
 
+/**
+ * What a failure is recorded as: a database error by its code only (its text
+ * can quote row values), anything else by its message, without NUL bytes.
+ */
+function failureOf(error: unknown): string {
+  const code = typeof error === "object" && error !== null && "code" in error ? String(error.code) : undefined;
+  if (code && /^[0-9A-Z]{5}$/.test(code)) return `database error ${code}`;
+  const message = error instanceof Error ? error.message : String(error);
+  return message.replaceAll("\0", "").slice(0, 500) || "failed";
+}
+
 /** 30 s, 1 min, 2 min… up to an hour. */
 const backoff = (attempts: number) => Math.min(30_000 * 2 ** (attempts - 1), 3_600_000);
 
@@ -50,43 +61,58 @@ export async function processOutbox(db: Db, options: ProcessOutboxOptions = {}):
   const { maxAttempts = 8, retryDelayMs = backoff, limit = 100 } = options;
   const run: OutboxRun = { processed: 0, failed: 0, dead: 0 };
 
+  type Result = "none" | "processed" | "failed" | "dead" | "gone";
+  const recordFailure = async (trx: Transaction<Database>, row: OutboxRow, error: unknown): Promise<Result> => {
+    const retryAfterMs = Math.round(retryDelayMs(row.attempts + 1));
+    const { rows } = await sql<{ outcome: "retry" | "dead" | "gone" }>`
+      select app.outbox_failed(${row.id}::uuid, ${failureOf(error)}, ${maxAttempts}, ${retryAfterMs}::integer) as outcome
+    `.execute(trx);
+    return rows[0]!.outcome === "retry" ? "failed" : rows[0]!.outcome;
+  };
+
   for (let i = 0; i < limit; i++) {
-    const taken = await db.transaction().execute(async (trx) => {
-      const { rows } = await sql<OutboxRow>`select * from app.take_outbox_row()`.execute(trx);
-      const row = rows[0];
-      if (!row) return false;
-      await sql`savepoint deliver`.execute(trx);
-      try {
-        const handler = handlers[row.kind];
-        if (!handler) throw new Error(`no handler for outbox kind ${row.kind}`);
-        await handler(trx, row);
-      } catch (error) {
-        await sql`rollback to savepoint deliver`.execute(trx);
-        const message = error instanceof Error ? error.message : String(error);
-        const retryAfterMs = Math.round(retryDelayMs(row.attempts + 1));
-        const { rows: outcome } = await sql<{ outcome: "retry" | "dead" }>`
-          select app.outbox_failed(${row.id}::uuid, ${message}, ${maxAttempts}, ${retryAfterMs}::integer) as outcome
-        `.execute(trx);
-        if (outcome[0]!.outcome === "dead") run.dead++;
-        else run.failed++;
-        return true;
-      }
-      await sql`release savepoint deliver`.execute(trx);
-      await sql`select app.outbox_processed(${row.id}::uuid)`.execute(trx);
-      run.processed++;
-      return true;
-    });
-    if (!taken) break;
+    let taken: OutboxRow | undefined;
+    let result: Result;
+    try {
+      // Counted once committed: "none" when nothing is due.
+      result = await db.transaction().execute(async (trx): Promise<Result> => {
+        const { rows } = await sql<OutboxRow>`select * from app.take_outbox_row()`.execute(trx);
+        const row = (taken = rows[0]);
+        if (!row) return "none";
+        await sql`savepoint deliver`.execute(trx);
+        try {
+          const handler = handlers[row.kind];
+          if (!handler) throw new Error(`no handler for outbox kind ${row.kind}`);
+          await handler(trx, row);
+        } catch (error) {
+          await sql`rollback to savepoint deliver`.execute(trx);
+          return recordFailure(trx, row, error);
+        }
+        await sql`release savepoint deliver`.execute(trx);
+        await sql`select app.outbox_processed(${row.id}::uuid)`.execute(trx);
+        return "processed";
+      });
+    } catch (error) {
+      // The row's whole transaction failed (even recording the failure): record it
+      // afresh, so it can't stay first in line and hold up every row behind it.
+      if (!taken) throw error;
+      const row = taken;
+      result = await db.transaction().execute((trx) => recordFailure(trx, row, error));
+    }
+    if (result === "none") break;
+    if (result !== "gone") run[result]++;
   }
   return run;
 }
 
 export interface OutboxStats {
+  /** Rows not processed, dead-lettered ones included. */
   readonly backlog: number;
+  /** Age of the oldest of them; 0 when there are none. */
   readonly oldestAgeSeconds: number;
 }
 
-/** Rows still to process and the age of the oldest (0 when none), for the worker's log. */
+/** Rows not processed and the age of the oldest (0 when none), for the worker's log and the outbox alarms. */
 export async function outboxStats(db: Db): Promise<OutboxStats> {
   const { rows } = await sql<{ backlog: number; oldest_age_seconds: number }>`
     select * from app.outbox_stats()

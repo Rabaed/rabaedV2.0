@@ -2,7 +2,8 @@ import type { Locale } from "@rabaed/domain";
 import { DocNo } from "@rabaed/ui";
 import { getFormatter, getTranslations, setRequestLocale } from "next-intl/server";
 import { MarkNotificationsRead } from "@/components/mark-notifications-read";
-import { Link, redirect } from "@/i18n/navigation";
+import { NotificationLink } from "@/components/notification-link";
+import { redirect } from "@/i18n/navigation";
 import { getMe, getNotifications } from "@/lib/session";
 
 /**
@@ -30,9 +31,9 @@ export default async function NotificationsPage({ params }: { params: Promise<{ 
           {list.notifications.map((n) => (
             <li key={n.id} className="flex items-start justify-between gap-4 py-3">
               <div className="space-y-1">
-                <Link href={`/work-items/${n.workItemId}`} className="font-medium text-primary underline underline-offset-4">
+                <NotificationLink id={n.id} href={`/work-items/${n.workItemId}`} unread={!n.readAt}>
                   {n.title}
-                </Link>
+                </NotificationLink>
                 <p className="text-sm text-muted">
                   {n.documentNumber && (
                     <>

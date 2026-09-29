@@ -1,3 +1,4 @@
+import type { OutboxStats } from "@rabaed/db";
 import { pino, type DestinationStream, type Logger } from "pino";
 
 // The worker's log: JSON lines, like the api's, kept by CloudWatch in dev.
@@ -7,13 +8,6 @@ import { pino, type DestinationStream, type Logger } from "pino";
 /** `stream` is for tests (stdout otherwise). */
 export function createLogger(stream?: DestinationStream): Logger {
   return stream ? pino(stream) : pino();
-}
-
-export interface OutboxStats {
-  /** Rows not yet processed. */
-  readonly backlog: number;
-  /** Age of the oldest of them; 0 when there are none. */
-  readonly oldestAgeSeconds: number;
 }
 
 /**
