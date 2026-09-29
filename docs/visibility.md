@@ -60,6 +60,7 @@ Every one of these must apply the same layers. A new feature that adds a channel
 | Document Numbers | Numbering patterns that include a Company segment give each Company its own counter, so sequence gaps don't reveal a competitor's volume. |
 | Errors and logs shown to users | Never include another item's title, number or Company. |
 | Refusals of a Transition | Never say why another Participant can't take the next Step (no Participant covers the item, several do, or nobody there holds the Position): one answer for all, so its Visibility and Positions stay its own (V14, V16). |
+| Visibility Gap warnings | A Project Admin's warnings come from Participant grants only; an Authorized Person's cover only their own Participant's Members (V16). |
 | Rabaed Admin | A separate role, with `admin_action` logged on every read of customer data. |
 
 ## Scenario matrix (becomes the automated visibility test suite)
@@ -94,11 +95,13 @@ Setup, Project "Tower": Contractors **C1** (Electrical) and **C2** (Electrical, 
 | 24 | Project Admin narrows K1 from Tower 1 to Building A | K1 engineer who had Tower 1 | Now covers Building A only; widening K1 again doesn't widen them (V4) |
 | 25 | C1 member opens K1's Visibility, or a K1 engineer's | C1 member | 404 (V16) |
 | 26 | Project Admin (C1 Company) opens a K1 engineer's Visibility | Project Admin | 404; K1's own Participant grant is visible to them (V16) |
-| 27 | K1's Authorized Person, not a Project Member, narrows a K1 engineer | K1 Authorized Person | Sees only the Trades and Locations K1 covers, nothing else of the Project (V15, V16) |
+| 27 | K1's Authorized Person, not a Project Member, narrows a K1 engineer | K1 Authorized Person | Sees only the Trades and Locations K1 covers, with the names of the Locations above them; nothing else of the Project (V15, V16) |
 | 28 | C1 member opens the Project's Participants | C1 member (not a Project Admin) | Sees C1's own Participant, its Project Role and Project Members, and the Host Company's name. C2, K1 and OR are not listed (V15) |
 | 29 | Project Admin opens the Project's Participants | Project Admin | Every Participant is listed (V15) |
 | 30 | K1 invited to the Project, not yet accepted | C1 member; K1 Authorized Person | C1 doesn't see K1 anywhere. K1's Authorized Person sees only the invitation: Project name, Host Company, offered Project Role (V15, ADR 0009) |
 | 31 | Project Admin enters a CR number that isn't on Rabaed | Project Admin | Same answer as for a Company that is on Rabaed; nothing reveals whether it exists (ADR 0009) |
+| 32 | K1 covers Mechanical, but none of K1's engineers is granted Mechanical | Project Admin (C1 Company) | No Visibility Gap warning, since K1 covers Mechanical. Nothing shows how K1 split its coverage among its engineers (V16) |
+| 33 | Same | K1 Authorized Person | Warned that no K1 Project Member covers Mechanical. Other Participants' Members never count towards it (V16) |
 
 Every change to rules or channels must add or update rows here and in the test suite. A failing visibility test blocks release.
 
@@ -116,4 +119,5 @@ Every change to rules or channels must add or update rows here and in the test s
   - A Participant never sees the list of other Participants: not other Contractors, nor the Consultants, Owners or Owner Representatives. Another Company's name appears only as the Host Company, and on Work Items the viewer can access, where the item is "With" that Company (V14). Never its Project Members.
   - Project Admins see every Participant, because they add and manage them.
   - A Company invited to a Project sees only the invitation (Project name, Host Company, offered Project Role) until its Authorized Person accepts it; declined or pending invitations are never shown to other Participants ([ADR 0009](adr/0009-participant-invitation-with-consent.md)).
-- **V16. Visibility grants (RP-191).** A Participant's Visibility grant is seen by its own Company and by the Project's Project Admins, who set it. A Project Member's grant is seen only by their own Company, and set only by its Authorized Person, within the Participant's (V4). The Authorized Person also sees the Trades and Locations their Participant covers, so they can narrow it for their Members before they are a Project Member themselves (an addition to V15). Every Project Member sees the Project's Trades and Locations.
+- **V16. Visibility grants (settled 2026-09-29, RP-220; introduced in RP-191).** A Participant's Visibility grant is seen by its own Company and by the Project's Project Admins, who set it. A Project Member's grant is seen only by their own Company, and set only by its Authorized Person, within the Participant's (V4). The Authorized Person also sees the Trades and Locations their Participant covers, with the names of the Locations above them so each one reads in place (Tower 1 › Building A), so they can narrow it for their Members before they are a Project Member themselves (an addition to V15). Nothing else of the Project's Trades and Locations reaches them until they are a Project Member. Every Project Member sees the Project's Trades and Locations.
+  - **Visibility Gap warnings follow the same line.** Project Admins are warned only about values no active Participant covers, worked out from Participant grants alone, so a warning never shows how another Company splits its coverage among its Members. Each Authorized Person is warned, for their own Participant only, about values it covers that none of its Project Members do.

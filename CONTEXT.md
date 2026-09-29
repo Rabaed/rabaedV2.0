@@ -91,7 +91,7 @@ A place in the Project's physical breakdown, such as a Zone, Building, Villa or 
 _Avoid_: Area, WBS
 
 **Visibility**:
-The values of each Visibility Dimension a Participant or a Member covers on a Project, each either "all" or a chosen list; a Work Item is visible only if all its values are covered. A Member never covers more than their Company does. A value that nobody covers is a Visibility Gap, which Project Settings warns about.
+The values of each Visibility Dimension a Participant or a Member covers on a Project, each either "all" or a chosen list; a Work Item is visible only if all its values are covered. A Member never covers more than their Company does. A value that no active Participant covers is a Visibility Gap, which Project Settings warns Project Admins about. Each Authorized Person is also warned about values their Participant covers that none of its Project Members do.
 _Avoid_: Scope, access, coverage
 
 **Scope**:
