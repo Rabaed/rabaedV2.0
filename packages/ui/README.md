@@ -85,7 +85,7 @@ Every control sits in a `Field`, which gives it a label, optional help text, the
 | Component | Use for |
 |---|---|
 | `Dialog` | A focused task or confirmation over the page. Traps focus, closes on Escape, returns focus to its trigger. |
-| `Sheet` | A side panel (filters, details) from the inline-end side: right in English, left in Arabic. Same focus rules as Dialog. |
+| `Sheet` | A side panel (filters, details) from the inline-end side: right in English, left in Arabic; `side="start"` for navigation. Same focus rules as Dialog. |
 | `Popover` | A small non-modal panel anchored to a button, aligned to its start edge (mirrors in Arabic). Name it with `aria-label`. |
 | `Tooltip` | A short hint on hover or keyboard focus, read as the trigger's description. Never the only place information lives (touch screens have no hover). |
 | `ToastProvider` + `useToast()` | Brief feedback after an action, at the bottom inline-end corner. Announced politely, or at once for `tone: "danger"`. |
@@ -144,7 +144,7 @@ Every control sits in a `Field`, which gives it a label, optional help text, the
 - **Alignment**: `align="end"` for numbers, so they line up with tabular digits; columns and alignment mirror in Arabic.
 - **Tabs**: name the list (`<TabsList aria-label={t("project")}>`); a trigger takes an `icon` and a `count` (pass it formatted with `formatNumber`).
 
-The package has no translations of its own: pass every label (`closeLabel`, the toast region `label`, …) from the app's messages. The one exception is the fixed product wording of the status components below (Review Code meanings, "N weeks at this step"), which take a `locale` instead, so no module can word them differently. Copy never uses deadline language: the story tests check story copy, and the `json-no-deadline-words` lint rule checks the app's messages.
+The package has no translations of its own: pass every label (`closeLabel`, the toast region `label`, …) from the app's messages. The exceptions are the fixed product wording of the status components below (Review Code meanings, "N weeks at this step"), which take a `locale` instead, so no module can word them differently, and the language names in `MemberMenu`, each written in its own language ("English", "العربية"). Copy never uses deadline language: the story tests check story copy, and the `json-no-deadline-words` lint rule checks the app's messages.
 
 ## Status
 
@@ -156,6 +156,7 @@ The components that carry Rabaed's product rules, so every module shows status t
 | `CodeBadge` | A Review Code: `code` (`a`–`d`), `locale`, `size` (`sm`, `md`), `variant` (`full`, or `letter` with the meaning for screen readers only) | Icon + colour + text, never colour alone. B always has the comment icon. |
 | `AgeDots` | Step Age: `weeks` (the week at the current Step, from 1), `locale` | 1–4 dots (4+), grey turning red, named "N weeks at this step". Age only: it takes nothing but weeks. |
 | `WithChip` | Who holds the Step: `kind` (`person`, `company`), `name`, `photoSrc`, `companyName`, `logoSrc`, `inViewerCompany` | Visibility V14: when `inViewerCompany` is false it shows the company name only, whatever else is passed. |
+| `WorkItemCard` | A Work Item on a Kanban board: `number`, `rev`, `title`, `trade`, `location`, then `state`: `{ open: true, holder, stepAgeWeeks }` or `{ open: false, code }` (a closed item shows its Issued Code, never a holder or Step Age), optional `photoSrc`; `density` (`comfortable`, `compact`); `href` (a link, with `linkAs={Link}` for Next.js) or `onClick` (a button) | One card on every board. Closed items with an Inspection Result, or Cancelled ones, will need their own outcome here when those Modules come. One focus target, named by its number and title only; the rest is its description. The holder goes through `WithChip`, so another company shows as its name only. |
 
 ```tsx
 <StagePill stage="internal" label={stage.name[locale]} count={12} locale={locale} />
@@ -166,6 +167,36 @@ The components that carry Rabaed's product rules, so every module shows status t
 
 - `AgeDots` takes Step Age as CONTEXT.md defines it: **1 in the first week** at the Step, 2 in the second, and so on (`stepAgeWeeks` in `@rabaed/domain`). The dots come from the domain's `stepAgeDots`; `stepAgeLabel` gives the same words for places that aren't a component (an email, a report).
 - `WithChip` is the last line of defence, not the first: the API should still never send another company's person to the browser (V14), since props of a client component travel in the page payload.
+
+## Shell
+
+Every page sits in the same layout, in English and Arabic, on desktop and phone. Presentational only: the app passes the navigation targets, labels and data.
+
+| Component | Use for |
+|---|---|
+| `AppShell` | The page layout: `Sidebar` on the inline-start side (the right in Arabic), `TopBar` and the page beside it. Below `md` the sidebar becomes a `Sheet` from the start side, opened by a menu button in the top bar; choosing a page closes it. |
+| `Sidebar` / `SidebarNav` | The main navigation: sections of items (`key`, `label`, `icon`, `href`, optional `count`), the `current` one marked `aria-current="page"`. Collapses to icons with a button (mouse or keyboard); collapsed, each item shows its name in a tooltip and each section stays a named group. `brandCollapsed` (e.g. the logo mark) shows when collapsed; `defaultCollapsed` and `onCollapsedChange` let the app remember the choice. |
+| `TopBar` | The banner landmark, with slots for `search`, `notifications` and `member`. |
+| `MemberMenu` | The signed-in Member's avatar and name, opening a menu with the language switch (each language named in itself, the current one pressed) and any extra items, e.g. Sign out. |
+| `PageHeader` | A page's one `h1`, with an optional `eyebrow`, `description`, `actions` and `tabs`. |
+| `ProjectTabs` | A Project's tabs, always in the agreed order (`projectTabKeys`): Dashboard · Submittals · Inspections · Snag List · Site Reports · Drawings · Files · Views · Schedule · Settings. Page navigation, so links in a named `nav` (not ARIA tabs). Schedule isn't built yet: greyed out, `aria-disabled`, described by `comingSoonLabel`. They scroll sideways on a phone. |
+
+```tsx
+<AppShell
+  sidebar={{ brand: "Rabaed", label: t("main"), sections, current: "projects", collapseLabel: t("collapse"), expandLabel: t("expand"), linkAs: Link }}
+  topBar={{ search: <SearchButton />, notifications: <NotificationsButton />, member: <MemberMenu … /> }}
+  menuLabel={t("menu")}
+  closeLabel={t("close")}
+>
+  <PageHeader
+    title={project.name}
+    tabs={<ProjectTabs label={t("project")} labels={tabLabels} href={(key) => `/projects/${project.id}/${key}`} current="submittals" comingSoonLabel={t("comingSoon")} linkAs={Link} />}
+  />
+  …
+</AppShell>
+```
+
+The sidebar uses the light variant of the design (surface and brand tint); a dark sidebar would need its own theme roles first.
 
 ## Storybook and story tests
 
