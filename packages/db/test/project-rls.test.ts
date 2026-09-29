@@ -70,9 +70,9 @@ beforeAll(async () => {
   await fillProject(ids.projectB, ids.creatorB);
 });
 
-/** Runs `query` as `memberId` and returns its only row's `outcome`. */
-const outcome = (memberId: string, query: ReturnType<typeof sql<{ outcome: string }>>) =>
-  withMember(app, memberId, (trx) => query.execute(trx)).then((r) => r.rows[0]!.outcome);
+/** Runs `query` as `memberId` and returns its first row. */
+const firstRowAs = <T extends object>(memberId: string, query: ReturnType<typeof sql<T>>) =>
+  withMember(app, memberId, (trx) => query.execute(trx)).then((r) => r.rows[0]!);
 
 /**
  * Gives the Project a row in every Project table: through the app's functions,
@@ -82,56 +82,53 @@ const outcome = (memberId: string, query: ReturnType<typeof sql<{ outcome: strin
  */
 async function fillProject(projectId: string, creator: string) {
   const participantId = await one("select id from participant where project_id = $1", [projectId]);
+  const expectOutcome = async (query: ReturnType<typeof sql<{ outcome: string }>>, expected: string) =>
+    expect((await firstRowAs(creator, query)).outcome).toBe(expected);
   const value = (kind: string, code: string) =>
-    withMember(app, creator, (trx) =>
+    firstRowAs(
+      creator,
       sql<{ value_id: string }>`
         select value_id from app.add_dimension_value(${projectId}::uuid, ${kind}, null, ${code}, '{"en": "V", "ar": "ق"}'::jsonb)
-      `.execute(trx),
-    ).then((r) => r.rows[0]!.value_id);
+      `,
+    ).then((r) => r.value_id);
   const values = { trade: await value("trade", "EL"), location: await value("location", "BA") };
 
   // Value lists rather than "all", so visibility_grant_value gets rows too.
   for (const [kind, id] of Object.entries(values)) {
-    expect(
-      await outcome(
-        creator,
-        sql`select app.set_participant_visibility(${participantId}::uuid, ${kind}, false, ${[id]}::uuid[], now()) as outcome`,
-      ),
-    ).toBe("set");
-    expect(
-      await outcome(
-        creator,
-        sql`select app.set_member_visibility(${participantId}::uuid, ${creator}::uuid, ${kind}, false, ${[id]}::uuid[], now()) as outcome`,
-      ),
-    ).toBe("set");
+    await expectOutcome(
+      sql`select app.set_participant_visibility(${participantId}::uuid, ${kind}, false, ${[id]}::uuid[], now()) as outcome`,
+      "set",
+    );
+    await expectOutcome(
+      sql`select app.set_member_visibility(${participantId}::uuid, ${creator}::uuid, ${kind}, false, ${[id]}::uuid[], now()) as outcome`,
+      "set",
+    );
   }
-  expect(
-    await outcome(
-      creator,
-      sql`select app.set_project_member_positions(${participantId}::uuid, ${creator}::uuid, ${["engineer", "project_manager"]}::text[]) as outcome`,
-    ),
-  ).toBe("set");
+  await expectOutcome(
+    sql`select app.set_project_member_positions(${participantId}::uuid, ${creator}::uuid, ${["engineer", "project_manager"]}::text[]) as outcome`,
+    "set",
+  );
 
-  const created = await withMember(app, creator, (trx) =>
+  const created = await firstRowAs(
+    creator,
     sql<{ outcome: string; work_item_id: string }>`
       select outcome, work_item_id from app.create_work_item(
         ${projectId}::uuid, 'MAR', 'Cable trays', 'Galvanised', ${values.trade}::uuid, ${values.location}::uuid, now())
-    `.execute(trx),
-  ).then((r) => r.rows[0]!);
+    `,
+  );
   expect(created.outcome).toBe("created");
   const item = created.work_item_id;
-  // Numbers the item, keeps the idempotency key and queues a notification to the review pool.
-  expect(
-    await outcome(
-      creator,
-      sql`select app.take_transition(${item}::uuid, 'send_for_review', '', ${randomUUID()}::uuid, now()) as outcome`,
-    ),
-  ).toBe("applied");
+  // Numbers the item, keeps the idempotency key and queues a notification to the Step Pool.
+  await expectOutcome(
+    sql`select app.take_transition(${item}::uuid, 'send_for_review', '', ${randomUUID()}::uuid, now()) as outcome`,
+    "applied",
+  );
 
   await migrator.query(
     `insert into notification (member_id, project_id, work_item_id, outbox_id, kind, step_id)
      select $1, w.project_id, w.id, o.id, 'step_reached', w.current_step_id
-     from work_item w join outbox o on o.project_id = w.project_id where w.id = $2`,
+     from work_item w join outbox o on o.project_id = w.project_id where w.id = $2
+     limit 1`,
     [creator, item],
   );
   const name = JSON.stringify({ en: "Own", ar: "خاص" });
@@ -182,7 +179,8 @@ async function projectsSeen(trx: Db, { table, column }: { table: string; column:
 }
 
 // Written and read only through SECURITY DEFINER functions: with no read policy,
-// no Member sees any of their rows.
+// no Member sees any of their rows. Kept by hand on purpose: a new Project table
+// is expected readable by its own Project until it is added here.
 const unreadable = ["command_idempotency", "numbering_counter", "outbox"];
 
 describe("every Project table", () => {
@@ -202,7 +200,7 @@ describe("every Project table", () => {
     }
   });
 
-  it("shows a Member of each Project exactly that Project's rows", async () => {
+  it("shows a Member of each Project exactly that Project's rows, or none where no Member reads", async () => {
     for (const t of await projectTables()) {
       for (const [who, project] of [
         [ids.creatorA, ids.projectA],
