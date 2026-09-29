@@ -141,7 +141,7 @@ describe("a Participant's Visibility", () => {
   // RP-233: anyone but a Project Admin gets exactly the answer a made-up id
   // gets, so it never learns that another Company is a Participant (404, never
   // 403; V15, V16). That includes the Participant's own Company.
-  it("is granted only by a Project Admin, and anyone else can't tell a real Participant from a made-up id", async () => {
+  it("is granted only by a Project Admin", async () => {
     const body = { trade: all, location: all };
     for (const [who, caller] of [
       ["host member (not a Project Admin)", hostMember.caller],
