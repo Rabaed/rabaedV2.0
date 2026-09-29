@@ -25,16 +25,11 @@ export type DocNoProps = Omit<ComponentProps<"bdi">, "children" | "dir" | "rev">
  * With a revision, the number and its revision are one unit isolated in the
  * locale's direction, so the revision follows the number in reading order.
  */
-export function DocNo({ value, rev, locale, className, ...props }: DocNoProps) {
+// The types require `locale` with `rev`; the default only keeps an untyped caller's revision visible.
+export function DocNo({ value, rev, locale = "en", className, ...props }: DocNoProps) {
   const classes = cn("whitespace-nowrap font-medium tabular-nums", className);
   // Browser translation would mangle an identifier.
-  const number = (
-    <bdi dir="ltr" translate="no">
-      {value}
-    </bdi>
-  );
-  // The types require `locale` with `rev`.
-  if (rev === undefined || locale === undefined) {
+  if (rev === undefined) {
     return (
       <bdi dir="ltr" translate="no" className={classes} {...props}>
         {value}
@@ -43,7 +38,10 @@ export function DocNo({ value, rev, locale, className, ...props }: DocNoProps) {
   }
   return (
     <bdi dir={directionOf(locale)} className={classes} {...props}>
-      {number} {revisionWord[locale]} {rev}
+      <bdi dir="ltr" translate="no">
+        {value}
+      </bdi>{" "}
+      {revisionWord[locale]} {rev}
     </bdi>
   );
 }

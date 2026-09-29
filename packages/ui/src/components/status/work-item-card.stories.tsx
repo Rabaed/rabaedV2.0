@@ -164,12 +164,12 @@ export const LongTitle: Story = {
     const title = card.querySelector<HTMLElement>("[data-title]")!;
     await expect(title.scrollHeight).toBeGreaterThan(title.clientHeight);
     await expect(getComputedStyle(title).direction).toBe(storyLocale(context) === "ar" ? "rtl" : "ltr");
-    const docNo = within(card).getByText(number);
-    await expect(getComputedStyle(docNo).direction).toBe("ltr");
-    await expect(docNo.parentElement).toHaveTextContent(numberWithRev(context, 12));
+    const docNumber = within(card).getByText(number);
+    await expect(getComputedStyle(docNumber).direction).toBe("ltr");
+    await expect(docNumber.parentElement).toHaveTextContent(numberWithRev(context, 12));
     // The number starts at the card's start edge.
     const box = card.getBoundingClientRect();
-    const num = docNo.getBoundingClientRect();
+    const num = docNumber.getBoundingClientRect();
     const rtl = storyLocale(context) === "ar";
     await expect(rtl ? box.right - num.right : num.left - box.left).toBeLessThan(24);
   },

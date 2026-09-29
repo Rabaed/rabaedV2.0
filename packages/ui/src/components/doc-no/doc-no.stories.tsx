@@ -55,15 +55,15 @@ export const WithRevision: Story = {
     const ar = storyLocale(context) === "ar";
     await expectDocNoLeftToRight(context, "TWR-SUB-0000123");
     const number = context.canvas.getByText("TWR-SUB-0000123");
-    const whole = number.parentElement!;
-    await expect(whole.textContent).toBe(ar ? "TWR-SUB-0000123 مراجعة 2" : "TWR-SUB-0000123 Rev 2");
+    const docNo = number.parentElement!;
+    await expect(docNo.textContent).toBe(ar ? "TWR-SUB-0000123 مراجعة 2" : "TWR-SUB-0000123 Rev 2");
     // The number and its revision are one unit, isolated in the page's direction.
-    await expect(getComputedStyle(whole).unicodeBidi).toBe("isolate");
-    await expect(getComputedStyle(whole).direction).toBe(ar ? "rtl" : "ltr");
+    await expect(getComputedStyle(docNo).unicodeBidi).toBe("isolate");
+    await expect(getComputedStyle(docNo).direction).toBe(ar ? "rtl" : "ltr");
     // The revision comes after the number in reading order.
     const revision = document.createRange();
     revision.setStartAfter(number);
-    revision.setEndAfter(whole.lastChild!);
+    revision.setEndAfter(docNo.lastChild!);
     const numberBox = number.getBoundingClientRect();
     const revisionBox = revision.getBoundingClientRect();
     if (ar) await expect(revisionBox.right).toBeLessThanOrEqual(numberBox.left);
