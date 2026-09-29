@@ -179,11 +179,16 @@ describe("a Participant's Visibility", () => {
     expect(await myVisibility(consultant.member, "trade")).toEqual([]);
   });
 
-  it("is set only by a Project Admin", async () => {
-    await expect(setParticipantVisibility(host.member, consultantParticipant, "trade", true, [])).rejects.toThrow(
-      /only a Project Admin/,
-    );
-    expect(await setParticipantVisibility(consultant.ap, consultantParticipant, "trade", true, [])).toBe("not_found");
+  // RP-233: anyone but a Project Admin gets the answer a made-up id gets, so
+  // it never learns that a Participant exists (404, never 403; V15, V16).
+  it("is set only by a Project Admin, and answers anyone else as if the Participant didn't exist", async () => {
+    for (const as of [host.member, consultant.ap, consultant.member]) {
+      for (const participant of [consultantParticipant, hostParticipant, randomUUID()]) {
+        expect(await setParticipantVisibility(as, participant, "trade", true, []), `${as} → ${participant}`).toBe(
+          "not_found",
+        );
+      }
+    }
   });
 
   it("rejects a value from another dimension or Project", async () => {

@@ -30,7 +30,9 @@ const created = z.object({ id: z.uuid() });
 // Member sees the Trades and Locations; only a Project Admin changes them and
 // grants each Participant Visibility; only a Participant's Authorized Person
 // narrows it for its Project Members, whose grants only its own Company sees.
-// A Visibility is saved whole, every dimension at once, or not at all.
+// A Visibility is saved whole, every dimension at once, or not at all. Setting
+// a Participant's answers anyone but a Project Admin with a 404, exactly like a
+// made-up id, so it never reveals that a Participant exists (RP-233).
 export const visibilityRoutes =
   (ctx: AppContext): FastifyPluginAsyncZod =>
   async (app) => {

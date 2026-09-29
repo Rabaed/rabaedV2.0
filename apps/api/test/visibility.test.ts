@@ -138,11 +138,24 @@ describe("a Participant's Visibility", () => {
     expect(mine.trade).toEqual([]);
   });
 
-  it("is granted only by a Project Admin", async () => {
+  // RP-233: anyone but a Project Admin gets exactly the answer a made-up id
+  // gets, so it never learns that another Company is a Participant (404, never
+  // 403; V15, V16). That includes the Participant's own Company.
+  it("is granted only by a Project Admin, and anyone else can't tell a real Participant from a made-up id", async () => {
     const body = { trade: all, location: all };
-    expect((await setParticipantVisibility(hostMember.caller, consultantParticipantId, body)).statusCode).toBe(403);
-    expect((await setParticipantVisibility(consultant.caller, consultantParticipantId, body)).statusCode).toBe(404);
-    expect((await setParticipantVisibility(engineer.caller, consultantParticipantId, body)).statusCode).toBe(403);
+    for (const [who, caller] of [
+      ["host member (not a Project Admin)", hostMember.caller],
+      ["consultant's Authorized Person", consultant.caller],
+      ["consultant engineer", engineer.caller],
+    ] as const) {
+      for (const participantId of [consultantParticipantId, hostParticipantId, randomUUID()]) {
+        const res = await setParticipantVisibility(caller, participantId, body);
+        expect({ status: res.statusCode, body: res.json() }, `${who} → ${participantId}`).toEqual({
+          status: 404,
+          body: { error: "not_found" },
+        });
+      }
+    }
   });
 
   it("rejects values that aren't the dimension's, and then saves nothing", async () => {
