@@ -154,17 +154,17 @@ The components that carry Rabaed's product rules, so every module shows status t
 |---|---|---|
 | `StagePill` | A Stage: `stage` (the colour category, one of `stageKeys`), its `label`, optional `count` (formatted for `locale`) | One colour per default Stage in every module; the name carries the meaning. |
 | `CodeBadge` | A Review Code: `code` (`a`–`d`), `locale`, `size` (`sm`, `md`), `variant` (`full`, or `letter` with the meaning for screen readers only) | Icon + colour + text, never colour alone. B always has the comment icon. |
-| `AgeDots` | Step Age: `weeks` (whole weeks at the current Step), `locale` | 0–4 dots (4+), grey turning red, named "N weeks at this step". Age only: it takes nothing but weeks. |
+| `AgeDots` | Step Age: `weeks` (the week at the current Step, from 1), `locale` | 1–4 dots (4+), grey turning red, named "N weeks at this step". Age only: it takes nothing but weeks. |
 | `WithChip` | Who holds the Step: `kind` (`person`, `company`), `name`, `photoSrc`, `companyName`, `logoSrc`, `inViewerCompany` | Visibility V14: when `inViewerCompany` is false it shows the company name only, whatever else is passed. |
 
 ```tsx
 <StagePill stage="internal" label={stage.name[locale]} count={12} locale={locale} />
 <CodeBadge code="b" locale={locale} />
-<AgeDots weeks={weeksAtStep} locale={locale} />
+<AgeDots weeks={item.stepAgeWeeks} locale={locale} />
 <WithChip kind="person" name={holder.name} companyName={holder.companyName} inViewerCompany={holder.companyId === viewer.companyId} />
 ```
 
-- `AgeDots` takes **whole weeks elapsed** at the Step (0 in the first week). `ageDotCount` and `stepAgeLabel` give the same dots and words for places that aren't a component (an email, a report).
+- `AgeDots` takes Step Age as CONTEXT.md defines it: **1 in the first week** at the Step, 2 in the second, and so on (`stepAgeWeeks` in `@rabaed/domain`). The dots come from the domain's `stepAgeDots`; `stepAgeLabel` gives the same words for places that aren't a component (an email, a report).
 - `WithChip` is the last line of defence, not the first: the API should still never send another company's person to the browser (V14), since props of a client component travel in the page payload.
 
 ## Storybook and story tests
