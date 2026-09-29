@@ -156,6 +156,7 @@ The components that carry Rabaed's product rules, so every module shows status t
 | `CodeBadge` | A Review Code: `code` (`a`–`d`), `locale`, `size` (`sm`, `md`), `variant` (`full`, or `letter` with the meaning for screen readers only) | Icon + colour + text, never colour alone. B always has the comment icon. |
 | `AgeDots` | Step Age: `weeks` (the week at the current Step, from 1), `locale` | 1–4 dots (4+), grey turning red, named "N weeks at this step". Age only: it takes nothing but weeks. |
 | `WithChip` | Who holds the Step: `kind` (`person`, `company`), `name`, `photoSrc`, `companyName`, `logoSrc`, `inViewerCompany` | Visibility V14: when `inViewerCompany` is false it shows the company name only, whatever else is passed. |
+| `WorkItemCard` | A Work Item on a Kanban board: `number`, `rev`, `title`, `trade`, `location`, then `state`: `{ open: true, holder, stepAgeWeeks }` or `{ open: false, code }` (a closed item shows its Issued Code, never a holder or Step Age), optional `photoSrc`; `density` (`comfortable`, `compact`); `href` (a link, with `linkAs={Link}` for Next.js) or `onClick` (a button) | One card on every board. Closed items with an Inspection Result, or Cancelled ones, will need their own outcome here when those Modules come. One focus target, named by its number and title only; the rest is its description. The holder goes through `WithChip`, so another company shows as its name only. |
 
 ```tsx
 <StagePill stage="internal" label={stage.name[locale]} count={12} locale={locale} />
