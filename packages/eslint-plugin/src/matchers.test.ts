@@ -79,7 +79,7 @@ describe("deadlineWord", () => {
 });
 
 describe("deadlineWordInCopy", () => {
-  it.each(["Overdue", "Due date: 3 Oct", "Due 3 Oct", "Payment due", "3 days late", "Late", "SLA breached", "متأخر"])("flags %s", (text) => {
+  it.each(["Overdue", "Due date: 3 Oct", "Due 3 Oct", "Payment due", "3 days late", "Late", "SLA breached", "Sla breached", "within sla", "متأخر"])("flags %s", (text) => {
     expect(deadlineWordInCopy(text)).not.toBeNull();
   });
 
