@@ -1,11 +1,9 @@
 "use client";
 
 import { baseRoles } from "@rabaed/domain";
-import { Button } from "@rabaed/ui";
+import { Button, Field, Input, Select } from "@rabaed/ui";
 import { useTranslations } from "next-intl";
 import { useState, type FormEvent } from "react";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { useRouter } from "@/i18n/navigation";
 
 /**
@@ -54,25 +52,12 @@ export function AddParticipantForm({ projectId }: { projectId: string }) {
 
   return (
     <form onSubmit={onSubmit} className="grid gap-4 rounded-md border border-border p-4 sm:grid-cols-3" noValidate>
-      <div className="space-y-2">
-        <Label htmlFor="participant-cr">{t("crNumber")}</Label>
-        <Input id="participant-cr" name="crNumber" dir="ltr" inputMode="numeric" required maxLength={10} />
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor="participant-role">{t("role")}</Label>
-        <select
-          id="participant-role"
-          name="role"
-          defaultValue="consultant"
-          className="h-9 w-full rounded-sm border border-border bg-surface px-3 text-sm"
-        >
-          {baseRoles.map((role) => (
-            <option key={role} value={role}>
-              {tRoles(role)}
-            </option>
-          ))}
-        </select>
-      </div>
+      <Field label={t("crNumber")} id="participant-cr" required>
+        <Input name="crNumber" dir="ltr" inputMode="numeric" maxLength={10} />
+      </Field>
+      <Field label={t("role")} id="participant-role">
+        <Select name="role" defaultValue="consultant" options={baseRoles.map((role) => ({ value: role, label: tRoles(role) }))} />
+      </Field>
       <div className="flex items-end">
         <Button type="submit" disabled={pending}>
           {t("invite")}

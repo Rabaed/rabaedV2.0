@@ -1,9 +1,8 @@
 "use client";
 
-import { Button } from "@rabaed/ui";
+import { Button, Checkbox, Field, Select } from "@rabaed/ui";
 import { useTranslations } from "next-intl";
 import { useState, type FormEvent } from "react";
-import { Label } from "@/components/ui/label";
 import { Link, useRouter } from "@/i18n/navigation";
 
 type Person = { id: string; name: string };
@@ -83,16 +82,12 @@ export function ProjectMembersEditor({
                   <fieldset className="flex flex-wrap gap-4 text-sm">
                     <legend className="sr-only">{t("positions")}</legend>
                     {positions.map((p) => (
-                      <label key={p.key} className="flex items-center gap-2">
-                        <input
-                          type="checkbox"
-                          className="size-4 accent-primary"
+                      <Field key={p.key} label={p.name} layout="inline" disabled={pending}>
+                        <Checkbox
                           checked={m.positions.includes(p.key)}
-                          disabled={pending}
-                          onChange={(e) => togglePosition(m, p.key, e.target.checked)}
+                          onCheckedChange={(checked) => togglePosition(m, p.key, checked === true)}
                         />
-                        {p.name}
-                      </label>
+                      </Field>
                     ))}
                   </fieldset>
                 ) : (
@@ -124,20 +119,15 @@ export function ProjectMembersEditor({
 
       {canManage && candidates.length > 0 && (
         <form onSubmit={onAdd} className="flex flex-wrap items-end gap-4">
-          <div className="min-w-60 flex-1 space-y-2">
-            <Label htmlFor="project-member">{t("addMember")}</Label>
-            <select
-              id="project-member"
+          <Field label={t("addMember")} id="project-member" className="min-w-60 flex-1">
+            {/* Keyed by the candidates, so it starts again on the first one after an add. */}
+            <Select
+              key={candidates.map((c) => c.id).join()}
               name="memberId"
-              className="h-9 w-full rounded-sm border border-border bg-surface px-3 text-sm"
-            >
-              {candidates.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-          </div>
+              defaultValue={candidates[0]?.id}
+              options={candidates.map((c) => ({ value: c.id, label: c.name }))}
+            />
+          </Field>
           <Button type="submit" disabled={pending}>
             {t("add")}
           </Button>

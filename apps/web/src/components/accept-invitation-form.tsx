@@ -3,9 +3,7 @@
 import { PASSWORD_MIN_LENGTH as MIN_PASSWORD } from "@rabaed/domain";
 import { useTranslations } from "next-intl";
 import { useEffect, useState, type FormEvent } from "react";
-import { Button } from "@rabaed/ui";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Button, Field, Input } from "@rabaed/ui";
 import { useRouter } from "@/i18n/navigation";
 
 /**
@@ -64,15 +62,12 @@ export function AcceptInvitationForm() {
 
   return (
     <form onSubmit={onSubmit} className="max-w-sm space-y-4" noValidate>
-      <p className="text-sm text-muted">{t("hint", { min: MIN_PASSWORD })}</p>
-      <div className="space-y-2">
-        <Label htmlFor="password">{t("password")}</Label>
-        <Input id="password" name="password" type="password" autoComplete="new-password" required minLength={MIN_PASSWORD} />
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor="confirm">{t("confirm")}</Label>
-        <Input id="confirm" name="confirm" type="password" autoComplete="new-password" required />
-      </div>
+      <Field label={t("password")} help={t("hint", { min: MIN_PASSWORD })} id="password" required>
+        <Input name="password" type="password" autoComplete="new-password" minLength={MIN_PASSWORD} />
+      </Field>
+      <Field label={t("confirm")} id="confirm" required>
+        <Input name="confirm" type="password" autoComplete="new-password" />
+      </Field>
       {error && (
         <p role="alert" className="text-sm text-danger">
           {error}

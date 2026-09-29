@@ -1,11 +1,10 @@
 import { isOpenStageCategory, type Locale } from "@rabaed/domain";
-import { DocNo, buttonVariants } from "@rabaed/ui";
+import { AgeDots, DocNo, StagePill, buttonVariants } from "@rabaed/ui";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
-import { AgeDots } from "@/components/age-dots";
-import { StagePill } from "@/components/stage-pill";
 import { Link, redirect } from "@/i18n/navigation";
 import { getMe, getProject, getWorkItems } from "@/lib/session";
+import { stageColour } from "@/lib/stage-colour";
 
 /**
  * A Project's Submittals, grouped by Stage. Only the items the Member can see
@@ -41,9 +40,8 @@ export default async function WorkItemsPage({ params }: { params: Promise<{ loca
 
       <ul className="flex flex-wrap gap-2" data-testid="stage-counts">
         {list.stages.map((s) => (
-          <li key={s.key} className="flex items-center gap-2 rounded-sm border border-border px-3 py-1 text-sm">
-            <StagePill stage={s} locale={locale} />
-            <span className="tabular-nums">{s.count}</span>
+          <li key={s.key}>
+            <StagePill stage={stageColour(s)} label={s.name[locale]} count={s.count} locale={locale} />
           </li>
         ))}
       </ul>
@@ -76,7 +74,7 @@ export default async function WorkItemsPage({ params }: { params: Promise<{ loca
                       </span>
                       {/* A closed item doesn't age. */}
                       {isOpenStageCategory(i.stage.category) ? (
-                        <AgeDots weeks={i.stepAgeWeeks} label={t("stepAge", { weeks: i.stepAgeWeeks, shown: String(i.stepAgeWeeks) })} />
+                        <AgeDots weeks={i.stepAgeWeeks} locale={locale} />
                       ) : null}
                     </li>
                   ))}

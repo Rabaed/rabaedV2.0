@@ -2,7 +2,7 @@
 
 import type { DimensionKind, DimensionValue, DimensionValues, Locale, Visibility } from "@rabaed/domain";
 import { dimensionKinds } from "@rabaed/domain";
-import { Button } from "@rabaed/ui";
+import { Button, Checkbox, Field } from "@rabaed/ui";
 import { useLocale, useTranslations } from "next-intl";
 import { useState } from "react";
 import { useRouter } from "@/i18n/navigation";
@@ -151,10 +151,9 @@ function DimensionFieldset({
   return (
     <fieldset className="space-y-2 rounded-md border border-border p-4" data-testid={`visibility-${kind}`}>
       <legend className="px-1 font-medium">{legend}</legend>
-      <label className="flex items-center gap-2">
-        <input type="checkbox" checked={draft.isAll} disabled={readOnly} onChange={(e) => onAll(e.target.checked)} />
-        <span className="font-medium">{allLabel}</span>
-      </label>
+      <Field label={allLabel} layout="inline" readOnly={readOnly}>
+        <Checkbox checked={draft.isAll} onCheckedChange={(checked) => onAll(checked === true)} />
+      </Field>
       {values.length === 0 ? (
         <p className="text-sm text-muted">{emptyText}</p>
       ) : (
@@ -163,21 +162,22 @@ function DimensionFieldset({
             const covered = draft.isAll || implied.has(v.id);
             return (
               <li key={v.id} style={{ paddingInlineStart: `${v.level * 1.5}rem` }}>
-                <label className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={covered || draft.selected.has(v.id)}
-                    disabled={readOnly || covered}
-                    onChange={() => onToggle(v.id)}
-                  />
-                  <span>
-                    {v.name[locale]}{" "}
-                    <bdi dir="ltr" className="text-sm text-muted">
-                      {v.code}
-                    </bdi>
-                    {v.levelName && <span className="text-sm text-muted"> · {v.levelName[locale]}</span>}
-                  </span>
-                </label>
+                <Field
+                  label={
+                    <>
+                      {v.name[locale]}{" "}
+                      <bdi dir="ltr" className="text-sm text-muted">
+                        {v.code}
+                      </bdi>
+                      {v.levelName && <span className="text-sm text-muted"> · {v.levelName[locale]}</span>}
+                    </>
+                  }
+                  layout="inline"
+                  readOnly={readOnly}
+                  disabled={!readOnly && covered}
+                >
+                  <Checkbox checked={covered || draft.selected.has(v.id)} onCheckedChange={() => onToggle(v.id)} />
+                </Field>
               </li>
             );
           })}
