@@ -9,6 +9,7 @@
   },
   "scripts": {
     "setup": "tsx --env-file-if-exists=../../.env src/setup.ts",
+    "reset": "tsx --env-file-if-exists=../../.env src/reset.ts",
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
