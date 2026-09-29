@@ -43,11 +43,32 @@ export const InASentence: Story = {
   },
 };
 
-/** With a revision: the Rev stays after the number, on its left-to-right side. */
+/**
+ * With a revision, worded in the page's language: "Rev 2" in English,
+ * "مراجعة 2" in Arabic. The number stays isolated and left to right; the
+ * revision follows it in reading order, so on its left in Arabic.
+ */
 export const WithRevision: Story = {
-  args: { value: "TWR-SUB-0000123", rev: 2 },
-  render: InASentence.render,
-  play: (context) => expectDocNoLeftToRight(context, "TWR-SUB-0000123 Rev 2"),
+  args: { value: "TWR-SUB-0000123", rev: 2, locale: "en" },
+  render: (args, context) => InASentence.render!({ ...args, locale: storyLocale(context) }, context),
+  play: async (context) => {
+    const ar = storyLocale(context) === "ar";
+    await expectDocNoLeftToRight(context, "TWR-SUB-0000123");
+    const number = context.canvas.getByText("TWR-SUB-0000123");
+    const docNo = number.parentElement!;
+    await expect(docNo.textContent).toBe(ar ? "TWR-SUB-0000123 مراجعة 2" : "TWR-SUB-0000123 Rev 2");
+    // The number and its revision are one unit, isolated in the page's direction.
+    await expect(getComputedStyle(docNo).unicodeBidi).toBe("isolate");
+    await expect(getComputedStyle(docNo).direction).toBe(ar ? "rtl" : "ltr");
+    // The revision comes after the number in reading order.
+    const revision = document.createRange();
+    revision.setStartAfter(number);
+    revision.setEndAfter(docNo.lastChild!);
+    const numberBox = number.getBoundingClientRect();
+    const revisionBox = revision.getBoundingClientRect();
+    if (ar) await expect(revisionBox.right).toBeLessThanOrEqual(numberBox.left);
+    else await expect(revisionBox.left).toBeGreaterThanOrEqual(numberBox.right);
+  },
 };
 
 /**

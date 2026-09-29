@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { expect, fn, userEvent } from "storybook/test";
+import { expect, fn, userEvent, within } from "storybook/test";
 import photo from "../../storybook/fixtures/site-photo.svg";
 import { expectTouchTarget, phone } from "../../storybook/form.ts";
 import { storyLocale, storyText } from "../../storybook/locale.ts";
@@ -21,6 +21,11 @@ const text = {
 const number = "TWR-TMC-EL-MAR-041";
 
 type Context = { globals: Record<string, unknown> };
+
+/** The number with its revision, as the card reads it: "… Rev 1" in English, "… مراجعة 1" in Arabic. */
+function numberWithRev(context: Context, rev: number) {
+  return `${number} ${storyText(context, { en: "Rev", ar: "مراجعة" })} ${rev}`;
+}
 
 /** An open item held by someone in the viewer's own Company. */
 function openItem(context: Context): Omit<WorkItemCardProps, "href" | "onClick"> {
@@ -67,7 +72,7 @@ type Story = StoryObj<typeof meta>;
 export const Open: Story = {
   render: (args, context) => <WorkItemCard {...args} {...openItem(context)} />,
   play: async (context) => {
-    const card = context.canvas.getByRole("link", { name: `${number} Rev 1 ${storyText(context, text.title)}` });
+    const card = context.canvas.getByRole("link", { name: `${numberWithRev(context, 1)} ${storyText(context, text.title)}` });
     await expect(context.canvas.getAllByRole("link")).toHaveLength(1);
     await expect(card).toHaveAccessibleDescription(new RegExp(storyText(context, text.person)));
     await userEvent.tab();
@@ -122,7 +127,7 @@ export const Closed: Story = {
 export const WithPhoto: Story = {
   render: (args, context) => <WorkItemCard {...args} {...openItem(context)} photoSrc={photo} />,
   play: async (context) => {
-    const card = context.canvas.getByRole("link", { name: `${number} Rev 1 ${storyText(context, text.title)}` });
+    const card = context.canvas.getByRole("link", { name: `${numberWithRev(context, 1)} ${storyText(context, text.title)}` });
     const img = card.querySelector("img")!;
     await expect(img).toHaveAttribute("alt", "");
   },
@@ -159,12 +164,12 @@ export const LongTitle: Story = {
     const title = card.querySelector<HTMLElement>("[data-title]")!;
     await expect(title.scrollHeight).toBeGreaterThan(title.clientHeight);
     await expect(getComputedStyle(title).direction).toBe(storyLocale(context) === "ar" ? "rtl" : "ltr");
-    const docNo = card.querySelector("bdi")!;
-    await expect(getComputedStyle(docNo).direction).toBe("ltr");
-    await expect(docNo).toHaveTextContent(`${number} Rev 12`);
+    const docNumber = within(card).getByText(number);
+    await expect(getComputedStyle(docNumber).direction).toBe("ltr");
+    await expect(docNumber.parentElement).toHaveTextContent(numberWithRev(context, 12));
     // The number starts at the card's start edge.
     const box = card.getBoundingClientRect();
-    const num = docNo.getBoundingClientRect();
+    const num = docNumber.getBoundingClientRect();
     const rtl = storyLocale(context) === "ar";
     await expect(rtl ? box.right - num.right : num.left - box.left).toBeLessThan(24);
   },
@@ -175,7 +180,7 @@ export const AsButton: Story = {
   args: { href: undefined, onClick: fn() },
   render: (args, context) => <WorkItemCard {...args} {...openItem(context)} />,
   play: async (context) => {
-    const card = context.canvas.getByRole("button", { name: `${number} Rev 1 ${storyText(context, text.title)}` });
+    const card = context.canvas.getByRole("button", { name: `${numberWithRev(context, 1)} ${storyText(context, text.title)}` });
     await userEvent.tab();
     await expect(card).toHaveFocus();
     await userEvent.keyboard("{Enter}");
