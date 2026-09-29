@@ -145,7 +145,7 @@ The outcome of an Inspection: Passed, Passed with Comments, or Failed. Each Work
 _Avoid_: Review Code, grade
 
 **Expected Frequency**:
-How often a Work Item Type, such as the Daily Site Report, must be issued. A missing one shows as a gap, triggers reminders, and is flagged when the next Weekly report is prepared, where it can be added late or ignored.
+How often a Work Item Type, such as the Daily Site Report, must be issued. A missing one shows as a gap, triggers reminders, and is flagged when the next Weekly report is prepared, where it can be added afterwards or ignored.
 _Avoid_: Recurrence, schedule
 
 **Site Report**:
