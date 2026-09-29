@@ -76,7 +76,7 @@ export default async function WorkItemsPage({ params }: { params: Promise<{ loca
                       </span>
                       {/* A closed item doesn't age. */}
                       {isOpenStageCategory(i.stage.category) ? (
-                        <AgeDots weeks={i.stepAgeWeeks} label={t("stepAge", { weeks: i.stepAgeWeeks })} />
+                        <AgeDots weeks={i.stepAgeWeeks} label={t("stepAge", { weeks: i.stepAgeWeeks, shown: String(i.stepAgeWeeks) })} />
                       ) : null}
                     </li>
                   ))}

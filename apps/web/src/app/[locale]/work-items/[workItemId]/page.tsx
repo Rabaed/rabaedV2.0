@@ -30,8 +30,8 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
           {/* Step Age only while it waits at a Step; a closed item doesn't age. */}
           {isOpenStageCategory(item.stage.category) && (
             <>
-              <AgeDots weeks={item.stepAgeWeeks} label={t("stepAge", { weeks: item.stepAgeWeeks })} />
-              <span className="text-sm text-muted">{t("stepAge", { weeks: item.stepAgeWeeks })}</span>
+              <AgeDots weeks={item.stepAgeWeeks} label={t("stepAge", { weeks: item.stepAgeWeeks, shown: String(item.stepAgeWeeks) })} />
+              <span className="text-sm text-muted">{t("stepAge", { weeks: item.stepAgeWeeks, shown: String(item.stepAgeWeeks) })}</span>
             </>
           )}
         </div>

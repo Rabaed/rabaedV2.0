@@ -3,6 +3,7 @@ export * from "./company.ts";
 export * from "./health.ts";
 export * from "./locale.ts";
 export * from "./member.ts";
+export * from "./notification.ts";
 export * from "./participant.ts";
 export * from "./project.ts";
 export * from "./visibility.ts";

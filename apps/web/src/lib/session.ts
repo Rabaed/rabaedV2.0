@@ -5,6 +5,7 @@ import type {
   DimensionValues,
   MemberVisibility,
   MyProjects,
+  NotificationList,
   ParticipantMembers,
   ParticipantVisibility,
   ProjectParticipants,
@@ -103,4 +104,9 @@ export function getWorkItem(workItemId: string): Promise<WorkItemDetail | null> 
 /** A Work Item's history as the signed-in Member may see it; null if they can't see the item. */
 export function getWorkItemHistory(workItemId: string): Promise<WorkItemHistory | null> {
   return apiGet<WorkItemHistory>(`/v1/work-items/${encodeURIComponent(workItemId)}/history`);
+}
+
+/** The signed-in Member's notifications and unread count; null if signed out. */
+export function getNotifications(): Promise<NotificationList | null> {
+  return apiGet<NotificationList>("/v1/notifications");
 }

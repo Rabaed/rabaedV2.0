@@ -175,7 +175,7 @@
     "noLocation": "No Location",
     "noDescription": "No description.",
     "noTradesCovered": "Your Visibility on this Project covers no Trade yet, so you can't raise a Work Item. Ask your Company's Authorized Person.",
-    "stepAge": "{weeks, plural, one {# week} other {# weeks}} at this step",
+    "stepAge": "{weeks, plural, one {{shown} week} other {{shown} weeks}} at this step",
     "saveDraft": "Save Draft",
     "fields": {
       "title": "Title",
@@ -220,5 +220,14 @@
       "numbered": "Document Number",
       "internal": "Internal: only your Company sees this."
     }
+  },
+  "notifications": {
+    "title": "Notifications",
+    "bellUnread": "Notifications, {shown} unread",
+    "empty": "No notifications yet.",
+    "reached": "Reached you at {step}",
+    "unread": "Unread",
+    "markAllRead": "Mark all as read",
+    "unavailable": "Something went wrong. Try again."
   }
 }

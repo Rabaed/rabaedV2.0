@@ -175,7 +175,7 @@ New items use the latest *published* versions of the Form and Workflow at creati
 `project_id`, `participant_id`, `work_item_type_id`, `step_key`, `member_id`. Set by each Participant for its own Steps.
 
 **outbox**
-`id`, `kind` (notification, documental_record, email, package_recompute…), `payload jsonb`, `created_at`, `processed_at`, `attempts`, `last_error`. Written in the same transaction as the command that caused it.
+`id`, `kind` (notification, documental_record, email, package_recompute…), `project_id`, `payload jsonb` (ids only, never customer text), `created_at`, `available_at` (next due), `processed_at`, `attempts`, `last_error`, `dead_at` (dead-lettered after the last attempt). Written in the same transaction as the command that caused it; the worker takes one due row at a time (`FOR UPDATE SKIP LOCKED`).
 
 **numbering_pattern**
 `id`, `project_id`, `work_item_type_id` (null = Project default), `segments jsonb` (≤ 6 of: project code, type code, trade, company, location level, custom literal), `separator`, `seq_digits (3–7)`, `seq_scope jsonb` (which segments the counter counts separately for), `effective_from`.
@@ -326,7 +326,7 @@ Each created Draft carries `import_id` for traceability.
 
 **project_event**: append-only project-level events (participant added or withdrawn, settings changed, Workflow version published). Together with `work_item_event` it forms the **Activity Feed**, filtered by access and Visibility.
 
-**notification** / **notification_preference**: in-app inbox and per-Member channel settings (email now, WhatsApp later).
+**notification** / **notification_preference**: in-app inbox and per-Member channel settings (email now, WhatsApp later). `notification`: `id`, `member_id`, `project_id`, `work_item_id`, `outbox_id` (unique with `member_id`: one per Member per row), `kind`, `step_id`, `created_at`, `read_at`. It holds ids only; the item's number and title are read through RLS when shown, and a Member sees only their own notifications of items they still see.
 
 **rabaed_engineer**: separate identity table. Engineers are never Members.
 
