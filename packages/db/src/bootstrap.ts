@@ -61,13 +61,31 @@ export async function bootstrap(urls: DatabaseUrls, { passwords = "always" }: Bo
     // cluster-wide, so serialise the check-then-create. Released when the session ends.
     await client.query("select pg_advisory_lock($1)", [BOOTSTRAP_LOCK_KEY]);
     for (const role of roles) {
-      const exists = await client.query("select 1 from pg_roles where rolname = $1", [role.name]);
-      const verb = exists.rowCount ? "alter" : "create";
-      const setPassword = role.password && (verb === "create" || passwords === "always");
-      const password = setPassword ? `password ${client.escapeLiteral(role.password)}` : "";
-      await client.query(
-        `${verb} role ${role.name} login nosuperuser nocreatedb nocreaterole noreplication ${role.bypassRls ? "bypassrls" : "nobypassrls"} ${password}`,
+      const password = `password ${client.escapeLiteral(role.password)}`;
+      const found = await client.query<Record<"rolcanlogin" | "rolsuper" | "rolcreatedb" | "rolcreaterole" | "rolreplication" | "rolbypassrls", boolean>>(
+        "select rolcanlogin, rolsuper, rolcreatedb, rolcreaterole, rolreplication, rolbypassrls from pg_roles where rolname = $1",
+        [role.name],
       );
+      const current = found.rows[0];
+      if (!current) {
+        await client.query(
+          `create role ${role.name} login nosuperuser nocreatedb nocreaterole noreplication ${role.bypassRls ? "bypassrls" : "nobypassrls"} ${role.password ? password : ""}`,
+        );
+        continue;
+      }
+      // An existing role: change only what differs. On RDS the bootstrap user
+      // is not a superuser, and PostgreSQL refuses an ALTER ROLE that so much
+      // as names SUPERUSER (or REPLICATION) from anyone else, even unchanged.
+      const changes = [
+        !current.rolcanlogin && "login",
+        current.rolsuper && "nosuperuser",
+        current.rolcreatedb && "nocreatedb",
+        current.rolcreaterole && "nocreaterole",
+        current.rolreplication && "noreplication",
+        current.rolbypassrls !== role.bypassRls && (role.bypassRls ? "bypassrls" : "nobypassrls"),
+        role.password && passwords === "always" && password,
+      ].filter((change): change is string => !!change);
+      if (changes.length) await client.query(`alter role ${role.name} ${changes.join(" ")}`);
     }
     // On RDS the bootstrap user is not a superuser, and PostgreSQL 16 lets it
     // give the database and schema to rabaed_migrator only as a member of it.
