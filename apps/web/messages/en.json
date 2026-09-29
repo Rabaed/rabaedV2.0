@@ -111,7 +111,7 @@
   "participants": {
     "title": "Company Projects",
     "subtitle": "Every Project {company} takes part in. Add your Members to each one.",
-    "hostedBy": "Host: {company}",
+    "hostedBy": "Host Company: {company}",
     "empty": "Your Company is not on any Project yet.",
     "membersTitle": "Project Members",
     "noMembers": "None of your Members are on this Project yet.",

@@ -37,6 +37,7 @@ export async function listParticipants(db: Db, memberId: string, projectId: stri
   return withMember(db, memberId, async (trx) => {
     const onProject = await trx
       .selectFrom("project")
+      // Never null here: RLS shows the Project only to its Members, who all see the Host Company.
       .select(sql<BilingualText>`app.project_host_company_name(id)`.as("hostName"))
       .where("id", "=", projectId)
       .executeTakeFirst();
@@ -92,8 +93,8 @@ type ParticipationRow = {
   role_name: BilingualText;
 };
 
-/** A participation row from app.company_participants or app.participation, with its Host Company's name. */
-const participationRows = (from: RawBuilder<unknown>) =>
+/** Rows of app.company_participants or app.participation, each with its Host Company's name. */
+const withHostCompanyName = (from: RawBuilder<unknown>) =>
   sql<ParticipationRow>`select x.*, app.project_host_company_name(x.project_id) as host_name from ${from} x`;
 
 function toParticipation(r: ParticipationRow): CompanyParticipation {
@@ -112,7 +113,7 @@ export function listCompanyParticipations(
 ): Promise<{ ok: true; participations: CompanyParticipation[] } | Forbidden> {
   return refusedAsForbidden(() =>
     withMember(db, memberId, async (trx) => {
-      const { rows } = await participationRows(sql`app.company_participants()`).execute(trx);
+      const { rows } = await withHostCompanyName(sql`app.company_participants()`).execute(trx);
       return { ok: true, participations: rows.map(toParticipation) } as const;
     }),
   );
@@ -129,7 +130,7 @@ export async function listParticipantMembers(
 ): Promise<ParticipantMembers | null> {
   return withMember(db, memberId, async (trx) => {
     // Only the acting Member's own Company's Participants they may look into.
-    const participant = await participationRows(sql`app.participation(${participantId}::uuid)`).execute(trx);
+    const participant = await withHostCompanyName(sql`app.participation(${participantId}::uuid)`).execute(trx);
     const row = participant.rows[0];
     if (!row) return null;
     const members = await trx

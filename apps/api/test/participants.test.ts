@@ -10,6 +10,9 @@ afterAll(() => api.close());
 
 type Company = { company: OnboardedCompany; caller: Caller };
 
+/** The Host Company as every Participant sees it: its name only (V15). */
+const HOST_COMPANY = { legalName: { en: "Test Constructions", ar: "إنشاءات الاختبار" } };
+
 let host: Company; // The Host Company: its Authorized Person is a Project Creator and the Project Admin.
 let consultant: Company; // Another Company, added as a Participant.
 let projectId: string;
@@ -32,7 +35,7 @@ describe("adding a Participant", () => {
   it("lists it on the Project with its Company's name and Project Role", async () => {
     const res = await host.caller.get(`/v1/projects/${projectId}/participants`);
     expect(res.statusCode).toBe(200);
-    expect(res.json().hostCompany).toEqual({ legalName: { en: "Test Constructions", ar: "إنشاءات الاختبار" } });
+    expect(res.json().hostCompany).toEqual(HOST_COMPANY);
     expect(res.json().participants).toEqual([
       {
         id: expect.any(String),
@@ -118,7 +121,7 @@ describe("the Authorized Person of a Participant", () => {
     expect(res.json().participants).toContainEqual({
       id: consultantParticipantId,
       project: { id: projectId, projectNumber: expect.any(Number), code: "TWR", name: expect.any(Object) },
-      hostCompany: { legalName: { en: "Test Constructions", ar: "إنشاءات الاختبار" } },
+      hostCompany: HOST_COMPANY,
       projectRole: { baseRole: "consultant", name: { en: "Consultant", ar: "الاستشاري" } },
     });
     // Not on the Project yet, so it is not among their own Projects.
@@ -239,8 +242,9 @@ describe("a Participant's Project Members list", () => {
 // visibility.md V15, scenarios 28 and 29 (RP-223): a Participant sees only its
 // own participation and the Host Company's name; Project Admins see every Participant.
 describe("the Participants of a Project", () => {
+  type Guest = "c1" | "c2" | "k1" | "or";
   let tower: string;
-  const ids: Record<"host" | "c1" | "c2" | "k1" | "or", string> = { host: "", c1: "", c2: "", k1: "", or: "" };
+  const ids: Record<"host" | Guest, string> = { host: "", c1: "", c2: "", k1: "", or: "" };
   let c1: Company;
   let c1Member: Caller;
   let c1MemberId: string;
@@ -249,7 +253,7 @@ describe("the Participants of a Project", () => {
     tower = (await api.createProject(host.caller, { role: "owner" })).id;
     ids.host = (await host.caller.get(`/v1/projects/${tower}/participants`)).json().participants[0].id;
     // Each Participant with one Project Member of its own.
-    const join = async (key: "c1" | "c2" | "k1" | "or", role: BaseRole) => {
+    const join = async (key: Guest, role: BaseRole) => {
       const company = await api.authorizedPerson();
       ids[key] = await api.addParticipant(host.caller, tower, company.company, role);
       const { member, caller } = await api.member(company.caller);
@@ -267,7 +271,7 @@ describe("the Participants of a Project", () => {
     const res = await c1Member.get(`/v1/projects/${tower}/participants`);
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual({
-      hostCompany: { legalName: { en: "Test Constructions", ar: "إنشاءات الاختبار" } },
+      hostCompany: HOST_COMPANY,
       participants: [
         {
           id: ids.c1,
@@ -283,7 +287,7 @@ describe("the Participants of a Project", () => {
   it("shows C1 its own Project Members with their Positions", async () => {
     const res = await c1Member.get(`/v1/participants/${ids.c1}/members`);
     expect(res.statusCode).toBe(200);
-    expect(res.json().participant.hostCompany).toEqual({ legalName: { en: "Test Constructions", ar: "إنشاءات الاختبار" } });
+    expect(res.json().participant.hostCompany).toEqual(HOST_COMPANY);
     expect(res.json().members).toEqual([expect.objectContaining({ id: c1MemberId, positions: [] })]);
     for (const other of [ids.host, ids.c2, ids.k1, ids.or]) {
       expect((await c1Member.get(`/v1/participants/${other}/members`)).statusCode).toBe(404);
@@ -308,7 +312,7 @@ describe("the Participants of a Project", () => {
     expect(res.json().participants).toContainEqual({
       id: ids.c1,
       project: { id: tower, projectNumber: expect.any(Number), code: "TWR", name: expect.any(Object) },
-      hostCompany: { legalName: { en: "Test Constructions", ar: "إنشاءات الاختبار" } },
+      hostCompany: HOST_COMPANY,
       projectRole: { baseRole: "contractor", name: { en: "Contractor", ar: "المقاول" } },
     });
   });
