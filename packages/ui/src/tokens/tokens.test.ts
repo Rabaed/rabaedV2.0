@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { contrastRatio } from "./contrast.ts";
 import { generateTokensCss } from "./generate.ts";
 import { palette } from "./palette.ts";
-import { coolLight, resolveRole, reviewCodes, stageKeys, type SemanticRole } from "./themes.ts";
+import { coolLight, resolveRole, reviewCodes, stageKeys, toneKeys, type SemanticRole } from "./themes.ts";
 
 describe("contrastRatio", () => {
   it("is 21 for black on white and 1 for a colour on itself", () => {
@@ -37,6 +37,10 @@ describe("cool light launch theme", () => {
       expect(roles).toContain(`code-${code}-fg`);
     }
     for (const age of [0, 1, 2, 3, 4]) expect(roles).toContain(`age-${age}`);
+    for (const tone of toneKeys) {
+      expect(roles).toContain(`${tone}-tint`);
+      expect(roles).toContain(`${tone}-fg`);
+    }
   });
 
   // WCAG 2.2 AA: 4.5:1 for text (1.4.3), 3:1 for focus indicators (1.4.11).
@@ -62,6 +66,8 @@ describe("cool light launch theme", () => {
     ["success", "surface"],
     ["primary", "surface"],
     ["on-inverse", "inverse"],
+    // Badge tones (and Avatar initials): text on its tint.
+    ...toneKeys.map((tone) => [`${tone}-fg`, `${tone}-tint`] as [SemanticRole, SemanticRole]),
     ...stageKeys.map(
       (s) => [`stage-${s}-fg`, `stage-${s}-bg`] as [SemanticRole, SemanticRole],
     ),
