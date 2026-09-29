@@ -14,7 +14,7 @@ export async function WorkItemHistory({ events, locale }: { events: Event[]; loc
   const format = await getFormatter();
 
   const what = (e: Event) => {
-    if (e.type === "transition" && e.transition) return e.transition[locale];
+    if ((e.type === "transition" || e.type === "issue_code") && e.transition) return e.transition[locale];
     if (e.type === "created" || e.type === "claimed" || e.type === "released") return t(e.type);
     return t("other");
   };

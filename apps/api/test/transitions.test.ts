@@ -197,9 +197,10 @@ describe("Claim, Return and re-send", () => {
     expect(res.json()).toEqual({ error: "reason_required" });
   });
 
-  it("refuses a Transition that doesn't leave the current Step, or isn't open to the skeleton yet", async () => {
+  it("refuses a Transition that doesn't leave the current Step, or whose next Step nobody could hold", async () => {
     expect((await take(pm1, id, "send_for_review")).json()).toEqual({ error: "transition_not_available" });
-    expect((await take(pm1, id, "submit")).json()).toEqual({ error: "transition_not_available" });
+    // The Consultant has Engineers only: nobody could issue its Code (RP-194), which is theirs to know.
+    expect((await take(pm1, id, "submit")).json()).toEqual({ error: "next_step_unavailable" });
     expect((await take(pm1, id, "no_such_thing")).statusCode).toBe(409);
   });
 

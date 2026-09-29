@@ -383,3 +383,113 @@ describe("Send for Review and Return", () => {
     }
   });
 });
+
+// RP-194: Submit to the Consultant and Code A, called as the app role.
+describe("Submit and Code A", () => {
+  let item = "";
+  let pm = "";
+  let manager = "";
+  const take = (as: string, transition: string) =>
+    call<{ outcome: string }>(
+      as,
+      sql`select app.take_transition(${item}::uuid, ${transition}, '', ${randomUUID()}::uuid, now()) as outcome`,
+    ).then((rows) => rows[0]!.outcome);
+  const claim = (as: string) =>
+    call<{ outcome: string }>(as, sql`select app.claim_step(${item}::uuid, now()) as outcome`).then((rows) => rows[0]!.outcome);
+  const setPositions = (ap: string, p: string, m: string, keys: string[]) =>
+    call<{ outcome: string }>(ap, sql`select app.set_project_member_positions(${p}::uuid, ${m}::uuid, ${keys}::text[]) as outcome`).then(
+      (rows) => expect(rows[0]!.outcome).toBe("set"),
+    );
+  const events = async () =>
+    (
+      await migrator.query(
+        "select id, type, audience, actor_participant_id, payload from work_item_event where work_item_id = $1 order by seq",
+        [item],
+      )
+    ).rows;
+  const signerName = (as: string, eventId: string) =>
+    call<{ name: { en: string } | null }>(as, sql`select app.code_signer_name(${eventId}::uuid) as name`).then(
+      (rows) => rows[0]!.name,
+    );
+
+  beforeAll(async () => {
+    pm = await member(c1.id, "submitting-pm");
+    manager = await member(k1.id, "khalid-signer");
+    await call<{ outcome: string }>(c1.ap, sql`select app.add_project_member(${participant.c1}::uuid, ${pm}::uuid, now())`);
+    await call<{ outcome: string }>(k1.ap, sql`select app.add_project_member(${participant.k1}::uuid, ${manager}::uuid, now())`);
+    for (const kind of ["trade", "location"]) {
+      await grant(c1.ap, "member", [participant.c1, pm], kind, "all");
+      await grant(k1.ap, "member", [participant.k1, manager], kind, "all");
+    }
+    await setPositions(c1.ap, participant.c1, c1.member, ["engineer"]);
+    await setPositions(c1.ap, participant.c1, pm, ["project_manager"]);
+    await setPositions(k1.ap, participant.k1, manager, ["manager"]);
+    item = (await createDraft(c1.member, { title: "Busbars" })).work_item_id!;
+    expect(await take(c1.member, "send_for_review")).toBe("applied");
+    expect(await claim(pm)).toBe("claimed");
+    expect(await take(pm, "submit")).toBe("applied");
+  });
+
+  it("gives the Consultant handling access and the Owner Representative oversight, and nobody else (V2, V3)", async () => {
+    const { rows } = await migrator.query(
+      "select participant_id, reason from work_item_access where work_item_id = $1 order by participant_id",
+      [item],
+    );
+    expect(Object.fromEntries(rows.map((r) => [r.participant_id, r.reason]))).toEqual({
+      [participant.c1]: "raised",
+      [participant.k1]: "handling",
+      [participant.or]: "oversight",
+    });
+    for (const who of [k1.member, manager, or.member]) expect(await seen(who, "work_item", "id"), who).toContain(item);
+    expect(await seen(c2.member, "work_item", "id")).not.toContain(item);
+    for (const table of itemTables) expect(await seen(c2.member, table), table).not.toContain(item);
+  });
+
+  it("shows the Consultant only the shared Submit of the Contractor's history (V5)", async () => {
+    const visible = await call<{ type: string; audience: string }>(
+      k1.member,
+      sql`select type, audience from work_item_event where work_item_id = ${item}::uuid order by seq`,
+    );
+    expect(visible).toEqual([{ type: "transition", audience: "shared" }]);
+  });
+
+  it("closes the item with Code A in a shared issue_code event, still chained", async () => {
+    expect(await claim(manager)).toBe("claimed");
+    expect(await take(manager, "approve_a")).toBe("applied");
+    const { rows } = await migrator.query(
+      "select outcome, closed_at, current_stage_key from work_item where id = $1",
+      [item],
+    );
+    expect(rows[0]).toMatchObject({ outcome: "A", current_stage_key: "approved" });
+    expect(rows[0].closed_at).not.toBeNull();
+    expect(
+      (await migrator.query("select count(*)::int as n from step_assignment where work_item_id = $1 and status <> 'done'", [item]))
+        .rows[0].n,
+    ).toBe(0);
+    const last = (await events()).at(-1);
+    expect(last).toMatchObject({ type: "issue_code", audience: "shared", actor_participant_id: participant.k1, payload: { outcome: "A" } });
+    expect((await migrator.query("select app.work_item_chain_intact($1) as ok", [item])).rows[0].ok).toBe(true);
+    expect(await take(manager, "revise_c")).toBe("item_closed");
+  });
+
+  it("names the Code's signer to those who see it, and to nobody else, for no other event (V14)", async () => {
+    const all = await events();
+    const code = all.find((e) => e.type === "issue_code")!;
+    const submit = all.find((e) => e.audience === "shared" && e.type === "transition")!;
+    expect(await signerName(c1.member, code.id)).toMatchObject({ en: "khalid-signer" });
+    expect(await signerName(or.member, code.id)).toMatchObject({ en: "khalid-signer" });
+    expect(await signerName(c2.member, code.id)).toBeNull();
+    expect(await signerName(k1.member, submit.id)).toBeNull();
+  });
+
+  it("keeps actor resolution out of the app role's reach", async () => {
+    await expect(
+      withMember(app, c1.member, (trx) => sql`select app.next_step_holder(${item}::uuid, ${randomUUID()}::uuid)`.execute(trx)),
+    ).rejects.toThrow(/permission denied/);
+    await expect(
+      withMember(app, c1.member, (trx) =>
+        sql`select app.participant_covers_item(${participant.k1}::uuid, ${item}::uuid)`.execute(trx),
+      ),
+    ).rejects.toThrow(/permission denied/);
+  });
+});

@@ -186,7 +186,8 @@
       "documentNumber": "Document Number",
       "step": "Step",
       "with": "With",
-      "raisedBy": "Raised by"
+      "raisedBy": "Raised by",
+      "issuedCode": "Issued Code"
     },
     "invalid": "Give a title and a Trade.",
     "notContractor": "Only a Contractor can raise a Material Submittal.",
@@ -205,6 +206,7 @@
       "reasonRequired": "Give a reason.",
       "forbidden": "Your Position doesn't allow this.",
       "noStepPool": "Nobody in your Company can hold the next step yet. Ask your Authorized Person to give someone the Position.",
+      "nextStepUnavailable": "This can't be handed over yet: the next step has nobody to take it. Ask a Project Admin.",
       "notAvailable": "This Transition isn't available any more.",
       "projectClosed": "This Project is closed.",
       "unavailable": "Something went wrong. Try again."

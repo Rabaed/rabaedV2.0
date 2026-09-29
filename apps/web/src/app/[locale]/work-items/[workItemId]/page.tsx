@@ -1,4 +1,4 @@
-import type { Locale } from "@rabaed/domain";
+import { isOpenStageCategory, type Locale } from "@rabaed/domain";
 import { DocNo } from "@rabaed/ui";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
@@ -27,8 +27,13 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
         <h1 className="text-h4 font-semibold">{item.title}</h1>
         <div className="flex flex-wrap items-center gap-3">
           <StagePill stage={item.stage} locale={locale} />
-          <AgeDots weeks={item.stepAgeWeeks} label={t("stepAge", { weeks: item.stepAgeWeeks })} />
-          <span className="text-sm text-muted">{t("stepAge", { weeks: item.stepAgeWeeks })}</span>
+          {/* Step Age only while it waits at a Step; a closed item doesn't age. */}
+          {isOpenStageCategory(item.stage.category) && (
+            <>
+              <AgeDots weeks={item.stepAgeWeeks} label={t("stepAge", { weeks: item.stepAgeWeeks })} />
+              <span className="text-sm text-muted">{t("stepAge", { weeks: item.stepAgeWeeks })}</span>
+            </>
+          )}
         </div>
       </div>
 
@@ -50,6 +55,16 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
         <dd>{item.location ? item.location.name[locale] : t("noLocation")}</dd>
         <dt className="text-muted">{t("fields.step")}</dt>
         <dd>{item.step.name[locale]}</dd>
+        {item.outcome && (
+          <>
+            <dt className="text-muted">{t("fields.issuedCode")}</dt>
+            <dd>
+              <bdi dir="ltr" className="font-semibold" data-testid="issued-code">
+                {item.outcome}
+              </bdi>
+            </dd>
+          </>
+        )}
         {item.heldBy && (
           <>
             {/* "With": another Company by its name only, a person only within the viewer's own (V14). */}

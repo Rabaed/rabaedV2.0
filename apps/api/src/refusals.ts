@@ -24,6 +24,7 @@ const answers = {
   already_claimed: () => new HttpError(409, "already_claimed"),
   transition_not_available: () => new HttpError(409, "transition_not_available"),
   no_step_pool: () => new HttpError(409, "no_step_pool"),
+  next_step_unavailable: () => new HttpError(409, "next_step_unavailable"),
   reason_required: () => new HttpError(422, "reason_required"),
   idempotency_key_reused: () => new HttpError(422, "idempotency_key_reused"),
 } satisfies Record<string, () => HttpError>;
