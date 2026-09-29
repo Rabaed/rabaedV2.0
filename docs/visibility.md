@@ -62,7 +62,7 @@ Every one of these must apply the same layers. A new feature that adds a channel
 | Refusals of a Transition | Never say why another Participant can't take the next Step (no Participant covers the item, several do, or nobody there holds the Position): one answer for all, so its Visibility and Positions stay its own (V14, V16). |
 | Visibility Gap warnings | A Project Admin's warnings come from Participant grants only; an Authorized Person's cover only their own Participant's Members (V16). |
 | Rabaed Admin | A separate role, with `admin_action` logged on every read of customer data. |
-| Adding a Company by CR number | One answer, status and body alike, whether or not the CR number is on Rabaed; the Project Admin's pending invitations list both kinds by CR number, never by Company name (ADR 0009). |
+| Participant Invitation by CR number | One answer, status and body alike, whether or not the CR number is on Rabaed. The Project Admin's pending invitations list both kinds by CR number, never by Company name, and a declined invitation stays listed like a CR number that isn't on Rabaed (ADR 0009). |
 
 ## Scenario matrix (becomes the automated visibility test suite)
 

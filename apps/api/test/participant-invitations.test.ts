@@ -163,7 +163,14 @@ describe("answering an invitation", () => {
     expect((await k3.caller.get("/v1/participants")).json().participants).toEqual([]);
     expect(await participantIds(host.caller)).toEqual(before);
     const pending = (await host.caller.get(`/v1/projects/${projectId}/invitations`)).json().invitations;
-    expect(pending.map((i: { id: string }) => i.id)).not.toContain(k3.invitationId);
+    // Still "awaiting an answer" for the Project Admin, like a CR number that isn't on
+    // Rabaed: a decline doesn't reveal that the Company is a customer (scenario 31).
+    expect(pending).toContainEqual({
+      id: k3.invitationId,
+      crNumber: k3.company.crNumber,
+      projectRole: expect.objectContaining({ baseRole: "consultant" }),
+      invitedAt: expect.any(String),
+    });
     // Answered already: nothing left to accept.
     expect((await k3.caller.post(`/v1/participant-invitations/${k3.invitationId}/accept`)).statusCode).toBe(404);
   });

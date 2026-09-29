@@ -1,7 +1,7 @@
 -- Participant Invitations with consent, and a uniform answer to a CR number
 -- (RP-224; ADR 0009; visibility.md V15, scenarios 30 and 31).
 --
--- * Adding a Company by its CR number no longer makes it a Participant. A
+-- * A Participant Invitation, by CR number, no longer makes a Company a Participant. A
 --   Company on Rabaed gets an Invited Participant; a CR number that isn't on
 --   Rabaed becomes an onboarding lead for Rabaed Admin. The Project Admin gets
 --   the same answer either way, so nothing reveals whether a CR number is a
@@ -11,7 +11,9 @@
 --   acceptance is the Company Active, and so anywhere in the Project. A
 --   declined invitation is kept for audit and shown to nobody.
 -- * The Project Admin sees their pending invitations by CR number, both kinds
---   alike, never with a Company's name.
+--   alike, never with a Company's name. A declined invitation stays pending for
+--   them, like a CR number that isn't on Rabaed, so a decline doesn't reveal a
+--   customer either; only an acceptance (the Company's consent) does.
 --
 -- Every existing read already keeps to Active Participants (app.current_participant_ids,
 -- app.project_participants, the Visibility and Work Item functions), so an
@@ -101,7 +103,7 @@ create function app.add_participant(p_project_id uuid, p_cr_number text, p_base_
         return 'not_found';
       end if;
       if not exists (select 1 from app.current_admin_project_ids() x where x = p_project_id) then
-        raise exception 'only a Project Admin can add Participants' using errcode = '42501';
+        raise exception 'only a Project Admin can invite Participants' using errcode = '42501';
       end if;
       if exists (select 1 from project where id = p_project_id and status = 'closed') then
         return 'project_closed';
@@ -139,9 +141,10 @@ create function app.add_participant(p_project_id uuid, p_cr_number text, p_base_
   $$;
 
 -- The pending invitations of a Project, for its Project Admins: the Companies
--- invited and the CR numbers that aren't on Rabaed, alike, each by its CR
--- number and offered role and never with a Company's name. No rows for anyone
--- else, not even the Project's other Members.
+-- invited (declined ones too, see above) and the CR numbers that aren't on
+-- Rabaed, alike, each by its CR number and offered role and never with a
+-- Company's name. No rows for anyone else, not even the Project's other
+-- Members.
 create function app.project_invitations(p_project_id uuid)
   returns table (invitation_id uuid, cr_number text, base_role text, role_name jsonb, invited_at timestamptz)
   language sql stable security definer
@@ -151,7 +154,7 @@ create function app.project_invitations(p_project_id uuid)
     from (
       select p.id, co.cr_number, p.project_role_id, p.invited_at as at
       from participant p join company co on co.id = p.company_id
-      where p.project_id = p_project_id and p.status = 'invited'
+      where p.project_id = p_project_id and p.status in ('invited', 'declined')
       union all
       select l.id, l.cr_number, l.project_role_id, l.updated_at
       from onboarding_lead l

@@ -314,7 +314,14 @@ describe("a Participant Invitation", () => {
     expect(await respond(other.ap, id, false)).toBe("declined");
     expect(await invitations(other.ap)).toEqual([]);
     expect(await listed(host.ap)).not.toContain(id);
-    expect((await pending(host.ap)).map((r) => r.invitation_id)).not.toContain(id);
+    // Still pending for the Project Admins, exactly like a CR number that isn't on Rabaed (scenario 31).
+    expect(await pending(host.ap)).toContainEqual({
+      invitation_id: id,
+      cr_number: other.cr,
+      base_role: "consultant",
+      role_name: expect.any(Object),
+      invited_at: expect.any(Date),
+    });
     expect(await respond(other.ap, id, true)).toBe("not_found");
     expect(await numbered()).toBe(before);
 
