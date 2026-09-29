@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { smokeTest } from "./smoke.ts";
+import { smokeTest, visibilityCheck } from "./smoke.ts";
 
 const url = "https://rabaed-dev-123.eu-central-1.elb.amazonaws.com";
 const version = "4f2a9c1e";
@@ -147,5 +147,89 @@ describe("smoke test: Arabic font", () => {
   it("fails when the page sets no Arabic font", async () => {
     const failures = await smokeTest({ url, version, fetch: deployment({ [`${url}/_next/static/chunks/app.css`]: { status: 200, body: "body{margin:0}" } }) });
     expect(failures).toEqual([expect.stringContaining("no --font-arabic")]);
+  });
+});
+
+// The deploy's visibility check (RP-213), through web's /api/v1 proxy as a
+// browser would: a Member of Riyadh Gate Tower (Hafiz) and one of Jeddah
+// Corniche Villas (Nasser) get 404 on each other's Project and Work Items.
+describe("visibility check", () => {
+  const password = "demo-password-from-secrets-manager";
+  const people = { hafiz: "hafiz.hamdan@tmc.demo.rabaed.test", nasser: "nasser.aldosari@betabuild.demo.rabaed.test" };
+  const twr = "0190a000-0000-7000-8000-000000000001";
+  const jcv = "0190a000-0000-7000-8000-000000000002";
+  const twrItem = "0190a000-0000-7000-8000-00000000000a";
+  const jcvItem = "0190a000-0000-7000-8000-00000000000b";
+
+  type Who = keyof typeof people;
+  /** What each person may read, as the api answers it; `leak` lets a case break one rule. */
+  function api({ leak, badPassword = false, twrItems = [twrItem] }: { leak?: { who: Who; path: string }; badPassword?: boolean; twrItems?: string[] } = {}) {
+    const own: Record<Who, { project: string; code: string; items: string[] }> = {
+      hafiz: { project: twr, code: "TWR", items: twrItems },
+      nasser: { project: jcv, code: "JCV", items: [jcvItem] },
+    };
+    const signedOut: Who[] = [];
+    const fetcher = (async (input: string | URL, init: RequestInit = {}) => {
+      const path = new URL(String(input)).pathname;
+      const method = init.method ?? "GET";
+      const json = (status: number, body?: unknown, headers: Record<string, string> = {}) =>
+        new Response(body === undefined ? null : JSON.stringify(body), { status, headers: { "content-type": "application/json", ...headers } });
+      if (path === "/api/v1/session" && method === "POST") {
+        const { email, password: given } = JSON.parse(String(init.body));
+        const who = (Object.keys(people) as Who[]).find((w) => people[w] === email);
+        if (!who || given !== password || badPassword) return json(401, { error: "invalid_credentials" });
+        return json(204, undefined, { "set-cookie": `rabaed_session=token-${who}; Path=/; HttpOnly; Secure` });
+      }
+      const cookie = new Headers(init.headers).get("cookie") ?? "";
+      const who = (Object.keys(people) as Who[]).find((w) => cookie.includes(`rabaed_session=token-${w}`));
+      if (!who) return json(401, { error: "not_signed_in" });
+      if (path === "/api/v1/session" && method === "DELETE") {
+        signedOut.push(who);
+        return json(204);
+      }
+      const mine = own[who];
+      const allowed = (p: string) => (leak?.who === who && leak.path === p) || p === `/api/v1/projects/${mine.project}` || p === `/api/v1/projects/${mine.project}/work-items` || mine.items.some((i) => p === `/api/v1/work-items/${i}`);
+      if (path === "/api/v1/projects") {
+        const projects = [{ id: mine.project, code: mine.code }];
+        if (leak?.who === who && leak.path === "/api/v1/projects") projects.push(who === "hafiz" ? { id: jcv, code: "JCV" } : { id: twr, code: "TWR" });
+        return json(200, { projects });
+      }
+      if (!allowed(path)) return json(404, { error: "not_found" });
+      if (path.endsWith("/work-items")) return json(200, { stages: [], items: (path.includes(twr) ? own.hafiz : own.nasser).items.map((id) => ({ id })) });
+      return json(200, {});
+    }) as typeof fetch;
+    return { fetcher, signedOut };
+  }
+
+  it("passes when each gets 404 on the other's Project and Work Items, and signs both out", async () => {
+    const { fetcher, signedOut } = api();
+    expect(await visibilityCheck({ url, password, fetch: fetcher })).toEqual([]);
+    expect(signedOut.sort()).toEqual(["hafiz", "nasser"]);
+  });
+
+  it.each([
+    ["hafiz", `/api/v1/projects/${jcv}`],
+    ["hafiz", `/api/v1/projects/${jcv}/work-items`],
+    ["hafiz", `/api/v1/work-items/${jcvItem}`],
+    ["nasser", `/api/v1/projects/${twr}`],
+    ["nasser", `/api/v1/projects/${twr}/work-items`],
+    ["nasser", `/api/v1/work-items/${twrItem}`],
+  ] as const)("fails when %s can read %s", async (who, path) => {
+    const failures = await visibilityCheck({ url, password, fetch: api({ leak: { who, path } }).fetcher });
+    expect(failures).toEqual([expect.stringContaining(`${path} answered 200, expected 404`)]);
+  });
+
+  it("fails when the other Project is listed", async () => {
+    const failures = await visibilityCheck({ url, password, fetch: api({ leak: { who: "hafiz", path: "/api/v1/projects" } }).fetcher });
+    expect(failures).toContainEqual(expect.stringContaining("hafiz.hamdan@tmc.demo.rabaed.test lists JCV"));
+  });
+
+  it("fails when a demo person cannot sign in (the demo is not seeded)", async () => {
+    const failures = await visibilityCheck({ url, password, fetch: api({ badPassword: true }).fetcher });
+    expect(failures).toEqual([expect.stringContaining("sign-in as hafiz.hamdan@tmc.demo.rabaed.test answered 401")]);
+  });
+
+  it("checks Riyadh Gate Tower's Work Items only when it has some (a fresh demo has none)", async () => {
+    expect(await visibilityCheck({ url, password, fetch: api({ twrItems: [] }).fetcher })).toEqual([]);
   });
 });

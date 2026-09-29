@@ -19,6 +19,12 @@ export interface EnvironmentConfig {
   readonly migrationTask: Omit<ServiceSize, "desiredCount">;
   /** Days CloudWatch keeps every log group. */
   readonly logRetentionDays: RetentionDays;
+  /**
+   * A demo environment holds the demo seed and nothing else: the deploy seeds
+   * it, the smoke test signs in as demo people, and a manual run resets it
+   * (RP-213). Never on where real Companies work.
+   */
+  readonly demo: boolean;
   readonly alarms: AlarmThresholds;
 }
 
@@ -108,6 +114,8 @@ export const environments = {
     },
     migrationTask: { cpu: 256, memoryMiB: 512 },
     logRetentionDays: 30,
+    // Dev holds only the demo, never real customer data.
+    demo: true,
     alarms: {
       api5xxPercent: 5,
       loadBalancer5xxCount: 5,
@@ -187,6 +195,8 @@ export function resourceNames(config: EnvironmentConfig) {
     deployRole: `${prefix}-github-deploy`,
     /** The api's task role; the Project files bucket refuses everyone else. */
     apiTaskRole: `${prefix}-api-task`,
+    /** The demo people's sign-in password (demo environments only). */
+    demoPasswordSecret: `rabaed/${config.name}/demo/password`,
     /** Every Secrets Manager secret of the environment starts with this. */
     secretPrefix: `rabaed/${config.name}/`,
     /** Private DNS namespace; web reaches the api at `api.<namespace>`. */

@@ -5,7 +5,8 @@ import { SESSION_COOKIE } from "../app.ts";
 import { createEngineer } from "../identity/engineers.ts";
 
 // The demo Project (RP-196): "Riyadh Gate Tower – Phase 2" with four Companies,
-// their Members, Positions and Visibility, built through the API itself (the
+// their Members, Positions and Visibility, and a second Project no other demo
+// Company is on (RP-213), built through the API itself (the
 // same routes, validation and app.* functions a person would use), never raw
 // SQL. A Rabaed Engineer onboards each Company through Rabaed Admin, which
 // writes admin_action with the reason (visibility.md V9).
@@ -28,6 +29,8 @@ export interface DemoPerson {
 
 export interface DemoSeed {
   projectId: string;
+  /** Beta Build's own Jeddah Corniche Villas, with one Draft MAR; only Nasser is on it. */
+  otherProjectId: string;
   engineer: DemoPerson;
   people: DemoPerson[];
 }
@@ -229,5 +232,26 @@ export async function seedDemo(app: FastifyInstance, migrator: Db, password: str
   };
   await member(waha, participant.waha, faisal, ["engineer"]);
 
-  return { projectId, engineer, people };
+  // A second Project: Beta Build's own, with only its Authorized Person on it
+  // and one Draft. Nobody on Riyadh Gate Tower is on it, and Nasser is on
+  // nothing else, so each sees only their own Project (the deploy's
+  // visibility check in dev, packages/infra/src/smoke.ts).
+  await beta.caller("PATCH", `/v1/members/${beta.authorizedPersonId}`, { canCreateProjects: true });
+  const { projectId: otherProjectId } = await beta.caller<{ projectId: string }>("POST", "/v1/projects", {
+    name: bi("Jeddah Corniche Villas", "فلل كورنيش جدة"),
+    code: "JCV",
+    role: "contractor",
+  });
+  const plumbing = (await beta.caller<{ id: string }>("POST", `/v1/projects/${otherProjectId}/trades`, { code: "PL", name: bi("Plumbing Works", "أعمال السباكة") })).id;
+  const { participants: betaParticipants } = await beta.caller<{ participants: { id: string; isOwnCompany: boolean }[] }>(
+    "GET",
+    `/v1/projects/${otherProjectId}/participants`,
+  );
+  const betaOwn = betaParticipants.find((p) => p.isOwnCompany)!.id;
+  await beta.caller("PUT", `/v1/participants/${betaOwn}/visibility`, { trade: only(plumbing), location: all });
+  await beta.caller("PUT", `/v1/participants/${betaOwn}/members/${beta.authorizedPersonId}/visibility`, { trade: all, location: all });
+  await beta.caller("PUT", `/v1/participants/${betaOwn}/members/${beta.authorizedPersonId}/positions`, { positions: ["engineer"] });
+  await beta.caller("POST", `/v1/projects/${otherProjectId}/work-items`, { type: "MAR", title: "Pump room ventilation", tradeId: plumbing });
+
+  return { projectId, otherProjectId, engineer, people };
 }

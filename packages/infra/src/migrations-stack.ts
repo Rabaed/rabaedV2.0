@@ -21,7 +21,10 @@ export interface MigrationsStackProps extends StackProps {
 // schema is always migrated before new code takes traffic.
 //
 // It runs packages/db/src/setup.ts: bootstrap (roles and database, as the RDS
-// master user) and then the migrations, as rabaed_migrator.
+// master user) and then the migrations, as rabaed_migrator. The workflow also
+// runs it with other commands (RP-213): the app role check
+// (packages/db/src/check-app-role.ts) after every deploy, and in a demo
+// environment the demo seed or reset (apps/api/src/cli/demo-environment.ts).
 export class MigrationsStack extends Stack {
   constructor(scope: Construct, id: string, props: MigrationsStackProps) {
     super(scope, id, props);
@@ -40,13 +43,18 @@ export class MigrationsStack extends Stack {
       repository: registry.repositories.api,
       imageTag: imageTagParameter(this),
       // Rotation owns the role passwords once the roles exist.
-      environment: { ...databaseEnvironment(data), DATABASE_ROLE_PASSWORDS: "on-create" },
+      environment: {
+        ...databaseEnvironment(data),
+        DATABASE_ROLE_PASSWORDS: "on-create",
+        ...(data.demoPassword ? { RABAED_DEMO: "on" } : {}),
+      },
       secrets: {
         DATABASE_SUPERUSER_USERNAME: ecs.Secret.fromSecretsManager(data.masterSecret, "username"),
         DATABASE_SUPERUSER_PASSWORD: ecs.Secret.fromSecretsManager(data.masterSecret, "password"),
         DATABASE_MIGRATOR_PASSWORD: ecs.Secret.fromSecretsManager(data.roleSecrets.rabaed_migrator, "password"),
         DATABASE_APP_PASSWORD: ecs.Secret.fromSecretsManager(data.roleSecrets.rabaed_app, "password"),
         DATABASE_ADMIN_PASSWORD: ecs.Secret.fromSecretsManager(data.roleSecrets.rabaed_admin, "password"),
+        ...(data.demoPassword ? { DEMO_PASSWORD: ecs.Secret.fromSecretsManager(data.demoPassword) } : {}),
       },
       workingDirectory: "/app/packages/db",
       command: ["./node_modules/.bin/tsx", "src/setup.ts"],
@@ -61,5 +69,7 @@ export class MigrationsStack extends Stack {
     new CfnOutput(this, "Subnets", { value: Fn.join(",", subnets) });
     new CfnOutput(this, "SecurityGroup", { value: network.securityGroups.migrations.securityGroupId });
     new CfnOutput(this, "LogGroup", { value: names.logGroup("migrate") });
+    // Its presence tells the workflow this is a demo environment; the smoke test signs in with it.
+    if (data.demoPassword) new CfnOutput(this, "DemoPasswordSecret", { value: names.demoPasswordSecret });
   }
 }

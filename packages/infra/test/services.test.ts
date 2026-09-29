@@ -87,6 +87,7 @@ const MASTER = "rabaed/dev/database/master";
 const APP = "rabaed/dev/database/roles/rabaed_app";
 const ADMIN = "rabaed/dev/database/roles/rabaed_admin";
 const MIGRATOR = "rabaed/dev/database/roles/rabaed_migrator";
+const DEMO = "rabaed/dev/demo/password";
 
 describe("container images", () => {
   it("has one private ECR repository per service, scanned on push, with immutable tags", () => {
@@ -253,8 +254,10 @@ describe("secrets", () => {
       DATABASE_MIGRATOR_PASSWORD: `${MIGRATOR}:password`,
       DATABASE_APP_PASSWORD: `${APP}:password`,
       DATABASE_ADMIN_PASSWORD: `${ADMIN}:password`,
+      // Dev is a demo environment: the task also seeds the demo (demo.test.ts).
+      DEMO_PASSWORD: DEMO,
     });
-    expect(readableSecrets("rabaed-dev-migrate")).toEqual([ADMIN, MASTER, APP, MIGRATOR].sort());
+    expect(readableSecrets("rabaed-dev-migrate")).toEqual([ADMIN, MASTER, DEMO, APP, MIGRATOR].sort());
   });
 
   it("puts no password in plain environment variables", () => {

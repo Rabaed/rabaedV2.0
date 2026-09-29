@@ -44,7 +44,7 @@ const migrator = createDb(urls.migrator, { max: 1 });
 const app = await buildApp({ db, adminDb, config: apiConfigFromEnv(), logger: false });
 try {
   const seed = await seedDemo(app, migrator, password);
-  console.log(`\nDemo Project "Riyadh Gate Tower – Phase 2" seeded. Everyone signs in with the password in .env.demo.\n`);
+  console.log(`\nDemo Projects "Riyadh Gate Tower – Phase 2" and "Jeddah Corniche Villas" seeded. Everyone signs in with the password in .env.demo.\n`);
   const rows = [seed.engineer, ...seed.people].map((p) => [p.company, p.label, p.name.en, p.email]);
   const widths = [0, 1, 2].map((i) => Math.max(...rows.map((r) => r[i]!.length)));
   for (const r of rows) console.log(`  ${r.slice(0, 3).map((c, i) => c!.padEnd(widths[i]!)).join("  ")}  ${r[3]}`);

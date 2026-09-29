@@ -176,3 +176,38 @@ describe("the README walkthrough", () => {
     expect(await detail(hafiz)).toMatchObject({ stage: { key: "revise_resubmit" }, outcome: "C" });
   });
 });
+
+// The deploy's visibility check (RP-213) asks exactly this of dev, through the
+// load balancer (packages/infra/src/smoke.ts).
+describe("a second Project: Beta Build's Jeddah Corniche Villas, which no other demo Company is on", () => {
+  let nasser: Caller;
+  let jcv = "";
+  let jcvItem = "";
+  let twrItem = "";
+
+  beforeAll(async () => {
+    nasser = await signIn("nasser");
+    const projects = (await nasser.get("/v1/projects")).json().projects as { id: string; code: string }[];
+    expect(projects.map((p) => p.code)).toEqual(["JCV"]);
+    jcv = projects[0]!.id;
+    const items = (await nasser.get(`/v1/projects/${jcv}/work-items`)).json().items as { id: string }[];
+    expect(items).toHaveLength(1);
+    jcvItem = items[0]!.id;
+    const created = await hafiz.post(`/v1/projects/${projectId}/work-items`, { type: "MAR", title: "Cross-project check", tradeId: electrical });
+    expect(created.statusCode, created.body).toBe(201);
+    twrItem = created.json().id;
+  });
+
+  it("Hafiz (Riyadh Gate Tower) gets 404 on it and on its Work Item, and never sees it listed", async () => {
+    expect((await hafiz.get("/v1/projects")).json().projects.map((p: { code: string }) => p.code)).not.toContain("JCV");
+    expect((await hafiz.get(`/v1/projects/${jcv}`)).statusCode).toBe(404);
+    expect((await hafiz.get(`/v1/projects/${jcv}/work-items`)).statusCode).toBe(404);
+    expect((await hafiz.get(`/v1/work-items/${jcvItem}`)).statusCode).toBe(404);
+  });
+
+  it("Nasser (Jeddah Corniche Villas) gets 404 on Riyadh Gate Tower and its Work Items", async () => {
+    expect((await nasser.get(`/v1/projects/${projectId}`)).statusCode).toBe(404);
+    expect((await nasser.get(`/v1/projects/${projectId}/work-items`)).statusCode).toBe(404);
+    expect((await nasser.get(`/v1/work-items/${twrItem}`)).statusCode).toBe(404);
+  });
+});

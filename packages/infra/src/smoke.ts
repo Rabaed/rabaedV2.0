@@ -1,6 +1,7 @@
 // The post-deploy smoke test: checks a deployed environment from the outside,
 // as a browser would. `bin/smoke.ts` runs it after every deploy; any failure
-// fails the deploy workflow.
+// fails the deploy workflow. In a demo environment it also signs in as two
+// demo people and checks visibility holds (RP-213).
 
 export interface SmokeTestOptions {
   /** The environment's HTTPS address, e.g. `https://<load balancer>`. */
@@ -13,6 +14,8 @@ export interface SmokeTestOptions {
    * Left out, any Arabic font passes, as long as it is served from our origin.
    */
   readonly arabicFont?: string;
+  /** The demo people's password; given in a demo environment, the visibility check runs too. */
+  readonly demoPassword?: string;
   readonly fetch?: typeof fetch;
 }
 
@@ -22,7 +25,7 @@ interface Health {
 }
 
 /** Runs every check and returns what failed; empty means the deploy is good. */
-export async function smokeTest({ url, version, arabicFont, fetch: get = fetch }: SmokeTestOptions): Promise<string[]> {
+export async function smokeTest({ url, version, arabicFont, demoPassword, fetch: get = fetch }: SmokeTestOptions): Promise<string[]> {
   const base = new URL(url);
   const failures: string[] = [];
   const check = async (name: string, run: () => Promise<string[]>) => {
@@ -62,7 +65,88 @@ export async function smokeTest({ url, version, arabicFont, fetch: get = fetch }
     return arabicFontChecks(html, new URL("/en/health", base), request, arabicFont);
   });
 
+  if (demoPassword) await check("visibility", () => visibilityCheck({ url, password: demoPassword, fetch: get }));
+
   return failures;
+}
+
+/**
+ * Two demo people on different Projects (apps/api/src/demo/seed.ts): Hafiz is
+ * on Riyadh Gate Tower only, Nasser on Jeddah Corniche Villas only.
+ */
+export const VISIBILITY_CHECK_PEOPLE = {
+  twr: "hafiz.hamdan@tmc.demo.rabaed.test",
+  jcv: "nasser.aldosari@betabuild.demo.rabaed.test",
+} as const;
+
+/** How many of Riyadh Gate Tower's Work Items (made in walkthroughs) are tried as Nasser. */
+const MAX_ITEMS_CHECKED = 5;
+
+interface Signed {
+  email: string;
+  get(path: string): Promise<Response>;
+  signOut(): Promise<void>;
+}
+
+/**
+ * Each of two Members of different Projects gets 404 on the other's Project,
+ * its Work Item list and its Work Items, and never sees it listed: visibility
+ * holds on the deployed infrastructure, through web's /api/v1 proxy.
+ */
+export async function visibilityCheck({ url, password, fetch: get = fetch }: { url: string; password: string; fetch?: typeof fetch }): Promise<string[]> {
+  const base = new URL(url);
+  const call = (path: string, init: RequestInit = {}) => get(new URL(path, base).toString(), { ...init, signal: AbortSignal.timeout(10_000) });
+
+  const signIn = async (email: string): Promise<Signed | string> => {
+    const res = await call("/api/v1/session", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email, password }) });
+    const cookie = res.headers.getSetCookie().map((c) => c.split(";")[0]).find((c) => c?.startsWith("rabaed_session="));
+    if (res.status >= 300 || !cookie) return `sign-in as ${email} answered ${res.status}`;
+    const headers = { cookie };
+    return {
+      email,
+      get: (path) => call(path, { headers }),
+      signOut: async () => void (await call("/api/v1/session", { method: "DELETE", headers })),
+    };
+  };
+
+  const hafiz = await signIn(VISIBILITY_CHECK_PEOPLE.twr);
+  if (typeof hafiz === "string") return [hafiz];
+  const nasser = await signIn(VISIBILITY_CHECK_PEOPLE.jcv);
+  if (typeof nasser === "string") {
+    await hafiz.signOut();
+    return [nasser];
+  }
+
+  try {
+    const failures: string[] = [];
+    const projects = async (who: Signed) => ((await (await who.get("/api/v1/projects")).json()) as { projects: { id: string; code: string }[] }).projects;
+    const items = async (who: Signed, projectId: string) =>
+      ((await (await who.get(`/api/v1/projects/${projectId}/work-items`)).json()) as { items: { id: string }[] }).items.map((i) => i.id);
+    const notFound = async (who: Signed, path: string) => {
+      const res = await who.get(path);
+      if (res.status !== 404) failures.push(`${who.email}: ${path} answered ${res.status}, expected 404`);
+    };
+
+    const [hafizProjects, nasserProjects] = [await projects(hafiz), await projects(nasser)];
+    const twr = hafizProjects.find((p) => p.code === "TWR");
+    const jcv = nasserProjects.find((p) => p.code === "JCV");
+    if (!twr || !jcv) return [`demo Projects not found (TWR for ${hafiz.email}, JCV for ${nasser.email}): is the demo seeded?`];
+    if (hafizProjects.some((p) => p.id === jcv.id)) failures.push(`${hafiz.email} lists JCV`);
+    if (nasserProjects.some((p) => p.id === twr.id)) failures.push(`${nasser.email} lists TWR`);
+
+    const jcvItems = await items(nasser, jcv.id);
+    if (jcvItems.length === 0) failures.push("Jeddah Corniche Villas has no Work Item to check");
+    await notFound(hafiz, `/api/v1/projects/${jcv.id}`);
+    await notFound(hafiz, `/api/v1/projects/${jcv.id}/work-items`);
+    for (const id of jcvItems) await notFound(hafiz, `/api/v1/work-items/${id}`);
+
+    await notFound(nasser, `/api/v1/projects/${twr.id}`);
+    await notFound(nasser, `/api/v1/projects/${twr.id}/work-items`);
+    for (const id of (await items(hafiz, twr.id)).slice(0, MAX_ITEMS_CHECKED)) await notFound(nasser, `/api/v1/work-items/${id}`);
+    return failures;
+  } finally {
+    await Promise.all([hafiz.signOut(), nasser.signOut()]);
+  }
 }
 
 // Fonts are self-hosted (no font CDN), and Arabic is in the font the build was

@@ -76,6 +76,8 @@ describe("database", () => {
         "rabaed/dev/database/roles/rabaed_admin",
         "rabaed/dev/database/roles/rabaed_app",
         "rabaed/dev/database/roles/rabaed_migrator",
+        // The demo people's password (demo.test.ts): dev is a demo environment.
+        "rabaed/dev/demo/password",
         // Legacy plain-password secrets, kept for one deploy (see data-stack.ts); nothing reads them.
         ...LEGACY,
       ].sort(),
@@ -89,7 +91,7 @@ describe("database", () => {
   it("keeps each role's credentials as the JSON the rotation needs: its own username, and the database", () => {
     const templates = Object.fromEntries(
       resourcesOfType(env.synthesised, "AWS::SecretsManager::Secret")
-        .filter((s) => !LEGACY.includes(s.Properties?.Name as string))
+        .filter((s) => String(s.Properties?.Name).startsWith("rabaed/dev/database/") && !LEGACY.includes(s.Properties?.Name as string))
         .map((s) => [
         s.Properties?.Name,
         JSON.parse((s.Properties?.GenerateSecretString as { SecretStringTemplate: string }).SecretStringTemplate),
