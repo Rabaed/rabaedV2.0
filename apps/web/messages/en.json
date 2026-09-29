@@ -220,5 +220,14 @@
       "numbered": "Document Number",
       "internal": "Internal: only your Company sees this."
     }
+  },
+  "notifications": {
+    "title": "Notifications",
+    "bellUnread": "{count, plural, one {Notifications, # unread} other {Notifications, # unread}}",
+    "empty": "No notifications yet.",
+    "reached": "Reached you at {step}",
+    "unread": "Unread",
+    "markAllRead": "Mark all as read",
+    "unavailable": "Something went wrong. Try again."
   }
 }

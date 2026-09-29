@@ -6,10 +6,11 @@ import { getTranslations, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
 import { LanguageSwitch } from "@/components/language-switch";
+import { NotificationBell } from "@/components/notification-bell";
 import { SignOutButton } from "@/components/sign-out-button";
 import { Link } from "@/i18n/navigation";
 import { routing } from "@/i18n/routing";
-import { getMe } from "@/lib/session";
+import { getMe, getNotifications } from "@/lib/session";
 import "../globals.css";
 
 export function generateStaticParams() {
@@ -30,6 +31,7 @@ export default async function LocaleLayout({
   setRequestLocale(locale);
   const t = await getTranslations("shell");
   const me = await getMe();
+  const notifications = me ? await getNotifications() : null;
 
   return (
     <html lang={locale} dir={directionOf(locale)}>
@@ -41,6 +43,7 @@ export default async function LocaleLayout({
                 {t("appName")}
               </Link>
               <div className="flex items-center gap-2">
+                {notifications && <NotificationBell unread={notifications.unread} />}
                 {me && <SignOutButton />}
                 <LanguageSwitch />
               </div>
