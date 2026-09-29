@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import { environmentTemplates, references, resourcesOfType } from "./support.ts";
 
 const env = environmentTemplates();
-const LEGACY = ["rabaed/dev/database/rabaed_admin", "rabaed/dev/database/rabaed_app", "rabaed/dev/database/rabaed_migrator"];
 const [database] = resourcesOfType(env.synthesised, "AWS::RDS::DBInstance");
 const db = database?.Properties ?? {};
 
@@ -48,17 +47,6 @@ describe("database", () => {
     expect((group as { Properties: { GroupDescription: string } }).Properties.GroupDescription).toBe("PostgreSQL: reachable from api, worker and migrations only");
   });
 
-  it("no secret the migrations stack deployed with loses its export yet", () => {
-    const exports = Object.values(env.template("data").toJSON().Outputs as Record<string, { Export?: { Name: string } }>).map((o) => o.Export?.Name);
-    for (const name of [
-      "Rabaed-dev-Data:ExportsOutputRefrabaedmigratorPassword88D699E6BE532016",
-      "Rabaed-dev-Data:ExportsOutputRefrabaedappPasswordFCBCE57B016F28BA",
-      "Rabaed-dev-Data:ExportsOutputRefrabaedadminPassword4EF7B5D1D21A3419",
-    ]) {
-      expect(exports).toContain(name);
-    }
-  });
-
   it("requires TLS for every connection", () => {
     const parameters = env.resolve(db.DBParameterGroupName, "data").resource;
     expect(parameters.Properties?.Parameters).toMatchObject({ "rds.force_ssl": "1" });
@@ -78,8 +66,6 @@ describe("database", () => {
         "rabaed/dev/database/roles/rabaed_migrator",
         // The demo people's password (demo.test.ts): dev is a demo environment.
         "rabaed/dev/demo/password",
-        // Legacy plain-password secrets, kept for one deploy (see data-stack.ts); nothing reads them.
-        ...LEGACY,
       ].sort(),
     );
     for (const secret of secrets) {
@@ -91,11 +77,11 @@ describe("database", () => {
   it("keeps each role's credentials as the JSON the rotation needs: its own username, and the database", () => {
     const templates = Object.fromEntries(
       resourcesOfType(env.synthesised, "AWS::SecretsManager::Secret")
-        .filter((s) => String(s.Properties?.Name).startsWith("rabaed/dev/database/") && !LEGACY.includes(s.Properties?.Name as string))
+        .filter((s) => String(s.Properties?.Name).startsWith("rabaed/dev/database/"))
         .map((s) => [
-        s.Properties?.Name,
-        JSON.parse((s.Properties?.GenerateSecretString as { SecretStringTemplate: string }).SecretStringTemplate),
-      ]),
+          s.Properties?.Name,
+          JSON.parse((s.Properties?.GenerateSecretString as { SecretStringTemplate: string }).SecretStringTemplate),
+        ]),
     );
     expect(templates["rabaed/dev/database/roles/rabaed_app"]).toMatchObject({ username: "rabaed_app", dbname: "rabaed" });
     expect(templates["rabaed/dev/database/roles/rabaed_admin"]).toMatchObject({ username: "rabaed_admin", dbname: "rabaed" });
