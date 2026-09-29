@@ -79,9 +79,9 @@ describe("database", () => {
       resourcesOfType(env.synthesised, "AWS::SecretsManager::Secret")
         .filter((s) => String(s.Properties?.Name).startsWith("rabaed/dev/database/"))
         .map((s) => [
-        s.Properties?.Name,
-        JSON.parse((s.Properties?.GenerateSecretString as { SecretStringTemplate: string }).SecretStringTemplate),
-      ]),
+          s.Properties?.Name,
+          JSON.parse((s.Properties?.GenerateSecretString as { SecretStringTemplate: string }).SecretStringTemplate),
+        ]),
     );
     expect(templates["rabaed/dev/database/roles/rabaed_app"]).toMatchObject({ username: "rabaed_app", dbname: "rabaed" });
     expect(templates["rabaed/dev/database/roles/rabaed_admin"]).toMatchObject({ username: "rabaed_admin", dbname: "rabaed" });
