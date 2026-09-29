@@ -3,8 +3,10 @@ import type {
   AddParticipantRequest,
   BaseRole,
   BilingualText,
+  CompanyInvitations,
   CompanyParticipation,
   ParticipantMembers,
+  ProjectInvitations,
   ProjectParticipants,
 } from "@rabaed/domain";
 import { sql, type RawBuilder } from "kysely";
@@ -15,10 +17,13 @@ import { refusedAsForbidden } from "../db-error.ts";
 
 type Forbidden = { ok: false; reason: "forbidden" };
 
+/** One answer, `ok`, whether or not the CR number is on Rabaed (ADR 0009). */
 export type AddParticipantResult =
-  | { ok: true; participantId: string }
+  | { ok: true }
   | Forbidden
-  | { ok: false; reason: "not_found" | "project_closed" | "unknown_company" | "already_participant" };
+  | { ok: false; reason: "not_found" | "project_closed" | "already_participant" };
+
+export type RespondToInvitationResult = { ok: true } | Forbidden | { ok: false; reason: "not_found" | "project_closed" };
 
 type ProjectMemberRefusal = "not_found" | "project_closed" | "member_not_found" | "position_not_found";
 export type ProjectMemberResult = { ok: true } | Forbidden | { ok: false; reason: ProjectMemberRefusal };
@@ -64,20 +69,106 @@ export async function listParticipants(db: Db, memberId: string, projectId: stri
   });
 }
 
-/** A Project Admin adds a Company, found by its CR number, as a Participant. */
+/**
+ * A Project Admin invites a Company, found by its CR number, to the Project. A
+ * CR number that isn't on Rabaed becomes an onboarding lead, with the same answer.
+ */
 export function addParticipant(
   db: Db,
   memberId: string,
   projectId: string,
   input: AddParticipantRequest,
+  now: Date,
 ): Promise<AddParticipantResult> {
   return refusedAsForbidden(() =>
     withMember(db, memberId, async (trx): Promise<AddParticipantResult> => {
-      const { rows } = await sql<{ outcome: "added" | Exclude<AddParticipantResult, { ok: true } | Forbidden>["reason"]; participant_id: string | null }>`
-        select outcome, participant_id from app.add_participant(${projectId}::uuid, ${input.crNumber}, ${input.role})
+      const { rows } = await sql<{ outcome: "invited" | Exclude<AddParticipantResult, { ok: true } | Forbidden>["reason"] }>`
+        select app.add_participant(${projectId}::uuid, ${input.crNumber}, ${input.role}, ${now}) as outcome
       `.execute(trx);
-      const { outcome, participant_id } = rows[0]!;
-      return outcome === "added" ? { ok: true, participantId: participant_id! } : { ok: false, reason: outcome };
+      const { outcome } = rows[0]!;
+      return outcome === "invited" ? { ok: true } : { ok: false, reason: outcome };
+    }),
+  );
+}
+
+/**
+ * A Project's pending Participant Invitations, for its Project Admins: null
+ * when it isn't one of the Member's Projects, forbidden for its other Members.
+ */
+export async function listProjectInvitations(
+  db: Db,
+  memberId: string,
+  projectId: string,
+): Promise<ProjectInvitations | Forbidden | null> {
+  return withMember(db, memberId, async (trx) => {
+    const project = await trx
+      .selectFrom("project")
+      .select(sql<boolean>`id in (select app.current_admin_project_ids())`.as("isAdmin"))
+      .where("id", "=", projectId)
+      .executeTakeFirst();
+    if (!project) return null;
+    if (!project.isAdmin) return { ok: false, reason: "forbidden" } as const;
+    const { rows } = await sql<{
+      invitation_id: string;
+      cr_number: string;
+      base_role: BaseRole;
+      role_name: BilingualText;
+      invited_at: Date;
+    }>`select * from app.project_invitations(${projectId}::uuid)`.execute(trx);
+    return {
+      invitations: rows.map((r) => ({
+        id: r.invitation_id,
+        crNumber: r.cr_number,
+        projectRole: { baseRole: r.base_role, name: r.role_name },
+        invitedAt: r.invited_at.toISOString(),
+      })),
+    };
+  });
+}
+
+/** The Authorized Person's Company's pending Participant Invitations. */
+export function listCompanyInvitations(db: Db, memberId: string): Promise<CompanyInvitations | Forbidden> {
+  return refusedAsForbidden(() =>
+    withMember(db, memberId, async (trx) => {
+      const { rows } = await sql<{
+        participant_id: string;
+        project_name: BilingualText;
+        host_name: BilingualText;
+        base_role: BaseRole;
+        role_name: BilingualText;
+        invited_at: Date;
+      }>`select * from app.company_invitations()`.execute(trx);
+      return {
+        invitations: rows.map((r) => ({
+          id: r.participant_id,
+          project: { name: r.project_name },
+          hostCompany: { legalName: r.host_name },
+          projectRole: { baseRole: r.base_role, name: r.role_name },
+          invitedAt: r.invited_at.toISOString(),
+        })),
+      };
+    }),
+  );
+}
+
+/**
+ * The invited Company's Authorized Person accepts (the Company becomes a
+ * Participant) or declines (nothing changes on the Project) an invitation.
+ */
+export function respondToInvitation(
+  db: Db,
+  memberId: string,
+  participantId: string,
+  accept: boolean,
+  now: Date,
+): Promise<RespondToInvitationResult> {
+  return refusedAsForbidden(() =>
+    withMember(db, memberId, async (trx): Promise<RespondToInvitationResult> => {
+      const { rows } = await sql<{ outcome: "accepted" | "declined" | "not_found" | "project_closed" }>`
+        select app.respond_to_invitation(${participantId}::uuid, ${accept}, ${now}) as outcome
+      `.execute(trx);
+      const { outcome } = rows[0]!;
+      return outcome === "accepted" || outcome === "declined" ? { ok: true } : { ok: false, reason: outcome };
     }),
   );
 }

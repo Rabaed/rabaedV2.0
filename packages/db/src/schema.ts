@@ -64,9 +64,10 @@ export interface InvitationTable {
 export interface AdminActionTable {
   id: Generated<string>;
   engineer_id: string;
-  action: "onboard_company";
+  action: "onboard_company" | "read_onboarding_leads";
   target_kind: string;
-  target_id: string;
+  /** Null for a read of a list. */
+  target_id: string | null;
   reason: string;
   before: Json | null;
   after: Json | null;
@@ -109,10 +110,25 @@ export interface ParticipantTable {
   project_id: string;
   company_id: string;
   project_role_id: string;
-  /** Its place on the Project (1, 2, 3…), set by a trigger. */
-  ordinal: Generated<number>;
-  status: Generated<"active" | "withdrawn">;
+  /** Its place on the Project (1, 2, 3…), set by a trigger when it becomes Active. */
+  ordinal: Generated<number | null>;
+  /** Invited until its Authorized Person accepts (Active) or declines (ADR 0009). */
+  status: Generated<"invited" | "declined" | "active" | "withdrawn">;
+  invited_by_member_id: string | null;
+  invited_at: Timestamp | null;
+  responded_at: Timestamp | null;
   withdrawn_at: Timestamp | null;
+  created_at: Generated<Timestamp>;
+  updated_at: Generated<Timestamp>;
+}
+
+/** A CR number a Project Admin invited that isn't on Rabaed; read only through Rabaed Admin. */
+export interface OnboardingLeadTable {
+  id: Generated<string>;
+  cr_number: string;
+  project_id: string;
+  project_role_id: string;
+  requested_by_member_id: string;
   created_at: Generated<Timestamp>;
   updated_at: Generated<Timestamp>;
 }
@@ -364,6 +380,7 @@ export interface Database {
   project: ProjectTable;
   company_project_counter: CompanyProjectCounterTable;
   participant: ParticipantTable;
+  onboarding_lead: OnboardingLeadTable;
   project_member: ProjectMemberTable;
   project_admin: ProjectAdminTable;
   visibility_dimension: VisibilityDimensionTable;

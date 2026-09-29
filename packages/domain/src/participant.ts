@@ -4,9 +4,58 @@ import { baseRoles } from "./project.ts";
 
 const projectRole = z.object({ baseRole: z.enum(baseRoles), name: bilingualText });
 
-/** A Project Admin adds another Company, found by its CR number, as a Participant in a Project Role. */
+/**
+ * A Project Admin invites another Company, found by its CR number, to be a
+ * Participant in a Project Role. The answer is the same whether or not the CR
+ * number is on Rabaed (ADR 0009).
+ */
 export const addParticipantRequest = z.object({ crNumber, role: z.enum(baseRoles) });
 export type AddParticipantRequest = z.infer<typeof addParticipantRequest>;
+
+/**
+ * A Project's pending Participant Invitations, for its Project Admins: by the
+ * CR number they entered, alike whether or not it is on Rabaed, and never with
+ * a Company's name (ADR 0009).
+ */
+export const projectInvitations = z.object({
+  invitations: z.array(z.object({ id: z.uuid(), crNumber: z.string(), projectRole, invitedAt: z.iso.datetime() })),
+});
+export type ProjectInvitations = z.infer<typeof projectInvitations>;
+
+/**
+ * A pending Participant Invitation, as the invited Company's Authorized Person
+ * sees it: the Project's name, its Host Company and the offered Project Role,
+ * and nothing else of the Project until they accept (V15, ADR 0009).
+ */
+export const companyInvitation = z.object({
+  id: z.uuid(),
+  project: z.object({ name: bilingualText }),
+  hostCompany: z.object({ legalName: bilingualText }),
+  projectRole,
+  invitedAt: z.iso.datetime(),
+});
+export type CompanyInvitation = z.infer<typeof companyInvitation>;
+
+export const companyInvitations = z.object({ invitations: z.array(companyInvitation) });
+export type CompanyInvitations = z.infer<typeof companyInvitations>;
+
+/**
+ * A CR number a Project Admin invited that isn't on Rabaed, for Rabaed to
+ * onboard: seen only through Rabaed Admin (V9, ADR 0009).
+ */
+export const onboardingLeads = z.object({
+  leads: z.array(
+    z.object({
+      id: z.uuid(),
+      crNumber: z.string(),
+      project: z.object({ id: z.uuid(), projectNumber: z.number().int(), code: z.string(), name: bilingualText }),
+      hostCompany: z.object({ id: z.uuid(), legalName: bilingualText }),
+      baseRole: z.enum(baseRoles),
+      requestedAt: z.iso.datetime(),
+    }),
+  ),
+});
+export type OnboardingLeads = z.infer<typeof onboardingLeads>;
 
 /** A Participant of a Project, as its Project Admins, and its own Company's Members, see it. */
 export const projectParticipant = z.object({

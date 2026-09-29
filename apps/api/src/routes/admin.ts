@@ -1,8 +1,9 @@
-import { onboardCompanyRequest, signInRequest } from "@rabaed/domain";
+import { engineerReason, onboardCompanyRequest, onboardingLeads, signInRequest } from "@rabaed/domain";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import type { AppContext } from "../app.ts";
 import { HttpError } from "../http-error.ts";
+import { listOnboardingLeads } from "../identity/onboarding-leads.ts";
 import { onboardCompany } from "../identity/onboarding.ts";
 import { signInHandler } from "./session.ts";
 
@@ -45,6 +46,21 @@ export const adminRoutes =
           authorizedPersonId: result.authorizedPersonId,
           invitation: result.invitation,
         });
+      },
+    );
+
+    // The CR numbers Project Admins invited that aren't on Rabaed, for Rabaed to onboard (ADR 0009).
+    app.get(
+      "/v1/onboarding-leads",
+      {
+        onRequest: async (request) => {
+          ctx.requireEngineer(request);
+        },
+        schema: { querystring: z.object({ reason: engineerReason }), response: { 200: onboardingLeads } },
+      },
+      async (request) => {
+        const engineerId = ctx.requireEngineer(request);
+        return { leads: await listOnboardingLeads(ctx.adminDb, engineerId, request.query.reason) };
       },
     );
   };

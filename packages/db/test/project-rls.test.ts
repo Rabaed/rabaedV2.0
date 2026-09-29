@@ -76,6 +76,8 @@ async function projectTables(): Promise<{ table: string; column: string }[]> {
     select c.table_name as table from information_schema.columns c
     join information_schema.tables t on t.table_schema = c.table_schema and t.table_name = c.table_name
     where c.table_schema = 'public' and c.column_name = 'project_id' and t.table_type = 'BASE TABLE'
+      -- The rest are out of the app role's reach altogether (see below).
+      and has_table_privilege('rabaed_app', format('%I.%I', c.table_schema, c.table_name), 'select')
     order by 1
   `);
   return [{ table: "project", column: "id" }, ...rows.map((r) => ({ table: r.table, column: "project_id" }))];
@@ -131,11 +133,14 @@ describe("every Project table", () => {
   });
 });
 
-describe("company_project_counter", () => {
-  it("is out of the app role's reach", async () => {
-    await expect(
-      withMember(app, ids.creatorA, (trx) => sql`select * from company_project_counter`.execute(trx)),
-    ).rejects.toThrow(/permission denied/);
+describe("company_project_counter and onboarding_lead", () => {
+  it("are out of the app role's reach", async () => {
+    for (const table of ["company_project_counter", "onboarding_lead"]) {
+      await expect(
+        withMember(app, ids.creatorA, (trx) => sql`select * from ${sql.table(table)}`.execute(trx)),
+        table,
+      ).rejects.toThrow(/permission denied/);
+    }
   });
 });
 

@@ -88,8 +88,12 @@ This table is versioned: every signing event points at the exact signature row t
 A custom role (Subcontractor, PMC…) must name a `base_role`. Permission checks cap at what the base role allows.
 
 **participant**
-`id`, `project_id`, `company_id`, `project_role_id`, `ordinal` (1, 2, 3… on the Project; the Company segment of Document Numbers until numbering patterns), `status {active, withdrawn}`, `withdrawn_at`, `withdrawn_by`.
-Unique `(project_id, company_id)`. Withdrawal cancels the participant's in-progress Work Items in one transaction (§5).
+`id`, `project_id`, `company_id`, `project_role_id`, `ordinal` (1, 2, 3… on the Project, set when it becomes Active; the Company segment of Document Numbers until numbering patterns), `status {invited, declined, active, withdrawn}`, `invited_by_member_id`, `invited_at`, `responded_at`, `withdrawn_at`, `withdrawn_by`.
+Unique `(project_id, company_id)`. A Project Admin's Participant Invitation creates it Invited; the Company's Authorized Person accepts (Active) or declines it (ADR 0009). Invited and Declined rows are seen by nobody but the invited Authorized Person (their own pending invitations) and, as a CR number only, the Project Admins, to whom a Declined one still looks pending. Withdrawal cancels the participant's in-progress Work Items in one transaction (§5).
+
+**onboarding_lead**
+`id`, `cr_number`, `project_id`, `project_role_id`, `requested_by_member_id`, `created_at`, `updated_at`. Unique `(project_id, cr_number)`.
+A CR number a Project Admin invited that isn't on Rabaed. The Project Admin gets the same answer as for a Company that is, and sees it among their pending invitations by CR number; its details are read only through Rabaed Admin (V9).
 
 **project_member**
 `id`, `project_id` (denormalised for RLS; must match the Participant's), `participant_id`, `member_id`, `status {active, removed}`, `removed_at`.
@@ -330,7 +334,7 @@ Each created Draft carries `import_id` for traceability.
 
 **rabaed_engineer**: separate identity table. Engineers are never Members.
 
-**admin_action**: `id`, `engineer_id`, `action`, `target_kind/target_id`, `reason` (required), `before jsonb`, `after jsonb`, `at`.
+**admin_action**: `id`, `engineer_id`, `action`, `target_kind/target_id` (`target_id` null for a read of a list), `reason` (required), `before jsonb`, `after jsonb`, `at`.
 Allowed actions are an explicit list: onboard Company, reassign, reset step, transfer Authorized Person, unlock, run import, fix visibility, publish library template.
 
 **job**: background jobs (PDF sealing, imports, deliveries) with status and error, which is the Job Monitor.

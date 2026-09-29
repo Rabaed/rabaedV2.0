@@ -1,5 +1,6 @@
 import "server-only";
 import type {
+  CompanyInvitations,
   CompanyMembers,
   CompanyParticipations,
   DimensionValues,
@@ -8,6 +9,7 @@ import type {
   NotificationList,
   ParticipantMembers,
   ParticipantVisibility,
+  ProjectInvitations,
   ProjectParticipants,
   ProjectSummary,
   SignedInMember,
@@ -62,6 +64,16 @@ export function getProjectParticipants(projectId: string): Promise<ProjectPartic
 /** The Authorized Person's Company's Participants; null for anyone else. */
 export function getCompanyParticipations(): Promise<CompanyParticipations | null> {
   return apiGet<CompanyParticipations>("/v1/participants");
+}
+
+/** The Authorized Person's Company's pending Participant Invitations; null for anyone else. */
+export function getCompanyInvitations(): Promise<CompanyInvitations | null> {
+  return apiGet<CompanyInvitations>("/v1/participant-invitations");
+}
+
+/** A Project's pending Participant Invitations, for its Project Admins; null for anyone else. */
+export function getProjectInvitations(projectId: string): Promise<ProjectInvitations | null> {
+  return apiGet<ProjectInvitations>(`/v1/projects/${encodeURIComponent(projectId)}/invitations`);
 }
 
 /** One of the signed-in Member's own Company's Participants and its Project Members; null otherwise. */

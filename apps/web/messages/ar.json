@@ -106,7 +106,10 @@
     "tradesLocations": "التخصصات والمواقع",
     "visibility": "الرؤية",
     "membersVisibility": "رؤية أعضاء شركتك",
-    "submittals": "الاعتمادات"
+    "submittals": "الاعتمادات",
+    "pendingInvitations": "دعوات بانتظار الرد",
+    "crNumber": "السجل التجاري",
+    "awaitingAnswer": "بانتظار الرد"
   },
   "participants": {
     "title": "مشاريع الشركة",
@@ -124,10 +127,16 @@
     "invalidCr": "أدخل رقم السجل التجاري المكوّن من 10 أرقام.",
     "notAdmin": "لا يضيف المشاركين إلا مسؤول المشروع.",
     "alreadyParticipant": "هذه الشركة مشاركة في المشروع بالفعل.",
-    "unknownCompany": "لا توجد شركة بهذا الرقم على ربائد.",
     "unavailable": "حدث خطأ. حاول مرة أخرى.",
     "visibility": "الرؤية",
-    "positions": "المناصب"
+    "positions": "المناصب",
+    "invite": "إرسال الدعوة",
+    "invitationSent": "إذا كانت هذه الشركة على ربائد فستصل الدعوة إلى المفوَّض فيها، وإلا فسيتواصل معك فريق ربائد لإضافتها.",
+    "invitationsTitle": "الدعوات",
+    "offeredRole": "مدعوّة بدور {role}",
+    "accept": "قبول",
+    "decline": "رفض",
+    "confirmDecline": "رفض هذه الدعوة؟ لن تنضم شركتك إلى المشروع."
   },
   "dimensions": {
     "title": "التخصصات والمواقع",

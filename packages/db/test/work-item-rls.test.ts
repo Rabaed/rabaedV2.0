@@ -7,7 +7,7 @@ import { sql } from "kysely";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb, withMember, type Db } from "../src/index.ts";
-import { testDatabaseUrls } from "../test-support/index.ts";
+import { joinProject, testDatabaseUrls } from "../test-support/index.ts";
 
 const urls = testDatabaseUrls();
 const digits = (n: number) => Array.from({ length: n }, () => randomInt(10)).join("");
@@ -122,11 +122,7 @@ beforeAll(async () => {
     ["k1", k1, "consultant"],
     ["or", or, "owner_representative"],
   ] as const) {
-    const [row] = await call<{ participant_id: string }>(
-      c1.ap,
-      sql`select participant_id from app.add_participant(${projectId}::uuid, ${co.cr}, ${role})`,
-    );
-    participant[key] = row!.participant_id;
+    participant[key] = await joinProject(app, projectId, { adminId: c1.ap, crNumber: co.cr, role }, co.ap);
   }
   const addProjectMember = (as: string, p: string, m: string) =>
     call<{ outcome: string }>(as, sql`select app.add_project_member(${p}::uuid, ${m}::uuid, now())`);

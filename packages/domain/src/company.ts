@@ -26,6 +26,9 @@ export const email = z
   .toLowerCase()
   .pipe(z.email().max(254));
 
+/** Every Rabaed Engineer action carries a reason (visibility.md V9). */
+export const engineerReason = z.string().trim().min(1).max(1000);
+
 /** A Rabaed Engineer's request to onboard a Company and name its Authorized Person. */
 export const onboardCompanyRequest = z.object({
   legalName: bilingualText,
@@ -36,7 +39,6 @@ export const onboardCompanyRequest = z.object({
     fullName: bilingualText,
     locale: z.enum(locales).default("en"),
   }),
-  /** Every Rabaed Engineer action carries a reason (visibility.md V9). */
-  reason: z.string().trim().min(1).max(1000),
+  reason: engineerReason,
 });
 export type OnboardCompanyRequest = z.infer<typeof onboardCompanyRequest>;
