@@ -168,7 +168,8 @@ jobs:
           echo "secret=$secret" >> "$GITHUB_OUTPUT"
           action=ensure
           [[ "$RESET" == true ]] && action=reset
-          packages/infra/scripts/run-task.sh "$RUNNER_TEMP/migrations.json" "demo $action"             /app/apps/api/node_modules/.bin/tsx /app/apps/api/src/cli/demo-environment.ts "$action"
+          packages/infra/scripts/run-task.sh "$RUNNER_TEMP/migrations.json" "demo $action" \
+            /app/apps/api/node_modules/.bin/tsx /app/apps/api/src/cli/demo-environment.ts "$action"
 
       - name: App
         working-directory: packages/infra

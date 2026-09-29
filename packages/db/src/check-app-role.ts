@@ -11,7 +11,7 @@ try {
     console.error(`app role check failed:\n${failures.map((f) => `  - ${f}`).join("\n")}`);
     process.exitCode = 1;
   } else {
-    console.log("app role check passed: rabaed_app is subject to row-level security and cannot rewrite work_item_event");
+    console.log("app role check passed: rabaed_app is subject to row-level security and cannot rewrite work_item_event or admin_action");
   }
 } finally {
   await db.destroy();

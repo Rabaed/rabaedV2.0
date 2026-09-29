@@ -10,8 +10,8 @@ import { APP_ROLE } from "./config.ts";
 /** Tables the check expects to be empty to a connection with no Member set. */
 const RLS_TABLES = ["company", "member", "project", "participant", "work_item", "work_item_event"] as const;
 
-/** The legal trail: append-only (docs/workflow-engine.md). */
-const AUDIT_TABLE = "work_item_event";
+/** Append-only: the legal trail of Work Items (docs/workflow-engine.md) and Rabaed Admin's actions (visibility.md V9). */
+const AUDIT_TABLES = ["work_item_event", "admin_action"] as const;
 
 /** Returns what is wrong; empty when `db` is a role that cannot get round row-level security or rewrite the audit trail. */
 export async function checkAppRole(db: Db): Promise<string[]> {
@@ -34,14 +34,16 @@ export async function checkAppRole(db: Db): Promise<string[]> {
   // Turning row security off must be refused, not obeyed.
   if (await rowSecurityOffWorks(db)) failures.push(`${role.name} can switch row-level security off`);
 
-  const { rows: [audit] } = await sql<{ update: boolean; delete: boolean; truncate: boolean }>`
-    select has_table_privilege(current_user, ${AUDIT_TABLE}, 'UPDATE') as update,
-           has_table_privilege(current_user, ${AUDIT_TABLE}, 'DELETE') as delete,
-           has_table_privilege(current_user, ${AUDIT_TABLE}, 'TRUNCATE') as truncate
-  `.execute(db);
-  if (audit!.update) failures.push(`${role.name} may update ${AUDIT_TABLE}`);
-  if (audit!.delete) failures.push(`${role.name} may delete from ${AUDIT_TABLE}`);
-  if (audit!.truncate) failures.push(`${role.name} may truncate ${AUDIT_TABLE}`);
+  for (const table of AUDIT_TABLES) {
+    const { rows: [may] } = await sql<{ update: boolean; delete: boolean; truncate: boolean }>`
+      select has_table_privilege(current_user, ${table}, 'UPDATE') as update,
+             has_table_privilege(current_user, ${table}, 'DELETE') as delete,
+             has_table_privilege(current_user, ${table}, 'TRUNCATE') as truncate
+    `.execute(db);
+    if (may!.update) failures.push(`${role.name} may update ${table}`);
+    if (may!.delete) failures.push(`${role.name} may delete from ${table}`);
+    if (may!.truncate) failures.push(`${role.name} may truncate ${table}`);
+  }
 
   return failures;
 }

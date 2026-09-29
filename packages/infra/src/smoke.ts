@@ -79,10 +79,10 @@ export const VISIBILITY_CHECK_PEOPLE = {
   jcv: "nasser.aldosari@betabuild.demo.rabaed.test",
 } as const;
 
-/** How many of Riyadh Gate Tower's Work Items (made in walkthroughs) are tried as Nasser. */
+/** How many of Riyadh Gate Tower's Work Items (the seeded Draft, and any made in walkthroughs) are tried as Nasser. */
 const MAX_ITEMS_CHECKED = 5;
 
-interface Signed {
+interface SignedIn {
   email: string;
   get(path: string): Promise<Response>;
   signOut(): Promise<void>;
@@ -97,7 +97,7 @@ export async function visibilityCheck({ url, password, fetch: get = fetch }: { u
   const base = new URL(url);
   const call = (path: string, init: RequestInit = {}) => get(new URL(path, base).toString(), { ...init, signal: AbortSignal.timeout(10_000) });
 
-  const signIn = async (email: string): Promise<Signed | string> => {
+  const signIn = async (email: string): Promise<SignedIn | string> => {
     const res = await call("/api/v1/session", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email, password }) });
     const cookie = res.headers.getSetCookie().map((c) => c.split(";")[0]).find((c) => c?.startsWith("rabaed_session="));
     if (res.status >= 300 || !cookie) return `sign-in as ${email} answered ${res.status}`;
@@ -105,7 +105,8 @@ export async function visibilityCheck({ url, password, fetch: get = fetch }: { u
     return {
       email,
       get: (path) => call(path, { headers }),
-      signOut: async () => void (await call("/api/v1/session", { method: "DELETE", headers })),
+      // Best effort: a failed sign-out must not hide what the check found.
+      signOut: async () => void (await call("/api/v1/session", { method: "DELETE", headers }).catch(() => undefined)),
     };
   };
 
@@ -119,10 +120,10 @@ export async function visibilityCheck({ url, password, fetch: get = fetch }: { u
 
   try {
     const failures: string[] = [];
-    const projects = async (who: Signed) => ((await (await who.get("/api/v1/projects")).json()) as { projects: { id: string; code: string }[] }).projects;
-    const items = async (who: Signed, projectId: string) =>
+    const projects = async (who: SignedIn) => ((await (await who.get("/api/v1/projects")).json()) as { projects: { id: string; code: string }[] }).projects;
+    const items = async (who: SignedIn, projectId: string) =>
       ((await (await who.get(`/api/v1/projects/${projectId}/work-items`)).json()) as { items: { id: string }[] }).items.map((i) => i.id);
-    const notFound = async (who: Signed, path: string) => {
+    const notFound = async (who: SignedIn, path: string) => {
       const res = await who.get(path);
       if (res.status !== 404) failures.push(`${who.email}: ${path} answered ${res.status}, expected 404`);
     };
@@ -140,9 +141,11 @@ export async function visibilityCheck({ url, password, fetch: get = fetch }: { u
     await notFound(hafiz, `/api/v1/projects/${jcv.id}/work-items`);
     for (const id of jcvItems) await notFound(hafiz, `/api/v1/work-items/${id}`);
 
+    const twrItems = (await items(hafiz, twr.id)).slice(0, MAX_ITEMS_CHECKED);
+    if (twrItems.length === 0) failures.push("Riyadh Gate Tower has no Work Item to check");
     await notFound(nasser, `/api/v1/projects/${twr.id}`);
     await notFound(nasser, `/api/v1/projects/${twr.id}/work-items`);
-    for (const id of (await items(hafiz, twr.id)).slice(0, MAX_ITEMS_CHECKED)) await notFound(nasser, `/api/v1/work-items/${id}`);
+    for (const id of twrItems) await notFound(nasser, `/api/v1/work-items/${id}`);
     return failures;
   } finally {
     await Promise.all([hafiz.signOut(), nasser.signOut()]);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { smokeTest, visibilityCheck } from "./smoke.ts";
+import { smokeTest, VISIBILITY_CHECK_PEOPLE, visibilityCheck } from "./smoke.ts";
 
 const url = "https://rabaed-dev-123.eu-central-1.elb.amazonaws.com";
 const version = "4f2a9c1e";
@@ -155,7 +155,7 @@ describe("smoke test: Arabic font", () => {
 // Corniche Villas (Nasser) get 404 on each other's Project and Work Items.
 describe("visibility check", () => {
   const password = "demo-password-from-secrets-manager";
-  const people = { hafiz: "hafiz.hamdan@tmc.demo.rabaed.test", nasser: "nasser.aldosari@betabuild.demo.rabaed.test" };
+  const people = { hafiz: VISIBILITY_CHECK_PEOPLE.twr, nasser: VISIBILITY_CHECK_PEOPLE.jcv };
   const twr = "0190a000-0000-7000-8000-000000000001";
   const jcv = "0190a000-0000-7000-8000-000000000002";
   const twrItem = "0190a000-0000-7000-8000-00000000000a";
@@ -229,7 +229,18 @@ describe("visibility check", () => {
     expect(failures).toEqual([expect.stringContaining("sign-in as hafiz.hamdan@tmc.demo.rabaed.test answered 401")]);
   });
 
-  it("checks Riyadh Gate Tower's Work Items only when it has some (a fresh demo has none)", async () => {
-    expect(await visibilityCheck({ url, password, fetch: api({ twrItems: [] }).fetcher })).toEqual([]);
+  it("fails when a Project has no Work Item to check (the demo seeds one in each)", async () => {
+    const failures = await visibilityCheck({ url, password, fetch: api({ twrItems: [] }).fetcher });
+    expect(failures).toEqual([expect.stringContaining("Riyadh Gate Tower has no Work Item to check")]);
+  });
+
+  it("reports what it found even when signing out fails", async () => {
+    const { fetcher } = api({ leak: { who: "hafiz", path: `/api/v1/projects/${jcv}` } });
+    const failing = (async (input: string | URL, init: RequestInit = {}) => {
+      if (init.method === "DELETE") throw new TypeError("fetch failed");
+      return fetcher(input, init);
+    }) as typeof fetch;
+    const failures = await visibilityCheck({ url, password, fetch: failing });
+    expect(failures).toEqual([expect.stringContaining(`/api/v1/projects/${jcv} answered 200, expected 404`)]);
   });
 });

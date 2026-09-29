@@ -35,8 +35,11 @@ export interface DemoSeed {
   people: DemoPerson[];
 }
 
-/** The Rabaed Engineer's email: whether the demo is seeded can be told from it. */
+/** The Rabaed Engineer's email: created first, so whether a seed started can be told from it. */
 export const DEMO_ENGINEER_EMAIL = "engineer@rabaed.demo.rabaed.test";
+
+/** The Draft the seed creates last: whether a seed finished can be told from it. */
+export const DEMO_LAST_ITEM_TITLE = "Pump room ventilation";
 
 type Method = "GET" | "POST" | "PUT" | "PATCH";
 /** An API call; `T` is the answer's shape where the seed reads it. */
@@ -165,7 +168,7 @@ export async function seedDemo(app: FastifyInstance, migrator: Db, password: str
   for (const floor of ["01", "02", "03"]) {
     await location(`T1F${floor}`, bi(`Tower 1 Floor ${floor}`, `البرج 1 الطابق ${floor}`), tower1);
   }
-  await location("T2F01", bi("Tower 2 Floor 01", "البرج 2 الطابق 01"), tower2);
+  const tower2Floor1 = await location("T2F01", bi("Tower 2 Floor 01", "البرج 2 الطابق 01"), tower2);
 
   // Participants and what each covers (set by the Project Admin). Beta Build
   // covers exactly what TMC does: only the Company boundary keeps TMC's items from it (V3).
@@ -232,6 +235,17 @@ export async function seedDemo(app: FastifyInstance, migrator: Db, password: str
   };
   await member(waha, participant.waha, faisal, ["engineer"]);
 
+  // One Draft of TMC's own, so a fresh demo has a Riyadh Gate Tower Work Item
+  // for the deploy's visibility check to try as someone from another Project.
+  const hafizCaller = browser(app);
+  await hafizCaller("POST", "/v1/session", { email: email(hafiz.local, tmc.domain), password });
+  await hafizCaller("POST", `/v1/projects/${projectId}/work-items`, {
+    type: "MAR",
+    title: "Emergency lighting – Tower 2",
+    tradeId: electrical,
+    locationId: tower2Floor1,
+  });
+
   // A second Project: Beta Build's own, with only its Authorized Person on it
   // and one Draft. Nobody on Riyadh Gate Tower is on it, and Nasser is on
   // nothing else, so each sees only their own Project (the deploy's
@@ -251,7 +265,8 @@ export async function seedDemo(app: FastifyInstance, migrator: Db, password: str
   await beta.caller("PUT", `/v1/participants/${betaOwn}/visibility`, { trade: only(plumbing), location: all });
   await beta.caller("PUT", `/v1/participants/${betaOwn}/members/${beta.authorizedPersonId}/visibility`, { trade: all, location: all });
   await beta.caller("PUT", `/v1/participants/${betaOwn}/members/${beta.authorizedPersonId}/positions`, { positions: ["engineer"] });
-  await beta.caller("POST", `/v1/projects/${otherProjectId}/work-items`, { type: "MAR", title: "Pump room ventilation", tradeId: plumbing });
+  // Last: ensureDemo takes this Draft as the sign that the seed finished.
+  await beta.caller("POST", `/v1/projects/${otherProjectId}/work-items`, { type: "MAR", title: DEMO_LAST_ITEM_TITLE, tradeId: plumbing });
 
   return { projectId, otherProjectId, engineer, people };
 }

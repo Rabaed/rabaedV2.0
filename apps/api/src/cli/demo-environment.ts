@@ -32,7 +32,7 @@ const { action, DEMO_PASSWORD: password } = parsed.data;
 const urls = databaseUrlsFromEnv();
 // Rotation owns the role passwords in AWS; the reset must not set them back.
 if (action === "reset") {
-  const { database } = await resetDatabase(urls, { passwords: "on-create" });
+  const { database } = await resetDatabase(urls, { passwords: "on-create", notLocal: "demo environment" });
   console.log(`demo: dropped and migrated ${database}`);
 }
 

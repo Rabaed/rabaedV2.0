@@ -26,6 +26,7 @@ describe("the app role check", () => {
     const failures = await checkAppRole(migrator);
     expect(failures).toContainEqual(expect.stringMatching(/may update work_item_event/));
     expect(failures).toContainEqual(expect.stringMatching(/may delete from work_item_event/));
+    expect(failures).toContainEqual(expect.stringMatching(/may update admin_action/));
   });
 
   it("changes nothing, even when a statement is allowed", async () => {

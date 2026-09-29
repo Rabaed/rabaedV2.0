@@ -193,9 +193,10 @@ describe("a second Project: Beta Build's Jeddah Corniche Villas, which no other 
     const items = (await nasser.get(`/v1/projects/${jcv}/work-items`)).json().items as { id: string }[];
     expect(items).toHaveLength(1);
     jcvItem = items[0]!.id;
-    const created = await hafiz.post(`/v1/projects/${projectId}/work-items`, { type: "MAR", title: "Cross-project check", tradeId: electrical });
-    expect(created.statusCode, created.body).toBe(201);
-    twrItem = created.json().id;
+    // The seed gives Riyadh Gate Tower one Draft of its own, so a fresh demo has an item to check.
+    const twrItems = (await hafiz.get(`/v1/projects/${projectId}/work-items`)).json().items as { id: string; title: string }[];
+    twrItem = twrItems.find((i) => i.title === "Emergency lighting – Tower 2")!.id;
+    expect(twrItem).toBeDefined();
   });
 
   it("Hafiz (Riyadh Gate Tower) gets 404 on it and on its Work Item, and never sees it listed", async () => {

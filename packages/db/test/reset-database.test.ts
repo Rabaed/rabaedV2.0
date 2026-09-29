@@ -30,6 +30,11 @@ afterAll(async () => {
 });
 
 describe("resetDatabase", () => {
+  it("refuses a database that is not on this machine unless told it may", async () => {
+    const remote = { ...urls, superuser: urls.superuser.replace(/@[^/]+\//, "@db.example.com/") };
+    await expect(resetDatabase(remote)).rejects.toThrow(/not on this machine/);
+  });
+
   it("drops the database, even with connections open, and migrates it from empty", async () => {
     await resetDatabase(urls);
     await query(urls.migrator, "create table leftover (id int)");
