@@ -31,7 +31,8 @@ export default async function ParticipantPage({
       <div className="space-y-1">
         <h1 className="text-h4 font-semibold">{t("membersTitle")}</h1>
         <p className="text-muted">
-          {data.participant.project.name[locale]} · {data.participant.projectRole.name[locale]}
+          {data.participant.project.name[locale]} · {data.participant.projectRole.name[locale]} ·{" "}
+          {t("hostedBy", { company: data.participant.hostCompany.legalName[locale] })}
         </p>
       </div>
       <ProjectMembersEditor

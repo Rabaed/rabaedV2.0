@@ -35,7 +35,9 @@ export default async function ParticipationsPage({ params }: { params: Promise<{
                     {p.project.code}
                   </bdi>
                 </span>
-                <span className="text-sm text-muted">{p.projectRole.name[locale]}</span>
+                <span className="text-end text-sm text-muted">
+                  {p.projectRole.name[locale]} · {t("hostedBy", { company: p.hostCompany.legalName[locale] })}
+                </span>
               </Link>
             </li>
           ))}

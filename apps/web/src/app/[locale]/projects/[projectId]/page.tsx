@@ -30,6 +30,12 @@ export default async function ProjectPage({ params }: { params: Promise<{ locale
         </dd>
         <dt className="text-muted">{t("projectNumber")}</dt>
         <dd>{project.projectNumber}</dd>
+        {participants && (
+          <>
+            <dt className="text-muted">{t("hostCompany")}</dt>
+            <dd>{participants.hostCompany.legalName[locale]}</dd>
+          </>
+        )}
         <dt className="text-muted">{t("yourRole")}</dt>
         <dd>
           {project.projectRole.name[locale]}
@@ -43,6 +49,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ locale
 
       <section className="space-y-4">
         <h2 className="text-h6 font-semibold">{t("participants")}</h2>
+        {/* Every Participant for a Project Admin; otherwise only your own Company's (V15). */}
         {participants && (
           <ul className="divide-y divide-border border-y border-border" data-testid="participants">
             {participants.participants.map((p) => (

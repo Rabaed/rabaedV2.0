@@ -2,6 +2,7 @@
 // RP-185 scenario 10: a removed Project Member loses access immediately).
 import { randomUUID } from "node:crypto";
 import { beforeAll, afterAll, describe, expect, it } from "vitest";
+import type { BaseRole } from "@rabaed/domain";
 import { createTestApi, uniqueCr, type Caller, type OnboardedCompany } from "./support/harness.ts";
 
 const api = await createTestApi();
@@ -31,6 +32,7 @@ describe("adding a Participant", () => {
   it("lists it on the Project with its Company's name and Project Role", async () => {
     const res = await host.caller.get(`/v1/projects/${projectId}/participants`);
     expect(res.statusCode).toBe(200);
+    expect(res.json().hostCompany).toEqual({ legalName: { en: "Test Constructions", ar: "إنشاءات الاختبار" } });
     expect(res.json().participants).toEqual([
       {
         id: expect.any(String),
@@ -116,6 +118,7 @@ describe("the Authorized Person of a Participant", () => {
     expect(res.json().participants).toContainEqual({
       id: consultantParticipantId,
       project: { id: projectId, projectNumber: expect.any(Number), code: "TWR", name: expect.any(Object) },
+      hostCompany: { legalName: { en: "Test Constructions", ar: "إنشاءات الاختبار" } },
       projectRole: { baseRole: "consultant", name: { en: "Consultant", ar: "الاستشاري" } },
     });
     // Not on the Project yet, so it is not among their own Projects.
@@ -230,5 +233,83 @@ describe("a Participant's Project Members list", () => {
     const res = await host.caller.get(`/v1/participants/${participantId}/members`);
     expect(res.statusCode).toBe(404);
     expect(res.json()).toEqual({ error: "not_found" });
+  });
+});
+
+// visibility.md V15, scenarios 28 and 29 (RP-223): a Participant sees only its
+// own participation and the Host Company's name; Project Admins see every Participant.
+describe("the Participants of a Project", () => {
+  let tower: string;
+  const ids: Record<"host" | "c1" | "c2" | "k1" | "or", string> = { host: "", c1: "", c2: "", k1: "", or: "" };
+  let c1: Company;
+  let c1Member: Caller;
+  let c1MemberId: string;
+
+  beforeAll(async () => {
+    tower = (await api.createProject(host.caller, { role: "owner" })).id;
+    ids.host = (await host.caller.get(`/v1/projects/${tower}/participants`)).json().participants[0].id;
+    // Each Participant with one Project Member of its own.
+    const join = async (key: "c1" | "c2" | "k1" | "or", role: BaseRole) => {
+      const company = await api.authorizedPerson();
+      ids[key] = await api.addParticipant(host.caller, tower, company.company, role);
+      const { member, caller } = await api.member(company.caller);
+      await api.addProjectMember(company.caller, ids[key], member.id);
+      return { company, member, caller };
+    };
+    const first = await join("c1", "contractor");
+    [c1, c1Member, c1MemberId] = [first.company, first.caller, first.member.id];
+    await join("c2", "contractor");
+    await join("k1", "consultant");
+    await join("or", "owner_representative");
+  });
+
+  it("shows a C1 member only C1's own Participant and the Host Company's name (scenario 28)", async () => {
+    const res = await c1Member.get(`/v1/projects/${tower}/participants`);
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({
+      hostCompany: { legalName: { en: "Test Constructions", ar: "إنشاءات الاختبار" } },
+      participants: [
+        {
+          id: ids.c1,
+          company: { id: c1.company.companyId, legalName: expect.any(Object) },
+          projectRole: { baseRole: "contractor", name: { en: "Contractor", ar: "المقاول" } },
+          isOwnCompany: true,
+        },
+      ],
+    });
+    for (const other of [ids.host, ids.c2, ids.k1, ids.or, host.company.companyId]) expect(res.body).not.toContain(other);
+  });
+
+  it("shows C1 its own Project Members with their Positions", async () => {
+    const res = await c1Member.get(`/v1/participants/${ids.c1}/members`);
+    expect(res.statusCode).toBe(200);
+    expect(res.json().participant.hostCompany).toEqual({ legalName: { en: "Test Constructions", ar: "إنشاءات الاختبار" } });
+    expect(res.json().members).toEqual([expect.objectContaining({ id: c1MemberId, positions: [] })]);
+    for (const other of [ids.host, ids.c2, ids.k1, ids.or]) {
+      expect((await c1Member.get(`/v1/participants/${other}/members`)).statusCode).toBe(404);
+    }
+  });
+
+  it("shows a Project Admin every Participant (scenario 29)", async () => {
+    const res = await host.caller.get(`/v1/projects/${tower}/participants`);
+    expect(res.statusCode).toBe(200);
+    expect(res.json().participants.map((p: { id: string }) => p.id)).toEqual([ids.host, ids.c1, ids.c2, ids.k1, ids.or]);
+  });
+
+  it("shows a host Member who is not a Project Admin only their own Participant", async () => {
+    const { member, caller } = await api.member(host.caller);
+    await api.addProjectMember(host.caller, ids.host, member.id);
+    const res = await caller.get(`/v1/projects/${tower}/participants`);
+    expect(res.json().participants.map((p: { id: string }) => p.id)).toEqual([ids.host]);
+  });
+
+  it("shows the Company Projects view the Host Company's name and the Company's own Project Role", async () => {
+    const res = await c1.caller.get("/v1/participants");
+    expect(res.json().participants).toContainEqual({
+      id: ids.c1,
+      project: { id: tower, projectNumber: expect.any(Number), code: "TWR", name: expect.any(Object) },
+      hostCompany: { legalName: { en: "Test Constructions", ar: "إنشاءات الاختبار" } },
+      projectRole: { baseRole: "contractor", name: { en: "Contractor", ar: "المقاول" } },
+    });
   });
 });

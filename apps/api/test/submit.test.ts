@@ -211,6 +211,10 @@ describe("Submit", () => {
     // "With Design Consultants LLC", never a Consultant person (V14).
     expect(d.heldBy).toEqual({ companyName: bilingual(CONSULTANT), memberName: null });
     expect(buttons(d)).toEqual([]);
+    // Named on the item, yet never listed among the Contractor's Participants (V15).
+    const participants = await pm.get(`/v1/projects/${projectId}/participants`);
+    expect(participants.statusCode).toBe(200);
+    expect(participants.body).not.toContain(CONSULTANT);
   });
 
   it("shows the item to the Consultant's Members whose Visibility covers it: list, counts and detail (V2, scenario 3)", async () => {

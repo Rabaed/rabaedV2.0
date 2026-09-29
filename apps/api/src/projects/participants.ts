@@ -5,9 +5,9 @@ import type {
   BilingualText,
   CompanyParticipation,
   ParticipantMembers,
-  ProjectParticipant,
+  ProjectParticipants,
 } from "@rabaed/domain";
-import { sql } from "kysely";
+import { sql, type RawBuilder } from "kysely";
 import { refusedAsForbidden } from "../db-error.ts";
 
 // Participants and Project Members. Writes go through the app.* functions of the
@@ -28,10 +28,18 @@ function projectMemberResult(outcome: string, done: string): ProjectMemberResult
   return outcome === done ? { ok: true } : { ok: false, reason: outcome as ProjectMemberRefusal };
 }
 
-/** The Participants of one of the Member's Projects, or null when it isn't one of theirs. */
-export async function listParticipants(db: Db, memberId: string, projectId: string): Promise<ProjectParticipant[] | null> {
+/**
+ * The Participants of one of the Member's Projects they may list (every one for
+ * its Project Admins, otherwise only their own Company's) and the Host Company's
+ * name (V15); null when it isn't one of their Projects.
+ */
+export async function listParticipants(db: Db, memberId: string, projectId: string): Promise<ProjectParticipants | null> {
   return withMember(db, memberId, async (trx) => {
-    const onProject = await trx.selectFrom("project").select("id").where("id", "=", projectId).executeTakeFirst();
+    const onProject = await trx
+      .selectFrom("project")
+      .select(sql<BilingualText>`app.project_host_company_name(id)`.as("hostName"))
+      .where("id", "=", projectId)
+      .executeTakeFirst();
     if (!onProject) return null;
     const { rows } = await sql<{
       participant_id: string;
@@ -43,12 +51,15 @@ export async function listParticipants(db: Db, memberId: string, projectId: stri
     }>`
       select p.*, p.company_id = app.current_company_id() as own from app.project_participants(${projectId}::uuid) p
     `.execute(trx);
-    return rows.map((r) => ({
-      id: r.participant_id,
-      company: { id: r.company_id, legalName: r.legal_name },
-      projectRole: { baseRole: r.base_role, name: r.role_name },
-      isOwnCompany: r.own,
-    }));
+    return {
+      hostCompany: { legalName: onProject.hostName },
+      participants: rows.map((r) => ({
+        id: r.participant_id,
+        company: { id: r.company_id, legalName: r.legal_name },
+        projectRole: { baseRole: r.base_role, name: r.role_name },
+        isOwnCompany: r.own,
+      })),
+    };
   });
 }
 
@@ -76,14 +87,20 @@ type ParticipationRow = {
   project_number: number;
   code: string;
   name: BilingualText;
+  host_name: BilingualText;
   base_role: BaseRole;
   role_name: BilingualText;
 };
+
+/** A participation row from app.company_participants or app.participation, with its Host Company's name. */
+const participationRows = (from: RawBuilder<unknown>) =>
+  sql<ParticipationRow>`select x.*, app.project_host_company_name(x.project_id) as host_name from ${from} x`;
 
 function toParticipation(r: ParticipationRow): CompanyParticipation {
   return {
     id: r.participant_id,
     project: { id: r.project_id, projectNumber: r.project_number, code: r.code, name: r.name },
+    hostCompany: { legalName: r.host_name },
     projectRole: { baseRole: r.base_role, name: r.role_name },
   };
 }
@@ -95,7 +112,7 @@ export function listCompanyParticipations(
 ): Promise<{ ok: true; participations: CompanyParticipation[] } | Forbidden> {
   return refusedAsForbidden(() =>
     withMember(db, memberId, async (trx) => {
-      const { rows } = await sql<ParticipationRow>`select * from app.company_participants()`.execute(trx);
+      const { rows } = await participationRows(sql`app.company_participants()`).execute(trx);
       return { ok: true, participations: rows.map(toParticipation) } as const;
     }),
   );
@@ -112,7 +129,7 @@ export async function listParticipantMembers(
 ): Promise<ParticipantMembers | null> {
   return withMember(db, memberId, async (trx) => {
     // Only the acting Member's own Company's Participants they may look into.
-    const participant = await sql<ParticipationRow>`select * from app.participation(${participantId}::uuid)`.execute(trx);
+    const participant = await participationRows(sql`app.participation(${participantId}::uuid)`).execute(trx);
     const row = participant.rows[0];
     if (!row) return null;
     const members = await trx

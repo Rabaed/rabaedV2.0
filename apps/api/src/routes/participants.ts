@@ -23,9 +23,10 @@ import { refusal } from "../refusals.ts";
 
 const participantParams = z.object({ participantId: z.string() });
 
-// Participants of a Project, and each Participant's Project Members. The
-// Project's Members see its Participants; only a Participant's own Company sees
-// its Project Members, and only its Authorized Person changes them.
+// Participants of a Project, and each Participant's Project Members. A Project's
+// Members see their own Company's Participant and the Host Company's name; its
+// Project Admins see every Participant (V15). Only a Participant's own Company
+// sees its Project Members, and only its Authorized Person changes them.
 export const participantRoutes =
   (ctx: AppContext): FastifyPluginAsyncZod =>
   async (app) => {
@@ -36,7 +37,7 @@ export const participantRoutes =
         const memberId = ctx.requireMember(request);
         const participants = await listParticipants(ctx.db, memberId, idOrNotFound(request.params.projectId));
         if (!participants) throw notFound();
-        return { participants };
+        return participants;
       },
     );
 

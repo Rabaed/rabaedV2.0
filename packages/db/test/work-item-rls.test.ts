@@ -482,6 +482,17 @@ describe("Submit and Code A", () => {
     expect(await signerName(k1.member, submit.id)).toBeNull();
   });
 
+  it("names only the Companies that appear on the item, and only to those who see it (V14, V15)", async () => {
+    const named = (as: string) =>
+      call<{ participant_id: string }>(as, sql`select participant_id from app.work_item_companies(${item}::uuid)`).then((rows) =>
+        rows.map((r) => r.participant_id).sort(),
+      );
+    // The raiser and the Consultant it was "With"; the Owner Representative's oversight names nobody.
+    expect(await named(c1.member)).toEqual([participant.c1, participant.k1].sort());
+    expect(await named(or.member)).toEqual([participant.c1, participant.k1].sort());
+    expect(await named(c2.member)).toEqual([]);
+  });
+
   it("keeps actor resolution out of the app role's reach", async () => {
     await expect(
       withMember(app, c1.member, (trx) => sql`select app.next_step_holder(${item}::uuid, ${randomUUID()}::uuid)`.execute(trx)),
