@@ -20,6 +20,61 @@ pnpm dev
 | api | http://127.0.0.1:4000 (`GET /health`) |
 | worker | background process, logs only |
 
+## Demo: the MAR journey
+
+One command resets the local database, seeds the demo Project and starts the stack:
+
+```bash
+pnpm demo
+```
+
+It starts Postgres, drops and rebuilds the local database (`pnpm db:reset`, which refuses any database that isn't on this machine), seeds the demo (`pnpm demo:seed`) and runs web, api and worker. The seed is built through the API itself, and the Rabaed Engineer onboards each Company through Rabaed Admin, so `admin_action` records each onboarding with its reason (V9). The names, emails (on the reserved `.test` domain), CR and VAT numbers are made up.
+
+Everyone signs in with one password, generated on your machine the first time and kept in `.env.demo` (git-ignored; it stays the same across resets). The seed prints the list below.
+
+**Project:** Riyadh Gate Tower – Phase 2 (`TWR`). Trades Electrical Works (`EL`) and Mechanical Works (`ME`); Locations Main Zone › Tower 1 (Floors 01–03) and Tower 2 (Floor 01).
+
+| Company | Role on the Project | Covers | Person | Email |
+|---|---|---|---|---|
+| TMC Constructions | Contractor, Project Admin | Electrical, everywhere | Saeed Al Qahtani (Authorized Person) | `saeed.alqahtani@tmc.demo.rabaed.test` |
+| | | | Hafiz Hamdan (Engineer) | `hafiz.hamdan@tmc.demo.rabaed.test` |
+| | | | Ali Sonour (Project Manager) | `ali.sonour@tmc.demo.rabaed.test` |
+| Beta Build | Contractor | Electrical, everywhere (like TMC: only the Company boundary hides TMC's work) | Yousef Karim (Engineer) | `yousef.karim@betabuild.demo.rabaed.test` |
+| Design Consultants LLC | Consultant | Electrical and Mechanical | Ahmed bin Said, Sara (Engineers) | `ahmed.binsaid@…`, `sara@designconsultants.demo.rabaed.test` |
+| | | | Mohammed Al Shamsi (Manager) | `mohammed.alshamsi@designconsultants.demo.rabaed.test` |
+| Al Waha PMC | Owner Representative | Electrical, everywhere | Faisal Al Otaibi (Engineer, Arabic) | `faisal.alotaibi@alwaha.demo.rabaed.test` |
+
+Each Company's Authorized Person (`<first>.<last>@<company>.demo.rabaed.test`) can sign in too, and the Rabaed Engineer is `engineer@rabaed.demo.rabaed.test`.
+
+### Walkthrough
+
+Open http://localhost:3000/en (or `http://laneN.localhost:<port>/en` in a lane). Use a private window per person, or sign out between steps. Every step works the same in Arabic: switch with the language button, or use `/ar/…`. The buttons there are:
+
+| English | العربية |
+|---|---|
+| Submittals · New Material Submittal · Save Draft | الاعتمادات · اعتماد مواد جديد · حفظ المسودة |
+| Send for Review | إرسال للمراجعة |
+| Claim · Release to pool | استلام · إعادة إلى المجموعة |
+| Return (Reason) | إعادة (السبب) |
+| Submit | تقديم |
+| Approve · A · Revise & Resubmit · C | اعتماد · A · مراجعة وإعادة تقديم · C |
+| Notifications · Mark all as read | الإشعارات · تعليم الكل كمقروء |
+| With | لدى |
+
+| # | Who | Do | What each Company sees |
+|---|---|---|---|
+| 1 | Hafiz | Riyadh Gate Tower – Phase 2 → Submittals → New Material Submittal: "Lighting Fixtures", Electrical Works, Tower 1 Floor 02 → Save Draft | TMC sees the Draft (no number yet). Beta Build, Design Consultants and Al Waha see nothing, not even in the counts. |
+| 2 | Hafiz | Send for Review | It gets its Document Number (`TWR-MAR-01-0001`) and waits in Ali's pool. Ali's bell shows 1 (the worker delivers within seconds). Still nothing outside TMC. |
+| 3 | Ali | Open it from the bell → Claim → Return, with the reason "Add emergency duration" | Back in Hafiz's Draft, the reason in TMC's history, marked internal. |
+| 4 | Hafiz | Send for Review again | Hafiz's bell showed the Return; now Ali's pool has it again. |
+| 5 | Ali | Claim → Submit | Pending Approval. TMC sees "With Design Consultants LLC", never a Consultant's name. Mohammed's bell shows it. Ahmed and Sara see it but have no buttons (only a Manager can issue a Code). Faisal (Al Waha) sees it as oversight, read-only. Yousef (Beta Build) still sees nothing. The Consultant's history shows the Submit only, never the Return. |
+| 6 | Mohammed | Claim → Approve · A | Approved, Code A. TMC and Al Waha see the Code and that Mohammed Al Shamsi issued it; nobody else of the Consultant is named to them. The item accepts no more moves. |
+| 7 | Hafiz, Ali, Mohammed | Repeat with "Cable tray layout – Level 2" and end with Revise & Resubmit · C | Revise & Resubmit, Code C. |
+
+Step Age dots (1–4+ weeks at the current Step) show on the list and the item; there are no due dates.
+
+Both seam suites run against this seeded setup: their global setup (`apps/api/test/support/seed-demo.ts`) seeds the same demo into the test database, where the demo people sign in with the test harness's password, and `apps/api/test/demo-seed.test.ts` follows the walkthrough above through the API.
+
 ## Several worktrees at once
 
 Parallel Claude Code sessions each work in their own git worktree. Give each worktree its own lane number so they never share a database or a port:
