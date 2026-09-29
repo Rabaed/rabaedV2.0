@@ -3,6 +3,7 @@
 import { randomUUID } from "node:crypto";
 import { beforeAll, afterAll, describe, expect, it } from "vitest";
 import type { BaseRole } from "@rabaed/domain";
+import type { LightMyRequestResponse } from "fastify";
 import { createTestApi, uniqueCr, type Caller, type OnboardedCompany } from "./support/harness.ts";
 
 const api = await createTestApi();
@@ -79,10 +80,31 @@ describe("adding a Participant", () => {
     expect(await roleOn(asConsultant.projectId)).toBe("consultant");
   });
 
-  it("answers an unknown CR number without adding anything", async () => {
-    const res = await host.caller.post(`/v1/projects/${projectId}/participants`, { crNumber: uniqueCr(), role: "owner" });
-    expect(res.statusCode).toBe(422);
-    expect(res.json()).toEqual({ error: "unknown_company" });
+  it("answers a CR number that isn't on Rabaed exactly as one that is (scenario 31)", async () => {
+    const answer = (res: LightMyRequestResponse) => ({
+      status: res.statusCode,
+      body: res.body,
+      headers: Object.keys(res.headers).filter((h) => h !== "date").sort(),
+    });
+    const { id } = await api.createProject(host.caller);
+    const invite = async (crNumber: string) => {
+      const started = performance.now();
+      const res = await host.caller.post(`/v1/projects/${id}/participants`, { crNumber, role: "owner" });
+      return { answer: answer(res), ms: performance.now() - started };
+    };
+    const known: number[] = [];
+    const unknown: number[] = [];
+    for (let i = 0; i < 12; i++) {
+      const onRabaed = await invite((await api.onboardCompany()).crNumber);
+      const notOnRabaed = await invite(uniqueCr());
+      expect(notOnRabaed.answer).toEqual(onRabaed.answer);
+      known.push(onRabaed.ms);
+      unknown.push(notOnRabaed.ms);
+    }
+    // Timing within normal variance: neither answer's median is twice the other's.
+    const median = (xs: number[]) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)]!;
+    const [fast, slow] = [median(known), median(unknown)].sort((a, b) => a - b);
+    expect(slow! / fast!).toBeLessThan(2);
   });
 
   it("rejects a malformed request", async () => {

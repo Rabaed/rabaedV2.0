@@ -106,7 +106,10 @@
     "tradesLocations": "Trades & Locations",
     "visibility": "Visibility",
     "membersVisibility": "Your Members' Visibility",
-    "submittals": "Submittals"
+    "submittals": "Submittals",
+    "pendingInvitations": "Pending invitations",
+    "crNumber": "CR",
+    "awaitingAnswer": "Awaiting an answer"
   },
   "participants": {
     "title": "Company Projects",
@@ -124,10 +127,16 @@
     "invalidCr": "Enter the Company's 10-digit CR number.",
     "notAdmin": "Only a Project Admin can add Participants.",
     "alreadyParticipant": "That Company is already on this Project.",
-    "unknownCompany": "No Company with that CR number is on Rabaed.",
     "unavailable": "Something went wrong. Try again.",
     "visibility": "Visibility",
-    "positions": "Positions"
+    "positions": "Positions",
+    "invite": "Send invitation",
+    "invitationSent": "If this company is on Rabaed, its Authorized Person will receive the invitation; if not, Rabaed will contact you to onboard them.",
+    "invitationsTitle": "Invitations",
+    "offeredRole": "Invited as {role}",
+    "accept": "Accept",
+    "decline": "Decline",
+    "confirmDecline": "Decline this invitation? Your Company won't join the Project."
   },
   "dimensions": {
     "title": "Trades & Locations",

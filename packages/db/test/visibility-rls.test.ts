@@ -7,7 +7,7 @@ import { sql } from "kysely";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb, withMember, type Db } from "../src/index.ts";
-import { testDatabaseUrls } from "../test-support/index.ts";
+import { joinProject, testDatabaseUrls } from "../test-support/index.ts";
 
 const urls = testDatabaseUrls();
 const digits = (n: number) => Array.from({ length: n }, () => randomInt(10)).join("");
@@ -115,11 +115,7 @@ beforeAll(async () => {
       .then((r) => r.rows[0]!.project_id),
   );
   hostParticipant = (await migrator.query("select id from participant where project_id = $1", [projectId])).rows[0].id;
-  consultantParticipant = await withMember(app, host.ap, (trx) =>
-    sql<{ participant_id: string }>`select participant_id from app.add_participant(${projectId}::uuid, ${consultant.cr}, 'consultant')`
-      .execute(trx)
-      .then((r) => r.rows[0]!.participant_id),
-  );
+  consultantParticipant = await joinProject(app, projectId, { adminId: host.ap, crNumber: consultant.cr, role: "consultant" }, consultant.ap);
   const addProjectMember = (as: string, participant: string, member: string) =>
     withMember(app, as, (trx) =>
       sql`select app.add_project_member(${participant}::uuid, ${member}::uuid, now())`.execute(trx),

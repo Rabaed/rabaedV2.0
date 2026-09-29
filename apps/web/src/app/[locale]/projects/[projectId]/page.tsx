@@ -3,7 +3,7 @@ import { getTranslations, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
 import { AddParticipantForm } from "@/components/add-participant-form";
 import { Link, redirect } from "@/i18n/navigation";
-import { getMe, getProject, getProjectParticipants } from "@/lib/session";
+import { getMe, getProject, getProjectInvitations, getProjectParticipants } from "@/lib/session";
 
 export default async function ProjectPage({ params }: { params: Promise<{ locale: Locale; projectId: string }> }) {
   const { locale, projectId } = await params;
@@ -17,6 +17,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ locale
   ]);
   if (!me) return redirect({ href: "/sign-in", locale });
   if (!project) notFound();
+  const invitations = project.isProjectAdmin ? await getProjectInvitations(project.id) : null;
   // The Authorized Person narrows Visibility for their own Company's Project Members.
   const ownParticipant = me.member.isAuthorizedPerson ? participants?.participants.find((p) => p.isOwnCompany) : undefined;
 
@@ -66,6 +67,23 @@ export default async function ProjectPage({ params }: { params: Promise<{ locale
               </li>
             ))}
           </ul>
+        )}
+        {/* Pending invitations, for the Project Admin only: by CR number, never by Company name (ADR 0009). */}
+        {invitations && invitations.invitations.length > 0 && (
+          <div className="space-y-2">
+            <h3 className="text-sm font-semibold">{t("pendingInvitations")}</h3>
+            <ul className="divide-y divide-border border-y border-border" data-testid="pending-invitations">
+              {invitations.invitations.map((i) => (
+                <li key={i.id} className="flex flex-wrap items-baseline justify-between gap-4 py-2 text-sm">
+                  <span>
+                    {t("crNumber")} <bdi dir="ltr">{i.crNumber}</bdi>{" "}
+                    <span className="text-muted">· {i.projectRole.name[locale]}</span>
+                  </span>
+                  <span className="text-muted">{t("awaitingAnswer")}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
         )}
         {project.isProjectAdmin && <AddParticipantForm projectId={project.id} />}
       </section>

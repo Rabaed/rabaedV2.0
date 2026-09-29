@@ -8,7 +8,8 @@ export interface AdminActionContext {
 }
 
 export interface AdminActionOutcome<T> {
-  target: { kind: string; id: string };
+  /** What was read or changed; `id` is null for a read of a list. */
+  target: { kind: string; id: string | null };
   before?: unknown;
   after?: unknown;
   result: T;

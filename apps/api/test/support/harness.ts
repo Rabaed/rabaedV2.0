@@ -69,7 +69,10 @@ export interface TestApi {
   projectCreator(): Promise<{ company: OnboardedCompany; caller: Caller }>;
   /** `by` (a Project Creator) creates a Project; overrides replace parts of the request. */
   createProject(by: Caller, overrides?: Partial<CreateProjectRequest>): Promise<CreatedProject>;
-  /** A Project Admin (`by`) adds a Company as a Participant; returns the Participant's id. */
+  /**
+   * A Project Admin (`by`) invites a Company, whose Authorized Person (signed in
+   * with the default password) accepts (ADR 0009); returns the Participant's id.
+   */
   addParticipant(by: Caller, projectId: string, company: OnboardedCompany, role: BaseRole): Promise<string>;
   /** The Participant's Authorized Person (`by`) adds a Member of their Company to the Project. */
   addProjectMember(by: Caller, participantId: string, memberId: string): Promise<void>;
@@ -232,8 +235,12 @@ export async function createTestApi(options: { databaseUrl?: string } = {}): Pro
 
     async addParticipant(by, projectId, company, role) {
       const res = await by.post(`/v1/projects/${projectId}/participants`, { crNumber: company.crNumber, role });
-      expectStatus(res, 201, "add participant");
-      return res.json().participantId;
+      expectStatus(res, 202, "invite participant");
+      const invited = await api.signIn(company.authorizedPerson.email, DEFAULT_PASSWORD);
+      // The newest pending invitation: the one just sent.
+      const participantId: string = (await invited.get("/v1/participant-invitations")).json().invitations[0].id;
+      expectStatus(await invited.post(`/v1/participant-invitations/${participantId}/accept`), 204, "accept participant invitation");
+      return participantId;
     },
 
     async addProjectMember(by, participantId, memberId) {

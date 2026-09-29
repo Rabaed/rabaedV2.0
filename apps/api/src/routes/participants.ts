@@ -1,8 +1,10 @@
 import {
   addParticipantRequest,
   addProjectMemberRequest,
+  companyInvitations,
   companyParticipations,
   participantMembers,
+  projectInvitations,
   projectParticipants,
   setMemberPositionsRequest,
 } from "@rabaed/domain";
@@ -13,17 +15,23 @@ import { forbidden, idOrNotFound, notFound } from "../http-error.ts";
 import {
   addParticipant,
   addProjectMember,
+  listCompanyInvitations,
   listCompanyParticipations,
   listParticipantMembers,
   listParticipants,
+  listProjectInvitations,
   removeProjectMember,
+  respondToInvitation,
   setMemberPositions,
 } from "../projects/participants.ts";
 import { refusal } from "../refusals.ts";
 
 const participantParams = z.object({ participantId: z.string() });
 
-// Participants of a Project, and each Participant's Project Members. A Project's
+// Participants of a Project, their invitations, and each Participant's Project
+// Members. A Project Admin invites a Company by its CR number and gets one
+// answer whether or not it is on Rabaed; the Company joins only when its
+// Authorized Person accepts (ADR 0009). A Project's
 // Members see their own Company's Participant and the Host Company's name; its
 // Project Admins see every Participant (V15). Only a Participant's own Company
 // sees its Project Members, and only its Authorized Person changes them.
@@ -41,22 +49,51 @@ export const participantRoutes =
       },
     );
 
+    // 202 with no body, alike for a Company on Rabaed and a CR number that isn't (scenario 31).
     app.post(
       "/v1/projects/:projectId/participants",
-      {
-        schema: {
-          params: z.object({ projectId: z.string() }),
-          body: addParticipantRequest,
-          response: { 201: z.object({ participantId: z.uuid() }) },
-        },
-      },
+      { schema: { params: z.object({ projectId: z.string() }), body: addParticipantRequest } },
       async (request, reply) => {
         const memberId = ctx.requireMember(request);
-        const result = await addParticipant(ctx.db, memberId, idOrNotFound(request.params.projectId), request.body);
+        const projectId = idOrNotFound(request.params.projectId);
+        const result = await addParticipant(ctx.db, memberId, projectId, request.body, ctx.now());
         if (!result.ok) throw refusal(result);
-        return reply.code(201).send({ participantId: result.participantId });
+        return reply.code(202).send();
       },
     );
+
+    app.get(
+      "/v1/projects/:projectId/invitations",
+      { schema: { params: z.object({ projectId: z.string() }), response: { 200: projectInvitations } } },
+      async (request) => {
+        const memberId = ctx.requireMember(request);
+        const result = await listProjectInvitations(ctx.db, memberId, idOrNotFound(request.params.projectId));
+        if (!result) throw notFound();
+        if ("ok" in result) throw forbidden();
+        return result;
+      },
+    );
+
+    app.get("/v1/participant-invitations", { schema: { response: { 200: companyInvitations } } }, async (request) => {
+      const memberId = ctx.requireMember(request);
+      const result = await listCompanyInvitations(ctx.db, memberId);
+      if ("ok" in result) throw forbidden();
+      return result;
+    });
+
+    for (const [answer, accept] of [["accept", true], ["decline", false]] as const) {
+      app.post(
+        `/v1/participant-invitations/:participantId/${answer}`,
+        { schema: { params: participantParams } },
+        async (request, reply) => {
+          const memberId = ctx.requireMember(request);
+          const participantId = idOrNotFound(request.params.participantId);
+          const result = await respondToInvitation(ctx.db, memberId, participantId, accept, ctx.now());
+          if (!result.ok) throw refusal(result);
+          return reply.code(204).send();
+        },
+      );
+    }
 
     app.get("/v1/participants", { schema: { response: { 200: companyParticipations } } }, async (request) => {
       const actorId = ctx.requireMember(request);

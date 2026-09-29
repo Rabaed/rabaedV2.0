@@ -170,19 +170,19 @@ export async function seedDemo(app: FastifyInstance, migrator: Db, password: str
   }
   const tower2Floor1 = await location("T2F01", bi("Tower 2 Floor 01", "البرج 2 الطابق 01"), tower2);
 
-  // Participants and what each covers (set by the Project Admin). Beta Build
+  // Participants, each invited by the Project Admin and accepted by its own
+  // Authorized Person (ADR 0009), and what each covers (set by the Project Admin). Beta Build
   // covers exactly what TMC does: only the Company boundary keeps TMC's items from it (V3).
   const { participants } = await tmc.caller<{ participants: { id: string; isOwnCompany: boolean }[] }>(
     "GET",
     `/v1/projects/${projectId}/participants`,
   );
-  const participantOf = async (company: Onboarded, role: BaseRole) =>
-    (
-      await tmc.caller<{ participantId: string }>("POST", `/v1/projects/${projectId}/participants`, {
-        crNumber: company.crNumber,
-        role,
-      })
-    ).participantId;
+  const participantOf = async (company: Onboarded, role: BaseRole) => {
+    await tmc.caller("POST", `/v1/projects/${projectId}/participants`, { crNumber: company.crNumber, role });
+    const { invitations } = await company.caller<{ invitations: { id: string }[] }>("GET", "/v1/participant-invitations");
+    await company.caller("POST", `/v1/participant-invitations/${invitations[0]!.id}/accept`);
+    return invitations[0]!.id;
+  };
   const participant = {
     tmc: participants.find((p) => p.isOwnCompany)!.id,
     beta: await participantOf(beta, "contractor"),
