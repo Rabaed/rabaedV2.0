@@ -3,18 +3,20 @@ import { pino, type DestinationStream, type Logger } from "pino";
 
 // The worker's log: JSON lines, like the api's, kept by CloudWatch in dev.
 // Counts and states only; never an outbox row's payload, which is customer
-// content. Errors go under `err`: a database error by its class and code only,
-// like the outbox's failureOf (packages/db/src/outbox.ts), because
-// PostgreSQL's messages and details can quote a row's values, such as a Work
-// Item title.
+// content. Errors go under `err`, as in the api (apps/api/src/logging.ts): a
+// database error by its class and code only, like the outbox's failureOf
+// (packages/db/src/outbox.ts), because PostgreSQL's messages, details and
+// stack can quote a row's values, such as a Work Item title.
 
-type LoggedError = Error & { code?: unknown };
+type LoggedError = Error & { code?: unknown; severity?: unknown };
 
 function errorLog(error: LoggedError) {
   const type = error.constructor?.name ?? error.name;
   const code = typeof error.code === "string" ? error.code : undefined;
-  // A SQLSTATE: five digits or capitals.
-  if (code && /^[0-9A-Z]{5}$/.test(code)) return { type, code, message: `database error ${code}` };
+  // pg's DatabaseError: a severity and a SQLSTATE (Node's EPIPE has no severity).
+  if (typeof error.severity === "string" && code && /^[0-9A-Z]{5}$/.test(code)) {
+    return { type, code, message: `database error ${code}` };
+  }
   return { type, message: error.message, code, stack: error.stack ?? "" };
 }
 

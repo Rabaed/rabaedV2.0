@@ -44,9 +44,11 @@ describe("worker log", () => {
     ]);
   });
 
-  it("logs other errors with their class and message", () => {
+  it("logs other errors, even with a five-letter code like EPIPE, with their class, message and stack", () => {
     const { lines, logger } = capture();
-    logger.error({ err: new TypeError("fetch failed") }, "outbox run failed");
-    expect(lines).toEqual([expect.objectContaining({ err: expect.objectContaining({ type: "TypeError", message: "fetch failed" }) })]);
+    logger.error({ err: Object.assign(new Error("write EPIPE"), { code: "EPIPE" }) }, "outbox run failed");
+    const err = lines[0]!.err as Record<string, unknown>;
+    expect(err).toMatchObject({ type: "Error", message: "write EPIPE", code: "EPIPE" });
+    expect(String(err.stack)).toContain("log.test.ts");
   });
 });
