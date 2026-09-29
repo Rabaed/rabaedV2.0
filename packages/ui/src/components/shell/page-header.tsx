@@ -18,7 +18,8 @@ export type PageHeaderProps = {
 /** The top of a page: its title, optional actions, and tabs underneath. */
 export function PageHeader({ title, eyebrow, description, actions, tabs, className }: PageHeaderProps) {
   return (
-    <header className={cn("flex flex-col gap-4 border-b border-border bg-surface px-4 pt-5 sm:px-6", !tabs && "pb-5", className)}>
+    // A div, not <header>: the TopBar is the page's one banner.
+    <div className={cn("flex flex-col gap-4 border-b border-border bg-surface px-4 pt-5 sm:px-6", !tabs && "pb-5", className)}>
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="flex min-w-0 flex-col gap-1">
           {eyebrow !== undefined && <div className="text-caption text-muted">{eyebrow}</div>}
@@ -29,6 +30,6 @@ export function PageHeader({ title, eyebrow, description, actions, tabs, classNa
       </div>
       {/* The tabs' own bottom border sits on the header's. */}
       {tabs !== undefined && <div className="-mb-px">{tabs}</div>}
-    </header>
+    </div>
   );
 }

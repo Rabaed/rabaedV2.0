@@ -144,7 +144,7 @@ Every control sits in a `Field`, which gives it a label, optional help text, the
 - **Alignment**: `align="end"` for numbers, so they line up with tabular digits; columns and alignment mirror in Arabic.
 - **Tabs**: name the list (`<TabsList aria-label={t("project")}>`); a trigger takes an `icon` and a `count` (pass it formatted with `formatNumber`).
 
-The package has no translations of its own: pass every label (`closeLabel`, the toast region `label`, …) from the app's messages. The one exception is the fixed product wording of the status components below (Review Code meanings, "N weeks at this step"), which take a `locale` instead, so no module can word them differently. Copy never uses deadline language: the story tests check story copy, and the `json-no-deadline-words` lint rule checks the app's messages.
+The package has no translations of its own: pass every label (`closeLabel`, the toast region `label`, …) from the app's messages. The exceptions are the fixed product wording of the status components below (Review Code meanings, "N weeks at this step"), which take a `locale` instead, so no module can word them differently, and the language names in `MemberMenu`, each written in its own language ("English", "العربية"). Copy never uses deadline language: the story tests check story copy, and the `json-no-deadline-words` lint rule checks the app's messages.
 
 ## Status
 
@@ -175,16 +175,16 @@ Every page sits in the same layout, in English and Arabic, on desktop and phone.
 | Component | Use for |
 |---|---|
 | `AppShell` | The page layout: `Sidebar` on the inline-start side (the right in Arabic), `TopBar` and the page beside it. Below `md` the sidebar becomes a `Sheet` from the start side, opened by a menu button in the top bar; choosing a page closes it. |
-| `Sidebar` / `SidebarNav` | The main navigation: sections of items (`key`, `label`, `icon`, `href`, optional `count`), the `current` one marked `aria-current="page"`. Collapses to icons with a button (mouse or keyboard); collapsed, each item shows its name in a tooltip. `defaultCollapsed` and `onCollapsedChange` let the app remember the choice. |
-| `TopBar` | Slots for `search`, `notifications` and `user`. |
-| `UserMenu` | The Member's avatar and name, opening a menu with the language switch (each language named in itself, the current one pressed) and any extra items, e.g. Sign out. |
+| `Sidebar` / `SidebarNav` | The main navigation: sections of items (`key`, `label`, `icon`, `href`, optional `count`), the `current` one marked `aria-current="page"`. Collapses to icons with a button (mouse or keyboard); collapsed, each item shows its name in a tooltip and each section stays a named group. `brandCollapsed` (e.g. the logo mark) shows when collapsed; `defaultCollapsed` and `onCollapsedChange` let the app remember the choice. |
+| `TopBar` | The banner landmark, with slots for `search`, `notifications` and `member`. |
+| `MemberMenu` | The signed-in Member's avatar and name, opening a menu with the language switch (each language named in itself, the current one pressed) and any extra items, e.g. Sign out. |
 | `PageHeader` | A page's one `h1`, with an optional `eyebrow`, `description`, `actions` and `tabs`. |
 | `ProjectTabs` | A Project's tabs, always in the agreed order (`projectTabKeys`): Dashboard · Submittals · Inspections · Snag List · Site Reports · Drawings · Files · Views · Schedule · Settings. Page navigation, so links in a named `nav` (not ARIA tabs). Schedule isn't built yet: greyed out, `aria-disabled`, described by `comingSoonLabel`. They scroll sideways on a phone. |
 
 ```tsx
 <AppShell
   sidebar={{ brand: "Rabaed", label: t("main"), sections, current: "projects", collapseLabel: t("collapse"), expandLabel: t("expand"), linkAs: Link }}
-  topBar={{ search: <SearchButton />, notifications: <NotificationsButton />, user: <UserMenu … /> }}
+  topBar={{ search: <SearchButton />, notifications: <NotificationsButton />, member: <MemberMenu … /> }}
   menuLabel={t("menu")}
   closeLabel={t("close")}
 >

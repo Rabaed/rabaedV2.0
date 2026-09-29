@@ -61,7 +61,7 @@ export {
   type SidebarProps,
   type SidebarSection,
 } from "./components/shell/sidebar.tsx";
-export { UserMenu, type UserMenuProps } from "./components/shell/user-menu.tsx";
+export { MemberMenu, type MemberMenuProps } from "./components/shell/member-menu.tsx";
 export { cn } from "./lib/cn.ts";
 export {
   themes,

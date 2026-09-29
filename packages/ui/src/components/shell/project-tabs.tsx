@@ -55,9 +55,16 @@ export type ProjectTabsProps = {
  */
 export function ProjectTabs({ label, labels, href, current, comingSoonLabel, linkAs: Link = "a", className }: ProjectTabsProps) {
   const hintId = useId();
+  const listRef = useRef<HTMLUListElement>(null);
   const currentRef = useRef<HTMLElement>(null);
+  // Scroll the current tab into view sideways only; scrollIntoView could scroll the page too.
   useEffect(() => {
-    currentRef.current?.scrollIntoView({ block: "nearest", inline: "nearest" });
+    const list = listRef.current;
+    const tab = currentRef.current?.getBoundingClientRect();
+    if (!list || !tab) return;
+    const box = list.getBoundingClientRect();
+    if (tab.right > box.right) list.scrollBy({ left: tab.right - box.right });
+    else if (tab.left < box.left) list.scrollBy({ left: tab.left - box.left });
   }, [current]);
 
   return (
@@ -65,7 +72,7 @@ export function ProjectTabs({ label, labels, href, current, comingSoonLabel, lin
       <span id={hintId} hidden>
         {comingSoonLabel}
       </span>
-      <ul className="flex gap-7 overflow-x-auto border-b border-border [scrollbar-width:none]">
+      <ul ref={listRef} className="flex gap-7 overflow-x-auto border-b border-border [scrollbar-width:none]">
         {projectTabKeys.map((key) => (
           <li key={key} className="flex shrink-0">
             {comingSoon.has(key) ? (

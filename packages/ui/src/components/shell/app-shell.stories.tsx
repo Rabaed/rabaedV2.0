@@ -1,6 +1,6 @@
 import type { Meta, StoryContext, StoryObj } from "@storybook/react-vite";
 import { expect, screen, userEvent, waitFor } from "storybook/test";
-import { phone } from "../../storybook/form.ts";
+import { expectTouchTarget, phone } from "../../storybook/form.ts";
 import { storyLocale, storyText } from "../../storybook/locale.ts";
 import { overlay } from "../../storybook/overlay.ts";
 import { shellCopy, storyPageHeader, storySidebar, storyTopBar } from "../../storybook/shell.tsx";
@@ -35,7 +35,7 @@ type PlayContext = Parameters<NonNullable<Story["play"]>>[0];
 
 const t = (context: PlayContext, text: { en: string; ar: string }) => storyText(context, text);
 // The desktop sidebar; hidden on a phone, where it can't be found by role.
-const sidebar = (context: PlayContext) => context.canvasElement.querySelector("aside")!;
+const sidebar = (context: PlayContext) => context.canvasElement.querySelector<HTMLElement>("[data-sidebar]")!;
 
 /**
  * Every page's layout. The sidebar sits on the inline-start side: the left in
@@ -46,6 +46,8 @@ export const Desktop: Story = {
   play: async (context) => {
     const aside = sidebar(context).getBoundingClientRect();
     const main = context.canvas.getByRole("main").getBoundingClientRect();
+    const person = context.canvas.getByRole("button", { name: t(context, shellCopy.person) });
+    await expect(context.canvas.getByRole("banner")).toContainElement(person);
     if (storyLocale(context) === "ar") await expect(aside.left).toBeGreaterThanOrEqual(main.right - 1);
     else await expect(aside.right).toBeLessThanOrEqual(main.left + 1);
 
@@ -77,6 +79,8 @@ export const CollapseByKeyboard: Story = {
     const home = context.canvas.getByRole("link", { name: t(context, shellCopy.home) });
     await expect(home).toHaveFocus();
     await expect(await screen.findByRole("tooltip")).toHaveTextContent(t(context, shellCopy.home));
+    // Named once: the tooltip repeats the name, so it isn't also the description.
+    await expect(home).toHaveAccessibleDescription("");
 
     await userEvent.tab({ shift: true });
     await userEvent.keyboard(" ");
@@ -110,6 +114,8 @@ export const Phone: Story = {
     await expect(list.scrollWidth).toBeGreaterThan(list.clientWidth);
 
     const menu = context.canvas.getByRole("button", { name: t(context, shellCopy.menu) });
+    await expectTouchTarget(menu);
+    await expectTouchTarget(context.canvas.getByRole("button", { name: t(context, shellCopy.person) }));
     await userEvent.click(menu);
     const sheet = await screen.findByRole("dialog", { name: t(context, shellCopy.brand) });
     const box = sheet.getBoundingClientRect();

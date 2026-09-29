@@ -4,7 +4,7 @@ import { useState } from "react";
 import { expect, screen, userEvent } from "storybook/test";
 import { storyLocale, storyText } from "../../storybook/locale.ts";
 import { overlay } from "../../storybook/overlay.ts";
-import { shellCopy, storyUserMenu } from "../../storybook/shell.tsx";
+import { shellCopy, storyMemberMenu } from "../../storybook/shell.tsx";
 import { DirectionProvider } from "../form/direction.tsx";
 
 const greeting = { en: "Good morning, Faisal", ar: "صباح الخير يا فيصل" };
@@ -17,14 +17,14 @@ function LanguageDemo({ context }: { context: StoryContext }) {
     <DirectionProvider dir={dir}>
       <div data-testid="page" lang={locale} dir={dir} className="flex items-center justify-between gap-4">
         <p className="text-body">{greeting[locale]}</p>
-        {storyUserMenu({ globals: { locale } }, { locale, onLocaleChange: setLocale })}
+        {storyMemberMenu({ globals: { locale } }, { locale, onLocaleChange: setLocale })}
       </div>
     </DirectionProvider>
   );
 }
 
 const meta = {
-  title: "Shell/UserMenu",
+  title: "Shell/MemberMenu",
   render: (_args, context) => <LanguageDemo context={context} />,
 } satisfies Meta;
 
@@ -32,7 +32,7 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 /**
- * The avatar and name open the account menu. Its language switch names each
+ * The avatar and name open the Member's menu. Its language switch names each
  * language in itself and marks the current one pressed; choosing the other
  * switches the page between English (LTR) and Arabic (RTL). Left open for the
  * screenshot, in the story's own language.
@@ -45,7 +45,7 @@ export const LanguageSwitch: Story = {
     const page = context.canvas.getByTestId("page");
 
     await userEvent.click(context.canvas.getByRole("button", { name: storyText(context, shellCopy.person) }));
-    const menu = await screen.findByRole("dialog", { name: storyText(context, shellCopy.account) });
+    const menu = await screen.findByRole("dialog", { name: storyText(context, shellCopy.profile) });
     const group = screen.getByRole("group", { name: storyText(context, shellCopy.language) });
     await expect(menu).toContainElement(group);
     const [english, arabic] = [screen.getByRole("button", { name: "English" }), screen.getByRole("button", { name: "العربية" })];

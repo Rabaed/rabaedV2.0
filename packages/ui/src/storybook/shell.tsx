@@ -3,7 +3,8 @@ import { Icon } from "../components/icon/icon.tsx";
 import { PageHeader } from "../components/shell/page-header.tsx";
 import { ProjectTabs, projectTabKeys, type ProjectTabKey } from "../components/shell/project-tabs.tsx";
 import type { SidebarProps } from "../components/shell/sidebar.tsx";
-import { UserMenu, type UserMenuProps } from "../components/shell/user-menu.tsx";
+import { DocNo } from "../components/doc-no/doc-no.tsx";
+import { MemberMenu, type MemberMenuProps } from "../components/shell/member-menu.tsx";
 import { storyLocale, storyText } from "./locale.ts";
 
 // Story copy and fixtures shared by the shell stories.
@@ -37,7 +38,6 @@ export function storyProjectTabs(context: Context, current: ProjectTabKey = "sub
   );
 }
 
-
 export const shellCopy = {
   brand: { en: "Rabaed", ar: "Rabaed" },
   nav: { en: "Main", ar: "الرئيسية" },
@@ -52,13 +52,13 @@ export const shellCopy = {
   close: { en: "Close", ar: "إغلاق" },
   search: { en: "Search", ar: "بحث" },
   notifications: { en: "Notifications", ar: "الإشعارات" },
-  account: { en: "Account", ar: "الحساب" },
+  profile: { en: "Profile", ar: "الملف الشخصي" },
   language: { en: "Language", ar: "اللغة" },
   signOut: { en: "Sign out", ar: "تسجيل الخروج" },
   person: { en: "Faisal Al Harbi", ar: "فيصل الحربي" },
   ownCompany: { en: "Tamkeen Contracting", ar: "تمكين للمقاولات" },
   project: { en: "Riyadh Tower 1", ar: "برج الرياض 1" },
-  projectNumber: { en: "Project TWR-2026-014", ar: "المشروع TWR-2026-014" },
+  projectNumber: { en: "Project 14", ar: "المشروع 14" },
   newSubmittal: { en: "New submittal", ar: "تقديم جديد" },
 };
 
@@ -88,13 +88,13 @@ export function storySidebar(context: Context, current = "projects"): SidebarPro
   };
 }
 
-export function storyUserMenu(context: Context, props: Partial<UserMenuProps> = {}) {
+export function storyMemberMenu(context: Context, props: Partial<MemberMenuProps> = {}) {
   const t = (text: { en: string; ar: string }) => storyText(context, text);
   return (
-    <UserMenu
+    <MemberMenu
       name={t(shellCopy.person)}
       companyName={t(shellCopy.ownCompany)}
-      label={t(shellCopy.account)}
+      label={t(shellCopy.profile)}
       locale={storyLocale(context)}
       languageLabel={t(shellCopy.language)}
       onLocaleChange={() => {}}
@@ -104,7 +104,7 @@ export function storyUserMenu(context: Context, props: Partial<UserMenuProps> = 
         <Icon name="logout" />
         {t(shellCopy.signOut)}
       </Button>
-    </UserMenu>
+    </MemberMenu>
   );
 }
 
@@ -122,7 +122,7 @@ export function storyTopBar(context: Context) {
         <Icon name="bell" />
       </IconButton>
     ),
-    user: storyUserMenu(context),
+    member: storyMemberMenu(context),
   };
 }
 
@@ -130,7 +130,11 @@ export function storyPageHeader(context: Context) {
   const t = (text: { en: string; ar: string }) => storyText(context, text);
   return (
     <PageHeader
-      eyebrow={t(shellCopy.projectNumber)}
+      eyebrow={
+        <>
+          {t(shellCopy.projectNumber)} · <DocNo value="TWR" />
+        </>
+      }
       title={t(shellCopy.project)}
       actions={
         <Button>

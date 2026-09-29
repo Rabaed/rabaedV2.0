@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, screen, userEvent } from "storybook/test";
-import { phone } from "../../storybook/form.ts";
+import { expectTouchTarget, phone } from "../../storybook/form.ts";
 import { storyText } from "../../storybook/locale.ts";
 import { comingSoon, projectTabLabels, projectTabsLabel, storyProjectTabs } from "../../storybook/shell.tsx";
 import { projectTabKeys } from "./project-tabs.tsx";
@@ -61,5 +61,8 @@ export const Phone: Story = {
     const tab = current.getBoundingClientRect();
     await expect(tab.left).toBeGreaterThanOrEqual(box.left - 1);
     await expect(tab.right).toBeLessThanOrEqual(box.right + 1);
+    await expectTouchTarget(current);
+    // Sideways only: the page itself hasn't scrolled.
+    await expect(scrollY).toBe(0);
   },
 };

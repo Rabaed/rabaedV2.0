@@ -8,16 +8,17 @@ import { focusRing } from "../form/control-styles.ts";
 import { Icon } from "../icon/icon.tsx";
 import { Popover, PopoverContent, PopoverTrigger } from "../overlay/popover.tsx";
 
-// Each language named in itself, as language pickers do, so a reader of either can find theirs.
+// Each language named in itself (its endonym), as language pickers do, so a reader of either can find theirs.
+// Not a translation: the same in every locale, so it lives here rather than in the app's messages.
 const languageNames: Record<Locale, string> = { en: "English", ar: "العربية" };
 
-export type UserMenuProps = {
+export type MemberMenuProps = {
   /** The signed-in Member's name. */
   name: string;
   /** Their company, under the name in the menu. */
   companyName?: string;
   photoSrc?: string;
-  /** Names the menu, e.g. "Account". */
+  /** Names the menu, e.g. "Profile". */
   label: string;
   /** The current language, and the switch's name, e.g. "Language". */
   locale: Locale;
@@ -27,14 +28,14 @@ export type UserMenuProps = {
   children?: ReactNode;
 };
 
-/** The Member's avatar and name in the top bar, opening a menu with the language switch. */
-export function UserMenu({ name, companyName, photoSrc, label, locale, languageLabel, onLocaleChange, children }: UserMenuProps) {
+/** The signed-in Member's avatar and name in the top bar, opening their menu with the language switch. */
+export function MemberMenu({ name, companyName, photoSrc, label, locale, languageLabel, onLocaleChange, children }: MemberMenuProps) {
   return (
     <Popover>
       <PopoverTrigger
         className={cn(
-          "inline-flex h-10 items-center gap-2 rounded-full ps-1 pe-1 text-body font-medium text-text hover:bg-hover sm:pe-3",
-          "pointer-coarse:min-h-11",
+          "inline-flex h-10 items-center gap-2 rounded-full px-1 text-body font-medium text-text hover:bg-hover sm:pe-3",
+          "justify-center pointer-coarse:min-h-11 pointer-coarse:min-w-11",
           focusRing,
         )}
       >

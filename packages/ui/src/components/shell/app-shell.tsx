@@ -14,15 +14,15 @@ export type TopBarProps = {
   search?: ReactNode;
   /** The notifications button. */
   notifications?: ReactNode;
-  /** The UserMenu. */
-  user?: ReactNode;
+  /** The MemberMenu. */
+  member?: ReactNode;
   className?: string;
 };
 
-/** The bar across the top of the page: search at the start; notifications and the user menu at the end. */
-export function TopBar({ menu, search, notifications, user, className }: TopBarProps) {
+/** The bar across the top of the page (the banner landmark): search at the start; notifications and the Member's menu at the end. */
+export function TopBar({ menu, search, notifications, member, className }: TopBarProps) {
   return (
-    <div
+    <header
       className={cn(
         "sticky top-0 z-30 flex h-16 shrink-0 items-center gap-3 border-b border-border bg-surface px-4 sm:px-6",
         className,
@@ -31,8 +31,8 @@ export function TopBar({ menu, search, notifications, user, className }: TopBarP
       {menu}
       <div className="min-w-0 flex-1">{search}</div>
       {notifications}
-      {user}
-    </div>
+      {member}
+    </header>
   );
 }
 
@@ -56,6 +56,9 @@ export type AppShellProps = {
  */
 export function AppShell({ sidebar, topBar, menuLabel, closeLabel, children }: AppShellProps) {
   const [menuOpen, setMenuOpen] = useState(false);
+  // The navigation itself, for the phone sheet; the other props concern the desktop sidebar only.
+  const { label, sections, current, linkAs, onNavigate } = sidebar;
+  const nav = { label, sections, current, linkAs };
   const menu = (
     <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
       <SheetTrigger asChild>
@@ -65,13 +68,10 @@ export function AppShell({ sidebar, topBar, menuLabel, closeLabel, children }: A
       </SheetTrigger>
       <SheetContent side="start" title={sidebar.brand} closeLabel={closeLabel} className="max-w-xs p-4">
         <SidebarNav
-          label={sidebar.label}
-          sections={sidebar.sections}
-          current={sidebar.current}
-          linkAs={sidebar.linkAs}
+          {...nav}
           onNavigate={() => {
             setMenuOpen(false);
-            sidebar.onNavigate?.();
+            onNavigate?.();
           }}
         />
       </SheetContent>
