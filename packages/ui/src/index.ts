@@ -44,6 +44,11 @@ export { Popover, PopoverClose, PopoverContent, PopoverTrigger, type PopoverCont
 export { Sheet, SheetClose, SheetContent, SheetFooter, SheetTrigger, type SheetContentProps } from "./components/overlay/sheet.tsx";
 export { ToastProvider, useToast, type ToastInput, type ToastProviderProps, type ToastTone } from "./components/overlay/toast.tsx";
 export { Tooltip, type TooltipProps } from "./components/overlay/tooltip.tsx";
+export { AgeDots, type AgeDotsProps } from "./components/status/age-dots.tsx";
+export { CodeBadge, type CodeBadgeProps } from "./components/status/code-badge.tsx";
+export { StagePill, type StagePillProps } from "./components/status/stage-pill.tsx";
+export { stepAgeLabel } from "./components/status/step-age.ts";
+export { WithChip, type WithChipProps } from "./components/status/with-chip.tsx";
 export { cn } from "./lib/cn.ts";
 export {
   themes,
