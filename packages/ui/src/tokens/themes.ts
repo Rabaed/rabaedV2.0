@@ -11,6 +11,10 @@ export type StageKey = (typeof stageKeys)[number];
 export const reviewCodes = ["a", "b", "c", "d"] as const;
 export type ReviewCode = (typeof reviewCodes)[number];
 
+/** Tones for Badge and Avatar: neutral, the brand, and the semantic feedback hues. Each has a `-tint` and a `-fg` role. */
+export const toneKeys = ["neutral", "brand", "info", "success", "warning", "danger"] as const;
+export type Tone = (typeof toneKeys)[number];
+
 /**
  * Layer 2: semantic roles. A theme maps every role to a base palette colour.
  * This is the only layer that changes per theme; components (layer 3) read
@@ -75,6 +79,17 @@ export const coolLight = {
   success: "green-700",
   "success-tint": "green-50",
   "danger-tint": "red-50",
+
+  // Tones: a tint and the text on it, for Badge and Avatar initials. Not Stages or Review Codes, which have their own.
+  "neutral-tint": "slate-100",
+  "neutral-fg": "slate-700",
+  "brand-fg": "tomato-750",
+  "info-tint": "blue-50",
+  "info-fg": "blue-700",
+  "success-fg": "green-800",
+  "warning-tint": "amber-50",
+  "warning-fg": "amber-700",
+  "danger-fg": "red-700",
 
   // Stage: one colour set per default Stage, shared by every Module.
   "stage-draft-bg": "slate-100",
