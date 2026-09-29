@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { arbitraryColourClasses, colourLiterals, deadlineWord, namedColour, physicalClasses } from "./matchers.ts";
+import { arbitraryColourClasses, colourLiterals, deadlineWord, deadlineWordInCopy, namedColour, physicalClasses } from "./matchers.ts";
 
 describe("colourLiterals", () => {
   it.each(["#fff", "#F95738", "#f9573880", "rgb(0 0 0)", "rgba(0,0,0,.4)", "hsl(10 50% 50%)", "oklch(0.7 0.1 30)", "0 1px 2px rgba(31, 36, 48, .05)", "1px solid #ddd", "var(--palette-tomato-600)", "color(srgb 1 0 0)"])(
@@ -73,9 +73,22 @@ describe("deadlineWord", () => {
     },
   );
 
-  it.each(["stepAge", "weeksAtStep", "residue", "dueling", "Submitted", "addressee", "translate", "isLatest", "slate-500", "island"])("allows %s", (text) => {
+  it.each(["stepAge", "weeksAtStep", "residue", "dueling", "Submitted", "addressee", "translate", "isLatest", "slate-500", "island", "due", "isLate"])("allows %s", (text) => {
     expect(deadlineWord(text)).toBeNull();
   });
+});
+
+describe("deadlineWordInCopy", () => {
+  it.each(["Overdue", "Due date: 3 Oct", "Due 3 Oct", "Payment due", "3 days late", "Late", "SLA breached", "متأخر"])("flags %s", (text) => {
+    expect(deadlineWordInCopy(text)).not.toBeNull();
+  });
+
+  it.each(["4+ weeks at this step", "Rejected due to missing drawings", "Due to the site closure", "Latest revision", "Translate", "Submitted later", "Island"])(
+    "allows %s",
+    (text) => {
+      expect(deadlineWordInCopy(text)).toBeNull();
+    },
+  );
 });
 
 describe("namedColour", () => {

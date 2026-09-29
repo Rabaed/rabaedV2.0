@@ -175,7 +175,17 @@ export function physicalClasses(classes: string): LogicalFix[] {
 const deadline = /overdue|due[\s_-]?date|deadline|متأخر|موعد نهائي|تاريخ الاستحقاق/i;
 const sla = /\bSLAs?\b|^sla(?=[A-Z_])|(?<=[a-z])Sla(?=[A-Z_]|s?$)/;
 
-/** The deadline word in an identifier, key or UI string, if any. */
+// Bare "due" and "late" read as a deadline only in words people see ("Due 3 Oct", "3 days late").
+// In names and keys they are too broad to police on their own, so deadlineWord leaves them out.
+// "due to" gives a reason, not a date, so it stays allowed.
+const copyOnly = /\bdue\b(?!\s+to\b)|\blate\b/i;
+
+/** The deadline word in an identifier, message key or UI string, if any. */
 export function deadlineWord(text: string): string | null {
   return deadline.exec(text)?.[0] ?? sla.exec(text)?.[0] ?? null;
+}
+
+/** The deadline word in text people read (message copy, rendered stories), if any: stricter than deadlineWord. */
+export function deadlineWordInCopy(text: string): string | null {
+  return deadlineWord(text) ?? copyOnly.exec(text)?.[0] ?? null;
 }

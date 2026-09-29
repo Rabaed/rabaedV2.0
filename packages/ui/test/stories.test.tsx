@@ -15,6 +15,7 @@
  * Update screenshots on purpose with the "update-screenshots" PR label.
  */
 import { directionOf, locales } from "@rabaed/domain";
+import { deadlineWordInCopy } from "@rabaed/eslint-plugin/matchers";
 import { composeStories, type composeStory, setProjectAnnotations } from "@storybook/react-vite";
 import axe, { type RunOptions } from "axe-core";
 import { beforeAll, describe, expect, inject, test } from "vitest";
@@ -35,8 +36,6 @@ type StoriesModule = Parameters<typeof composeStories>[0];
 type ComposedStory = ReturnType<typeof composeStory>;
 const modules = import.meta.glob<StoriesModule>("../src/**/*.stories.tsx", { eager: true });
 
-// Rabaed shows Step Age only: never due dates, deadlines or lateness (CONTEXT.md).
-const deadlineWords = /overdue|\bdue\b|deadline|\blate\b|\bSLA\b|متأخر|موعد نهائي|تاريخ الاستحقاق/i;
 const nonLatinDigits = /[٠-٩۰-۹]/;
 
 const viewports = {
@@ -83,7 +82,8 @@ for (const locale of locales) {
           expect(document.documentElement.dir).toBe(directionOf(locale));
           // The whole page, so overlays rendered in portals are checked too.
           const text = document.body.textContent ?? "";
-          expect(text).not.toMatch(deadlineWords);
+          // Rabaed shows Step Age only: the same words the lint rules ban in message copy.
+          expect(deadlineWordInCopy(text)).toBeNull();
           expect(text).not.toMatch(nonLatinDigits);
 
           // Fonts load as glyphs are laid out; wait for them, then check where everything came from.
