@@ -28,7 +28,7 @@ One command resets the local database, seeds the demo Project and starts the sta
 pnpm demo
 ```
 
-It starts Postgres, drops and rebuilds the local database (`pnpm db:reset`, which refuses any database that isn't on this machine), seeds the demo (`pnpm demo:seed`) and runs web, api and worker. The seed is built through the API itself, and the Rabaed Engineer onboards each Company through Rabaed Admin, so `admin_action` records each onboarding with its reason.
+It starts Postgres, drops and rebuilds the local database (`pnpm db:reset`, which refuses any database that isn't on this machine), seeds the demo (`pnpm demo:seed`) and runs web, api and worker. The seed is built through the API itself, and the Rabaed Engineer onboards each Company through Rabaed Admin, so `admin_action` records each onboarding with its reason (V9). The names, emails (on the reserved `.test` domain), CR and VAT numbers are made up.
 
 Everyone signs in with one password, generated on your machine the first time and kept in `.env.demo` (git-ignored; it stays the same across resets). The seed prints the list below.
 
@@ -39,8 +39,8 @@ Everyone signs in with one password, generated on your machine the first time an
 | TMC Constructions | Contractor, Project Admin | Electrical, everywhere | Saeed Al Qahtani (Authorized Person) | `saeed.alqahtani@tmc.demo.rabaed.test` |
 | | | | Hafiz Hamdan (Engineer) | `hafiz.hamdan@tmc.demo.rabaed.test` |
 | | | | Ali Sonour (Project Manager) | `ali.sonour@tmc.demo.rabaed.test` |
-| Beta Build | Contractor | Electrical, Tower 2 only | Yousef Karim (Engineer) | `yousef.karim@betabuild.demo.rabaed.test` |
-| Design Consultants LLC | Consultant | Electrical and Mechanical | Ahmed bin Said, Sara Al Harbi (Engineers) | `ahmed.binsaid@…`, `sara.alharbi@designconsultants.demo.rabaed.test` |
+| Beta Build | Contractor | Electrical, everywhere (like TMC: only the Company boundary hides TMC's work) | Yousef Karim (Engineer) | `yousef.karim@betabuild.demo.rabaed.test` |
+| Design Consultants LLC | Consultant | Electrical and Mechanical | Ahmed bin Said, Sara (Engineers) | `ahmed.binsaid@…`, `sara@designconsultants.demo.rabaed.test` |
 | | | | Mohammed Al Shamsi (Manager) | `mohammed.alshamsi@designconsultants.demo.rabaed.test` |
 | Al Waha PMC | Owner Representative | Electrical, everywhere | Faisal Al Otaibi (Engineer, Arabic) | `faisal.alotaibi@alwaha.demo.rabaed.test` |
 
@@ -48,7 +48,18 @@ Each Company's Authorized Person (`<first>.<last>@<company>.demo.rabaed.test`) c
 
 ### Walkthrough
 
-Open http://localhost:3000/en (or `http://laneN.localhost:<port>/en` in a lane). Use a private window per person, or sign out between steps. Every step works the same in Arabic: switch with the language button, or use `/ar/…`.
+Open http://localhost:3000/en (or `http://laneN.localhost:<port>/en` in a lane). Use a private window per person, or sign out between steps. Every step works the same in Arabic: switch with the language button, or use `/ar/…`. The buttons there are:
+
+| English | العربية |
+|---|---|
+| Submittals · New Material Submittal · Save Draft | الاعتمادات · اعتماد مواد جديد · حفظ المسودة |
+| Send for Review | إرسال للمراجعة |
+| Claim · Release to pool | استلام · إعادة إلى المجموعة |
+| Return (Reason) | إعادة (السبب) |
+| Submit | تقديم |
+| Approve · A · Revise & Resubmit · C | اعتماد · A · مراجعة وإعادة تقديم · C |
+| Notifications · Mark all as read | الإشعارات · تعليم الكل كمقروء |
+| With | لدى |
 
 | # | Who | Do | What each Company sees |
 |---|---|---|---|
@@ -62,7 +73,7 @@ Open http://localhost:3000/en (or `http://laneN.localhost:<port>/en` in a lane).
 
 Step Age dots (1–4+ weeks at the current Step) show on the list and the item; there are no due dates.
 
-`apps/api/test/demo-seed.test.ts` follows the same walkthrough through the API, and both seam suites run against a seeded database (`apps/api/test/support/seed-demo.ts`).
+Both seam suites run against this seeded setup: their global setup (`apps/api/test/support/seed-demo.ts`) seeds the same demo into the test database, where the demo people sign in with the test harness's password, and `apps/api/test/demo-seed.test.ts` follows the walkthrough above through the API.
 
 ## Several worktrees at once
 

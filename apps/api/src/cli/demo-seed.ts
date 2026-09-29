@@ -7,12 +7,11 @@
 import { randomBytes } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { createDb, createDbFromEnv, databaseUrlsFromEnv } from "@rabaed/db";
+import { assertLocalDatabases, createDb, databaseUrlsFromEnv } from "@rabaed/db";
 import { buildApp } from "../app.ts";
 import { apiConfigFromEnv } from "../config.ts";
 import { seedDemo } from "../demo/seed.ts";
 
-const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]", "::1"]);
 const passwordFile = fileURLToPath(new URL("../../../../.env.demo", import.meta.url));
 
 function demoPassword(): string {
@@ -28,22 +27,25 @@ function demoPassword(): string {
   return password;
 }
 
+// Only a database on this machine, reached through exactly these URLs (never a
+// password from Secrets Manager, as createDbFromEnv would use in AWS).
 const urls = databaseUrlsFromEnv();
-const host = new URL(urls.migrator).hostname;
-if (!LOCAL_HOSTS.has(host)) {
-  console.error(`demo:seed only seeds a local database; ${host} is not local.`);
+try {
+  assertLocalDatabases([urls.migrator, urls.app, urls.admin]);
+} catch (error) {
+  console.error(`demo:seed: ${(error as Error).message}`);
   process.exit(1);
 }
 
 const password = demoPassword();
-const db = createDbFromEnv("app", { max: 2 });
-const adminDb = createDbFromEnv("admin", { max: 1 });
+const db = createDb(urls.app, { max: 2 });
+const adminDb = createDb(urls.admin, { max: 1 });
 const migrator = createDb(urls.migrator, { max: 1 });
 const app = await buildApp({ db, adminDb, config: apiConfigFromEnv(), logger: false });
 try {
-  const seed = await seedDemo(app, migrator, { password });
+  const seed = await seedDemo(app, migrator, password);
   console.log(`\nDemo Project "Riyadh Gate Tower – Phase 2" seeded. Everyone signs in with the password in .env.demo.\n`);
-  const rows = [seed.engineer, ...seed.people].map((p) => [p.company, p.role, p.name.en, p.email]);
+  const rows = [seed.engineer, ...seed.people].map((p) => [p.company, p.label, p.name.en, p.email]);
   const widths = [0, 1, 2].map((i) => Math.max(...rows.map((r) => r[i]!.length)));
   for (const r of rows) console.log(`  ${r.slice(0, 3).map((c, i) => c!.padEnd(widths[i]!)).join("  ")}  ${r[3]}`);
   console.log(`\nSign in at /en/sign-in (or /ar/sign-in). The Rabaed Engineer uses Rabaed Admin (the /admin/v1 API).\n`);
