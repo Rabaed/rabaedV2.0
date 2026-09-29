@@ -5,7 +5,7 @@
 import { randomUUID } from "node:crypto";
 import type { WorkItemDetail, WorkItemHistory } from "@rabaed/domain";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createTestApi, type Caller, type OnboardedCompany } from "./support/harness.ts";
+import { createTestApi, expectHidden, type Caller, type OnboardedCompany } from "./support/harness.ts";
 
 const api = await createTestApi();
 afterAll(() => api.close());
@@ -141,11 +141,11 @@ describe("Send for Review", () => {
       const list = (await caller.get(`/v1/projects/${projectId}/work-items`)).json();
       expect(list.items).toEqual([]);
       expect(list.stages.every((s: { count: number }) => s.count === 0)).toBe(true);
-      expect((await caller.get(`/v1/work-items/${id}`)).statusCode).toBe(404);
-      expect((await caller.get(`/v1/work-items/${id}/history`)).statusCode).toBe(404);
+      await expectHidden(caller.get(`/v1/work-items/${id}`));
+      await expectHidden(caller.get(`/v1/work-items/${id}/history`));
       const res = await take(caller, id, "return", { reason: "x" });
-      expect(res.statusCode).toBe(404);
-      expect((await caller.post(`/v1/work-items/${id}/claim`)).statusCode).toBe(404);
+      await expectHidden(res);
+      await expectHidden(caller.post(`/v1/work-items/${id}/claim`));
     }
   });
 
@@ -241,7 +241,7 @@ describe("Claim, Return and re-send", () => {
   it("keeps the Return reason from everyone outside the Contractor (V5)", async () => {
     for (const caller of [k1Engineer, orEngineer, c2Engineer]) {
       const res = await caller.get(`/v1/work-items/${id}/history`);
-      expect(res.statusCode).toBe(404);
+      await expectHidden(res);
       expect(res.body).not.toContain("Wrong tray size");
     }
   });
@@ -316,7 +316,7 @@ describe("a Transition", () => {
     const id = await createDraft(engineer, "Trunking");
     expect((await engineer.post(`/v1/work-items/${id}/transitions`, { transition: "send_for_review" })).statusCode).toBe(400);
     expect((await take(api.anonymous(), id, "send_for_review")).statusCode).toBe(401);
-    expect((await engineer.post(`/v1/work-items/${randomUUID()}/claim`)).statusCode).toBe(404);
+    await expectHidden(engineer.post(`/v1/work-items/${randomUUID()}/claim`));
   });
 });
 

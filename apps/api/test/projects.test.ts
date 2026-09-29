@@ -2,7 +2,7 @@
 // (RP-189; RP-185 stories 14–17, 26; visibility.md scenario matrix, RP-185 scenario 9).
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createTestApi, type Caller, type OnboardedCompany } from "./support/harness.ts";
+import { createTestApi, expectHidden, type Caller, type OnboardedCompany } from "./support/harness.ts";
 
 const api = await createTestApi();
 afterAll(() => api.close());
@@ -113,8 +113,7 @@ describe("a Project is invisible to anyone not on it", () => {
     const { caller: colleague } = await api.member(a.caller);
     expect(projectIds(await colleague.get("/v1/projects"))).not.toContain(project.id);
     const res = await colleague.get(`/v1/projects/${project.id}`);
-    expect(res.statusCode).toBe(404);
-    expect(res.json()).toEqual({ error: "not_found" });
+    await expectHidden(res);
   });
 
   it("for another Company, exactly like an id that doesn't exist (scenario 9)", async () => {
@@ -127,8 +126,7 @@ describe("a Project is invisible to anyone not on it", () => {
     const missing = await other.caller.get(`/v1/projects/${randomUUID()}`);
     const malformed = await other.caller.get("/v1/projects/not-an-id");
     for (const res of [hidden, missing, malformed]) {
-      expect(res.statusCode).toBe(404);
-      expect(res.body).toBe(JSON.stringify({ error: "not_found" }));
+      await expectHidden(res);
     }
   });
 

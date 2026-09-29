@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import { createDb } from "@rabaed/db";
 import { testDatabaseUrls } from "@rabaed/db/test-support";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createTestApi, uniqueCr, type Caller, type OnboardedCompany } from "./support/harness.ts";
+import { createTestApi, expectHidden, uniqueCr, type Caller, type OnboardedCompany } from "./support/harness.ts";
 
 const api = await createTestApi();
 // Reads the audit trail the way Rabaed Admin would.
@@ -73,10 +73,10 @@ describe("a Company invited to a Project, before it accepts (scenario 30)", () =
       `/v1/participants/${k1.invitationId}/members`,
       `/v1/participants/${k1.invitationId}/visibility`,
     ]) {
-      expect((await k1.caller.get(url)).statusCode, url).toBe(404);
+      await expectHidden(k1.caller.get(url), url);
     }
     const add = await k1.caller.post(`/v1/participants/${k1.invitationId}/members`, { memberId: k1.company.authorizedPerson.id });
-    expect(add.statusCode).toBe(404);
+    await expectHidden(add);
   });
 
   it("appears nowhere for another Participant", async () => {
@@ -85,7 +85,7 @@ describe("a Company invited to a Project, before it accepts (scenario 30)", () =
     const list = await c1.caller.get("/v1/participants");
     expect(list.body).not.toContain(k1.invitationId);
     expect(list.body).not.toContain(k1.company.companyId);
-    expect((await c1Member.get(`/v1/participants/${k1.invitationId}/members`)).statusCode).toBe(404);
+    await expectHidden(c1Member.get(`/v1/participants/${k1.invitationId}/members`));
     // Pending invitations are the Project Admins' alone.
     const res = await c1Member.get(`/v1/projects/${projectId}/invitations`);
     expect(res.statusCode).toBe(403);
@@ -120,7 +120,7 @@ describe("a Company invited to a Project, before it accepts (scenario 30)", () =
   it("answers someone not on the Project as not found", async () => {
     const outsider = await api.projectCreator();
     for (const id of [projectId, randomUUID()]) {
-      expect((await outsider.caller.get(`/v1/projects/${id}/invitations`)).statusCode).toBe(404);
+      await expectHidden(outsider.caller.get(`/v1/projects/${id}/invitations`));
     }
   });
 });
@@ -172,7 +172,7 @@ describe("answering an invitation", () => {
       invitedAt: expect.any(String),
     });
     // Answered already: nothing left to accept.
-    expect((await k3.caller.post(`/v1/participant-invitations/${k3.invitationId}/accept`)).statusCode).toBe(404);
+    await expectHidden(k3.caller.post(`/v1/participant-invitations/${k3.invitationId}/accept`));
   });
 
   it("is for the invited Company's Authorized Person only", async () => {
@@ -183,15 +183,14 @@ describe("answering an invitation", () => {
       // Another Company's Authorized Person, the Project Admin included: as if it didn't exist.
       for (const caller of [c1.caller, host.caller]) {
         const res = await caller.post(url);
-        expect(res.statusCode).toBe(404);
-        expect(res.json()).toEqual({ error: "not_found" });
+        await expectHidden(res);
       }
       expect((await k4Member.post(url)).statusCode).toBe(403);
       expect((await api.anonymous().post(url)).statusCode).toBe(401);
     }
     expect((await k4Member.get("/v1/participant-invitations")).statusCode).toBe(403);
     for (const id of [randomUUID(), "not-a-uuid"]) {
-      expect((await k4.caller.post(`/v1/participant-invitations/${id}/accept`)).statusCode).toBe(404);
+      await expectHidden(k4.caller.post(`/v1/participant-invitations/${id}/accept`));
     }
     // Still pending.
     expect((await k4.caller.get("/v1/participant-invitations")).json().invitations).toHaveLength(1);
@@ -243,7 +242,7 @@ describe("an onboarding lead", () => {
   it("does not exist for a Member", async () => {
     for (const caller of [host.caller, api.anonymous()]) {
       const res = await caller.get("/admin/v1/onboarding-leads?reason=curious");
-      expect(res.statusCode).toBe(404);
+      await expectHidden(res);
     }
   });
 });

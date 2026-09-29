@@ -5,7 +5,7 @@
 import { randomUUID } from "node:crypto";
 import type { DimensionValue } from "@rabaed/domain";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createTestApi, type Caller, type InvitedMember, type OnboardedCompany } from "./support/harness.ts";
+import { createTestApi, expectHidden, type Caller, type InvitedMember, type OnboardedCompany } from "./support/harness.ts";
 
 const api = await createTestApi();
 afterAll(() => api.close());
@@ -108,8 +108,8 @@ describe("Trades and Locations", () => {
   it("are changed only by a Project Admin", async () => {
     expect((await addTrade(hostMember.caller, "CV")).statusCode).toBe(403);
     // Not on the Project: exactly like a Project that doesn't exist.
-    expect((await addTrade(consultant.caller, "CV")).statusCode).toBe(404);
-    expect((await consultant.caller.get(`/v1/projects/${projectId}/dimensions`)).statusCode).toBe(404);
+    await expectHidden(addTrade(consultant.caller, "CV"));
+    await expectHidden(consultant.caller.get(`/v1/projects/${projectId}/dimensions`));
   });
 
   it("reject a code that isn't 2 to 6 letters or digits", async () => {
@@ -149,11 +149,7 @@ describe("a Participant's Visibility", () => {
       ["consultant engineer", engineer.caller],
     ] as const) {
       for (const participantId of [consultantParticipantId, hostParticipantId, randomUUID()]) {
-        const res = await setParticipantVisibility(caller, participantId, body);
-        expect({ status: res.statusCode, body: res.json() }, `${who} → ${participantId}`).toEqual({
-          status: 404,
-          body: { error: "not_found" },
-        });
+        await expectHidden(setParticipantVisibility(caller, participantId, body), `${who} → ${participantId}`);
       }
     }
   });
@@ -215,7 +211,7 @@ describe("a Member's Visibility", () => {
     const body = { trade: all, location: all };
     expect((await setMemberVisibility(engineer.caller, engineer.member.id, body)).statusCode).toBe(403);
     // The Project Admin of another Company: not theirs, so not found.
-    expect((await setMemberVisibility(host.caller, engineer.member.id, body)).statusCode).toBe(404);
+    await expectHidden(setMemberVisibility(host.caller, engineer.member.id, body));
     const notOnProject = await api.inviteMember(consultant.caller);
     const res = await setMemberVisibility(consultant.caller, notOnProject.id, body);
     expect(res.statusCode).toBe(404);
@@ -230,14 +226,14 @@ describe("other Participants' grants", () => {
   });
 
   it("are not visible to a Member of another Participant", async () => {
-    expect((await engineer.caller.get(`/v1/participants/${hostParticipantId}/visibility`)).statusCode).toBe(404);
-    expect((await hostMember.caller.get(`/v1/participants/${consultantParticipantId}/visibility`)).statusCode).toBe(404);
+    await expectHidden(engineer.caller.get(`/v1/participants/${hostParticipantId}/visibility`));
+    await expectHidden(hostMember.caller.get(`/v1/participants/${consultantParticipantId}/visibility`));
   });
 
   it("show another Company's Project Admin the Participant's grant, never its Members'", async () => {
     expect((await host.caller.get(`/v1/participants/${consultantParticipantId}/visibility`)).statusCode).toBe(200);
     const res = await host.caller.get(`/v1/participants/${consultantParticipantId}/members/${engineer.member.id}/visibility`);
-    expect(res.statusCode).toBe(404);
+    await expectHidden(res);
   });
 
   it("leave a Member's own Visibility alone", async () => {

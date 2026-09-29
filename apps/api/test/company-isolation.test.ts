@@ -1,7 +1,7 @@
 // Seam 1: a Member of Company A cannot read Company B's record (RP-187).
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createTestApi, type Caller, type OnboardedCompany } from "./support/harness.ts";
+import { createTestApi, expectHidden, type Caller, type OnboardedCompany } from "./support/harness.ts";
 
 const api = await createTestApi();
 afterAll(() => api.close());
@@ -32,13 +32,12 @@ describe("a Company's record", () => {
     const missing = await a.caller.get(`/v1/companies/${randomUUID()}`);
     const malformed = await a.caller.get("/v1/companies/not-an-id");
     for (const res of [other, missing, malformed]) {
-      expect(res.statusCode).toBe(404);
-      expect(res.json()).toEqual({ error: "not_found" });
+      await expectHidden(res);
     }
   });
 
   it("works the other way round too", async () => {
-    expect((await b.caller.get(`/v1/companies/${a.company.companyId}`)).statusCode).toBe(404);
+    await expectHidden(b.caller.get(`/v1/companies/${a.company.companyId}`));
     expect((await b.caller.get(`/v1/companies/${b.company.companyId}`)).statusCode).toBe(200);
   });
 

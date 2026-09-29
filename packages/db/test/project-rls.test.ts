@@ -1,10 +1,11 @@
 // Seam 2 for Projects (RP-189; ADR 0007): the Project is the tenancy boundary.
 // With a Member of Project A set, an unfiltered SELECT on any Project table
-// returns no Project B rows; with no Member set, nothing at all.
+// returns exactly Project A's rows; with no Member set, nothing at all.
 //
 // The tables are found, not listed: every table with a project_id column (and
 // project itself) is checked, so each later Project table is covered as soon as
-// its migration lands.
+// its migration lands. Both Projects have rows in every one of them (RP-236), so
+// a missing or too-wide policy shows up as a wrong set of Projects.
 import { randomInt, randomUUID } from "node:crypto";
 import { sql } from "kysely";
 import pg from "pg";
@@ -24,7 +25,7 @@ async function one(text: string, values: unknown[]): Promise<string> {
   return (await migrator.query(text, values)).rows[0].id as string;
 }
 
-/** A Company with a Project Creator and a plain Member, inserted as the migrator. */
+/** A Company whose Authorized Person is a Project Creator, and a plain Member, inserted as the migrator. */
 async function company(engineer: string, name: string) {
   const companyId = await one(
     "insert into company (legal_name, cr_number, vat_number, onboarded_by) values ($1, $2, $3, $4) returning id",
@@ -35,7 +36,9 @@ async function company(engineer: string, name: string) {
       "insert into member (company_id, email, full_name, status, can_create_projects) values ($1, $2, $3, 'active', $4) returning id",
       [companyId, email(who), JSON.stringify({ en: who, ar: who }), creator],
     );
-  return { companyId, creator: await member("creator", true), colleague: await member("colleague", false) };
+  const creator = await member("creator", true);
+  await migrator.query("update company set authorized_person_id = $1 where id = $2", [creator, companyId]);
+  return { companyId, creator, colleague: await member("colleague", false) };
 }
 
 /** Creates a Project the way the API does: app.create_project, as the Project Creator. */
@@ -63,7 +66,94 @@ beforeAll(async () => {
   app = createDb(urls.app, { max: 2 });
   ids.projectA = await createProject(ids.creatorA, "AAA");
   ids.projectB = await createProject(ids.creatorB, "BBB");
+  await fillProject(ids.projectA, ids.creatorA);
+  await fillProject(ids.projectB, ids.creatorB);
 });
+
+/** Runs `query` as `memberId` and returns its only row's `outcome`. */
+const outcome = (memberId: string, query: ReturnType<typeof sql<{ outcome: string }>>) =>
+  withMember(app, memberId, (trx) => query.execute(trx)).then((r) => r.rows[0]!.outcome);
+
+/**
+ * Gives the Project a row in every Project table: through the app's functions,
+ * as its creator (its Authorized Person and Project Admin), where they exist;
+ * as the migrator for what no function writes yet (a Project's own definitions)
+ * or only the worker writes (notifications).
+ */
+async function fillProject(projectId: string, creator: string) {
+  const participantId = await one("select id from participant where project_id = $1", [projectId]);
+  const value = (kind: string, code: string) =>
+    withMember(app, creator, (trx) =>
+      sql<{ value_id: string }>`
+        select value_id from app.add_dimension_value(${projectId}::uuid, ${kind}, null, ${code}, '{"en": "V", "ar": "ق"}'::jsonb)
+      `.execute(trx),
+    ).then((r) => r.rows[0]!.value_id);
+  const values = { trade: await value("trade", "EL"), location: await value("location", "BA") };
+
+  // Value lists rather than "all", so visibility_grant_value gets rows too.
+  for (const [kind, id] of Object.entries(values)) {
+    expect(
+      await outcome(
+        creator,
+        sql`select app.set_participant_visibility(${participantId}::uuid, ${kind}, false, ${[id]}::uuid[], now()) as outcome`,
+      ),
+    ).toBe("set");
+    expect(
+      await outcome(
+        creator,
+        sql`select app.set_member_visibility(${participantId}::uuid, ${creator}::uuid, ${kind}, false, ${[id]}::uuid[], now()) as outcome`,
+      ),
+    ).toBe("set");
+  }
+  expect(
+    await outcome(
+      creator,
+      sql`select app.set_project_member_positions(${participantId}::uuid, ${creator}::uuid, ${["engineer", "project_manager"]}::text[]) as outcome`,
+    ),
+  ).toBe("set");
+
+  const created = await withMember(app, creator, (trx) =>
+    sql<{ outcome: string; work_item_id: string }>`
+      select outcome, work_item_id from app.create_work_item(
+        ${projectId}::uuid, 'MAR', 'Cable trays', 'Galvanised', ${values.trade}::uuid, ${values.location}::uuid, now())
+    `.execute(trx),
+  ).then((r) => r.rows[0]!);
+  expect(created.outcome).toBe("created");
+  const item = created.work_item_id;
+  // Numbers the item, keeps the idempotency key and queues a notification to the review pool.
+  expect(
+    await outcome(
+      creator,
+      sql`select app.take_transition(${item}::uuid, 'send_for_review', '', ${randomUUID()}::uuid, now()) as outcome`,
+    ),
+  ).toBe("applied");
+
+  await migrator.query(
+    `insert into notification (member_id, project_id, work_item_id, outbox_id, kind, step_id)
+     select $1, w.project_id, w.id, o.id, 'step_reached', w.current_step_id
+     from work_item w join outbox o on o.project_id = w.project_id where w.id = $2`,
+    [creator, item],
+  );
+  const name = JSON.stringify({ en: "Own", ar: "خاص" });
+  await migrator.query(
+    "insert into project_role (owner_kind, project_id, base_role, name, code) values ('project', $1, 'contractor', $2, 'OWNC')",
+    [projectId, name],
+  );
+  await migrator.query(
+    `insert into stage (owner_kind, project_id, module_key, key, name, category, sort)
+     values ('project', $1, 'submittals', 'own_stage', $2, 'in_progress', 9)`,
+    [projectId, name],
+  );
+  const definition = await one("insert into workflow_definition (owner_kind, project_id, name) values ('project', $1, $2) returning id", [
+    projectId,
+    name,
+  ]);
+  await migrator.query(
+    `insert into work_item_type (owner_kind, project_id, module_key, code, name, workflow_definition_id, outcome_kind)
+     values ('project', $1, 'submittals', 'OWN', $2, $3, 'none')`,
+    [projectId, name, definition],
+  );
+}
 
 afterAll(async () => {
   await app?.destroy();
@@ -91,22 +181,36 @@ async function projectsSeen(trx: Db, { table, column }: { table: string; column:
   return rows.map((r) => r.project).filter((p): p is string => p !== null);
 }
 
+// Written and read only through SECURITY DEFINER functions: with no read policy,
+// no Member sees any of their rows.
+const unreadable = ["command_idempotency", "numbering_counter", "outbox"];
+
 describe("every Project table", () => {
   it("includes the tables this ticket adds", async () => {
     const tables = (await projectTables()).map((t) => t.table);
     expect(tables).toEqual(expect.arrayContaining(["project", "participant", "project_member", "project_admin", "project_role"]));
   });
 
-  it("shows a Member of Project A no Project B rows, and does show Project A's", async () => {
-    for (const t of await projectTables()) {
-      const seenByA = await withMember(app, ids.creatorA, (trx) => projectsSeen(trx, t));
-      expect(seenByA, t.table).not.toContain(ids.projectB);
-      const seenByB = await withMember(app, ids.creatorB, (trx) => projectsSeen(trx, t));
-      expect(seenByB, t.table).not.toContain(ids.projectA);
+  it("has rows of both Projects, so the check below can tell them apart", async () => {
+    for (const { table, column } of await projectTables()) {
+      const col = pg.escapeIdentifier(column);
+      const { rows } = await migrator.query<{ project: string }>(
+        `select distinct ${col} as project from ${pg.escapeIdentifier(table)} where ${col} = any($1)`,
+        [[ids.projectA, ids.projectB]],
+      );
+      expect(rows.map((r) => r.project).sort(), table).toEqual([ids.projectA, ids.projectB].sort());
     }
-    for (const table of ["project", "participant", "project_member", "project_admin"]) {
-      const t = (await projectTables()).find((x) => x.table === table)!;
-      expect(await withMember(app, ids.creatorA, (trx) => projectsSeen(trx, t)), table).toEqual([ids.projectA]);
+  });
+
+  it("shows a Member of each Project exactly that Project's rows", async () => {
+    for (const t of await projectTables()) {
+      for (const [who, project] of [
+        [ids.creatorA, ids.projectA],
+        [ids.creatorB, ids.projectB],
+      ] as const) {
+        const expected = unreadable.includes(t.table) ? [] : [project];
+        expect(await withMember(app, who, (trx) => projectsSeen(trx, t)), t.table).toEqual(expected);
+      }
     }
   });
 
