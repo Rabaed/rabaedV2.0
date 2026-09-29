@@ -4,7 +4,7 @@ import { useDirection } from "@radix-ui/react-direction";
 import * as ToastPrimitive from "@radix-ui/react-toast";
 import { createContext, useCallback, useContext, useState, type ReactNode } from "react";
 import { cn } from "../../lib/cn.ts";
-import { focusRing } from "../form/control-styles.ts";
+import { focusRing, touchArea } from "../form/control-styles.ts";
 import { Icon, type IconName } from "../icon/icon.tsx";
 
 export type ToastTone = "info" | "success" | "danger";
@@ -61,7 +61,8 @@ export function ToastProvider({ label, closeLabel, duration = 5000, children }: 
             </div>
             <ToastPrimitive.Close
               aria-label={closeLabel}
-              className={cn("-m-1 rounded-xs p-1 text-muted hover:bg-hover hover:text-text", focusRing)}
+              // 24px to look at; a 44px hit area on touch screens.
+              className={cn("-m-1 rounded-xs p-1 text-muted hover:bg-hover hover:text-text", focusRing, touchArea)}
             >
               <Icon name="x" size={16} />
             </ToastPrimitive.Close>

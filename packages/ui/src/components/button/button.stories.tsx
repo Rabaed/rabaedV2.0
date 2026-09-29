@@ -1,6 +1,9 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, fn, userEvent } from "storybook/test";
+import { expectTouchTarget, phone } from "../../storybook/form.ts";
 import { storyText } from "../../storybook/locale.ts";
+// Aliased: this file has a story named Icon.
+import { Icon as IconGlyph } from "../icon/icon.tsx";
 import { Button, IconButton } from "./button.tsx";
 import { SignButton } from "./sign-button.tsx";
 
@@ -111,4 +114,28 @@ export const AllVariants: Story = {
       <SignButton onClick={args.onClick}>{storyText(context, { en: "Acknowledge", ar: "إقرار" })}</SignButton>
     </div>
   ),
+};
+
+/** On a phone: every size of Button, IconButton and SignButton is at least 44 × 44px. */
+export const Phone: Story = {
+  parameters: phone,
+  render: (args, context) => (
+    <div className="flex flex-wrap items-center gap-3">
+      <Button {...args}>{storyText(context, { en: "Submit", ar: "إرسال" })}</Button>
+      <Button {...args} size="sm">{storyText(context, { en: "Save", ar: "حفظ" })}</Button>
+      <IconButton {...args} variant="ghost" label={storyText(context, { en: "Add", ar: "إضافة" })}>
+        <IconGlyph name="plus" />
+      </IconButton>
+      <IconButton {...args} variant="ghost" size="sm" label={storyText(context, { en: "Remove", ar: "إزالة" })}>
+        <IconGlyph name="minus" />
+      </IconButton>
+      <SignButton onClick={args.onClick}>{storyText(context, { en: "Acknowledge", ar: "إقرار" })}</SignButton>
+      <SignButton onClick={args.onClick} size="sm">{storyText(context, { en: "Sign", ar: "توقيع" })}</SignButton>
+    </div>
+  ),
+  play: async ({ canvas }) => {
+    const buttons = canvas.getAllByRole("button");
+    await expect(buttons).toHaveLength(6);
+    for (const button of buttons) await expectTouchTarget(button);
+  },
 };

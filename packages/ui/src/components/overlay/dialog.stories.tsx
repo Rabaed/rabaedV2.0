@@ -1,5 +1,6 @@
 import type { Meta, StoryContext, StoryObj } from "@storybook/react-vite";
-import { expect, screen, userEvent, waitFor } from "storybook/test";
+import { expect, screen, userEvent, waitFor, within } from "storybook/test";
+import { expectTouchTarget, phone } from "../../storybook/form.ts";
 import { storyText } from "../../storybook/locale.ts";
 import { expectFocusTrapped, overlay } from "../../storybook/overlay.ts";
 import { Button } from "../button/button.tsx";
@@ -84,5 +85,18 @@ export const ButtonsClose: Story = {
       await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
       await expect(trigger(context)).toHaveFocus();
     }
+  },
+};
+
+/** On a phone: the close button, Cancel and Save are all at least 44 × 44px. Left open for the screenshot. */
+export const Phone: Story = {
+  parameters: { ...phone, ...overlay },
+  play: async (context) => {
+    await expectTouchTarget(trigger(context));
+    await userEvent.click(trigger(context));
+    const panel = await dialog(context);
+    const buttons = within(panel).getAllByRole("button");
+    await expect(buttons).toHaveLength(3);
+    for (const button of buttons) await expectTouchTarget(button);
   },
 };

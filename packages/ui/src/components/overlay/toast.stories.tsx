@@ -1,5 +1,6 @@
 import type { Meta, StoryContext, StoryObj } from "@storybook/react-vite";
 import { expect, screen, userEvent, waitFor } from "storybook/test";
+import { expectTouchTarget, phone } from "../../storybook/form.ts";
 import { storyText } from "../../storybook/locale.ts";
 import { overlay } from "../../storybook/overlay.ts";
 import { Button } from "../button/button.tsx";
@@ -83,5 +84,16 @@ export const Dismiss: Story = {
     await screen.findByText(storyText(context, copy.saved));
     await userEvent.click(screen.getByRole("button", { name: storyText(context, copy.close) }));
     await waitFor(() => expect(screen.queryByText(storyText(context, copy.saved))).toBeNull());
+  },
+};
+
+/** On a phone: the buttons and the toast's dismiss button are at least 44 × 44px. Left open for the screenshot. */
+export const Phone: Story = {
+  parameters: { ...phone, ...overlay },
+  play: async (context) => {
+    for (const text of [copy.save, copy.submit]) await expectTouchTarget(button(context, text));
+    await userEvent.click(button(context, copy.save));
+    await screen.findByText(storyText(context, copy.saved));
+    await expectTouchTarget(screen.getByRole("button", { name: storyText(context, copy.close) }));
   },
 };

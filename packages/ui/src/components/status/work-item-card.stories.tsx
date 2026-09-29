@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, fn, userEvent } from "storybook/test";
 import photo from "../../storybook/fixtures/site-photo.svg";
+import { expectTouchTarget, phone } from "../../storybook/form.ts";
 import { storyLocale, storyText } from "../../storybook/locale.ts";
 import { reviewCodes } from "../../tokens/themes.ts";
 import { WorkItemCard, type WorkItemCardProps } from "./work-item-card.tsx";
@@ -181,5 +182,22 @@ export const AsButton: Story = {
     await expect(card).toHaveFocus();
     await userEvent.keyboard("{Enter}");
     await expect(context.args.onClick).toHaveBeenCalledOnce();
+  },
+};
+
+/** On a phone: every card, comfortable or compact, link or button, is at least 44 × 44px. */
+export const Phone: Story = {
+  parameters: phone,
+  render: (args, context) => (
+    <div className="flex flex-col gap-2">
+      <WorkItemCard {...args} {...openItem(context)} />
+      <WorkItemCard {...args} {...closedItem(context, "b")} density="compact" />
+      <WorkItemCard {...args} {...openItem(context)} density="compact" href={undefined} onClick={fn()} />
+    </div>
+  ),
+  play: async ({ canvas }) => {
+    const cards = [...canvas.getAllByRole("link"), ...canvas.getAllByRole("button")];
+    await expect(cards).toHaveLength(3);
+    for (const card of cards) await expectTouchTarget(card);
   },
 };
