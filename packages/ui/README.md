@@ -41,7 +41,7 @@ All fonts are self-hosted: bundled from npm (`@fontsource…`) onto our own orig
 ## Digits, dates and direction
 
 - Numbers and dates: `formatNumber` and `formatDate` from `@rabaed/domain`. Latin digits in English and Arabic, the Gregorian calendar, Saudi time.
-- **DocNo**: `<DocNo value="TWR-TMC-EL-MAR-041" rev={2} />`. A Document Number (with optional `Rev n`), left-to-right and isolated, so it never scrambles inside Arabic text. Always use it for Document Numbers.
+- **DocNo**: `<DocNo value="TWR-TMC-EL-MAR-041" />`, or with its revision `<DocNo value="TWR-TMC-EL-MAR-041" rev={2} locale={locale} />` ("Rev 2" in English, "مراجعة 2" in Arabic; `locale` is required with `rev`). The number is left-to-right and isolated, so it never scrambles inside Arabic text; with a revision, number and revision form one unit in the locale's direction, so the revision follows the number in reading order (on its left in Arabic). Always use it for Document Numbers.
 - **Icon**: `<Icon name="chevron-right" />`, from the Tabler outline set, bundled as SVG (no icon font, no CDN). Decorative by default; pass `label` when the icon means something on its own. Arrows and chevrons that follow the reading direction flip in Arabic; override with `mirrorInRtl`. To add an icon, register it in `src/components/icon/icon.tsx`.
 
 ## Forms
@@ -144,7 +144,7 @@ Every control sits in a `Field`, which gives it a label, optional help text, the
 - **Alignment**: `align="end"` for numbers, so they line up with tabular digits; columns and alignment mirror in Arabic.
 - **Tabs**: name the list (`<TabsList aria-label={t("project")}>`); a trigger takes an `icon` and a `count` (pass it formatted with `formatNumber`).
 
-The package has no translations of its own: pass every label (`closeLabel`, the toast region `label`, …) from the app's messages. The exceptions are the fixed product wording of the status components below (Review Code meanings, "N weeks at this step"), which take a `locale` instead, so no module can word them differently, and the language names in `MemberMenu`, each written in its own language ("English", "العربية"). Copy never uses deadline language: the story tests check story copy, and the `json-no-deadline-words` lint rule checks the app's messages.
+The package has no translations of its own: pass every label (`closeLabel`, the toast region `label`, …) from the app's messages. The exceptions are the fixed product wording of the status components below (Review Code meanings, "N weeks at this step") and of `DocNo`'s revision word ("Rev"), which take a `locale` instead, so no module can word them differently, and the language names in `MemberMenu`, each written in its own language ("English", "العربية"). Copy never uses deadline language: the story tests check story copy, and the `json-no-deadline-words` lint rule checks the app's messages.
 
 ## Status
 

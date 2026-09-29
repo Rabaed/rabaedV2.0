@@ -45,7 +45,7 @@ function Row({ item, locale, children }: { item: Submittal; locale: Locale; chil
     <>
       {children}
       <TableCell>
-        <DocNo value={item.number} rev={item.rev} />
+        <DocNo value={item.number} rev={item.rev} locale={locale} />
       </TableCell>
       <TableCell>{item.title[locale]}</TableCell>
       <TableCell>

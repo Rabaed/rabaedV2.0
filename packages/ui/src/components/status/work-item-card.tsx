@@ -33,7 +33,7 @@ export type WorkItemState =
 export type WorkItemCardProps = {
   /** The Document Number, e.g. `TWR-TMC-EL-MAR-041`. */
   number: string;
-  /** The revision, shown as `Rev n` after the number. */
+  /** The revision, shown after the number in the card's language (`Rev n`, `مراجعة n`). */
   rev?: DocNoProps["rev"];
   title: string;
   /** The Trade's name, e.g. "Electrical". */
@@ -83,7 +83,7 @@ export function WorkItemCard({
     <>
       <span className="flex items-start gap-3">
         <span className="flex min-w-0 flex-1 flex-col gap-1">
-          <DocNo id={`${id}-number`} value={number} rev={rev} className="text-caption text-muted" />
+          <DocNo id={`${id}-number`} value={number} rev={rev} locale={locale} className="text-caption text-muted" />
           <span id={`${id}-title`} data-title="" className={cn("text-body font-semibold text-text", densities[density].title)}>
             {title}
           </span>
