@@ -49,6 +49,7 @@ export { CodeBadge, type CodeBadgeProps } from "./components/status/code-badge.t
 export { StagePill, type StagePillProps } from "./components/status/stage-pill.tsx";
 export { stepAgeLabel } from "./components/status/step-age.ts";
 export { WithChip, type WithChipProps } from "./components/status/with-chip.tsx";
+export { WorkItemCard, type WorkItemCardProps } from "./components/status/work-item-card.tsx";
 export { cn } from "./lib/cn.ts";
 export {
   themes,
