@@ -208,7 +208,7 @@ describe("services", () => {
 
   it("logs every container to its own log group, kept for a month", () => {
     const groups = resourcesOfType(env.synthesised, "AWS::Logs::LogGroup").filter((g) =>
-      String(g.Properties?.LogGroupName).startsWith("/rabaed/dev/"),
+      String(g.Properties?.LogGroupName).startsWith("/rabaed/dev/") && !String(g.Properties?.LogGroupName).includes("/lambda/"),
     );
     expect(groups.map((g) => g.Properties?.LogGroupName).sort()).toEqual(
       ["/rabaed/dev/api", "/rabaed/dev/migrate", "/rabaed/dev/web", "/rabaed/dev/worker"],

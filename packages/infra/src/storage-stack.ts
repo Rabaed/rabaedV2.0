@@ -25,13 +25,16 @@ export const FONTS_PREFIX = "fonts/";
 // - Build assets: private files the build needs. The setup wizard uploads
 //   the licensed Thmanyah fonts under fonts/; the deploy workflow, which
 //   builds the images, may read that prefix and nothing else (RP-211).
-// - Logs: S3 access logs of the other two buckets, and later the load
-//   balancer's. Encrypted with S3-managed keys, because neither S3 access
-//   logs nor load-balancer logs can be written to a KMS-encrypted bucket.
+// - Logs: S3 access logs of the other two buckets, the load balancer's
+//   access logs (under load-balancer/) and CloudTrail's audit trail (under
+//   cloudtrail/), kept for a year. Encrypted with S3-managed keys, because
+//   neither S3 access logs nor load-balancer logs can be written to a
+//   KMS-encrypted bucket.
 export class StorageStack extends Stack {
   readonly storageKey: kms.Key;
   readonly projectFiles: s3.Bucket;
   readonly buildAssets: s3.Bucket;
+  readonly logs: s3.Bucket;
 
   constructor(scope: Construct, id: string, props: StorageStackProps) {
     super(scope, id, props);
@@ -62,11 +65,11 @@ export class StorageStack extends Stack {
       removalPolicy: RemovalPolicy.RETAIN,
     };
 
-    const logs = new s3.Bucket(this, "Logs", {
+    const logs = (this.logs = new s3.Bucket(this, "Logs", {
       ...privateBucket,
       encryption: s3.BucketEncryption.S3_MANAGED,
       lifecycleRules: [{ expiration: Duration.days(365), noncurrentVersionExpiration: Duration.days(30) }],
-    });
+    }));
 
     // Old versions are kept: recovering an overwritten or deleted file is what versioning is for.
     const encryptedBucket = (id: string, logPrefix: string) =>

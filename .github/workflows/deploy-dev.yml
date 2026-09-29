@@ -1,6 +1,7 @@
 name: Deploy dev
 # Every merge to main that passes CI (build, tests, infra assertions) is
-# deployed to dev: infrastructure → images → migrations → app → smoke test.
+# deployed to dev: infrastructure → images → migrations → app → monitoring →
+# smoke test.
 # A failed migration stops the deploy before the app changes; a version that
 # never turns healthy is rolled back by ECS and fails the workflow; so does a
 # failed smoke test.
@@ -174,6 +175,13 @@ jobs:
           pnpm --silent cdk deploy -c env=dev --exclusively --require-approval never --no-color --progress events
           "$STACK_PREFIX-App" --parameters "ImageTag=$VERSION" --parameters "CertificateArn=$CERTIFICATE_ARN"
           --outputs-file "$RUNNER_TEMP/app.json"
+
+      # Alarms on the app's load balancer, logs and database, and CloudTrail.
+      - name: Monitoring
+        working-directory: packages/infra
+        run: >-
+          pnpm --silent cdk deploy -c env=dev --exclusively --require-approval never --no-color --progress events
+          "$STACK_PREFIX-Monitoring"
 
       - name: Smoke test
         env:
