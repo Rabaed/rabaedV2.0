@@ -43,8 +43,16 @@ A Member who configures a Project's Settings. The Project's creator is the first
 _Avoid_: Project owner, project manager
 
 **Project Participant**:
-One Company taking part in one Project, in one Project Role. A Project can have any number of Participants in each role. When a Participant is withdrawn, all its in-progress Work Items are Cancelled, and its replacement starts them afresh.
+One Company taking part in one Project, in one Project Role. A Project can have any number of Participants in each role. A Company becomes a Participant only when its Authorized Person accepts a Participant Invitation. When a Participant is withdrawn, all its in-progress Work Items are Cancelled, and its replacement starts them afresh.
 _Avoid_: Project company, party
+
+**Participant Invitation**:
+A Project Admin's offer to a Company, found by its CR number, to join a Project in a given Project Role. It is Invited until the Company's Authorized Person accepts (the Company becomes a Participant) or declines it.
+_Avoid_: Join request, add company
+
+**Company Projects**:
+What a Company's Members see of the Projects their Company takes part in, before and besides the Project itself: each Project's name, code, number and Host Company, their own Project Role and Project Members, and pending Participant Invitations.
+_Avoid_: My projects list, project directory
 
 **Position**:
 A named bundle of Function Permissions (View, Create, Submit, Review, Approve, Assign, Close, Attach) that a Member holds on a Project, such as Engineer or Project Manager. Rabaed supplies defaults; Project Admins can add their own, and a Member can hold several.
