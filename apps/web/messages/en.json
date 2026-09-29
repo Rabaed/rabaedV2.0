@@ -87,6 +87,7 @@
     "code": "Project code",
     "codeHint": "2 to 10 letters or digits, used in Document Numbers.",
     "projectNumber": "Project Number",
+    "hostCompany": "Host Company",
     "role": "Your Company's role",
     "yourRole": "Your Company's role",
     "create": "Create Project",
@@ -110,6 +111,7 @@
   "participants": {
     "title": "Company Projects",
     "subtitle": "Every Project {company} takes part in. Add your Members to each one.",
+    "hostedBy": "Host Company: {company}",
     "empty": "Your Company is not on any Project yet.",
     "membersTitle": "Project Members",
     "noMembers": "None of your Members are on this Project yet.",

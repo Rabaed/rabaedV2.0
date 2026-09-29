@@ -106,12 +106,19 @@ describe("project_admin", () => {
   });
 });
 
+// visibility.md V15, scenarios 28 and 29 (RP-223).
 describe("participant", () => {
-  it("shows the Project's Members every Participant of it", async () => {
-    const seen = (trx: Db) => sql<{ id: string }>`select id from participant`.execute(trx).then((r) => r.rows.map((x) => x.id).sort());
-    expect(await withMember(app, consultant.member, seen)).toEqual([hostParticipant, consultantParticipant].sort());
-    // The consultant's Authorized Person is not on the Project: only their own Participant.
+  const seen = (trx: Db) => sql<{ id: string }>`select id from participant`.execute(trx).then((r) => r.rows.map((x) => x.id).sort());
+
+  it("shows a Participant's Members only their own Participant, never the others (scenario 28)", async () => {
+    expect(await withMember(app, consultant.member, seen)).toEqual([consultantParticipant]);
+    expect(await withMember(app, host.member, seen)).toEqual([hostParticipant]);
+    // The consultant's Authorized Person is not on the Project: still only their own Participant.
     expect(await withMember(app, consultant.ap, seen)).toEqual([consultantParticipant]);
+  });
+
+  it("shows a Project Admin every Participant (scenario 29)", async () => {
+    expect(await withMember(app, host.ap, seen)).toEqual([hostParticipant, consultantParticipant].sort());
   });
 });
 
@@ -147,14 +154,34 @@ describe("the Participant functions", () => {
     ).rejects.toThrow(/only a Project Admin/);
   });
 
-  it("show a Project's Participants' names only to its Members", async () => {
+  it("list a Project's Participants in full only to its Project Admins, and otherwise only your own (V15)", async () => {
     const names = (as: string) =>
       withMember(app, as, (trx) =>
         sql<{ company_id: string }>`select company_id from app.project_participants(${projectId}::uuid)`
           .execute(trx)
           .then((r) => r.rows.map((x) => x.company_id)),
       );
-    expect(await names(consultant.member)).toEqual([host.id, consultant.id]);
+    expect(await names(host.ap)).toEqual([host.id, consultant.id]);
+    expect(await names(host.member)).toEqual([host.id]);
+    expect(await names(consultant.member)).toEqual([consultant.id]);
     expect(await names(consultant.ap)).toEqual([]);
+  });
+
+  it("name the Host Company to every Member of a Participant, and to nobody else", async () => {
+    const hostName = (as: string) =>
+      withMember(app, as, (trx) =>
+        sql<{ en: string }>`select app.project_host_company_name(${projectId}::uuid) ->> 'en' as en`
+          .execute(trx)
+          .then((r) => r.rows[0]!.en),
+      );
+    expect(await hostName(consultant.member)).toBe("Host");
+    // Before they are on the Project themselves (the Company Projects view).
+    expect(await hostName(consultant.ap)).toBe("Host");
+    const outsider = await company(
+      (await migrator.query("select onboarded_by from company where id = $1", [host.id])).rows[0].onboarded_by,
+      "Outsider",
+    );
+    expect(await hostName(outsider.ap)).toBeNull();
+    expect(await hostName(outsider.member)).toBeNull();
   });
 });

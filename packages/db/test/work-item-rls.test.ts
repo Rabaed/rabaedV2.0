@@ -169,6 +169,24 @@ afterAll(async () => {
   await migrator?.end();
 });
 
+// visibility.md V15, on the Tower setup: C1's Authorized Person is the Project Admin.
+describe("participant (scenarios 28 and 29)", () => {
+  it("shows each Participant's Member only their own Participant: never C2, K1 or OR to C1 (scenario 28)", async () => {
+    for (const [who, own] of [
+      [c1.member, participant.c1],
+      [c2.member, participant.c2],
+      [k1.member, participant.k1],
+      [or.member, participant.or],
+    ] as const) {
+      expect(await seen(who, "participant", "id"), who).toEqual([own]);
+    }
+  });
+
+  it("shows the Project Admin every Participant (scenario 29)", async () => {
+    expect((await seen(c1.ap, "participant", "id")).sort()).toEqual(Object.values(participant).sort());
+  });
+});
+
 describe("a Draft Work Item", () => {
   it("is seen, with its history, by its raiser's Members whose Visibility covers it (V1)", async () => {
     expect(await seen(c1.member, "work_item", "id")).toEqual([draft]);
@@ -480,6 +498,17 @@ describe("Submit and Code A", () => {
     expect(await signerName(or.member, code.id)).toMatchObject({ en: "khalid-signer" });
     expect(await signerName(c2.member, code.id)).toBeNull();
     expect(await signerName(k1.member, submit.id)).toBeNull();
+  });
+
+  it("names only the Companies that appear on the item, and only to those who see it (V14, V15)", async () => {
+    const named = (as: string) =>
+      call<{ participant_id: string }>(as, sql`select participant_id from app.work_item_companies(${item}::uuid)`).then((rows) =>
+        rows.map((r) => r.participant_id).sort(),
+      );
+    // The raiser and the Consultant it was "With"; the Owner Representative's oversight names nobody.
+    expect(await named(c1.member)).toEqual([participant.c1, participant.k1].sort());
+    expect(await named(or.member)).toEqual([participant.c1, participant.k1].sort());
+    expect(await named(c2.member)).toEqual([]);
   });
 
   it("keeps actor resolution out of the app role's reach", async () => {

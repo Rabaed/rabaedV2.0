@@ -154,9 +154,9 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
         raiser.legal_name as raised_by, holder.legal_name as held_by, m.full_name as holder_name
       from work_item w
       join workflow_step s on s.id = w.current_step_id
-      join app.project_participants(w.project_id) raiser on raiser.participant_id = w.raised_by_participant_id
+      join app.work_item_companies(w.id) raiser on raiser.participant_id = w.raised_by_participant_id
       left join step_assignment a on a.work_item_id = w.id and a.status in ('pooled', 'claimed', 'vacant')
-      left join app.project_participants(w.project_id) holder on holder.participant_id = a.participant_id
+      left join app.work_item_companies(w.id) holder on holder.participant_id = a.participant_id
       -- member's own RLS shows only the viewer's own Company's people (V14).
       left join member m on m.id = a.assignee_member_id
       where w.id = ${workItemId}

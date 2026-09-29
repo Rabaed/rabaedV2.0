@@ -8,7 +8,7 @@ const projectRole = z.object({ baseRole: z.enum(baseRoles), name: bilingualText 
 export const addParticipantRequest = z.object({ crNumber, role: z.enum(baseRoles) });
 export type AddParticipantRequest = z.infer<typeof addParticipantRequest>;
 
-/** A Participant of a Project, as the Project's Members see it. */
+/** A Participant of a Project, as its Project Admins, and its own Company's Members, see it. */
 export const projectParticipant = z.object({
   id: z.uuid(),
   company: z.object({ id: z.uuid(), legalName: bilingualText }),
@@ -18,13 +18,21 @@ export const projectParticipant = z.object({
 });
 export type ProjectParticipant = z.infer<typeof projectParticipant>;
 
-export const projectParticipants = z.object({ participants: z.array(projectParticipant) });
+/** The Company that hosts a Project: the one other Company every Participant sees by name (V15). */
+const hostCompany = z.object({ legalName: bilingualText });
+
+/**
+ * The Participants of a Project the viewer may list: every one for its Project
+ * Admins, otherwise only the viewer's own Company's (V15).
+ */
+export const projectParticipants = z.object({ hostCompany, participants: z.array(projectParticipant) });
 export type ProjectParticipants = z.infer<typeof projectParticipants>;
 
 /** One Project the Authorized Person's Company takes part in (GET /v1/participants). */
 export const companyParticipation = z.object({
   id: z.uuid(),
   project: z.object({ id: z.uuid(), projectNumber: z.number().int(), code: z.string(), name: bilingualText }),
+  hostCompany,
   projectRole,
 });
 export type CompanyParticipation = z.infer<typeof companyParticipation>;
