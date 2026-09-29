@@ -10,7 +10,7 @@ import type { WorkItemDetail } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { DEMO_ENGINEER_EMAIL } from "../src/demo/seed.ts";
-import { createTestApi, DEFAULT_PASSWORD, type Caller } from "./support/harness.ts";
+import { createTestApi, expectHidden, DEFAULT_PASSWORD, type Caller } from "./support/harness.ts";
 
 const api = await createTestApi();
 const urls = testDatabaseUrls();
@@ -95,7 +95,7 @@ describe("the README walkthrough", () => {
   };
   /** Not in the detail, the list, or (for Beta Build, with no items of its own) any count. */
   const hidden = async (who: Caller, { countsZero = false } = {}) => {
-    expect((await who.get(`/v1/work-items/${mar}`)).statusCode).toBe(404);
+    await expectHidden(who.get(`/v1/work-items/${mar}`));
     const list = (await who.get(`/v1/projects/${projectId}/work-items`)).json();
     expect(list.items.map((i: { id: string }) => i.id)).not.toContain(mar);
     if (countsZero) expect(list.stages.every((s: { count: number }) => s.count === 0)).toBe(true);
@@ -201,14 +201,14 @@ describe("a second Project: Beta Build's Jeddah Corniche Villas, which no other 
 
   it("Hafiz (Riyadh Gate Tower) gets 404 on it and on its Work Item, and never sees it listed", async () => {
     expect((await hafiz.get("/v1/projects")).json().projects.map((p: { code: string }) => p.code)).not.toContain("JCV");
-    expect((await hafiz.get(`/v1/projects/${jcv}`)).statusCode).toBe(404);
-    expect((await hafiz.get(`/v1/projects/${jcv}/work-items`)).statusCode).toBe(404);
-    expect((await hafiz.get(`/v1/work-items/${jcvItem}`)).statusCode).toBe(404);
+    await expectHidden(hafiz.get(`/v1/projects/${jcv}`));
+    await expectHidden(hafiz.get(`/v1/projects/${jcv}/work-items`));
+    await expectHidden(hafiz.get(`/v1/work-items/${jcvItem}`));
   });
 
   it("Nasser (Jeddah Corniche Villas) gets 404 on Riyadh Gate Tower and its Work Items", async () => {
-    expect((await nasser.get(`/v1/projects/${projectId}`)).statusCode).toBe(404);
-    expect((await nasser.get(`/v1/projects/${projectId}/work-items`)).statusCode).toBe(404);
-    expect((await nasser.get(`/v1/work-items/${twrItem}`)).statusCode).toBe(404);
+    await expectHidden(nasser.get(`/v1/projects/${projectId}`));
+    await expectHidden(nasser.get(`/v1/projects/${projectId}/work-items`));
+    await expectHidden(nasser.get(`/v1/work-items/${twrItem}`));
   });
 });

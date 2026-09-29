@@ -1,7 +1,7 @@
 // Seam 1: the Authorized Person manages Members (RP-188; RP-185 stories 5–8, 13).
 import { randomUUID } from "node:crypto";
 import { beforeAll, afterAll, describe, expect, it } from "vitest";
-import { createTestApi, DEFAULT_PASSWORD, type Caller, type OnboardedCompany } from "./support/harness.ts";
+import { createTestApi, expectHidden, DEFAULT_PASSWORD, type Caller, type OnboardedCompany } from "./support/harness.ts";
 
 const api = await createTestApi();
 afterAll(() => api.close());
@@ -157,8 +157,7 @@ describe("the Project Creator flag", () => {
     const missing = await a.caller.patch(`/v1/members/${randomUUID()}`, { canCreateProjects: true });
     const malformed = await a.caller.patch("/v1/members/not-an-id", { canCreateProjects: true });
     for (const res of [other, missing, malformed]) {
-      expect(res.statusCode).toBe(404);
-      expect(res.json()).toEqual({ error: "not_found" });
+      await expectHidden(res);
     }
     expect((await bCaller.get("/v1/me")).json().member.canCreateProjects).toBe(false);
   });
@@ -226,8 +225,7 @@ describe("deactivating a Member", () => {
     const other = await a.caller.post(`/v1/members/${bMember.id}/deactivate`);
     const missing = await a.caller.post(`/v1/members/${randomUUID()}/deactivate`);
     for (const res of [other, missing]) {
-      expect(res.statusCode).toBe(404);
-      expect(res.json()).toEqual({ error: "not_found" });
+      await expectHidden(res);
     }
     expect((await bCaller.get("/v1/me")).statusCode).toBe(200);
   });

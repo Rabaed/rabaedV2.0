@@ -3,11 +3,25 @@ import { createDb } from "@rabaed/db";
 import { testDatabaseUrls } from "@rabaed/db/test-support";
 import type { BaseRole, CreateProjectRequest, InviteMemberRequest, OnboardCompanyRequest } from "@rabaed/domain";
 import type { FastifyInstance, LightMyRequestResponse } from "fastify";
+import { expect } from "vitest";
 import { buildApp, SESSION_COOKIE } from "../../src/app.ts";
 import type { ApiConfig } from "../../src/config.ts";
 import { createEngineer } from "../../src/identity/engineers.ts";
 
 export const HOUR = 3_600_000;
+
+/**
+ * Asserts the answer to something the caller may not see: exactly what an id
+ * that doesn't exist gets, 404 with the body `{ error: "not_found" }` and nothing
+ * else (visibility.md), so it never tells whether the thing exists.
+ */
+export async function expectHidden(response: LightMyRequestResponse | Promise<LightMyRequestResponse>, label?: string) {
+  const res = await response;
+  expect({ status: res.statusCode, body: res.body }, label).toEqual({
+    status: 404,
+    body: JSON.stringify({ error: "not_found" }),
+  });
+}
 
 export const testConfig: ApiConfig = {
   sessionTtlMs: 12 * HOUR,

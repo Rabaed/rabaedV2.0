@@ -4,7 +4,7 @@
 import { randomUUID } from "node:crypto";
 import type { WorkItemDetail, WorkItemList } from "@rabaed/domain";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createTestApi, DEFAULT_PASSWORD, type Caller, type OnboardedCompany } from "./support/harness.ts";
+import { createTestApi, expectHidden, DEFAULT_PASSWORD, type Caller, type OnboardedCompany } from "./support/harness.ts";
 
 const api = await createTestApi();
 afterAll(() => api.close());
@@ -161,8 +161,7 @@ describe("a Contractor engineer's Draft MAR", () => {
     expect(l.items).toEqual([]);
     expect(Object.values(counts(l)).every((n) => n === 0)).toBe(true);
     const res = await c2Engineer.get(`/v1/work-items/${draftId}`);
-    expect(res.statusCode).toBe(404);
-    expect(res.json()).toEqual({ error: "not_found" });
+    await expectHidden(res);
   });
 
   it("is not seen by the Consultant or the Owner Representative (V1)", async () => {
@@ -170,7 +169,7 @@ describe("a Contractor engineer's Draft MAR", () => {
       const l = await list(caller);
       expect(l.items).toEqual([]);
       expect(Object.values(counts(l)).every((n) => n === 0)).toBe(true);
-      expect((await caller.get(`/v1/work-items/${draftId}`)).statusCode).toBe(404);
+      await expectHidden(caller.get(`/v1/work-items/${draftId}`));
     }
   });
 
@@ -178,12 +177,12 @@ describe("a Contractor engineer's Draft MAR", () => {
     const l = await list(c1Narrow);
     expect(l.items).toEqual([]);
     expect(counts(l).draft).toBe(0);
-    expect((await c1Narrow.get(`/v1/work-items/${draftId}`)).statusCode).toBe(404);
+    await expectHidden(c1Narrow.get(`/v1/work-items/${draftId}`));
   });
 
   it("is not found by a Member who is not on the Project, nor is the Project's list", async () => {
-    expect((await c1Outsider.get(`/v1/work-items/${draftId}`)).statusCode).toBe(404);
-    expect((await c1Outsider.get(`/v1/projects/${projectId}/work-items`)).statusCode).toBe(404);
+    await expectHidden(c1Outsider.get(`/v1/work-items/${draftId}`));
+    await expectHidden(c1Outsider.get(`/v1/projects/${projectId}/work-items`));
   });
 });
 
@@ -213,15 +212,15 @@ describe("creating a Draft", () => {
   });
 
   it("is not found on a Project the Member is not on, or of an unknown Type", async () => {
-    expect((await createDraft(c1Outsider)).statusCode).toBe(404);
+    await expectHidden(createDraft(c1Outsider));
     expect((await createDraft(c1Engineer, { type: "XYZ" })).json()).toEqual({ error: "type_not_found" });
   });
 });
 
 describe("a Work Item link", () => {
   it("that isn't a UUID, or doesn't exist, is 404", async () => {
-    expect((await c1Engineer.get("/v1/work-items/not-an-id")).statusCode).toBe(404);
-    expect((await c1Engineer.get(`/v1/work-items/${randomUUID()}`)).statusCode).toBe(404);
+    await expectHidden(c1Engineer.get("/v1/work-items/not-an-id"));
+    await expectHidden(c1Engineer.get(`/v1/work-items/${randomUUID()}`));
   });
 
   it("needs a session", async () => {

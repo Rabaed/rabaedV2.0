@@ -2,7 +2,7 @@
 import { createDb } from "@rabaed/db";
 import { testDatabaseUrls } from "@rabaed/db/test-support";
 import { afterAll, describe, expect, it } from "vitest";
-import { createTestApi, uniqueCr, uniqueEmail, uniqueVat } from "./support/harness.ts";
+import { createTestApi, expectHidden, uniqueCr, uniqueEmail, uniqueVat } from "./support/harness.ts";
 
 const api = await createTestApi();
 // Reads the audit trail the way Rabaed Admin would.
@@ -100,8 +100,7 @@ describe("onboarding a Company", () => {
     const { caller: member } = await api.authorizedPerson();
     for (const caller of [api.anonymous(), member]) {
       const res = await caller.post("/admin/v1/companies", request());
-      expect(res.statusCode).toBe(404);
-      expect(res.json()).toEqual({ error: "not_found" });
+      await expectHidden(res);
     }
   });
 });

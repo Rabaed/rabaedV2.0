@@ -6,7 +6,7 @@
 import { randomUUID } from "node:crypto";
 import type { WorkItemDetail, WorkItemHistory } from "@rabaed/domain";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createTestApi, DEFAULT_PASSWORD, type Caller, type OnboardedCompany } from "./support/harness.ts";
+import { createTestApi, expectHidden, DEFAULT_PASSWORD, type Caller, type OnboardedCompany } from "./support/harness.ts";
 
 const api = await createTestApi();
 afterAll(() => api.close());
@@ -231,8 +231,8 @@ describe("Submit", () => {
 
   it("hides it from a Consultant Member whose Visibility doesn't cover its Trade (scenario 4)", async () => {
     expect(await listed(mechanicalManager)).toMatchObject({ ids: [], counts: { pending_approval: 0 } });
-    expect((await mechanicalManager.get(`/v1/work-items/${id}`)).statusCode).toBe(404);
-    expect((await mechanicalManager.post(`/v1/work-items/${id}/claim`)).statusCode).toBe(404);
+    await expectHidden(mechanicalManager.get(`/v1/work-items/${id}`));
+    await expectHidden(mechanicalManager.post(`/v1/work-items/${id}/claim`));
   });
 
   it("shows it as oversight to the Owner and the Owner Representative whose Visibility covers it, with no actions (V2, scenario 6)", async () => {
@@ -247,16 +247,16 @@ describe("Submit", () => {
   it("hides it from an Owner Representative whose Visibility doesn't cover its Location, or its Trade: 404", async () => {
     for (const caller of [orElsewhere, orMechanical]) {
       expect(await listed(caller)).toMatchObject({ ids: [], counts: { pending_approval: 0 } });
-      expect((await caller.get(`/v1/work-items/${id}`)).statusCode).toBe(404);
-      expect((await caller.get(`/v1/work-items/${id}/history`)).statusCode).toBe(404);
+      await expectHidden(caller.get(`/v1/work-items/${id}`));
+      await expectHidden(caller.get(`/v1/work-items/${id}/history`));
     }
   });
 
   it("still shows the second Contractor nothing: list, counts, detail, history (V3, scenario 5)", async () => {
     expect(await listed(c2Engineer)).toMatchObject({ ids: [], counts: { pending_approval: 0 } });
-    expect((await c2Engineer.get(`/v1/work-items/${id}`)).statusCode).toBe(404);
-    expect((await c2Engineer.get(`/v1/work-items/${id}/history`)).statusCode).toBe(404);
-    expect((await take(c2Engineer, id, "approve_a")).statusCode).toBe(404);
+    await expectHidden(c2Engineer.get(`/v1/work-items/${id}`));
+    await expectHidden(c2Engineer.get(`/v1/work-items/${id}/history`));
+    await expectHidden(take(c2Engineer, id, "approve_a"));
   });
 
   it("shows the Consultant the Submit, never the Contractor's Return or internal moves (V5)", async () => {
