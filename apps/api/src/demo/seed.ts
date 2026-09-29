@@ -5,7 +5,8 @@ import { SESSION_COOKIE } from "../app.ts";
 import { createEngineer } from "../identity/engineers.ts";
 
 // The demo Project (RP-196): "Riyadh Gate Tower – Phase 2" with four Companies,
-// their Members, Positions and Visibility, built through the API itself (the
+// their Members, Positions and Visibility, and a second Project no other demo
+// Company is on (RP-213), built through the API itself (the
 // same routes, validation and app.* functions a person would use), never raw
 // SQL. A Rabaed Engineer onboards each Company through Rabaed Admin, which
 // writes admin_action with the reason (visibility.md V9).
@@ -28,12 +29,17 @@ export interface DemoPerson {
 
 export interface DemoSeed {
   projectId: string;
+  /** Beta Build's own Jeddah Corniche Villas, with one Draft MAR; only Nasser is on it. */
+  otherProjectId: string;
   engineer: DemoPerson;
   people: DemoPerson[];
 }
 
-/** The Rabaed Engineer's email: whether the demo is seeded can be told from it. */
+/** The Rabaed Engineer's email: created first, so whether a seed started can be told from it. */
 export const DEMO_ENGINEER_EMAIL = "engineer@rabaed.demo.rabaed.test";
+
+/** The Draft the seed creates last: whether a seed finished can be told from it. */
+export const DEMO_LAST_ITEM_TITLE = "Pump room ventilation";
 
 type Method = "GET" | "POST" | "PUT" | "PATCH";
 /** An API call; `T` is the answer's shape where the seed reads it. */
@@ -162,7 +168,7 @@ export async function seedDemo(app: FastifyInstance, migrator: Db, password: str
   for (const floor of ["01", "02", "03"]) {
     await location(`T1F${floor}`, bi(`Tower 1 Floor ${floor}`, `البرج 1 الطابق ${floor}`), tower1);
   }
-  await location("T2F01", bi("Tower 2 Floor 01", "البرج 2 الطابق 01"), tower2);
+  const tower2Floor1 = await location("T2F01", bi("Tower 2 Floor 01", "البرج 2 الطابق 01"), tower2);
 
   // Participants and what each covers (set by the Project Admin). Beta Build
   // covers exactly what TMC does: only the Company boundary keeps TMC's items from it (V3).
@@ -229,5 +235,38 @@ export async function seedDemo(app: FastifyInstance, migrator: Db, password: str
   };
   await member(waha, participant.waha, faisal, ["engineer"]);
 
-  return { projectId, engineer, people };
+  // One Draft of TMC's own, so a fresh demo has a Riyadh Gate Tower Work Item
+  // for the deploy's visibility check to try as someone from another Project.
+  const hafizCaller = browser(app);
+  await hafizCaller("POST", "/v1/session", { email: email(hafiz.local, tmc.domain), password });
+  await hafizCaller("POST", `/v1/projects/${projectId}/work-items`, {
+    type: "MAR",
+    title: "Emergency lighting – Tower 2",
+    tradeId: electrical,
+    locationId: tower2Floor1,
+  });
+
+  // A second Project: Beta Build's own, with only its Authorized Person on it
+  // and one Draft. Nobody on Riyadh Gate Tower is on it, and Nasser is on
+  // nothing else, so each sees only their own Project (the deploy's
+  // visibility check in dev, packages/infra/src/smoke.ts).
+  await beta.caller("PATCH", `/v1/members/${beta.authorizedPersonId}`, { canCreateProjects: true });
+  const { projectId: otherProjectId } = await beta.caller<{ projectId: string }>("POST", "/v1/projects", {
+    name: bi("Jeddah Corniche Villas", "فلل كورنيش جدة"),
+    code: "JCV",
+    role: "contractor",
+  });
+  const plumbing = (await beta.caller<{ id: string }>("POST", `/v1/projects/${otherProjectId}/trades`, { code: "PL", name: bi("Plumbing Works", "أعمال السباكة") })).id;
+  const { participants: betaParticipants } = await beta.caller<{ participants: { id: string; isOwnCompany: boolean }[] }>(
+    "GET",
+    `/v1/projects/${otherProjectId}/participants`,
+  );
+  const betaOwn = betaParticipants.find((p) => p.isOwnCompany)!.id;
+  await beta.caller("PUT", `/v1/participants/${betaOwn}/visibility`, { trade: only(plumbing), location: all });
+  await beta.caller("PUT", `/v1/participants/${betaOwn}/members/${beta.authorizedPersonId}/visibility`, { trade: all, location: all });
+  await beta.caller("PUT", `/v1/participants/${betaOwn}/members/${beta.authorizedPersonId}/positions`, { positions: ["engineer"] });
+  // Last: ensureDemo takes this Draft as the sign that the seed finished.
+  await beta.caller("POST", `/v1/projects/${otherProjectId}/work-items`, { type: "MAR", title: DEMO_LAST_ITEM_TITLE, tradeId: plumbing });
+
+  return { projectId, otherProjectId, engineer, people };
 }

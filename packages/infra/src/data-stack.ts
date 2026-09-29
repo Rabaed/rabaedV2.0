@@ -1,5 +1,6 @@
 import { Duration, RemovalPolicy, Stack, type StackProps } from "aws-cdk-lib";
 import * as ec2 from "aws-cdk-lib/aws-ec2";
+import * as iam from "aws-cdk-lib/aws-iam";
 import * as kms from "aws-cdk-lib/aws-kms";
 import * as logs from "aws-cdk-lib/aws-logs";
 import * as rds from "aws-cdk-lib/aws-rds";
@@ -39,6 +40,8 @@ export class DataStack extends Stack {
   readonly masterSecret: secretsmanager.ISecret;
   /** One secret per database role (JSON with `username` and `password`). */
   readonly roleSecrets: Record<DatabaseRole, secretsmanager.ISecret>;
+  /** Every demo person's sign-in password; demo environments only. */
+  readonly demoPassword?: secretsmanager.ISecret;
 
   constructor(scope: Construct, id: string, props: DataStackProps) {
     super(scope, id, props);
@@ -123,6 +126,22 @@ export class DataStack extends Stack {
     };
     rotate("master", this.masterSecret);
     for (const role of databaseRoles) rotate(role, this.roleSecrets[role]);
+
+    // The demo people's one password (demo environments only). The migration
+    // task seeds with it; the deploy role reads it for the smoke test, which
+    // signs in as demo people to check visibility through the load balancer.
+    if (config.demo) {
+      this.demoPassword = new secretsmanager.Secret(this, "DemoPassword", {
+        secretName: names.demoPasswordSecret,
+        description: `Sign-in password of every demo person in rabaed-${config.name} (demo data only)`,
+        generateSecretString: { passwordLength: 32, excludePunctuation: true },
+      });
+      // Granted here, by name, next to the secret: the deploy role is in the account stack.
+      new iam.Policy(this, "DeployReadsDemoPassword", {
+        roles: [iam.Role.fromRoleName(this, "DeployRole", names.deployRole)],
+        statements: [new iam.PolicyStatement({ actions: ["secretsmanager:GetSecretValue"], resources: [this.demoPassword.secretArn] })],
+      });
+    }
 
     // TODO(RP-210 follow-up): delete once this has been deployed to dev.
     // The plain-password secrets the role secrets replaced, and their exports:

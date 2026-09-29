@@ -1,8 +1,6 @@
-import pg from "pg";
-import { bootstrap } from "./bootstrap.ts";
-import { databaseNameOf, databaseUrlsFromEnv, withDatabaseName } from "./config.ts";
+import { databaseUrlsFromEnv } from "./config.ts";
 import { assertLocalDatabases } from "./local-database.ts";
-import { migrate } from "./migrate.ts";
+import { resetDatabase } from "./reset-database.ts";
 
 // `pnpm db:reset`: drops the local database and builds it again (roles,
 // migrations), for the demo (RP-196). It refuses unless every database URL is
@@ -16,15 +14,5 @@ try {
   process.exit(1);
 }
 
-const database = databaseNameOf(urls.migrator);
-if (!/^[a-z_][a-z0-9_]*$/.test(database)) throw new Error(`Unsafe database name: ${database}`);
-const client = new pg.Client({ connectionString: withDatabaseName(urls.superuser, "postgres") });
-await client.connect();
-try {
-  await client.query(`drop database if exists ${database} with (force)`);
-} finally {
-  await client.end();
-}
-await bootstrap(urls);
-const { applied } = await migrate(urls.migrator);
+const { database, applied } = await resetDatabase(urls);
 console.log(`Reset ${database}: applied ${applied.length} migrations.`);

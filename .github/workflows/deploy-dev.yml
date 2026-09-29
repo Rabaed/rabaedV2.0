@@ -4,14 +4,21 @@ name: Deploy dev
 # smoke test.
 # A failed migration stops the deploy before the app changes; a version that
 # never turns healthy is rolled back by ECS and fails the workflow; so does a
-# failed smoke test.
+# failed smoke test or app role check. Dev is a demo environment: each deploy
+# seeds the demo if it is missing, and a manual run can reset it (RP-213).
 on:
   workflow_run:
     workflows: [CI]
     types: [completed]
     branches: [main]
-  # Redeploy main by hand (Actions → Deploy dev → Run workflow).
+  # Redeploy main by hand (Actions → Deploy dev → Run workflow), optionally
+  # resetting the demo: the database is dropped, migrated and seeded again.
   workflow_dispatch:
+    inputs:
+      reset_demo:
+        description: Reset the demo (drops everything in dev's database and seeds the demo again)
+        type: boolean
+        default: false
 permissions:
   contents: read
 # One deploy at a time, never cancelled half way. A newer merge waits; if
@@ -148,24 +155,21 @@ jobs:
           "$STACK_PREFIX-Migrations" --parameters "ImageTag=$VERSION" --outputs-file "$RUNNER_TEMP/migrations.json"
 
       - name: Run migrations
+        run: packages/infra/scripts/run-task.sh "$RUNNER_TEMP/migrations.json" "migrations (the app was not changed)"
+
+      # Only demo environments have the demo password (packages/infra/src/config.ts).
+      - name: Demo data
+        id: demo
+        env:
+          RESET: ${{ github.event_name == 'workflow_dispatch' && inputs.reset_demo }}
         run: |
-          out() { jq -r --arg s "$STACK_PREFIX-Migrations" --arg k "$1" '.[$s][$k]' "$RUNNER_TEMP/migrations.json"; }
-          cluster=$(out Cluster)
-          task=$(aws ecs run-task --cluster "$cluster" --task-definition "$(out TaskDefinition)" \
-            --launch-type FARGATE --started-by "deploy-${VERSION:0:7}" \
-            --network-configuration "awsvpcConfiguration={subnets=[$(out Subnets)],securityGroups=[$(out SecurityGroup)],assignPublicIp=DISABLED}" \
-            --query 'tasks[0].taskArn' --output text)
-          echo "migration task ${task##*/}"
-          aws ecs wait tasks-stopped --cluster "$cluster" --tasks "$task"
-          # Streams are named <streamPrefix>/<container>/<task id> (src/task.ts).
-          aws logs get-log-events --log-group-name "$(out LogGroup)" --log-stream-name "migrate/migrate/${task##*/}" \
-            --start-from-head --query 'events[].message' --output text || echo "(no log)"
-          read -r code reason < <(aws ecs describe-tasks --cluster "$cluster" --tasks "$task" \
-            --query 'tasks[0].[containers[0].exitCode, stoppedReason]' --output text)
-          if [[ "$code" != "0" ]]; then
-            echo "::error::migrations failed (exit $code: $reason); the app was not changed"
-            exit 1
-          fi
+          secret=$(jq -r --arg s "$STACK_PREFIX-Migrations" '.[$s].DemoPasswordSecret // empty' "$RUNNER_TEMP/migrations.json")
+          if [[ -z "$secret" ]]; then echo "Not a demo environment."; exit 0; fi
+          echo "secret=$secret" >> "$GITHUB_OUTPUT"
+          action=ensure
+          [[ "$RESET" == true ]] && action=reset
+          packages/infra/scripts/run-task.sh "$RUNNER_TEMP/migrations.json" "demo $action" \
+            /app/apps/api/node_modules/.bin/tsx /app/apps/api/src/cli/demo-environment.ts "$action"
 
       - name: App
         working-directory: packages/infra
@@ -189,6 +193,7 @@ jobs:
           # for this check only. Empty once dev has a real certificate.
           CERTIFICATE_PEM: ${{ vars.AWS_CERTIFICATE_PEM }}
           ARABIC_FONT: ${{ steps.images.outputs.arabic_font }}
+          DEMO_SECRET: ${{ steps.demo.outputs.secret }}
         run: |
           if [[ -n "$CERTIFICATE_PEM" ]]; then
             printf '%s\n' "$CERTIFICATE_PEM" > "$RUNNER_TEMP/dev-ca.pem"
@@ -197,5 +202,18 @@ jobs:
           export SMOKE_URL=$(jq -r --arg s "$STACK_PREFIX-App" '.[$s].Url' "$RUNNER_TEMP/app.json")
           export SMOKE_VERSION="$VERSION"
           export SMOKE_ARABIC_FONT="$ARABIC_FONT"
+          # In a demo environment, it also signs in as two demo people to check visibility.
+          if [[ -n "$DEMO_SECRET" ]]; then
+            SMOKE_DEMO_PASSWORD=$(aws secretsmanager get-secret-value --secret-id "$DEMO_SECRET" --query SecretString --output text)
+            echo "::add-mask::$SMOKE_DEMO_PASSWORD"
+            export SMOKE_DEMO_PASSWORD
+          fi
           pnpm --filter @rabaed/infra smoke
           echo "### Deployed \`${VERSION:0:7}\` to $SMOKE_URL" >> "$GITHUB_STEP_SUMMARY"
+
+      # As rabaed_app, inside the VPC: it cannot bypass row-level security or
+      # rewrite the audit trail (packages/db/src/app-role-check.ts).
+      - name: App role check
+        run: >-
+          packages/infra/scripts/run-task.sh "$RUNNER_TEMP/migrations.json" "app role check"
+          ./node_modules/.bin/tsx src/check-app-role.ts
