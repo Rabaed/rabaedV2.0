@@ -215,6 +215,8 @@
       "release": "Release to pool",
       "reason": "Reason",
       "reasonHelp": "Only your Company sees this.",
+      "internalNote": "Internal Note",
+      "internalNoteHelp": "Optional. Only your Company sees it, even when the item goes to another Company. Anything for them goes in Chat or the Form.",
       "cancel": "Cancel",
       "notHolder": "Someone else holds this step now.",
       "alreadyClaimed": "Someone else claimed it first.",
@@ -233,6 +235,8 @@
       "released": "Released to pool",
       "other": "Updated",
       "numbered": "Document Number",
+      "internalNote": "Internal Note",
+      "internalNoteWith": "Internal Note · {transition}",
       "internal": "Internal: only your Company sees this."
     }
   },

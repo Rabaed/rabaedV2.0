@@ -338,7 +338,7 @@ describe("Send for Review and Return", () => {
   const take = (as: string, transition: string, reason = "") =>
     call<{ outcome: string }>(
       as,
-      sql`select app.take_transition(${item}::uuid, ${transition}, ${reason}, ${randomUUID()}::uuid, now()) as outcome`,
+      sql`select app.take_transition(${item}::uuid, ${transition}, ${reason}, '', ${randomUUID()}::uuid, now()) as outcome`,
     ).then((rows) => rows[0]!.outcome);
   const claim = (as: string) =>
     call<{ outcome: string }>(as, sql`select app.claim_step(${item}::uuid, now()) as outcome`).then((rows) => rows[0]!.outcome);
@@ -421,7 +421,7 @@ describe("Submit and Code A", () => {
   const take = (as: string, transition: string) =>
     call<{ outcome: string }>(
       as,
-      sql`select app.take_transition(${item}::uuid, ${transition}, '', ${randomUUID()}::uuid, now()) as outcome`,
+      sql`select app.take_transition(${item}::uuid, ${transition}, '', '', ${randomUUID()}::uuid, now()) as outcome`,
     ).then((rows) => rows[0]!.outcome);
   const claim = (as: string) =>
     call<{ outcome: string }>(as, sql`select app.claim_step(${item}::uuid, now()) as outcome`).then((rows) => rows[0]!.outcome);
@@ -531,5 +531,103 @@ describe("Submit and Code A", () => {
         sql`select app.participant_covers_item(${participant.k1}::uuid, ${item}::uuid)`.execute(trx),
       ),
     ).rejects.toThrow(/permission denied/);
+  });
+});
+
+// RP-239: an Internal Note written with a Transition, called as the app role
+// (visibility.md V5, scenarios 7, 8 and 34).
+describe("Internal Note", () => {
+  let item = "";
+  let pm = "";
+  let manager = "";
+  const take = (as: string, transition: string, internalNote: string, reason = "") =>
+    call<{ outcome: string }>(
+      as,
+      sql`select app.take_transition(
+        ${item}::uuid, ${transition}, ${reason}, ${internalNote}, ${randomUUID()}::uuid, now()) as outcome`,
+    ).then((rows) => rows[0]!.outcome);
+  const claim = (as: string) =>
+    call<{ outcome: string }>(as, sql`select app.claim_step(${item}::uuid, now()) as outcome`).then((rows) => rows[0]!.outcome);
+  const setPositions = (ap: string, p: string, m: string, keys: string[]) =>
+    call<{ outcome: string }>(ap, sql`select app.set_project_member_positions(${p}::uuid, ${m}::uuid, ${keys}::text[]) as outcome`).then(
+      (rows) => expect(rows[0]!.outcome).toBe("set"),
+    );
+  /** The item's events `as` may read, through RLS. */
+  const visible = (as: string) =>
+    call<{ type: string; payload: Record<string, unknown> }>(
+      as,
+      sql`select type, payload from work_item_event where work_item_id = ${item}::uuid order by seq`,
+    );
+  const intact = async () => (await migrator.query("select app.work_item_chain_intact($1) as ok", [item])).rows[0].ok as boolean;
+
+  beforeAll(async () => {
+    pm = await member(c1.id, "noting-pm");
+    manager = await member(k1.id, "noting-manager");
+    await call<{ outcome: string }>(c1.ap, sql`select app.add_project_member(${participant.c1}::uuid, ${pm}::uuid, now())`);
+    await call<{ outcome: string }>(k1.ap, sql`select app.add_project_member(${participant.k1}::uuid, ${manager}::uuid, now())`);
+    for (const kind of ["trade", "location"]) {
+      await grant(c1.ap, "member", [participant.c1, pm], kind, "all");
+      await grant(k1.ap, "member", [participant.k1, manager], kind, "all");
+    }
+    await setPositions(c1.ap, participant.c1, c1.member, ["engineer"]);
+    await setPositions(c1.ap, participant.c1, pm, ["project_manager"]);
+    await setPositions(k1.ap, participant.k1, manager, ["manager"]);
+    item = (await createDraft(c1.member, { title: "Transformers" })).work_item_id!;
+    expect(await take(c1.member, "send_for_review", "sent note")).toBe("applied");
+    expect(await claim(pm)).toBe("claimed");
+    expect(await take(pm, "return", "returned note", "Wrong rating")).toBe("applied");
+    expect(await take(c1.member, "send_for_review", "")).toBe("applied");
+    expect(await claim(pm)).toBe("claimed");
+    expect(await take(pm, "submit", "submitted note")).toBe("applied");
+  });
+
+  it("is an internal event of the writer's Participant, just before its Transition, even for Submit", async () => {
+    const { rows } = await migrator.query(
+      `select type, audience, audience_participant_id, actor_member_id, transition_id, payload
+       from work_item_event where work_item_id = $1 order by seq`,
+      [item],
+    );
+    const notes = rows.flatMap((r, i) => (r.type === "internal_note" ? [[r, rows[i + 1]]] : []));
+    expect(notes.map(([n]) => n.payload)).toEqual([{ internal_note: "sent note" }, { internal_note: "returned note" }, { internal_note: "submitted note" }]);
+    for (const [note, next] of notes) {
+      expect(note).toMatchObject({ audience: "internal", audience_participant_id: participant.c1 });
+      expect(next).toMatchObject({ type: "transition", transition_id: note.transition_id, actor_member_id: note.actor_member_id });
+    }
+    expect(notes.at(-1)![1].audience).toBe("shared");
+    expect(notes.map(([n]) => n.actor_member_id)).toEqual([c1.member, pm, pm]);
+  });
+
+  it("is read only by the writer's Participant: the Consultant and Owner Representative see just the Submit (scenario 34)", async () => {
+    expect((await visible(c1.member)).filter((e) => e.type === "internal_note")).toHaveLength(3);
+    for (const who of [k1.member, manager, or.member]) {
+      expect(await visible(who), who).toEqual([{ type: "transition", payload: {} }]);
+    }
+    expect(await visible(c2.member)).toEqual([]);
+  });
+
+  it("written with the Code, is read only by the Consultant (scenario 8)", async () => {
+    expect(await claim(manager)).toBe("claimed");
+    expect(await take(manager, "approve_a", "coded note")).toBe("applied");
+    expect((await visible(k1.member)).map((e) => e.payload.internal_note).filter(Boolean)).toEqual(["coded note"]);
+    for (const who of [c1.member, pm, or.member]) {
+      expect(JSON.stringify(await visible(who)), who).not.toContain("coded note");
+    }
+  });
+
+  it("is in the hash chain: changing an Internal Note breaks it", async () => {
+    expect(await intact()).toBe(true);
+    await migrator.query("begin");
+    try {
+      await migrator.query("alter table work_item_event disable trigger work_item_event_append_only");
+      await migrator.query(
+        `update work_item_event set payload = '{"internal_note": "forged"}' where work_item_id = $1 and type = 'internal_note'
+         and payload ->> 'internal_note' = 'submitted note'`,
+        [item],
+      );
+      expect(await intact()).toBe(false);
+    } finally {
+      await migrator.query("rollback");
+    }
+    expect(await intact()).toBe(true);
   });
 });

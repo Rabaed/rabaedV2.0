@@ -15,6 +15,9 @@ export async function WorkItemHistory({ events, locale }: { events: Event[]; loc
 
   const what = (e: Event) => {
     if ((e.type === "transition" || e.type === "issue_code") && e.transition) return e.transition[locale];
+    if (e.type === "internal_note") {
+      return e.transition ? t("internalNoteWith", { transition: e.transition[locale] }) : t("internalNote");
+    }
     if (e.type === "created" || e.type === "claimed" || e.type === "released") return t(e.type);
     return t("other");
   };
@@ -48,6 +51,7 @@ export async function WorkItemHistory({ events, locale }: { events: Event[]; loc
               </p>
             )}
             {e.reason && <p className="whitespace-pre-wrap">{e.reason}</p>}
+            {e.internalNote && <p className="whitespace-pre-wrap">{e.internalNote}</p>}
             {e.audience === "internal" && <p className="text-xs text-muted">{t("internal")}</p>}
           </li>
         ))}
