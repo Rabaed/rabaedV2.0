@@ -18,7 +18,7 @@ _Avoid_: Representative, company admin, owner (clashes with Owner Representative
 A Member whom the Authorized Person allows to create Projects on the Company's behalf.
 
 **Member**:
-A person who signs in to Rabaed. A Member belongs to exactly one Company and keeps a Signature in their profile.
+A person who signs in to Rabaed. A Member belongs to exactly one Company and keeps a Signature in their profile. Their email address is theirs alone on the Instance: a person already a Member of one Company can't also become a Member of another. A deactivated Member whom their Company invites again is reactivated, keeping their Signature and records.
 _Avoid_: User, employee, staff
 
 ### Projects
@@ -193,7 +193,7 @@ A move of a Work Item from one Step to another, shown as a button whose label th
 _Avoid_: Action, button
 
 **Action Form**:
-The pop-up form a Member fills in when taking a Transition, such as choosing a Review Code, writing comments or attaching files; each Transition defines its own.
+The pop-up form a Member fills in when taking a Transition, such as choosing a Review Code, writing a reason or an Internal Note, attaching files, or, with Code B, writing the reviewer's Comments, each of which becomes its own Comment in the Snag List; each Transition defines its own.
 _Avoid_: Dialog, modal
 
 **Submit**:
@@ -204,7 +204,7 @@ A Transition that sends a Work Item back to an earlier step within the same Part
 _Avoid_: Reject, RFI
 
 **Step Age**:
-How many weeks a Work Item has sat at its current step (1, 2, 3, 4+), shown as dots and sent in a periodic ageing report. Rabaed shows age only; it sets no due dates or SLAs.
+How many weeks a Work Item has sat at its current step (1, 2, 3, 4+), shown as dots and sent in a periodic ageing report. Inside the Company holding the item it counts from the current Step; every other Company sees it counted from when the item reached that Company. Rabaed shows age only; it sets no due dates or SLAs.
 _Avoid_: Overdue, SLA, deadline
 
 **Vacancy**:
@@ -256,8 +256,12 @@ The discussion thread on a Work Item, visible to every Participant who can see t
 _Avoid_: Comments (reserved for the Snag List), messages
 
 **Internal Communication**:
-The part of a Work Item's history (notes, Step changes, Returns, approvals) that happens inside one Participant and is visible only to that Participant. Other Participants see only the Transitions between Participants, such as Submit and the Issued Code.
-_Avoid_: Private log, internal notes
+The part of a Work Item's history (Internal Notes, Step changes, Returns, approvals) that happens inside one Participant and is visible only to that Participant. Other Participants see only the Transitions between Participants, such as Submit and the Issued Code.
+_Avoid_: Private log
+
+**Internal Note**:
+Free text a Member writes in the Action Form when taking a Transition, recorded with it in Internal Communication. It is never posted on its own, and it stays inside the writer's Participant even when the Transition goes to another Participant.
+_Avoid_: Note, remark, comment
 
 **Activity Feed**:
 The Project-level log of what happened across the Project, filtered by each viewer's Visibility and Internal Communication rules.
@@ -336,7 +340,7 @@ _Avoid_: Management summary
 ### Operations
 
 **Rabaed Admin**:
-The separate internal portal where Rabaed Engineers onboard and support Companies and Members.
+The portal where Rabaed Engineers onboard and support Companies and Members. It is separate from the app Companies use: its own address, its own sign-in with a one-time code, and never served by the same system as the customer app.
 _Avoid_: Back office, super admin
 
 **Instance**:
