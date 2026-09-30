@@ -144,7 +144,7 @@ Every control sits in a `Field`, which gives it a label, optional help text, the
 - **Alignment**: `align="end"` for numbers, so they line up with tabular digits; columns and alignment mirror in Arabic.
 - **Tabs**: name the list (`<TabsList aria-label={t("project")}>`); a trigger takes an `icon` and a `count` (pass it formatted with `formatNumber`).
 
-The package has no translations of its own: pass every label (`closeLabel`, the toast region `label`, …) from the app's messages. The exceptions are the fixed product wording of the status components below (Review Code meanings, "N weeks at this step") and of `DocNo`'s revision word ("Rev"), which take a `locale` instead, so no module can word them differently, and the language names in `MemberMenu`, each written in its own language ("English", "العربية"). Copy never uses deadline language: the story tests check story copy, and the `json-no-deadline-words` lint rule checks the app's messages.
+The package has no translations of its own: pass every label (`closeLabel`, the toast region `label`, …) from the app's messages. The exceptions are the fixed product wording of the status components below (Review Code meanings, and "N weeks at this step", which comes from `stepAgeLabel` in `@rabaed/domain` so emails and reports share it) and of `DocNo`'s revision word ("Rev"), which take a `locale` instead, so no module can word them differently, and the language names in `MemberMenu`, each written in its own language ("English", "العربية"). Copy never uses deadline language: the story tests check story copy, and the `json-no-deadline-words` lint rule checks the app's messages.
 
 ## Status
 
