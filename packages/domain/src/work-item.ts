@@ -132,6 +132,7 @@ export const workItemEventTypes = [
 export const workItemHistory = z.object({
   events: z.array(
     z.object({
+      /** 1, 2, 3… over the events the viewer sees: gaps would count other Participants' internal ones (V5). */
       seq: z.number().int().positive(),
       type: z.enum(workItemEventTypes),
       at: z.iso.datetime(),
@@ -150,7 +151,7 @@ export const workItemHistory = z.object({
       /** Set on the event that closed the item: the Issued Code. */
       outcome: workItemOutcome.nullable(),
       /** Set on an internal_note event: the Internal Note, written with its `transition`. */
-      note: z.string().nullable(),
+      internalNote: z.string().nullable(),
     }),
   ),
 });

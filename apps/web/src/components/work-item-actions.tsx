@@ -134,7 +134,7 @@ export function WorkItemActions({
       <dialog
         ref={dialog}
         onClose={() => {
-          // A note written for one Transition never carries over to another.
+          // An Internal Note written for one Transition never carries over to another.
           form.current?.reset();
           setAsking(null);
         }}

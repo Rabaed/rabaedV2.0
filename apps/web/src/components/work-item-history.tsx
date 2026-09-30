@@ -51,7 +51,7 @@ export async function WorkItemHistory({ events, locale }: { events: Event[]; loc
               </p>
             )}
             {e.reason && <p className="whitespace-pre-wrap">{e.reason}</p>}
-            {e.note && <p className="whitespace-pre-wrap">{e.note}</p>}
+            {e.internalNote && <p className="whitespace-pre-wrap">{e.internalNote}</p>}
             {e.audience === "internal" && <p className="text-xs text-muted">{t("internal")}</p>}
           </li>
         ))}

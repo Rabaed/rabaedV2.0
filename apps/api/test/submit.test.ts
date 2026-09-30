@@ -399,7 +399,6 @@ describe("Submit with no single Consultant to take it", () => {
   });
 });
 
-// Last: moving the clock ends every session.
 describe("Internal Note (V5, scenarios 7 and 34)", () => {
   const SENT = "Checked against the approved catalogue";
   const RETURNED = "Supplier letter is missing";
@@ -409,7 +408,7 @@ describe("Internal Note (V5, scenarios 7 and 34)", () => {
 
   /** The Internal Notes a caller sees in the item's history, each with the Transition it was written with. */
   const notes = async (by: Caller) =>
-    (await history(by, id)).filter((e) => e.type === "internal_note").map((e) => [e.transition?.en, e.note, e.audience]);
+    (await history(by, id)).filter((e) => e.type === "internal_note").map((e) => [e.transition?.en, e.internalNote, e.audience]);
 
   beforeAll(async () => {
     id = await createDraft(engineer, "Cable glands");
@@ -429,16 +428,16 @@ describe("Internal Note (V5, scenarios 7 and 34)", () => {
     ]);
     // Each is written just before its Transition, by the Member who took it.
     const events = await history(pm, id);
-    const submitNote = events.findIndex((e) => e.note === SUBMITTED);
+    const submitNote = events.findIndex((e) => e.internalNote === SUBMITTED);
     expect(events[submitNote]).toMatchObject({ by: { memberName: bilingual("Test Member") }, reason: null });
-    expect(events[submitNote + 1]).toMatchObject({ type: "transition", transition: { en: "Submit" }, audience: "shared", note: null });
+    expect(events[submitNote + 1]).toMatchObject({ type: "transition", transition: { en: "Submit" }, audience: "shared", internalNote: null });
   });
 
   it("is never seen by the Consultant or the Owner Representative, who see the Submit (scenario 34)", async () => {
     for (const caller of [signer, otherManager, orEngineer, owner]) {
       const events = await history(caller, id);
-      expect(events.map((e) => [e.type, e.transition?.en ?? null])).toEqual([["transition", "Submit"]]);
-      expect(events[0]!.note).toBeNull();
+      expect(events.map((e) => [e.seq, e.type, e.transition?.en ?? null])).toEqual([[1, "transition", "Submit"]]);
+      expect(events[0]!.internalNote).toBeNull();
       const all = await everything(caller, id);
       for (const note of [SENT, RETURNED, SUBMITTED]) expect(all).not.toContain(note);
     }
@@ -449,7 +448,10 @@ describe("Internal Note (V5, scenarios 7 and 34)", () => {
     await ok(take(signer, id, "approve_a", { internalNote: CODED }));
     expect(await notes(otherManager)).toEqual([["Approve · A", CODED, "internal"]]);
     for (const caller of [engineer, pm, orEngineer]) {
-      expect((await history(caller, id)).at(-1)).toMatchObject({ type: "issue_code", outcome: "A", note: null });
+      const events = await history(caller, id);
+      // Numbered as they see them: no gap counts the Consultant's Claim or Internal Note.
+      expect(events.map((e) => e.seq)).toEqual(events.map((_, i) => i + 1));
+      expect(events.at(-1)).toMatchObject({ type: "issue_code", outcome: "A", internalNote: null });
       expect(await everything(caller, id)).not.toContain(CODED);
     }
   });
@@ -463,7 +465,7 @@ describe("Internal Note (V5, scenarios 7 and 34)", () => {
     await ok(pm.post(`/v1/work-items/${other}/claim`));
     await ok(take(pm, other, "return", { reason: "Again", internalNote: "   " }));
     const events = await history(engineer, other);
-    expect(events.filter((e) => e.type === "internal_note").map((e) => e.note)).toEqual([SENT]);
+    expect(events.filter((e) => e.type === "internal_note").map((e) => e.internalNote)).toEqual([SENT]);
   });
 
   it("writes nothing when the Transition is refused", async () => {
@@ -483,6 +485,7 @@ describe("Internal Note (V5, scenarios 7 and 34)", () => {
   });
 });
 
+// Last: moving the clock ends every session.
 describe("Step Age", () => {
   it("counts the weeks at the Consultant's Step, for both sides", async () => {
     const id = await readyToSubmit("Earthing");

@@ -284,7 +284,7 @@ export function getWorkItemHistory(db: Db, memberId: string, workItemId: string)
       reason: string | null;
       document_number: string | null;
       outcome: WorkItemOutcome | null;
-      note: string | null;
+      internal_note: string | null;
     }>`select * from app.work_item_history(${workItemId}::uuid)`.execute(trx);
     return {
       events: rows.map((r) => ({
@@ -299,7 +299,7 @@ export function getWorkItemHistory(db: Db, memberId: string, workItemId: string)
         reason: r.reason,
         documentNumber: r.document_number,
         outcome: r.outcome,
-        note: r.note,
+        internalNote: r.internal_note,
       })),
     };
   });

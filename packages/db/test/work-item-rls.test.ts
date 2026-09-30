@@ -573,7 +573,7 @@ describe("Internal Note", () => {
       [item],
     );
     const notes = rows.flatMap((r, i) => (r.type === "internal_note" ? [[r, rows[i + 1]]] : []));
-    expect(notes.map(([n]) => n.payload)).toEqual([{ note: "sent note" }, { note: "returned note" }, { note: "submitted note" }]);
+    expect(notes.map(([n]) => n.payload)).toEqual([{ internal_note: "sent note" }, { internal_note: "returned note" }, { internal_note: "submitted note" }]);
     for (const [note, next] of notes) {
       expect(note).toMatchObject({ audience: "internal", audience_participant_id: participant.c1 });
       expect(next).toMatchObject({ type: "transition", transition_id: note.transition_id, actor_member_id: note.actor_member_id });
@@ -593,20 +593,20 @@ describe("Internal Note", () => {
   it("written with the Code, is read only by the Consultant (scenario 8)", async () => {
     expect(await claim(manager)).toBe("claimed");
     expect(await take(manager, "approve_a", "coded note")).toBe("applied");
-    expect((await visible(k1.member)).map((e) => e.payload.note).filter(Boolean)).toEqual(["coded note"]);
+    expect((await visible(k1.member)).map((e) => e.payload.internal_note).filter(Boolean)).toEqual(["coded note"]);
     for (const who of [c1.member, pm, or.member]) {
       expect(JSON.stringify(await visible(who)), who).not.toContain("coded note");
     }
   });
 
-  it("is in the hash chain: changing a note breaks it", async () => {
+  it("is in the hash chain: changing an Internal Note breaks it", async () => {
     expect(await intact()).toBe(true);
     await migrator.query("begin");
     try {
       await migrator.query("alter table work_item_event disable trigger work_item_event_append_only");
       await migrator.query(
-        `update work_item_event set payload = '{"note": "forged"}' where work_item_id = $1 and type = 'internal_note'
-         and payload ->> 'note' = 'submitted note'`,
+        `update work_item_event set payload = '{"internal_note": "forged"}' where work_item_id = $1 and type = 'internal_note'
+         and payload ->> 'internal_note' = 'submitted note'`,
         [item],
       );
       expect(await intact()).toBe(false);

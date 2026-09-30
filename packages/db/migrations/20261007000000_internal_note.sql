@@ -7,8 +7,12 @@
 --   the Transition it was written with, in the same transaction and the same hash
 --   chain. It is never posted on its own, so a refused Transition writes no note,
 --   and a replayed key writes nothing more.
--- * app.work_item_history adds each event's note. RLS already keeps an internal
---   event to its own Participant (layer 5), so no other Participant reads it.
+-- * app.work_item_history adds each event's Internal Note. RLS already keeps an
+--   internal event to its own Participant (layer 5), so no other Participant
+--   reads it. It now numbers the events the viewer sees 1, 2, 3… instead of
+--   showing the stored seq: gaps in it would tell another Participant how many
+--   internal events, Internal Notes among them, happened between the ones it
+--   sees (V5). The stored seq stays gap-free for the chain.
 --
 -- Otherwise take_transition is as in the submit_and_codes migration.
 
@@ -136,15 +140,15 @@ create function app.take_transition(
         end if;
       end if;
       -- The Internal Note stays inside the writer's Participant even when the
-      -- Transition crosses to another (V5). It goes just before the Transition, so
-      -- no seq after a shared event hints to another Participant that it exists.
+      -- Transition crosses to another (V5). It goes just before the Transition it
+      -- is written with.
       if v_note is not null then
         insert into work_item_event (
           project_id, work_item_id, type, actor_member_id, actor_participant_id, transition_id,
           payload, audience, audience_participant_id, created_at
         ) values (
           v_item.project_id, p_work_item_id, 'internal_note', v_member_id, v_me.participant_id, v_transition.id,
-          jsonb_build_object('note', v_note), 'internal', v_me.participant_id, v_at
+          jsonb_build_object('internal_note', v_note), 'internal', v_me.participant_id, v_at
         );
       end if;
       v_audience := case
@@ -210,21 +214,21 @@ create function app.take_transition(
     end
   $$;
 
--- The item's history the acting Member may see, now with each Internal Note
--- (otherwise as in the own_participation migration).
+-- The item's history the acting Member may see, now with each Internal Note and
+-- numbered as the viewer sees it (otherwise as in the own_participation migration).
 drop function app.work_item_history(uuid);
 create function app.work_item_history(p_work_item_id uuid)
   returns table (
     seq integer, type text, created_at timestamptz, audience text, company_name jsonb, member_name jsonb,
     transition_label jsonb, from_step_name jsonb, to_step_name jsonb, reason text, document_number text, outcome text,
-    note text
+    internal_note text
   )
   language sql stable security invoker
   set search_path = pg_catalog, public
   as $$
-    select e.seq, e.type, e.created_at, e.audience, actor.legal_name, coalesce(m.full_name, app.code_signer_name(e.id)),
+    select (row_number() over (order by e.seq))::integer, e.type, e.created_at, e.audience, actor.legal_name, coalesce(m.full_name, app.code_signer_name(e.id)),
       tr.label, fs.name, ts.name, e.payload ->> 'reason', e.payload ->> 'document_number', e.payload ->> 'outcome',
-      e.payload ->> 'note'
+      e.payload ->> 'internal_note'
     from work_item_event e
     join work_item w on w.id = e.work_item_id
     left join app.work_item_companies(p_work_item_id) actor on actor.participant_id = e.actor_participant_id
