@@ -218,7 +218,8 @@ export type TakeTransitionResult = { ok: true } | { ok: false; reason: (typeof t
 
 /**
  * The holder of the item's current Step takes one of its Transitions, in one
- * transaction (workflow-engine.md §5.1). The same idempotency key again applies nothing.
+ * transaction (workflow-engine.md §5.1), with their Internal Note if they wrote
+ * one. The same idempotency key again applies nothing.
  */
 export function takeTransition(
   db: Db,
@@ -230,7 +231,8 @@ export function takeTransition(
   return withMember(db, memberId, async (trx) => {
     const { rows } = await sql<{ outcome: string }>`
       select app.take_transition(
-        ${workItemId}::uuid, ${input.transition}, ${input.reason}, ${input.idempotencyKey}::uuid, ${now}) as outcome
+        ${workItemId}::uuid, ${input.transition}, ${input.reason}, ${input.internalNote},
+        ${input.idempotencyKey}::uuid, ${now}) as outcome
     `.execute(trx);
     return commandResult(rows[0]!.outcome, "applied", transitionRefusals);
   });
@@ -282,6 +284,7 @@ export function getWorkItemHistory(db: Db, memberId: string, workItemId: string)
       reason: string | null;
       document_number: string | null;
       outcome: WorkItemOutcome | null;
+      note: string | null;
     }>`select * from app.work_item_history(${workItemId}::uuid)`.execute(trx);
     return {
       events: rows.map((r) => ({
@@ -296,6 +299,7 @@ export function getWorkItemHistory(db: Db, memberId: string, workItemId: string)
         reason: r.reason,
         documentNumber: r.document_number,
         outcome: r.outcome,
+        note: r.note,
       })),
     };
   });

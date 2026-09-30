@@ -70,6 +70,11 @@ export const takeTransitionRequest = z.object({
   transition: z.string().regex(/^[a-z][a-z0-9_]*$/),
   /** Required for a Return. */
   reason: z.string().trim().max(2000).default(""),
+  /**
+   * Optional on any Transition. Seen only by the writer's own Participant, even
+   * when the Transition goes to another, such as Submit (visibility.md V5).
+   */
+  internalNote: z.string().trim().max(4000).default(""),
   idempotencyKey: z.uuid(),
 });
 export type TakeTransitionRequest = z.input<typeof takeTransitionRequest>;
@@ -144,6 +149,8 @@ export const workItemHistory = z.object({
       documentNumber: z.string().nullable(),
       /** Set on the event that closed the item: the Issued Code. */
       outcome: workItemOutcome.nullable(),
+      /** Set on an internal_note event: the Internal Note, written with its `transition`. */
+      note: z.string().nullable(),
     }),
   ),
 });

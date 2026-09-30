@@ -98,7 +98,7 @@ async function createDraft(by: Caller, title: string): Promise<string> {
   return res.json().id;
 }
 
-const take = (by: Caller, id: string, transition: string, extra: { reason?: string } = {}) =>
+const take = (by: Caller, id: string, transition: string, extra: { reason?: string; internalNote?: string } = {}) =>
   by.post(`/v1/work-items/${id}/transitions`, { transition, idempotencyKey: randomUUID(), ...extra });
 
 async function detail(by: Caller, id: string): Promise<WorkItemDetail> {
@@ -125,12 +125,13 @@ async function listed(by: Caller) {
   return { ids: list.items.map((i: { id: string }) => i.id) as string[], counts };
 }
 
-/** Everything a caller can learn of the item: list, counts, detail and history, as one body. */
+/** Everything a caller can learn of the item: list, counts, detail, history and notifications, as one body. */
 async function everything(by: Caller, id: string) {
   const parts = await Promise.all([
     by.get(`/v1/projects/${projectId}/work-items`),
     by.get(`/v1/work-items/${id}`),
     by.get(`/v1/work-items/${id}/history`),
+    by.get("/v1/notifications"),
   ]);
   return parts.map((r) => r.body).join("\n");
 }
@@ -399,6 +400,89 @@ describe("Submit with no single Consultant to take it", () => {
 });
 
 // Last: moving the clock ends every session.
+describe("Internal Note (V5, scenarios 7 and 34)", () => {
+  const SENT = "Checked against the approved catalogue";
+  const RETURNED = "Supplier letter is missing";
+  const SUBMITTED = "Price is 8% over budget, don't mention it";
+  const CODED = "Approving, but watch their next batch";
+  let id = "";
+
+  /** The Internal Notes a caller sees in the item's history, each with the Transition it was written with. */
+  const notes = async (by: Caller) =>
+    (await history(by, id)).filter((e) => e.type === "internal_note").map((e) => [e.transition?.en, e.note, e.audience]);
+
+  beforeAll(async () => {
+    id = await createDraft(engineer, "Cable glands");
+    await ok(take(engineer, id, "send_for_review", { internalNote: SENT }));
+    await ok(pm.post(`/v1/work-items/${id}/claim`));
+    await ok(take(pm, id, "return", { reason: "Wrong gland size", internalNote: RETURNED }));
+    await ok(take(engineer, id, "send_for_review"));
+    await ok(pm.post(`/v1/work-items/${id}/claim`));
+    await ok(take(pm, id, "submit", { internalNote: SUBMITTED }));
+  });
+
+  it("is recorded with each Transition, Send for Review, Return and Submit, inside the Contractor", async () => {
+    expect(await notes(engineer)).toEqual([
+      ["Send for Review", SENT, "internal"],
+      ["Return", RETURNED, "internal"],
+      ["Submit", SUBMITTED, "internal"],
+    ]);
+    // Each is written just before its Transition, by the Member who took it.
+    const events = await history(pm, id);
+    const submitNote = events.findIndex((e) => e.note === SUBMITTED);
+    expect(events[submitNote]).toMatchObject({ by: { memberName: bilingual("Test Member") }, reason: null });
+    expect(events[submitNote + 1]).toMatchObject({ type: "transition", transition: { en: "Submit" }, audience: "shared", note: null });
+  });
+
+  it("is never seen by the Consultant or the Owner Representative, who see the Submit (scenario 34)", async () => {
+    for (const caller of [signer, otherManager, orEngineer, owner]) {
+      const events = await history(caller, id);
+      expect(events.map((e) => [e.type, e.transition?.en ?? null])).toEqual([["transition", "Submit"]]);
+      expect(events[0]!.note).toBeNull();
+      const all = await everything(caller, id);
+      for (const note of [SENT, RETURNED, SUBMITTED]) expect(all).not.toContain(note);
+    }
+  });
+
+  it("written with the Code, stays inside the Consultant (scenario 8)", async () => {
+    await ok(signer.post(`/v1/work-items/${id}/claim`));
+    await ok(take(signer, id, "approve_a", { internalNote: CODED }));
+    expect(await notes(otherManager)).toEqual([["Approve · A", CODED, "internal"]]);
+    for (const caller of [engineer, pm, orEngineer]) {
+      expect((await history(caller, id)).at(-1)).toMatchObject({ type: "issue_code", outcome: "A", note: null });
+      expect(await everything(caller, id)).not.toContain(CODED);
+    }
+  });
+
+  it("is written once for a repeated request, and not at all for a blank one", async () => {
+    const other = await createDraft(engineer, "Cable lugs");
+    const idempotencyKey = randomUUID();
+    const send = () =>
+      engineer.post(`/v1/work-items/${other}/transitions`, { transition: "send_for_review", internalNote: SENT, idempotencyKey });
+    await Promise.all([ok(send()), ok(send())]);
+    await ok(pm.post(`/v1/work-items/${other}/claim`));
+    await ok(take(pm, other, "return", { reason: "Again", internalNote: "   " }));
+    const events = await history(engineer, other);
+    expect(events.filter((e) => e.type === "internal_note").map((e) => e.note)).toEqual([SENT]);
+  });
+
+  it("writes nothing when the Transition is refused", async () => {
+    const other = await createDraft(engineer, "Cable ties");
+    expect((await take(pm, other, "send_for_review", { internalNote: "Not mine to send" })).statusCode).not.toBe(204);
+    await ok(take(engineer, other, "send_for_review"));
+    await ok(pm.post(`/v1/work-items/${other}/claim`));
+    expect((await take(pm, other, "return", { internalNote: "No reason given" })).json()).toEqual({ error: "reason_required" });
+    const events = await history(pm, other);
+    expect(events.some((e) => e.type === "internal_note")).toBe(false);
+  });
+
+  it("is at most 4000 characters", async () => {
+    const other = await createDraft(engineer, "Cable clips");
+    expect((await take(engineer, other, "send_for_review", { internalNote: "x".repeat(4001) })).statusCode).toBe(400);
+    await ok(take(engineer, other, "send_for_review", { internalNote: "x".repeat(4000) }));
+  });
+});
+
 describe("Step Age", () => {
   it("counts the weeks at the Consultant's Step, for both sides", async () => {
     const id = await readyToSubmit("Earthing");
