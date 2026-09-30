@@ -386,36 +386,42 @@ describe("Revise & Resubmit · C", () => {
 // Scenario 37: whether no Consultant covers the item, two do, or the one that does has
 // nobody who can issue its Code (transitions.test.ts), the PM gets one answer (V14, V16).
 describe("Submit with no single Consultant to take it (scenario 37)", () => {
-  const NAMES = [CONSULTANT, "Second Consultants", "Electrical", "Building A", "Mechanical"];
+  const SECOND_CONSULTANT = "Second Consultants";
+  /** The one answer, byte for byte, whichever case it is. */
+  const ANSWER = JSON.stringify({ error: "next_step_unavailable" });
+  const NEVER_IN_REFUSAL = [CONSULTANT, SECOND_CONSULTANT, "Electrical", "Building A", "Mechanical"];
 
-  /** Submit isn't offered, and taking it is refused with the one answer, naming nobody and nothing. */
-  async function refused(id: string) {
+  /** Submit isn't offered, and taking it gets the one answer, naming nobody and nothing. */
+  async function expectRefused(id: string) {
     expect(buttons(await detail(pm, id))).toEqual(["release", "return"]);
     const res = await take(pm, id, "submit");
     expect(res.statusCode).toBe(409);
-    expect(res.json()).toEqual({ error: "next_step_unavailable" });
-    for (const name of NAMES) expect(res.body).not.toContain(name);
+    expect(res.body).toBe(ANSWER);
+    for (const name of NEVER_IN_REFUSAL) expect(res.body).not.toContain(name);
     expect((await detail(pm, id)).stage.key).toBe("internal_review");
-    return res.body;
   }
 
-  let gapAnswer = "";
-
   it("is not offered, and refused without saying why, when no Consultant covers the item (a Visibility Gap)", async () => {
-    await ok(c1.caller.request("PUT", `/v1/participants/${k1ParticipantId}/visibility`, { trade: only(mechanical), location: all }));
-    const id = await readyToSubmit("Cable glands");
-    gapAnswer = await refused(id);
-    // Give the Consultant Electrical again: Submit comes back.
-    await ok(c1.caller.request("PUT", `/v1/participants/${k1ParticipantId}/visibility`, { trade: all, location: all }));
-    expect(buttons(await detail(pm, id))).toEqual(["release", "return", "submit"]);
+    const setK1Trade = async (trade: Coverage) =>
+      ok(c1.caller.request("PUT", `/v1/participants/${k1ParticipantId}/visibility`, { trade, location: all }));
+    await setK1Trade(only(mechanical));
+    try {
+      const id = await readyToSubmit("Cable glands");
+      await expectRefused(id);
+      // Give the Consultant Electrical again: Submit comes back.
+      await setK1Trade(all);
+      expect(buttons(await detail(pm, id))).toEqual(["release", "return", "submit"]);
+    } finally {
+      // K1 is every other test's Consultant.
+      await setK1Trade(all);
+    }
   });
 
   it("is not offered, and refused with the same answer, when two Consultants cover the item (a Visibility Overlap)", async () => {
-    const k2 = await participant("consultant", { trade: only(electrical), location: all }, "Second Consultants");
+    const k2 = await participant("consultant", { trade: only(electrical), location: all }, SECOND_CONSULTANT);
     await projectMember(k2.company, k2.participantId, ["manager"]);
     const id = await readyToSubmit("Switchgear");
-    // The same answer as a Gap or an empty Consultant pool: another Company's setup stays theirs.
-    expect(await refused(id)).toBe(gapAnswer);
+    await expectRefused(id);
     // Narrow the second Consultant away: Submit comes back.
     await ok(c1.caller.request("PUT", `/v1/participants/${k2.participantId}/visibility`, { trade: only(mechanical), location: all }));
     expect(buttons(await detail(pm, id))).toEqual(["release", "return", "submit"]);
