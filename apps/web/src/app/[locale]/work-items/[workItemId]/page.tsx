@@ -1,5 +1,5 @@
-import { isOpenStageCategory, type Locale } from "@rabaed/domain";
-import { AgeDots, DocNo, StagePill, stepAgeLabel } from "@rabaed/ui";
+import { isOpenStageCategory, stepAgeLabel, type Locale } from "@rabaed/domain";
+import { AgeDots, DocNo, StagePill } from "@rabaed/ui";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
 import { WorkItemActions } from "@/components/work-item-actions";

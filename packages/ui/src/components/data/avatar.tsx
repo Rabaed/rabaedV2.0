@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { cn } from "../../lib/cn.ts";
 import type { Tone } from "../../tokens/themes.ts";
 import { initials } from "./initials.ts";
@@ -60,6 +60,21 @@ export function Avatar({ name, src, kind = "person", size = "md", decorative = f
   );
 }
 
+/** The pill shared by CompanyChip and WithChip: a small decorative avatar, then the name, which truncates. */
+export function Chip({ avatar, name, className }: { avatar: ReactNode; name: string; className?: string }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex h-7 max-w-full items-center gap-1.5 rounded-full border border-border bg-surface ps-0.5 pe-2.5 text-sm font-medium text-text",
+        className,
+      )}
+    >
+      {avatar}
+      <span className="truncate">{name}</span>
+    </span>
+  );
+}
+
 export type CompanyChipProps = {
   /** The company's name, the only thing the chip shows about it. */
   name: string;
@@ -72,15 +87,5 @@ export type CompanyChipProps = {
  * it can never show another company's people (visibility: grouped companies).
  */
 export function CompanyChip({ name, logoSrc, className }: CompanyChipProps) {
-  return (
-    <span
-      className={cn(
-        "inline-flex h-7 max-w-full items-center gap-1.5 rounded-full border border-border bg-surface ps-0.5 pe-2.5 text-sm font-medium text-text",
-        className,
-      )}
-    >
-      <Avatar name={name} src={logoSrc} kind="company" size="sm" decorative />
-      <span className="truncate">{name}</span>
-    </span>
-  );
+  return <Chip avatar={<Avatar name={name} src={logoSrc} kind="company" size="sm" decorative />} name={name} className={className} />;
 }

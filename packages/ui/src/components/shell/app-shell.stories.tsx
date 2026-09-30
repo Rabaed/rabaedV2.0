@@ -78,7 +78,13 @@ export const CollapseByKeyboard: Story = {
     await userEvent.tab();
     const home = context.canvas.getByRole("link", { name: t(context, shellCopy.home) });
     await expect(home).toHaveFocus();
-    await expect(await screen.findByRole("tooltip")).toHaveTextContent(t(context, shellCopy.home));
+    const tooltip = await screen.findByRole("tooltip");
+    await expect(tooltip).toHaveTextContent(t(context, shellCopy.home));
+    // It opens towards the page (the inline-end side): right of the link in English, left in Arabic.
+    const tip = tooltip.closest("[data-side]")!.getBoundingClientRect();
+    const link = home.getBoundingClientRect();
+    if (storyLocale(context) === "ar") await expect(tip.right).toBeLessThanOrEqual(link.left);
+    else await expect(tip.left).toBeGreaterThanOrEqual(link.right);
     // Named once: the tooltip repeats the name, so it isn't also the description.
     await expect(home).toHaveAccessibleDescription("");
 
