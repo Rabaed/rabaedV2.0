@@ -1,12 +1,14 @@
 /**
- * Non-colour tokens: type, spacing, radii and shadows, from the Claude Design
- * export (typography.css, spacing.css).
+ * Type, spacing, radii and shadows, from the Claude Design export
+ * (typography.css, spacing.css). Colours live in themes.ts; shadows take
+ * theirs from the shadow-colour role.
  */
 
 /**
- * Spacing uses Tailwind's 4px grid as is (`p-3` is 12px). These are the steps
- * the components use, shown in the token specimen; a unit test keeps the list
- * complete. Add a step here when a component starts using it.
+ * Spacing uses Tailwind's 4px grid as is (`p-3` is 12px). These are the
+ * padding, margin and gap steps the components use, shown in the token
+ * specimen; a unit test keeps the list complete. Add a step here when a
+ * component starts using it.
  */
 export const spacing = [0.5, 1, 1.5, 2, 2.5, 3, 4, 5, 6, 7, 8, 12] as const;
 
@@ -49,11 +51,11 @@ export const radii = {
 } as const;
 
 /** The `shadow-colour` role (themes.ts) at the given opacity, so a theme can change the tint. */
-const shade = (percent: number) => `color-mix(in srgb, var(--shadow-colour) ${percent}%, transparent)`;
+const shadowTint = (percent: number) => `color-mix(in srgb, var(--shadow-colour) ${percent}%, transparent)`;
 
 export const shadows = {
-  xs: `0 1px 2px ${shade(5)}`,
-  sm: `0 1px 3px ${shade(8)}, 0 1px 2px ${shade(4)}`,
-  md: `0 4px 12px ${shade(8)}`,
-  lg: `0 14px 34px ${shade(16)}`,
+  xs: `0 1px 2px ${shadowTint(5)}`,
+  sm: `0 1px 3px ${shadowTint(8)}, 0 1px 2px ${shadowTint(4)}`,
+  md: `0 4px 12px ${shadowTint(8)}`,
+  lg: `0 14px 34px ${shadowTint(16)}`,
 } as const;
