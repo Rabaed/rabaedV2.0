@@ -1,6 +1,5 @@
-import { stepAgeDots, type Locale } from "@rabaed/domain";
+import { stepAgeDots, stepAgeLabel, type Locale } from "@rabaed/domain";
 import { cn } from "../../lib/cn.ts";
-import { stepAgeLabel, wholeStepAge } from "./step-age.ts";
 
 // One colour per filled dot count, grey turning red; full class names, so Tailwind finds them.
 const filled = ["", "bg-age-1", "bg-age-2", "bg-age-3", "bg-age-4"];
@@ -19,7 +18,7 @@ export type AgeDotsProps = {
  * only cue. Rabaed shows age only.
  */
 export function AgeDots({ weeks, locale, className }: AgeDotsProps) {
-  const dots = stepAgeDots(wholeStepAge(weeks));
+  const dots = stepAgeDots(weeks);
   const label = stepAgeLabel(weeks, locale);
   return (
     <span role="img" aria-label={label} title={label} className={cn("inline-flex items-center gap-1", className)}>

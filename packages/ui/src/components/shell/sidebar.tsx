@@ -1,6 +1,5 @@
 "use client";
 
-import { useDirection } from "@radix-ui/react-direction";
 import { useState, type ElementType, type ReactNode } from "react";
 import { cn } from "../../lib/cn.ts";
 import { IconButton } from "../button/button.tsx";
@@ -39,8 +38,6 @@ export type SidebarNavProps = {
 
 /** The navigation list itself: shared by the desktop sidebar and the phone sheet. */
 export function SidebarNav({ label, sections, current, linkAs: Link = "a", onNavigate, collapsed = false }: SidebarNavProps) {
-  // Tooltips open towards the page: to the right of a left-hand sidebar, to the left in Arabic.
-  const side = useDirection() === "rtl" ? "left" : "right";
   return (
     <nav aria-label={label} className="flex flex-col gap-4">
       {sections.map((section, i) => (
@@ -85,7 +82,8 @@ export function SidebarNav({ label, sections, current, linkAs: Link = "a", onNav
               return (
                 <li key={item.key}>
                   {collapsed ? (
-                    <Tooltip content={item.label} side={side}>
+                    // Towards the page: the sidebar is on the start side.
+                    <Tooltip content={item.label} side="end">
                       {link}
                     </Tooltip>
                   ) : (

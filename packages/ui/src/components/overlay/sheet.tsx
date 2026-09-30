@@ -2,6 +2,7 @@
 
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { cn } from "../../lib/cn.ts";
+import type { LogicalSide } from "../../lib/direction.ts";
 import { ModalContent, ModalFooter, type ModalContentProps } from "./modal.tsx";
 
 /** A side panel (drawer). Compose like Dialog: `<Sheet><SheetTrigger asChild>…</SheetTrigger><SheetContent …>…</SheetContent></Sheet>`. */
@@ -12,7 +13,7 @@ export const SheetFooter = ModalFooter;
 
 export type SheetContentProps = ModalContentProps & {
   /** `end` (default): the right in English, the left in Arabic. `start` for navigation, which lives on the start side. */
-  side?: "start" | "end";
+  side?: LogicalSide;
 };
 
 /**

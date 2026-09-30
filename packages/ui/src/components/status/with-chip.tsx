@@ -1,5 +1,4 @@
-import { cn } from "../../lib/cn.ts";
-import { Avatar, CompanyChip } from "../data/avatar.tsx";
+import { Avatar, Chip, CompanyChip } from "../data/avatar.tsx";
 
 type HolderCompany = {
   /** The holder's Company name. */
@@ -45,15 +44,5 @@ export function WithChip(props: WithChipProps) {
     return <CompanyChip name={companyName} logoSrc={logoSrc} className={className} />;
   }
   const { name, photoSrc } = props;
-  return (
-    <span
-      className={cn(
-        "inline-flex h-7 max-w-full items-center gap-1.5 rounded-full border border-border bg-surface ps-0.5 pe-2.5 text-sm font-medium text-text",
-        className,
-      )}
-    >
-      <Avatar name={name} src={photoSrc} size="sm" decorative />
-      <span className="truncate">{name}</span>
-    </span>
-  );
+  return <Chip avatar={<Avatar name={name} src={photoSrc} size="sm" decorative />} name={name} className={className} />;
 }

@@ -1,4 +1,4 @@
-/** Focus ring shared by every control, matching Button's. */
+/** Focus ring shared by every control, Button included. */
 export const focusRing = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus";
 
 /** Shared look of text boxes: Input, Textarea and the Select trigger. */

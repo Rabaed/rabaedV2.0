@@ -4,6 +4,7 @@ import { useDirection } from "@radix-ui/react-direction";
 import * as ToastPrimitive from "@radix-ui/react-toast";
 import { createContext, useCallback, useContext, useState, type ReactNode } from "react";
 import { cn } from "../../lib/cn.ts";
+import { physicalSide } from "../../lib/direction.ts";
 import { focusRing, touchArea } from "../form/control-styles.ts";
 import { Icon, type IconName } from "../icon/icon.tsx";
 
@@ -38,7 +39,8 @@ export type ToastProviderProps = {
 export function ToastProvider({ label, closeLabel, duration = 5000, children }: ToastProviderProps) {
   const [toasts, setToasts] = useState<(ToastInput & { id: number })[]>([]);
   const show = useCallback<ShowToast>((toast) => setToasts((list) => [...list, { ...toast, id: nextToastId++ }]), []);
-  const swipeDirection = useDirection() === "rtl" ? "left" : "right";
+  // Swiped away towards the inline-end corner they sit in.
+  const swipeDirection = physicalSide("end", useDirection());
 
   return (
     <ToastContext.Provider value={show}>

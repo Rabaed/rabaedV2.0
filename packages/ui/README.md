@@ -87,7 +87,7 @@ Every control sits in a `Field`, which gives it a label, optional help text, the
 | `Dialog` | A focused task or confirmation over the page. Traps focus, closes on Escape, returns focus to its trigger. |
 | `Sheet` | A side panel (filters, details) from the inline-end side: right in English, left in Arabic; `side="start"` for navigation. Same focus rules as Dialog. |
 | `Popover` | A small non-modal panel anchored to a button, aligned to its start edge (mirrors in Arabic). Name it with `aria-label`. |
-| `Tooltip` | A short hint on hover or keyboard focus, read as the trigger's description. Never the only place information lives (touch screens have no hover). |
+| `Tooltip` | A short hint on hover or keyboard focus, read as the trigger's description. Never the only place information lives (touch screens have no hover). `side`: `top` (default), `bottom`, or `start` / `end`, which mirror in Arabic. |
 | `ToastProvider` + `useToast()` | Brief feedback after an action, at the bottom inline-end corner. Announced politely, or at once for `tone: "danger"`. |
 | `EmptyState`, `ErrorState` | A list or page with nothing yet, or that failed to load: icon, heading, a sentence, optional action. ErrorState is announced. |
 | `Loading` + `Skeleton` | Placeholders in the shape of the content; screen readers hear the `Loading` label instead. |
@@ -144,7 +144,7 @@ Every control sits in a `Field`, which gives it a label, optional help text, the
 - **Alignment**: `align="end"` for numbers, so they line up with tabular digits; columns and alignment mirror in Arabic.
 - **Tabs**: name the list (`<TabsList aria-label={t("project")}>`); a trigger takes an `icon` and a `count` (pass it formatted with `formatNumber`).
 
-The package has no translations of its own: pass every label (`closeLabel`, the toast region `label`, …) from the app's messages. The exceptions are the fixed product wording of the status components below (Review Code meanings, "N weeks at this step") and of `DocNo`'s revision word ("Rev"), which take a `locale` instead, so no module can word them differently, and the language names in `MemberMenu`, each written in its own language ("English", "العربية"). Copy never uses deadline language: the story tests check story copy, and the `json-no-deadline-words` lint rule checks the app's messages.
+The package has no translations of its own: pass every label (`closeLabel`, the toast region `label`, …) from the app's messages. The exceptions are the fixed product wording of the status components below (Review Code meanings, and "N weeks at this step", which comes from `stepAgeLabel` in `@rabaed/domain` so emails and reports share it) and of `DocNo`'s revision word ("Rev"), which take a `locale` instead, so no module can word them differently, and the language names in `MemberMenu`, each written in its own language ("English", "العربية"). Copy never uses deadline language: the story tests check story copy, and the `json-no-deadline-words` lint rule checks the app's messages.
 
 ## Status
 
@@ -170,7 +170,7 @@ const chip: WithChipHolder =
 <WithChip {...chip} />
 ```
 
-- `AgeDots` takes Step Age as CONTEXT.md defines it: **1 in the first week** at the Step, 2 in the second, and so on (`stepAgeWeeks` in `@rabaed/domain`). The dots come from the domain's `stepAgeDots`; `stepAgeLabel` gives the same words for places that aren't a component (an email, a report).
+- `AgeDots` takes Step Age as CONTEXT.md defines it: **1 in the first week** at the Step, 2 in the second, and so on (`stepAgeWeeks` in `@rabaed/domain`). The whole rule lives in `@rabaed/domain`: the dots come from `stepAgeDots`, and `stepAgeLabel` gives the same words for places that aren't a component (an email, a report), without importing this package.
 - `WithChip` is the last line of defence, not the first. Its types stop a caller from passing another company's person, but the API must still never send that person to the browser (V14): build the holder on the server from what the viewer may see, since props of a client component travel in the page payload.
 
 ## Shell

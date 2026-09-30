@@ -1,12 +1,13 @@
 import { cva, type VariantProps } from "class-variance-authority";
 import type { ComponentProps, ReactNode } from "react";
 import { cn } from "../../lib/cn.ts";
+import { focusRing } from "../form/control-styles.ts";
 
 export const buttonVariants = cva(
   [
     "inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-sm font-medium select-none",
     "transition-colors duration-150",
-    "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus",
+    focusRing,
     "disabled:cursor-not-allowed disabled:bg-disabled disabled:text-on-disabled",
     "aria-disabled:cursor-not-allowed aria-disabled:bg-disabled aria-disabled:text-on-disabled",
     "[&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",

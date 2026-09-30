@@ -105,18 +105,6 @@ export const workItemDetail = workItemSummary.extend({
 });
 export type WorkItemDetail = z.infer<typeof workItemDetail>;
 
-const WEEK = 7 * 86_400_000;
-
-/** Step Age: 1 in the first week at the Step, 2 in the second, and so on. */
-export function stepAgeWeeks(enteredAt: Date, now: Date): number {
-  return Math.max(0, Math.floor((now.getTime() - enteredAt.getTime()) / WEEK)) + 1;
-}
-
-/** Step Age as dots: one per week, up to 4 (4+). */
-export function stepAgeDots(weeks: number): number {
-  return Math.min(Math.max(weeks, 1), 4);
-}
-
 export const workItemEventTypes = [
   "created",
   "transition",
