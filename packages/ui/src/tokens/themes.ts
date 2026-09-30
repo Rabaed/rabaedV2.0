@@ -38,6 +38,8 @@ export const coolLight = {
   // Form controls: their boundary must show at 3:1 (WCAG 1.4.11); decorative borders need not.
   "control-border": "slate-450",
   "control-border-hover": "slate-600",
+  // The tint of every shadow; scales.ts sets each shadow's opacity.
+  "shadow-colour": "slate-900",
 
   // Text
   text: "slate-900",

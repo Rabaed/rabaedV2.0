@@ -79,6 +79,7 @@
   --border-strong: var(--palette-slate-350);
   --control-border: var(--palette-slate-450);
   --control-border-hover: var(--palette-slate-600);
+  --shadow-colour: var(--palette-slate-900);
   --text: var(--palette-slate-900);
   --text-secondary: var(--palette-slate-800);
   --muted: var(--palette-slate-600);
@@ -168,6 +169,7 @@
   --color-border-strong: var(--border-strong);
   --color-control-border: var(--control-border);
   --color-control-border-hover: var(--control-border-hover);
+  --color-shadow-colour: var(--shadow-colour);
   --color-text: var(--text);
   --color-text-secondary: var(--text-secondary);
   --color-muted: var(--muted);
@@ -289,8 +291,8 @@
   --radius-xl: 24px;
 
   --shadow-*: initial;
-  --shadow-xs: 0 1px 2px rgba(31, 36, 48, 0.05);
-  --shadow-sm: 0 1px 3px rgba(61, 64, 91, 0.08), 0 1px 2px rgba(61, 64, 91, 0.04);
-  --shadow-md: 0 4px 12px rgba(61, 64, 91, 0.08);
-  --shadow-lg: 0 14px 34px rgba(15, 20, 35, 0.16);
+  --shadow-xs: 0 1px 2px color-mix(in srgb, var(--shadow-colour) 5%, transparent);
+  --shadow-sm: 0 1px 3px color-mix(in srgb, var(--shadow-colour) 8%, transparent), 0 1px 2px color-mix(in srgb, var(--shadow-colour) 4%, transparent);
+  --shadow-md: 0 4px 12px color-mix(in srgb, var(--shadow-colour) 8%, transparent);
+  --shadow-lg: 0 14px 34px color-mix(in srgb, var(--shadow-colour) 16%, transparent);
 }

@@ -1,7 +1,14 @@
 /**
- * Non-colour tokens: type, radii and shadows, from the Claude Design export
- * (typography.css, spacing.css). Spacing uses Tailwind's 4px grid as is.
+ * Non-colour tokens: type, spacing, radii and shadows, from the Claude Design
+ * export (typography.css, spacing.css).
  */
+
+/**
+ * Spacing uses Tailwind's 4px grid as is (`p-3` is 12px). These are the steps
+ * the components use, shown in the token specimen; a unit test keeps the list
+ * complete. Add a step here when a component starts using it.
+ */
+export const spacing = [0.5, 1, 1.5, 2, 2.5, 3, 4, 5, 6, 7, 8, 12] as const;
 
 // All self-hosted (src/styles/index.css), no font CDN. Latin text uses the first
 // family; Arabic glyphs fall through to --font-arabic, which prepareArabicFont
@@ -41,9 +48,12 @@ export const radii = {
   xl: "24px",
 } as const;
 
+/** The `shadow-colour` role (themes.ts) at the given opacity, so a theme can change the tint. */
+const shade = (percent: number) => `color-mix(in srgb, var(--shadow-colour) ${percent}%, transparent)`;
+
 export const shadows = {
-  xs: "0 1px 2px rgba(31, 36, 48, 0.05)",
-  sm: "0 1px 3px rgba(61, 64, 91, 0.08), 0 1px 2px rgba(61, 64, 91, 0.04)",
-  md: "0 4px 12px rgba(61, 64, 91, 0.08)",
-  lg: "0 14px 34px rgba(15, 20, 35, 0.16)",
+  xs: `0 1px 2px ${shade(5)}`,
+  sm: `0 1px 3px ${shade(8)}, 0 1px 2px ${shade(4)}`,
+  md: `0 4px 12px ${shade(8)}`,
+  lg: `0 14px 34px ${shade(16)}`,
 } as const;
