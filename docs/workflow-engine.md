@@ -65,6 +65,7 @@ Published versions never change. Publishing v2 leaves v1 items untouched. Items 
 
 The state lives on `work_item`:
 - `current_step_id`, `current_stage_key`, `step_entered_at` (for Step Age);
+- `participant_entered_at`, `participant_entered_step_id`: when, and at which Step, it reached the holding Participant (§10);
 - `outcome`, `closed_at`.
 
 The current holder is the single open `step_assignment` row.
@@ -146,7 +147,7 @@ Effects, in order:
    - a `content_sha256` of the item data plus its frozen Documents;
    - the hash chain.
 3. The current assignment is closed (`done`).
-4. The item moves: `current_step_id`, `current_stage_key` and `step_entered_at` are set.
+4. The item moves: `current_step_id`, `current_stage_key` and `step_entered_at` are set. If it leaves the acting Participant (handed to another, or closed), `participant_entered_at` and `participant_entered_step_id` are set too, and its event is `shared`; a move inside one Participant is `internal`.
 5. **If the new Step is non-terminal:** a new assignment is created (§3), and `work_item_access` is granted to the holder's Participant (`handling`). On the first `submit`, oversight access is granted to Owner and Owner Representative Participants whose Visibility covers the item.
 6. **If the new Step is terminal:**
    - `outcome` and `closed_at` are set;
@@ -244,8 +245,8 @@ There is no admin path to `take_transition`, `recommend_code`, `issue_code`, or 
 
 ## 10. Step Age and "Need My Action"
 
-- **Step Age** = weeks since `step_entered_at`, shown as up to 4 dots.
-- A weekly job builds each Participant's ageing report from the items it can see.
+- **Step Age** = weeks since `step_entered_at`, shown as up to 4 dots, for the holding Participant's own Members. Every other Company counts it from `participant_entered_at` and sees the Step it arrived at, so internal moves never reset or reveal anything (visibility.md V14). `app.step_as_seen` is the one place that chooses.
+- A weekly job builds each Participant's ageing report from the items it can see, through `app.step_as_seen` too.
 - **"Need My Action"** = open assignments where the viewer is the assignee, or is in the pool and nobody has claimed it.
 
 ---

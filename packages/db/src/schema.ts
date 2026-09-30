@@ -287,7 +287,11 @@ export interface WorkItemTable {
   document_number: string | null;
   current_step_id: string;
   current_stage_key: string;
+  /** When it entered its current Step: Step Age inside the holding Participant only; read it through app.step_as_seen. */
   step_entered_at: Timestamp;
+  /** When, and at which Step, it reached the holding Participant (set by a trigger on insert): Step Age for everyone else. */
+  participant_entered_at: Generated<Timestamp>;
+  participant_entered_step_id: Generated<string>;
   outcome: string | null;
   closed_at: Timestamp | null;
   created_at: Generated<Timestamp>;
