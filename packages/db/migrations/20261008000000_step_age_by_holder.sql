@@ -9,6 +9,10 @@
 --   when it entered it; every other Company sees the Step it arrived at and when,
 --   so internal moves there never reset or reveal anything. The periodic ageing
 --   report must read it from here too.
+-- * rabaed_app no longer reads work_item's current Step, Stage, their times or
+--   updated_at directly: RLS filters rows, not columns, and those would show
+--   another Company's internal moves. A new work_item column must be granted
+--   to rabaed_app explicitly.
 -- * app.take_transition: a Transition is shared only when it leaves the acting
 --   Participant (or is a Submit or a close). Before, any Transition out of a Step
 --   that issues Codes was shared, so a Consultant's internal Return from such a
@@ -21,14 +25,16 @@ alter table work_item
 
 -- Existing items reached their holder at their latest shared event, or were never
 -- handed over (still with the raiser since creation).
-update work_item w set participant_entered_at = e.created_at, participant_entered_step_id = e.to_step_id
-from (
-  select distinct on (work_item_id) work_item_id, created_at, to_step_id
-  from work_item_event
-  where to_step_id is not null and (type = 'created' or audience = 'shared')
-  order by work_item_id, seq desc
-) e
-where e.work_item_id = w.id;
+update work_item w
+set participant_entered_at = coalesce(e.created_at, w.step_entered_at),
+  participant_entered_step_id = coalesce(e.to_step_id, w.current_step_id)
+from work_item x
+left join lateral (
+  select created_at, to_step_id from work_item_event
+  where work_item_id = x.id and to_step_id is not null and (type = 'created' or audience = 'shared')
+  order by seq desc limit 1
+) e on true
+where x.id = w.id;
 
 alter table work_item
   alter column participant_entered_at set not null,
@@ -52,11 +58,11 @@ create trigger work_item_arrives before insert on work_item
 
 -- The item's current Step, its Stage, and when Step Age counts from, as the acting
 -- Member may see them: their own Participant holds it, its current internal Step;
--- anyone else, the Step at which it reached the holder (V14). Runs as the caller,
--- so an item they can't see answers nothing.
+-- anyone else, the Step at which it reached the holder (V14). An item they can't
+-- see answers nothing.
 create function app.step_as_seen(p_work_item_id uuid)
   returns table (step_id uuid, stage_key text, entered_at timestamptz)
-  language sql stable security invoker
+  language sql stable security definer
   set search_path = pg_catalog, public
   as $$
     select s.id, s.stage_key, case when h.mine then w.step_entered_at else w.participant_entered_at end
@@ -69,8 +75,14 @@ create function app.step_as_seen(p_work_item_id uuid)
       ) as mine
     ) h
     join workflow_step s on s.id = case when h.mine then w.current_step_id else w.participant_entered_step_id end
-    where w.id = p_work_item_id
+    where w.id = p_work_item_id and app.sees_work_item(w.id)
   $$;
+
+revoke select on work_item from rabaed_app;
+grant select (
+  id, project_id, work_item_type_id, raised_by_participant_id, created_by_member_id, title, data,
+  workflow_version_id, document_number, outcome, closed_at, created_at
+) on work_item to rabaed_app;
 
 -- Takes a Transition (§5.1) by its key. Outcomes and checks as in the
 -- submit_and_codes migration; see the header for what changed.

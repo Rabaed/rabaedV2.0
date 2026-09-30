@@ -147,7 +147,7 @@ Effects, in order:
    - a `content_sha256` of the item data plus its frozen Documents;
    - the hash chain.
 3. The current assignment is closed (`done`).
-4. The item moves: `current_step_id`, `current_stage_key` and `step_entered_at` are set. If it leaves the acting Participant (handed to another, or closed), `participant_entered_at` and `participant_entered_step_id` are set too, and its event is `shared`; a move inside one Participant is `internal`.
+4. The item moves: `current_step_id`, `current_stage_key` and `step_entered_at` are set. If it leaves the acting Participant (handed to another, or closed), `participant_entered_at` and `participant_entered_step_id` are set too. The event is `shared` when the item leaves the acting Participant (a Submit or a close always does); a move inside one Participant is `internal`, even from a Step that issues Codes.
 5. **If the new Step is non-terminal:** a new assignment is created (§3), and `work_item_access` is granted to the holder's Participant (`handling`). On the first `submit`, oversight access is granted to Owner and Owner Representative Participants whose Visibility covers the item.
 6. **If the new Step is terminal:**
    - `outcome` and `closed_at` are set;

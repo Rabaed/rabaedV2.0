@@ -5,7 +5,8 @@
 //
 // The seeded MAR has one Consultant Step, so this file adds a test-only Work Item
 // Type whose Workflow has two: the Consultant's Engineer, then its Manager, who
-// can Return it to the Engineer.
+// can Return it to the Engineer. The Manager's Step is in another Stage, so the
+// Stage too must stay the one the item arrived in.
 import { randomUUID } from "node:crypto";
 import { createDb } from "@rabaed/db";
 import { testDatabaseUrls } from "@rabaed/db/test-support";
@@ -72,7 +73,7 @@ async function addInternalConsultantStepsType() {
           (v_version, 'consultant_engineer', '{"en": "Consultant engineer review", "ar": "مراجعة مهندس الاستشاري"}',
             'pending_approval', '{"base_role": "consultant", "permission": "review"}', 'none'),
           (v_version, 'consultant_manager', ${sql.lit(JSON.stringify(bilingual(MANAGER_STEP)))}::jsonb,
-            'pending_approval', '{"base_role": "consultant", "permission": "approve"}', 'issue_code'),
+            'internal_review', '{"base_role": "consultant", "permission": "approve"}', 'issue_code'),
           (v_version, 'approved', '{"en": "Approved", "ar": "معتمد"}', 'approved', '{}', 'none');
 
         insert into workflow_transition (workflow_version_id, key, from_step_id, to_step_id, label, kind, outcome, permission, sort)
@@ -234,7 +235,7 @@ describe("K1 moves the Submitted item internally (scenario 35)", () => {
     for (const caller of [k1Engineer, k1Manager]) {
       const { row, detail } = await seenBy(caller, id);
       expect(row.stepAgeWeeks).toBe(1);
-      expect(detail).toMatchObject({ step: { key: "consultant_engineer" }, stepAgeWeeks: 1 });
+      expect(detail).toMatchObject({ step: { key: "consultant_engineer" }, stage: { key: "pending_approval" }, stepAgeWeeks: 1 });
       expect(Date.parse(detail.stepEnteredAt)).toBeGreaterThan(Date.parse(submittedAt) + 22 * DAY);
     }
   });
