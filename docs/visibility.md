@@ -106,6 +106,7 @@ Setup, Project "Tower": Contractors **C1** (Electrical) and **C2** (Electrical, 
 | 34 | C1 PM Submits the MAR with an Internal Note | K1, OR | See the Submit; never the Internal Note (V5) |
 | 35 | K1 engineer sends the Submitted MAR to the K1 PM, who returns it to the engineer | C1 PM | Sees "With K1" and Step Age counted from the Submit; no reset, no internal move (V14) |
 | 36 | C2's Authorized Person invites the email of a C1 Member | C2 Authorized Person | Refused: already registered on Rabaed with another Company. C1 is never named, and nothing else about the Member is shown (V17) |
+| 37 | C1 PM Submits an Electrical item when (a) no Consultant covers it, (b) two do, or (c) the covering Consultant has nobody who can hold the Step | C1 PM | Submit isn't offered, and taking it gets the same refusal in all three cases. Nothing in it names a Consultant or says which case it is (V14, V16) |
 
 Every change to rules or channels must add or update rows here and in the test suite. A failing visibility test blocks release.
 
