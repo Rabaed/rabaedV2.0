@@ -27,8 +27,7 @@ async function one(text: string, values: unknown[]): Promise<string> {
 }
 
 /** A Company with an Authorized Person (also a Project Creator) and a plain Member. */
-async function company(engineer: string, name: string): Promise<Company> {
-  const cr = digits(10);
+async function company(engineer: string, name: string, cr = digits(10)): Promise<Company> {
   const id = await one(
     "insert into company (legal_name, cr_number, vat_number, onboarded_by) values ($1, $2, $3, $4) returning id",
     [JSON.stringify({ en: name, ar: name }), cr, `3${digits(13)}3`, engineer],
@@ -346,5 +345,120 @@ describe("a Participant Invitation", () => {
     expect(await addProjectMember(other.ap, id, other.member)).toBe("added");
     // Inviting it again is refused: its Project Admins see it already.
     expect(await invite(host.ap, other.cr)).toBe("already_participant");
+  });
+});
+
+// RP-252: Rabaed onboards a Company whose CR number was invited as an onboarding
+// lead (ADR 0009; visibility.md V9, scenario 31).
+describe("an onboarding lead, converted when Rabaed onboards its Company", () => {
+  let admin: Db;
+  let engineer = "";
+  let project = "";
+  let newcomer: Company;
+  const cr = digits(10);
+  let before: Record<string, unknown>[] = [];
+
+  const pending = () =>
+    withMember(app, host.ap, (trx) =>
+      sql<Record<string, unknown>>`select * from app.project_invitations(${project}::uuid)`
+        .execute(trx)
+        .then((r) => r.rows.filter((x) => x.cr_number === cr)),
+    );
+  const convert = (companyId: string) =>
+    admin
+      .transaction()
+      .execute((trx) =>
+        sql<{ lead_id: string; participant_id: string; project_id: string }>`
+          select * from app.convert_onboarding_leads(${companyId}::uuid, now())`
+          .execute(trx)
+          .then((r) => r.rows),
+      );
+
+  beforeAll(async () => {
+    admin = createDb(urls.admin, { max: 1 });
+    engineer = (await migrator.query("select onboarded_by from company where id = $1", [host.id])).rows[0].onboarded_by;
+    project = await withMember(app, host.ap, (trx) =>
+      sql<{ project_id: string }>`select project_id from app.create_project('{"en": "Lead Tower", "ar": "Lead Tower"}'::jsonb, 'LTW', 'contractor')`
+        .execute(trx)
+        .then((r) => r.rows[0]!.project_id),
+    );
+    await joinProject(app, project, { adminId: host.ap, crNumber: consultant.cr, role: "consultant" }, consultant.ap);
+    const outcome = await withMember(app, host.ap, (trx) =>
+      sql<{ outcome: string }>`select app.add_participant(${project}::uuid, ${cr}, 'owner_representative', now()) as outcome`
+        .execute(trx)
+        .then((r) => r.rows[0]!.outcome),
+    );
+    expect(outcome).toBe("invited");
+    before = await pending();
+    expect(before).toHaveLength(1);
+    newcomer = await company(engineer, "Newcomer", cr);
+  });
+
+  afterAll(async () => {
+    await admin?.destroy();
+  });
+
+  it("is for Rabaed Admin only: the app role can't convert a lead", async () => {
+    await expect(
+      withMember(app, host.ap, (trx) => sql`select * from app.convert_onboarding_leads(${newcomer.id}::uuid, now())`.execute(trx)),
+    ).rejects.toThrow(/permission denied/);
+  });
+
+  it("becomes an Invited Participant with the lead's id, in the offered role, closing the lead for audit", async () => {
+    const [lead] = (await migrator.query("select id from onboarding_lead where cr_number = $1", [cr])).rows;
+    expect(await convert(newcomer.id)).toEqual([{ lead_id: lead.id, participant_id: lead.id, project_id: project }]);
+    const { rows } = await migrator.query(
+      `select p.id, p.status, p.company_id, r.base_role, p.invited_by_member_id
+       from participant p join project_role r on r.id = p.project_role_id where p.id = $1`,
+      [lead.id],
+    );
+    expect(rows).toEqual([
+      { id: lead.id, status: "invited", company_id: newcomer.id, base_role: "owner_representative", invited_by_member_id: host.ap },
+    ]);
+    const closed = (await migrator.query("select converted_at, participant_id from onboarding_lead where id = $1", [lead.id])).rows[0];
+    expect(closed.participant_id).toBe(lead.id);
+    expect(closed.converted_at).not.toBeNull();
+    // Converted once: again, nothing more.
+    expect(await convert(newcomer.id)).toEqual([]);
+  });
+
+  it("shows the Project Admin the same row as before, once (scenario 31)", async () => {
+    expect(await pending()).toEqual(before);
+  });
+
+  it("never lists a lead beside an invitation of its CR number, such as one written while its Company was onboarded", async () => {
+    const racer = await company(engineer, "Racer");
+    const invited = await withMember(app, host.ap, (trx) =>
+      sql<{ outcome: string }>`select app.add_participant(${project}::uuid, ${racer.cr}, 'consultant', now()) as outcome`
+        .execute(trx)
+        .then((r) => r.rows[0]!.outcome),
+    );
+    expect(invited).toBe("invited");
+    const role = (await migrator.query("select id from project_role where owner_kind = 'rabaed' and base_role = 'owner'")).rows[0].id;
+    await migrator.query(
+      "insert into onboarding_lead (cr_number, project_id, project_role_id, requested_by_member_id) values ($1, $2, $3, $4)",
+      [racer.cr, project, role, host.ap],
+    );
+    const rows = await withMember(app, host.ap, (trx) =>
+      sql<{ cr_number: string; base_role: string }>`select cr_number, base_role from app.project_invitations(${project}::uuid)`
+        .execute(trx)
+        .then((r) => r.rows.filter((x) => x.cr_number === racer.cr)),
+    );
+    expect(rows).toEqual([{ cr_number: racer.cr, base_role: "consultant" }]);
+  });
+
+  it("shows the invitation to the new Company's Authorized Person, and to no other Participant", async () => {
+    const invitations = await withMember(app, newcomer.ap, (trx) =>
+      sql<{ participant_id: string; base_role: string }>`select participant_id, base_role from app.company_invitations()`
+        .execute(trx)
+        .then((r) => r.rows),
+    );
+    expect(invitations).toEqual([{ participant_id: before[0]!.invitation_id, base_role: "owner_representative" }]);
+    for (const as of [consultant.ap, consultant.member, host.member]) {
+      const seen = await withMember(app, as, (trx) =>
+        sql<{ id: string }>`select id from participant where project_id = ${project}`.execute(trx).then((r) => r.rows.map((x) => x.id)),
+      );
+      expect(seen, as).not.toContain(before[0]!.invitation_id);
+    }
   });
 });

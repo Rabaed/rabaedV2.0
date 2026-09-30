@@ -1,5 +1,6 @@
 import type { Db } from "@rabaed/db";
 import type { OnboardCompanyRequest } from "@rabaed/domain";
+import { sql } from "kysely";
 import { asEngineer } from "../admin/admin-action.ts";
 import { createInvitation, type Invitation } from "./invitations.ts";
 
@@ -16,7 +17,9 @@ const conflicts: Record<string, Conflict> = {
 };
 
 /**
- * A Rabaed Engineer onboards a Company and invites its Authorized Person.
+ * A Rabaed Engineer onboards a Company and invites its Authorized Person. Every
+ * onboarding lead for its CR number becomes the Company's Participant Invitation
+ * on that lead's Project, logged with the onboarding (ADR 0009).
  * The invitation token is returned once, to be passed to the Authorized Person
  * (email delivery comes later); only its hash is stored.
  */
@@ -51,6 +54,10 @@ export async function onboardCompany(
         .executeTakeFirstOrThrow();
       await trx.updateTable("company").set({ authorized_person_id: person.id }).where("id", "=", company.id).execute();
       const invitation = await createInvitation(trx, person.id, { engineerId }, now, invitationTtlMs);
+      // Every Project Admin who invited its CR number before now has it invited (RP-252).
+      const { rows: invitedFromLeads } = await sql<{ lead_id: string; participant_id: string; project_id: string }>`
+        select * from app.convert_onboarding_leads(${company.id}::uuid, ${now})
+      `.execute(trx);
 
       return {
         target: { kind: "company", id: company.id },
@@ -59,6 +66,11 @@ export async function onboardCompany(
           crNumber: input.crNumber,
           vatNumber: input.vatNumber,
           authorizedPerson: { id: person.id, email: input.authorizedPerson.email },
+          invitedFromLeads: invitedFromLeads.map((l) => ({
+            leadId: l.lead_id,
+            participantId: l.participant_id,
+            projectId: l.project_id,
+          })),
         },
         result: { ok: true, companyId: company.id, authorizedPersonId: person.id, invitation } as const,
       };

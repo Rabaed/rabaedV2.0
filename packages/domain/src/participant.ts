@@ -40,8 +40,8 @@ export const companyInvitations = z.object({ invitations: z.array(companyInvitat
 export type CompanyInvitations = z.infer<typeof companyInvitations>;
 
 /**
- * A CR number a Project Admin invited that isn't on Rabaed, for Rabaed to
- * onboard: seen only through Rabaed Admin (V9, ADR 0009).
+ * A CR number a Project Admin invited that wasn't on Rabaed, for Rabaed to
+ * onboard, open or converted: seen only through Rabaed Admin (V9, ADR 0009).
  */
 export const onboardingLeads = z.object({
   leads: z.array(
@@ -52,6 +52,9 @@ export const onboardingLeads = z.object({
       hostCompany: z.object({ id: z.uuid(), legalName: bilingualText }),
       baseRole: z.enum(baseRoles),
       requestedAt: z.iso.datetime(),
+      /** Set once Rabaed onboarded the Company and the lead became its Participant Invitation (kept for audit). */
+      convertedAt: z.iso.datetime().nullable(),
+      participantId: z.uuid().nullable(),
     }),
   ),
 });
