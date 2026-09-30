@@ -225,11 +225,26 @@ describe("a Draft Work Item", () => {
     expect(rows.rows).toEqual([]);
   });
 
+  it("never gives the app role the current Step, Stage or their times directly: only app.step_as_seen (V14)", async () => {
+    for (const column of [
+      "current_step_id",
+      "current_stage_key",
+      "step_entered_at",
+      "participant_entered_at",
+      "participant_entered_step_id",
+      "updated_at",
+    ]) {
+      await expect(
+        withMember(app, c1.member, (trx) => sql`select ${sql.ref(column)} from work_item`.execute(trx)),
+      ).rejects.toThrow(/permission denied/);
+    }
+  });
+
   it("starts at the Draft Step, held by its creator, with one internal 'created' event", async () => {
     const [item] = await call<{ stage: string; holder: string; status: string }>(
       c1.member,
-      sql`select w.current_stage_key as stage, a.assignee_member_id as holder, a.status
-          from work_item w join step_assignment a on a.work_item_id = w.id where w.id = ${draft}`,
+      sql`select seen.stage_key as stage, a.assignee_member_id as holder, a.status
+          from app.step_as_seen(${draft}::uuid) seen join step_assignment a on a.work_item_id = ${draft}`,
     );
     expect(item).toEqual({ stage: "draft", holder: c1.member, status: "claimed" });
     const events = await call<{ seq: number; type: string; audience: string; audience_participant_id: string }>(

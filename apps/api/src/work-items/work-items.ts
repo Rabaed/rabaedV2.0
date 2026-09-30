@@ -18,7 +18,9 @@ import { checkedOutcome, commandResult } from "../outcomes.ts";
 // Work Items. Writes go through the app.* functions of the work items migration;
 // reads go through RLS, which answers only with the items the Member can see
 // (data-model.md §10). Lists and Stage counts come from the same query, so a
-// count can never include an item the list hides.
+// count can never include an item the list hides. The Step, its Stage and Step Age
+// come from app.step_as_seen: another Company sees only when the item reached the
+// holder, never its internal moves (V14).
 
 type Trx = Transaction<Database>;
 
@@ -61,10 +63,11 @@ function visibleItems(trx: Trx, where: RawBuilder<unknown>) {
       st.key as stage_key, st.name as stage_name, st.category as stage_category,
       tv.id as trade_id, tv.code as trade_code, tv.name as trade_name,
       lv.id as location_id, lv.code as location_code, lv.name as location_name,
-      w.step_entered_at
+      seen.entered_at as step_entered_at
     from work_item w
+    cross join lateral app.step_as_seen(w.id) seen
     join work_item_type t on t.id = w.work_item_type_id
-    join stage st on st.module_key = t.module_key and st.key = w.current_stage_key and st.project_id is null
+    join stage st on st.module_key = t.module_key and st.key = seen.stage_key and st.project_id is null
     join visibility_dimension td on td.project_id = w.project_id and td.kind = 'trade'
     join work_item_dimension_value tdv on tdv.work_item_id = w.id and tdv.dimension_id = td.id
     join dimension_value tv on tv.id = tdv.dimension_value_id
@@ -72,7 +75,7 @@ function visibleItems(trx: Trx, where: RawBuilder<unknown>) {
     left join work_item_dimension_value ldv on ldv.work_item_id = w.id and ldv.dimension_id = ld.id
     left join dimension_value lv on lv.id = ldv.dimension_value_id
     where ${where}
-    order by w.step_entered_at desc, w.id desc
+    order by seen.entered_at desc, w.id desc
   `
     .execute(trx)
     .then((r) => r.rows);
@@ -157,7 +160,8 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
       select w.data, w.created_at, w.outcome, w.closed_at, s.key as step_key, s.name as step_name,
         raiser.legal_name as raised_by, holder.legal_name as held_by, m.full_name as holder_name
       from work_item w
-      join workflow_step s on s.id = w.current_step_id
+      cross join lateral app.step_as_seen(w.id) seen
+      join workflow_step s on s.id = seen.step_id
       join app.work_item_companies(w.id) raiser on raiser.participant_id = w.raised_by_participant_id
       left join step_assignment a on a.work_item_id = w.id and a.status in ('pooled', 'claimed', 'vacant')
       left join app.work_item_companies(w.id) holder on holder.participant_id = a.participant_id

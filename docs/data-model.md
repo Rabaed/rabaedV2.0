@@ -208,7 +208,8 @@ Until numbering patterns exist, the key is `<project code>-<type code>-<Particip
 | `revision_no` (0 = original), `revision_of_id`, `root_id` | Revision chain; display `MS-003 Rev 1` |
 | `parent_id` | Subtask; check: parent's `parent_id` is null |
 | `package_id` | nullable |
-| `current_step_id`, `current_stage_key`, `step_entered_at` | `step_entered_at` feeds **Step Age** |
+| `current_step_id`, `current_stage_key`, `step_entered_at` | `step_entered_at` feeds **Step Age** inside the holding Participant |
+| `participant_entered_at`, `participant_entered_step_id` | when, and at which Step, the item reached the holding Participant (or closed): what every other Company sees (V14) |
 | `outcome` | `A, B, C, D, passed, passed_with_comments, failed, cancelled, closed`; null while open |
 | `recommended_code` | latest recommendation, informational |
 | `closed_at` | |
