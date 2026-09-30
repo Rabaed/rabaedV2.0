@@ -54,7 +54,7 @@ Every one of these must apply the same layers. A new feature that adds a channel
 | Notifications and emails | Sent only to Members with access. The subject line holds only what the recipient may see. |
 | Distribution List | Receives the Documental Record link only (E2-style sealed PDF), and the link expires. |
 | Activity Feed | Built from `work_item_event` and `project_event`, filtered through layers 3 to 5. |
-| Work Item history | The item's `work_item_event`s through layers 3 to 5. Another Company appears by name only; the one person of another Company named is the signer of the final Code (V14). |
+| Work Item history | The item's `work_item_event`s through layers 3 to 5. Another Company appears by name only; the one person of another Company named is the signer of the final Code (V14). Events are numbered 1, 2, 3… as the viewer sees them, never by the stored `seq`, whose gaps would count another Participant's internal events and Internal Notes (V5). |
 | Step Age reports | Each Participant's report covers items it has access to. The Owner-level report covers oversight items. |
 | Exports and handover | An export contains only what the exporter could see, plus their E2 records. |
 | Document Numbers | Numbering patterns that include a Company segment give each Company its own counter, so sequence gaps don't reveal a competitor's volume. |

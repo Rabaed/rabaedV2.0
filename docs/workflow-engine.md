@@ -145,6 +145,8 @@ Effects, in order:
    - `signature_id` if signing;
    - a `content_sha256` of the item data plus its frozen Documents;
    - the hash chain.
+
+   An Internal Note written in the Action Form is its own `internal_note` event, appended just before the Transition's, carrying the Transition's id. It is always `internal` to the actor's Participant, even with a Submit or a Code (visibility.md V5).
 3. The current assignment is closed (`done`).
 4. The item moves: `current_step_id`, `current_stage_key` and `step_entered_at` are set.
 5. **If the new Step is non-terminal:** a new assignment is created (§3), and `work_item_access` is granted to the holder's Participant (`handling`). On the first `submit`, oversight access is granted to Owner and Owner Representative Participants whose Visibility covers the item.
