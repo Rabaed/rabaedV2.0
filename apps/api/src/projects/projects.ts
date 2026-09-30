@@ -1,11 +1,9 @@
 import { withMember, type Database, type Db } from "@rabaed/db";
 import type { CreateProjectRequest, ProjectSummary } from "@rabaed/domain";
 import { sql, type Transaction } from "kysely";
-import { refusedAsForbidden } from "../db-error.ts";
+import { refusedAsForbidden, type Forbidden } from "../db-error.ts";
 
-export type CreateProjectResult =
-  | { ok: true; projectId: string; projectNumber: number }
-  | { ok: false; reason: "forbidden" };
+export type CreateProjectResult = { ok: true; projectId: string; projectNumber: number } | Forbidden;
 
 /**
  * A Project Creator creates a Project. app.create_project checks the flag, takes

@@ -11,7 +11,7 @@ import {
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import type { AppContext } from "../app.ts";
-import { forbidden, idOrNotFound, notFound } from "../http-error.ts";
+import { forbidden, idOrNotFound, notFound, visibleOrNotFound } from "../http-error.ts";
 import {
   addParticipant,
   addProjectMember,
@@ -43,9 +43,7 @@ export const participantRoutes =
       { schema: { params: z.object({ projectId: z.string() }), response: { 200: projectParticipants } } },
       async (request) => {
         const memberId = ctx.requireMember(request);
-        const participants = await listParticipants(ctx.db, memberId, idOrNotFound(request.params.projectId));
-        if (!participants) throw notFound();
-        return participants;
+        return visibleOrNotFound(listParticipants(ctx.db, memberId, idOrNotFound(request.params.projectId)));
       },
     );
 
@@ -107,9 +105,7 @@ export const participantRoutes =
       { schema: { params: participantParams, response: { 200: participantMembers } } },
       async (request) => {
         const memberId = ctx.requireMember(request);
-        const list = await listParticipantMembers(ctx.db, memberId, idOrNotFound(request.params.participantId));
-        if (!list) throw notFound();
-        return list;
+        return visibleOrNotFound(listParticipantMembers(ctx.db, memberId, idOrNotFound(request.params.participantId)));
       },
     );
 

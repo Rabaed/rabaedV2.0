@@ -1,15 +1,13 @@
 import { withMember, type Database, type Db } from "@rabaed/db";
 import type { CompanyMember, InviteMemberRequest } from "@rabaed/domain";
 import { sql, type Transaction } from "kysely";
-import { pgError, refusedAsForbidden, UNIQUE_VIOLATION } from "../db-error.ts";
+import { checkedOutcome, pgError, refusedAsForbidden, UNIQUE_VIOLATION, type Forbidden } from "../db-error.ts";
 import type { Invitation } from "./invitations.ts";
 import { newToken } from "./tokens.ts";
 
 // The Authorized Person's Member management. Every write goes through one of
 // the app.* functions in the member_management migration, which check that the
 // acting Member is the Authorized Person and scope the target to their Company.
-
-type Forbidden = { ok: false; reason: "forbidden" };
 
 export type InviteResult = { ok: true; memberId: string; invitation: Invitation } | Forbidden | { ok: false; reason: "duplicate_email" };
 
@@ -98,11 +96,11 @@ export function setProjectCreator(db: Db, memberId: string, targetId: string, va
 export function deactivateMember(db: Db, memberId: string, targetId: string, now: Date): Promise<UpdateResult> {
   return asAuthorizedPerson(db, memberId, async (trx): Promise<UpdateResult> => {
     // 'deactivated', 'authorized_person' (refused), or null when they are not in the Company.
-    const { rows } = await sql<{ outcome: "deactivated" | "authorized_person" | null }>`
+    const { rows } = await sql<{ outcome: string | null }>`
       select app.deactivate_member(${targetId}::uuid, ${now}) as outcome
     `.execute(trx);
-    const outcome = rows[0]?.outcome;
-    if (!outcome) return { ok: false, reason: "not_found" };
+    if (rows[0]?.outcome == null) return { ok: false, reason: "not_found" };
+    const outcome = checkedOutcome(rows[0].outcome, ["deactivated", "authorized_person"]);
     if (outcome === "authorized_person") return { ok: false, reason: "authorized_person" };
     return { ok: true, member: await readMember(trx, targetId) };
   });

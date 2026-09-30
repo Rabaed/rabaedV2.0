@@ -1,5 +1,5 @@
 import type { Db } from "@rabaed/db";
-import type { BaseRole, BilingualText, Locale } from "@rabaed/domain";
+import type { BaseRole, BilingualText, Locale, VisibilityGrant } from "@rabaed/domain";
 import type { FastifyInstance } from "fastify";
 import { SESSION_COOKIE } from "../app.ts";
 import { createEngineer } from "../identity/engineers.ts";
@@ -14,8 +14,6 @@ import { createEngineer } from "../identity/engineers.ts";
 // The names, emails (on the reserved .test domain), CR and VAT numbers are all
 // made up. Every demo person signs in with one password the caller supplies:
 // generated on the developer's machine for `pnpm demo`, never in the repo.
-
-type Coverage = { isAll: boolean; valueIds: string[] };
 
 export interface DemoPerson {
   /** A stable key, e.g. "tmc-engineer". */
@@ -63,8 +61,8 @@ function browser(app: FastifyInstance): Call {
 }
 
 const bi = (en: string, ar: string): BilingualText => ({ en, ar });
-const all: Coverage = { isAll: true, valueIds: [] };
-const only = (...valueIds: string[]): Coverage => ({ isAll: false, valueIds });
+const all: VisibilityGrant = { isAll: true, valueIds: [] };
+const only = (...valueIds: string[]): VisibilityGrant => ({ isAll: false, valueIds });
 const email = (local: string, domain: string) => `${local}@${domain}.demo.rabaed.test`;
 
 interface Person {
@@ -189,7 +187,7 @@ export async function seedDemo(app: FastifyInstance, migrator: Db, password: str
     dcl: await participantOf(dcl, "consultant"),
     waha: await participantOf(waha, "owner_representative"),
   };
-  const cover = (participantId: string, trades: Coverage, locations: Coverage) =>
+  const cover = (participantId: string, trades: VisibilityGrant, locations: VisibilityGrant) =>
     tmc.caller("PUT", `/v1/participants/${participantId}/visibility`, { trade: trades, location: locations });
   await cover(participant.tmc, only(electrical), all);
   await cover(participant.beta, only(electrical), all);

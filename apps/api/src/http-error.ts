@@ -19,5 +19,12 @@ export function idOrNotFound(value: string): string {
   return value;
 }
 
+/** What a read answers, or a 404 when it answers null: hidden from the Member, or not there at all. */
+export async function visibleOrNotFound<T>(read: Promise<T | null>): Promise<T> {
+  const value = await read;
+  if (value === null) throw notFound();
+  return value;
+}
+
 /** Signed in, but not allowed to do this to something you can see. */
 export const forbidden = () => new HttpError(403, "forbidden");
