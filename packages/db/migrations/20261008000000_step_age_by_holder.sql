@@ -16,7 +16,7 @@
 -- * app.take_transition: a Transition is shared only when it leaves the acting
 --   Participant (or is a Submit or a close). Before, any Transition out of a Step
 --   that issues Codes was shared, so a Consultant's internal Return from such a
---   Step showed in the Contractor's history. Otherwise as in the submit_and_codes
+--   Step showed in the Contractor's history. Otherwise as in the internal_note
 --   migration.
 
 alter table work_item
@@ -84,10 +84,11 @@ grant select (
   workflow_version_id, document_number, outcome, closed_at, created_at
 ) on work_item to rabaed_app;
 
--- Takes a Transition (§5.1) by its key. Outcomes and checks as in the
--- submit_and_codes migration; see the header for what changed.
+-- Takes a Transition (§5.1) by its key, with the Member's Internal Note. Outcomes
+-- and checks as in the internal_note migration; see the header for what changed.
 create or replace function app.take_transition(
-  p_work_item_id uuid, p_transition_key text, p_reason text, p_idempotency_key uuid, p_now timestamptz
+  p_work_item_id uuid, p_transition_key text, p_reason text, p_internal_note text, p_idempotency_key uuid,
+  p_now timestamptz
 ) returns text
   language plpgsql volatile security definer
   set search_path = pg_catalog, public
@@ -103,6 +104,7 @@ create or replace function app.take_transition(
       v_next record;
       v_raiser record;
       v_reason text := nullif(btrim(p_reason), '');
+      v_note text := nullif(btrim(p_internal_note), '');
       v_holder uuid;
       v_number text;
       v_prefix text;
@@ -200,6 +202,18 @@ create or replace function app.take_transition(
         if v_outcome is null then
           raise exception 'Transition % closes the item without an outcome', v_transition.key;
         end if;
+      end if;
+      -- The Internal Note stays inside the writer's Participant even when the
+      -- Transition crosses to another (V5). It goes just before the Transition it
+      -- is written with.
+      if v_note is not null then
+        insert into work_item_event (
+          project_id, work_item_id, type, actor_member_id, actor_participant_id, transition_id,
+          payload, audience, audience_participant_id, created_at
+        ) values (
+          v_item.project_id, p_work_item_id, 'internal_note', v_member_id, v_me.participant_id, v_transition.id,
+          jsonb_build_object('internal_note', v_note), 'internal', v_me.participant_id, v_at
+        );
       end if;
       -- It leaves the acting Participant: handed to another, or closed (nobody holds it).
       v_crosses := v_next.participant_id is distinct from v_me.participant_id;
