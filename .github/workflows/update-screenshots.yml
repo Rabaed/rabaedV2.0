@@ -3,54 +3,97 @@
 # "update-screenshots" label to the PR (or, once this file is on main, run
 #   gh workflow run update-screenshots.yml --ref <your-branch>).
 # Then review the changed PNGs in the PR like any other change.
+#
+# The PR's code runs only in the render job, with a read-only token and no
+# persisted credentials. The commit job holds the write token and never runs
+# PR code: it only commits the baselines the render job uploaded (RP-248).
 name: Update screenshots
 on:
   workflow_dispatch:
   pull_request:
     types: [labeled]
-permissions:
-  contents: write
-  actions: write
-  pull-requests: write
+permissions: {}
 concurrency:
   group: update-screenshots-${{ github.head_ref || github.ref_name }}
 
+env:
+  BRANCH: ${{ github.head_ref || github.ref_name }}
+  SCREENSHOTS: packages/ui/test/__screenshots__
+
 jobs:
-  update:
+  render:
     if: >-
       github.ref != 'refs/heads/main' &&
       (github.event_name == 'workflow_dispatch' || github.event.label.name == 'update-screenshots')
     # Must match the stories job in ci.yml.
     runs-on: ubuntu-24.04
-    env:
-      BRANCH: ${{ github.head_ref || github.ref_name }}
+    permissions:
+      contents: read
+    outputs:
+      sha: ${{ steps.head.outputs.sha }}
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ env.BRANCH }}
+          persist-credentials: false
+      - id: head
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with: { node-version: 24, cache: pnpm }
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @rabaed/ui exec playwright install --with-deps chromium
       - run: pnpm --filter @rabaed/ui exec vitest run --update
+      - uses: actions/upload-artifact@v4
+        with:
+          name: screenshots
+          path: ${{ env.SCREENSHOTS }}
+          if-no-files-found: error
+          retention-days: 1
+
+  commit:
+    needs: render
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      actions: write
+    steps:
+      # The commit the render job rendered: if the branch has moved since,
+      # the push below is rejected rather than overwriting the newer commit.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.render.outputs.sha }}
+      - name: Replace the baselines with the rendered ones
+        run: rm -rf "$SCREENSHOTS"
+      - uses: actions/download-artifact@v4
+        with:
+          name: screenshots
+          path: ${{ env.SCREENSHOTS }}
       - name: Commit changed baselines
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          git add packages/ui/test/__screenshots__
+          git add -A "$SCREENSHOTS"
           if git diff --cached --quiet; then
             echo "Screenshots are already up to date."
           else
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
             git commit -m "Update story screenshot baselines"
-            git push origin "HEAD:$BRANCH"
+            git push origin "HEAD:refs/heads/$BRANCH"
             # Pushes made with the workflow token do not start CI; start it explicitly.
             gh workflow run ci.yml --ref "$BRANCH" || echo "::warning::Could not start CI; push any commit to re-run it."
           fi
-      - name: Remove the label so it can be added again
-        if: always() && github.event_name == 'pull_request'
-        env:
+
+  unlabel:
+    name: Remove the label so it can be added again
+    needs: [render, commit]
+    if: always() && github.event_name == 'pull_request' && github.event.label.name == 'update-screenshots'
+    runs-on: ubuntu-24.04
+    permissions:
+      pull-requests: write
+    steps:
+      - env:
           GH_TOKEN: ${{ github.token }}
-        run: gh pr edit ${{ github.event.pull_request.number }} --repo ${{ github.repository }} --remove-label update-screenshots
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: gh pr edit "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --remove-label update-screenshots
