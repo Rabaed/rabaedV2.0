@@ -24,7 +24,9 @@ jobs:
   render:
     if: >-
       github.ref != 'refs/heads/main' &&
-      (github.event_name == 'workflow_dispatch' || github.event.label.name == 'update-screenshots')
+      (github.event_name == 'workflow_dispatch' ||
+        (github.event.label.name == 'update-screenshots' &&
+          github.event.pull_request.head.repo.full_name == github.repository))
     # Must match the stories job in ci.yml.
     runs-on: ubuntu-24.04
     permissions:
@@ -49,26 +51,37 @@ jobs:
           name: screenshots
           path: ${{ env.SCREENSHOTS }}
           if-no-files-found: error
+          overwrite: true
           retention-days: 1
 
   commit:
     needs: render
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     permissions:
       contents: write
       actions: write
     steps:
       # The commit the render job rendered: if the branch has moved since,
       # the push below is rejected rather than overwriting the newer commit.
+      # Credentials stay persisted for that push; nothing here runs PR code.
       - uses: actions/checkout@v4
         with:
           ref: ${{ needs.render.outputs.sha }}
-      - name: Replace the baselines with the rendered ones
+      - name: Remove the old baselines
         run: rm -rf "$SCREENSHOTS"
       - uses: actions/download-artifact@v4
         with:
           name: screenshots
           path: ${{ env.SCREENSHOTS }}
+      # The artifact came from a job that ran PR code: commit baselines only.
+      - name: Only PNGs in the artifact
+        run: |
+          others=$(find "$SCREENSHOTS" -type f ! -name '*.png')
+          if [ -n "$others" ]; then
+            echo "::error::The artifact holds files other than PNGs:"
+            echo "$others"
+            exit 1
+          fi
       - name: Commit changed baselines
         env:
           GH_TOKEN: ${{ github.token }}
@@ -89,7 +102,7 @@ jobs:
     name: Remove the label so it can be added again
     needs: [render, commit]
     if: always() && github.event_name == 'pull_request' && github.event.label.name == 'update-screenshots'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     permissions:
       pull-requests: write
     steps:
