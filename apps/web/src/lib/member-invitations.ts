@@ -13,7 +13,7 @@ export function invitationLink(inviteeLocale: Locale, token: string): string {
  * (visibility.md V17). Returns the new invitation link for one who had never
  * accepted their first invitation, else null; throws when refused.
  */
-export async function reactivateMember(memberId: string): Promise<{ link: string | null }> {
+export async function requestReactivation(memberId: string): Promise<{ link: string | null }> {
   const res = await fetch(`/api/v1/members/${encodeURIComponent(memberId)}/reactivate`, { method: "POST" });
   if (!res.ok) throw new Error(`reactivate: ${res.status}`);
   const { member, invitation } = (await res.json()) as {

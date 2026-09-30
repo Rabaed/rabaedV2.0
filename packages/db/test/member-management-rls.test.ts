@@ -134,7 +134,7 @@ describe("inviting a taken email (V17)", () => {
     const before = await row(ids.b1);
     const taken = ` ${(await emailOf(ids.b1)).toUpperCase()}`;
     expect(await withMember(app, ids.apA, (trx) => inviteEmail(trx, taken))).toEqual({
-      outcome: "another_company",
+      outcome: "registered_with_another_company",
       member_id: null,
     });
     expect(await row(ids.b1)).toEqual(before);
@@ -147,7 +147,7 @@ describe("inviting a taken email (V17)", () => {
     });
     const gone = await member(ids.companyA, "gone", "deactivated");
     expect(await withMember(app, ids.apA, async (trx) => inviteEmail(trx, await emailOf(gone)))).toEqual({
-      outcome: "deactivated",
+      outcome: "deactivated_member",
       member_id: gone,
     });
     expect((await row(gone)).status).toBe("deactivated");

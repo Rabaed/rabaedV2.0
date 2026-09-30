@@ -14,9 +14,9 @@ drop function app.invite_member(text, jsonb, text, bytea, timestamptz);
 -- Creates an invited Member of the acting Authorized Person's Company and their
 -- one-time invitation, and returns ('invited', their id). When the email is
 -- taken, nothing changes and it returns:
---   ('already_a_member', null)   a Member of the Company who isn't deactivated;
---   ('deactivated', id)          a deactivated Member of the Company, to reactivate;
---   ('another_company', null)    any Member of another Company.
+--   ('already_a_member', null)                  a Member of the Company who isn't deactivated;
+--   ('deactivated_member', id)                  a deactivated Member of the Company, to reactivate;
+--   ('registered_with_another_company', null)   any Member of another Company.
 create function app.invite_member(
   p_email text, p_full_name jsonb, p_locale text, p_token_hash bytea, p_expires_at timestamptz
 ) returns table (outcome text, member_id uuid)
@@ -44,9 +44,9 @@ create function app.invite_member(
 
       select m.id, m.company_id, m.status into v_taken from member m where m.email = v_email;
       if v_taken.company_id <> v_company_id then
-        return query select 'another_company', null::uuid;
+        return query select 'registered_with_another_company', null::uuid;
       elsif v_taken.status = 'deactivated' then
-        return query select 'deactivated', v_taken.id;
+        return query select 'deactivated_member', v_taken.id;
       else
         return query select 'already_a_member', null::uuid;
       end if;

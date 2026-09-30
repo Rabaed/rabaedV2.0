@@ -79,23 +79,22 @@ export function inviteMember(
   const { token, hash } = newToken();
   const expiresAt = new Date(now.getTime() + invitationTtlMs);
   return asAuthorizedPerson(db, memberId, async (trx): Promise<InviteResult> => {
-    // The new Member's id, or why the email is taken; the id comes only with 'invited' and 'deactivated'.
+    // The new Member's id, or why the email is taken; an id comes only with 'invited' and 'deactivated_member'.
     const { rows } = await sql<{ outcome: string; member_id: string | null }>`
       select * from app.invite_member(
         ${input.email}, ${JSON.stringify(input.fullName)}::jsonb, ${input.locale}, ${hash}, ${expiresAt}
       )
     `.execute(trx);
     const { outcome, member_id: id } = rows[0]!;
-    switch (checkedOutcome(outcome, ["invited", "deactivated", "already_a_member", "another_company"])) {
-      case "invited":
-        return { ok: true, memberId: id!, invitation: { token, expiresAt } };
-      case "deactivated":
-        return { ok: false, reason: "deactivated_member", memberId: id! };
-      case "already_a_member":
-        return { ok: false, reason: "already_a_member" };
-      case "another_company":
-        return { ok: false, reason: "registered_with_another_company" };
-    }
+    const reason = checkedOutcome(outcome, [
+      "invited",
+      "deactivated_member",
+      "already_a_member",
+      "registered_with_another_company",
+    ]);
+    if (reason === "invited") return { ok: true, memberId: id!, invitation: { token, expiresAt } };
+    if (reason === "deactivated_member") return { ok: false, reason, memberId: id! };
+    return { ok: false, reason };
   });
 }
 

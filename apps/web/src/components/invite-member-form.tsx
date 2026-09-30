@@ -6,7 +6,7 @@ import { useState, type FormEvent } from "react";
 import { Button, Field, Input, Select } from "@rabaed/ui";
 import { InvitationLink } from "@/components/invitation-link";
 import { useRouter } from "@/i18n/navigation";
-import { invitationLink, reactivateMember } from "@/lib/member-invitations";
+import { invitationLink, requestReactivation } from "@/lib/member-invitations";
 
 /**
  * The Authorized Person invites a Member. Until email delivery exists, the
@@ -54,7 +54,7 @@ export function InviteMemberForm() {
       if (refused.error === "registered_with_another_company") return setError(t("registeredWithAnotherCompany"));
       if (refused.error !== "deactivated_member" || !refused.memberId) return setError(t("unavailable"));
       if (!window.confirm(t("confirmReactivateEmail", { email: String(form.get("email")).trim() }))) return;
-      const reactivated = await reactivateMember(refused.memberId);
+      const reactivated = await requestReactivation(refused.memberId);
       if (reactivated.link) setLink(reactivated.link);
       else setNotice(t("reactivated"));
       formElement.reset();

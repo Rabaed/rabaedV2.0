@@ -6,7 +6,7 @@ import { useState } from "react";
 import { Button } from "@rabaed/ui";
 import { InvitationLink } from "@/components/invitation-link";
 import { useRouter } from "@/i18n/navigation";
-import { reactivateMember } from "@/lib/member-invitations";
+import { requestReactivation } from "@/lib/member-invitations";
 
 /** The Authorized Person's buttons on one row of the Members list. */
 export function MemberActions({ member }: { member: CompanyMember }) {
@@ -44,7 +44,7 @@ export function MemberActions({ member }: { member: CompanyMember }) {
     setPending(true);
     setError(false);
     try {
-      setLink((await reactivateMember(member.id)).link);
+      setLink((await requestReactivation(member.id)).link);
       router.refresh();
     } catch {
       setError(true);

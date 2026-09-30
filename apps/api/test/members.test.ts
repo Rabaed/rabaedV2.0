@@ -136,7 +136,7 @@ describe("reactivating a deactivated Member", () => {
     expect((await again.get(`/v1/projects/${project.id}`)).statusCode).toBe(200);
   });
 
-  it("sends a Member who never accepted a fresh invitation", async () => {
+  it("gives a Member who never accepted a fresh invitation", async () => {
     const invited = await api.inviteMember(a.caller);
     await a.caller.post(`/v1/members/${invited.id}/deactivate`);
 
