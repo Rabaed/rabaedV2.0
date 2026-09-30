@@ -2,7 +2,7 @@ import type { Meta, StoryContext, StoryObj } from "@storybook/react-vite";
 import { expect } from "storybook/test";
 import { storyText } from "../storybook/locale.ts";
 import { palette } from "./palette.ts";
-import { radii, shadows, typeScale } from "./scales.ts";
+import { radii, shadows, spacing, typeScale } from "./scales.ts";
 import { coolLight, reviewCodes, stageKeys, type SemanticRole } from "./themes.ts";
 
 const meta = {
@@ -15,7 +15,7 @@ type Story = StoryObj<typeof meta>;
 
 const roles = Object.keys(coolLight) as SemanticRole[];
 const groups: { en: string; ar: string; roles: SemanticRole[] }[] = [
-  { en: "Surfaces and lines", ar: "الأسطح والحدود", roles: ["canvas", "surface", "surface-subtle", "hover", "press", "border", "border-subtle", "border-strong", "control-border", "control-border-hover"] },
+  { en: "Surfaces and lines", ar: "الأسطح والحدود", roles: ["canvas", "surface", "surface-subtle", "hover", "press", "border", "border-subtle", "border-strong", "control-border", "control-border-hover", "shadow-colour"] },
   { en: "Text", ar: "النص", roles: ["text", "text-secondary", "muted", "faint", "inverse", "on-inverse"] },
   { en: "Brand", ar: "الهوية", roles: ["brand", "brand-ink", "brand-tint"] },
   { en: "Actions", ar: "الإجراءات", roles: roles.filter((r) => /^(primary|secondary|ghost|danger|on-|disabled|focus)/.test(r)) },
@@ -104,6 +104,22 @@ function TokenSpecimen(context: StoryContext) {
       </section>
 
       <section className="rounded-md border border-border bg-surface p-4 shadow-xs">
+        <Heading>{t("Spacing", "المسافات")}</Heading>
+        <ul className="space-y-1.5">
+          {spacing.map((step) => (
+            <li key={step} data-testid="spacing-step" className="flex items-center gap-4">
+              <span className="w-32 shrink-0 font-mono text-caption text-muted">
+                <span dir="ltr">
+                  {step} · {step * 4}px
+                </span>
+              </span>
+              <span aria-hidden="true" className="h-3 rounded-xs bg-brand" style={{ width: `calc(var(--spacing) * ${step})` }} />
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <section className="rounded-md border border-border bg-surface p-4 shadow-xs">
         <Heading>{t("Radii and shadows", "الزوايا والظلال")}</Heading>
         <div className="flex flex-wrap gap-4">
           {Object.entries(radii).map(([name, value]) => (
@@ -125,8 +141,14 @@ function TokenSpecimen(context: StoryContext) {
 export const Specimen: Story = {
   render: (_args, context) => <TokenSpecimen {...context} />,
   play: async ({ canvas }) => {
-    await expect(canvas.getAllByRole("heading", { level: 2 })).toHaveLength(groups.length + 4);
-    for (const role of ["canvas", "primary", "focus", "age-4"]) await expect(canvas.getByText(role)).toBeVisible();
+    await expect(canvas.getAllByRole("heading", { level: 2 })).toHaveLength(groups.length + 5);
+    for (const role of ["canvas", "primary", "focus", "age-4", "shadow-colour"]) await expect(canvas.getByText(role)).toBeVisible();
+    // Each spacing step is drawn at its size on the 4px grid.
+    const steps = canvas.getAllByTestId("spacing-step");
+    await expect(steps).toHaveLength(spacing.length);
+    for (const [i, step] of spacing.entries()) {
+      await expect(steps[i]!.lastElementChild!.getBoundingClientRect().width).toBeCloseTo(step * 4, 1);
+    }
     // Latin digits in both languages.
     await expect(canvas.getAllByText(/0123/).length).toBe(Object.keys(typeScale).length);
   },

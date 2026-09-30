@@ -21,7 +21,7 @@ Next.js apps also list `@rabaed/ui` in `transpilePackages`.
 Three layers, all in `src/tokens/`:
 
 1. **Base palette** (`palette.ts`): raw colours such as `tomato-600`. Only themes read it.
-2. **Semantic roles** (`themes.ts`): `canvas`, `primary`, `stage-*`, `code-a..d-*`, `age-0..4` and so on, mapped to palette colours. The only layer a new theme changes. Launch theme: cool light.
+2. **Semantic roles** (`themes.ts`): `canvas`, `primary`, `stage-*`, `code-a..d-*`, `age-0..4`, `shadow-colour` (the tint of every shadow) and so on, mapped to palette colours. The only layer a new theme changes. Launch theme: cool light.
 3. **Component usage**: components use Tailwind classes for semantic roles (`bg-primary`, `text-muted`). The Tailwind theme exposes semantic roles only, so the base palette is unreachable from a class.
 
 `src/styles/tokens.css` is generated. After editing `src/tokens/`, run `pnpm --filter @rabaed/ui tokens`; a unit test fails if you forget. Another unit test keeps every text/background pair at WCAG AA contrast.

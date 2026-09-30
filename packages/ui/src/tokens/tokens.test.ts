@@ -1,8 +1,9 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { contrastRatio } from "./contrast.ts";
 import { generateTokensCss } from "./generate.ts";
 import { palette } from "./palette.ts";
+import { shadows, spacing } from "./scales.ts";
 import { coolLight, resolveRole, reviewCodes, stageKeys, toneKeys, type SemanticRole } from "./themes.ts";
 
 describe("contrastRatio", () => {
@@ -125,8 +126,36 @@ describe("generated tokens.css", () => {
     expect(css).not.toContain("Thmanyah");
   });
 
+  it("tints every shadow with the shadow-colour role, so a theme can change it", () => {
+    expect(css).toMatch(/:root,\n\[data-theme="cool-light"\] \{[^}]*--shadow-colour: var\(--palette-slate-900\);/);
+    const shadowLines = css.split("\n").filter((line) => /^\s*--shadow-(xs|sm|md|lg):/.test(line));
+    expect(shadowLines).toHaveLength(Object.keys(shadows).length);
+    for (const line of shadowLines) {
+      expect(line).toContain("var(--shadow-colour)");
+      expect(line).not.toMatch(/rgba?\(|#[0-9a-f]{3,8}\b/i);
+    }
+  });
+
   it("is up to date with src/tokens (run `pnpm --filter @rabaed/ui tokens`)", () => {
     const committed = readFileSync(new URL("../styles/tokens.css", import.meta.url), "utf8");
     expect(committed).toBe(css);
+  });
+});
+
+describe("spacing", () => {
+  // Padding, margin and gap classes such as `px-2.5`, `-mt-1`, `gap-x-3`, `space-y-4`.
+  const spacingClass = /(?<![\w-])-?(?:p|px|py|ps|pe|pt|pb|m|mx|my|ms|me|mt|mb|gap|gap-x|gap-y|space-x|space-y)-(\d+(?:\.5)?)(?![\w.-])/g;
+  const componentsDir = new URL("../components/", import.meta.url);
+  const sources = readdirSync(componentsDir, { recursive: true, encoding: "utf8" })
+    .filter((file) => /\.tsx?$/.test(file) && !/\.(stories|test)\./.test(file))
+    .map((file) => readFileSync(new URL(file.replaceAll("\\", "/"), componentsDir), "utf8"));
+
+  it("lists, in order, every step the components use (the specimen shows this list)", () => {
+    const used = new Set(
+      sources.flatMap((source) => [...source.matchAll(spacingClass)].map((match) => Number(match[1])).filter((step) => step > 0)),
+    );
+    expect(used.size).toBeGreaterThan(0);
+    expect([...used].filter((step) => !(spacing as readonly number[]).includes(step))).toEqual([]);
+    expect([...spacing]).toEqual([...spacing].sort((a, b) => a - b));
   });
 });
