@@ -82,7 +82,7 @@ When an item enters a Step, the engine resolves the holder in three stages.
 - Otherwise the candidates are active Participants in that role whose Visibility covers **all** the item's dimension values (Trade, Location…):
   - **1 candidate:** chosen.
   - **More than 1:** the person taking the Submit picks one in the Action Form. Project Settings also shows a **Visibility Overlap** warning, since this usually means misconfiguration.
-  - **0 candidates:** the Transition is blocked with "No Consultant covers Electrical / Building A". This is a Visibility Gap, and Project Admins are notified.
+  - **0 candidates:** a Visibility Gap. The Transition isn't offered, and taking it is refused with the same answer as for more than one candidate or an empty Step Pool (§3.2): `next_step_unavailable`, shown as "This can't be handed over yet: the next step has nobody to take it. Ask a Project Admin." The answer never says which case it is, nor names another Participant, Trade or Location (visibility.md, "Refusals of a Transition"; V14, V16). Separately, Project Admins get a Visibility Gap warning, computed from Participant grants only (V16).
 
 **3.2 Step Pool.** The pool is the active Project Members of that Participant who:
 - hold a Position with the rule's required permission (e.g. `review`, `approve`) for this Work Item Type, and
