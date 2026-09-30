@@ -13,7 +13,8 @@ export const healthRoutes =
       const ok = await pingDatabase(db);
       const { version } = config;
       return reply
-        .code(ok ? 200 : 503)
+        // RP-221 rollback test: ECS sets this variable, so only deployed tasks fail. Reverted right after.
+        .code(ok && !process.env.ECS_CONTAINER_METADATA_URI_V4 ? 200 : 503)
         .send(ok ? { status: "ok", database: "ok", version } : { status: "degraded", database: "unavailable", version });
     });
   };
