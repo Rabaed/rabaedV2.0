@@ -1,8 +1,12 @@
-/** An error the API answers with `{ error: code }` and this status. */
+/**
+ * An error the API answers with `{ error: code }` and this status. `details`
+ * add to the body; only ever what the caller may already see.
+ */
 export class HttpError extends Error {
   constructor(
     readonly statusCode: number,
     readonly code: string,
+    readonly details?: Record<string, unknown>,
   ) {
     super(code);
   }

@@ -8,7 +8,9 @@ const answers = {
   forbidden,
   not_found: notFound,
   member_not_found: () => new HttpError(404, "member_not_found"),
-  duplicate_email: () => new HttpError(409, "duplicate_email"),
+  // An email taken on the Instance (V17). Another Company's Member is never named.
+  already_a_member: () => new HttpError(409, "already_a_member"),
+  registered_with_another_company: () => new HttpError(409, "registered_with_another_company"),
   member_deactivated: () => new HttpError(409, "member_deactivated"),
   authorized_person: () => new HttpError(409, "authorized_person"),
   project_closed: () => new HttpError(409, "project_closed"),

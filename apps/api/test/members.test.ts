@@ -56,15 +56,6 @@ describe("inviting a Member", () => {
     expect(after.status).toBe("active");
   });
 
-  it("rejects an email that is already a Member, in any Company", async () => {
-    const res = await a.caller.post("/v1/members", {
-      email: b.company.authorizedPerson.email,
-      fullName: { en: "Someone", ar: "شخص" },
-    });
-    expect(res.statusCode).toBe(409);
-    expect(res.json()).toEqual({ error: "duplicate_email" });
-  });
-
   it("rejects a malformed request", async () => {
     expect((await a.caller.post("/v1/members", { email: "not-an-email", fullName: { en: "X", ar: "س" } })).statusCode).toBe(400);
     expect((await a.caller.post("/v1/members", { email: "x@rabaed.test", fullName: { en: "X" } })).statusCode).toBe(400);
@@ -76,6 +67,114 @@ describe("inviting a Member", () => {
     expect(res.statusCode).toBe(403);
     expect(res.json()).toEqual({ error: "forbidden" });
     expect((await api.anonymous().post("/v1/members", { email: "x@rabaed.test", fullName: { en: "X", ar: "س" } })).statusCode).toBe(401);
+  });
+});
+
+// visibility.md V17: an email belongs to one Member on the Instance (RP-234).
+describe("inviting an email that is already taken", () => {
+  const invite = (by: Caller, email: string) =>
+    by.post("/v1/members", { email, fullName: { en: "Someone", ar: "شخص" } });
+
+  it("by another Company's Member is refused, never naming the Company (scenario 36)", async () => {
+    const { member: bMember } = await api.member(b.caller);
+    for (const email of [bMember.email, b.company.authorizedPerson.email, `  ${bMember.email.toUpperCase()} `]) {
+      const res = await invite(a.caller, email);
+      expect(res.statusCode).toBe(409);
+      // Nothing but the reason: no Company, no Member.
+      expect(res.body).toBe(JSON.stringify({ error: "registered_with_another_company" }));
+    }
+    // An invited, not yet accepted, Member of another Company is answered the same way.
+    const pending = await api.inviteMember(b.caller);
+    expect((await invite(a.caller, pending.email)).body).toBe(JSON.stringify({ error: "registered_with_another_company" }));
+    // And a deactivated one.
+    await b.caller.post(`/v1/members/${bMember.id}/deactivate`);
+    expect((await invite(a.caller, bMember.email)).body).toBe(JSON.stringify({ error: "registered_with_another_company" }));
+    // B's Member is untouched and still B's.
+    expect(ids(await a.caller.get("/v1/members"))).not.toContain(bMember.id);
+    const row = (await b.caller.get("/v1/members")).json().members.find((m: { id: string }) => m.id === pending.id);
+    expect(row).toMatchObject({ status: "invited", fullName: { en: "Test Member" } });
+  });
+
+  it("by a Member of your own Company is the ordinary answer", async () => {
+    const { member } = await api.member(a.caller);
+    const pending = await api.inviteMember(a.caller);
+    for (const email of [member.email, pending.email, a.company.authorizedPerson.email]) {
+      const res = await invite(a.caller, email);
+      expect(res.statusCode).toBe(409);
+      expect(res.json()).toEqual({ error: "already_a_member" });
+    }
+  });
+
+  it("by a deactivated Member of your own Company offers to reactivate them", async () => {
+    const { member } = await api.member(a.caller);
+    await a.caller.post(`/v1/members/${member.id}/deactivate`);
+    const res = await invite(a.caller, member.email);
+    expect(res.statusCode).toBe(409);
+    expect(res.json()).toEqual({ error: "deactivated_member", memberId: member.id });
+    // Nothing changes until the Authorized Person confirms.
+    const row = (await a.caller.get("/v1/members")).json().members.find((m: { id: string }) => m.id === member.id);
+    expect(row.status).toBe("deactivated");
+  });
+});
+
+describe("reactivating a deactivated Member", () => {
+  it("keeps the same Member, password, Project Creator flag and Projects", async () => {
+    const { member, caller } = await api.member(a.caller);
+    await a.caller.patch(`/v1/members/${member.id}`, { canCreateProjects: true });
+    const project = await api.createProject(caller);
+    await a.caller.post(`/v1/members/${member.id}/deactivate`);
+
+    const res = await a.caller.post(`/v1/members/${member.id}/reactivate`);
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({
+      member: expect.objectContaining({ id: member.id, email: member.email, status: "active", canCreateProjects: true }),
+    });
+
+    // They sign in with their own password: no new invitation.
+    const again = await api.signIn(member.email, DEFAULT_PASSWORD);
+    expect((await again.get("/v1/me")).json().member.id).toBe(member.id);
+    expect((await again.get(`/v1/projects/${project.id}`)).statusCode).toBe(200);
+  });
+
+  it("gives a Member who never accepted a fresh invitation", async () => {
+    const invited = await api.inviteMember(a.caller);
+    await a.caller.post(`/v1/members/${invited.id}/deactivate`);
+
+    const res = await a.caller.post(`/v1/members/${invited.id}/reactivate`);
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.member).toMatchObject({ id: invited.id, status: "invited" });
+    expect(body.invitation.token).toEqual(expect.any(String));
+    // The old invitation stays void; the new one works.
+    const old = await api.anonymous().post("/v1/invitations/accept", { token: invited.invitationToken, password: DEFAULT_PASSWORD });
+    expect(old.statusCode).toBe(400);
+    const caller = await api.acceptInvitation(body.invitation.token);
+    expect((await caller.get("/v1/me")).json().member.id).toBe(invited.id);
+  });
+
+  it("leaves a Member who isn't deactivated as they are", async () => {
+    const { member } = await api.member(a.caller);
+    const res = await a.caller.post(`/v1/members/${member.id}/reactivate`);
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ member: expect.objectContaining({ id: member.id, status: "active" }) });
+  });
+
+  it("is only for the Authorized Person", async () => {
+    const { member: target } = await api.member(a.caller);
+    await a.caller.post(`/v1/members/${target.id}/deactivate`);
+    const { caller } = await api.member(a.caller);
+    const res = await caller.post(`/v1/members/${target.id}/reactivate`);
+    expect(res.statusCode).toBe(403);
+    expect(res.json()).toEqual({ error: "forbidden" });
+  });
+
+  it("treats another Company's Member exactly like one that doesn't exist", async () => {
+    const { member: bMember } = await api.member(b.caller);
+    await b.caller.post(`/v1/members/${bMember.id}/deactivate`);
+    await expectHidden(a.caller.post(`/v1/members/${bMember.id}/reactivate`));
+    await expectHidden(a.caller.post(`/v1/members/${randomUUID()}/reactivate`));
+    const row = (await b.caller.get("/v1/members")).json().members.find((m: { id: string }) => m.id === bMember.id);
+    expect(row.status).toBe("deactivated");
   });
 });
 

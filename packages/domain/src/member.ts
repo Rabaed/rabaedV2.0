@@ -29,11 +29,16 @@ export const inviteMemberRequest = z.object({
 });
 export type InviteMemberRequest = z.infer<typeof inviteMemberRequest>;
 
-export const invitedMember = z.object({
-  memberId: z.uuid(),
-  /** Shown once, for the Authorized Person to pass on (email delivery comes later). */
-  invitation: z.object({ token: z.string(), expiresAt: z.date() }),
-});
+/** Shown once, for the Authorized Person to pass on (email delivery comes later). */
+const invitation = z.object({ token: z.string(), expiresAt: z.date() });
+
+export const invitedMember = z.object({ memberId: z.uuid(), invitation });
+
+/**
+ * A deactivated Member, reactivated as the same Member (visibility.md V17). One
+ * who never accepted their first invitation gets a new one.
+ */
+export const reactivatedMember = z.object({ member: companyMember, invitation: invitation.optional() });
 
 /** The Authorized Person marks a Member as a Project Creator, or not. */
 export const updateMemberRequest = z.object({ canCreateProjects: z.boolean() });
