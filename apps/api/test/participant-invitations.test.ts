@@ -263,8 +263,8 @@ describe("an onboarding lead, once Rabaed onboards its Company", () => {
     ((await host.caller.get(`/v1/projects/${project}/invitations`)).json().invitations as Pending[]).filter(
       (i) => i.crNumber === cr,
     );
-  const invite = (project: string, role: string) =>
-    host.caller.post(`/v1/projects/${project}/participants`, { crNumber: cr, role });
+  const invite = (project: string, role: string, crNumber = cr) =>
+    host.caller.post(`/v1/projects/${project}/participants`, { crNumber, role });
 
   beforeAll(async () => {
     secondProjectId = (await api.createProject(host.caller, { code: "TW2", role: "owner" })).id;
@@ -281,9 +281,10 @@ describe("an onboarding lead, once Rabaed onboards its Company", () => {
 
   it("invites the Company to each lead's Project in the offered role, for its Authorized Person to answer", async () => {
     const invitations = (await newcomer.caller.get("/v1/participant-invitations")).json().invitations;
-    expect(
-      invitations.map((i: { project: { name: { en: string } }; projectRole: { baseRole: string } }) => i.projectRole.baseRole).sort(),
-    ).toEqual(["consultant", "owner_representative"]);
+    expect(invitations.map((i: { projectRole: { baseRole: string } }) => i.projectRole.baseRole).sort()).toEqual([
+      "consultant",
+      "owner_representative",
+    ]);
     expect(invitations.map((i: { id: string }) => i.id).sort()).toEqual(before.map((i) => i.id).sort());
   });
 
@@ -291,18 +292,23 @@ describe("an onboarding lead, once Rabaed onboards its Company", () => {
     expect([...(await pendingFor(projectId)), ...(await pendingFor(secondProjectId))]).toEqual(before);
   });
 
-  it("never lists the CR number twice, even when invited again", async () => {
-    expect((await invite(projectId, "owner_representative")).statusCode).toBe(202);
-    expect(await pendingFor(projectId)).toHaveLength(1);
-    // A lead invited again is one row too.
+  it("never lists the CR number twice: invited again, its one row changes just as a lead's does (scenario 31)", async () => {
     const other = uniqueCr();
-    for (const role of ["consultant", "owner"]) {
-      await host.caller.post(`/v1/projects/${projectId}/participants`, { crNumber: other, role });
-    }
-    const invitations = (await host.caller.get(`/v1/projects/${projectId}/invitations`)).json().invitations as Pending[];
-    expect(invitations.filter((i) => i.crNumber === other)).toEqual([
-      expect.objectContaining({ projectRole: expect.objectContaining({ baseRole: "owner" }) }),
-    ]);
+    const rowsFor = async (crNumber: string) =>
+      ((await host.caller.get(`/v1/projects/${projectId}/invitations`)).json().invitations as Pending[]).filter(
+        (i) => i.crNumber === crNumber,
+      );
+    expect((await invite(projectId, "consultant", other)).statusCode).toBe(202);
+    const [lead] = await rowsFor(other);
+    const onboarded = before.find((i) => i.projectRole.baseRole === "owner_representative")!;
+    for (const crNumber of [cr, other]) expect((await invite(projectId, "owner", crNumber)).statusCode).toBe(202);
+
+    const onRabaed = await rowsFor(cr);
+    const notOnRabaed = await rowsFor(other);
+    expect(onRabaed).toEqual([expect.objectContaining({ id: onboarded.id, projectRole: expect.objectContaining({ baseRole: "owner" }) })]);
+    expect(notOnRabaed).toEqual([expect.objectContaining({ id: lead!.id, projectRole: expect.objectContaining({ baseRole: "owner" }) })]);
+    expect(onRabaed[0]!.invitedAt > onboarded.invitedAt).toBe(true);
+    expect(notOnRabaed[0]!.invitedAt > lead!.invitedAt).toBe(true);
   });
 
   it("makes the Company a Participant when its Authorized Person accepts", async () => {

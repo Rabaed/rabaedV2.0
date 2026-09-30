@@ -94,7 +94,7 @@ Unique `(project_id, company_id)`. A Project Admin's Participant Invitation crea
 **onboarding_lead**
 `id`, `cr_number`, `project_id`, `project_role_id`, `requested_by_member_id`, `created_at`, `updated_at`, `converted_at`, `participant_id → participant`. Unique `(project_id, cr_number)`.
 A CR number a Project Admin invited that isn't on Rabaed. The Project Admin gets the same answer as for a Company that is, and sees it among their pending invitations by CR number; its details are read only through Rabaed Admin (V9).
-When Rabaed onboards a Company with that CR number, each open lead becomes an Invited Participant on its Project, in the offered role, in the onboarding's transaction and `admin_action`. The Participant takes the lead's id and time, so the Project Admin's pending row doesn't change (scenario 31). The lead is then closed (`converted_at`, `participant_id`) and kept for audit.
+When Rabaed onboards a Company with that CR number, each open lead becomes an Invited Participant on its Project, in the offered role, in the onboarding's transaction and `admin_action`. The Participant takes the lead's id and time, so the Project Admin's pending row doesn't change (scenario 31). The lead is then marked converted (`converted_at`, `participant_id`) and kept for audit. Inviting a CR number and onboarding its Company take the same lock on the CR number, so no lead is written after the conversion looked.
 
 **project_member**
 `id`, `project_id` (denormalised for RLS; must match the Participant's), `participant_id`, `member_id`, `status {active, removed}`, `removed_at`.
