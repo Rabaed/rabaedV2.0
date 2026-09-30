@@ -9,7 +9,7 @@ import {
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import type { AppContext } from "../app.ts";
-import { idOrNotFound, notFound } from "../http-error.ts";
+import { idOrNotFound, visibleOrNotFound } from "../http-error.ts";
 import { refusal } from "../refusals.ts";
 import {
   claimStep,
@@ -47,9 +47,7 @@ export const workItemRoutes =
       { schema: { params: projectParams, response: { 200: workItemList } } },
       async (request) => {
         const memberId = ctx.requireMember(request);
-        const list = await listWorkItems(ctx.db, memberId, idOrNotFound(request.params.projectId), ctx.now());
-        if (!list) throw notFound();
-        return list;
+        return visibleOrNotFound(listWorkItems(ctx.db, memberId, idOrNotFound(request.params.projectId), ctx.now()));
       },
     );
 
@@ -58,9 +56,7 @@ export const workItemRoutes =
       { schema: { params: workItemParams, response: { 200: workItemDetail } } },
       async (request) => {
         const memberId = ctx.requireMember(request);
-        const item = await getWorkItem(ctx.db, memberId, idOrNotFound(request.params.workItemId), ctx.now());
-        if (!item) throw notFound();
-        return item;
+        return visibleOrNotFound(getWorkItem(ctx.db, memberId, idOrNotFound(request.params.workItemId), ctx.now()));
       },
     );
 
@@ -69,9 +65,7 @@ export const workItemRoutes =
       { schema: { params: workItemParams, response: { 200: workItemHistory } } },
       async (request) => {
         const memberId = ctx.requireMember(request);
-        const history = await getWorkItemHistory(ctx.db, memberId, idOrNotFound(request.params.workItemId));
-        if (!history) throw notFound();
-        return history;
+        return visibleOrNotFound(getWorkItemHistory(ctx.db, memberId, idOrNotFound(request.params.workItemId)));
       },
     );
 

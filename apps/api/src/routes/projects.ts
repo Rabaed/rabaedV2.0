@@ -2,7 +2,7 @@ import { createdProject, createProjectRequest, myProjects, projectSummary } from
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import type { AppContext } from "../app.ts";
-import { forbidden, idOrNotFound, notFound } from "../http-error.ts";
+import { forbidden, idOrNotFound, visibleOrNotFound } from "../http-error.ts";
 import { createProject, getProject, listMyProjects } from "../projects/projects.ts";
 
 // Projects. Only Project Creators create one; only a Project's Members see it,
@@ -31,9 +31,7 @@ export const projectRoutes =
       { schema: { params: z.object({ projectId: z.string() }), response: { 200: projectSummary } } },
       async (request) => {
         const memberId = ctx.requireMember(request);
-        const project = await getProject(ctx.db, memberId, idOrNotFound(request.params.projectId));
-        if (!project) throw notFound();
-        return project;
+        return visibleOrNotFound(getProject(ctx.db, memberId, idOrNotFound(request.params.projectId)));
       },
     );
   };

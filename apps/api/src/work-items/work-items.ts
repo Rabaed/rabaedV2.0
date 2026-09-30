@@ -12,7 +12,8 @@ import {
   type WorkItemSummary,
 } from "@rabaed/domain";
 import { sql, type RawBuilder, type Transaction } from "kysely";
-import { refusedAsForbidden } from "../db-error.ts";
+import { refusedAsForbidden, type Forbidden } from "../db-error.ts";
+import { checkedOutcome, commandResult } from "../outcomes.ts";
 
 // Work Items. Writes go through the app.* functions of the work items migration;
 // reads go through RLS, which answers only with the items the Member can see
@@ -21,13 +22,18 @@ import { refusedAsForbidden } from "../db-error.ts";
 
 type Trx = Transaction<Database>;
 
+const createWorkItemRefusals = [
+  "not_found",
+  "project_closed",
+  "type_not_found",
+  "trade_required",
+  "value_not_found",
+  "outside_visibility",
+] as const;
 export type CreateWorkItemResult =
   | { ok: true; id: string }
-  | { ok: false; reason: "forbidden" }
-  | {
-      ok: false;
-      reason: "not_found" | "project_closed" | "type_not_found" | "trade_required" | "value_not_found" | "outside_visibility";
-    };
+  | Forbidden
+  | { ok: false; reason: (typeof createWorkItemRefusals)[number] };
 
 type SummaryRow = {
   id: string;
@@ -97,15 +103,13 @@ export function createWorkItem(
 ): Promise<CreateWorkItemResult> {
   return refusedAsForbidden(() =>
     withMember(db, memberId, async (trx): Promise<CreateWorkItemResult> => {
-      const { rows } = await sql<{
-        outcome: "created" | Exclude<CreateWorkItemResult, { ok: true }>["reason"];
-        work_item_id: string | null;
-      }>`
+      const { rows } = await sql<{ outcome: string; work_item_id: string | null }>`
         select outcome, work_item_id from app.create_work_item(
           ${projectId}::uuid, ${input.type}, ${input.title}, ${input.description},
           ${input.tradeId}::uuid, ${input.locationId}::uuid, ${now})
       `.execute(trx);
-      const { outcome, work_item_id } = rows[0]!;
+      const outcome = checkedOutcome(rows[0]!.outcome, ["created", ...createWorkItemRefusals]);
+      const { work_item_id } = rows[0]!;
       return outcome === "created" ? { ok: true, id: work_item_id! } : { ok: false, reason: outcome };
     }),
   );
@@ -198,23 +202,19 @@ async function actions(trx: Trx, workItemId: string): Promise<WorkItemActions> {
   };
 }
 
-type TransitionRefusal =
-  | "not_found"
-  | "item_closed"
-  | "project_closed"
-  | "not_holder"
-  | "transition_not_available"
-  | "forbidden"
-  | "reason_required"
-  | "next_step_unavailable"
-  | "no_step_pool"
-  | "idempotency_key_reused";
-export type TakeTransitionResult = { ok: true } | { ok: false; reason: TransitionRefusal };
-
-/** An app.* command's outcome as a result: `done` is its success word, anything else a refusal. */
-function commandResult<R extends string>(outcome: string, done: string): { ok: true } | { ok: false; reason: R } {
-  return outcome === done ? { ok: true } : { ok: false, reason: outcome as R };
-}
+const transitionRefusals = [
+  "not_found",
+  "item_closed",
+  "project_closed",
+  "not_holder",
+  "transition_not_available",
+  "forbidden",
+  "reason_required",
+  "next_step_unavailable",
+  "no_step_pool",
+  "idempotency_key_reused",
+] as const;
+export type TakeTransitionResult = { ok: true } | { ok: false; reason: (typeof transitionRefusals)[number] };
 
 /**
  * The holder of the item's current Step takes one of its Transitions, in one
@@ -232,13 +232,14 @@ export function takeTransition(
       select app.take_transition(
         ${workItemId}::uuid, ${input.transition}, ${input.reason}, ${input.idempotencyKey}::uuid, ${now}) as outcome
     `.execute(trx);
-    return commandResult<TransitionRefusal>(rows[0]!.outcome, "applied");
+    return commandResult(rows[0]!.outcome, "applied", transitionRefusals);
   });
 }
 
-type StepRefusal = "not_found" | "item_closed" | "project_closed";
-export type ClaimResult = { ok: true } | { ok: false; reason: StepRefusal | "already_claimed" | "forbidden" };
-export type ReleaseResult = { ok: true } | { ok: false; reason: StepRefusal | "not_holder" };
+const claimRefusals = ["not_found", "item_closed", "project_closed", "already_claimed", "forbidden"] as const;
+const releaseRefusals = ["not_found", "item_closed", "project_closed", "not_holder"] as const;
+export type ClaimResult = { ok: true } | { ok: false; reason: (typeof claimRefusals)[number] };
+export type ReleaseResult = { ok: true } | { ok: false; reason: (typeof releaseRefusals)[number] };
 
 /** A Member of its Step Pool claims the item's pooled Step; of two at once, one wins (§5.2). */
 export function claimStep(db: Db, memberId: string, workItemId: string, now: Date): Promise<ClaimResult> {
@@ -246,7 +247,7 @@ export function claimStep(db: Db, memberId: string, workItemId: string, now: Dat
     const { rows } = await sql<{ outcome: string }>`
       select app.claim_step(${workItemId}::uuid, ${now}) as outcome
     `.execute(trx);
-    return commandResult<StepRefusal | "already_claimed" | "forbidden">(rows[0]!.outcome, "claimed");
+    return commandResult(rows[0]!.outcome, "claimed", claimRefusals);
   });
 }
 
@@ -256,7 +257,7 @@ export function releaseStep(db: Db, memberId: string, workItemId: string, now: D
     const { rows } = await sql<{ outcome: string }>`
       select app.release_step(${workItemId}::uuid, ${now}) as outcome
     `.execute(trx);
-    return commandResult<StepRefusal | "not_holder">(rows[0]!.outcome, "released");
+    return commandResult(rows[0]!.outcome, "released", releaseRefusals);
   });
 }
 

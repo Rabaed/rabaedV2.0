@@ -9,7 +9,7 @@ import {
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import type { AppContext } from "../app.ts";
-import { idOrNotFound, notFound } from "../http-error.ts";
+import { idOrNotFound, visibleOrNotFound } from "../http-error.ts";
 import {
   addDimensionValue,
   getMemberVisibility,
@@ -39,9 +39,7 @@ export const visibilityRoutes =
       { schema: { params: projectParams, response: { 200: dimensionValues } } },
       async (request) => {
         const memberId = ctx.requireMember(request);
-        const values = await listDimensions(ctx.db, memberId, idOrNotFound(request.params.projectId));
-        if (!values) throw notFound();
-        return values;
+        return visibleOrNotFound(listDimensions(ctx.db, memberId, idOrNotFound(request.params.projectId)));
       },
     );
 
@@ -67,9 +65,7 @@ export const visibilityRoutes =
       { schema: { params: projectParams, response: { 200: dimensionValues } } },
       async (request) => {
         const memberId = ctx.requireMember(request);
-        const values = await myVisibility(ctx.db, memberId, idOrNotFound(request.params.projectId));
-        if (!values) throw notFound();
-        return values;
+        return visibleOrNotFound(myVisibility(ctx.db, memberId, idOrNotFound(request.params.projectId)));
       },
     );
 
@@ -78,9 +74,7 @@ export const visibilityRoutes =
       { schema: { params: participantParams, response: { 200: participantVisibility } } },
       async (request) => {
         const memberId = ctx.requireMember(request);
-        const result = await getParticipantVisibility(ctx.db, memberId, idOrNotFound(request.params.participantId));
-        if (!result) throw notFound();
-        return result;
+        return visibleOrNotFound(getParticipantVisibility(ctx.db, memberId, idOrNotFound(request.params.participantId)));
       },
     );
 
@@ -104,9 +98,7 @@ export const visibilityRoutes =
       async (request) => {
         const actorId = ctx.requireMember(request);
         const participantId = idOrNotFound(request.params.participantId);
-        const result = await getMemberVisibility(ctx.db, actorId, participantId, idOrNotFound(request.params.memberId));
-        if (!result) throw notFound();
-        return result;
+        return visibleOrNotFound(getMemberVisibility(ctx.db, actorId, participantId, idOrNotFound(request.params.memberId)));
       },
     );
 

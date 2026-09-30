@@ -2,18 +2,13 @@ import { companyMember, companyMembers, invitedMember, inviteMemberRequest, upda
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import type { AppContext } from "../app.ts";
-import { forbidden, HttpError, idOrNotFound, notFound } from "../http-error.ts";
-import { deactivateMember, inviteMember, listMembers, setProjectCreator, type InviteResult, type UpdateResult } from "../identity/members.ts";
+import { idOrNotFound } from "../http-error.ts";
+import { deactivateMember, inviteMember, listMembers, setProjectCreator, type UpdateResult } from "../identity/members.ts";
+import { refusal } from "../refusals.ts";
 
 const memberParams = z.object({ memberId: z.string() });
 
-/** A refusal as an HTTP error: 403 for anyone but the Authorized Person, 404 for another Company's Member, else 409. */
-function refusal(result: Exclude<InviteResult | UpdateResult, { ok: true }>): HttpError {
-  if (result.reason === "forbidden") return forbidden();
-  if (result.reason === "not_found") return notFound();
-  return new HttpError(409, result.reason);
-}
-
+/** The updated Member, or the refusal: 403 for anyone but the Authorized Person, 404 for another Company's Member, else 409. */
 function unwrap(result: UpdateResult) {
   if (result.ok) return result.member;
   throw refusal(result);

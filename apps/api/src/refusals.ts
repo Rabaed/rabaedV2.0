@@ -1,12 +1,16 @@
 import { forbidden, HttpError, notFound } from "./http-error.ts";
 
-// Every refusal the app.* functions answer with, as the API's HTTP answer.
-// `not_found` is the Project or Participant itself: a plain 404, exactly like
-// one that doesn't exist (visibility.md, "Direct URL or ID").
+// Every refusal the API's commands answer with, as the API's HTTP answer.
+// `not_found` is the thing addressed itself (a Project, Participant, Work Item,
+// or another Company's Member): a plain 404, exactly like one that doesn't
+// exist (visibility.md, "Direct URL or ID").
 const answers = {
   forbidden,
   not_found: notFound,
   member_not_found: () => new HttpError(404, "member_not_found"),
+  duplicate_email: () => new HttpError(409, "duplicate_email"),
+  member_deactivated: () => new HttpError(409, "member_deactivated"),
+  authorized_person: () => new HttpError(409, "authorized_person"),
   project_closed: () => new HttpError(409, "project_closed"),
   already_participant: () => new HttpError(409, "already_participant"),
   duplicate_code: () => new HttpError(409, "duplicate_code"),

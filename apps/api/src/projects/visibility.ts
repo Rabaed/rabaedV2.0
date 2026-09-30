@@ -10,26 +10,23 @@ import {
   type Visibility,
 } from "@rabaed/domain";
 import { sql, type Transaction } from "kysely";
-import { refusedAsForbidden } from "../db-error.ts";
+import { refusedAsForbidden, type Forbidden } from "../db-error.ts";
+import { checkedOutcome } from "../outcomes.ts";
 
 // Trades, Locations and Visibility grants. Writes go through the app.* functions
 // of the visibility migration; reads go through RLS or those functions.
 
-type Forbidden = { ok: false; reason: "forbidden" };
 type Trx = Transaction<Database>;
 
+const addValueRefusals = ["not_found", "project_closed", "parent_not_found", "too_deep", "duplicate_code"] as const;
 export type AddValueResult =
   | { ok: true; id: string }
   | Forbidden
-  | { ok: false; reason: "not_found" | "project_closed" | "parent_not_found" | "too_deep" | "duplicate_code" };
+  | { ok: false; reason: (typeof addValueRefusals)[number] };
 
-export type SetVisibilityResult =
-  | { ok: true }
-  | Forbidden
-  | {
-      ok: false;
-      reason: "not_found" | "project_closed" | "member_not_found" | "value_not_found" | "exceeds_participant";
-    };
+const setVisibilityRefusals = ["not_found", "project_closed", "member_not_found", "value_not_found", "exceeds_participant"] as const;
+type SetRefusal = (typeof setVisibilityRefusals)[number];
+export type SetVisibilityResult = { ok: true } | Forbidden | { ok: false; reason: SetRefusal };
 
 type ValueRow = {
   kind: DimensionKind;
@@ -96,11 +93,12 @@ export function addDimensionValue(
 ): Promise<AddValueResult> {
   return refusedAsForbidden(() =>
     withMember(db, memberId, async (trx): Promise<AddValueResult> => {
-      const { rows } = await sql<{ outcome: "added" | Exclude<AddValueResult, { ok: true } | Forbidden>["reason"]; value_id: string | null }>`
+      const { rows } = await sql<{ outcome: string; value_id: string | null }>`
         select outcome, value_id from app.add_dimension_value(
           ${projectId}::uuid, ${kind}, ${input.parentId ?? null}::uuid, ${input.code}, ${JSON.stringify(input.name)}::jsonb)
       `.execute(trx);
-      const { outcome, value_id } = rows[0]!;
+      const outcome = checkedOutcome(rows[0]!.outcome, ["added", ...addValueRefusals]);
+      const { value_id } = rows[0]!;
       return outcome === "added" ? { ok: true, id: value_id! } : { ok: false, reason: outcome };
     }),
   );
@@ -140,8 +138,6 @@ export function getParticipantVisibility(
   return withMember(db, memberId, (trx) => participantVisibilityIn(trx, participantId));
 }
 
-type SetRefusal = Exclude<SetVisibilityResult, { ok: true } | Forbidden>["reason"];
-
 /** An app.set_*_visibility outcome other than 'set': rolls the whole save back. */
 class Refused extends Error {
   constructor(readonly reason: SetRefusal) {
@@ -160,8 +156,8 @@ async function setEveryDimension(
     return await refusedAsForbidden(() =>
       withMember(db, memberId, async (trx) => {
         for (const kind of dimensionKinds) {
-          const outcome = await setOne(trx, kind, request[kind]);
-          if (outcome !== "set") throw new Refused(outcome as SetRefusal);
+          const outcome = checkedOutcome(await setOne(trx, kind, request[kind]), ["set", ...setVisibilityRefusals]);
+          if (outcome !== "set") throw new Refused(outcome);
         }
         return { ok: true } as const;
       }),

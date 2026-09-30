@@ -8,8 +8,11 @@ export function pgError(error: unknown): { code?: string; constraint?: string } 
   return error as { code?: string; constraint?: string };
 }
 
+/** The acting Member may not take the step. */
+export type Forbidden = { ok: false; reason: "forbidden" };
+
 /** Runs `fn`; the database refusing the acting Member (42501) becomes `{ ok: false, reason: "forbidden" }`. */
-export async function refusedAsForbidden<T>(fn: () => Promise<T>): Promise<T | { ok: false; reason: "forbidden" }> {
+export async function refusedAsForbidden<T>(fn: () => Promise<T>): Promise<T | Forbidden> {
   try {
     return await fn();
   } catch (error) {

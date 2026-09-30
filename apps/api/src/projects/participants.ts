@@ -10,28 +10,28 @@ import type {
   ProjectParticipants,
 } from "@rabaed/domain";
 import { sql, type RawBuilder } from "kysely";
-import { refusedAsForbidden } from "../db-error.ts";
+import { refusedAsForbidden, type Forbidden } from "../db-error.ts";
+import { checkedOutcome, commandResult } from "../outcomes.ts";
 
 // Participants and Project Members. Writes go through the app.* functions of the
 // participants migration; reads go through RLS or those functions, never around them.
 
-type Forbidden = { ok: false; reason: "forbidden" };
+const addParticipantRefusals = ["not_found", "project_closed", "already_participant"] as const;
 
 /** One answer, `ok`, whether or not the CR number is on Rabaed (ADR 0009). */
 export type AddParticipantResult =
   | { ok: true }
   | Forbidden
-  | { ok: false; reason: "not_found" | "project_closed" | "already_participant" };
+  | { ok: false; reason: (typeof addParticipantRefusals)[number] };
 
-export type RespondToInvitationResult = { ok: true } | Forbidden | { ok: false; reason: "not_found" | "project_closed" };
+const respondRefusals = ["not_found", "project_closed"] as const;
+export type RespondToInvitationResult =
+  | { ok: true }
+  | Forbidden
+  | { ok: false; reason: (typeof respondRefusals)[number] };
 
-type ProjectMemberRefusal = "not_found" | "project_closed" | "member_not_found" | "position_not_found";
-export type ProjectMemberResult = { ok: true } | Forbidden | { ok: false; reason: ProjectMemberRefusal };
-
-/** An app.*_project_member outcome as a result: `done` is its success word, anything else a refusal. */
-function projectMemberResult(outcome: string, done: string): ProjectMemberResult {
-  return outcome === done ? { ok: true } : { ok: false, reason: outcome as ProjectMemberRefusal };
-}
+const projectMemberRefusals = ["not_found", "project_closed", "member_not_found", "position_not_found"] as const;
+export type ProjectMemberResult = { ok: true } | Forbidden | { ok: false; reason: (typeof projectMemberRefusals)[number] };
 
 /**
  * The Participants of one of the Member's Projects they may list (every one for
@@ -82,11 +82,10 @@ export function addParticipant(
 ): Promise<AddParticipantResult> {
   return refusedAsForbidden(() =>
     withMember(db, memberId, async (trx): Promise<AddParticipantResult> => {
-      const { rows } = await sql<{ outcome: "invited" | Exclude<AddParticipantResult, { ok: true } | Forbidden>["reason"] }>`
+      const { rows } = await sql<{ outcome: string }>`
         select app.add_participant(${projectId}::uuid, ${input.crNumber}, ${input.role}, ${now}) as outcome
       `.execute(trx);
-      const { outcome } = rows[0]!;
-      return outcome === "invited" ? { ok: true } : { ok: false, reason: outcome };
+      return commandResult(rows[0]!.outcome, "invited", addParticipantRefusals);
     }),
   );
 }
@@ -164,10 +163,10 @@ export function respondToInvitation(
 ): Promise<RespondToInvitationResult> {
   return refusedAsForbidden(() =>
     withMember(db, memberId, async (trx): Promise<RespondToInvitationResult> => {
-      const { rows } = await sql<{ outcome: "accepted" | "declined" | "not_found" | "project_closed" }>`
+      const { rows } = await sql<{ outcome: string }>`
         select app.respond_to_invitation(${participantId}::uuid, ${accept}, ${now}) as outcome
       `.execute(trx);
-      const { outcome } = rows[0]!;
+      const outcome = checkedOutcome(rows[0]!.outcome, ["accepted", "declined", ...respondRefusals]);
       return outcome === "accepted" || outcome === "declined" ? { ok: true } : { ok: false, reason: outcome };
     }),
   );
@@ -271,7 +270,7 @@ export function addProjectMember(
       const { rows } = await sql<{ outcome: string }>`
         select app.add_project_member(${participantId}::uuid, ${targetId}::uuid, ${now}) as outcome
       `.execute(trx);
-      return projectMemberResult(rows[0]!.outcome, "added");
+      return commandResult(rows[0]!.outcome, "added", projectMemberRefusals);
     }),
   );
 }
@@ -289,7 +288,7 @@ export function removeProjectMember(
       const { rows } = await sql<{ outcome: string }>`
         select app.remove_project_member(${participantId}::uuid, ${targetId}::uuid, ${now}) as outcome
       `.execute(trx);
-      return projectMemberResult(rows[0]!.outcome, "removed");
+      return commandResult(rows[0]!.outcome, "removed", projectMemberRefusals);
     }),
   );
 }
@@ -307,7 +306,7 @@ export function setMemberPositions(
       const { rows } = await sql<{ outcome: string }>`
         select app.set_project_member_positions(${participantId}::uuid, ${targetId}::uuid, ${positions}::text[]) as outcome
       `.execute(trx);
-      return projectMemberResult(rows[0]!.outcome, "set");
+      return commandResult(rows[0]!.outcome, "set", projectMemberRefusals);
     }),
   );
 }

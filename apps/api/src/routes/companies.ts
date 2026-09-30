@@ -3,7 +3,7 @@ import { bilingualText, signedInMember } from "@rabaed/domain";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import type { AppContext } from "../app.ts";
-import { notFound, notSignedIn } from "../http-error.ts";
+import { idOrNotFound, notFound, notSignedIn } from "../http-error.ts";
 
 const company = z.object({
   id: z.uuid(),
@@ -56,8 +56,7 @@ export const companyRoutes =
       { schema: { params: z.object({ companyId: z.string() }), response: { 200: company } } },
       async (request) => {
         const memberId = ctx.requireMember(request);
-        const { companyId } = request.params;
-        if (!z.uuid().safeParse(companyId).success) throw notFound();
+        const companyId = idOrNotFound(request.params.companyId);
         // No filter beyond the id: RLS decides, and anything hidden is a 404.
         const row = await withMember(ctx.db, memberId, (trx) =>
           trx.selectFrom("company").selectAll().where("id", "=", companyId).executeTakeFirst(),
