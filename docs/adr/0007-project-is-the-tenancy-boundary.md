@@ -8,7 +8,7 @@ All customers share one database per Instance (pooled), with isolation enforced 
 2. **PostgreSQL row-level security** on every tenant table. The request's Member is set as a transaction-local setting, so a missed `WHERE` clause returns nothing instead of another customer's data.
 3. **Scoped object storage.** File keys are prefixed by Project and served only through short-lived signed URLs.
 
-Search indexes, caches and background jobs carry the same Project context. Rabaed Admin uses a separate database role that bypasses RLS; every use of it is written to `admin_action`.
+Search indexes, caches and background jobs carry the same Project context. Rabaed Admin uses a separate database role that bypasses RLS; every use of it is written to `admin_action`. Only the Rabaed Admin service holds that role, never the customer app ([ADR 0010](0010-rabaed-admin-is-a-separate-service.md)).
 
 ## Considered Options
 
