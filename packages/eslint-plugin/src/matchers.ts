@@ -1,6 +1,6 @@
 /**
  * Pure matchers behind the Rabaed lint rules, so each design rule is defined
- * once and shared by the JavaScript, CSS and JSON rules.
+ * once and shared by the JavaScript, CSS and JSON rules and the UI story tests.
  */
 
 // ---- Colours --------------------------------------------------------------
@@ -175,7 +175,18 @@ export function physicalClasses(classes: string): LogicalFix[] {
 const deadline = /overdue|due[\s_-]?date|deadline|متأخر|موعد نهائي|تاريخ الاستحقاق/i;
 const sla = /\bSLAs?\b|^sla(?=[A-Z_])|(?<=[a-z])Sla(?=[A-Z_]|s?$)/;
 
-/** The deadline word in an identifier, key or UI string, if any. */
+// Bare "due" and "late" read as a deadline only in words people see ("Due 3 Oct", "3 days late").
+// In names and keys they are too broad to police on their own, so deadlineWord leaves them out.
+// "due to" gives a reason, not a date, so it stays allowed. In copy, SLA is caught in any case
+// ("Sla breached"); in names, sla must stay case-sensitive so "island" and "slate" pass.
+const dueLateOrSla = /\bdue\b(?!\s+to\b)|\blate\b|\bslas?\b/i;
+
+/** The deadline word in an identifier or message key, if any. */
 export function deadlineWord(text: string): string | null {
   return deadline.exec(text)?.[0] ?? sla.exec(text)?.[0] ?? null;
+}
+
+/** The deadline word in text people read (message copy, rendered stories), if any: stricter than deadlineWord. */
+export function deadlineWordInCopy(text: string): string | null {
+  return deadlineWord(text) ?? dueLateOrSla.exec(text)?.[0] ?? null;
 }

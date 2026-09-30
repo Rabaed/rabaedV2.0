@@ -136,8 +136,13 @@ cssTester.run("css-no-physical-direction", rules["css-no-physical-direction"], {
 });
 
 jsonTester.run("json-no-deadline-words", rules["json-no-deadline-words"], {
-  valid: [`{ "list": { "stepAge": "Step Age", "weeks": "{n} weeks at this step" } }`],
+  valid: [
+    `{ "list": { "stepAge": "Step Age", "weeks": "{n} weeks at this step" } }`,
+    `{ "list": { "due": "Returned due to missing drawings" } }`,
+  ],
   invalid: [
+    { code: `{ "card": { "when": "Due {date}" } }`, errors: [{ messageId: "value" }] },
+    { code: `{ "card": { "status": "Submitted late" } }`, errors: [{ messageId: "value" }] },
     { code: `{ "list": { "dueDate": "Due date" } }`, errors: [{ messageId: "key" }, { messageId: "value" }] },
     { code: `{ "home": { "kpi": "Overdue 8+ days" } }`, errors: [{ messageId: "value" }] },
     { code: `{ "home": { "kpi": "متأخر" } }`, errors: [{ messageId: "value" }] },
