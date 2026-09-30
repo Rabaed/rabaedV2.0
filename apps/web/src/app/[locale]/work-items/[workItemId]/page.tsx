@@ -1,13 +1,12 @@
 import { isOpenStageCategory, type Locale } from "@rabaed/domain";
-import { DocNo } from "@rabaed/ui";
+import { AgeDots, DocNo, StagePill, stepAgeLabel } from "@rabaed/ui";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
-import { AgeDots } from "@/components/age-dots";
-import { StagePill } from "@/components/stage-pill";
 import { WorkItemActions } from "@/components/work-item-actions";
 import { WorkItemHistory } from "@/components/work-item-history";
 import { Link, redirect } from "@/i18n/navigation";
 import { getMe, getWorkItem, getWorkItemHistory } from "@/lib/session";
+import { stageColour } from "@/lib/stage-colour";
 
 /** One Work Item. One the Member can't see is not found, exactly like one that doesn't exist. */
 export default async function WorkItemPage({ params }: { params: Promise<{ locale: Locale; workItemId: string }> }) {
@@ -26,12 +25,15 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
         </Link>
         <h1 className="text-h4 font-semibold">{item.title}</h1>
         <div className="flex flex-wrap items-center gap-3">
-          <StagePill stage={item.stage} locale={locale} />
+          <StagePill stage={stageColour(item.stage)} label={item.stage.name[locale]} />
           {/* Step Age only while it waits at a Step; a closed item doesn't age. */}
           {isOpenStageCategory(item.stage.category) && (
             <>
-              <AgeDots weeks={item.stepAgeWeeks} label={t("stepAge", { weeks: item.stepAgeWeeks, shown: String(item.stepAgeWeeks) })} />
-              <span className="text-sm text-muted">{t("stepAge", { weeks: item.stepAgeWeeks, shown: String(item.stepAgeWeeks) })}</span>
+              {/* The dots already carry the label for screen readers; the text repeats it for sighted readers. */}
+              <AgeDots weeks={item.stepAgeWeeks} locale={locale} />
+              <span aria-hidden="true" className="text-sm text-muted">
+                {stepAgeLabel(item.stepAgeWeeks, locale)}
+              </span>
             </>
           )}
         </div>

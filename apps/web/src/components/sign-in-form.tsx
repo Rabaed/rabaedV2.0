@@ -2,9 +2,7 @@
 
 import { useTranslations } from "next-intl";
 import { useState, type FormEvent } from "react";
-import { Button } from "@rabaed/ui";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Button, Field, Input } from "@rabaed/ui";
 import { useRouter } from "@/i18n/navigation";
 
 export function SignInForm() {
@@ -40,14 +38,12 @@ export function SignInForm() {
 
   return (
     <form onSubmit={onSubmit} className="max-w-sm space-y-4" noValidate>
-      <div className="space-y-2">
-        <Label htmlFor="email">{t("email")}</Label>
-        <Input id="email" name="email" type="email" autoComplete="username" dir="ltr" required />
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor="password">{t("password")}</Label>
-        <Input id="password" name="password" type="password" autoComplete="current-password" required />
-      </div>
+      <Field label={t("email")} id="email" required>
+        <Input name="email" type="email" autoComplete="username" dir="ltr" />
+      </Field>
+      <Field label={t("password")} id="password" required>
+        <Input name="password" type="password" autoComplete="current-password" />
+      </Field>
       {error && (
         <p role="alert" className="text-sm text-danger">
           {error}

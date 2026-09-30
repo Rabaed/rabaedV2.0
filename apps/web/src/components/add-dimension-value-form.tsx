@@ -1,12 +1,13 @@
 "use client";
 
 import type { DimensionKind } from "@rabaed/domain";
-import { Button } from "@rabaed/ui";
+import { Button, Field, Input, Select } from "@rabaed/ui";
 import { useTranslations } from "next-intl";
 import { useState, type FormEvent } from "react";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { useRouter } from "@/i18n/navigation";
+
+// A choice can't have an empty value, so "no parent" (a new Zone) has its own.
+const NO_PARENT = "none";
 
 /**
  * A Project Admin adds a Trade, or a Location: a Zone, or a Building or Floor
@@ -40,7 +41,7 @@ export function AddDimensionValueForm({
         body: JSON.stringify({
           code: form.get("code"),
           name: { en: form.get("nameEn"), ar: form.get("nameAr") },
-          ...(kind === "location" ? { parentId: form.get("parentId") || null } : {}),
+          ...(kind === "location" ? { parentId: form.get("parentId") === NO_PARENT ? null : form.get("parentId") } : {}),
         }),
       });
       if (res.status === 201) {
@@ -67,38 +68,23 @@ export function AddDimensionValueForm({
   return (
     <form onSubmit={onSubmit} className="grid gap-4 rounded-md border border-border p-4 sm:grid-cols-2" noValidate>
       {kind === "location" && (
-        <div className="space-y-2 sm:col-span-2">
-          <Label htmlFor={id("parent")}>{t("parent")}</Label>
-          <select
-            id={id("parent")}
+        <Field label={t("parent")} id={id("parent")} className="sm:col-span-2">
+          <Select
             name="parentId"
-            defaultValue=""
-            className="h-9 w-full rounded-sm border border-border bg-surface px-3 text-sm"
-          >
-            <option value="">{t("newZone")}</option>
-            {parents.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.label}
-              </option>
-            ))}
-          </select>
-        </div>
+            defaultValue={NO_PARENT}
+            options={[{ value: NO_PARENT, label: t("newZone") }, ...parents.map((p) => ({ value: p.id, label: p.label }))]}
+          />
+        </Field>
       )}
-      <div className="space-y-2">
-        <Label htmlFor={id("nameEn")}>{t("nameEn")}</Label>
-        <Input id={id("nameEn")} name="nameEn" dir="ltr" required maxLength={200} />
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor={id("nameAr")}>{t("nameAr")}</Label>
-        <Input id={id("nameAr")} name="nameAr" dir="rtl" required maxLength={200} />
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor={id("code")}>{t("code")}</Label>
-        <Input id={id("code")} name="code" dir="ltr" required maxLength={6} aria-describedby={id("codeHint")} />
-        <p id={id("codeHint")} className="text-sm text-muted">
-          {t("codeHint")}
-        </p>
-      </div>
+      <Field label={t("nameEn")} id={id("nameEn")} required>
+        <Input name="nameEn" dir="ltr" maxLength={200} />
+      </Field>
+      <Field label={t("nameAr")} id={id("nameAr")} required>
+        <Input name="nameAr" dir="rtl" maxLength={200} />
+      </Field>
+      <Field label={t("code")} help={t("codeHint")} id={id("code")} required>
+        <Input name="code" dir="ltr" maxLength={6} />
+      </Field>
       <div className="flex items-end">
         <Button type="submit" disabled={pending}>
           {t(kind === "trade" ? "addTrade" : "addLocation")}

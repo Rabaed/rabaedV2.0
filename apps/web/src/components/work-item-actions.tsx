@@ -1,10 +1,9 @@
 "use client";
 
 import type { Locale, WorkItemActions as Actions } from "@rabaed/domain";
-import { Button } from "@rabaed/ui";
+import { Button, Field, Textarea } from "@rabaed/ui";
 import { useTranslations } from "next-intl";
 import { useRef, useState, type FormEvent } from "react";
-import { Label } from "@/components/ui/label";
 import { useRouter } from "@/i18n/navigation";
 
 type Transition = Actions["transitions"][number];
@@ -139,18 +138,9 @@ export function WorkItemActions({
       >
         <form onSubmit={onReason} className="space-y-4" noValidate>
           <h2 className="text-h6 font-semibold">{asking?.label[locale]}</h2>
-          <div className="space-y-2">
-            <Label htmlFor="transition-reason">{t("reason")}</Label>
-            <textarea
-              id="transition-reason"
-              name="reason"
-              rows={4}
-              maxLength={2000}
-              required
-              className="w-full rounded-sm border border-border bg-surface px-3 py-2 text-sm"
-            />
-            <p className="text-sm text-muted">{t("reasonHelp")}</p>
-          </div>
+          <Field label={t("reason")} help={t("reasonHelp")} id="transition-reason" required>
+            <Textarea name="reason" rows={4} maxLength={2000} />
+          </Field>
           {error && asking && (
             <p role="alert" className="text-sm text-danger">
               {error}

@@ -1,11 +1,9 @@
 "use client";
 
 import { baseRoles } from "@rabaed/domain";
-import { Button } from "@rabaed/ui";
+import { Button, Field, Input, Select } from "@rabaed/ui";
 import { useTranslations } from "next-intl";
 import { useState, type FormEvent } from "react";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { useRouter } from "@/i18n/navigation";
 
 /** A Project Creator creates a Project; their Company joins it in the chosen Project Role. */
@@ -48,45 +46,22 @@ export function CreateProjectForm() {
     <section className="space-y-4 rounded-md border border-border p-4">
       <h2 className="text-h6 font-semibold">{t("createTitle")}</h2>
       <form onSubmit={onSubmit} className="grid gap-4 sm:grid-cols-2" noValidate>
-        <div className="space-y-2">
-          <Label htmlFor="project-name-en">{t("nameEn")}</Label>
-          <Input id="project-name-en" name="nameEn" dir="ltr" lang="en" required />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="project-name-ar">{t("nameAr")}</Label>
-          <Input id="project-name-ar" name="nameAr" dir="rtl" lang="ar" required />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="project-code">{t("code")}</Label>
-          <Input
-            id="project-code"
-            name="code"
-            dir="ltr"
-            required
-            minLength={2}
-            maxLength={10}
-            className="uppercase"
-            aria-describedby="project-code-hint"
-          />
-          <p id="project-code-hint" className="text-sm text-muted">
-            {t("codeHint")}
-          </p>
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="project-role">{t("role")}</Label>
-          <select
-            id="project-role"
+        <Field label={t("nameEn")} id="project-name-en" required>
+          <Input name="nameEn" dir="ltr" lang="en" />
+        </Field>
+        <Field label={t("nameAr")} id="project-name-ar" required>
+          <Input name="nameAr" dir="rtl" lang="ar" />
+        </Field>
+        <Field label={t("code")} help={t("codeHint")} id="project-code" required>
+          <Input name="code" dir="ltr" minLength={2} maxLength={10} className="uppercase" />
+        </Field>
+        <Field label={t("role")} id="project-role">
+          <Select
             name="role"
             defaultValue="contractor"
-            className="h-9 w-full rounded-sm border border-border bg-surface px-3 text-sm"
-          >
-            {baseRoles.map((role) => (
-              <option key={role} value={role}>
-                {t(`roles.${role}`)}
-              </option>
-            ))}
-          </select>
-        </div>
+            options={baseRoles.map((role) => ({ value: role, label: t(`roles.${role}`) }))}
+          />
+        </Field>
         <div className="sm:col-span-2">
           <Button type="submit" disabled={pending}>
             {t("create")}

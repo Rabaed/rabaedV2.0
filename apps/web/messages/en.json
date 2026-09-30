@@ -186,7 +186,6 @@
     "noLocation": "No Location",
     "noDescription": "No description.",
     "noTradesCovered": "Your Visibility on this Project covers no Trade yet, so you can't raise a Work Item. Ask your Company's Authorized Person.",
-    "stepAge": "{weeks, plural, one {{shown} week} other {{shown} weeks}} at this step",
     "saveDraft": "Save Draft",
     "fields": {
       "title": "Title",

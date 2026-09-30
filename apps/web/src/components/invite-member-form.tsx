@@ -2,9 +2,7 @@
 
 import { useLocale, useTranslations } from "next-intl";
 import { useState, type FormEvent } from "react";
-import { Button } from "@rabaed/ui";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Button, Field, Input, Select } from "@rabaed/ui";
 import { useRouter } from "@/i18n/navigation";
 
 /**
@@ -57,30 +55,26 @@ export function InviteMemberForm() {
     <section className="space-y-4 rounded-md border border-border p-4">
       <h2 className="text-h6 font-semibold">{t("inviteTitle")}</h2>
       <form onSubmit={onSubmit} className="grid gap-4 sm:grid-cols-2" noValidate>
-        <div className="space-y-2 sm:col-span-2">
-          <Label htmlFor="invite-email">{t("email")}</Label>
-          <Input id="invite-email" name="email" type="email" autoComplete="off" dir="ltr" required />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="invite-name-en">{t("nameEn")}</Label>
-          <Input id="invite-name-en" name="nameEn" dir="ltr" lang="en" required />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="invite-name-ar">{t("nameAr")}</Label>
-          <Input id="invite-name-ar" name="nameAr" dir="rtl" lang="ar" required />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="invite-locale">{t("language")}</Label>
-          <select
-            id="invite-locale"
+        <Field label={t("email")} id="invite-email" required className="sm:col-span-2">
+          <Input name="email" type="email" autoComplete="off" dir="ltr" />
+        </Field>
+        <Field label={t("nameEn")} id="invite-name-en" required>
+          <Input name="nameEn" dir="ltr" lang="en" />
+        </Field>
+        <Field label={t("nameAr")} id="invite-name-ar" required>
+          <Input name="nameAr" dir="rtl" lang="ar" />
+        </Field>
+        <Field label={t("language")} id="invite-locale">
+          {/* Each language named in itself. */}
+          <Select
             name="locale"
             defaultValue={locale}
-            className="h-9 w-full rounded-md border border-border bg-surface px-3 text-sm"
-          >
-            <option value="en">English</option>
-            <option value="ar">العربية</option>
-          </select>
-        </div>
+            options={[
+              { value: "en", label: "English" },
+              { value: "ar", label: "العربية" },
+            ]}
+          />
+        </Field>
         <div className="flex items-end">
           <Button type="submit" disabled={pending}>
             {t("invite")}
@@ -93,9 +87,10 @@ export function InviteMemberForm() {
         </p>
       )}
       {link && (
-        <div className="space-y-2" data-testid="invitation-link">
-          <p className="text-sm">{t("invitationLink")}</p>
-          <Input readOnly value={link} dir="ltr" onFocus={(e) => e.currentTarget.select()} />
+        <div data-testid="invitation-link">
+          <Field label={t("invitationLink")} id="invitation-link" readOnly>
+            <Input value={link} dir="ltr" onFocus={(e) => e.currentTarget.select()} />
+          </Field>
         </div>
       )}
     </section>

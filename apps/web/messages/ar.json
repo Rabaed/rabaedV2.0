@@ -186,7 +186,6 @@
     "noLocation": "بلا موقع",
     "noDescription": "لا يوجد وصف.",
     "noTradesCovered": "رؤيتك في هذا المشروع لا تشمل أي تخصص بعد، لذا لا يمكنك إنشاء عنصر عمل. تواصل مع المفوَّض في شركتك.",
-    "stepAge": "{weeks, plural, one {أسبوع واحد} two {أسبوعان} few {{shown} أسابيع} other {{shown} أسبوعًا}} في هذه الخطوة",
     "saveDraft": "حفظ المسودة",
     "fields": {
       "title": "العنوان",
