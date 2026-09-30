@@ -131,6 +131,9 @@ export interface OnboardingLeadTable {
   requested_by_member_id: string;
   created_at: Generated<Timestamp>;
   updated_at: Generated<Timestamp>;
+  /** Set, with participant_id, when Rabaed onboarded its Company and the lead became that invitation. */
+  converted_at: Timestamp | null;
+  participant_id: string | null;
 }
 
 export interface ProjectMemberTable {

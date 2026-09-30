@@ -5,7 +5,8 @@ import { asEngineer } from "../admin/admin-action.ts";
 
 /**
  * Every onboarding lead, newest first: a CR number a Project Admin invited that
- * isn't on Rabaed, with the Project and Host Company that asked. Read on the
+ * wasn't on Rabaed, with the Project and Host Company that asked, and, once
+ * Rabaed onboarded the Company, the Participant Invitation it became. Read on the
  * admin connection and logged with the Engineer's reason (V9, ADR 0009).
  */
 export function listOnboardingLeads(adminDb: Db, engineerId: string, reason: string): Promise<OnboardingLeads["leads"]> {
@@ -26,6 +27,8 @@ export function listOnboardingLeads(adminDb: Db, engineerId: string, reason: str
         "host.id as host_id",
         "host.legal_name as host_name",
         "r.base_role",
+        "l.converted_at",
+        "l.participant_id",
       ])
       .orderBy("l.updated_at", "desc")
       .orderBy("l.id", "desc")
@@ -37,6 +40,8 @@ export function listOnboardingLeads(adminDb: Db, engineerId: string, reason: str
       hostCompany: { id: r.host_id, legalName: r.host_name },
       baseRole: r.base_role,
       requestedAt: r.requested_at.toISOString(),
+      convertedAt: r.converted_at?.toISOString() ?? null,
+      participantId: r.participant_id,
     }));
     return { target: { kind: "onboarding_lead", id: null }, after: { leadIds: leads.map((l) => l.id) }, result: leads };
   });

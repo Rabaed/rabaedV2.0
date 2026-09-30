@@ -220,6 +220,8 @@ describe("an onboarding lead", () => {
       hostCompany: { id: host.company.companyId, legalName: expect.any(Object) },
       baseRole: "consultant",
       requestedAt: expect.any(String),
+      convertedAt: null,
+      participantId: null,
     });
     // A Company on Rabaed is invited, never a lead.
     expect(res.body).not.toContain(c1.company.crNumber);
@@ -243,6 +245,101 @@ describe("an onboarding lead", () => {
     for (const caller of [host.caller, api.anonymous()]) {
       const res = await caller.get("/admin/v1/onboarding-leads?reason=curious");
       await expectHidden(res);
+    }
+  });
+});
+
+// RP-252: when Rabaed onboards a Company, the leads for its CR number become its
+// Participant Invitations (ADR 0009; visibility.md V9, V15, scenario 31).
+describe("an onboarding lead, once Rabaed onboards its Company", () => {
+  type Pending = { id: string; crNumber: string; projectRole: { baseRole: string }; invitedAt: string };
+  const cr = uniqueCr();
+  const reason = `Signed contract after a lead ${randomUUID()}`;
+  let secondProjectId = "";
+  let before: Pending[] = [];
+  let newcomer: Company;
+
+  const pendingFor = async (project: string) =>
+    ((await host.caller.get(`/v1/projects/${project}/invitations`)).json().invitations as Pending[]).filter(
+      (i) => i.crNumber === cr,
+    );
+  const invite = (project: string, role: string, crNumber = cr) =>
+    host.caller.post(`/v1/projects/${project}/participants`, { crNumber, role });
+
+  beforeAll(async () => {
+    secondProjectId = (await api.createProject(host.caller, { code: "TW2", role: "owner" })).id;
+    // Invited twice on the first Project, the second time in another role: still one lead.
+    expect((await invite(projectId, "consultant")).statusCode).toBe(202);
+    expect((await invite(projectId, "owner_representative")).statusCode).toBe(202);
+    expect((await invite(secondProjectId, "consultant")).statusCode).toBe(202);
+    before = [...(await pendingFor(projectId)), ...(await pendingFor(secondProjectId))];
+    expect(before).toHaveLength(2);
+
+    const company = await api.onboardCompany({ crNumber: cr, reason });
+    newcomer = { company, caller: await api.acceptInvitation(company.invitationToken) };
+  });
+
+  it("invites the Company to each lead's Project in the offered role, for its Authorized Person to answer", async () => {
+    const invitations = (await newcomer.caller.get("/v1/participant-invitations")).json().invitations;
+    expect(invitations.map((i: { projectRole: { baseRole: string } }) => i.projectRole.baseRole).sort()).toEqual([
+      "consultant",
+      "owner_representative",
+    ]);
+    expect(invitations.map((i: { id: string }) => i.id).sort()).toEqual(before.map((i) => i.id).sort());
+  });
+
+  it("leaves the Project Admin's pending row exactly as it was: nothing shows the CR number is now on Rabaed (scenario 31)", async () => {
+    expect([...(await pendingFor(projectId)), ...(await pendingFor(secondProjectId))]).toEqual(before);
+  });
+
+  it("never lists the CR number twice: invited again, its one row changes just as a lead's does (scenario 31)", async () => {
+    const other = uniqueCr();
+    const rowsFor = async (crNumber: string) =>
+      ((await host.caller.get(`/v1/projects/${projectId}/invitations`)).json().invitations as Pending[]).filter(
+        (i) => i.crNumber === crNumber,
+      );
+    expect((await invite(projectId, "consultant", other)).statusCode).toBe(202);
+    const [lead] = await rowsFor(other);
+    const onboarded = before.find((i) => i.projectRole.baseRole === "owner_representative")!;
+    for (const crNumber of [cr, other]) expect((await invite(projectId, "owner", crNumber)).statusCode).toBe(202);
+
+    const onRabaed = await rowsFor(cr);
+    const notOnRabaed = await rowsFor(other);
+    expect(onRabaed).toEqual([expect.objectContaining({ id: onboarded.id, projectRole: expect.objectContaining({ baseRole: "owner" }) })]);
+    expect(notOnRabaed).toEqual([expect.objectContaining({ id: lead!.id, projectRole: expect.objectContaining({ baseRole: "owner" }) })]);
+    expect(onRabaed[0]!.invitedAt > onboarded.invitedAt).toBe(true);
+    expect(notOnRabaed[0]!.invitedAt > lead!.invitedAt).toBe(true);
+  });
+
+  it("makes the Company a Participant when its Authorized Person accepts", async () => {
+    const [invitation] = await pendingFor(secondProjectId);
+    expect((await newcomer.caller.post(`/v1/participant-invitations/${invitation!.id}/accept`)).statusCode).toBe(204);
+    expect(await participantIds(host.caller)).not.toContain(invitation!.id);
+    expect(
+      (await host.caller.get(`/v1/projects/${secondProjectId}/participants`)).json().participants.map((p: { id: string }) => p.id),
+    ).toContain(invitation!.id);
+    expect(await pendingFor(secondProjectId)).toEqual([]);
+  });
+
+  it("is logged with the onboarding, and kept for audit only through Rabaed Admin (V9)", async () => {
+    const [logged] = await adminDb
+      .selectFrom("admin_action")
+      .select(["action", "after"])
+      .where("reason", "=", reason)
+      .execute();
+    expect(logged!.action).toBe("onboard_company");
+    expect((logged!.after as { invitedFromLeads: { projectId: string }[] }).invitedFromLeads.map((l) => l.projectId).sort()).toEqual(
+      [projectId, secondProjectId].sort(),
+    );
+
+    const engineer = await api.engineer();
+    const leads = (await engineer.get(`/admin/v1/onboarding-leads?reason=${encodeURIComponent("Audit of converted leads")}`)).json()
+      .leads as { crNumber: string; project: { id: string }; convertedAt: string | null; participantId: string | null }[];
+    const converted = leads.filter((l) => l.crNumber === cr);
+    expect(converted.map((l) => l.project.id).sort()).toEqual([projectId, secondProjectId].sort());
+    for (const lead of converted) {
+      expect(lead.convertedAt).not.toBeNull();
+      expect(before.map((i) => i.id)).toContain(lead.participantId);
     }
   });
 });
