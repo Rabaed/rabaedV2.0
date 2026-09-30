@@ -1,14 +1,18 @@
 "use client";
 
+import type { Locale } from "@rabaed/domain";
 import { useLocale, useTranslations } from "next-intl";
 import { useState, type FormEvent } from "react";
 import { Button, Field, Input, Select } from "@rabaed/ui";
+import { InvitationLink } from "@/components/invitation-link";
 import { useRouter } from "@/i18n/navigation";
+import { invitationLink, reactivateMember } from "@/lib/member-invitations";
 
 /**
  * The Authorized Person invites a Member. Until email delivery exists, the
- * invitation link is shown once here for them to pass on. The token travels in
- * the URL fragment, which browsers never send to a server.
+ * invitation link is shown once here for them to pass on. A taken email is
+ * answered as visibility.md V17 says: another Company is never named, and a
+ * deactivated Member of their own Company is reactivated once they confirm.
  */
 export function InviteMemberForm() {
   const t = useTranslations("members");
@@ -16,6 +20,7 @@ export function InviteMemberForm() {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [link, setLink] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
@@ -25,6 +30,7 @@ export function InviteMemberForm() {
     setPending(true);
     setError(null);
     setLink(null);
+    setNotice(null);
     try {
       const res = await fetch("/api/v1/members", {
         method: "POST",
@@ -37,13 +43,22 @@ export function InviteMemberForm() {
       });
       if (res.status === 201) {
         const { invitation } = (await res.json()) as { invitation: { token: string } };
-        const inviteeLocale = String(form.get("locale"));
-        setLink(`${window.location.origin}/${inviteeLocale}/accept-invitation#token=${invitation.token}`);
+        setLink(invitationLink(form.get("locale") as Locale, invitation.token));
         formElement.reset();
         router.refresh();
         return;
       }
-      setError(res.status === 409 ? t("duplicateEmail") : res.status === 400 ? t("invalid") : t("unavailable"));
+      if (res.status !== 409) return setError(res.status === 400 ? t("invalid") : t("unavailable"));
+      const refused = (await res.json()) as { error: string; memberId?: string };
+      if (refused.error === "already_a_member") return setError(t("alreadyAMember"));
+      if (refused.error === "registered_with_another_company") return setError(t("registeredWithAnotherCompany"));
+      if (refused.error !== "deactivated_member" || !refused.memberId) return setError(t("unavailable"));
+      if (!window.confirm(t("confirmReactivateEmail", { email: String(form.get("email")).trim() }))) return;
+      const reactivated = await reactivateMember(refused.memberId);
+      if (reactivated.link) setLink(reactivated.link);
+      else setNotice(t("reactivated"));
+      formElement.reset();
+      router.refresh();
     } catch {
       setError(t("unavailable"));
     } finally {
@@ -86,13 +101,12 @@ export function InviteMemberForm() {
           {error}
         </p>
       )}
-      {link && (
-        <div data-testid="invitation-link">
-          <Field label={t("invitationLink")} id="invitation-link" readOnly>
-            <Input value={link} dir="ltr" onFocus={(e) => e.currentTarget.select()} />
-          </Field>
-        </div>
+      {notice && (
+        <p role="status" className="text-sm">
+          {notice}
+        </p>
       )}
+      {link && <InvitationLink id="invitation-link" link={link} />}
     </section>
   );
 }

@@ -1,6 +1,6 @@
 // Seam 2 for Member management (RP-188): only a Company's Authorized Person can
-// invite, flag or deactivate its Members, and never another Company's, even
-// when calling the database directly as the app role.
+// invite, flag, deactivate or reactivate its Members, and never another
+// Company's, even when calling the database directly as the app role.
 import { randomInt, randomUUID } from "node:crypto";
 import { sql } from "kysely";
 import pg from "pg";
@@ -62,13 +62,21 @@ afterAll(async () => {
   await migrator?.end();
 });
 
-const invite = (trx: Db, who = "invitee") =>
-  sql<{ id: string }>`
-    select app.invite_member(${email(who)}, ${JSON.stringify({ en: who, ar: who })}::jsonb, 'en',
-      ${Buffer.from(randomUUID())}, now() + interval '1 day') as id
+const inviteEmail = (trx: Db, address: string) =>
+  sql<{ outcome: string; member_id: string | null }>`
+    select * from app.invite_member(${address}, '{"en":"x","ar":"x"}'::jsonb, 'en',
+      ${Buffer.from(randomUUID())}, now() + interval '1 day')
   `
     .execute(trx)
-    .then((r) => r.rows[0]!.id);
+    .then((r) => r.rows[0]!);
+const invite = (trx: Db, who = "invitee") => inviteEmail(trx, email(who)).then((r) => r.member_id!);
+const reactivate = (trx: Db, target: string) =>
+  sql<{ outcome: string | null }>`
+    select app.reactivate_member(${target}::uuid, ${Buffer.from(randomUUID())}, now() + interval '1 day', now()) as outcome
+  `
+    .execute(trx)
+    .then((r) => r.rows[0]!.outcome);
+const emailOf = async (id: string) => (await migrator.query("select email from member where id = $1", [id])).rows[0].email as string;
 const setCreator = (trx: Db, target: string, value: boolean) =>
   sql<{ status: string | null }>`select app.set_project_creator(${target}::uuid, ${value}) as status`
     .execute(trx)
@@ -118,6 +126,51 @@ describe("inviting", () => {
     const gone = await member(companyC, "gone-ap", "deactivated");
     await migrator.query("update company set authorized_person_id = $1 where id = $2", [gone, companyC]);
     await expect(withMember(app, gone, invite)).rejects.toThrow(/only the Authorized Person/);
+  });
+});
+
+describe("inviting a taken email (V17)", () => {
+  it("says only that another Company has it, with no id", async () => {
+    const before = await row(ids.b1);
+    const taken = ` ${(await emailOf(ids.b1)).toUpperCase()}`;
+    expect(await withMember(app, ids.apA, (trx) => inviteEmail(trx, taken))).toEqual({
+      outcome: "another_company",
+      member_id: null,
+    });
+    expect(await row(ids.b1)).toEqual(before);
+  });
+
+  it("tells the Company's own Members and deactivated Members apart", async () => {
+    expect(await withMember(app, ids.apA, async (trx) => inviteEmail(trx, await emailOf(ids.a1)))).toEqual({
+      outcome: "already_a_member",
+      member_id: null,
+    });
+    const gone = await member(ids.companyA, "gone", "deactivated");
+    expect(await withMember(app, ids.apA, async (trx) => inviteEmail(trx, await emailOf(gone)))).toEqual({
+      outcome: "deactivated",
+      member_id: gone,
+    });
+    expect((await row(gone)).status).toBe("deactivated");
+  });
+});
+
+describe("reactivating", () => {
+  it("does not reach another Company's Member", async () => {
+    const gone = await member(ids.companyB, "gone-b", "deactivated");
+    expect(await withMember(app, ids.apA, (trx) => reactivate(trx, gone))).toBeNull();
+    expect((await row(gone)).status).toBe("deactivated");
+  });
+
+  it("invites again a Member who never set a password, as the same Member", async () => {
+    const gone = await member(ids.companyA, "never-accepted", "deactivated");
+    expect(await withMember(app, ids.apA, (trx) => reactivate(trx, gone))).toBe("reactivated");
+    expect((await row(gone)).status).toBe("invited");
+    const invitations = await migrator.query("select count(*)::int as n from invitation where member_id = $1", [gone]);
+    expect(invitations.rows[0].n).toBe(1);
+  });
+
+  it("is refused to anyone else", async () => {
+    await expect(withMember(app, ids.a1, (trx) => reactivate(trx, ids.a1))).rejects.toThrow(/only the Authorized Person/);
   });
 });
 

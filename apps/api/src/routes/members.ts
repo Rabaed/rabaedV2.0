@@ -1,9 +1,23 @@
-import { companyMember, companyMembers, invitedMember, inviteMemberRequest, updateMemberRequest } from "@rabaed/domain";
+import {
+  companyMember,
+  companyMembers,
+  invitedMember,
+  inviteMemberRequest,
+  reactivatedMember,
+  updateMemberRequest,
+} from "@rabaed/domain";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import type { AppContext } from "../app.ts";
-import { idOrNotFound } from "../http-error.ts";
-import { deactivateMember, inviteMember, listMembers, setProjectCreator, type UpdateResult } from "../identity/members.ts";
+import { HttpError, idOrNotFound } from "../http-error.ts";
+import {
+  deactivateMember,
+  inviteMember,
+  listMembers,
+  reactivateMember,
+  setProjectCreator,
+  type UpdateResult,
+} from "../identity/members.ts";
 import { refusal } from "../refusals.ts";
 
 const memberParams = z.object({ memberId: z.string() });
@@ -15,7 +29,7 @@ function unwrap(result: UpdateResult) {
 }
 
 // A Company's Members. The list is private to the Company; only its Authorized
-// Person invites, flags Project Creators and deactivates.
+// Person invites, flags Project Creators, deactivates and reactivates.
 export const memberRoutes =
   (ctx: AppContext): FastifyPluginAsyncZod =>
   async (app) => {
@@ -30,6 +44,10 @@ export const memberRoutes =
       async (request, reply) => {
         const memberId = ctx.requireMember(request);
         const result = await inviteMember(ctx.db, memberId, request.body, ctx.now(), ctx.config.invitationTtlMs);
+        // Their own Company's deactivated Member: the id, for the Authorized Person to confirm reactivating them.
+        if (!result.ok && result.reason === "deactivated_member") {
+          throw new HttpError(409, "deactivated_member", { memberId: result.memberId });
+        }
         if (!result.ok) throw refusal(result);
         return reply.code(201).send({ memberId: result.memberId, invitation: result.invitation });
       },
@@ -52,6 +70,18 @@ export const memberRoutes =
         const memberId = ctx.requireMember(request);
         const target = idOrNotFound(request.params.memberId);
         return unwrap(await deactivateMember(ctx.db, memberId, target, ctx.now()));
+      },
+    );
+
+    app.post(
+      "/v1/members/:memberId/reactivate",
+      { schema: { params: memberParams, response: { 200: reactivatedMember } } },
+      async (request) => {
+        const memberId = ctx.requireMember(request);
+        const target = idOrNotFound(request.params.memberId);
+        const result = await reactivateMember(ctx.db, memberId, target, ctx.now(), ctx.config.invitationTtlMs);
+        if (!result.ok) throw refusal(result);
+        return { member: result.member, invitation: result.invitation };
       },
     );
   };

@@ -2,7 +2,6 @@
 
 /** Raised by the app.* functions when the acting Member may not take the step. */
 export const INSUFFICIENT_PRIVILEGE = "42501";
-export const UNIQUE_VIOLATION = "23505";
 
 export function pgError(error: unknown): { code?: string; constraint?: string } {
   return error as { code?: string; constraint?: string };

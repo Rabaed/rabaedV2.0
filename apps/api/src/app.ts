@@ -80,7 +80,7 @@ export async function buildApp({
   });
 
   app.setErrorHandler((error, request, reply) => {
-    if (error instanceof HttpError) return reply.code(error.statusCode).send({ error: error.code });
+    if (error instanceof HttpError) return reply.code(error.statusCode).send({ error: error.code, ...error.details });
     if (hasZodFastifySchemaValidationErrors(error)) {
       return reply.code(400).send({ error: "invalid_request", issues: error.validation });
     }

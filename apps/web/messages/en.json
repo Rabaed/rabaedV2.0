@@ -68,13 +68,18 @@
     "language": "Language",
     "invite": "Send invitation",
     "invitationLink": "Invitation created. Send this link to the new Member; it works once and expires.",
-    "duplicateEmail": "That email already belongs to a Member on Rabaed.",
+    "alreadyAMember": "That email already belongs to a Member of your Company.",
+    "registeredWithAnotherCompany": "This person is already registered on Rabaed with another Company.",
+    "confirmReactivateEmail": "{email} belongs to a deactivated Member of your Company. Reactivate them? They keep their Signature and records.",
+    "reactivated": "Member reactivated. They can sign in again with their password.",
     "invalid": "Check the email and both names.",
     "unavailable": "Something went wrong. Try again.",
     "makeProjectCreator": "Make Project Creator",
     "removeProjectCreator": "Remove Project Creator",
     "deactivate": "Deactivate",
-    "confirmDeactivate": "Deactivate {name}? They will be signed out at once and can no longer sign in."
+    "confirmDeactivate": "Deactivate {name}? They will be signed out at once and can no longer sign in.",
+    "reactivate": "Reactivate",
+    "confirmReactivate": "Reactivate {name}? They keep their Signature and records."
   },
   "projects": {
     "title": "My Projects",
