@@ -10,7 +10,8 @@ import {
   type Visibility,
 } from "@rabaed/domain";
 import { sql, type Transaction } from "kysely";
-import { checkedOutcome, refusedAsForbidden, type Forbidden } from "../db-error.ts";
+import { refusedAsForbidden, type Forbidden } from "../db-error.ts";
+import { checkedOutcome } from "../outcomes.ts";
 
 // Trades, Locations and Visibility grants. Writes go through the app.* functions
 // of the visibility migration; reads go through RLS or those functions.
@@ -23,8 +24,8 @@ export type AddValueResult =
   | Forbidden
   | { ok: false; reason: (typeof addValueRefusals)[number] };
 
-const setRefusals = ["not_found", "project_closed", "member_not_found", "value_not_found", "exceeds_participant"] as const;
-type SetRefusal = (typeof setRefusals)[number];
+const setVisibilityRefusals = ["not_found", "project_closed", "member_not_found", "value_not_found", "exceeds_participant"] as const;
+type SetRefusal = (typeof setVisibilityRefusals)[number];
 export type SetVisibilityResult = { ok: true } | Forbidden | { ok: false; reason: SetRefusal };
 
 type ValueRow = {
@@ -155,7 +156,7 @@ async function setEveryDimension(
     return await refusedAsForbidden(() =>
       withMember(db, memberId, async (trx) => {
         for (const kind of dimensionKinds) {
-          const outcome = checkedOutcome(await setOne(trx, kind, request[kind]), ["set", ...setRefusals]);
+          const outcome = checkedOutcome(await setOne(trx, kind, request[kind]), ["set", ...setVisibilityRefusals]);
           if (outcome !== "set") throw new Refused(outcome);
         }
         return { ok: true } as const;

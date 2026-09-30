@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { checkedOutcome, commandResult } from "./db-error.ts";
+import { checkedOutcome, commandResult } from "./outcomes.ts";
 
 describe("checkedOutcome", () => {
   const words = ["added", "not_found", "project_closed"] as const;

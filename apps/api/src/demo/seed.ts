@@ -187,12 +187,12 @@ export async function seedDemo(app: FastifyInstance, migrator: Db, password: str
     dcl: await participantOf(dcl, "consultant"),
     waha: await participantOf(waha, "owner_representative"),
   };
-  const cover = (participantId: string, trades: VisibilityGrant, locations: VisibilityGrant) =>
+  const grantVisibility = (participantId: string, trades: VisibilityGrant, locations: VisibilityGrant) =>
     tmc.caller("PUT", `/v1/participants/${participantId}/visibility`, { trade: trades, location: locations });
-  await cover(participant.tmc, only(electrical), all);
-  await cover(participant.beta, only(electrical), all);
-  await cover(participant.dcl, only(electrical, mechanical), all);
-  await cover(participant.waha, only(electrical), all);
+  await grantVisibility(participant.tmc, only(electrical), all);
+  await grantVisibility(participant.beta, only(electrical), all);
+  await grantVisibility(participant.dcl, only(electrical, mechanical), all);
+  await grantVisibility(participant.waha, only(electrical), all);
 
   /** Invited by their Authorized Person, added to the Project with a Position and all of their Participant's Visibility. */
   async function member(company: Onboarded, participantId: string, person: Person, positions: string[]) {

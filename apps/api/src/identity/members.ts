@@ -1,7 +1,8 @@
 import { withMember, type Database, type Db } from "@rabaed/db";
 import type { CompanyMember, InviteMemberRequest } from "@rabaed/domain";
 import { sql, type Transaction } from "kysely";
-import { checkedOutcome, pgError, refusedAsForbidden, UNIQUE_VIOLATION, type Forbidden } from "../db-error.ts";
+import { pgError, refusedAsForbidden, UNIQUE_VIOLATION, type Forbidden } from "../db-error.ts";
+import { checkedOutcome } from "../outcomes.ts";
 import type { Invitation } from "./invitations.ts";
 import { newToken } from "./tokens.ts";
 

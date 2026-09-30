@@ -12,7 +12,8 @@ import {
   type WorkItemSummary,
 } from "@rabaed/domain";
 import { sql, type RawBuilder, type Transaction } from "kysely";
-import { checkedOutcome, commandResult, refusedAsForbidden, type Forbidden } from "../db-error.ts";
+import { refusedAsForbidden, type Forbidden } from "../db-error.ts";
+import { checkedOutcome, commandResult } from "../outcomes.ts";
 
 // Work Items. Writes go through the app.* functions of the work items migration;
 // reads go through RLS, which answers only with the items the Member can see
@@ -21,7 +22,7 @@ import { checkedOutcome, commandResult, refusedAsForbidden, type Forbidden } fro
 
 type Trx = Transaction<Database>;
 
-const createRefusals = [
+const createWorkItemRefusals = [
   "not_found",
   "project_closed",
   "type_not_found",
@@ -32,7 +33,7 @@ const createRefusals = [
 export type CreateWorkItemResult =
   | { ok: true; id: string }
   | Forbidden
-  | { ok: false; reason: (typeof createRefusals)[number] };
+  | { ok: false; reason: (typeof createWorkItemRefusals)[number] };
 
 type SummaryRow = {
   id: string;
@@ -107,7 +108,7 @@ export function createWorkItem(
           ${projectId}::uuid, ${input.type}, ${input.title}, ${input.description},
           ${input.tradeId}::uuid, ${input.locationId}::uuid, ${now})
       `.execute(trx);
-      const outcome = checkedOutcome(rows[0]!.outcome, ["created", ...createRefusals]);
+      const outcome = checkedOutcome(rows[0]!.outcome, ["created", ...createWorkItemRefusals]);
       const { work_item_id } = rows[0]!;
       return outcome === "created" ? { ok: true, id: work_item_id! } : { ok: false, reason: outcome };
     }),

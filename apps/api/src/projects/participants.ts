@@ -10,7 +10,8 @@ import type {
   ProjectParticipants,
 } from "@rabaed/domain";
 import { sql, type RawBuilder } from "kysely";
-import { checkedOutcome, commandResult, refusedAsForbidden, type Forbidden } from "../db-error.ts";
+import { refusedAsForbidden, type Forbidden } from "../db-error.ts";
+import { checkedOutcome, commandResult } from "../outcomes.ts";
 
 // Participants and Project Members. Writes go through the app.* functions of the
 // participants migration; reads go through RLS or those functions, never around them.
@@ -23,7 +24,11 @@ export type AddParticipantResult =
   | Forbidden
   | { ok: false; reason: (typeof addParticipantRefusals)[number] };
 
-export type RespondToInvitationResult = { ok: true } | Forbidden | { ok: false; reason: "not_found" | "project_closed" };
+const respondRefusals = ["not_found", "project_closed"] as const;
+export type RespondToInvitationResult =
+  | { ok: true }
+  | Forbidden
+  | { ok: false; reason: (typeof respondRefusals)[number] };
 
 const projectMemberRefusals = ["not_found", "project_closed", "member_not_found", "position_not_found"] as const;
 export type ProjectMemberResult = { ok: true } | Forbidden | { ok: false; reason: (typeof projectMemberRefusals)[number] };
@@ -161,7 +166,7 @@ export function respondToInvitation(
       const { rows } = await sql<{ outcome: string }>`
         select app.respond_to_invitation(${participantId}::uuid, ${accept}, ${now}) as outcome
       `.execute(trx);
-      const outcome = checkedOutcome(rows[0]!.outcome, ["accepted", "declined", "not_found", "project_closed"]);
+      const outcome = checkedOutcome(rows[0]!.outcome, ["accepted", "declined", ...respondRefusals]);
       return outcome === "accepted" || outcome === "declined" ? { ok: true } : { ok: false, reason: outcome };
     }),
   );
