@@ -154,12 +154,17 @@ export function accountStackName(config: EnvironmentConfig): string {
  */
 export const accountBootstrap = { qualifier: "rabaedacct", toolkitStackName: "CDKToolkit-Account" } as const;
 
+/** Matches every stack of the environment, its nested stacks and the roles CloudFormation names after them. */
+export function stackPattern(config: EnvironmentConfig): string {
+  return `Rabaed-${config.name}-*`;
+}
+
 /**
  * Every stack's name, in deploy order. The deploy workflow deploys all but
  * the account stack, which only a person deploys, through the wizard.
  */
 export function stackNames(config: EnvironmentConfig) {
-  const name = (part: string) => `Rabaed-${config.name}-${part}`;
+  const name = (part: string) => stackPattern(config).replace("*", part);
   return {
     account: accountStackName(config),
     network: name("Network"),
@@ -210,7 +215,9 @@ export function resourceNames(config: EnvironmentConfig) {
     allServicesQuery: `${prefix}/all-services`,
     trail: prefix,
     /** Every role in the environment's stacks: named ones and the ones CloudFormation names after the stack. */
-    rolePatterns: [`${prefix}-*`, `Rabaed-${config.name}-*`],
+    rolePatterns: [`${prefix}-*`, stackPattern(config)],
+    /** GitHub Actions' roles (account stack); a deploy may only add and remove their inline grants. */
+    githubRoles: `${prefix}-github-*`,
     /** GitHub Actions' deploy role, which also builds the images (account stack). */
     deployRole: `${prefix}-github-deploy`,
     /** The last version that passed the deploy's checks; the workflow rolls back to it. */

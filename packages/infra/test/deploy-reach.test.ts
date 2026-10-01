@@ -123,16 +123,9 @@ describe("CloudFormation execution policy (no AdministratorAccess)", () => {
       expect(list(statement.Resource)).toEqual(ENVIRONMENT_ROLES);
       expect(actions([statement])).not.toContain("iam:*");
     }
-    // Creating a role or changing what it may do needs the boundary on it.
-    const permissionWrites = [
-      "iam:CreateRole",
-      "iam:PutRolePolicy",
-      "iam:DeleteRolePolicy",
-      "iam:AttachRolePolicy",
-      "iam:DetachRolePolicy",
-      "iam:PutRolePermissionsBoundary",
-    ];
-    for (const action of permissionWrites) {
+    // Creating a role or giving it permissions needs the boundary on it.
+    // Taking permissions away does not: it never widens anything.
+    for (const action of ["iam:CreateRole", "iam:PutRolePolicy", "iam:AttachRolePolicy", "iam:PutRolePermissionsBoundary"]) {
       const granting = iam.filter((s) => list(s.Action).includes(action));
       expect(granting, action).toHaveLength(1);
       expect(granting[0]!.Condition, action).toEqual({ StringEquals: { "iam:PermissionsBoundary": BOUNDARY } });
@@ -157,9 +150,11 @@ describe("CloudFormation execution policy (no AdministratorAccess)", () => {
 
   it("deploys only this environment's stacks, and reads only the rotation app and the bootstrap version", () => {
     const scoped = (prefix: string) => allowed(execution).filter((s) => actions([s]).some((a) => service(a) === prefix));
-    for (const statement of scoped("cloudformation")) {
-      expect(statement.Resource).toBe("arn:aws:cloudformation:eu-central-1:${AWS::AccountId}:stack/Rabaed-dev-*");
-    }
+    expect(scoped("cloudformation")).toMatchObject([
+      { Action: "cloudformation:*", Resource: "arn:aws:cloudformation:eu-central-1:${AWS::AccountId}:stack/Rabaed-dev-*" },
+      // The data stack's nested rotation stacks come through the Serverless transform.
+      { Action: "cloudformation:CreateChangeSet", Resource: "arn:aws:cloudformation:eu-central-1:aws:transform/Serverless-2016-10-31" },
+    ]);
     for (const statement of scoped("serverlessrepo")) {
       expect(statement.Resource).toBe("arn:aws:serverlessrepo:us-east-1:297356227824:applications/SecretsManagerRDSPostgreSQLRotationSingleUser");
       for (const action of actions([statement])) expect(action).toMatch(/^serverlessrepo:(Get|CreateCloudFormationTemplate)/);

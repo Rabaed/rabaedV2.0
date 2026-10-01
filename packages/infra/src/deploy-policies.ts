@@ -1,7 +1,7 @@
 import { DefaultStackSynthesizer, type Stack } from "aws-cdk-lib";
 import * as iam from "aws-cdk-lib/aws-iam";
-import * as secretsmanager from "aws-cdk-lib/aws-secretsmanager";
-import { resourceNames, type EnvironmentConfig } from "./config.ts";
+import { resourceNames, stackPattern, type EnvironmentConfig } from "./config.ts";
+import { ROTATION_APPLICATION } from "./data-stack.ts";
 
 // The two policies that bound a deploy (RP-242), both in the account stack,
 // which only a person deploys.
@@ -13,9 +13,6 @@ import { resourceNames, type EnvironmentConfig } from "./config.ts";
 // boundary caps every such role, the GitHub deploy role among them, whatever
 // a stack grants it. A new kind of resource, or a role that needs a new kind
 // of action, needs these widened in the same change (deploy-reach.test.ts).
-
-/** The rotation app the data stack deploys: AWS's PostgreSQL single-user rotation, at the version the CDK pins. */
-export const ROTATION_APPLICATION = secretsmanager.SecretRotationApplication.POSTGRES_ROTATION_SINGLE_USER;
 
 // Services whose first use creates a service-linked role.
 const SERVICE_LINKED_ROLES = ["ecs.amazonaws.com", "elasticloadbalancing.amazonaws.com", "rds.amazonaws.com"];
@@ -63,11 +60,16 @@ export function executionPolicyStatements(stack: Stack, config: EnvironmentConfi
       ],
       resources: ["*"],
     }),
-    // The rotation app becomes a nested stack of the data stack.
+    // The rotation app becomes a nested stack of the data stack, through the Serverless transform.
     new iam.PolicyStatement({
       sid: "NestedStacks",
       actions: ["cloudformation:*"],
-      resources: [stack.formatArn({ service: "cloudformation", resource: "stack", resourceName: `Rabaed-${config.name}-*` })],
+      resources: [stack.formatArn({ service: "cloudformation", resource: "stack", resourceName: stackPattern(config) })],
+    }),
+    new iam.PolicyStatement({
+      sid: "ServerlessTransform",
+      actions: ["cloudformation:CreateChangeSet"],
+      resources: [stack.formatArn({ service: "cloudformation", account: "aws", resource: "transform", resourceName: "Serverless-2016-10-31" })],
     }),
     new iam.PolicyStatement({
       sid: "RotationApplication",
@@ -88,18 +90,20 @@ export function executionPolicyStatements(stack: Stack, config: EnvironmentConfi
       actions: [
         "iam:AttachRolePolicy",
         "iam:CreateRole",
-        "iam:DeleteRolePolicy",
-        "iam:DetachRolePolicy",
         "iam:PutRolePermissionsBoundary",
         "iam:PutRolePolicy",
       ],
       resources: environmentRoles,
       conditions: { StringEquals: { "iam:PermissionsBoundary": boundaryArn } },
     }),
+    // Taking permissions away never widens anything, so also from roles a
+    // deploy has not bounded yet (e.g. hosted rotation's, deleted in dev).
     new iam.PolicyStatement({
       sid: "Roles",
       actions: [
         "iam:DeleteRole",
+        "iam:DeleteRolePolicy",
+        "iam:DetachRolePolicy",
         "iam:GetRole",
         "iam:GetRolePolicy",
         "iam:ListAttachedRolePolicies",
@@ -133,7 +137,7 @@ export function executionPolicyStatements(stack: Stack, config: EnvironmentConfi
       sid: "GithubRolesAreTheAccountStacks",
       effect: iam.Effect.DENY,
       notActions: ["iam:DeleteRolePolicy", "iam:GetRole", "iam:GetRolePolicy", "iam:PutRolePolicy"],
-      resources: roleArns(stack, [`rabaed-${config.name}-github-*`]),
+      resources: roleArns(stack, [names.githubRoles]),
     }),
   ];
 }

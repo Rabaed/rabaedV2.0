@@ -85,15 +85,17 @@ describe("GitHub Actions access", () => {
     const uses = readdirSync(dir).flatMap((file) => {
       const lines = readFileSync(new URL(file, dir), "utf8").split("\n");
       return lines.flatMap((line, i) => {
-        if (!/^\s+environment:\s*dev\s*$/.test(line)) return [];
+        // Any spelling (`environment: dev`, `{ name: dev }`, a `name:` block):
+        // a job naming any environment at all must be this one.
+        if (!/^\s+environment:/.test(line)) return [];
         const job = lines
           .slice(0, i)
           .reverse()
           .find((l) => /^ {2}[\w-]+:\s*$/.test(l));
-        return [`${file} ${job?.trim()}`];
+        return [`${file} ${job?.trim()} ${line.trim()}`];
       });
     });
-    expect(uses).toEqual(["deploy-dev.yml deploy:"]);
+    expect(uses).toEqual(["deploy-dev.yml deploy: environment: dev"]);
   });
 
   it("the deploy role is capped by the permissions boundary, so the stacks' grants to it cannot exceed it", () => {

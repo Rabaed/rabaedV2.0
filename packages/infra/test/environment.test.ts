@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { environments, type EnvironmentConfig } from "../src/config.ts";
-import { ROTATION_APPLICATION } from "../src/deploy-policies.ts";
+import { ROTATION_APPLICATION } from "../src/data-stack.ts";
 import { synthesise } from "./support.ts";
 
 const AWS_REGION = /\b(?:us|eu|ap|me|sa|ca|af|il|mx)-(?:gov-)?[a-z]+-\d\b/g;

@@ -9,8 +9,10 @@ import * as sam from "aws-cdk-lib/aws-sam";
 import * as secretsmanager from "aws-cdk-lib/aws-secretsmanager";
 import type { Construct } from "constructs";
 import { resourceNames, type EnvironmentConfig } from "./config.ts";
-import { ROTATION_APPLICATION } from "./deploy-policies.ts";
 import { DATABASE_PORT, type NetworkStack } from "./network-stack.ts";
+
+/** The rotation app: AWS's PostgreSQL single-user rotation, at the version the CDK pins. */
+export const ROTATION_APPLICATION = secretsmanager.SecretRotationApplication.POSTGRES_ROTATION_SINGLE_USER;
 
 // The database roles every Instance runs with (packages/db/src/config.ts).
 export const databaseRoles = ["rabaed_migrator", "rabaed_app", "rabaed_admin"] as const;
@@ -36,9 +38,10 @@ const EXCLUDED_CHARACTERS = " %+~`#$&*()|[]{}:;<>?!'/@\"\\";
 // Secrets Manager rotates every 30 days: a Lambda in the VPC signs in as the
 // role and changes its own password. The Lambda is AWS's own (a Serverless
 // Application Repository app), run with a role of ours: hosted rotation would
-// create a role a deploy may not (it cannot carry the permissions boundary). api and worker read the current password
-// when they connect (packages/db/src/rotating-password.ts), so a rotation
-// needs no restart; the migration task gets it at start.
+// create a role a deploy may not (it cannot carry the permissions boundary).
+// api and worker read the current password when they connect
+// (packages/db/src/rotating-password.ts), so a rotation needs no restart; the
+// migration task gets it at start.
 export class DataStack extends Stack {
   readonly database: rds.DatabaseInstance;
   /** The RDS master user's secret (JSON with `username` and `password`). */
