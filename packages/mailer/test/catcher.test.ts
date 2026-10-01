@@ -1,0 +1,69 @@
+import { randomUUID } from "node:crypto";
+import { describe, expect, it } from "vitest";
+import { mailerFromEnv, renderEmail } from "../src/index.ts";
+
+// Sends through the real mailer, as the services will, to the local Mailpit
+// (docker-compose.yml; a service in CI), and reads it back through
+// Mailpit's API. Each test mails its own address, so runs never mix.
+const catcherUrl = process.env.MAIL_CATCHER_URL;
+if (!catcherUrl) throw new Error("MAIL_CATCHER_URL is not set: start Mailpit (docker compose up -d mailpit) and see .env.example");
+
+interface CaughtMessage {
+  From: { Name: string; Address: string };
+  To: { Address: string }[];
+  Subject: string;
+  Text: string;
+  HTML: string;
+  Tags: string[];
+}
+
+async function caught(to: string): Promise<CaughtMessage[]> {
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const search = await fetch(new URL(`/api/v1/search?query=${encodeURIComponent(`to:"${to}"`)}`, catcherUrl));
+    const { messages } = (await search.json()) as { messages: { ID: string }[] };
+    if (messages.length > 0) {
+      return Promise.all(messages.map(async ({ ID }) => (await fetch(new URL(`/api/v1/message/${ID}`, catcherUrl))).json() as Promise<CaughtMessage>));
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  return [];
+}
+
+const recipient = () => `test-${randomUUID()}@rabaed.test`;
+
+describe("the mailer, against the local catcher", () => {
+  const mailer = mailerFromEnv({ ...process.env, MAIL_FROM: "no-reply@rabaed.test", MAIL_SES_CONFIGURATION_SET: undefined });
+
+  it("chooses the catcher, never SES, when MAIL_CATCHER_URL is set", () => {
+    expect(mailer.transport).toBe("catcher");
+  });
+
+  it("delivers an English sign-in code with its subject, both bodies and the sender", async () => {
+    const to = recipient();
+    const values = { code: "482913", validMinutes: 10 };
+    await mailer.send({ to, template: "sign-in-code", locale: "en", values });
+
+    const [message, ...more] = await caught(to);
+    const expected = renderEmail("sign-in-code", "en", values);
+    expect(more).toEqual([]);
+    expect(message).toMatchObject({
+      From: { Name: "Rabaed", Address: "no-reply@rabaed.test" },
+      To: [{ Address: to }],
+      Subject: expected.subject,
+      Tags: ["sign-in-code"],
+    });
+    expect(message!.Text.trim()).toBe(expected.text.trim());
+    expect(message!.HTML).toContain("482913");
+  });
+
+  it("delivers an Arabic invitation intact: Arabic subject, right-to-left body, the link", async () => {
+    const to = recipient();
+    const values = { companyName: "شركة البناء", link: "http://127.0.0.1:3000/ar/accept-invitation#token=abc" };
+    await mailer.send({ to, template: "invitation", locale: "ar", values });
+
+    const [message] = await caught(to);
+    expect(message?.Subject).toBe(renderEmail("invitation", "ar", values).subject);
+    expect(message?.HTML).toContain('<html lang="ar" dir="rtl">');
+    expect(message?.HTML).toContain(`href="${values.link}"`);
+  });
+});

@@ -191,11 +191,11 @@ finish() {
 # answers you give are remembered in .env.aws (git-ignored, never committed).
 # Nothing secret is written to the repo or to GitHub (the budget and alarm
 # emails are deploy-time parameters of the account stack): GitHub only receives
-# role ARNs, the region and the interim certificate (public) and its ARN, as
-# repository variables. The licensed Thmanyah fonts go from this computer
+# role ARNs, the region, the interim certificate (public) and its ARN, and the
+# email sender's address, as repository variables. The licensed Thmanyah fonts go from this computer
 # straight to the private build assets bucket.
 
-TOTAL_STAGES=10
+TOTAL_STAGES=11
 
 # The repository this script is in, wherever it is run from.
 cd "$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)"
@@ -421,6 +421,95 @@ fi
 pause
 
 # ── 9 ────────────────────────────────────────────────────────────────────
+stage "Email sender (Amazon SES)"
+say "Rabaed sends email (Rabaed Admin sign-in codes, invitations) through Amazon SES"
+say "in $REGION, from one address. Until Rabaed has a domain, SES verifies that one"
+say "address: AWS emails it a link to click. Use a mailbox the company controls."
+say "The address stays out of the repo: it is kept in .env.aws and a GitHub variable,"
+say "and each deploy passes it to the App stack, whose api may send only from it."
+ask_required MAIL_FROM_ADDRESS "Address every email comes from (e.g. no-reply@<company domain>):"
+write_env MAIL_FROM_ADDRESS "$MAIL_FROM_ADDRESS"
+ses_verified() {
+  [[ "$(aws sesv2 get-email-identity --region "$REGION" --email-identity "$MAIL_FROM_ADDRESS" \
+    --query VerifiedForSendingStatus --output text 2>/dev/null)" == True ]]
+}
+MAIL_VERIFIED=""
+if fresh_credentials && ses_verified; then
+  MAIL_VERIFIED=1
+  note "✓ $MAIL_FROM_ADDRESS is verified"
+elif confirm "Ask SES to verify $MAIL_FROM_ADDRESS now?"; then
+  # SES sends the link when the identity is created; for a new link, delete
+  # the identity in the SES console and re-run.
+  if ! aws sesv2 get-email-identity --region "$REGION" --email-identity "$MAIL_FROM_ADDRESS" >/dev/null 2>&1; then
+    aws sesv2 create-email-identity --region "$REGION" --email-identity "$MAIL_FROM_ADDRESS" >/dev/null \
+      || warn "SES refused the address; check it and re-run"
+  fi
+  step "AWS emails $MAIL_FROM_ADDRESS (subject \"Amazon Web Services – Email Address Verification Request\")."
+  step "Click the link in it within 24 hours."
+  while true; do
+    pause "Press Enter once you have clicked it."
+    fresh_credentials
+    if ses_verified; then MAIL_VERIFIED=1; note "✓ verified"; break; fi
+    warn "SES does not show it verified yet (it can take a minute)."
+    confirm "Check again?" || break
+  done
+fi
+if [[ -n "$MAIL_VERIFIED" ]]; then
+  set_var MAIL_FROM_ADDRESS "$MAIL_FROM_ADDRESS"
+  note "The next deploy lets the api send from it."
+else
+  SKIPPED+=("email sender: verify $MAIL_FROM_ADDRESS (re-run this wizard)")
+fi
+
+# A new account's SES is in the sandbox: it sends only to verified addresses,
+# 200 a day. Leaving it needs AWS to review a request, usually within a day.
+if [[ -n "$MAIL_VERIFIED" ]] && fresh_credentials; then
+  if [[ "$(aws sesv2 get-account --region "$REGION" --query ProductionAccessEnabled --output text)" == True ]]; then
+    note "✓ SES production access: on"
+  else
+    review=$(aws sesv2 get-account --region "$REGION" --query Details.ReviewDetails.Status --output text 2>/dev/null || true)
+    if [[ "$review" == PENDING ]]; then
+      note "SES production access was requested; AWS is reviewing it. Re-run later to check."
+      SKIPPED+=("SES production access (AWS is reviewing the request)")
+    else
+      say "SES is in the sandbox: it sends only to verified addresses, 200 a day."
+      [[ "$review" == DENIED ]] && warn "AWS denied the last request; see the AWS Support case it opened before asking again."
+      website=$(stack_output Url "Rabaed-${RABAED_ENV}-App" 2>/dev/null || true)
+      arn_ok "$website" || website="https://github.com/$REPOSITORY"
+      if ! confirm "Request production access now (transactional email, website $website)?"; then
+        SKIPPED+=("SES production access (re-run this wizard)")
+      elif aws sesv2 put-account-details --region "$REGION" --production-access-enabled \
+          --mail-type TRANSACTIONAL --website-url "$website" --contact-language EN \
+          --use-case-description "Rabaed is a business-to-business construction management platform. It sends transactional email only: one-time sign-in codes for its staff portal, and invitations that a company sends to its own colleagues. No marketing email. Each email goes to one recipient who asked for it or was invited by their own company; bounces and complaints are tracked through an SES configuration set and suppressed."; then
+        note "✓ requested; AWS answers by email, usually within a day"
+        SKIPPED+=("SES production access (AWS is reviewing the request)")
+      else
+        SKIPPED+=("SES production access (the request failed; re-run this wizard)")
+      fi
+    fi
+  fi
+fi
+
+# One test email from the sender to itself, which works even in the sandbox.
+if [[ -n "$MAIL_VERIFIED" ]] && confirm "Send a test email from $MAIL_FROM_ADDRESS to itself?"; then
+  fresh_credentials
+  configuration_set=()
+  aws sesv2 get-configuration-set --region "$REGION" --configuration-set-name "rabaed-${RABAED_ENV}" >/dev/null 2>&1 \
+    && configuration_set=(--configuration-set-name "rabaed-${RABAED_ENV}")
+  # The ${a[@]+…} form expands an empty array safely under set -u in older bash too.
+  if aws sesv2 send-email --region "$REGION" ${configuration_set[@]+"${configuration_set[@]}"} \
+      --from-email-address "Rabaed <$MAIL_FROM_ADDRESS>" \
+      --destination "{\"ToAddresses\":[\"$MAIL_FROM_ADDRESS\"]}" \
+      --content '{"Simple":{"Subject":{"Data":"Rabaed email test"},"Body":{"Text":{"Data":"Amazon SES sends Rabaed email. Sent by the AWS setup wizard."}}}}' >/dev/null; then
+    confirm "Sent. Did \"Rabaed email test\" reach $MAIL_FROM_ADDRESS (check spam too)?" \
+      || SKIPPED+=("test email did not arrive (SES console → Account dashboard; check spam)")
+  else
+    SKIPPED+=("test email (SES refused it; re-run this wizard)")
+  fi
+fi
+pause
+
+# ── 10 ───────────────────────────────────────────────────────────────────
 stage "Thmanyah fonts (private)"
 say "Arabic is shown in Thmanyah Sans, which is licensed: its files must never be"
 say "in the repo. This stage uploads them to the private build assets bucket; the"
@@ -465,7 +554,7 @@ else
 fi
 pause
 
-# ── 10 ───────────────────────────────────────────────────────────────────
+# ── 11 ───────────────────────────────────────────────────────────────────
 stage "Test alarm"
 say "Sets one alarm to ALARM for a moment, to prove notifications arrive."
 say "CloudWatch puts it back within a few minutes, which sends an OK email too."

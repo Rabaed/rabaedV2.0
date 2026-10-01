@@ -142,6 +142,26 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm test:seam2
 
+  mail:
+    name: mail (mailer against the catcher)
+    runs-on: ubuntu-latest
+    # The same catcher as docker-compose.yml: CI never sends real email.
+    services:
+      mailpit:
+        image: axllent/mailpit:v1.31.3
+        ports: ["8025:8025"]
+        options: >-
+          --health-cmd "/mailpit readyz" --health-interval 2s --health-timeout 3s --health-retries 30
+    env:
+      MAIL_CATCHER_URL: http://127.0.0.1:8025
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+      - uses: actions/setup-node@v4
+        with: { node-version: 24, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test:mail
+
   infra:
     name: infra (template assertions)
     runs-on: ubuntu-latest

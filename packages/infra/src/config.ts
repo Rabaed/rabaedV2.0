@@ -199,6 +199,8 @@ export function resourceNames(config: EnvironmentConfig) {
     demoPasswordSecret: `rabaed/${config.name}/demo/password`,
     /** Every Secrets Manager secret of the environment starts with this. */
     secretPrefix: `rabaed/${config.name}/`,
+    /** The SES configuration set every email is sent through (app stack). */
+    mailConfigurationSet: prefix,
     /** Private DNS namespace; web reaches the api at `api.<namespace>`. */
     namespace: `${prefix}.internal`,
   };

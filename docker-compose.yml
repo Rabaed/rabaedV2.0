@@ -1,4 +1,4 @@
-# Local development database. Credentials here are local-only placeholders
+# Local development database and mail catcher. Credentials here are local-only placeholders
 # (see .env.example); real environments never use them.
 # COMPOSE_PROJECT_NAME and POSTGRES_PORT come from .env, so each worktree gets its own
 # container, volume and port (see "Several worktrees at once" in README.md).
@@ -16,6 +16,19 @@ services:
       - db-data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  # Catches every email the services send, so local runs never send real email
+  # (packages/mailer). Read them at http://127.0.0.1:${MAILPIT_PORT}; the
+  # mailer posts to the same port's API. No volume: the mail is throwaway.
+  mailpit:
+    image: axllent/mailpit:v1.31.3
+    ports:
+      - "127.0.0.1:${MAILPIT_PORT:-8025}:8025"
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
       interval: 2s
       timeout: 3s
       retries: 30
