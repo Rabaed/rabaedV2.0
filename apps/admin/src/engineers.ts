@@ -1,5 +1,5 @@
 import type { Db } from "@rabaed/db";
-import { hashPassword } from "./password.ts";
+import { hashPassword } from "@rabaed/auth";
 
 /**
  * Creates a Rabaed Engineer (never a Member) with a password. An operations

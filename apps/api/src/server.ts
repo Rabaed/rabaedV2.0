@@ -11,12 +11,11 @@ const env = z
   .parse(process.env);
 
 const db = createDbFromEnv("app");
-const adminDb = createDbFromEnv("admin", { max: 2 });
-const app = await buildApp({ db, adminDb, config: apiConfigFromEnv() });
+const app = await buildApp({ db, config: apiConfigFromEnv() });
 
 const shutdown = async () => {
   await app.close();
-  await Promise.all([db.destroy(), adminDb.destroy()]);
+  await db.destroy();
   process.exit(0);
 };
 process.once("SIGINT", shutdown);

@@ -58,7 +58,8 @@ export interface DatabaseSize {
   readonly backupRetentionDays: number;
 }
 
-export const serviceNames = ["web", "api", "worker"] as const;
+/** The long-running services; admin is Rabaed Admin (apps/admin, ADR 0010). */
+export const serviceNames = ["web", "api", "admin", "worker"] as const;
 export type ServiceName = (typeof serviceNames)[number];
 
 /** A Fargate service at a fixed size: no autoscaling in dev. */
@@ -110,6 +111,7 @@ export const environments = {
     services: {
       web: { cpu: 256, memoryMiB: 1024, desiredCount: 1 },
       api: { cpu: 256, memoryMiB: 512, desiredCount: 1 },
+      admin: { cpu: 256, memoryMiB: 512, desiredCount: 1 },
       worker: { cpu: 256, memoryMiB: 512, desiredCount: 1 },
     },
     migrationTask: { cpu: 256, memoryMiB: 512 },
@@ -197,6 +199,8 @@ export function resourceNames(config: EnvironmentConfig) {
     lastGoodVersionParameter: `/rabaed/${config.name}/deploy/last-good-version`,
     /** The api's task role; the Project files bucket refuses everyone else. */
     apiTaskRole: `${prefix}-api-task`,
+    /** Rabaed Admin's task role: the only one that may read the rabaed_admin secret. */
+    adminTaskRole: `${prefix}-admin-task`,
     /** The demo people's sign-in password (demo environments only). */
     demoPasswordSecret: `rabaed/${config.name}/demo/password`,
     /** Every Secrets Manager secret of the environment starts with this. */

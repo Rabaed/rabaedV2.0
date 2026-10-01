@@ -5,7 +5,8 @@ if (existsSync(".env")) process.loadEnvFile(".env");
 
 // Five suites, each run on its own in CI:
 // - unit:  pure logic, no database.
-// - seam1: the API called as a given signed-in Member, against a real Postgres.
+// - seam1: the API called as a given signed-in Member, and Rabaed Admin as a
+//   signed-in Rabaed Engineer, against a real Postgres.
 // - seam2: the database as the app role with a Member set (RLS defence in depth).
 // Both run against the seeded setup: the demo Project `pnpm demo` builds is seeded
 // into the test database first (RP-196).
@@ -23,7 +24,7 @@ export default defineConfig({
       {
         test: {
           name: "seam1",
-          include: ["apps/api/test/**/*.test.ts"],
+          include: ["apps/api/test/**/*.test.ts", "apps/admin/test/**/*.test.ts"],
           globalSetup: ["packages/db/test-support/global-setup.ts", "apps/api/test/support/seed-demo.ts"],
           fileParallelism: false,
         },

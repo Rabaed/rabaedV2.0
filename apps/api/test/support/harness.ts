@@ -1,12 +1,12 @@
 import { randomInt, randomUUID } from "node:crypto";
+import { createEngineer, listOnboardingLeads, onboardCompany } from "@rabaed/admin/services";
 import { createDb } from "@rabaed/db";
 import { testDatabaseUrls } from "@rabaed/db/test-support";
-import type { BaseRole, CreateProjectRequest, InviteMemberRequest, OnboardCompanyRequest } from "@rabaed/domain";
+import type { BaseRole, CreateProjectRequest, InviteMemberRequest, OnboardCompanyRequest, OnboardingLeads } from "@rabaed/domain";
 import type { FastifyInstance, LightMyRequestResponse } from "fastify";
 import { expect } from "vitest";
 import { buildApp, SESSION_COOKIE } from "../../src/app.ts";
 import type { ApiConfig } from "../../src/config.ts";
-import { createEngineer } from "../../src/identity/engineers.ts";
 
 export const HOUR = 3_600_000;
 
@@ -67,10 +67,15 @@ export interface CreatedProject {
 export interface TestApi {
   /** A caller with no session. */
   anonymous(): Caller;
-  /** A new Rabaed Engineer, created as the `engineer:create` script does, signed in. */
-  engineer(): Promise<Caller>;
-  /** Onboards a Company with unique CR, VAT and email; overrides replace parts of the request. */
+  /** A new Rabaed Engineer, created as the `engineer:create` script does; returns their id. */
+  engineer(): Promise<string>;
+  /**
+   * A Rabaed Engineer onboards a Company with unique CR, VAT and email, through
+   * Rabaed Admin's onboarding service (apps/admin); overrides replace parts of the request.
+   */
   onboardCompany(overrides?: Partial<OnboardCompanyRequest>): Promise<OnboardedCompany>;
+  /** A Rabaed Engineer reads the onboarding leads, with a reason, through Rabaed Admin's service. */
+  onboardingLeads(reason: string): Promise<OnboardingLeads["leads"]>;
   /** Accepts an invitation and returns the signed-in caller. */
   acceptInvitation(token: string, password?: string): Promise<Caller>;
   /** Onboards a Company and signs its Authorized Person in. */
@@ -143,37 +148,25 @@ function expectStatus(res: LightMyRequestResponse, status: number, what: string)
 export async function createTestApi(options: { databaseUrl?: string } = {}): Promise<TestApi> {
   const urls = testDatabaseUrls();
   const db = createDb(options.databaseUrl ?? urls.app);
+  // Rabaed Admin's connection, for onboarding only: the customer api has none (ADR 0010).
   const adminDb = createDb(urls.admin, { max: 2 });
   const migratorDb = createDb(urls.migrator, { max: 1 });
   let offset = 0;
-  const app = await buildApp({
-    db,
-    adminDb,
-    config: testConfig,
-    now: () => new Date(Date.now() + offset),
-    logger: false,
-  });
+  const now = () => new Date(Date.now() + offset);
+  const app = await buildApp({ db, config: testConfig, now, logger: false });
 
-  // One Engineer per TestApi; signed in afresh for each onboarding, since tests move the clock.
-  let engineerEmail: string | undefined;
-  const signInEngineer = async (email: string) => {
-    const caller = callerFor(app);
-    expectStatus(await caller.post("/admin/v1/session", { email, password: DEFAULT_PASSWORD }), 204, "engineer sign-in");
-    return caller;
-  };
+  // One Engineer per TestApi does every onboarding.
+  let engineerId: string | undefined;
+  const theEngineer = async () => (engineerId ??= await api.engineer());
 
   const api: TestApi = {
     anonymous: () => callerFor(app),
 
     async engineer() {
-      const email = uniqueEmail("engineer");
-      await createEngineer(migratorDb, { email, fullName: "Test Engineer", password: DEFAULT_PASSWORD });
-      engineerEmail ??= email;
-      return signInEngineer(email);
+      return createEngineer(migratorDb, { email: uniqueEmail("engineer"), fullName: "Test Engineer", password: DEFAULT_PASSWORD });
     },
 
     async onboardCompany(overrides = {}) {
-      const engineerCaller = engineerEmail ? await signInEngineer(engineerEmail) : await api.engineer();
       const body: OnboardCompanyRequest = {
         legalName: { en: "Test Constructions", ar: "إنشاءات الاختبار" },
         crNumber: uniqueCr(),
@@ -186,16 +179,19 @@ export async function createTestApi(options: { databaseUrl?: string } = {}): Pro
         reason: "Signed contract, test onboarding",
         ...overrides,
       };
-      const res = await engineerCaller.post("/admin/v1/companies", body);
-      expectStatus(res, 201, "onboard company");
-      const json = res.json();
+      const result = await onboardCompany(adminDb, await theEngineer(), body, now(), testConfig.invitationTtlMs);
+      if (!result.ok) throw new Error(`onboard company: duplicate ${result.conflict}`);
       return {
-        companyId: json.companyId,
-        authorizedPerson: { id: json.authorizedPersonId, email: body.authorizedPerson.email },
-        invitationToken: json.invitation.token,
+        companyId: result.companyId,
+        authorizedPerson: { id: result.authorizedPersonId, email: body.authorizedPerson.email },
+        invitationToken: result.invitation.token,
         crNumber: body.crNumber,
         vatNumber: body.vatNumber,
       };
+    },
+
+    async onboardingLeads(reason) {
+      return listOnboardingLeads(adminDb, await theEngineer(), reason);
     },
 
     async acceptInvitation(token, password = DEFAULT_PASSWORD) {

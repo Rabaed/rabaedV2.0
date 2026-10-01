@@ -28,6 +28,13 @@ export default tseslint.config(
     },
   },
   {
+    // Rabaed Admin's page script runs in the browser, without a build step.
+    files: ["apps/admin/src/pages/*.js"],
+    languageOptions: { sourceType: "script", globals: { ...globals.browser } },
+    plugins: { rabaed },
+    rules: { "rabaed/no-deadline-words": "error" },
+  },
+  {
     files: ["apps/web/**/*.{ts,tsx}"],
     plugins: { "@next/next": nextPlugin },
     languageOptions: { globals: { ...globals.browser } },

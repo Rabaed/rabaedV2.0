@@ -1,6 +1,6 @@
 // Seam 1: invitations, sign-in and sign-out (RP-187).
 import { afterAll, describe, expect, it } from "vitest";
-import { createTestApi, DEFAULT_PASSWORD, HOUR, testConfig, uniqueEmail } from "./support/harness.ts";
+import { createTestApi, DEFAULT_PASSWORD, expectHidden, HOUR, testConfig, uniqueEmail } from "./support/harness.ts";
 
 const api = await createTestApi();
 afterAll(() => api.close());
@@ -105,18 +105,26 @@ describe("signing in", () => {
     ]);
   });
 
-  it("does not let a Rabaed Engineer act as a Member", async () => {
-    const engineer = await api.engineer();
-    expect((await engineer.get("/v1/me")).statusCode).toBe(401);
+  it("does not sign a Rabaed Engineer in: Engineers sign in to Rabaed Admin only (ADR 0010)", async () => {
+    // The demo Engineer, whose password in the test database is the test password.
+    const res = await api.anonymous().post("/v1/session", { email: "engineer@rabaed.demo.rabaed.test", password: DEFAULT_PASSWORD });
+    expect(res.statusCode).toBe(401);
+    expect(res.json()).toEqual({ error: "invalid_credentials" });
   });
 
-  it("does not let a Member sign in to Rabaed Admin", async () => {
-    const company = await api.onboardCompany();
-    await api.acceptInvitation(company.invitationToken);
-    const res = await api
-      .anonymous()
-      .post("/admin/v1/session", { email: company.authorizedPerson.email, password: DEFAULT_PASSWORD });
-    expect(res.statusCode).toBe(401);
+  it("serves no Rabaed Admin route, to anyone", async () => {
+    const { caller: member } = await api.authorizedPerson();
+    for (const caller of [api.anonymous(), member]) {
+      for (const [method, url] of [
+        ["POST", "/admin/v1/session"],
+        ["POST", "/admin/v1/companies"],
+        ["GET", "/admin/v1/onboarding-leads?reason=x"],
+        ["POST", "/v1/sign-in"],
+        ["POST", "/v1/companies"],
+      ] as const) {
+        await expectHidden(caller.request(method, url, method === "POST" ? {} : undefined), `${method} ${url}`);
+      }
+    }
   });
 });
 

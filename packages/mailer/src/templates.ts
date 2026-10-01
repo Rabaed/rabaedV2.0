@@ -6,6 +6,10 @@ export interface EmailTemplateValues {
   "sign-in-code": { code: string; validMinutes: number };
   /** An invitation to become a Member of a Company; the link opens accept-invitation. */
   invitation: { companyName: string; link: string };
+  /** Rabaed Admin: a Rabaed Engineer signed in from a browser it hasn't seen (ADR 0010). */
+  "new-device-sign-in": { when: string; ip: string };
+  /** Rabaed Admin: too many failed sign-ins; sign-in is refused for a while. */
+  "sign-in-locked": { minutes: number };
 }
 
 export type EmailTemplate = keyof EmailTemplateValues;
@@ -30,8 +34,9 @@ export function renderEmail<T extends EmailTemplate>(template: T, locale: Locale
   };
 }
 
-// A paragraph is text, with values marked to keep left to right (codes, links).
-type Part = string | { ltr: string; link?: boolean };
+// A paragraph is text, with values marked to keep left to right: codes (shown
+// large), links, and inline values such as times and addresses.
+type Part = string | { ltr: string; link?: boolean; inline?: boolean };
 type Paragraph = Part[];
 interface Content {
   subject: string;
@@ -70,6 +75,44 @@ const templates: { [T in EmailTemplate]: (locale: Locale, values: EmailTemplateV
           signOff: signOff.en,
         };
   },
+  "new-device-sign-in": (locale, { when, ip }) =>
+    locale === "ar"
+      ? {
+          subject: "دخول إلى إدارة ربائد من متصفح جديد",
+          paragraphs: [
+            ["دخل أحدهم إلى إدارة ربائد بحسابك من متصفح لم يُستخدم من قبل، في ", { ltr: when, inline: true }, " من العنوان ", { ltr: ip, inline: true }, "."],
+            ["إن لم تكن أنت، غيّر كلمة المرور وأبلغ فريق ربائد فوراً."],
+          ],
+          signOff: signOff.ar,
+        }
+      : {
+          subject: "New browser signed in to Rabaed Admin",
+          paragraphs: [
+            ["Someone signed in to Rabaed Admin as you from a browser not used before, at ", { ltr: when, inline: true }, " from ", { ltr: ip, inline: true }, "."],
+            ["If it wasn't you, change your password and tell the Rabaed team at once."],
+          ],
+          signOff: signOff.en,
+        },
+  "sign-in-locked": (locale, { minutes }) => {
+    const count = formatNumber(minutes, locale);
+    return locale === "ar"
+      ? {
+          subject: "أُوقف الدخول إلى إدارة ربائد مؤقتاً",
+          paragraphs: [
+            [`بعد عدة محاولات دخول فاشلة إلى حسابك في إدارة ربائد، أُوقف الدخول لمدة ${count} ${arabicMinutes(minutes)}.`],
+            ["إن لم تكن أنت، أبلغ فريق ربائد فوراً."],
+          ],
+          signOff: signOff.ar,
+        }
+      : {
+          subject: "Rabaed Admin sign-in locked for now",
+          paragraphs: [
+            [`After several failed sign-ins to your Rabaed Admin account, sign-in is locked for ${count} minutes.`],
+            ["If it wasn't you, tell the Rabaed team at once."],
+          ],
+          signOff: signOff.en,
+        };
+  },
 };
 
 /** Every template, from the templates themselves, so none can be left out of the tests. */
@@ -98,6 +141,7 @@ function escape(text: string): string {
 function partHtml(part: Part): string {
   if (typeof part === "string") return escape(part);
   const value = escape(part.ltr);
+  if (part.inline) return `<bdi dir="ltr">${value}</bdi>`;
   const inner = part.link ? `<a href="${value}">${value}</a>` : `<strong style="font-size:20px;letter-spacing:2px">${value}</strong>`;
   return `<bdi dir="ltr">${inner}</bdi>`;
 }

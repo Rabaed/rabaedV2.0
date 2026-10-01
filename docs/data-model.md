@@ -55,10 +55,10 @@ Tenancy is per Project (ADR 0007): every Project-owned table has `project_id` an
 A Member never moves between Companies. Changing employer means a new Member.
 
 **credential**
-`member_id` or `engineer_id` (exactly one), `password_hash` (argon2id, PHC string). Authentication is in-house (email + password); MFA factors and lockout counters get their own table and columns later. The app role never reads it directly.
+`member_id` or `engineer_id` (exactly one), `password_hash` (argon2id, PHC string). Authentication is in-house (email + password); Members' MFA factors and lockout counters get their own table and columns later (Rabaed Engineers have them, below). The app role never reads it directly.
 
 **session**
-`token_hash` (SHA-256 of the random cookie token), `member_id` or `engineer_id`, `expires_at`, `revoked_at`. Server-side: signing out revokes the row.
+`token_hash` (SHA-256 of the random cookie token), `member_id`, `expires_at`, `revoked_at`. Server-side: signing out revokes the row. Members only: the customer api neither creates nor resolves a session for an Engineer (its `engineer_id` column is left from before ADR 0010).
 
 **invitation**
 `member_id`, `token_hash`, `invited_by_engineer_id` or `invited_by_member_id`, `expires_at`, `used_at`. One-time and expiring; accepting it sets the password and activates the Member.
@@ -334,10 +334,17 @@ Each created Draft carries `import_id` for traceability.
 
 **notification** / **notification_preference**: in-app inbox and per-Member channel settings (email now, WhatsApp later). `notification`: `id`, `member_id`, `project_id`, `work_item_id`, `outbox_id` (unique with `member_id`: one per Member per row), `kind`, `step_id`, `created_at`, `read_at`. It holds ids only; the item's number and title are read through RLS when shown, and a Member sees only their own notifications of items they still see.
 
-**rabaed_engineer**: separate identity table. Engineers are never Members.
+**rabaed_engineer**: separate identity table. Engineers are never Members. `failed_sign_ins` and `locked_until` hold Rabaed Admin's lockout.
+
+Rabaed Admin's own sign-in (ADR 0010), used by the admin service only, never the app role:
+
+- **engineer_sign_in_code**: a sign-in waiting for its emailed code: `engineer_id`, `challenge_hash` (the browser's cookie token), `code_hash`, `expires_at`, `used_at`, `failed_attempts`. Single use, ten minutes, three wrong tries.
+- **engineer_session**: `token_hash`, `engineer_id`, `last_seen_at` (ends after 30 minutes idle), `expires_at` (12 hours at most), `revoked_at`.
+- **engineer_device**: `engineer_id`, `device_hash`, `first_seen_at`: the browsers an Engineer has signed in from; any other triggers an email alert.
+- **engineer_sign_in_event**: append-only log of every sign-in, failure and sign-out: `engineer_id` (null when the email matched none), `email`, `event`, `ip`, `user_agent`, `at`.
 
 **admin_action**: `id`, `engineer_id`, `action`, `target_kind/target_id` (`target_id` null for a read of a list), `reason` (required), `before jsonb`, `after jsonb`, `at`.
-Allowed actions are an explicit list: onboard Company, reassign, reset step, transfer Authorized Person, unlock, run import, fix visibility, publish library template.
+Allowed actions are an explicit list: onboard Company, invite its Authorized Person again, reassign, reset step, transfer Authorized Person, unlock, run import, fix visibility, publish library template.
 
 **job**: background jobs (PDF sealing, imports, deliveries) with status and error, which is the Job Monitor.
 

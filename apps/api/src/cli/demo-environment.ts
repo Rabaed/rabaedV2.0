@@ -40,7 +40,7 @@ const migrator = createDb(urls.migrator, { max: 2 });
 const db = createDb(urls.app, { max: 2 });
 const adminDb = createDb(urls.admin, { max: 1 });
 try {
-  const result = await ensureDemo(migrator, () => buildApp({ db, adminDb, config: apiConfigFromEnv(), logger: false }), password);
+  const result = await ensureDemo({ migrator, admin: adminDb }, () => buildApp({ db, config: apiConfigFromEnv(), logger: false }), password);
   console.log(result === "seeded" ? "demo: seeded Riyadh Gate Tower – Phase 2 and Jeddah Corniche Villas" : "demo: already seeded");
 } finally {
   await Promise.all([migrator.destroy(), db.destroy(), adminDb.destroy()]);

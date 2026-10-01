@@ -12,8 +12,62 @@ export interface RabaedEngineerTable {
   email: string;
   full_name: string;
   status: Generated<"active" | "deactivated">;
+  /** Consecutive failed passwords or codes in Rabaed Admin. */
+  failed_sign_ins: Generated<number>;
+  locked_until: Timestamp | null;
   created_at: Generated<Timestamp>;
   updated_at: Generated<Timestamp>;
+}
+
+/** A Rabaed Admin sign-in waiting for its emailed code. */
+export interface EngineerSignInCodeTable {
+  id: Generated<string>;
+  engineer_id: string;
+  challenge_hash: Buffer;
+  code_hash: Buffer;
+  created_at: Timestamp;
+  expires_at: Timestamp;
+  used_at: Timestamp | null;
+  failed_attempts: Generated<number>;
+}
+
+export interface EngineerSessionTable {
+  id: Generated<string>;
+  token_hash: Buffer;
+  engineer_id: string;
+  created_at: Timestamp;
+  last_seen_at: Timestamp;
+  expires_at: Timestamp;
+  revoked_at: Timestamp | null;
+}
+
+export interface EngineerDeviceTable {
+  id: Generated<string>;
+  engineer_id: string;
+  device_hash: Buffer;
+  first_seen_at: Timestamp;
+}
+
+export type EngineerSignInEvent =
+  | "password_failed"
+  | "locked_out"
+  | "refused_while_locked"
+  | "code_sent"
+  | "code_rate_limited"
+  | "code_failed"
+  | "signed_in"
+  | "new_device"
+  | "signed_out"
+  | "idle_signed_out";
+
+export interface EngineerSignInEventTable {
+  id: Generated<string>;
+  engineer_id: string | null;
+  email: string;
+  event: EngineerSignInEvent;
+  ip: string | null;
+  user_agent: string | null;
+  at: Timestamp;
 }
 
 export interface CompanyTable {
@@ -64,7 +118,7 @@ export interface InvitationTable {
 export interface AdminActionTable {
   id: Generated<string>;
   engineer_id: string;
-  action: "onboard_company" | "read_onboarding_leads";
+  action: "onboard_company" | "read_onboarding_leads" | "invite_authorized_person";
   target_kind: string;
   /** Null for a read of a list. */
   target_id: string | null;
@@ -378,6 +432,10 @@ export interface ProjectMemberPositionTable {
 
 export interface Database {
   rabaed_engineer: RabaedEngineerTable;
+  engineer_sign_in_code: EngineerSignInCodeTable;
+  engineer_session: EngineerSessionTable;
+  engineer_device: EngineerDeviceTable;
+  engineer_sign_in_event: EngineerSignInEventTable;
   company: CompanyTable;
   member: MemberTable;
   credential: CredentialTable;

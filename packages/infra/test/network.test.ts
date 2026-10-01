@@ -71,13 +71,16 @@ describe("network", () => {
     }
   });
 
-  it("runs the load balancer in the public subnets, facing the internet", () => {
-    const [alb] = resourcesOfType(env.synthesised, "AWS::ElasticLoadBalancingV2::LoadBalancer");
-    expect(alb?.Properties?.Scheme).toBe("internet-facing");
-    const subnets = alb?.Properties?.Subnets as unknown[];
-    expect(subnets.length).toBeGreaterThanOrEqual(2);
-    for (const subnet of subnets) expect(env.subnetType(subnet, "app")).toBe("Public");
-    expect((alb?.Properties?.SecurityGroups as unknown[]).map((g) => groupName(g, "app"))).toEqual(["LoadBalancer"]);
+  it("runs both load balancers (customer and Rabaed Admin) in the public subnets, facing the internet, each in its own group", () => {
+    const albs = resourcesOfType(env.synthesised, "AWS::ElasticLoadBalancingV2::LoadBalancer");
+    for (const alb of albs) {
+      expect(alb.Properties?.Scheme).toBe("internet-facing");
+      const subnets = alb.Properties?.Subnets as unknown[];
+      expect(subnets.length).toBeGreaterThanOrEqual(2);
+      for (const subnet of subnets) expect(env.subnetType(subnet, "app")).toBe("Public");
+    }
+    const groups = albs.map((alb) => (alb.Properties?.SecurityGroups as unknown[]).map((g) => groupName(g, "app")));
+    expect(groups.sort()).toEqual([["AdminLoadBalancer"], ["LoadBalancer"]]);
   });
 
   it("runs every service in the private subnets without a public IP, in its own security group", () => {
@@ -90,7 +93,12 @@ describe("network", () => {
       for (const subnet of vpc.Subnets as unknown[]) expect(env.subnetType(subnet, "app")).toBe("Private");
       byFamily[family] = (vpc.SecurityGroups as unknown[]).map((g) => groupName(g, "app"));
     }
-    expect(byFamily).toEqual({ "rabaed-dev-web": ["Web"], "rabaed-dev-api": ["Api"], "rabaed-dev-worker": ["Worker"] });
+    expect(byFamily).toEqual({
+      "rabaed-dev-web": ["Web"],
+      "rabaed-dev-api": ["Api"],
+      "rabaed-dev-admin": ["Admin"],
+      "rabaed-dev-worker": ["Worker"],
+    });
   });
 
   it("runs migrations in the private subnets, in their own security group", () => {
@@ -108,10 +116,13 @@ describe("network", () => {
         // Only to redirect to HTTPS.
         "internet -> LoadBalancer:80",
         "LoadBalancer -> Web:3000",
-        // The public load balancer reaches web only; web reaches the api privately,
-        // so Rabaed Admin routes are not reachable from the internet.
+        // The public load balancer reaches web only; web reaches the api privately.
         "Web -> Api:4000",
         "Api -> Database:5432",
+        // Rabaed Admin: its own load balancer, HTTPS only, to it alone (ADR 0010).
+        "internet -> AdminLoadBalancer:443",
+        "AdminLoadBalancer -> Admin:4050",
+        "Admin -> Database:5432",
         "Worker -> Database:5432",
         "Migrations -> Database:5432",
         // The secret rotation Lambda signs in as each role to change its password.
@@ -128,6 +139,9 @@ describe("network", () => {
         "Web -> internet:443",
         "Api -> Database:5432",
         "Api -> internet:443",
+        "AdminLoadBalancer -> Admin:4050",
+        "Admin -> Database:5432",
+        "Admin -> internet:443",
         "Worker -> Database:5432",
         "Worker -> internet:443",
         "Migrations -> Database:5432",

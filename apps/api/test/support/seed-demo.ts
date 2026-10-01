@@ -16,7 +16,7 @@ export default async function setup(): Promise<void> {
   const db = createDb(urls.app, { max: 2 });
   const adminDb = createDb(urls.admin, { max: 1 });
   try {
-    await ensureDemo(migrator, () => buildApp({ db, adminDb, config: testConfig, logger: false }), DEFAULT_PASSWORD);
+    await ensureDemo({ migrator, admin: adminDb }, () => buildApp({ db, config: testConfig, logger: false }), DEFAULT_PASSWORD);
   } finally {
     await Promise.all([migrator.destroy(), db.destroy(), adminDb.destroy()]);
   }

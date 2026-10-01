@@ -6,6 +6,8 @@ import { renderEmail, emailTemplates, type EmailTemplateValues } from "./templat
 const examples: EmailTemplateValues = {
   "sign-in-code": { code: "482913", validMinutes: 10 },
   invitation: { companyName: "Al Bina <Contracting> & Sons", link: "https://rabaed.test/ar/accept-invitation#token=abc" },
+  "new-device-sign-in": { when: "2026-10-02 09:15 UTC", ip: "203.0.113.7" },
+  "sign-in-locked": { minutes: 15 },
 };
 
 describe("every template", () => {
@@ -75,5 +77,22 @@ describe("invitation", () => {
 
   it("refuses a link that is not https or http", () => {
     expect(() => renderEmail("invitation", "en", { ...examples.invitation, link: "javascript:alert(1)" })).toThrow();
+  });
+});
+
+describe("new-device sign-in alert", () => {
+  it("says when and from where, kept left to right inside Arabic", () => {
+    for (const locale of locales) {
+      const email = renderEmail("new-device-sign-in", locale, examples["new-device-sign-in"]);
+      expect(email.text).toContain("2026-10-02 09:15 UTC");
+      expect(email.text).toContain("203.0.113.7");
+    }
+    expect(renderEmail("new-device-sign-in", "ar", examples["new-device-sign-in"]).html).toContain('<bdi dir="ltr">203.0.113.7</bdi>');
+  });
+});
+
+describe("sign-in locked", () => {
+  it("says for how many minutes, in Latin digits in both languages", () => {
+    for (const locale of locales) expect(renderEmail("sign-in-locked", locale, examples["sign-in-locked"]).text).toContain("15");
   });
 });

@@ -209,12 +209,12 @@ describe("logs", () => {
     }
   });
 
-  it("web, api and worker can be searched together in one saved Logs Insights query", () => {
+  it("web, api, Rabaed Admin and worker can be searched together in one saved Logs Insights query", () => {
     const queries = Object.values(monitoring.findResources("AWS::Logs::QueryDefinition")) as Resource[];
     expect(queries).toHaveLength(1);
     expect(queries[0]!.Properties).toMatchObject({
       Name: "rabaed-dev/all-services",
-      LogGroupNames: ["/rabaed/dev/web", "/rabaed/dev/api", "/rabaed/dev/worker"],
+      LogGroupNames: ["/rabaed/dev/web", "/rabaed/dev/api", "/rabaed/dev/admin", "/rabaed/dev/worker"],
     });
   });
 });

@@ -1,8 +1,8 @@
+import { createInvitation, type Invitation } from "@rabaed/auth";
 import type { Db } from "@rabaed/db";
-import type { OnboardCompanyRequest } from "@rabaed/domain";
+import type { BilingualText, Locale, OnboardCompanyRequest } from "@rabaed/domain";
 import { sql } from "kysely";
-import { asEngineer } from "../admin/admin-action.ts";
-import { createInvitation, type Invitation } from "./invitations.ts";
+import { asEngineer } from "./admin-action.ts";
 
 type Conflict = "cr_number" | "vat_number" | "email";
 
@@ -20,8 +20,8 @@ const conflicts: Record<string, Conflict> = {
  * A Rabaed Engineer onboards a Company and invites its Authorized Person. Every
  * onboarding lead for its CR number becomes the Company's Participant Invitation
  * on that lead's Project, logged with the onboarding (ADR 0009).
- * The invitation token is returned once, to be passed to the Authorized Person
- * (email delivery comes later); only its hash is stored.
+ * The invitation token is returned once, for the caller to email to the
+ * Authorized Person (or, in the demo seed, to accept); only its hash is stored.
  */
 export async function onboardCompany(
   adminDb: Db,
@@ -85,4 +85,59 @@ export async function onboardCompany(
 function uniqueViolation(error: unknown): Conflict | null {
   const e = error as { code?: string; constraint?: string };
   return e.code === "23505" && e.constraint ? (conflicts[e.constraint] ?? null) : null;
+}
+
+/** Who an invitation goes to, and the token, returned once. */
+export interface AuthorizedPersonInvitation {
+  companyId: string;
+  companyName: BilingualText;
+  email: string;
+  locale: Locale;
+  invitation: Invitation;
+}
+
+export type InviteAgainResult = { ok: true; invited: AuthorizedPersonInvitation } | { ok: false; reason: "not_found" | "already_active" };
+
+class NotInvited extends Error {
+  constructor(readonly reason: "not_found" | "already_active") {
+    super(reason);
+  }
+}
+
+/**
+ * A Rabaed Engineer invites a Company's Authorized Person again, for example
+ * when the first invitation expired: a new invitation, logged with its reason.
+ * Earlier invitations stay valid until they expire. Refused, and nothing
+ * logged, when no Company has the CR number or its Authorized Person has
+ * already accepted.
+ */
+export async function inviteAuthorizedPerson(
+  adminDb: Db,
+  engineerId: string,
+  input: { crNumber: string; reason: string },
+  now: Date,
+  invitationTtlMs: number,
+): Promise<InviteAgainResult> {
+  try {
+    const invited = await asEngineer(adminDb, { engineerId, action: "invite_authorized_person", reason: input.reason }, async (trx) => {
+      const found = await trx
+        .selectFrom("company as c")
+        .innerJoin("member as m", "m.id", "c.authorized_person_id")
+        .select(["c.id", "c.legal_name", "m.id as member_id", "m.email", "m.locale", "m.status"])
+        .where("c.cr_number", "=", input.crNumber)
+        .executeTakeFirst();
+      if (!found) throw new NotInvited("not_found");
+      if (found.status !== "invited") throw new NotInvited("already_active");
+      const invitation = await createInvitation(trx, found.member_id, { engineerId }, now, invitationTtlMs);
+      return {
+        target: { kind: "company", id: found.id },
+        after: { authorizedPerson: { id: found.member_id, email: found.email }, invitationExpiresAt: invitation.expiresAt },
+        result: { companyId: found.id, companyName: found.legal_name, email: found.email, locale: found.locale, invitation },
+      };
+    });
+    return { ok: true, invited };
+  } catch (error) {
+    if (error instanceof NotInvited) return { ok: false, reason: error.reason };
+    throw error;
+  }
 }

@@ -1,11 +1,15 @@
 // The post-deploy smoke test: checks a deployed environment from the outside,
 // as a browser would. `bin/smoke.ts` runs it after every deploy; any failure
 // fails the deploy workflow. In a demo environment it also signs in as two
-// demo people and checks visibility holds (RP-213).
+// demo people and checks visibility holds (RP-213). Given Rabaed Admin's
+// address, it checks Rabaed Admin answers there, and that the customer
+// address serves none of it (ADR 0010, RP-254).
 
 export interface SmokeTestOptions {
   /** The environment's HTTPS address, e.g. `https://<load balancer>`. */
   readonly url: string;
+  /** Rabaed Admin's own HTTPS address (its own load balancer). */
+  readonly adminUrl?: string;
   /** The commit that was just deployed; web and the api must both report it. */
   readonly version: string;
   /**
@@ -25,7 +29,7 @@ interface Health {
 }
 
 /** Runs every check and returns what failed; empty means the deploy is good. */
-export async function smokeTest({ url, version, arabicFont, demoPassword, fetch: get = fetch }: SmokeTestOptions): Promise<string[]> {
+export async function smokeTest({ url, adminUrl, version, arabicFont, demoPassword, fetch: get = fetch }: SmokeTestOptions): Promise<string[]> {
   const base = new URL(url);
   const failures: string[] = [];
   const check = async (name: string, run: () => Promise<string[]>) => {
@@ -67,8 +71,46 @@ export async function smokeTest({ url, version, arabicFont, demoPassword, fetch:
 
   if (demoPassword) await check("visibility", () => visibilityCheck({ url, password: demoPassword, fetch: get }));
 
+  if (adminUrl) {
+    await check("Rabaed Admin health", async () => {
+      const health = new URL("/health", adminUrl).toString();
+      const res = await get(health, { signal: AbortSignal.timeout(10_000) });
+      if (res.status !== 200) return [`${health} answered ${res.status}`];
+      const body = (await res.json()) as { version?: string; database?: string };
+      const found: string[] = [];
+      if (body.version !== version) found.push(`Rabaed Admin runs ${body.version}, expected ${version}`);
+      if (body.database !== "ok") found.push(`Rabaed Admin's database: ${body.database}`);
+      return found;
+    });
+    await check("no Rabaed Admin on the customer address", async () => {
+      const found: string[] = [];
+      for (const { method, path } of ADMIN_PATHS) {
+        const res = await request(path, { method, redirect: "manual", headers: { "content-type": "application/json" }, body: method === "POST" ? "{}" : undefined });
+        // The api answers what it doesn't serve with 404; web may first redirect a page path to add the language.
+        const served = path.startsWith("/api/") ? res.status !== 404 : res.status < 300 || res.status >= 500;
+        if (served) found.push(`the customer address answered ${method} ${path} with ${res.status}: it must not serve Rabaed Admin`);
+      }
+      return found;
+    });
+  }
+
   return failures;
 }
+
+/**
+ * Rabaed Admin's routes, and where the customer api served them before Rabaed
+ * Admin moved out, as they would look on the customer address. None may answer there.
+ */
+export const ADMIN_PATHS = [
+  { method: "POST", path: "/api/v1/sign-in" },
+  { method: "POST", path: "/api/v1/sign-in/code" },
+  { method: "POST", path: "/api/v1/companies" },
+  { method: "POST", path: "/api/v1/invitations" },
+  { method: "GET", path: "/api/v1/onboarding-leads?reason=smoke" },
+  { method: "POST", path: "/api/admin/v1/session" },
+  { method: "POST", path: "/api/admin/v1/companies" },
+  { method: "GET", path: "/assets/admin.js" },
+] as const;
 
 /**
  * Two demo people on different Projects (apps/api/src/demo/seed.ts): Hafiz is

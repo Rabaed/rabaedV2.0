@@ -68,13 +68,13 @@ describe("email (Amazon SES)", () => {
     expect(JSON.stringify(app.toJSON())).not.toMatch(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/);
   });
 
-  it("only the api task role may send email; the admin service joins it in RP-254", () => {
-    expect(sesGrants().flatMap((g) => g.roles)).toEqual(["rabaed-dev-api-task"]);
+  it("only the api and Rabaed Admin task roles may send email", () => {
+    expect(sesGrants().flatMap((g) => g.roles).sort()).toEqual(["rabaed-dev-admin-task", "rabaed-dev-api-task"]);
   });
 
   it("may send only ses:SendEmail, only from the configured From address, only through the configuration set", () => {
-    const [grant] = sesGrants();
-    expect(render(grant!.statement)).toEqual({
+    for (const grant of sesGrants()) {
+      expect(render(grant.statement)).toEqual({
       Effect: "Allow",
       Action: "ses:SendEmail",
       Resource: [
@@ -82,12 +82,15 @@ describe("email (Amazon SES)", () => {
         "arn:aws:ses:eu-central-1:${AWS::AccountId}:identity/*",
       ],
       Condition: { StringEquals: { "ses:FromAddress": "${MailFromAddress}" } },
-    });
+      });
+    }
   });
 
-  it("tells the api its From address and configuration set, and no task the local catcher", () => {
-    expect(environmentOf("rabaed-dev-api")).toMatchObject({ MAIL_FROM: "${MailFromAddress}", MAIL_SES_CONFIGURATION_SET: "rabaed-dev" });
-    for (const family of ["rabaed-dev-api", "rabaed-dev-web", "rabaed-dev-worker"]) {
+  it("tells the api and Rabaed Admin their From address and configuration set, and no task the local catcher", () => {
+    for (const family of ["rabaed-dev-api", "rabaed-dev-admin"]) {
+      expect(environmentOf(family), family).toMatchObject({ MAIL_FROM: "${MailFromAddress}", MAIL_SES_CONFIGURATION_SET: "rabaed-dev" });
+    }
+    for (const family of ["rabaed-dev-api", "rabaed-dev-admin", "rabaed-dev-web", "rabaed-dev-worker"]) {
       expect(environmentOf(family)).not.toHaveProperty("MAIL_CATCHER_URL");
     }
     expect(environmentOf("rabaed-dev-web")).not.toHaveProperty("MAIL_FROM");

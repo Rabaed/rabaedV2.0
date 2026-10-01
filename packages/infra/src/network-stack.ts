@@ -6,6 +6,7 @@ import { resourceNames, type EnvironmentConfig } from "./config.ts";
 
 export const WEB_PORT = 3000;
 export const API_PORT = 4000;
+export const ADMIN_PORT = 4050;
 export const DATABASE_PORT = 5432;
 
 export interface NetworkStackProps extends StackProps {
@@ -15,13 +16,17 @@ export interface NetworkStackProps extends StackProps {
 // The VPC, the ECS cluster and every security group. All traffic rules live
 // here, in one place, so the allowed paths can be read (and are tested) together:
 //   internet → load balancer (443, and 80 only to redirect) → web → api → database
+//   internet → admin load balancer (443 only) → admin → database (Rabaed Admin, ADR 0010)
 //   worker → database; the migration task → database; password rotation → database
 // Every task may also make outbound HTTPS calls, through the NAT gateway, to pull
 // its image, write logs and read its secrets.
 export class NetworkStack extends Stack {
   readonly vpc: ec2.Vpc;
   readonly cluster: ecs.Cluster;
-  readonly securityGroups: Record<"loadBalancer" | "web" | "api" | "worker" | "migrations" | "rotation" | "database", ec2.SecurityGroup>;
+  readonly securityGroups: Record<
+    "loadBalancer" | "web" | "api" | "adminLoadBalancer" | "admin" | "worker" | "migrations" | "rotation" | "database",
+    ec2.SecurityGroup
+  >;
 
   constructor(scope: Construct, id: string, props: NetworkStackProps) {
     super(scope, id, props);
@@ -50,6 +55,9 @@ export class NetworkStack extends Stack {
     const loadBalancer = group("LoadBalancer", "Public load balancer: HTTPS in, to web only");
     const web = group("Web", "web tasks");
     const api = group("Api", "api tasks");
+    // Rabaed Admin has its own load balancer and address; nothing connects it to web or the api.
+    const adminLoadBalancer = group("AdminLoadBalancer", "Rabaed Admin load balancer: HTTPS in, to admin only");
+    const admin = group("Admin", "Rabaed Admin tasks");
     const worker = group("Worker", "worker tasks");
     const migrations = group("Migrations", "One-off migration tasks");
     const rotation = group("Rotation", "Secrets Manager rotation Lambdas for the database passwords");
@@ -61,13 +69,15 @@ export class NetworkStack extends Stack {
     loadBalancer.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(80), "HTTP from anywhere, redirected to HTTPS");
     loadBalancer.connections.allowTo(web, ec2.Port.tcp(WEB_PORT), "load balancer to web");
     web.connections.allowTo(api, ec2.Port.tcp(API_PORT), "web to api");
-    for (const client of [api, worker, migrations, rotation]) {
+    adminLoadBalancer.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(443), "HTTPS from anywhere");
+    adminLoadBalancer.connections.allowTo(admin, ec2.Port.tcp(ADMIN_PORT), "admin load balancer to admin");
+    for (const client of [api, admin, worker, migrations, rotation]) {
       client.connections.allowTo(database, ec2.Port.tcp(DATABASE_PORT), `${client.node.id} to database`);
     }
-    for (const task of [web, api, worker, migrations, rotation]) {
+    for (const task of [web, api, admin, worker, migrations, rotation]) {
       task.addEgressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(443), "HTTPS out: image pulls, logs, secrets");
     }
 
-    this.securityGroups = { loadBalancer, web, api, worker, migrations, rotation, database };
+    this.securityGroups = { loadBalancer, web, api, adminLoadBalancer, admin, worker, migrations, rotation, database };
   }
 }
