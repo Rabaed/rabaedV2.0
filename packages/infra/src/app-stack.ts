@@ -5,7 +5,7 @@ import * as elbv2 from "aws-cdk-lib/aws-elasticloadbalancingv2";
 import * as iam from "aws-cdk-lib/aws-iam";
 import * as servicediscovery from "aws-cdk-lib/aws-servicediscovery";
 import type { Construct } from "constructs";
-import { resourceNames, type EnvironmentConfig, type ServiceName } from "./config.ts";
+import { checkDomain, resourceNames, type EnvironmentConfig, type ServiceName } from "./config.ts";
 import type { DataStack } from "./data-stack.ts";
 import { MailSending } from "./email.ts";
 import { API_PORT, WEB_PORT, type NetworkStack } from "./network-stack.ts";
@@ -44,7 +44,7 @@ export class AppStack extends Stack {
   constructor(scope: Construct, id: string, props: AppStackProps) {
     super(scope, id, props);
     const { config, network, data, registry, storage } = props;
-    checkDomain(config.domain);
+    checkDomain(config);
     const names = resourceNames(config);
     const imageTag = imageTagParameter(this);
 
@@ -179,14 +179,5 @@ export class AppStack extends Stack {
     // Where the domain's DNS record points; also the address until there is one.
     new CfnOutput(this, "LoadBalancerDnsName", { value: loadBalancer.loadBalancerDnsName });
     new CfnOutput(this, "Url", { value: `https://${config.domain ?? loadBalancer.loadBalancerDnsName}` });
-  }
-}
-
-// Lower-case labels with at least one dot: no scheme, port or path.
-const HOST_NAME = /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/;
-
-function checkDomain(domain: string | undefined) {
-  if (domain !== undefined && !HOST_NAME.test(domain)) {
-    throw new Error(`domain "${domain}" must be a bare lower-case host name, e.g. dev.example.sa`);
   }
 }

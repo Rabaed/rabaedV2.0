@@ -367,11 +367,12 @@ CERT_ARN=$(_existing AWS_CERTIFICATE_ARN || true)
 cert_expiry() {
   aws acm describe-certificate --region "$REGION" --certificate-arn "$1" --query Certificate.NotAfter --output text 2>/dev/null
 }
-# AMAZON_ISSUED: the domain's certificate (README "Interim HTTPS"); IMPORTED: the interim one.
-cert_type() {
-  aws acm describe-certificate --region "$REGION" --certificate-arn "$1" --query Certificate.Type --output text 2>/dev/null
+# True for the domain's certificate, which ACM issued (README "A real domain"),
+# not the interim one imported here.
+domain_certificate() {
+  [[ -n "$1" ]] && fresh_credentials && [[ "$(aws acm describe-certificate --region "$REGION"     --certificate-arn "$1" --query Certificate.Type --output text 2>/dev/null)" == AMAZON_ISSUED ]]
 }
-if [[ -n "$CERT_ARN" ]] && fresh_credentials && [[ "$(cert_type "$CERT_ARN")" == AMAZON_ISSUED ]]; then
+if domain_certificate "$CERT_ARN"; then
   note "✓ the domain's certificate is in place; ACM renews it, nothing to do"
   CERT_ARN_KEEP=1
 elif [[ -n "$CERT_ARN" ]] && fresh_credentials && expiry=$(cert_expiry "$CERT_ARN"); then
@@ -419,7 +420,7 @@ fi
 # The interim certificate itself is public; the deploy's smoke test trusts it
 # (and only it). The domain's certificate needs no trusting, so no PEM.
 CERT_ARN=$(_existing AWS_CERTIFICATE_ARN || true)
-if [[ -n "$CERT_ARN" ]] && fresh_credentials && [[ "$(cert_type "$CERT_ARN")" == AMAZON_ISSUED ]]; then
+if domain_certificate "$CERT_ARN"; then
   set_var AWS_CERTIFICATE_ARN "$CERT_ARN"
   if gh variable list --json name --jq '.[].name' 2>/dev/null | grep -qx AWS_CERTIFICATE_PEM; then
     gh variable delete AWS_CERTIFICATE_PEM >/dev/null 2>&1 \

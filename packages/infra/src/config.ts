@@ -27,8 +27,8 @@ export interface EnvironmentConfig {
   readonly demo: boolean;
   readonly alarms: AlarmThresholds;
   /**
-   * The public host name, e.g. `dev.<domain>`: the deploy's smoke test and
-   * summary use `https://<domain>`. Its ACM certificate is the
+   * The public host name, e.g. `dev.example.sa`: the deploy's smoke test and
+   * summary use `https://` + it. Its ACM certificate is the
    * `AWS_CERTIFICATE_ARN` repository variable, not this file, since an ARN
    * names the account. Left out until Rabaed has a domain: the load balancer's
    * own address, with the wizard's interim certificate. See README "Dev
@@ -147,6 +147,17 @@ export function environmentConfig(name: string): EnvironmentConfig {
     throw new Error(`Unknown environment "${name}". Known: ${Object.keys(environments).join(", ")}`);
   }
   return environments[name as EnvironmentName];
+}
+
+// Lower-case labels with at least one dot: no scheme, port or path. The last
+// label may be punycode, such as Saudi Arabia's Arabic TLD (xn--mgberp4a5d4ar).
+const HOST_NAME = /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+(?:[a-z]{2,63}|xn--[a-z0-9-]{1,59})$/;
+
+/** Throws unless `domain` is left out or a bare host name. */
+export function checkDomain({ domain }: EnvironmentConfig): void {
+  if (domain !== undefined && !HOST_NAME.test(domain)) {
+    throw new Error(`domain "${domain}" must be a bare lower-case host name, e.g. dev.example.sa`);
+  }
 }
 
 /** The account stack's name; the setup wizard deploys it by this name. */
