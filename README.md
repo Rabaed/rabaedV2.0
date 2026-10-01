@@ -225,7 +225,16 @@ To test an alarm by hand (acceptance check): `aws cloudwatch set-alarm-state --r
 
 **To see a rollback** (acceptance check): on a branch, make the api's `/health` return 503 only on ECS (for example when `ECS_CONTAINER_METADATA_URI_V4`, which ECS sets, is present; failing it everywhere fails seam 1, and CI never deploys), merge, and watch the workflow of the first commit that includes it (a newer merge cancels the older deploy): the App step fails with "circuit breaker", the service returns to the previous task definition, and `/en/health` keeps showing the previous commit. Revert afterwards.
 
-**Interim HTTPS (until Rabaed has a domain).** No public certificate authority issues certificates for the load balancer's own AWS address, so the wizard (stage 7) imports a self-signed certificate for `*.eu-central-1.elb.amazonaws.com` and the listener uses it. Traffic is encrypted, but browsers warn the first time ("Your connection is not private"): choose Advanced → Proceed. The smoke test trusts exactly that certificate (`AWS_CERTIFICATE_PEM`). When the domain is decided: request an ACM certificate for `dev.<domain>` (DNS validation), point `dev.<domain>` at the load balancer, set `AWS_CERTIFICATE_ARN` to the new certificate and clear `AWS_CERTIFICATE_PEM`. The next deploy switches over; no code changes.
+**Interim HTTPS (until Rabaed has a domain).** No public certificate authority issues certificates for the load balancer's own AWS address, so the wizard (stage 7) imports a self-signed certificate for `*.eu-central-1.elb.amazonaws.com` and the listener uses it. Traffic is encrypted, but browsers warn the first time ("Your connection is not private"): choose Advanced → Proceed. The smoke test trusts exactly that certificate (`AWS_CERTIFICATE_PEM`).
+
+**A real domain** (configuration only; `test/domain.test.ts`). When the domain is decided:
+
+1. In ACM (eu-central-1), request a public certificate for `dev.<domain>` with DNS validation, and publish the CNAME record ACM gives.
+2. Point `dev.<domain>` at the load balancer: a CNAME (or a Route 53 alias) to the App stack's `LoadBalancerDnsName` output.
+3. Once ACM shows the certificate as issued, put its ARN in `.env.aws` as `AWS_CERTIFICATE_ARN` and re-run the wizard. Stage 7 then keeps it (ACM renews it), and stage 8 sets the `AWS_CERTIFICATE_ARN` variable and deletes `AWS_CERTIFICATE_PEM`.
+4. Set `domain: "dev.<domain>"` for dev in `src/config.ts` and merge.
+
+That deploy serves the domain's certificate, and the App stack's `Url` output, which the smoke test and the deploy's summary use, becomes `https://dev.<domain>`. If the certificate and `domain` disagree (or the DNS record is missing), the smoke test fails on the TLS host name check and the deploy turns red. The browser builds every other link (invitations) from the address it is on, so nothing else changes. Then verify the domain for email too (see "Email" above).
 
 **Before the first deploy** (from `main`, after this is merged): re-run the wizard so stage 6 redeploys the account stack with the deploy role's new permissions and the alarm topic, and stages 7–8 create the certificate and record the variables. Then run the workflow by hand (Actions → Deploy dev → Run workflow) or merge anything.
 

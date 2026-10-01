@@ -26,6 +26,15 @@ export interface EnvironmentConfig {
    */
   readonly demo: boolean;
   readonly alarms: AlarmThresholds;
+  /**
+   * The public host name, e.g. `dev.<domain>`: the deploy's smoke test and
+   * summary use `https://<domain>`. Its ACM certificate is the
+   * `AWS_CERTIFICATE_ARN` repository variable, not this file, since an ARN
+   * names the account. Left out until Rabaed has a domain: the load balancer's
+   * own address, with the wizard's interim certificate. See README "Dev
+   * environment on AWS".
+   */
+  readonly domain?: string;
 }
 
 /**
@@ -116,6 +125,7 @@ export const environments = {
     logRetentionDays: 30,
     // Dev holds only the demo, never real customer data.
     demo: true,
+    // No `domain` until Rabaed has one; README "A real domain".
     alarms: {
       api5xxPercent: 5,
       loadBalancer5xxCount: 5,
