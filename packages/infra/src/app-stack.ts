@@ -7,6 +7,7 @@ import * as servicediscovery from "aws-cdk-lib/aws-servicediscovery";
 import type { Construct } from "constructs";
 import { resourceNames, type EnvironmentConfig, type ServiceName } from "./config.ts";
 import type { DataStack } from "./data-stack.ts";
+import { MailSending } from "./email.ts";
 import { API_PORT, WEB_PORT, type NetworkStack } from "./network-stack.ts";
 import type { RegistryStack } from "./registry-stack.ts";
 import { PROJECT_FILES_PREFIX, type StorageStack } from "./storage-stack.ts";
@@ -20,7 +21,8 @@ export interface AppStackProps extends StackProps {
   readonly storage: StorageStack;
 }
 
-// The running app: the public load balancer and the web, api and worker services.
+// The running app: the public load balancer, the web, api and worker services,
+// and how they send email.
 //
 // The load balancer forwards to web only. Web reaches the api by its private
 // name (as it does locally through API_URL), and the browser reaches the api
@@ -88,6 +90,11 @@ export class AppStack extends Stack {
     );
     storage.storageKey.grantEncryptDecrypt(apiTaskRole);
 
+    // Email through Amazon SES. Only the services that send email (the api;
+    // the Rabaed Admin service once it exists, ADR 0010) may.
+    const mail = new MailSending(this, config);
+    mail.grantSend(apiTaskRole);
+
     const api = service(
       "api",
       task("api", {
@@ -99,6 +106,7 @@ export class AppStack extends Stack {
           API_HOST: "0.0.0.0",
           API_PORT: String(API_PORT),
           SESSION_COOKIE_SECURE: "true",
+          ...mail.environment,
         },
         taskRole: apiTaskRole,
         port: API_PORT,

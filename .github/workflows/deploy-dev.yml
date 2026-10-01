@@ -175,15 +175,21 @@ jobs:
           packages/infra/scripts/run-task.sh "$RUNNER_TEMP/migrations.json" "demo $action" \
             /app/apps/api/node_modules/.bin/tsx /app/apps/api/src/cli/demo-environment.ts "$action"
 
+      # The email sender comes from the setup wizard (a repository variable,
+      # not in the repo). Until it is set, the App stack keeps its previous
+      # value, empty at first: nothing may send email yet.
       - name: App
         id: app
         working-directory: packages/infra
         env:
           CERTIFICATE_ARN: ${{ vars.AWS_CERTIFICATE_ARN }}
-        run: >-
-          pnpm --silent cdk deploy -c env=dev --exclusively --require-approval never --no-color --progress events
-          "$STACK_PREFIX-App" --parameters "ImageTag=$VERSION" --parameters "CertificateArn=$CERTIFICATE_ARN"
-          --outputs-file "$RUNNER_TEMP/app.json"
+          MAIL_FROM_ADDRESS: ${{ vars.MAIL_FROM_ADDRESS }}
+        run: |
+          mail=()
+          if [[ -n "$MAIL_FROM_ADDRESS" ]]; then mail=(--parameters "MailFromAddress=$MAIL_FROM_ADDRESS"); fi
+          pnpm --silent cdk deploy -c env=dev --exclusively --require-approval never --no-color --progress events \
+            "$STACK_PREFIX-App" --parameters "ImageTag=$VERSION" --parameters "CertificateArn=$CERTIFICATE_ARN" "${mail[@]}" \
+            --outputs-file "$RUNNER_TEMP/app.json"
 
       # Alarms on the app's load balancer, logs and database, and CloudTrail.
       - name: Monitoring

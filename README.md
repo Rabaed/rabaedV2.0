@@ -12,13 +12,14 @@ pnpm install
 pnpm dev
 ```
 
-`pnpm dev` starts Postgres 16 in Docker, creates the database roles, applies migrations, then runs:
+`pnpm dev` starts Postgres 16 and Mailpit (the mail catcher) in Docker, creates the database roles, applies migrations, then runs:
 
 | App | URL |
 |---|---|
 | web | http://localhost:3000 (`/en`, `/ar`; health page at `/en/health`) |
 | api | http://127.0.0.1:4000 (`GET /health`) |
 | worker | background process, logs only |
+| Mailpit | http://127.0.0.1:8025: every email the apps send locally lands here, never in a real mailbox |
 
 ## Demo: the MAR journey
 
@@ -94,6 +95,7 @@ Lane `n` gets its own Docker Compose project (`rabaed-laneN`, with its own conta
 | Postgres | 5432 | 5432 + 100n |
 | api | 4000 | 4000 + 100n |
 | web | 3000 | 3000 + 100n |
+| Mailpit | 8025 | 8025 + 100n |
 
 Open each lane's web app at `http://laneN.localhost:<web port>/en`. Browsers keep cookies per host name, not per port, so a separate `laneN.localhost` host stops one lane's sign-in from replacing another's. Tests read the same `.env`, so each lane's test runs use its own database.
 
@@ -105,6 +107,7 @@ Open each lane's web app at `http://laneN.localhost:<web port>/en`. Browsers kee
 | `apps/api` | Fastify with zod validation. |
 | `apps/worker` | Outbox processor (in-app notifications, from RP-195). |
 | `packages/domain` | Shared rules and types, no I/O. |
+| `packages/mailer` | Email: `send({ to, template, locale, values })`, with the templates in English and Arabic (RTL, Latin digits). Amazon SES in AWS; locally and in CI, Mailpit (`MAIL_CATCHER_URL`). |
 | `packages/db` | Kysely, the migration runner, role bootstrap and `withMember`. Migrations are plain SQL in `packages/db/migrations`, named `YYYYMMDDHHMMSS_what.sql`. |
 | `packages/infra` | AWS CDK (TypeScript). One entry per environment in `src/config.ts` (name, region, GitHub repository, budget); dev is `eu-central-1`. `pnpm --filter @rabaed/infra cdk synth` prints the templates. |
 
@@ -126,10 +129,11 @@ bash packages/infra/scripts/setup-aws-account.sh dev
 | 6. Account stack | Deploys `Rabaed-<env>-Account` (`src/account-stack.ts`): GitHub's OIDC provider; `rabaed-<env>-github-deploy`, assumable only from `Rabaed/rabaedV2.0` `main`, which can assume the CDK bootstrap roles, push to the `rabaed-<env>/*` image repositories, run the `rabaed-<env>-migrate` task and pass it only its own roles; `rabaed-<env>-github-diff`, assumable only from this repository's pull requests and read-only (it can only read the environment's CloudFormation stacks and the CDK bootstrap version, not logs, buckets or images); the monthly budget, alerting at 80% of actual and 100% of forecast spend; and the alarm topic `rabaed-<env>-alarms`, which emails the alarm address (confirm the subscription in the email AWS sends). The CDK shows the IAM changes for approval. |
 | 7. Interim HTTPS certificate | Creates a self-signed certificate for `*.<region>.elb.amazonaws.com` with OpenSSL, imports it into ACM and deletes the private key locally (see "Dev environment on AWS"). Offers to replace it on later runs; it is valid for 397 days. |
 | 8. GitHub variables | Records `AWS_REGION`, `AWS_DEPLOY_ROLE_ARN`, `AWS_DIFF_ROLE_ARN`, `AWS_CERTIFICATE_ARN` and `AWS_CERTIFICATE_PEM` (the certificate, which is public) as repository variables. |
-| 9. Thmanyah fonts | Uploads the licensed `thmanyahsans-*.woff2` files from a folder on your computer to the private build assets bucket, under `fonts/thmanyah/`. Needs the storage stack, so on a new account it is skipped until the first deploy; re-run the wizard then. See "Thmanyah fonts" below. |
-| 10. Test alarm | Sets `rabaed-<env>-load-balancer-5xx` to ALARM with `aws cloudwatch set-alarm-state` and asks whether the email arrived. CloudWatch sets it back within minutes (an OK email follows). Needs the monitoring stack, so it is skipped until the first deploy. |
+| 9. Email sender | Asks for the address every email comes from and has SES verify it (AWS emails it a link), records it as the `MAIL_FROM_ADDRESS` repository variable, requests SES production access (leaving the sandbox; AWS reviews it, usually within a day) and offers a test email from the sender to itself. See "Email" below. |
+| 10. Thmanyah fonts | Uploads the licensed `thmanyahsans-*.woff2` files from a folder on your computer to the private build assets bucket, under `fonts/thmanyah/`. Needs the storage stack, so on a new account it is skipped until the first deploy; re-run the wizard then. See "Thmanyah fonts" below. |
+| 11. Test alarm | Sets `rabaed-<env>-load-balancer-5xx` to ALARM with `aws cloudwatch set-alarm-state` and asks whether the email arrived. CloudWatch sets it back within minutes (an OK email follows). Needs the monitoring stack, so it is skipped until the first deploy. |
 
-Your answers are remembered in `.env.aws` (git-ignored), so a re-run offers them as defaults; every stage is safe to repeat. Nothing secret goes into the repo or GitHub: the budget and alarm emails are `NoEcho` deploy-time parameters, never in a template or a diff, and GitHub holds only role ARNs, the region and the interim certificate (which is public) and its ARN.
+Your answers are remembered in `.env.aws` (git-ignored), so a re-run offers them as defaults; every stage is safe to repeat. Nothing secret goes into the repo or GitHub: the budget and alarm emails are `NoEcho` deploy-time parameters, never in a template or a diff, and GitHub holds only role ARNs, the region, the interim certificate (which is public) and its ARN, and the email sender's address (a variable, so it stays out of the repo).
 
 Both roles check GitHub's immutable OIDC subject, which carries the owner and repository IDs (`repo:Rabaed@328426410/rabaedV2.0@1391344568:…`, set in `src/config.ts`), so a renamed or re-created repository cannot match. The wizard warns if GitHub's subject (`gh api repos/Rabaed/rabaedV2.0/actions/oidc/customization/sub`) ever differs from the config.
 
@@ -148,7 +152,7 @@ Every merge to `main` that passes CI is deployed to dev by `.github/workflows/de
 | `Rabaed-dev-Registry` | ECR repositories `rabaed-dev/web`, `api`, `worker`: scanned on push, tags immutable. |
 | `Rabaed-dev-Storage` | The storage KMS key (rotating) and a signing key reserved for sealing PDFs. Buckets, all private, versioned, owner-enforced and TLS-only: **Project files** (storage key; objects under `projects/<Project>/…`, ADR 0007), **build assets** (storage key; the Thmanyah fonts under `fonts/`, which the deploy role may read and nothing else of the bucket) and **logs** (S3 access logs of the other two, the load balancer's access logs under `load-balancer/` and CloudTrail under `cloudtrail/`; kept a year). |
 | `Rabaed-dev-Migrations` | The one-off migration task (`packages/db/src/setup.ts` in the api image). |
-| `Rabaed-dev-App` | The load balancer (HTTPS, HTTP redirected; access logs to the logs bucket) and the `web`, `api` and `worker` Fargate services at the fixed sizes in `src/config.ts`, each logging to `/rabaed/dev/<service>`. |
+| `Rabaed-dev-App` | The load balancer (HTTPS, HTTP redirected; access logs to the logs bucket), the `web`, `api` and `worker` Fargate services at the fixed sizes in `src/config.ts`, each logging to `/rabaed/dev/<service>`, and the SES configuration set `rabaed-dev` (see "Email"). |
 | `Rabaed-dev-Monitoring` | CloudTrail, the alarms and a saved Logs Insights query over all three services (see "Monitoring and audit trail"). |
 
 Traffic paths (security groups, asserted in `test/network.test.ts`): internet → load balancer on 443 (and 80, only to redirect) → web → api → database; worker, the migration task and the password rotation Lambda → database. The load balancer forwards to web only; the browser reaches the api through web's `/api/v1` proxy, so Rabaed Admin is not reachable from the internet. Tasks may also call out over HTTPS (image pulls, logs, secrets) through the NAT gateway.
@@ -179,7 +183,17 @@ Rotation takes a few seconds. `describe-secret` shows a new `LastRotatedDate` an
 
 **Project files.** Only the api's task role (`rabaed-dev-api-task`) can read or write objects, only under `projects/`, and the bucket policy refuses object access to every other principal, administrators included. Browsers will get files through signed URLs the api creates, which carry the api role's permissions; the bucket refuses any signature older than 15 minutes. The api is told the bucket as `PROJECT_FILES_BUCKET`. The bucket cannot tell one Project from another: before signing a URL the api must check the Member may see that Project's file (visibility.md), which arrives with the first file feature.
 
-**Thmanyah fonts.** Thmanyah Sans is licensed: its files are never in the repo, the build context or GitHub. The wizard (stage 9) uploads them to the build assets bucket. The deploy role, which builds the images, may list and read only the bucket's `fonts/` prefix and decrypt only through S3 for that bucket (`test/storage.test.ts`; together with `test/ci-access.test.ts`, that is everything the role itself may do). Through the CDK deploy role it hands over to, a deploy can still change any stack, and so the bucket. The workflow hands the files to the web build alone as a separate build context (`--build-context fonts=…`, see the `Dockerfile`). Next.js bundles them, so dev serves them from its own address, never a font CDN. Without the files (a fork, a pull request, a local build, or before stage 9), everything builds with IBM Plex Sans Arabic. CI's web build checks exactly that. Uploaded fonts reach dev with the next merge to `main`. A re-run of the same commit reuses its web image, fonts or not. Two checks keep font files out of the public repo. `scripts/check-no-fonts.ts` refuses any font file anywhere in the history, by path, since font files are binary and gitleaks skips binary files. A gitleaks rule in `.gitleaks.toml` catches fonts inlined as base64 into CSS, HTML or JS.
+**Thmanyah fonts.** Thmanyah Sans is licensed: its files are never in the repo, the build context or GitHub. The wizard (stage 10) uploads them to the build assets bucket. The deploy role, which builds the images, may list and read only the bucket's `fonts/` prefix and decrypt only through S3 for that bucket (`test/storage.test.ts`; together with `test/ci-access.test.ts`, that is everything the role itself may do). Through the CDK deploy role it hands over to, a deploy can still change any stack, and so the bucket. The workflow hands the files to the web build alone as a separate build context (`--build-context fonts=…`, see the `Dockerfile`). Next.js bundles them, so dev serves them from its own address, never a font CDN. Without the files (a fork, a pull request, a local build, or before stage 10), everything builds with IBM Plex Sans Arabic. CI's web build checks exactly that. Uploaded fonts reach dev with the next merge to `main`. A re-run of the same commit reuses its web image, fonts or not. Two checks keep font files out of the public repo. `scripts/check-no-fonts.ts` refuses any font file anywhere in the history, by path, since font files are binary and gitleaks skips binary files. A gitleaks rule in `.gitleaks.toml` catches fonts inlined as base64 into CSS, HTML or JS.
+
+**Email** (`src/email.ts`, asserted in `test/email.test.ts`). Rabaed sends email through Amazon SES in the environment's region, through `packages/mailer`. The sender is verified by the wizard (stage 9), outside CloudFormation: one address until Rabaed has a domain. Its address is never in the repo: the wizard records it as the `MAIL_FROM_ADDRESS` repository variable and the deploy passes it to the App stack as the `MailFromAddress` parameter (until it is set, the parameter is empty and nothing can send). Only the api's task role may call `ses:SendEmail`, only with that From address and only through the configuration set; the Rabaed Admin service gets the same grant when it exists (ADR 0010, RP-254). The api is told `MAIL_FROM` and `MAIL_SES_CONFIGURATION_SET`, which makes the mailer use SES. The configuration set `rabaed-dev` requires TLS, suppresses addresses that bounced or complained, and publishes bounces and complaints to CloudWatch (namespace `AWS/SES`), split by the `template` dimension, so CloudWatch → Metrics → SES shows them per template. A new account's SES is in the sandbox (sends only to verified addresses, 200 a day) until AWS grants production access, which the wizard requests.
+
+When Rabaed's domain is chosen, verify the domain instead of the single address, and publish:
+
+- *DKIM:* in SES, create an identity for the domain with Easy DKIM (RSA 2048). SES gives three CNAME records, `<token>._domainkey.<domain>` → `<token>.dkim.amazonses.com`; publish all three.
+- *Custom MAIL FROM and SPF:* set the identity's MAIL FROM domain to `mail.<domain>` and publish `mail.<domain>` MX `10 feedback-smtp.<region>.amazonses.com` and TXT `"v=spf1 include:amazonses.com ~all"`, so SPF aligns with the From domain.
+- *DMARC:* TXT on `_dmarc.<domain>`: start with `"v=DMARC1; p=none; rua=mailto:<reports mailbox>"`, then move to `p=quarantine` once the reports show only SES sending.
+
+Then set `MAIL_FROM_ADDRESS` to an address on the domain (for example `no-reply@<domain>`). The grant already allows a domain identity (`identity/*`, limited by the From address), so no infrastructure change is needed.
 
 **Logs bucket.** It is encrypted with S3-managed keys, not KMS, because S3 access logs and the load balancer's can only be delivered to such a bucket. Every other bucket uses the storage key.
 
@@ -205,7 +219,7 @@ Rotation takes a few seconds. `describe-secret` shows a new `LastRotatedDate` an
 
 - *Audit trail.* CloudTrail (`rabaed-dev`) records every management call in every region of the account, with log file validation, to the logs bucket under `cloudtrail/`. The load balancer's access logs go there too, under `load-balancer/`. Both are kept a year.
 
-To test an alarm by hand (acceptance check): `aws cloudwatch set-alarm-state --region eu-central-1 --alarm-name rabaed-dev-load-balancer-5xx --state-value ALARM --state-reason test`, or run the wizard's stage 10.
+To test an alarm by hand (acceptance check): `aws cloudwatch set-alarm-state --region eu-central-1 --alarm-name rabaed-dev-load-balancer-5xx --state-value ALARM --state-reason test`, or run the wizard's stage 11.
 
 **To see a rollback** (acceptance check): on a branch, make the api's `/health` return 503 only on ECS (for example when `ECS_CONTAINER_METADATA_URI_V4`, which ECS sets, is present; failing it everywhere fails seam 1, and CI never deploys), merge, and watch the workflow of the first commit that includes it (a newer merge cancels the older deploy): the App step fails with "circuit breaker", the service returns to the previous task definition, and `/en/health` keeps showing the previous commit. Revert afterwards.
 
@@ -251,13 +265,14 @@ pnpm test:unit    # pure logic, no database
 pnpm test:seam1   # the API called as a given signed-in Member (apps/api/test)
 pnpm test:seam2   # the database as the app role with a Member set (packages/db/test)
 pnpm test:infra   # assertions on the synthesised AWS templates (packages/infra/test)
+pnpm test:mail    # the mailer against Mailpit (packages/mailer/test); start it with docker compose up -d mailpit
 pnpm lint
 pnpm typecheck
 ```
 
 Seam 1 is the primary suite: scenarios call the API through `createTestApi()` (`apps/api/test/support/harness.ts`) with real sign-in: `api.authorizedPerson()` onboards a Company and signs its Authorized Person in, `api.engineer()` gives a signed-in Rabaed Engineer, and `api.advanceClock()` moves time to test expiry.
 
-CI (`.github/workflows/ci.yml`) runs lint, typecheck, unit, web build, seam 1 and seam 2 against Postgres 16, and the infra assertions, on every push and pull request; `secret-scan.yml` runs gitleaks (default rules plus `.gitleaks.toml`) and `scripts/check-no-fonts.ts` over the full history; `infra-diff.yml` posts `cdk diff` on pull requests once the AWS account is set up; `deploy-dev.yml` deploys `main` to dev after CI passes. For a failure to block merging, `main`'s branch protection must list these jobs as required status checks.
+CI (`.github/workflows/ci.yml`) runs lint, typecheck, unit, web build, seam 1 and seam 2 against Postgres 16, the mailer against Mailpit, and the infra assertions, on every push and pull request; `secret-scan.yml` runs gitleaks (default rules plus `.gitleaks.toml`) and `scripts/check-no-fonts.ts` over the full history; `infra-diff.yml` posts `cdk diff` on pull requests once the AWS account is set up; `deploy-dev.yml` deploys `main` to dev after CI passes. For a failure to block merging, `main`'s branch protection must list these jobs as required status checks.
 
 ## Secrets
 
