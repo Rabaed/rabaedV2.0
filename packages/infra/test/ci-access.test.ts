@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Template } from "aws-cdk-lib/assertions";
+import { environments, stackNames } from "../src/config.ts";
 import { accountTemplate, render } from "./support.ts";
 
 // GitHub's immutable subject for this repository (created after 15 July 2026):
@@ -34,6 +35,11 @@ function bootstrapRoleArn(kind: string) {
   return `arn:aws:iam::\${AWS::AccountId}:role/cdk-hnb659fds-${kind}-role-\${AWS::AccountId}-eu-central-1`;
 }
 
+// An ARN pattern in this account and region.
+function regional(service: string, resource: string) {
+  return `arn:aws:${service}:eu-central-1:\${AWS::AccountId}:${resource}`;
+}
+
 function trustsOnly(statements: Statement[], subject: string) {
   expect(statements).toHaveLength(1);
   expect(statements[0]).toMatchObject({
@@ -65,7 +71,6 @@ describe("GitHub Actions access", () => {
   it("the deploy role can hand over to the CDK bootstrap roles, push images and run migrations, nothing more", () => {
     const deploy = role(accountTemplate(), "rabaed-dev-github-deploy");
     expect(deploy.managedPolicies).toEqual([]);
-    const regional = (service: string, resource: string) => `arn:aws:${service}:eu-central-1:\${AWS::AccountId}:${resource}`;
     const expected = [
       {
         Effect: "Allow",
@@ -111,9 +116,33 @@ describe("GitHub Actions access", () => {
     trustsOnly(role(accountTemplate(), "rabaed-dev-github-diff").trust, `${repo}:pull_request`);
   });
 
-  it("the pull request role is read-only: it can only assume the CDK lookup role", () => {
+  it("the pull request role can read this environment's stack templates and the CDK bootstrap version, nothing more", () => {
     const diff = role(accountTemplate(), "rabaed-dev-github-diff");
     expect(diff.managedPolicies).toEqual([]);
-    expect(render(diff.permissions)).toEqual([{ Effect: "Allow", Action: "sts:AssumeRole", Resource: bootstrapRoleArn("lookup") }]);
+    expect(render(diff.permissions)).toEqual([
+      {
+        Effect: "Allow",
+        Action: ["cloudformation:DescribeStacks", "cloudformation:GetTemplate", "cloudformation:ListStackResources"],
+        Resource: Object.values(stackNames(environments.dev))
+          .sort()
+          .map((stack) => regional("cloudformation", `stack/${stack}/*`)),
+      },
+      {
+        Effect: "Allow",
+        Action: "ssm:GetParameter",
+        Resource: regional("ssm", "parameter/cdk-bootstrap/hnb659fds/version"),
+      },
+    ]);
+  });
+
+  // Code in a pull request runs with this role, so it must not reach the
+  // logs bucket, CloudWatch logs or image layers, directly or through the
+  // CDK lookup role (AWS ReadOnlyAccess).
+  it("the pull request role cannot read logs or images, or assume another role", () => {
+    const actions = role(accountTemplate(), "rabaed-dev-github-diff").permissions.flatMap((s) => [s.Action ?? [], s.NotAction ?? []].flat());
+    for (const action of actions as string[]) {
+      expect(action).not.toMatch(/^(s3|logs|ecr|sts):/);
+      expect(action).not.toMatch(/\*/);
+    }
   });
 });
