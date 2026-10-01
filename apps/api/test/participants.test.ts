@@ -92,14 +92,25 @@ describe("adding a Participant", () => {
       const res = await host.caller.post(`/v1/projects/${id}/participants`, { crNumber, role: "owner" });
       return { answer: answer(res), ms: performance.now() - started };
     };
+    // Every Company is onboarded before any request is timed, so no sample comes
+    // straight after an onboarding's sign-in hash and writes (RP-257).
+    const pairs = 30;
+    const onRabaed: string[] = [];
+    for (let i = 0; i < pairs + 2; i++) onRabaed.push((await api.onboardCompany()).crNumber);
+    // Warm-up, untimed: each path twice, in both orders.
+    for (const crNumber of [onRabaed.pop()!, uniqueCr(), uniqueCr(), onRabaed.pop()!]) await invite(crNumber);
+
     const known: number[] = [];
     const unknown: number[] = [];
-    for (let i = 0; i < 12; i++) {
-      const onRabaed = await invite((await api.onboardCompany()).crNumber);
-      const notOnRabaed = await invite(uniqueCr());
-      expect(notOnRabaed.answer).toEqual(onRabaed.answer);
-      known.push(onRabaed.ms);
-      unknown.push(notOnRabaed.ms);
+    for (const [i, crNumber] of onRabaed.entries()) {
+      // Alternate which goes first, so neither path always follows the other.
+      const [first, second] = i % 2 ? [uniqueCr(), crNumber] : [crNumber, uniqueCr()];
+      const a = await invite(first);
+      const b = await invite(second);
+      const [isOn, isNotOn] = i % 2 ? [b, a] : [a, b];
+      expect(isNotOn.answer).toEqual(isOn.answer);
+      known.push(isOn.ms);
+      unknown.push(isNotOn.ms);
     }
     // Timing within normal variance: neither answer's median is twice the other's.
     const median = (xs: number[]) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)]!;

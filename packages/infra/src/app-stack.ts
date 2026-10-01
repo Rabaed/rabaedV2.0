@@ -5,7 +5,7 @@ import * as elbv2 from "aws-cdk-lib/aws-elasticloadbalancingv2";
 import * as iam from "aws-cdk-lib/aws-iam";
 import * as servicediscovery from "aws-cdk-lib/aws-servicediscovery";
 import type { Construct } from "constructs";
-import { resourceNames, type EnvironmentConfig, type ServiceName } from "./config.ts";
+import { checkDomain, resourceNames, type EnvironmentConfig, type ServiceName } from "./config.ts";
 import type { DataStack } from "./data-stack.ts";
 import { MailSending } from "./email.ts";
 import { ADMIN_PORT, API_PORT, WEB_PORT, type NetworkStack } from "./network-stack.ts";
@@ -50,11 +50,13 @@ export class AppStack extends Stack {
   constructor(scope: Construct, id: string, props: AppStackProps) {
     super(scope, id, props);
     const { config, network, data, registry, storage } = props;
+    checkDomain(config);
     const names = resourceNames(config);
     const imageTag = imageTagParameter(this);
 
-    // Until a domain is chosen, the wizard imports an interim self-signed
-    // certificate and records its ARN; see README "Dev environment on AWS".
+    // The domain's certificate once config.domain is set. Until then, the
+    // wizard imports an interim self-signed certificate and records its ARN;
+    // see README "Dev environment on AWS".
     const certificateArn = new CfnParameter(this, "CertificateArn", {
       type: "String",
       description: "ACM certificate for the HTTPS listener",
@@ -180,6 +182,9 @@ export class AppStack extends Stack {
       defaultAction: elbv2.ListenerAction.redirect({ protocol: "HTTPS", port: "443", permanent: true }),
     });
 
+    // The customer web's address: the domain once there is one.
+    const webUrl = `https://${config.domain ?? loadBalancer.loadBalancerDnsName}`;
+
     const admin = service(
       "admin",
       task("admin", {
@@ -190,7 +195,7 @@ export class AppStack extends Stack {
           ADMIN_PORT: String(ADMIN_PORT),
           SESSION_COOKIE_SECURE: "true",
           // Invitation links in Rabaed Admin's emails open the customer web.
-          WEB_URL: `https://${loadBalancer.loadBalancerDnsName}`,
+          WEB_URL: webUrl,
           ...mail.environment,
         },
         taskRole: adminTaskRole,
@@ -215,7 +220,9 @@ export class AppStack extends Stack {
         port: 443,
         protocol: elbv2.ApplicationProtocol.HTTPS,
         sslPolicy: elbv2.SslPolicy.RECOMMENDED_TLS,
-        // The interim certificate covers every load balancer's AWS address.
+        // The interim certificate covers every load balancer's AWS address. A
+        // domain's certificate covers only its names: Rabaed Admin then needs
+        // its own name on it (e.g. admin.<domain>), which RP-247 left out.
         certificates: [elbv2.ListenerCertificate.fromArn(certificateArn.valueAsString)],
         open: false,
       })
@@ -236,12 +243,14 @@ export class AppStack extends Stack {
       statements: [new iam.PolicyStatement({ actions: ["iam:SimulatePrincipalPolicy"], resources: [apiTaskRole.roleArn, adminTaskRole.roleArn] })],
     });
 
-    new CfnOutput(this, "Url", { value: `https://${loadBalancer.loadBalancerDnsName}` });
     new CfnOutput(this, "AdminUrl", { value: `https://${adminLoadBalancer.loadBalancerDnsName}` });
     // ARNs, not secrets: what the deploy's secret access check asks IAM about.
     new CfnOutput(this, "ApiTaskRoleArn", { value: apiTaskRole.roleArn });
     new CfnOutput(this, "AdminTaskRoleArn", { value: adminTaskRole.roleArn });
     new CfnOutput(this, "AdminSecretArn", { value: data.roleSecrets.rabaed_admin.secretArn });
+    // Where the domain's DNS record points; also the address until there is one.
+    new CfnOutput(this, "LoadBalancerDnsName", { value: loadBalancer.loadBalancerDnsName });
+    new CfnOutput(this, "Url", { value: webUrl });
   }
 }
 
