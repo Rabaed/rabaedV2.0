@@ -39,7 +39,7 @@ jobs:
   latest:
     # Needs the repository variables the AWS setup wizard records
     # (packages/infra/scripts/setup-aws-account.sh). The deploy role trusts
-    # only this repository's main branch, so nothing else could deploy anyway.
+    # only the deploy job's environment, so nothing else could deploy anyway.
     if: >-
       vars.AWS_DEPLOY_ROLE_ARN != '' && github.ref == 'refs/heads/main' && (
         github.event_name == 'workflow_dispatch' || (
@@ -66,6 +66,9 @@ jobs:
     needs: latest
     if: needs.latest.outputs.version != ''
     runs-on: ubuntu-latest
+    # The deploy role trusts only jobs in this environment, which admits only
+    # main (setup wizard): no other job, workflow or branch can assume it.
+    environment: dev
     timeout-minutes: 60
     permissions:
       contents: read

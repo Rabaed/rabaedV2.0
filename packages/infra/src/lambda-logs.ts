@@ -7,8 +7,8 @@ import { resourceNames, type EnvironmentConfig } from "./config.ts";
 // empties the default security group). Left alone, Lambda creates their log
 // groups on first run, with no retention. This points every function in a
 // stack at one log group the stack creates first, with the environment's
-// retention. (Secrets Manager's hosted rotation Lambdas are not in the
-// template; the data stack names them and creates their groups.)
+// retention. (The password-rotation Lambdas are in the rotation app's nested
+// stacks, not the template; the data stack names them and creates their groups.)
 export class LambdaLogGroups implements IAspect {
   constructor(private readonly config: EnvironmentConfig) {}
 

@@ -1,3 +1,4 @@
+import { readdirSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import type { Template } from "aws-cdk-lib/assertions";
 import { environments, stackNames } from "../src/config.ts";
@@ -11,7 +12,12 @@ const repo = "repo:Rabaed@328426410/rabaedV2.0@1391344568";
 type Statement = { Condition?: Record<string, unknown> } & Record<string, unknown>;
 type PolicyDocument = { Statement: Statement[] };
 type RoleResource = {
-  Properties: { AssumeRolePolicyDocument: PolicyDocument; ManagedPolicyArns?: unknown[]; Policies?: { PolicyDocument: PolicyDocument }[] };
+  Properties: {
+    AssumeRolePolicyDocument: PolicyDocument;
+    ManagedPolicyArns?: unknown[];
+    PermissionsBoundary?: unknown;
+    Policies?: { PolicyDocument: PolicyDocument }[];
+  };
 };
 type PolicyResource = { Properties: { Roles: { Ref?: string }[]; PolicyDocument: PolicyDocument } };
 
@@ -26,9 +32,12 @@ function role(template: Template, roleName: string) {
   return {
     trust: resource.Properties.AssumeRolePolicyDocument.Statement,
     managedPolicies: resource.Properties.ManagedPolicyArns ?? [],
+    boundary: render(resource.Properties.PermissionsBoundary),
     permissions: [...attached.map((p) => p.Properties), ...inline].flatMap((p) => p.PolicyDocument.Statement),
   };
 }
+
+const BOUNDARY = "arn:aws:iam::${AWS::AccountId}:policy/rabaed-dev-boundary";
 
 // The ARN pattern of a CDK bootstrap role (default qualifier) in this account and region.
 function bootstrapRoleArn(kind: string) {
@@ -64,8 +73,31 @@ describe("GitHub Actions access", () => {
     });
   });
 
-  it("the deploy role trusts only this repository's main branch", () => {
-    trustsOnly(role(accountTemplate(), "rabaed-dev-github-deploy").trust, `${repo}:ref:refs/heads/main`);
+  // Not just main: any workflow on main could ask for a token. Only a job that
+  // names the dev environment gets this subject, and the environment admits
+  // only main (setup wizard).
+  it("the deploy role trusts only this repository's dev environment", () => {
+    trustsOnly(role(accountTemplate(), "rabaed-dev-github-deploy").trust, `${repo}:environment:dev`);
+  });
+
+  it("only the deploy job of the dev deploy workflow uses the dev environment", () => {
+    const dir = new URL("../../../.github/workflows/", import.meta.url);
+    const uses = readdirSync(dir).flatMap((file) => {
+      const lines = readFileSync(new URL(file, dir), "utf8").split("\n");
+      return lines.flatMap((line, i) => {
+        if (!/^\s+environment:\s*dev\s*$/.test(line)) return [];
+        const job = lines
+          .slice(0, i)
+          .reverse()
+          .find((l) => /^ {2}[\w-]+:\s*$/.test(l));
+        return [`${file} ${job?.trim()}`];
+      });
+    });
+    expect(uses).toEqual(["deploy-dev.yml deploy:"]);
+  });
+
+  it("the deploy role is capped by the permissions boundary, so the stacks' grants to it cannot exceed it", () => {
+    expect(role(accountTemplate(), "rabaed-dev-github-deploy").boundary).toBe(BOUNDARY);
   });
 
   it("the deploy role can hand over to the CDK bootstrap roles, push images and run migrations, nothing more", () => {
@@ -130,7 +162,8 @@ describe("GitHub Actions access", () => {
       {
         Effect: "Allow",
         Action: "ssm:GetParameter",
-        Resource: regional("ssm", "parameter/cdk-bootstrap/hnb659fds/version"),
+        // The deploys' bootstrap, and the account stack's own (rabaedacct).
+        Resource: ["hnb659fds", "rabaedacct"].map((qualifier) => regional("ssm", `parameter/cdk-bootstrap/${qualifier}/version`)),
       },
     ]);
   });

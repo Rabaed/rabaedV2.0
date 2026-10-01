@@ -192,7 +192,8 @@ finish() {
 # Nothing secret is written to the repo or to GitHub (the budget and alarm
 # emails are deploy-time parameters of the account stack): GitHub only receives
 # role ARNs, the region, the interim certificate (public) and its ARN, and the
-# email sender's address, as repository variables. The licensed Thmanyah fonts go from this computer
+# email sender's address, as repository variables, and the deploy environment
+# (main only). The licensed Thmanyah fonts go from this computer
 # straight to the private build assets bucket.
 
 TOTAL_STAGES=11
@@ -244,14 +245,16 @@ done
 
 # Region, stack and repository come from packages/infra/src/config.ts, the one
 # source of truth (Node runs the TypeScript directly).
-read -r REGION STACK REPOSITORY OIDC_SUBJECT < <(node --input-type=module -e "
+read -r REGION STACK REPOSITORY OIDC_SUBJECT ACCOUNT_QUALIFIER ACCOUNT_TOOLKIT EXECUTION_POLICY GITHUB_ENVIRONMENT < <(node --input-type=module -e "
   const c = await import('./packages/infra/src/config.ts');
   const env = c.environmentConfig(process.argv[1]);
-  console.log(env.region, c.accountStackName(env), c.repositoryName(env.github), c.oidcSubjectPrefix(env.github));" "$RABAED_ENV")
+  const names = c.resourceNames(env);
+  console.log(env.region, c.accountStackName(env), c.repositoryName(env.github), c.oidcSubjectPrefix(env.github),
+    c.accountBootstrap.qualifier, c.accountBootstrap.toolkitStackName, names.executionPolicy, names.githubEnvironment);" "$RABAED_ENV")
 
 if ! gh auth status >/dev/null 2>&1; then
   step "Sign the GitHub CLI in to an account that can administer $REPOSITORY:"
-  gh auth login || warn "gh sign-in failed; stage 7 will list what to set by hand"
+  gh auth login || warn "gh sign-in failed; stage 8 will list what to set by hand"
 fi
 note "✓ $(aws --version 2>&1 | cut -d' ' -f1), gh, node $(node --version); region $REGION"
 pause
@@ -317,25 +320,19 @@ write_env ALARM_EMAIL "$ALARM_EMAIL"
 pause
 
 # ── 5 ────────────────────────────────────────────────────────────────────
-stage "CDK bootstrap"
-say "Bootstrapping creates the CDK's own roles and asset bucket in $REGION,"
-say "which every later deploy goes through. Safe to repeat."
-if confirm "Bootstrap aws://$AWS_ACCOUNT_ID/$REGION now?"; then
-  fresh_credentials
-  cdk_ bootstrap "aws://$AWS_ACCOUNT_ID/$REGION"
-else
-  SKIPPED+=("CDK bootstrap (re-run this wizard)")
-fi
-pause
-
-# ── 6 ────────────────────────────────────────────────────────────────────
-stage "GitHub access and budget ($STACK)"
-say "Deploys the account stack from packages/infra/src/account-stack.ts:"
+stage "GitHub access, deploy limits and budget ($STACK)"
+say "First a CDK bootstrap of its own for the account stack ($ACCOUNT_TOOLKIT,"
+say "qualifier $ACCOUNT_QUALIFIER): only a person deploys through it, never GitHub."
+say "Then the account stack from packages/infra/src/account-stack.ts:"
 step "trust for GitHub Actions through OIDC (no AWS keys stored in GitHub);"
-step "rabaed-${RABAED_ENV}-github-deploy: usable only from $REPOSITORY main, to deploy,"
-step "  push images and run the migration task (the storage stack, deployed on merge,"
-step "  also lets it read the private fonts);"
+step "rabaed-${RABAED_ENV}-github-deploy: usable only by the deploy job in the GitHub"
+step "  environment '$GITHUB_ENVIRONMENT' (main only, stage 8), to deploy, push images and run"
+step "  the migration task (the storage stack, deployed on merge, also lets it read the"
+step "  private fonts);"
 step "rabaed-${RABAED_ENV}-github-diff: read-only, for cdk diff on pull requests;"
+step "what a deploy may reach: $EXECUTION_POLICY, which CloudFormation runs with"
+step "  instead of AdministratorAccess (stage 6), and the permissions boundary"
+step "  rabaed-${RABAED_ENV}-boundary on every role a deploy creates;"
 step "the monthly budget alert to $BUDGET_ALERT_EMAIL;"
 step "the alarm topic rabaed-${RABAED_ENV}-alarms, which emails $ALARM_EMAIL."
 # The roles trust only tokens whose subject starts with the prefix in config.ts.
@@ -345,14 +342,38 @@ if [[ -n "$actual_subject" && "$actual_subject" != "$OIDC_SUBJECT" ]]; then
   warn "but config.ts expects '$OIDC_SUBJECT'. Fix config.ts before deploying."
 fi
 note "The CDK lists the IAM changes and asks you to approve them."
-if confirm "Deploy $STACK now?"; then
+if confirm "Bootstrap $ACCOUNT_TOOLKIT and deploy $STACK now?"; then
   fresh_credentials
-  cdk_ deploy "$STACK" --parameters "BudgetAlertEmail=$BUDGET_ALERT_EMAIL" --parameters "AlarmEmail=$ALARM_EMAIL"
+  cdk_ bootstrap "aws://$AWS_ACCOUNT_ID/$REGION" --qualifier "$ACCOUNT_QUALIFIER" --toolkit-stack-name "$ACCOUNT_TOOLKIT"
+  cdk_ deploy "$STACK" --toolkit-stack-name "$ACCOUNT_TOOLKIT" \
+    --parameters "BudgetAlertEmail=$BUDGET_ALERT_EMAIL" --parameters "AlarmEmail=$ALARM_EMAIL"
   say "AWS Notifications emails $ALARM_EMAIL once to confirm the alarm subscription"
   say "(subject \"AWS Notification - Subscription Confirmation\"). Alarms reach it only after that."
-  pause "Click \"Confirm subscription\" in that email, then press Enter."
+  pause "Click \"Confirm subscription\" in that email (if this is its first deploy), then press Enter."
 else
   SKIPPED+=("deploy $STACK (re-run this wizard)")
+fi
+pause
+
+# ── 6 ────────────────────────────────────────────────────────────────────
+stage "CDK bootstrap for deploys"
+say "Bootstrapping creates the CDK's own roles and asset bucket in $REGION,"
+say "which every deploy from GitHub goes through. Its CloudFormation role gets"
+say "$EXECUTION_POLICY (stage 5), not AdministratorAccess: a deploy can"
+say "reach only the services the stacks use, and only roles with the boundary."
+say "An account bootstrapped before (with AdministratorAccess) is switched over"
+say "here. Safe to repeat."
+EXECUTION_POLICY_ARN="arn:aws:iam::$AWS_ACCOUNT_ID:policy/$EXECUTION_POLICY"
+if confirm "Bootstrap aws://$AWS_ACCOUNT_ID/$REGION now?"; then
+  fresh_credentials
+  if aws iam get-policy --policy-arn "$EXECUTION_POLICY_ARN" >/dev/null 2>&1; then
+    cdk_ bootstrap "aws://$AWS_ACCOUNT_ID/$REGION" --cloudformation-execution-policies "$EXECUTION_POLICY_ARN"
+  else
+    warn "$EXECUTION_POLICY does not exist yet: deploy $STACK first (stage 5)."
+    SKIPPED+=("CDK bootstrap for deploys (re-run this wizard after stage 5)")
+  fi
+else
+  SKIPPED+=("CDK bootstrap for deploys (re-run this wizard)")
 fi
 pause
 
@@ -407,7 +428,22 @@ if fresh_credentials && DEPLOY_ROLE_ARN=$(stack_output DeployRoleArn) && DIFF_RO
   set_var AWS_DIFF_ROLE_ARN "$DIFF_ROLE_ARN"
 else
   warn "Could not read the role ARNs from $STACK (not deployed yet, or the sign-in expired)."
-  SKIPPED+=("GitHub variables AWS_REGION, AWS_DEPLOY_ROLE_ARN, AWS_DIFF_ROLE_ARN (re-run after stage 6)")
+  SKIPPED+=("GitHub variables AWS_REGION, AWS_DEPLOY_ROLE_ARN, AWS_DIFF_ROLE_ARN (re-run after stage 5)")
+fi
+# The deploy role trusts only jobs in this environment; it admits only main,
+# so a workflow on any other branch cannot run in it.
+say "The deploy job runs in the GitHub environment '$GITHUB_ENVIRONMENT', open to main only."
+environments="repos/$REPOSITORY/environments/$GITHUB_ENVIRONMENT"
+if gh api -X PUT "$environments" --input - >/dev/null 2>&1 \
+    <<< '{"deployment_branch_policy":{"protected_branches":false,"custom_branch_policies":true}}' \
+  && { gh api "$environments/deployment-branch-policies" --jq '.branch_policies[] | "\(.type // "branch") \(.name)"' 2>/dev/null \
+         | grep -qx "branch main" \
+       || gh api -X POST "$environments/deployment-branch-policies" -f name=main -f type=branch >/dev/null 2>&1; } \
+  && [[ "$(gh api "$environments/deployment-branch-policies" --jq '[.branch_policies[].name] | join(",")' 2>/dev/null)" == main ]]; then
+  printf '  %s✓ set%s GitHub environment %s (deployments from main only)\n' "$GREEN" "$RESET" "$GITHUB_ENVIRONMENT"
+else
+  warn "Could not set up the GitHub environment (needs gh signed in as a repository admin), or it admits more than main."
+  SKIPPED+=("GitHub environment '$GITHUB_ENVIRONMENT': Settings → Environments → New environment; Deployment branches → Selected branches → add main, and only main")
 fi
 # The certificate itself is public; the deploy's smoke test trusts it (and only it).
 CERT_ARN=$(_existing AWS_CERTIFICATE_ARN || true)

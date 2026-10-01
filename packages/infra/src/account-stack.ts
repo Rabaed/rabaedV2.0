@@ -4,7 +4,8 @@ import * as iam from "aws-cdk-lib/aws-iam";
 import * as sns from "aws-cdk-lib/aws-sns";
 import * as subscriptions from "aws-cdk-lib/aws-sns-subscriptions";
 import type { Construct } from "constructs";
-import { oidcSubjectPrefix, repositoryName, resourceNames, stackNames, type EnvironmentConfig } from "./config.ts";
+import { accountBootstrap, oidcSubjectPrefix, repositoryName, resourceNames, stackNames, type EnvironmentConfig } from "./config.ts";
+import { boundaryStatements, executionPolicyStatements } from "./deploy-policies.ts";
 
 const GITHUB_OIDC_HOST = "token.actions.githubusercontent.com";
 const BOOTSTRAP_ROLES = ["deploy", "file-publishing", "image-publishing", "lookup"] as const;
@@ -13,12 +14,15 @@ export interface AccountStackProps extends StackProps {
   readonly config: EnvironmentConfig;
 }
 
-// Account-level setup, deployed once by a human through the setup wizard
+// Account-level setup, deployed only by a person through the setup wizard
 // (packages/infra/scripts/setup-aws-account.sh): the GitHub OIDC trust, the
-// roles GitHub Actions assumes, the cost budget and where alarms are emailed.
+// roles GitHub Actions assumes, what a deploy may reach (the CloudFormation
+// execution policy and the permissions boundary), the cost budget and where
+// alarms are emailed. It goes through its own CDK bootstrap, which the GitHub
+// roles cannot assume, so no deploy can change it.
 export class AccountStack extends Stack {
   constructor(scope: Construct, id: string, props: AccountStackProps) {
-    super(scope, id, props);
+    super(scope, id, { ...props, synthesizer: new DefaultStackSynthesizer({ qualifier: accountBootstrap.qualifier }) });
     const { config } = props;
 
     const github = new iam.OidcProviderNative(this, "GithubOidc", {
@@ -50,14 +54,34 @@ export class AccountStack extends Stack {
     // An ARN in this account and region, for the GitHub roles' grants.
     const regional = (service: string, resource: string) => `arn:${this.partition}:${service}:${this.region}:${this.account}:${resource}`;
 
-    // Deploys on merge to main. It cannot be assumed from any other branch,
-    // tag, pull request or fork.
+    // What a deploy may reach. The wizard bootstraps the deploys' CDK
+    // bootstrap with the execution policy, so CloudFormation runs with it
+    // instead of AdministratorAccess (src/deploy-policies.ts).
     const names = resourceNames(config);
+    const boundaryPolicy = new iam.ManagedPolicy(this, "PermissionsBoundary", {
+      managedPolicyName: names.permissionsBoundary,
+      description: `The most any role a ${config.name} deploy creates or changes may do`,
+      statements: boundaryStatements(this, config),
+    });
+    // By name, as the other stacks refer to it; created before any role carries it.
+    const boundary = iam.ManagedPolicy.fromManagedPolicyName(this, "PermissionsBoundaryByName", names.permissionsBoundary);
+    new iam.ManagedPolicy(this, "ExecutionPolicy", {
+      managedPolicyName: names.executionPolicy,
+      description: `What CloudFormation may do when GitHub Actions deploys ${config.name}`,
+      statements: executionPolicyStatements(this, config, boundary.managedPolicyArn),
+    });
+
+    // Deploys on merge to main: only a job in the GitHub environment, which
+    // admits only main (the wizard sets it up). Not any workflow on main, nor
+    // another branch, tag, pull request or fork. The stacks grant it more by
+    // name, within the boundary.
     const deploy = new iam.Role(this, "GithubDeployRole", {
       roleName: names.deployRole,
-      description: `GitHub Actions deploys ${config.name} from ${repository} main only`,
-      assumedBy: githubPrincipal(`${subject}:ref:refs/heads/main`),
+      description: `GitHub Actions deploys ${config.name} from ${repository} main, environment ${names.githubEnvironment} only`,
+      assumedBy: githubPrincipal(`${subject}:environment:${names.githubEnvironment}`),
+      permissionsBoundary: boundary,
     });
+    deploy.node.addDependency(boundaryPolicy);
     deploy.addToPolicy(new iam.PolicyStatement({ actions: ["sts:AssumeRole"], resources: BOOTSTRAP_ROLES.map(bootstrapRoleArn) }));
 
     // Outside CloudFormation, the deploy workflow pushes the images and runs
@@ -122,7 +146,9 @@ export class AccountStack extends Stack {
     diff.addToPolicy(
       new iam.PolicyStatement({
         actions: ["ssm:GetParameter"],
-        resources: [regional("ssm", `parameter/cdk-bootstrap/${DefaultStackSynthesizer.DEFAULT_QUALIFIER}/version`)],
+        resources: [DefaultStackSynthesizer.DEFAULT_QUALIFIER, accountBootstrap.qualifier].map((qualifier) =>
+          regional("ssm", `parameter/cdk-bootstrap/${qualifier}/version`),
+        ),
       }),
     );
 

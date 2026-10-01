@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { environments, type EnvironmentConfig } from "../src/config.ts";
+import { ROTATION_APPLICATION } from "../src/deploy-policies.ts";
 import { synthesise } from "./support.ts";
 
 const AWS_REGION = /\b(?:us|eu|ap|me|sa|ca|af|il|mx)-(?:gov-)?[a-z]+-\d\b/g;
@@ -22,7 +23,9 @@ describe.each([environments.dev, elsewhere])("the $name environment", (config) =
   it("puts every stack in the configured region and names no other region", () => {
     for (const { stack, template } of stacks) {
       expect(stack.region).toBe(config.region);
-      const regions = new Set(JSON.stringify(template.toJSON()).match(AWS_REGION));
+      // AWS publishes the password-rotation app in us-east-1 only; it is deployed here.
+      const json = JSON.stringify(template.toJSON()).replaceAll(ROTATION_APPLICATION.applicationArnForPartition("aws"), "");
+      const regions = new Set(json.match(AWS_REGION));
       regions.delete(config.region);
       expect([...regions], stack.stackName).toEqual([]);
     }
