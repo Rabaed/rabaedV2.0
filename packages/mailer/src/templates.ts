@@ -1,15 +1,14 @@
 import { directionOf, formatNumber, type Locale } from "@rabaed/domain";
 
 /** The values each email template needs. */
-export interface TemplateValues {
+export interface EmailTemplateValues {
   /** Rabaed Admin's one-time sign-in code (ADR 0010). */
   "sign-in-code": { code: string; validMinutes: number };
   /** An invitation to become a Member of a Company; the link opens accept-invitation. */
   invitation: { companyName: string; link: string };
 }
 
-export type TemplateName = keyof TemplateValues;
-export const templateNames = ["sign-in-code", "invitation"] as const satisfies readonly TemplateName[];
+export type EmailTemplate = keyof EmailTemplateValues;
 
 export interface RenderedEmail {
   subject: string;
@@ -22,8 +21,8 @@ export interface RenderedEmail {
  * with the locale's language and direction. Numbers are in Latin digits, and
  * codes and links stay left to right inside Arabic.
  */
-export function renderEmail<T extends TemplateName>(template: T, locale: Locale, values: TemplateValues[T]): RenderedEmail {
-  const content = (templates[template] as (locale: Locale, values: TemplateValues[T]) => Content)(locale, values);
+export function renderEmail<T extends EmailTemplate>(template: T, locale: Locale, values: EmailTemplateValues[T]): RenderedEmail {
+  const content = (templates[template] as (locale: Locale, values: EmailTemplateValues[T]) => Content)(locale, values);
   return {
     subject: content.subject,
     text: [...content.paragraphs.map(plain), content.signOff].join("\n\n") + "\n",
@@ -42,7 +41,7 @@ interface Content {
 
 const signOff: Record<Locale, string> = { en: "Rabaed", ar: "ربائد" };
 
-const templates: { [T in TemplateName]: (locale: Locale, values: TemplateValues[T]) => Content } = {
+const templates: { [T in EmailTemplate]: (locale: Locale, values: EmailTemplateValues[T]) => Content } = {
   "sign-in-code": (locale, { code, validMinutes }) => {
     const minutes = formatNumber(validMinutes, locale);
     return locale === "ar"
@@ -72,6 +71,9 @@ const templates: { [T in TemplateName]: (locale: Locale, values: TemplateValues[
         };
   },
 };
+
+/** Every template, from the templates themselves, so none can be left out of the tests. */
+export const emailTemplates = Object.keys(templates) as EmailTemplate[];
 
 // Arabic counts 3 to 10 with the plural, and 11 and up (and 1, 2) with the singular.
 function arabicMinutes(count: number): string {
