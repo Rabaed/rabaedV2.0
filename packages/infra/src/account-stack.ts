@@ -4,7 +4,7 @@ import * as iam from "aws-cdk-lib/aws-iam";
 import * as sns from "aws-cdk-lib/aws-sns";
 import * as subscriptions from "aws-cdk-lib/aws-sns-subscriptions";
 import type { Construct } from "constructs";
-import { oidcSubjectPrefix, repositoryName, resourceNames, type EnvironmentConfig } from "./config.ts";
+import { oidcSubjectPrefix, repositoryName, resourceNames, stackNames, type EnvironmentConfig } from "./config.ts";
 
 const GITHUB_OIDC_HOST = "token.actions.githubusercontent.com";
 const BOOTSTRAP_ROLES = ["deploy", "file-publishing", "image-publishing", "lookup"] as const;
@@ -47,6 +47,9 @@ export class AccountStack extends Stack {
         resourceName: `cdk-${DefaultStackSynthesizer.DEFAULT_QUALIFIER}-${kind}-role-${this.account}-${this.region}`,
       });
 
+    // An ARN in this account and region, for the GitHub roles' grants.
+    const regional = (service: string, resource: string) => `arn:${this.partition}:${service}:${this.region}:${this.account}:${resource}`;
+
     // Deploys on merge to main. It cannot be assumed from any other branch,
     // tag, pull request or fork.
     const names = resourceNames(config);
@@ -64,7 +67,6 @@ export class AccountStack extends Stack {
     // roles, and read its log. The names come from config.ts, so these grants
     // exist before the resources do. Reading the private fonts is granted by
     // the storage stack, next to the bucket.
-    const regional = (service: string, resource: string) => `arn:${this.partition}:${service}:${this.region}:${this.account}:${resource}`;
     deploy.addToPolicy(new iam.PolicyStatement({ actions: ["ecr:GetAuthorizationToken"], resources: ["*"] }));
     deploy.addToPolicy(
       new iam.PolicyStatement({
@@ -99,15 +101,30 @@ export class AccountStack extends Stack {
       new iam.PolicyStatement({ actions: ["logs:GetLogEvents"], resources: [regional("logs", `log-group:${names.logGroup("migrate")}:*`)] }),
     );
 
-    // Runs `cdk diff` on pull requests. The lookup role is read-only (AWS
-    // ReadOnlyAccess, kms:Decrypt denied), so a pull request can read what is
-    // deployed but change nothing.
+    // Runs `cdk diff --method=template` on pull requests. Code in a pull
+    // request runs with this role, so it reads this environment's deployed
+    // templates and the bootstrap version, nothing else: not the CDK lookup
+    // role (AWS ReadOnlyAccess would expose the logs bucket, CloudWatch logs
+    // and image layers). The CLI warns that it cannot assume the lookup role
+    // and carries on with these credentials, which are for the right account.
     const diff = new iam.Role(this, "GithubDiffRole", {
       roleName: `rabaed-${config.name}-github-diff`,
       description: `GitHub Actions runs cdk diff for ${repository} pull requests (read-only)`,
       assumedBy: githubPrincipal(`${subject}:pull_request`),
     });
-    diff.addToPolicy(new iam.PolicyStatement({ actions: ["sts:AssumeRole"], resources: [bootstrapRoleArn("lookup")] }));
+    diff.addToPolicy(
+      new iam.PolicyStatement({
+        // ListStackResources finds nested stacks' templates.
+        actions: ["cloudformation:DescribeStacks", "cloudformation:GetTemplate", "cloudformation:ListStackResources"],
+        resources: Object.values(stackNames(config)).map((stack) => regional("cloudformation", `stack/${stack}/*`)),
+      }),
+    );
+    diff.addToPolicy(
+      new iam.PolicyStatement({
+        actions: ["ssm:GetParameter"],
+        resources: [regional("ssm", `parameter/cdk-bootstrap/${DefaultStackSynthesizer.DEFAULT_QUALIFIER}/version`)],
+      }),
+    );
 
     // The alert email is a deploy-time parameter (the wizard passes it), so
     // it is never in the repo, the template or a pull request's diff. Later
