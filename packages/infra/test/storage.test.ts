@@ -51,7 +51,7 @@ describe("buckets", () => {
     expect(env.resolve(keyId, "storage").logicalId).toMatch(/^StorageKey/);
   });
 
-  it("encrypts logs with S3-managed keys, the only encryption S3 access logs (and later load-balancer logs) can be written to", () => {
+  it("encrypts logs with S3-managed keys, the only encryption S3 access logs and load-balancer logs can be written to", () => {
     expect(buckets.Logs?.Properties?.BucketEncryption).toEqual({
       ServerSideEncryptionConfiguration: [{ ServerSideEncryptionByDefault: { SSEAlgorithm: "AES256" } }],
     });
