@@ -388,7 +388,15 @@ CERT_ARN=$(_existing AWS_CERTIFICATE_ARN || true)
 cert_expiry() {
   aws acm describe-certificate --region "$REGION" --certificate-arn "$1" --query Certificate.NotAfter --output text 2>/dev/null
 }
-if [[ -n "$CERT_ARN" ]] && fresh_credentials && expiry=$(cert_expiry "$CERT_ARN"); then
+# True for the domain's certificate, which ACM issued (README "A real domain"),
+# not the interim one imported here.
+domain_certificate() {
+  [[ -n "$1" ]] && fresh_credentials && [[ "$(aws acm describe-certificate --region "$REGION"     --certificate-arn "$1" --query Certificate.Type --output text 2>/dev/null)" == AMAZON_ISSUED ]]
+}
+if domain_certificate "$CERT_ARN"; then
+  note "✓ the domain's certificate is in place; ACM renews it, nothing to do"
+  CERT_ARN_KEEP=1
+elif [[ -n "$CERT_ARN" ]] && fresh_credentials && expiry=$(cert_expiry "$CERT_ARN"); then
   note "✓ current certificate expires $expiry"
   confirm "Replace it with a new one (do this within a month of expiry)?" || CERT_ARN_KEEP=1
 fi
@@ -445,9 +453,17 @@ else
   warn "Could not set up the GitHub environment (needs gh signed in as a repository admin), or it admits more than main."
   SKIPPED+=("GitHub environment '$GITHUB_ENVIRONMENT': Settings → Environments → New environment; Deployment branches → Selected branches → add main, and only main")
 fi
-# The certificate itself is public; the deploy's smoke test trusts it (and only it).
+# The interim certificate itself is public; the deploy's smoke test trusts it
+# (and only it). The domain's certificate needs no trusting, so no PEM.
 CERT_ARN=$(_existing AWS_CERTIFICATE_ARN || true)
-if [[ -n "$CERT_ARN" ]] && fresh_credentials \
+if domain_certificate "$CERT_ARN"; then
+  set_var AWS_CERTIFICATE_ARN "$CERT_ARN"
+  if gh variable list --json name --jq '.[].name' 2>/dev/null | grep -qx AWS_CERTIFICATE_PEM; then
+    gh variable delete AWS_CERTIFICATE_PEM >/dev/null 2>&1 \
+      && printf '  %s✓ deleted%s GitHub variable AWS_CERTIFICATE_PEM\n' "$GREEN" "$RESET" \
+      || SKIPPED+=("delete GitHub variable AWS_CERTIFICATE_PEM")
+  fi
+elif [[ -n "$CERT_ARN" ]] && fresh_credentials \
     && CERT_PEM=$(aws acm get-certificate --region "$REGION" --certificate-arn "$CERT_ARN" --query Certificate --output text); then
   set_var AWS_CERTIFICATE_ARN "$CERT_ARN"
   set_var AWS_CERTIFICATE_PEM "$CERT_PEM"
