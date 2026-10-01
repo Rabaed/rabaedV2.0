@@ -195,7 +195,9 @@ When Rabaed's domain is chosen, verify the domain instead of the single address,
 
 Then set `MAIL_FROM_ADDRESS` to an address on the domain (for example `no-reply@<domain>`). The grant already allows a domain identity (`identity/*`, limited by the From address), so no infrastructure change is needed.
 
-**Logs bucket.** It is encrypted with S3-managed keys, not KMS, because S3 access logs and the load balancer's can only be delivered to such a bucket. Every other bucket uses the storage key.
+**Logs bucket** (amends spec RP-207, which asked for every bucket to be KMS-encrypted). It is encrypted with S3-managed keys (SSE-S3, `AES256`), not KMS, because S3 server access logs and the load balancer's access logs can only be delivered to such a bucket. CloudTrail shares the bucket, so its files are SSE-S3 too. `test/storage.test.ts` asserts it. Every other bucket uses the storage key.
+
+**Plain HTTP inside the VPC** (ADR 0011). The load balancer forwards to web, and web calls the api (`API_URL`, `http://api.rabaed-dev.internal:4000`), over plain HTTP inside the private subnets. Accepted for dev only, which holds demo data; an environment with real customer data must carry TLS on both hops.
 
 **Demo in dev** (RP-213). Dev holds the demo and nothing else: the two demo Projects above, made up from end to end. There is no way to import data, and nobody should type real Companies, people or documents into it. Other environments are not demo ones (`demo` in `src/config.ts`): they have no demo password, and the demo command refuses to run there.
 
