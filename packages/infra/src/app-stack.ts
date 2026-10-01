@@ -5,7 +5,7 @@ import * as elbv2 from "aws-cdk-lib/aws-elasticloadbalancingv2";
 import * as iam from "aws-cdk-lib/aws-iam";
 import * as servicediscovery from "aws-cdk-lib/aws-servicediscovery";
 import type { Construct } from "constructs";
-import { resourceNames, type EnvironmentConfig, type ServiceName } from "./config.ts";
+import { checkDomain, resourceNames, type EnvironmentConfig, type ServiceName } from "./config.ts";
 import type { DataStack } from "./data-stack.ts";
 import { MailSending } from "./email.ts";
 import { API_PORT, WEB_PORT, type NetworkStack } from "./network-stack.ts";
@@ -44,11 +44,13 @@ export class AppStack extends Stack {
   constructor(scope: Construct, id: string, props: AppStackProps) {
     super(scope, id, props);
     const { config, network, data, registry, storage } = props;
+    checkDomain(config);
     const names = resourceNames(config);
     const imageTag = imageTagParameter(this);
 
-    // Until a domain is chosen, the wizard imports an interim self-signed
-    // certificate and records its ARN; see README "Dev environment on AWS".
+    // The domain's certificate once config.domain is set. Until then, the
+    // wizard imports an interim self-signed certificate and records its ARN;
+    // see README "Dev environment on AWS".
     const certificateArn = new CfnParameter(this, "CertificateArn", {
       type: "String",
       description: "ACM certificate for the HTTPS listener",
@@ -174,6 +176,8 @@ export class AppStack extends Stack {
       defaultAction: elbv2.ListenerAction.redirect({ protocol: "HTTPS", port: "443", permanent: true }),
     });
 
-    new CfnOutput(this, "Url", { value: `https://${loadBalancer.loadBalancerDnsName}` });
+    // Where the domain's DNS record points; also the address until there is one.
+    new CfnOutput(this, "LoadBalancerDnsName", { value: loadBalancer.loadBalancerDnsName });
+    new CfnOutput(this, "Url", { value: `https://${config.domain ?? loadBalancer.loadBalancerDnsName}` });
   }
 }
