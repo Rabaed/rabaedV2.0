@@ -3,9 +3,11 @@ name: Deploy dev
 # deployed to dev: infrastructure → images → migrations → app → monitoring →
 # smoke test.
 # A failed migration stops the deploy before the app changes; a version that
-# never turns healthy is rolled back by ECS and fails the workflow; so does a
-# failed smoke test or app role check. Dev is a demo environment: each deploy
-# seeds the demo if it is missing, and a manual run can reset it (RP-213).
+# never turns healthy is rolled back by ECS and fails the workflow. A version
+# that turns healthy but then fails the smoke test or the app role check is
+# rolled back here, to the last version that passed them, and fails the
+# workflow too (RP-246). Dev is a demo environment: each deploy seeds the demo
+# if it is missing, and a manual run can reset it (RP-213).
 on:
   workflow_run:
     workflows: [CI]
@@ -29,6 +31,8 @@ concurrency:
 
 env:
   STACK_PREFIX: Rabaed-dev
+  # Only this workflow writes it; the registry stack grants the deploy role access.
+  LAST_GOOD_PARAMETER: /rabaed/dev/deploy/last-good-version
 
 jobs:
   # CI runs can finish out of order; never deploy an older commit over a newer one.
@@ -172,6 +176,7 @@ jobs:
             /app/apps/api/node_modules/.bin/tsx /app/apps/api/src/cli/demo-environment.ts "$action"
 
       - name: App
+        id: app
         working-directory: packages/infra
         env:
           CERTIFICATE_ARN: ${{ vars.AWS_CERTIFICATE_ARN }}
@@ -217,3 +222,38 @@ jobs:
         run: >-
           packages/infra/scripts/run-task.sh "$RUNNER_TEMP/migrations.json" "app role check"
           ./node_modules/.bin/tsx src/check-app-role.ts
+
+      # This version passed every check: it is what a later failed deploy rolls back to.
+      - name: Record last good version
+        id: record
+        run: aws ssm put-parameter --name "$LAST_GOOD_PARAMETER" --value "$VERSION" --type String --overwrite >/dev/null
+
+      # The app went live, then a later step failed (monitoring, smoke test or
+      # app role check): put the last good version's images back; the job stays
+      # red. Code only, not schema or the app stack's template (README step 8).
+      # Not when recording itself failed: that version passed every check.
+      - name: Roll back to the last good version
+        if: failure() && steps.app.outcome == 'success' && steps.record.outcome == 'skipped'
+        working-directory: packages/infra
+        env:
+          CERTIFICATE_ARN: ${{ vars.AWS_CERTIFICATE_ARN }}
+        run: |
+          if ! good=$(aws ssm get-parameter --name "$LAST_GOOD_PARAMETER" --query Parameter.Value --output text 2>"$RUNNER_TEMP/ssm.err"); then
+            grep -q ParameterNotFound "$RUNNER_TEMP/ssm.err" || { cat "$RUNNER_TEMP/ssm.err" >&2; exit 1; }
+            echo "::error::No version has passed the checks yet, so there is nothing to roll back to; dev stays on ${VERSION:0:7} until main is fixed."
+            exit 1
+          fi
+          if [[ "$good" == "$VERSION" ]]; then
+            echo "::error::${VERSION:0:7} passed the checks before, so it is itself the last good version; dev stays on it."
+            exit 1
+          fi
+          for service in web api worker; do
+            if ! aws ecr describe-images --repository-name "rabaed-dev/$service" --image-ids "imageTag=$good" >/dev/null 2>&1; then
+              echo "::error::rabaed-dev/$service:$good is no longer in the registry; dev stays on ${VERSION:0:7}."
+              exit 1
+            fi
+          done
+          echo "::warning::${VERSION:0:7} failed its checks; rolling dev back to ${good:0:7}."
+          pnpm --silent cdk deploy -c env=dev --exclusively --require-approval never --no-color --progress events \
+            "$STACK_PREFIX-App" --parameters "ImageTag=$good" --parameters "CertificateArn=$CERTIFICATE_ARN"
+          echo "### \`${VERSION:0:7}\` failed its checks; dev was rolled back to \`${good:0:7}\`" >> "$GITHUB_STEP_SUMMARY"

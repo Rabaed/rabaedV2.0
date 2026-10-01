@@ -193,6 +193,8 @@ export function resourceNames(config: EnvironmentConfig) {
     trail: prefix,
     /** GitHub Actions' deploy role, which also builds the images (account stack). */
     deployRole: `${prefix}-github-deploy`,
+    /** The last version that passed the deploy's checks; the workflow rolls back to it. */
+    lastGoodVersionParameter: `/rabaed/${config.name}/deploy/last-good-version`,
     /** The api's task role; the Project files bucket refuses everyone else. */
     apiTaskRole: `${prefix}-api-task`,
     /** The demo people's sign-in password (demo environments only). */
