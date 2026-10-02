@@ -17,6 +17,23 @@ export function synthesise(config: EnvironmentConfig = environments.dev) {
   return stacks.map((stack) => ({ stack, template: Template.fromStack(stack) }));
 }
 
+/**
+ * The context lookups synthesis for a real account would make. Each would be
+ * cached in cdk.context.json, so there must be none (RP-244).
+ */
+export function contextLookups(config: EnvironmentConfig = environments.dev) {
+  const account = process.env.CDK_DEFAULT_ACCOUNT;
+  process.env.CDK_DEFAULT_ACCOUNT = "111111111111";
+  try {
+    const app = new App({ context: cdkJson.context });
+    buildEnvironment(app, config);
+    return app.synth().manifest.missing ?? [];
+  } finally {
+    if (account === undefined) delete process.env.CDK_DEFAULT_ACCOUNT;
+    else process.env.CDK_DEFAULT_ACCOUNT = account;
+  }
+}
+
 export function accountTemplate(config: EnvironmentConfig = environments.dev): Template {
   const found = synthesise(config).find(({ stack }) => stack instanceof AccountStack);
   if (!found) throw new Error("account stack not synthesised");

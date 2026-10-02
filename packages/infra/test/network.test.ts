@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { stackNames, environments } from "../src/config.ts";
-import { environmentTemplates, references, resourcesOfType, type Resource } from "./support.ts";
+import { contextLookups, environmentTemplates, references, resourcesOfType, type Resource } from "./support.ts";
 
 const env = environmentTemplates();
 const names = stackNames(environments.dev);
@@ -47,6 +47,20 @@ function paths(direction: "ingress" | "egress"): string[] {
 }
 
 describe("network", () => {
+  // Subnet N in zone N, as maxAzs placed them before the zones were pinned.
+  it("places subnet N of each tier in the environment's Nth pinned availability zone", () => {
+    const subnets = Object.entries(env.template("network").findResources("AWS::EC2::Subnet")) as [string, Resource][];
+    expect(subnets).toHaveLength(3 * environments.dev.availabilityZones.length);
+    for (const [logicalId, subnet] of subnets) {
+      const n = Number(/Subnet(\d+)Subnet[0-9A-F]{8}$/.exec(logicalId)?.[1]);
+      expect(subnet.Properties?.AvailabilityZone).toBe(environments.dev.availabilityZones[n - 1]);
+    }
+  });
+
+  it("synthesises for a real account without looking anything up", () => {
+    expect(contextLookups()).toEqual([]);
+  });
+
   it("puts nothing in a public subnet except the load balancer and the NAT gateway", () => {
     const users = new Set<string>();
     for (const part of parts) {
