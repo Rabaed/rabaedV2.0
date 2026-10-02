@@ -1,4 +1,5 @@
 import cookie from "@fastify/cookie";
+import { dummyHash } from "@rabaed/auth";
 import type { Db } from "@rabaed/db";
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
 import {
@@ -8,11 +9,9 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import type { ApiConfig } from "./config.ts";
-import { HttpError, notFound, notSignedIn } from "./http-error.ts";
-import { dummyHash } from "./identity/password.ts";
+import { HttpError, notSignedIn } from "./http-error.ts";
 import { resolveSession, type Principal, type Session } from "./identity/sessions.ts";
 import { loggerOptions } from "./logging.ts";
-import { adminRoutes } from "./routes/admin.ts";
 import { companyRoutes } from "./routes/companies.ts";
 import { healthRoutes } from "./routes/health.ts";
 import { memberRoutes } from "./routes/members.ts";
@@ -32,11 +31,14 @@ declare module "fastify" {
   }
 }
 
+// The customer api: what every Member's browser talks to, through web. It
+// connects as rabaed_app only, which cannot bypass row-level security. Rabaed
+// Admin, and the rabaed_admin role, live in their own service (apps/admin,
+// ADR 0010); src/admin-boundary.test.ts keeps them out of here.
+
 export interface AppOptions {
   /** Connects as rabaed_app: row-level security applies. */
   db: Db;
-  /** Connects as rabaed_admin: Rabaed Admin routes only, always through asEngineer. */
-  adminDb: Db;
   config: ApiConfig;
   /** The current time; tests move it to check expiry. */
   now?: () => Date;
@@ -46,20 +48,16 @@ export interface AppOptions {
 /** What route plugins get from the app. */
 export interface AppContext {
   db: Db;
-  adminDb: Db;
   config: ApiConfig;
   now: () => Date;
   /** The signed-in Member's id, or a 401. */
   requireMember(request: FastifyRequest): string;
-  /** The signed-in Rabaed Engineer's id, or a 404: Rabaed Admin routes don't exist for anyone else. */
-  requireEngineer(request: FastifyRequest): string;
   setSessionCookie(reply: FastifyReply, session: Session): void;
   clearSessionCookie(reply: FastifyReply): void;
 }
 
 export async function buildApp({
   db,
-  adminDb,
   config,
   now = () => new Date(),
   logger = true,
@@ -94,16 +92,11 @@ export async function buildApp({
   const cookieOptions = { path: "/", httpOnly: true, sameSite: "lax", secure: config.cookieSecure } as const;
   const context: AppContext = {
     db,
-    adminDb,
     config,
     now,
     requireMember(request) {
-      if (request.principal?.kind !== "member") throw notSignedIn();
+      if (!request.principal) throw notSignedIn();
       return request.principal.memberId;
-    },
-    requireEngineer(request) {
-      if (request.principal?.kind !== "engineer") throw notFound();
-      return request.principal.engineerId;
     },
     setSessionCookie(reply, session) {
       reply.setCookie(SESSION_COOKIE, session.token, { ...cookieOptions, expires: session.expiresAt });
@@ -122,6 +115,5 @@ export async function buildApp({
   await app.register(visibilityRoutes(context));
   await app.register(workItemRoutes(context));
   await app.register(notificationRoutes(context));
-  await app.register(adminRoutes(context), { prefix: "/admin" });
   return app;
 }

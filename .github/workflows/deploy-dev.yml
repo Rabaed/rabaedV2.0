@@ -1,7 +1,8 @@
 name: Deploy dev
 # Every merge to main that passes CI (build, tests, infra assertions) is
-# deployed to dev: infrastructure → images → migrations → app → monitoring →
-# smoke test.
+# deployed to dev: infrastructure → images → migrations → app (with Rabaed
+# Admin, behind its own load balancer) → monitoring → smoke test → admin
+# secret access check.
 # A failed migration stops the deploy before the app changes; a version that
 # never turns healthy is rolled back by ECS and fails the workflow. A version
 # that turns healthy but then fails the smoke test or the app role check is
@@ -130,7 +131,7 @@ jobs:
       - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
 
       # Tags are immutable, so a commit's images are built once; a re-run reuses
-      # them. The three builds share their dependency layers in this builder.
+      # them. The builds share their dependency layers in this builder.
       # Only web gets the fonts. The smoke test then expects the Arabic font
       # web was built with; a web image reused from an earlier run is only
       # checked for serving its fonts from our origin.
@@ -140,7 +141,7 @@ jobs:
           REGISTRY: ${{ steps.ecr.outputs.registry }}
           ARABIC_FONT: ${{ steps.fonts.outputs.arabic_font }}
         run: |
-          for service in web api worker; do
+          for service in web api admin worker; do
             repo="rabaed-dev/$service"
             if aws ecr describe-images --repository-name "$repo" --image-ids "imageTag=$VERSION" >/dev/null 2>&1; then
               echo "$repo:$VERSION already pushed"
@@ -214,6 +215,8 @@ jobs:
             export NODE_EXTRA_CA_CERTS="$RUNNER_TEMP/dev-ca.pem"
           fi
           export SMOKE_URL=$(jq -r --arg s "$STACK_PREFIX-App" '.[$s].Url' "$RUNNER_TEMP/app.json")
+          # Rabaed Admin answers on its own address, and the customer address serves none of it.
+          export SMOKE_ADMIN_URL=$(jq -r --arg s "$STACK_PREFIX-App" '.[$s].AdminUrl' "$RUNNER_TEMP/app.json")
           export SMOKE_VERSION="$VERSION"
           export SMOKE_ARABIC_FONT="$ARABIC_FONT"
           # In a demo environment, it also signs in as two demo people to check visibility.
@@ -224,6 +227,24 @@ jobs:
           fi
           pnpm --filter @rabaed/infra smoke
           echo "### Deployed \`${VERSION:0:7}\` to $SMOKE_URL" >> "$GITHUB_STEP_SUMMARY"
+
+      # ADR 0010: only Rabaed Admin's task role may read the password of
+      # rabaed_admin, the role that bypasses row-level security. IAM is asked,
+      # without reading the secret: the api's task role must be denied, and
+      # Rabaed Admin's allowed (so the check can tell the two apart).
+      - name: Admin secret access check
+        run: |
+          out() { jq -r --arg s "$STACK_PREFIX-App" --arg k "$1" '.[$s][$k]' "$RUNNER_TEMP/app.json"; }
+          secret=$(out AdminSecretArn)
+          decision() {
+            aws iam simulate-principal-policy --policy-source-arn "$1" --action-names secretsmanager:GetSecretValue \
+              --resource-arns "$secret" --query 'EvaluationResults[0].EvalDecision' --output text
+          }
+          api=$(decision "$(out ApiTaskRoleArn)")
+          admin=$(decision "$(out AdminTaskRoleArn)")
+          echo "api task role: $api; Rabaed Admin task role: $admin"
+          if [[ "$api" == allowed ]]; then echo "::error::The customer api's task role can read the admin secret"; exit 1; fi
+          if [[ "$admin" != allowed ]]; then echo "::error::Rabaed Admin's task role cannot read the admin secret ($admin)"; exit 1; fi
 
       # As rabaed_app, inside the VPC: it cannot bypass row-level security or
       # rewrite the audit trail (packages/db/src/app-role-check.ts).
@@ -237,9 +258,9 @@ jobs:
         id: record
         run: aws ssm put-parameter --name "$LAST_GOOD_PARAMETER" --value "$VERSION" --type String --overwrite >/dev/null
 
-      # The app went live, then a later step failed (monitoring, smoke test or
-      # app role check): put the last good version's images back; the job stays
-      # red. Code only, not schema or the app stack's template (README step 8).
+      # The app went live, then a later step failed (monitoring, smoke test,
+      # admin secret access or app role check): put the last good version's images back; the job stays
+      # red. Code only, not schema or the app stack's template (README step 9).
       # Not when recording itself failed: that version passed every check.
       - name: Roll back to the last good version
         if: failure() && steps.app.outcome == 'success' && steps.record.outcome == 'skipped'
@@ -256,7 +277,7 @@ jobs:
             echo "::error::${VERSION:0:7} passed the checks before, so it is itself the last good version; dev stays on it."
             exit 1
           fi
-          for service in web api worker; do
+          for service in web api admin worker; do
             if ! aws ecr describe-images --repository-name "rabaed-dev/$service" --image-ids "imageTag=$good" >/dev/null 2>&1; then
               echo "::error::rabaed-dev/$service:$good is no longer in the registry; dev stays on ${VERSION:0:7}."
               exit 1

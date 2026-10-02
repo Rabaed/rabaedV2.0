@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { smokeTest, VISIBILITY_CHECK_PEOPLE, visibilityCheck } from "./smoke.ts";
+import { ADMIN_PATHS, smokeTest, VISIBILITY_CHECK_PEOPLE, visibilityCheck } from "./smoke.ts";
 
 const url = "https://rabaed-dev-123.eu-central-1.elb.amazonaws.com";
 const version = "4f2a9c1e";
@@ -242,5 +242,52 @@ describe("visibility check", () => {
     }) as typeof fetch;
     const failures = await visibilityCheck({ url, password, fetch: failing });
     expect(failures).toEqual([expect.stringContaining(`/api/v1/projects/${jcv} answered 200, expected 404`)]);
+  });
+});
+
+describe("Rabaed Admin checks", () => {
+  const adminUrl = "https://rabaed-dev-admin-456.eu-central-1.elb.amazonaws.com";
+  const adminHealth = (body: unknown) => ({ [`${adminUrl}/health`]: { status: 200, body } });
+
+  // The customer address as it should be: every admin path is unknown to it.
+  function customer(overrides: Record<string, Route> = {}) {
+    const notFound = Object.fromEntries(ADMIN_PATHS.map((p) => [`${url}${p.path}`, { status: 404, body: { error: "not_found" } }]));
+    return deployment({ ...notFound, ...adminHealth({ status: "ok", database: "ok", version }), ...overrides });
+  }
+
+  it("pass when Rabaed Admin answers on its own address and the customer address serves none of it", async () => {
+    expect(await smokeTest({ url, adminUrl, version, fetch: customer() })).toEqual([]);
+  });
+
+  it("fail when Rabaed Admin runs another version or cannot reach its database", async () => {
+    const failures = await smokeTest({
+      url,
+      adminUrl,
+      version,
+      fetch: customer({ [`${adminUrl}/health`]: { status: 503, body: { status: "degraded", database: "unavailable", version: "0ld" } } }),
+    });
+    expect(failures).toEqual([expect.stringContaining(`${adminUrl}/health answered 503`)]);
+
+    const stale = await smokeTest({ url, adminUrl, version, fetch: customer(adminHealth({ status: "ok", database: "ok", version: "0ld" })) });
+    expect(stale).toEqual([`Rabaed Admin runs 0ld, expected ${version}`]);
+  });
+
+  it("fail when Rabaed Admin does not answer at all", async () => {
+    const failures = await smokeTest({ url, adminUrl, version, fetch: deployment(Object.fromEntries(ADMIN_PATHS.map((p) => [`${url}${p.path}`, { status: 404 }]))) });
+    expect(failures).toEqual([expect.stringContaining("Rabaed Admin health")]);
+  });
+
+  it.each(ADMIN_PATHS.map((p) => [p.method, p.path, p.path.startsWith("/api/") ? 401 : 200] as const))(
+    "fail when the customer address answers %s %s",
+    async (method, path, status) => {
+      const failures = await smokeTest({ url, adminUrl, version, fetch: customer({ [`${url}${path}`]: { status } }) });
+      expect(failures).toEqual([`the customer address answered ${method} ${path} with ${status}: it must not serve Rabaed Admin`]);
+    },
+  );
+
+  it("accept a redirect for a page path (web adds the language), but never a 2xx", async () => {
+    const page = ADMIN_PATHS.find((p) => !p.path.startsWith("/api/"))!;
+    const redirected = customer({ [`${url}${page.path}`]: { status: 307, location: `/en${page.path}` } });
+    expect(await smokeTest({ url, adminUrl, version, fetch: redirected })).toEqual([]);
   });
 });

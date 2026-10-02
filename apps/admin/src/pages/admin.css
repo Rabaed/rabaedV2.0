@@ -1,0 +1,144 @@
+/* Rabaed Admin: plain and readable. Logical properties only, so Arabic mirrors. */
+:root {
+  --ink: #1d2433;
+  --muted: #5b6475;
+  --line: #d6dae2;
+  --surface: #ffffff;
+  --page: #f5f6f8;
+  --accent: #0f5c4d;
+  --accent-ink: #ffffff;
+  --error: #a3261b;
+  --error-surface: #fbeceb;
+  --info-surface: #e9f4f1;
+  color-scheme: light;
+  font-family: system-ui, "Segoe UI", Tahoma, Arial, sans-serif;
+  font-variant-numeric: lining-nums;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--page);
+  color: var(--ink);
+  line-height: 1.5;
+}
+
+.bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  padding-block: 12px;
+  padding-inline: 24px;
+  background: var(--surface);
+  border-block-end: 1px solid var(--line);
+}
+
+.spacer {
+  flex: 1;
+}
+
+main {
+  max-inline-size: 720px;
+  margin-inline: auto;
+  padding: 24px 16px;
+}
+
+#who {
+  overflow-wrap: anywhere;
+}
+
+h1 {
+  font-size: 1.5rem;
+  margin-block: 0 8px;
+}
+
+h2 {
+  font-size: 1.2rem;
+  margin-block: 40px 8px;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+form {
+  display: grid;
+  gap: 12px;
+  margin-block: 16px;
+}
+
+fieldset {
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 16px;
+  background: var(--surface);
+}
+
+label {
+  display: grid;
+  gap: 4px;
+}
+
+input,
+select,
+textarea {
+  min-inline-size: 0;
+  font: inherit;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--ink);
+}
+
+button {
+  font: inherit;
+  justify-self: start;
+  padding: 8px 16px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.6;
+}
+
+button.link {
+  padding: 0;
+  background: none;
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+#notice {
+  padding: 12px 16px;
+  border-radius: 6px;
+  background: var(--info-surface);
+}
+
+#notice.error {
+  background: var(--error-surface);
+  color: var(--error);
+}
+
+table {
+  inline-size: 100%;
+  border-collapse: collapse;
+  background: var(--surface);
+}
+
+th,
+td {
+  text-align: start;
+  padding: 8px;
+  border-block-end: 1px solid var(--line);
+}

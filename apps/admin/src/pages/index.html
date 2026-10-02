@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>Rabaed Admin</title>
+    <link rel="stylesheet" href="/assets/admin.css" />
+    <script src="/assets/admin.js" defer></script>
+  </head>
+  <body>
+    <header class="bar">
+      <strong data-t="title">Rabaed Admin</strong>
+      <span class="spacer"></span>
+      <span id="who" class="muted"></span>
+      <button type="button" id="language" class="link"></button>
+      <button type="button" id="sign-out" class="link" data-t="signOut" hidden>Sign out</button>
+    </header>
+
+    <main>
+      <p id="notice" role="status" hidden></p>
+
+      <section id="sign-in" hidden>
+        <h1 data-t="signInTitle">Sign in</h1>
+        <form id="password-form">
+          <label><span data-t="email">Email</span><input name="email" type="email" autocomplete="username" dir="ltr" required /></label>
+          <label><span data-t="password">Password</span><input name="password" type="password" autocomplete="current-password" dir="ltr" required /></label>
+          <button type="submit" data-t="continue">Continue</button>
+        </form>
+        <form id="code-form" hidden>
+          <p id="code-sent"></p>
+          <label>
+            <span data-t="code">Code</span>
+            <input name="code" inputmode="numeric" autocomplete="one-time-code" pattern="\d{6}" maxlength="6" dir="ltr" required />
+          </label>
+          <button type="submit" data-t="signIn">Sign in</button>
+          <button type="button" id="start-over" class="link" data-t="startOver">Start again</button>
+        </form>
+      </section>
+
+      <section id="home" hidden>
+        <h1 data-t="onboardTitle">Onboard a Company</h1>
+        <p class="muted" data-t="onboardHint">Creates the Company and emails its Authorized Person an invitation.</p>
+        <form id="onboard-form">
+          <fieldset>
+            <legend data-t="company">Company</legend>
+            <label><span data-t="nameEn">Legal name (English)</span><input name="legalNameEn" dir="ltr" required maxlength="200" /></label>
+            <label><span data-t="nameAr">Legal name (Arabic)</span><input name="legalNameAr" dir="rtl" required maxlength="200" /></label>
+            <label><span data-t="cr">CR number</span><input name="crNumber" inputmode="numeric" pattern="\d{10}" dir="ltr" required /></label>
+            <label><span data-t="vat">VAT number</span><input name="vatNumber" inputmode="numeric" pattern="3\d{13}3" dir="ltr" required /></label>
+          </fieldset>
+          <fieldset>
+            <legend data-t="authorizedPerson">Authorized Person</legend>
+            <label><span data-t="email">Email</span><input name="email" type="email" dir="ltr" required /></label>
+            <label><span data-t="personEn">Full name (English)</span><input name="fullNameEn" dir="ltr" required maxlength="200" /></label>
+            <label><span data-t="personAr">Full name (Arabic)</span><input name="fullNameAr" dir="rtl" required maxlength="200" /></label>
+            <label>
+              <span data-t="language">Language</span>
+              <select name="locale">
+                <option value="en">English</option>
+                <option value="ar">العربية</option>
+              </select>
+            </label>
+          </fieldset>
+          <label><span data-t="reason">Reason</span><textarea name="reason" required maxlength="1000" rows="2"></textarea></label>
+          <button type="submit" data-t="onboard">Onboard and invite</button>
+        </form>
+
+        <h2 data-t="inviteTitle">Invite an Authorized Person again</h2>
+        <p class="muted" data-t="inviteHint">For a Company whose Authorized Person has not accepted yet, for example when the invitation expired.</p>
+        <form id="invite-form">
+          <label><span data-t="cr">CR number</span><input name="crNumber" inputmode="numeric" pattern="\d{10}" dir="ltr" required /></label>
+          <label><span data-t="reason">Reason</span><textarea name="reason" required maxlength="1000" rows="2"></textarea></label>
+          <button type="submit" data-t="invite">Send invitation</button>
+        </form>
+
+        <h2 data-t="leadsTitle">Onboarding leads</h2>
+        <p class="muted" data-t="leadsHint">CR numbers Project Admins invited that are not on Rabaed yet.</p>
+        <form id="leads-form">
+          <label><span data-t="reason">Reason</span><input name="reason" required maxlength="1000" /></label>
+          <button type="submit" data-t="showLeads">Show leads</button>
+        </form>
+        <table id="leads" hidden>
+          <thead>
+            <tr><th data-t="cr">CR number</th><th data-t="project">Project</th><th data-t="host">Host Company</th><th data-t="requested">Requested</th><th data-t="state">State</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </section>
+    </main>
+  </body>
+</html>

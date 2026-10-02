@@ -1,7 +1,7 @@
 import type { Db } from "@rabaed/db";
 import type { OnboardingLeads } from "@rabaed/domain";
 import { sql } from "kysely";
-import { asEngineer } from "../admin/admin-action.ts";
+import { asEngineer } from "./admin-action.ts";
 
 /**
  * Every onboarding lead, newest first: a CR number a Project Admin invited that

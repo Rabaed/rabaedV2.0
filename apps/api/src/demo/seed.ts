@@ -1,15 +1,16 @@
+import { createEngineer, onboardCompany } from "@rabaed/admin/services";
 import type { Db } from "@rabaed/db";
 import type { BaseRole, BilingualText, Locale, VisibilityGrant } from "@rabaed/domain";
 import type { FastifyInstance } from "fastify";
 import { SESSION_COOKIE } from "../app.ts";
-import { createEngineer } from "../identity/engineers.ts";
 
 // The demo Project (RP-196): "Riyadh Gate Tower – Phase 2" with four Companies,
 // their Members, Positions and Visibility, and a second Project no other demo
 // Company is on (RP-213), built through the API itself (the
 // same routes, validation and app.* functions a person would use), never raw
-// SQL. A Rabaed Engineer onboards each Company through Rabaed Admin, which
-// writes admin_action with the reason (visibility.md V9).
+// SQL. A Rabaed Engineer onboards each Company through Rabaed Admin's domain
+// service (apps/admin), which writes admin_action with the reason
+// (visibility.md V9), as the admin service's own screen does.
 //
 // The names, emails (on the reserved .test domain), CR and VAT numbers are all
 // made up. Every demo person signs in with one password the caller supplies:
@@ -81,8 +82,19 @@ interface Onboarded {
   legalName: BilingualText;
 }
 
-/** Seeds the demo Project through `app`. `migrator` creates the Rabaed Engineer, as `pnpm engineer:create` does. */
-export async function seedDemo(app: FastifyInstance, migrator: Db, password: string): Promise<DemoSeed> {
+/** The databases the seed needs besides the customer api's own. */
+export interface SeedDatabases {
+  /** Creates the Rabaed Engineer, as `pnpm engineer:create` does. */
+  migrator: Db;
+  /** rabaed_admin, for the Engineer's onboardings, as Rabaed Admin connects. */
+  admin: Db;
+}
+
+// Each invitation is accepted at once.
+const INVITATION_TTL_MS = 3_600_000;
+
+/** Seeds the demo Project through `app`, the customer api, and Rabaed Admin's onboarding. */
+export async function seedDemo(app: FastifyInstance, databases: SeedDatabases, password: string): Promise<DemoSeed> {
   const people: DemoPerson[] = [];
 
   const engineer: DemoPerson = {
@@ -92,21 +104,26 @@ export async function seedDemo(app: FastifyInstance, migrator: Db, password: str
     company: "Rabaed",
     label: "Rabaed Engineer (Rabaed Admin)",
   };
-  await createEngineer(migrator, { email: engineer.email, fullName: engineer.name.en, password });
-  const admin = browser(app);
-  await admin("POST", "/admin/v1/session", { email: engineer.email, password });
+  const engineerId = await createEngineer(databases.migrator, { email: engineer.email, fullName: engineer.name.en, password });
 
   /** The Engineer onboards a Company; its Authorized Person accepts the invitation. */
   async function onboard(n: number, domain: string, legalName: BilingualText, ap: Person): Promise<Onboarded> {
     // Made-up numbers in a range no real registration uses.
     const crNumber = `99990000${String(n).padStart(2, "0")}`;
-    const r = await admin<{ authorizedPersonId: string; invitation: { token: string } }>("POST", "/admin/v1/companies", {
-      legalName,
-      crNumber,
-      vatNumber: `3999900000000${n}3`,
-      authorizedPerson: { email: email(ap.local, domain), fullName: ap.name, locale: ap.locale ?? "en" },
-      reason: `Demo seed: onboarding ${legalName.en} for the Riyadh Gate Tower – Phase 2 walkthrough`,
-    });
+    const r = await onboardCompany(
+      databases.admin,
+      engineerId,
+      {
+        legalName,
+        crNumber,
+        vatNumber: `3999900000000${n}3`,
+        authorizedPerson: { email: email(ap.local, domain), fullName: ap.name, locale: ap.locale ?? "en" },
+        reason: `Demo seed: onboarding ${legalName.en} for the Riyadh Gate Tower – Phase 2 walkthrough`,
+      },
+      new Date(),
+      INVITATION_TTL_MS,
+    );
+    if (!r.ok) throw new Error(`Demo seed: onboarding ${legalName.en} conflicts on ${r.conflict}`);
     const caller = browser(app);
     await caller("POST", "/v1/invitations/accept", { token: r.invitation.token, password });
     people.push({ key: ap.key, email: email(ap.local, domain), name: ap.name, company: legalName.en, label: ap.label });

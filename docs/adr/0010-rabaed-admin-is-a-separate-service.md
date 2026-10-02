@@ -14,4 +14,4 @@ We decided that Rabaed Admin runs as its own service, with its own address and l
 
 ## Consequences
 
-The first version moves only what exists today: Company onboarding and inviting its Authorized Person, each with a reason, gets simple screens in the new portal. Rabaed must be able to send email before the admin service can go live.
+The first version moves only what exists today: Company onboarding and inviting its Authorized Person, each with a reason, gets simple screens in the new portal. Rabaed must be able to send email before the admin service can go live. Besides the admin service, only the one-off migration task can read the bypass role's password: it creates the roles, and in a demo environment seeds the demo through Rabaed Admin's onboarding service. It never runs as a service and takes no traffic (RP-254).

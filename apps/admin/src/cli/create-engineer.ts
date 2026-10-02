@@ -4,7 +4,7 @@ import { randomBytes } from "node:crypto";
 import { parseArgs } from "node:util";
 import { createDb, databaseUrlsFromEnv } from "@rabaed/db";
 import { z } from "zod";
-import { createEngineer } from "../identity/engineers.ts";
+import { createEngineer } from "../engineers.ts";
 
 const { values } = parseArgs({ options: { email: { type: "string" }, name: { type: "string" } } });
 const input = z.object({ email: z.email(), name: z.string().trim().min(1) }).parse(values);

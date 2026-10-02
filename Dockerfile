@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 #
-# One image per service: `docker build --target web|api|worker .`
+# One image per service: `docker build --target web|api|admin|worker .`
 # Migrations run from the api image (packages/infra/src/migrations-stack.ts).
 # The deploy workflow builds these on every merge to main; configuration and
 # secrets come from the task definition at runtime, never from the image.
@@ -31,6 +31,12 @@ USER node
 FROM node-service AS api
 WORKDIR /app/apps/api
 EXPOSE 4000
+CMD ["./node_modules/.bin/tsx", "src/server.ts"]
+
+# Rabaed Admin (ADR 0010): its own image and service, never the customer api's.
+FROM node-service AS admin
+WORKDIR /app/apps/admin
+EXPOSE 4050
 CMD ["./node_modules/.bin/tsx", "src/server.ts"]
 
 FROM node-service AS worker

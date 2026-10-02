@@ -41,14 +41,14 @@ const password = demoPassword();
 const db = createDb(urls.app, { max: 2 });
 const adminDb = createDb(urls.admin, { max: 1 });
 const migrator = createDb(urls.migrator, { max: 1 });
-const app = await buildApp({ db, adminDb, config: apiConfigFromEnv(), logger: false });
+const app = await buildApp({ db, config: apiConfigFromEnv(), logger: false });
 try {
-  const seed = await seedDemo(app, migrator, password);
+  const seed = await seedDemo(app, { migrator, admin: adminDb }, password);
   console.log(`\nDemo Projects "Riyadh Gate Tower – Phase 2" and "Jeddah Corniche Villas" seeded. Everyone signs in with the password in .env.demo.\n`);
   const rows = [seed.engineer, ...seed.people].map((p) => [p.company, p.label, p.name.en, p.email]);
   const widths = [0, 1, 2].map((i) => Math.max(...rows.map((r) => r[i]!.length)));
   for (const r of rows) console.log(`  ${r.slice(0, 3).map((c, i) => c!.padEnd(widths[i]!)).join("  ")}  ${r[3]}`);
-  console.log(`\nSign in at /en/sign-in (or /ar/sign-in). The Rabaed Engineer uses Rabaed Admin (the /admin/v1 API).\n`);
+  console.log(`\nSign in at /en/sign-in (or /ar/sign-in). The Rabaed Engineer signs in to Rabaed Admin (pnpm dev runs it; the code comes by email, to Mailpit).\n`);
 } catch (error) {
   console.error(error instanceof Error ? error.message : error);
   console.error("If the demo was seeded before, reset first: pnpm db:reset (or run pnpm demo).");

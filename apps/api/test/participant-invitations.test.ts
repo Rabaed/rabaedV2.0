@@ -209,11 +209,9 @@ describe("an onboarding lead", () => {
     const cr = uniqueCr();
     await host.caller.post(`/v1/projects/${projectId}/participants`, { crNumber: cr, role: "consultant" });
 
-    const engineer = await api.engineer();
     const reason = `Weekly onboarding follow-up ${randomUUID()}`;
-    const res = await engineer.get(`/admin/v1/onboarding-leads?reason=${encodeURIComponent(reason)}`);
-    expect(res.statusCode).toBe(200);
-    expect(res.json().leads).toContainEqual({
+    const leads = await api.onboardingLeads(reason);
+    expect(leads).toContainEqual({
       id: expect.any(String),
       crNumber: cr,
       project: { id: projectId, projectNumber: expect.any(Number), code: "TWR", name: expect.any(Object) },
@@ -224,7 +222,7 @@ describe("an onboarding lead", () => {
       participantId: null,
     });
     // A Company on Rabaed is invited, never a lead.
-    expect(res.body).not.toContain(c1.company.crNumber);
+    expect(JSON.stringify(leads)).not.toContain(c1.company.crNumber);
 
     const logged = await adminDb
       .selectFrom("admin_action")
@@ -235,13 +233,10 @@ describe("an onboarding lead", () => {
   });
 
   it("needs a reason", async () => {
-    const engineer = await api.engineer();
-    for (const url of ["/admin/v1/onboarding-leads", "/admin/v1/onboarding-leads?reason=%20%20"]) {
-      expect((await engineer.get(url)).statusCode, url).toBe(400);
-    }
+    await expect(api.onboardingLeads("  ")).rejects.toThrow();
   });
 
-  it("does not exist for a Member", async () => {
+  it("is not served by the customer api to anyone (Rabaed Admin is its own service, ADR 0010)", async () => {
     for (const caller of [host.caller, api.anonymous()]) {
       const res = await caller.get("/admin/v1/onboarding-leads?reason=curious");
       await expectHidden(res);
@@ -332,9 +327,7 @@ describe("an onboarding lead, once Rabaed onboards its Company", () => {
       [projectId, secondProjectId].sort(),
     );
 
-    const engineer = await api.engineer();
-    const leads = (await engineer.get(`/admin/v1/onboarding-leads?reason=${encodeURIComponent("Audit of converted leads")}`)).json()
-      .leads as { crNumber: string; project: { id: string }; convertedAt: string | null; participantId: string | null }[];
+    const leads = await api.onboardingLeads("Audit of converted leads");
     const converted = leads.filter((l) => l.crNumber === cr);
     expect(converted.map((l) => l.project.id).sort()).toEqual([projectId, secondProjectId].sort());
     for (const lead of converted) {

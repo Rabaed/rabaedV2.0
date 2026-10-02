@@ -27,3 +27,19 @@ describe("last good version", () => {
     ]);
   });
 });
+
+// After each deploy the workflow asks IAM whether the api's task role could
+// read the admin secret (it must not) and Rabaed Admin's could (ADR 0010).
+describe("admin secret access check", () => {
+  it("the deploy role may only simulate the api's and Rabaed Admin's task roles' policies", () => {
+    const app = env.template("app");
+    const policies = (Object.values(app.findResources("AWS::IAM::Policy")) as { Properties: Policy }[]).map((p) => p.Properties);
+    const granted = policies.filter((p) => String(render(p.Roles)).includes("rabaed-dev-github-deploy"));
+    expect(granted).toHaveLength(1);
+    const [statement] = granted[0]!.PolicyDocument.Statement;
+    expect(statement).toMatchObject({ Effect: "Allow", Action: "iam:SimulatePrincipalPolicy" });
+    const roles = (statement!.Resource as { "Fn::GetAtt": [string, string] }[]).map((r) => app.toJSON().Resources[r["Fn::GetAtt"][0]].Properties.RoleName);
+    expect(roles.sort()).toEqual(["rabaed-dev-admin-task", "rabaed-dev-api-task"]);
+    expect(granted[0]!.PolicyDocument.Statement).toHaveLength(1);
+  });
+});

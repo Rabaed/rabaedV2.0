@@ -1,10 +1,9 @@
+import { newToken, type Invitation } from "@rabaed/auth";
 import { withMember, type Database, type Db } from "@rabaed/db";
 import type { CompanyMember, InviteMemberRequest } from "@rabaed/domain";
 import { sql, type Transaction } from "kysely";
 import { refusedAsForbidden, type Forbidden } from "../db-error.ts";
 import { checkedOutcome } from "../outcomes.ts";
-import type { Invitation } from "./invitations.ts";
-import { newToken } from "./tokens.ts";
 
 // The Authorized Person's Member management. Every write goes through one of
 // the app.* functions in the member_management migration, which check that the
