@@ -206,5 +206,13 @@ export function boundaryStatements(stack: Stack, config: EnvironmentConfig): iam
     }),
     // The deploy role passes the migration task its roles.
     new iam.PolicyStatement({ sid: "PassEnvironmentRoles", actions: ["iam:PassRole"], resources: roleArns(stack, names.rolePatterns) }),
+    // After each deploy, the deploy role asks IAM whether the api's task role
+    // could read the admin secret, and Rabaed Admin's could (ADR 0010). Simulate
+    // reads policies and changes nothing; only those two roles.
+    new iam.PolicyStatement({
+      sid: "AdminSecretAccessCheck",
+      actions: ["iam:SimulatePrincipalPolicy"],
+      resources: roleArns(stack, [names.apiTaskRole, names.adminTaskRole]),
+    }),
   ];
 }

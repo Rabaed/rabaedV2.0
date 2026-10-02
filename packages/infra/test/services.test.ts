@@ -336,7 +336,7 @@ describe("secrets", () => {
   });
 
   // ADR 0010: the role that bypasses row-level security is out of the customer api's reach.
-  it("lets no role read the admin secret but Rabaed Admin's task role and the migration task's, which creates the roles", () => {
+  it("lets no role read the admin secret but Rabaed Admin's task role, the migration task's (it creates the roles) and rotation's", () => {
     const readers: string[] = [];
     for (const { stack, template } of env.synthesised) {
       const part = (Object.entries(stackNames(environments.dev)).find(([, name]) => name === stack.stackName)?.[0] ?? "") as Part;
@@ -349,7 +349,8 @@ describe("secrets", () => {
         for (const role of policy.Properties?.Roles as { Ref: string }[]) readers.push(String(env.resolve(role, part).resource.Properties?.RoleName));
       }
     }
-    expect(readers.sort()).toEqual(["rabaed-dev-admin-task", "rabaed-dev-migrate-execution"]);
+    // rabaed-dev-rotation changes every database password, so it must read and write each secret.
+    expect(readers.sort()).toEqual(["rabaed-dev-admin-task", "rabaed-dev-migrate-execution", "rabaed-dev-rotation"]);
   });
 
   it("puts no password in plain environment variables", () => {
