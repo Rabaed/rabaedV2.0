@@ -1,4 +1,3 @@
-import type { OutboxStats } from "@rabaed/db";
 import { pino, type DestinationStream, type Logger } from "pino";
 
 // The worker's log: JSON lines, like the api's, kept by CloudWatch in dev.
@@ -24,13 +23,4 @@ function errorLog(error: LoggedError) {
 export function createLogger(stream?: DestinationStream): Logger {
   const options = { serializers: { err: errorLog } };
   return stream ? pino(options, stream) : pino(options);
-}
-
-/**
- * One line per poll once the worker processes the outbox (RP-195). The
- * monitoring stack turns these fields into the outbox age and backlog alarms
- * (packages/infra/src/monitoring-stack.ts), so keep their names.
- */
-export function logOutbox(logger: Logger, stats: OutboxStats): void {
-  logger.info({ outbox: { backlog: stats.backlog, oldestAgeSeconds: stats.oldestAgeSeconds } }, "outbox");
 }

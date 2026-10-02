@@ -50,7 +50,13 @@ export class NetworkStack extends Stack {
       ],
     });
 
-    this.cluster = new ecs.Cluster(this, "Cluster", { vpc: this.vpc, clusterName: names.cluster });
+    // Container Insights publishes each service's running task count, which the
+    // monitoring stack alarms on (RP-245).
+    this.cluster = new ecs.Cluster(this, "Cluster", {
+      vpc: this.vpc,
+      clusterName: names.cluster,
+      containerInsightsV2: ecs.ContainerInsights.ENABLED,
+    });
     this.cluster.addDefaultCloudMapNamespace({ name: names.namespace, vpc: this.vpc });
 
     const group = (id: string, description: string) =>
