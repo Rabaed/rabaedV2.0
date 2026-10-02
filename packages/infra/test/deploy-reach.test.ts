@@ -120,6 +120,15 @@ describe("CloudFormation execution policy (no AdministratorAccess)", () => {
         });
         continue;
       }
+      if (statement.Condition?.StringEquals?.["iam:PassedToService"]) {
+        // CloudFormation passes its own role to the nested rotation stacks: that role, to CloudFormation only.
+        expect(statement).toMatchObject({
+          Action: "iam:PassRole",
+          Resource: "arn:aws:iam::${AWS::AccountId}:role/cdk-hnb659fds-cfn-exec-role-*",
+          Condition: { StringEquals: { "iam:PassedToService": "cloudformation.amazonaws.com" } },
+        });
+        continue;
+      }
       expect(list(statement.Resource)).toEqual(ENVIRONMENT_ROLES);
       expect(actions([statement])).not.toContain("iam:*");
     }

@@ -118,6 +118,14 @@ export function executionPolicyStatements(stack: Stack, config: EnvironmentConfi
       ],
       resources: environmentRoles,
     }),
+    // CloudFormation hands its own role on to the nested stacks (the rotation
+    // apps), which needs PassRole on that role, and only to CloudFormation.
+    new iam.PolicyStatement({
+      sid: "NestedStacksRole",
+      actions: ["iam:PassRole"],
+      resources: roleArns(stack, [`cdk-${DefaultStackSynthesizer.DEFAULT_QUALIFIER}-cfn-exec-role-*`]),
+      conditions: { StringEquals: { "iam:PassedToService": "cloudformation.amazonaws.com" } },
+    }),
     new iam.PolicyStatement({
       sid: "ServiceLinkedRoles",
       actions: ["iam:CreateServiceLinkedRole"],
