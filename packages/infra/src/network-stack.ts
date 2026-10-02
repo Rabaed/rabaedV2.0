@@ -28,16 +28,19 @@ export class NetworkStack extends Stack {
     ec2.SecurityGroup
   >;
 
+  private readonly zones: readonly string[];
+
   constructor(scope: Construct, id: string, props: NetworkStackProps) {
     super(scope, id, props);
     const { config } = props;
+    this.zones = config.availabilityZones;
     const names = resourceNames(config);
 
     // Public subnets hold only the load balancer and the NAT gateway. Tasks run
     // in the private subnets; the database in isolated ones with no route out.
     this.vpc = new ec2.Vpc(this, "Vpc", {
       ipAddresses: ec2.IpAddresses.cidr("10.20.0.0/16"),
-      maxAzs: 2,
+      availabilityZones: this.availabilityZones,
       natGateways: config.natGateways,
       restrictDefaultSecurityGroup: true,
       subnetConfiguration: [
@@ -85,5 +88,10 @@ export class NetworkStack extends Stack {
     }
 
     this.securityGroups = { loadBalancer, web, api, adminLoadBalancer, admin, worker, migrations, rotation, database };
+  }
+
+  // The pinned zones (config.ts), so synthesis never looks them up.
+  override get availabilityZones(): string[] {
+    return [...this.zones];
   }
 }

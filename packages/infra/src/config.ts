@@ -7,6 +7,12 @@ export interface EnvironmentConfig {
   readonly name: string;
   /** AWS region every regional resource is created in. */
   readonly region: string;
+  /**
+   * The VPC's availability zones, in `region`. Pinned so synthesis never looks
+   * them up: CDK caches a lookup in cdk.context.json under a key that names the
+   * AWS account, and the repository is public (RP-244).
+   */
+  readonly availabilityZones: readonly string[];
   /** The GitHub repository whose Actions may deploy this environment. */
   readonly github: GithubRepository;
   /**
@@ -115,6 +121,8 @@ export const environments = {
   dev: {
     name: "dev",
     region: "eu-central-1",
+    // The two the VPC was first created in; changing them replaces its subnets.
+    availabilityZones: ["eu-central-1a", "eu-central-1b"],
     github: rabaedRepository,
     monthlyBudgetUsd: 150,
     natGateways: 1,

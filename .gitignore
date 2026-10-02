@@ -56,3 +56,5 @@ next-env.d.ts
 cdk.out/
 # Claude Code desktop app worktrees (other sessions' checkouts, incl. their .env)
 .claude/worktrees/
+# CDK context lookups name the AWS account; pin values in config.ts (RP-244).
+cdk.context.json
