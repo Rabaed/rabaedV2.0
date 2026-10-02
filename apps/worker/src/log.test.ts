@@ -1,6 +1,6 @@
 import { Writable } from "node:stream";
 import { describe, expect, it } from "vitest";
-import { createLogger, logOutbox } from "./log.ts";
+import { createLogger } from "./log.ts";
 
 // Shaped like pg's DatabaseError: the message and detail can quote the row.
 class DatabaseError extends Error {
@@ -25,14 +25,6 @@ describe("worker log", () => {
     const { lines, logger } = capture();
     logger.info("database ok");
     expect(lines).toEqual([expect.objectContaining({ level: 30, msg: "database ok" })]);
-  });
-
-  // The monitoring stack's outbox alarms read exactly these fields
-  // (packages/infra/src/monitoring-stack.ts): counts only, no payloads.
-  it("reports the outbox as { outbox: { backlog, oldestAgeSeconds } }", () => {
-    const { lines, logger } = capture();
-    logOutbox(logger, { backlog: 3, oldestAgeSeconds: 42 });
-    expect(lines).toEqual([expect.objectContaining({ msg: "outbox", outbox: { backlog: 3, oldestAgeSeconds: 42 } })]);
   });
 
   it("logs a database error's code and class, never its message or detail, which can quote a Work Item title", () => {

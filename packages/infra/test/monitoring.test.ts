@@ -100,6 +100,10 @@ describe("alarms", () => {
         "rabaed-dev-database-cpu",
         "rabaed-dev-database-storage",
         "rabaed-dev-database-connections",
+        "rabaed-dev-web-tasks",
+        "rabaed-dev-api-tasks",
+        "rabaed-dev-admin-tasks",
+        "rabaed-dev-worker-tasks",
       ].sort(),
     );
   });
@@ -130,13 +134,16 @@ describe("alarms", () => {
     expect(env.resolve(tgDimension.Value, "monitoring").resource.Type).toBe("AWS::ElasticLoadBalancingV2::TargetGroup");
   });
 
-  it("outbox age and backlog come from the worker's structured log", () => {
+  // RP-245: measured in the database by the api, so a stopped worker still shows;
+  // a silent api (down, or the database unreadable) counts as breaching.
+  it("outbox age and backlog come from the api's report of the database, and alarm when it stops arriving", () => {
     expect(alarms.get("rabaed-dev-outbox-age")).toMatchObject({
       Namespace: "Rabaed/dev",
       MetricName: "OutboxOldestAgeSeconds",
       Statistic: "Maximum",
       ComparisonOperator: "GreaterThanThreshold",
       Threshold: 300,
+      TreatMissingData: "breaching",
     });
     expect(alarms.get("rabaed-dev-outbox-backlog")).toMatchObject({
       Namespace: "Rabaed/dev",
@@ -144,18 +151,48 @@ describe("alarms", () => {
       Statistic: "Maximum",
       ComparisonOperator: "GreaterThanThreshold",
       Threshold: 100,
+      TreatMissingData: "breaching",
     });
-    // The worker logs { outbox: { backlog, oldestAgeSeconds } } (apps/worker/src/log.ts).
+    // The api logs { outbox: { backlog, oldestAgeSeconds } } every minute (apps/api/src/outbox-report.ts).
     expect(filterFor("OutboxOldestAgeSeconds")).toMatchObject({
-      LogGroupName: "/rabaed/dev/worker",
+      LogGroupName: "/rabaed/dev/api",
       FilterPattern: "{ $.outbox.oldestAgeSeconds >= 0 }",
       MetricTransformations: [{ MetricValue: "$.outbox.oldestAgeSeconds" }],
     });
     expect(filterFor("OutboxBacklog")).toMatchObject({
-      LogGroupName: "/rabaed/dev/worker",
+      LogGroupName: "/rabaed/dev/api",
       FilterPattern: "{ $.outbox.backlog >= 0 }",
       MetricTransformations: [{ MetricValue: "$.outbox.backlog" }],
     });
+  });
+
+  // RP-245: a service with fewer running tasks than it should have (the api
+  // down, the worker stopped) alarms, whatever its logs say.
+  it("each service alarms when fewer of its tasks run than desired, and when the count stops arriving", () => {
+    const app = env.template("app");
+    const services = Object.entries(app.findResources("AWS::ECS::Service")) as [string, Resource][];
+    expect(services).toHaveLength(4);
+    for (const [id, service] of services) {
+      const family = env.resolve(service.Properties?.TaskDefinition, "app").resource.Properties?.Family as string;
+      const name = family.replace(/^rabaed-dev-/, "");
+      const alarm = alarms.get(`rabaed-dev-${name}-tasks`)!;
+      expect(alarm, name).toMatchObject({
+        Namespace: "ECS/ContainerInsights",
+        MetricName: "RunningTaskCount",
+        ComparisonOperator: "LessThanThreshold",
+        Threshold: service.Properties?.DesiredCount,
+        TreatMissingData: "breaching",
+      });
+      expect(alarm.Dimensions!.find((d) => d.Name === "ClusterName")?.Value, name).toBe("rabaed-dev");
+      const serviceName = alarm.Dimensions!.find((d) => d.Name === "ServiceName")!.Value;
+      const target = env.resolve(serviceName, "monitoring");
+      expect(target.logicalId, name).toBe(id);
+    }
+  });
+
+  it("Container Insights is on for the cluster, so ECS publishes running task counts", () => {
+    const [cluster] = resourcesOfType(env.synthesised, "AWS::ECS::Cluster");
+    expect(cluster?.Properties?.ClusterSettings).toContainEqual({ Name: "containerInsights", Value: "enabled" });
   });
 
   it("database CPU, free storage and connections watch the database instance", () => {
