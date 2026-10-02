@@ -7,12 +7,12 @@
 #   run-task.sh <migrations stack outputs.json> <what, for messages> [command…]
 #
 # With a command, it replaces the task's own (the migrations). Needs
-# STACK_PREFIX and VERSION, as the deploy workflow sets them.
+# MIGRATIONS_STACK and VERSION, as the deploy workflow sets them.
 set -euo pipefail
 outputs=$1 what=$2
 shift 2
 
-out() { jq -r --arg s "$STACK_PREFIX-Migrations" --arg k "$1" '.[$s][$k]' "$outputs"; }
+out() { jq -r --arg s "$MIGRATIONS_STACK" --arg k "$1" '.[$s][$k]' "$outputs"; }
 overrides='{}'
 if (( $# )); then overrides=$(jq -cn '{containerOverrides: [{name: "migrate", command: $ARGS.positional}]}' --args "$@"); fi
 

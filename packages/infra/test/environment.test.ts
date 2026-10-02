@@ -1,16 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { environments, type EnvironmentConfig } from "../src/config.ts";
 import { ROTATION_APPLICATION } from "../src/data-stack.ts";
-import { synthesise } from "./support.ts";
+import { ksa, synthesise } from "./support.ts";
 
 const AWS_REGION = /\b(?:us|eu|ap|me|sa|ca|af|il|mx)-(?:gov-)?[a-z]+-\d\b/g;
 
-// A second environment somewhere else, to prove the region is a parameter.
-// (Not a Gulf region: CloudFormation offers no AWS::Budgets::Budget in
-// me-central-1, which the production spec must plan for.)
+// Other environments elsewhere, to prove the region is a parameter. The KSA
+// one has no budget: CloudFormation offers no AWS::Budgets::Budget there.
 const elsewhere: EnvironmentConfig = { ...environments.dev, name: "elsewhere", region: "eu-west-1" };
 
-describe.each([environments.dev, elsewhere])("the $name environment", (config) => {
+describe.each([environments.dev, elsewhere, ksa])("the $name environment", (config) => {
   const stacks = synthesise(config);
 
   it("creates no IAM users or access keys", () => {

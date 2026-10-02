@@ -4,7 +4,7 @@ import * as iam from "aws-cdk-lib/aws-iam";
 import * as sns from "aws-cdk-lib/aws-sns";
 import * as subscriptions from "aws-cdk-lib/aws-sns-subscriptions";
 import type { Construct } from "constructs";
-import { accountBootstrap, oidcSubjectPrefix, repositoryName, resourceNames, stackNames, type EnvironmentConfig } from "./config.ts";
+import { accountBootstrap, checkBudget, oidcSubjectPrefix, repositoryName, resourceNames, stackNames, type EnvironmentConfig } from "./config.ts";
 import { boundaryStatements, executionPolicyStatements } from "./deploy-policies.ts";
 
 const GITHUB_OIDC_HOST = "token.actions.githubusercontent.com";
@@ -24,6 +24,7 @@ export class AccountStack extends Stack {
   constructor(scope: Construct, id: string, props: AccountStackProps) {
     super(scope, id, { ...props, synthesizer: new DefaultStackSynthesizer({ qualifier: accountBootstrap.qualifier }) });
     const { config } = props;
+    checkBudget(config);
 
     const github = new iam.OidcProviderNative(this, "GithubOidc", {
       url: `https://${GITHUB_OIDC_HOST}`,
@@ -132,7 +133,7 @@ export class AccountStack extends Stack {
     // and image layers). The CLI warns that it cannot assume the lookup role
     // and carries on with these credentials, which are for the right account.
     const diff = new iam.Role(this, "GithubDiffRole", {
-      roleName: `rabaed-${config.name}-github-diff`,
+      roleName: names.diffRole,
       description: `GitHub Actions runs cdk diff for ${repository} pull requests (read-only)`,
       assumedBy: githubPrincipal(`${subject}:pull_request`),
     });
@@ -152,27 +153,7 @@ export class AccountStack extends Stack {
       }),
     );
 
-    // The alert email is a deploy-time parameter (the wizard passes it), so
-    // it is never in the repo, the template or a pull request's diff. Later
-    // deploys without it keep the previous value.
-    const budgetAlertEmail = new CfnParameter(this, "BudgetAlertEmail", {
-      type: "String",
-      noEcho: true,
-      description: "Email that receives the monthly budget alerts",
-    });
-    const alert = (notificationType: "ACTUAL" | "FORECASTED", threshold: number) => ({
-      notification: { notificationType, threshold, comparisonOperator: "GREATER_THAN", thresholdType: "PERCENTAGE" },
-      subscribers: [{ subscriptionType: "EMAIL", address: budgetAlertEmail.valueAsString }],
-    });
-    new budgets.CfnBudget(this, "MonthlyBudget", {
-      budget: {
-        budgetName: `rabaed-${config.name}-monthly`,
-        budgetType: "COST",
-        timeUnit: "MONTHLY",
-        budgetLimit: { amount: config.monthlyBudgetUsd, unit: "USD" },
-      },
-      notificationsWithSubscribers: [alert("ACTUAL", 80), alert("FORECASTED", 100)],
-    });
+    if (config.monthlyBudgetUsd !== undefined) this.monthlyBudget(names.budget, config.monthlyBudgetUsd);
 
     // Every alarm (monitoring stack) notifies this topic, by name. It lives
     // here because the email, like the budget's, is a parameter only the
@@ -199,5 +180,26 @@ export class AccountStack extends Stack {
     new CfnOutput(this, "AlarmTopicArn", { value: alarmTopic.topicArn });
     new CfnOutput(this, "DeployRoleArn", { value: deploy.roleArn });
     new CfnOutput(this, "DiffRoleArn", { value: diff.roleArn });
+  }
+
+  // Only where config sets a budget: CloudFormation cannot create one in
+  // every region (config.ts, checkBudget).
+  private monthlyBudget(budgetName: string, amount: number): void {
+    // The alert email is a deploy-time parameter (the wizard passes it), so
+    // it is never in the repo, the template or a pull request's diff. Later
+    // deploys without it keep the previous value.
+    const budgetAlertEmail = new CfnParameter(this, "BudgetAlertEmail", {
+      type: "String",
+      noEcho: true,
+      description: "Email that receives the monthly budget alerts",
+    });
+    const alert = (notificationType: "ACTUAL" | "FORECASTED", threshold: number) => ({
+      notification: { notificationType, threshold, comparisonOperator: "GREATER_THAN", thresholdType: "PERCENTAGE" },
+      subscribers: [{ subscriptionType: "EMAIL", address: budgetAlertEmail.valueAsString }],
+    });
+    new budgets.CfnBudget(this, "MonthlyBudget", {
+      budget: { budgetName, budgetType: "COST", timeUnit: "MONTHLY", budgetLimit: { amount, unit: "USD" } },
+      notificationsWithSubscribers: [alert("ACTUAL", 80), alert("FORECASTED", 100)],
+    });
   }
 }

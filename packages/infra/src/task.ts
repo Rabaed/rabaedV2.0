@@ -4,7 +4,7 @@ import * as ecs from "aws-cdk-lib/aws-ecs";
 import type * as iam from "aws-cdk-lib/aws-iam";
 import * as logs from "aws-cdk-lib/aws-logs";
 import { resourceNames, type EnvironmentConfig, type ServiceName, type ServiceSize } from "./config.ts";
-import { DATABASE_NAME, type DataStack } from "./data-stack.ts";
+import { DATABASE_NAME, type DatabaseRole, type DataStack } from "./data-stack.ts";
 
 /** Where the images put the RDS certificate bundle (see Dockerfile). */
 const RDS_CA_BUNDLE = "/etc/ssl/rds/global-bundle.pem";
@@ -31,6 +31,25 @@ export function databaseEnvironment(data: DataStack): Record<string, string> {
   };
 }
 
+// Where a service finds the secret of the database role it connects as.
+const SECRET_ARN_VARIABLES = {
+  rabaed_app: "DATABASE_APP_SECRET_ARN",
+  rabaed_admin: "DATABASE_ADMIN_SECRET_ARN",
+} as const satisfies Partial<Record<DatabaseRole, string>>;
+
+/**
+ * A long-running service that connects as one database role: its task role
+ * reads that role's secret whenever it connects, so a rotated password needs
+ * no restart (packages/db/src/rotating-password.ts).
+ */
+export function databaseConnection(data: DataStack, role: keyof typeof SECRET_ARN_VARIABLES) {
+  const secret = data.roleSecrets[role];
+  return {
+    environment: { ...databaseEnvironment(data), [SECRET_ARN_VARIABLES[role]]: secret.secretArn },
+    grantRead: (taskRole: iam.IGrantable) => secret.grantRead(taskRole),
+  };
+}
+
 export interface TaskProps {
   readonly config: EnvironmentConfig;
   /** web, api, worker, or migrate (which runs the api image). */
@@ -53,7 +72,7 @@ export interface TaskProps {
 export function taskDefinition(stack: Stack, props: TaskProps): ecs.FargateTaskDefinition {
   const names = resourceNames(props.config);
   const task = new ecs.FargateTaskDefinition(stack, `${props.name}Task`, {
-    family: `rabaed-${props.config.name}-${props.name}`,
+    family: names.taskFamily(props.name),
     cpu: props.size.cpu,
     memoryLimitMiB: props.size.memoryMiB,
     runtimePlatform: { cpuArchitecture: ecs.CpuArchitecture.X86_64, operatingSystemFamily: ecs.OperatingSystemFamily.LINUX },

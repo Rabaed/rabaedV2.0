@@ -7,11 +7,12 @@ import * as servicediscovery from "aws-cdk-lib/aws-servicediscovery";
 import type { Construct } from "constructs";
 import { checkDomain, resourceNames, type EnvironmentConfig, type ServiceName } from "./config.ts";
 import type { DataStack } from "./data-stack.ts";
+import { grantToDeployRole } from "./deploy-grants.ts";
 import { MailSending } from "./email.ts";
 import { ADMIN_PORT, API_PORT, WEB_PORT, type NetworkStack } from "./network-stack.ts";
 import type { RegistryStack } from "./registry-stack.ts";
 import { PROJECT_FILES_PREFIX, type StorageStack } from "./storage-stack.ts";
-import { databaseEnvironment, imageTagParameter, taskDefinition, type TaskProps } from "./task.ts";
+import { databaseConnection, imageTagParameter, taskDefinition, type TaskProps } from "./task.ts";
 
 export interface AppStackProps extends StackProps {
   readonly config: EnvironmentConfig;
@@ -88,7 +89,8 @@ export class AppStack extends Stack {
       roleName: names.apiTaskRole,
       assumedBy: new iam.ServicePrincipal("ecs-tasks.amazonaws.com"),
     });
-    data.roleSecrets.rabaed_app.grantRead(apiTaskRole);
+    const appDatabase = databaseConnection(data, "rabaed_app");
+    appDatabase.grantRead(apiTaskRole);
     // Read and write objects under projects/ only: what the signed URLs it
     // creates may do, since a signed URL carries the signer's permissions.
     apiTaskRole.addToPolicy(
@@ -104,7 +106,8 @@ export class AppStack extends Stack {
       roleName: names.adminTaskRole,
       assumedBy: new iam.ServicePrincipal("ecs-tasks.amazonaws.com"),
     });
-    data.roleSecrets.rabaed_admin.grantRead(adminTaskRole);
+    const adminDatabase = databaseConnection(data, "rabaed_admin");
+    adminDatabase.grantRead(adminTaskRole);
 
     // Email through Amazon SES. Only the services that send email (the api,
     // and Rabaed Admin for its sign-in codes and invitations) may.
@@ -116,8 +119,7 @@ export class AppStack extends Stack {
       "api",
       task("api", {
         environment: {
-          ...databaseEnvironment(data),
-          DATABASE_APP_SECRET_ARN: data.roleSecrets.rabaed_app.secretArn,
+          ...appDatabase.environment,
           PROJECT_FILES_BUCKET: storage.projectFiles.bucketName,
           API_HOST: "0.0.0.0",
           API_PORT: String(API_PORT),
@@ -145,10 +147,8 @@ export class AppStack extends Stack {
     );
     web.node.addDependency(api);
 
-    const workerTask = task("worker", {
-      environment: { ...databaseEnvironment(data), DATABASE_APP_SECRET_ARN: data.roleSecrets.rabaed_app.secretArn },
-    });
-    data.roleSecrets.rabaed_app.grantRead(workerTask.taskRole);
+    const workerTask = task("worker", { environment: appDatabase.environment });
+    appDatabase.grantRead(workerTask.taskRole);
     const worker = service("worker", workerTask, network.securityGroups.worker);
 
     const loadBalancer = (this.loadBalancer = new elbv2.ApplicationLoadBalancer(this, "LoadBalancer", {
@@ -191,8 +191,7 @@ export class AppStack extends Stack {
       "admin",
       task("admin", {
         environment: {
-          ...databaseEnvironment(data),
-          DATABASE_ADMIN_SECRET_ARN: data.roleSecrets.rabaed_admin.secretArn,
+          ...adminDatabase.environment,
           ADMIN_HOST: "0.0.0.0",
           ADMIN_PORT: String(ADMIN_PORT),
           SESSION_COOKIE_SECURE: "true",
@@ -241,10 +240,9 @@ export class AppStack extends Stack {
     // cannot read the admin secret and Rabaed Admin's can, by asking IAM
     // (simulate only: it reads the roles' policies, it changes nothing).
     // Granted here, by name, next to the roles it names (as the registry stack does).
-    new iam.Policy(this, "DeployChecksAdminSecretAccess", {
-      roles: [iam.Role.fromRoleName(this, "DeployRole", names.deployRole)],
-      statements: [new iam.PolicyStatement({ actions: ["iam:SimulatePrincipalPolicy"], resources: [apiTaskRole.roleArn, adminTaskRole.roleArn] })],
-    });
+    grantToDeployRole(this, config, "DeployChecksAdminSecretAccess", [
+      new iam.PolicyStatement({ actions: ["iam:SimulatePrincipalPolicy"], resources: [apiTaskRole.roleArn, adminTaskRole.roleArn] }),
+    ]);
 
     new CfnOutput(this, "AdminUrl", { value: `https://${adminLoadBalancer.loadBalancerDnsName}` });
     // ARNs, not secrets: what the deploy's secret access check asks IAM about.

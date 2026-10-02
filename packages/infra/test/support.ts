@@ -23,6 +23,11 @@ export function accountTemplate(config: EnvironmentConfig = environments.dev): T
   return found.template;
 }
 
+/** An environment in the KSA region, where CloudFormation offers no AWS::Budgets::Budget, so it sets no budget. */
+export const ksa: EnvironmentConfig = (({ monthlyBudgetUsd: _, ...withoutBudget }) => ({ ...withoutBudget, name: "ksa", region: "me-central-1" }))(
+  environments.dev,
+);
+
 type StackPart = keyof ReturnType<typeof stackNames>;
 export type Resource = { Type: string; Properties?: Record<string, unknown> };
 

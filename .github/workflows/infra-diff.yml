@@ -7,6 +7,10 @@ concurrency:
   group: infra-diff-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  # The environment to diff against (packages/infra/src/config.ts).
+  RABAED_ENV: dev
+
 jobs:
   cdk-diff:
     name: cdk diff (dev)
@@ -39,7 +43,7 @@ jobs:
         # no change set, so it needs no write access.
         run: |
           set -o pipefail
-          pnpm --silent cdk diff --method=template --no-color -c env=dev 2>&1 | tee "$RUNNER_TEMP/diff.txt"
+          pnpm --silent cdk diff --method=template --no-color -c "env=$RABAED_ENV" 2>&1 | tee "$RUNNER_TEMP/diff.txt"
       - name: Post the diff on the pull request
         if: ${{ !cancelled() && steps.diff.outcome != 'skipped' }}
         env:

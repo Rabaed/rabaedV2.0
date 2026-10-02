@@ -4,6 +4,7 @@ import * as kms from "aws-cdk-lib/aws-kms";
 import * as s3 from "aws-cdk-lib/aws-s3";
 import type { Construct } from "constructs";
 import { resourceNames, type EnvironmentConfig } from "./config.ts";
+import { grantToDeployRole } from "./deploy-grants.ts";
 
 export interface StorageStackProps extends StackProps {
   readonly config: EnvironmentConfig;
@@ -42,16 +43,16 @@ export class StorageStack extends Stack {
     const names = resourceNames(config);
 
     this.storageKey = new kms.Key(this, "StorageKey", {
-      alias: `alias/rabaed-${config.name}-storage`,
-      description: `Encrypts rabaed-${config.name} Project files and build assets`,
+      alias: names.keyAlias("storage"),
+      description: `Encrypts ${names.prefix} Project files and build assets`,
       enableKeyRotation: true,
       removalPolicy: RemovalPolicy.RETAIN,
     });
 
     // Reserved: sealing issued PDFs (a digital signature) comes later. Nothing may use it yet.
     new kms.Key(this, "PdfSealingKey", {
-      alias: `alias/rabaed-${config.name}-pdf-sealing`,
-      description: `Reserved for sealing rabaed-${config.name} PDFs; not used yet`,
+      alias: names.keyAlias("pdf-sealing"),
+      description: `Reserved for sealing ${names.prefix} PDFs; not used yet`,
       keySpec: kms.KeySpec.RSA_3072,
       keyUsage: kms.KeyUsage.SIGN_VERIFY,
       removalPolicy: RemovalPolicy.RETAIN,
@@ -99,28 +100,25 @@ export class StorageStack extends Stack {
     );
     // The deploy role (account stack) builds the web image, which bundles the
     // fonts. Granted here, by name, next to the bucket and key it reads.
-    new iam.Policy(this, "DeployReadsFonts", {
-      roles: [iam.Role.fromRoleName(this, "DeployRole", names.deployRole)],
-      statements: [
-        new iam.PolicyStatement({ actions: ["s3:GetObject"], resources: [this.buildAssets.arnForObjects(`${FONTS_PREFIX}*`)] }),
-        new iam.PolicyStatement({
-          actions: ["s3:ListBucket"],
-          resources: [this.buildAssets.bucketArn],
-          conditions: { StringLike: { "s3:prefix": `${FONTS_PREFIX}*` } },
-        }),
-        // With bucket keys, S3 asks KMS in the bucket's name, not the object's.
-        new iam.PolicyStatement({
-          actions: ["kms:Decrypt"],
-          resources: [this.storageKey.keyArn],
-          conditions: {
-            StringEquals: {
-              "kms:ViaService": `s3.${this.region}.amazonaws.com`,
-              "kms:EncryptionContext:aws:s3:arn": this.buildAssets.bucketArn,
-            },
+    grantToDeployRole(this, config, "DeployReadsFonts", [
+      new iam.PolicyStatement({ actions: ["s3:GetObject"], resources: [this.buildAssets.arnForObjects(`${FONTS_PREFIX}*`)] }),
+      new iam.PolicyStatement({
+        actions: ["s3:ListBucket"],
+        resources: [this.buildAssets.bucketArn],
+        conditions: { StringLike: { "s3:prefix": `${FONTS_PREFIX}*` } },
+      }),
+      // With bucket keys, S3 asks KMS in the bucket's name, not the object's.
+      new iam.PolicyStatement({
+        actions: ["kms:Decrypt"],
+        resources: [this.storageKey.keyArn],
+        conditions: {
+          StringEquals: {
+            "kms:ViaService": `s3.${this.region}.amazonaws.com`,
+            "kms:EncryptionContext:aws:s3:arn": this.buildAssets.bucketArn,
           },
-        }),
-      ],
-    });
+        },
+      }),
+    ]);
     new CfnOutput(this, "BuildAssetsBucket", { value: this.buildAssets.bucketName });
 
     // A signed URL carries the api role's permissions until it expires; S3 refuses it after 15 minutes whatever expiry it was signed with.

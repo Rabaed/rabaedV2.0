@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { accountTemplate } from "./support.ts";
+import { accountTemplate, ksa, synthesise } from "./support.ts";
 
 describe("cost budget", () => {
   const template = accountTemplate();
@@ -24,5 +24,15 @@ describe("cost budget", () => {
     const parameter = template.toJSON().Parameters.BudgetAlertEmail;
     expect(parameter).toMatchObject({ Type: "String", NoEcho: true });
     expect(parameter).not.toHaveProperty("Default");
+  });
+
+  it("without a budget in config, creates none and asks for no alert email", () => {
+    const ksaAccount = accountTemplate(ksa);
+    ksaAccount.resourceCountIs("AWS::Budgets::Budget", 0);
+    expect(ksaAccount.toJSON().Parameters).not.toHaveProperty("BudgetAlertEmail");
+  });
+
+  it("refuses a budget in a region where CloudFormation cannot create one", () => {
+    expect(() => synthesise({ ...ksa, monthlyBudgetUsd: 150 })).toThrow(/me-central-1.*monthlyBudgetUsd/);
   });
 });

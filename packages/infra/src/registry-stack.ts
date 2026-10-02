@@ -3,6 +3,7 @@ import * as ecr from "aws-cdk-lib/aws-ecr";
 import * as iam from "aws-cdk-lib/aws-iam";
 import type { Construct } from "constructs";
 import { resourceNames, serviceNames, type EnvironmentConfig, type ServiceName } from "./config.ts";
+import { grantToDeployRole } from "./deploy-grants.ts";
 
 export interface RegistryStackProps extends StackProps {
   readonly config: EnvironmentConfig;
@@ -33,14 +34,11 @@ export class RegistryStack extends Stack {
     this.repositories = Object.fromEntries(serviceNames.map((s) => [s, repository(s)])) as Record<ServiceName, ecr.Repository>;
 
     // Granted here, by name, next to the images it names (as the storage stack does for the fonts).
-    new iam.Policy(this, "DeployRecordsLastGoodVersion", {
-      roles: [iam.Role.fromRoleName(this, "DeployRole", names.deployRole)],
-      statements: [
-        new iam.PolicyStatement({
-          actions: ["ssm:GetParameter", "ssm:PutParameter"],
-          resources: [this.formatArn({ service: "ssm", resource: "parameter", resourceName: names.lastGoodVersionParameter.slice(1) })],
-        }),
-      ],
-    });
+    grantToDeployRole(this, props.config, "DeployRecordsLastGoodVersion", [
+      new iam.PolicyStatement({
+        actions: ["ssm:GetParameter", "ssm:PutParameter"],
+        resources: [this.formatArn({ service: "ssm", resource: "parameter", resourceName: names.lastGoodVersionParameter.slice(1) })],
+      }),
+    ]);
   }
 }
