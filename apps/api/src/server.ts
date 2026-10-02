@@ -1,7 +1,8 @@
-import { createDbFromEnv } from "@rabaed/db";
+import { createDbFromEnv, outboxStats } from "@rabaed/db";
 import { z } from "zod";
 import { buildApp } from "./app.ts";
 import { apiConfigFromEnv } from "./config.ts";
+import { startOutboxReport } from "./outbox-report.ts";
 
 const env = z
   .object({
@@ -12,8 +13,13 @@ const env = z
 
 const db = createDbFromEnv("app");
 const app = await buildApp({ db, config: apiConfigFromEnv() });
+// For the outbox alarms, measured in the database whether or not the worker runs.
+// Every minute: the outbox alarms' 5-minute periods each need a few reports.
+const OUTBOX_REPORT_INTERVAL_MS = 60_000;
+const stopOutboxReport = startOutboxReport({ stats: () => outboxStats(db), log: app.log, intervalMs: OUTBOX_REPORT_INTERVAL_MS });
 
 const shutdown = async () => {
+  stopOutboxReport();
   await app.close();
   await db.destroy();
   process.exit(0);

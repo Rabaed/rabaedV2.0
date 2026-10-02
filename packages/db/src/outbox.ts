@@ -112,7 +112,7 @@ export interface OutboxStats {
   readonly oldestAgeSeconds: number;
 }
 
-/** Rows not processed and the age of the oldest (0 when none), for the worker's log and the outbox alarms. */
+/** Rows not processed and the age of the oldest (0 when none), for the api's outbox report and so the outbox alarms (RP-245). As the app role with no Member set. */
 export async function outboxStats(db: Db): Promise<OutboxStats> {
   const { rows } = await sql<{ backlog: number; oldest_age_seconds: number }>`
     select * from app.outbox_stats()
