@@ -234,12 +234,15 @@ Then set `MAIL_FROM_ADDRESS` to an address on the domain (for example `no-reply@
   | `rabaed-dev-api-5xx-rate` | more than 5% of api responses in 5 minutes are 5xx (with at least 10 requests), from the api's request log, which leaves out `/health` |
   | `rabaed-dev-load-balancer-5xx` | the load balancer itself answers 5 or more 5xx in 5 minutes (web down or not answering) |
   | `rabaed-dev-unhealthy-targets` | a web task fails the load balancer's health check for 5 minutes |
-  | `rabaed-dev-outbox-age` / `-outbox-backlog` | the oldest unprocessed outbox row is over 5 minutes old / more than 100 rows wait for 15 minutes, from the worker's `outbox` log line. The worker logs it once it processes the outbox (RP-195); until then these alarms have no data and stay OK. |
+  | `rabaed-dev-outbox-age` / `-outbox-backlog` | the oldest unprocessed outbox row is over 5 minutes old / more than 100 rows wait for 15 minutes. The api reads both from the database and logs them every minute (`apps/api/src/outbox-report.ts`), so a stopped worker shows as a growing age. No report (the api down, or the database unreadable) fires them too. |
+  | `rabaed-dev-<service>-tasks` (web, api, admin, worker) | fewer of the service's tasks run than `desiredCount` for 5 minutes, or ECS reports no count. From Container Insights, which is on for the cluster (RP-245). |
   | `rabaed-dev-database-cpu` / `-storage` / `-connections` | CPU over 80% for 15 minutes / under 2 GB free / over 60 connections for 10 minutes |
 
 - *Audit trail.* CloudTrail (`rabaed-dev`) records every management call in every region of the account, with log file validation, to the logs bucket under `cloudtrail/`. The load balancer's access logs go there too, under `load-balancer/`. Both are kept a year.
 
 To test an alarm by hand (acceptance check): `aws cloudwatch set-alarm-state --region eu-central-1 --alarm-name rabaed-dev-load-balancer-5xx --state-value ALARM --state-reason test`, or run the wizard's stage 11.
+
+To check the worker alarms for real (RP-245, once per environment, as an account administrator): stop the worker, `aws ecs update-service --region eu-central-1 --cluster rabaed-dev --service <worker service> --desired-count 0` (ECS console → rabaed-dev → Services shows its name). Within about 5 minutes `rabaed-dev-worker-tasks` fires; leave a Work Item submitted and `rabaed-dev-outbox-age` follows once its notification has waited 5 minutes. Set the desired count back to 1 and both clear. The next deploy sets it back too.
 
 **To see a rollback** (acceptance check): on a branch, make the api's `/health` return 503 only on ECS (for example when `ECS_CONTAINER_METADATA_URI_V4`, which ECS sets, is present; failing it everywhere fails seam 1, and CI never deploys), merge, and watch the workflow of the first commit that includes it (a newer merge cancels the older deploy): the App step fails with "circuit breaker", the service returns to the previous task definition, and `/en/health` keeps showing the previous commit. Revert afterwards.
 

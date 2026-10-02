@@ -47,6 +47,8 @@ export class AppStack extends Stack {
   readonly webTargets: elbv2.ApplicationTargetGroup;
   /** Rabaed Admin's own load balancer. */
   readonly adminLoadBalancer: elbv2.ApplicationLoadBalancer;
+  /** Every Fargate service, for the monitoring stack's running task alarms. */
+  readonly services: Record<ServiceName, ecs.FargateService>;
 
   constructor(scope: Construct, id: string, props: AppStackProps) {
     super(scope, id, props);
@@ -147,7 +149,7 @@ export class AppStack extends Stack {
 
     const workerTask = task("worker", { environment: appDatabase.environment });
     appDatabase.grantRead(workerTask.taskRole);
-    service("worker", workerTask, network.securityGroups.worker);
+    const worker = service("worker", workerTask, network.securityGroups.worker);
 
     const loadBalancer = (this.loadBalancer = new elbv2.ApplicationLoadBalancer(this, "LoadBalancer", {
       vpc: network.vpc,
@@ -204,6 +206,7 @@ export class AppStack extends Stack {
       network.securityGroups.admin,
       { healthCheckGracePeriod: Duration.seconds(60) },
     );
+    this.services = { web, api, admin, worker };
 
     // Rabaed Admin's own load balancer: HTTPS only, no HTTP listener at all.
     const adminLoadBalancer = (this.adminLoadBalancer = new elbv2.ApplicationLoadBalancer(this, "AdminLoadBalancer", {

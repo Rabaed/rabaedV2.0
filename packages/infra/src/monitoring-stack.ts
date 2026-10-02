@@ -21,10 +21,11 @@ export interface MonitoringStackProps extends StackProps {
 // Finding out when dev misbehaves, and the audit trail.
 //
 // Every alarm emails, through the account stack's topic, when it fires and
-// when it clears. Thresholds are in config.ts. The api and worker metrics come
-// from their structured logs (JSON lines, no customer content): the api's
-// request log (apps/api/src/logging.ts) and the worker's outbox line
-// (apps/worker/src/log.ts).
+// when it clears. Thresholds are in config.ts. The api metrics come from its
+// structured log (JSON lines, no customer content): its request log
+// (apps/api/src/logging.ts) and its outbox report (apps/api/src/outbox-report.ts),
+// which reads the outbox in the database, so a stopped worker still shows.
+// Container Insights gives each service's running task count (RP-245).
 //
 // CloudTrail records every management call in every region of the account to
 // the private logs bucket, next to the load balancer's access logs.
@@ -112,29 +113,49 @@ export class MonitoringStack extends Stack {
       treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
     });
 
-    // worker: one { outbox: { backlog, oldestAgeSeconds } } line per poll.
-    // No data is not an alarm, because the worker reports these only once it
-    // processes the outbox (RP-195).
+    // A service running fewer tasks than it should: the api down, the worker
+    // stopped, whatever their logs say. No count at all is as bad.
+    for (const service of serviceNames) {
+      const { desiredCount } = config.services[service];
+      alarm(`${service}Tasks`, `${service}-tasks`, {
+        alarmDescription: `Fewer ${service} tasks than the ${desiredCount} wanted have run for 5 minutes, or ECS reported none.`,
+        metric: new cloudwatch.Metric({
+          namespace: "ECS/ContainerInsights",
+          metricName: "RunningTaskCount",
+          dimensionsMap: { ClusterName: names.cluster, ServiceName: appStack.services[service].serviceName },
+          statistic: "Minimum",
+          period: Duration.minutes(1),
+        }),
+        comparisonOperator: cloudwatch.ComparisonOperator.LESS_THAN_THRESHOLD,
+        threshold: desiredCount,
+        evaluationPeriods: 5,
+        treatMissingData: cloudwatch.TreatMissingData.BREACHING,
+      });
+    }
+
+    // The api's outbox report: one { outbox: { backlog, oldestAgeSeconds } }
+    // line a minute, read from the database. It stops when the api is down or
+    // cannot read the database, which breaches too.
     const outbox = (metricName: string, field: string) =>
-      fromLog(metricName, { service: "worker", pattern: `{ $.outbox.${field} >= 0 }`, value: `$.outbox.${field}` }).metric({
+      fromLog(metricName, { service: "api", pattern: `{ $.outbox.${field} >= 0 }`, value: `$.outbox.${field}` }).metric({
         statistic: "Maximum",
         period: fiveMinutes,
       });
     alarm("OutboxAge", "outbox-age", {
-      alarmDescription: `The oldest unprocessed outbox row is more than ${thresholds.outboxOldestAgeSeconds} seconds old: the worker is behind or stopped.`,
+      alarmDescription: `The oldest unprocessed outbox row is more than ${thresholds.outboxOldestAgeSeconds} seconds old (the worker is behind or stopped), or the api stopped reporting it.`,
       metric: outbox("OutboxOldestAgeSeconds", "oldestAgeSeconds"),
       comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_THRESHOLD,
       threshold: thresholds.outboxOldestAgeSeconds,
       evaluationPeriods: 1,
-      treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+      treatMissingData: cloudwatch.TreatMissingData.BREACHING,
     });
     alarm("OutboxBacklog", "outbox-backlog", {
-      alarmDescription: `More than ${thresholds.outboxBacklog} outbox rows have waited for 15 minutes.`,
+      alarmDescription: `More than ${thresholds.outboxBacklog} outbox rows have waited for 15 minutes, or the api stopped reporting them.`,
       metric: outbox("OutboxBacklog", "backlog"),
       comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_THRESHOLD,
       threshold: thresholds.outboxBacklog,
       evaluationPeriods: 3,
-      treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+      treatMissingData: cloudwatch.TreatMissingData.BREACHING,
     });
 
     const database = data.database;
