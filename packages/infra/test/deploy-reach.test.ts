@@ -214,6 +214,8 @@ describe("permissions boundary", () => {
   });
 
   it("lets no role change IAM, or assume any role but the CDK bootstrap roles", () => {
+    // Read-only: the deploy's admin secret access check asks IAM about the two task roles.
+    const TASK_ROLES = ["admin", "api"].map((service) => `arn:aws:iam::\${AWS::AccountId}:role/rabaed-dev-${service}-task`);
     for (const action of actions(boundary)) {
       expect(action).not.toMatch(/^[^:]*$|:\*$/);
     }
@@ -223,6 +225,8 @@ describe("permissions boundary", () => {
       expect(statement.Effect).toBe("Allow");
       if (iamOrSts.includes("iam:PassRole")) {
         expect(statement).toMatchObject({ Effect: "Allow", Action: "iam:PassRole", Resource: ENVIRONMENT_ROLES });
+      } else if (iamOrSts.includes("iam:SimulatePrincipalPolicy")) {
+        expect(statement).toMatchObject({ Effect: "Allow", Action: "iam:SimulatePrincipalPolicy", Resource: TASK_ROLES });
       } else {
         expect(statement).toMatchObject({
           Effect: "Allow",

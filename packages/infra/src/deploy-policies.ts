@@ -206,5 +206,11 @@ export function boundaryStatements(stack: Stack, config: EnvironmentConfig): iam
     }),
     // The deploy role passes the migration task its roles.
     new iam.PolicyStatement({ sid: "PassEnvironmentRoles", actions: ["iam:PassRole"], resources: roleArns(stack, names.rolePatterns) }),
+    // The deploy role asks IAM whether the task roles can read the admin secret (ADR 0010); it changes nothing.
+    new iam.PolicyStatement({
+      sid: "SimulateTaskRoles",
+      actions: ["iam:SimulatePrincipalPolicy"],
+      resources: roleArns(stack, [names.apiTaskRole, names.adminTaskRole]),
+    }),
   ];
 }
