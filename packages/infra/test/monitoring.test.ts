@@ -193,19 +193,19 @@ describe("logs", () => {
     }
   });
 
-  it("each hosted password-rotation Lambda has a named function whose log group the data stack creates first", () => {
+  it("each password-rotation Lambda has a named function whose log group the data stack creates first", () => {
     const data = env.template("data");
     const groupNames = new Map(
       Object.entries(data.findResources("AWS::Logs::LogGroup")).map(([id, g]) => [(g as Resource).Properties?.LogGroupName, id]),
     );
-    const schedules = Object.values(data.findResources("AWS::SecretsManager::RotationSchedule")) as (Resource & { DependsOn?: string[] })[];
-    expect(schedules).toHaveLength(4);
-    for (const schedule of schedules) {
-      const name = (schedule.Properties?.HostedRotationLambda as { RotationLambdaName?: string }).RotationLambdaName;
-      expect(name).toMatch(/^rabaed-dev-rotate-/);
+    const rotations = Object.values(data.findResources("AWS::Serverless::Application")) as (Resource & { DependsOn?: string[] })[];
+    expect(rotations).toHaveLength(4);
+    for (const rotation of rotations) {
+      const name = (rotation.Properties?.Parameters as { functionName?: string }).functionName;
+      expect(name).toMatch(/^rabaed-dev-rotation-/);
       const groupId = groupNames.get(`/aws/lambda/${name}`);
       expect(groupId, name).toBeDefined();
-      expect(schedule.DependsOn).toContain(groupId);
+      expect(rotation.DependsOn).toContain(groupId);
     }
   });
 

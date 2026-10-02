@@ -166,11 +166,26 @@ export function accountStackName(config: EnvironmentConfig): string {
 }
 
 /**
+ * The CDK bootstrap only the account stack is deployed through, by a person
+ * (setup wizard). Its CloudFormation role keeps AdministratorAccess: the
+ * account stack holds the GitHub trust, the permissions boundary and the
+ * deploys' execution policy. The deploy role cannot assume its roles; every
+ * other stack goes through the default bootstrap, whose CloudFormation role
+ * has only the execution policy (account stack).
+ */
+export const accountBootstrap = { qualifier: "rabaedacct", toolkitStackName: "CDKToolkit-Account" } as const;
+
+/** Matches every stack of the environment, its nested stacks and the roles CloudFormation names after them. */
+export function stackPattern(config: EnvironmentConfig): string {
+  return `Rabaed-${config.name}-*`;
+}
+
+/**
  * Every stack's name, in deploy order. The deploy workflow deploys all but
  * the account stack, which only a person deploys, through the wizard.
  */
 export function stackNames(config: EnvironmentConfig) {
-  const name = (part: string) => `Rabaed-${config.name}-${part}`;
+  const name = (part: string) => stackPattern(config).replace("*", part);
   return {
     account: accountStackName(config),
     network: name("Network"),
@@ -201,8 +216,16 @@ export function resourceNames(config: EnvironmentConfig) {
     logGroup: (service: ServiceName | "migrate") => `/rabaed/${config.name}/${service}`,
     /** The Lambdas CDK adds for custom resources log here, one group per stack. */
     lambdaLogGroup: (stack: string) => `/rabaed/${config.name}/lambda/${stack}`,
-    /** Secrets Manager's hosted rotation Lambda for one secret. */
-    rotationFunction: (secret: string) => `${prefix}-rotate-${secret}`,
+    /** The rotation Lambda for one secret. Not `-rotate-`: hosted rotation's functions had those names. */
+    rotationFunction: (secret: string) => `${prefix}-rotation-${secret}`,
+    /** The rotation Lambdas' role (data stack). */
+    rotationRole: `${prefix}-rotation`,
+    /** Every role the deploys create or change must carry it (account stack). */
+    permissionsBoundary: `${prefix}-boundary`,
+    /** What CloudFormation may do in a deploy, in place of AdministratorAccess (account stack). */
+    executionPolicy: `${prefix}-cfn-execution`,
+    /** The GitHub environment the deploy job runs in; it admits only main. */
+    githubEnvironment: config.name,
     /** Every alarm notifies this SNS topic (account stack), which emails the wizard's address. */
     alarmTopic: `${prefix}-alarms`,
     /** Custom metrics the monitoring stack extracts from the services' logs. */
@@ -212,6 +235,10 @@ export function resourceNames(config: EnvironmentConfig) {
     /** The saved Logs Insights query over web, api and worker. */
     allServicesQuery: `${prefix}/all-services`,
     trail: prefix,
+    /** Every role in the environment's stacks: named ones and the ones CloudFormation names after the stack. */
+    rolePatterns: [`${prefix}-*`, stackPattern(config)],
+    /** GitHub Actions' roles (account stack); a deploy may only add and remove their inline grants. */
+    githubRoles: `${prefix}-github-*`,
     /** GitHub Actions' deploy role, which also builds the images (account stack). */
     deployRole: `${prefix}-github-deploy`,
     /** The last version that passed the deploy's checks; the workflow rolls back to it. */

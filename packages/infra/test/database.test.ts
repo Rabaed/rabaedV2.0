@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { environmentTemplates, references, resourcesOfType } from "./support.ts";
+import { environmentTemplates, references, resourcesOfType, type Resource } from "./support.ts";
 
 const env = environmentTemplates();
 const [database] = resourcesOfType(env.synthesised, "AWS::RDS::DBInstance");
@@ -103,16 +103,46 @@ describe("database", () => {
         RotationRules: { ScheduleExpression: "rate(30 days)" },
         // The roles only exist once the migration task has run, so no rotation on creation.
         RotateImmediatelyOnUpdate: false,
-        HostedRotationLambda: { RotationType: "PostgreSQLSingleUser" },
       });
-      const lambda = p?.HostedRotationLambda as { VpcSubnetIds: unknown; VpcSecurityGroupIds: unknown };
-      const subnets = references(lambda.VpcSubnetIds);
+      // AWS's PostgreSQL single-user rotation function, from the Serverless
+      // Application Repository, run with our own role.
+      const rotation = env.resolve(p?.RotationLambdaARN, "data").resource;
+      expect(rotation.Type).toBe("AWS::Serverless::Application");
+      expect(rotation.Properties?.Location).toEqual({
+        ApplicationId: "arn:aws:serverlessrepo:us-east-1:297356227824:applications/SecretsManagerRDSPostgreSQLRotationSingleUser",
+        SemanticVersion: expect.stringMatching(/^1\.1\.\d+$/),
+      });
+      const parameters = rotation.Properties?.Parameters as { vpcSubnetIds: unknown; vpcSecurityGroupIds: unknown; roleArn: unknown };
+      const subnets = references(parameters.vpcSubnetIds);
       expect(subnets.length).toBeGreaterThanOrEqual(2);
       for (const subnet of subnets) expect(env.subnetType(subnet, "data")).toBe("Private");
-      expect(env.resolve(lambda.VpcSecurityGroupIds, "data").logicalId).toMatch(/^RotationSecurityGroup/);
+      expect(env.resolve(parameters.vpcSecurityGroupIds, "data").logicalId).toMatch(/^RotationSecurityGroup/);
+      expect(env.resolve(parameters.roleArn, "data").resource.Properties?.RoleName).toBe("rabaed-dev-rotation");
     }
     expect([...rotated].sort()).toEqual(
       ["rabaed/dev/database/master", "rabaed/dev/database/roles/rabaed_admin", "rabaed/dev/database/roles/rabaed_app", "rabaed/dev/database/roles/rabaed_migrator"].sort(),
     );
+  });
+
+  // Hosted rotation (the AWS::SecretsManager transform) creates a role of its
+  // own, which cannot carry the permissions boundary (deploy-reach.test.ts).
+  it("rotates with a role of our own, not one hosted rotation creates", () => {
+    expect(env.template("data").toJSON().Transform).not.toContain("AWS::SecretsManager-2024-09-16");
+    const roles = Object.values(env.template("data").findResources("AWS::IAM::Role", { Properties: { RoleName: "rabaed-dev-rotation" } })) as Resource[];
+    expect(roles).toHaveLength(1);
+    expect(roles[0]!.Properties?.AssumeRolePolicyDocument).toMatchObject({
+      Statement: [{ Effect: "Allow", Action: "sts:AssumeRole", Principal: { Service: "lambda.amazonaws.com" } }],
+    });
+  });
+
+  it("lets the rotation role change only the four database secrets", () => {
+    type Statement = { Action: string | string[]; Resource: unknown };
+    const statements = resourcesOfType(env.synthesised, "AWS::IAM::Policy")
+      .filter((p) => (p.Properties?.Roles as unknown[]).some((r) => env.tryResolve(r, "data")?.resource.Properties?.RoleName === "rabaed-dev-rotation"))
+      .flatMap((p) => (p.Properties?.PolicyDocument as { Statement: Statement[] }).Statement);
+    const writes = statements.filter((s) => [s.Action].flat().includes("secretsmanager:PutSecretValue"));
+    expect(writes).toHaveLength(1);
+    const secrets = (writes[0]!.Resource as unknown[]).map((r) => env.resolve(r, "data").resource.Type);
+    expect(secrets).toEqual(Array(4).fill("AWS::SecretsManager::SecretTargetAttachment"));
   });
 });

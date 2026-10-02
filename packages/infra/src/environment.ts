@@ -1,7 +1,8 @@
 import { Aspects, type App, type Stack } from "aws-cdk-lib";
+import * as iam from "aws-cdk-lib/aws-iam";
 import { AccountStack } from "./account-stack.ts";
 import { AppStack } from "./app-stack.ts";
-import { stackNames, type EnvironmentConfig } from "./config.ts";
+import { resourceNames, stackNames, type EnvironmentConfig } from "./config.ts";
 import { DataStack } from "./data-stack.ts";
 import { LambdaLogGroups } from "./lambda-logs.ts";
 import { MigrationsStack } from "./migrations-stack.ts";
@@ -24,5 +25,10 @@ export function buildEnvironment(app: App, config: EnvironmentConfig): Stack[] {
   const application = new AppStack(app, names.app, { env, config, network, data, registry, storage });
   const monitoring = new MonitoringStack(app, names.monitoring, { env, config, data, storage, appStack: application });
   Aspects.of(app).add(new LambdaLogGroups(config));
-  return [account, network, data, registry, storage, migrations, application, monitoring];
+  const deployed = [network, data, registry, storage, migrations, application, monitoring];
+  // A deploy may create or change a role only with the boundary on it (account stack).
+  for (const stack of deployed) {
+    iam.PermissionsBoundary.of(stack).apply(iam.ManagedPolicy.fromManagedPolicyName(stack, "PermissionsBoundary", resourceNames(config).permissionsBoundary));
+  }
+  return [account, ...deployed];
 }

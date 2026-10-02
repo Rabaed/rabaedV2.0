@@ -2,12 +2,17 @@ import { Duration, RemovalPolicy, Stack, type StackProps } from "aws-cdk-lib";
 import * as ec2 from "aws-cdk-lib/aws-ec2";
 import * as iam from "aws-cdk-lib/aws-iam";
 import * as kms from "aws-cdk-lib/aws-kms";
+import * as lambda from "aws-cdk-lib/aws-lambda";
 import * as logs from "aws-cdk-lib/aws-logs";
 import * as rds from "aws-cdk-lib/aws-rds";
+import * as sam from "aws-cdk-lib/aws-sam";
 import * as secretsmanager from "aws-cdk-lib/aws-secretsmanager";
 import type { Construct } from "constructs";
 import { resourceNames, type EnvironmentConfig } from "./config.ts";
 import { DATABASE_PORT, type NetworkStack } from "./network-stack.ts";
+
+/** The rotation app: AWS's PostgreSQL single-user rotation, at the version the CDK pins. */
+export const ROTATION_APPLICATION = secretsmanager.SecretRotationApplication.POSTGRES_ROTATION_SINGLE_USER;
 
 // The database roles every Instance runs with (packages/db/src/config.ts).
 export const databaseRoles = ["rabaed_migrator", "rabaed_app", "rabaed_admin"] as const;
@@ -31,9 +36,12 @@ const EXCLUDED_CHARACTERS = " %+~`#$&*()|[]{}:;<>?!'/@\"\\";
 //
 // Every password is a JSON secret (username, password, host, database) that
 // Secrets Manager rotates every 30 days: a Lambda in the VPC signs in as the
-// role and changes its own password. api and worker read the current password
-// when they connect (packages/db/src/rotating-password.ts), so a rotation
-// needs no restart; the migration task gets it at start.
+// role and changes its own password. The Lambda is AWS's own (a Serverless
+// Application Repository app), run with a role of ours: hosted rotation would
+// create a role a deploy may not (it cannot carry the permissions boundary).
+// api and worker read the current password when they connect
+// (packages/db/src/rotating-password.ts), so a rotation needs no restart; the
+// migration task gets it at start.
 export class DataStack extends Stack {
   readonly database: rds.DatabaseInstance;
   /** The RDS master user's secret (JSON with `username` and `password`). */
@@ -100,6 +108,28 @@ export class DataStack extends Stack {
       }).attach(this.database);
     this.roleSecrets = Object.fromEntries(databaseRoles.map((role) => [role, roleSecret(role)])) as Record<DatabaseRole, secretsmanager.ISecret>;
 
+    // The rotation Lambdas' role: in the VPC, a fresh password, and each its
+    // own secret and log group (below).
+    const rotationRole = new iam.Role(this, "RotationRole", {
+      roleName: names.rotationRole,
+      description: `Rotates the rabaed-${config.name} database passwords`,
+      assumedBy: new iam.ServicePrincipal("lambda.amazonaws.com"),
+    });
+    rotationRole.addToPolicy(
+      new iam.PolicyStatement({
+        // Lambda's network interfaces in the VPC have no resource-level permission.
+        actions: [
+          "ec2:AssignPrivateIpAddresses",
+          "ec2:CreateNetworkInterface",
+          "ec2:DeleteNetworkInterface",
+          "ec2:DescribeNetworkInterfaces",
+          "ec2:UnassignPrivateIpAddresses",
+        ],
+        resources: ["*"],
+      }),
+    );
+    rotationRole.addToPolicy(new iam.PolicyStatement({ actions: ["secretsmanager:GetRandomPassword"], resources: ["*"] }));
+
     // Named, so its log group can be created first, with a retention: Lambda
     // would otherwise create one that keeps logs forever.
     const rotate = (id: string, secret: secretsmanager.ISecret) => {
@@ -109,20 +139,41 @@ export class DataStack extends Stack {
         retention: config.logRetentionDays,
         removalPolicy: RemovalPolicy.DESTROY,
       });
-      const schedule = new secretsmanager.RotationSchedule(this, `${id}Rotation`, {
-        secret,
-        hostedRotation: secretsmanager.HostedRotation.postgreSqlSingleUser({
-          functionName,
-          vpc: network.vpc,
-          vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
-          securityGroups: [network.securityGroups.rotation],
-          excludeCharacters: EXCLUDED_CHARACTERS,
+      rotationRole.addToPolicy(
+        new iam.PolicyStatement({
+          actions: [
+            "secretsmanager:DescribeSecret",
+            "secretsmanager:GetSecretValue",
+            "secretsmanager:PutSecretValue",
+            "secretsmanager:UpdateSecretVersionStage",
+          ],
+          resources: [secret.secretArn],
         }),
+      );
+      rotationRole.addToPolicy(new iam.PolicyStatement({ actions: ["logs:CreateLogStream", "logs:PutLogEvents"], resources: [logGroup.logGroupArn] }));
+      const rotation = new sam.CfnApplication(this, `${id}RotationFunction`, {
+        location: {
+          applicationId: ROTATION_APPLICATION.applicationArnForPartition("aws"),
+          semanticVersion: ROTATION_APPLICATION.semanticVersionForPartition("aws"),
+        },
+        parameters: {
+          endpoint: `https://secretsmanager.${this.region}.${this.urlSuffix}`,
+          functionName,
+          roleArn: rotationRole.roleArn,
+          vpcSubnetIds: network.vpc.selectSubnets({ subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS }).subnetIds.join(","),
+          vpcSecurityGroupIds: network.securityGroups.rotation.securityGroupId,
+          excludeCharacters: EXCLUDED_CHARACTERS,
+        },
+      });
+      // Lambda checks the role may create network interfaces when the function is created.
+      rotation.node.addDependency(logGroup, rotationRole);
+      new secretsmanager.RotationSchedule(this, `${id}Rotation`, {
+        secret,
+        rotationLambda: lambda.Function.fromFunctionArn(this, `${id}RotationLambda`, rotation.getAtt("Outputs.RotationLambdaARN").toString()),
         automaticallyAfter: Duration.days(30),
         // The roles exist only once the migration task has run after the first deploy.
         rotateImmediatelyOnUpdate: false,
       });
-      schedule.node.addDependency(logGroup);
     };
     rotate("master", this.masterSecret);
     for (const role of databaseRoles) rotate(role, this.roleSecrets[role]);

@@ -25,7 +25,11 @@ function sesGrants() {
     // Managed policies and inline role policies would grant just as well; there must be none for SES.
     for (const type of ["AWS::IAM::ManagedPolicy", "AWS::IAM::Role"]) {
       for (const resource of Object.values(env.template(part).findResources(type)) as Resource[]) {
-        expect(JSON.stringify(resource.Properties?.PolicyDocument ?? resource.Properties?.Policies ?? {})).not.toMatch(/"ses:/);
+        // The permissions boundary only caps roles; the deploys' execution
+        // policy may manage the configuration set, but not send (deploy-reach.test.ts).
+        if (resource.Properties?.ManagedPolicyName === "rabaed-dev-boundary") continue;
+        const sending = resource.Properties?.ManagedPolicyName === "rabaed-dev-cfn-execution" ? /"ses:(Send|\*")/ : /"ses:/;
+        expect(JSON.stringify(resource.Properties?.PolicyDocument ?? resource.Properties?.Policies ?? {})).not.toMatch(sending);
       }
     }
   }
