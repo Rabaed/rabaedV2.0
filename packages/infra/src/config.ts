@@ -9,8 +9,13 @@ export interface EnvironmentConfig {
   readonly region: string;
   /** The GitHub repository whose Actions may deploy this environment. */
   readonly github: GithubRepository;
-  /** Monthly cost budget; an alert is emailed at 80% of actual and 100% of forecast spend. */
-  readonly monthlyBudgetUsd: number;
+  /**
+   * Monthly cost budget; an alert is emailed at 80% of actual and 100% of
+   * forecast spend. Left out where CloudFormation has no AWS::Budgets::Budget
+   * (me-central-1, see `checkBudget`): set the budget in the Billing console
+   * there instead.
+   */
+  readonly monthlyBudgetUsd?: number;
   /** NAT gateways for the private subnets' outbound traffic (image pulls, logs, secrets). One is enough for dev. */
   readonly natGateways: number;
   readonly database: DatabaseSize;
@@ -162,9 +167,22 @@ export function checkDomain({ domain }: EnvironmentConfig): void {
   }
 }
 
-/** The account stack's name; the setup wizard deploys it by this name. */
-export function accountStackName(config: EnvironmentConfig): string {
-  return `Rabaed-${config.name}-Account`;
+// Regions where CloudFormation offers no AWS::Budgets::Budget, so the
+// account stack cannot create the budget.
+const REGIONS_WITHOUT_BUDGETS: readonly string[] = ["me-central-1"];
+
+/** Throws if config asks for a budget the account stack cannot create in its region. */
+export function checkBudget({ region, monthlyBudgetUsd }: EnvironmentConfig): void {
+  if (monthlyBudgetUsd !== undefined && REGIONS_WITHOUT_BUDGETS.includes(region)) {
+    throw new Error(
+      `CloudFormation cannot create a budget in ${region}: leave monthlyBudgetUsd out and set the budget in the Billing console`,
+    );
+  }
+}
+
+/** Starts every stack's name, e.g. `Rabaed-dev`. */
+function stackPrefix(config: EnvironmentConfig): string {
+  return `Rabaed-${config.name}`;
 }
 
 /**
@@ -179,7 +197,7 @@ export const accountBootstrap = { qualifier: "rabaedacct", toolkitStackName: "CD
 
 /** Matches every stack of the environment, its nested stacks and the roles CloudFormation names after them. */
 export function stackPattern(config: EnvironmentConfig): string {
-  return `Rabaed-${config.name}-*`;
+  return `${stackPrefix(config)}-*`;
 }
 
 /**
@@ -187,9 +205,9 @@ export function stackPattern(config: EnvironmentConfig): string {
  * the account stack, which only a person deploys, through the wizard.
  */
 export function stackNames(config: EnvironmentConfig) {
-  const name = (part: string) => stackPattern(config).replace("*", part);
+  const name = (part: string) => `${stackPrefix(config)}-${part}`;
   return {
-    account: accountStackName(config),
+    account: name("Account"),
     network: name("Network"),
     data: name("Data"),
     registry: name("Registry"),
@@ -206,13 +224,22 @@ export function stackNames(config: EnvironmentConfig) {
  */
 export function resourceNames(config: EnvironmentConfig) {
   const prefix = `rabaed-${config.name}`;
+  const repositoryPrefix = `${prefix}/`;
+  const taskFamily = (task: ServiceName | "migrate") => `${prefix}-${task}`;
   return {
+    /** Starts most names, e.g. `rabaed-dev`; descriptions name the environment by it. */
+    prefix,
     cluster: prefix,
+    /** Every ECR repository's name starts with this. */
+    repositoryPrefix,
     /** One ECR repository per service, e.g. `rabaed-dev/web`. */
-    repository: (service: ServiceName) => `${prefix}/${service}`,
+    repository: (service: ServiceName) => `${repositoryPrefix}${service}`,
     /** Matches every repository of the environment. */
-    repositoryPattern: `${prefix}/*`,
-    migrationTaskFamily: `${prefix}-migrate`,
+    repositoryPattern: `${repositoryPrefix}*`,
+    /** A Fargate task definition's family, e.g. `rabaed-dev-web`. */
+    taskFamily,
+    /** The deploy role may run only this family (account stack). */
+    migrationTaskFamily: taskFamily("migrate"),
     /** Both migration roles start with this, so the deploy role can pass only them. */
     migrationRolePrefix: `${prefix}-migrate-`,
     logGroup: (service: ServiceName | "migrate") => `/rabaed/${config.name}/${service}`,
@@ -243,6 +270,12 @@ export function resourceNames(config: EnvironmentConfig) {
     githubRoles: `${prefix}-github-*`,
     /** GitHub Actions' deploy role, which also builds the images (account stack). */
     deployRole: `${prefix}-github-deploy`,
+    /** GitHub Actions' read-only role for `cdk diff` on pull requests (account stack). */
+    diffRole: `${prefix}-github-diff`,
+    /** The monthly cost budget (account stack). */
+    budget: `${prefix}-monthly`,
+    /** A KMS key's alias, e.g. `alias/rabaed-dev-database`. */
+    keyAlias: (key: "database" | "storage" | "pdf-sealing") => `alias/${prefix}-${key}`,
     /** The last version that passed the deploy's checks; the workflow rolls back to it. */
     lastGoodVersionParameter: `/rabaed/${config.name}/deploy/last-good-version`,
     /** The api's task role; the Project files bucket refuses everyone else. */
@@ -257,5 +290,38 @@ export function resourceNames(config: EnvironmentConfig) {
     mailConfigurationSet: prefix,
     /** Private DNS namespace; web reaches the api at `api.<namespace>`. */
     namespace: `${prefix}.internal`,
+  };
+}
+
+/**
+ * Every name the deploy workflow and the setup wizard use, as shell
+ * variables. `node packages/infra/bin/names.ts <env>` prints them, so neither
+ * spells an environment's names itself.
+ */
+export function shellVariables(config: EnvironmentConfig): Record<string, string> {
+  const names = resourceNames(config);
+  const stacks = Object.fromEntries(Object.entries(stackNames(config)).map(([part, stack]) => [`${part.toUpperCase()}_STACK`, stack]));
+  return {
+    REGION: config.region,
+    ...stacks,
+    SERVICES: serviceNames.join(" "),
+    IMAGE_REPOSITORY_PREFIX: names.repositoryPrefix,
+    LAST_GOOD_PARAMETER: names.lastGoodVersionParameter,
+    RESOURCE_PREFIX: names.prefix,
+    REPOSITORY: repositoryName(config.github),
+    OIDC_SUBJECT: oidcSubjectPrefix(config.github),
+    ACCOUNT_QUALIFIER: accountBootstrap.qualifier,
+    ACCOUNT_TOOLKIT: accountBootstrap.toolkitStackName,
+    EXECUTION_POLICY: names.executionPolicy,
+    GITHUB_ENVIRONMENT: names.githubEnvironment,
+    DEPLOY_ROLE: names.deployRole,
+    DIFF_ROLE: names.diffRole,
+    PERMISSIONS_BOUNDARY: names.permissionsBoundary,
+    ALARM_TOPIC: names.alarmTopic,
+    /** The alarm the wizard triggers to prove alarm emails arrive. */
+    TEST_ALARM: names.alarm("load-balancer-5xx"),
+    MAIL_CONFIGURATION_SET: names.mailConfigurationSet,
+    /** Empty where config sets no budget. */
+    MONTHLY_BUDGET_USD: config.monthlyBudgetUsd === undefined ? "" : String(config.monthlyBudgetUsd),
   };
 }

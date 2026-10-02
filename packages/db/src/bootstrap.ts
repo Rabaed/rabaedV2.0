@@ -1,5 +1,6 @@
 import pg from "pg";
 import { ADMIN_ROLE, APP_ROLE, MIGRATOR_ROLE, databaseNameOf, withDatabaseName, type DatabaseUrls } from "./config.ts";
+import type { RolePasswordMode } from "./task-flags.ts";
 
 const identifier = /^[a-z_][a-z0-9_]*$/;
 
@@ -37,7 +38,7 @@ export interface BootstrapOptions {
    * the role; after that Secrets Manager rotation owns the password, and a
    * deploy must not set it back to what its task read at start.
    */
-  passwords?: "always" | "on-create";
+  passwords?: RolePasswordMode;
 }
 
 /**

@@ -9,6 +9,7 @@ import * as sam from "aws-cdk-lib/aws-sam";
 import * as secretsmanager from "aws-cdk-lib/aws-secretsmanager";
 import type { Construct } from "constructs";
 import { resourceNames, type EnvironmentConfig } from "./config.ts";
+import { grantToDeployRole } from "./deploy-grants.ts";
 import { DATABASE_PORT, type NetworkStack } from "./network-stack.ts";
 
 /** The rotation app: AWS's PostgreSQL single-user rotation, at the version the CDK pins. */
@@ -57,8 +58,8 @@ export class DataStack extends Stack {
     const names = resourceNames(config);
 
     const key = new kms.Key(this, "DatabaseKey", {
-      alias: `alias/rabaed-${config.name}-database`,
-      description: `Encrypts the rabaed-${config.name} database and its backups`,
+      alias: names.keyAlias("database"),
+      description: `Encrypts the ${names.prefix} database and its backups`,
       enableKeyRotation: true,
       removalPolicy: RemovalPolicy.RETAIN,
     });
@@ -84,7 +85,7 @@ export class DataStack extends Stack {
       }),
       parameterGroup: new rds.ParameterGroup(this, "Parameters", {
         engine,
-        description: `rabaed-${config.name}: TLS only`,
+        description: `${names.prefix}: TLS only`,
         parameters: { "rds.force_ssl": "1" },
       }),
       caCertificate: rds.CaCertificate.RDS_CA_RSA2048_G1,
@@ -112,7 +113,7 @@ export class DataStack extends Stack {
     // own secret and log group (below).
     const rotationRole = new iam.Role(this, "RotationRole", {
       roleName: names.rotationRole,
-      description: `Rotates the rabaed-${config.name} database passwords`,
+      description: `Rotates the ${names.prefix} database passwords`,
       assumedBy: new iam.ServicePrincipal("lambda.amazonaws.com"),
     });
     rotationRole.addToPolicy(
@@ -184,14 +185,13 @@ export class DataStack extends Stack {
     if (config.demo) {
       this.demoPassword = new secretsmanager.Secret(this, "DemoPassword", {
         secretName: names.demoPasswordSecret,
-        description: `Sign-in password of every demo person in rabaed-${config.name} (demo data only)`,
+        description: `Sign-in password of every demo person in ${names.prefix} (demo data only)`,
         generateSecretString: { passwordLength: 32, excludePunctuation: true },
       });
       // Granted here, by name, next to the secret: the deploy role is in the account stack.
-      new iam.Policy(this, "DeployReadsDemoPassword", {
-        roles: [iam.Role.fromRoleName(this, "DeployRole", names.deployRole)],
-        statements: [new iam.PolicyStatement({ actions: ["secretsmanager:GetSecretValue"], resources: [this.demoPassword.secretArn] })],
-      });
+      grantToDeployRole(this, config, "DeployReadsDemoPassword", [
+        new iam.PolicyStatement({ actions: ["secretsmanager:GetSecretValue"], resources: [this.demoPassword.secretArn] }),
+      ]);
     }
   }
 }

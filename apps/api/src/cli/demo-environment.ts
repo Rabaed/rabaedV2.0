@@ -10,6 +10,7 @@
 // Manager; it is never in the repo. A demo environment holds demo data only:
 // there is no way to import anything else.
 import { createDb, databaseUrlsFromEnv, resetDatabase } from "@rabaed/db";
+import { DEMO_FLAG, DEMO_ON, ROLE_PASSWORDS_ON_CREATE } from "@rabaed/db/task-flags";
 import { z } from "zod";
 import { buildApp } from "../app.ts";
 import { apiConfigFromEnv } from "../config.ts";
@@ -18,7 +19,7 @@ import { ensureDemo } from "../demo/ensure.ts";
 const parsed = z
   .object({
     action: z.enum(["ensure", "reset"]),
-    RABAED_DEMO: z.literal("on", "Not a demo environment (RABAED_DEMO is not on)"),
+    [DEMO_FLAG]: z.literal(DEMO_ON, `Not a demo environment (${DEMO_FLAG} is not ${DEMO_ON})`),
     DEMO_PASSWORD: z.string().min(16, "DEMO_PASSWORD is missing or too short"),
   })
   .safeParse({ ...process.env, action: process.argv[2] });
@@ -32,7 +33,7 @@ const { action, DEMO_PASSWORD: password } = parsed.data;
 const urls = databaseUrlsFromEnv();
 // Rotation owns the role passwords in AWS; the reset must not set them back.
 if (action === "reset") {
-  const { database } = await resetDatabase(urls, { passwords: "on-create", notLocal: "demo environment" });
+  const { database } = await resetDatabase(urls, { passwords: ROLE_PASSWORDS_ON_CREATE, notLocal: "demo environment" });
   console.log(`demo: dropped and migrated ${database}`);
 }
 

@@ -223,6 +223,9 @@ importers:
 
   packages/infra:
     dependencies:
+      '@rabaed/db':
+        specifier: workspace:*
+        version: link:../db
       aws-cdk-lib:
         specifier: ^2.271.0
         version: 2.271.0(constructs@10.8.1)

@@ -31,9 +31,9 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  STACK_PREFIX: Rabaed-dev
-  # Only this workflow writes it; the registry stack grants the deploy role access.
-  LAST_GOOD_PARAMETER: /rabaed/dev/deploy/last-good-version
+  # The environment to deploy. Every stack, repository and parameter name
+  # comes from packages/infra/src/config.ts (the Names step), never from here.
+  RABAED_ENV: dev
 
 jobs:
   # CI runs can finish out of order; never deploy an older commit over a newer one.
@@ -84,6 +84,10 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 24, cache: pnpm }
       - run: pnpm install --frozen-lockfile
+      # NETWORK_STACK, …, SERVICES, IMAGE_REPOSITORY_PREFIX and LAST_GOOD_PARAMETER
+      # (only this workflow writes it; the registry stack grants the deploy role access).
+      - name: Names
+        run: node packages/infra/bin/names.ts "$RABAED_ENV" >> "$GITHUB_ENV"
 
       - uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4.3.1
         with:
@@ -95,8 +99,8 @@ jobs:
       - name: Infrastructure (network, database, image registry, storage)
         working-directory: packages/infra
         run: >-
-          pnpm --silent cdk deploy -c env=dev --exclusively --require-approval never --no-color --progress events
-          "$STACK_PREFIX-Network" "$STACK_PREFIX-Data" "$STACK_PREFIX-Registry" "$STACK_PREFIX-Storage"
+          pnpm --silent cdk deploy -c "env=$RABAED_ENV" --exclusively --require-approval never --no-color --progress events
+          "$NETWORK_STACK" "$DATA_STACK" "$REGISTRY_STACK" "$STORAGE_STACK"
           --outputs-file "$RUNNER_TEMP/infra.json"
 
       # The licensed Thmanyah fonts, uploaded by the setup wizard to the private
@@ -106,7 +110,7 @@ jobs:
       - name: Private fonts
         id: fonts
         run: |
-          bucket=$(jq -r --arg s "$STACK_PREFIX-Storage" '.[$s].BuildAssetsBucket' "$RUNNER_TEMP/infra.json")
+          bucket=$(jq -r --arg s "$STORAGE_STACK" '.[$s].BuildAssetsBucket' "$RUNNER_TEMP/infra.json")
           dir="$RUNNER_TEMP/fonts/thmanyah"
           mkdir -p "$dir"
           # Retried: on the first deploy the grant was only just created.
@@ -141,8 +145,8 @@ jobs:
           REGISTRY: ${{ steps.ecr.outputs.registry }}
           ARABIC_FONT: ${{ steps.fonts.outputs.arabic_font }}
         run: |
-          for service in web api admin worker; do
-            repo="rabaed-dev/$service"
+          for service in $SERVICES; do
+            repo="$IMAGE_REPOSITORY_PREFIX$service"
             if aws ecr describe-images --repository-name "$repo" --image-ids "imageTag=$VERSION" >/dev/null 2>&1; then
               echo "$repo:$VERSION already pushed"
               continue
@@ -159,8 +163,8 @@ jobs:
       - name: Migration task
         working-directory: packages/infra
         run: >-
-          pnpm --silent cdk deploy -c env=dev --exclusively --require-approval never --no-color --progress events
-          "$STACK_PREFIX-Migrations" --parameters "ImageTag=$VERSION" --outputs-file "$RUNNER_TEMP/migrations.json"
+          pnpm --silent cdk deploy -c "env=$RABAED_ENV" --exclusively --require-approval never --no-color --progress events
+          "$MIGRATIONS_STACK" --parameters "ImageTag=$VERSION" --outputs-file "$RUNNER_TEMP/migrations.json"
 
       - name: Run migrations
         run: packages/infra/scripts/run-task.sh "$RUNNER_TEMP/migrations.json" "migrations (the app was not changed)"
@@ -171,7 +175,7 @@ jobs:
         env:
           RESET: ${{ github.event_name == 'workflow_dispatch' && inputs.reset_demo }}
         run: |
-          secret=$(jq -r --arg s "$STACK_PREFIX-Migrations" '.[$s].DemoPasswordSecret // empty' "$RUNNER_TEMP/migrations.json")
+          secret=$(jq -r --arg s "$MIGRATIONS_STACK" '.[$s].DemoPasswordSecret // empty' "$RUNNER_TEMP/migrations.json")
           if [[ -z "$secret" ]]; then echo "Not a demo environment."; exit 0; fi
           echo "secret=$secret" >> "$GITHUB_OUTPUT"
           action=ensure
@@ -191,16 +195,16 @@ jobs:
         run: |
           mail=()
           if [[ -n "$MAIL_FROM_ADDRESS" ]]; then mail=(--parameters "MailFromAddress=$MAIL_FROM_ADDRESS"); fi
-          pnpm --silent cdk deploy -c env=dev --exclusively --require-approval never --no-color --progress events \
-            "$STACK_PREFIX-App" --parameters "ImageTag=$VERSION" --parameters "CertificateArn=$CERTIFICATE_ARN" "${mail[@]}" \
+          pnpm --silent cdk deploy -c "env=$RABAED_ENV" --exclusively --require-approval never --no-color --progress events \
+            "$APP_STACK" --parameters "ImageTag=$VERSION" --parameters "CertificateArn=$CERTIFICATE_ARN" "${mail[@]}" \
             --outputs-file "$RUNNER_TEMP/app.json"
 
       # Alarms on the app's load balancer, logs and database, and CloudTrail.
       - name: Monitoring
         working-directory: packages/infra
         run: >-
-          pnpm --silent cdk deploy -c env=dev --exclusively --require-approval never --no-color --progress events
-          "$STACK_PREFIX-Monitoring"
+          pnpm --silent cdk deploy -c "env=$RABAED_ENV" --exclusively --require-approval never --no-color --progress events
+          "$MONITORING_STACK"
 
       - name: Smoke test
         env:
@@ -214,9 +218,9 @@ jobs:
             printf '%s\n' "$CERTIFICATE_PEM" > "$RUNNER_TEMP/dev-ca.pem"
             export NODE_EXTRA_CA_CERTS="$RUNNER_TEMP/dev-ca.pem"
           fi
-          export SMOKE_URL=$(jq -r --arg s "$STACK_PREFIX-App" '.[$s].Url' "$RUNNER_TEMP/app.json")
+          export SMOKE_URL=$(jq -r --arg s "$APP_STACK" '.[$s].Url' "$RUNNER_TEMP/app.json")
           # Rabaed Admin answers on its own address, and the customer address serves none of it.
-          export SMOKE_ADMIN_URL=$(jq -r --arg s "$STACK_PREFIX-App" '.[$s].AdminUrl' "$RUNNER_TEMP/app.json")
+          export SMOKE_ADMIN_URL=$(jq -r --arg s "$APP_STACK" '.[$s].AdminUrl' "$RUNNER_TEMP/app.json")
           export SMOKE_VERSION="$VERSION"
           export SMOKE_ARABIC_FONT="$ARABIC_FONT"
           # In a demo environment, it also signs in as two demo people to check visibility.
@@ -234,7 +238,7 @@ jobs:
       # Rabaed Admin's allowed (so the check can tell the two apart).
       - name: Admin secret access check
         run: |
-          out() { jq -r --arg s "$STACK_PREFIX-App" --arg k "$1" '.[$s][$k]' "$RUNNER_TEMP/app.json"; }
+          out() { jq -r --arg s "$APP_STACK" --arg k "$1" '.[$s][$k]' "$RUNNER_TEMP/app.json"; }
           secret=$(out AdminSecretArn)
           decision() {
             aws iam simulate-principal-policy --policy-source-arn "$1" --action-names secretsmanager:GetSecretValue \
@@ -277,13 +281,13 @@ jobs:
             echo "::error::${VERSION:0:7} passed the checks before, so it is itself the last good version; dev stays on it."
             exit 1
           fi
-          for service in web api admin worker; do
-            if ! aws ecr describe-images --repository-name "rabaed-dev/$service" --image-ids "imageTag=$good" >/dev/null 2>&1; then
-              echo "::error::rabaed-dev/$service:$good is no longer in the registry; dev stays on ${VERSION:0:7}."
+          for service in $SERVICES; do
+            if ! aws ecr describe-images --repository-name "$IMAGE_REPOSITORY_PREFIX$service" --image-ids "imageTag=$good" >/dev/null 2>&1; then
+              echo "::error::$IMAGE_REPOSITORY_PREFIX$service:$good is no longer in the registry; dev stays on ${VERSION:0:7}."
               exit 1
             fi
           done
           echo "::warning::${VERSION:0:7} failed its checks; rolling dev back to ${good:0:7}."
-          pnpm --silent cdk deploy -c env=dev --exclusively --require-approval never --no-color --progress events \
-            "$STACK_PREFIX-App" --parameters "ImageTag=$good" --parameters "CertificateArn=$CERTIFICATE_ARN"
+          pnpm --silent cdk deploy -c "env=$RABAED_ENV" --exclusively --require-approval never --no-color --progress events \
+            "$APP_STACK" --parameters "ImageTag=$good" --parameters "CertificateArn=$CERTIFICATE_ARN"
           echo "### \`${VERSION:0:7}\` failed its checks; dev was rolled back to \`${good:0:7}\`" >> "$GITHUB_STEP_SUMMARY"

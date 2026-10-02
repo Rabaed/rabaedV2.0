@@ -2,6 +2,7 @@ import { CfnOutput, Fn, Stack, type StackProps } from "aws-cdk-lib";
 import * as ec2 from "aws-cdk-lib/aws-ec2";
 import * as ecs from "aws-cdk-lib/aws-ecs";
 import * as iam from "aws-cdk-lib/aws-iam";
+import { DEMO_FLAG, DEMO_ON, ROLE_PASSWORDS_FLAG, ROLE_PASSWORDS_ON_CREATE } from "@rabaed/db/task-flags";
 import type { Construct } from "constructs";
 import { resourceNames, type EnvironmentConfig } from "./config.ts";
 import type { DataStack } from "./data-stack.ts";
@@ -45,8 +46,8 @@ export class MigrationsStack extends Stack {
       // Rotation owns the role passwords once the roles exist.
       environment: {
         ...databaseEnvironment(data),
-        DATABASE_ROLE_PASSWORDS: "on-create",
-        ...(data.demoPassword ? { RABAED_DEMO: "on" } : {}),
+        [ROLE_PASSWORDS_FLAG]: ROLE_PASSWORDS_ON_CREATE,
+        ...(data.demoPassword ? { [DEMO_FLAG]: DEMO_ON } : {}),
       },
       secrets: {
         DATABASE_SUPERUSER_USERNAME: ecs.Secret.fromSecretsManager(data.masterSecret, "username"),

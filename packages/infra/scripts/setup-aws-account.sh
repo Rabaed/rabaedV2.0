@@ -219,7 +219,7 @@ fresh_credentials() { eval "$(aws configure export-credentials --profile "$AWS_P
 
 # stack_output OUTPUT [STACK]: an output of the account stack, or of STACK.
 stack_output() {
-  aws cloudformation describe-stacks --region "$REGION" --stack-name "${2:-$STACK}" \
+  aws cloudformation describe-stacks --region "$REGION" --stack-name "${2:-$ACCOUNT_STACK}" \
     --query "Stacks[0].Outputs[?OutputKey=='$1'].OutputValue" --output text
 }
 
@@ -243,14 +243,11 @@ while true; do
   pause "Install them, open a new terminal if needed, then press Enter to check again."
 done
 
-# Region, stack and repository come from packages/infra/src/config.ts, the one
-# source of truth (Node runs the TypeScript directly).
-read -r REGION STACK REPOSITORY OIDC_SUBJECT ACCOUNT_QUALIFIER ACCOUNT_TOOLKIT EXECUTION_POLICY GITHUB_ENVIRONMENT < <(node --input-type=module -e "
-  const c = await import('./packages/infra/src/config.ts');
-  const env = c.environmentConfig(process.argv[1]);
-  const names = c.resourceNames(env);
-  console.log(env.region, c.accountStackName(env), c.repositoryName(env.github), c.oidcSubjectPrefix(env.github),
-    c.accountBootstrap.qualifier, c.accountBootstrap.toolkitStackName, names.executionPolicy, names.githubEnvironment);" "$RABAED_ENV")
+# Region, stack, role and every other name come from packages/infra/src/config.ts,
+# the one source of truth (Node runs the TypeScript directly): REGION,
+# ACCOUNT_STACK, STORAGE_STACK, DEPLOY_ROLE, … (shellVariables there).
+names=$(node packages/infra/bin/names.ts "$RABAED_ENV")
+while IFS='=' read -r key value; do printf -v "$key" '%s' "$value"; done <<< "$names"
 
 if ! gh auth status >/dev/null 2>&1; then
   step "Sign the GitHub CLI in to an account that can administer $REPOSITORY:"
@@ -272,7 +269,7 @@ if confirm "Do you need to create a new AWS account?"; then
 fi
 say "Now sign the AWS CLI in with the console. Nothing is stored in the repo;"
 say "the CLI keeps short-lived credentials in your home folder."
-ask_required AWS_PROFILE "AWS CLI profile name to use (e.g. rabaed-${RABAED_ENV}):"
+ask_required AWS_PROFILE "AWS CLI profile name to use (e.g. $RESOURCE_PREFIX):"
 export AWS_PROFILE
 write_env AWS_PROFILE "$AWS_PROFILE"
 until aws sts get-caller-identity >/dev/null 2>&1; do
@@ -308,11 +305,21 @@ pause
 
 # ── 4 ────────────────────────────────────────────────────────────────────
 stage "Alert emails"
-say "A monthly cost budget emails this address at 80% of actual spend and"
-say "when the forecast passes 100%. The amount is monthlyBudgetUsd in"
-say "packages/infra/src/config.ts; the emails stay out of the repo."
-ask_required BUDGET_ALERT_EMAIL "Email for budget alerts:"
-write_env BUDGET_ALERT_EMAIL "$BUDGET_ALERT_EMAIL"
+budget_parameters=()
+if [[ -n "$MONTHLY_BUDGET_USD" ]]; then
+  say "A monthly cost budget of \$$MONTHLY_BUDGET_USD emails this address at 80% of actual"
+  say "spend and when the forecast passes 100%. The amount is monthlyBudgetUsd in"
+  say "packages/infra/src/config.ts; the emails stay out of the repo."
+  ask_required BUDGET_ALERT_EMAIL "Email for budget alerts:"
+  write_env BUDGET_ALERT_EMAIL "$BUDGET_ALERT_EMAIL"
+  budget_parameters=(--parameters "BudgetAlertEmail=$BUDGET_ALERT_EMAIL")
+else
+  # CloudFormation cannot create a budget in every region (config.ts, checkBudget).
+  warn "config.ts sets no budget for $RABAED_ENV ($REGION): set one up by hand."
+  step "Billing and Cost Management → Budgets → Create budget: a monthly cost budget"
+  step "that emails at 80% of actual spend and when the forecast passes 100%."
+  pause "Press Enter once it exists."
+fi
 say "CloudWatch alarms (api errors, unhealthy web, outbox, database) email this"
 say "address when they fire and when they clear. It can be the same one."
 ask_required ALARM_EMAIL "Email for alarms:"
@@ -320,21 +327,21 @@ write_env ALARM_EMAIL "$ALARM_EMAIL"
 pause
 
 # ── 5 ────────────────────────────────────────────────────────────────────
-stage "GitHub access, deploy limits and budget ($STACK)"
+stage "GitHub access, deploy limits and budget ($ACCOUNT_STACK)"
 say "First a CDK bootstrap of its own for the account stack ($ACCOUNT_TOOLKIT,"
 say "qualifier $ACCOUNT_QUALIFIER): only a person deploys through it, never GitHub."
 say "Then the account stack from packages/infra/src/account-stack.ts:"
 step "trust for GitHub Actions through OIDC (no AWS keys stored in GitHub);"
-step "rabaed-${RABAED_ENV}-github-deploy: usable only by the deploy job in the GitHub"
+step "$DEPLOY_ROLE: usable only by the deploy job in the GitHub"
 step "  environment '$GITHUB_ENVIRONMENT' (main only, stage 8), to deploy, push images and run"
 step "  the migration task (the storage stack, deployed on merge, also lets it read the"
 step "  private fonts);"
-step "rabaed-${RABAED_ENV}-github-diff: read-only, for cdk diff on pull requests;"
+step "$DIFF_ROLE: read-only, for cdk diff on pull requests;"
 step "what a deploy may reach: $EXECUTION_POLICY, which CloudFormation runs with"
 step "  instead of AdministratorAccess (stage 6), and the permissions boundary"
-step "  rabaed-${RABAED_ENV}-boundary on every role a deploy creates;"
-step "the monthly budget alert to $BUDGET_ALERT_EMAIL;"
-step "the alarm topic rabaed-${RABAED_ENV}-alarms, which emails $ALARM_EMAIL."
+step "  $PERMISSIONS_BOUNDARY on every role a deploy creates;"
+if [[ -n "$MONTHLY_BUDGET_USD" ]]; then step "the monthly budget alert to $BUDGET_ALERT_EMAIL;"; fi
+step "the alarm topic $ALARM_TOPIC, which emails $ALARM_EMAIL."
 # The roles trust only tokens whose subject starts with the prefix in config.ts.
 actual_subject=$(gh api "repos/$REPOSITORY/actions/oidc/customization/sub" --jq .sub_claim_prefix 2>/dev/null || true)
 if [[ -n "$actual_subject" && "$actual_subject" != "$OIDC_SUBJECT" ]]; then
@@ -342,16 +349,16 @@ if [[ -n "$actual_subject" && "$actual_subject" != "$OIDC_SUBJECT" ]]; then
   warn "but config.ts expects '$OIDC_SUBJECT'. Fix config.ts before deploying."
 fi
 note "The CDK lists the IAM changes and asks you to approve them."
-if confirm "Bootstrap $ACCOUNT_TOOLKIT and deploy $STACK now?"; then
+if confirm "Bootstrap $ACCOUNT_TOOLKIT and deploy $ACCOUNT_STACK now?"; then
   fresh_credentials
   cdk_ bootstrap "aws://$AWS_ACCOUNT_ID/$REGION" --qualifier "$ACCOUNT_QUALIFIER" --toolkit-stack-name "$ACCOUNT_TOOLKIT"
-  cdk_ deploy "$STACK" --toolkit-stack-name "$ACCOUNT_TOOLKIT" \
-    --parameters "BudgetAlertEmail=$BUDGET_ALERT_EMAIL" --parameters "AlarmEmail=$ALARM_EMAIL"
+  cdk_ deploy "$ACCOUNT_STACK" --toolkit-stack-name "$ACCOUNT_TOOLKIT" \
+    ${budget_parameters[@]+"${budget_parameters[@]}"} --parameters "AlarmEmail=$ALARM_EMAIL"
   say "AWS Notifications emails $ALARM_EMAIL once to confirm the alarm subscription"
   say "(subject \"AWS Notification - Subscription Confirmation\"). Alarms reach it only after that."
   pause "Click \"Confirm subscription\" in that email (if this is its first deploy), then press Enter."
 else
-  SKIPPED+=("deploy $STACK (re-run this wizard)")
+  SKIPPED+=("deploy $ACCOUNT_STACK (re-run this wizard)")
 fi
 pause
 
@@ -369,7 +376,7 @@ if confirm "Bootstrap aws://$AWS_ACCOUNT_ID/$REGION now?"; then
   if aws iam get-policy --policy-arn "$EXECUTION_POLICY_ARN" >/dev/null 2>&1; then
     cdk_ bootstrap "aws://$AWS_ACCOUNT_ID/$REGION" --cloudformation-execution-policies "$EXECUTION_POLICY_ARN"
   else
-    warn "$EXECUTION_POLICY does not exist yet: deploy $STACK first (stage 5)."
+    warn "$EXECUTION_POLICY does not exist yet: deploy $ACCOUNT_STACK first (stage 5)."
     SKIPPED+=("CDK bootstrap for deploys (re-run this wizard after stage 5)")
   fi
 else
@@ -406,7 +413,7 @@ if [[ -z "${CERT_ARN_KEEP:-}" ]]; then
     # Git Bash would otherwise rewrite "/CN=…" as a Windows path.
     MSYS_NO_PATHCONV=1 openssl req -x509 -newkey rsa:2048 -nodes -days 397 \
       -keyout "$(native_path "$certdir/key.pem")" -out "$(native_path "$certdir/cert.pem")" \
-      -subj "/CN=rabaed-${RABAED_ENV} interim" \
+      -subj "/CN=$RESOURCE_PREFIX interim" \
       -addext "subjectAltName=DNS:*.$REGION.elb.amazonaws.com" 2>/dev/null
     fresh_credentials
     if CERT_ARN=$(aws acm import-certificate --region "$REGION" \
@@ -435,7 +442,7 @@ if fresh_credentials && DEPLOY_ROLE_ARN=$(stack_output DeployRoleArn) && DIFF_RO
   set_var AWS_DEPLOY_ROLE_ARN "$DEPLOY_ROLE_ARN"
   set_var AWS_DIFF_ROLE_ARN "$DIFF_ROLE_ARN"
 else
-  warn "Could not read the role ARNs from $STACK (not deployed yet, or the sign-in expired)."
+  warn "Could not read the role ARNs from $ACCOUNT_STACK (not deployed yet, or the sign-in expired)."
   SKIPPED+=("GitHub variables AWS_REGION, AWS_DEPLOY_ROLE_ARN, AWS_DIFF_ROLE_ARN (re-run after stage 5)")
 fi
 # The deploy role trusts only jobs in this environment; it admits only main,
@@ -526,7 +533,7 @@ if [[ -n "$MAIL_VERIFIED" ]] && fresh_credentials; then
     else
       say "SES is in the sandbox: it sends only to verified addresses, 200 a day."
       [[ "$review" == DENIED ]] && warn "AWS denied the last request; see the AWS Support case it opened before asking again."
-      website=$(stack_output Url "Rabaed-${RABAED_ENV}-App" 2>/dev/null || true)
+      website=$(stack_output Url "$APP_STACK" 2>/dev/null || true)
       arn_ok "$website" || website="https://github.com/$REPOSITORY"
       if ! confirm "Request production access now (transactional email, website $website)?"; then
         SKIPPED+=("SES production access (re-run this wizard)")
@@ -546,8 +553,8 @@ fi
 if [[ -n "$MAIL_VERIFIED" ]] && confirm "Send a test email from $MAIL_FROM_ADDRESS to itself?"; then
   fresh_credentials
   configuration_set=()
-  aws sesv2 get-configuration-set --region "$REGION" --configuration-set-name "rabaed-${RABAED_ENV}" >/dev/null 2>&1 \
-    && configuration_set=(--configuration-set-name "rabaed-${RABAED_ENV}")
+  aws sesv2 get-configuration-set --region "$REGION" --configuration-set-name "$MAIL_CONFIGURATION_SET" >/dev/null 2>&1 \
+    && configuration_set=(--configuration-set-name "$MAIL_CONFIGURATION_SET")
   # The ${a[@]+…} form expands an empty array safely under set -u in older bash too.
   if aws sesv2 send-email --region "$REGION" ${configuration_set[@]+"${configuration_set[@]}"} \
       --from-email-address "Rabaed <$MAIL_FROM_ADDRESS>" \
@@ -567,7 +574,6 @@ say "Arabic is shown in Thmanyah Sans, which is licensed: its files must never b
 say "in the repo. This stage uploads them to the private build assets bucket; the"
 say "deploy bundles them into the web image, which serves them from Rabaed's own"
 say "address. Without them, Arabic falls back to IBM Plex Sans Arabic."
-STORAGE_STACK="Rabaed-${RABAED_ENV}-Storage"
 if fresh_credentials && BUCKET=$(stack_output BuildAssetsBucket "$STORAGE_STACK" 2>/dev/null) && arn_ok "$BUCKET"; then
   note "The thmanyahsans-{Light,Regular,Medium,Bold,Black}.woff2 files, in a folder outside"
   note "the repo or in design/reference/claude-design/assets/fonts/thmanyah (git-ignored)."
@@ -610,12 +616,11 @@ pause
 stage "Test alarm"
 say "Sets one alarm to ALARM for a moment, to prove notifications arrive."
 say "CloudWatch puts it back within a few minutes, which sends an OK email too."
-TEST_ALARM="rabaed-${RABAED_ENV}-load-balancer-5xx"
 if fresh_credentials && aws cloudwatch describe-alarms --region "$REGION" --alarm-names "$TEST_ALARM"     --query 'MetricAlarms[0].AlarmName' --output text 2>/dev/null | grep -q "$TEST_ALARM"; then
   if confirm "Trigger $TEST_ALARM now?"; then
     aws cloudwatch set-alarm-state --region "$REGION" --alarm-name "$TEST_ALARM"       --state-value ALARM --state-reason "Test from the setup wizard: notifications work."
     note "✓ triggered; an \"ALARM: $TEST_ALARM\" email should reach $ALARM_EMAIL within a minute."
-    confirm "Did it arrive?" || SKIPPED+=("alarm email (check the subscription is confirmed: SNS → Topics → rabaed-${RABAED_ENV}-alarms)")
+    confirm "Did it arrive?" || SKIPPED+=("alarm email (check the subscription is confirmed: SNS → Topics → $ALARM_TOPIC)")
   else
     SKIPPED+=("test alarm (re-run this wizard)")
   fi
