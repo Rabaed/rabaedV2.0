@@ -163,9 +163,9 @@ export function WorkItemAnswers({ locale, workItemId, documents }: { locale: Loc
   const t = useTranslations("workItems.form");
   const tItems = useTranslations("workItems");
   const form = useWorkItemForm();
-  // The Form's `attachments` and `photos` fields upload as the Attachments System Field does (RP-281, RP-284).
+  // The Form's `attachments`, `photos` and `checklist` fields upload as the Attachments System Field does (RP-281, RP-284, RP-285).
   const files = useDocuments(workItemId, documents.limits);
-  const photoKeys = new Set(form ? formFields(form.schema).flatMap((f) => (f.type === "photos" ? [f.key] : [])) : []);
+  const photoKeys = new Set(form ? formFields(form.schema).flatMap((f) => (f.type === "photos" || f.type === "checklist" ? [f.key] : [])) : []);
   const imageUrls = useImageUrls(
     workItemId,
     documents.documents.filter((d) => d.fieldKey !== null && photoKeys.has(d.fieldKey)),
@@ -195,9 +195,9 @@ export function WorkItemAnswers({ locale, workItemId, documents }: { locale: Loc
           canChange: documents.canChange,
           pending: files.pending,
           imageUrls,
-          onUpload: (fieldKey, picked) => void files.upload(picked, fieldKey),
+          onUpload: (fieldKey, picked, itemKey) => void files.upload(picked, fieldKey, itemKey),
           onOpen: (documentId) => void files.open(documentId),
-          onRemove: (fieldKey, documentId) => void files.remove(documentId, fieldKey),
+          onRemove: (fieldKey, documentId, itemKey) => void files.remove(documentId, fieldKey, itemKey),
         }}
       />
       {form.message && (

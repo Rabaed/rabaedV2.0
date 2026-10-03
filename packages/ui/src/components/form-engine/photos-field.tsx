@@ -83,6 +83,11 @@ export type PhotosFieldProps = {
   files: PhotosFieldFiles | undefined;
   mode: "edit" | "read";
   locale: Locale;
+  /**
+   * What names these photos when the field is not in a Field of its own (a
+   * checklist item's evidence): its accessible name, in the viewer's language.
+   */
+  label?: string;
   /** Called with the photos taken or chosen, in order. */
   onUpload?: (files: File[]) => void;
   onOpen?: (documentId: string) => void;
@@ -139,11 +144,13 @@ function PhotoInputs({
   field,
   pending,
   locale,
+  label,
   onUpload,
 }: {
   field: PhotosFieldSchema;
   pending: boolean;
   locale: Locale;
+  label?: string;
   onUpload?: (files: File[]) => void;
 }) {
   const choose = useRef<HTMLInputElement>(null);
@@ -163,6 +170,7 @@ function PhotoInputs({
         type="file"
         multiple
         accept={accept}
+        aria-label={label}
         disabled={pending}
         onChange={() => picked(choose.current)}
         className="block w-full text-sm text-text file:me-3 file:rounded-md file:border file:border-border file:bg-surface file:px-3 file:py-1.5 file:text-sm"
@@ -184,6 +192,7 @@ function PhotoInputs({
             type="file"
             accept={accept}
             capture="environment"
+            aria-label={label && `${copy[locale].takePhoto}: ${label}`}
             disabled={pending}
             onChange={() => picked(camera.current)}
             className="sr-only"
@@ -199,14 +208,18 @@ function PhotoInputs({
   );
 }
 
-export function PhotosField({ field, files, mode, locale, onUpload, onOpen, onRemove }: PhotosFieldProps) {
+export function PhotosField({ field, files, mode, locale, label, onUpload, onOpen, onRemove }: PhotosFieldProps) {
   const text = copy[locale];
   const documents = files?.documents ?? [];
   const canRemove = mode === "edit" && !!files?.canChange;
   const upload = takesPhotos(field, files, mode);
   // Without a file input, the Field's label, help and error name and describe the photos as a group.
   const { labelId, "aria-describedby": describedBy } = useFieldControl<FieldControlProps>({});
-  const group = !upload && labelId ? { role: "group", "aria-labelledby": labelId, "aria-describedby": describedBy } : {};
+  const group = label
+    ? { role: "group", "aria-label": label }
+    : !upload && labelId
+      ? { role: "group", "aria-labelledby": labelId, "aria-describedby": describedBy }
+      : {};
   return (
     <div className="flex flex-col gap-3" {...group}>
       {documents.length > 0 ? (
@@ -253,7 +266,7 @@ export function PhotosField({ field, files, mode, locale, onUpload, onOpen, onRe
       ) : (
         mode === "edit" && <p className="text-sm text-muted">{files ? text.none : text.notYet}</p>
       )}
-      {upload && <PhotoInputs field={field} pending={!!files?.pending} locale={locale} onUpload={onUpload} />}
+      {upload && <PhotoInputs field={field} pending={!!files?.pending} locale={locale} label={label} onUpload={onUpload} />}
       {mode === "edit" && files?.canChange && !upload && field.maxFiles !== undefined && (
         <p className="text-sm text-muted">{text.full(field.maxFiles)}</p>
       )}

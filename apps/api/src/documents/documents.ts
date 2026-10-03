@@ -37,12 +37,13 @@ export function listDocuments(db: Db, memberId: string, workItemId: string, limi
       member_name: BilingualText | null;
       frozen: boolean;
       field_key: string | null;
+      item_key: string | null;
       taken_at: Date | null;
       taken_latitude: number | null;
       taken_longitude: number | null;
     }>`
       select d.id, d.file_name, d.size_bytes, d.content_type, d.confirmed_at, co.legal_name as company_name,
-        m.full_name as member_name, d.frozen_at is not null as frozen, d.field_key,
+        m.full_name as member_name, d.frozen_at is not null as frozen, d.field_key, d.item_key,
         d.taken_at, d.taken_latitude, d.taken_longitude
       from document d
       join app.work_item_companies(d.work_item_id) co on co.participant_id = d.uploaded_by_participant_id
@@ -62,6 +63,7 @@ export function listDocuments(db: Db, memberId: string, workItemId: string, limi
         uploadedBy: { companyName: r.company_name, memberName: r.member_name },
         frozen: r.frozen,
         fieldKey: r.field_key,
+        itemKey: r.item_key,
         takenAt: r.taken_at?.toISOString() ?? null,
         takenWhere:
           r.taken_latitude !== null && r.taken_longitude !== null ? { latitude: r.taken_latitude, longitude: r.taken_longitude } : null,
@@ -73,7 +75,7 @@ export function listDocuments(db: Db, memberId: string, workItemId: string, limi
 }
 
 const changeRefusals = ["not_found", "project_closed", "forbidden", "not_editable"] as const;
-/** A file a Form's `attachments` or `photos` field won't take (the field_documents migration). */
+/** A file a Form's `attachments`, `photos` or `checklist` field won't take (the field_documents migration). */
 const fieldRefusals = ["field_not_found", "content_type_not_allowed", "too_many_files"] as const;
 const startRefusals = [...changeRefusals, ...fieldRefusals] as const;
 export type StartUploadResult =
@@ -89,8 +91,8 @@ class OverLimit extends Error {
 
 /**
  * Step 1: the acting Member declares a file for a visible item, and for one of
- * its Form's `attachments` or `photos` fields or the Attachments System Field, and gets a
- * URL to PUT it to. The URL is signed for exactly that size and type.
+ * its Form's `attachments`, `photos` or `checklist` fields (a checklist's for one of its
+ * items, as evidence) or the Attachments System Field, and gets a URL to PUT it to. The URL is signed for exactly that size and type.
  */
 export function startUpload(
   db: Db,
@@ -104,7 +106,7 @@ export function startUpload(
   return withMember(db, memberId, async (trx): Promise<StartUploadResult> => {
     const { rows } = await sql<{ outcome: string; document_id: string | null; storage_key: string | null }>`
       select outcome, document_id, storage_key from app.start_document_upload(
-        ${workItemId}::uuid, ${file.fileName}, ${file.sizeBytes}, ${file.contentType}, ${now}, ${file.fieldKey ?? null})
+        ${workItemId}::uuid, ${file.fileName}, ${file.sizeBytes}, ${file.contentType}, ${now}, ${file.fieldKey ?? null}, ${file.itemKey ?? null})
     `.execute(trx);
     const outcome = checkedOutcome(rows[0]!.outcome, ["started", ...startRefusals]);
     if (outcome !== "started") return { ok: false, reason: outcome };

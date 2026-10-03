@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  checklistItemFilesKey,
   currencyDecimals,
   defaultMaxLength,
   directionOf,
@@ -22,6 +23,7 @@ import {
   type AnswerField,
   type BuiltInFieldType,
   type CalculatedField,
+  type ChecklistAnswers,
   type FieldError,
   type FormChoices,
   type FormField,
@@ -48,6 +50,7 @@ import { Textarea } from "../form/textarea.tsx";
 import { Icon } from "../icon/icon.tsx";
 import { BuiltInSelect, builtInAnswerLabels, noChoices, ScopesChecklist, type BuiltInChoices } from "./built-in-fields.tsx";
 import { AttachmentsField, attachmentsLimits, takesUpload } from "./attachments-field.tsx";
+import { ChecklistField, type ChecklistFiles } from "./checklist-field.tsx";
 import { OptionListInput } from "./option-list-field.tsx";
 import { PhotosField, photosLimits, takesPhotos, type PhotosFieldFiles } from "./photos-field.tsx";
 import { TableInput, TableRead } from "./table-field.tsx";
@@ -188,9 +191,9 @@ export type FormRendererProps = {
    */
   named?: NamedAnswers;
   /**
-   * The files of the Form's `attachments` and `photos` fields: the item's
-   * Documents tied to a field, and what may be done with them. Undefined before
-   * the item exists.
+   * The files of the Form's `attachments`, `photos` and `checklist` fields: the
+   * item's Documents tied to a field (and a checklist's to an item), and what may
+   * be done with them. Undefined before the item exists.
    */
   files?: FormFiles;
   /**
@@ -203,26 +206,29 @@ export type FormRendererProps = {
   className?: string;
 };
 
-/** The files of a Form's `attachments` and `photos` fields, and what the page does with them (RP-281, RP-284). */
+/** The files of a Form's `attachments`, `photos` and `checklist` fields, and what the page does with them (RP-281, RP-284, RP-285). */
 export type FormFiles = {
-  /** The item's confirmed Documents tied to a field (`fieldKey`); others are ignored. */
+  /** The item's confirmed Documents tied to a field (`fieldKey`), and a checklist's to an item (`itemKey`); others are ignored. */
   documents: readonly DocumentSummary[];
   /** Files may be uploaded and removed now (the raiser's Company, in Draft, with Attach). */
   canChange: boolean;
-  /** The fields with an upload or removal under way. */
+  /** The fields, and the checklist items (checklistItemFilesKey), with an upload or removal under way. */
   pending?: ReadonlySet<string>;
   /** Photos' image URLs, by Document id, for their thumbnails. */
   imageUrls?: Readonly<Record<string, string>>;
-  /** Called with the files picked for a field, in order: one for an `attachments` field, several photos at once. */
-  onUpload?: (fieldKey: string, files: File[]) => void;
+  /**
+   * Called with the files picked for a field, in order: one for an `attachments`
+   * field, several photos at once. A checklist's photos name their `itemKey`.
+   */
+  onUpload?: (fieldKey: string, files: File[], itemKey?: string) => void;
   onOpen?: (documentId: string) => void;
-  onRemove?: (fieldKey: string, documentId: string) => void;
+  onRemove?: (fieldKey: string, documentId: string, itemKey?: string) => void;
 };
 
-/** One file field's files, out of the Form's. */
+/** One file field's files, out of the Form's (never a checklist item's evidence). */
 const filesOf = (files: FormFiles | undefined, key: string): PhotosFieldFiles | undefined =>
   files && {
-    documents: files.documents.filter((d) => d.fieldKey === key),
+    documents: files.documents.filter((d) => d.fieldKey === key && d.itemKey === null),
     canChange: files.canChange,
     pending: files.pending?.has(key),
     imageUrls: files.imageUrls,
@@ -369,6 +375,7 @@ const optionsOf = (field: { options: FormOption[] }, locale: Locale) =>
 type OwnField = Exclude<AnswerField, { type: BuiltInFieldType }>;
 type AttachmentsFieldSchema = Extract<AnswerField, { type: "attachments" }>;
 type PhotosFieldSchema = Extract<AnswerField, { type: "photos" }>;
+type ChecklistFieldSchema = Extract<AnswerField, { type: "checklist" }>;
 
 /** A select's options, with "None" first when the field is optional, so a choice can be taken back. */
 const withNone = (field: { required: unknown }, options: { value: string; label: string }[], locale: Locale) =>
@@ -376,8 +383,8 @@ const withNone = (field: { required: unknown }, options: { value: string; label:
 
 /** One of the Form's own fields' control, and whether its Field labels a group (radios, checkboxes) rather than one control. */
 function control(
-  // A file field holds files, not a value: FormRenderer draws it (attachmentsControl, photosControl).
-  field: Exclude<OwnField, { type: "attachments" | "photos" }> | TableColumn,
+  // A file field holds files, not a value, and a checklist's photos are files too: FormRenderer draws them (attachmentsControl, photosControl, checklistControl).
+  field: Exclude<OwnField, { type: "attachments" | "photos" | "checklist" }> | TableColumn,
   value: unknown,
   locale: Locale,
   people: FormChoices,
@@ -594,9 +601,10 @@ export function FormRenderer({
   const fieldId = (key: string) => `${idPrefix}-${key}`;
   const byKey = new Map(answerFields(schema).map((f) => [f.key, f]));
   const visibility = formVisibility(schema, answers);
-  // A field's own error; a table's cell errors (row and column) are shown at the cells.
-  const errorOf = (key: string) => errors.find((e) => e.key === key && e.row === undefined);
+  // A field's own error; a table's cell errors (row and column) are shown at the cells, a checklist's (item) under its items.
+  const errorOf = (key: string) => errors.find((e) => e.key === key && e.row === undefined && e.item === undefined);
   const cellErrorsOf = (key: string) => errors.filter((e) => e.key === key && e.row !== undefined);
+  const itemErrorsOf = (key: string) => errors.filter((e) => e.key === key && e.item !== undefined);
   // Only errors of fields shown on this Form can be shown and linked, once per field.
   const shownErrors =
     mode === "edit"
@@ -683,6 +691,38 @@ export function FormRenderer({
     };
   }
 
+  /** The files of a checklist's items: its Documents, and the items with an upload or removal under way. */
+  function checklistFiles(field: ChecklistFieldSchema): ChecklistFiles | undefined {
+    if (!files) return undefined;
+    return {
+      documents: files.documents.filter((d) => d.fieldKey === field.key && d.itemKey !== null),
+      canChange: files.canChange,
+      pendingItems: new Set(field.items.filter((i) => files.pending?.has(checklistItemFilesKey(field.key, i.key))).map((i) => i.key)),
+      imageUrls: files.imageUrls,
+    };
+  }
+
+  /** A `checklist` field: its items to answer, with comment and photos as each asks; a group of its own. */
+  function checklistControl(field: ChecklistFieldSchema): { element: ReactNode; group?: boolean } {
+    return {
+      group: true,
+      element: (
+        <ChecklistField
+          field={field}
+          value={answers[field.key]}
+          mode="edit"
+          locale={locale}
+          errors={itemErrorsOf(field.key)}
+          files={checklistFiles(field)}
+          onChange={(value: ChecklistAnswers | undefined) => onChange?.({ [field.key]: value })}
+          onUpload={(itemKey, picked) => files?.onUpload?.(field.key, picked, itemKey)}
+          onOpen={files?.onOpen}
+          onRemove={(itemKey, documentId) => files?.onRemove?.(field.key, documentId, itemKey)}
+        />
+      ),
+    };
+  }
+
   /** A field's help, and for a file field its limits (file types, most files) after it. */
   function helpOf(field: AnswerField): ReactNode {
     const help = field.help?.[locale];
@@ -714,6 +754,13 @@ export function FormRenderer({
       const own = filesOf(files, field.key);
       return own && own.documents.length > 0 ? (
         <PhotosField field={field} files={own} mode="read" locale={locale} onOpen={files?.onOpen} />
+      ) : null;
+    }
+    if (field.type === "checklist") {
+      const own = checklistFiles(field);
+      const answered = typeof value === "object" && value !== null && Object.keys(value).length > 0;
+      return answered || (own && own.documents.length > 0) ? (
+        <ChecklistField field={field} value={value} mode="read" locale={locale} files={own} onOpen={files?.onOpen} />
       ) : null;
     }
     if (isBuiltInField(field)) {
@@ -782,7 +829,9 @@ export function FormRenderer({
                     ? attachmentsControl(field)
                     : field.type === "photos"
                       ? photosControl(field)
-                      : control(
+                      : field.type === "checklist"
+                        ? checklistControl(field)
+                        : control(
                         field,
                         // A calculated field shows the result worked out from the answers now, never one given.
                         field.type === "calculated" ? visibility.answers[field.key] : answers[field.key],
