@@ -56,12 +56,13 @@ describe("the AWS root user", () => {
 });
 
 describe("short-lived credentials", () => {
-  let bin: string | undefined;
-  afterEach(() => bin && rmSync(bin, { recursive: true, force: true }));
+  const bins: string[] = [];
+  afterEach(() => bins.splice(0).forEach((bin) => rmSync(bin, { recursive: true, force: true })));
 
   // A stand-in for the AWS CLI's `configure export-credentials`.
   function awsPrinting(output: string, status = 0) {
-    bin = mkdtempSync(join(tmpdir(), "wizard-aws-"));
+    const bin = mkdtempSync(join(tmpdir(), "wizard-aws-"));
+    bins.push(bin);
     const aws = join(bin, "aws");
     writeFileSync(aws, `#!/usr/bin/env bash\nprintf '%s' '${output}'\nexit ${status}\n`);
     chmodSync(aws, 0o755);
@@ -70,7 +71,7 @@ describe("short-lived credentials", () => {
 
   it("are handed over when the sign-in is current", () => {
     const env = awsPrinting("export AWS_ACCESS_KEY_ID=ASIAEXAMPLE\nexport AWS_SECRET_ACCESS_KEY=example\n");
-    expect(run('export_credentials rabaed && eval "$(export_credentials rabaed)" && printf %s "$AWS_ACCESS_KEY_ID"', "", env)).toContain("ASIAEXAMPLE");
+    expect(run('eval "$(export_credentials rabaed)" && printf %s "$AWS_ACCESS_KEY_ID"', "", env)).toBe("ASIAEXAMPLE");
   });
 
   it("are refused when the sign-in has expired", () => {

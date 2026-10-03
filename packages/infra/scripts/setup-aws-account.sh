@@ -240,13 +240,17 @@ sign_in_command() {
 # short-lived credentials in your home folder, never in the repo or .env.aws.
 sign_in() {
   local command
-  read -ra command <<< "$(sign_in_command "$1")"
-  step "Running: ${command[*]}  (a browser window opens)"
-  "${command[@]}"
+  command=$(sign_in_command "$1")
+  step "Running: $command  (a browser window opens)"
+  if [[ "$command" == "aws sso login"* ]]; then
+    aws sso login --profile "$1"
+  else
+    aws login --profile "$1" --region "$REGION"
+  fi
 }
 
 # Set once stage 5 has an admin sign-in: from then on the root user is refused.
-NOT_ROOT=""
+REFUSE_ROOT=""
 
 # Hands the profile's short-lived credentials to the CDK, in this process
 # only; called before each AWS step so they have not expired. An expired
@@ -254,16 +258,19 @@ NOT_ROOT=""
 fresh_credentials() {
   local exported caller
   until exported=$(export_credentials "$AWS_PROFILE"); do
-    warn "Your AWS sign-in for profile $AWS_PROFILE has expired."
+    warn "Your AWS sign-in for profile $AWS_PROFILE has expired (or the profile is not set up)."
     if ! confirm "Sign in again now?"; then
       stop "Stopped. Run: $(sign_in_command "$AWS_PROFILE"), then re-run this wizard."
     fi
     sign_in "$AWS_PROFILE" || warn "sign-in did not finish"
   done
   eval "$exported"
-  if [[ -n "$NOT_ROOT" ]]; then
+  if [[ -n "$REFUSE_ROOT" ]]; then
+    # Refused too when AWS cannot say who is signed in.
     caller=$(aws sts get-caller-identity --query Arn --output text 2>/dev/null || true)
-    if is_root_arn "$caller"; then
+    if [[ -z "$caller" ]]; then
+      stop "Stopped: AWS could not say who profile $AWS_PROFILE is signed in as. Check the network and re-run this wizard."
+    elif is_root_arn "$caller"; then
       warn "Profile $AWS_PROFILE is signed in as the root user, which this stage refuses."
       stop "Stopped. Sign it in as the admin from stage 5 ($(sign_in_command "$AWS_PROFILE")), then re-run this wizard."
     fi
@@ -333,7 +340,7 @@ until aws sts get-caller-identity >/dev/null 2>&1; do
 done
 AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 note "✓ signed in to account $AWS_ACCOUNT_ID as $(aws sts get-caller-identity --query Arn --output text)"
-confirm "Is $AWS_ACCOUNT_ID the account for Rabaed ${RABAED_ENV}?" || { warn "Stopped: sign in to the right account and re-run."; exit 1; }
+confirm "Is $AWS_ACCOUNT_ID the account for Rabaed ${RABAED_ENV}?" || stop "Stopped: sign in to the right account and re-run."
 write_env AWS_ACCOUNT_ID "$AWS_ACCOUNT_ID"
 
 # ── 3 ────────────────────────────────────────────────────────────────────
@@ -447,7 +454,7 @@ else
   done
   note "✓ $AWS_PROFILE signs in as $caller; the rest of the wizard uses it"
 fi
-NOT_ROOT=1
+REFUSE_ROOT=1
 pause
 
 # ── 6 ────────────────────────────────────────────────────────────────────
