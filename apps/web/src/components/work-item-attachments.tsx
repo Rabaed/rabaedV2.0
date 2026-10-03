@@ -18,7 +18,22 @@ const refusals: Record<string, string> = {
   not_editable: "notEditable",
   document_frozen: "frozen",
   forbidden: "forbidden",
+  project_closed: "projectClosed",
+  not_uploaded: "notUploaded",
+  upload_mismatch: "notUploaded",
 };
+
+// Browsers know no type for some files Documents may be: name it from the extension.
+const typesByExtension: Record<string, string> = {
+  dwg: "image/vnd.dwg",
+  dxf: "image/vnd.dxf",
+  heic: "image/heic",
+  csv: "text/csv",
+};
+
+function contentTypeOf(file: File): string {
+  return file.type || typesByExtension[file.name.split(".").pop()?.toLowerCase() ?? ""] || "application/octet-stream";
+}
 
 export function WorkItemAttachments({ workItemId, list, locale }: { workItemId: string; list: DocumentList; locale: Locale }) {
   const t = useTranslations("workItems.attachments");
@@ -47,13 +62,14 @@ export function WorkItemAttachments({ workItemId, list, locale }: { workItemId: 
     setMessage(null);
     // The same limits the API checks, before sending anything.
     if (file.size > list.limits.maxBytes) return setMessage(t("tooLarge", { size: size(list.limits.maxBytes) }));
-    if (!list.limits.contentTypes.includes(file.type)) return setMessage(t("wrongType"));
+    const contentType = contentTypeOf(file);
+    if (!list.limits.contentTypes.includes(contentType)) return setMessage(t("wrongType"));
     setPending(true);
     try {
       const res = await fetch(base, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ fileName: file.name, sizeBytes: file.size, contentType: file.type }),
+        body: JSON.stringify({ fileName: file.name, sizeBytes: file.size, contentType }),
       });
       if (!res.ok) return await refused(res);
       const started = (await res.json()) as StartedDocumentUpload;

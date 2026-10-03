@@ -17,6 +17,12 @@
 --   trigger stamps frozen_at, and a frozen Document never changes again, not even
 --   for its owner. A Document is removed by marking it, never by deleting it.
 
+-- Where a Document's file is stored: under its Project first (ADR 0007).
+create function app.document_storage_key(p_project_id uuid, p_work_item_id uuid, p_document_id uuid) returns text
+  language sql immutable
+  set search_path = pg_catalog
+  as $$ select 'projects/' || p_project_id || '/work-items/' || p_work_item_id || '/documents/' || p_document_id $$;
+
 create table document (
   id uuid primary key default app.uuid_v7(),
   project_id uuid not null references project (id),
@@ -36,7 +42,7 @@ create table document (
   constraint document_item_fk foreign key (work_item_id, project_id) references work_item (id, project_id),
   constraint document_participant_fk
     foreign key (uploaded_by_participant_id, project_id) references participant (id, project_id),
-  check (storage_key = 'projects/' || project_id || '/work-items/' || work_item_id || '/documents/' || id),
+  check (storage_key = app.document_storage_key(project_id, work_item_id, id)),
   check ((removed_at is null) = (removed_by_member_id is null)),
   check (removed_at is null or confirmed_at is not null),
   check (frozen_at is null or (confirmed_at is not null and removed_at is null))
@@ -155,7 +161,7 @@ create function app.start_document_upload(
         return query select app.documents_refusal(p_work_item_id), null::uuid, null::text;
         return;
       end if;
-      v_key := 'projects/' || v_item.project_id || '/work-items/' || v_item.id || '/documents/' || v_id;
+      v_key := app.document_storage_key(v_item.project_id, v_item.id, v_id);
       insert into document (
         id, project_id, work_item_id, file_name, size_bytes, content_type, storage_key,
         uploaded_by_member_id, uploaded_by_participant_id, created_at
@@ -167,14 +173,13 @@ create function app.start_document_upload(
     end
   $$;
 
--- The acting Member's own pending upload on a visible item, for the api to find
--- in storage before confirming it. No row for anyone else's.
-create function app.pending_document_upload(p_work_item_id uuid, p_document_id uuid)
-  returns table (storage_key text, size_bytes bigint, content_type text)
+-- The storage key of the acting Member's own pending upload on a visible item,
+-- for the api to find the file before confirming it. Null for anyone else's.
+create function app.pending_document_upload(p_work_item_id uuid, p_document_id uuid) returns text
   language sql stable security definer
   set search_path = pg_catalog, public
   as $$
-    select d.storage_key, d.size_bytes, d.content_type from document d
+    select d.storage_key from document d
     where d.id = p_document_id and d.work_item_id = p_work_item_id
       and d.uploaded_by_member_id = app.current_member_id()
       and d.confirmed_at is null and d.removed_at is null
@@ -253,6 +258,7 @@ create function app.remove_document(p_work_item_id uuid, p_document_id uuid, p_n
   $$;
 
 revoke all on function
+  app.document_storage_key(uuid, uuid, uuid),
   app.refuse_frozen_document_change(),
   app.freeze_documents_leaving_draft(),
   app.can_change_documents(uuid),

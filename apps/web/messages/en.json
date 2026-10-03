@@ -262,9 +262,9 @@
     },
     "attachments": {
       "title": "Attachments",
-      "none": "No documents attached.",
-      "add": "Attach a document",
-      "limits": "PDF, images, Office files, drawings, text or zip, up to {size}. Once sent, documents can't be changed.",
+      "none": "No Documents attached.",
+      "add": "Attach a Document",
+      "limits": "PDF, images, Office files, drawings, text or zip, up to {size}. Once sent, Documents can't be changed.",
       "open": "Open",
       "remove": "Remove",
       "frozenLabel": "Sent: can't be changed",
@@ -273,11 +273,13 @@
       "tooLarge": "This file is too large. The limit is {size}.",
       "wrongType": "This type of file can't be attached.",
       "notEditable": "Documents can't be changed any more.",
-      "frozen": "This document was sent, so it can't be removed.",
-      "forbidden": "Your Position doesn't allow attaching documents.",
+      "frozen": "This Document was sent, so it can't be removed.",
+      "forbidden": "Your Position doesn't allow attaching Documents.",
       "unavailable": "Something went wrong. Try again.",
       "kb": "{size} KB",
-      "mb": "{size} MB"
+      "mb": "{size} MB",
+      "projectClosed": "This Project is closed.",
+      "notUploaded": "The file didn't finish uploading. Attach it again."
     },
     "history": {
       "title": "History",

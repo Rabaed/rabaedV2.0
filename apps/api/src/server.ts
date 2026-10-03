@@ -13,10 +13,10 @@ const env = z
   .parse(process.env);
 
 const db = createDbFromEnv("app");
-const fileStore = fileStoreSettingsFromEnv();
+const fileStoreSettings = fileStoreSettingsFromEnv();
 // Locally the store in Docker starts empty; in AWS the storage stack made the bucket.
-if (fileStore.endpoint) await ensureLocalBucket(fileStore);
-const app = await buildApp({ db, config: apiConfigFromEnv(), files: createFileStore(fileStore) });
+if (fileStoreSettings.endpoint) await ensureLocalBucket(fileStoreSettings);
+const app = await buildApp({ db, config: apiConfigFromEnv(), files: createFileStore(fileStoreSettings) });
 // For the outbox alarms, measured in the database whether or not the worker runs.
 // Every minute: the outbox alarms' 5-minute periods each need a few reports.
 const OUTBOX_REPORT_INTERVAL_MS = 60_000;

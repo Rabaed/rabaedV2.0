@@ -55,7 +55,7 @@ export function listDocuments(db: Db, memberId: string, workItemId: string, limi
         frozen: r.frozen,
       })),
       canChange: can[0]!.can,
-      limits: { maxBytes: limits.maxBytes, contentTypes: limits.contentTypes },
+      limits,
     };
   });
 }
@@ -63,10 +63,10 @@ export function listDocuments(db: Db, memberId: string, workItemId: string, limi
 const changeRefusals = ["not_found", "project_closed", "forbidden", "not_editable"] as const;
 export type StartUploadResult =
   | { ok: true; started: StartedDocumentUpload }
-  | { ok: false; reason: (typeof changeRefusals)[number] | Refused["reason"] };
+  | { ok: false; reason: (typeof changeRefusals)[number] | OverLimit["reason"] };
 
-/** Thrown inside a transaction to roll it back with a refusal. */
-class Refused extends Error {
+/** A file over the configured limits: thrown inside the transaction, so its pending row is rolled back. */
+class OverLimit extends Error {
   constructor(readonly reason: "file_too_large" | "content_type_not_allowed") {
     super(reason);
   }
@@ -93,12 +93,12 @@ export function startUpload(
     const outcome = checkedOutcome(rows[0]!.outcome, ["started", ...changeRefusals]);
     if (outcome !== "started") return { ok: false, reason: outcome };
     // Who may upload, and when, before what is wrong with the file. Thrown, so the row is rolled back.
-    if (file.sizeBytes > limits.maxBytes) throw new Refused("file_too_large");
-    if (!limits.contentTypes.includes(file.contentType)) throw new Refused("content_type_not_allowed");
+    if (file.sizeBytes > limits.maxBytes) throw new OverLimit("file_too_large");
+    if (!limits.contentTypes.includes(file.contentType)) throw new OverLimit("content_type_not_allowed");
     const upload = await files.signUpload(rows[0]!.storage_key!, file, now);
     return { ok: true, started: { id: rows[0]!.document_id!, upload: { ...upload, method: "PUT" } } };
   }).catch((error: unknown) => {
-    if (error instanceof Refused) return { ok: false, reason: error.reason };
+    if (error instanceof OverLimit) return { ok: false, reason: error.reason };
     throw error;
   });
 }
@@ -116,12 +116,13 @@ export function confirmUpload(
   now: Date,
 ): Promise<ConfirmUploadResult> {
   return withMember(db, memberId, async (trx): Promise<ConfirmUploadResult> => {
-    const { rows } = await sql<{ storage_key: string }>`
-      select storage_key from app.pending_document_upload(${workItemId}::uuid, ${documentId}::uuid)
+    const { rows } = await sql<{ storage_key: string | null }>`
+      select app.pending_document_upload(${workItemId}::uuid, ${documentId}::uuid) as storage_key
     `.execute(trx);
+    const pendingKey = rows[0]!.storage_key;
     let stored: { sizeBytes: number; contentType: string } | null = null;
-    if (rows[0]) {
-      stored = await files.stat(rows[0].storage_key);
+    if (pendingKey) {
+      stored = await files.stat(pendingKey);
       if (!stored) return { ok: false, reason: "not_uploaded" };
     }
     // No pending upload of theirs: the function answers for a confirmed one, or not_found.

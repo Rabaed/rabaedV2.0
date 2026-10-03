@@ -12,8 +12,8 @@ import { stageColour } from "@/lib/stage-colour";
 
 /**
  * One Work Item, in the frame every item has (form-engine.md §1): the System
- * Fields Subject and Document Number above its Form, Attachments below it. One the Member can't see is
- * not found, exactly like one that doesn't exist.
+ * Fields Subject and Document Number above its Form, Attachments below it. One
+ * the Member can't see is not found, exactly like one that doesn't exist.
  */
 export default async function WorkItemPage({ params }: { params: Promise<{ locale: Locale; workItemId: string }> }) {
   const { locale, workItemId } = await params;

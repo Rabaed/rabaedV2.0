@@ -81,7 +81,7 @@ async function insertDocument(
     `insert into document (id, project_id, work_item_id, file_name, size_bytes, content_type, storage_key,
        uploaded_by_member_id, uploaded_by_participant_id, confirmed_at, removed_at, removed_by_member_id)
      values ($1::uuid, $2::uuid, $3::uuid, 'datasheet.pdf', 1024, 'application/pdf',
-       'projects/' || $2 || '/work-items/' || $3 || '/documents/' || $1, $4::uuid, $5::uuid,
+       app.document_storage_key($2::uuid, $3::uuid, $1::uuid), $4::uuid, $5::uuid,
        case when $6::boolean then now() end, case when $7::boolean then now() end, case when $7 then $4::uuid end)`,
     [id, projectId, itemId, memberId, participantId, state.confirmed ?? false, state.removed ?? false],
   );
@@ -116,8 +116,11 @@ describe("a Document", () => {
     expect(await documentIds(a.ap)).not.toContain(b.documentId);
     const rows = await call<{ id: string }>(a.ap, sql`select id, storage_key from document where id = ${b.documentId}::uuid`);
     expect(rows).toEqual([]);
-    const pending = await call<{ storage_key: string }>(a.ap, sql`select storage_key from app.pending_document_upload(${b.itemId}::uuid, ${b.documentId}::uuid)`);
-    expect(pending).toEqual([]);
+    const pending = await call<{ key: string | null }>(
+      a.ap,
+      sql`select app.pending_document_upload(${b.itemId}::uuid, ${b.documentId}::uuid) as key`,
+    );
+    expect(pending).toEqual([{ key: null }]);
   });
 
   it("returns nothing with no Member set", async () => {
