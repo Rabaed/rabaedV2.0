@@ -7,7 +7,14 @@ import { WorkItemAttachments } from "@/components/work-item-attachments";
 import { WorkItemAnswers, WorkItemFormProvider } from "@/components/work-item-form";
 import { WorkItemHistory } from "@/components/work-item-history";
 import { Link, redirect } from "@/i18n/navigation";
-import { getMe, getWorkItem, getWorkItemDocuments, getWorkItemForm, getWorkItemHistory } from "@/lib/session";
+import {
+  getMe,
+  getWorkItem,
+  getWorkItemDocuments,
+  getWorkItemForm,
+  getWorkItemFormChoices,
+  getWorkItemHistory,
+} from "@/lib/session";
 import { stageColour } from "@/lib/stage-colour";
 
 /**
@@ -19,18 +26,26 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
   const { locale, workItemId } = await params;
   setRequestLocale(locale);
   const t = await getTranslations("workItems");
-  const [me, item, form, documents, history] = await Promise.all([
+  const [me, item, form, choices, documents, history] = await Promise.all([
     getMe(),
     getWorkItem(workItemId),
     getWorkItemForm(workItemId),
+    getWorkItemFormChoices(workItemId),
     getWorkItemDocuments(workItemId),
     getWorkItemHistory(workItemId),
   ]);
   if (!me) return redirect({ href: "/sign-in", locale });
-  if (!item || !form || !documents) notFound();
+  if (!item || !form || !choices || !documents) notFound();
 
   return (
-    <WorkItemFormProvider workItemId={item.id} schema={form.schema} answers={item.answers} editable={item.actions.saveAnswers}>
+    <WorkItemFormProvider
+      workItemId={item.id}
+      schema={form.schema}
+      answers={item.answers}
+      named={item.namedAnswers}
+      choices={choices}
+      editable={item.actions.saveAnswers}
+    >
       <div className="max-w-3xl space-y-6">
         <div className="space-y-2">
           <Link href={`/projects/${item.projectId}/work-items`} className="text-sm text-primary underline underline-offset-4">

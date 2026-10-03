@@ -9,11 +9,13 @@ import {
   fromProjectWallTime,
   toProjectWallTime,
   type FieldError,
+  type FormChoices,
   type FormField,
   type FormOption,
   type FormSchema,
   type FormValue,
   type Locale,
+  type NamedAnswers,
 } from "@rabaed/domain";
 import type { ReactNode } from "react";
 import { cn } from "../../lib/cn.ts";
@@ -32,7 +34,9 @@ import { Icon } from "../icon/icon.tsx";
 // errors come from the shared validator (validateAnswers) or the API's refusal.
 // Labels follow the viewer's language; text answers are shown exactly as typed,
 // dates and times in the viewer's language with Latin digits, and date-times in
-// the Project's time zone.
+// the Project's time zone. A `member` or `participant` field offers only the
+// choices the API gave this filler, and reads as the API named it for this
+// viewer: another Company's Member by the Company's name only (V14).
 
 const copy = {
   en: {
@@ -78,6 +82,10 @@ export type FormRendererProps = {
   mode: "edit" | "read";
   /** The viewer's language: labels, help and messages. */
   locale: Locale;
+  /** Who and which Companies `member` and `participant` fields offer (edit mode): the API's form choices. */
+  choices?: FormChoices;
+  /** The `member` and `participant` answers as the API named them for this viewer (read mode). */
+  named?: NamedAnswers;
   /** Called with a field's key and new value as the filler answers (edit mode); `undefined` clears it. */
   onChange?: (key: string, value: FormValue | undefined) => void;
   /** Prefix for the fields' ids, unique on the page. */
@@ -110,15 +118,22 @@ const textOf = (value: unknown) => (typeof value === "string" ? value : "");
 // A select's "no choice" item: option values are snake_case keys, so this never clashes with one.
 const noChoice = "-";
 
+const noChoices: FormChoices = { members: [], participants: [] };
+
 /** A choice field's options as a control takes them, labelled in the viewer's language. */
 const optionsOf = (field: { options: FormOption[] }, locale: Locale) =>
   field.options.map((o) => ({ value: o.value, label: o.label[locale] }));
+
+/** A select's options, with "None" first when the field is optional, so a choice can be taken back. */
+const withNone = (field: FormField, options: { value: string; label: string }[], locale: Locale) =>
+  field.required ? options : [{ value: noChoice, label: copy[locale].none }, ...options];
 
 /** One field's control, and whether its Field labels a group (radios, checkboxes) rather than one control. */
 function control(
   field: FormField,
   value: unknown,
   locale: Locale,
+  choices: FormChoices,
   change: (value: FormValue | undefined) => void,
 ): { element: ReactNode; group?: boolean } {
   const text = copy[locale];
@@ -174,13 +189,32 @@ function control(
           <Select
             name={name}
             placeholder={text.choose}
-            // An optional choice can be taken back.
-            options={field.required ? optionsOf(field, locale) : [{ value: noChoice, label: text.none }, ...optionsOf(field, locale)]}
+            options={withNone(field, optionsOf(field, locale), locale)}
             value={textOf(value)}
             onValueChange={(v) => change(v === noChoice ? undefined : v)}
           />
         ),
       };
+    case "member":
+    case "participant": {
+      // Only those the API offered this filler (V15); ids, unlike option values, never clash with "-".
+      const offered = field.type === "member" ? choices.members : choices.participants;
+      return {
+        element: (
+          <Select
+            name={name}
+            placeholder={text.choose}
+            options={withNone(
+              field,
+              offered.map((c) => ({ value: c.id, label: c.name[locale] })),
+              locale,
+            )}
+            value={textOf(value)}
+            onValueChange={(v) => change(v === noChoice ? undefined : v)}
+          />
+        ),
+      };
+    }
     case "multi_select":
       return {
         group: true,
@@ -206,6 +240,8 @@ export function FormRenderer({
   errors = [],
   mode,
   locale,
+  choices = noChoices,
+  named = {},
   onChange,
   idPrefix = "form",
   className,
@@ -245,7 +281,9 @@ export function FormRenderer({
             {mode === "edit" ? (
               section.fields.map((field) => {
                 const error = errorOf(field.key);
-                const { element, group } = control(field, answers[field.key], locale, (value) => onChange?.(field.key, value));
+                const { element, group } = control(field, answers[field.key], locale, choices, (value) =>
+                  onChange?.(field.key, value),
+                );
                 return (
                   <Field
                     key={field.key}
@@ -264,12 +302,18 @@ export function FormRenderer({
               <dl className="flex flex-col gap-4">
                 {section.fields.map((field) => {
                   const value = answers[field.key];
+                  // Another Company's Member comes named, without their id (V14).
+                  const unanswered = isUnanswered(value) && !(field.key in named);
                   return (
                     <div key={field.key} className="flex flex-col gap-1">
                       <dt className="text-sm font-medium text-muted">{field.label[locale]}</dt>
                       {/* The answer keeps its own direction, but lines up with the page's. */}
-                      <dd className={cn("text-body", isUnanswered(value) ? "text-muted" : "whitespace-pre-wrap text-text")}>
-                        {isUnanswered(value) ? copy[locale].unanswered : <bdi>{formatFormValue(field, value, locale)}</bdi>}
+                      <dd className={cn("text-body", unanswered ? "text-muted" : "whitespace-pre-wrap text-text")}>
+                        {unanswered ? (
+                          copy[locale].unanswered
+                        ) : (
+                          <bdi>{formatFormValue(field, value, locale, named[field.key])}</bdi>
+                        )}
                       </dd>
                     </div>
                   );

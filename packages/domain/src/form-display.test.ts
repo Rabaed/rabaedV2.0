@@ -101,3 +101,44 @@ describe("formatFormValue", () => {
     expect(formatFormValue(select, "retired_option", "en")).toBe("retired_option");
   });
 });
+
+describe("formatFormValue for member and participant answers (V14)", () => {
+  const [member, participant] = formFields(
+    formSchema.parse({
+      sections: [
+        {
+          key: "s",
+          title: label("S"),
+          fields: [
+            { key: "m", type: "member", label: label("Site engineer") },
+            { key: "p", type: "participant", label: label("Supplier") },
+          ],
+        },
+      ],
+    }),
+  ) as [FormField, FormField];
+  const c1 = label("C1 Contracting", "سي ون للمقاولات");
+  const ahmed = label("Ahmed Ali", "أحمد علي");
+  const id = "0199a3b0-0000-7000-8000-000000000001";
+
+  it("names a Member of the viewer's own Company", () => {
+    expect(formatFormValue(member, id, "en", { companyName: c1, memberName: ahmed })).toBe("Ahmed Ali");
+    expect(formatFormValue(member, id, "ar", { companyName: c1, memberName: ahmed })).toBe("أحمد علي");
+  });
+
+  it("shows another Company's Member as that Company's name only, even with no id to read", () => {
+    expect(formatFormValue(member, undefined, "en", { companyName: c1, memberName: null })).toBe("C1 Contracting");
+    expect(formatFormValue(member, undefined, "ar", { companyName: c1, memberName: null })).toBe("سي ون للمقاولات");
+  });
+
+  it("shows a Participant as its Company's name", () => {
+    expect(formatFormValue(participant, id, "ar", { companyName: c1, memberName: null })).toBe("سي ون للمقاولات");
+  });
+
+  it("names nobody it may not, and never shows the stored id", () => {
+    const hidden = { companyName: null, memberName: null };
+    expect(formatFormValue(member, id, "en", hidden)).toBe("Another Company");
+    expect(formatFormValue(participant, id, "ar", hidden)).toBe("شركة أخرى");
+    expect(formatFormValue(member, id, "en")).toBe("Another Company");
+  });
+});

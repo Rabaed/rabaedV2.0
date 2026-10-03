@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { bilingualText } from "./company.ts";
-import { formAnswers } from "./form.ts";
+import { formAnswers, namedAnswers } from "./form.ts";
 
 /** A Work Item Type's short code, used in filters and Document Numbers (MAR, SAR…). */
 export const workItemTypeCode = z.string().regex(/^[A-Z]{2,6}$/);
@@ -110,8 +110,14 @@ export type WorkItemActions = z.infer<typeof workItemActions>;
 export const workItemDetail = workItemSummary.extend({
   /** The Form Version the item is pinned to, for good (ADR 0006). */
   formVersionId: z.uuid(),
-  /** The Form's answers by field key, exactly as typed. */
+  /**
+   * The Form's answers by field key, exactly as typed; except that a `member`
+   * answer naming another Company's Member is left out (V14): `namedAnswers`
+   * has its Company instead.
+   */
   answers: formAnswers,
+  /** The `member` and `participant` answers as the viewer may read them, by field key. */
+  namedAnswers,
   step: z.object({ key: z.string(), name: bilingualText }),
   raisedBy: z.object({ companyName: bilingualText }),
   /**

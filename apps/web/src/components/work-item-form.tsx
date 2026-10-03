@@ -1,6 +1,15 @@
 "use client";
 
-import { validateAnswers, type FieldError, type FormSchema, type FormValue, type Locale } from "@rabaed/domain";
+import {
+  offeredChoices,
+  validateAnswers,
+  type FieldError,
+  type FormChoices,
+  type FormSchema,
+  type FormValue,
+  type Locale,
+  type NamedAnswers,
+} from "@rabaed/domain";
 import { Button, FormRenderer } from "@rabaed/ui";
 import { useTranslations } from "next-intl";
 import { createContext, useContext, useState, type ReactNode } from "react";
@@ -13,6 +22,10 @@ import { useRouter } from "@/i18n/navigation";
 type WorkItemFormState = {
   schema: FormSchema;
   answers: Record<string, unknown>;
+  /** Its `member` and `participant` answers as the API named them for the viewer (V14). */
+  named: NamedAnswers;
+  /** Who and which Companies those fields offer the viewer (V15). */
+  choices: FormChoices;
   errors: readonly FieldError[];
   editable: boolean;
   /** Typed since the last save. */
@@ -37,12 +50,16 @@ export function WorkItemFormProvider({
   workItemId,
   schema,
   answers: saved,
+  named,
+  choices,
   editable,
   children,
 }: {
   workItemId: string;
   schema: FormSchema;
   answers: Record<string, unknown>;
+  named: NamedAnswers;
+  choices: FormChoices;
   /** Save draft is offered (actions.saveAnswers). */
   editable: boolean;
   children: ReactNode;
@@ -61,7 +78,7 @@ export function WorkItemFormProvider({
     setDirty(true);
     setMessage(null);
     // Instant feedback with the same checks the server runs (draft mode: types only).
-    const checked = validateAnswers(schema, next, "draft");
+    const checked = validateAnswers(schema, next, "draft", offeredChoices(choices));
     setErrors(checked.ok ? [] : checked.errors);
   }
 
@@ -105,7 +122,7 @@ export function WorkItemFormProvider({
 
   return (
     <WorkItemFormContext.Provider
-      value={{ schema, answers, errors, editable, dirty, pending, message, change, save, showErrors }}
+      value={{ schema, answers, named, choices, errors, editable, dirty, pending, message, change, save, showErrors }}
     >
       {children}
     </WorkItemFormContext.Provider>
@@ -123,6 +140,8 @@ export function WorkItemAnswers({ locale }: { locale: Locale }) {
       <FormRenderer
         schema={form.schema}
         answers={form.answers}
+        named={form.named}
+        choices={form.choices}
         errors={form.errors}
         mode={form.editable ? "edit" : "read"}
         locale={locale}

@@ -1,4 +1,4 @@
-import { isIsoValue, type FormField } from "./form.ts";
+import { isIsoValue, type FormField, type NamedAnswer } from "./form.ts";
 import { formatDate, timeZone, type Locale } from "./locale.ts";
 
 // How answers read on screen (form-engine.md §5): the viewer's language, Latin
@@ -6,6 +6,7 @@ import { formatDate, timeZone, type Locale } from "./locale.ts";
 // Stored values never change; only their display does. Pure, like the validator.
 
 const yesNo = { en: { yes: "Yes", no: "No" }, ar: { yes: "نعم", no: "لا" } } satisfies Record<Locale, unknown>;
+const anotherCompany = { en: "Another Company", ar: "شركة أخرى" } satisfies Record<Locale, string>;
 const listSeparator = { en: ", ", ar: "، " } satisfies Record<Locale, string>;
 
 const wallTimeParts = new Intl.DateTimeFormat("en-US", {
@@ -41,9 +42,12 @@ export function fromProjectWallTime(wallTime: string): string {
 /**
  * An answer as the viewer reads it: dates and times in their language (Latin
  * digits), Yes/No and option labels translated, text exactly as typed. A value
- * the field can't read (e.g. a retired option) is shown as stored.
+ * the field can't read (e.g. a retired option) is shown as stored. A `member` or
+ * `participant` answer reads as the API `named` it for this viewer (V14): a
+ * Member of their own Company by name, anyone else by their Company's name;
+ * never by its id.
  */
-export function formatFormValue(field: FormField, value: unknown, locale: Locale): string {
+export function formatFormValue(field: FormField, value: unknown, locale: Locale, named?: NamedAnswer): string {
   switch (field.type) {
     case "date":
       return typeof value === "string" && isIsoValue("date", value)
@@ -65,6 +69,9 @@ export function formatFormValue(field: FormField, value: unknown, locale: Locale
       const labelOf = (v: unknown) => field.options.find((o) => o.value === v)?.label[locale] ?? String(v);
       return Array.isArray(value) ? value.map(labelOf).join(listSeparator[locale]) : value == null ? "" : labelOf(value);
     }
+    case "member":
+    case "participant":
+      return (named?.memberName ?? named?.companyName)?.[locale] ?? anotherCompany[locale];
     case "text":
     case "textarea":
       return typeof value === "string" ? value : String(value ?? "");

@@ -48,6 +48,18 @@ export const formField = z.discriminatedUnion("type", [
   z.object({ ...fieldBase, type: z.literal("select"), options: formOptions }),
   /** Any of the field's options, by value, in the order chosen. */
   z.object({ ...fieldBase, type: z.literal("multi_select"), options: formOptions }),
+  /**
+   * A Project Member, by id. Offered only those the filler can see: in practice
+   * their own Company's Project Members (V15). Another Company sees the answer
+   * as that Company's name, never the person (V14).
+   */
+  z.object({ ...fieldBase, type: z.literal("member") }),
+  /**
+   * A Participant, by id. Offered only those the filler can see: their own, the
+   * Host Company and those on the item (V15). Never any Company on Rabaed (ADR
+   * 0009): a Company outside the Project is typed in a text field.
+   */
+  z.object({ ...fieldBase, type: z.literal("participant") }),
 ]);
 export type FormField = z.infer<typeof formField>;
 export type FormFieldType = FormField["type"];
@@ -71,6 +83,38 @@ export const formAnswers = z.record(z.string(), z.unknown());
 export type FormAnswers = z.infer<typeof formAnswers>;
 
 /**
+ * A `member` or `participant` answer as one viewer may read it (V14, V15): the
+ * Company's name when they may see that Company, and a Member's name only for
+ * their own Company's Members.
+ */
+export const namedAnswer = z.object({ companyName: bilingualText.nullable(), memberName: bilingualText.nullable() });
+export type NamedAnswer = z.infer<typeof namedAnswer>;
+
+/** A `member` or `participant` field's answers as the viewer may read them, by field key. */
+export const namedAnswers = z.record(z.string(), namedAnswer);
+export type NamedAnswers = z.infer<typeof namedAnswers>;
+
+/** One Project Member or Participant a filler may choose, with their name in both languages. */
+const formChoice = z.object({ id: z.uuid(), name: bilingualText });
+export type FormChoice = z.infer<typeof formChoice>;
+
+/**
+ * What a filler may choose in `member` and `participant` fields: only those they
+ * can see (V15). Their own Company's Project Members; their own Participant, the
+ * Host Company's, and those on the item.
+ */
+export const formChoices = z.object({ members: z.array(formChoice), participants: z.array(formChoice) });
+export type FormChoices = z.infer<typeof formChoices>;
+
+/** The ids of `choices`, as the validator takes them. */
+export function offeredChoices(choices: FormChoices): OfferedChoices {
+  return {
+    members: new Set(choices.members.map((m) => m.id)),
+    participants: new Set(choices.participants.map((p) => p.id)),
+  };
+}
+
+/**
  * `draft`: types only, so a Save draft with required fields empty succeeds.
  * `complete`: types and required, checked when the item leaves Draft.
  */
@@ -79,7 +123,8 @@ export type ValidationMode = "draft" | "complete";
 /**
  * `wrong_type`: not the kind of value the field holds (text, true/false, a list).
  * `invalid_format`: text, but not a real ISO date, time or UTC instant.
- * `unknown_option`: not one of a choice field's option values.
+ * `unknown_option`: not one of a choice field's option values, or a Member or
+ *   Participant the filler wasn't offered (the same answer as a made-up id).
  */
 export const fieldErrorCodes = [
   "required",
@@ -95,6 +140,13 @@ export type FieldErrorCode = (typeof fieldErrorCodes)[number];
 export const fieldError = z.object({ key: z.string(), code: z.enum(fieldErrorCodes) });
 export type FieldError = z.infer<typeof fieldError>;
 
+/**
+ * The ids a `member` or `participant` field may take for this filler: those the
+ * API offered them (form choices). The server always passes them; without them
+ * (in the browser) any id is taken, and the server decides.
+ */
+export type OfferedChoices = { members: ReadonlySet<string>; participants: ReadonlySet<string> };
+
 export type ValidationResult = { ok: true; answers: Record<string, FormValue> } | { ok: false; errors: FieldError[] };
 
 /** Every field of the schema, in Form order. */
@@ -105,6 +157,8 @@ export function formFields(schema: FormSchema): FormField[] {
 /** No answer: nothing, empty text, or no option chosen. `false` is an answer (No). */
 export const isUnanswered = (value: unknown): boolean =>
   value === undefined || value === null || value === "" || (Array.isArray(value) && value.length === 0);
+
+const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const isoDate = /^(\d{4})-(\d{2})-(\d{2})$/;
 const isoTime = /^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/;
@@ -124,7 +178,12 @@ export function isIsoValue(type: "date" | "datetime" | "time", value: string): b
 }
 
 /** What is wrong with one field's (non-empty) value, or null when nothing is. */
-function checkValue(field: FormField, value: unknown, mode: ValidationMode): FieldErrorCode | null {
+function checkValue(
+  field: FormField,
+  value: unknown,
+  mode: ValidationMode,
+  offered: OfferedChoices | undefined,
+): FieldErrorCode | null {
   switch (field.type) {
     case "text":
     case "textarea":
@@ -148,15 +207,27 @@ function checkValue(field: FormField, value: unknown, mode: ValidationMode): Fie
       const known = new Set(field.options.map((o) => o.value));
       return value.every((v) => known.has(v)) ? null : "unknown_option";
     }
+    case "member":
+    case "participant": {
+      if (typeof value !== "string") return "wrong_type";
+      const ids = offered && (field.type === "member" ? offered.members : offered.participants);
+      return (ids ? ids.has(value) : uuid.test(value)) ? null : "unknown_option";
+    }
   }
 }
 
 /**
- * Checks `answers` against a Form Version's schema in `mode`. On success it
+ * Checks `answers` against a Form Version's schema in `mode`, and `member` and
+ * `participant` answers against the ids `offered` to the filler. On success it
  * answers with the values to store: exactly as typed, empty ones dropped. On
  * failure, one error per field, in Form order, then answers to unknown fields.
  */
-export function validateAnswers(schema: FormSchema, answers: unknown, mode: ValidationMode): ValidationResult {
+export function validateAnswers(
+  schema: FormSchema,
+  answers: unknown,
+  mode: ValidationMode,
+  offered?: OfferedChoices,
+): ValidationResult {
   if (typeof answers !== "object" || answers === null || Array.isArray(answers)) {
     return { ok: false, errors: [{ key: "", code: "wrong_type" }] };
   }
@@ -171,7 +242,7 @@ export function validateAnswers(schema: FormSchema, answers: unknown, mode: Vali
       if (mode === "complete" && field.required) errors.push({ key: field.key, code: "required" });
       continue;
     }
-    const code = checkValue(field, value, mode);
+    const code = checkValue(field, value, mode, offered);
     if (code) errors.push({ key: field.key, code });
     else clean[field.key] = value as FormValue;
   }

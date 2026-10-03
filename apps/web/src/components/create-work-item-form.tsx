@@ -1,6 +1,14 @@
 "use client";
 
-import { validateAnswers, type FieldError, type FormValue, type FormVersion, type Locale } from "@rabaed/domain";
+import {
+  offeredChoices,
+  validateAnswers,
+  type FieldError,
+  type FormChoices,
+  type FormValue,
+  type FormVersion,
+  type Locale,
+} from "@rabaed/domain";
 import { Button, Field, FormRenderer, Input, Select } from "@rabaed/ui";
 import { useTranslations } from "next-intl";
 import { useState, type FormEvent } from "react";
@@ -19,12 +27,15 @@ const NO_LOCATION = "none";
 export function CreateWorkItemForm({
   projectId,
   form,
+  choices,
   trades,
   locations,
   locale,
 }: {
   projectId: string;
   form: FormVersion;
+  /** Who and which Companies its `member` and `participant` fields offer. */
+  choices: FormChoices;
   trades: Option[];
   locations: Option[];
   locale: Locale;
@@ -40,7 +51,7 @@ export function CreateWorkItemForm({
     const next = { ...answers, [key]: value };
     setAnswers(next);
     // Instant feedback with the same checks the server runs (draft mode: types only).
-    const checked = validateAnswers(form.schema, next, "draft");
+    const checked = validateAnswers(form.schema, next, "draft", offeredChoices(choices));
     setFieldErrors(checked.ok ? [] : checked.errors);
   }
 
@@ -105,7 +116,16 @@ export function CreateWorkItemForm({
           </Field>
         </div>
       </div>
-      <FormRenderer schema={form.schema} answers={answers} errors={fieldErrors} mode="edit" locale={locale} onChange={change} idPrefix="answer" />
+      <FormRenderer
+        schema={form.schema}
+        answers={answers}
+        choices={choices}
+        errors={fieldErrors}
+        mode="edit"
+        locale={locale}
+        onChange={change}
+        idPrefix="answer"
+      />
       {error && (
         <p role="alert" className="text-sm text-danger">
           {error}

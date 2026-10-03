@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { CreateWorkItemForm } from "@/components/create-work-item-form";
 import { Link, redirect } from "@/i18n/navigation";
 import { treeOrder } from "@/lib/dimension-tree";
-import { getMe, getMyVisibility, getNewWorkItemForm, getProject } from "@/lib/session";
+import { getMe, getMyVisibility, getNewWorkItemForm, getNewWorkItemFormChoices, getProject } from "@/lib/session";
 
 // Unicode left-to-right isolate and its closing pop, for codes inside <option> text.
 const LRI = String.fromCodePoint(0x2066);
@@ -18,14 +18,15 @@ export default async function NewWorkItemPage({ params }: { params: Promise<{ lo
   const { locale, projectId } = await params;
   setRequestLocale(locale);
   const t = await getTranslations("workItems");
-  const [me, project, mine, form] = await Promise.all([
+  const [me, project, mine, form, choices] = await Promise.all([
     getMe(),
     getProject(projectId),
     getMyVisibility(projectId),
     getNewWorkItemForm(projectId, "MAR"),
+    getNewWorkItemFormChoices(projectId),
   ]);
   if (!me) return redirect({ href: "/sign-in", locale });
-  if (!project || !mine || !form) notFound();
+  if (!project || !mine || !form || !choices) notFound();
 
   const label = (v: DimensionValue) => `${v.name[locale]} (${LRI}${v.code}${PDI})`;
   const trades = mine.trade.map((v) => ({ id: v.id, label: label(v) }));
@@ -42,7 +43,14 @@ export default async function NewWorkItemPage({ params }: { params: Promise<{ lo
       {trades.length === 0 ? (
         <p className="text-muted">{t("noTradesCovered")}</p>
       ) : (
-        <CreateWorkItemForm projectId={project.id} form={form} trades={trades} locations={locations} locale={locale} />
+        <CreateWorkItemForm
+          projectId={project.id}
+          form={form}
+          choices={choices}
+          trades={trades}
+          locations={locations}
+          locale={locale}
+        />
       )}
     </div>
   );

@@ -1,6 +1,7 @@
 import {
   createdWorkItem,
   createWorkItemRequest,
+  formChoices,
   formVersion,
   saveAnswersRequest,
   takeTransitionRequest,
@@ -18,8 +19,10 @@ import {
   claimStep,
   createWorkItem,
   getNewWorkItemForm,
+  getNewWorkItemFormChoices,
   getWorkItem,
   getWorkItemForm,
+  getWorkItemFormChoices,
   getWorkItemHistory,
   listWorkItems,
   releaseStep,
@@ -87,6 +90,26 @@ export const workItemRoutes =
       async (request) => {
         const memberId = ctx.requireMember(request);
         return visibleOrNotFound(getWorkItemForm(ctx.db, memberId, idOrNotFound(request.params.workItemId)));
+      },
+    );
+
+    // Who and which Companies a filler may choose in `member` and `participant`
+    // fields: only those they can see (V15), for a new item or on one.
+    app.get(
+      "/v1/projects/:projectId/form-choices",
+      { schema: { params: projectParams, response: { 200: formChoices } } },
+      async (request) => {
+        const memberId = ctx.requireMember(request);
+        return visibleOrNotFound(getNewWorkItemFormChoices(ctx.db, memberId, idOrNotFound(request.params.projectId)));
+      },
+    );
+
+    app.get(
+      "/v1/work-items/:workItemId/form-choices",
+      { schema: { params: workItemParams, response: { 200: formChoices } } },
+      async (request) => {
+        const memberId = ctx.requireMember(request);
+        return visibleOrNotFound(getWorkItemFormChoices(ctx.db, memberId, idOrNotFound(request.params.workItemId)));
       },
     );
 
