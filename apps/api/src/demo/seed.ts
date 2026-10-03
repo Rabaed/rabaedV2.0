@@ -1,6 +1,6 @@
 import { createEngineer, onboardCompany } from "@rabaed/admin/services";
 import type { Db } from "@rabaed/db";
-import type { BaseRole, BilingualText, Locale, VisibilityGrant } from "@rabaed/domain";
+import type { BaseRole, BilingualText, Locale, StartedDocumentUpload, VisibilityGrant } from "@rabaed/domain";
 import type { FastifyInstance } from "fastify";
 import { SESSION_COOKIE } from "../app.ts";
 
@@ -90,11 +90,25 @@ export interface SeedDatabases {
   admin: Db;
 }
 
+export interface SeedOptions {
+  /**
+   * The api `app` has a file store, so the seed may attach a file to a MAR.
+   * Left off where none is reachable: the migration task has no access to
+   * the Project files bucket (only the api does, ADR 0007).
+   */
+  files?: boolean;
+}
+
 // Each invitation is accepted at once.
 const INVITATION_TTL_MS = 3_600_000;
 
 /** Seeds the demo Project through `app`, the customer api, and Rabaed Admin's onboarding. */
-export async function seedDemo(app: FastifyInstance, databases: SeedDatabases, password: string): Promise<DemoSeed> {
+export async function seedDemo(
+  app: FastifyInstance,
+  databases: SeedDatabases,
+  password: string,
+  options: SeedOptions = {},
+): Promise<DemoSeed> {
   const people: DemoPerson[] = [];
 
   const engineer: DemoPerson = {
@@ -261,13 +275,14 @@ export async function seedDemo(app: FastifyInstance, databases: SeedDatabases, p
   // for the deploy's visibility check to try as someone from another Project.
   const hafizCaller = browser(app);
   await hafizCaller("POST", "/v1/session", { email: email(hafiz.local, tmc.domain), password });
-  await hafizCaller("POST", `/v1/projects/${projectId}/work-items`, {
+  const { id: emergencyLightingId } = await hafizCaller<{ id: string }>("POST", `/v1/projects/${projectId}/work-items`, {
     type: "MAR",
     title: "Emergency lighting – Tower 2",
     // Filled through the MAR Form Version 1, its Built-in Fields included.
     answers: {
       manufacturer: "Zumtobel",
       model: "RESCLITE PRO",
+      quantity: 48,
       specification_section: "26 52 13",
       trade: electrical,
       location: tower2Floor1,
@@ -275,6 +290,21 @@ export async function seedDemo(app: FastifyInstance, databases: SeedDatabases, p
       description: "LED emergency luminaires for the Tower 2 escape routes, 3-hour duration, self-test.",
     },
   });
+
+  // Its Attachments System Field holds the datasheet, uploaded as the browser does:
+  // a signed URL from the API, the file, then the API told it is there.
+  if (options.files) {
+    const datasheet = "Zumtobel RESCLITE PRO: LED emergency luminaire, 3-hour duration, self-test. Demo datasheet.\n";
+    const documents = `/v1/work-items/${emergencyLightingId}/documents`;
+    const started = await hafizCaller<StartedDocumentUpload>("POST", documents, {
+      fileName: "RESCLITE-PRO-datasheet.txt",
+      contentType: "text/plain",
+      sizeBytes: Buffer.byteLength(datasheet),
+    });
+    const put = await fetch(started.upload.url, { method: started.upload.method, headers: started.upload.headers, body: datasheet });
+    if (!put.ok) throw new Error(`Demo seed: the file store answered ${put.status} to the datasheet upload`);
+    await hafizCaller("POST", `${documents}/${started.id}/confirm`);
+  }
 
   // A second Project: Beta Build's own, with only its Authorized Person on it
   // and one Draft. Nobody on Riyadh Gate Tower is on it, and Nasser is on
@@ -299,7 +329,7 @@ export async function seedDemo(app: FastifyInstance, databases: SeedDatabases, p
   await beta.caller("POST", `/v1/projects/${otherProjectId}/work-items`, {
     type: "MAR",
     title: DEMO_LAST_ITEM_TITLE,
-    answers: { manufacturer: "Geberit", trade: plumbing, description: "PP-R water supply pipes and fittings for the villas." },
+    answers: { manufacturer: "Geberit", quantity: 120, trade: plumbing, description: "PP-R water supply pipes and fittings for the villas." },
   });
 
   return { projectId, otherProjectId, engineer, people };

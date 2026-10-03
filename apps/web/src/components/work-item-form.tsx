@@ -152,6 +152,11 @@ export function WorkItemAnswers({ locale }: { locale: Locale }) {
   const tItems = useTranslations("workItems");
   const form = useWorkItemForm();
   if (!form) return null;
+  // The fields the last check marked, by their labels in the viewer's language, in Form order.
+  const marked = new Set(form.errors.map((e) => e.key));
+  const toFix = form.schema.sections.flatMap((section) =>
+    section.fields.flatMap((field) => (marked.has(field.key) && "label" in field ? [field.label[locale]] : [])),
+  );
   return (
     <section className="space-y-4" aria-label={t("title")}>
       <FormRenderer
@@ -170,6 +175,16 @@ export function WorkItemAnswers({ locale }: { locale: Locale }) {
         <p role="status" className="text-sm text-muted">
           {form.message}
         </p>
+      )}
+      {toFix.length > 0 && (
+        <div role="alert" className="text-sm">
+          <p className="font-medium">{t("toFix")}</p>
+          <ul className="list-disc ps-6">
+            {toFix.map((label) => (
+              <li key={label}>{label}</li>
+            ))}
+          </ul>
+        </div>
       )}
       {form.editable && (
         <Button variant="secondary" disabled={form.pending || !form.dirty} onClick={() => void form.save()}>

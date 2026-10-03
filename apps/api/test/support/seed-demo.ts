@@ -1,6 +1,7 @@
 import { createDb } from "@rabaed/db";
 import { testDatabaseUrls } from "@rabaed/db/test-support";
 import { buildApp } from "../../src/app.ts";
+import { createFileStore, ensureLocalBucket, fileStoreSettingsFromEnv } from "../../src/documents/file-store.ts";
 import { ensureDemo } from "../../src/demo/ensure.ts";
 import { DEFAULT_PASSWORD, testConfig } from "./harness.ts";
 
@@ -16,7 +17,16 @@ export default async function setup(): Promise<void> {
   const db = createDb(urls.app, { max: 2 });
   const adminDb = createDb(urls.admin, { max: 1 });
   try {
-    await ensureDemo({ migrator, admin: adminDb }, () => buildApp({ db, config: testConfig, logger: false }), DEFAULT_PASSWORD);
+    // The local file store (docker-compose.yml, ci.yml), for the datasheet attached to a MAR.
+    const settings = fileStoreSettingsFromEnv();
+    await ensureLocalBucket(settings);
+    const files = createFileStore(settings);
+    await ensureDemo(
+      { migrator, admin: adminDb },
+      () => buildApp({ db, config: testConfig, logger: false, files }),
+      DEFAULT_PASSWORD,
+      { files: true },
+    );
   } finally {
     await Promise.all([migrator.destroy(), db.destroy(), adminDb.destroy()]);
   }

@@ -106,6 +106,10 @@ System Fields   Attachments · Links
 
 **Signatures are never Form fields.** They come only from signing Transitions ([ADR 0003](adr/0003-docusign-grade-signing-not-legally-qualified.md)).
 
+### 2.2 The MAR Form Version 1 (as built, RP-272)
+
+The part-1 MAR is a Rabaed Default written as data (migration `mar_quantity` completes the Version the skeleton shipped): Manufacturer (text, required), Model (text), Quantity (`number`, unit `pcs`, 0 or more, two decimals), Specification section (text) and Description (textarea, required), with Trade, Location and Scopes as Built-in Fields among them, and the Attachments System Field below. The table of items, named attachment fields and the supplier pick list are Version 2 (part 2). The demo seeds its MARs through this Form (README, "Demo: the MAR journey"). Send for Review with the Form incomplete is refused with `form_incomplete`; the page marks each field and lists them by label.
+
 ---
 
 ## 3. Checklists

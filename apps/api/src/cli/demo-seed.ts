@@ -10,6 +10,7 @@ import { fileURLToPath } from "node:url";
 import { assertLocalDatabases, createDb, databaseUrlsFromEnv } from "@rabaed/db";
 import { buildApp } from "../app.ts";
 import { apiConfigFromEnv } from "../config.ts";
+import { createFileStore, ensureLocalBucket, fileStoreSettingsFromEnv } from "../documents/file-store.ts";
 import { seedDemo } from "../demo/seed.ts";
 
 const passwordFile = fileURLToPath(new URL("../../../../.env.demo", import.meta.url));
@@ -41,9 +42,12 @@ const password = demoPassword();
 const db = createDb(urls.app, { max: 2 });
 const adminDb = createDb(urls.admin, { max: 1 });
 const migrator = createDb(urls.migrator, { max: 1 });
-const app = await buildApp({ db, config: apiConfigFromEnv(), logger: false });
+// The local file store (Docker), for the datasheet attached to a MAR.
+const fileStoreSettings = fileStoreSettingsFromEnv();
+if (fileStoreSettings.endpoint) await ensureLocalBucket(fileStoreSettings);
+const app = await buildApp({ db, config: apiConfigFromEnv(), logger: false, files: createFileStore(fileStoreSettings) });
 try {
-  const seed = await seedDemo(app, { migrator, admin: adminDb }, password);
+  const seed = await seedDemo(app, { migrator, admin: adminDb }, password, { files: true });
   console.log(`\nDemo Projects "Riyadh Gate Tower – Phase 2" and "Jeddah Corniche Villas" seeded. Everyone signs in with the password in .env.demo.\n`);
   const rows = [seed.engineer, ...seed.people].map((p) => [p.company, p.label, p.name.en, p.email]);
   const widths = [0, 1, 2].map((i) => Math.max(...rows.map((r) => r[i]!.length)));
