@@ -7,6 +7,7 @@ import type { FastifyInstance, LightMyRequestResponse } from "fastify";
 import { expect } from "vitest";
 import { buildApp, SESSION_COOKIE } from "../../src/app.ts";
 import type { ApiConfig } from "../../src/config.ts";
+import { createFileStore, ensureLocalBucket, fileStoreSettingsFromEnv } from "../../src/documents/file-store.ts";
 
 export const HOUR = 3_600_000;
 
@@ -28,6 +29,7 @@ export const testConfig: ApiConfig = {
   invitationTtlMs: 72 * HOUR,
   cookieSecure: true,
   version: "0123abc",
+  documents: { maxBytes: 1024 * 1024, contentTypes: ["application/pdf", "image/png", "text/plain"] },
 };
 
 type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
@@ -147,7 +149,11 @@ function expectStatus(res: LightMyRequestResponse, status: number, what: string)
   if (res.statusCode !== status) throw new Error(`${what}: expected ${status}, got ${res.statusCode} ${res.body}`);
 }
 
-export async function createTestApi(options: { databaseUrl?: string } = {}): Promise<TestApi> {
+/**
+ * `files`: the suite uploads and downloads Documents, through the local file
+ * store (FILE_STORE_ENDPOINT; docker-compose.yml locally, ci.yml in CI).
+ */
+export async function createTestApi(options: { databaseUrl?: string; files?: boolean } = {}): Promise<TestApi> {
   const urls = testDatabaseUrls();
   const db = createDb(options.databaseUrl ?? urls.app);
   // Rabaed Admin's connection, for onboarding only: the customer api has none (ADR 0010).
@@ -155,7 +161,13 @@ export async function createTestApi(options: { databaseUrl?: string } = {}): Pro
   const migratorDb = createDb(urls.migrator, { max: 1 });
   let offset = 0;
   const now = () => new Date(Date.now() + offset);
-  const app = await buildApp({ db, config: testConfig, now, logger: false });
+  let files;
+  if (options.files) {
+    const settings = fileStoreSettingsFromEnv();
+    await ensureLocalBucket(settings);
+    files = createFileStore(settings);
+  }
+  const app = await buildApp({ db, config: testConfig, now, logger: false, ...(files ? { files } : {}) });
 
   // One Engineer per TestApi does every onboarding.
   let engineerId: string | undefined;

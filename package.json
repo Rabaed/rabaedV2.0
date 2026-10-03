@@ -6,11 +6,11 @@
     "node": ">=24.7"
   },
   "scripts": {
-    "dev": "docker compose up -d --wait db mailpit && pnpm db:setup && pnpm dev:apps",
+    "dev": "docker compose up -d --wait db mailpit files && pnpm db:setup && pnpm dev:apps",
     "dev:apps": "pnpm --parallel --filter @rabaed/api --filter @rabaed/web --filter @rabaed/worker --filter @rabaed/admin run dev",
     "lane:env": "node scripts/lane-env.mjs",
     "db:setup": "pnpm --filter @rabaed/db run setup",
-    "demo": "docker compose up -d --wait db mailpit && pnpm db:reset && pnpm demo:seed && pnpm dev:apps",
+    "demo": "docker compose up -d --wait db mailpit files && pnpm db:reset && pnpm demo:seed && pnpm dev:apps",
     "demo:seed": "pnpm --filter @rabaed/api run demo:seed",
     "db:reset": "pnpm --filter @rabaed/db run reset",
     "lint": "eslint .",
