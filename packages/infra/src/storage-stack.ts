@@ -21,8 +21,8 @@ export const FONTS_PREFIX = "fonts/";
 //
 // - Project files: encrypted with the storage key. Only the api's task role
 //   can read or write objects, only under projects/, and the bucket policy
-//   refuses everyone else, administrators included. Browsers get files
-//   through signed URLs the api creates, refused once 15 minutes old.
+//   refuses everyone else, administrators included. Browsers upload and get
+//   files through signed URLs the api creates, refused once 15 minutes old.
 // - Build assets: private files the build needs. The setup wizard uploads
 //   the licensed Thmanyah fonts under fonts/; the deploy workflow, which
 //   builds the images, may read that prefix and nothing else (RP-211).
@@ -83,6 +83,15 @@ export class StorageStack extends Stack {
         serverAccessLogsPrefix: logPrefix,
       });
     this.projectFiles = encryptedBucket("ProjectFiles", "project-files/");
+    // Browsers upload and download Documents straight to and from the bucket,
+    // with the api's signed URLs (RP-269): only from the customer web's address,
+    // the domain once there is one, else the load balancer's (app stack).
+    this.projectFiles.addCorsRule({
+      allowedOrigins: [config.domain ? `https://${config.domain}` : `https://*.${this.region}.elb.amazonaws.com`],
+      allowedMethods: [s3.HttpMethods.PUT, s3.HttpMethods.GET],
+      allowedHeaders: ["content-type"],
+      maxAge: 600,
+    });
     this.buildAssets = encryptedBucket("BuildAssets", "build-assets/");
 
     // By name, not by reference: the api's role lives in the app stack, which

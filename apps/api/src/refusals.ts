@@ -42,6 +42,12 @@ const answers = {
   // A new Form Version, or new answers, arrived while the command ran: try again.
   form_version_not_latest: () => new HttpError(409, "form_version_not_latest"),
   form_not_checked: () => new HttpError(409, "form_not_checked"),
+  // Documents (RP-269).
+  file_too_large: () => new HttpError(422, "file_too_large"),
+  content_type_not_allowed: () => new HttpError(422, "content_type_not_allowed"),
+  not_uploaded: () => new HttpError(409, "not_uploaded"),
+  upload_mismatch: () => new HttpError(409, "upload_mismatch"),
+  document_frozen: () => new HttpError(409, "document_frozen"),
 } satisfies Record<string, () => HttpError>;
 
 export type RefusalReason = keyof typeof answers;

@@ -9,10 +9,12 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import type { ApiConfig } from "./config.ts";
+import { noFileStore, type FileStore } from "./documents/file-store.ts";
 import { HttpError, notSignedIn } from "./http-error.ts";
 import { resolveSession, type Principal, type Session } from "./identity/sessions.ts";
 import { loggerOptions } from "./logging.ts";
 import { companyRoutes } from "./routes/companies.ts";
+import { documentRoutes } from "./routes/documents.ts";
 import { healthRoutes } from "./routes/health.ts";
 import { memberRoutes } from "./routes/members.ts";
 import { notificationRoutes } from "./routes/notifications.ts";
@@ -41,6 +43,8 @@ export interface AppOptions {
   /** Connects as rabaed_app: row-level security applies. */
   db: Db;
   config: ApiConfig;
+  /** Where Documents' files live; the only signer of their URLs. Left out where nothing uploads (the demo seed). */
+  files?: FileStore;
   /** The current time; tests move it to check expiry. */
   now?: () => Date;
   logger?: boolean;
@@ -50,6 +54,7 @@ export interface AppOptions {
 export interface AppContext {
   db: Db;
   config: ApiConfig;
+  files: FileStore;
   now: () => Date;
   /** The signed-in Member's id, or a 401. */
   requireMember(request: FastifyRequest): string;
@@ -60,6 +65,7 @@ export interface AppContext {
 export async function buildApp({
   db,
   config,
+  files = noFileStore,
   now = () => new Date(),
   logger = true,
 }: AppOptions): Promise<FastifyInstance> {
@@ -94,6 +100,7 @@ export async function buildApp({
   const context: AppContext = {
     db,
     config,
+    files,
     now,
     requireMember(request) {
       if (!request.principal) throw notSignedIn();
@@ -116,6 +123,7 @@ export async function buildApp({
   await app.register(visibilityRoutes(context));
   await app.register(scopeRoutes(context));
   await app.register(workItemRoutes(context));
+  await app.register(documentRoutes(context));
   await app.register(notificationRoutes(context));
   return app;
 }

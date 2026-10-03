@@ -86,9 +86,22 @@ describe("Project files", () => {
     });
   });
 
+  it("lets browsers PUT and GET Documents with those URLs from the customer web's address only (RP-269)", () => {
+    const cors = (template: typeof storage) =>
+      render(Object.values(template.findResources("AWS::S3::Bucket")).find((b) => (b as Resource).Properties?.CorsConfiguration));
+    const rule = (bucket: unknown) => (bucket as Resource).Properties!.CorsConfiguration as { CorsRules: Record<string, unknown>[] };
+    expect(rule(buckets.ProjectFiles).CorsRules).toEqual([
+      expect.objectContaining({ AllowedMethods: ["PUT", "GET"], AllowedHeaders: ["content-type"] }),
+    ]);
+    expect(JSON.stringify(rule(buckets.ProjectFiles).CorsRules[0]!.AllowedOrigins)).toContain(".elb.amazonaws.com");
+    const withDomain = environmentTemplates({ ...environments.dev, domain: "dev.example.test" }).template("storage");
+    expect(rule(cors(withDomain)).CorsRules[0]!.AllowedOrigins).toEqual(["https://dev.example.test"]);
+    expect(buckets.BuildAssets?.Properties?.CorsConfiguration).toBeUndefined();
+  });
+
   it("only the api task role is granted object access, and only under projects/", () => {
     const projectBucket = bucketLogicalId("ProjectFiles");
-    const grants: { role: string; resources: unknown[] }[] = [];
+    const grants: { role: string; actions: string[]; resources: unknown[] }[] = [];
     for (const part of Object.keys(stackNames(environments.dev)) as (keyof ReturnType<typeof stackNames>)[]) {
       for (const policy of Object.values(env.template(part).findResources("AWS::IAM::Policy")) as Resource[]) {
         for (const statement of (policy.Properties?.PolicyDocument as { Statement: Statement[] }).Statement) {
@@ -96,14 +109,25 @@ describe("Project files", () => {
           const onProjectFiles = references(statement.Resource).some((ref) => env.tryResolve(ref, part)?.logicalId === projectBucket);
           if (!onProjectFiles) continue;
           for (const role of policy.Properties?.Roles as unknown[]) {
-            grants.push({ role: String(env.resolve(role, part).resource.Properties?.RoleName), resources: [statement.Resource].flat() });
+            grants.push({
+              role: String(env.resolve(role, part).resource.Properties?.RoleName),
+              actions: actions(statement),
+              resources: [statement.Resource].flat(),
+            });
           }
         }
       }
     }
-    expect(grants.map((g) => g.role)).toEqual(["rabaed-dev-api-task"]);
-    // ADR 0007: object keys start with the Project; the api's grant covers that prefix only.
-    for (const resource of grants[0]!.resources) expect(String(render(resource))).toMatch(/\/projects\/\*$/);
+    expect([...new Set(grants.map((g) => g.role))]).toEqual(["rabaed-dev-api-task"]);
+    // ADR 0007: object keys start with the Project; the api's object grants cover that prefix only.
+    const isList = (g: { actions: string[] }) => g.actions.includes("s3:ListBucket");
+    for (const resource of grants.filter((g) => !isList(g)).flatMap((g) => g.resources)) {
+      expect(String(render(resource))).toMatch(/\/projects\/\*$/);
+    }
+    // And listing, on the bucket itself, so a file not uploaded yet answers 404 rather than 403 (RP-269).
+    const lists = grants.filter(isList);
+    expect(lists.map((g) => g.actions)).toEqual([["s3:ListBucket"]]);
+    expect(env.resolve(lists[0]!.resources[0], "app").logicalId).toBe(projectBucket);
   });
 });
 
