@@ -72,7 +72,13 @@ async function ok(res: Promise<LightMyRequestResponse>, status = 204) {
 }
 
 type Person = { id: string; caller: Caller; name: { en: string; ar: string } };
-type Party = { participantId: string; name: { en: string; ar: string }; member(positions: string[]): Promise<Person> };
+type Party = {
+  participantId: string;
+  name: { en: string; ar: string };
+  /** Its Authorized Person. */
+  ap: Caller;
+  member(positions: string[]): Promise<Person>;
+};
 
 let projectId = "";
 let electrical = "";
@@ -114,7 +120,7 @@ async function participant(name: string, role: BaseRole): Promise<Party> {
   const { onboarded, caller } = await company(name);
   const participantId = await api.addParticipant(ow.admin, projectId, onboarded, role);
   await ok(ow.admin.request("PUT", `/v1/participants/${participantId}/visibility`, { trade: all, location: all }));
-  return { participantId, name: bilingual(name), member: memberOf(caller, participantId) };
+  return { participantId, name: bilingual(name), ap: caller, member: memberOf(caller, participantId) };
 }
 
 const choices = async (by: Caller, url: string): Promise<FormChoices> => (await ok(by.get(url), 200)).json();
@@ -137,7 +143,7 @@ beforeAll(async () => {
     .json()
     .participants.find((p: { isOwnCompany: boolean }) => p.isOwnCompany).id;
   await ok(host.caller.request("PUT", `/v1/participants/${own}/visibility`, { trade: all, location: all }));
-  ow = { participantId: own, name: bilingual("OW Holding"), member: memberOf(host.caller, own), admin: host.caller,
+  ow = { participantId: own, name: bilingual("OW Holding"), ap: host.caller, member: memberOf(host.caller, own), admin: host.caller,
     adminId: host.onboarded.authorizedPerson.id };
   electrical = (await ow.admin.post(`/v1/projects/${projectId}/trades`, { code: "EL", name: bilingual("Electrical") })).json().id;
 
@@ -234,6 +240,17 @@ describe("saving an id the filler wasn't offered", () => {
       body: { error: "invalid_answers", fields: [{ key: "supplier", code: "unknown_option" }] },
     });
     expect((await detail(engineer.caller, id)).answers).toEqual({ site_engineer: pm.id });
+  });
+
+  it("is not asked of an answer already saved: a Member who has since left the Project stays, and can't be chosen again", async () => {
+    const leaver = await c1.member([]);
+    const id = (await ok(createDraft(engineer.caller, { site_engineer: leaver.id }), 201)).json().id;
+    await ok(c1.ap.delete(`/v1/participants/${c1.participantId}/members/${leaver.id}`));
+    await ok(engineer.caller.request("PUT", `/v1/work-items/${id}/answers`, { answers: { site_engineer: leaver.id, manufacturer: "ACME" } }));
+    expect((await refusal(createDraft(engineer.caller, { site_engineer: leaver.id }))).body).toEqual({
+      error: "invalid_answers",
+      fields: [{ key: "site_engineer", code: "unknown_option" }],
+    });
   });
 });
 

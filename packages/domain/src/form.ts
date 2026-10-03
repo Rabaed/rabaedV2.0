@@ -106,12 +106,17 @@ export type FormChoice = z.infer<typeof formChoice>;
 export const formChoices = z.object({ members: z.array(formChoice), participants: z.array(formChoice) });
 export type FormChoices = z.infer<typeof formChoices>;
 
-/** The ids of `choices`, as the validator takes them. */
-export function offeredChoices(choices: FormChoices): OfferedChoices {
-  return {
-    members: new Set(choices.members.map((m) => m.id)),
-    participants: new Set(choices.participants.map((p) => p.id)),
-  };
+/** The ids of `choices`, as the validator takes them, with `saved` answers' ids (still taken once saved). */
+export function offeredChoices(choices: FormChoices, schema?: FormSchema, saved: Record<string, unknown> = {}): OfferedChoices {
+  const members = new Set(choices.members.map((m) => m.id));
+  const participants = new Set(choices.participants.map((p) => p.id));
+  for (const field of schema ? formFields(schema) : []) {
+    const value = saved[field.key];
+    if (typeof value !== "string") continue;
+    if (field.type === "member") members.add(value);
+    if (field.type === "participant") participants.add(value);
+  }
+  return { members, participants };
 }
 
 /**
@@ -142,8 +147,8 @@ export type FieldError = z.infer<typeof fieldError>;
 
 /**
  * The ids a `member` or `participant` field may take for this filler: those the
- * API offered them (form choices). The server always passes them; without them
- * (in the browser) any id is taken, and the server decides.
+ * API offered them (form choices), and on the server those already saved.
+ * Without them (complete mode, after the answers were saved) any id is taken.
  */
 export type OfferedChoices = { members: ReadonlySet<string>; participants: ReadonlySet<string> };
 

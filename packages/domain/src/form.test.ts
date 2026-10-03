@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formSchema, validateAnswers, type FormSchema } from "./form.ts";
+import { formSchema, offeredChoices, validateAnswers, type FormSchema } from "./form.ts";
 
 const label = (en: string) => ({ en, ar: en });
 
@@ -334,6 +334,16 @@ describe("member and participant fields (RP-266)", () => {
         { key: "site_engineer", code: "unknown_option" },
         { key: "supplier", code: "wrong_type" },
       ],
+    });
+  });
+
+  it("keep an id already saved, even once it is no longer offered, but take no other new one", () => {
+    const choices = { members: [], participants: [{ id: ownParticipant, name: label("C1") }] };
+    const offered = offeredChoices(choices, people, { site_engineer: otherMember, note: ownMember });
+    expect(validateAnswers(people, { site_engineer: otherMember }, "draft", offered).ok).toBe(true);
+    expect(validateAnswers(people, { site_engineer: ownMember }, "draft", offered)).toEqual({
+      ok: false,
+      errors: [{ key: "site_engineer", code: "unknown_option" }],
     });
   });
 

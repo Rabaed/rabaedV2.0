@@ -129,6 +129,20 @@ describe("app.work_item_named_answers", () => {
     ]);
   });
 
+  it("names no Company the caller may not see, nor its Member", async () => {
+    // Written as the owner: the API never offers these, but the function mustn't rely on it.
+    const hidden = { who: b.ap, through: b.participantId };
+    await migrator.query("update work_item set data = $1 where id = $2", [JSON.stringify(hidden), a.itemId]);
+    try {
+      expect(await named(a.ap, a.itemId)).toEqual([
+        { field_key: "through", field_type: "participant", company_name: null, member_name: null },
+        { field_key: "who", field_type: "member", company_name: null, member_name: null },
+      ]);
+    } finally {
+      await migrator.query("update work_item set data = $1 where id = $2", [JSON.stringify({ who: a.ap, through: a.participantId }), a.itemId]);
+    }
+  });
+
   it("answers nothing for an item the caller can't see", async () => {
     expect(await named(b.ap, a.itemId)).toEqual([]);
   });

@@ -78,7 +78,7 @@ export function WorkItemFormProvider({
     setDirty(true);
     setMessage(null);
     // Instant feedback with the same checks the server runs (draft mode: types only).
-    const checked = validateAnswers(schema, next, "draft", offeredChoices(choices));
+    const checked = validateAnswers(schema, next, "draft", offeredChoices(choices, schema, saved));
     setErrors(checked.ok ? [] : checked.errors);
   }
 
