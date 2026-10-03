@@ -1,6 +1,6 @@
 "use client";
 
-import { validateAnswers, type FieldError, type FormValue, type FormVersion, type Locale } from "@rabaed/domain";
+import { formVisibility, validateAnswers, type FieldError, type FormValue, type FormVersion, type Locale } from "@rabaed/domain";
 import { Button, Field, FormRenderer, Input, Select } from "@rabaed/ui";
 import { useTranslations } from "next-intl";
 import { useState, type FormEvent } from "react";
@@ -58,7 +58,8 @@ export function CreateWorkItemForm({
           title: data.get("title"),
           tradeId: data.get("tradeId"),
           locationId: data.get("locationId") === NO_LOCATION ? null : data.get("locationId"),
-          answers,
+          // Hidden fields' answers are cleared on save, here as on the server.
+          answers: formVisibility(form.schema, answers).answers,
         }),
       });
       if (res.status === 201) {

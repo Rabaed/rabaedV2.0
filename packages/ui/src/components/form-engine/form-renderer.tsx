@@ -4,12 +4,17 @@ import {
   defaultMaxLength,
   formatFormValue,
   formatNumber,
-  formFields,
+  answerFields,
+  formVisibility,
+  isAnswerField,
+  isRequired,
   isUnanswered,
   fromProjectWallTime,
   toProjectWallTime,
+  type AnswerField,
   type FieldError,
   type FormField,
+  type LayoutField,
   type FormOption,
   type FormSchema,
   type FormValue,
@@ -85,7 +90,7 @@ export type FormRendererProps = {
   className?: string;
 };
 
-function errorText(field: FormField, error: FieldError, locale: Locale): string {
+function errorText(field: AnswerField, error: FieldError, locale: Locale): string {
   const text = copy[locale];
   switch (error.code) {
     case "required":
@@ -116,7 +121,7 @@ const optionsOf = (field: { options: FormOption[] }, locale: Locale) =>
 
 /** One field's control, and whether its Field labels a group (radios, checkboxes) rather than one control. */
 function control(
-  field: FormField,
+  field: AnswerField,
   value: unknown,
   locale: Locale,
   change: (value: FormValue | undefined) => void,
@@ -195,10 +200,35 @@ function control(
   }
 }
 
+/** A layout field: a heading, a paragraph of instructions, or a divider. Display only. */
+function Layout({ field, locale }: { field: LayoutField; locale: Locale }) {
+  switch (field.type) {
+    case "heading":
+      return <h4 className="pt-2 text-body font-semibold text-text">{field.text[locale]}</h4>;
+    case "instructions":
+      return <p className="text-body whitespace-pre-wrap text-muted">{field.text[locale]}</p>;
+    case "divider":
+      return <hr className="border-border" />;
+  }
+}
+
+/** Splits fields into runs: each layout field alone, consecutive answer fields together (one list each). */
+function runs(fields: FormField[]): (LayoutField | AnswerField[])[] {
+  const out: (LayoutField | AnswerField[])[] = [];
+  for (const field of fields) {
+    const last = out.at(-1);
+    if (!isAnswerField(field)) out.push(field);
+    else if (Array.isArray(last)) last.push(field);
+    else out.push([field]);
+  }
+  return out;
+}
+
 /**
- * A Form: its sections in order, each with its fields. In edit mode every field
- * is a labelled control with its help and error; in read mode, a list of labels
- * and answers.
+ * A Form: its sections in order, each with its fields, showing only the
+ * sections and fields whose `visible_if` holds for the answers now. In edit
+ * mode every field is a labelled control with its help and error; in read
+ * mode, a list of labels and answers. Layout fields show in both.
  */
 export function FormRenderer({
   schema,
@@ -211,10 +241,11 @@ export function FormRenderer({
   className,
 }: FormRendererProps) {
   const fieldId = (key: string) => `${idPrefix}-${key}`;
-  const byKey = new Map(formFields(schema).map((f) => [f.key, f]));
+  const byKey = new Map(answerFields(schema).map((f) => [f.key, f]));
+  const visibility = formVisibility(schema, answers);
   const errorOf = (key: string) => errors.find((e) => e.key === key);
-  // Only errors of fields on this Form can be shown and linked.
-  const shown = mode === "edit" ? errors.filter((e) => byKey.has(e.key)) : [];
+  // Only errors of fields shown on this Form can be shown and linked.
+  const shown = mode === "edit" ? errors.filter((e) => byKey.has(e.key) && visibility.fields.has(e.key)) : [];
 
   return (
     <div className={cn("flex flex-col gap-6", className)}>
@@ -236,6 +267,8 @@ export function FormRenderer({
         </div>
       )}
       {schema.sections.map((section) => {
+        if (!visibility.sections.has(section.key)) return null;
+        const fields = section.fields.filter((f) => visibility.fields.has(f.key));
         const headingId = `${idPrefix}-section-${section.key}`;
         return (
           <section key={section.key} aria-labelledby={headingId} className="flex flex-col gap-4">
@@ -243,7 +276,8 @@ export function FormRenderer({
               {section.title[locale]}
             </h3>
             {mode === "edit" ? (
-              section.fields.map((field) => {
+              fields.map((field) => {
+                if (!isAnswerField(field)) return <Layout key={field.key} field={field} locale={locale} />;
                 const error = errorOf(field.key);
                 const { element, group } = control(field, answers[field.key], locale, (value) => onChange?.(field.key, value));
                 return (
@@ -253,7 +287,7 @@ export function FormRenderer({
                     label={field.label[locale]}
                     help={field.help?.[locale]}
                     error={error && errorText(field, error, locale)}
-                    required={field.required}
+                    required={isRequired(field, visibility.answers)}
                     group={group}
                   >
                     {element}
@@ -261,20 +295,26 @@ export function FormRenderer({
                 );
               })
             ) : (
-              <dl className="flex flex-col gap-4">
-                {section.fields.map((field) => {
-                  const value = answers[field.key];
-                  return (
-                    <div key={field.key} className="flex flex-col gap-1">
-                      <dt className="text-sm font-medium text-muted">{field.label[locale]}</dt>
-                      {/* The answer keeps its own direction, but lines up with the page's. */}
-                      <dd className={cn("text-body", isUnanswered(value) ? "text-muted" : "whitespace-pre-wrap text-text")}>
-                        {isUnanswered(value) ? copy[locale].unanswered : <bdi>{formatFormValue(field, value, locale)}</bdi>}
-                      </dd>
-                    </div>
-                  );
-                })}
-              </dl>
+              runs(fields).map((run) =>
+                Array.isArray(run) ? (
+                  <dl key={run[0]!.key} className="flex flex-col gap-4">
+                    {run.map((field) => {
+                      const value = answers[field.key];
+                      return (
+                        <div key={field.key} className="flex flex-col gap-1">
+                          <dt className="text-sm font-medium text-muted">{field.label[locale]}</dt>
+                          {/* The answer keeps its own direction, but lines up with the page's. */}
+                          <dd className={cn("text-body", isUnanswered(value) ? "text-muted" : "whitespace-pre-wrap text-text")}>
+                            {isUnanswered(value) ? copy[locale].unanswered : <bdi>{formatFormValue(field, value, locale)}</bdi>}
+                          </dd>
+                        </div>
+                      );
+                    })}
+                  </dl>
+                ) : (
+                  <Layout key={run.key} field={run} locale={locale} />
+                ),
+              )
             )}
           </section>
         );

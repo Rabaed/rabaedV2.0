@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { bilingualText } from "./company.ts";
+import { condition, evaluateCondition, isUnanswered } from "./condition.ts";
 
 // The Form engine's schema and its one validator (form-engine.md §1, §8; ADR 0006).
 // The same code runs in the browser, for instant feedback, and on the server, as
@@ -11,12 +12,19 @@ export const formKey = z.string().regex(/^[a-z][a-z0-9_]*$/).max(64);
 
 const helpText = z.object({ en: z.string().trim().min(1).max(1000), ar: z.string().trim().min(1).max(1000) });
 
+/** Shown only while this condition holds; hidden fields aren't checked, and their answers are cleared on save. */
+const visibleIf = condition.optional();
+
 const fieldBase = {
   key: formKey,
   label: bilingualText,
   help: helpText.optional(),
-  required: z.boolean().default(false),
+  /** Always, never, or while a condition holds (checked only when the field is shown). */
+  required: z.union([z.boolean(), condition]).default(false),
+  visible_if: visibleIf,
 };
+
+const layoutBase = { key: formKey, visible_if: visibleIf };
 
 /** The longest value each text type takes when its field sets no `maxLength`. */
 export const defaultMaxLength = { text: 500, textarea: 4000 } as const;
@@ -48,14 +56,29 @@ export const formField = z.discriminatedUnion("type", [
   z.object({ ...fieldBase, type: z.literal("select"), options: formOptions }),
   /** Any of the field's options, by value, in the order chosen. */
   z.object({ ...fieldBase, type: z.literal("multi_select"), options: formOptions }),
+  /** Layout, display only: a heading inside a section. */
+  z.object({ ...layoutBase, type: z.literal("heading"), text: bilingualText }),
+  /** Layout, display only: a paragraph of guidance for the filler. */
+  z.object({ ...layoutBase, type: z.literal("instructions"), text: helpText }),
+  /** Layout, display only: a line between groups of fields. */
+  z.object({ ...layoutBase, type: z.literal("divider") }),
 ]);
 export type FormField = z.infer<typeof formField>;
 export type FormFieldType = FormField["type"];
 
+const layoutTypes = ["heading", "instructions", "divider"] as const;
+export type LayoutField = Extract<FormField, { type: (typeof layoutTypes)[number] }>;
+/** A field that takes an answer: every type but the layout ones. */
+export type AnswerField = Exclude<FormField, LayoutField>;
+
+export function isAnswerField(field: FormField): field is AnswerField {
+  return !(layoutTypes as readonly string[]).includes(field.type);
+}
+
 /** A stored answer: text (also dates, times and a select's option), Yes/No, or a multi-select's options. */
 export type FormValue = string | boolean | string[];
 
-export const formSection = z.object({ key: formKey, title: bilingualText, fields: z.array(formField) });
+export const formSection = z.object({ key: formKey, title: bilingualText, visible_if: visibleIf, fields: z.array(formField) });
 export type FormSection = z.infer<typeof formSection>;
 
 /** A Form Version's schema: its sections and their fields, in order. */
@@ -97,14 +120,58 @@ export type FieldError = z.infer<typeof fieldError>;
 
 export type ValidationResult = { ok: true; answers: Record<string, FormValue> } | { ok: false; errors: FieldError[] };
 
-/** Every field of the schema, in Form order. */
+/** Every field of the schema, layout included, in Form order. */
 export function formFields(schema: FormSchema): FormField[] {
   return schema.sections.flatMap((s) => s.fields);
 }
 
-/** No answer: nothing, empty text, or no option chosen. `false` is an answer (No). */
-export const isUnanswered = (value: unknown): boolean =>
-  value === undefined || value === null || value === "" || (Array.isArray(value) && value.length === 0);
+/** The fields that take answers, in Form order. */
+export function answerFields(schema: FormSchema): AnswerField[] {
+  return formFields(schema).filter(isAnswerField);
+}
+
+/** What is shown for a set of answers: section and field keys, and the shown fields' answers. */
+export type FormVisibility = {
+  sections: ReadonlySet<string>;
+  fields: ReadonlySet<string>;
+  /** The answers of shown fields only: what a save keeps. */
+  answers: Record<string, unknown>;
+};
+
+/**
+ * Which sections and fields are shown for `answers` (`visible_if`). A hidden
+ * field reads as cleared, so a field that depends on it is worked out without
+ * its answer: the check repeats until nothing changes (the publish checks keep
+ * conditions free of cycles; the repeats are bounded anyway).
+ */
+export function formVisibility(schema: FormSchema, answers: Readonly<Record<string, unknown>>): FormVisibility {
+  const fields = formFields(schema);
+  const shownWith = (current: Record<string, unknown>) => {
+    const holds = (rule: FormField["visible_if"]) => !rule || evaluateCondition(rule, { fields: current });
+    const sections = new Set(schema.sections.filter((s) => holds(s.visible_if)).map((s) => s.key));
+    const shown = new Set(
+      schema.sections.filter((s) => sections.has(s.key)).flatMap((s) => s.fields.filter((f) => holds(f.visible_if)).map((f) => f.key)),
+    );
+    return { sections, fields: shown };
+  };
+  const keep = (shown: ReadonlySet<string>) =>
+    Object.fromEntries(Object.entries(answers).filter(([key]) => !fields.some((f) => f.key === key) || shown.has(key)));
+
+  let visibility = shownWith({ ...answers });
+  for (let i = 0; i <= fields.length; i++) {
+    const next = shownWith(keep(visibility.fields));
+    const same = next.fields.size === visibility.fields.size && [...next.fields].every((k) => visibility.fields.has(k));
+    visibility = next;
+    if (same) break;
+  }
+  return { ...visibility, answers: keep(visibility.fields) };
+}
+
+/** Whether a field must be answered now: `required` itself, or its condition over `answers`. */
+export function isRequired(field: FormField, answers: Readonly<Record<string, unknown>>): boolean {
+  if (!isAnswerField(field)) return false;
+  return typeof field.required === "boolean" ? field.required : evaluateCondition(field.required, { fields: answers });
+}
 
 const isoDate = /^(\d{4})-(\d{2})-(\d{2})$/;
 const isoTime = /^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/;
@@ -124,13 +191,13 @@ export function isIsoValue(type: "date" | "datetime" | "time", value: string): b
 }
 
 /** What is wrong with one field's (non-empty) value, or null when nothing is. */
-function checkValue(field: FormField, value: unknown, mode: ValidationMode): FieldErrorCode | null {
+function checkValue(field: AnswerField, value: unknown, required: boolean): FieldErrorCode | null {
   switch (field.type) {
     case "text":
     case "textarea":
       if (typeof value !== "string") return "wrong_type";
       if (value.length > (field.maxLength ?? defaultMaxLength[field.type])) return "too_long";
-      return mode === "complete" && field.required && value.trim() === "" ? "required" : null;
+      return required && value.trim() === "" ? "required" : null;
     case "date":
     case "datetime":
     case "time":
@@ -153,25 +220,29 @@ function checkValue(field: FormField, value: unknown, mode: ValidationMode): Fie
 
 /**
  * Checks `answers` against a Form Version's schema in `mode`. On success it
- * answers with the values to store: exactly as typed, empty ones dropped. On
- * failure, one error per field, in Form order, then answers to unknown fields.
+ * answers with the values to store: exactly as typed, empty ones and hidden
+ * fields' dropped (a hidden field is cleared, never checked). On failure, one
+ * error per shown field, in Form order, then answers to unknown fields.
  */
 export function validateAnswers(schema: FormSchema, answers: unknown, mode: ValidationMode): ValidationResult {
   if (typeof answers !== "object" || answers === null || Array.isArray(answers)) {
     return { ok: false, errors: [{ key: "", code: "wrong_type" }] };
   }
   const given = answers as Record<string, unknown>;
-  const fields = formFields(schema);
+  const fields = answerFields(schema);
+  const visibility = formVisibility(schema, given);
   const errors: FieldError[] = [];
   const clean: Record<string, FormValue> = {};
 
   for (const field of fields) {
+    if (!visibility.fields.has(field.key)) continue;
+    const required = mode === "complete" && isRequired(field, visibility.answers);
     const value = given[field.key];
     if (isUnanswered(value)) {
-      if (mode === "complete" && field.required) errors.push({ key: field.key, code: "required" });
+      if (required) errors.push({ key: field.key, code: "required" });
       continue;
     }
-    const code = checkValue(field, value, mode);
+    const code = checkValue(field, value, required);
     if (code) errors.push({ key: field.key, code });
     else clean[field.key] = value as FormValue;
   }

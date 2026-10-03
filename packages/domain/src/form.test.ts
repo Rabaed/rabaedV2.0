@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formSchema, validateAnswers, type FormSchema } from "./form.ts";
+import { answerFields, formFields, formSchema, formVisibility, isRequired, validateAnswers, type FormSchema } from "./form.ts";
 
 const label = (en: string) => ({ en, ar: en });
 
@@ -281,5 +281,137 @@ describe("formSchema for choice fields", () => {
         ]),
       ).success,
     ).toBe(false);
+  });
+});
+
+// Layout fields and conditions (RP-267; form-engine.md §1).
+const conditional: FormSchema = formSchema.parse({
+  sections: [
+    {
+      key: "sample",
+      title: label("Sample"),
+      fields: [
+        { key: "sample_heading", type: "heading", text: label("About the sample") },
+        { key: "sample_note", type: "instructions", text: label("Send the sample to site before the review.") },
+        { key: "sample_provided", type: "yes_no", label: label("Sample provided"), required: true },
+        {
+          key: "sample_reference",
+          type: "text",
+          label: label("Sample reference"),
+          required: true,
+          visible_if: { field: "sample_provided", op: "=", value: true },
+        },
+        { key: "sample_divider", type: "divider" },
+        {
+          key: "finish",
+          type: "select",
+          label: label("Finish"),
+          options: [
+            { value: "galvanised", label: label("Galvanised") },
+            { value: "other", label: label("Other") },
+          ],
+        },
+        // Shown always, required only for "Other".
+        { key: "finish_details", type: "text", label: label("Finish details"), required: { field: "finish", op: "=", value: "other" } },
+      ],
+    },
+    {
+      key: "lab",
+      title: label("Lab test"),
+      // The whole section, only with a sample.
+      visible_if: { field: "sample_provided", op: "=", value: true },
+      fields: [
+        { key: "lab_name", type: "text", label: label("Lab"), required: true },
+        // Hidden in turn when the lab is hidden: a chain.
+        { key: "lab_contact", type: "text", label: label("Lab contact"), visible_if: { field: "lab_name", op: "not_empty" } },
+      ],
+    },
+  ],
+});
+
+describe("layout fields", () => {
+  it("are part of the Form but take no answer", () => {
+    expect(answerFields(conditional).map((f) => f.key)).not.toContain("sample_heading");
+    expect(formFields(conditional).map((f) => f.key)).toContain("sample_divider");
+    expect(validateAnswers(conditional, { sample_heading: "x" }, "draft")).toEqual({
+      ok: false,
+      errors: [{ key: "sample_heading", code: "unknown_field" }],
+    });
+  });
+
+  it("need their text in both languages, except a divider", () => {
+    const layout = (field: unknown) => formSchema.safeParse({ sections: [{ key: "a", title: label("A"), fields: [field] }] }).success;
+    expect(layout({ key: "h", type: "heading", text: label("H") })).toBe(true);
+    expect(layout({ key: "h", type: "heading" })).toBe(false);
+    expect(layout({ key: "i", type: "instructions", text: { en: "Only English" } })).toBe(false);
+    expect(layout({ key: "d", type: "divider" })).toBe(true);
+  });
+});
+
+describe("formVisibility", () => {
+  it("shows a field or section only while its condition holds", () => {
+    const hidden = formVisibility(conditional, { sample_provided: false });
+    expect(hidden.fields.has("sample_reference")).toBe(false);
+    expect(hidden.sections.has("lab")).toBe(false);
+    expect(hidden.fields.has("lab_name")).toBe(false);
+    const shown = formVisibility(conditional, { sample_provided: true });
+    expect(shown.fields.has("sample_reference")).toBe(true);
+    expect(shown.sections.has("lab")).toBe(true);
+  });
+
+  it("reads a hidden field as cleared, so what depends on it hides too", () => {
+    // lab_name has a value, but its section is hidden: lab_contact hides with it.
+    const vis = formVisibility(conditional, { sample_provided: false, lab_name: "SGS" });
+    expect(vis.fields.has("lab_contact")).toBe(false);
+    expect(formVisibility(conditional, { sample_provided: true, lab_name: "SGS" }).fields.has("lab_contact")).toBe(true);
+  });
+
+  it("answers with only the shown fields' answers", () => {
+    expect(formVisibility(conditional, { sample_provided: false, sample_reference: "S-1", lab_name: "SGS" }).answers).toEqual({
+      sample_provided: false,
+    });
+  });
+});
+
+describe("validateAnswers with conditions", () => {
+  it("doesn't check a hidden field, and clears its answer", () => {
+    expect(validateAnswers(conditional, { sample_provided: false, sample_reference: ["not text"], lab_name: "SGS" }, "draft")).toEqual({
+      ok: true,
+      answers: { sample_provided: false },
+    });
+  });
+
+  it("checks a shown field as usual", () => {
+    expect(validateAnswers(conditional, { sample_provided: true, sample_reference: ["not text"] }, "draft")).toEqual({
+      ok: false,
+      errors: [{ key: "sample_reference", code: "wrong_type" }],
+    });
+  });
+
+  it("requires a field only while it is shown", () => {
+    expect(validateAnswers(conditional, { sample_provided: false }, "complete")).toEqual({ ok: true, answers: { sample_provided: false } });
+    expect(validateAnswers(conditional, { sample_provided: true }, "complete")).toEqual({
+      ok: false,
+      errors: [
+        { key: "sample_reference", code: "required" },
+        { key: "lab_name", code: "required" },
+      ],
+    });
+  });
+
+  it("requires a field when its required condition holds", () => {
+    expect(validateAnswers(conditional, { sample_provided: false, finish: "galvanised" }, "complete").ok).toBe(true);
+    expect(validateAnswers(conditional, { sample_provided: false, finish: "other" }, "complete")).toEqual({
+      ok: false,
+      errors: [{ key: "finish_details", code: "required" }],
+    });
+    // A draft still skips it.
+    expect(validateAnswers(conditional, { finish: "other" }, "draft").ok).toBe(true);
+  });
+
+  it("isRequired evaluates a required condition against the answers", () => {
+    const details = formFields(conditional).find((f) => f.key === "finish_details")!;
+    expect(isRequired(details, { finish: "other" })).toBe(true);
+    expect(isRequired(details, {})).toBe(false);
   });
 });
