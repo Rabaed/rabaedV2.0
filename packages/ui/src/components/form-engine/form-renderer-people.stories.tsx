@@ -32,6 +32,8 @@ const schema = formSchema.parse({
 const ids = {
   ahmed: "0199a3b0-0000-7000-8000-000000000001",
   sara: "0199a3b0-0000-7000-8000-000000000002",
+  hala: "0199a3b0-0000-7000-8000-000000000003",
+  nasser: "0199a3b0-0000-7000-8000-000000000004",
   c1: "0199a3b0-0000-7000-8000-000000000011",
   host: "0199a3b0-0000-7000-8000-000000000012",
 };
@@ -107,6 +109,33 @@ export const Edit: Story = {
     await userEvent.click(screen.getByRole("option", { name: storyText(context, copy.host) }));
     await waitFor(() => expect(screen.queryByRole("listbox")).toBeNull());
     await expect(args.onChange).toHaveBeenLastCalledWith({ supplied_through: ids.host });
+  },
+};
+
+/**
+ * Members sort in the viewer's language: Hala comes first in English, Nasser
+ * first in Arabic (ن before ه). Participants keep the API's order.
+ */
+export const MembersSortedByLanguage: Story = {
+  args: {
+    people: {
+      members: [
+        { id: ids.hala, name: { en: "Hala Al-Dosari", ar: "هالة الدوسري" } },
+        { id: ids.nasser, name: { en: "Nasser Al-Otaibi", ar: "ناصر العتيبي" } },
+      ],
+      participants: choices.participants,
+    },
+  },
+  render: (args, context) => <FormRenderer {...args} locale={storyLocale(context)} />,
+  play: async (context) => {
+    await userEvent.click(context.canvas.getByRole("combobox", { name: storyText(context, copy.siteEngineer) }));
+    const listed = (await screen.findAllByRole("option")).map((o) => o.textContent);
+    const hala = storyText(context, { en: "Hala Al-Dosari", ar: "هالة الدوسري" });
+    const nasser = storyText(context, { en: "Nasser Al-Otaibi", ar: "ناصر العتيبي" });
+    await expect(listed).toEqual(storyLocale(context) === "ar" ? [nasser, hala] : [hala, nasser]);
+    // Close the list: the a11y check can't run with the story hidden behind it.
+    await userEvent.click(screen.getByRole("option", { name: hala }));
+    await waitFor(() => expect(screen.queryByRole("listbox")).toBeNull());
   },
 };
 
