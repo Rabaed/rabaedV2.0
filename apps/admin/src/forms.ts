@@ -41,7 +41,8 @@ export async function publishFormVersion(migratorDb: Db, formDefinitionId: strin
       .orderBy("version_no")
       .execute();
     const earlier = versions.filter((v) => v.status === "published").map((v) => formSchema.parse(v.schema));
-    const problems = publishProblems(parsed.data, earlier);
+    const lists = await trx.selectFrom("option_list").select("id").execute();
+    const problems = publishProblems(parsed.data, earlier, { optionListIds: new Set(lists.map((l) => l.id)) });
     if (problems.length > 0) return { ok: false, reason: "schema_problems", problems };
 
     const versionNo = Math.max(0, ...versions.map((v) => v.version_no)) + 1;

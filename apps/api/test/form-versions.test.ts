@@ -180,6 +180,41 @@ describe("a schema the publish-time checks refuse", () => {
     expect(await newItemForm()).toEqual(before);
   });
 
+  it("is refused when an Option List field or table column names a list that doesn't exist (RP-282), and takes one that does", async () => {
+    const withList = (list: string) => ({
+      sections: [
+        {
+          ...version2.sections[0],
+          fields: [
+            { key: "grade", type: "option_list", label: bilingual("Grade"), list },
+            {
+              key: "items",
+              type: "table",
+              label: bilingual("Items"),
+              columns: [{ key: "kind", type: "option_list", label: bilingual("Kind"), list }],
+            },
+          ],
+        },
+        classification,
+      ],
+    });
+    const before = await newItemForm();
+    expect(await publishFormVersion(migrator, formId, withList(randomUUID()))).toEqual({
+      ok: false,
+      reason: "schema_problems",
+      problems: [
+        { key: "grade", code: "unknown_option_list" },
+        { key: "items", code: "unknown_option_list" },
+      ],
+    });
+    expect(await newItemForm()).toEqual(before);
+
+    const { rows } = await sql<{ id: string }>`
+      insert into option_list (name) values ('{"en": "Versions (test)", "ar": "إصدارات (اختبار)"}') returning id
+    `.execute(migrator);
+    expect(await publishFormVersion(migrator, formId, withList(rows[0]!.id))).toMatchObject({ ok: true });
+  });
+
   it("is refused for a Form that doesn't exist", async () => {
     expect(await publishFormVersion(migrator, randomUUID(), version1)).toEqual({ ok: false, reason: "form_not_found" });
   });

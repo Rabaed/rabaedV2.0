@@ -1,4 +1,11 @@
-import { answerFields, formatFormValue, type FormSchema, type Locale, type WorkItemHistory as History } from "@rabaed/domain";
+import {
+  answerFields,
+  formatFormValue,
+  type FormSchema,
+  type Locale,
+  type OptionList,
+  type WorkItemHistory as History,
+} from "@rabaed/domain";
 import { DocNo } from "@rabaed/ui";
 import { getFormatter, getTranslations } from "next-intl/server";
 
@@ -15,7 +22,17 @@ const idTypes = new Set(["trade", "location", "scopes", "member", "participant"]
  * seen only by the viewer's own Company. A change to the answers after Draft
  * lists each field, labelled from the item's Form, with its old and new value.
  */
-export async function WorkItemHistory({ events, schema, locale }: { events: Event[]; schema: FormSchema; locale: Locale }) {
+export async function WorkItemHistory({
+  events,
+  schema,
+  optionLists,
+  locale,
+}: {
+  events: Event[];
+  schema: FormSchema;
+  optionLists: readonly OptionList[];
+  locale: Locale;
+}) {
   const t = await getTranslations("workItems.history");
   const format = await getFormatter();
 
@@ -33,7 +50,7 @@ export async function WorkItemHistory({ events, schema, locale }: { events: Even
   const value = (change: Change, v: unknown) => {
     const field = fields.get(change.field);
     if (v === null || v === undefined || v === "" || (Array.isArray(v) && v.length === 0)) return t("emptyAnswer");
-    return field ? formatFormValue(field, v, locale) : String(v);
+    return field ? formatFormValue(field, v, locale, undefined, optionLists) : String(v);
   };
   const changeText = (change: Change) => {
     const field = fields.get(change.field);

@@ -18,17 +18,24 @@ export const schemaProblemCodes = [
   "built_in_optional",
   "built_in_hidden",
   "key_type_changed",
+  "unknown_option_list",
 ] as const;
 export type SchemaProblemCode = (typeof schemaProblemCodes)[number];
 
 /** One problem with a schema, about its section or field `key`. The codes are explained in form-engine.md §7. */
 export type SchemaProblem = { key: string; code: SchemaProblemCode };
 
+/** What the database knows, which the schema is checked against. */
+export type PublishContext = {
+  /** The ids of the Option Lists that exist. Without them the lists a schema names aren't checked. */
+  optionListIds?: ReadonlySet<string>;
+};
+
 /**
  * What stops a schema from being published as a Form's first Version. Empty
  * when there is nothing. Problems come check by check, each in Form order.
  */
-export function formSchemaProblems(schema: FormSchema): SchemaProblem[] {
+export function formSchemaProblems(schema: FormSchema, context: PublishContext = {}): SchemaProblem[] {
   const builtIns = builtInProblems(schema);
   const repeatedBuiltIns = new Set(builtIns.filter((p) => p.code === "built_in_repeated").map((p) => p.key));
   return [
@@ -37,6 +44,7 @@ export function formSchemaProblems(schema: FormSchema): SchemaProblem[] {
     ...conditionCycles(schema).map((key) => problem(key, "condition_cycle")),
     ...requiredNeverShown(schema).map((key) => problem(key, "required_never_shown")),
     ...builtIns,
+    ...(context.optionListIds ? unknownOptionLists(schema, context.optionListIds).map((key) => problem(key, "unknown_option_list")) : []),
   ];
 }
 
@@ -46,10 +54,10 @@ export function formSchemaProblems(schema: FormSchema): SchemaProblem[] {
  * forever: a field key an earlier Version used, even one dropped since, comes
  * back with the same type or not at all, because answers are stored by key.
  */
-export function publishProblems(schema: FormSchema, earlier: readonly FormSchema[] = []): SchemaProblem[] {
+export function publishProblems(schema: FormSchema, earlier: readonly FormSchema[] = [], context: PublishContext = {}): SchemaProblem[] {
   const typeOf = new Map(earlier.flatMap((version) => formFields(version).map((f) => [f.key, f.type] as const)));
   const changed = formFields(schema).filter((f) => typeOf.has(f.key) && typeOf.get(f.key) !== f.type);
-  return [...formSchemaProblems(schema), ...changed.map((f) => problem(f.key, "key_type_changed"))];
+  return [...formSchemaProblems(schema, context), ...changed.map((f) => problem(f.key, "key_type_changed"))];
 }
 
 const problem = (key: string, code: SchemaProblemCode): SchemaProblem => ({ key, code });
@@ -194,6 +202,16 @@ function requiredNeverShown(schema: FormSchema): string[] {
 
   return formFields(schema)
     .filter((f) => hiddenFields.has(f.key) && isAnswerField(f) && "required" in f && f.required !== false)
+    .map((f) => f.key);
+}
+
+/** Fields (a table for its columns) that name an Option List that doesn't exist. */
+function unknownOptionLists(schema: FormSchema, known: ReadonlySet<string>): string[] {
+  return formFields(schema)
+    .filter((f) => {
+      if (f.type === "option_list") return !known.has(f.list);
+      return f.type === "table" && f.columns.some((c) => c.type === "option_list" && !known.has(c.list));
+    })
     .map((f) => f.key);
 }
 

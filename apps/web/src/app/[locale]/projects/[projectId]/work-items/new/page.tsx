@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { CreateWorkItemForm } from "@/components/create-work-item-form";
 import { Link, redirect } from "@/i18n/navigation";
 import { fillingChoices } from "@/lib/built-in-choices";
-import { getMe, getMyVisibility, getNewWorkItemForm, getNewWorkItemFormChoices, getProject, getProjectScopes } from "@/lib/session";
+import { getMe, getMyVisibility, getNewWorkItemForm, getNewWorkItemFormChoices, getOptionLists, getProject, getProjectScopes } from "@/lib/session";
 
 /**
  * A Contractor Member creates a MAR in Draft. Its Form offers only the Trades
@@ -15,13 +15,14 @@ export default async function NewWorkItemPage({ params }: { params: Promise<{ lo
   const { locale, projectId } = await params;
   setRequestLocale(locale);
   const t = await getTranslations("workItems");
-  const [me, project, mine, scopes, form, people] = await Promise.all([
+  const [me, project, mine, scopes, form, people, optionLists] = await Promise.all([
     getMe(),
     getProject(projectId),
     getMyVisibility(projectId),
     getProjectScopes(projectId),
     getNewWorkItemForm(projectId, "MAR"),
     getNewWorkItemFormChoices(projectId),
+    getOptionLists(),
   ]);
   if (!me) return redirect({ href: "/sign-in", locale });
   if (!project || !mine || !scopes || !form || !people) notFound();
@@ -42,6 +43,7 @@ export default async function NewWorkItemPage({ params }: { params: Promise<{ lo
           form={form}
           choices={fillingChoices(mine, scopes.scopes, locale)}
           people={people}
+          optionLists={optionLists}
           locale={locale}
         />
       )}
