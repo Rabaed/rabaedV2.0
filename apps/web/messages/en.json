@@ -288,7 +288,10 @@
       "numbered": "Document Number",
       "internalNote": "Internal Note",
       "internalNoteWith": "Internal Note · {transition}",
-      "internal": "Internal: only your Company sees this."
+      "internal": "Internal: only your Company sees this.",
+      "answersChanged": "Form changed",
+      "emptyAnswer": "(empty)",
+      "changedValue": "changed"
     }
   },
   "notifications": {

@@ -1,15 +1,21 @@
-import type { Locale, WorkItemHistory as History } from "@rabaed/domain";
+import { answerFields, formatFormValue, type FormSchema, type Locale, type WorkItemHistory as History } from "@rabaed/domain";
 import { DocNo } from "@rabaed/ui";
 import { getFormatter, getTranslations } from "next-intl/server";
 
 type Event = History["events"][number];
+type Change = NonNullable<Event["changes"]>[number];
+
+// Answers that hold ids (Built-in Fields, people and Companies) are named only on
+// the Form itself; a diff says they changed, never the ids.
+const idTypes = new Set(["trade", "location", "scopes", "member", "participant"]);
 
 /**
  * A Work Item's history as the viewer may see it. The API already leaves out
  * other Companies' internal events (V5); internal ones shown here are marked as
- * seen only by the viewer's own Company.
+ * seen only by the viewer's own Company. A change to the answers after Draft
+ * lists each field, labelled from the item's Form, with its old and new value.
  */
-export async function WorkItemHistory({ events, locale }: { events: Event[]; locale: Locale }) {
+export async function WorkItemHistory({ events, schema, locale }: { events: Event[]; schema: FormSchema; locale: Locale }) {
   const t = await getTranslations("workItems.history");
   const format = await getFormatter();
 
@@ -18,8 +24,22 @@ export async function WorkItemHistory({ events, locale }: { events: Event[]; loc
     if (e.type === "internal_note") {
       return e.transition ? t("internalNoteWith", { transition: e.transition[locale] }) : t("internalNote");
     }
-    if (e.type === "created" || e.type === "claimed" || e.type === "released") return t(e.type);
+    if (e.type === "created" || e.type === "claimed" || e.type === "released" || e.type === "answers_changed") {
+      return t(e.type === "answers_changed" ? "answersChanged" : e.type);
+    }
     return t("other");
+  };
+  const fields = new Map(answerFields(schema).map((f) => [f.key, f]));
+  const value = (change: Change, v: unknown) => {
+    const field = fields.get(change.field);
+    if (v === null || v === undefined || v === "" || (Array.isArray(v) && v.length === 0)) return t("emptyAnswer");
+    return field ? formatFormValue(field, v, locale) : String(v);
+  };
+  const changeText = (change: Change) => {
+    const field = fields.get(change.field);
+    const label = field?.label[locale] ?? change.field;
+    if (field && idTypes.has(field.type)) return `${label}: ${t("changedValue")}`;
+    return `${label}: ${value(change, change.old)} ${locale === "ar" ? "←" : "→"} ${value(change, change.new)}`;
   };
   const who = (e: Event) =>
     [e.by.memberName?.[locale], e.by.companyName?.[locale]].filter((part): part is string => Boolean(part)).join(" · ");
@@ -52,6 +72,15 @@ export async function WorkItemHistory({ events, locale }: { events: Event[]; loc
             )}
             {e.reason && <p className="whitespace-pre-wrap">{e.reason}</p>}
             {e.internalNote && <p className="whitespace-pre-wrap">{e.internalNote}</p>}
+            {e.changes && e.changes.length > 0 && (
+              <ul className="space-y-0.5 text-sm" data-testid="answer-changes">
+                {e.changes.map((change) => (
+                  <li key={change.field} className="whitespace-pre-wrap">
+                    <bdi>{changeText(change)}</bdi>
+                  </li>
+                ))}
+              </ul>
+            )}
             {e.audience === "internal" && <p className="text-xs text-muted">{t("internal")}</p>}
           </li>
         ))}

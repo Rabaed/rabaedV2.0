@@ -288,7 +288,10 @@
       "numbered": "رقم المستند",
       "internalNote": "ملاحظة داخلية",
       "internalNoteWith": "ملاحظة داخلية · {transition}",
-      "internal": "داخلي: لا يراه إلا شركتك."
+      "internal": "داخلي: لا يراه إلا شركتك.",
+      "answersChanged": "تعديل النموذج",
+      "emptyAnswer": "(فارغ)",
+      "changedValue": "عُدّل"
     }
   },
   "notifications": {

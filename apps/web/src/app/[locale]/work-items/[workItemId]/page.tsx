@@ -130,7 +130,7 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
           <dd>{item.raisedBy.companyName[locale]}</dd>
         </dl>
 
-        {history && <WorkItemHistory events={history.events} locale={locale} />}
+        {history && <WorkItemHistory events={history.events} schema={form.schema} locale={locale} />}
       </div>
     </WorkItemFormProvider>
   );

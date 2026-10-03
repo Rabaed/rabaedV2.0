@@ -201,7 +201,7 @@ As built (RP-271): `publishProblems(schema, earlierVersions)` in `packages/domai
 ## 8. Validation, drafts, reporting
 
 - **One validator**, generated from the schema, runs in the browser (instant feedback) and on the server (authoritative). Save as draft skips "required" checks but not type checks.
-  - It lives in `packages/domain` (`validateAnswers`, modes `draft` and `complete`), so the server runs it in the api. The database keeps who may write answers and when, and `take_transition` lets an item leave Draft (other than by cancelling) only with the hash of the answers the api found complete. Answers changed in between are refused with `form_not_checked` (RP-262).
+  - It lives in `packages/domain` (`validateAnswers`, modes `draft` and `complete`), so the server runs it in the api. The database keeps who may write answers and when, and `take_transition` lets an item move on while its answers are open (leaving Draft, and the Submit; not a cancel or a Return) only with the hash of the answers the api found complete. Answers changed in between are refused with `form_not_checked` (RP-262, RP-268).
 - **Autosave** runs every few seconds while editing a Draft. Each save records the values plus `updated_at` per field, so the offline mobile app (ADR 0004) can later merge field by field.
 - **Reporting:** `reportable` fields are copied on each save into `work_item_field_value (work_item_id, field_key, value_text, value_num, value_date)`. Dashboards and filters query this table, which is under the same row-level security as `work_item`. A GIN index on `work_item.data` covers ad-hoc search.
 

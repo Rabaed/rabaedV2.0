@@ -139,7 +139,7 @@ describe("Save draft", () => {
     id = await created();
   });
 
-  it("is offered to the raiser's Company on its Draft only", async () => {
+  it("is offered to the raiser's Company on its Draft", async () => {
     expect((await detail(engineer, id)).actions.saveAnswers).toBe(true);
     expect((await detail(pm, id)).actions.saveAnswers).toBe(true);
   });
@@ -196,12 +196,10 @@ describe("Send for Review", () => {
     });
   });
 
-  it("leaves the answers read-only to the Draft's Save draft", async () => {
-    const res = await save(engineer, id, { ...complete, location: buildingA, model: "Later" });
-    expect(res.statusCode).toBe(409);
-    expect(res.json()).toEqual({ error: "not_editable" });
-    expect((await detail(pm, id)).answers.model).toBe("CT-300");
-    expect((await detail(engineer, id)).actions.saveAnswers).toBe(false);
+  it("keeps the answers open to the raiser's Company at Internal Review (RP-268)", async () => {
+    await ok(save(engineer, id, { ...complete, location: buildingA, model: "Later" }));
+    expect((await detail(pm, id)).answers.model).toBe("Later");
+    expect((await detail(engineer, id)).actions.saveAnswers).toBe(true);
   });
 });
 

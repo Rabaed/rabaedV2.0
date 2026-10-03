@@ -666,8 +666,8 @@ describe("Internal Note", () => {
   });
 });
 
-// The Form's answers (RP-262): written only by the raiser's Participant while in
-// Draft, pinned to the latest Form Version, and leaving Draft only with answers
+// The Form's answers (RP-262, RP-268): written only by the raiser's Participant
+// until Submit, pinned to the latest Form Version, and leaving Draft only with answers
 // the API checked.
 describe("a Draft's answers", () => {
   let item = "";
@@ -719,9 +719,107 @@ describe("a Draft's answers", () => {
     expect(await sendForReview(c1.member, sql`app.answers_sha256(${item}::uuid)`)).toBe("applied");
   });
 
-  it("are no longer editable once the item has left Draft", async () => {
-    expect(await save(c1.member, { description: "Later" })).toBe("not_editable");
-    expect(await stored()).toEqual({ description: "Updated" });
+  // RP-268: open to the raiser until Submit, every change after Draft on the record.
+  describe("after Draft", () => {
+    let pm = "";
+    const diffs = async () =>
+      (
+        await migrator.query(
+          `select id, actor_member_id, actor_participant_id, payload, audience, audience_participant_id, content_sha256
+           from work_item_event where work_item_id = $1 and type = 'answers_changed' order by seq`,
+          [item],
+        )
+      ).rows;
+    const intact = async () => (await migrator.query("select app.work_item_chain_intact($1) as ok", [item])).rows[0].ok as boolean;
+
+    beforeAll(async () => {
+      pm = await member(c1.id, "answers-pm");
+      await call<{ outcome: string }>(c1.ap, sql`select app.add_project_member(${participant.c1}::uuid, ${pm}::uuid, now())`);
+      for (const kind of ["trade", "location"]) await grant(c1.ap, "member", [participant.c1, pm], kind, "all");
+      await call<{ outcome: string }>(c1.ap, sql`select app.set_project_member_positions(${participant.c1}::uuid, ${pm}::uuid, ${["project_manager"]}::text[])`);
+      expect(await call<{ outcome: string }>(pm, sql`select app.claim_step(${item}::uuid, now()) as outcome`)).toEqual([{ outcome: "claimed" }]);
+    });
+
+    it("are saved by the raiser's Members at its internal Steps, each change a diff internal to the raiser", async () => {
+      expect(await diffs()).toEqual([]);
+      expect(await save(pm, { description: "Later", model: "CT-300" })).toBe("saved");
+      expect(await stored()).toEqual({ description: "Later", model: "CT-300" });
+      const [diff, ...more] = await diffs();
+      expect(more).toEqual([]);
+      expect(diff).toMatchObject({
+        actor_member_id: pm,
+        actor_participant_id: participant.c1,
+        audience: "internal",
+        audience_participant_id: participant.c1,
+        payload: {
+          changes: [
+            { field: "description", old: "Updated", new: "Later" },
+            { field: "model", old: null, new: "CT-300" },
+          ],
+        },
+      });
+      expect(diff.content_sha256).toHaveLength(32);
+      // A save that changes nothing records nothing.
+      expect(await save(pm, { description: "Later", model: "CT-300" })).toBe("saved");
+      expect(await diffs()).toHaveLength(1);
+    });
+
+    it("are append-only for the app role, and in the hash chain", async () => {
+      const [diff] = await diffs();
+      for (const statement of [
+        sql`update work_item_event set payload = '{}' where id = ${diff.id}::uuid`,
+        sql`delete from work_item_event where id = ${diff.id}::uuid`,
+      ]) {
+        await expect(withMember(app, c1.member, (trx) => statement.execute(trx))).rejects.toThrow(/permission denied/);
+      }
+      expect(await intact()).toBe(true);
+      await migrator.query("begin");
+      try {
+        await migrator.query("alter table work_item_event disable trigger work_item_event_append_only");
+        await migrator.query(`update work_item_event set payload = '{"changes": []}' where id = $1`, [diff.id]);
+        expect(await intact()).toBe(false);
+      } finally {
+        await migrator.query("rollback");
+      }
+      expect(await intact()).toBe(true);
+    });
+
+    it("keeps recording changes in a Draft it was Returned to", async () => {
+      const take = (as: string, transition: string, reason = "") =>
+        call<{ outcome: string }>(
+          as,
+          sql`select app.take_transition(${item}::uuid, ${transition}, ${reason}, '', app.answers_sha256(${item}::uuid), ${randomUUID()}::uuid, now()) as outcome`,
+        ).then((rows) => rows[0]!.outcome);
+      expect(await take(pm, "return", "Check the model")).toBe("applied");
+      expect(await save(c1.member, { description: "Later", model: "CT-301" })).toBe("saved");
+      expect((await diffs()).at(-1)).toMatchObject({
+        actor_member_id: c1.member,
+        payload: { changes: [{ field: "model", old: "CT-300", new: "CT-301" }] },
+      });
+      expect(await take(c1.member, "send_for_review")).toBe("applied");
+      expect(await call<{ outcome: string }>(pm, sql`select app.claim_step(${item}::uuid, now()) as outcome`)).toEqual([{ outcome: "claimed" }]);
+    });
+
+    it("can't be Submitted except with the answers checked", async () => {
+      const submit = (hash: RawBuilder<unknown>) =>
+        call<{ outcome: string }>(
+          pm,
+          sql`select app.take_transition(${item}::uuid, 'submit', '', '', ${hash}, ${randomUUID()}::uuid, now()) as outcome`,
+        ).then((rows) => rows[0]!.outcome);
+      expect(await submit(sql`null`)).toBe("form_not_checked");
+      expect(await submit(sql`app.answers_sha256(${item}::uuid)`)).toBe("applied");
+    });
+
+    it("are read-only for everyone from Submit onwards, and the diffs stay with the raiser (V5)", async () => {
+      for (const who of [c1.member, pm, k1.member, or.member]) {
+        expect(await save(who, { description: "After Submit" }), who).toBe("not_editable");
+      }
+      expect(await stored()).toEqual({ description: "Later", model: "CT-301" });
+      for (const who of [k1.member, or.member]) {
+        const visible = await call<{ type: string }>(who, sql`select type from work_item_event where work_item_id = ${item}::uuid`);
+        expect(visible.map((e) => e.type), who).toEqual(["transition"]);
+      }
+    });
   });
 });
 
