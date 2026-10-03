@@ -401,11 +401,12 @@ describe("withdrawing a pending invitation (scenario 38)", () => {
     const k4 = await invited();
     for (const id of [leadId, k4.invitationId]) expect((await withdraw(host.caller, id)).statusCode).toBe(204);
 
-    for (const crNumber of [cr, k4.company.crNumber]) {
+    // Each keeps its id, as a lead does when its Company is onboarded (scenario 31).
+    for (const [crNumber, id] of [[cr, leadId], [k4.company.crNumber, k4.invitationId]] as const) {
       expect((await inviteCr(crNumber, "owner_representative")).statusCode).toBe(202);
       expect((await pending()).filter((i) => i.crNumber === crNumber)).toEqual([
         {
-          id: expect.any(String),
+          id,
           crNumber,
           projectRole: expect.objectContaining({ baseRole: "owner_representative" }),
           invitedAt: expect.any(String),
@@ -449,6 +450,18 @@ describe("withdrawing a pending invitation (scenario 38)", () => {
     const caller = await api.acceptInvitation(company.invitationToken);
     expect((await caller.get("/v1/participant-invitations")).json().invitations).toEqual([]);
     expect((await api.onboardingLeads("Weekly onboarding call")).map((l) => l.crNumber)).not.toContain(cr);
+  });
+
+  it("keeps the lead's id when its CR number is invited again after Rabaed onboarded it: nothing shows it is now on Rabaed", async () => {
+    const cr = uniqueCr();
+    const leadId = await lead(cr);
+    expect((await withdraw(host.caller, leadId)).statusCode).toBe(204);
+    const company = await api.onboardCompany({ crNumber: cr });
+    const caller = await api.acceptInvitation(company.invitationToken);
+
+    expect((await inviteCr(cr)).statusCode).toBe(202);
+    expect((await pending()).filter((i) => i.crNumber === cr).map((i) => i.id)).toEqual([leadId]);
+    expect((await caller.get("/v1/participant-invitations")).json().invitations.map((i: { id: string }) => i.id)).toEqual([leadId]);
   });
 });
 

@@ -346,6 +346,7 @@ describe("a Participant Invitation", () => {
     // Inviting it again is refused: its Project Admins see it already.
     expect(await invite(host.ap, other.cr)).toBe("already_participant");
   });
+
   // RP-260, scenario 38: withdrawing goes through the pending list alone, and both kinds answer alike.
   it("is withdrawn only by a Project Admin, a lead and a Company on Rabaed alike, even calling the database directly", async () => {
     const withdraw = (as: string, id: string) =>

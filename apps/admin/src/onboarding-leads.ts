@@ -61,9 +61,9 @@ class NotClosed extends Error {
 /**
  * A Rabaed Engineer closes an open onboarding lead that won't be onboarded,
  * logged with the reason. It only leaves Rabaed's own list: the Project Admin
- * still sees their invitation pending until they withdraw it, since only a
- * non-customer's invitation could vanish this way (ADR 0009). Not found for a
- * lead already closed, withdrawn or converted.
+ * still sees their invitation pending until they withdraw it, since only an
+ * invitation to a CR number not on Rabaed could vanish this way (ADR 0009).
+ * Not found for a lead already closed, withdrawn or converted.
  */
 export async function closeOnboardingLead(
   adminDb: Db,

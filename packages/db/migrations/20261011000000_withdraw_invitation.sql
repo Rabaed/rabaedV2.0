@@ -6,14 +6,16 @@
 --   off it: an invitation to a Company on Rabaed (pending or declined) or an
 --   onboarding lead. Both kinds are found the same way, through
 --   app.project_invitations, and give the same outcome, so withdrawing reveals
---   nothing about which CR numbers are customers. Anyone else, and anything not
---   on that list, gets 'not_found', like an id that doesn't exist.
+--   nothing about which CR numbers are Companies on Rabaed. Anyone else, and
+--   anything not on that list, gets 'not_found', like an id that doesn't exist.
 -- * A withdrawn invitation to a Company leaves its Authorized Person's list
 --   (status 'invitation_withdrawn'; app.company_invitations shows 'invited'
 --   only). A withdrawn lead is never converted when its Company is onboarded,
 --   and leaves Rabaed Admin's list. Both are kept for audit.
 -- * The same CR number can be invited again: app.add_participant reopens the
---   withdrawn row, keeping its id, for both kinds alike.
+--   withdrawn row, keeping its id, for both kinds alike. A withdrawn lead whose
+--   Company Rabaed onboarded since becomes that Company's invitation, with the
+--   lead's id, as a conversion would have made it.
 -- * Rabaed Admin closes a lead (closed_at, with the reason in admin_action). That
 --   only takes it off Rabaed's own list: the Project Admin's row stays exactly as
 --   it was (its time is the lead's updated_at, which closing leaves alone), and
@@ -151,8 +153,9 @@ create or replace function app.convert_onboarding_leads(p_company_id uuid, p_now
   $$;
 
 -- A Project Admin invites a Company by its CR number. Inviting again reopens a
--- withdrawn invitation or lead, and a closed lead, keeping its id (otherwise as
--- in the onboarding_lead_conversion migration).
+-- withdrawn invitation or lead, and a closed lead, keeping its id; a withdrawn
+-- lead whose Company is now on Rabaed becomes its invitation with that id
+-- (otherwise as in the onboarding_lead_conversion migration).
 create or replace function app.add_participant(p_project_id uuid, p_cr_number text, p_base_role text, p_now timestamptz)
   returns text
   language plpgsql volatile security definer
@@ -163,6 +166,8 @@ create or replace function app.add_participant(p_project_id uuid, p_cr_number te
       v_cr_number text := trim(p_cr_number);
       v_company_id uuid;
       v_role_id uuid;
+      v_lead_id uuid;
+      v_participant_id uuid;
     begin
       if not exists (select 1 from app.current_project_ids() x where x = p_project_id) then
         return 'not_found';
@@ -199,14 +204,28 @@ create or replace function app.add_participant(p_project_id uuid, p_cr_number te
       ) then
         return 'already_participant';
       end if;
+      -- A lead for this CR number that was never converted (withdrawn before
+      -- Rabaed onboarded the Company): the new invitation takes its id, as a
+      -- conversion would, so the Project Admin's row keeps its id (scenario 31).
+      select l.id into v_lead_id from onboarding_lead l
+      where l.project_id = p_project_id and l.cr_number = v_cr_number and l.converted_at is null
+      for update;
       insert into participant as p
-        (project_id, company_id, project_role_id, status, invited_by_member_id, invited_at, created_at, updated_at)
-      values (p_project_id, v_company_id, v_role_id, 'invited', app.current_member_id(), v_at, v_at, v_at)
+        (id, project_id, company_id, project_role_id, status, invited_by_member_id, invited_at, created_at, updated_at)
+      values (
+        coalesce(v_lead_id, app.uuid_v7()), p_project_id, v_company_id, v_role_id, 'invited', app.current_member_id(),
+        v_at, v_at, v_at
+      )
       on conflict (project_id, company_id) do update
         set status = 'invited', project_role_id = excluded.project_role_id,
           invited_by_member_id = excluded.invited_by_member_id, invited_at = v_at, responded_at = null,
           withdrawn_at = null, withdrawn_by_member_id = null, updated_at = v_at
-        where p.status in ('invited', 'declined', 'invitation_withdrawn');
+        where p.status in ('invited', 'declined', 'invitation_withdrawn')
+      returning p.id into v_participant_id;
+      if v_lead_id is not null and v_participant_id = v_lead_id then
+        update onboarding_lead set converted_at = v_at, participant_id = v_lead_id, updated_at = v_at
+        where id = v_lead_id;
+      end if;
       return 'invited';
     end
   $$;

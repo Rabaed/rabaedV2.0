@@ -48,7 +48,6 @@ const text = {
     closeLead: "Close lead",
     cancel: "Cancel",
     closedNotice: "Lead closed.",
-    leadNotOpen: "This lead is no longer open. Show the leads again.",
     onboardedNotice: (email) => `Company onboarded. The invitation went to ${email}.`,
     invitedNotice: (email) => `Invitation sent to ${email}.`,
     errors: {
@@ -60,6 +59,7 @@ const text = {
       duplicate_vat_number: "A Company with this VAT number is already on Rabaed.",
       duplicate_email: "This email already belongs to someone on Rabaed.",
       not_found: "No Company has this CR number.",
+      lead_not_open: "This lead is no longer open. Show the leads again.",
       already_active: "This Authorized Person has already accepted.",
       invalid_request: "Check the fields and try again.",
       other: "Something went wrong. Try again.",
@@ -109,7 +109,6 @@ const text = {
     closeLead: "إغلاق الطلب",
     cancel: "إلغاء",
     closedNotice: "أُغلق الطلب.",
-    leadNotOpen: "لم يعد هذا الطلب مفتوحاً. اعرض الطلبات مجدداً.",
     onboardedNotice: (email) => `أُضيفت الشركة، وأُرسلت الدعوة إلى ${email}.`,
     invitedNotice: (email) => `أُرسلت الدعوة إلى ${email}.`,
     errors: {
@@ -121,6 +120,7 @@ const text = {
       duplicate_vat_number: "توجد شركة بهذا الرقم الضريبي على ربائد.",
       duplicate_email: "هذا البريد الإلكتروني مستخدم على ربائد.",
       not_found: "لا توجد شركة بهذا السجل التجاري.",
+      lead_not_open: "لم يعد هذا الطلب مفتوحاً. اعرض الطلبات مجدداً.",
       already_active: "قبل الشخص المفوّض الدعوة من قبل.",
       invalid_request: "راجع الحقول وحاول مجدداً.",
       other: "حدث خطأ. حاول مجدداً.",
@@ -153,7 +153,7 @@ function notice(message, kind = "info") {
   el.hidden = !message;
 }
 
-const errorMessage = (code) => (code === "lead_not_open" ? t().leadNotOpen : (t().errors[code] ?? t().errors.other));
+const errorMessage = (code) => t().errors[code] ?? t().errors.other;
 
 /** Calls the API; returns the parsed body, or throws the API's error code. */
 async function api(method, path, body) {
@@ -311,6 +311,7 @@ onSubmit("close-form", async ({ leadId, reason }, form) => {
   try {
     await api("POST", `/v1/onboarding-leads/${encodeURIComponent(leadId)}/close`, { reason });
   } catch (code) {
+    // The API's not_found here is the lead, not a CR number.
     throw code === "not_found" ? "lead_not_open" : code;
   }
   form.hidden = true;
