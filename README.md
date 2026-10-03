@@ -80,7 +80,7 @@ Open http://localhost:3000/en (or `http://laneN.localhost:<port>/en` in a lane).
 | 6 | Ali | Claim → Submit | Pending Approval. TMC sees "With Design Consultants LLC", never a Consultant's name. Mohammed's bell shows it. Ahmed and Sara see it but have no buttons (only a Manager can issue a Code). Faisal (Al Waha) sees it as oversight, read-only. Yousef (Beta Build) still sees nothing. The Consultant's history shows the Submit only, never the Return. |
 | 7 | Ahmed | Open it → read the Form (Manufacturer, Model, Specification section, Description, the Items and their total, Trade, Location) and open the PDF under Datasheet (PDF) | The Consultant reads every answer and the Documents, none of them editable, each Document frozen; a Sample photo shows its time and place. Yousef (Beta Build) still gets nothing. |
 | 8 | Mohammed | Claim → Approve · A | Approved, Code A. TMC and Al Waha see the Code and that Mohammed Al Shamsi issued it; nobody else of the Consultant is named to them. The item accepts no more moves. |
-| 9 | Hafiz, Ali, Mohammed | Repeat with "Cable tray layout – Level 2" and end with Revise & Resubmit · C | Revise & Resubmit, Code C. |
+| 9 | Hafiz, Ali, Mohammed | Repeat with "Cable tray layout – Level 2" (its Form complete and a PDF under Datasheet (PDF) before Send for Review) and end with Revise & Resubmit · C | Revise & Resubmit, Code C. |
 
 Step Age dots (1–4+ weeks at the current Step) show on the list and the item; there are no due dates.
 
