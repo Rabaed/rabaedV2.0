@@ -25,6 +25,7 @@ import {
 } from "@rabaed/domain";
 import { sql, type RawBuilder, type Transaction } from "kysely";
 import { refusedAsForbidden, type Forbidden } from "../db-error.ts";
+import { readOptionLists } from "../option-lists/option-lists.ts";
 import { checkedOutcome, commandResult } from "../outcomes.ts";
 
 // Work Items. Writes go through the app.* functions of the work items migration;
@@ -88,6 +89,18 @@ async function projectScopes(trx: Trx, projectId: string): Promise<ScopeChoice[]
     select id, trade_value_id, parent_id from scope where project_id = ${projectId}
   `.execute(trx);
   return rows.map((r) => ({ id: r.id, tradeId: r.trade_value_id, parentId: r.parent_id }));
+}
+
+/**
+ * The Option Lists as they are now, when the Form has a field or a table column
+ * that uses one. They are never copied into a Form (RP-282), so an option added
+ * since the Form Version was published is offered at once.
+ */
+async function optionListsFor(trx: Trx, schema: FormSchema) {
+  const uses = formFields(schema).some(
+    (f) => f.type === "option_list" || (f.type === "table" && f.columns.some((c) => c.type === "option_list")),
+  );
+  return uses ? readOptionLists(trx) : undefined;
 }
 
 /** Checked answers as the database functions take them: the Form's own, and the Built-in Fields apart. */
@@ -290,6 +303,7 @@ export function createWorkItem(
       const checked = validateAnswers(form.schema, input.answers, "draft", {
         scopes: await projectScopes(trx, projectId),
         offered: await offeredFor(trx, form.schema, projectId, null),
+        optionLists: await optionListsFor(trx, form.schema),
       });
       if (!checked.ok) return { ok: false, reason: "invalid_answers", errors: checked.errors };
       const stored = storedAnswers(checked.answers);
@@ -471,7 +485,12 @@ export function takeTransition(
         where action = 'transition' and transition_key = ${input.transition}
       `.execute(trx);
       const scopes = await projectScopes(trx, pinned.projectId);
-      const checked = validateAnswers(pinned.form.schema, pinned.data, "complete", { scopes });
+      // What is saved is checked as it stands: a retired option it holds stays valid (held).
+      const checked = validateAnswers(pinned.form.schema, pinned.data, "complete", {
+        scopes,
+        optionLists: await optionListsFor(trx, pinned.form.schema),
+        held: pinned.data,
+      });
       if (takeable.some((t) => t.transition_kind !== "cancel" && t.transition_kind !== "return") && !checked.ok) {
         return { ok: false, reason: "form_incomplete", errors: checked.errors };
       }
@@ -516,6 +535,8 @@ export function saveAnswers(
     const checked = validateAnswers(pinned.form.schema, input.answers, "draft", {
       scopes: await projectScopes(trx, pinned.projectId),
       offered: await offeredFor(trx, pinned.form.schema, pinned.projectId, workItemId, pinned.data),
+      optionLists: await optionListsFor(trx, pinned.form.schema),
+      held: pinned.data,
     });
     if (!checked.ok) return { ok: false, reason: "invalid_answers", errors: checked.errors };
     const stored = storedAnswers(checked.answers);

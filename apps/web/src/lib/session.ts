@@ -20,6 +20,7 @@ import type {
   WorkItemDetail,
   WorkItemHistory,
   WorkItemList,
+  OptionList,
 } from "@rabaed/domain";
 import { cookies } from "next/headers";
 import { apiUrl } from "./api-url.ts";
@@ -142,6 +143,14 @@ export function getNewWorkItemFormChoices(projectId: string): Promise<FormChoice
 /** Who and which Companies the Member may choose in a visible item's Form; null when hidden. */
 export function getWorkItemFormChoices(workItemId: string): Promise<FormChoices | null> {
   return apiGet<FormChoices>(`/v1/work-items/${encodeURIComponent(workItemId)}/form-choices`);
+}
+
+/**
+ * The Option Lists, as they are now (Rabaed Defaults, readable by every Member), for Form fields that use one.
+ * Empty when they can't be read, so a Form without them still shows.
+ */
+export async function getOptionLists(): Promise<OptionList[]> {
+  return (await apiGet<{ optionLists: OptionList[] }>("/v1/option-lists"))?.optionLists ?? [];
 }
 
 /** A visible item's Documents, with whether the Member may change them now; null when hidden. */

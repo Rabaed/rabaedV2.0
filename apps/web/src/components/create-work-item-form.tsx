@@ -9,6 +9,7 @@ import {
   type FormValue,
   type FormVersion,
   type Locale,
+  type OptionList,
 } from "@rabaed/domain";
 import { Button, Field, FormRenderer, Input, type BuiltInChoices } from "@rabaed/ui";
 import { useTranslations } from "next-intl";
@@ -26,6 +27,7 @@ export function CreateWorkItemForm({
   form,
   choices,
   people,
+  optionLists,
   locale,
 }: {
   projectId: string;
@@ -33,6 +35,8 @@ export function CreateWorkItemForm({
   choices: BuiltInChoices;
   /** Who and which Companies its `member` and `participant` fields offer. */
   people: FormChoices;
+  /** The Option Lists its `option_list` fields offer. */
+  optionLists: readonly OptionList[];
   locale: Locale;
 }) {
   const t = useTranslations("workItems");
@@ -47,7 +51,11 @@ export function CreateWorkItemForm({
     setAnswers(next);
     // Instant feedback with the same checks the server runs (draft mode). A missing
     // Trade is reported when the Draft is saved, not while the Form is being filled.
-    const checked = validateAnswers(form.schema, next, "draft", { scopes: choices.scopes, offered: offeredChoices(people) });
+    const checked = validateAnswers(form.schema, next, "draft", {
+      scopes: choices.scopes,
+      offered: offeredChoices(people),
+      optionLists,
+    });
     setFieldErrors(checked.ok ? [] : checked.errors.filter((e) => e.code !== "required"));
   }
 
@@ -107,6 +115,7 @@ export function CreateWorkItemForm({
         locale={locale}
         choices={choices}
         people={people}
+        optionLists={optionLists}
         onChange={change}
         idPrefix="answer"
       />

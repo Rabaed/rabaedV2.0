@@ -31,6 +31,7 @@ import {
   type Locale,
   type NamedAnswer,
   type NamedAnswers,
+  type OptionList,
   type TableColumn,
 } from "@rabaed/domain";
 import { useState, type ReactNode } from "react";
@@ -44,6 +45,7 @@ import { Select } from "../form/select.tsx";
 import { Textarea } from "../form/textarea.tsx";
 import { Icon } from "../icon/icon.tsx";
 import { BuiltInSelect, builtInAnswerLabels, noChoices, ScopesChecklist, type BuiltInChoices } from "./built-in-fields.tsx";
+import { OptionListInput } from "./option-list-field.tsx";
 import { TableInput, TableRead } from "./table-field.tsx";
 
 // The Form engine's renderer (form-engine.md §1, §5): draws a Form Version's
@@ -78,6 +80,7 @@ const copy = {
     tooManyDecimals: (n: number) =>
       n === 0 ? "Enter a whole number." : n === 1 ? "Use at most 1 decimal place." : `Use at most ${formatNumber(n, "en")} decimal places.`,
     unknownOption: "Choose one of the options.",
+    tooShallow: "Keep choosing down to the last level.",
     tooFewRows: (n: number) => (n === 1 ? "Add at least 1 row." : `Add at least ${formatNumber(n, "en")} rows.`),
     tooManyRows: (n: number) => (n === 1 ? "Use at most 1 row." : `Use at most ${formatNumber(n, "en")} rows.`),
     choose: "Choose…",
@@ -119,6 +122,7 @@ const copy = {
             ? "استخدم منزلتين عشريتين على الأكثر."
             : `استخدم ${formatNumber(n, "ar")} منازل عشرية على الأكثر.`,
     unknownOption: "اختر أحد الخيارات.",
+    tooShallow: "تابع الاختيار حتى المستوى الأخير.",
     tooFewRows: (n: number) =>
       n === 1 ? "أضف صفًا واحدًا على الأقل." : n === 2 ? "أضف صفين على الأقل." : n <= 10 ? `أضف ${formatNumber(n, "ar")} صفوف على الأقل.` : `أضف ${formatNumber(n, "ar")} صفًا على الأقل.`,
     tooManyRows: (n: number) =>
@@ -154,6 +158,11 @@ export type FormRendererProps = {
   choices?: BuiltInChoices;
   /** Who and which Companies `member` and `participant` fields offer (edit mode): the API's form choices. */
   people?: FormChoices;
+  /**
+   * The Option Lists, as they are now, for `option_list` fields and columns: what
+   * they offer (edit mode) and how their answers read (read mode).
+   */
+  optionLists?: readonly OptionList[];
   /**
    * The `member` and `participant` answers as the API named them for this viewer:
    * read mode, and, in edit mode, a saved one no longer on offer in `people`.
@@ -206,6 +215,8 @@ function errorText(field: AnswerField | TableColumn, error: FieldError, locale: 
           : text.wrongType;
     case "unknown_option":
       return text.unknownOption;
+    case "too_shallow":
+      return text.tooShallow;
     default:
       return field.type === "number" || field.type === "currency" ? text.notANumber : text.wrongType;
   }
@@ -274,6 +285,7 @@ function currencySymbol(currency: string, locale: Locale): string {
 }
 
 const noPeople: FormChoices = { members: [], participants: [] };
+const noOptionLists: readonly OptionList[] = [];
 
 /** A choice field's options as a control takes them, labelled in the viewer's language. */
 const optionsOf = (field: { options: FormOption[] }, locale: Locale) =>
@@ -293,6 +305,7 @@ function control(
   locale: Locale,
   people: FormChoices,
   naming: NamedAnswer | undefined,
+  optionLists: readonly OptionList[],
   change: (value: FormValue | undefined) => void,
   /** A table's cell errors (it has no others). */
   errors: readonly FieldError[] = [],
@@ -409,6 +422,20 @@ function control(
         ),
       };
     }
+    case "option_list":
+      return {
+        group: true,
+        element: (
+          <OptionListInput
+            list={optionLists.find((l) => l.id === field.list)}
+            depth={field.depth}
+            multiple={"multiple" in field && field.multiple}
+            value={value}
+            locale={locale}
+            onChange={change}
+          />
+        ),
+      };
     case "table":
       return {
         element: (
@@ -419,7 +446,7 @@ function control(
             errors={errors}
             // A cell is a control of its column's type, named by its row and column.
             cell={(column, row, cellValue, changeCell) =>
-              control({ ...column, key: `${field.key}.${row}.${column.key}` }, cellValue, locale, people, undefined, changeCell)
+              control({ ...column, key: `${field.key}.${row}.${column.key}` }, cellValue, locale, people, undefined, optionLists, changeCell)
             }
             cellError={(column, error) => errorText(column, error, locale)}
             onChange={change}
@@ -478,6 +505,7 @@ export function FormRenderer({
   locale,
   choices = noChoices,
   people = noPeople,
+  optionLists = noOptionLists,
   named = {},
   onChange,
   idPrefix = "form",
@@ -558,8 +586,8 @@ export function FormRenderer({
     // Another Company's Member comes named, without their id (V14).
     const naming = named[field.key];
     if (isUnanswered(value) && !naming) return null;
-    if (field.type === "table") return <TableRead field={field} value={value} locale={locale} />;
-    const shown = formatFormValue(field, value, locale, naming);
+    if (field.type === "table") return <TableRead field={field} value={value} locale={locale} optionLists={optionLists} />;
+    const shown = formatFormValue(field, value, locale, naming, optionLists);
     // A number reads in the page's direction, so its unit follows it; an address or a phone number left to right.
     if (field.type === "number" || field.type === "currency") return <bdi dir={directionOf(locale)}>{shown}</bdi>;
     if (field.type === "email" || field.type === "phone") return <bdi dir="ltr">{shown}</bdi>;
@@ -600,7 +628,7 @@ export function FormRenderer({
                 const error = errorOf(field.key);
                 const { element, group } = isBuiltInField(field)
                   ? builtInControl(field.type)
-                  : control(field, answers[field.key], locale, people, named[field.key], (value) => onChange?.({ [field.key]: value }), cellErrorsOf(field.key));
+                  : control(field, answers[field.key], locale, people, named[field.key], optionLists, (value) => onChange?.({ [field.key]: value }), cellErrorsOf(field.key));
                 return (
                   <Field
                     key={field.key}

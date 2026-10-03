@@ -11,6 +11,7 @@ import { fillingChoices, readingChoices } from "@/lib/built-in-choices";
 import {
   getMe,
   getMyVisibility,
+  getOptionLists,
   getProjectScopes,
   getWorkItem,
   getWorkItemDocuments,
@@ -29,13 +30,14 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
   const { locale, workItemId } = await params;
   setRequestLocale(locale);
   const t = await getTranslations("workItems");
-  const [me, item, form, people, documents, history] = await Promise.all([
+  const [me, item, form, people, documents, history, optionLists] = await Promise.all([
     getMe(),
     getWorkItem(workItemId),
     getWorkItemForm(workItemId),
     getWorkItemFormChoices(workItemId),
     getWorkItemDocuments(workItemId),
     getWorkItemHistory(workItemId),
+    getOptionLists(),
   ]);
   if (!me) return redirect({ href: "/sign-in", locale });
   if (!item || !form || !people || !documents) notFound();
@@ -53,6 +55,7 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
       schema={form.schema}
       choices={choices}
       people={people}
+      optionLists={optionLists}
       answers={item.answers}
       named={item.namedAnswers}
       editable={editable && !!mine && !!scopes}
@@ -130,7 +133,7 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
           <dd>{item.raisedBy.companyName[locale]}</dd>
         </dl>
 
-        {history && <WorkItemHistory events={history.events} schema={form.schema} locale={locale} />}
+        {history && <WorkItemHistory events={history.events} schema={form.schema} optionLists={optionLists} locale={locale} />}
       </div>
     </WorkItemFormProvider>
   );

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { bilingualText } from "./company.ts";
 import { condition, evaluateCondition, isUnanswered, readsAttrs } from "./condition.ts";
+import { OPTION_LIST_MAX_LEVELS, isChoosable, optionPath, reachesDepth, type OptionList } from "./option-list.ts";
 
 // The Form engine's schema and its one validator (form-engine.md §1, §8; ADR 0006).
 // The same code runs in the browser, for instant feedback, and on the server, as
@@ -88,6 +89,9 @@ export const maxTableRows = 200;
 
 const columnBase = { key: formKey, label: bilingualText, required: z.boolean().default(false) };
 
+/** How many levels the filler goes down in an Option List: 1 to the most a list has. */
+const optionDepth = z.number().int().min(1).max(OPTION_LIST_MAX_LEVELS).default(1);
+
 /**
  * A table column (form-engine.md §2). Its types are the plain ones: no files,
  * people, checklists or nested tables, so no reference ever lives in a row (ADR
@@ -119,6 +123,8 @@ export const tableColumn = z.discriminatedUnion("type", [
   z.object({ ...columnBase, type: z.literal("date") }),
   z.object({ ...columnBase, type: z.literal("yes_no") }),
   z.object({ ...columnBase, type: z.literal("select"), options: formOptions }),
+  /** One option of an Option List, by the list's id: options are never copied into the Form, so the list stays live. */
+  z.object({ ...columnBase, type: z.literal("option_list"), list: z.uuid(), depth: optionDepth }),
 ]);
 export type TableColumn = z.infer<typeof tableColumn>;
 
@@ -168,6 +174,14 @@ export const formField = z.discriminatedUnion("type", [
   /** Any of the field's options, by value, in the order chosen. */
   z.object({ ...fieldBase, type: z.literal("multi_select"), options: formOptions }),
   /**
+   * Choices from an Option List, by the list's id (never copied, so the list
+   * stays live without a new Form Version). `depth` is how many levels the
+   * filler goes down; each level's choices are those under the level above.
+   * The answer is the value of the option reached (a list of them, if
+   * `multiple`); its path follows from the list.
+   */
+  z.object({ ...fieldBase, type: z.literal("option_list"), list: z.uuid(), multiple: z.boolean().default(false), depth: optionDepth }),
+  /**
    * A Project Member, by id. Offered only those the filler can see: in practice
    * their own Company's Project Members (V15). Another Company sees the answer
    * as that Company's name, never the person (V14).
@@ -213,6 +227,7 @@ export const formField = z.discriminatedUnion("type", [
 export type FormField = z.infer<typeof formField>;
 export type FormFieldType = FormField["type"];
 export type TableField = Extract<FormField, { type: "table" }>;
+export type OptionListField = Extract<FormField, { type: "option_list" }>;
 
 const layoutTypes = ["heading", "instructions", "divider"] as const;
 export type LayoutField = Extract<FormField, { type: (typeof layoutTypes)[number] }>;
@@ -305,6 +320,8 @@ export type ValidationMode = "draft" | "complete";
  *   same answer as a made-up id).
  * `too_few_rows`, `too_many_rows`: a table with fewer rows than its minimum or
  *   more than its maximum (checked when the item leaves Draft).
+ * `too_shallow`: an Option List choice that stops above the depth the field
+ *   asks for, though options remain below it (checked when the item leaves Draft).
  * A table's cell errors name the cell: `row` (from 0) and `column`.
  */
 export const fieldErrorCodes = [
@@ -319,6 +336,7 @@ export const fieldErrorCodes = [
   "unknown_field",
   "too_few_rows",
   "too_many_rows",
+  "too_shallow",
 ] as const;
 export type FieldErrorCode = (typeof fieldErrorCodes)[number];
 
@@ -348,7 +366,20 @@ export type ScopeChoice = { id: string; tradeId: string; parentId: string | null
  * Fields, and the ids `offered` to the filler for `member` and `participant`.
  * Without them it checks only that they are ids; the server always passes them.
  */
-export type ValidationContext = { scopes?: readonly ScopeChoice[]; offered?: OfferedChoices };
+export type ValidationContext = {
+  scopes?: readonly ScopeChoice[];
+  offered?: OfferedChoices;
+  /**
+   * The Option Lists, as they are now. Without them an `option_list` answer is
+   * only checked to be text; the server always passes them.
+   */
+  optionLists?: readonly OptionList[];
+  /**
+   * The answers already saved. A retired option an answer already holds stays
+   * valid (and saves again unchanged); choosing it anew is refused.
+   */
+  held?: Readonly<Record<string, unknown>>;
+};
 
 /** Every field of the schema, layout included, in Form order. */
 export function formFields(schema: FormSchema): FormField[] {
@@ -484,6 +515,39 @@ function checkNumber(value: unknown, field: { min?: number; max?: number }, deci
 
 const isId = (value: unknown): value is string => typeof value === "string" && z.uuid().safeParse(value).success;
 
+const isRow = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
+
+/** The option values an answer already holds: a single option, a list of them, or a table column's cells. */
+function heldValues(saved: unknown, column?: string): ReadonlySet<string> {
+  const values = (Array.isArray(saved) ? saved : [saved]).flatMap((v) => (column !== undefined ? (isRow(v) ? [v[column]] : []) : [v]));
+  return new Set(values.filter((v): v is string => typeof v === "string"));
+}
+
+/**
+ * What is wrong with one option an `option_list` field or column holds: not
+ * text, not in the list, retired or below the field's depth for a new choice,
+ * or (when `complete`) stopping short of its depth. An option the answer already
+ * holds is forgiven being retired: it stays, and saves again unchanged.
+ */
+function checkOption(
+  field: { list: string; depth: number },
+  value: unknown,
+  complete: boolean,
+  held: ReadonlySet<string>,
+  lists: ReadonlyMap<string, OptionList> | undefined,
+): FieldErrorCode | null {
+  if (typeof value !== "string") return "wrong_type";
+  if (!lists) return null;
+  const list = lists.get(field.list);
+  const path = list ? optionPath(list, value) : null;
+  if (!path) return "unknown_option";
+  const kept = held.has(value);
+  if (!kept && !isChoosable(path, field.depth)) return "unknown_option";
+  // A retired option can't be gone deeper into, so a kept one is as deep as it can be.
+  const asDeepAsItGets = kept && path.some((o) => o.retired);
+  return complete && !asDeepAsItGets && !reachesDepth(path, field.depth) ? "too_shallow" : null;
+}
+
 /** A field or a table column of a type both take: checked the same way. */
 type PlainField = Extract<AnswerField | TableColumn, { type: "text" | "textarea" | "number" | "currency" | "date" | "yes_no" | "select" }>;
 
@@ -517,6 +581,7 @@ function checkValue(
   required: boolean,
   given: Record<string, unknown>,
   context: ValidationContext,
+  complete: boolean,
 ): FieldErrorCode | null {
   switch (field.type) {
     case "text":
@@ -544,6 +609,17 @@ function checkValue(
       const known = new Set(field.options.map((o) => o.value));
       return value.every((v) => known.has(v)) ? null : "unknown_option";
     }
+    case "option_list": {
+      const lists = context.optionLists && new Map(context.optionLists.map((l) => [l.id, l]));
+      const held = heldValues(context.held?.[field.key]);
+      if (!field.multiple) return checkOption(field, value, complete, held, lists);
+      if (!Array.isArray(value) || new Set(value).size !== value.length) return "wrong_type";
+      for (const v of value) {
+        const code = checkOption(field, v, complete, held, lists);
+        if (code) return code;
+      }
+      return null;
+    }
     case "trade":
     case "location":
       return isId(value) ? null : "wrong_type";
@@ -565,8 +641,6 @@ function checkValue(
   }
 }
 
-const isRow = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
-
 /**
  * Checks a table's rows. Each cell is checked by its column's type; an empty
  * cell is dropped, and a row with nothing in it is dropped and not counted.
@@ -579,6 +653,7 @@ function checkTable(
   value: unknown,
   complete: boolean,
   required: boolean,
+  context: ValidationContext,
 ): { errors: FieldError[]; rows: FormRow[] } {
   const key = field.key;
   if (value === undefined || value === null) value = [];
@@ -588,6 +663,7 @@ function checkTable(
   const errors: FieldError[] = [];
   const rows: FormRow[] = [];
   const columns = new Map(field.columns.map((c) => [c.key, c]));
+  const lists = context.optionLists && new Map(context.optionLists.map((l) => [l.id, l]));
   value.forEach((given: unknown, row) => {
     if (!isRow(given)) {
       errors.push({ key, code: "wrong_type", row });
@@ -602,7 +678,10 @@ function checkTable(
         if (complete && column.required) errors.push({ key, code: "required", row, column: column.key });
         continue;
       }
-      const code = checkPlain(column, cell, complete && column.required);
+      const code =
+        column.type === "option_list"
+          ? checkOption(column, cell, complete, heldValues(context.held?.[field.key], column.key), lists)
+          : checkPlain(column, cell, complete && column.required);
       if (code) errors.push({ key, code, row, column: column.key });
       else cells[column.key] = cell as string | number | boolean;
     }
@@ -650,7 +729,8 @@ export function tableTotals(field: TableField, rows: unknown): Record<string, nu
  * fields' dropped (a hidden field is cleared, never checked). On failure, one
  * error per shown field, in Form order, then answers to unknown fields. The
  * Trade is required even in `draft` mode: no Work Item exists without one.
- * `context` holds the Project's Scopes, so that Scopes outside the chosen Trade are refused.
+ * `context` holds the Project's Scopes, so that Scopes outside the chosen Trade are refused,
+ * and the Option Lists for `option_list` answers.
  */
 export function validateAnswers(
   schema: FormSchema,
@@ -672,7 +752,7 @@ export function validateAnswers(
     const required = field.type === "trade" || (mode === "complete" && isRequired(field, visibility.answers));
     const value = given[field.key];
     if (field.type === "table") {
-      const table = checkTable(field, value, mode === "complete", required);
+      const table = checkTable(field, value, mode === "complete", required, context);
       errors.push(...table.errors);
       if (table.errors.length === 0 && table.rows.length > 0) clean[field.key] = table.rows;
       continue;
@@ -681,7 +761,7 @@ export function validateAnswers(
       if (required) errors.push({ key: field.key, code: "required" });
       continue;
     }
-    const code = checkValue(field, value, required, given, context);
+    const code = checkValue(field, value, required, given, context, mode === "complete");
     if (code) errors.push({ key: field.key, code });
     // Email addresses and phone numbers are kept as typed, without the spaces around them.
     else if ((field.type === "email" || field.type === "phone") && typeof value === "string") {
