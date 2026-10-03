@@ -67,7 +67,7 @@ export function WorkItemAttachments({ workItemId, list, locale }: { workItemId: 
             disabled={pending}
             onChange={(e) => {
               const file = e.target.files?.[0];
-              if (file) void upload(file).finally(() => input.current && (input.current.value = ""));
+              if (file) void upload([file]).finally(() => input.current && (input.current.value = ""));
             }}
             className="block text-sm file:me-3 file:rounded-md file:border file:border-border file:bg-surface file:px-3 file:py-1.5 file:text-sm"
           />

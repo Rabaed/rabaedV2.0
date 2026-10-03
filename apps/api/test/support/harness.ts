@@ -29,7 +29,7 @@ export const testConfig: ApiConfig = {
   invitationTtlMs: 72 * HOUR,
   cookieSecure: true,
   version: "0123abc",
-  documents: { maxBytes: 1024 * 1024, contentTypes: ["application/pdf", "image/png", "text/plain"] },
+  documents: { maxBytes: 1024 * 1024, contentTypes: ["application/pdf", "image/jpeg", "image/png", "text/plain"] },
 };
 
 type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";

@@ -48,6 +48,8 @@ const document = (id: string, fieldKey: string | null, fileName: string, sizeByt
   uploadedBy: { companyName: { en: "C1 Contracting", ar: "سي ون للمقاولات" }, memberName: null },
   frozen,
   fieldKey,
+  takenAt: null,
+  takenWhere: null,
 });
 
 const datasheet = document("0199a3b0-0000-7000-8000-000000000101", "datasheet", "RESCLITE-PRO datasheet.pdf", 1_536_000);

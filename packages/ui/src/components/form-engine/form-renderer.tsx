@@ -47,8 +47,9 @@ import { Select } from "../form/select.tsx";
 import { Textarea } from "../form/textarea.tsx";
 import { Icon } from "../icon/icon.tsx";
 import { BuiltInSelect, builtInAnswerLabels, noChoices, ScopesChecklist, type BuiltInChoices } from "./built-in-fields.tsx";
-import { AttachmentsField, attachmentsLimits, takesUpload, type AttachmentsFieldFiles } from "./attachments-field.tsx";
+import { AttachmentsField, attachmentsLimits, takesUpload } from "./attachments-field.tsx";
 import { OptionListInput } from "./option-list-field.tsx";
+import { PhotosField, photosLimits, takesPhotos, type PhotosFieldFiles } from "./photos-field.tsx";
 import { TableInput, TableRead } from "./table-field.tsx";
 
 // The Form engine's renderer (form-engine.md §1, §5): draws a Form Version's
@@ -187,8 +188,9 @@ export type FormRendererProps = {
    */
   named?: NamedAnswers;
   /**
-   * The files of the Form's `attachments` fields: the item's Documents tied to
-   * a field, and what may be done with them. Undefined before the item exists.
+   * The files of the Form's `attachments` and `photos` fields: the item's
+   * Documents tied to a field, and what may be done with them. Undefined before
+   * the item exists.
    */
   files?: FormFiles;
   /**
@@ -201,7 +203,7 @@ export type FormRendererProps = {
   className?: string;
 };
 
-/** The files of a Form's `attachments` fields, and what the page does with them (RP-281). */
+/** The files of a Form's `attachments` and `photos` fields, and what the page does with them (RP-281, RP-284). */
 export type FormFiles = {
   /** The item's confirmed Documents tied to a field (`fieldKey`); others are ignored. */
   documents: readonly DocumentSummary[];
@@ -209,20 +211,28 @@ export type FormFiles = {
   canChange: boolean;
   /** The fields with an upload or removal under way. */
   pending?: ReadonlySet<string>;
-  onUpload?: (fieldKey: string, file: File) => void;
+  /** Photos' image URLs, by Document id, for their thumbnails. */
+  imageUrls?: Readonly<Record<string, string>>;
+  /** Called with the files picked for a field, in order: one for an `attachments` field, several photos at once. */
+  onUpload?: (fieldKey: string, files: File[]) => void;
   onOpen?: (documentId: string) => void;
   onRemove?: (fieldKey: string, documentId: string) => void;
 };
 
-/** One `attachments` field's files, out of the Form's. */
-const filesOf = (files: FormFiles | undefined, key: string): AttachmentsFieldFiles | undefined =>
-  files && { documents: files.documents.filter((d) => d.fieldKey === key), canChange: files.canChange, pending: files.pending?.has(key) };
+/** One file field's files, out of the Form's. */
+const filesOf = (files: FormFiles | undefined, key: string): PhotosFieldFiles | undefined =>
+  files && {
+    documents: files.documents.filter((d) => d.fieldKey === key),
+    canChange: files.canChange,
+    pending: files.pending?.has(key),
+    imageUrls: files.imageUrls,
+  };
 
 function errorText(field: AnswerField | TableColumn, error: FieldError, locale: Locale): string {
   const text = copy[locale];
   switch (error.code) {
     case "too_few_files":
-      return field.type === "attachments" ? text.tooFewFiles(Math.max(field.minFiles ?? 1, 1)) : text.wrongType;
+      return field.type === "attachments" || field.type === "photos" ? text.tooFewFiles(Math.max(field.minFiles ?? 1, 1)) : text.wrongType;
     case "too_few_rows":
       return field.type === "table" ? text.tooFewRows(Math.max(field.minRows ?? 1, 1)) : text.wrongType;
     case "too_many_rows":
@@ -358,6 +368,7 @@ const optionsOf = (field: { options: FormOption[] }, locale: Locale) =>
 /** A field the Form itself defines: one that takes an answer, but not a Built-in Field. */
 type OwnField = Exclude<AnswerField, { type: BuiltInFieldType }>;
 type AttachmentsFieldSchema = Extract<AnswerField, { type: "attachments" }>;
+type PhotosFieldSchema = Extract<AnswerField, { type: "photos" }>;
 
 /** A select's options, with "None" first when the field is optional, so a choice can be taken back. */
 const withNone = (field: { required: unknown }, options: { value: string; label: string }[], locale: Locale) =>
@@ -365,8 +376,8 @@ const withNone = (field: { required: unknown }, options: { value: string; label:
 
 /** One of the Form's own fields' control, and whether its Field labels a group (radios, checkboxes) rather than one control. */
 function control(
-  // An `attachments` field holds files, not a value: FormRenderer draws it (attachmentsControl).
-  field: Exclude<OwnField, { type: "attachments" }> | TableColumn,
+  // A file field holds files, not a value: FormRenderer draws it (attachmentsControl, photosControl).
+  field: Exclude<OwnField, { type: "attachments" | "photos" }> | TableColumn,
   value: unknown,
   locale: Locale,
   people: FormChoices,
@@ -645,7 +656,7 @@ export function FormRenderer({
           files={own}
           mode="edit"
           locale={locale}
-          onUpload={(file) => files?.onUpload?.(field.key, file)}
+          onUpload={(file) => files?.onUpload?.(field.key, [file])}
           onOpen={files?.onOpen}
           onRemove={(documentId) => files?.onRemove?.(field.key, documentId)}
         />
@@ -653,10 +664,30 @@ export function FormRenderer({
     };
   }
 
-  /** A field's help, and for an `attachments` field its limits (file types, most files) after it. */
+  /** A `photos` field's photos, to take, choose and remove while they may change; a group when there is no file input. */
+  function photosControl(field: PhotosFieldSchema): { element: ReactNode; group?: boolean } {
+    const own = filesOf(files, field.key);
+    return {
+      group: !takesPhotos(field, own, "edit"),
+      element: (
+        <PhotosField
+          field={field}
+          files={own}
+          mode="edit"
+          locale={locale}
+          onUpload={(picked) => files?.onUpload?.(field.key, picked)}
+          onOpen={files?.onOpen}
+          onRemove={(documentId) => files?.onRemove?.(field.key, documentId)}
+        />
+      ),
+    };
+  }
+
+  /** A field's help, and for a file field its limits (file types, most files) after it. */
   function helpOf(field: AnswerField): ReactNode {
     const help = field.help?.[locale];
-    const limits = field.type === "attachments" ? attachmentsLimits(field, locale) : undefined;
+    const limits =
+      field.type === "attachments" ? attachmentsLimits(field, locale) : field.type === "photos" ? photosLimits(field, locale) : undefined;
     if (!limits) return help;
     return help ? (
       <>
@@ -677,6 +708,12 @@ export function FormRenderer({
       const own = filesOf(files, field.key);
       return own && own.documents.length > 0 ? (
         <AttachmentsField field={field} files={own} mode="read" locale={locale} onOpen={files?.onOpen} />
+      ) : null;
+    }
+    if (field.type === "photos") {
+      const own = filesOf(files, field.key);
+      return own && own.documents.length > 0 ? (
+        <PhotosField field={field} files={own} mode="read" locale={locale} onOpen={files?.onOpen} />
       ) : null;
     }
     if (isBuiltInField(field)) {
@@ -743,7 +780,9 @@ export function FormRenderer({
                   ? builtInControl(field.type)
                   : field.type === "attachments"
                     ? attachmentsControl(field)
-                    : control(
+                    : field.type === "photos"
+                      ? photosControl(field)
+                      : control(
                         field,
                         // A calculated field shows the result worked out from the answers now, never one given.
                         field.type === "calculated" ? visibility.answers[field.key] : answers[field.key],

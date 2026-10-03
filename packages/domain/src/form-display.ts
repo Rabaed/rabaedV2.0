@@ -164,6 +164,7 @@ export function formatFormValue(
       return Array.isArray(value) ? rowCount[locale](value.length) : String(value ?? "");
     // Its files are Documents, listed by the page; there is no answer to show.
     case "attachments":
+    case "photos":
       return "";
     case "member":
     case "participant":
