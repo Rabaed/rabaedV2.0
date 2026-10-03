@@ -87,7 +87,7 @@ System Fields   Attachments · Links
 | Time | `date`, `datetime`, `time` | ISO values: `date` is a calendar date (`2026-10-03`), `datetime` an instant in UTC (`2026-10-03T06:30:00.000Z`) filled in and shown in the Project's time zone, `time` a time of day in the Project's time zone (`07:30`). Every Project is in Asia/Riyadh for now (`timeZone` in `packages/domain`). Gregorian only in part 1. Display follows §5. |
 | Choice | `yes_no`, `select`, `multi_select` | `yes_no` stores `true` or `false` (No is an answer, not an empty field). `select` and `multi_select` have options `{value, label: {en, ar}}` and store the option `value`s (a list, in the order chosen, for `multi_select`); an unknown value is refused (`unknown_option`). |
 | People and org | `member`, `participant` | Store a Project Member's or a Participant's id. The filler is offered only those they can see (V15), from the API's form choices: their own Participant's Project Members; their own Participant, the Host Company's and, on an item, the Companies on it. Never every Participant, not even for a Project Admin. The server refuses an id the filler couldn't have been offered with the same `unknown_option` as a made-up one. Another Company reads a `member` answer as the Member's Company name, never the person, and the item's answers leave out that Member's id (V14). There's no field for picking any Company on Rabaed, because that would expose the customer list (ADR 0009). A Company outside the Project is typed as text. |
-| References | `pick_list`, `work_item_ref` | `pick_list` sources: Approved Supplier List, Scopes, Locations, custom lists, and later BOQ items. `work_item_ref` creates a **Link**, and can be restricted to Types and outcomes (e.g. "approved MAR"). |
+| References | `work_item_ref` | Creates a **Link**, and can be restricted to Types and outcomes (e.g. "approved MAR"). Custom choice lists are **Option Lists** (`option_list`); there's no separate `pick_list` type (settled 2026-10-03). Choosing from the Approved Supplier List comes with that feature. |
 | Files | `attachments`, `photos` | Named file fields in the Form body (e.g. "Test certificate (PDF)", required), beside the always-present Attachments System Field. All become **Documents** and are frozen at the first Send or Submit. `photos` supports camera capture and keeps EXIF time and GPS. An optional time/location stamp can be burned onto the image. |
 | Structure | `table` | Repeating rows with typed columns and optional column totals, e.g. manpower (trade, count) or equipment (type, count, hours). |
 | Checklists | `checklist` | See §3. |
@@ -232,12 +232,29 @@ The full engine is built in five parts. Each part is merged and usable before th
    - Answers are edited by the raiser's Company in Draft and its internal Steps, and are read-only from Submit onwards. Changes after Draft are recorded as field-level diffs.
    - An explicit "Save draft" button. "Required" is checked only when the item leaves Draft.
    - The demo is re-seeded: dev has no real data to migrate.
-2. **Rich fields:** Links (with E1), named `attachments` and `photos` fields, `table`, `calculated`, `checklist` (including "create Snag on a failed item"), Option Lists and the `option_list` type, and `pick_list` / `work_item_ref`. Publishes the MAR Form Version 2.
+2. **Rich fields**, in two specs (settled 2026-10-03):
+   - **2a, fields inside one item:** Option Lists and the `option_list` type, `table`, `calculated`, named `attachments` and `photos` fields, and `checklist` without "create Snag". Publishes the MAR Form Version 2.
+     - **Option Lists** are Rabaed Defaults until part 5. Rabaed Engineers edit them in Rabaed Admin, each edit logged in `admin_action` with a reason. Their contents are live in every Form that uses them (§10).
+     - **Table columns** can be `text`, `number`, `currency`, `date`, `yes_no`, `select` or `option_list`. They can't hold files, people, checklists or tables. A table can set minimum and maximum rows, and a number or currency column can show a total.
+     - **`calculated`**: the result is shown live, recalculated by the server on every save, and stored with the answers (so it's in the hash). Operations are `+ − × ÷` and `sum(table.column)`, rounded to the field's decimals. A division by zero or a missing input leaves it empty, so a required calculated field then blocks leaving Draft.
+     - **`photos`**: camera capture on phones, several per field. EXIF time and GPS are kept and shown to everyone who sees the item (V13). The burned-in stamp comes with part 4.
+     - **`checklist`**: items written in the Form (checklist templates come with Libraries in part 5); answer sets `Yes / No / N/A` or `Pass / Fail / N/A`; comment and photo off, optional or required on a negative answer; a summary such as "18 Pass / 2 Fail / 1 N/A".
+     - **MAR Form Version 2:**
+       - manufacturer (text), model, specification section, description
+       - an **Items** table (fixture type, description, quantity, unit, with a total quantity)
+       - **Datasheet** (PDF, required), **Test certificate** (optional), **Sample photo** (`photos`, optional)
+       - Trade, Location, Scopes
+   - **2b, between items:** Links and `work_item_ref`, with the E1 visibility rule, right after 2a. Until part 4, a link to an item the viewer can't see shows only its Document Number and Subject. The "open its Documental Record" action is added with part 4.
+   - Before 2b, answers are read only through the stripping function (ADR 0012, RP-275).
 3. **Who fills what:** `editable_at` per section, Action Forms built from Forms, autosave with per-field timestamps, and the reporting table.
 4. **PDF output:** the Documental Record layout and PDF Templates, and optional Hijri dates per Project (part 1 shows Gregorian only).
-
-Package isn't a System Field. It arrives with the Package feature (RP-26), later.
 5. **The builder and Libraries:** the Form builder, the Field Library (Saved Fields), Company Libraries with "Copy to my Library" and offering to a Project (V18 tests), and the Company Trade/Scope lists with "pull updates".
+
+Later, with their own modules:
+- Package, which isn't a System Field, comes with the Package feature (RP-26).
+- A checklist's "create Snag on a failed item" comes with the Snag List module.
+- Choosing a supplier from the Approved Supplier List comes with that feature (V10). Until then the MAR's manufacturer is free text.
+- Custom Visibility Dimensions and their Built-in Fields are parked (RP-274) until a Project needs one.
 
 ## Settled (2026-09-26)
 

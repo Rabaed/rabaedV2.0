@@ -4,6 +4,8 @@ Because customers build their own Forms, Work Item answers can't live in fixed c
 
 The same pinning applies to Workflows. Visibility is enforced through a materialised `work_item_access` table combined with Postgres row-level security, rather than evaluating Workflow rules on every read.
 
+Answers that point at things another Company may not see are read only through a stripping function, never from the document directly ([ADR 0012](0012-answers-read-only-through-a-stripping-function.md)).
+
 ## Exception: the MAR Form Version 1 was completed in place (2026-10-03)
 
 The migration `20261012000000_built_in_fields.sql` (RP-270) changed the published MAR Form Version 1. It switched off the `form_version_published_frozen` trigger for one update, which added the Built-in Fields Trade, Location and Scopes in a Classification section.
