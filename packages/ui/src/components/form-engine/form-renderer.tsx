@@ -352,7 +352,12 @@ function control(
     case "member":
     case "participant": {
       // Only those the API offered this filler (V15); ids, unlike option values, never clash with "-".
-      const offered = field.type === "member" ? people.members : people.participants;
+      // Members come in the viewer's alphabet (the API answer is locale-free); Participants keep the API's order.
+      const collator = new Intl.Collator(intlLocaleOf(locale));
+      const offered =
+        field.type === "member"
+          ? people.members.toSorted((a, b) => collator.compare(a.name[locale], b.name[locale]))
+          : people.participants;
       return {
         element: (
           <Select
