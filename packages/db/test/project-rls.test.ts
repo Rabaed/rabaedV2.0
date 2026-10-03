@@ -92,6 +92,10 @@ async function fillProject(projectId: string, creator: string) {
       `,
     ).then((r) => r.value_id);
   const values = { trade: await value("trade", "EL"), location: await value("location", "BA") };
+  await expectOutcome(
+    sql`select outcome from app.add_scope(${projectId}::uuid, ${values.trade}::uuid, null, '{"en": "S", "ar": "ن"}'::jsonb)`,
+    "added",
+  );
 
   // Value lists rather than "all", so visibility_grant_value gets rows too.
   for (const [kind, id] of Object.entries(values)) {

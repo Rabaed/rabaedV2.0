@@ -2,15 +2,20 @@ import type { DimensionValue, Locale } from "@rabaed/domain";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
 import { AddDimensionValueForm } from "@/components/add-dimension-value-form";
+import { TradeScopes } from "@/components/trade-scopes";
 import { Link, redirect } from "@/i18n/navigation";
 import { treeOrder } from "@/lib/dimension-tree";
-import { getMe, getProject, getProjectDimensions } from "@/lib/session";
+import { getMe, getProject, getProjectDimensions, getProjectScopes } from "@/lib/session";
 
 // Unicode left-to-right isolate and its closing pop, for codes inside <option> text.
 const LRI = String.fromCodePoint(0x2066);
 const PDI = String.fromCodePoint(0x2069);
 
-/** Project Settings → Trades & Locations. Every Project Member sees them; a Project Admin adds them. */
+/**
+ * Project Settings → Trades & Locations, with each Trade's Scopes and Sub-scopes.
+ * Every Project Member sees them; a Project Admin adds them, and renames and
+ * deactivates Scopes.
+ */
 export default async function TradesLocationsPage({
   params,
 }: {
@@ -19,9 +24,14 @@ export default async function TradesLocationsPage({
   const { locale, projectId } = await params;
   setRequestLocale(locale);
   const t = await getTranslations("dimensions");
-  const [me, project, dimensions] = await Promise.all([getMe(), getProject(projectId), getProjectDimensions(projectId)]);
+  const [me, project, dimensions, scopes] = await Promise.all([
+    getMe(),
+    getProject(projectId),
+    getProjectDimensions(projectId),
+    getProjectScopes(projectId),
+  ]);
   if (!me) return redirect({ href: "/sign-in", locale });
-  if (!project || !dimensions) notFound();
+  if (!project || !dimensions || !scopes) notFound();
 
   // An <option> can't hold <bdi>: isolate the code left-to-right with LRI/PDI instead.
   const label = (v: DimensionValue) => `${v.name[locale]} (${LRI}${v.code}${PDI})`;
@@ -47,11 +57,19 @@ export default async function TradesLocationsPage({
         ) : (
           <ul className="divide-y divide-border border-y border-border" data-testid="trades">
             {dimensions.trade.map((v) => (
-              <li key={v.id} className="py-2">
-                {v.name[locale]}{" "}
-                <bdi dir="ltr" className="text-sm text-muted">
-                  {v.code}
-                </bdi>
+              <li key={v.id} className="space-y-2 py-3">
+                <div>
+                  {v.name[locale]}{" "}
+                  <bdi dir="ltr" className="text-sm text-muted">
+                    {v.code}
+                  </bdi>
+                </div>
+                <TradeScopes
+                  projectId={project.id}
+                  tradeId={v.id}
+                  scopes={treeOrder(scopes.scopes.filter((s) => s.tradeId === v.id))}
+                  canEdit={project.isProjectAdmin}
+                />
               </li>
             ))}
           </ul>

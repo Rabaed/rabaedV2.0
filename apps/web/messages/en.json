@@ -164,6 +164,27 @@
     "tooDeep": "Floors are the lowest level.",
     "unavailable": "Something went wrong. Try again."
   },
+  "scopes": {
+    "scopes": "Scopes",
+    "noScopes": "No Scopes yet.",
+    "deactivated": "Deactivated",
+    "parent": "Under",
+    "newScope": "New Scope (top level)",
+    "nameEn": "Name (English)",
+    "nameAr": "Name (Arabic)",
+    "addScope": "Add Scope",
+    "rename": "Rename",
+    "save": "Save",
+    "cancel": "Cancel",
+    "deactivate": "Deactivate",
+    "reactivate": "Reactivate",
+    "confirmDeactivate": "Deactivate {name}? It stays on the Work Items that already use it, but won't be offered for new ones.",
+    "invalid": "Enter the name in English and Arabic.",
+    "notFound": "This is no longer available. Refresh the page.",
+    "parentDeactivated": "Reactivate its Scope first.",
+    "projectClosed": "This Project is closed.",
+    "unavailable": "Something went wrong. Try again."
+  },
   "visibility": {
     "title": "Visibility",
     "participantsHint": "Choose which Trades and Locations each Participant covers. Choosing a Location covers everything inside it. Each Company's Authorized Person narrows this for its own Members.",

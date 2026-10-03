@@ -124,8 +124,8 @@ Every Project gets `trade` (required) and `location` at creation.
 `dimension_value_id`, `drawing_id → drawing`. The plan Drawings of a Location, used for Pins.
 
 **scope**
-`id`, `trade_value_id → dimension_value`, `parent_id` (null = Scope; set = Sub-scope), `code`, `name i18n`, `owner_kind/owner_id`.
-Rabaed defaults are copied per Project, and only Project Admins add more.
+`id`, `project_id`, `trade_value_id → dimension_value` (a Trade of the Project), `parent_id` (null = Scope; set = Sub-scope, in its Scope's Trade), `name i18n`, `status {active, deactivated}`, `sort`. Two levels.
+Only Project Admins add, rename and deactivate them; a deactivated one stays on the Work Items that use it. They are not a Visibility Dimension and never grant or restrict access. Built in RP-263; still to come: `code`, Rabaed defaults and the Company lists they are copied from (`owner_kind/owner_id`, `copied_from_id`, "pull updates").
 
 **visibility_grant** / **visibility_grant_value**
 - `visibility_grant`: `id`, `project_id`, `subject_kind {participant, project_member}`, `participant_id`, `project_member_id` (set for a Member's grant; `participant_id` is then their Participant), `dimension_id`, `is_all bool`. One per subject and dimension.
