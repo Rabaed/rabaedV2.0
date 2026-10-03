@@ -9,7 +9,7 @@ Four lanes. **main** plans; **A, B and C** implement. Each implementing session 
 | 3 | **Agent B** | Implements tickets labelled `lane-b` | 3 | lane3.localhost:3300 |
 | 4 | **Agent C** | Implements tickets labelled `lane-c` | 4 | lane4.localhost:3400 |
 
-Lane `n` has its own Postgres (5432+100n), api (4000+100n), web (3000+100n) and Docker Compose project `rabaed-laneN`. See "Several worktrees at once" in the README.
+Each lane has its own ports, database and Docker Compose project: see "Several worktrees at once" in the README.
 
 **Which ticket is next** comes from Jira, not this file: a lane's frontier is its `lane-x` tickets that are `ready-for-agent` and have every "Blocks" blocker Done. The ticket gives a suggested model (Opus or Sonnet).
 
@@ -36,7 +36,7 @@ Every ticket already gets a `/code-review` inside `/implement`. When all of a sp
 
 1. One ticket = one app-made worktree session = one branch named with the key (`RP-191-...`) = one PR.
 2. Start only tickets whose blockers are Done.
-3. When another lane's open ticket touches the same files (the ticket names them), keep your changes to those files in their own commits, and merge `main` right before opening the PR.
-4. Migrations are timestamp-named, and a migration already on `main` is never edited; a fix is a new migration.
+3. When another lane's open ticket touches the same files (the ticket names them), keep your changes to those files in their own commits, and merge `main` right before opening the PR. Shared root files (root `package.json`, lockfile, CI workflows) change in small PRs of their own.
+4. Migrations are timestamp-named (and follow `CODING_STANDARDS.md`).
 5. Merge only through a PR with green CI (both visibility suites must pass). Merge `main` into your branch when it moves; use `/resolving-merge-conflicts` if needed.
 6. Parallel sessions multiply usage — close finished sessions.
