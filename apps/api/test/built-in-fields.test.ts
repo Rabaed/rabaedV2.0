@@ -7,9 +7,9 @@ import { randomUUID } from "node:crypto";
 import type { WorkItemDetail } from "@rabaed/domain";
 import type { LightMyRequestResponse } from "fastify";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createTestApi, expectHidden, type Caller, type OnboardedCompany } from "./support/harness.ts";
+import { attachDatasheet, createTestApi, expectHidden, type Caller, type OnboardedCompany } from "./support/harness.ts";
 
-const api = await createTestApi();
+const api = await createTestApi({ files: true });
 afterAll(() => api.close());
 
 type Company = { company: OnboardedCompany; caller: Caller };
@@ -166,6 +166,7 @@ describe("Save draft with the Built-in Fields", () => {
 describe("leaving Draft", () => {
   it("is refused without a Location, naming the field", async () => {
     const id = await created({ ...material, trade: trade.electrical });
+    await attachDatasheet(engineer, id);
     const res = await sendForReview(id);
     expect(res.statusCode).toBe(422);
     expect(res.json()).toEqual({ error: "form_incomplete", fields: [{ key: "location", code: "required" }] });

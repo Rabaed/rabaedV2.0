@@ -42,7 +42,7 @@ const password = demoPassword();
 const db = createDb(urls.app, { max: 2 });
 const adminDb = createDb(urls.admin, { max: 1 });
 const migrator = createDb(urls.migrator, { max: 1 });
-// The local file store (Docker), for the datasheet attached to a MAR.
+// The local file store (Docker), for the Datasheet and Sample photo of a MAR.
 const fileStoreSettings = fileStoreSettingsFromEnv();
 if (fileStoreSettings.endpoint) await ensureLocalBucket(fileStoreSettings);
 const app = await buildApp({ db, config: apiConfigFromEnv(), logger: false, files: createFileStore(fileStoreSettings) });

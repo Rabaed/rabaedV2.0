@@ -7,9 +7,9 @@ import { randomUUID } from "node:crypto";
 import type { WorkItemDetail, WorkItemHistory } from "@rabaed/domain";
 import type { LightMyRequestResponse } from "fastify";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createTestApi, type Caller, type OnboardedCompany } from "./support/harness.ts";
+import { attachDatasheet, createTestApi, type Caller, type OnboardedCompany } from "./support/harness.ts";
 
-const api = await createTestApi();
+const api = await createTestApi({ files: true });
 afterAll(() => api.close());
 
 type Company = { company: OnboardedCompany; caller: Caller };
@@ -96,6 +96,7 @@ describe("answers after Draft", () => {
     }), 201)).json().id;
     // Changes in Draft are the Draft itself: no diff.
     await ok(save(engineer, id, { ...complete, model: DRAFT_MODEL }));
+    await attachDatasheet(engineer, id);
     await ok(take(engineer, id, "send_for_review"));
     await ok(pm.post(`/v1/work-items/${id}/claim`));
   });

@@ -1,6 +1,7 @@
-// A tiny JPEG with an EXIF block, as a phone camera writes one: when the photo
-// was taken (DateTimeOriginal, with or without OffsetTimeOriginal) and where
-// (GPS latitude and longitude). Built by hand, so the tests need no image files.
+// A JPEG with an EXIF block, as a phone camera writes one: when the photo was
+// taken (DateTimeOriginal, with or without OffsetTimeOriginal) and where (GPS
+// latitude and longitude). Built by hand, so the tests and the demo seed need no
+// image files.
 
 type Entry = { tag: number; type: "ascii"; value: string } | { tag: number; type: "long"; value: number } | { tag: number; type: "rational"; value: number[] };
 
@@ -60,11 +61,15 @@ export type PhotoExif = {
   longitude?: number;
 };
 
-/** A JPEG whose EXIF holds `exif`; with nothing given, a JPEG with no EXIF at all. */
-export function jpegWithExif(exif: PhotoExif = {}): Buffer {
-  const soi = Buffer.from([0xff, 0xd8]);
-  const eoi = Buffer.from([0xff, 0xd9]);
-  if (exif.takenAt === undefined && exif.latitude === undefined) return Buffer.concat([soi, eoi]);
+/**
+ * `image` (a JPEG; by default an empty one, which nothing can show) with an
+ * EXIF block holding `exif`, put straight after its start marker. With nothing
+ * given, the image has no EXIF at all.
+ */
+export function jpegWithExif(exif: PhotoExif = {}, image: Buffer = Buffer.from([0xff, 0xd8, 0xff, 0xd9])): Buffer {
+  const soi = image.subarray(0, 2);
+  const rest = image.subarray(2);
+  if (exif.takenAt === undefined && exif.latitude === undefined) return image;
 
   const exifEntries: Entry[] = [];
   if (exif.takenAt !== undefined) exifEntries.push({ tag: 0x9003, type: "ascii", value: exif.takenAt });
@@ -97,5 +102,5 @@ export function jpegWithExif(exif: PhotoExif = {}): Buffer {
   const app1 = Buffer.alloc(4);
   app1.writeUInt16BE(0xffe1, 0);
   app1.writeUInt16BE(payload.length + 2, 2);
-  return Buffer.concat([soi, app1, payload, eoi]);
+  return Buffer.concat([soi, app1, payload, rest]);
 }

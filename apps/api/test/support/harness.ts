@@ -2,7 +2,14 @@ import { randomInt, randomUUID } from "node:crypto";
 import { closeOnboardingLead, createEngineer, listOnboardingLeads, onboardCompany, type CloseLeadResult } from "@rabaed/admin/services";
 import { createDb } from "@rabaed/db";
 import { testDatabaseUrls } from "@rabaed/db/test-support";
-import type { BaseRole, CreateProjectRequest, InviteMemberRequest, OnboardCompanyRequest, OnboardingLeads } from "@rabaed/domain";
+import type {
+  BaseRole,
+  CreateProjectRequest,
+  InviteMemberRequest,
+  OnboardCompanyRequest,
+  OnboardingLeads,
+  StartedDocumentUpload,
+} from "@rabaed/domain";
 import type { FastifyInstance, LightMyRequestResponse } from "fastify";
 import { expect } from "vitest";
 import { buildApp, SESSION_COOKIE } from "../../src/app.ts";
@@ -33,6 +40,39 @@ export const testConfig: ApiConfig = {
 };
 
 type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+
+/** A file to upload to a Work Item: to a named file field with `fieldKey`, else to the Attachments System Field. */
+export interface TestFile {
+  fieldKey?: string;
+  fileName: string;
+  contentType: string;
+  body: string | Uint8Array;
+}
+
+/**
+ * Uploads a file to a Work Item as the browser does (a signed URL from the API,
+ * the file, then the API told it is there); returns the Document's id. Needs a
+ * TestApi made with `files`.
+ */
+export async function uploadDocument(by: Caller, itemId: string, { body, ...file }: TestFile): Promise<string> {
+  const documents = `/v1/work-items/${itemId}/documents`;
+  const sizeBytes = typeof body === "string" ? Buffer.byteLength(body) : body.byteLength;
+  const started = await by.post(documents, { ...file, sizeBytes });
+  expect(started.statusCode, started.body).toBe(201);
+  const { id, upload } = started.json() as StartedDocumentUpload;
+  const stored = await fetch(upload.url, { method: upload.method, headers: upload.headers, body });
+  expect(stored.status).toBe(200);
+  const confirmed = await by.post(`${documents}/${id}/confirm`);
+  expect(confirmed.statusCode, confirmed.body).toBe(204);
+  return id;
+}
+
+/**
+ * The MAR Form Version 2's Datasheet (a PDF, required to leave Draft; RP-286),
+ * uploaded so a MAR can be sent for review.
+ */
+export const attachDatasheet = (by: Caller, itemId: string) =>
+  uploadDocument(by, itemId, { fieldKey: "datasheet", fileName: "datasheet.pdf", contentType: "application/pdf", body: "%PDF-1.7 a datasheet (test)" });
 
 /** Calls the API like one browser: keeps the session cookie between requests. */
 export interface Caller {
