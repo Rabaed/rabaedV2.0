@@ -29,6 +29,7 @@ import {
   type FormSchema,
   type FormValue,
   type Locale,
+  type NamedAnswer,
   type NamedAnswers,
   type TableColumn,
 } from "@rabaed/domain";
@@ -55,7 +56,8 @@ import { TableInput, TableRead } from "./table-field.tsx";
 // where the Form places them, offering what the page passes in `choices`. A
 // `member` or `participant` field offers only the `people` the API gave this
 // filler, and reads as the API named it for this viewer: another Company's
-// Member by the Company's name only (V14).
+// Member by the Company's name only (V14). A saved one no longer on offer (a
+// Member who left the Project) stays the choice, marked, until changed.
 
 const copy = {
   en: {
@@ -80,6 +82,8 @@ const copy = {
     tooManyRows: (n: number) => (n === 1 ? "Use at most 1 row." : `Use at most ${formatNumber(n, "en")} rows.`),
     choose: "Choose…",
     none: "None",
+    // The name sits in an isolate (\u2068 first strong, \u2069 ends), so an Arabic name keeps its place.
+    leftProject: (name: string) => `\u2068${name}\u2069 (no longer on the Project)`,
     unanswered: "Not answered",
   },
   ar: {
@@ -127,6 +131,7 @@ const copy = {
             : `استخدم ${formatNumber(n, "ar")} صفًا على الأكثر.`,
     choose: "اختر…",
     none: "بدون",
+    leftProject: (name: string) => `\u2068${name}\u2069 (لم يعد في المشروع)`,
     unanswered: "لم تتم الإجابة",
   },
 } satisfies Record<Locale, unknown>;
@@ -149,7 +154,10 @@ export type FormRendererProps = {
   choices?: BuiltInChoices;
   /** Who and which Companies `member` and `participant` fields offer (edit mode): the API's form choices. */
   people?: FormChoices;
-  /** The `member` and `participant` answers as the API named them for this viewer (read mode). */
+  /**
+   * The `member` and `participant` answers as the API named them for this viewer:
+   * read mode, and, in edit mode, a saved one no longer on offer in `people`.
+   */
   named?: NamedAnswers;
   /**
    * Called as the filler answers (edit mode), with every answer that changed:
@@ -284,6 +292,7 @@ function control(
   value: unknown,
   locale: Locale,
   people: FormChoices,
+  naming: NamedAnswer | undefined,
   change: (value: FormValue | undefined) => void,
   /** A table's cell errors (it has no others). */
   errors: readonly FieldError[] = [],
@@ -379,17 +388,22 @@ function control(
         field.type === "member"
           ? people.members.toSorted((a, b) => collator.compare(a.name[locale], b.name[locale]))
           : people.participants;
+      const options = offered.map((c) => ({ value: c.id, label: c.name[locale] }));
+      // A saved answer no longer on offer (e.g. a Member who left the Project) stays the
+      // choice, named as the API named it, until another is chosen; then it is gone.
+      // Only a saved answer can be off offer (the picker takes offered ids only), so
+      // `naming`, which names the saved answer, is never put on another id.
+      const current = textOf(value);
+      if (current && naming && !offered.some((c) => c.id === current)) {
+        options.unshift({ value: current, label: text.leftProject(formatFormValue(field, value, locale, naming)) });
+      }
       return {
         element: (
           <Select
             name={name}
             placeholder={text.choose}
-            options={withNone(
-              field,
-              offered.map((c) => ({ value: c.id, label: c.name[locale] })),
-              locale,
-            )}
-            value={textOf(value)}
+            options={withNone(field, options, locale)}
+            value={current}
             onValueChange={(v) => change(v === noChoice ? undefined : v)}
           />
         ),
@@ -405,7 +419,7 @@ function control(
             errors={errors}
             // A cell is a control of its column's type, named by its row and column.
             cell={(column, row, cellValue, changeCell) =>
-              control({ ...column, key: `${field.key}.${row}.${column.key}` }, cellValue, locale, people, changeCell)
+              control({ ...column, key: `${field.key}.${row}.${column.key}` }, cellValue, locale, people, undefined, changeCell)
             }
             cellError={(column, error) => errorText(column, error, locale)}
             onChange={change}
@@ -586,7 +600,7 @@ export function FormRenderer({
                 const error = errorOf(field.key);
                 const { element, group } = isBuiltInField(field)
                   ? builtInControl(field.type)
-                  : control(field, answers[field.key], locale, people, (value) => onChange?.({ [field.key]: value }), cellErrorsOf(field.key));
+                  : control(field, answers[field.key], locale, people, named[field.key], (value) => onChange?.({ [field.key]: value }), cellErrorsOf(field.key));
                 return (
                   <Field
                     key={field.key}
