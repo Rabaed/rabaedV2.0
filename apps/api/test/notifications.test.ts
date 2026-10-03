@@ -34,6 +34,7 @@ let c1: Company;
 let c1ParticipantId = "";
 let projectId = "";
 let electrical = "";
+let buildingA = "";
 let mechanical = "";
 
 let engineer: Member;
@@ -76,9 +77,7 @@ async function createDraft(title: string, by: Member = engineer): Promise<string
   const res = await by.caller.post(`/v1/projects/${projectId}/work-items`, {
     type: "MAR",
     title,
-    tradeId: electrical,
-    locationId: null,
-    answers: { manufacturer: "ACME Cables", description: "Galvanised, 300 mm" },
+    answers: { manufacturer: "ACME Cables", description: "Galvanised, 300 mm", trade: electrical, location: buildingA },
   });
   expect(res.statusCode, res.body).toBe(201);
   return res.json().id;
@@ -109,6 +108,7 @@ beforeAll(async () => {
   c1 = await api.projectCreator();
   projectId = (await api.createProject(c1.caller)).id;
   electrical = (await c1.caller.post(`/v1/projects/${projectId}/trades`, { code: "EL", name: bilingual("Electrical") })).json().id;
+  buildingA = (await c1.caller.post(`/v1/projects/${projectId}/locations`, { code: "BA", name: bilingual("Building A"), parentId: null })).json().id;
   mechanical = (await c1.caller.post(`/v1/projects/${projectId}/trades`, { code: "ME", name: bilingual("Mechanical") })).json().id;
   c1ParticipantId = (await c1.caller.get(`/v1/projects/${projectId}/participants`))
     .json()

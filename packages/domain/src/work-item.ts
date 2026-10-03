@@ -6,15 +6,14 @@ import { formAnswers, namedAnswers } from "./form.ts";
 export const workItemTypeCode = z.string().regex(/^[A-Z]{2,6}$/);
 
 /**
- * A Contractor Member creates a Work Item in Draft: its Subject (`title` in code),
- * Trade (required), Location, and the answers to its Form so far (checked in draft
- * mode against the latest published Form Version of its Type).
+ * A Contractor Member creates a Work Item in Draft: its Subject (`title` in code)
+ * and the answers to its Form so far, checked in draft mode against the latest
+ * published Form Version of its Type. The Built-in Fields are answers too: `trade`
+ * (required even in a Draft), `location` and `scopes` (form-engine.md §1).
  */
 export const createWorkItemRequest = z.object({
   type: workItemTypeCode,
   title: z.string().trim().min(1).max(200),
-  tradeId: z.uuid(),
-  locationId: z.uuid().nullable().default(null),
   answers: formAnswers.default({}),
 });
 export type CreateWorkItemRequest = z.input<typeof createWorkItemRequest>;
@@ -111,13 +110,17 @@ export const workItemDetail = workItemSummary.extend({
   /** The Form Version the item is pinned to, for good (ADR 0006). */
   formVersionId: z.uuid(),
   /**
-   * The Form's answers by field key, exactly as typed; except that a `member`
-   * answer naming another Company's Member is left out (V14): `namedAnswers`
-   * has its Company instead.
+   * The Form's answers by field key, exactly as typed. The Built-in Fields hold
+   * ids: `trade` and `location` the item's `trade` and `location`, `scopes` its `scopes`.
+   * A `member` answer naming another Company's Member, or a `participant` one
+   * naming a Company the viewer may not see, is left out (V14, V15):
+   * `namedAnswers` has what they may read instead.
    */
   answers: formAnswers,
   /** The `member` and `participant` answers as the viewer may read them, by field key. */
   namedAnswers,
+  /** The item's Scopes and Sub-scopes, each Scope before its Sub-scopes. */
+  scopes: z.array(z.object({ id: z.uuid(), parentId: z.uuid().nullable(), name: bilingualText })),
   step: z.object({ key: z.string(), name: bilingualText }),
   raisedBy: z.object({ companyName: bilingualText }),
   /**

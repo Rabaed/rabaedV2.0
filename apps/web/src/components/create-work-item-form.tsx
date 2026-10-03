@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  formVisibility,
   offeredChoices,
   validateAnswers,
   type FieldError,
@@ -9,35 +10,29 @@ import {
   type FormVersion,
   type Locale,
 } from "@rabaed/domain";
-import { Button, Field, FormRenderer, Input, Select } from "@rabaed/ui";
+import { Button, Field, FormRenderer, Input, type BuiltInChoices } from "@rabaed/ui";
 import { useTranslations } from "next-intl";
 import { useState, type FormEvent } from "react";
 import { useRouter } from "@/i18n/navigation";
 
-type Option = { id: string; label: string };
-
-// A choice can't have an empty value, so "no Location" has its own.
-const NO_LOCATION = "none";
-
 /**
- * Creates a MAR in Draft, then opens it: its Subject, Trade and Location, then
- * its Form (the latest published Version). Required fields may stay empty in a
- * Draft; they are checked when it leaves Draft.
+ * Creates a MAR in Draft, then opens it: its Subject, then its Form (the latest
+ * published Version), with Trade, Location and Scopes where the Form places
+ * them. Required fields may stay empty in a Draft, except the Trade; the rest
+ * are checked when it leaves Draft.
  */
 export function CreateWorkItemForm({
   projectId,
   form,
   choices,
-  trades,
-  locations,
+  people,
   locale,
 }: {
   projectId: string;
   form: FormVersion;
+  choices: BuiltInChoices;
   /** Who and which Companies its `member` and `participant` fields offer. */
-  choices: FormChoices;
-  trades: Option[];
-  locations: Option[];
+  people: FormChoices;
   locale: Locale;
 }) {
   const t = useTranslations("workItems");
@@ -47,12 +42,13 @@ export function CreateWorkItemForm({
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
-  function change(key: string, value: FormValue | undefined) {
-    const next = { ...answers, [key]: value };
+  function change(changes: Readonly<Record<string, FormValue | undefined>>) {
+    const next = { ...answers, ...changes };
     setAnswers(next);
-    // Instant feedback with the same checks the server runs (draft mode: types only).
-    const checked = validateAnswers(form.schema, next, "draft", offeredChoices(choices));
-    setFieldErrors(checked.ok ? [] : checked.errors);
+    // Instant feedback with the same checks the server runs (draft mode). A missing
+    // Trade is reported when the Draft is saved, not while the Form is being filled.
+    const checked = validateAnswers(form.schema, next, "draft", { scopes: choices.scopes, offered: offeredChoices(people) });
+    setFieldErrors(checked.ok ? [] : checked.errors.filter((e) => e.code !== "required"));
   }
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
@@ -67,9 +63,8 @@ export function CreateWorkItemForm({
         body: JSON.stringify({
           type: "MAR",
           title: data.get("title"),
-          tradeId: data.get("tradeId"),
-          locationId: data.get("locationId") === NO_LOCATION ? null : data.get("locationId"),
-          answers,
+          // Hidden fields' answers are cleared on save, here as on the server. Trade and Location are among them.
+          answers: formVisibility(form.schema, answers).answers,
         }),
       });
       if (res.status === 201) {
@@ -84,12 +79,14 @@ export function CreateWorkItemForm({
         invalid_answers: t("form.invalid"),
         forbidden: t("notContractor"),
         outside_visibility: t("outsideVisibility"),
+        // A Trade, Location or Scope removed meanwhile.
+        value_not_found: t("form.valueNotFound"),
         project_closed: t("projectClosed"),
         form_version_not_latest: t("form.newVersion"),
       };
       setError(errors[body.error ?? ""] ?? t("unavailable"));
-      // A newer Form Version was published meanwhile: show it.
-      if (body.error === "form_version_not_latest") router.refresh();
+      // A newer Form Version, or other choices, arrived meanwhile: show them.
+      if (body.error === "form_version_not_latest" || body.error === "value_not_found") router.refresh();
     } catch {
       setError(t("unavailable"));
     } finally {
@@ -99,30 +96,17 @@ export function CreateWorkItemForm({
 
   return (
     <form onSubmit={onSubmit} className="space-y-6" noValidate>
-      <div className="space-y-4">
-        <Field label={t("fields.subject")} id="title" required>
-          <Input name="title" maxLength={200} dir="auto" />
-        </Field>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label={t("fields.trade")} id="tradeId" required>
-            <Select name="tradeId" defaultValue={trades[0]?.id} options={trades.map((o) => ({ value: o.id, label: o.label }))} />
-          </Field>
-          <Field label={t("fields.location")} id="locationId">
-            <Select
-              name="locationId"
-              defaultValue={NO_LOCATION}
-              options={[{ value: NO_LOCATION, label: t("noLocation") }, ...locations.map((o) => ({ value: o.id, label: o.label }))]}
-            />
-          </Field>
-        </div>
-      </div>
+      <Field label={t("fields.subject")} id="title" required>
+        <Input name="title" maxLength={200} dir="auto" />
+      </Field>
       <FormRenderer
         schema={form.schema}
         answers={answers}
-        choices={choices}
         errors={fieldErrors}
         mode="edit"
         locale={locale}
+        choices={choices}
+        people={people}
         onChange={change}
         idPrefix="answer"
       />

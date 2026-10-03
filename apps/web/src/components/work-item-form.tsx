@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  formVisibility,
   offeredChoices,
   validateAnswers,
   type FieldError,
@@ -10,7 +11,7 @@ import {
   type Locale,
   type NamedAnswers,
 } from "@rabaed/domain";
-import { Button, FormRenderer } from "@rabaed/ui";
+import { Button, FormRenderer, type BuiltInChoices } from "@rabaed/ui";
 import { useTranslations } from "next-intl";
 import { createContext, useContext, useState, type ReactNode } from "react";
 import { useRouter } from "@/i18n/navigation";
@@ -21,18 +22,20 @@ import { useRouter } from "@/i18n/navigation";
 
 type WorkItemFormState = {
   schema: FormSchema;
+  /** What the Built-in Fields offer, or name in the read view. */
+  choices: BuiltInChoices;
   answers: Record<string, unknown>;
   /** Its `member` and `participant` answers as the API named them for the viewer (V14). */
   named: NamedAnswers;
   /** Who and which Companies those fields offer the viewer (V15). */
-  choices: FormChoices;
+  people: FormChoices;
   errors: readonly FieldError[];
   editable: boolean;
   /** Typed since the last save. */
   dirty: boolean;
   pending: boolean;
   message: string | null;
-  change(key: string, value: FormValue | undefined): void;
+  change(changes: Readonly<Record<string, FormValue | undefined>>): void;
   /** Saves the answers if they changed; false when the save was refused. */
   save(): Promise<boolean>;
   /** Shows the API's per-field errors on the Form. */
@@ -49,22 +52,25 @@ export function useWorkItemForm(): WorkItemFormState | null {
 export function WorkItemFormProvider({
   workItemId,
   schema,
+  choices,
   answers: saved,
   named,
-  choices,
+  people,
   editable,
   children,
 }: {
   workItemId: string;
   schema: FormSchema;
+  choices: BuiltInChoices;
   answers: Record<string, unknown>;
   named: NamedAnswers;
-  choices: FormChoices;
+  people: FormChoices;
   /** Save draft is offered (actions.saveAnswers). */
   editable: boolean;
   children: ReactNode;
 }) {
   const t = useTranslations("workItems.form");
+  const tItems = useTranslations("workItems");
   const router = useRouter();
   const [answers, setAnswers] = useState(saved);
   const [errors, setErrors] = useState<readonly FieldError[]>([]);
@@ -72,13 +78,16 @@ export function WorkItemFormProvider({
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
-  function change(key: string, value: FormValue | undefined) {
-    const next = { ...answers, [key]: value };
+  function change(changes: Readonly<Record<string, FormValue | undefined>>) {
+    const next = { ...answers, ...changes };
     setAnswers(next);
     setDirty(true);
     setMessage(null);
-    // Instant feedback with the same checks the server runs (draft mode: types only).
-    const checked = validateAnswers(schema, next, "draft", offeredChoices(choices, schema, saved));
+    // Instant feedback with the same checks the server runs (draft mode: types, and the Trade).
+    const checked = validateAnswers(schema, next, "draft", {
+      scopes: choices.scopes,
+      offered: offeredChoices(people, schema, saved),
+    });
     setErrors(checked.ok ? [] : checked.errors);
   }
 
@@ -86,13 +95,16 @@ export function WorkItemFormProvider({
     if (!dirty) return true;
     setPending(true);
     setMessage(null);
+    const shownAnswers = formVisibility(schema, answers).answers;
     try {
       const res = await fetch(`/api/v1/work-items/${workItemId}/answers`, {
         method: "PUT",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ answers }),
+        // Hidden fields' answers are cleared on save, here as on the server.
+        body: JSON.stringify({ answers: shownAnswers }),
       });
       if (res.ok) {
+        setAnswers(shownAnswers);
         setDirty(false);
         setErrors([]);
         setMessage(t("saved"));
@@ -104,8 +116,13 @@ export function WorkItemFormProvider({
         setErrors(body.fields);
         setMessage(t("invalid"));
       } else {
-        setMessage(body.error === "not_editable" ? t("notEditable") : t("unavailable"));
-        if (res.status === 404 || res.status === 409) router.refresh();
+        const messages: Record<string, string> = {
+          not_editable: t("notEditable"),
+          outside_visibility: tItems("outsideVisibility"),
+          value_not_found: t("valueNotFound"),
+        };
+        setMessage(messages[body.error ?? ""] ?? t("unavailable"));
+        if (res.status === 404 || res.status === 409 || body.error === "value_not_found") router.refresh();
       }
     } catch {
       setMessage(t("unavailable"));
@@ -122,7 +139,7 @@ export function WorkItemFormProvider({
 
   return (
     <WorkItemFormContext.Provider
-      value={{ schema, answers, named, choices, errors, editable, dirty, pending, message, change, save, showErrors }}
+      value={{ schema, choices, people, answers, named, errors, editable, dirty, pending, message, change, save, showErrors }}
     >
       {children}
     </WorkItemFormContext.Provider>
@@ -139,9 +156,10 @@ export function WorkItemAnswers({ locale }: { locale: Locale }) {
     <section className="space-y-4" aria-label={t("title")}>
       <FormRenderer
         schema={form.schema}
+        choices={form.choices}
         answers={form.answers}
         named={form.named}
-        choices={form.choices}
+        people={form.people}
         errors={form.errors}
         mode={form.editable ? "edit" : "read"}
         locale={locale}

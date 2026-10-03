@@ -24,6 +24,7 @@ let k1Manager: Caller; // Consultant manager: the pool a Submit goes to.
 let outsider: Caller; // A C1 Member not on the Project.
 let projectId = "";
 let electrical = "";
+let buildingA = "";
 
 const bilingual = (text: string) => ({ en: text, ar: text });
 const all = { isAll: true, valueIds: [] };
@@ -57,7 +58,12 @@ async function otherParticipant(role: "contractor" | "consultant") {
 
 async function draft(answers: Record<string, unknown> = complete): Promise<string> {
   const res = await ok(
-    engineer.post(`/v1/projects/${projectId}/work-items`, { type: "MAR", title: "Cable trays", tradeId: electrical, answers }),
+    // Trade and Location are Built-in Fields: answers like the rest (RP-270).
+    engineer.post(`/v1/projects/${projectId}/work-items`, {
+      type: "MAR",
+      title: "Cable trays",
+      answers: { trade: electrical, location: buildingA, ...answers },
+    }),
     201,
   );
   return res.json().id;
@@ -95,6 +101,8 @@ beforeAll(async () => {
   c1 = await api.projectCreator();
   projectId = (await api.createProject(c1.caller)).id;
   electrical = (await c1.caller.post(`/v1/projects/${projectId}/trades`, { code: "EL", name: bilingual("Electrical") })).json().id;
+  buildingA = (await c1.caller.post(`/v1/projects/${projectId}/locations`, { code: "BA", name: bilingual("Building A"), parentId: null }))
+    .json().id;
   const own = (await c1.caller.get(`/v1/projects/${projectId}/participants`))
     .json()
     .participants.find((p: { isOwnCompany: boolean }) => p.isOwnCompany).id;

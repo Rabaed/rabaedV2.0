@@ -185,6 +185,13 @@ export async function seedDemo(app: FastifyInstance, databases: SeedDatabases, p
   }
   const tower2Floor1 = await location("T2F01", bi("Tower 2 Floor 01", "البرج 2 الطابق 01"), tower2);
 
+  // Scopes of Electrical, chosen in the MAR Form's Scopes field.
+  const scope = async (name: BilingualText, parentId: string | null = null) =>
+    (await tmc.caller<{ id: string }>("POST", `/v1/projects/${projectId}/scopes`, { tradeId: electrical, parentId, name })).id;
+  const lighting = await scope(bi("Lighting", "الإنارة"));
+  const emergencyLighting = await scope(bi("Emergency lighting", "إنارة الطوارئ"), lighting);
+  await scope(bi("Power distribution", "توزيع الطاقة"));
+
   // Participants, each invited by the Project Admin and accepted by its own
   // Authorized Person (ADR 0009), and what each covers (set by the Project Admin). Beta Build
   // covers exactly what TMC does: only the Company boundary keeps TMC's items from it (V3).
@@ -257,13 +264,14 @@ export async function seedDemo(app: FastifyInstance, databases: SeedDatabases, p
   await hafizCaller("POST", `/v1/projects/${projectId}/work-items`, {
     type: "MAR",
     title: "Emergency lighting – Tower 2",
-    tradeId: electrical,
-    locationId: tower2Floor1,
-    // Filled through the MAR Form Version 1.
+    // Filled through the MAR Form Version 1, its Built-in Fields included.
     answers: {
       manufacturer: "Zumtobel",
       model: "RESCLITE PRO",
       specification_section: "26 52 13",
+      trade: electrical,
+      location: tower2Floor1,
+      scopes: [lighting, emergencyLighting],
       description: "LED emergency luminaires for the Tower 2 escape routes, 3-hour duration, self-test.",
     },
   });
@@ -291,8 +299,7 @@ export async function seedDemo(app: FastifyInstance, databases: SeedDatabases, p
   await beta.caller("POST", `/v1/projects/${otherProjectId}/work-items`, {
     type: "MAR",
     title: DEMO_LAST_ITEM_TITLE,
-    tradeId: plumbing,
-    answers: { manufacturer: "Geberit", description: "PP-R water supply pipes and fittings for the villas." },
+    answers: { manufacturer: "Geberit", trade: plumbing, description: "PP-R water supply pipes and fittings for the villas." },
   });
 
   return { projectId, otherProjectId, engineer, people };

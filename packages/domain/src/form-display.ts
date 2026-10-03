@@ -1,4 +1,4 @@
-import { isIsoValue, type FormField, type NamedAnswer } from "./form.ts";
+import { isIsoValue, type AnswerField, type NamedAnswer } from "./form.ts";
 import { formatDate, timeZone, type Locale } from "./locale.ts";
 
 // How answers read on screen (form-engine.md §5): the viewer's language, Latin
@@ -47,7 +47,7 @@ export function fromProjectWallTime(wallTime: string): string {
  * Member of their own Company by name, anyone else by their Company's name;
  * never by its id.
  */
-export function formatFormValue(field: FormField, value: unknown, locale: Locale, named?: NamedAnswer): string {
+export function formatFormValue(field: AnswerField, value: unknown, locale: Locale, named?: NamedAnswer): string {
   switch (field.type) {
     case "date":
       return typeof value === "string" && isIsoValue("date", value)
@@ -75,5 +75,10 @@ export function formatFormValue(field: FormField, value: unknown, locale: Locale
     case "text":
     case "textarea":
       return typeof value === "string" ? value : String(value ?? "");
+    // Built-in Fields hold ids; the page names them (the renderer's `choices`), so only the ids are known here.
+    case "trade":
+    case "location":
+    case "scopes":
+      return Array.isArray(value) ? value.join(listSeparator[locale]) : String(value ?? "");
   }
 }

@@ -1,22 +1,38 @@
 import { z } from "zod";
 import { bilingualText } from "./company.ts";
+import { condition, evaluateCondition, isUnanswered, readsAttrs } from "./condition.ts";
 
 // The Form engine's schema and its one validator (form-engine.md §1, §8; ADR 0006).
 // The same code runs in the browser, for instant feedback, and on the server, as
 // the authority. It stays pure, with no I/O, so the offline app can use it later
-// (ADR 0004).
+// (ADR 0004). The Built-in Fields `trade`, `location` and `scopes` sit among the
+// Form's own fields (RP-270).
 
 /** A section or field key: stable across Versions, because answers are stored by it. */
 export const formKey = z.string().regex(/^[a-z][a-z0-9_]*$/).max(64);
 
 const helpText = z.object({ en: z.string().trim().min(1).max(1000), ar: z.string().trim().min(1).max(1000) });
 
+/**
+ * A Form's conditions read its own fields only. The item's attributes (Trade,
+ * Location) are answers to its Built-in Fields, so a rule reads them as fields;
+ * an `attr` rule is refused.
+ */
+const formCondition = condition.refine((rule) => !readsAttrs(rule), "A Form condition reads Form fields only");
+
+/** Shown only while this condition holds; hidden fields aren't checked, and their answers are cleared on save. */
+const visibleIf = formCondition.optional();
+
 const fieldBase = {
   key: formKey,
   label: bilingualText,
   help: helpText.optional(),
-  required: z.boolean().default(false),
+  /** Always, never, or while a condition holds (checked only when the field is shown). */
+  required: z.union([z.boolean(), formCondition]).default(false),
+  visible_if: visibleIf,
 };
+
+const layoutBase = { key: formKey, visible_if: visibleIf };
 
 /** The longest value each text type takes when its field sets no `maxLength`. */
 export const defaultMaxLength = { text: 500, textarea: 4000 } as const;
@@ -30,6 +46,26 @@ const formOptions = z
   .min(1)
   .max(200)
   .refine((options) => new Set(options.map((o) => o.value)).size === options.length, "Option values must be unique");
+
+/**
+ * A Built-in Field (form-engine.md §1): it sits inside every Form, where the Form
+ * places it and with the Form's label, but can't be removed or hidden (it has no
+ * `visible_if`). Its key is its type, because the Work Item's Trade, Location and
+ * Scopes are found by it. Trade and Location are always required
+ * (formSchemaProblems refuses them optional, and validateAnswers requires them
+ * whatever the schema says): visibility and Consultant routing depend on them.
+ */
+const builtInField = <T extends string>(type: T, required: boolean) =>
+  z.object({
+    key: z.literal(type),
+    type: z.literal(type),
+    label: bilingualText,
+    help: helpText.optional(),
+    required: z.boolean().default(required),
+  });
+
+export const builtInFieldTypes = ["trade", "location", "scopes"] as const;
+export type BuiltInFieldType = (typeof builtInFieldTypes)[number];
 
 export const formField = z.discriminatedUnion("type", [
   /** One line of plain text. */
@@ -60,14 +96,42 @@ export const formField = z.discriminatedUnion("type", [
    * 0009): a Company outside the Project is typed in a text field.
    */
   z.object({ ...fieldBase, type: z.literal("participant") }),
+  /** Layout, display only: a heading inside a section. */
+  z.object({ ...layoutBase, type: z.literal("heading"), text: bilingualText }),
+  /** Layout, display only: a paragraph of guidance for the filler. */
+  z.object({ ...layoutBase, type: z.literal("instructions"), text: helpText }),
+  /** Layout, display only: a line between groups of fields. */
+  z.object({ ...layoutBase, type: z.literal("divider") }),
+  /** Built-in: one of the Project's Trades, by id. Required even in a Draft. */
+  builtInField("trade", true),
+  /** Built-in: one of the Project's Locations, by id. Required to leave Draft. */
+  builtInField("location", true),
+  /** Built-in: Scopes of the chosen Trade, and Sub-scopes of the chosen Scopes, by id. */
+  builtInField("scopes", false),
 ]);
 export type FormField = z.infer<typeof formField>;
 export type FormFieldType = FormField["type"];
 
-/** A stored answer: text (also dates, times and a select's option), Yes/No, or a multi-select's options. */
+const layoutTypes = ["heading", "instructions", "divider"] as const;
+export type LayoutField = Extract<FormField, { type: (typeof layoutTypes)[number] }>;
+/** A field that takes an answer: every type but the layout ones. */
+export type AnswerField = Exclude<FormField, LayoutField>;
+
+export function isAnswerField(field: FormField): field is AnswerField {
+  return !(layoutTypes as readonly string[]).includes(field.type);
+}
+
+/** Whether a field is one of the Built-in Fields. */
+export const isBuiltInField = (field: FormField): field is Extract<FormField, { type: BuiltInFieldType }> =>
+  (builtInFieldTypes as readonly string[]).includes(field.type);
+
+/**
+ * A stored answer: text (also dates, times, a select's option, a Trade or
+ * Location id), Yes/No, or a list (a multi-select's options, Scope ids).
+ */
 export type FormValue = string | boolean | string[];
 
-export const formSection = z.object({ key: formKey, title: bilingualText, fields: z.array(formField) });
+export const formSection = z.object({ key: formKey, title: bilingualText, visible_if: visibleIf, fields: z.array(formField) });
 export type FormSection = z.infer<typeof formSection>;
 
 /** A Form Version's schema: its sections and their fields, in order. */
@@ -128,8 +192,9 @@ export type ValidationMode = "draft" | "complete";
 /**
  * `wrong_type`: not the kind of value the field holds (text, true/false, a list).
  * `invalid_format`: text, but not a real ISO date, time or UTC instant.
- * `unknown_option`: not one of a choice field's option values, or a Member or
- *   Participant the filler wasn't offered (the same answer as a made-up id).
+ * `unknown_option`: not one of a choice field's option values, a Scope outside
+ *   the chosen Trade, or a Member or Participant the filler wasn't offered (the
+ *   same answer as a made-up id).
  */
 export const fieldErrorCodes = [
   "required",
@@ -154,16 +219,114 @@ export type OfferedChoices = { members: ReadonlySet<string>; participants: Reado
 
 export type ValidationResult = { ok: true; answers: Record<string, FormValue> } | { ok: false; errors: FieldError[] };
 
-/** Every field of the schema, in Form order. */
+/** A Scope or Sub-scope, as the validator and the renderer filter them. */
+export type ScopeChoice = { id: string; tradeId: string; parentId: string | null };
+
+/**
+ * What the validator checks against: the Project's Scopes for the Built-in
+ * Fields, and the ids `offered` to the filler for `member` and `participant`.
+ * Without them it checks only that they are ids; the server always passes them.
+ */
+export type ValidationContext = { scopes?: readonly ScopeChoice[]; offered?: OfferedChoices };
+
+export const schemaProblemCodes = ["built_in_missing", "built_in_repeated", "built_in_optional", "built_in_hidden"] as const;
+/** One problem with a schema, about its field `key`. */
+export type SchemaProblem = { key: string; code: (typeof schemaProblemCodes)[number] };
+
+/** Every field of the schema, layout included, in Form order. */
 export function formFields(schema: FormSchema): FormField[] {
   return schema.sections.flatMap((s) => s.fields);
 }
 
-/** No answer: nothing, empty text, or no option chosen. `false` is an answer (No). */
-export const isUnanswered = (value: unknown): boolean =>
-  value === undefined || value === null || value === "" || (Array.isArray(value) && value.length === 0);
+/** The fields that take answers, in Form order. */
+export function answerFields(schema: FormSchema): AnswerField[] {
+  return formFields(schema).filter(isAnswerField);
+}
 
-const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/**
+ * What stops a schema from being published: each Built-in Field placed exactly
+ * once, never in a section that can be hidden, with Trade and Location required.
+ * Empty when there is nothing.
+ */
+export function formSchemaProblems(schema: FormSchema): SchemaProblem[] {
+  return builtInFieldTypes.flatMap((type): SchemaProblem[] => {
+    const placed = schema.sections.flatMap((s) => s.fields.filter((f) => f.type === type).map((f) => ({ field: f, section: s })));
+    if (placed.length === 0) return [{ key: type, code: "built_in_missing" }];
+    if (placed.length > 1) return [{ key: type, code: "built_in_repeated" }];
+    const { field, section } = placed[0]!;
+    if (section.visible_if) return [{ key: type, code: "built_in_hidden" }];
+    if (type !== "scopes" && isBuiltInField(field) && !field.required) return [{ key: type, code: "built_in_optional" }];
+    return [];
+  });
+}
+
+/**
+ * The chosen Scopes that fit `tradeId`: its Scopes, and Sub-scopes only under a
+ * Scope still chosen, in the order chosen. Changing the Trade keeps these and clears the rest.
+ */
+export function scopesFittingTrade(chosen: readonly string[], tradeId: string, scopes: readonly ScopeChoice[]): string[] {
+  const byId = new Map(scopes.map((s) => [s.id, s]));
+  const scopeKept = (id: string) => byId.get(id)?.tradeId === tradeId && byId.get(id)?.parentId === null && chosen.includes(id);
+  return chosen.filter((id) => {
+    const s = byId.get(id);
+    return s !== undefined && s.tradeId === tradeId && scopeKept(s.parentId ?? id);
+  });
+}
+
+/** What is shown for a set of answers: section and field keys, and the shown fields' answers. */
+export type FormVisibility = {
+  sections: ReadonlySet<string>;
+  fields: ReadonlySet<string>;
+  /** The answers of shown fields only: what a save keeps. */
+  answers: Record<string, unknown>;
+};
+
+/**
+ * Which sections and fields are shown for `answers` (`visible_if`). A hidden
+ * field reads as cleared, so a field that depends on it is worked out without
+ * its answer: the check repeats until nothing changes. Conditions that depend
+ * on each other in a cycle are for the publish checks to refuse (RP-271); until
+ * then the repeats are bounded, and the last pass wins. The Built-in Fields are
+ * always shown: they can't be hidden.
+ */
+export function formVisibility(schema: FormSchema, answers: Readonly<Record<string, unknown>>): FormVisibility {
+  const fieldKeys = new Set(formFields(schema).map((f) => f.key));
+  const shownFor = (current: Record<string, unknown>) => {
+    const holds = (rule: FormSection["visible_if"]) => !rule || evaluateCondition(rule, { fields: current });
+    const sections = new Set(schema.sections.filter((s) => holds(s.visible_if)).map((s) => s.key));
+    const shown = new Set(
+      schema.sections.flatMap((s) =>
+        s.fields
+          .filter((f) => isBuiltInField(f) || (sections.has(s.key) && holds("visible_if" in f ? f.visible_if : undefined)))
+          .map((f) => f.key),
+      ),
+    );
+    return { sections, fields: shown };
+  };
+  // Answers to keys that aren't fields stay, for the validator to refuse as unknown.
+  const answersShownIn = (shown: ReadonlySet<string>) =>
+    Object.fromEntries(Object.entries(answers).filter(([key]) => !fieldKeys.has(key) || shown.has(key)));
+  const sameKeys = (a: ReadonlySet<string>, b: ReadonlySet<string>) => a.size === b.size && [...a].every((k) => b.has(k));
+
+  let visibility = shownFor({ ...answers });
+  for (let i = 0; i <= fieldKeys.size; i++) {
+    const next = shownFor(answersShownIn(visibility.fields));
+    const settled = sameKeys(next.fields, visibility.fields) && sameKeys(next.sections, visibility.sections);
+    visibility = next;
+    if (settled) break;
+  }
+  return { ...visibility, answers: answersShownIn(visibility.fields) };
+}
+
+/**
+ * Whether a field must be answered to leave Draft: `required` itself, or its
+ * condition over `answers`. Trade and Location must, whatever the schema says.
+ */
+export function isRequired(field: FormField, answers: Readonly<Record<string, unknown>>): boolean {
+  if (!isAnswerField(field)) return false;
+  if (field.type === "trade" || field.type === "location") return true;
+  return typeof field.required === "boolean" ? field.required : evaluateCondition(field.required, { fields: answers });
+}
 
 const isoDate = /^(\d{4})-(\d{2})-(\d{2})$/;
 const isoTime = /^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/;
@@ -182,19 +345,22 @@ export function isIsoValue(type: "date" | "datetime" | "time", value: string): b
   return match !== null && isCalendarDate(match[1]!, match[2]!, match[3]!);
 }
 
+const isId = (value: unknown): value is string => typeof value === "string" && z.uuid().safeParse(value).success;
+
 /** What is wrong with one field's (non-empty) value, or null when nothing is. */
 function checkValue(
-  field: FormField,
+  field: AnswerField,
   value: unknown,
-  mode: ValidationMode,
-  offered: OfferedChoices | undefined,
+  required: boolean,
+  given: Record<string, unknown>,
+  context: ValidationContext,
 ): FieldErrorCode | null {
   switch (field.type) {
     case "text":
     case "textarea":
       if (typeof value !== "string") return "wrong_type";
       if (value.length > (field.maxLength ?? defaultMaxLength[field.type])) return "too_long";
-      return mode === "complete" && field.required && value.trim() === "" ? "required" : null;
+      return required && value.trim() === "" ? "required" : null;
     case "date":
     case "datetime":
     case "time":
@@ -212,42 +378,56 @@ function checkValue(
       const known = new Set(field.options.map((o) => o.value));
       return value.every((v) => known.has(v)) ? null : "unknown_option";
     }
+    case "trade":
+    case "location":
+      return isId(value) ? null : "wrong_type";
+    case "scopes": {
+      if (!Array.isArray(value) || !value.every(isId) || new Set(value).size !== value.length) return "wrong_type";
+      if (!context.scopes) return null;
+      const tradeId = typeof given.trade === "string" ? given.trade : "";
+      return scopesFittingTrade(value, tradeId, context.scopes).length === value.length ? null : "unknown_option";
+    }
     case "member":
     case "participant": {
       if (typeof value !== "string") return "wrong_type";
-      const ids = offered && (field.type === "member" ? offered.members : offered.participants);
-      return (ids ? ids.has(value) : uuid.test(value)) ? null : "unknown_option";
+      const ids = context.offered && (field.type === "member" ? context.offered.members : context.offered.participants);
+      return (ids ? ids.has(value) : isId(value)) ? null : "unknown_option";
     }
   }
 }
 
 /**
- * Checks `answers` against a Form Version's schema in `mode`, and `member` and
- * `participant` answers against the ids `offered` to the filler. On success it
- * answers with the values to store: exactly as typed, empty ones dropped. On
- * failure, one error per field, in Form order, then answers to unknown fields.
+ * Checks `answers` against a Form Version's schema in `mode`. On success it
+ * answers with the values to store: exactly as typed, empty ones and hidden
+ * fields' dropped (a hidden field is cleared, never checked). On failure, one
+ * error per shown field, in Form order, then answers to unknown fields. The
+ * Trade is required even in `draft` mode: no Work Item exists without one.
+ * `context` holds the Project's Scopes, so that Scopes outside the chosen Trade are refused.
  */
 export function validateAnswers(
   schema: FormSchema,
   answers: unknown,
   mode: ValidationMode,
-  offered?: OfferedChoices,
+  context: ValidationContext = {},
 ): ValidationResult {
   if (typeof answers !== "object" || answers === null || Array.isArray(answers)) {
     return { ok: false, errors: [{ key: "", code: "wrong_type" }] };
   }
   const given = answers as Record<string, unknown>;
-  const fields = formFields(schema);
+  const fields = answerFields(schema);
+  const visibility = formVisibility(schema, given);
   const errors: FieldError[] = [];
   const clean: Record<string, FormValue> = {};
 
   for (const field of fields) {
+    if (!visibility.fields.has(field.key)) continue;
+    const required = field.type === "trade" || (mode === "complete" && isRequired(field, visibility.answers));
     const value = given[field.key];
     if (isUnanswered(value)) {
-      if (mode === "complete" && field.required) errors.push({ key: field.key, code: "required" });
+      if (required) errors.push({ key: field.key, code: "required" });
       continue;
     }
-    const code = checkValue(field, value, mode, offered);
+    const code = checkValue(field, value, required, given, context);
     if (code) errors.push({ key: field.key, code });
     else clean[field.key] = value as FormValue;
   }

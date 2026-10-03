@@ -4,13 +4,21 @@ import {
   defaultMaxLength,
   formatFormValue,
   formatNumber,
-  formFields,
-  isUnanswered,
+  answerFields,
+  formVisibility,
   fromProjectWallTime,
+  isAnswerField,
+  isBuiltInField,
+  isRequired,
+  isUnanswered,
+  scopesFittingTrade,
   toProjectWallTime,
+  type AnswerField,
+  type BuiltInFieldType,
   type FieldError,
   type FormChoices,
   type FormField,
+  type LayoutField,
   type FormOption,
   type FormSchema,
   type FormValue,
@@ -27,6 +35,7 @@ import { RadioGroup } from "../form/radio-group.tsx";
 import { Select } from "../form/select.tsx";
 import { Textarea } from "../form/textarea.tsx";
 import { Icon } from "../icon/icon.tsx";
+import { BuiltInSelect, builtInAnswerLabels, noChoices, ScopesChecklist, type BuiltInChoices } from "./built-in-fields.tsx";
 
 // The Form engine's renderer (form-engine.md §1, §5): draws a Form Version's
 // schema with its answers and per-field errors, to fill in (`edit`) or to read
@@ -34,9 +43,11 @@ import { Icon } from "../icon/icon.tsx";
 // errors come from the shared validator (validateAnswers) or the API's refusal.
 // Labels follow the viewer's language; text answers are shown exactly as typed,
 // dates and times in the viewer's language with Latin digits, and date-times in
-// the Project's time zone. A `member` or `participant` field offers only the
-// choices the API gave this filler, and reads as the API named it for this
-// viewer: another Company's Member by the Company's name only (V14).
+// the Project's time zone. The Built-in Fields (Trade, Location, Scopes) sit
+// where the Form places them, offering what the page passes in `choices`. A
+// `member` or `participant` field offers only the `people` the API gave this
+// filler, and reads as the API named it for this viewer: another Company's
+// Member by the Company's name only (V14).
 
 const copy = {
   en: {
@@ -82,18 +93,26 @@ export type FormRendererProps = {
   mode: "edit" | "read";
   /** The viewer's language: labels, help and messages. */
   locale: Locale;
+  /**
+   * What the Built-in Fields offer (edit mode), and the names of the chosen
+   * values (read mode). Scopes are filtered here by the chosen Trade.
+   */
+  choices?: BuiltInChoices;
   /** Who and which Companies `member` and `participant` fields offer (edit mode): the API's form choices. */
-  choices?: FormChoices;
+  people?: FormChoices;
   /** The `member` and `participant` answers as the API named them for this viewer (read mode). */
   named?: NamedAnswers;
-  /** Called with a field's key and new value as the filler answers (edit mode); `undefined` clears it. */
-  onChange?: (key: string, value: FormValue | undefined) => void;
+  /**
+   * Called as the filler answers (edit mode), with every answer that changed:
+   * one field's, or a new Trade's with the Scopes that still fit it. `undefined` clears one.
+   */
+  onChange?: (changes: Readonly<Record<string, FormValue | undefined>>) => void;
   /** Prefix for the fields' ids, unique on the page. */
   idPrefix?: string;
   className?: string;
 };
 
-function errorText(field: FormField, error: FieldError, locale: Locale): string {
+function errorText(field: AnswerField, error: FieldError, locale: Locale): string {
   const text = copy[locale];
   switch (error.code) {
     case "required":
@@ -114,26 +133,30 @@ function errorText(field: FormField, error: FieldError, locale: Locale): string 
 }
 
 const textOf = (value: unknown) => (typeof value === "string" ? value : "");
+const idsOf = (value: unknown) => (Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : []);
 
 // A select's "no choice" item: option values are snake_case keys, so this never clashes with one.
 const noChoice = "-";
 
-const noChoices: FormChoices = { members: [], participants: [] };
+const noPeople: FormChoices = { members: [], participants: [] };
 
 /** A choice field's options as a control takes them, labelled in the viewer's language. */
 const optionsOf = (field: { options: FormOption[] }, locale: Locale) =>
   field.options.map((o) => ({ value: o.value, label: o.label[locale] }));
 
+/** A field the Form itself defines: one that takes an answer, but not a Built-in Field. */
+type OwnField = Exclude<AnswerField, { type: BuiltInFieldType }>;
+
 /** A select's options, with "None" first when the field is optional, so a choice can be taken back. */
-const withNone = (field: FormField, options: { value: string; label: string }[], locale: Locale) =>
+const withNone = (field: OwnField, options: { value: string; label: string }[], locale: Locale) =>
   field.required ? options : [{ value: noChoice, label: copy[locale].none }, ...options];
 
-/** One field's control, and whether its Field labels a group (radios, checkboxes) rather than one control. */
+/** One of the Form's own fields' control, and whether its Field labels a group (radios, checkboxes) rather than one control. */
 function control(
-  field: FormField,
+  field: OwnField,
   value: unknown,
   locale: Locale,
-  choices: FormChoices,
+  people: FormChoices,
   change: (value: FormValue | undefined) => void,
 ): { element: ReactNode; group?: boolean } {
   const text = copy[locale];
@@ -198,7 +221,7 @@ function control(
     case "member":
     case "participant": {
       // Only those the API offered this filler (V15); ids, unlike option values, never clash with "-".
-      const offered = field.type === "member" ? choices.members : choices.participants;
+      const offered = field.type === "member" ? people.members : people.participants;
       return {
         element: (
           <Select
@@ -229,10 +252,35 @@ function control(
   }
 }
 
+/** A layout field: a heading, a paragraph of instructions, or a divider. Display only. */
+function Layout({ field, locale }: { field: LayoutField; locale: Locale }) {
+  switch (field.type) {
+    case "heading":
+      return <h4 className="pt-2 text-body font-semibold text-text">{field.text[locale]}</h4>;
+    case "instructions":
+      return <p className="text-body whitespace-pre-wrap text-muted">{field.text[locale]}</p>;
+    case "divider":
+      return <hr className="border-border" />;
+  }
+}
+
+/** Splits fields into runs: each layout field alone, consecutive answer fields together (one list each). */
+function fieldRuns(fields: FormField[]): (LayoutField | AnswerField[])[] {
+  const out: (LayoutField | AnswerField[])[] = [];
+  for (const field of fields) {
+    const last = out.at(-1);
+    if (!isAnswerField(field)) out.push(field);
+    else if (Array.isArray(last)) last.push(field);
+    else out.push([field]);
+  }
+  return out;
+}
+
 /**
- * A Form: its sections in order, each with its fields. In edit mode every field
- * is a labelled control with its help and error; in read mode, a list of labels
- * and answers.
+ * A Form: its sections in order, each with its fields, showing only the
+ * sections and fields whose `visible_if` holds for the answers now. In edit
+ * mode every field is a labelled control with its help and error; in read
+ * mode, a list of labels and answers. Layout fields show in both.
  */
 export function FormRenderer({
   schema,
@@ -241,27 +289,94 @@ export function FormRenderer({
   mode,
   locale,
   choices = noChoices,
+  people = noPeople,
   named = {},
   onChange,
   idPrefix = "form",
   className,
 }: FormRendererProps) {
   const fieldId = (key: string) => `${idPrefix}-${key}`;
-  const byKey = new Map(formFields(schema).map((f) => [f.key, f]));
+  const byKey = new Map(answerFields(schema).map((f) => [f.key, f]));
+  const visibility = formVisibility(schema, answers);
   const errorOf = (key: string) => errors.find((e) => e.key === key);
-  // Only errors of fields on this Form can be shown and linked.
-  const shown = mode === "edit" ? errors.filter((e) => byKey.has(e.key)) : [];
+  // Only errors of fields shown on this Form can be shown and linked.
+  const shownErrors = mode === "edit" ? errors.filter((e) => byKey.has(e.key) && visibility.fields.has(e.key)) : [];
+
+  /** A Built-in Field's control; Scopes label a group of checkboxes. */
+  function builtInControl(type: BuiltInFieldType): { element: ReactNode; group?: boolean } {
+    switch (type) {
+      case "trade":
+        return {
+          element: (
+            <BuiltInSelect
+              value={textOf(answers.trade)}
+              choices={choices.trades}
+              locale={locale}
+              // A new Trade keeps only the Scopes that fit it.
+              onChange={(trade) => onChange?.({ trade, scopes: scopesFittingTrade(idsOf(answers.scopes), trade, choices.scopes) })}
+            />
+          ),
+        };
+      case "location":
+        return {
+          element: (
+            <BuiltInSelect
+              value={textOf(answers.location)}
+              choices={choices.locations}
+              locale={locale}
+              onChange={(location) => onChange?.({ location })}
+            />
+          ),
+        };
+      case "scopes":
+        return {
+          group: true,
+          element: (
+            <ScopesChecklist
+              chosen={idsOf(answers.scopes)}
+              tradeId={textOf(answers.trade)}
+              scopes={choices.scopes}
+              locale={locale}
+              onChange={(scopes) => onChange?.({ scopes })}
+            />
+          ),
+        };
+    }
+  }
+
+  /** An answer as read; null when there is none. Built-in Fields are named from `choices`. */
+  function answer(field: AnswerField): ReactNode {
+    const value = answers[field.key];
+    if (isBuiltInField(field)) {
+      const labels = builtInAnswerLabels(field.type, value, choices);
+      if (labels.length === 0) return null;
+      return field.type === "scopes" ? (
+        <ul className="flex flex-col gap-1">
+          {labels.map((label) => (
+            <li key={label}>
+              <bdi>{label}</bdi>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <bdi>{labels[0]}</bdi>
+      );
+    }
+    // Another Company's Member comes named, without their id (V14).
+    const naming = named[field.key];
+    return isUnanswered(value) && !naming ? null : <bdi>{formatFormValue(field, value, locale, naming)}</bdi>;
+  }
 
   return (
     <div className={cn("flex flex-col gap-6", className)}>
-      {shown.length > 0 && (
+      {shownErrors.length > 0 && (
         <div role="alert" className="flex flex-col gap-2 rounded-md border border-danger bg-danger-tint p-4 text-body text-text">
           <p className="flex items-center gap-2 font-semibold">
             <Icon name="alert-circle" size={20} className="text-danger" />
-            {copy[locale].summary(shown.length)}
+            {copy[locale].summary(shownErrors.length)}
           </p>
           <ul className="flex flex-col gap-1 ps-7">
-            {shown.map((e) => (
+            {shownErrors.map((e) => (
               <li key={e.key}>
                 <a href={`#${fieldId(e.key)}`} className={cn("font-medium text-text underline underline-offset-4", focusRing)}>
                   {byKey.get(e.key)!.label[locale]}
@@ -272,6 +387,8 @@ export function FormRenderer({
         </div>
       )}
       {schema.sections.map((section) => {
+        if (!visibility.sections.has(section.key)) return null;
+        const fields = section.fields.filter((f) => visibility.fields.has(f.key));
         const headingId = `${idPrefix}-section-${section.key}`;
         return (
           <section key={section.key} aria-labelledby={headingId} className="flex flex-col gap-4">
@@ -279,11 +396,12 @@ export function FormRenderer({
               {section.title[locale]}
             </h3>
             {mode === "edit" ? (
-              section.fields.map((field) => {
+              fields.map((field) => {
+                if (!isAnswerField(field)) return <Layout key={field.key} field={field} locale={locale} />;
                 const error = errorOf(field.key);
-                const { element, group } = control(field, answers[field.key], locale, choices, (value) =>
-                  onChange?.(field.key, value),
-                );
+                const { element, group } = isBuiltInField(field)
+                  ? builtInControl(field.type)
+                  : control(field, answers[field.key], locale, people, (value) => onChange?.({ [field.key]: value }));
                 return (
                   <Field
                     key={field.key}
@@ -291,7 +409,8 @@ export function FormRenderer({
                     label={field.label[locale]}
                     help={field.help?.[locale]}
                     error={error && errorText(field, error, locale)}
-                    required={field.required}
+                    // Trade and Location always are, whatever the schema says (isRequired).
+                    required={isRequired(field, visibility.answers)}
                     group={group}
                   >
                     {element}
@@ -299,26 +418,26 @@ export function FormRenderer({
                 );
               })
             ) : (
-              <dl className="flex flex-col gap-4">
-                {section.fields.map((field) => {
-                  const value = answers[field.key];
-                  // Another Company's Member comes named, without their id (V14).
-                  const unanswered = isUnanswered(value) && !(field.key in named);
-                  return (
-                    <div key={field.key} className="flex flex-col gap-1">
-                      <dt className="text-sm font-medium text-muted">{field.label[locale]}</dt>
-                      {/* The answer keeps its own direction, but lines up with the page's. */}
-                      <dd className={cn("text-body", unanswered ? "text-muted" : "whitespace-pre-wrap text-text")}>
-                        {unanswered ? (
-                          copy[locale].unanswered
-                        ) : (
-                          <bdi>{formatFormValue(field, value, locale, named[field.key])}</bdi>
-                        )}
-                      </dd>
-                    </div>
-                  );
-                })}
-              </dl>
+              fieldRuns(fields).map((run) =>
+                Array.isArray(run) ? (
+                  <dl key={run[0]!.key} className="flex flex-col gap-4">
+                    {run.map((field) => {
+                      const shownAnswer = answer(field);
+                      return (
+                        <div key={field.key} className="flex flex-col gap-1">
+                          <dt className="text-sm font-medium text-muted">{field.label[locale]}</dt>
+                          {/* The answer keeps its own direction, but lines up with the page's. */}
+                          <dd className={cn("text-body", shownAnswer ? "whitespace-pre-wrap text-text" : "text-muted")}>
+                            {shownAnswer ?? copy[locale].unanswered}
+                          </dd>
+                        </div>
+                      );
+                    })}
+                  </dl>
+                ) : (
+                  <Layout key={run.key} field={run} locale={locale} />
+                ),
+              )
             )}
           </section>
         );

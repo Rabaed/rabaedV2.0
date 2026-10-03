@@ -63,7 +63,7 @@ const choices: FormChoices = {
 const meta = {
   title: "Form engine/FormRenderer/Members and Participants",
   component: FormRenderer,
-  args: { schema, answers: {}, choices, mode: "edit", locale: "en", onChange: fn() },
+  args: { schema, answers: {}, people: choices, mode: "edit", locale: "en", onChange: fn() },
   decorators: [(Story) => <div className="max-w-xl">{Story()}</div>],
 } satisfies Meta<typeof FormRenderer>;
 
@@ -79,9 +79,9 @@ export const Edit: Story = {
         {...args}
         locale={storyLocale(context)}
         answers={values}
-        onChange={(key, value) => {
-          args.onChange?.(key, value);
-          setValues((current) => ({ ...current, [key]: value }));
+        onChange={(changes) => {
+          args.onChange?.(changes);
+          setValues((current) => ({ ...current, ...changes }));
         }}
       />
     );
@@ -96,7 +96,7 @@ export const Edit: Story = {
     ]);
     await userEvent.click(screen.getByRole("option", { name: storyText(context, copy.sara) }));
     await waitFor(() => expect(screen.queryByRole("listbox")).toBeNull());
-    await expect(args.onChange).toHaveBeenLastCalledWith("site_engineer", ids.sara);
+    await expect(args.onChange).toHaveBeenLastCalledWith({ site_engineer: ids.sara });
 
     await userEvent.click(canvas.getByRole("combobox", { name: storyText(context, copy.suppliedThrough) }));
     await expect((await screen.findAllByRole("option")).map((o) => o.textContent)).toEqual([
@@ -106,7 +106,7 @@ export const Edit: Story = {
     ]);
     await userEvent.click(screen.getByRole("option", { name: storyText(context, copy.host) }));
     await waitFor(() => expect(screen.queryByRole("listbox")).toBeNull());
-    await expect(args.onChange).toHaveBeenLastCalledWith("supplied_through", ids.host);
+    await expect(args.onChange).toHaveBeenLastCalledWith({ supplied_through: ids.host });
   },
 };
 

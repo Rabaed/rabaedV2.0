@@ -38,6 +38,16 @@ const schema = {
         { key: "supplier", type: "participant", label: { en: "Supplied through", ar: "التوريد عن طريق" } },
       ],
     },
+    {
+      // The Built-in Fields every Form places (RP-270).
+      key: "classification",
+      title: { en: "Classification", ar: "التصنيف" },
+      fields: [
+        { key: "trade", type: "trade", label: { en: "Trade", ar: "التخصص" } },
+        { key: "location", type: "location", label: { en: "Location", ar: "الموقع" } },
+        { key: "scopes", type: "scopes", label: { en: "Scopes", ar: "النطاقات" } },
+      ],
+    },
   ],
 };
 
@@ -82,6 +92,10 @@ type Party = {
 
 let projectId = "";
 let electrical = "";
+let buildingA = "";
+
+/** The Built-in Fields, sent with every set of answers so the people fields are what each test varies. */
+const builtIns = () => ({ trade: electrical, location: buildingA });
 let ow: Party & { admin: Caller; adminId: string };
 let c1: Party;
 let c2: Party;
@@ -127,7 +141,7 @@ const choices = async (by: Caller, url: string): Promise<FormChoices> => (await 
 const ids = (list: { id: string }[]) => list.map((c) => c.id).sort();
 
 const createDraft = (by: Caller, answers: Record<string, unknown>) =>
-  by.post(`/v1/projects/${projectId}/work-items`, { type: TYPE, title: "Cable trays", tradeId: electrical, answers });
+  by.post(`/v1/projects/${projectId}/work-items`, { type: TYPE, title: "Cable trays", answers: { ...builtIns(), ...answers } });
 
 const take = (by: Caller, id: string, transition: string) =>
   by.post(`/v1/work-items/${id}/transitions`, { transition, idempotencyKey: randomUUID() });
@@ -146,6 +160,9 @@ beforeAll(async () => {
   ow = { participantId: own, name: bilingual("OW Holding"), ap: host.caller, member: memberOf(host.caller, own), admin: host.caller,
     adminId: host.onboarded.authorizedPerson.id };
   electrical = (await ow.admin.post(`/v1/projects/${projectId}/trades`, { code: "EL", name: bilingual("Electrical") })).json().id;
+  buildingA = (
+    await ow.admin.post(`/v1/projects/${projectId}/locations`, { code: "BA", name: bilingual("Building A"), parentId: null })
+  ).json().id;
 
   c1 = await participant("C1 Contracting", "contractor");
   c2 = await participant("C2 Contracting", "contractor");
@@ -230,7 +247,7 @@ describe("saving an id the filler wasn't offered", () => {
   it("is refused on Save draft with the same answer as a random id, and changes nothing", async () => {
     const id = (await ok(createDraft(engineer.caller, { site_engineer: pm.id }), 201)).json().id;
     const save = (answers: Record<string, unknown>) =>
-      refusal(engineer.caller.request("PUT", `/v1/work-items/${id}/answers`, { answers }));
+      refusal(engineer.caller.request("PUT", `/v1/work-items/${id}/answers`, { answers: { ...builtIns(), ...answers } }));
     const expected = await save({ site_engineer: madeUp });
     expect(expected).toEqual({ status: 422, body: { error: "invalid_answers", fields: [{ key: "site_engineer", code: "unknown_option" }] } });
     expect(await save({ site_engineer: k1Engineer.id })).toEqual(expected);
@@ -239,14 +256,14 @@ describe("saving an id the filler wasn't offered", () => {
       status: 422,
       body: { error: "invalid_answers", fields: [{ key: "supplier", code: "unknown_option" }] },
     });
-    expect((await detail(engineer.caller, id)).answers).toEqual({ site_engineer: pm.id });
+    expect((await detail(engineer.caller, id)).answers).toEqual({ ...builtIns(), site_engineer: pm.id });
   });
 
   it("is not asked of an answer already saved: a Member who has since left the Project stays, and can't be chosen again", async () => {
     const leaver = await c1.member([]);
     const id = (await ok(createDraft(engineer.caller, { site_engineer: leaver.id }), 201)).json().id;
     await ok(c1.ap.delete(`/v1/participants/${c1.participantId}/members/${leaver.id}`));
-    await ok(engineer.caller.request("PUT", `/v1/work-items/${id}/answers`, { answers: { site_engineer: leaver.id, manufacturer: "ACME" } }));
+    await ok(engineer.caller.request("PUT", `/v1/work-items/${id}/answers`, { answers: { ...builtIns(), site_engineer: leaver.id, manufacturer: "ACME" } }));
     expect((await refusal(createDraft(engineer.caller, { site_engineer: leaver.id }))).body).toEqual({
       error: "invalid_answers",
       fields: [{ key: "site_engineer", code: "unknown_option" }],
@@ -271,7 +288,7 @@ describe("a Submitted item's member and participant answers", () => {
 
   it("C1 reads its own Member by name", async () => {
     const item = await detail(engineer.caller, id);
-    expect(item.answers).toEqual({ manufacturer: "ACME Cables", site_engineer: pm.id, supplier: ow.participantId });
+    expect(item.answers).toEqual({ ...builtIns(), manufacturer: "ACME Cables", site_engineer: pm.id, supplier: ow.participantId });
     expect(item.namedAnswers).toEqual({
       site_engineer: { companyName: c1.name, memberName: pm.name },
       supplier: { companyName: ow.name, memberName: null },
@@ -285,7 +302,7 @@ describe("a Submitted item's member and participant answers", () => {
       site_engineer: { companyName: c1.name, memberName: null },
       supplier: { companyName: ow.name, memberName: null },
     });
-    expect(item.answers).toEqual({ manufacturer: "ACME Cables", supplier: ow.participantId });
+    expect(item.answers).toEqual({ ...builtIns(), manufacturer: "ACME Cables", supplier: ow.participantId });
     expect(res.body).not.toContain(pm.id);
     expect(res.body).not.toContain(pm.name.en);
   });

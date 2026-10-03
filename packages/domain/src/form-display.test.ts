@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { formatFormValue, fromProjectWallTime, toProjectWallTime } from "./form-display.ts";
-import { formFields, formSchema, type FormField } from "./form.ts";
+import { answerFields, formSchema, type AnswerField } from "./form.ts";
 
 const label = (en: string, ar = en) => ({ en, ar });
 
-const fields = formFields(
+const fields = answerFields(
   formSchema.parse({
     sections: [
       {
@@ -37,12 +37,12 @@ const fields = formFields(
 );
 const field = (key: string) => fields.find((f) => f.key === key)!;
 const [date, datetime, time, yesNo, select, multi] = ["d", "dt", "t", "yn", "finish", "certs"].map(field) as [
-  FormField,
-  FormField,
-  FormField,
-  FormField,
-  FormField,
-  FormField,
+  AnswerField,
+  AnswerField,
+  AnswerField,
+  AnswerField,
+  AnswerField,
+  AnswerField,
 ];
 
 const noArabicIndic = /[٠-٩۰-۹]/;
@@ -103,7 +103,7 @@ describe("formatFormValue", () => {
 });
 
 describe("formatFormValue for member and participant answers (V14)", () => {
-  const [member, participant] = formFields(
+  const [member, participant] = answerFields(
     formSchema.parse({
       sections: [
         {
@@ -116,7 +116,7 @@ describe("formatFormValue for member and participant answers (V14)", () => {
         },
       ],
     }),
-  ) as [FormField, FormField];
+  ) as [AnswerField, AnswerField];
   const c1 = label("C1 Contracting", "سي ون للمقاولات");
   const ahmed = label("Ahmed Ali", "أحمد علي");
   const id = "0199a3b0-0000-7000-8000-000000000001";

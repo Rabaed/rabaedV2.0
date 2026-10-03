@@ -26,6 +26,7 @@ let projectId = "";
 const participant = { c1: "", c2: "", k1: "", or: "" };
 const loc = { tower1: "", buildingA: "", buildingB: "" };
 const trade = { electrical: "", mechanical: "" };
+const scope = { lighting: "", indoor: "", power: "", hvac: "" }; // Indoor is a Sub-scope of Lighting; HVAC is Mechanical's.
 
 async function one(text: string, values: unknown[]): Promise<string> {
   return (await migrator.query(text, values)).rows[0].id as string;
@@ -61,6 +62,15 @@ async function value(kind: "trade" | "location", code: string, parent: string | 
   return row!.value_id;
 }
 
+async function addScope(tradeId: string, name: string, parent: string | null = null): Promise<string> {
+  const [row] = await call<{ outcome: string; scope_id: string }>(
+    c1.ap,
+    sql`select outcome, scope_id from app.add_scope(${projectId}::uuid, ${tradeId}::uuid, ${parent}::uuid, ${JSON.stringify({ en: name, ar: name })}::jsonb)`,
+  );
+  expect(row!.outcome).toBe("added");
+  return row!.scope_id;
+}
+
 async function grant(as: string, fn: "participant" | "member", subject: string[], kind: string, values: string[] | "all") {
   const isAll = values === "all";
   const ids = isAll ? [] : values;
@@ -79,14 +89,34 @@ async function grant(as: string, fn: "participant" | "member", subject: string[]
 
 type Created = { outcome: string; work_item_id: string | null };
 
-const createDraft = (as: string, input: { trade?: string | null; location?: string | null; title?: string } = {}) =>
+type BuiltIns = { trade?: string | null; location?: string | null; scopes?: readonly string[] };
+
+const createDraft = (as: string, input: BuiltIns & { title?: string } = {}) =>
   call<Created>(
     as,
     sql`select outcome, work_item_id from app.create_work_item(
       ${projectId}::uuid, 'MAR', ${input.title ?? "Cable trays"}, app.latest_form_version('MAR'), '{"description": "Galvanised, 300 mm"}'::jsonb,
       ${input.trade === undefined ? trade.electrical : input.trade}::uuid,
-      ${input.location === undefined ? loc.buildingA : input.location}::uuid, now())`,
+      ${input.location === undefined ? loc.buildingA : input.location}::uuid, now(),
+      ${input.scopes ?? [scope.lighting]}::uuid[])`,
   ).then((rows) => rows[0]!);
+
+/** Save draft: the Form's own answers, and its Built-in Fields (by default as createDraft sets them). */
+const saveAnswers = (as: string, item: string, data: object, builtIns: BuiltIns = {}) =>
+  call<{ outcome: string }>(
+    as,
+    sql`select app.save_work_item_answers(
+      ${item}::uuid, ${JSON.stringify(data)}::jsonb,
+      ${builtIns.trade === undefined ? trade.electrical : builtIns.trade}::uuid,
+      ${builtIns.location === undefined ? loc.buildingA : builtIns.location}::uuid,
+      ${builtIns.scopes ?? [scope.lighting]}::uuid[], now()) as outcome`,
+  ).then((rows) => rows[0]!.outcome);
+
+const sendDraftForReview = (as: string, item: string, hash: RawBuilder<unknown>) =>
+  call<{ outcome: string }>(
+    as,
+    sql`select app.take_transition(${item}::uuid, 'send_for_review', '', '', ${hash}, ${randomUUID()}::uuid, now()) as outcome`,
+  ).then((rows) => rows[0]!.outcome);
 
 /** The ids `as` sees in `table` for the item, unfiltered but for RLS. */
 const seen = (as: string, table: string, column = "work_item_id") =>
@@ -94,7 +124,7 @@ const seen = (as: string, table: string, column = "work_item_id") =>
     rows.map((r) => r.id),
   );
 
-const itemTables = ["work_item_dimension_value", "work_item_access", "step_assignment", "work_item_event"];
+const itemTables = ["work_item_dimension_value", "work_item_scope", "work_item_access", "step_assignment", "work_item_event"];
 
 let draft = "";
 
@@ -137,6 +167,10 @@ beforeAll(async () => {
   loc.tower1 = await value("location", "T1");
   loc.buildingA = await value("location", "BA", loc.tower1);
   loc.buildingB = await value("location", "BB", loc.tower1);
+  scope.lighting = await addScope(trade.electrical, "Lighting");
+  scope.indoor = await addScope(trade.electrical, "Indoor", scope.lighting);
+  scope.power = await addScope(trade.electrical, "Power");
+  scope.hvac = await addScope(trade.mechanical, "HVAC");
 
   // Every Participant covers Electrical everywhere; Members get all of their Participant's.
   for (const p of Object.values(participant)) {
@@ -267,7 +301,7 @@ describe("creating a Draft", () => {
   });
 
   it("stays within the creator's own Visibility", async () => {
-    expect((await createDraft(c1.member, { trade: trade.mechanical })).outcome).toBe("outside_visibility");
+    expect((await createDraft(c1.member, { trade: trade.mechanical, scopes: [] })).outcome).toBe("outside_visibility");
     expect((await createDraft(c1Narrow, { location: loc.buildingA })).outcome).toBe("outside_visibility");
   });
 
@@ -637,16 +671,8 @@ describe("Internal Note", () => {
 // the API checked.
 describe("a Draft's answers", () => {
   let item = "";
-  const save = (as: string, data: object) =>
-    call<{ outcome: string }>(
-      as,
-      sql`select app.save_work_item_answers(${item}::uuid, ${JSON.stringify(data)}::jsonb, now()) as outcome`,
-    ).then((rows) => rows[0]!.outcome);
-  const sendForReview = (as: string, hash: RawBuilder<unknown>) =>
-    call<{ outcome: string }>(
-      as,
-      sql`select app.take_transition(${item}::uuid, 'send_for_review', '', '', ${hash}, ${randomUUID()}::uuid, now()) as outcome`,
-    ).then((rows) => rows[0]!.outcome);
+  const save = (as: string, data: object) => saveAnswers(as, item, data);
+  const sendForReview = (as: string, hash: RawBuilder<unknown>) => sendDraftForReview(as, item, hash);
   const stored = async () => (await migrator.query("select data from work_item where id = $1", [item])).rows[0].data;
 
   beforeAll(async () => {
@@ -696,5 +722,90 @@ describe("a Draft's answers", () => {
   it("are no longer editable once the item has left Draft", async () => {
     expect(await save(c1.member, { description: "Later" })).toBe("not_editable");
     expect(await stored()).toEqual({ description: "Updated" });
+  });
+});
+
+// The Built-in Fields (RP-270): Trade, Location and Scopes are answers, kept
+// where visibility reads them; the database keeps Trade required, the values in
+// the Project and within the writer's own Visibility, and Scopes in the Trade.
+describe("a Draft's Built-in Fields", () => {
+  let item = "";
+  const answers = (as: string) =>
+    call<{ answers: Record<string, unknown> | null }>(as, sql`select app.work_item_answers(${item}::uuid) as answers`).then(
+      (rows) => rows[0]!.answers,
+    );
+  const save = (builtIns: BuiltIns, as = c1.member) => saveAnswers(as, item, { description: "Galvanised" }, builtIns);
+
+  beforeAll(async () => {
+    item = (await createDraft(c1.member, { title: "Built-ins", scopes: [scope.lighting, scope.indoor] })).work_item_id!;
+  });
+
+  it("are among the answers, as ids, for those who see the item", async () => {
+    expect(await answers(c1.member)).toEqual({
+      description: "Galvanised, 300 mm",
+      trade: trade.electrical,
+      location: loc.buildingA,
+      scopes: [scope.lighting, scope.indoor].sort(),
+    });
+    for (const who of [c2.member, k1.member, or.member, c1Narrow]) expect(await answers(who), who).toBeNull();
+  });
+
+  it("refuses a Draft without a Trade, a Scope of another Trade, or a Sub-scope without its Scope", async () => {
+    for (const [input, outcome] of [
+      [{ trade: null }, "trade_required"],
+      [{ scopes: [scope.hvac] }, "value_not_found"],
+      [{ scopes: [scope.indoor] }, "value_not_found"],
+      [{ scopes: [loc.buildingA] }, "value_not_found"],
+      [{ trade: trade.mechanical, scopes: [] }, "outside_visibility"],
+    ] as const) {
+      expect((await createDraft(c1.member, input)).outcome, JSON.stringify(input)).toBe(outcome);
+    }
+  });
+
+  it("are saved with the answers, and replace what was there", async () => {
+    expect(await save({ trade: trade.electrical, location: loc.buildingB, scopes: [scope.power] })).toBe("saved");
+    expect(await answers(c1.member)).toEqual({
+      description: "Galvanised",
+      trade: trade.electrical,
+      location: loc.buildingB,
+      scopes: [scope.power],
+    });
+    // Now in Building B: the narrow engineer sees it too.
+    expect((await answers(c1Narrow))?.location).toBe(loc.buildingB);
+  });
+
+  it("refuse a save that would drop the Trade, leave the Trade, or step outside the saver's Visibility", async () => {
+    expect(await save({ trade: null, location: loc.buildingB })).toBe("trade_required");
+    expect(await save({ trade: trade.electrical, location: loc.buildingB, scopes: [scope.hvac] })).toBe("value_not_found");
+    expect(await save({ trade: trade.electrical, location: loc.buildingA, scopes: [] }, c1Narrow)).toBe("outside_visibility");
+    expect((await answers(c1.member))?.scopes).toEqual([scope.power]);
+  });
+
+  it("keep a deactivated Scope already on the item, but never take it anew", async () => {
+    await call<{ outcome: string }>(c1.ap, sql`select app.update_scope(${scope.power}::uuid, null, false, now()) as outcome`);
+    try {
+      expect(await save({ trade: trade.electrical, location: loc.buildingB, scopes: [scope.power] })).toBe("saved");
+      expect((await createDraft(c1.member, { scopes: [scope.power] })).outcome).toBe("value_not_found");
+    } finally {
+      await call<{ outcome: string }>(c1.ap, sql`select app.update_scope(${scope.power}::uuid, null, true, now()) as outcome`);
+    }
+  });
+
+  it("can't be written directly by the app role", async () => {
+    await expect(
+      withMember(app, c1.member, (trx) =>
+        sql`insert into work_item_scope (work_item_id, project_id, scope_id) values (${item}::uuid, ${projectId}::uuid, ${scope.lighting}::uuid)`.execute(trx),
+      ),
+    ).rejects.toThrow(/permission denied/);
+  });
+
+  it("are in the hash a Transition out of Draft checks: a Location changed since is refused", async () => {
+    await call<{ outcome: string }>(c1.ap, sql`select app.set_project_member_positions(${participant.c1}::uuid, ${c1.member}::uuid, ${["engineer"]}::text[]) as outcome`);
+    const [{ hash }] = (await call<{ hash: Buffer }>(c1.member, sql`select app.answers_sha256(${item}::uuid) as hash`)) as [
+      { hash: Buffer },
+    ];
+    expect(await save({ trade: trade.electrical, location: loc.buildingA, scopes: [scope.power] })).toBe("saved");
+    expect(await sendDraftForReview(c1.member, item, sql`${hash}::bytea`)).toBe("form_not_checked");
+    expect(await sendDraftForReview(c1.member, item, sql`app.answers_sha256(${item}::uuid)`)).toBe("applied");
   });
 });

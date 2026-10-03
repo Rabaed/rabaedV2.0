@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { formSchema, offeredChoices, validateAnswers, type FormSchema } from "./form.ts";
+import {
+  answerFields,
+  formFields,
+  formSchema,
+  formVisibility,
+  isRequired,
+  offeredChoices,
+  validateAnswers,
+  type FormSchema,
+} from "./form.ts";
 
 const label = (en: string) => ({ en, ar: en });
 
@@ -304,12 +313,12 @@ describe("member and participant fields (RP-266)", () => {
 
   it("take the id of a Member or Participant the filler was offered", () => {
     const answers = { site_engineer: ownMember, supplier: ownParticipant };
-    expect(validateAnswers(people, answers, "complete", offered)).toEqual({ ok: true, answers });
+    expect(validateAnswers(people, answers, "complete", { offered })).toEqual({ ok: true, answers });
   });
 
   it("refuse an id the filler wasn't offered exactly like a made-up one", () => {
     const refused = (value: string) =>
-      validateAnswers(people, { site_engineer: value, supplier: value }, "draft", offered);
+      validateAnswers(people, { site_engineer: value, supplier: value }, "draft", { offered });
     const expected = {
       ok: false,
       errors: [
@@ -320,7 +329,7 @@ describe("member and participant fields (RP-266)", () => {
     expect(refused(otherMember)).toEqual(expected);
     expect(refused("0199a3b0-0000-7000-8000-00000000dead")).toEqual(expected);
     // A Member's id is not a Participant's, and the other way round.
-    expect(validateAnswers(people, { site_engineer: ownParticipant, supplier: ownMember }, "draft", offered)).toEqual(expected);
+    expect(validateAnswers(people, { site_engineer: ownParticipant, supplier: ownMember }, "draft", { offered })).toEqual(expected);
   });
 
   it("without the offered ids (no I/O in the browser), take any id but nothing else", () => {
@@ -340,16 +349,16 @@ describe("member and participant fields (RP-266)", () => {
   it("keep an id already saved, even once it is no longer offered, but take no other new one", () => {
     const choices = { members: [], participants: [{ id: ownParticipant, name: label("C1") }] };
     const offered = offeredChoices(choices, people, { site_engineer: otherMember, note: ownMember });
-    expect(validateAnswers(people, { site_engineer: otherMember }, "draft", offered).ok).toBe(true);
-    expect(validateAnswers(people, { site_engineer: ownMember }, "draft", offered)).toEqual({
+    expect(validateAnswers(people, { site_engineer: otherMember }, "draft", { offered }).ok).toBe(true);
+    expect(validateAnswers(people, { site_engineer: ownMember }, "draft", { offered })).toEqual({
       ok: false,
       errors: [{ key: "site_engineer", code: "unknown_option" }],
     });
   });
 
   it("are unanswered when empty: dropped in a draft, required when complete", () => {
-    expect(validateAnswers(people, { site_engineer: "" }, "draft", offered)).toEqual({ ok: true, answers: {} });
-    expect(validateAnswers(people, {}, "complete", offered)).toEqual({
+    expect(validateAnswers(people, { site_engineer: "" }, "draft", { offered })).toEqual({ ok: true, answers: {} });
+    expect(validateAnswers(people, {}, "complete", { offered })).toEqual({
       ok: false,
       errors: [{ key: "site_engineer", code: "required" }],
     });
@@ -371,5 +380,149 @@ describe("member and participant fields (RP-266)", () => {
       label: label("Who"),
       required: false,
     });
+  });
+});
+
+// Layout fields and conditions (RP-267; form-engine.md §1).
+const conditional: FormSchema = formSchema.parse({
+  sections: [
+    {
+      key: "sample",
+      title: label("Sample"),
+      fields: [
+        { key: "sample_heading", type: "heading", text: label("About the sample") },
+        { key: "sample_note", type: "instructions", text: label("Send the sample to site before the review.") },
+        { key: "sample_provided", type: "yes_no", label: label("Sample provided"), required: true },
+        {
+          key: "sample_reference",
+          type: "text",
+          label: label("Sample reference"),
+          required: true,
+          visible_if: { field: "sample_provided", op: "=", value: true },
+        },
+        { key: "sample_divider", type: "divider" },
+        {
+          key: "finish",
+          type: "select",
+          label: label("Finish"),
+          options: [
+            { value: "galvanised", label: label("Galvanised") },
+            { value: "other", label: label("Other") },
+          ],
+        },
+        // Shown always, required only for "Other".
+        { key: "finish_details", type: "text", label: label("Finish details"), required: { field: "finish", op: "=", value: "other" } },
+      ],
+    },
+    {
+      key: "lab",
+      title: label("Lab test"),
+      // The whole section, only with a sample.
+      visible_if: { field: "sample_provided", op: "=", value: true },
+      fields: [
+        { key: "lab_name", type: "text", label: label("Lab"), required: true },
+        // Hidden in turn when the lab is hidden: a chain.
+        { key: "lab_contact", type: "text", label: label("Lab contact"), visible_if: { field: "lab_name", op: "not_empty" } },
+      ],
+    },
+  ],
+});
+
+describe("layout fields", () => {
+  it("are part of the Form but take no answer", () => {
+    expect(answerFields(conditional).map((f) => f.key)).not.toContain("sample_heading");
+    expect(formFields(conditional).map((f) => f.key)).toContain("sample_divider");
+    expect(validateAnswers(conditional, { sample_heading: "x" }, "draft")).toEqual({
+      ok: false,
+      errors: [{ key: "sample_heading", code: "unknown_field" }],
+    });
+  });
+
+  it("need their text in both languages, except a divider", () => {
+    const layout = (field: unknown) => formSchema.safeParse({ sections: [{ key: "a", title: label("A"), fields: [field] }] }).success;
+    expect(layout({ key: "h", type: "heading", text: label("H") })).toBe(true);
+    expect(layout({ key: "h", type: "heading" })).toBe(false);
+    expect(layout({ key: "i", type: "instructions", text: { en: "Only English" } })).toBe(false);
+    expect(layout({ key: "d", type: "divider" })).toBe(true);
+  });
+});
+
+describe("conditions in a Form", () => {
+  it("can't read item attributes yet: the Form has none to give them (Built-in Fields, RP-270)", () => {
+    const withRule = (visible_if: unknown) =>
+      formSchema.safeParse({
+        sections: [{ key: "a", title: label("A"), fields: [{ key: "x", type: "text", label: label("X"), visible_if }] }],
+      }).success;
+    expect(withRule({ field: "y", op: "empty" })).toBe(true);
+    expect(withRule({ attr: "trade", op: "in", value: ["EL"] })).toBe(false);
+    expect(withRule({ all: [{ field: "y", op: "empty" }, { not: { attr: "trade", op: "empty" } }] })).toBe(false);
+  });
+});
+
+describe("formVisibility", () => {
+  it("shows a field or section only while its condition holds", () => {
+    const hidden = formVisibility(conditional, { sample_provided: false });
+    expect(hidden.fields.has("sample_reference")).toBe(false);
+    expect(hidden.sections.has("lab")).toBe(false);
+    expect(hidden.fields.has("lab_name")).toBe(false);
+    const shown = formVisibility(conditional, { sample_provided: true });
+    expect(shown.fields.has("sample_reference")).toBe(true);
+    expect(shown.sections.has("lab")).toBe(true);
+  });
+
+  it("reads a hidden field as cleared, so what depends on it hides too", () => {
+    // lab_name has a value, but its section is hidden: lab_contact hides with it.
+    const vis = formVisibility(conditional, { sample_provided: false, lab_name: "SGS" });
+    expect(vis.fields.has("lab_contact")).toBe(false);
+    expect(formVisibility(conditional, { sample_provided: true, lab_name: "SGS" }).fields.has("lab_contact")).toBe(true);
+  });
+
+  it("answers with only the shown fields' answers", () => {
+    expect(formVisibility(conditional, { sample_provided: false, sample_reference: "S-1", lab_name: "SGS" }).answers).toEqual({
+      sample_provided: false,
+    });
+  });
+});
+
+describe("validateAnswers with conditions", () => {
+  it("doesn't check a hidden field, and clears its answer", () => {
+    expect(validateAnswers(conditional, { sample_provided: false, sample_reference: ["not text"], lab_name: "SGS" }, "draft")).toEqual({
+      ok: true,
+      answers: { sample_provided: false },
+    });
+  });
+
+  it("checks a shown field as usual", () => {
+    expect(validateAnswers(conditional, { sample_provided: true, sample_reference: ["not text"] }, "draft")).toEqual({
+      ok: false,
+      errors: [{ key: "sample_reference", code: "wrong_type" }],
+    });
+  });
+
+  it("requires a field only while it is shown", () => {
+    expect(validateAnswers(conditional, { sample_provided: false }, "complete")).toEqual({ ok: true, answers: { sample_provided: false } });
+    expect(validateAnswers(conditional, { sample_provided: true }, "complete")).toEqual({
+      ok: false,
+      errors: [
+        { key: "sample_reference", code: "required" },
+        { key: "lab_name", code: "required" },
+      ],
+    });
+  });
+
+  it("requires a field when its required condition holds", () => {
+    expect(validateAnswers(conditional, { sample_provided: false, finish: "galvanised" }, "complete").ok).toBe(true);
+    expect(validateAnswers(conditional, { sample_provided: false, finish: "other" }, "complete")).toEqual({
+      ok: false,
+      errors: [{ key: "finish_details", code: "required" }],
+    });
+    // A draft still skips it.
+    expect(validateAnswers(conditional, { finish: "other" }, "draft").ok).toBe(true);
+  });
+
+  it("isRequired evaluates a required condition against the answers", () => {
+    const details = formFields(conditional).find((f) => f.key === "finish_details")!;
+    expect(isRequired(details, { finish: "other" })).toBe(true);
+    expect(isRequired(details, {})).toBe(false);
   });
 });

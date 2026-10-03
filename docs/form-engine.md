@@ -47,6 +47,16 @@ One engine serves:
 
 Conditions use the **same JSON rule language as Workflow conditions** ([workflow-engine.md §4](workflow-engine.md)). One evaluator serves both, in the browser and on the server.
 
+As built (RP-267): `evaluateCondition` in `packages/domain` (`condition.ts`). A comparison reads a Form `field` or an item `attr`.
+- `=` and `!=` compare exactly. A multi-select equals a list holding the same options, in any order.
+- `> >= < <=` order like with like: two numbers, or two ISO values of one kind (dates, times of day or UTC instants). Anything else, plain text included, has no order, so the rule doesn't hold.
+- `in` and `not_in` take a list. A multi-select is `in` when any of its options is.
+- `empty` matches nothing, empty text or no option; No is not empty.
+
+A Form's conditions read its own fields only, for now. The item's attributes reach the Form with the Built-in Fields (RP-270), so until then a rule with `attr` is refused.
+
+`visible_if` works on sections and fields. A hidden field reads as cleared, so a field that depends on it hides too. `formVisibility` works out what is shown, and `isRequired` evaluates `required` when it is a condition. The validator skips hidden fields and drops their answers. The API stores what it returns, and the web sends only shown answers.
+
 ### System Fields and Built-in Fields (settled 2026-10-03)
 
 Every Work Item has the same frame around its Form:
@@ -59,6 +69,10 @@ System Fields   Attachments · Links
 
 - **System Fields** are outside the schema, and the engine renders them itself. The Form designer can't remove or move them, and only chooses where they appear on the PDF.
 - **Built-in Fields** sit inside the Form: Trade, Location, Scopes / Sub-scopes (filtered by the chosen Trade), and any Visibility Dimension the Project marks as required on Work Items. The designer places and labels them but can't delete them, and Trade and Location are always required. Visibility and Consultant routing depend on them.
+  - In the schema each is a field whose `key` is its `type` (`trade`, `location`, `scopes`). A schema without them, with one twice, or with Trade or Location optional is invalid (`formSchemaProblems`, which publishing will run: RP-271).
+  - The validator requires Trade even in a Draft (no Work Item exists without one) and Location to leave Draft, whatever the schema says. It refuses Scopes outside the chosen Trade, and Sub-scopes whose Scope isn't chosen. Changing the Trade clears the Scopes that no longer fit.
+  - Their answers are ids, stored where visibility reads them (`work_item_dimension_value`, `work_item_scope`), never in `data`. The API returns them among the answers.
+  - Custom Visibility Dimensions don't exist yet; their Built-in Fields come with them.
 - For Revisions, the "previous revision" panel appears automatically.
 
 ---
@@ -79,7 +93,7 @@ System Fields   Attachments · Links
 | Checklists | `checklist` | See §3. |
 | Plans | `pin` | Places the item's Pin on a plan Drawing of its Location. |
 | Aggregates | `aggregate` | Pulls values from other Work Items of a named Type in a period, e.g. a Weekly report summing manpower from that week's issued Dailies. It writes a snapshot, then stays editable. It flags missing Dailies (Expected Frequency) with "add late" or "ignore". |
-| Layout | `heading`, `instructions`, `divider` | Display only. |
+| Layout | `heading`, `instructions`, `divider` | Display only, with no answer. `heading` and `instructions` take `text` (`{en, ar}`), and all three take `visible_if`. |
 | Future | `boq_quantities` | For WIRs, switched on with the Financial Module. |
 
 **Signatures are never Form fields.** They come only from signing Transitions ([ADR 0003](adr/0003-docusign-grade-signing-not-legally-qualified.md)).

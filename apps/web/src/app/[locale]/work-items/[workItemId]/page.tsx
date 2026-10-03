@@ -7,8 +7,11 @@ import { WorkItemAttachments } from "@/components/work-item-attachments";
 import { WorkItemAnswers, WorkItemFormProvider } from "@/components/work-item-form";
 import { WorkItemHistory } from "@/components/work-item-history";
 import { Link, redirect } from "@/i18n/navigation";
+import { fillingChoices, readingChoices } from "@/lib/built-in-choices";
 import {
   getMe,
+  getMyVisibility,
+  getProjectScopes,
   getWorkItem,
   getWorkItemDocuments,
   getWorkItemForm,
@@ -26,7 +29,7 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
   const { locale, workItemId } = await params;
   setRequestLocale(locale);
   const t = await getTranslations("workItems");
-  const [me, item, form, choices, documents, history] = await Promise.all([
+  const [me, item, form, people, documents, history] = await Promise.all([
     getMe(),
     getWorkItem(workItemId),
     getWorkItemForm(workItemId),
@@ -35,16 +38,24 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
     getWorkItemHistory(workItemId),
   ]);
   if (!me) return redirect({ href: "/sign-in", locale });
-  if (!item || !form || !choices || !documents) notFound();
+  if (!item || !form || !people || !documents) notFound();
+  // Editable: the Built-in Fields offer what a new item's do. Otherwise they only name the item's own values.
+  const editable = item.actions.saveAnswers;
+  const [mine, scopes] = editable
+    ? await Promise.all([getMyVisibility(item.projectId), getProjectScopes(item.projectId)])
+    : [null, null];
+  const choices =
+    mine && scopes ? fillingChoices(mine, scopes.scopes, locale, item) : readingChoices(item, locale);
 
   return (
     <WorkItemFormProvider
       workItemId={item.id}
       schema={form.schema}
+      choices={choices}
+      people={people}
       answers={item.answers}
       named={item.namedAnswers}
-      choices={choices}
-      editable={item.actions.saveAnswers}
+      editable={editable && !!mine && !!scopes}
     >
       <div className="max-w-3xl space-y-6">
         <div className="space-y-2">
@@ -92,10 +103,6 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
               {item.type.code}
             </bdi>
           </dd>
-          <dt className="text-muted">{t("fields.trade")}</dt>
-          <dd>{item.trade.name[locale]}</dd>
-          <dt className="text-muted">{t("fields.location")}</dt>
-          <dd>{item.location ? item.location.name[locale] : t("noLocation")}</dd>
           <dt className="text-muted">{t("fields.step")}</dt>
           <dd>{item.step.name[locale]}</dd>
           {item.outcome && (
