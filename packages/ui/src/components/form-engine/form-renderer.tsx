@@ -2,17 +2,25 @@
 
 import {
   defaultMaxLength,
+  formatFormValue,
   formatNumber,
   formFields,
+  fromProjectWallTime,
+  toProjectWallTime,
   type FieldError,
   type FormField,
   type FormSchema,
+  type FormValue,
   type Locale,
 } from "@rabaed/domain";
+import type { ReactNode } from "react";
 import { cn } from "../../lib/cn.ts";
+import { CheckboxGroup } from "../form/checkbox-group.tsx";
 import { focusRing } from "../form/control-styles.ts";
 import { Field } from "../form/field.tsx";
 import { Input } from "../form/input.tsx";
+import { RadioGroup } from "../form/radio-group.tsx";
+import { Select } from "../form/select.tsx";
 import { Textarea } from "../form/textarea.tsx";
 import { Icon } from "../icon/icon.tsx";
 
@@ -20,7 +28,9 @@ import { Icon } from "../icon/icon.tsx";
 // schema with its answers and per-field errors, to fill in (`edit`) or to read
 // (`read`). Presentational only: it fetches nothing and checks nothing itself;
 // errors come from the shared validator (validateAnswers) or the API's refusal.
-// Labels follow the viewer's language; answers are shown exactly as typed.
+// Labels follow the viewer's language; text answers are shown exactly as typed,
+// dates and times in the viewer's language with Latin digits, and date-times in
+// the Project's time zone.
 
 const copy = {
   en: {
@@ -28,6 +38,12 @@ const copy = {
     required: "This field is required.",
     wrongType: "This value isn't valid here.",
     tooLong: (max: number) => `Use at most ${formatNumber(max, "en")} characters.`,
+    invalidFormat: { date: "Enter a valid date.", time: "Enter a valid time.", datetime: "Enter a valid date and time." },
+    unknownOption: "Choose one of the options.",
+    yes: "Yes",
+    no: "No",
+    choose: "Choose…",
+    none: "None",
     unanswered: "Not answered",
   },
   ar: {
@@ -43,6 +59,12 @@ const copy = {
     required: "هذا الحقل مطلوب.",
     wrongType: "هذه القيمة غير صالحة هنا.",
     tooLong: (max: number) => `استخدم ${formatNumber(max, "ar")} حرفًا على الأكثر.`,
+    invalidFormat: { date: "أدخل تاريخًا صالحًا.", time: "أدخل وقتًا صالحًا.", datetime: "أدخل تاريخًا ووقتًا صالحين." },
+    unknownOption: "اختر أحد الخيارات.",
+    yes: "نعم",
+    no: "لا",
+    choose: "اختر…",
+    none: "بدون",
     unanswered: "لم تتم الإجابة",
   },
 } satisfies Record<Locale, unknown>;
@@ -58,8 +80,8 @@ export type FormRendererProps = {
   mode: "edit" | "read";
   /** The viewer's language: labels, help and messages. */
   locale: Locale;
-  /** Called with a field's key and new value as the filler types (edit mode). */
-  onChange?: (key: string, value: string) => void;
+  /** Called with a field's key and new value as the filler answers (edit mode); `undefined` clears it. */
+  onChange?: (key: string, value: FormValue | undefined) => void;
   /** Prefix for the fields' ids, unique on the page. */
   idPrefix?: string;
   className?: string;
@@ -67,11 +89,113 @@ export type FormRendererProps = {
 
 function errorText(field: FormField, error: FieldError, locale: Locale): string {
   const text = copy[locale];
-  if (error.code === "too_long") return text.tooLong(field.maxLength ?? defaultMaxLength[field.type]);
-  return error.code === "required" ? text.required : text.wrongType;
+  switch (error.code) {
+    case "required":
+      return text.required;
+    case "too_long":
+      return field.type === "text" || field.type === "textarea"
+        ? text.tooLong(field.maxLength ?? defaultMaxLength[field.type])
+        : text.wrongType;
+    case "invalid_format":
+      return field.type === "date" || field.type === "time" || field.type === "datetime"
+        ? text.invalidFormat[field.type]
+        : text.wrongType;
+    case "unknown_option":
+      return text.unknownOption;
+    default:
+      return text.wrongType;
+  }
 }
 
 const textOf = (value: unknown) => (typeof value === "string" ? value : "");
+const isAnswered = (value: unknown) =>
+  value !== undefined && value !== null && value !== "" && !(Array.isArray(value) && value.length === 0);
+
+// A select's "no choice" item: option values are snake_case keys, so this never clashes with one.
+const NONE = "-";
+
+/** One field's control, and whether its Field labels a group (radios, checkboxes) rather than one control. */
+function control(
+  field: FormField,
+  value: unknown,
+  locale: Locale,
+  change: (value: FormValue | undefined) => void,
+): { element: ReactNode; group?: boolean } {
+  const text = copy[locale];
+  const name = field.key;
+  switch (field.type) {
+    case "text":
+    case "textarea": {
+      const props = {
+        name,
+        value: textOf(value),
+        maxLength: field.maxLength ?? defaultMaxLength[field.type],
+        // Answers keep the filler's own language and direction.
+        dir: "auto" as const,
+        onChange: (event: { target: { value: string } }) => change(event.target.value),
+      };
+      return { element: field.type === "textarea" ? <Textarea rows={5} {...props} /> : <Input {...props} /> };
+    }
+    case "date":
+    case "time":
+      return {
+        element: <Input type={field.type} name={name} value={textOf(value)} onChange={(e) => change(e.target.value)} />,
+      };
+    case "datetime":
+      // The control shows the Project's wall time; the answer is the UTC instant.
+      return {
+        element: (
+          <Input
+            type="datetime-local"
+            name={name}
+            value={toProjectWallTime(textOf(value))}
+            onChange={(e) => change(fromProjectWallTime(e.target.value) || undefined)}
+          />
+        ),
+      };
+    case "yes_no":
+      return {
+        group: true,
+        element: (
+          <RadioGroup
+            name={name}
+            options={[
+              { value: "yes", label: text.yes },
+              { value: "no", label: text.no },
+            ]}
+            value={value === true ? "yes" : value === false ? "no" : ""}
+            onValueChange={(v) => change(v === "yes")}
+          />
+        ),
+      };
+    case "select": {
+      const options = field.options.map((o) => ({ value: o.value, label: o.label[locale] }));
+      return {
+        element: (
+          <Select
+            name={name}
+            placeholder={text.choose}
+            // An optional choice can be taken back.
+            options={field.required ? options : [{ value: NONE, label: text.none }, ...options]}
+            value={textOf(value)}
+            onValueChange={(v) => change(v === NONE ? undefined : v)}
+          />
+        ),
+      };
+    }
+    case "multi_select":
+      return {
+        group: true,
+        element: (
+          <CheckboxGroup
+            options={field.options.map((o) => ({ value: o.value, label: o.label[locale] }))}
+            value={Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : []}
+            onValueChange={change}
+          />
+        ),
+      };
+  }
+}
 
 /**
  * A Form: its sections in order, each with its fields. In edit mode every field
@@ -123,14 +247,7 @@ export function FormRenderer({
             {mode === "edit" ? (
               section.fields.map((field) => {
                 const error = errorOf(field.key);
-                const props = {
-                  name: field.key,
-                  value: textOf(answers[field.key]),
-                  maxLength: field.maxLength ?? defaultMaxLength[field.type],
-                  // Answers keep the filler's own language and direction.
-                  dir: "auto" as const,
-                  onChange: (event: { target: { value: string } }) => onChange?.(field.key, event.target.value),
-                };
+                const { element, group } = control(field, answers[field.key], locale, (value) => onChange?.(field.key, value));
                 return (
                   <Field
                     key={field.key}
@@ -139,21 +256,22 @@ export function FormRenderer({
                     help={field.help?.[locale]}
                     error={error && errorText(field, error, locale)}
                     required={field.required}
+                    group={group}
                   >
-                    {field.type === "textarea" ? <Textarea rows={5} {...props} /> : <Input {...props} />}
+                    {element}
                   </Field>
                 );
               })
             ) : (
               <dl className="flex flex-col gap-4">
                 {section.fields.map((field) => {
-                  const value = textOf(answers[field.key]);
+                  const value = answers[field.key];
                   return (
                     <div key={field.key} className="flex flex-col gap-1">
                       <dt className="text-sm font-medium text-muted">{field.label[locale]}</dt>
                       {/* The answer keeps its own direction, but lines up with the page's. */}
-                      <dd className={cn("text-body", value ? "whitespace-pre-wrap text-text" : "text-muted")}>
-                        {value ? <bdi>{value}</bdi> : copy[locale].unanswered}
+                      <dd className={cn("text-body", isAnswered(value) ? "whitespace-pre-wrap text-text" : "text-muted")}>
+                        {isAnswered(value) ? <bdi>{formatFormValue(field, value, locale)}</bdi> : copy[locale].unanswered}
                       </dd>
                     </div>
                   );
