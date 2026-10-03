@@ -3,7 +3,7 @@
 // saves an incomplete draft, and can't Send for Review until the Form is
 // complete. The answers are filtered exactly like the Work Item: 404 when hidden.
 import { randomUUID } from "node:crypto";
-import type { FormVersion, WorkItemDetail } from "@rabaed/domain";
+import { formSchemaProblems, type FormVersion, type WorkItemDetail } from "@rabaed/domain";
 import type { LightMyRequestResponse } from "fastify";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestApi, expectHidden, type Caller, type OnboardedCompany } from "./support/harness.ts";
@@ -100,6 +100,8 @@ describe("the Form for a new MAR", () => {
       ["description", "textarea", true],
     ]);
     expect(form.schema.sections[0]!.title).toEqual({ en: "Material details", ar: "تفاصيل المادة" });
+    // A Form that could be published: every Built-in Field once, Trade and Location required.
+    expect(formSchemaProblems(form.schema)).toEqual([]);
   });
 
   it("is not found off the Member's Projects, or for a Type that doesn't exist", async () => {

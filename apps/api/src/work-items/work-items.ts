@@ -93,8 +93,8 @@ function storedAnswers({ trade, location, scopes, ...data }: Record<string, unkn
 /** A visible item's Form as the acting Member may work with it. */
 type PinnedForm = {
   form: FormVersion;
-  /** Its Project's Scopes, for the validator. */
-  scopes: ScopeChoice[];
+  /** Its Project, whose Scopes the validator checks `scopes` against. */
+  projectId: string;
   /** The answers now, Built-in Fields included. */
   data: Record<string, unknown>;
   /** Their hash, as app.take_transition compares it. */
@@ -129,7 +129,7 @@ async function pinnedForm(trx: Trx, workItemId: string): Promise<PinnedForm | nu
   if (!r) return null;
   return {
     form: toFormVersion(r),
-    scopes: await projectScopes(trx, r.project_id),
+    projectId: r.project_id,
     data: r.data,
     dataSha256: r.data_sha256,
     inDraft: r.in_draft,
@@ -386,7 +386,8 @@ export function takeTransition(
         select transition_kind from app.work_item_actions(${workItemId}::uuid)
         where action = 'transition' and transition_key = ${input.transition}
       `.execute(trx);
-      const checked = validateAnswers(pinned.form.schema, pinned.data, "complete", { scopes: pinned.scopes });
+      const scopes = await projectScopes(trx, pinned.projectId);
+      const checked = validateAnswers(pinned.form.schema, pinned.data, "complete", { scopes });
       if (takeable.some((t) => t.transition_kind !== "cancel") && !checked.ok) {
         return { ok: false, reason: "form_incomplete", errors: checked.errors };
       }
@@ -426,7 +427,7 @@ export function saveAnswers(
     if (!pinned) return { ok: false, reason: "not_found" };
     // Who may save, and when, before what is wrong with the answers.
     if (!pinned.canSave) return { ok: false, reason: "not_editable" };
-    const checked = validateAnswers(pinned.form.schema, input.answers, "draft", { scopes: pinned.scopes });
+    const checked = validateAnswers(pinned.form.schema, input.answers, "draft", { scopes: await projectScopes(trx, pinned.projectId) });
     if (!checked.ok) return { ok: false, reason: "invalid_answers", errors: checked.errors };
     const stored = storedAnswers(checked.answers);
     const { rows } = await sql<{ outcome: string }>`

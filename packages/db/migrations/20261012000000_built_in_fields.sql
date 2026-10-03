@@ -99,7 +99,7 @@ create function app.check_work_item_built_ins(
     declare
       v_trade_dimension uuid := app.project_dimension_id(p_project_id, 'trade');
       v_location_dimension uuid := app.project_dimension_id(p_project_id, 'location');
-      v_scope_ids uuid[] := coalesce(p_scope_ids, '{}');
+      v_scope_ids uuid[] := array(select distinct x from unnest(coalesce(p_scope_ids, '{}')) x where x is not null);
     begin
       if p_trade_id is null then
         return 'trade_required';
