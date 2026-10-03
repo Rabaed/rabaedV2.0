@@ -91,9 +91,7 @@ async function createDraft(by: Caller, title: string): Promise<string> {
   const res = await by.post(`/v1/projects/${projectId}/work-items`, {
     type: "MAR",
     title,
-    tradeId: electrical,
-    locationId: buildingA,
-    answers: { manufacturer: "ACME Cables", description: "Galvanised, 300 mm" },
+    answers: { manufacturer: "ACME Cables", description: "Galvanised, 300 mm", trade: electrical, location: buildingA },
   });
   expect(res.statusCode, res.body).toBe(201);
   return res.json().id;

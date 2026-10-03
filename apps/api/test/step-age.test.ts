@@ -190,9 +190,7 @@ describe("K1 moves the Submitted item internally (scenario 35)", () => {
     const res = await engineer.post(`/v1/projects/${projectId}/work-items`, {
       type: TYPE,
       title: "Cable trays",
-      tradeId: electrical,
-      locationId: buildingA,
-      answers: { manufacturer: "ACME Cables", description: "Galvanised, 300 mm" },
+      answers: { manufacturer: "ACME Cables", description: "Galvanised, 300 mm", trade: electrical, location: buildingA },
     });
     expect(res.statusCode, res.body).toBe(201);
     id = res.json().id;

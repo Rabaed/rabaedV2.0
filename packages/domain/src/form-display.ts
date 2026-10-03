@@ -68,5 +68,10 @@ export function formatFormValue(field: AnswerField, value: unknown, locale: Loca
     case "text":
     case "textarea":
       return typeof value === "string" ? value : String(value ?? "");
+    // Built-in Fields hold ids; the page names them (the renderer's `choices`), so only the ids are known here.
+    case "trade":
+    case "location":
+    case "scopes":
+      return Array.isArray(value) ? value.join(listSeparator[locale]) : String(value ?? "");
   }
 }

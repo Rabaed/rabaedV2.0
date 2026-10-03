@@ -7,7 +7,16 @@ import { WorkItemAttachments } from "@/components/work-item-attachments";
 import { WorkItemAnswers, WorkItemFormProvider } from "@/components/work-item-form";
 import { WorkItemHistory } from "@/components/work-item-history";
 import { Link, redirect } from "@/i18n/navigation";
-import { getMe, getWorkItem, getWorkItemDocuments, getWorkItemForm, getWorkItemHistory } from "@/lib/session";
+import { fillingChoices, readingChoices } from "@/lib/built-in-choices";
+import {
+  getMe,
+  getMyVisibility,
+  getProjectScopes,
+  getWorkItem,
+  getWorkItemDocuments,
+  getWorkItemForm,
+  getWorkItemHistory,
+} from "@/lib/session";
 import { stageColour } from "@/lib/stage-colour";
 
 /**
@@ -28,9 +37,22 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
   ]);
   if (!me) return redirect({ href: "/sign-in", locale });
   if (!item || !form || !documents) notFound();
+  // Editable: the Built-in Fields offer what a new item's do. Otherwise they only name the item's own values.
+  const editable = item.actions.saveAnswers;
+  const [mine, scopes] = editable
+    ? await Promise.all([getMyVisibility(item.projectId), getProjectScopes(item.projectId)])
+    : [null, null];
+  const choices =
+    mine && scopes ? fillingChoices(mine, scopes.scopes, locale, item) : readingChoices(item, locale);
 
   return (
-    <WorkItemFormProvider workItemId={item.id} schema={form.schema} answers={item.answers} editable={item.actions.saveAnswers}>
+    <WorkItemFormProvider
+      workItemId={item.id}
+      schema={form.schema}
+      choices={choices}
+      answers={item.answers}
+      editable={editable && !!mine && !!scopes}
+    >
       <div className="max-w-3xl space-y-6">
         <div className="space-y-2">
           <Link href={`/projects/${item.projectId}/work-items`} className="text-sm text-primary underline underline-offset-4">
@@ -77,10 +99,6 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
               {item.type.code}
             </bdi>
           </dd>
-          <dt className="text-muted">{t("fields.trade")}</dt>
-          <dd>{item.trade.name[locale]}</dd>
-          <dt className="text-muted">{t("fields.location")}</dt>
-          <dd>{item.location ? item.location.name[locale] : t("noLocation")}</dd>
           <dt className="text-muted">{t("fields.step")}</dt>
           <dd>{item.step.name[locale]}</dd>
           {item.outcome && (

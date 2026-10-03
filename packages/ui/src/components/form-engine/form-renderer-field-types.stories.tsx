@@ -134,9 +134,9 @@ export const Edit: Story = {
         {...args}
         locale={storyLocale(context)}
         answers={values}
-        onChange={(key, value) => {
-          args.onChange?.(key, value);
-          setValues((current) => ({ ...current, [key]: value }));
+        onChange={(changes) => {
+          args.onChange?.(changes);
+          setValues((current) => ({ ...current, ...changes }));
         }}
       />
     );
@@ -147,19 +147,19 @@ export const Edit: Story = {
     await expect(date).toHaveAttribute("type", "date");
     await expect(date).toBeRequired();
     fireEvent.change(date, { target: { value: "2026-10-03" } });
-    await expect(args.onChange).toHaveBeenLastCalledWith("delivery_date", "2026-10-03");
+    await expect(args.onChange).toHaveBeenLastCalledWith({ delivery_date: "2026-10-03" });
 
     // Picked in Riyadh time, stored in UTC.
     const datetime = labelled(context, copy.inspectedAt);
     await expect(datetime).toHaveAttribute("type", "datetime-local");
     fireEvent.change(datetime, { target: { value: "2026-10-03T09:30" } });
-    await expect(args.onChange).toHaveBeenLastCalledWith("inspected_at", "2026-10-03T06:30:00.000Z");
+    await expect(args.onChange).toHaveBeenLastCalledWith({ inspected_at: "2026-10-03T06:30:00.000Z" });
     await expect(datetime).toHaveValue("2026-10-03T09:30");
 
     fireEvent.change(labelled(context, copy.startTime), {
       target: { value: "07:30" },
     });
-    await expect(args.onChange).toHaveBeenLastCalledWith("start_time", "07:30");
+    await expect(args.onChange).toHaveBeenLastCalledWith({ start_time: "07:30" });
 
     // No is an answer, not an empty field.
     const sample = canvas.getByRole("radiogroup", {
@@ -167,7 +167,7 @@ export const Edit: Story = {
     });
     await expect(sample).toBeRequired();
     await userEvent.click(canvas.getByRole("radio", { name: storyText(context, copy.no) }));
-    await expect(args.onChange).toHaveBeenLastCalledWith("sample_provided", false);
+    await expect(args.onChange).toHaveBeenLastCalledWith({ sample_provided: false });
 
     // The open list renders in a portal at the end of <body>, outside the story.
     await userEvent.click(canvas.getByRole("combobox", { name: storyText(context, copy.finish) }));
@@ -182,7 +182,7 @@ export const Edit: Story = {
       }),
     );
     await waitFor(() => expect(screen.queryByRole("listbox")).toBeNull());
-    await expect(args.onChange).toHaveBeenLastCalledWith("finish", "powder_coated");
+    await expect(args.onChange).toHaveBeenLastCalledWith({ finish: "powder_coated" });
 
     const certificates = canvas.getByRole("group", {
       name: storyText(context, copy.certificates),
@@ -190,7 +190,7 @@ export const Edit: Story = {
     await expect(certificates).toHaveAccessibleDescription(storyText(context, copy.certificatesHelp));
     await userEvent.click(canvas.getByRole("checkbox", { name: storyText(context, copy.saso) }));
     await userEvent.click(canvas.getByRole("checkbox", { name: "ISO 9001" }));
-    await expect(args.onChange).toHaveBeenLastCalledWith("certificates", ["saso", "iso_9001"]);
+    await expect(args.onChange).toHaveBeenLastCalledWith({ certificates: ["saso", "iso_9001"] });
   },
 };
 

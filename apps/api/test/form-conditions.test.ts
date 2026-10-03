@@ -57,6 +57,16 @@ const schema = {
         },
       ],
     },
+    {
+      // The Built-in Fields every Form places (RP-270).
+      key: "classification",
+      title: { en: "Classification", ar: "التصنيف" },
+      fields: [
+        { key: "trade", type: "trade", label: { en: "Trade", ar: "التخصص" } },
+        { key: "location", type: "location", label: { en: "Location", ar: "الموقع" } },
+        { key: "scopes", type: "scopes", label: { en: "Scopes", ar: "النطاقات" } },
+      ],
+    },
   ],
 };
 /** The test-only Rabaed Default Type, filled with the conditional Form above and following the MAR's Workflow. */
@@ -86,6 +96,10 @@ async function addConditionsType() {
 let engineer: Caller;
 let projectId = "";
 let electrical = "";
+let buildingA = "";
+
+/** The Built-in Fields, sent with every set of answers so the conditional fields are what each test varies. */
+const builtIns = () => ({ trade: electrical, location: buildingA });
 
 async function ok(res: Promise<LightMyRequestResponse>, status = 204) {
   const r = await res;
@@ -94,19 +108,25 @@ async function ok(res: Promise<LightMyRequestResponse>, status = 204) {
 }
 
 const createDraft = (answers: Record<string, unknown>) =>
-  engineer.post(`/v1/projects/${projectId}/work-items`, { type: TYPE, title: "Cable trays", tradeId: electrical, answers });
+  engineer.post(`/v1/projects/${projectId}/work-items`, { type: TYPE, title: "Cable trays", answers: { ...builtIns(), ...answers } });
 
 const save = (id: string, answers: Record<string, unknown>) =>
-  engineer.request("PUT", `/v1/work-items/${id}/answers`, { answers });
+  engineer.request("PUT", `/v1/work-items/${id}/answers`, { answers: { ...builtIns(), ...answers } });
 
-const answersOf = async (id: string) =>
-  ((await ok(engineer.get(`/v1/work-items/${id}`), 200)).json() as WorkItemDetail).answers;
+/** The Form's own answers, without the Built-in Fields. */
+const answersOf = async (id: string) => {
+  const { answers } = (await ok(engineer.get(`/v1/work-items/${id}`), 200)).json() as WorkItemDetail;
+  const { trade: _trade, location: _location, ...own } = answers;
+  return own;
+};
 
 beforeAll(async () => {
   await addConditionsType();
   const c1 = await api.projectCreator();
   projectId = (await api.createProject(c1.caller)).id;
   electrical = (await c1.caller.post(`/v1/projects/${projectId}/trades`, { code: "EL", name: bilingual("Electrical") })).json().id;
+  buildingA = (await c1.caller.post(`/v1/projects/${projectId}/locations`, { code: "BA", name: bilingual("Building A"), parentId: null }))
+    .json().id;
   const own = (await c1.caller.get(`/v1/projects/${projectId}/participants`))
     .json()
     .participants.find((p: { isOwnCompany: boolean }) => p.isOwnCompany).id;

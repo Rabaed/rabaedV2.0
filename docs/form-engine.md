@@ -69,6 +69,10 @@ System Fields   Attachments · Links
 
 - **System Fields** are outside the schema, and the engine renders them itself. The Form designer can't remove or move them, and only chooses where they appear on the PDF.
 - **Built-in Fields** sit inside the Form: Trade, Location, Scopes / Sub-scopes (filtered by the chosen Trade), and any Visibility Dimension the Project marks as required on Work Items. The designer places and labels them but can't delete them, and Trade and Location are always required. Visibility and Consultant routing depend on them.
+  - In the schema each is a field whose `key` is its `type` (`trade`, `location`, `scopes`). A schema without them, with one twice, or with Trade or Location optional is invalid (`formSchemaProblems`, which publishing will run: RP-271).
+  - The validator requires Trade even in a Draft (no Work Item exists without one) and Location to leave Draft, whatever the schema says. It refuses Scopes outside the chosen Trade, and Sub-scopes whose Scope isn't chosen. Changing the Trade clears the Scopes that no longer fit.
+  - Their answers are ids, stored where visibility reads them (`work_item_dimension_value`, `work_item_scope`), never in `data`. The API returns them among the answers.
+  - Custom Visibility Dimensions don't exist yet; their Built-in Fields come with them.
 - For Revisions, the "previous revision" panel appears automatically.
 
 ---

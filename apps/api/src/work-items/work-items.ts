@@ -8,6 +8,7 @@ import {
   type FieldError,
   type FormVersion,
   type SaveAnswersRequest,
+  type ScopeChoice,
   type TakeTransitionRequest,
   type WorkItemActions,
   type WorkItemDetail,
@@ -31,6 +32,11 @@ import { checkedOutcome, commandResult } from "../outcomes.ts";
 // the item is pinned to (form-engine.md §8): draft mode on create and Save draft,
 // complete mode before leaving Draft. The database decides who may write them and
 // when, and lets an item leave Draft only with the answers checked here.
+//
+// The Built-in Fields `trade`, `location` and `scopes` are answers like any other
+// to the Member, but are stored where visibility reads them: the database
+// functions take them apart from the Form's own answers, and app.work_item_answers
+// puts them back (RP-270).
 
 type Trx = Transaction<Database>;
 
@@ -66,10 +72,30 @@ async function latestForm(trx: Trx, typeCode: string): Promise<FormVersion | nul
   return rows[0] ? toFormVersion(rows[0]) : null;
 }
 
+/** The Project's Scopes and Sub-scopes, which the validator checks `scopes` against. */
+async function projectScopes(trx: Trx, projectId: string): Promise<ScopeChoice[]> {
+  const { rows } = await sql<{ id: string; trade_value_id: string; parent_id: string | null }>`
+    select id, trade_value_id, parent_id from scope where project_id = ${projectId}
+  `.execute(trx);
+  return rows.map((r) => ({ id: r.id, tradeId: r.trade_value_id, parentId: r.parent_id }));
+}
+
+/** Checked answers as the database functions take them: the Form's own, and the Built-in Fields apart. */
+function storedAnswers({ trade, location, scopes, ...data }: Record<string, unknown>) {
+  return {
+    data: JSON.stringify(data),
+    tradeId: (trade as string | undefined) ?? null,
+    locationId: (location as string | undefined) ?? null,
+    scopeIds: (scopes as string[] | undefined) ?? [],
+  };
+}
+
 /** A visible item's Form as the acting Member may work with it. */
 type PinnedForm = {
   form: FormVersion;
-  /** The answers now. */
+  /** Its Project, whose Scopes the validator checks `scopes` against. */
+  projectId: string;
+  /** The answers now, Built-in Fields included. */
   data: Record<string, unknown>;
   /** Their hash, as app.take_transition compares it. */
   dataSha256: Buffer;
@@ -82,10 +108,16 @@ type PinnedForm = {
 /** A visible item's pinned Form Version and its answers; null when the Member can't see the item. */
 async function pinnedForm(trx: Trx, workItemId: string): Promise<PinnedForm | null> {
   const { rows } = await sql<
-    FormVersionRow & { data: Record<string, unknown>; data_sha256: Buffer; in_draft: boolean; can_save: boolean }
+    FormVersionRow & {
+      project_id: string;
+      data: Record<string, unknown>;
+      data_sha256: Buffer;
+      in_draft: boolean;
+      can_save: boolean;
+    }
   >`
-    select v.id, v.version_no, v.schema, w.data, app.answers_sha256(w.id) as data_sha256,
-      st.category = 'draft' as in_draft, app.can_save_answers(w.id) as can_save
+    select v.id, v.version_no, v.schema, w.project_id, app.work_item_answers(w.id) as data,
+      app.answers_sha256(w.id) as data_sha256, st.category = 'draft' as in_draft, app.can_save_answers(w.id) as can_save
     from work_item w
     join form_version v on v.id = w.form_version_id
     join work_item_type t on t.id = w.work_item_type_id
@@ -94,9 +126,15 @@ async function pinnedForm(trx: Trx, workItemId: string): Promise<PinnedForm | nu
     where w.id = ${workItemId}
   `.execute(trx);
   const r = rows[0];
-  return r
-    ? { form: toFormVersion(r), data: r.data, dataSha256: r.data_sha256, inDraft: r.in_draft, canSave: r.can_save }
-    : null;
+  if (!r) return null;
+  return {
+    form: toFormVersion(r),
+    projectId: r.project_id,
+    data: r.data,
+    dataSha256: r.data_sha256,
+    inDraft: r.in_draft,
+    canSave: r.can_save,
+  };
 }
 
 /**
@@ -192,12 +230,13 @@ export function createWorkItem(
       if (!onProject) return { ok: false, reason: "not_found" };
       const form = await latestForm(trx, input.type);
       if (!form) return { ok: false, reason: "type_not_found" };
-      const checked = validateAnswers(form.schema, input.answers, "draft");
+      const checked = validateAnswers(form.schema, input.answers, "draft", { scopes: await projectScopes(trx, projectId) });
       if (!checked.ok) return { ok: false, reason: "invalid_answers", errors: checked.errors };
+      const stored = storedAnswers(checked.answers);
       const { rows } = await sql<{ outcome: string; work_item_id: string | null }>`
         select outcome, work_item_id from app.create_work_item(
-          ${projectId}::uuid, ${input.type}, ${input.title}, ${form.id}::uuid, ${JSON.stringify(checked.answers)}::jsonb,
-          ${input.tradeId}::uuid, ${input.locationId}::uuid, ${now})
+          ${projectId}::uuid, ${input.type}, ${input.title}, ${form.id}::uuid, ${stored.data}::jsonb,
+          ${stored.tradeId}::uuid, ${stored.locationId}::uuid, ${now}, ${stored.scopeIds}::uuid[])
       `.execute(trx);
       const outcome = checkedOutcome(rows[0]!.outcome, ["created", ...createWorkItemRefusals]);
       const { work_item_id } = rows[0]!;
@@ -247,7 +286,7 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
       closed_at: Date | null;
       can_save_answers: boolean;
     }>`
-      select w.data, w.form_version_id, w.created_at, w.outcome, w.closed_at, s.key as step_key, s.name as step_name,
+      select app.work_item_answers(w.id) as data, w.form_version_id, w.created_at, w.outcome, w.closed_at, s.key as step_key, s.name as step_name,
         raiser.legal_name as raised_by, holder.legal_name as held_by, m.full_name as holder_name,
         app.can_save_answers(w.id) as can_save_answers
       from work_item w
@@ -261,10 +300,20 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
       where w.id = ${workItemId}
     `.execute(trx);
     const d = rows[0]!;
+    // work_item_scope shows only a visible item's; every Project Member reads the Project's Scopes.
+    const { rows: scopes } = await sql<{ id: string; parent_id: string | null; name: BilingualText }>`
+      select s.id, s.parent_id, s.name
+      from work_item_scope ws
+      join scope s on s.id = ws.scope_id
+      left join scope parent on parent.id = s.parent_id
+      where ws.work_item_id = ${workItemId}
+      order by coalesce(parent.sort, s.sort), coalesce(s.parent_id, s.id), s.depth, s.sort
+    `.execute(trx);
     return {
       ...toSummary(row, now),
       formVersionId: d.form_version_id,
       answers: d.data,
+      scopes: scopes.map((s) => ({ id: s.id, parentId: s.parent_id, name: s.name })),
       step: { key: d.step_key, name: d.step_name },
       raisedBy: { companyName: d.raised_by },
       heldBy: d.held_by ? { companyName: d.held_by, memberName: d.holder_name } : null,
@@ -337,7 +386,8 @@ export function takeTransition(
         select transition_kind from app.work_item_actions(${workItemId}::uuid)
         where action = 'transition' and transition_key = ${input.transition}
       `.execute(trx);
-      const checked = validateAnswers(pinned.form.schema, pinned.data, "complete");
+      const scopes = await projectScopes(trx, pinned.projectId);
+      const checked = validateAnswers(pinned.form.schema, pinned.data, "complete", { scopes });
       if (takeable.some((t) => t.transition_kind !== "cancel") && !checked.ok) {
         return { ok: false, reason: "form_incomplete", errors: checked.errors };
       }
@@ -351,7 +401,14 @@ export function takeTransition(
   });
 }
 
-const saveAnswersRefusals = ["not_found", "project_closed", "not_editable"] as const;
+const saveAnswersRefusals = [
+  "not_found",
+  "project_closed",
+  "not_editable",
+  "trade_required",
+  "value_not_found",
+  "outside_visibility",
+] as const;
 export type SaveAnswersResult = { ok: true } | AnswersRefused | { ok: false; reason: (typeof saveAnswersRefusals)[number] };
 
 /**
@@ -370,10 +427,13 @@ export function saveAnswers(
     if (!pinned) return { ok: false, reason: "not_found" };
     // Who may save, and when, before what is wrong with the answers.
     if (!pinned.canSave) return { ok: false, reason: "not_editable" };
-    const checked = validateAnswers(pinned.form.schema, input.answers, "draft");
+    const checked = validateAnswers(pinned.form.schema, input.answers, "draft", { scopes: await projectScopes(trx, pinned.projectId) });
     if (!checked.ok) return { ok: false, reason: "invalid_answers", errors: checked.errors };
+    const stored = storedAnswers(checked.answers);
     const { rows } = await sql<{ outcome: string }>`
-      select app.save_work_item_answers(${workItemId}::uuid, ${JSON.stringify(checked.answers)}::jsonb, ${now}) as outcome
+      select app.save_work_item_answers(
+        ${workItemId}::uuid, ${stored.data}::jsonb, ${stored.tradeId}::uuid, ${stored.locationId}::uuid,
+        ${stored.scopeIds}::uuid[], ${now}) as outcome
     `.execute(trx);
     return commandResult(rows[0]!.outcome, "saved", saveAnswersRefusals);
   });

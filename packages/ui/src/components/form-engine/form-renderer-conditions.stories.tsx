@@ -94,8 +94,8 @@ export const Edit: Story = {
         locale={storyLocale(context)}
         answers={values}
         errors={errors}
-        onChange={(key, value) => {
-          const next = { ...values, [key]: value };
+        onChange={(changes) => {
+          const next = { ...values, ...changes };
           setValues(next);
           const checked = validateAnswers(schema, next, "draft");
           setErrors(checked.ok ? [] : checked.errors);

@@ -23,6 +23,7 @@ let k1Engineer: Caller; // Consultant.
 let orEngineer: Caller; // Owner Representative.
 let projectId = "";
 let electrical = "";
+let buildingA = "";
 
 const bilingual = (text: string) => ({ en: text, ar: text });
 const all = { isAll: true, valueIds: [] };
@@ -59,9 +60,7 @@ async function createDraft(by: Caller, title = "Cable trays"): Promise<string> {
   const res = await by.post(`/v1/projects/${projectId}/work-items`, {
     type: "MAR",
     title,
-    tradeId: electrical,
-    locationId: null,
-    answers: { manufacturer: "ACME Cables", description: "Galvanised, 300 mm" },
+    answers: { manufacturer: "ACME Cables", description: "Galvanised, 300 mm", trade: electrical, location: buildingA },
   });
   expect(res.statusCode, res.body).toBe(201);
   return res.json().id;
@@ -94,6 +93,7 @@ beforeAll(async () => {
   projectId = (await api.createProject(c1.caller)).id;
   const res = await c1.caller.post(`/v1/projects/${projectId}/trades`, { code: "EL", name: bilingual("Electrical") });
   electrical = res.json().id;
+  buildingA = (await c1.caller.post(`/v1/projects/${projectId}/locations`, { code: "BA", name: bilingual("Building A"), parentId: null })).json().id;
   c1ParticipantId = (await c1.caller.get(`/v1/projects/${projectId}/participants`))
     .json()
     .participants.find((p: { isOwnCompany: boolean }) => p.isOwnCompany).id;
