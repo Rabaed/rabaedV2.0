@@ -3,10 +3,10 @@
 -- Version 1 is the part-1 MAR: manufacturer, model, quantity (a number with its
 -- unit), specification section and description, with Trade, Location and Scopes
 -- as Built-in Fields. The skeleton's Version 1 had no quantity; this adds it
--- (optional, so no item pinned to Version 1 becomes incomplete) the way the
--- Built-in Fields migration placed Trade, Location and Scopes: dev and CI hold
--- demo and test data only, and no customer Work Item exists yet, so Version 1
--- is completed in place. The richer MAR (table of items, named attachment
+-- (optional, so an item already pinned to Version 1 stays valid and complete,
+-- with no answer for it) the way the Built-in Fields migration placed Trade,
+-- Location and Scopes: dev and CI hold demo and test data only, no customer
+-- Work Item exists yet, so Version 1 is completed in place. The richer MAR (table of items, named attachment
 -- fields, supplier pick list) is Version 2, published through RP-271.
 
 alter table form_version disable trigger form_version_published_frozen;

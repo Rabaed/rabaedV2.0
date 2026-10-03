@@ -148,6 +148,20 @@ jobs:
         ports: ["5432:5432"]
         options: >-
           --health-cmd "pg_isready -U postgres" --health-interval 2s --health-timeout 3s --health-retries 30
+      # The global setup seeds the demo, whose MAR carries a file (RP-272).
+      files:
+        image: rustfs/rustfs:1.0.0
+        env:
+          RUSTFS_ACCESS_KEY: ci-only
+          RUSTFS_SECRET_KEY: ci-only-secret
+        ports: ["9000:9000"]
+        options: >-
+          --health-cmd "curl -fs http://127.0.0.1:9000/health" --health-interval 2s --health-timeout 3s --health-retries 30
+    env:
+      PROJECT_FILES_BUCKET: rabaed-project-files
+      FILE_STORE_ENDPOINT: http://127.0.0.1:9000
+      FILE_STORE_ACCESS_KEY_ID: ci-only
+      FILE_STORE_SECRET_ACCESS_KEY: ci-only-secret
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
