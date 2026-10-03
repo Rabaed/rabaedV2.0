@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { bilingualText } from "./company.ts";
-import { formAnswers } from "./form.ts";
+import { formAnswers, namedAnswers } from "./form.ts";
 
 /** A Work Item Type's short code, used in filters and Document Numbers (MAR, SAR…). */
 export const workItemTypeCode = z.string().regex(/^[A-Z]{2,6}$/);
@@ -112,8 +112,13 @@ export const workItemDetail = workItemSummary.extend({
   /**
    * The Form's answers by field key, exactly as typed. The Built-in Fields hold
    * ids: `trade` and `location` the item's `trade` and `location`, `scopes` its `scopes`.
+   * A `member` answer naming another Company's Member, or a `participant` one
+   * naming a Company the viewer may not see, is left out (V14, V15):
+   * `namedAnswers` has what they may read instead.
    */
   answers: formAnswers,
+  /** The `member` and `participant` answers as the viewer may read them, by field key. */
+  namedAnswers,
   /** The item's Scopes and Sub-scopes, each Scope before its Sub-scopes. */
   scopes: z.array(z.object({ id: z.uuid(), parentId: z.uuid().nullable(), name: bilingualText })),
   step: z.object({ key: z.string(), name: bilingualText }),

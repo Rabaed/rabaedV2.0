@@ -1,6 +1,15 @@
 "use client";
 
-import { formVisibility, validateAnswers, type FieldError, type FormValue, type FormVersion, type Locale } from "@rabaed/domain";
+import {
+  formVisibility,
+  offeredChoices,
+  validateAnswers,
+  type FieldError,
+  type FormChoices,
+  type FormValue,
+  type FormVersion,
+  type Locale,
+} from "@rabaed/domain";
 import { Button, Field, FormRenderer, Input, type BuiltInChoices } from "@rabaed/ui";
 import { useTranslations } from "next-intl";
 import { useState, type FormEvent } from "react";
@@ -16,11 +25,14 @@ export function CreateWorkItemForm({
   projectId,
   form,
   choices,
+  people,
   locale,
 }: {
   projectId: string;
   form: FormVersion;
   choices: BuiltInChoices;
+  /** Who and which Companies its `member` and `participant` fields offer. */
+  people: FormChoices;
   locale: Locale;
 }) {
   const t = useTranslations("workItems");
@@ -35,7 +47,7 @@ export function CreateWorkItemForm({
     setAnswers(next);
     // Instant feedback with the same checks the server runs (draft mode). A missing
     // Trade is reported when the Draft is saved, not while the Form is being filled.
-    const checked = validateAnswers(form.schema, next, "draft", { scopes: choices.scopes });
+    const checked = validateAnswers(form.schema, next, "draft", { scopes: choices.scopes, offered: offeredChoices(people) });
     setFieldErrors(checked.ok ? [] : checked.errors.filter((e) => e.code !== "required"));
   }
 
@@ -94,6 +106,7 @@ export function CreateWorkItemForm({
         mode="edit"
         locale={locale}
         choices={choices}
+        people={people}
         onChange={change}
         idPrefix="answer"
       />

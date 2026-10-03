@@ -1,6 +1,16 @@
 "use client";
 
-import { formVisibility, validateAnswers, type FieldError, type FormSchema, type FormValue, type Locale } from "@rabaed/domain";
+import {
+  formVisibility,
+  offeredChoices,
+  validateAnswers,
+  type FieldError,
+  type FormChoices,
+  type FormSchema,
+  type FormValue,
+  type Locale,
+  type NamedAnswers,
+} from "@rabaed/domain";
 import { Button, FormRenderer, type BuiltInChoices } from "@rabaed/ui";
 import { useTranslations } from "next-intl";
 import { createContext, useContext, useState, type ReactNode } from "react";
@@ -15,6 +25,10 @@ type WorkItemFormState = {
   /** What the Built-in Fields offer, or name in the read view. */
   choices: BuiltInChoices;
   answers: Record<string, unknown>;
+  /** Its `member` and `participant` answers as the API named them for the viewer (V14). */
+  named: NamedAnswers;
+  /** Who and which Companies those fields offer the viewer (V15). */
+  people: FormChoices;
   errors: readonly FieldError[];
   editable: boolean;
   /** Typed since the last save. */
@@ -40,6 +54,8 @@ export function WorkItemFormProvider({
   schema,
   choices,
   answers: saved,
+  named,
+  people,
   editable,
   children,
 }: {
@@ -47,6 +63,8 @@ export function WorkItemFormProvider({
   schema: FormSchema;
   choices: BuiltInChoices;
   answers: Record<string, unknown>;
+  named: NamedAnswers;
+  people: FormChoices;
   /** Save draft is offered (actions.saveAnswers). */
   editable: boolean;
   children: ReactNode;
@@ -66,7 +84,10 @@ export function WorkItemFormProvider({
     setDirty(true);
     setMessage(null);
     // Instant feedback with the same checks the server runs (draft mode: types, and the Trade).
-    const checked = validateAnswers(schema, next, "draft", { scopes: choices.scopes });
+    const checked = validateAnswers(schema, next, "draft", {
+      scopes: choices.scopes,
+      offered: offeredChoices(people, schema, saved),
+    });
     setErrors(checked.ok ? [] : checked.errors);
   }
 
@@ -118,7 +139,7 @@ export function WorkItemFormProvider({
 
   return (
     <WorkItemFormContext.Provider
-      value={{ schema, choices, answers, errors, editable, dirty, pending, message, change, save, showErrors }}
+      value={{ schema, choices, people, answers, named, errors, editable, dirty, pending, message, change, save, showErrors }}
     >
       {children}
     </WorkItemFormContext.Provider>
@@ -137,6 +158,8 @@ export function WorkItemAnswers({ locale }: { locale: Locale }) {
         schema={form.schema}
         choices={form.choices}
         answers={form.answers}
+        named={form.named}
+        people={form.people}
         errors={form.errors}
         mode={form.editable ? "edit" : "read"}
         locale={locale}

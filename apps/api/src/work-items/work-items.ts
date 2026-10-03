@@ -1,12 +1,18 @@
 import { withMember, type Database, type Db } from "@rabaed/db";
 import {
+  formFields,
   formSchema,
+  offeredChoices,
   stepAgeWeeks,
   validateAnswers,
   type BilingualText,
   type CreateWorkItemRequest,
   type FieldError,
+  type FormChoices,
+  type FormSchema,
+  type FormFieldType,
   type FormVersion,
+  type NamedAnswers,
   type SaveAnswersRequest,
   type ScopeChoice,
   type TakeTransitionRequest,
@@ -30,8 +36,12 @@ import { checkedOutcome, commandResult } from "../outcomes.ts";
 //
 // Answers are checked here, with the shared validator, against the Form Version
 // the item is pinned to (form-engine.md §8): draft mode on create and Save draft,
-// complete mode before leaving Draft. The database decides who may write them and
-// when, and lets an item leave Draft only with the answers checked here.
+// complete mode before leaving Draft. A new `member` or `participant` answer
+// must be one the filler was offered (formChoices), with the same visibility as
+// everywhere else (V15): an id they couldn't see is refused like a made-up one.
+// One already saved stays, even if that Member has since left the Project. The
+// database decides who may write them and when, and lets an item leave Draft
+// only with the answers checked here.
 //
 // The Built-in Fields `trade`, `location` and `scopes` are answers like any other
 // to the Member, but are stored where visibility reads them: the database
@@ -149,6 +159,56 @@ export function getNewWorkItemForm(db: Db, memberId: string, projectId: string, 
   });
 }
 
+/**
+ * What the acting Member may choose in `member` and `participant` fields on one
+ * of their Projects (V15): their own Participant's Project Members (RLS shows no
+ * one else's); their own Participant, the Host Company's and, on an item, those
+ * on it (app.form_participant_choices).
+ */
+async function formChoices(trx: Trx, projectId: string, workItemId: string | null): Promise<FormChoices> {
+  const { rows: members } = await sql<{ id: string; name: BilingualText }>`
+    select m.id, m.full_name as name
+    from project_member pm
+    join member m on m.id = pm.member_id
+    where pm.project_id = ${projectId} and pm.status = 'active' and m.status = 'active'
+      -- Already all RLS shows; said here too, so a wider policy never widens the choices.
+      and pm.participant_id in (select app.current_participant_ids())
+    order by m.full_name ->> 'en', m.id
+  `.execute(trx);
+  const { rows: participants } = await sql<{ id: string; name: BilingualText }>`
+    select participant_id as id, legal_name as name from app.form_participant_choices(${projectId}::uuid, ${workItemId}::uuid)
+  `.execute(trx);
+  return { members, participants };
+}
+
+/** The ids the filler may choose (and those already `saved`), when the Form has fields that take them. */
+async function offeredFor(
+  trx: Trx,
+  schema: FormSchema,
+  projectId: string,
+  workItemId: string | null,
+  saved: Record<string, unknown> = {},
+) {
+  const needed = formFields(schema).some((f) => f.type === "member" || f.type === "participant");
+  return needed ? offeredChoices(await formChoices(trx, projectId, workItemId), schema, saved) : undefined;
+}
+
+/** What the Member may choose on a new item of one of their Projects; null when it isn't one of theirs. */
+export function getNewWorkItemFormChoices(db: Db, memberId: string, projectId: string): Promise<FormChoices | null> {
+  return withMember(db, memberId, async (trx) => {
+    const onProject = await trx.selectFrom("project").select("id").where("id", "=", projectId).executeTakeFirst();
+    return onProject ? formChoices(trx, projectId, null) : null;
+  });
+}
+
+/** What the Member may choose on a visible item; null when they can't see it. */
+export function getWorkItemFormChoices(db: Db, memberId: string, workItemId: string): Promise<FormChoices | null> {
+  return withMember(db, memberId, async (trx) => {
+    const item = await trx.selectFrom("work_item").select("project_id").where("id", "=", workItemId).executeTakeFirst();
+    return item ? formChoices(trx, item.project_id, workItemId) : null;
+  });
+}
+
 /** The Form Version a visible item is pinned to; null when the Member can't see the item. */
 export function getWorkItemForm(db: Db, memberId: string, workItemId: string): Promise<FormVersion | null> {
   return withMember(db, memberId, async (trx) => (await pinnedForm(trx, workItemId))?.form ?? null);
@@ -230,7 +290,10 @@ export function createWorkItem(
       if (!onProject) return { ok: false, reason: "not_found" };
       const form = await latestForm(trx, input.type);
       if (!form) return { ok: false, reason: "type_not_found" };
-      const checked = validateAnswers(form.schema, input.answers, "draft", { scopes: await projectScopes(trx, projectId) });
+      const checked = validateAnswers(form.schema, input.answers, "draft", {
+        scopes: await projectScopes(trx, projectId),
+        offered: await offeredFor(trx, form.schema, projectId, null),
+      });
       if (!checked.ok) return { ok: false, reason: "invalid_answers", errors: checked.errors };
       const stored = storedAnswers(checked.answers);
       const { rows } = await sql<{ outcome: string; work_item_id: string | null }>`
@@ -309,10 +372,13 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
       where ws.work_item_id = ${workItemId}
       order by coalesce(parent.sort, s.sort), coalesce(s.parent_id, s.id), s.depth, s.sort
     `.execute(trx);
+    const { named, unnamed } = await namedAnswers(trx, workItemId);
     return {
       ...toSummary(row, now),
       formVersionId: d.form_version_id,
-      answers: d.data,
+      // Another Company's people, and a Company the viewer may not see, are never identified, not even by an id (V14, V15).
+      answers: Object.fromEntries(Object.entries(d.data).filter(([key]) => !unnamed.has(key))),
+      namedAnswers: named,
       scopes: scopes.map((s) => ({ id: s.id, parentId: s.parent_id, name: s.name })),
       step: { key: d.step_key, name: d.step_name },
       raisedBy: { companyName: d.raised_by },
@@ -323,6 +389,26 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
       actions: { ...(await actions(trx, workItemId)), saveAnswers: d.can_save_answers },
     };
   });
+}
+
+/**
+ * A visible item's `member` and `participant` answers as the acting Member may
+ * read them (V14), and the keys of those naming someone or a Company they may
+ * not see.
+ */
+async function namedAnswers(trx: Trx, workItemId: string): Promise<{ named: NamedAnswers; unnamed: Set<string> }> {
+  const { rows } = await sql<{
+    field_key: string;
+    field_type: Extract<FormFieldType, "member" | "participant">;
+    company_name: BilingualText | null;
+    member_name: BilingualText | null;
+  }>`select * from app.work_item_named_answers(${workItemId}::uuid)`.execute(trx);
+  return {
+    named: Object.fromEntries(rows.map((r) => [r.field_key, { companyName: r.company_name, memberName: r.member_name }])),
+    unnamed: new Set(
+      rows.filter((r) => !r.company_name || (r.field_type === "member" && !r.member_name)).map((r) => r.field_key),
+    ),
+  };
 }
 
 /** What the acting Member may press on a visible item now, as app.work_item_actions answers. */
@@ -427,7 +513,10 @@ export function saveAnswers(
     if (!pinned) return { ok: false, reason: "not_found" };
     // Who may save, and when, before what is wrong with the answers.
     if (!pinned.canSave) return { ok: false, reason: "not_editable" };
-    const checked = validateAnswers(pinned.form.schema, input.answers, "draft", { scopes: await projectScopes(trx, pinned.projectId) });
+    const checked = validateAnswers(pinned.form.schema, input.answers, "draft", {
+      scopes: await projectScopes(trx, pinned.projectId),
+      offered: await offeredFor(trx, pinned.form.schema, pinned.projectId, workItemId, pinned.data),
+    });
     if (!checked.ok) return { ok: false, reason: "invalid_answers", errors: checked.errors };
     const stored = storedAnswers(checked.answers);
     const { rows } = await sql<{ outcome: string }>`
