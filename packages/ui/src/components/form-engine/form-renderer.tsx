@@ -28,6 +28,7 @@ import {
   type FormSchema,
   type FormValue,
   type Locale,
+  type NamedAnswer,
   type NamedAnswers,
 } from "@rabaed/domain";
 import { useState, type ReactNode } from "react";
@@ -52,7 +53,8 @@ import { BuiltInSelect, builtInAnswerLabels, noChoices, ScopesChecklist, type Bu
 // where the Form places them, offering what the page passes in `choices`. A
 // `member` or `participant` field offers only the `people` the API gave this
 // filler, and reads as the API named it for this viewer: another Company's
-// Member by the Company's name only (V14).
+// Member by the Company's name only (V14). A saved one no longer on offer (a
+// Member who left the Project) stays the choice, marked, until changed.
 
 const copy = {
   en: {
@@ -75,6 +77,8 @@ const copy = {
     unknownOption: "Choose one of the options.",
     choose: "Choose…",
     none: "None",
+    // The name sits in an isolate (⁨ first strong, ⁩ ends), so an Arabic name keeps its place.
+    leftProject: (name: string) => `⁨${name}⁩ (no longer on the Project)`,
     unanswered: "Not answered",
   },
   ar: {
@@ -112,6 +116,7 @@ const copy = {
     unknownOption: "اختر أحد الخيارات.",
     choose: "اختر…",
     none: "بدون",
+    leftProject: (name: string) => `⁨${name}⁩ (لم يعد في المشروع)`,
     unanswered: "لم تتم الإجابة",
   },
 } satisfies Record<Locale, unknown>;
@@ -134,7 +139,10 @@ export type FormRendererProps = {
   choices?: BuiltInChoices;
   /** Who and which Companies `member` and `participant` fields offer (edit mode): the API's form choices. */
   people?: FormChoices;
-  /** The `member` and `participant` answers as the API named them for this viewer (read mode). */
+  /**
+   * The `member` and `participant` answers as the API named them for this viewer:
+   * read mode, and, in edit mode, a saved one no longer on offer in `people`.
+   */
   named?: NamedAnswers;
   /**
    * Called as the filler answers (edit mode), with every answer that changed:
@@ -265,6 +273,7 @@ function control(
   value: unknown,
   locale: Locale,
   people: FormChoices,
+  naming: NamedAnswer | undefined,
   change: (value: FormValue | undefined) => void,
 ): { element: ReactNode; group?: boolean } {
   const text = copy[locale];
@@ -358,16 +367,19 @@ function control(
         field.type === "member"
           ? people.members.toSorted((a, b) => collator.compare(a.name[locale], b.name[locale]))
           : people.participants;
+      const options = offered.map((c) => ({ value: c.id, label: c.name[locale] }));
+      // A saved answer no longer on offer (e.g. a Member who left the Project) stays the
+      // choice, named as the API named it, until another is chosen; then it is gone.
+      const current = textOf(value);
+      if (current && naming && !offered.some((c) => c.id === current)) {
+        options.unshift({ value: current, label: text.leftProject(formatFormValue(field, value, locale, naming)) });
+      }
       return {
         element: (
           <Select
             name={name}
             placeholder={text.choose}
-            options={withNone(
-              field,
-              offered.map((c) => ({ value: c.id, label: c.name[locale] })),
-              locale,
-            )}
+            options={withNone(field, options, locale)}
             value={textOf(value)}
             onValueChange={(v) => change(v === noChoice ? undefined : v)}
           />
@@ -542,7 +554,7 @@ export function FormRenderer({
                 const error = errorOf(field.key);
                 const { element, group } = isBuiltInField(field)
                   ? builtInControl(field.type)
-                  : control(field, answers[field.key], locale, people, (value) => onChange?.({ [field.key]: value }));
+                  : control(field, answers[field.key], locale, people, named[field.key], (value) => onChange?.({ [field.key]: value }));
                 return (
                   <Field
                     key={field.key}

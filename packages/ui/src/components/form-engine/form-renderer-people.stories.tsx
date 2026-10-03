@@ -34,6 +34,7 @@ const ids = {
   sara: "0199a3b0-0000-7000-8000-000000000002",
   hala: "0199a3b0-0000-7000-8000-000000000003",
   nasser: "0199a3b0-0000-7000-8000-000000000004",
+  khalid: "0199a3b0-0000-7000-8000-000000000005",
   c1: "0199a3b0-0000-7000-8000-000000000011",
   host: "0199a3b0-0000-7000-8000-000000000012",
 };
@@ -43,6 +44,8 @@ const copy = {
   suppliedThrough: { en: "Supplied through", ar: "التوريد عن طريق" },
   ahmed: { en: "Ahmed Al-Harbi", ar: "أحمد الحربي" },
   sara: { en: "Sara Al-Qahtani", ar: "سارة القحطاني" },
+  khalid: { en: "Khalid Al-Shehri", ar: "خالد الشهري" },
+  leftProject: { en: "⁨Khalid Al-Shehri⁩ (no longer on the Project)", ar: "⁨خالد الشهري⁩ (لم يعد في المشروع)" },
   c1: { en: "C1 Contracting", ar: "سي ون للمقاولات" },
   host: { en: "Riyadh Development Co.", ar: "شركة الرياض للتطوير" },
   none: { en: "None", ar: "بدون" },
@@ -135,6 +138,56 @@ export const MembersSortedByLanguage: Story = {
     await expect(listed).toEqual(storyLocale(context) === "ar" ? [nasser, hala] : [hala, nasser]);
     // Close the list: the a11y check can't run with the story hidden behind it.
     await userEvent.click(screen.getByRole("option", { name: hala }));
+    await waitFor(() => expect(screen.queryByRole("listbox")).toBeNull());
+  },
+};
+
+/**
+ * A saved Member who has since left the Project (RP-277): still the answer, so
+ * the picker shows them by name, marked; once another is chosen, they're gone.
+ */
+export const SavedMemberLeftProject: Story = {
+  args: {
+    answers: { site_engineer: ids.khalid },
+    named: { site_engineer: { companyName: copy.c1, memberName: copy.khalid } } satisfies NamedAnswers,
+  },
+  render: function Render(args, context) {
+    const [values, setValues] = useState<Record<string, unknown>>(args.answers);
+    return (
+      <FormRenderer
+        {...args}
+        locale={storyLocale(context)}
+        answers={values}
+        onChange={(changes) => {
+          args.onChange?.(changes);
+          setValues((current) => ({ ...current, ...changes }));
+        }}
+      />
+    );
+  },
+  play: async (context) => {
+    const { args, canvas } = context;
+    const left = storyText(context, copy.leftProject);
+    const engineer = canvas.getByRole("combobox", { name: storyText(context, copy.siteEngineer) });
+    await expect(engineer).toHaveTextContent(left);
+
+    await userEvent.click(engineer);
+    await expect((await screen.findAllByRole("option")).map((o) => o.textContent)).toEqual([
+      left,
+      storyText(context, copy.ahmed),
+      storyText(context, copy.sara),
+    ]);
+    await userEvent.click(screen.getByRole("option", { name: storyText(context, copy.sara) }));
+    await waitFor(() => expect(screen.queryByRole("listbox")).toBeNull());
+    await expect(args.onChange).toHaveBeenLastCalledWith({ site_engineer: ids.sara });
+
+    // Changed: the Member who left can't be chosen again.
+    await userEvent.click(engineer);
+    await expect((await screen.findAllByRole("option")).map((o) => o.textContent)).toEqual([
+      storyText(context, copy.ahmed),
+      storyText(context, copy.sara),
+    ]);
+    await userEvent.click(screen.getByRole("option", { name: storyText(context, copy.sara) }));
     await waitFor(() => expect(screen.queryByRole("listbox")).toBeNull());
   },
 };
