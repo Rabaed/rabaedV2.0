@@ -360,7 +360,8 @@ export function isPhoneNumber(value: string): boolean {
   const compact = value.replace(/[\s\-.()]/g, "");
   if (!/^(\+|00)?\d+$/.test(compact)) return false;
   const dialled = compact.startsWith("00") ? `+${compact.slice(2)}` : compact;
-  if (dialled.startsWith("+966")) return ksaNumber.test(dialled.slice(4));
+  // The home 0 is often kept after the country code (+966 050 …): drop it.
+  if (dialled.startsWith("+966")) return ksaNumber.test(dialled.slice(4).replace(/^0/, ""));
   return dialled.startsWith("+") ? international.test(dialled) : ksaNational.test(dialled);
 }
 

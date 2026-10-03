@@ -101,8 +101,8 @@ System Fields   Attachments · Links
 - `number`: optional `unit` (plain text, e.g. `m²` or `طن`), `min`, `max` (inclusive) and `decimals` (0–6; no limit when unset). Out of range is `below_min` or `above_max`, too many decimal places `too_many_decimals`, and anything but a JSON number (text of digits included) `wrong_type`. 0 is an answer.
 - `currency`: `currency` is an ISO 4217 code, `SAR` by default, with optional `min` and `max`. Amounts take the currency's own decimals (2 for SAR).
 - `email`: one address, at most 254 characters (`isEmailAddress`).
-- `phone` (`isPhoneNumber`): spaces, dashes, dots and brackets may group the digits. A KSA number as dialled at home (`05x xxx xxxx`, a landline `01x xxx xxxx`, `800 …`, `920 …`), or any number with its country code after `+` or `00` (E.164, at most 15 digits; after `+966`, a KSA mobile or landline). Arabic-Indic digits are refused; the phone box turns them into Latin ones as they are typed.
-- On screen: numbers are grouped, in Latin digits, to the field's decimals, with the unit after them; amounts in the viewer's language (`SAR 1,250.75`, `1,250.75 ر.س.`). A number reads in the page's direction, so in Arabic its unit still follows it; email addresses and phone numbers read left to right. The number box takes text, turns Arabic-Indic digits into Latin ones as they are typed (`toLatinDigits`, `parseNumberInput`), and passes text that isn't a number on for the validator to refuse.
+- `phone` (`isPhoneNumber`): spaces, dashes, dots and brackets may group the digits. A KSA number as dialled at home (`05x xxx xxxx`, a landline `01x xxx xxxx`, `800 …`, `920 …`), or any number with its country code after `+` or `00` (E.164, at most 15 digits; after `+966`, a KSA mobile or landline, with or without its home 0). Arabic-Indic digits are refused; the phone box turns them into Latin ones as they are typed.
+- On screen: numbers are grouped, in Latin digits, to the field's decimals, with the unit after them; amounts in the viewer's language (`SAR 1,250.75`, `1,250.75 ر.س.`). A number reads in the page's direction, so in Arabic its unit still follows it; email addresses and phone numbers read left to right. The number box takes text, turns Arabic-Indic digits into Latin ones as they are typed (`toLatinDigits`, `parseNumberInput`), takes commas only where they group thousands (`12,5` is refused, never read as 125), and passes text that isn't a number on for the validator to refuse.
 
 **Signatures are never Form fields.** They come only from signing Transitions ([ADR 0003](adr/0003-docusign-grade-signing-not-legally-qualified.md)).
 
@@ -141,7 +141,7 @@ Action Forms remain the place for per-Transition input: Review Code, comments, "
 ## 5. Languages, dates, numbers
 
 - **Labels** are `{en, ar}`. Rabaed Defaults must have both. Customer Forms need at least one, and the builder warns if the other is missing. More languages can be added to the same map later.
-- **Values** are stored exactly as typed. They are never translated.
+- **Values** are stored as typed (email addresses and phone numbers without the spaces around them; §2.1). They are never translated.
 - **The UI** follows the viewer's language and direction (RTL for Arabic), and the Form layout mirrors automatically.
 - **Dates** follow the viewer's locale on screen. On the PDF they follow the Project's record language (`ar`, `en` or `bilingual`). Numbers use Western digits unless the Project selects Arabic-Indic digits for Arabic output.
 

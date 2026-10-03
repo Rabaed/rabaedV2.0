@@ -89,4 +89,11 @@ describe("parseNumberInput: what the filler typed in a number field", () => {
       expect(parseNumberInput(text), text).toBeNull();
     }
   });
+
+  it("refuses a comma that doesn't group thousands, rather than read 12,5 as 125", () => {
+    expect(parseNumberInput("12,345,678.9")).toBe(12345678.9);
+    for (const text of ["12,5", "1,2,3", "1234,567", ",123", "1,23.4"]) {
+      expect(parseNumberInput(text), text).toBeNull();
+    }
+  });
 });

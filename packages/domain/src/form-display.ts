@@ -58,10 +58,12 @@ export function toLatinDigits(text: string): string {
  */
 export function parseNumberInput(text: string): number | null {
   const latin = toLatinDigits(text)
-    .replace(/[,\s]/g, "")
+    .replace(/\s/g, "")
     // The minus sign (U+2212).
     .replace(/^−/, "-");
-  return /^[+-]?(\d+\.?\d*|\.\d+)$/.test(latin) ? Number(latin) : null;
+  // Commas only where they group thousands: "12,5" is refused, never read as 125.
+  if (!/^[+-]?(\d+\.?\d*|\.\d+)$/.test(latin) && !/^[+-]?\d{1,3}(,\d{3})+(\.\d*)?$/.test(latin)) return null;
+  return Number(latin.replace(/,/g, ""));
 }
 
 /**
