@@ -21,6 +21,7 @@ let k1Engineer: Caller; // Consultant.
 let outsider: Caller; // A C1 Member not on the Project.
 let projectId = "";
 let electrical = "";
+let buildingA = "";
 
 const bilingual = (text: string) => ({ en: text, ar: text });
 const all = { isAll: true, valueIds: [] };
@@ -50,15 +51,16 @@ async function otherParticipant(role: "contractor" | "consultant") {
 }
 
 const createDraft = (by: Caller, answers: Record<string, unknown>) =>
-  by.post(`/v1/projects/${projectId}/work-items`, { type: "MAR", title: "Cable trays", tradeId: electrical, answers });
+  by.post(`/v1/projects/${projectId}/work-items`, { type: "MAR", title: "Cable trays", answers: { trade: electrical, ...answers } });
 
 async function created(answers: Record<string, unknown> = {}) {
   const res = await ok(createDraft(engineer, answers), 201);
   return res.json().id as string;
 }
 
+/** Save draft: the whole set of answers, so the Trade (required even in a Draft) is always among them. */
 const save = (by: Caller, id: string, answers: Record<string, unknown>) =>
-  by.request("PUT", `/v1/work-items/${id}/answers`, { answers });
+  by.request("PUT", `/v1/work-items/${id}/answers`, { answers: { trade: electrical, ...answers } });
 
 const sendForReview = (by: Caller, id: string) =>
   by.post(`/v1/work-items/${id}/transitions`, { transition: "send_for_review", idempotencyKey: randomUUID() });
@@ -71,6 +73,7 @@ beforeAll(async () => {
   c1 = await api.projectCreator();
   projectId = (await api.createProject(c1.caller)).id;
   electrical = (await c1.caller.post(`/v1/projects/${projectId}/trades`, { code: "EL", name: bilingual("Electrical") })).json().id;
+  buildingA = (await c1.caller.post(`/v1/projects/${projectId}/locations`, { code: "BA", name: bilingual("Building A"), parentId: null })).json().id;
   const own = (await c1.caller.get(`/v1/projects/${projectId}/participants`))
     .json()
     .participants.find((p: { isOwnCompany: boolean }) => p.isOwnCompany).id;
@@ -90,6 +93,10 @@ describe("the Form for a new MAR", () => {
       ["manufacturer", "text", true],
       ["model", "text", false],
       ["specification_section", "text", false],
+      // The Built-in Fields, placed mid-Form (RP-270).
+      ["trade", "trade", true],
+      ["location", "location", true],
+      ["scopes", "scopes", false],
       ["description", "textarea", true],
     ]);
     expect(form.schema.sections[0]!.title).toEqual({ en: "Material details", ar: "تفاصيل المادة" });
@@ -137,14 +144,14 @@ describe("Save draft", () => {
 
   it("succeeds with required fields still empty", async () => {
     await ok(save(engineer, id, { model: "CT-300" }));
-    expect((await detail(engineer, id)).answers).toEqual({ model: "CT-300" });
+    expect((await detail(engineer, id)).answers).toEqual({ model: "CT-300", trade: electrical });
   });
 
   it("fails on a wrong type, and changes nothing", async () => {
     const res = await save(engineer, id, { model: ["CT-300"] });
     expect(res.statusCode).toBe(422);
     expect(res.json()).toEqual({ error: "invalid_answers", fields: [{ key: "model", code: "wrong_type" }] });
-    expect((await detail(engineer, id)).answers).toEqual({ model: "CT-300" });
+    expect((await detail(engineer, id)).answers).toEqual({ model: "CT-300", trade: electrical });
   });
 
   it("is open to the raiser's Participant only: anyone else gets 404", async () => {
@@ -165,6 +172,7 @@ describe("Send for Review", () => {
       error: "form_incomplete",
       fields: [
         { key: "manufacturer", code: "required" },
+        { key: "location", code: "required" },
         { key: "description", code: "required" },
       ],
     });
@@ -178,16 +186,16 @@ describe("Send for Review", () => {
   });
 
   it("succeeds once the Form is complete", async () => {
-    await ok(save(engineer, id, { ...complete, model: "CT-300" }));
+    await ok(save(engineer, id, { ...complete, location: buildingA, model: "CT-300" }));
     await ok(sendForReview(engineer, id));
     expect(await detail(engineer, id)).toMatchObject({
       stage: { key: "internal_review" },
-      answers: { ...complete, model: "CT-300" },
+      answers: { ...complete, model: "CT-300", trade: electrical, location: buildingA },
     });
   });
 
   it("leaves the answers read-only to the Draft's Save draft", async () => {
-    const res = await save(engineer, id, { ...complete, model: "Later" });
+    const res = await save(engineer, id, { ...complete, location: buildingA, model: "Later" });
     expect(res.statusCode).toBe(409);
     expect(res.json()).toEqual({ error: "not_editable" });
     expect((await detail(pm, id)).answers.model).toBe("CT-300");

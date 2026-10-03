@@ -31,6 +31,7 @@ export {
 export { Checkbox, type CheckboxProps } from "./components/form/checkbox.tsx";
 export { DirectionProvider } from "./components/form/direction.tsx";
 export { Field, type ChoiceOption, type FieldProps } from "./components/form/field.tsx";
+export { type BuiltInChoice, type BuiltInChoices } from "./components/form-engine/built-in-fields.tsx";
 export { FormRenderer, type FormRendererProps } from "./components/form-engine/form-renderer.tsx";
 export { Input, type InputProps } from "./components/form/input.tsx";
 export { RadioGroup, type RadioGroupProps } from "./components/form/radio-group.tsx";

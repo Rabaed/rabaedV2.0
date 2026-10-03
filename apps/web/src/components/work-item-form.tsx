@@ -1,7 +1,7 @@
 "use client";
 
 import { validateAnswers, type FieldError, type FormSchema, type Locale } from "@rabaed/domain";
-import { Button, FormRenderer } from "@rabaed/ui";
+import { Button, FormRenderer, type BuiltInChoices } from "@rabaed/ui";
 import { useTranslations } from "next-intl";
 import { createContext, useContext, useState, type ReactNode } from "react";
 import { useRouter } from "@/i18n/navigation";
@@ -12,6 +12,8 @@ import { useRouter } from "@/i18n/navigation";
 
 type WorkItemFormState = {
   schema: FormSchema;
+  /** What the Built-in Fields offer, or name in the read view. */
+  choices: BuiltInChoices;
   answers: Record<string, unknown>;
   errors: readonly FieldError[];
   editable: boolean;
@@ -19,7 +21,7 @@ type WorkItemFormState = {
   dirty: boolean;
   pending: boolean;
   message: string | null;
-  change(key: string, value: string): void;
+  change(changes: Readonly<Record<string, unknown>>): void;
   /** Saves the answers if they changed; false when the save was refused. */
   save(): Promise<boolean>;
   /** Shows the API's per-field errors on the Form. */
@@ -36,18 +38,21 @@ export function useWorkItemForm(): WorkItemFormState | null {
 export function WorkItemFormProvider({
   workItemId,
   schema,
+  choices,
   answers: saved,
   editable,
   children,
 }: {
   workItemId: string;
   schema: FormSchema;
+  choices: BuiltInChoices;
   answers: Record<string, unknown>;
   /** Save draft is offered (actions.saveAnswers). */
   editable: boolean;
   children: ReactNode;
 }) {
   const t = useTranslations("workItems.form");
+  const tItems = useTranslations("workItems");
   const router = useRouter();
   const [answers, setAnswers] = useState(saved);
   const [errors, setErrors] = useState<readonly FieldError[]>([]);
@@ -55,13 +60,13 @@ export function WorkItemFormProvider({
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
-  function change(key: string, value: string) {
-    const next = { ...answers, [key]: value };
+  function change(changes: Readonly<Record<string, unknown>>) {
+    const next = { ...answers, ...changes };
     setAnswers(next);
     setDirty(true);
     setMessage(null);
-    // Instant feedback with the same checks the server runs (draft mode: types only).
-    const checked = validateAnswers(schema, next, "draft");
+    // Instant feedback with the same checks the server runs (draft mode: types, and the Trade).
+    const checked = validateAnswers(schema, next, "draft", { scopes: choices.scopes });
     setErrors(checked.ok ? [] : checked.errors);
   }
 
@@ -87,8 +92,13 @@ export function WorkItemFormProvider({
         setErrors(body.fields);
         setMessage(t("invalid"));
       } else {
-        setMessage(body.error === "not_editable" ? t("notEditable") : t("unavailable"));
-        if (res.status === 404 || res.status === 409) router.refresh();
+        const messages: Record<string, string> = {
+          not_editable: t("notEditable"),
+          outside_visibility: tItems("outsideVisibility"),
+          value_not_found: t("valueNotFound"),
+        };
+        setMessage(messages[body.error ?? ""] ?? t("unavailable"));
+        if (res.status === 404 || res.status === 409 || body.error === "value_not_found") router.refresh();
       }
     } catch {
       setMessage(t("unavailable"));
@@ -105,7 +115,7 @@ export function WorkItemFormProvider({
 
   return (
     <WorkItemFormContext.Provider
-      value={{ schema, answers, errors, editable, dirty, pending, message, change, save, showErrors }}
+      value={{ schema, choices, answers, errors, editable, dirty, pending, message, change, save, showErrors }}
     >
       {children}
     </WorkItemFormContext.Provider>
@@ -122,6 +132,7 @@ export function WorkItemAnswers({ locale }: { locale: Locale }) {
     <section className="space-y-4" aria-label={t("title")}>
       <FormRenderer
         schema={form.schema}
+        choices={form.choices}
         answers={form.answers}
         errors={form.errors}
         mode={form.editable ? "edit" : "read"}

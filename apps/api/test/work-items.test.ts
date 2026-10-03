@@ -62,13 +62,18 @@ async function participantWithEngineer(company: Company, role: "contractor" | "c
   return { participantId, email: member.email, caller };
 }
 
-const createDraft = (by: Caller, body: Record<string, unknown> = {}) =>
+/** A Draft MAR; `answers` replace the defaults key by key (Trade and Location are answers too). */
+const createDraft = (by: Caller, { answers, ...body }: Record<string, unknown> & { answers?: Record<string, unknown> } = {}) =>
   by.post(`/v1/projects/${projectId}/work-items`, {
     type: "MAR",
     title: "Cable trays",
-    tradeId: trade.electrical,
-    locationId: loc.buildingA,
-    answers: { manufacturer: "ACME Cables", description: "Galvanised, 300 mm" },
+    answers: {
+      manufacturer: "ACME Cables",
+      description: "Galvanised, 300 mm",
+      trade: trade.electrical,
+      location: loc.buildingA,
+      ...answers,
+    },
     ...body,
   });
 
@@ -140,7 +145,8 @@ describe("a Contractor engineer's Draft MAR", () => {
     expect(detail).toMatchObject({
       id: draftId,
       title: "Cable trays",
-      answers: { manufacturer: "ACME Cables", description: "Galvanised, 300 mm" },
+      answers: { manufacturer: "ACME Cables", description: "Galvanised, 300 mm", trade: trade.electrical, location: loc.buildingA },
+      scopes: [],
       stage: { key: "draft" },
       step: { key: "draft", name: { en: "Draft" } },
       trade: { code: "EL", name: bilingual("Electrical") },
@@ -192,20 +198,22 @@ describe("creating a Draft", () => {
   });
 
   it("stays within the creator's Visibility", async () => {
-    const res = await createDraft(c1Engineer, { tradeId: trade.mechanical });
+    const res = await createDraft(c1Engineer, { answers: { trade: trade.mechanical } });
     expect(res.statusCode).toBe(422);
     expect(res.json()).toEqual({ error: "outside_visibility" });
     expect((await createDraft(c1Narrow)).json()).toEqual({ error: "outside_visibility" });
   });
 
-  it("needs a title and a Trade of the Project", async () => {
+  it("needs a Subject, and a Trade of the Project even in a Draft", async () => {
     expect((await createDraft(c1Engineer, { title: "  " })).statusCode).toBe(400);
-    expect((await createDraft(c1Engineer, { tradeId: undefined })).statusCode).toBe(400);
-    expect((await createDraft(c1Engineer, { tradeId: loc.buildingA })).json()).toEqual({ error: "value_not_found" });
+    const noTrade = await createDraft(c1Engineer, { answers: { trade: undefined } });
+    expect(noTrade.statusCode).toBe(422);
+    expect(noTrade.json()).toEqual({ error: "invalid_answers", fields: [{ key: "trade", code: "required" }] });
+    expect((await createDraft(c1Engineer, { answers: { trade: loc.buildingA } })).json()).toEqual({ error: "value_not_found" });
   });
 
   it("allows a Draft without a Location", async () => {
-    const id = await created(createDraft(c1Engineer, { locationId: null, title: "Conduits" }));
+    const id = await created(createDraft(c1Engineer, { title: "Conduits", answers: { location: undefined } }));
     expect((await c1Engineer.get(`/v1/work-items/${id}`)).json().location).toBeNull();
     // Without a Location, only the Trade decides: the narrow engineer sees this one.
     expect((await list(c1Narrow)).items.map((i) => i.id)).toEqual([id]);

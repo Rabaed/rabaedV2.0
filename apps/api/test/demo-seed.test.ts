@@ -109,9 +109,7 @@ describe("the README walkthrough", () => {
     const r = await hafiz.post(`/v1/projects/${projectId}/work-items`, {
       type: "MAR",
       title,
-      tradeId: electrical,
-      locationId: tower1Floor2,
-      answers: { manufacturer: "Philips", description: "LED panel fixtures, 600 × 600" },
+      answers: { manufacturer: "Philips", description: "LED panel fixtures, 600 × 600", trade: electrical, location: tower1Floor2 },
     });
     expect(r.statusCode, r.body).toBe(201);
     return r.json().id as string;

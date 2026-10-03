@@ -410,6 +410,13 @@ export interface WorkItemDimensionValueTable {
   dimension_value_id: string;
 }
 
+/** A Work Item's Scopes and Sub-scopes, all under its Trade (RP-270). */
+export interface WorkItemScopeTable {
+  work_item_id: string;
+  project_id: string;
+  scope_id: string;
+}
+
 export interface StepAssignmentTable {
   id: Generated<string>;
   project_id: string;
@@ -511,6 +518,7 @@ export interface Database {
   form_version: FormVersionTable;
   work_item: WorkItemTable;
   work_item_dimension_value: WorkItemDimensionValueTable;
+  work_item_scope: WorkItemScopeTable;
   step_assignment: StepAssignmentTable;
   work_item_access: WorkItemAccessTable;
   work_item_event: WorkItemEventTable;
