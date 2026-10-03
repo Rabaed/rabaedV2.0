@@ -192,6 +192,27 @@ describe("Scopes and Sub-scopes", () => {
     expect((await addScope(host.ap, projectA, trade.electrical, "Trays", cabling)).outcome).toBe("parent_not_found");
   });
 
+  it("reactivate a Sub-scope only once its Scope is active again", async () => {
+    const earthing = await scope(trade.electrical, "Earthing");
+    const rods = await scope(trade.electrical, "Rods", earthing);
+    expect(await updateScope(host.ap, rods, { active: false })).toBe("updated");
+    expect(await updateScope(host.ap, earthing, { active: false })).toBe("updated");
+    expect(await updateScope(host.ap, rods, { active: true })).toBe("parent_deactivated");
+    // Renaming it is still fine.
+    expect(await updateScope(host.ap, rods, { name: "Earth rods" })).toBe("updated");
+    expect(await updateScope(host.ap, earthing, { active: true })).toBe("updated");
+    expect(await updateScope(host.ap, rods, { active: true })).toBe("updated");
+  });
+
+  it("never nest a Sub-scope under a Sub-scope, however the row is written", async () => {
+    await expect(
+      migrator.query(
+        "insert into scope (project_id, trade_value_id, parent_id, depth, name) values ($1, $2, $3, 2, $4)",
+        [projectA, trade.electrical, indoor, JSON.stringify(bilingual("Too deep"))],
+      ),
+    ).rejects.toThrow(/scope_parent_fk/);
+  });
+
   // A 404 that names nothing: anyone but the Project's Project Admins gets the
   // answer a made-up id gets, whether or not they are on the Project.
   it("are changed only by a Project Admin, and answer anyone else as if they didn't exist", async () => {

@@ -96,7 +96,7 @@ Setup, Project "Tower": Contractors **C1** (Electrical) and **C2** (Electrical, 
 | 24 | Project Admin narrows K1 from Tower 1 to Building A | K1 engineer who had Tower 1 | Now covers Building A only; widening K1 again doesn't widen them (V4) |
 | 25 | C1 member opens K1's Visibility, or a K1 engineer's | C1 member | 404 (V16) |
 | 26 | Project Admin (C1 Company) opens a K1 engineer's Visibility | Project Admin | 404; K1's own Participant grant is visible to them (V16) |
-| 27 | K1's Authorized Person, not a Project Member, narrows a K1 engineer | K1 Authorized Person | Sees only the Trades and Locations K1 covers, with the names of the Locations above them; nothing else of the Project (V15, V16) |
+| 27 | K1's Authorized Person, not a Project Member, narrows a K1 engineer | K1 Authorized Person | Sees only the Trades and Locations K1 covers, with the names of the Locations above them, and the Scopes and Sub-scopes under those Trades; nothing else of the Project (V15, V16) |
 | 28 | C1 member opens the Project's Participants | C1 member (not a Project Admin) | Sees C1's own Participant, its Project Role and Project Members, and the Host Company's name. C2, K1 and OR are not listed (V15) |
 | 29 | Project Admin opens the Project's Participants | Project Admin | Every Participant is listed (V15) |
 | 30 | K1 invited to the Project, not yet accepted | C1 member; K1 Authorized Person | C1 doesn't see K1 anywhere. K1's Authorized Person sees only the invitation: Project name, Host Company, offered Project Role (V15, ADR 0009) |
@@ -109,6 +109,7 @@ Setup, Project "Tower": Contractors **C1** (Electrical) and **C2** (Electrical, 
 | 37 | C1 PM Submits an Electrical item when (a) no Consultant covers it, (b) two do, or (c) the covering Consultant has nobody who can hold the Step | C1 PM | Submit isn't offered, and taking it gets the same refusal in all three cases. Nothing in it names a Consultant or says which case it is (V14, V16) |
 | 38 | Project Admin withdraws two pending invitations: one to a CR number not on Rabaed, one to K1 (declined or still pending) | Project Admin; K1 Authorized Person | Both leave the Project Admin's list in exactly the same way. K1's invitation also leaves K1's list. Nothing shows which one was a customer (ADR 0009) |
 | 39 | K1's Library has two Forms; one is used on Project "Tower" | C1 member on "Tower"; a Company sharing no Project with K1 | The C1 member sees only the Form used on "Tower" and can copy it into C1's Library. Neither sees K1's other Form, and the other Company sees nothing of K1's Library (V18) |
+| 40 | A C1 member who isn't a Project Admin, K1's Authorized Person, or the Project Admin of another Project adds, renames or deactivates a Scope of "Tower" | Each of them | 404, the same as for a made-up id; the Scope is unchanged. Nobody outside "Tower" ever reads its Scopes (V16) |
 
 Every change to rules or channels must add or update rows here and in the test suite. A failing visibility test blocks release.
 

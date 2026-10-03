@@ -38,6 +38,7 @@ function useScopeCommand() {
         not_found: t("notFound"),
         trade_not_found: t("notFound"),
         parent_not_found: t("notFound"),
+        parent_deactivated: t("parentDeactivated"),
         project_closed: t("projectClosed"),
       };
       setError(errors[code ?? ""] ?? t("unavailable"));
@@ -63,8 +64,23 @@ const nameFrom = (form: FormData): BilingualText => ({
   ar: String(form.get("nameAr") ?? ""),
 });
 
+/** The English and Arabic name inputs, read back with `nameFrom`. */
+function NameFields({ idPrefix, name }: { idPrefix: string; name?: BilingualText }) {
+  const t = useTranslations("scopes");
+  return (
+    <>
+      <Field label={t("nameEn")} id={`${idPrefix}-nameEn`} required>
+        <Input name="nameEn" dir="ltr" maxLength={200} defaultValue={name?.en} />
+      </Field>
+      <Field label={t("nameAr")} id={`${idPrefix}-nameAr`} required>
+        <Input name="nameAr" dir="rtl" maxLength={200} defaultValue={name?.ar} />
+      </Field>
+    </>
+  );
+}
+
 /** One Scope or Sub-scope; a Project Admin renames, deactivates or reactivates it. */
-function ScopeRow({ scope, canEdit }: { scope: Scope & { level: number }; canEdit: boolean }) {
+function ScopeItem({ scope, canEdit }: { scope: Scope & { level: number }; canEdit: boolean }) {
   const t = useTranslations("scopes");
   const locale = useLocale() as Locale;
   const { send, pending, alert } = useScopeCommand();
@@ -82,7 +98,6 @@ function ScopeRow({ scope, canEdit }: { scope: Scope & { level: number }; canEdi
     void send(`/scopes/${scope.id}`, "PATCH", { active });
   }
 
-  const id = (field: string) => `scope-${scope.id}-${field}`;
   return (
     <li className="space-y-2 py-2" style={{ paddingInlineStart: `${scope.level * 1.5}rem` }} data-testid="scope">
       <div className="flex flex-wrap items-center gap-2">
@@ -101,12 +116,7 @@ function ScopeRow({ scope, canEdit }: { scope: Scope & { level: number }; canEdi
       </div>
       {renaming && (
         <form onSubmit={rename} className="grid gap-4 sm:grid-cols-2" noValidate>
-          <Field label={t("nameEn")} id={id("nameEn")} required>
-            <Input name="nameEn" dir="ltr" maxLength={200} defaultValue={scope.name.en} />
-          </Field>
-          <Field label={t("nameAr")} id={id("nameAr")} required>
-            <Input name="nameAr" dir="rtl" maxLength={200} defaultValue={scope.name.ar} />
-          </Field>
+          <NameFields idPrefix={`scope-${scope.id}`} name={scope.name} />
           <div className="flex gap-2 sm:col-span-2">
             <Button type="submit" size="sm" disabled={pending}>
               {t("save")}
@@ -127,7 +137,6 @@ function AddScopeForm({ projectId, tradeId, parents }: { projectId: string; trad
   const t = useTranslations("scopes");
   const locale = useLocale() as Locale;
   const { send, pending, alert } = useScopeCommand();
-  const id = (field: string) => `add-scope-${tradeId}-${field}`;
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -145,7 +154,7 @@ function AddScopeForm({ projectId, tradeId, parents }: { projectId: string; trad
   return (
     <form onSubmit={onSubmit} className="grid gap-4 rounded-md border border-border p-4 sm:grid-cols-2" noValidate>
       {parents.length > 0 && (
-        <Field label={t("parent")} id={id("parent")} className="sm:col-span-2">
+        <Field label={t("parent")} id={`add-scope-${tradeId}-parent`} className="sm:col-span-2">
           <Select
             name="parentId"
             defaultValue={NO_PARENT}
@@ -153,12 +162,7 @@ function AddScopeForm({ projectId, tradeId, parents }: { projectId: string; trad
           />
         </Field>
       )}
-      <Field label={t("nameEn")} id={id("nameEn")} required>
-        <Input name="nameEn" dir="ltr" maxLength={200} />
-      </Field>
-      <Field label={t("nameAr")} id={id("nameAr")} required>
-        <Input name="nameAr" dir="rtl" maxLength={200} />
-      </Field>
+      <NameFields idPrefix={`add-scope-${tradeId}`} />
       <div className="sm:col-span-2">
         <Button type="submit" size="sm" disabled={pending}>
           {t("addScope")}
@@ -193,7 +197,7 @@ export function TradeScopes({
       ) : (
         <ul className="divide-y divide-border">
           {scopes.map((s) => (
-            <ScopeRow key={s.id} scope={s} canEdit={canEdit} />
+            <ScopeItem key={s.id} scope={s} canEdit={canEdit} />
           ))}
         </ul>
       )}

@@ -17,6 +17,7 @@ const answers = {
   already_participant: () => new HttpError(409, "already_participant"),
   duplicate_code: () => new HttpError(409, "duplicate_code"),
   parent_not_found: () => new HttpError(422, "parent_not_found"),
+  parent_deactivated: () => new HttpError(409, "parent_deactivated"),
   trade_not_found: () => new HttpError(422, "trade_not_found"),
   too_deep: () => new HttpError(422, "too_deep"),
   value_not_found: () => new HttpError(422, "value_not_found"),

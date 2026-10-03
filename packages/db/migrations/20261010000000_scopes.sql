@@ -30,15 +30,18 @@ create table scope (
   parent_id uuid,
   -- 1 Scope, 2 Sub-scope.
   depth smallint not null check (depth between 1 and 2),
+  -- The depth its parent must have, so a Sub-scope is never under a Sub-scope.
+  parent_depth smallint generated always as (depth - 1) stored,
   name jsonb not null check (app.is_bilingual(name)),
   status text not null default 'active' check (status in ('active', 'deactivated')),
   sort integer not null default 0,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   constraint scope_trade_fk foreign key (trade_value_id, project_id) references dimension_value (id, project_id),
-  constraint scope_id_trade_key unique (id, trade_value_id),
-  -- A Sub-scope is in its Scope's Trade.
-  constraint scope_parent_fk foreign key (parent_id, trade_value_id) references scope (id, trade_value_id),
+  constraint scope_id_trade_depth_key unique (id, trade_value_id, depth),
+  -- A Sub-scope is under a Scope, in that Scope's Trade.
+  constraint scope_parent_fk foreign key (parent_id, trade_value_id, parent_depth)
+    references scope (id, trade_value_id, depth),
   check ((parent_id is null) = (depth = 1))
 );
 create index scope_project_id_idx on scope (project_id);
@@ -68,9 +71,12 @@ create function app.participant_scopes(p_participant_id uuid)
     join visibility_dimension d on d.project_id = p.project_id and d.kind = 'trade'
     cross join lateral app.values_covered_by_participant(p.id, d.id) as c (id)
     join scope s on s.trade_value_id = c.id
+    join dimension_value t on t.id = s.trade_value_id
+    left join scope parent on parent.id = s.parent_id
     where p.id = p_participant_id and p.status = 'active'
       and (p.id in (select app.current_participant_ids()) or p.project_id in (select app.current_admin_project_ids()))
-    order by s.trade_value_id, s.depth, s.sort, s.id
+    -- As the Project's list (apps/api listScopes): by Trade, each Scope followed by its Sub-scopes.
+    order by t.sort, t.id, coalesce(parent.sort, s.sort), coalesce(s.parent_id, s.id), s.depth, s.sort
   $$;
 
 -- Writes -----------------------------------------------------------------------
@@ -127,7 +133,8 @@ create function app.add_scope(p_project_id uuid, p_trade_id uuid, p_parent_id uu
 -- reactivates it (p_active), or both; null leaves that part as it is.
 -- Deactivating a Scope leaves its Sub-scopes as they are. Outcome: 'updated',
 -- 'not_found' (not a Scope of a Project the acting Member is a Project Admin
--- of, whether or not it exists) or 'project_closed'.
+-- of, whether or not it exists), 'project_closed' or 'parent_deactivated'
+-- (reactivating a Sub-scope whose Scope is deactivated: reactivate the Scope first).
 create function app.update_scope(p_scope_id uuid, p_name jsonb, p_active boolean, p_now timestamptz)
   returns text
   language plpgsql volatile security definer
@@ -144,6 +151,12 @@ create function app.update_scope(p_scope_id uuid, p_name jsonb, p_active boolean
       end if;
       if exists (select 1 from project where id = v_project_id and status = 'closed') then
         return 'project_closed';
+      end if;
+      if p_active and exists (
+        select 1 from scope s join scope parent on parent.id = s.parent_id
+        where s.id = p_scope_id and parent.status = 'deactivated'
+      ) then
+        return 'parent_deactivated';
       end if;
       update scope set
         name = coalesce(p_name, name),

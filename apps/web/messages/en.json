@@ -181,6 +181,7 @@
     "confirmDeactivate": "Deactivate {name}? It stays on the Work Items that already use it, but won't be offered for new ones.",
     "invalid": "Enter the name in English and Arabic.",
     "notFound": "This is no longer available. Refresh the page.",
+    "parentDeactivated": "Reactivate its Scope first.",
     "projectClosed": "This Project is closed.",
     "unavailable": "Something went wrong. Try again."
   },

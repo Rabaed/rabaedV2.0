@@ -10,10 +10,10 @@ import { checkedOutcome, commandResult } from "../outcomes.ts";
 const addScopeRefusals = ["not_found", "project_closed", "trade_not_found", "parent_not_found"] as const;
 export type AddScopeResult = { ok: true; id: string } | { ok: false; reason: (typeof addScopeRefusals)[number] };
 
-const updateScopeRefusals = ["not_found", "project_closed"] as const;
+const updateScopeRefusals = ["not_found", "project_closed", "parent_deactivated"] as const;
 export type UpdateScopeResult = { ok: true } | { ok: false; reason: (typeof updateScopeRefusals)[number] };
 
-type ScopeRow = {
+type StoredScope = {
   id: string;
   trade_value_id: string;
   parent_id: string | null;
@@ -21,7 +21,7 @@ type ScopeRow = {
   status: "active" | "deactivated";
 };
 
-const toScope = (r: ScopeRow): Scope => ({
+const toScope = (r: StoredScope): Scope => ({
   id: r.id,
   tradeId: r.trade_value_id,
   parentId: r.parent_id,
@@ -63,7 +63,7 @@ export function listParticipantScopes(db: Db, memberId: string, participantId: s
     // and, unlike it, has rows for them even when there are no Scopes yet.
     const grants = await sql`select 1 from app.participant_grants(${participantId}::uuid)`.execute(trx);
     if (grants.rows.length === 0) return null;
-    const { rows } = await sql<ScopeRow>`
+    const { rows } = await sql<StoredScope>`
       select id, trade_value_id, parent_id, name, status from app.participant_scopes(${participantId}::uuid)
     `.execute(trx);
     return rows.map(toScope);

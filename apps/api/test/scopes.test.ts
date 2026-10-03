@@ -95,6 +95,15 @@ describe("Scopes and Sub-scopes", () => {
     expect((await listScopes(hostMember.caller)).find((s) => s.id === pumps)?.active).toBe(true);
   });
 
+  it("reactivate a Sub-scope only once its Scope is active again", async () => {
+    const earthing = await created(addScope(host.caller, trade.electrical, "Earthing"));
+    const rods = await created(addScope(host.caller, trade.electrical, "Rods", earthing));
+    expect((await updateScope(host.caller, rods, { active: false })).statusCode).toBe(204);
+    expect((await updateScope(host.caller, earthing, { active: false })).statusCode).toBe(204);
+    const res = await updateScope(host.caller, rods, { active: true });
+    expect({ status: res.statusCode, body: res.json() }).toEqual({ status: 409, body: { error: "parent_deactivated" } });
+  });
+
   it("reject a Trade or Scope that isn't the Project's, or a third level", async () => {
     const wrongTrade = await addScope(host.caller, randomUUID(), "Nowhere");
     expect({ status: wrongTrade.statusCode, body: wrongTrade.json() }).toEqual({ status: 422, body: { error: "trade_not_found" } });
@@ -150,8 +159,10 @@ describe("Scopes and Sub-scopes", () => {
       const res = await consultant.caller.get(`/v1/participants/${consultantParticipantId}/scopes`);
       expect(res.statusCode, res.body).toBe(200);
       const scopes: Scope[] = res.json().scopes;
-      expect(ids(scopes)).toEqual([lighting, indoor].sort());
-      expect(scopes.every((s) => s.tradeId === trade.electrical)).toBe(true);
+      const electrical = (await listScopes(host.caller)).filter((s) => s.tradeId === trade.electrical);
+      expect(scopes).toEqual(electrical);
+      expect(ids(scopes)).toEqual(expect.arrayContaining([lighting, indoor]));
+      expect(ids(scopes)).not.toContain(hvac);
     });
 
     it("are read through the Participant only by its own Company and the Project Admins", async () => {
