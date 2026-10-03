@@ -4,6 +4,7 @@ import type {
   CompanyMembers,
   CompanyParticipations,
   DimensionValues,
+  FormVersion,
   MemberVisibility,
   MyProjects,
   NotificationList,
@@ -111,6 +112,18 @@ export function getWorkItems(projectId: string): Promise<WorkItemList | null> {
 /** One Work Item; null if the signed-in Member can't see it (exactly as if it didn't exist). */
 export function getWorkItem(workItemId: string): Promise<WorkItemDetail | null> {
   return apiGet<WorkItemDetail>(`/v1/work-items/${encodeURIComponent(workItemId)}`);
+}
+
+/** The Form Version a Work Item is pinned to; null if the signed-in Member can't see the item. */
+export function getWorkItemForm(workItemId: string): Promise<FormVersion | null> {
+  return apiGet<FormVersion>(`/v1/work-items/${encodeURIComponent(workItemId)}/form`);
+}
+
+/** The Form for a new item of a Type on one of the signed-in Member's Projects: its latest published Version. */
+export function getNewWorkItemForm(projectId: string, typeCode: string): Promise<FormVersion | null> {
+  return apiGet<FormVersion>(
+    `/v1/projects/${encodeURIComponent(projectId)}/work-item-types/${encodeURIComponent(typeCode)}/form`,
+  );
 }
 
 /** A Work Item's history as the signed-in Member may see it; null if they can't see the item. */

@@ -111,7 +111,7 @@ describe("the README walkthrough", () => {
       title,
       tradeId: electrical,
       locationId: tower1Floor2,
-      description: "",
+      answers: { manufacturer: "Philips", description: "LED panel fixtures, 600 × 600" },
     });
     expect(r.statusCode, r.body).toBe(201);
     return r.json().id as string;

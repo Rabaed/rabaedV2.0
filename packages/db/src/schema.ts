@@ -327,6 +327,30 @@ export interface WorkItemTypeTable {
   name: ColumnType<Bilingual, string, string>;
   workflow_definition_id: string;
   outcome_kind: "review_code" | "inspection_result" | "none";
+  /** Its Form; always set on a Rabaed Default. */
+  form_definition_id: string | null;
+  created_at: Generated<Timestamp>;
+  updated_at: Generated<Timestamp>;
+}
+
+export interface FormDefinitionTable {
+  id: Generated<string>;
+  owner_kind: OwnerKind;
+  project_id: string | null;
+  name: ColumnType<Bilingual, string, string>;
+  created_at: Generated<Timestamp>;
+  updated_at: Generated<Timestamp>;
+}
+
+/** Published Versions never change (a trigger refuses it); new Work Items use the latest. */
+export interface FormVersionTable {
+  id: Generated<string>;
+  form_definition_id: string;
+  version_no: number;
+  status: "draft" | "published";
+  /** The Form schema; parse it with the domain's formSchema. */
+  schema: Json;
+  published_at: Timestamp | null;
   created_at: Generated<Timestamp>;
   updated_at: Generated<Timestamp>;
 }
@@ -338,9 +362,10 @@ export interface WorkItemTable {
   raised_by_participant_id: string;
   created_by_member_id: string;
   title: string;
-  /** The Form answers; the MAR's `description` until the Form engine. */
+  /** The Form answers by field key, checked against form_version_id's schema. */
   data: ColumnType<Record<string, unknown>, string, string>;
   workflow_version_id: string;
+  form_version_id: string;
   document_number: string | null;
   current_step_id: string;
   current_stage_key: string;
@@ -458,6 +483,8 @@ export interface Database {
   workflow_step: WorkflowStepTable;
   workflow_transition: WorkflowTransitionTable;
   work_item_type: WorkItemTypeTable;
+  form_definition: FormDefinitionTable;
+  form_version: FormVersionTable;
   work_item: WorkItemTable;
   work_item_dimension_value: WorkItemDimensionValueTable;
   step_assignment: StepAssignmentTable;

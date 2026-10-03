@@ -68,7 +68,7 @@ const createDraft = (by: Caller, body: Record<string, unknown> = {}) =>
     title: "Cable trays",
     tradeId: trade.electrical,
     locationId: loc.buildingA,
-    description: "Galvanised, 300 mm",
+    answers: { manufacturer: "ACME Cables", description: "Galvanised, 300 mm" },
     ...body,
   });
 
@@ -140,7 +140,7 @@ describe("a Contractor engineer's Draft MAR", () => {
     expect(detail).toMatchObject({
       id: draftId,
       title: "Cable trays",
-      description: "Galvanised, 300 mm",
+      answers: { manufacturer: "ACME Cables", description: "Galvanised, 300 mm" },
       stage: { key: "draft" },
       step: { key: "draft", name: { en: "Draft" } },
       trade: { code: "EL", name: bilingual("Electrical") },

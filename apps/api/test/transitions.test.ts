@@ -61,7 +61,7 @@ async function createDraft(by: Caller, title = "Cable trays"): Promise<string> {
     title,
     tradeId: electrical,
     locationId: null,
-    description: "Galvanised, 300 mm",
+    answers: { manufacturer: "ACME Cables", description: "Galvanised, 300 mm" },
   });
   expect(res.statusCode, res.body).toBe(201);
   return res.json().id;

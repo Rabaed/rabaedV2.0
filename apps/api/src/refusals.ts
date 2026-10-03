@@ -1,3 +1,4 @@
+import type { FieldError } from "@rabaed/domain";
 import { forbidden, HttpError, notFound } from "./http-error.ts";
 
 // Every refusal the API's commands answer with, as the API's HTTP answer.
@@ -32,11 +33,19 @@ const answers = {
   next_step_unavailable: () => new HttpError(409, "next_step_unavailable"),
   reason_required: () => new HttpError(422, "reason_required"),
   idempotency_key_reused: () => new HttpError(422, "idempotency_key_reused"),
+  // Form answers (RP-262): the body lists each field's error (answersRefusal).
+  invalid_answers: () => new HttpError(422, "invalid_answers"),
+  form_incomplete: () => new HttpError(422, "form_incomplete"),
+  not_editable: () => new HttpError(409, "not_editable"),
+  // A new Form Version, or new answers, arrived while the command ran: try again.
+  form_version_not_latest: () => new HttpError(409, "form_version_not_latest"),
+  form_not_checked: () => new HttpError(409, "form_not_checked"),
 } satisfies Record<string, () => HttpError>;
 
 export type RefusalReason = keyof typeof answers;
 
-/** A refused result as the HTTP error to throw. */
-export function refusal(result: { reason: RefusalReason }): HttpError {
-  return answers[result.reason]();
+/** A refused result as the HTTP error to throw, with the per-field errors of refused answers. */
+export function refusal(result: { reason: RefusalReason; errors?: FieldError[] }): HttpError {
+  const error = answers[result.reason]();
+  return result.errors ? new HttpError(error.statusCode, error.code, { fields: result.errors }) : error;
 }

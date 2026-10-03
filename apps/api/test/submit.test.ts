@@ -93,7 +93,7 @@ async function createDraft(by: Caller, title: string): Promise<string> {
     title,
     tradeId: electrical,
     locationId: buildingA,
-    description: "Galvanised, 300 mm",
+    answers: { manufacturer: "ACME Cables", description: "Galvanised, 300 mm" },
   });
   expect(res.statusCode, res.body).toBe(201);
   return res.json().id;

@@ -56,6 +56,9 @@ async function addInternalConsultantStepsType() {
         v_version uuid;
       begin
         if exists (select 1 from work_item_type where owner_kind = 'rabaed' and code = ${sql.lit(TYPE)}) then
+          -- Written before Types had Forms: it fills the MAR's.
+          update work_item_type set form_definition_id = (select form_definition_id from work_item_type where code = 'MAR')
+          where owner_kind = 'rabaed' and code = ${sql.lit(TYPE)} and form_definition_id is null;
           return;
         end if;
         insert into workflow_definition (owner_kind, name)
@@ -90,9 +93,10 @@ async function addInternalConsultantStepsType() {
         join workflow_step f on f.workflow_version_id = v_version and f.key = t.from_key
         join workflow_step s on s.workflow_version_id = v_version and s.key = t.to_key;
 
-        insert into work_item_type (owner_kind, module_key, code, name, workflow_definition_id, outcome_kind)
+        -- It is filled with the MAR's Form.
+        insert into work_item_type (owner_kind, module_key, code, name, workflow_definition_id, outcome_kind, form_definition_id)
         values ('rabaed', 'submittals', ${sql.lit(TYPE)}, '{"en": "Internal Steps Submittal", "ar": "اعتماد بخطوات داخلية"}',
-          v_definition, 'review_code');
+          v_definition, 'review_code', (select form_definition_id from work_item_type where code = 'MAR'));
       end
     $$
   `.execute(migrator);
@@ -188,7 +192,7 @@ describe("K1 moves the Submitted item internally (scenario 35)", () => {
       title: "Cable trays",
       tradeId: electrical,
       locationId: buildingA,
-      description: "Galvanised, 300 mm",
+      answers: { manufacturer: "ACME Cables", description: "Galvanised, 300 mm" },
     });
     expect(res.statusCode, res.body).toBe(201);
     id = res.json().id;

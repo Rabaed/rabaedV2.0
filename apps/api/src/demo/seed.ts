@@ -259,6 +259,13 @@ export async function seedDemo(app: FastifyInstance, databases: SeedDatabases, p
     title: "Emergency lighting – Tower 2",
     tradeId: electrical,
     locationId: tower2Floor1,
+    // Filled through the MAR Form Version 1.
+    answers: {
+      manufacturer: "Zumtobel",
+      model: "RESCLITE PRO",
+      specification_section: "26 52 13",
+      description: "LED emergency luminaires for the Tower 2 escape routes, 3-hour duration, self-test.",
+    },
   });
 
   // A second Project: Beta Build's own, with only its Authorized Person on it
@@ -281,7 +288,12 @@ export async function seedDemo(app: FastifyInstance, databases: SeedDatabases, p
   await beta.caller("PUT", `/v1/participants/${betaOwn}/members/${beta.authorizedPersonId}/visibility`, { trade: all, location: all });
   await beta.caller("PUT", `/v1/participants/${betaOwn}/members/${beta.authorizedPersonId}/positions`, { positions: ["engineer"] });
   // Last: ensureDemo takes this Draft as the sign that the seed finished.
-  await beta.caller("POST", `/v1/projects/${otherProjectId}/work-items`, { type: "MAR", title: DEMO_LAST_ITEM_TITLE, tradeId: plumbing });
+  await beta.caller("POST", `/v1/projects/${otherProjectId}/work-items`, {
+    type: "MAR",
+    title: DEMO_LAST_ITEM_TITLE,
+    tradeId: plumbing,
+    answers: { manufacturer: "Geberit", description: "PP-R water supply pipes and fittings for the villas." },
+  });
 
   return { projectId, otherProjectId, engineer, people };
 }

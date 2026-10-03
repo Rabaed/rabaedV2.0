@@ -3,7 +3,7 @@
 // even when calling the database directly as the app role; and its history is
 // append-only, with a hash chain that shows tampering.
 import { randomInt, randomUUID } from "node:crypto";
-import { sql } from "kysely";
+import { sql, type RawBuilder } from "kysely";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb, withMember, type Db } from "../src/index.ts";
@@ -83,7 +83,7 @@ const createDraft = (as: string, input: { trade?: string | null; location?: stri
   call<Created>(
     as,
     sql`select outcome, work_item_id from app.create_work_item(
-      ${projectId}::uuid, 'MAR', ${input.title ?? "Cable trays"}, 'Galvanised, 300 mm',
+      ${projectId}::uuid, 'MAR', ${input.title ?? "Cable trays"}, app.latest_form_version('MAR'), '{"description": "Galvanised, 300 mm"}'::jsonb,
       ${input.trade === undefined ? trade.electrical : input.trade}::uuid,
       ${input.location === undefined ? loc.buildingA : input.location}::uuid, now())`,
   ).then((rows) => rows[0]!);
@@ -338,7 +338,7 @@ describe("Send for Review and Return", () => {
   const take = (as: string, transition: string, reason = "") =>
     call<{ outcome: string }>(
       as,
-      sql`select app.take_transition(${item}::uuid, ${transition}, ${reason}, '', ${randomUUID()}::uuid, now()) as outcome`,
+      sql`select app.take_transition(${item}::uuid, ${transition}, ${reason}, '', app.answers_sha256(${item}::uuid), ${randomUUID()}::uuid, now()) as outcome`,
     ).then((rows) => rows[0]!.outcome);
   const claim = (as: string) =>
     call<{ outcome: string }>(as, sql`select app.claim_step(${item}::uuid, now()) as outcome`).then((rows) => rows[0]!.outcome);
@@ -421,7 +421,7 @@ describe("Submit and Code A", () => {
   const take = (as: string, transition: string) =>
     call<{ outcome: string }>(
       as,
-      sql`select app.take_transition(${item}::uuid, ${transition}, '', '', ${randomUUID()}::uuid, now()) as outcome`,
+      sql`select app.take_transition(${item}::uuid, ${transition}, '', '', app.answers_sha256(${item}::uuid), ${randomUUID()}::uuid, now()) as outcome`,
     ).then((rows) => rows[0]!.outcome);
   const claim = (as: string) =>
     call<{ outcome: string }>(as, sql`select app.claim_step(${item}::uuid, now()) as outcome`).then((rows) => rows[0]!.outcome);
@@ -544,7 +544,7 @@ describe("Internal Note", () => {
     call<{ outcome: string }>(
       as,
       sql`select app.take_transition(
-        ${item}::uuid, ${transition}, ${reason}, ${internalNote}, ${randomUUID()}::uuid, now()) as outcome`,
+        ${item}::uuid, ${transition}, ${reason}, ${internalNote}, app.answers_sha256(${item}::uuid), ${randomUUID()}::uuid, now()) as outcome`,
     ).then((rows) => rows[0]!.outcome);
   const claim = (as: string) =>
     call<{ outcome: string }>(as, sql`select app.claim_step(${item}::uuid, now()) as outcome`).then((rows) => rows[0]!.outcome);
@@ -629,5 +629,72 @@ describe("Internal Note", () => {
       await migrator.query("rollback");
     }
     expect(await intact()).toBe(true);
+  });
+});
+
+// The Form's answers (RP-262): written only by the raiser's Participant while in
+// Draft, pinned to the latest Form Version, and leaving Draft only with answers
+// the API checked.
+describe("a Draft's answers", () => {
+  let item = "";
+  const save = (as: string, data: object) =>
+    call<{ outcome: string }>(
+      as,
+      sql`select app.save_work_item_answers(${item}::uuid, ${JSON.stringify(data)}::jsonb, now()) as outcome`,
+    ).then((rows) => rows[0]!.outcome);
+  const sendForReview = (as: string, hash: RawBuilder<unknown>) =>
+    call<{ outcome: string }>(
+      as,
+      sql`select app.take_transition(${item}::uuid, 'send_for_review', '', '', ${hash}, ${randomUUID()}::uuid, now()) as outcome`,
+    ).then((rows) => rows[0]!.outcome);
+  const stored = async () => (await migrator.query("select data from work_item where id = $1", [item])).rows[0].data;
+
+  beforeAll(async () => {
+    await call<{ outcome: string }>(c1.ap, sql`select app.set_project_member_positions(${participant.c1}::uuid, ${c1.member}::uuid, ${["engineer"]}::text[]) as outcome`);
+    item = (await createDraft(c1.member, { title: "Answers" })).work_item_id!;
+  });
+
+  it("is pinned to the MAR's latest published Form Version", async () => {
+    const { rows } = await migrator.query(
+      "select form_version_id = app.latest_form_version('MAR') as latest from work_item where id = $1",
+      [item],
+    );
+    expect(rows).toEqual([{ latest: true }]);
+  });
+
+  it("refuses a Form Version that isn't the latest when creating", async () => {
+    const [row] = await call<{ outcome: string }>(
+      c1.member,
+      sql`select outcome from app.create_work_item(
+        ${projectId}::uuid, 'MAR', 'Old', ${randomUUID()}::uuid, '{}'::jsonb, ${trade.electrical}::uuid, null, now())`,
+    );
+    expect(row!.outcome).toBe("form_version_not_latest");
+  });
+
+  it("are saved by the raiser in Draft", async () => {
+    expect(await save(c1.member, { description: "Updated" })).toBe("saved");
+    expect(await stored()).toEqual({ description: "Updated" });
+  });
+
+  it("can't be saved by anyone who can't see the item", async () => {
+    for (const who of [c2.member, k1.member, or.member, c1Narrow]) expect(await save(who, { description: "x" })).toBe("not_found");
+    expect(await stored()).toEqual({ description: "Updated" });
+  });
+
+  it("can't be updated directly by the app role", async () => {
+    await expect(
+      withMember(app, c1.member, (trx) => sql`update work_item set data = '{}' where id = ${item}::uuid`.execute(trx)),
+    ).rejects.toThrow(/permission denied/);
+  });
+
+  it("leave Draft only with the hash of the answers as they are now", async () => {
+    expect(await sendForReview(c1.member, sql`null`)).toBe("form_not_checked");
+    expect(await sendForReview(c1.member, sql`sha256('{}'::bytea)`)).toBe("form_not_checked");
+    expect(await sendForReview(c1.member, sql`app.answers_sha256(${item}::uuid)`)).toBe("applied");
+  });
+
+  it("are no longer editable once the item has left Draft", async () => {
+    expect(await save(c1.member, { description: "Later" })).toBe("not_editable");
+    expect(await stored()).toEqual({ description: "Updated" });
   });
 });
