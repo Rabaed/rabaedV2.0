@@ -177,7 +177,7 @@ export function WorkItemAnswers({ locale, workItemId, documents }: { locale: Loc
         files={{
           documents: documents.documents,
           canChange: documents.canChange,
-          pending: files.fieldsPending,
+          pending: files.pending,
           onUpload: (fieldKey, file) => void files.upload(file, fieldKey),
           onOpen: (documentId) => void files.open(documentId),
           onRemove: (fieldKey, documentId) => void files.remove(documentId, fieldKey),

@@ -133,6 +133,21 @@ describe("a Document", () => {
     expect(rows).toEqual([]);
   });
 
+  it("tied to a Form field is in the hash a Transition checks; the Attachments System Field's isn't", async () => {
+    const hash = async () =>
+      (await call<{ hash: Buffer }>(a.ap, sql`select app.answers_sha256(${a.itemId}::uuid) as hash`))[0]!.hash.toString("hex");
+    const participantId = (await migrator.query("select uploaded_by_participant_id as id from document where id = $1", [a.documentId]))
+      .rows[0].id;
+    const before = await hash();
+    await insertDocument(a.projectId, a.itemId, a.ap, participantId, { confirmed: true });
+    expect(await hash()).toBe(before);
+    const datasheet = await insertDocument(a.projectId, a.itemId, a.ap, participantId, { confirmed: true, fieldKey: "datasheet" });
+    const withDatasheet = await hash();
+    expect(withDatasheet).not.toBe(before);
+    await migrator.query("update document set removed_at = now(), removed_by_member_id = uploaded_by_member_id where id = $1", [datasheet]);
+    expect(await hash()).toBe(before);
+  });
+
   it("returns nothing with no Member set", async () => {
     const { rows } = await sql`select id from document`.execute(app);
     expect(rows).toEqual([]);

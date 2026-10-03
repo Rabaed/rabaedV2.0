@@ -3,7 +3,7 @@
 import { formatNumber, type AttachmentsField as AttachmentsFieldSchema, type DocumentSummary, type Locale } from "@rabaed/domain";
 import { useRef } from "react";
 import { IconButton } from "../button/button.tsx";
-import { useFieldControl } from "../form/field.tsx";
+import { useFieldControl, type FieldControlProps } from "../form/field.tsx";
 import { Icon } from "../icon/icon.tsx";
 
 // A Form's named `attachments` field (RP-281): its files, to open, and to upload
@@ -11,35 +11,49 @@ import { Icon } from "../icon/icon.tsx";
 // (the same signed URLs as the Attachments System Field) and passes the
 // field's Documents back in.
 
+// Words as the Attachments System Field's (the web app's messages): a Document, never a "file" (CONTEXT.md).
 const copy = {
   en: {
-    none: "No files yet.",
-    notYet: "Files can be added once the Draft is saved.",
-    add: "Add a file",
+    none: "No Documents yet.",
+    notYet: "Documents can be added once the Draft is saved.",
     uploading: "Uploading…",
     open: (name: string) => `Open ${name}`,
     remove: (name: string) => `Remove ${name}`,
-    frozen: "Sent: can't change",
+    frozen: "Sent: can't be changed",
     kb: (size: string) => `${size} KB`,
     mb: (size: string) => `${size} MB`,
     accepts: (types: string) => `${types} only`,
-    atMost: (n: number) => (n === 1 ? "At most 1 file" : `At most ${formatNumber(n, "en")} files`),
-    full: (n: number) => (n === 1 ? "This field takes 1 file." : `This field takes at most ${formatNumber(n, "en")} files.`),
+    atMost: (n: number) => (n === 1 ? "At most 1 Document" : `At most ${formatNumber(n, "en")} Documents`),
+    full: (n: number) => (n === 1 ? "This field takes 1 Document." : `This field takes at most ${formatNumber(n, "en")} Documents.`),
   },
   ar: {
-    none: "لا توجد ملفات بعد.",
-    notYet: "يمكن إضافة الملفات بعد حفظ المسودة.",
-    add: "إضافة ملف",
+    none: "لا توجد مستندات بعد.",
+    notYet: "يمكن إضافة المستندات بعد حفظ المسودة.",
     uploading: "جارٍ الرفع…",
     open: (name: string) => `فتح \u2068${name}\u2069`,
     remove: (name: string) => `إزالة \u2068${name}\u2069`,
-    frozen: "أُرسل: لا يمكن تغييره",
-    // Units and Latin file types sit in isolates (\u2066 left to right, \u2069 ends).
-    kb: (size: string) => `\u2066${size} KB\u2069`,
-    mb: (size: string) => `\u2066${size} MB\u2069`,
+    frozen: "مُرسَل: لا يمكن تغييره",
+    kb: (size: string) => `${size} ك.ب`,
+    mb: (size: string) => `${size} م.ب`,
+    // Latin file types sit in an isolate (\u2066 left to right, \u2069 ends).
     accepts: (types: string) => `\u2066${types}\u2069 فقط`,
-    atMost: (n: number) => (n === 1 ? "ملف واحد على الأكثر" : n === 2 ? "ملفان على الأكثر" : `${formatNumber(n, "ar")} ملفات على الأكثر`),
-    full: (n: number) => (n === 1 ? "يقبل هذا الحقل ملفًا واحدًا." : `يقبل هذا الحقل ${formatNumber(n, "ar")} ملفات على الأكثر.`),
+    // Arabic counts: one, two (dual), 3–10 (plural), 11 and more (singular accusative).
+    atMost: (n: number) =>
+      n === 1
+        ? "مستند واحد على الأكثر"
+        : n === 2
+          ? "مستندان على الأكثر"
+          : n <= 10
+            ? `${formatNumber(n, "ar")} مستندات على الأكثر`
+            : `${formatNumber(n, "ar")} مستندًا على الأكثر`,
+    full: (n: number) =>
+      n === 1
+        ? "يقبل هذا الحقل مستندًا واحدًا."
+        : n === 2
+          ? "يقبل هذا الحقل مستندين على الأكثر."
+          : n <= 10
+            ? `يقبل هذا الحقل ${formatNumber(n, "ar")} مستندات على الأكثر.`
+            : `يقبل هذا الحقل ${formatNumber(n, "ar")} مستندًا على الأكثر.`,
   },
 } satisfies Record<Locale, unknown>;
 
@@ -53,11 +67,6 @@ function fileSize(bytes: number, locale: Locale): string {
 
 /** A content type as people name it: `application/pdf` is PDF. */
 const typeName = (contentType: string) => (contentType.split("/")[1] ?? contentType).split(/[.+-]/).pop()!.toUpperCase();
-
-/** Browsers know no type for some files: name it from the extension, as the Attachments System Field does. */
-const typesByExtension: Record<string, string> = { dwg: "image/vnd.dwg", dxf: "image/vnd.dxf", heic: "image/heic", csv: "text/csv" };
-export const contentTypeOf = (file: File): string =>
-  file.type || typesByExtension[file.name.split(".").pop()?.toLowerCase() ?? ""] || "application/octet-stream";
 
 /** What a field's files are, and what may be done with them now. */
 export type AttachmentsFieldFiles = {
@@ -127,8 +136,12 @@ export function AttachmentsField({ field, files, mode, locale, onUpload, onOpen,
   const text = copy[locale];
   const documents = files?.documents ?? [];
   const canRemove = mode === "edit" && !!files?.canChange;
+  const upload = takesUpload(field, files, mode);
+  // Without a file input, the Field's label, help and error name and describe the list as a group.
+  const { labelId, "aria-describedby": describedBy } = useFieldControl<FieldControlProps>({});
+  const group = !upload && labelId ? { role: "group", "aria-labelledby": labelId, "aria-describedby": describedBy } : {};
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-2" {...group}>
       {documents.length > 0 ? (
         <ul className="divide-y divide-border rounded-md border border-border">
           {documents.map((d) => (
@@ -157,8 +170,8 @@ export function AttachmentsField({ field, files, mode, locale, onUpload, onOpen,
       ) : (
         mode === "edit" && <p className="text-sm text-muted">{files ? text.none : text.notYet}</p>
       )}
-      {takesUpload(field, files, mode) && <FileInput field={field} pending={!!files?.pending} locale={locale} onUpload={onUpload} />}
-      {mode === "edit" && files?.canChange && !takesUpload(field, files, mode) && field.maxFiles !== undefined && (
+      {upload && <FileInput field={field} pending={!!files?.pending} locale={locale} onUpload={onUpload} />}
+      {mode === "edit" && files?.canChange && !upload && field.maxFiles !== undefined && (
         <p className="text-sm text-muted">{text.full(field.maxFiles)}</p>
       )}
     </div>

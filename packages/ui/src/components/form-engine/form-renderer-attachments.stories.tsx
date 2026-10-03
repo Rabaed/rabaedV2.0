@@ -30,10 +30,10 @@ const schema = formSchema.parse({
 const copy = {
   datasheet: { en: "Datasheet", ar: "نشرة البيانات" },
   certificate: { en: "Test certificate", ar: "شهادة الاختبار" },
-  none: { en: "No files yet.", ar: "لا توجد ملفات بعد." },
-  notYet: { en: "Files can be added once the Draft is saved.", ar: "يمكن إضافة الملفات بعد حفظ المسودة." },
+  none: { en: "No Documents yet.", ar: "لا توجد مستندات بعد." },
+  notYet: { en: "Documents can be added once the Draft is saved.", ar: "يمكن إضافة المستندات بعد حفظ المسودة." },
   required: { en: "This field is required.", ar: "هذا الحقل مطلوب." },
-  full: { en: "This field takes 1 file.", ar: "يقبل هذا الحقل ملفًا واحدًا." },
+  full: { en: "This field takes 1 Document.", ar: "يقبل هذا الحقل مستندًا واحدًا." },
   openDatasheet: { en: "Open RESCLITE-PRO datasheet.pdf", ar: "فتح \u2068RESCLITE-PRO datasheet.pdf\u2069" },
   removeDatasheet: { en: "Remove RESCLITE-PRO datasheet.pdf", ar: "إزالة \u2068RESCLITE-PRO datasheet.pdf\u2069" },
   unanswered: { en: "Not answered", ar: "لم تتم الإجابة" },
@@ -93,7 +93,7 @@ export const Uploaded: Story = {
   play: async (context) => {
     const { args, canvas } = context;
     await expect(canvas.getByText("RESCLITE-PRO datasheet.pdf")).toBeVisible();
-    await expect(canvas.getByText(storyLocale(context) === "ar" ? /1\.5 MB/ : "1.5 MB")).toBeVisible();
+    await expect(canvas.getByText(storyLocale(context) === "ar" ? "1.5 م.ب" : "1.5 MB")).toBeVisible();
     await userEvent.click(canvas.getByRole("button", { name: storyText(context, copy.openDatasheet) }));
     await expect(args.files!.onOpen).toHaveBeenCalledWith(datasheet.id);
     await userEvent.click(canvas.getByRole("button", { name: storyText(context, copy.removeDatasheet) }));
@@ -115,11 +115,12 @@ export const WithErrors: Story = {
   },
 };
 
-/** Sent: the files are frozen; they open, but nothing is uploaded or removed. */
+/** Sent: the files are frozen; they open, but nothing is uploaded or removed. The list is the field's labelled group. */
 export const Frozen: Story = {
   args: { files: files([{ ...datasheet, frozen: true }], false) },
   play: async (context) => {
     const { canvas } = context;
+    await expect(canvas.getByRole("group", { name: storyText(context, copy.datasheet) })).toBeVisible();
     await expect(canvas.getByRole("button", { name: storyText(context, copy.openDatasheet) })).toBeVisible();
     await expect(canvas.queryByRole("button", { name: storyText(context, copy.removeDatasheet) })).toBeNull();
     await expect(canvas.queryByLabelText(storyText(context, copy.datasheet), { selector: "input" })).toBeNull();

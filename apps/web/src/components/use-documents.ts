@@ -1,7 +1,6 @@
 "use client";
 
-import type { DocumentList, StartedDocumentUpload } from "@rabaed/domain";
-import { contentTypeOf } from "@rabaed/ui";
+import { contentTypeOfFile, type DocumentList, type StartedDocumentUpload } from "@rabaed/domain";
 import { useFormatter, useTranslations } from "next-intl";
 import { useState } from "react";
 import { useRouter } from "@/i18n/navigation";
@@ -25,15 +24,22 @@ const refusals: Record<string, string> = {
   field_not_found: "unavailable",
 };
 
-/** The System Field's uploads have no field key: this stands for them in `pending`. */
+/** The Attachments System Field's Documents have no field key: this key stands for them in `pending`. */
 const systemField = "";
 
 export function useDocuments(workItemId: string, limits: DocumentList["limits"]) {
   const t = useTranslations("workItems.attachments");
   const format = useFormatter();
   const router = useRouter();
-  /** The field key whose upload or removal is under way (systemField for the System Field), or null. */
-  const [pending, setPending] = useState<string | null>(null);
+  /** The field keys with an upload or removal under way (systemField for the System Field). */
+  const [pending, setPending] = useState<ReadonlySet<string>>(new Set());
+  const start = (key: string) => setPending((keys) => new Set(keys).add(key));
+  const done = (key: string) =>
+    setPending((keys) => {
+      const next = new Set(keys);
+      next.delete(key);
+      return next;
+    });
   const [message, setMessage] = useState<string | null>(null);
   const base = `/api/v1/work-items/${workItemId}/documents`;
 
@@ -53,9 +59,9 @@ export function useDocuments(workItemId: string, limits: DocumentList["limits"])
     setMessage(null);
     // The same limits the API checks, before sending anything.
     if (file.size > limits.maxBytes) return setMessage(t("tooLarge", { size: size(limits.maxBytes) }));
-    const contentType = contentTypeOf(file);
+    const contentType = contentTypeOfFile(file);
     if (!limits.contentTypes.includes(contentType)) return setMessage(t("wrongType"));
-    setPending(fieldKey ?? systemField);
+    start(fieldKey ?? systemField);
     try {
       const res = await fetch(base, {
         method: "POST",
@@ -73,7 +79,7 @@ export function useDocuments(workItemId: string, limits: DocumentList["limits"])
     } catch {
       setMessage(t("unavailable"));
     } finally {
-      setPending(null);
+      done(fieldKey ?? systemField);
     }
   }
 
@@ -97,7 +103,7 @@ export function useDocuments(workItemId: string, limits: DocumentList["limits"])
   }
 
   async function remove(documentId: string, fieldKey?: string) {
-    setPending(fieldKey ?? systemField);
+    start(fieldKey ?? systemField);
     setMessage(null);
     try {
       const res = await fetch(`${base}/${documentId}`, { method: "DELETE" });
@@ -107,7 +113,7 @@ export function useDocuments(workItemId: string, limits: DocumentList["limits"])
     } catch {
       setMessage(t("unavailable"));
     } finally {
-      setPending(null);
+      done(fieldKey ?? systemField);
     }
   }
 
@@ -118,8 +124,8 @@ export function useDocuments(workItemId: string, limits: DocumentList["limits"])
     size,
     message,
     /** Whether the System Field's upload or removal is under way. */
-    systemPending: pending === systemField,
-    /** The Form fields with an upload or removal under way. */
-    fieldsPending: new Set(pending !== null && pending !== systemField ? [pending] : []),
+    systemPending: pending.has(systemField),
+    /** The keys with an upload or removal under way: the Form's fields read their own. */
+    pending,
   };
 }

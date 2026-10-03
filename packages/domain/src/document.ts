@@ -38,6 +38,14 @@ export const contentType = z
   .toLowerCase()
   .regex(/^[a-z0-9.+-]+\/[a-z0-9.+-]+$/);
 
+// Browsers know no type for some files Documents may be: named from the extension.
+const typesByExtension: Record<string, string> = { dwg: "image/vnd.dwg", dxf: "image/vnd.dxf", heic: "image/heic", csv: "text/csv" };
+
+/** The content type to declare for a file the browser picked: its own, else by its extension. */
+export function contentTypeOfFile(file: { name: string; type: string }): string {
+  return file.type || typesByExtension[file.name.split(".").pop()?.toLowerCase() ?? ""] || "application/octet-stream";
+}
+
 /** Step 1 of an upload: the file the browser is about to upload. */
 export const startDocumentUploadRequest = z.object({
   fileName: z.string().trim().min(1).max(255),

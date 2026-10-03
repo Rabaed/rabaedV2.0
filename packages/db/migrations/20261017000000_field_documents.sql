@@ -15,6 +15,10 @@
 -- * An `attachments` field holds no answer, so app.work_item_answers has nothing
 --   new to strip (ADR 0012); `required` and `minFiles` are checked by the api's
 --   validator against the confirmed files when the item leaves Draft.
+-- * app.answers_sha256 covers the fields' confirmed Documents too, so a file
+--   added or removed between that check and the Transition is refused
+--   ('form_not_checked'), as changed answers are. With no field Documents it
+--   is the hash it was.
 
 alter table document add column field_key text
   constraint document_field_key_format check (field_key ~ '^[a-z][a-z0-9_]*$' and length(field_key) <= 64);
@@ -49,6 +53,23 @@ create function app.field_document_refusal(
           and d.id is distinct from p_document_id
       ) then 'too_many_files'
     end
+  $$;
+
+-- The hash a Transition checks ------------------------------------------------------
+
+-- As in the answers_stripping migration (the full answers, only while they are
+-- open), followed by the ids of the fields' confirmed Documents, in order.
+create or replace function app.answers_sha256(p_work_item_id uuid) returns bytea
+  language sql stable security definer
+  set search_path = pg_catalog, public
+  as $$
+    select sha256(convert_to(app.work_item_full_answers(p_work_item_id)::text || coalesce((
+      select string_agg(d.field_key || ':' || d.id::text, ',' order by d.field_key, d.id)
+      from document d
+      where d.work_item_id = p_work_item_id and d.field_key is not null
+        and d.confirmed_at is not null and d.removed_at is null
+    ), ''), 'UTF8'))
+    where app.answers_open(p_work_item_id)
   $$;
 
 -- Upload ------------------------------------------------------------------------------

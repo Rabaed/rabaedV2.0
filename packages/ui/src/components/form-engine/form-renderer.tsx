@@ -82,7 +82,7 @@ const copy = {
     unknownOption: "Choose one of the options.",
     tooFewRows: (n: number) => (n === 1 ? "Add at least 1 row." : `Add at least ${formatNumber(n, "en")} rows.`),
     tooManyRows: (n: number) => (n === 1 ? "Use at most 1 row." : `Use at most ${formatNumber(n, "en")} rows.`),
-    tooFewFiles: (n: number) => (n === 1 ? "Add at least 1 file." : `Add at least ${formatNumber(n, "en")} files.`),
+    tooFewFiles: (n: number) => (n === 1 ? "Add at least 1 Document." : `Add at least ${formatNumber(n, "en")} Documents.`),
     choose: "Choose…",
     none: "None",
     // The name sits in an isolate (\u2068 first strong, \u2069 ends), so an Arabic name keeps its place.
@@ -134,12 +134,12 @@ const copy = {
             : `استخدم ${formatNumber(n, "ar")} صفًا على الأكثر.`,
     tooFewFiles: (n: number) =>
       n === 1
-        ? "أضف ملفًا واحدًا على الأقل."
+        ? "أضف مستندًا واحدًا على الأقل."
         : n === 2
-          ? "أضف ملفين على الأقل."
+          ? "أضف مستندين على الأقل."
           : n <= 10
-            ? `أضف ${formatNumber(n, "ar")} ملفات على الأقل.`
-            : `أضف ${formatNumber(n, "ar")} ملفًا على الأقل.`,
+            ? `أضف ${formatNumber(n, "ar")} مستندات على الأقل.`
+            : `أضف ${formatNumber(n, "ar")} مستندًا على الأقل.`,
     choose: "اختر…",
     none: "بدون",
     leftProject: (name: string) => `\u2068${name}\u2069 (لم يعد في المشروع)`,
