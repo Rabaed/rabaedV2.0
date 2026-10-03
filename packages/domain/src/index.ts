@@ -5,6 +5,7 @@ export * from "./document.ts";
 export * from "./form.ts";
 export * from "./form-publish.ts";
 export * from "./form-display.ts";
+export * from "./formula.ts";
 export * from "./health.ts";
 export * from "./locale.ts";
 export * from "./member.ts";

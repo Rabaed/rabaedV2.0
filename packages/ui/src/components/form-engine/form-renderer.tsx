@@ -21,6 +21,7 @@ import {
   toProjectWallTime,
   type AnswerField,
   type BuiltInFieldType,
+  type CalculatedField,
   type FieldError,
   type FormChoices,
   type FormField,
@@ -38,7 +39,7 @@ import { useState, type ReactNode } from "react";
 import { cn } from "../../lib/cn.ts";
 import { CheckboxGroup } from "../form/checkbox-group.tsx";
 import { focusRing } from "../form/control-styles.ts";
-import { Field } from "../form/field.tsx";
+import { Field, useFieldControl } from "../form/field.tsx";
 import { Input } from "../form/input.tsx";
 import { RadioGroup } from "../form/radio-group.tsx";
 import { Select } from "../form/select.tsx";
@@ -59,7 +60,9 @@ import { TableInput, TableRead } from "./table-field.tsx";
 // `member` or `participant` field offers only the `people` the API gave this
 // filler, and reads as the API named it for this viewer: another Company's
 // Member by the Company's name only (V14). A saved one no longer on offer (a
-// Member who left the Project) stays the choice, marked, until changed.
+// Member who left the Project) stays the choice, marked, until changed. A
+// calculated field is worked out here as it is on the server (formVisibility),
+// so its result follows its inputs live; read mode shows the stored result.
 
 const copy = {
   en: {
@@ -80,6 +83,8 @@ const copy = {
     tooManyDecimals: (n: number) =>
       n === 0 ? "Enter a whole number." : n === 1 ? "Use at most 1 decimal place." : `Use at most ${formatNumber(n, "en")} decimal places.`,
     unknownOption: "Choose one of the options.",
+    notWorkedOut: "Not worked out yet",
+    calculatedRequired: "Fill in the fields this is worked out from.",
     tooShallow: "Keep choosing down to the last level.",
     tooFewRows: (n: number) => (n === 1 ? "Add at least 1 row." : `Add at least ${formatNumber(n, "en")} rows.`),
     tooManyRows: (n: number) => (n === 1 ? "Use at most 1 row." : `Use at most ${formatNumber(n, "en")} rows.`),
@@ -122,6 +127,8 @@ const copy = {
             ? "استخدم منزلتين عشريتين على الأكثر."
             : `استخدم ${formatNumber(n, "ar")} منازل عشرية على الأكثر.`,
     unknownOption: "اختر أحد الخيارات.",
+    notWorkedOut: "لم يُحسب بعد",
+    calculatedRequired: "أكمل الحقول التي يُحسب منها.",
     tooShallow: "تابع الاختيار حتى المستوى الأخير.",
     tooFewRows: (n: number) =>
       n === 1 ? "أضف صفًا واحدًا على الأقل." : n === 2 ? "أضف صفين على الأقل." : n <= 10 ? `أضف ${formatNumber(n, "ar")} صفوف على الأقل.` : `أضف ${formatNumber(n, "ar")} صفًا على الأقل.`,
@@ -186,7 +193,8 @@ function errorText(field: AnswerField | TableColumn, error: FieldError, locale: 
     case "too_many_rows":
       return field.type === "table" ? text.tooManyRows(field.maxRows ?? maxTableRows) : text.wrongType;
     case "required":
-      return text.required;
+      // A calculated field can't be typed in: only its inputs can fill it.
+      return field.type === "calculated" ? text.calculatedRequired : text.required;
     case "too_long":
       return field.type === "text" || field.type === "textarea"
         ? text.tooLong(field.maxLength ?? defaultMaxLength[field.type])
@@ -275,6 +283,27 @@ function NumberInput({
         </span>
       )}
     </div>
+  );
+}
+
+/**
+ * A calculated field's result, read-only: worked out from the answers now, and
+ * announced as it changes (an `output` is a polite live region).
+ */
+function CalculatedOutput({ field, value, locale }: { field: CalculatedField; value: unknown; locale: Locale }) {
+  const { labelId: _labelId, required: _required, disabled: _disabled, readOnly: _readOnly, ...control } = useFieldControl({});
+  const hasResult = typeof value === "number";
+  return (
+    <output
+      {...control}
+      className={cn(
+        "flex min-h-9 w-full items-center rounded-sm border border-border bg-surface-subtle px-3 text-body pointer-coarse:min-h-11",
+        hasResult ? "text-text" : "text-muted",
+      )}
+    >
+      {/* A number reads in the page's direction, so its unit follows it. */}
+      {hasResult ? <bdi dir={directionOf(locale)}>{formatFormValue(field, value, locale)}</bdi> : copy[locale].notWorkedOut}
+    </output>
   );
 }
 
@@ -453,6 +482,8 @@ function control(
           />
         ),
       };
+    case "calculated":
+      return { element: <CalculatedOutput field={field} value={value} locale={locale} /> };
     case "multi_select":
       return {
         group: true,
@@ -589,7 +620,9 @@ export function FormRenderer({
     if (field.type === "table") return <TableRead field={field} value={value} locale={locale} optionLists={optionLists} />;
     const shown = formatFormValue(field, value, locale, naming, optionLists);
     // A number reads in the page's direction, so its unit follows it; an address or a phone number left to right.
-    if (field.type === "number" || field.type === "currency") return <bdi dir={directionOf(locale)}>{shown}</bdi>;
+    if (field.type === "number" || field.type === "currency" || field.type === "calculated") {
+      return <bdi dir={directionOf(locale)}>{shown}</bdi>;
+    }
     if (field.type === "email" || field.type === "phone") return <bdi dir="ltr">{shown}</bdi>;
     return <bdi>{shown}</bdi>;
   }
@@ -628,7 +661,17 @@ export function FormRenderer({
                 const error = errorOf(field.key);
                 const { element, group } = isBuiltInField(field)
                   ? builtInControl(field.type)
-                  : control(field, answers[field.key], locale, people, named[field.key], optionLists, (value) => onChange?.({ [field.key]: value }), cellErrorsOf(field.key));
+                  : control(
+                      field,
+                      // A calculated field shows the result worked out from the answers now, never one given.
+                      field.type === "calculated" ? visibility.answers[field.key] : answers[field.key],
+                      locale,
+                      people,
+                      named[field.key],
+                      optionLists,
+                      (value) => onChange?.({ [field.key]: value }),
+                      cellErrorsOf(field.key),
+                    );
                 return (
                   <Field
                     key={field.key}
