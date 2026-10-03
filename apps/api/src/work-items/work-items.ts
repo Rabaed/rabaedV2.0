@@ -105,10 +105,15 @@ type PinnedForm = {
   form: FormVersion;
   /** Its Project, whose Scopes the validator checks `scopes` against. */
   projectId: string;
-  /** The answers now, Built-in Fields included. */
+  /**
+   * The answers now, Built-in Fields included, as this Member may read them: less
+   * any reference they may not see (ADR 0012). While the answers are open only the
+   * raiser sees the item, and its references are its own, so nothing is stripped
+   * from what a Transition checks.
+   */
   data: Record<string, unknown>;
-  /** Their hash, as app.take_transition compares it. */
-  dataSha256: Buffer;
+  /** The full answers' hash, as app.take_transition compares it; null unless the answers are open. */
+  dataSha256: Buffer | null;
   /** Its answers are open to the raiser: Draft and the raiser's internal Steps (app.answers_open). */
   answersOpen: boolean;
   /** They may save its answers now (app.can_save_answers). */
@@ -121,7 +126,7 @@ async function pinnedForm(trx: Trx, workItemId: string): Promise<PinnedForm | nu
     FormVersionRow & {
       project_id: string;
       data: Record<string, unknown>;
-      data_sha256: Buffer;
+      data_sha256: Buffer | null;
       answers_open: boolean;
       can_save: boolean;
     }

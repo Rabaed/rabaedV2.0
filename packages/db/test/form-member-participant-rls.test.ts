@@ -236,44 +236,82 @@ describe("app.form_participant_choices", () => {
   });
 });
 
-// K1 sees C1's item (here A's), handling it at a Consultant Step: it reads C1's
-// Participant, which is on the item, but never the id of C1's Member (V14).
+// K1 sees C1's item (here A's), handling it at a Consultant Step. It reads C1's
+// Participant, which is on the item, but never the id of the C1 Member named in
+// it, nor of L1, a Participant on the Project but not on the item (V14, V15).
 describe("reading the answers as another Company on the item", () => {
   let k: { ap: string; participantId: string };
+  let l: { participantId: string };
+  let engineer = "";
 
-  beforeAll(async () => {
+  /** A Company joining Project A in `role`; returns its Authorized Person and Participant. */
+  async function joinA(en: string, role: string) {
     const crNumber = digits(10);
-    const engineer = await one("insert into rabaed_engineer (email, full_name) values ($1, 'Test Engineer') returning id", [email("engineer")]);
+    const onboardedBy = await one("insert into rabaed_engineer (email, full_name) values ($1, 'Test Engineer') returning id", [email("engineer")]);
     const companyId = await one("insert into company (legal_name, cr_number, vat_number, onboarded_by) values ($1, $2, $3, $4) returning id", [
-      JSON.stringify({ en: "K1 Consultants", ar: "K1 Consultants" }),
+      JSON.stringify({ en, ar: en }),
       crNumber,
       `3${digits(13)}3`,
-      engineer,
+      onboardedBy,
     ]);
     const ap = await one("insert into member (company_id, email, full_name, status) values ($1, $2, $3, 'active') returning id", [
       companyId,
-      email("k1-ap"),
-      JSON.stringify({ en: "K1 AP", ar: "K1 AP" }),
+      email("ap"),
+      JSON.stringify({ en, ar: en }),
     ]);
     await migrator.query("update company set authorized_person_id = $1 where id = $2", [ap, companyId]);
-    const participantId = await joinProject(app, a.projectId, { adminId: a.ap, crNumber, role: "consultant" }, ap);
-    await call(ap, sql`select app.add_project_member(${participantId}::uuid, ${ap}::uuid, now())`);
+    const participantId = await joinProject(app, a.projectId, { adminId: a.ap, crNumber, role }, ap);
+    return { ap, participantId };
+  }
+
+  const write = (data: Record<string, unknown>) =>
+    migrator.query("update work_item set data = $1 where id = $2", [JSON.stringify(data), a.itemId]);
+
+  /** Everything K1 can read of the item: its answers, named answers, history, row, events and assignments. */
+  const everythingK1Reads = async () =>
+    JSON.stringify([
+      await call(k.ap, sql`select app.work_item_answers(${a.itemId}::uuid) as answers`),
+      await call(k.ap, sql`select app.answers_sha256(${a.itemId}::uuid) as hash`),
+      await call(k.ap, sql`select * from app.work_item_named_answers(${a.itemId}::uuid)`),
+      await call(k.ap, sql`select * from app.work_item_history(${a.itemId}::uuid)`),
+      await call(
+        k.ap,
+        sql`select id, project_id, work_item_type_id, raised_by_participant_id, created_by_member_id, title, workflow_version_id,
+          form_version_id, document_number, outcome, closed_at, created_at from work_item where id = ${a.itemId}::uuid`,
+      ),
+      await call(k.ap, sql`select * from work_item_event where work_item_id = ${a.itemId}::uuid`),
+      await call(k.ap, sql`select * from step_assignment where work_item_id = ${a.itemId}::uuid`),
+    ]);
+
+  beforeAll(async () => {
+    const companyId: string = (await migrator.query("select company_id from member where id = $1", [a.ap])).rows[0].company_id;
+    // A C1 Member who is named in the answer only: neither its creator nor an actor on it.
+    engineer = await one("insert into member (company_id, email, full_name, status) values ($1, $2, $3, 'active') returning id", [
+      companyId,
+      email("c1-engineer"),
+      JSON.stringify({ en: "C1 Engineer", ar: "C1 Engineer" }),
+    ]);
+    await call(a.ap, sql`select app.add_project_member(${a.participantId}::uuid, ${engineer}::uuid, now())`);
+    await write({ who: engineer, through: a.participantId });
+
+    k = await joinA("K1 Consultants", "consultant");
+    l = await joinA("L1 Contracting", "contractor");
+    await call(k.ap, sql`select app.add_project_member(${k.participantId}::uuid, ${k.ap}::uuid, now())`);
     for (const kind of ["trade", "location"]) {
       const set = await call<{ outcome: string }>(
         a.ap,
-        sql`
-        select app.set_participant_visibility(${participantId}::uuid, ${kind}, true, '{}'::uuid[], now()) as outcome`,
+        sql`select app.set_participant_visibility(${k.participantId}::uuid, ${kind}, true, '{}'::uuid[], now()) as outcome`,
       );
       const mine = await call<{ outcome: string }>(
-        ap,
-        sql`
-        select app.set_member_visibility(${participantId}::uuid, ${ap}::uuid, ${kind}, true, '{}'::uuid[], now()) as outcome`,
+        k.ap,
+        sql`select app.set_member_visibility(${k.participantId}::uuid, ${k.ap}::uuid, ${kind}, true, '{}'::uuid[], now()) as outcome`,
       );
       expect([...set, ...mine].map((r) => r.outcome)).toEqual(["set", "set"]);
     }
-    // As the owner: the item at a Consultant Step, which K1 handles.
+    // As the owner: the item handed to K1 at a Consultant Step, as a Transition would.
     await migrator.query(
-      `update work_item w set current_step_id = s.id, current_stage_key = s.stage_key
+      `update work_item w set current_step_id = s.id, current_stage_key = s.stage_key,
+         participant_entered_step_id = s.id, participant_entered_at = now()
        from workflow_step s
        where w.id = $1 and s.workflow_version_id = w.workflow_version_id and s.actor_rule ->> 'base_role' = 'consultant'
          and s.id = (select min(x.id::text)::uuid from workflow_step x
@@ -282,16 +320,15 @@ describe("reading the answers as another Company on the item", () => {
     );
     await migrator.query(
       "insert into work_item_access (work_item_id, project_id, participant_id, since, reason) values ($1, $2, $3, now(), 'handling')",
-      [a.itemId, a.projectId, participantId],
+      [a.itemId, a.projectId, k.participantId],
     );
-    k = { ap, participantId };
   });
 
   it("sees the item", async () => {
     expect(await call(k.ap, sql`select app.sees_work_item(${a.itemId}::uuid) as sees`)).toEqual([{ sees: true }]);
   });
 
-  it("gets C1's Participant, but no query returns the id of C1's Member", async () => {
+  it("gets C1's Participant, but no query returns the id of the C1 Member named", async () => {
     const [{ answers }] = (await call<{ answers: Record<string, unknown> }>(
       k.ap,
       sql`select app.work_item_answers(${a.itemId}::uuid) as answers`,
@@ -299,15 +336,26 @@ describe("reading the answers as another Company on the item", () => {
     expect(answers).toMatchObject({ through: a.participantId });
     expect(answers).not.toHaveProperty("who");
     await expect(call(k.ap, sql`select data from work_item where id = ${a.itemId}::uuid`)).rejects.toThrow(/permission denied/);
-    const reads = JSON.stringify([
-      answers,
-      await call(k.ap, sql`select * from app.work_item_named_answers(${a.itemId}::uuid)`),
-      await call(k.ap, sql`select * from app.work_item_history(${a.itemId}::uuid)`),
-    ]);
-    expect(reads).not.toContain(a.ap);
+    expect(await everythingK1Reads()).not.toContain(engineer);
+  });
+
+  it("gets no id of a Participant on the Project but not on the item", async () => {
+    // Written as the owner: the API never offers L1 here, but the database mustn't rely on it.
+    await write({ who: engineer, through: l.participantId });
+    try {
+      const reads = await everythingK1Reads();
+      expect(reads).not.toContain(l.participantId);
+      expect(reads).not.toContain(engineer);
+    } finally {
+      await write({ who: engineer, through: a.participantId });
+    }
+  });
+
+  it("gets no hash of the answers once they have left the raiser", async () => {
+    expect(await call(k.ap, sql`select app.answers_sha256(${a.itemId}::uuid) as hash`)).toEqual([{ hash: null }]);
   });
 
   it("leaves C1's own Members their answers in full", async () => {
-    expect(await call(a.ap, sql`select app.work_item_answers(${a.itemId}::uuid) ->> 'who' as who`)).toEqual([{ who: a.ap }]);
+    expect(await call(a.ap, sql`select app.work_item_answers(${a.itemId}::uuid) ->> 'who' as who`)).toEqual([{ who: engineer }]);
   });
 });

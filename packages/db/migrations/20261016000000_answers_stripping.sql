@@ -13,11 +13,17 @@
 --     the Host Company's or one on the item (app.work_item_companies).
 --   An answer that names nobody is stripped too. `table` columns hold no references.
 -- * app.work_item_full_answers keeps the full answers for the functions that need
---   them (never granted): app.answers_sha256 and app.take_transition still hash
---   the unstripped document, so hashes and the hash chain are unchanged.
+--   them (never granted). app.answers_sha256 still hashes them, so the hash is
+--   unchanged, and app.save_work_item_answers diffs them. app.take_transition,
+--   as the owner, still hashes title and data into the hash chain, unchanged.
+-- * app.answers_sha256 now answers only while the answers are open (app.answers_open:
+--   the item has never left the raiser, so only the raiser sees it, V1), the one
+--   time a Transition needs it. Anyone else gets null: a hash of answers stripped
+--   for them would confirm a guessed id, and show when a hidden answer changed.
 -- * A new field type that stores an id adds its strip rule here, with a seam-2
 --   test (ADR 0012, Consequences).
 
+-- work_item has been granted column by column since the step_age_by_holder migration.
 revoke select (data) on work_item from rabaed_app;
 
 -- The full answers, Built-in Fields included, exactly as app.work_item_answers
@@ -73,13 +79,14 @@ create or replace function app.work_item_answers(p_work_item_id uuid) returns js
     where w.id = p_work_item_id and app.sees_work_item(w.id)
   $$;
 
--- As before (the full answers), and only for an item the caller sees.
+-- As before (the full answers), and only while the answers are open: to the
+-- raiser, the only one who sees the item then. Null otherwise.
 create or replace function app.answers_sha256(p_work_item_id uuid) returns bytea
   language sql stable security definer
   set search_path = pg_catalog, public
   as $$
     select sha256(convert_to(app.work_item_full_answers(p_work_item_id)::text, 'UTF8'))
-    where app.sees_work_item(p_work_item_id)
+    where app.answers_open(p_work_item_id)
   $$;
 
 -- As in the answers_history migration, diffing and hashing the full answers
