@@ -125,19 +125,6 @@ System Fields   Attachments · Links
 - On screen: a single choice is one select per level, each offering the options under the one chosen above (choosing another above clears what was below); a retired choice stays selected, marked "retired". A multiple choice is a checkbox for every option that can be chosen, named by its path (`Cables › Copper › 2.5 mm²`). Read mode shows the same path, in the viewer's language, marked when an option on it is retired. The history shows a change the same way.
 - Publish-time check: the list must exist (`unknown_option_list`, §7).
 
-### 2.4 The MAR Form Version 1 (as built, RP-272)
-
-The part-1 MAR is a Rabaed Default written as data (migration `mar_quantity` completes the Version the skeleton shipped): Manufacturer (text, required), Model (text), Quantity (`number`, unit `pcs`, 0 or more, two decimals), Specification section (text) and Description (textarea, required), with Trade, Location and Scopes as Built-in Fields among them, and the Attachments System Field below. Send for Review with the Form incomplete is refused with `form_incomplete`; the page marks each field and lists them by label. Version 2 (§2.5) replaced it for new MARs; MARs started on it keep it.
-
-### 2.5 The MAR Form Version 2 (as built, RP-286)
-
-- Published by migration `mar_form_version_2` as a Rabaed Default, written as data like Version 1, so every environment has it once migrated. `apps/api/test/mar-form-v2.test.ts` runs the part-1 publish checks (`publishProblems`, §7) on it against Version 1; published Versions never change, so it stays checked.
-- Sections and fields: **Material details** (Manufacturer, text, required; Model; Specification section; Description, textarea, required), **Items** (`items`, a `table` of Fixture type (text, required), Description (text), Quantity (`number`, 0 or more, two decimals, required, with a total) and Unit (`select`: Pieces, Metres, Square metres, Sets; required)), **Documents** (Datasheet, `attachments`, PDF only, required; Test certificate, `attachments`, optional; Sample photo, `photos`, optional) and **Classification** (Trade, Location, Scopes).
-- Version 1's `quantity` field is gone: the Items hold the quantities. The key is never reused for another type (§7).
-- New MARs pin Version 2. A MAR on Version 1 keeps showing and validating with Version 1, leaving Draft included, so it needs no Datasheet.
-- Leaving Draft without the Datasheet is refused per field (`form_incomplete`, `datasheet: required`).
-- The demo seeds its MARs through this Form: Items, the Datasheet (a generated PDF) and a Sample photo with EXIF time and GPS (README, "Demo: the MAR journey"). The supplier pick list comes with the Approved Supplier List.
-
 ### 2.4 Calculated fields (as built, RP-283)
 
 - A `calculated` field has a `formula`, `decimals` (0–6, 2 when unset) and an optional `unit`. A formula is numbers (Latin digits, a point for decimals), numeric field keys and `sum(table.column)`, joined by `+ − × ÷` (`-`, `*` and `/` too) and parentheses, with a leading minus. A schema whose formula doesn't parse is refused.
@@ -146,6 +133,19 @@ The part-1 MAR is a Rabaed Default written as data (migration `mar_quantity` com
 - **The server's result is the answer.** `formVisibility` and `validateAnswers` drop whatever the client sent for a calculated field (of any type, so it is never refused) and put the result in its place, so the API stores it with the answers and the answer hash covers it. An empty result is no answer: a required calculated field that is empty is `required` when the item leaves Draft.
 - Conditions read calculated fields like any other number (e.g. show an approval field when a total is over 1,000).
 - On screen: in edit mode the result is read-only, worked out from the answers as they are typed, in an `output` named by its label (a polite live region), with "Not worked out yet" while it is empty; its `required` error asks for the fields it is worked out from. In read mode it shows the stored result. It reads like a number: grouped, Latin digits, to its decimals, with its unit after it.
+
+### 2.5 The MAR Form Version 1 (as built, RP-272)
+
+The part-1 MAR is a Rabaed Default written as data (migration `mar_quantity` completes the Version the skeleton shipped): Manufacturer (text, required), Model (text), Quantity (`number`, unit `pcs`, 0 or more, two decimals), Specification section (text) and Description (textarea, required), with Trade, Location and Scopes as Built-in Fields among them, and the Attachments System Field below. Send for Review with the Form incomplete is refused with `form_incomplete`; the page marks each field and lists them by label. Version 2 (§2.6) replaced it for new MARs; MARs started on it keep it.
+
+### 2.6 The MAR Form Version 2 (as built, RP-286)
+
+- Published by migration `mar_form_version_2` as a Rabaed Default, written as data like Version 1, so every environment has it once migrated. `apps/api/test/mar-form-v2.test.ts` runs the part-1 publish checks (`publishProblems`, §7) on it against Version 1; published Versions never change, so it stays checked.
+- Sections and fields: **Material details** (Manufacturer, text, required; Model; Specification section; Description, textarea, required), **Items** (`items`, a `table` of Fixture type (text, required), Description (text), Quantity (`number`, 0 or more, two decimals, required, with a total) and Unit (`select`: Pieces, Metres, Square metres, Sets; required)), **Documents** (Datasheet, `attachments`, PDF only, required; Test certificate, `attachments`, optional; Sample photo, `photos`, optional) and **Classification** (Trade, Location, Scopes).
+- Version 1's `quantity` field is gone: the Items hold the quantities. The key is never reused for another type (§7).
+- New MARs pin Version 2. A MAR on Version 1 keeps showing and validating with Version 1, leaving Draft included, so it needs no Datasheet.
+- Leaving Draft without the Datasheet is refused per field (`form_incomplete`, `datasheet: required`).
+- The demo seeds its MARs through this Form: Items, the Datasheet (a generated PDF) and a Sample photo with EXIF time and GPS (README, "Demo: the MAR journey"). The supplier pick list comes with the Approved Supplier List.
 
 ---
 
@@ -238,7 +238,7 @@ As built (RP-271): `publishProblems(schema, earlierVersions)` in `packages/domai
 - `key_type_changed`: an earlier published Version used the key for another type, even if a later one dropped it.
 - `unknown_option_list` (RP-282): an `option_list` field, or a table column, names an Option List that doesn't exist. `publishFormVersion` passes the ids of the lists that exist; `publishProblems` without them doesn't look.
 
-`formSchemaProblems(schema)` runs the same checks for a first Version. In this part Rabaed publishes its Default Forms as data. `pnpm form:publish --type MAR --schema file.json` (Rabaed Admin's `publishFormVersion`, run with the migrator connection) checks the schema against the Form's published Versions, then publishes the next Version. A refused schema is listed problem by problem, and nothing is published. The database can't run these checks, so it is the only way to publish: a Version written or published by plain SQL (as the MAR Form Version 1 migration did) skips them. The MAR Form Version 2 is published by migration too, so that every environment has it; a seam test runs the checks on it instead (§2.5).
+`formSchemaProblems(schema)` runs the same checks for a first Version. In this part Rabaed publishes its Default Forms as data. `pnpm form:publish --type MAR --schema file.json` (Rabaed Admin's `publishFormVersion`, run with the migrator connection) checks the schema against the Form's published Versions, then publishes the next Version. A refused schema is listed problem by problem, and nothing is published. The database can't run these checks, so it is the only way to publish: a Version written or published by plain SQL (as the MAR Form Version 1 migration did) skips them. The MAR Form Version 2 is published by migration too, so that every environment has it; a seam test runs the checks on it instead (§2.6).
 
 ---
 

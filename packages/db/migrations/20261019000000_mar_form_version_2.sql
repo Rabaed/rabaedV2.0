@@ -1,4 +1,4 @@
--- The MAR Form Version 2 (RP-286, spec RP-278; form-engine.md §2.5).
+-- The MAR Form Version 2 (RP-286, spec RP-278; form-engine.md §2.6).
 --
 -- A MAR records what real submittals contain: the material (manufacturer, model,
 -- specification section, description), its Items as a table (fixture type,

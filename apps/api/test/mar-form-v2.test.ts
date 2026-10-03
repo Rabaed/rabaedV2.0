@@ -1,4 +1,4 @@
-// Seam 1 for the MAR Form Version 2 (RP-286, spec RP-278; form-engine.md §2.5):
+// Seam 1 for the MAR Form Version 2 (RP-286, spec RP-278; form-engine.md §2.6):
 // a MAR records what real submittals contain: its Items as a table with a total
 // quantity, a required Datasheet (PDF), an optional Test certificate and Sample
 // photo. New MARs pin Version 2; a MAR already on Version 1 keeps showing and
