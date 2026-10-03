@@ -203,7 +203,7 @@ Until numbering patterns exist, the key is `<project code>-<type code>-<Particip
 |---|---|
 | `id`, `project_id`, `work_item_type_id` | |
 | `raised_by_participant_id`, `created_by_member_id` | |
-| `title`, `data jsonb` | Form answers, validated against `form_version.schema` |
+| `title`, `data jsonb` | Form answers, validated against `form_version.schema`. Read only through `app.work_item_answers` (§10) |
 | `form_version_id`, `workflow_version_id` | pinned forever |
 | `document_number` | null while Draft; set at first leaving Draft |
 | `revision_no` (0 = original), `revision_of_id`, `root_id` | Revision chain; display `MS-003 Rev 1` |
@@ -365,6 +365,7 @@ Allowed actions are an explicit list: onboard Company, invite its Authorized Per
    - in one transaction, every open item with `raised_by_participant_id` = it gets a `cancelled` event, `outcome = cancelled` and a Documental Record;
    - open `step_assignment` rows for it are closed.
 5. **Rabaed Engineers** go through `admin_action` only. They have no path to insert `issue_code`, `recommend_code` or `transition` events.
+6. **Form answers** (ADR 0012): the app role can't read `work_item.data`. It reads the answers through `app.work_item_answers`, which re-checks that the caller sees the item and strips every reference they may not see: a `member` answer naming anyone outside their Company, and a `participant` answer naming a Participant other than their own, the Host Company's or one on the item. `app.answers_sha256` hashes the full, unstripped answers, and answers only while they are open (only the raiser sees the item then); the hash chain hashes `title` and `data` as before. A new field type that stores an id adds its strip rule there, with a seam-2 test.
 
 ## Settled points
 

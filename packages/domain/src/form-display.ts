@@ -1,5 +1,6 @@
 import { currencyDecimals, isIsoValue, type AnswerField, type NamedAnswer, type TableColumn } from "./form.ts";
 import { formatDate, formatNumber, timeZone, type Locale } from "./locale.ts";
+import { optionPath, type OptionList, type OptionNode } from "./option-list.ts";
 
 // How answers read on screen (form-engine.md §5): the viewer's language, Latin
 // digits, the Gregorian calendar, and the Project's time zone for instants.
@@ -8,6 +9,10 @@ import { formatDate, formatNumber, timeZone, type Locale } from "./locale.ts";
 const yesNo = { en: { yes: "Yes", no: "No" }, ar: { yes: "نعم", no: "لا" } } satisfies Record<Locale, unknown>;
 const anotherCompany = { en: "Another Company", ar: "شركة أخرى" } satisfies Record<Locale, string>;
 const listSeparator = { en: ", ", ar: "، " } satisfies Record<Locale, string>;
+// An Option List choice reads from its first level down, marked when an option on the way is retired.
+const levelSeparator = { en: " › ", ar: " ‹ " } satisfies Record<Locale, string>;
+/** The mark beside a retired option, as the admin shows it. */
+export const retiredMark = { en: "retired", ar: "موقوف" } satisfies Record<Locale, string>;
 
 const wallTimeParts = new Intl.DateTimeFormat("en-US", {
   timeZone,
@@ -67,6 +72,12 @@ export function parseNumberInput(text: string): number | null {
   return Number(latin.replace(/,/g, ""));
 }
 
+/** An option as read: the path to it from the list's first level, marked when an option on the way is retired. */
+export function optionLabel(path: readonly OptionNode[], locale: Locale): string {
+  const label = path.map((o) => o.label[locale]).join(levelSeparator[locale]);
+  return path.some((o) => o.retired) ? `${label} (${retiredMark[locale]})` : label;
+}
+
 /** How many rows a table holds, as a phrase: "3 rows", "صفان". */
 const rowCount = {
   en: (n: number) => (n === 1 ? "1 row" : `${formatNumber(n, "en")} rows`),
@@ -76,7 +87,7 @@ const rowCount = {
 } satisfies Record<Locale, (n: number) => string>;
 
 /** A table cell as the viewer reads it, by its column's type; empty when there is none. */
-export function formatTableCell(column: TableColumn, value: unknown, locale: Locale): string {
+export function formatTableCell(column: TableColumn, value: unknown, locale: Locale, optionLists: readonly OptionList[] = []): string {
   if (value === undefined || value === null) return "";
   switch (column.type) {
     case "number":
@@ -84,7 +95,8 @@ export function formatTableCell(column: TableColumn, value: unknown, locale: Loc
     case "date":
     case "yes_no":
     case "select":
-      return formatFormValue({ ...column, label: { en: "", ar: "" }, required: false }, value, locale);
+    case "option_list":
+      return formatFormValue({ ...column, label: { en: "", ar: "" }, required: false }, value, locale, undefined, optionLists);
     case "text":
       return typeof value === "string" ? value : String(value);
   }
@@ -96,9 +108,16 @@ export function formatTableCell(column: TableColumn, value: unknown, locale: Loc
  * the field can't read (e.g. a retired option) is shown as stored. A `member` or
  * `participant` answer reads as the API `named` it for this viewer (V14): a
  * Member of their own Company by name, anyone else by their Company's name;
- * never by its id.
+ * never by its id. An `option_list` answer reads as the path to the option
+ * (`optionLists` names it), marked when an option on the way is retired.
  */
-export function formatFormValue(field: AnswerField, value: unknown, locale: Locale, named?: NamedAnswer): string {
+export function formatFormValue(
+  field: AnswerField | (TableColumn & { type: "option_list" }),
+  value: unknown,
+  locale: Locale,
+  named?: NamedAnswer,
+  optionLists: readonly OptionList[] = [],
+): string {
   switch (field.type) {
     case "date":
       return typeof value === "string" && isIsoValue("date", value)
@@ -131,6 +150,14 @@ export function formatFormValue(field: AnswerField, value: unknown, locale: Loca
     case "select":
     case "multi_select": {
       const labelOf = (v: unknown) => field.options.find((o) => o.value === v)?.label[locale] ?? String(v);
+      return Array.isArray(value) ? value.map(labelOf).join(listSeparator[locale]) : value == null ? "" : labelOf(value);
+    }
+    case "option_list": {
+      const list = optionLists.find((l) => l.id === field.list);
+      const labelOf = (v: unknown) => {
+        const path = typeof v === "string" && list ? optionPath(list, v) : null;
+        return path ? optionLabel(path, locale) : String(v);
+      };
       return Array.isArray(value) ? value.map(labelOf).join(listSeparator[locale]) : value == null ? "" : labelOf(value);
     }
     case "table":
