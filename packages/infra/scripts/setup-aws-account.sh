@@ -61,6 +61,8 @@ say()  { printf '  %s\n' "$1"; }
 step() { printf '  %s•%s %s\n' "$BLUE" "$RESET" "$1"; }
 note() { printf '  %s%s%s\n' "$DIM" "$1" "$RESET"; }
 warn() { printf '  %s⚠ %s%s\n' "$YELLOW" "$1" "$RESET"; }
+# stop "..." says why the wizard cannot go on, and ends it.
+stop() { printf '  %s✗ %s%s\n' "$RED" "$1" "$RESET"; exit 1; }
 
 # open_url URL opens it in the human's browser, cross-platform incl. WSL.
 open_url() {
@@ -96,16 +98,23 @@ _existing() {
 }
 
 # ask KEY "Prompt" reads a value into $KEY. Offers the existing .env value as
-# a default on re-runs (Enter keeps it). Visible input (non-secret).
+# a default on re-runs (Enter keeps it). Visible input (non-secret). Arrow keys
+# edit the line; whatever escape codes still get through are cleaned off
+# (clean_answer, wizard-checks.sh), and a saved value holding some is asked again.
 ask() {
   local key="$1" prompt="$2" current input
   current=$(_existing "$key" || true)
+  if has_hidden_characters "$current"; then
+    warn "the saved $key holds hidden characters (keys typed at the prompt); type it again"
+    current=""
+  fi
   if [[ -n "$current" ]]; then
     printf '  %s%s%s %s[Enter keeps current]%s ' "$BOLD" "$prompt" "$RESET" "$DIM" "$RESET"
   else
     printf '  %s%s%s ' "$BOLD" "$prompt" "$RESET"
   fi
-  read -r input || true
+  read -er input || true
+  input=$(clean_answer "$input")
   [[ -z "$input" && -n "$current" ]] && input="$current"
   printf -v "$key" '%s' "$input"
 }
@@ -196,10 +205,13 @@ finish() {
 # (main only). The licensed Thmanyah fonts go from this computer
 # straight to the private build assets bucket.
 
-TOTAL_STAGES=11
+TOTAL_STAGES=12
 
 # The repository this script is in, wherever it is run from.
 cd "$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)"
+# clean_answer, has_hidden_characters, is_root_arn, export_credentials.
+# shellcheck source=packages/infra/scripts/wizard-checks.sh
+source packages/infra/scripts/wizard-checks.sh
 ENV_FILE=".env.aws"
 RABAED_ENV="${1:-dev}"
 
@@ -213,9 +225,50 @@ ask_required() {
   while [[ -z "${!1}" ]]; do warn "an answer is needed"; ask "$1" "$2"; done
 }
 
+# sign_in_command PROFILE: how PROFILE signs in to the console, through IAM
+# Identity Center when it was set up with `aws configure sso`.
+sign_in_command() {
+  if aws configure get sso_session --profile "$1" >/dev/null 2>&1 \
+      || aws configure get sso_start_url --profile "$1" >/dev/null 2>&1; then
+    printf 'aws sso login --profile %s' "$1"
+  else
+    printf 'aws login --profile %s --region %s' "$1" "$REGION"
+  fi
+}
+
+# sign_in PROFILE signs the CLI in through the browser. The CLI keeps the
+# short-lived credentials in your home folder, never in the repo or .env.aws.
+sign_in() {
+  local command
+  read -ra command <<< "$(sign_in_command "$1")"
+  step "Running: ${command[*]}  (a browser window opens)"
+  "${command[@]}"
+}
+
+# Set once stage 5 has an admin sign-in: from then on the root user is refused.
+NOT_ROOT=""
+
 # Hands the profile's short-lived credentials to the CDK, in this process
-# only; called before each AWS step so they have not expired.
-fresh_credentials() { eval "$(aws configure export-credentials --profile "$AWS_PROFILE" --format env)"; }
+# only; called before each AWS step so they have not expired. An expired
+# sign-in stops here, before any AWS call, rather than handing the CDK nothing.
+fresh_credentials() {
+  local exported caller
+  until exported=$(export_credentials "$AWS_PROFILE"); do
+    warn "Your AWS sign-in for profile $AWS_PROFILE has expired."
+    if ! confirm "Sign in again now?"; then
+      stop "Stopped. Run: $(sign_in_command "$AWS_PROFILE"), then re-run this wizard."
+    fi
+    sign_in "$AWS_PROFILE" || warn "sign-in did not finish"
+  done
+  eval "$exported"
+  if [[ -n "$NOT_ROOT" ]]; then
+    caller=$(aws sts get-caller-identity --query Arn --output text 2>/dev/null || true)
+    if is_root_arn "$caller"; then
+      warn "Profile $AWS_PROFILE is signed in as the root user, which this stage refuses."
+      stop "Stopped. Sign it in as the admin from stage 5 ($(sign_in_command "$AWS_PROFILE")), then re-run this wizard."
+    fi
+  fi
+}
 
 # stack_output OUTPUT [STACK]: an output of the account stack, or of STACK.
 stack_output() {
@@ -251,7 +304,7 @@ while IFS='=' read -r key value; do printf -v "$key" '%s' "$value"; done <<< "$n
 
 if ! gh auth status >/dev/null 2>&1; then
   step "Sign the GitHub CLI in to an account that can administer $REPOSITORY:"
-  gh auth login || warn "gh sign-in failed; stage 8 will list what to set by hand"
+  gh auth login || warn "gh sign-in failed; stage 9 will list what to set by hand"
 fi
 note "✓ $(aws --version 2>&1 | cut -d' ' -f1), gh, node $(node --version); region $REGION"
 pause
@@ -268,13 +321,14 @@ if confirm "Do you need to create a new AWS account?"; then
   pause "Press Enter once the account exists and root MFA is on."
 fi
 say "Now sign the AWS CLI in with the console. Nothing is stored in the repo;"
-say "the CLI keeps short-lived credentials in your home folder."
+say "the CLI keeps short-lived credentials in your home folder. A new account has"
+say "only its root user, which is fine for stages 3 and 4; stage 5 sets up an admin"
+say "that is not root for the rest."
 ask_required AWS_PROFILE "AWS CLI profile name to use (e.g. $RESOURCE_PREFIX):"
 export AWS_PROFILE
 write_env AWS_PROFILE "$AWS_PROFILE"
 until aws sts get-caller-identity >/dev/null 2>&1; do
-  step "Running: aws login --profile $AWS_PROFILE --region $REGION  (a browser window opens)"
-  aws login --profile "$AWS_PROFILE" --region "$REGION" || warn "sign-in did not finish"
+  sign_in "$AWS_PROFILE" || warn "sign-in did not finish"
   aws sts get-caller-identity >/dev/null 2>&1 || pause "Press Enter to try again (Ctrl-C to stop)."
 done
 AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
@@ -327,18 +381,88 @@ write_env ALARM_EMAIL "$ALARM_EMAIL"
 pause
 
 # ── 5 ────────────────────────────────────────────────────────────────────
+stage "Admin sign-in (not the root user)"
+say "The root user can do anything and nothing can limit it, so it is kept for"
+say "account tasks such as billing (stage 3). The CDK bootstraps, the account stack"
+say "and every stage after this one run as an admin that is not root: a user in IAM"
+say "Identity Center (preferred), or an IAM user with a console password, MFA and no"
+say "access keys. Either way the CLI keeps only short-lived credentials, never in the"
+say "repo or .env.aws."
+fresh_credentials
+caller=$(aws sts get-caller-identity --query Arn --output text)
+if ! is_root_arn "$caller"; then
+  note "✓ $AWS_PROFILE signs in as $caller, not root"
+else
+  note "$AWS_PROFILE signs in as the root user."
+  step "While signed in to the console as root, let the admin see bills and budgets:"
+  step "  account menu (top right) → Account → IAM user and role access to Billing"
+  step "  information → Edit → Activate IAM Access → Update."
+  ask_required AWS_ADMIN_PROFILE "AWS CLI profile name for the admin (e.g. $RESOURCE_PREFIX-admin):"
+  write_env AWS_ADMIN_PROFILE "$AWS_ADMIN_PROFILE"
+  if [[ "$AWS_ADMIN_PROFILE" == "$AWS_PROFILE" ]]; then
+    warn "That is the root profile's name; the admin needs a profile of its own."
+    stop "Stopped: re-run this wizard and give the admin another profile name."
+  fi
+  if ! confirm "Does $AWS_ADMIN_PROFILE already sign in as an admin of $AWS_ACCOUNT_ID?"; then
+    if confirm "Set the admin up in IAM Identity Center (preferred)?"; then
+      open_url "https://console.aws.amazon.com/singlesignon/home?region=$REGION"
+      step "Enable IAM Identity Center in $REGION. This makes $AWS_ACCOUNT_ID the management"
+      step "  account of a new AWS Organizations organization."
+      step "Users → Add user: yourself, with your work email. Accept the invitation email,"
+      step "  set a password and register an MFA device."
+      step "Permission sets → Create permission set → Predefined → AdministratorAccess."
+      step "AWS accounts → $AWS_ACCOUNT_ID → Assign users or groups → you → AdministratorAccess."
+      step "Settings → copy the AWS access portal URL (https://….awsapps.com/start)."
+      pause "Press Enter once that is done."
+      step "Running: aws configure sso --profile $AWS_ADMIN_PROFILE"
+      note "Give it any session name, the access portal URL and region $REGION; accept the"
+      note "default scopes; sign in in the browser; pick $AWS_ACCOUNT_ID and AdministratorAccess."
+      aws configure sso --profile "$AWS_ADMIN_PROFILE" || warn "aws configure sso did not finish"
+    else
+      open_url "https://console.aws.amazon.com/iam/home#/users/create"
+      step "User name: your own (e.g. firstname-admin). Tick \"Provide user access to the AWS"
+      step "  Management Console\", choose \"I want to create an IAM user\" and set a password."
+      step "Permissions: Attach policies directly → AdministratorAccess. Create the user."
+      step "Create no access keys for it: the CLI signs in through the browser instead."
+      step "Sign out of the console as root, sign in as the new user (the account ID is"
+      step "  $AWS_ACCOUNT_ID), then account menu → Security credentials → Assign MFA device."
+      pause "Press Enter once that is done."
+    fi
+  fi
+  # The root profile's credentials are in this process; the admin's replace them.
+  unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN AWS_CREDENTIAL_EXPIRATION
+  AWS_PROFILE="$AWS_ADMIN_PROFILE"
+  until caller=$(aws sts get-caller-identity --query Arn --output text 2>/dev/null) \
+      && [[ "$caller" == *":$AWS_ACCOUNT_ID:"* ]] && ! is_root_arn "$caller"; do
+    if is_root_arn "$caller"; then
+      warn "$AWS_PROFILE signed in as the root user. Sign out of the console (or use a"
+      warn "private window) and sign in as the admin."
+    elif [[ -n "$caller" ]]; then
+      warn "$AWS_PROFILE signed in as $caller, which is not in account $AWS_ACCOUNT_ID."
+    fi
+    if ! confirm "Sign $AWS_PROFILE in now?"; then
+      stop "Stopped: the stages from here on refuse the root user. Set up the admin as above, then re-run this wizard."
+    fi
+    sign_in "$AWS_PROFILE" || warn "sign-in did not finish"
+  done
+  note "✓ $AWS_PROFILE signs in as $caller; the rest of the wizard uses it"
+fi
+NOT_ROOT=1
+pause
+
+# ── 6 ────────────────────────────────────────────────────────────────────
 stage "GitHub access, deploy limits and budget ($ACCOUNT_STACK)"
 say "First a CDK bootstrap of its own for the account stack ($ACCOUNT_TOOLKIT,"
 say "qualifier $ACCOUNT_QUALIFIER): only a person deploys through it, never GitHub."
 say "Then the account stack from packages/infra/src/account-stack.ts:"
 step "trust for GitHub Actions through OIDC (no AWS keys stored in GitHub);"
 step "$DEPLOY_ROLE: usable only by the deploy job in the GitHub"
-step "  environment '$GITHUB_ENVIRONMENT' (main only, stage 8), to deploy, push images and run"
+step "  environment '$GITHUB_ENVIRONMENT' (main only, stage 9), to deploy, push images and run"
 step "  the migration task (the storage stack, deployed on merge, also lets it read the"
 step "  private fonts);"
 step "$DIFF_ROLE: read-only, for cdk diff on pull requests;"
 step "what a deploy may reach: $EXECUTION_POLICY, which CloudFormation runs with"
-step "  instead of AdministratorAccess (stage 6), and the permissions boundary"
+step "  instead of AdministratorAccess (stage 7), and the permissions boundary"
 step "  $PERMISSIONS_BOUNDARY on every role a deploy creates;"
 if [[ -n "$MONTHLY_BUDGET_USD" ]]; then step "the monthly budget alert to $BUDGET_ALERT_EMAIL;"; fi
 step "the alarm topic $ALARM_TOPIC, which emails $ALARM_EMAIL."
@@ -362,11 +486,11 @@ else
 fi
 pause
 
-# ── 6 ────────────────────────────────────────────────────────────────────
+# ── 7 ────────────────────────────────────────────────────────────────────
 stage "CDK bootstrap for deploys"
 say "Bootstrapping creates the CDK's own roles and asset bucket in $REGION,"
 say "which every deploy from GitHub goes through. Its CloudFormation role gets"
-say "$EXECUTION_POLICY (stage 5), not AdministratorAccess: a deploy can"
+say "$EXECUTION_POLICY (stage 6), not AdministratorAccess: a deploy can"
 say "reach only the services the stacks use, and only roles with the boundary."
 say "An account bootstrapped before (with AdministratorAccess) is switched over"
 say "here. Safe to repeat."
@@ -376,15 +500,15 @@ if confirm "Bootstrap aws://$AWS_ACCOUNT_ID/$REGION now?"; then
   if aws iam get-policy --policy-arn "$EXECUTION_POLICY_ARN" >/dev/null 2>&1; then
     cdk_ bootstrap "aws://$AWS_ACCOUNT_ID/$REGION" --cloudformation-execution-policies "$EXECUTION_POLICY_ARN"
   else
-    warn "$EXECUTION_POLICY does not exist yet: deploy $ACCOUNT_STACK first (stage 5)."
-    SKIPPED+=("CDK bootstrap for deploys (re-run this wizard after stage 5)")
+    warn "$EXECUTION_POLICY does not exist yet: deploy $ACCOUNT_STACK first (stage 6)."
+    SKIPPED+=("CDK bootstrap for deploys (re-run this wizard after stage 6)")
   fi
 else
   SKIPPED+=("CDK bootstrap for deploys (re-run this wizard)")
 fi
 pause
 
-# ── 7 ────────────────────────────────────────────────────────────────────
+# ── 8 ────────────────────────────────────────────────────────────────────
 stage "Interim HTTPS certificate"
 say "The load balancer serves HTTPS only. Until Rabaed has a domain, no public"
 say "certificate authority can issue one for its AWS address, so this stage makes"
@@ -432,7 +556,7 @@ if [[ -z "${CERT_ARN_KEEP:-}" ]]; then
 fi
 pause
 
-# ── 8 ────────────────────────────────────────────────────────────────────
+# ── 9 ────────────────────────────────────────────────────────────────────
 stage "GitHub repository variables"
 say "Pull request and deploy workflows read these non-secret values."
 arn_ok() { [[ -n "$1" && "$1" != None ]]; }
@@ -443,7 +567,7 @@ if fresh_credentials && DEPLOY_ROLE_ARN=$(stack_output DeployRoleArn) && DIFF_RO
   set_var AWS_DIFF_ROLE_ARN "$DIFF_ROLE_ARN"
 else
   warn "Could not read the role ARNs from $ACCOUNT_STACK (not deployed yet, or the sign-in expired)."
-  SKIPPED+=("GitHub variables AWS_REGION, AWS_DEPLOY_ROLE_ARN, AWS_DIFF_ROLE_ARN (re-run after stage 5)")
+  SKIPPED+=("GitHub variables AWS_REGION, AWS_DEPLOY_ROLE_ARN, AWS_DIFF_ROLE_ARN (re-run after stage 6)")
 fi
 # The deploy role trusts only jobs in this environment; it admits only main,
 # so a workflow on any other branch cannot run in it.
@@ -475,11 +599,11 @@ elif [[ -n "$CERT_ARN" ]] && fresh_credentials \
   set_var AWS_CERTIFICATE_ARN "$CERT_ARN"
   set_var AWS_CERTIFICATE_PEM "$CERT_PEM"
 else
-  SKIPPED+=("GitHub variables AWS_CERTIFICATE_ARN, AWS_CERTIFICATE_PEM (re-run after stage 7)")
+  SKIPPED+=("GitHub variables AWS_CERTIFICATE_ARN, AWS_CERTIFICATE_PEM (re-run after stage 8)")
 fi
 pause
 
-# ── 9 ────────────────────────────────────────────────────────────────────
+# ── 10 ───────────────────────────────────────────────────────────────────
 stage "Email sender (Amazon SES)"
 say "Rabaed sends email (Rabaed Admin sign-in codes, invitations) through Amazon SES"
 say "in $REGION, from one address. Until Rabaed has a domain, SES verifies that one"
@@ -568,7 +692,7 @@ if [[ -n "$MAIL_VERIFIED" ]] && confirm "Send a test email from $MAIL_FROM_ADDRE
 fi
 pause
 
-# ── 10 ───────────────────────────────────────────────────────────────────
+# ── 11 ───────────────────────────────────────────────────────────────────
 stage "Thmanyah fonts (private)"
 say "Arabic is shown in Thmanyah Sans, which is licensed: its files must never be"
 say "in the repo. This stage uploads them to the private build assets bucket; the"
@@ -612,7 +736,7 @@ else
 fi
 pause
 
-# ── 11 ───────────────────────────────────────────────────────────────────
+# ── 12 ───────────────────────────────────────────────────────────────────
 stage "Test alarm"
 say "Sets one alarm to ALARM for a moment, to prove notifications arrive."
 say "CloudWatch puts it back within a few minutes, which sends an OK email too."
