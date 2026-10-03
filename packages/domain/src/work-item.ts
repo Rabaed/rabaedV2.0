@@ -1,20 +1,33 @@
 import { z } from "zod";
 import { bilingualText } from "./company.ts";
+import { formAnswers } from "./form.ts";
 
 /** A Work Item Type's short code, used in filters and Document Numbers (MAR, SAR…). */
 export const workItemTypeCode = z.string().regex(/^[A-Z]{2,6}$/);
 
-/** A Contractor Member creates a Work Item in Draft: title, Trade (required), Location and a free-text description. */
+/**
+ * A Contractor Member creates a Work Item in Draft: its Subject (`title` in code),
+ * Trade (required), Location, and the answers to its Form so far (checked in draft
+ * mode against the latest published Form Version of its Type).
+ */
 export const createWorkItemRequest = z.object({
   type: workItemTypeCode,
   title: z.string().trim().min(1).max(200),
   tradeId: z.uuid(),
   locationId: z.uuid().nullable().default(null),
-  description: z.string().trim().max(4000).default(""),
+  answers: formAnswers.default({}),
 });
 export type CreateWorkItemRequest = z.input<typeof createWorkItemRequest>;
 
 export const createdWorkItem = z.object({ id: z.uuid() });
+
+/** Save draft: the Draft's answers so far, checked in draft mode (types, not required). */
+export const saveAnswersRequest = z.object({ answers: formAnswers });
+export type SaveAnswersRequest = z.infer<typeof saveAnswersRequest>;
+
+// Answers that fail the Form's checks are refused with `{ error, fields }`:
+// `invalid_answers` on create and Save draft (draft mode), `form_incomplete` on
+// leaving Draft (complete mode); `fields` holds one FieldError per field, in Form order.
 
 export const stageCategories = ["draft", "in_progress", "closed_positive", "closed_negative", "cancelled"] as const;
 
@@ -85,6 +98,8 @@ export const workItemActions = z.object({
   claim: z.boolean(),
   /** Give the Step they claimed back to its pool. */
   release: z.boolean(),
+  /** Save draft: change the Form's answers (the raiser's Company, in Draft). */
+  saveAnswers: z.boolean(),
   transitions: z.array(
     z.object({ key: z.string(), label: bilingualText, kind: z.enum(transitionKinds), needsReason: z.boolean() }),
   ),
@@ -93,7 +108,10 @@ export type WorkItemActions = z.infer<typeof workItemActions>;
 
 /** One Work Item, for someone who can see it. */
 export const workItemDetail = workItemSummary.extend({
-  description: z.string(),
+  /** The Form Version the item is pinned to, for good (ADR 0006). */
+  formVersionId: z.uuid(),
+  /** The Form's answers by field key, exactly as typed. */
+  answers: formAnswers,
   step: z.object({ key: z.string(), name: bilingualText }),
   raisedBy: z.object({ companyName: bilingualText }),
   /**

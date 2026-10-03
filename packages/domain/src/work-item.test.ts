@@ -4,13 +4,13 @@ import { createWorkItemRequest } from "./work-item.ts";
 describe("createWorkItemRequest", () => {
   const trade = "0192e0a0-0000-7000-8000-000000000001";
 
-  it("trims the title and makes Location and description optional", () => {
+  it("trims the title and makes Location and the answers optional", () => {
     expect(createWorkItemRequest.parse({ type: "MAR", title: "  Cable trays ", tradeId: trade })).toEqual({
       type: "MAR",
       title: "Cable trays",
       tradeId: trade,
       locationId: null,
-      description: "",
+      answers: {},
     });
   });
 

@@ -1,8 +1,13 @@
 import { withMember, type Database, type Db } from "@rabaed/db";
 import {
+  formSchema,
   stepAgeWeeks,
+  validateAnswers,
   type BilingualText,
   type CreateWorkItemRequest,
+  type FieldError,
+  type FormVersion,
+  type SaveAnswersRequest,
   type TakeTransitionRequest,
   type WorkItemActions,
   type WorkItemDetail,
@@ -21,13 +26,22 @@ import { checkedOutcome, commandResult } from "../outcomes.ts";
 // count can never include an item the list hides. The Step, its Stage and Step Age
 // come from app.step_as_seen: another Company sees only when the item reached the
 // holder, never its internal moves (V14).
+//
+// Answers are checked here, with the shared validator, against the Form Version
+// the item is pinned to (form-engine.md §8): draft mode on create and Save draft,
+// complete mode before leaving Draft. The database decides who may write them and
+// when, and lets an item leave Draft only with the answers checked here.
 
 type Trx = Transaction<Database>;
+
+/** Answers that failed the Form's checks, one error per field. */
+export type AnswersRefused = { ok: false; reason: "invalid_answers" | "form_incomplete"; errors: FieldError[] };
 
 const createWorkItemRefusals = [
   "not_found",
   "project_closed",
   "type_not_found",
+  "form_version_not_latest",
   "trade_required",
   "value_not_found",
   "outside_visibility",
@@ -35,7 +49,72 @@ const createWorkItemRefusals = [
 export type CreateWorkItemResult =
   | { ok: true; id: string }
   | Forbidden
+  | AnswersRefused
   | { ok: false; reason: (typeof createWorkItemRefusals)[number] };
+
+type FormVersionRow = { id: string; version_no: number; schema: unknown };
+
+function toFormVersion(r: FormVersionRow): FormVersion {
+  return { id: r.id, versionNo: r.version_no, schema: formSchema.parse(r.schema) };
+}
+
+/** The latest published Version of the Form of the Rabaed Default Type `typeCode`, if there is one. */
+async function latestForm(trx: Trx, typeCode: string): Promise<FormVersion | null> {
+  const { rows } = await sql<FormVersionRow>`
+    select id, version_no, schema from form_version where id = app.latest_form_version(${typeCode})
+  `.execute(trx);
+  return rows[0] ? toFormVersion(rows[0]) : null;
+}
+
+/** A visible item's Form as the acting Member may work with it. */
+type PinnedForm = {
+  form: FormVersion;
+  /** The answers now. */
+  data: Record<string, unknown>;
+  /** Their hash, as app.take_transition compares it. */
+  dataSha256: Buffer;
+  /** The viewer sees it in Draft. */
+  inDraft: boolean;
+  /** They may save its answers now (app.can_save_answers). */
+  canSave: boolean;
+};
+
+/** A visible item's pinned Form Version and its answers; null when the Member can't see the item. */
+async function pinnedForm(trx: Trx, workItemId: string): Promise<PinnedForm | null> {
+  const { rows } = await sql<
+    FormVersionRow & { data: Record<string, unknown>; data_sha256: Buffer; in_draft: boolean; can_save: boolean }
+  >`
+    select v.id, v.version_no, v.schema, w.data, app.answers_sha256(w.id) as data_sha256,
+      st.category = 'draft' as in_draft, app.can_save_answers(w.id) as can_save
+    from work_item w
+    join form_version v on v.id = w.form_version_id
+    join work_item_type t on t.id = w.work_item_type_id
+    cross join lateral app.step_as_seen(w.id) seen
+    join stage st on st.module_key = t.module_key and st.key = seen.stage_key and st.project_id is null
+    where w.id = ${workItemId}
+  `.execute(trx);
+  const r = rows[0];
+  return r
+    ? { form: toFormVersion(r), data: r.data, dataSha256: r.data_sha256, inDraft: r.in_draft, canSave: r.can_save }
+    : null;
+}
+
+/**
+ * The Form for a new item of the Rabaed Default Type `typeCode` on one of the
+ * Member's Projects: the latest published Version. Null when it isn't one of
+ * their Projects, or there is no such Type.
+ */
+export function getNewWorkItemForm(db: Db, memberId: string, projectId: string, typeCode: string): Promise<FormVersion | null> {
+  return withMember(db, memberId, async (trx) => {
+    const onProject = await trx.selectFrom("project").select("id").where("id", "=", projectId).executeTakeFirst();
+    return onProject ? latestForm(trx, typeCode) : null;
+  });
+}
+
+/** The Form Version a visible item is pinned to; null when the Member can't see the item. */
+export function getWorkItemForm(db: Db, memberId: string, workItemId: string): Promise<FormVersion | null> {
+  return withMember(db, memberId, async (trx) => (await pinnedForm(trx, workItemId))?.form ?? null);
+}
 
 type SummaryRow = {
   id: string;
@@ -96,7 +175,10 @@ function toSummary(r: SummaryRow, now: Date): WorkItemSummary {
   };
 }
 
-/** A Member creates a Work Item in Draft on one of their Projects. */
+/**
+ * A Member creates a Work Item in Draft on one of their Projects, pinned to the
+ * latest published Form Version of its Type, with its answers so far (draft mode).
+ */
 export function createWorkItem(
   db: Db,
   memberId: string,
@@ -106,9 +188,15 @@ export function createWorkItem(
 ): Promise<CreateWorkItemResult> {
   return refusedAsForbidden(() =>
     withMember(db, memberId, async (trx): Promise<CreateWorkItemResult> => {
+      const onProject = await trx.selectFrom("project").select("id").where("id", "=", projectId).executeTakeFirst();
+      if (!onProject) return { ok: false, reason: "not_found" };
+      const form = await latestForm(trx, input.type);
+      if (!form) return { ok: false, reason: "type_not_found" };
+      const checked = validateAnswers(form.schema, input.answers, "draft");
+      if (!checked.ok) return { ok: false, reason: "invalid_answers", errors: checked.errors };
       const { rows } = await sql<{ outcome: string; work_item_id: string | null }>`
         select outcome, work_item_id from app.create_work_item(
-          ${projectId}::uuid, ${input.type}, ${input.title}, ${input.description},
+          ${projectId}::uuid, ${input.type}, ${input.title}, ${form.id}::uuid, ${JSON.stringify(checked.answers)}::jsonb,
           ${input.tradeId}::uuid, ${input.locationId}::uuid, ${now})
       `.execute(trx);
       const outcome = checkedOutcome(rows[0]!.outcome, ["created", ...createWorkItemRefusals]);
@@ -148,6 +236,7 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
     if (!row) return null;
     const { rows } = await sql<{
       data: Record<string, unknown>;
+      form_version_id: string;
       created_at: Date;
       step_key: string;
       step_name: BilingualText;
@@ -156,9 +245,11 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
       holder_name: BilingualText | null;
       outcome: WorkItemOutcome | null;
       closed_at: Date | null;
+      can_save_answers: boolean;
     }>`
-      select w.data, w.created_at, w.outcome, w.closed_at, s.key as step_key, s.name as step_name,
-        raiser.legal_name as raised_by, holder.legal_name as held_by, m.full_name as holder_name
+      select w.data, w.form_version_id, w.created_at, w.outcome, w.closed_at, s.key as step_key, s.name as step_name,
+        raiser.legal_name as raised_by, holder.legal_name as held_by, m.full_name as holder_name,
+        app.can_save_answers(w.id) as can_save_answers
       from work_item w
       cross join lateral app.step_as_seen(w.id) seen
       join workflow_step s on s.id = seen.step_id
@@ -172,20 +263,21 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
     const d = rows[0]!;
     return {
       ...toSummary(row, now),
-      description: typeof d.data.description === "string" ? d.data.description : "",
+      formVersionId: d.form_version_id,
+      answers: d.data,
       step: { key: d.step_key, name: d.step_name },
       raisedBy: { companyName: d.raised_by },
       heldBy: d.held_by ? { companyName: d.held_by, memberName: d.holder_name } : null,
       outcome: d.outcome,
       closedAt: d.closed_at?.toISOString() ?? null,
       createdAt: d.created_at.toISOString(),
-      actions: await actions(trx, workItemId),
+      actions: { ...(await actions(trx, workItemId)), saveAnswers: d.can_save_answers },
     };
   });
 }
 
 /** What the acting Member may press on a visible item now, as app.work_item_actions answers. */
-async function actions(trx: Trx, workItemId: string): Promise<WorkItemActions> {
+async function actions(trx: Trx, workItemId: string): Promise<Omit<WorkItemActions, "saveAnswers">> {
   const { rows } = await sql<{
     action: "claim" | "release" | "transition";
     transition_key: string | null;
@@ -217,13 +309,15 @@ const transitionRefusals = [
   "next_step_unavailable",
   "no_step_pool",
   "idempotency_key_reused",
+  "form_not_checked",
 ] as const;
-export type TakeTransitionResult = { ok: true } | { ok: false; reason: (typeof transitionRefusals)[number] };
+export type TakeTransitionResult = { ok: true } | AnswersRefused | { ok: false; reason: (typeof transitionRefusals)[number] };
 
 /**
  * The holder of the item's current Step takes one of its Transitions, in one
  * transaction (workflow-engine.md §5.1), with their Internal Note if they wrote
- * one. The same idempotency key again applies nothing.
+ * one. The same idempotency key again applies nothing. Leaving Draft needs a
+ * complete Form: otherwise it is refused with the per-field errors.
  */
 export function takeTransition(
   db: Db,
@@ -232,13 +326,56 @@ export function takeTransition(
   input: Required<TakeTransitionRequest>,
   now: Date,
 ): Promise<TakeTransitionResult> {
-  return withMember(db, memberId, async (trx) => {
+  return withMember(db, memberId, async (trx): Promise<TakeTransitionResult> => {
+    const pinned = await pinnedForm(trx, workItemId);
+    if (!pinned) return { ok: false, reason: "not_found" };
+    // Leaving Draft (other than cancelling it) needs a complete Form; the database refuses
+    // answers that weren't checked. Only a Transition the Member may take is checked here,
+    // so anyone else is told why they can't act, not what the Form lacks.
+    if (pinned.inDraft) {
+      const { rows: takeable } = await sql<{ transition_kind: string }>`
+        select transition_kind from app.work_item_actions(${workItemId}::uuid)
+        where action = 'transition' and transition_key = ${input.transition}
+      `.execute(trx);
+      const checked = validateAnswers(pinned.form.schema, pinned.data, "complete");
+      if (takeable.some((t) => t.transition_kind !== "cancel") && !checked.ok) {
+        return { ok: false, reason: "form_incomplete", errors: checked.errors };
+      }
+    }
     const { rows } = await sql<{ outcome: string }>`
       select app.take_transition(
         ${workItemId}::uuid, ${input.transition}, ${input.reason}, ${input.internalNote},
-        ${input.idempotencyKey}::uuid, ${now}) as outcome
+        ${pinned.dataSha256}::bytea, ${input.idempotencyKey}::uuid, ${now}) as outcome
     `.execute(trx);
     return commandResult(rows[0]!.outcome, "applied", transitionRefusals);
+  });
+}
+
+const saveAnswersRefusals = ["not_found", "project_closed", "not_editable"] as const;
+export type SaveAnswersResult = { ok: true } | AnswersRefused | { ok: false; reason: (typeof saveAnswersRefusals)[number] };
+
+/**
+ * Save draft: the raiser's Participant saves a Draft's answers so far, checked
+ * in draft mode against its pinned Form Version (required fields may be empty).
+ */
+export function saveAnswers(
+  db: Db,
+  memberId: string,
+  workItemId: string,
+  input: SaveAnswersRequest,
+  now: Date,
+): Promise<SaveAnswersResult> {
+  return withMember(db, memberId, async (trx): Promise<SaveAnswersResult> => {
+    const pinned = await pinnedForm(trx, workItemId);
+    if (!pinned) return { ok: false, reason: "not_found" };
+    // Who may save, and when, before what is wrong with the answers.
+    if (!pinned.canSave) return { ok: false, reason: "not_editable" };
+    const checked = validateAnswers(pinned.form.schema, input.answers, "draft");
+    if (!checked.ok) return { ok: false, reason: "invalid_answers", errors: checked.errors };
+    const { rows } = await sql<{ outcome: string }>`
+      select app.save_work_item_answers(${workItemId}::uuid, ${JSON.stringify(checked.answers)}::jsonb, ${now}) as outcome
+    `.execute(trx);
+    return commandResult(rows[0]!.outcome, "saved", saveAnswersRefusals);
   });
 }
 

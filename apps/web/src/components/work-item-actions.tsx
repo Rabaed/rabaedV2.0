@@ -1,9 +1,10 @@
 "use client";
 
-import type { Locale, WorkItemActions as Actions } from "@rabaed/domain";
+import type { FieldError, Locale, WorkItemActions as Actions } from "@rabaed/domain";
 import { Button, Field, Textarea } from "@rabaed/ui";
 import { useTranslations } from "next-intl";
 import { useRef, useState, type FormEvent } from "react";
+import { useWorkItemForm } from "@/components/work-item-form";
 import { useRouter } from "@/i18n/navigation";
 
 type Transition = Actions["transitions"][number];
@@ -33,6 +34,7 @@ export function WorkItemActions({
   const dialog = useRef<HTMLDialogElement>(null);
   const form = useRef<HTMLFormElement>(null);
   const keys = useRef(new Map<string, string>());
+  const itemForm = useWorkItemForm();
 
   const errors: Record<string, string> = {
     not_holder: t("notHolder"),
@@ -44,6 +46,8 @@ export function WorkItemActions({
     transition_not_available: t("notAvailable"),
     item_closed: t("notAvailable"),
     project_closed: t("projectClosed"),
+    form_incomplete: t("formIncomplete"),
+    form_not_checked: t("tryAgain"),
   };
 
   async function send(path: string, body?: unknown): Promise<boolean> {
@@ -59,7 +63,12 @@ export function WorkItemActions({
         router.refresh();
         return true;
       }
-      const { error: code } = (await res.json().catch(() => ({}))) as { error?: string };
+      const { error: code, fields } = (await res.json().catch(() => ({}))) as { error?: string; fields?: FieldError[] };
+      // Leaving Draft with an incomplete Form: the Form marks each field to fix.
+      if (code === "form_incomplete" && fields) {
+        itemForm?.showErrors(fields, t("formIncomplete"));
+        dialog.current?.close();
+      }
       setError(errors[code ?? ""] ?? t("unavailable"));
       // The item moved or went away under us: show what is true now.
       if (res.status === 404 || res.status === 409) router.refresh();
@@ -72,6 +81,11 @@ export function WorkItemActions({
   }
 
   async function take(transition: Transition, reason: string, internalNote: string) {
+    // What was typed in the Form goes with it: save it first.
+    if (itemForm?.dirty && !(await itemForm.save())) {
+      setError(t("saveFirst"));
+      return false;
+    }
     let idempotencyKey = keys.current.get(transition.key);
     if (!idempotencyKey) {
       idempotencyKey = crypto.randomUUID();

@@ -212,14 +212,12 @@
     "empty": "No Work Items you can see yet.",
     "noNumber": "No number yet",
     "noLocation": "No Location",
-    "noDescription": "No description.",
     "noTradesCovered": "Your Visibility on this Project covers no Trade yet, so you can't raise a Work Item. Ask your Company's Authorized Person.",
     "saveDraft": "Save Draft",
     "fields": {
-      "title": "Title",
+      "subject": "Subject",
       "trade": "Trade",
       "location": "Location",
-      "description": "Description",
       "type": "Type",
       "documentNumber": "Document Number",
       "step": "Step",
@@ -227,11 +225,19 @@
       "raisedBy": "Raised by",
       "issuedCode": "Issued Code"
     },
-    "invalid": "Give a title and a Trade.",
+    "invalid": "Give a Subject and a Trade.",
     "notContractor": "Only a Contractor can raise a Material Submittal.",
     "outsideVisibility": "Choose a Trade and Location your Visibility covers.",
     "projectClosed": "This Project is closed.",
     "unavailable": "Something went wrong. Try again.",
+    "form": {
+      "title": "Form",
+      "saved": "Draft saved.",
+      "invalid": "Some answers aren't valid. Check the fields marked in the Form.",
+      "notEditable": "These answers can't be changed any more.",
+      "newVersion": "A new version of this Form was just published. Check your answers and save again.",
+      "unavailable": "Something went wrong. Try again."
+    },
     "actions": {
       "title": "Transitions",
       "claim": "Claim",
@@ -249,6 +255,9 @@
       "nextStepUnavailable": "This can't be handed over yet: the next step has nobody to take it. Ask a Project Admin.",
       "notAvailable": "This Transition isn't available any more.",
       "projectClosed": "This Project is closed.",
+      "formIncomplete": "Complete the Form first: the fields to fix are marked in it.",
+      "saveFirst": "Your answers couldn't be saved, so nothing was sent. Check the Form.",
+      "tryAgain": "The answers changed meanwhile. Try again.",
       "unavailable": "Something went wrong. Try again."
     },
     "history": {

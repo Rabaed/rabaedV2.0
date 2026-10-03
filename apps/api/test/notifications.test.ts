@@ -78,7 +78,7 @@ async function createDraft(title: string, by: Member = engineer): Promise<string
     title,
     tradeId: electrical,
     locationId: null,
-    description: "Galvanised, 300 mm",
+    answers: { manufacturer: "ACME Cables", description: "Galvanised, 300 mm" },
   });
   expect(res.statusCode, res.body).toBe(201);
   return res.json().id;
@@ -230,7 +230,7 @@ describe("a rolled-back Transition", () => {
     await expect(
       withMember(worker, engineer.id, async (trx) => {
         const { rows } = await sql<{ outcome: string }>`
-          select app.take_transition(${id}::uuid, 'send_for_review', '', '', ${randomUUID()}::uuid, now()) as outcome
+          select app.take_transition(${id}::uuid, 'send_for_review', '', '', app.answers_sha256(${id}::uuid), ${randomUUID()}::uuid, now()) as outcome
         `.execute(trx);
         expect(rows[0]!.outcome).toBe("applied");
         throw new Error("roll back");

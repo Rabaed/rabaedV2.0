@@ -117,14 +117,14 @@ async function fillProject(projectId: string, creator: string) {
     creator,
     sql<{ outcome: string; work_item_id: string }>`
       select outcome, work_item_id from app.create_work_item(
-        ${projectId}::uuid, 'MAR', 'Cable trays', 'Galvanised', ${values.trade}::uuid, ${values.location}::uuid, now())
+        ${projectId}::uuid, 'MAR', 'Cable trays', app.latest_form_version('MAR'), '{"description": "Galvanised"}'::jsonb, ${values.trade}::uuid, ${values.location}::uuid, now())
     `,
   );
   expect(created.outcome).toBe("created");
   const item = created.work_item_id;
   // Numbers the item, keeps the idempotency key and queues a notification to the Step Pool.
   await expectOutcome(
-    sql`select app.take_transition(${item}::uuid, 'send_for_review', '', '', ${randomUUID()}::uuid, now()) as outcome`,
+    sql`select app.take_transition(${item}::uuid, 'send_for_review', '', '', app.answers_sha256(${item}::uuid), ${randomUUID()}::uuid, now()) as outcome`,
     "applied",
   );
 
@@ -149,10 +149,14 @@ async function fillProject(projectId: string, creator: string) {
     projectId,
     name,
   ]);
+  const form = await one("insert into form_definition (owner_kind, project_id, name) values ('project', $1, $2) returning id", [
+    projectId,
+    name,
+  ]);
   await migrator.query(
-    `insert into work_item_type (owner_kind, project_id, module_key, code, name, workflow_definition_id, outcome_kind)
-     values ('project', $1, 'submittals', 'OWN', $2, $3, 'none')`,
-    [projectId, name, definition],
+    `insert into work_item_type (owner_kind, project_id, module_key, code, name, workflow_definition_id, outcome_kind, form_definition_id)
+     values ('project', $1, 'submittals', 'OWN', $2, $3, 'none', $4)`,
+    [projectId, name, definition, form],
   );
 }
 

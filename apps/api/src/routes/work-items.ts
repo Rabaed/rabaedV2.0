@@ -1,7 +1,10 @@
 import {
   createdWorkItem,
   createWorkItemRequest,
+  formVersion,
+  saveAnswersRequest,
   takeTransitionRequest,
+  workItemTypeCode,
   workItemDetail,
   workItemHistory,
   workItemList,
@@ -9,20 +12,24 @@ import {
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import type { AppContext } from "../app.ts";
-import { idOrNotFound, visibleOrNotFound } from "../http-error.ts";
+import { idOrNotFound, notFound, visibleOrNotFound } from "../http-error.ts";
 import { refusal } from "../refusals.ts";
 import {
   claimStep,
   createWorkItem,
+  getNewWorkItemForm,
   getWorkItem,
+  getWorkItemForm,
   getWorkItemHistory,
   listWorkItems,
   releaseStep,
+  saveAnswers,
   takeTransition,
 } from "../work-items/work-items.ts";
 
 const projectParams = z.object({ projectId: z.string() });
 const workItemParams = z.object({ workItemId: z.string() });
+const typeFormParams = z.object({ projectId: z.string(), typeCode: z.string() });
 
 // Work Items. A Member sees only the items that pass every visibility layer;
 // anything else answers exactly like an item that doesn't exist (404), and is
@@ -57,6 +64,42 @@ export const workItemRoutes =
       async (request) => {
         const memberId = ctx.requireMember(request);
         return visibleOrNotFound(getWorkItem(ctx.db, memberId, idOrNotFound(request.params.workItemId), ctx.now()));
+      },
+    );
+
+    // The Form to fill for a new item of a Type: its latest published Version.
+    app.get(
+      "/v1/projects/:projectId/work-item-types/:typeCode/form",
+      { schema: { params: typeFormParams, response: { 200: formVersion } } },
+      async (request) => {
+        const memberId = ctx.requireMember(request);
+        const projectId = idOrNotFound(request.params.projectId);
+        const { success, data: typeCode } = workItemTypeCode.safeParse(request.params.typeCode);
+        if (!success) throw notFound();
+        return visibleOrNotFound(getNewWorkItemForm(ctx.db, memberId, projectId, typeCode));
+      },
+    );
+
+    // The Form Version an item is pinned to; its answers come with the item.
+    app.get(
+      "/v1/work-items/:workItemId/form",
+      { schema: { params: workItemParams, response: { 200: formVersion } } },
+      async (request) => {
+        const memberId = ctx.requireMember(request);
+        return visibleOrNotFound(getWorkItemForm(ctx.db, memberId, idOrNotFound(request.params.workItemId)));
+      },
+    );
+
+    // Save draft. A refusal changes nothing.
+    app.put(
+      "/v1/work-items/:workItemId/answers",
+      { schema: { params: workItemParams, body: saveAnswersRequest } },
+      async (request, reply) => {
+        const memberId = ctx.requireMember(request);
+        const id = idOrNotFound(request.params.workItemId);
+        const result = await saveAnswers(ctx.db, memberId, id, request.body, ctx.now());
+        if (!result.ok) throw refusal(result);
+        return reply.code(204).send();
       },
     );
 
