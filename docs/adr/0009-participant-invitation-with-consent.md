@@ -13,3 +13,5 @@ We decided that adding a Company creates a **Participant Invitation**. The Proje
 ## Consequences
 
 Participants gain an **Invited** state before **Active**. A Project cannot hand work to a Company until it has accepted, so Project setup takes one more step on the invited side.
+
+**Pending invitations and leads (settled 2026-10-03, RP-256).** A Project Admin may **withdraw** any pending invitation, whether it went to a Company on Rabaed (pending or declined) or became an onboarding lead. Both kinds leave their list in exactly the same way, so withdrawing reveals nothing (scenario 38). A withdrawn invitation also leaves the invited Authorized Person's list, and the same CR number can be invited again later. Separately, Rabaed Engineers can close a lead in Rabaed Admin for their own housekeeping, with a reason in `admin_action`. That changes nothing in the Project Admin's view. Closing a lead never removes it from the Project Admin's list, because only non-customers could vanish that way.

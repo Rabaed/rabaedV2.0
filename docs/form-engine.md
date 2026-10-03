@@ -47,13 +47,19 @@ One engine serves:
 
 Conditions use the **same JSON rule language as Workflow conditions** ([workflow-engine.md §4](workflow-engine.md)). One evaluator serves both, in the browser and on the server.
 
-### System fields (not part of the schema)
+### System Fields and Built-in Fields (settled 2026-10-03)
 
-These are always present, and the engine renders them itself:
-- Title, Trade, Location, Scopes / Sub-scopes, Package, Links.
-- For Revisions: the "previous revision" panel.
+Every Work Item has the same frame around its Form:
 
-The Form designer can't remove them. It can only choose where they appear on the PDF.
+```
+System Fields   Subject · Document Number (with Rev)
+Form            the Company's own fields, with the Built-in Fields placed among them
+System Fields   Attachments · Links
+```
+
+- **System Fields** are outside the schema, and the engine renders them itself. The Form designer can't remove or move them, and only chooses where they appear on the PDF.
+- **Built-in Fields** sit inside the Form: Trade, Location, Scopes / Sub-scopes (filtered by the chosen Trade), and any Visibility Dimension the Project marks as required on Work Items. The designer places and labels them but can't delete them, and Trade and Location are always required. Visibility and Consultant routing depend on them.
+- For Revisions, the "previous revision" panel appears automatically.
 
 ---
 
@@ -61,13 +67,14 @@ The Form designer can't remove them. It can only choose where they appear on the
 
 | Group | Types | Notes |
 |---|---|---|
-| Text | `text`, `textarea` | Plain text. `textarea` allows line breaks, not rich formatting. |
+| Text | `text`, `textarea`, `email`, `phone` | Plain text. `textarea` allows line breaks, not rich formatting. `email` and `phone` are format-checked (KSA and international numbers). |
+| Lists | `option_list` | Choices from an **Option List** with up to three levels, each level filtered by the one above. Settings: single or multiple, and how deep the filler must go. |
 | Numbers | `number`, `currency`, `calculated` | `number` has unit, min, max and decimals. `currency` defaults to SAR. `calculated` is a formula over other numeric fields (`+ − × ÷`, `sum(table.col)`) and is read-only. |
 | Time | `date`, `datetime`, `time` | Stored as ISO values in UTC with the Project's time zone. Display follows §5. |
 | Choice | `yes_no`, `select`, `multi_select` | Options are i18n. |
-| People and org | `member`, `participant` | Limited to Project Members and Participants the filler can see. |
+| People and org | `member`, `participant` | Limited to Project Members and Participants the filler can see. There's no field for picking any Company on Rabaed, because that would expose the customer list (ADR 0009). A Company outside the Project is typed as text. |
 | References | `pick_list`, `work_item_ref` | `pick_list` sources: Approved Supplier List, Scopes, Locations, custom lists, and later BOQ items. `work_item_ref` creates a **Link**, and can be restricted to Types and outcomes (e.g. "approved MAR"). |
-| Files | `attachments`, `photos` | Both become **Documents** and are frozen at the first Send or Submit. `photos` supports camera capture and keeps EXIF time and GPS. An optional time/location stamp can be burned onto the image. |
+| Files | `attachments`, `photos` | Named file fields in the Form body (e.g. "Test certificate (PDF)", required), beside the always-present Attachments System Field. All become **Documents** and are frozen at the first Send or Submit. `photos` supports camera capture and keeps EXIF time and GPS. An optional time/location stamp can be burned onto the image. |
 | Structure | `table` | Repeating rows with typed columns and optional column totals, e.g. manpower (trade, count) or equipment (type, count, hours). |
 | Checklists | `checklist` | See §3. |
 | Plans | `pin` | Places the item's Pin on a plan Drawing of its Location. |
@@ -175,6 +182,29 @@ Layout is not fixed to the Form: a Form can have **several PDF Templates**, and 
 - "Validate" runs the §7 checks live, and "Publish" runs them again server-side.
 
 ---
+
+## 10. Option Lists, Saved Fields and Libraries (settled 2026-10-03)
+
+- **Option Lists** hold choices with up to three levels. Their contents are **live**: adding or renaming an option changes the choices in every Form that uses the list, with no new Form Version. A removed option disappears from new choices, but stays on Work Items that already chose it, marked as retired.
+- **Saved Fields** live in the **Field Library**. Inserting one **copies** its settings (labels, type, rules, Option List) into the Form, because published Form Versions never change. "Update to the latest Saved Field" in the builder publishes new Form Versions.
+- **Libraries.** Rabaed Defaults are visible to every Company. Each Company's Library (Forms, Saved Fields, Option Lists, Trade and Scope lists) is private (visibility V18). A Project takes its Forms from the Rabaed Defaults or from any Participant's Library, once that Participant's Authorized Person has agreed to offer them. Taking or copying always makes an independent copy that records where it came from.
+- **Trades and Scopes.** A Project copies the Company's Trade → Scope → Sub-scope lists when it's set up. Later changes reach the Project only when its Project Admin pulls them in, because Visibility grants hang on those values. Locations stay per Project.
+
+## Delivery order (settled 2026-10-03)
+
+The full engine is built in five parts. Each part is merged and usable before the next starts.
+
+1. **Core:** the schema and the shared validator (browser and server), Versions (draft, publish, pinned), the System Fields frame (Subject, Document Number, Attachments; Links come in part 2) and the Built-in Fields, and the field types `text`, `textarea`, `email`, `phone`, `number`, `currency`, `date`, `datetime`, `time`, `yes_no`, `select`, `multi_select`, `member`, `participant`, plus the layout types. Field rules: required and `visible_if`.
+   - Every Project uses Rabaed Default Forms. The first one is the **MAR Form Version 1**, which replaces today's hard-coded description.
+   - Answers are edited by the raiser's Company in Draft and its internal Steps, and are read-only from Submit onwards. Changes after Draft are recorded as field-level diffs.
+   - An explicit "Save draft" button. "Required" is checked only when the item leaves Draft.
+   - The demo is re-seeded: dev has no real data to migrate.
+2. **Rich fields:** Links (with E1), named `attachments` and `photos` fields, `table`, `calculated`, `checklist` (including "create Snag on a failed item"), Option Lists and the `option_list` type, and `pick_list` / `work_item_ref`. Publishes the MAR Form Version 2.
+3. **Who fills what:** `editable_at` per section, Action Forms built from Forms, autosave with per-field timestamps, and the reporting table.
+4. **PDF output:** the Documental Record layout and PDF Templates, and optional Hijri dates per Project (part 1 shows Gregorian only).
+
+Package isn't a System Field. It arrives with the Package feature (RP-26), later.
+5. **The builder and Libraries:** the Form builder, the Field Library (Saved Fields), Company Libraries with "Copy to my Library" and offering to a Project (V18 tests), and the Company Trade/Scope lists with "pull updates".
 
 ## Settled (2026-09-26)
 
