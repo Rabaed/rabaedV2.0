@@ -45,7 +45,7 @@ const copy = {
   ahmed: { en: "Ahmed Al-Harbi", ar: "أحمد الحربي" },
   sara: { en: "Sara Al-Qahtani", ar: "سارة القحطاني" },
   khalid: { en: "Khalid Al-Shehri", ar: "خالد الشهري" },
-  leftProject: { en: "⁨Khalid Al-Shehri⁩ (no longer on the Project)", ar: "⁨خالد الشهري⁩ (لم يعد في المشروع)" },
+  leftProject: { en: "\u2068Khalid Al-Shehri\u2069 (no longer on the Project)", ar: "\u2068خالد الشهري\u2069 (لم يعد في المشروع)" },
   c1: { en: "C1 Contracting", ar: "سي ون للمقاولات" },
   host: { en: "Riyadh Development Co.", ar: "شركة الرياض للتطوير" },
   none: { en: "None", ar: "بدون" },

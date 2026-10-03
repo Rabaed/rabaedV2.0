@@ -77,8 +77,8 @@ const copy = {
     unknownOption: "Choose one of the options.",
     choose: "Choose…",
     none: "None",
-    // The name sits in an isolate (⁨ first strong, ⁩ ends), so an Arabic name keeps its place.
-    leftProject: (name: string) => `⁨${name}⁩ (no longer on the Project)`,
+    // The name sits in an isolate (\u2068 first strong, \u2069 ends), so an Arabic name keeps its place.
+    leftProject: (name: string) => `\u2068${name}\u2069 (no longer on the Project)`,
     unanswered: "Not answered",
   },
   ar: {
@@ -116,7 +116,7 @@ const copy = {
     unknownOption: "اختر أحد الخيارات.",
     choose: "اختر…",
     none: "بدون",
-    leftProject: (name: string) => `⁨${name}⁩ (لم يعد في المشروع)`,
+    leftProject: (name: string) => `\u2068${name}\u2069 (لم يعد في المشروع)`,
     unanswered: "لم تتم الإجابة",
   },
 } satisfies Record<Locale, unknown>;
@@ -370,6 +370,8 @@ function control(
       const options = offered.map((c) => ({ value: c.id, label: c.name[locale] }));
       // A saved answer no longer on offer (e.g. a Member who left the Project) stays the
       // choice, named as the API named it, until another is chosen; then it is gone.
+      // Only a saved answer can be off offer (the picker takes offered ids only), so
+      // `naming`, which names the saved answer, is never put on another id.
       const current = textOf(value);
       if (current && naming && !offered.some((c) => c.id === current)) {
         options.unshift({ value: current, label: text.leftProject(formatFormValue(field, value, locale, naming)) });
@@ -380,7 +382,7 @@ function control(
             name={name}
             placeholder={text.choose}
             options={withNone(field, options, locale)}
-            value={textOf(value)}
+            value={current}
             onValueChange={(v) => change(v === noChoice ? undefined : v)}
           />
         ),
