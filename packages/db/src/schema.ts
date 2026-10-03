@@ -118,7 +118,16 @@ export interface InvitationTable {
 export interface AdminActionTable {
   id: Generated<string>;
   engineer_id: string;
-  action: "onboard_company" | "read_onboarding_leads" | "invite_authorized_person" | "close_onboarding_lead";
+  action:
+    | "onboard_company"
+    | "read_onboarding_leads"
+    | "invite_authorized_person"
+    | "close_onboarding_lead"
+    | "create_option_list"
+    | "add_option"
+    | "rename_option"
+    | "retire_option"
+    | "restore_option";
   target_kind: string;
   /** Null for a read of a list. */
   target_id: string | null;
@@ -378,6 +387,28 @@ export interface FormVersionTable {
   updated_at: Generated<Timestamp>;
 }
 
+/** A Rabaed Default Option List (form-engine.md §10). Written only by Rabaed Admin; the app role reads. */
+export interface OptionListTable {
+  id: Generated<string>;
+  name: Json;
+  created_at: Generated<Timestamp>;
+  updated_at: Generated<Timestamp>;
+}
+
+/** An option of a list, at level 1 to 3. Its list, parent and value never change; it is never deleted. */
+export interface OptionTable {
+  id: Generated<string>;
+  option_list_id: string;
+  parent_id: string | null;
+  /** Set from the parent by a trigger. */
+  level: Generated<number>;
+  value: string;
+  label: Json;
+  retired: Generated<boolean>;
+  created_at: Generated<Timestamp>;
+  updated_at: Timestamp;
+}
+
 /** A file attached to a Work Item (the documents migration). Written only through app.* functions. */
 export interface DocumentTable {
   id: Generated<string>;
@@ -535,6 +566,8 @@ export interface Database {
   work_item_type: WorkItemTypeTable;
   form_definition: FormDefinitionTable;
   form_version: FormVersionTable;
+  option_list: OptionListTable;
+  option: OptionTable;
   work_item: WorkItemTable;
   work_item_dimension_value: WorkItemDimensionValueTable;
   work_item_scope: WorkItemScopeTable;
