@@ -59,6 +59,7 @@ Every one of these must apply the same layers. A new feature that adds a channel
 | Step Age reports | Each Participant's report covers items it has access to. The Owner-level report covers oversight items. |
 | Exports and handover | An export contains only what the exporter could see, plus their E2 records. |
 | Document Numbers | Numbering patterns that include a Company segment give each Company its own counter, so sequence gaps don't reveal a competitor's volume. |
+| Form answers | Read only through one database function, never from `work_item.data` directly. It strips every reference the reader may not see: another Company's Member (V14), a Participant they may not see, and a Work Item they may not see (ADR 0012). |
 | Errors and logs shown to users | Never include another item's title, number or Company. |
 | Refusals of a Transition | Never say why another Participant can't take the next Step (no Participant covers the item, several do, or nobody there holds the Position): one answer for all, so its Visibility and Positions stay its own (V14, V16). |
 | Visibility Gap warnings | A Project Admin's warnings come from Participant grants only; an Authorized Person's cover only their own Participant's Members (V16). |
