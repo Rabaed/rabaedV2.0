@@ -64,6 +64,25 @@ const builtInField = <T extends string>(type: T, required: boolean) =>
     required: z.boolean().default(required),
   });
 
+/** At most this many decimal places for a `number` field. */
+export const maxDecimals = 6;
+
+const limit = z.number().finite();
+/** A number's limits: none, either, or both with min at most max. */
+const withinLimits = (field: { min?: number; max?: number }) =>
+  field.min === undefined || field.max === undefined || field.min <= field.max;
+
+/** An ISO 4217 code the platform knows, e.g. `SAR`. */
+const currencyCode = z
+  .string()
+  .regex(/^[A-Z]{3}$/)
+  .refine((code) => Intl.supportedValuesOf("currency").includes(code), "Not an ISO 4217 currency");
+
+/** How many decimal places a currency's amounts take (2 for SAR: halalas). */
+export function currencyDecimals(currency: string): number {
+  return new Intl.NumberFormat("en", { style: "currency", currency }).resolvedOptions().maximumFractionDigits ?? 2;
+}
+
 export const builtInFieldTypes = ["trade", "location", "scopes"] as const;
 export type BuiltInFieldType = (typeof builtInFieldTypes)[number];
 
@@ -72,6 +91,31 @@ export const formField = z.discriminatedUnion("type", [
   z.object({ ...fieldBase, type: z.literal("text"), maxLength: z.number().int().positive().max(2000).optional() }),
   /** Plain text with line breaks, no formatting. */
   z.object({ ...fieldBase, type: z.literal("textarea"), maxLength: z.number().int().positive().max(20000).optional() }),
+  /** A number, stored as a JSON number. Shown with its unit, to at most `decimals` places. */
+  z
+    .object({
+      ...fieldBase,
+      type: z.literal("number"),
+      unit: z.string().trim().min(1).max(20).optional(),
+      min: limit.optional(),
+      max: limit.optional(),
+      decimals: z.number().int().min(0).max(maxDecimals).optional(),
+    })
+    .refine(withinLimits, "min is above max"),
+  /** An amount of money, stored as a JSON number, in the field's currency (SAR unless it says otherwise). */
+  z
+    .object({
+      ...fieldBase,
+      type: z.literal("currency"),
+      currency: currencyCode.default("SAR"),
+      min: limit.optional(),
+      max: limit.optional(),
+    })
+    .refine(withinLimits, "min is above max"),
+  /** An email address, format-checked. */
+  z.object({ ...fieldBase, type: z.literal("email") }),
+  /** A KSA or international phone number, format-checked, stored as typed. */
+  z.object({ ...fieldBase, type: z.literal("phone") }),
   /** A calendar date, `YYYY-MM-DD` (Gregorian). */
   z.object({ ...fieldBase, type: z.literal("date") }),
   /** An instant, ISO 8601 in UTC (`…Z`). Filled in and shown in the Project's time zone. */
@@ -114,10 +158,11 @@ export const isBuiltInField = (field: FormField): field is Extract<FormField, { 
   (builtInFieldTypes as readonly string[]).includes(field.type);
 
 /**
- * A stored answer: text (also dates, times, a select's option, a Trade or
- * Location id), Yes/No, or a list (a multi-select's options, Scope ids).
+ * A stored answer: text (also dates, times, email addresses, phone numbers, a
+ * select's option, a Trade or Location id), a number (also an amount of money),
+ * Yes/No, or a list (a multi-select's options, Scope ids).
  */
-export type FormValue = string | boolean | string[];
+export type FormValue = string | number | boolean | string[];
 
 export const formSection = z.object({ key: formKey, title: bilingualText, visible_if: visibleIf, fields: z.array(formField) });
 export type FormSection = z.infer<typeof formSection>;
@@ -142,7 +187,9 @@ export type ValidationMode = "draft" | "complete";
 
 /**
  * `wrong_type`: not the kind of value the field holds (text, true/false, a list).
- * `invalid_format`: text, but not a real ISO date, time or UTC instant.
+ * `invalid_format`: text, but not a real ISO date, time or UTC instant, an email address or a phone number.
+ * `below_min`, `above_max`: a number outside the field's limits.
+ * `too_many_decimals`: a number with more decimal places than the field (or its currency) takes.
  * `unknown_option`: not one of a choice field's option values, or a Scope outside the chosen Trade.
  */
 export const fieldErrorCodes = [
@@ -150,6 +197,9 @@ export const fieldErrorCodes = [
   "wrong_type",
   "too_long",
   "invalid_format",
+  "below_min",
+  "above_max",
+  "too_many_decimals",
   "unknown_option",
   "unknown_field",
 ] as const;
@@ -286,6 +336,42 @@ export function isIsoValue(type: "date" | "datetime" | "time", value: string): b
   return match !== null && isCalendarDate(match[1]!, match[2]!, match[3]!);
 }
 
+/** How many decimal places a number has, as JSON writes it (`1e-7` has 7). */
+function decimalPlaces(value: number): number {
+  const [digits = "", exponent = "0"] = String(Math.abs(value)).split("e");
+  return Math.max(0, (digits.split(".")[1] ?? "").length - Number(exponent));
+}
+
+/** Whether `value` is an email address: one @, a dotted domain, no spaces, at most 254 characters. */
+export function isEmailAddress(value: string): boolean {
+  return value.length <= 254 && z.email().safeParse(value).success;
+}
+
+const ksaNumber = /^(5\d{8}|1[1-7]\d{7})$/; // a mobile, or a landline with its area code, without the 0
+const ksaNational = /^0(5\d{8}|1[1-7]\d{7})$|^800\d{7}$|^920\d{6}$/; // also toll-free 800 and unified 920 numbers
+const international = /^\+[1-9]\d{7,14}$/; // E.164: a country code and at most 15 digits
+
+/**
+ * Whether `value` is a phone number: a KSA number as dialled at home (`050 123
+ * 4567`, `011 234 5678`, `800 …`, `920 …`), or any number with its country code
+ * (`+966 50 123 4567`, `00 44 20 …`). Spaces, dashes, dots and brackets may group the digits.
+ */
+export function isPhoneNumber(value: string): boolean {
+  const compact = value.replace(/[\s\-.()]/g, "");
+  if (!/^(\+|00)?\d+$/.test(compact)) return false;
+  const dialled = compact.startsWith("00") ? `+${compact.slice(2)}` : compact;
+  if (dialled.startsWith("+966")) return ksaNumber.test(dialled.slice(4));
+  return dialled.startsWith("+") ? international.test(dialled) : ksaNational.test(dialled);
+}
+
+/** What is wrong with a number against a field's limits and decimals, or null when nothing is. */
+function checkNumber(value: unknown, field: { min?: number; max?: number }, decimals: number | undefined): FieldErrorCode | null {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "wrong_type";
+  if (field.min !== undefined && value < field.min) return "below_min";
+  if (field.max !== undefined && value > field.max) return "above_max";
+  return decimals !== undefined && decimalPlaces(value) > decimals ? "too_many_decimals" : null;
+}
+
 const isId = (value: unknown): value is string => typeof value === "string" && z.uuid().safeParse(value).success;
 
 /** What is wrong with one field's (non-empty) value, or null when nothing is. */
@@ -302,6 +388,15 @@ function checkValue(
       if (typeof value !== "string") return "wrong_type";
       if (value.length > (field.maxLength ?? defaultMaxLength[field.type])) return "too_long";
       return required && value.trim() === "" ? "required" : null;
+    case "number":
+      return checkNumber(value, field, field.decimals);
+    case "currency":
+      return checkNumber(value, field, currencyDecimals(field.currency));
+    case "email":
+    case "phone":
+      if (typeof value !== "string") return "wrong_type";
+      if (value.trim() === "") return required ? "required" : null;
+      return (field.type === "email" ? isEmailAddress : isPhoneNumber)(value.trim()) ? null : "invalid_format";
     case "date":
     case "datetime":
     case "time":
@@ -364,7 +459,10 @@ export function validateAnswers(
     }
     const code = checkValue(field, value, required, given, context);
     if (code) errors.push({ key: field.key, code });
-    else clean[field.key] = value as FormValue;
+    // Email addresses and phone numbers are kept as typed, without the spaces around them.
+    else if ((field.type === "email" || field.type === "phone") && typeof value === "string") {
+      if (value.trim() !== "") clean[field.key] = value.trim();
+    } else clean[field.key] = value as FormValue;
   }
 
   const known = new Set(fields.map((f) => f.key));

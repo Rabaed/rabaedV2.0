@@ -1,5 +1,5 @@
-import { isIsoValue, type AnswerField } from "./form.ts";
-import { formatDate, timeZone, type Locale } from "./locale.ts";
+import { currencyDecimals, isIsoValue, type AnswerField } from "./form.ts";
+import { formatDate, formatNumber, timeZone, type Locale } from "./locale.ts";
 
 // How answers read on screen (form-engine.md §5): the viewer's language, Latin
 // digits, the Gregorian calendar, and the Project's time zone for instants.
@@ -38,6 +38,32 @@ export function fromProjectWallTime(wallTime: string): string {
   return new Date(asUtc - offsetAt(first)).toISOString();
 }
 
+const arabicIndicDigits = /[٠-٩۰-۹]/g;
+
+/**
+ * Text as an Arabic keyboard types it, in Latin digits: Arabic-Indic digits
+ * and the Arabic decimal and thousands separators become Latin ones. Number
+ * and phone boxes show what is typed this way, since Rabaed shows Latin digits.
+ */
+export function toLatinDigits(text: string): string {
+  return text
+    .replace(arabicIndicDigits, (d) => String(d.codePointAt(0)! & 0xf)) // both runs start at a code point ending in 0
+    .replace(/٫/g, ".")
+    .replace(/٬/g, ",");
+}
+
+/**
+ * The number typed in a number field, or null when it isn't one. Arabic-Indic
+ * digits read as Latin ones; commas group thousands, a point marks decimals.
+ */
+export function parseNumberInput(text: string): number | null {
+  const latin = toLatinDigits(text)
+    .replace(/[,\s]/g, "")
+    // The minus sign (U+2212).
+    .replace(/^−/, "-");
+  return /^[+-]?(\d+\.?\d*|\.\d+)$/.test(latin) ? Number(latin) : null;
+}
+
 /**
  * An answer as the viewer reads it: dates and times in their language (Latin
  * digits), Yes/No and option labels translated, text exactly as typed. A value
@@ -58,6 +84,18 @@ export function formatFormValue(field: AnswerField, value: unknown, locale: Loca
       return typeof value === "string" && isIsoValue("datetime", value)
         ? formatDate(new Date(value), locale, { dateStyle: "medium", timeStyle: "short" })
         : String(value ?? "");
+    case "number":
+      if (typeof value !== "number") return String(value ?? "");
+      return [
+        formatNumber(value, locale, { minimumFractionDigits: field.decimals ?? 0, maximumFractionDigits: field.decimals ?? 20 }),
+        field.unit,
+      ]
+        .filter(Boolean)
+        .join(" ");
+    case "currency":
+      return typeof value === "number"
+        ? formatNumber(value, locale, { style: "currency", currency: field.currency, maximumFractionDigits: currencyDecimals(field.currency) })
+        : String(value ?? "");
     case "yes_no":
       return value === true ? yesNo[locale].yes : value === false ? yesNo[locale].no : String(value ?? "");
     case "select":
@@ -67,6 +105,8 @@ export function formatFormValue(field: AnswerField, value: unknown, locale: Loca
     }
     case "text":
     case "textarea":
+    case "email":
+    case "phone":
       return typeof value === "string" ? value : String(value ?? "");
     // Built-in Fields hold ids; the page names them (the renderer's `choices`), so only the ids are known here.
     case "trade":

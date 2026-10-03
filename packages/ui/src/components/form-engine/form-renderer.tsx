@@ -1,17 +1,22 @@
 "use client";
 
 import {
+  currencyDecimals,
   defaultMaxLength,
+  directionOf,
   formatFormValue,
   formatNumber,
   answerFields,
+  intlLocaleOf,
   formVisibility,
   fromProjectWallTime,
   isAnswerField,
   isBuiltInField,
   isRequired,
   isUnanswered,
+  parseNumberInput,
   scopesFittingTrade,
+  toLatinDigits,
   toProjectWallTime,
   type AnswerField,
   type BuiltInFieldType,
@@ -23,7 +28,7 @@ import {
   type FormValue,
   type Locale,
 } from "@rabaed/domain";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { cn } from "../../lib/cn.ts";
 import { CheckboxGroup } from "../form/checkbox-group.tsx";
 import { focusRing } from "../form/control-styles.ts";
@@ -50,7 +55,18 @@ const copy = {
     required: "This field is required.",
     wrongType: "This value isn't valid here.",
     tooLong: (max: number) => `Use at most ${formatNumber(max, "en")} characters.`,
-    invalidFormat: { date: "Enter a valid date.", time: "Enter a valid time.", datetime: "Enter a valid date and time." },
+    invalidFormat: {
+      date: "Enter a valid date.",
+      time: "Enter a valid time.",
+      datetime: "Enter a valid date and time.",
+      email: "Enter a valid email address, such as name@company.com.",
+      phone: "Enter a valid phone number, such as 050 123 4567 or +966 50 123 4567.",
+    },
+    notANumber: "Enter a number.",
+    belowMin: (min: string) => `Enter ${min} or more.`,
+    aboveMax: (max: string) => `Enter ${max} or less.`,
+    tooManyDecimals: (n: number) =>
+      n === 0 ? "Enter a whole number." : n === 1 ? "Use at most 1 decimal place." : `Use at most ${formatNumber(n, "en")} decimal places.`,
     unknownOption: "Choose one of the options.",
     choose: "Choose…",
     none: "None",
@@ -69,7 +85,25 @@ const copy = {
     required: "هذا الحقل مطلوب.",
     wrongType: "هذه القيمة غير صالحة هنا.",
     tooLong: (max: number) => `استخدم ${formatNumber(max, "ar")} حرفًا على الأكثر.`,
-    invalidFormat: { date: "أدخل تاريخًا صالحًا.", time: "أدخل وقتًا صالحًا.", datetime: "أدخل تاريخًا ووقتًا صالحين." },
+    // Latin examples and limits sit in isolates (\u2066 left to right, \u2067 right to left, \u2069 ends), so a + or a unit stays in place.
+    invalidFormat: {
+      date: "أدخل تاريخًا صالحًا.",
+      time: "أدخل وقتًا صالحًا.",
+      datetime: "أدخل تاريخًا ووقتًا صالحين.",
+      email: "أدخل بريدًا إلكترونيًا صالحًا، مثل \u2066name@company.com\u2069.",
+      phone: "أدخل رقم هاتف صالحًا، مثل \u2066050 123 4567\u2069 أو \u2066+966 50 123 4567\u2069.",
+    },
+    notANumber: "أدخل رقمًا.",
+    belowMin: (min: string) => `أدخل \u2067${min}\u2069 أو أكثر.`,
+    aboveMax: (max: string) => `أدخل \u2067${max}\u2069 أو أقل.`,
+    tooManyDecimals: (n: number) =>
+      n === 0
+        ? "أدخل عددًا صحيحًا."
+        : n === 1
+          ? "استخدم منزلة عشرية واحدة على الأكثر."
+          : n === 2
+            ? "استخدم منزلتين عشريتين على الأكثر."
+            : `استخدم ${formatNumber(n, "ar")} منازل عشرية على الأكثر.`,
     unknownOption: "اختر أحد الخيارات.",
     choose: "اختر…",
     none: "بدون",
@@ -113,13 +147,31 @@ function errorText(field: AnswerField, error: FieldError, locale: Locale): strin
         ? text.tooLong(field.maxLength ?? defaultMaxLength[field.type])
         : text.wrongType;
     case "invalid_format":
-      return field.type === "date" || field.type === "time" || field.type === "datetime"
+      return field.type === "date" ||
+        field.type === "time" ||
+        field.type === "datetime" ||
+        field.type === "email" ||
+        field.type === "phone"
         ? text.invalidFormat[field.type]
         : text.wrongType;
+    case "below_min":
+    case "above_max": {
+      const limit = field.type === "number" || field.type === "currency" ? field[error.code === "below_min" ? "min" : "max"] : undefined;
+      if (limit === undefined) return text.wrongType;
+      // The limit reads as the answer would: with its unit or currency.
+      const shown = formatFormValue(field, limit, locale);
+      return error.code === "below_min" ? text.belowMin(shown) : text.aboveMax(shown);
+    }
+    case "too_many_decimals":
+      return field.type === "number" && field.decimals !== undefined
+        ? text.tooManyDecimals(field.decimals)
+        : field.type === "currency"
+          ? text.tooManyDecimals(currencyDecimals(field.currency))
+          : text.wrongType;
     case "unknown_option":
       return text.unknownOption;
     default:
-      return text.wrongType;
+      return field.type === "number" || field.type === "currency" ? text.notANumber : text.wrongType;
   }
 }
 
@@ -128,6 +180,62 @@ const idsOf = (value: unknown) => (Array.isArray(value) ? value.filter((v): v is
 
 // A select's "no choice" item: option values are snake_case keys, so this never clashes with one.
 const noChoice = "-";
+
+/** What a number field's box shows for an answer: the number in Latin digits, or text that wasn't one. */
+const numberText = (value: unknown) => (typeof value === "number" ? String(value) : textOf(value));
+
+/** The answer a number field's text means: nothing, a number, or (for the validator to refuse) text that isn't one. */
+const numberAnswer = (text: string): FormValue | undefined => (text.trim() === "" ? undefined : (parseNumberInput(text) ?? text));
+
+/**
+ * A number field's box. It takes text, so that "12." or "-" can be on the way
+ * to a number, and turns Arabic-Indic digits into Latin ones as they are typed.
+ * The unit, or the currency, sits beside the box.
+ */
+function NumberInput({
+  name,
+  value,
+  suffix,
+  onChange,
+}: {
+  name: string;
+  value: unknown;
+  suffix?: string;
+  onChange: (value: FormValue | undefined) => void;
+}) {
+  const [typed, setTyped] = useState(() => numberText(value));
+  // What was typed, while it still means the answer; otherwise the answer changed elsewhere (e.g. cleared).
+  const text = numberAnswer(typed) === (value ?? undefined) ? typed : numberText(value);
+  return (
+    <div className="flex items-center gap-2">
+      <Input
+        name={name}
+        value={text}
+        inputMode="decimal"
+        autoComplete="off"
+        // Numbers read left to right, and line up with the page's start (the right, in Arabic).
+        dir="ltr"
+        className="rtl:text-end"
+        onChange={(event) => {
+          const latin = toLatinDigits(event.target.value);
+          setTyped(latin);
+          onChange(numberAnswer(latin));
+        }}
+      />
+      {suffix && (
+        <span className="shrink-0 text-body text-muted">
+          <bdi>{suffix}</bdi>
+        </span>
+      )}
+    </div>
+  );
+}
+
+/** The symbol a currency field shows beside its box, in the viewer's language (SAR, ر.س.). */
+function currencySymbol(currency: string, locale: Locale): string {
+  const parts = new Intl.NumberFormat(intlLocaleOf(locale), { style: "currency", currency }).formatToParts(0);
+  return parts.find((p) => p.type === "currency")?.value ?? currency;
+}
 
 /** A choice field's options as a control takes them, labelled in the viewer's language. */
 const optionsOf = (field: { options: FormOption[] }, locale: Locale) =>
@@ -158,6 +266,29 @@ function control(
       };
       return { element: field.type === "textarea" ? <Textarea rows={5} {...props} /> : <Input {...props} /> };
     }
+    case "number":
+      return { element: <NumberInput name={name} value={value} suffix={field.unit} onChange={change} /> };
+    case "currency":
+      return {
+        element: <NumberInput name={name} value={value} suffix={currencySymbol(field.currency, locale)} onChange={change} />,
+      };
+    case "email":
+    case "phone":
+      return {
+        element: (
+          <Input
+            type={field.type === "email" ? "email" : "tel"}
+            name={name}
+            value={textOf(value)}
+            autoComplete="off"
+            // Addresses and numbers read left to right, and line up with the page's start.
+            dir="ltr"
+            className="rtl:text-end"
+            // A phone number typed on an Arabic keyboard reads in Latin digits.
+            onChange={(e) => change(field.type === "phone" ? toLatinDigits(e.target.value) : e.target.value)}
+          />
+        ),
+      };
     case "date":
     case "time":
       return {
@@ -325,7 +456,12 @@ export function FormRenderer({
         <bdi>{labels[0]}</bdi>
       );
     }
-    return isUnanswered(value) ? null : <bdi>{formatFormValue(field, value, locale)}</bdi>;
+    if (isUnanswered(value)) return null;
+    const shown = formatFormValue(field, value, locale);
+    // A number reads in the page's direction, so its unit follows it; an address or a phone number left to right.
+    if (field.type === "number" || field.type === "currency") return <bdi dir={directionOf(locale)}>{shown}</bdi>;
+    if (field.type === "email" || field.type === "phone") return <bdi dir="ltr">{shown}</bdi>;
+    return <bdi>{shown}</bdi>;
   }
 
   return (
