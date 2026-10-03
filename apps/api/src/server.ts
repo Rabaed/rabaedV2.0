@@ -2,6 +2,7 @@ import { createDbFromEnv, outboxStats } from "@rabaed/db";
 import { z } from "zod";
 import { buildApp } from "./app.ts";
 import { apiConfigFromEnv } from "./config.ts";
+import { createFileStore, ensureLocalBucket, fileStoreSettingsFromEnv } from "./documents/file-store.ts";
 import { startOutboxReport } from "./outbox-report.ts";
 
 const env = z
@@ -12,7 +13,10 @@ const env = z
   .parse(process.env);
 
 const db = createDbFromEnv("app");
-const app = await buildApp({ db, config: apiConfigFromEnv() });
+const fileStore = fileStoreSettingsFromEnv();
+// Locally the store in Docker starts empty; in AWS the storage stack made the bucket.
+if (fileStore.endpoint) await ensureLocalBucket(fileStore);
+const app = await buildApp({ db, config: apiConfigFromEnv(), files: createFileStore(fileStore) });
 // For the outbox alarms, measured in the database whether or not the worker runs.
 // Every minute: the outbox alarms' 5-minute periods each need a few reports.
 const OUTBOX_REPORT_INTERVAL_MS = 60_000;

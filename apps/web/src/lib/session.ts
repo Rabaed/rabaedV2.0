@@ -4,6 +4,7 @@ import type {
   CompanyMembers,
   CompanyParticipations,
   DimensionValues,
+  DocumentList,
   FormVersion,
   MemberVisibility,
   MyProjects,
@@ -130,6 +131,11 @@ export function getNewWorkItemForm(projectId: string, typeCode: string): Promise
   return apiGet<FormVersion>(
     `/v1/projects/${encodeURIComponent(projectId)}/work-item-types/${encodeURIComponent(typeCode)}/form`,
   );
+}
+
+/** A visible item's Documents, with whether the Member may change them now; null when hidden. */
+export function getWorkItemDocuments(workItemId: string): Promise<DocumentList | null> {
+  return apiGet<DocumentList>(`/v1/work-items/${encodeURIComponent(workItemId)}/documents`);
 }
 
 /** A Work Item's history as the signed-in Member may see it; null if they can't see the item. */

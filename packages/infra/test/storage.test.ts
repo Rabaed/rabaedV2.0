@@ -86,6 +86,19 @@ describe("Project files", () => {
     });
   });
 
+  it("lets browsers PUT and GET Documents with those URLs from the customer web's address only (RP-269)", () => {
+    const cors = (template: typeof storage) =>
+      render(Object.values(template.findResources("AWS::S3::Bucket")).find((b) => (b as Resource).Properties?.CorsConfiguration));
+    const rule = (bucket: unknown) => (bucket as Resource).Properties!.CorsConfiguration as { CorsRules: Record<string, unknown>[] };
+    expect(rule(buckets.ProjectFiles).CorsRules).toEqual([
+      expect.objectContaining({ AllowedMethods: ["PUT", "GET"], AllowedHeaders: ["content-type"] }),
+    ]);
+    expect(JSON.stringify(rule(buckets.ProjectFiles).CorsRules[0]!.AllowedOrigins)).toContain(".elb.amazonaws.com");
+    const withDomain = environmentTemplates({ ...environments.dev, domain: "dev.example.test" }).template("storage");
+    expect(rule(cors(withDomain)).CorsRules[0]!.AllowedOrigins).toEqual(["https://dev.example.test"]);
+    expect(buckets.BuildAssets?.Properties?.CorsConfiguration).toBeUndefined();
+  });
+
   it("only the api task role is granted object access, and only under projects/", () => {
     const projectBucket = bucketLogicalId("ProjectFiles");
     const grants: { role: string; resources: unknown[] }[] = [];

@@ -48,7 +48,7 @@ Every one of these must apply the same layers. A new feature that adds a channel
 | Search and filters | Search results are filtered by the same RLS. No "12 results, 3 shown". |
 | Direct URL or ID | An inaccessible item returns **404, never 403**, so its existence isn't revealed. IDs are UUIDs and can't be guessed. |
 | Files Module | Work Item folders appear only for visible items. Free folders follow folder permissions. |
-| File downloads | Short-lived signed URLs, issued only after an access check. |
+| File downloads | Short-lived signed URLs, issued only after an access check. A Document follows its Work Item: who can't see the item gets 404 for its Documents and their URLs. Files are stored under their Project's prefix, and only the api signs (ADR 0007). |
 | Pins on shared Drawings | Show only Pins of visible items. A shared floor plan must not show a competitor's Snags. |
 | Links | Show a target's number, title and Documental Record (E1). Never its live data or history. |
 | Notifications and emails | Sent only to Members with access. The subject line holds only what the recipient may see. |
@@ -110,6 +110,8 @@ Setup, Project "Tower": Contractors **C1** (Electrical) and **C2** (Electrical, 
 | 38 | Project Admin withdraws two pending invitations: one to a CR number not on Rabaed, one to K1 (declined or still pending) | Project Admin; K1 Authorized Person | Both leave the Project Admin's list in exactly the same way. K1's invitation also leaves K1's list. Nothing shows which one was a customer (ADR 0009) |
 | 39 | K1's Library has two Forms; one is used on Project "Tower" | C1 member on "Tower"; a Company sharing no Project with K1 | The C1 member sees only the Form used on "Tower" and can copy it into C1's Library. Neither sees K1's other Form, and the other Company sees nothing of K1's Library (V18) |
 | 40 | A C1 member who isn't a Project Admin, K1's Authorized Person, or the Project Admin of another Project adds, renames or deactivates a Scope of "Tower" | Each of them | 404, the same as for a made-up id; the Scope is unchanged. Nobody outside "Tower" ever reads its Scopes (V16) |
+| 41 | C1 engineer attaches a datasheet to a Draft MAR; C2, K1 and a C1 member off the Project ask for its Documents, a download URL, or try to upload or remove one | Each of them | 404, the same as for a made-up id, naming nothing. After the Submit, K1 sees and downloads it, with C1's Company name but not the engineer's (V13, V14) |
+| 42 | A Member of Project A reads Documents with the database role directly | That Member | Never a Document of Project B, not even by its id |
 
 Every change to rules or channels must add or update rows here and in the test suite. A failing visibility test blocks release.
 

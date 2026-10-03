@@ -260,6 +260,25 @@
       "tryAgain": "The answers changed meanwhile. Try again.",
       "unavailable": "Something went wrong. Try again."
     },
+    "attachments": {
+      "title": "Attachments",
+      "none": "No documents attached.",
+      "add": "Attach a document",
+      "limits": "PDF, images, Office files, drawings, text or zip, up to {size}. Once sent, documents can't be changed.",
+      "open": "Open",
+      "remove": "Remove",
+      "frozenLabel": "Sent: can't be changed",
+      "uploaded": "Document attached.",
+      "removed": "Document removed.",
+      "tooLarge": "This file is too large. The limit is {size}.",
+      "wrongType": "This type of file can't be attached.",
+      "notEditable": "Documents can't be changed any more.",
+      "frozen": "This document was sent, so it can't be removed.",
+      "forbidden": "Your Position doesn't allow attaching documents.",
+      "unavailable": "Something went wrong. Try again.",
+      "kb": "{size} KB",
+      "mb": "{size} MB"
+    },
     "history": {
       "title": "History",
       "created": "Created",

@@ -3,29 +3,31 @@ import { AgeDots, DocNo, StagePill } from "@rabaed/ui";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
 import { WorkItemActions } from "@/components/work-item-actions";
+import { WorkItemAttachments } from "@/components/work-item-attachments";
 import { WorkItemAnswers, WorkItemFormProvider } from "@/components/work-item-form";
 import { WorkItemHistory } from "@/components/work-item-history";
 import { Link, redirect } from "@/i18n/navigation";
-import { getMe, getWorkItem, getWorkItemForm, getWorkItemHistory } from "@/lib/session";
+import { getMe, getWorkItem, getWorkItemDocuments, getWorkItemForm, getWorkItemHistory } from "@/lib/session";
 import { stageColour } from "@/lib/stage-colour";
 
 /**
  * One Work Item, in the frame every item has (form-engine.md §1): the System
- * Fields Subject and Document Number above its Form. One the Member can't see is
+ * Fields Subject and Document Number above its Form, Attachments below it. One the Member can't see is
  * not found, exactly like one that doesn't exist.
  */
 export default async function WorkItemPage({ params }: { params: Promise<{ locale: Locale; workItemId: string }> }) {
   const { locale, workItemId } = await params;
   setRequestLocale(locale);
   const t = await getTranslations("workItems");
-  const [me, item, form, history] = await Promise.all([
+  const [me, item, form, documents, history] = await Promise.all([
     getMe(),
     getWorkItem(workItemId),
     getWorkItemForm(workItemId),
+    getWorkItemDocuments(workItemId),
     getWorkItemHistory(workItemId),
   ]);
   if (!me) return redirect({ href: "/sign-in", locale });
-  if (!item || !form) notFound();
+  if (!item || !form || !documents) notFound();
 
   return (
     <WorkItemFormProvider workItemId={item.id} schema={form.schema} answers={item.answers} editable={item.actions.saveAnswers}>
@@ -63,6 +65,9 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
         </dl>
 
         <WorkItemAnswers locale={locale} />
+
+        {/* The System Field below the Form. */}
+        <WorkItemAttachments workItemId={item.id} list={documents} locale={locale} />
 
         <dl className="grid grid-cols-[max-content_1fr] gap-x-6 gap-y-2">
           <dt className="text-muted">{t("fields.type")}</dt>
