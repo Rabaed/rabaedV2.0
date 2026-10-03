@@ -18,6 +18,7 @@ import { memberRoutes } from "./routes/members.ts";
 import { notificationRoutes } from "./routes/notifications.ts";
 import { participantRoutes } from "./routes/participants.ts";
 import { projectRoutes } from "./routes/projects.ts";
+import { scopeRoutes } from "./routes/scopes.ts";
 import { sessionRoutes } from "./routes/session.ts";
 import { visibilityRoutes } from "./routes/visibility.ts";
 import { workItemRoutes } from "./routes/work-items.ts";
@@ -113,6 +114,7 @@ export async function buildApp({
   await app.register(projectRoutes(context));
   await app.register(participantRoutes(context));
   await app.register(visibilityRoutes(context));
+  await app.register(scopeRoutes(context));
   await app.register(workItemRoutes(context));
   await app.register(notificationRoutes(context));
   return app;

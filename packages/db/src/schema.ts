@@ -255,6 +255,20 @@ export interface VisibilityGrantValueTable {
   dimension_value_id: string;
 }
 
+/** A Scope under a Trade (depth 1), or a Sub-scope under a Scope (depth 2). */
+export interface ScopeTable {
+  id: Generated<string>;
+  project_id: string;
+  trade_value_id: string;
+  parent_id: string | null;
+  depth: number;
+  name: ColumnType<Bilingual, string, string>;
+  status: Generated<"active" | "deactivated">;
+  sort: Generated<number>;
+  created_at: Generated<Timestamp>;
+  updated_at: Generated<Timestamp>;
+}
+
 export type ModuleKey = "submittals" | "inspections" | "snag_list" | "site_reports" | "drawings";
 export type StageCategory = "draft" | "in_progress" | "closed_positive" | "closed_negative" | "cancelled";
 type OwnerKind = "rabaed" | "project";
@@ -452,6 +466,7 @@ export interface Database {
   dimension_value: DimensionValueTable;
   visibility_grant: VisibilityGrantTable;
   visibility_grant_value: VisibilityGrantValueTable;
+  scope: ScopeTable;
   stage: StageTable;
   workflow_definition: WorkflowDefinitionTable;
   workflow_version: WorkflowVersionTable;

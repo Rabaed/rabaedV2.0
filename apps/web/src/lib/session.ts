@@ -12,6 +12,7 @@ import type {
   ProjectInvitations,
   ProjectParticipants,
   ProjectSummary,
+  Scopes,
   SignedInMember,
   WorkItemDetail,
   WorkItemHistory,
@@ -84,6 +85,11 @@ export function getParticipantMembers(participantId: string): Promise<Participan
 /** A Project's Trades and Locations; null if it isn't one of the signed-in Member's Projects. */
 export function getProjectDimensions(projectId: string): Promise<DimensionValues | null> {
   return apiGet<DimensionValues>(`/v1/projects/${encodeURIComponent(projectId)}/dimensions`);
+}
+
+/** A Project's Scopes and Sub-scopes; null if it isn't one of the signed-in Member's Projects. */
+export function getProjectScopes(projectId: string): Promise<Scopes | null> {
+  return apiGet<Scopes>(`/v1/projects/${encodeURIComponent(projectId)}/scopes`);
 }
 
 /** A Participant's Visibility, for its own Company and the Project Admins; null otherwise. */
