@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { bilingualText } from "./company.ts";
 import { condition, evaluateCondition, isUnanswered, readsAttrs } from "./condition.ts";
-import { evaluateFormula, formulaReferences, parseFormula, roundTo, type FormulaReference } from "./formula.ts";
+import { evaluateFormula, formulaReferences, parseFormula, roundTo, type Formula, type FormulaReference } from "./formula.ts";
 
 // The Form engine's schema and its one validator (form-engine.md §1, §8; ADR 0006).
 // The same code runs in the browser, for instant feedback, and on the server, as
@@ -228,6 +228,9 @@ export type FormFieldType = FormField["type"];
 export type TableField = Extract<FormField, { type: "table" }>;
 export type CalculatedField = Extract<FormField, { type: "calculated" }>;
 
+/** Whether a field is a calculated one. */
+export const isCalculatedField = (field: FormField): field is CalculatedField => field.type === "calculated";
+
 const layoutTypes = ["heading", "instructions", "divider"] as const;
 export type LayoutField = Extract<FormField, { type: (typeof layoutTypes)[number] }>;
 /** A field that takes an answer: every type but the layout ones. */
@@ -244,8 +247,8 @@ export const isBuiltInField = (field: FormField): field is Extract<FormField, { 
 /**
  * A stored answer: text (also dates, times, email addresses, phone numbers, a
  * select's option, a Trade or Location id), a number (also an amount of money
- * and a calculated result),
- * Yes/No, or a list (a multi-select's options, Scope ids, a table's rows).
+ * and a calculated result), Yes/No, or a list (a multi-select's options, Scope
+ * ids, a table's rows).
  */
 export type FormValue = string | number | boolean | string[] | FormRow[];
 
@@ -396,9 +399,16 @@ export type FormVisibility = {
   answers: Record<string, unknown>;
 };
 
+// Each field's formula, parsed once: formVisibility works the results out on every pass.
+const parsedFormulas = new WeakMap<CalculatedField, Formula | null>();
+function formulaOf(field: CalculatedField): Formula | null {
+  if (!parsedFormulas.has(field)) parsedFormulas.set(field, parseFormula(field.formula));
+  return parsedFormulas.get(field)!;
+}
+
 /** What a calculated field's formula reads. */
 export function calculatedReferences(field: CalculatedField): FormulaReference[] {
-  const formula = parseFormula(field.formula);
+  const formula = formulaOf(field);
   return formula ? formulaReferences(formula) : [];
 }
 
@@ -416,10 +426,10 @@ function calculationOrder(fields: readonly CalculatedField[]): CalculatedField[]
     if (known) return known === "done";
     state.set(field.key, "working");
     const reads = calculatedReferences(field).flatMap((r) => (r.column === undefined && byKey.has(r.key) ? [byKey.get(r.key)!] : []));
-    const ok = reads.every(visit);
-    state.set(field.key, ok ? "done" : "cycle");
-    if (ok) order.push(field);
-    return ok;
+    const inputsDone = reads.every(visit);
+    state.set(field.key, inputsDone ? "done" : "cycle");
+    if (inputsDone) order.push(field);
+    return inputsDone;
   };
   fields.forEach(visit);
   return order;
@@ -429,18 +439,19 @@ function calculationOrder(fields: readonly CalculatedField[]): CalculatedField[]
  * `answers` with every calculated field worked out from them, replacing any
  * value given for it; an empty result leaves the field out. With `shown`, only
  * the calculated fields shown are worked out: a hidden one reads as cleared.
+ * A calculated field that reads another reads its rounded result, as stored.
  */
 export function calculateAnswers(
   schema: FormSchema,
   answers: Readonly<Record<string, unknown>>,
   shown?: ReadonlySet<string>,
 ): Record<string, unknown> {
-  const calculated = formFields(schema).filter((f): f is CalculatedField => f.type === "calculated");
+  const calculated = formFields(schema).filter(isCalculatedField);
   const out = { ...answers };
   for (const field of calculated) delete out[field.key];
   for (const field of calculationOrder(calculated)) {
     if (shown && !shown.has(field.key)) continue;
-    const formula = parseFormula(field.formula);
+    const formula = formulaOf(field);
     const result = formula && evaluateFormula(formula, out);
     if (result !== null) out[field.key] = roundTo(result, field.decimals);
   }
@@ -451,8 +462,8 @@ export function calculateAnswers(
  * Which sections and fields are shown for `answers` (`visible_if`). A hidden
  * field reads as cleared, so a field that depends on it is worked out without
  * its answer: the check repeats until nothing changes. Calculated fields are
- * worked out from the shown answers (calculateAnswers), and rules read them. Conditions that depend
- * on each other in a cycle are refused by the publish checks (publishProblems);
+ * worked out from the shown answers (calculateAnswers), and rules read them.
+ * Conditions that depend on each other in a cycle are refused by the publish checks (publishProblems);
  * the repeats are bounded all the same, and the last pass wins. The Built-in Fields are
  * always shown: they can't be hidden.
  */

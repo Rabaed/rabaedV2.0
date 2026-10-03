@@ -281,17 +281,17 @@ function NumberInput({
  */
 function CalculatedOutput({ field, value, locale }: { field: CalculatedField; value: unknown; locale: Locale }) {
   const { labelId: _labelId, required: _required, disabled: _disabled, readOnly: _readOnly, ...control } = useFieldControl({});
-  const worked = typeof value === "number";
+  const hasResult = typeof value === "number";
   return (
     <output
       {...control}
       className={cn(
         "flex min-h-9 w-full items-center rounded-sm border border-border bg-surface-subtle px-3 text-body pointer-coarse:min-h-11",
-        worked ? "text-text" : "text-muted",
+        hasResult ? "text-text" : "text-muted",
       )}
     >
       {/* A number reads in the page's direction, so its unit follows it. */}
-      {worked ? <bdi dir={directionOf(locale)}>{formatFormValue(field, value, locale)}</bdi> : copy[locale].notWorkedOut}
+      {hasResult ? <bdi dir={directionOf(locale)}>{formatFormValue(field, value, locale)}</bdi> : copy[locale].notWorkedOut}
     </output>
   );
 }

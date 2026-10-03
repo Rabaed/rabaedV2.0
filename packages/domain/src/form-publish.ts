@@ -5,7 +5,7 @@ import {
   formFields,
   isAnswerField,
   isBuiltInField,
-  type CalculatedField,
+  isCalculatedField,
   type FormField,
   type FormSchema,
   type FormSection,
@@ -89,8 +89,6 @@ function duplicateKeys(schema: FormSchema): string[] {
   return [...repeated];
 }
 
-const isCalculated = (item: FormSection | FormField): item is CalculatedField => "type" in item && item.type === "calculated";
-
 /**
  * Sections and fields with a rule that reads a key that is no answer field, and
  * calculated fields whose formula reads one that holds no number: a key that
@@ -110,7 +108,7 @@ function unknownReferences(schema: FormSchema): string[] {
     .filter(
       (item) =>
         rulesOf(item).some((rule) => conditionFields(rule).some((key) => !answerKeys.has(key))) ||
-        (isCalculated(item) && !calculatedReferences(item).every(holdsNumbers)),
+        ("type" in item && isCalculatedField(item) && !calculatedReferences(item).every(holdsNumbers)),
     )
     .map((item) => item.key);
 }
@@ -131,7 +129,7 @@ function reachesItself(dependsOn: ReadonlyMap<string, readonly string[]>, start:
 
 /** Calculated fields whose result depends, in the end, on itself, through formulas alone. */
 function formulaCycles(schema: FormSchema): string[] {
-  const calculated = formFields(schema).filter(isCalculated);
+  const calculated = formFields(schema).filter(isCalculatedField);
   const dependsOn = new Map(calculated.map((f) => [f.key, calculatedReferences(f).map((r) => r.key)]));
   return calculated.filter((f, i) => calculated.findIndex((o) => o.key === f.key) === i && reachesItself(dependsOn, f.key)).map((f) => f.key);
 }
@@ -150,7 +148,7 @@ function conditionCycles(schema: FormSchema): string[] {
     for (const f of s.fields) {
       if (isBuiltInField(f)) continue;
       const own = visibleIf(f);
-      const reads = [...(own ? conditionFields(own) : []), ...(isCalculated(f) ? calculatedReferences(f).map((r) => r.key) : [])];
+      const reads = [...(own ? conditionFields(own) : []), ...(isCalculatedField(f) ? calculatedReferences(f).map((r) => r.key) : [])];
       dependsOn.set(node("field", f.key), [node("section", s.key), ...reads.map((k) => node("field", k))]);
     }
   }
