@@ -47,7 +47,7 @@ One Company taking part in one Project, in one Project Role. A Project can have 
 _Avoid_: Project company, party
 
 **Participant Invitation**:
-A Project Admin's offer to a Company, found by its CR number, to join a Project in a given Project Role. It is Invited until the Company's Authorized Person accepts (the Company becomes a Participant) or declines it.
+A Project Admin's offer to a Company, found by its CR number, to join a Project in a given Project Role. It is Invited until the Company's Authorized Person accepts (the Company becomes a Participant) or declines it, or the Project Admin withdraws it.
 _Avoid_: Join request, add company
 
 **Company Projects**:
@@ -174,11 +174,43 @@ _Avoid_: Deleted, voided
 
 
 **Form**:
-The field layout, built in the form builder, that a Work Item Type captures. Field labels are in Arabic and English.
-_Avoid_: Template (on its own)
+The customisable middle of a Work Item, built in the form builder: the fields a Work Item Type captures between the System Fields above and below it. Field labels are in Arabic and English. A Form is a Rabaed Default, kept in a Company's Library, or copied into a Project.
+_Avoid_: Template (on its own), general template
+
+**System Field**:
+A part of every Work Item that no Form can remove or move out: Subject and Document Number above the Form, Attachments and Links below it.
+_Avoid_: Default field, header
+
+**Built-in Field**:
+A field that sits inside every Form but can't be deleted or made optional, because visibility depends on it: Trade, Location, Scopes, and any Visibility Dimension a Project requires on Work Items. A Form chooses only where they appear and how they are labelled.
+_Avoid_: Locked field, mandatory field
+
+**Subject**:
+The short line that names a Work Item, such as "Lighting Fixtures". A System Field.
+_Avoid_: Title, name
+
+**Option List**:
+A managed list of choices with up to three levels (list, sub-list, sub-sub-list), kept in one place and used by Form fields. Changing it changes the choices in every Form that uses it; an option removed later stays on Work Items that already chose it.
+_Avoid_: List (on its own), dropdown, lookup
+
+**Saved Field**:
+A field set up once (labels, type, rules, Option List) and kept in the Field Library, so it can be inserted into many Forms. Inserting copies its settings into the Form.
+_Avoid_: Field template, reusable field
+
+**Field Library**:
+The part of a Library that holds Saved Fields and Option Lists.
+_Avoid_: Field management (the screen, not the thing)
+
+**Library**:
+A Company's own collection of Forms, its Field Library, its Trade and Scope lists, and its Workflows and Work Item Types, built or copied. A Project copies a Company's Trade and Scope lists when it is set up, and takes later changes only when its Project Admin pulls them in. A Project takes its Forms from the Rabaed Defaults or from any of its Participants' Libraries, as the Project Admin chooses. Taking or copying one always makes an independent copy that notes where it came from: later changes to the original never reach it.
+_Avoid_: Template library, catalogue
 
 **Workflow**:
 The versioned graph of Steps and Transitions, drawn in the visual workflow builder, that a Work Item passes through. A Work Item stays on the Workflow version it started with.
+
+**Version**:
+A published, unchangeable edition of a Form or a Workflow. A Work Item stays on the Versions it started with; later Versions apply only to new Work Items.
+_Avoid_: Revision (reserved for Work Items), edition
 
 **Stage**:
 A named phase that shows where a Work Item is overall, such as Drafts, Internal Review, Revised & Resubmitted, Pending Approval, Approved, Rejected or Cancelled. Each Module has one shared set of Stages (Rabaed Defaults the Project can rename or extend), and every Workflow places its Steps into them. Stages are the Kanban columns.
@@ -237,7 +269,7 @@ _Avoid_: Final status
 
 **Revision**:
 A resubmission of a Work Item that ended with Code C, keeping the same number with a revision suffix (MS-003 → MS-003 Rev 1) and linked to the one before it. The earlier one stays closed at Code C.
-_Avoid_: Version (reserved for Workflows), resubmittal
+_Avoid_: Version (reserved for Forms and Workflows), resubmittal
 
 **Document Number**:
 The identifier a Work Item gets when it first leaves Draft (e.g. WH-CCM-0000001); numbers are never reused, built from a numbering pattern each Project configures from segments such as project, Work Item Type, Trade, Company and Location codes, plus a sequence. A pattern change applies only to new Work Items.
