@@ -21,14 +21,7 @@ export const schemaProblemCodes = [
 ] as const;
 export type SchemaProblemCode = (typeof schemaProblemCodes)[number];
 
-/**
- * One problem with a schema, about its section or field `key`.
- * `duplicate_key`: a key used by two sections or fields (layout fields included).
- * `unknown_reference`: a condition reads a key that is no answer field.
- * `condition_cycle`: whether it shows depends, in the end, on its own answer.
- * `required_never_shown`: required, but no answers can ever show it.
- * `key_type_changed`: an earlier Version used the key for another type.
- */
+/** One problem with a schema, about its section or field `key`. The codes are explained in form-engine.md §7. */
 export type SchemaProblem = { key: string; code: SchemaProblemCode };
 
 /**
@@ -62,7 +55,7 @@ export function publishProblems(schema: FormSchema, earlier: readonly FormSchema
 const problem = (key: string, code: SchemaProblemCode): SchemaProblem => ({ key, code });
 
 /** A section, then its fields, in Form order: everything that has a key. */
-const keyed = (schema: FormSchema): (FormSection | FormField)[] => schema.sections.flatMap((s) => [s, ...s.fields]);
+const sectionsAndFields = (schema: FormSchema): (FormSection | FormField)[] => schema.sections.flatMap((s) => [s, ...s.fields]);
 
 /** The conditions a section or field shows by. Built-in Fields have none: they always show. */
 const visibleIf = (item: FormSection | FormField): Condition | undefined => ("visible_if" in item ? item.visible_if : undefined);
@@ -77,14 +70,14 @@ function rulesOf(item: FormSection | FormField): Condition[] {
 function duplicateKeys(schema: FormSchema): string[] {
   const seen = new Set<string>();
   const repeated = new Set<string>();
-  for (const { key } of keyed(schema)) (seen.has(key) ? repeated : seen).add(key);
+  for (const { key } of sectionsAndFields(schema)) (seen.has(key) ? repeated : seen).add(key);
   return [...repeated];
 }
 
 /** Sections and fields with a rule that reads a key that is no answer field. */
 function unknownReferences(schema: FormSchema): string[] {
   const answerKeys = new Set(formFields(schema).filter(isAnswerField).map((f) => f.key));
-  return keyed(schema)
+  return sectionsAndFields(schema)
     .filter((item) => rulesOf(item).some((rule) => conditionFields(rule).some((key) => !answerKeys.has(key))))
     .map((item) => item.key);
 }
@@ -118,10 +111,11 @@ function conditionCycles(schema: FormSchema): string[] {
     }
     return false;
   };
-  return schema.sections
-    .flatMap((s) => [node("section", s.key), ...s.fields.map((f) => node("field", f.key))])
-    .filter((n, i, all) => all.indexOf(n) === i && reachesItself(n))
-    .map((n) => n.slice(n.indexOf(":") + 1));
+  const inFormOrder = schema.sections.flatMap((s) => [
+    { id: node("section", s.key), key: s.key },
+    ...s.fields.map((f) => ({ id: node("field", f.key), key: f.key })),
+  ]);
+  return inFormOrder.filter(({ id }, i) => inFormOrder.findIndex((n) => n.id === id) === i && reachesItself(id)).map((n) => n.key);
 }
 
 /** Rules over more combinations of answers than this are taken to be able to hold. */
@@ -162,6 +156,7 @@ function requiredNeverShown(schema: FormSchema): string[] {
   const hiddenSections = new Set<string>();
   const hiddenFields = new Set<string>();
 
+  // Form conditions read fields only (form.ts refuses `attr`), so answers are all a rule needs.
   const canHold = (rule: Condition): boolean => {
     const keys = conditionFields(rule);
     const choices: unknown[][] = [];

@@ -128,8 +128,7 @@ describe("a later Version of a Form, as the app role (RP-271)", () => {
     ).rejects.toMatchObject({ code: "42501" });
   });
 
-  it("can't be changed by its owner either, while a draft can still be published", async () => {
-    await expect(migrator.query("delete from form_version where id = $1", [version2])).rejects.toMatchObject({ code: "42501" });
+  it("freezes once published: a draft its owner publishes is frozen too", async () => {
     await migrator.query("update form_version set status = 'published', published_at = now() where id = $1", [draft]);
     await expect(migrator.query("delete from form_version where id = $1", [draft])).rejects.toMatchObject({ code: "42501" });
   });

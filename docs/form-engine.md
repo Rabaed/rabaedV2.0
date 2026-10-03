@@ -186,7 +186,7 @@ As built (RP-271): `publishProblems(schema, earlierVersions)` in `packages/domai
 - `built_in_missing`, `built_in_repeated`, `built_in_optional`, `built_in_hidden`: the Built-in Fields (§1).
 - `key_type_changed`: an earlier published Version used the key for another type, even if a later one dropped it.
 
-`formSchemaProblems(schema)` runs the same checks for a first Version. In this part Rabaed publishes its Default Forms as data. `pnpm form:publish --type MAR --schema file.json` (Rabaed Admin's `publishFormVersion`, run with the migrator connection) checks the schema against the Form's published Versions, then publishes the next Version. A refused schema is listed problem by problem, and nothing is published.
+`formSchemaProblems(schema)` runs the same checks for a first Version. In this part Rabaed publishes its Default Forms as data. `pnpm form:publish --type MAR --schema file.json` (Rabaed Admin's `publishFormVersion`, run with the migrator connection) checks the schema against the Form's published Versions, then publishes the next Version. A refused schema is listed problem by problem, and nothing is published. The database can't run these checks, so it is the only way to publish: a Version written or published by plain SQL (as the MAR Form Version 1 migration did) skips them.
 
 ---
 
