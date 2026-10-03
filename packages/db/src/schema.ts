@@ -378,6 +378,25 @@ export interface FormVersionTable {
   updated_at: Generated<Timestamp>;
 }
 
+/** A file attached to a Work Item (the documents migration). Written only through app.* functions. */
+export interface DocumentTable {
+  id: Generated<string>;
+  project_id: string;
+  work_item_id: string;
+  file_name: string;
+  /** bigint: pg returns it as a string. */
+  size_bytes: ColumnType<string, number, number>;
+  content_type: string;
+  storage_key: string;
+  uploaded_by_member_id: string;
+  uploaded_by_participant_id: string;
+  created_at: Generated<Timestamp>;
+  confirmed_at: Timestamp | null;
+  removed_at: Timestamp | null;
+  removed_by_member_id: string | null;
+  frozen_at: Timestamp | null;
+}
+
 export interface WorkItemTable {
   id: Generated<string>;
   project_id: string;
@@ -522,6 +541,7 @@ export interface Database {
   step_assignment: StepAssignmentTable;
   work_item_access: WorkItemAccessTable;
   work_item_event: WorkItemEventTable;
+  document: DocumentTable;
   position: PositionTable;
   position_permission: PositionPermissionTable;
   project_member_position: ProjectMemberPositionTable;

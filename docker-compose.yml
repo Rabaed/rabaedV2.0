@@ -1,4 +1,4 @@
-# Local development database and mail catcher. Credentials here are local-only placeholders
+# Local development database, mail catcher and file store. Credentials here are local-only placeholders
 # (see .env.example); real environments never use them.
 # COMPOSE_PROJECT_NAME and POSTGRES_PORT come from .env, so each worktree gets its own
 # container, volume and port (see "Several worktrees at once" in README.md).
@@ -33,5 +33,24 @@ services:
       timeout: 3s
       retries: 30
 
+  # The S3-compatible store Documents' files go to locally (apps/api file-store.ts),
+  # so local runs and tests never call AWS; in AWS it is the Project files bucket.
+  # The api creates the bucket on start. Keys are local-only placeholders (.env.example).
+  files:
+    image: rustfs/rustfs:1.0.0
+    environment:
+      RUSTFS_ACCESS_KEY: ${FILE_STORE_ACCESS_KEY_ID:-rabaed-local}
+      RUSTFS_SECRET_KEY: ${FILE_STORE_SECRET_ACCESS_KEY:-local-dev-only}
+    ports:
+      - "127.0.0.1:${FILE_STORE_PORT:-9000}:9000"
+    volumes:
+      - files-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-fs", "http://127.0.0.1:9000/health"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
 volumes:
   db-data:
+  files-data:

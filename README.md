@@ -12,7 +12,7 @@ pnpm install
 pnpm dev
 ```
 
-`pnpm dev` starts Postgres 16 and Mailpit (the mail catcher) in Docker, creates the database roles, applies migrations, then runs:
+`pnpm dev` starts Postgres 16, Mailpit (the mail catcher) and the file store in Docker, creates the database roles, applies migrations, then runs:
 
 | App | URL |
 |---|---|
@@ -20,6 +20,7 @@ pnpm dev
 | api | http://127.0.0.1:4000 (`GET /health`) |
 | worker | background process, logs only |
 | Mailpit | http://127.0.0.1:8025: every email the apps send locally lands here, never in a real mailbox |
+| File store | http://127.0.0.1:9000: RustFS, S3-compatible. Documents' files go here locally and in CI, never to AWS; the api creates its bucket on start |
 
 ## Demo: the MAR journey
 
@@ -96,6 +97,7 @@ Lane `n` gets its own Docker Compose project (`rabaed-laneN`, with its own conta
 | api | 4000 | 4000 + 100n |
 | web | 3000 | 3000 + 100n |
 | Mailpit | 8025 | 8025 + 100n |
+| File store | 9000 | 9000 + 100n |
 
 Open each lane's web app at `http://laneN.localhost:<web port>/en`. Browsers keep cookies per host name, not per port, so a separate `laneN.localhost` host stops one lane's sign-in from replacing another's. Tests read the same `.env`, so each lane's test runs use its own database.
 
@@ -294,7 +296,7 @@ All config comes from environment variables. The database suites use `<database>
 
 ```bash
 pnpm test:unit    # pure logic, no database
-pnpm test:seam1   # the API called as a given signed-in Member (apps/api/test)
+pnpm test:seam1   # the API called as a given signed-in Member (apps/api/test); Documents need docker compose up -d files
 pnpm test:seam2   # the database as the app role with a Member set (packages/db/test)
 pnpm test:infra   # assertions on the synthesised AWS templates (packages/infra/test)
 pnpm test:mail    # the mailer against Mailpit (packages/mailer/test); start it with docker compose up -d mailpit

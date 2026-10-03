@@ -99,6 +99,9 @@ export class AppStack extends Stack {
         resources: [storage.projectFiles.arnForObjects(`${PROJECT_FILES_PREFIX}*`)],
       }),
     );
+    // So S3 answers 404, not 403, for a file not uploaded yet: confirming a
+    // Document's upload asks whether it is there (RP-269). It reads no object.
+    apiTaskRole.addToPolicy(new iam.PolicyStatement({ actions: ["s3:ListBucket"], resources: [storage.projectFiles.bucketArn] }));
     storage.storageKey.grantEncryptDecrypt(apiTaskRole);
 
     // Named, so the deploy's smoke check can ask IAM what it may read.

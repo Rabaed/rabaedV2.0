@@ -123,6 +123,18 @@ async function fillProject(projectId: string, creator: string) {
   );
   expect(created.outcome).toBe("created");
   const item = created.work_item_id;
+  // A Document, through the upload functions (the api checks the file in storage; here it's taken as stored).
+  const upload = await firstRowAs(
+    creator,
+    sql<{ outcome: string; document_id: string }>`
+      select outcome, document_id from app.start_document_upload(${item}::uuid, 'datasheet.pdf', 1024, 'application/pdf', now())
+    `,
+  );
+  expect(upload.outcome).toBe("started");
+  await expectOutcome(
+    sql`select app.confirm_document_upload(${item}::uuid, ${upload.document_id}::uuid, 1024, 'application/pdf', now()) as outcome`,
+    "confirmed",
+  );
   // Numbers the item, keeps the idempotency key and queues a notification to the Step Pool.
   await expectOutcome(
     sql`select app.take_transition(${item}::uuid, 'send_for_review', '', '', app.answers_sha256(${item}::uuid), ${randomUUID()}::uuid, now()) as outcome`,
