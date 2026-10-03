@@ -73,6 +73,7 @@ Every control sits in a `Field`, which gives it a label, optional help text, the
 | `RadioGroup` | One choice, all options visible | `group` |
 | `SegmentedControl` | Two to five short options side by side (a view switch) | `group` |
 | `Checkbox` | Yes/no that takes effect on submit | `layout="inline"` |
+| `CheckboxGroup` | Any number of choices from a short list | `group` |
 | `Switch` | On/off that takes effect at once | `layout="inline"` |
 
 - **Read-only** keeps the value, stays focusable and is announced read-only (for every control, not only text boxes).

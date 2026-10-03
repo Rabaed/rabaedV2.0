@@ -1,6 +1,6 @@
 "use client";
 
-import { validateAnswers, type FieldError, type FormSchema, type Locale } from "@rabaed/domain";
+import { validateAnswers, type FieldError, type FormSchema, type FormValue, type Locale } from "@rabaed/domain";
 import { Button, FormRenderer, type BuiltInChoices } from "@rabaed/ui";
 import { useTranslations } from "next-intl";
 import { createContext, useContext, useState, type ReactNode } from "react";
@@ -21,7 +21,7 @@ type WorkItemFormState = {
   dirty: boolean;
   pending: boolean;
   message: string | null;
-  change(changes: Readonly<Record<string, unknown>>): void;
+  change(changes: Readonly<Record<string, FormValue | undefined>>): void;
   /** Saves the answers if they changed; false when the save was refused. */
   save(): Promise<boolean>;
   /** Shows the API's per-field errors on the Form. */
@@ -60,7 +60,7 @@ export function WorkItemFormProvider({
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
-  function change(changes: Readonly<Record<string, unknown>>) {
+  function change(changes: Readonly<Record<string, FormValue | undefined>>) {
     const next = { ...answers, ...changes };
     setAnswers(next);
     setDirty(true);

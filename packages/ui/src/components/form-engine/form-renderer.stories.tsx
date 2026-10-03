@@ -71,7 +71,7 @@ const copy = {
   chooseTradeFirst: { en: "Choose a Trade first.", ar: "اختر التخصص أولًا." },
   required: { en: "This field is required.", ar: "هذا الحقل مطلوب." },
   tooLong: { en: "Use at most 20 characters.", ar: "استخدم 20 حرفًا على الأكثر." },
-  unknownOption: { en: "Choose from the list offered.", ar: "اختر من القائمة المعروضة." },
+  unknownOption: { en: "Choose one of the options.", ar: "اختر أحد الخيارات." },
   unanswered: { en: "Not answered", ar: "لم تتم الإجابة" },
   summary: { en: "3 fields need your attention:", ar: "3 حقول تحتاج إلى مراجعتك:" },
 };

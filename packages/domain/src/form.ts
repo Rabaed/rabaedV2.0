@@ -4,8 +4,8 @@ import { bilingualText } from "./company.ts";
 // The Form engine's schema and its one validator (form-engine.md §1, §8; ADR 0006).
 // The same code runs in the browser, for instant feedback, and on the server, as
 // the authority. It stays pure, with no I/O, so the offline app can use it later
-// (ADR 0004). Part 1 knows the field types `text` and `textarea`, and the
-// Built-in Fields `trade`, `location` and `scopes`.
+// (ADR 0004). The Built-in Fields `trade`, `location` and `scopes` sit among the
+// Form's own fields (RP-270).
 
 /** A section or field key: stable across Versions, because answers are stored by it. */
 export const formKey = z.string().regex(/^[a-z][a-z0-9_]*$/).max(64);
@@ -21,6 +21,16 @@ const fieldBase = {
 
 /** The longest value each text type takes when its field sets no `maxLength`. */
 export const defaultMaxLength = { text: 500, textarea: 4000 } as const;
+
+/** One choice of a `select` or `multi_select` field. Answers store its `value`, never its label. */
+export const formOption = z.object({ value: formKey, label: bilingualText });
+export type FormOption = z.infer<typeof formOption>;
+
+const formOptions = z
+  .array(formOption)
+  .min(1)
+  .max(200)
+  .refine((options) => new Set(options.map((o) => o.value)).size === options.length, "Option values must be unique");
 
 /**
  * A Built-in Field (form-engine.md §1): it sits inside every Form, where the Form
@@ -47,6 +57,18 @@ export const formField = z.discriminatedUnion("type", [
   z.object({ ...fieldBase, type: z.literal("text"), maxLength: z.number().int().positive().max(2000).optional() }),
   /** Plain text with line breaks, no formatting. */
   z.object({ ...fieldBase, type: z.literal("textarea"), maxLength: z.number().int().positive().max(20000).optional() }),
+  /** A calendar date, `YYYY-MM-DD` (Gregorian). */
+  z.object({ ...fieldBase, type: z.literal("date") }),
+  /** An instant, ISO 8601 in UTC (`…Z`). Filled in and shown in the Project's time zone. */
+  z.object({ ...fieldBase, type: z.literal("datetime") }),
+  /** A time of day in the Project's time zone, `HH:mm` (or `HH:mm:ss`). */
+  z.object({ ...fieldBase, type: z.literal("time") }),
+  /** Yes or No, stored as `true` or `false`. */
+  z.object({ ...fieldBase, type: z.literal("yes_no") }),
+  /** One of the field's options, by value. */
+  z.object({ ...fieldBase, type: z.literal("select"), options: formOptions }),
+  /** Any of the field's options, by value, in the order chosen. */
+  z.object({ ...fieldBase, type: z.literal("multi_select"), options: formOptions }),
   /** Built-in: one of the Project's Trades, by id. Required even in a Draft. */
   builtInField("trade", true),
   /** Built-in: one of the Project's Locations, by id. Required to leave Draft. */
@@ -60,6 +82,12 @@ export type FormFieldType = FormField["type"];
 /** Whether a field is one of the Built-in Fields. */
 export const isBuiltInField = (field: FormField): field is Extract<FormField, { type: BuiltInFieldType }> =>
   (builtInFieldTypes as readonly string[]).includes(field.type);
+
+/**
+ * A stored answer: text (also dates, times, a select's option, a Trade or
+ * Location id), Yes/No, or a list (a multi-select's options, Scope ids).
+ */
+export type FormValue = string | boolean | string[];
 
 export const formSection = z.object({ key: formKey, title: bilingualText, fields: z.array(formField) });
 export type FormSection = z.infer<typeof formSection>;
@@ -82,14 +110,26 @@ export type FormAnswers = z.infer<typeof formAnswers>;
  */
 export type ValidationMode = "draft" | "complete";
 
-export const fieldErrorCodes = ["required", "wrong_type", "too_long", "unknown_field", "unknown_option"] as const;
+/**
+ * `wrong_type`: not the kind of value the field holds (text, true/false, a list).
+ * `invalid_format`: text, but not a real ISO date, time or UTC instant.
+ * `unknown_option`: not one of a choice field's option values, or a Scope outside the chosen Trade.
+ */
+export const fieldErrorCodes = [
+  "required",
+  "wrong_type",
+  "too_long",
+  "invalid_format",
+  "unknown_option",
+  "unknown_field",
+] as const;
 export type FieldErrorCode = (typeof fieldErrorCodes)[number];
 
 /** One problem with one field. `key` is empty when the answers as a whole aren't an object. */
 export const fieldError = z.object({ key: z.string(), code: z.enum(fieldErrorCodes) });
 export type FieldError = z.infer<typeof fieldError>;
 
-export type ValidationResult = { ok: true; answers: Record<string, unknown> } | { ok: false; errors: FieldError[] };
+export type ValidationResult = { ok: true; answers: Record<string, FormValue> } | { ok: false; errors: FieldError[] };
 
 /** A Scope or Sub-scope, as the validator and the renderer filter them. */
 export type ScopeChoice = { id: string; tradeId: string; parentId: string | null };
@@ -137,8 +177,26 @@ export function scopesFittingTrade(chosen: readonly string[], tradeId: string, s
   });
 }
 
-const isEmpty = (value: unknown) =>
+/** No answer: nothing, empty text, or no option chosen. `false` is an answer (No). */
+export const isUnanswered = (value: unknown): boolean =>
   value === undefined || value === null || value === "" || (Array.isArray(value) && value.length === 0);
+
+const isoDate = /^(\d{4})-(\d{2})-(\d{2})$/;
+const isoTime = /^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/;
+const isoInstant = /^(\d{4})-(\d{2})-(\d{2})T([01]\d|2[0-3]):[0-5]\d(:[0-5]\d(\.\d{1,3})?)?Z$/;
+
+/** A real Gregorian date: no 30 February. */
+function isCalendarDate(year: string, month: string, day: string): boolean {
+  const date = new Date(Date.UTC(Number(year), Number(month) - 1, Number(day)));
+  return date.getUTCFullYear() === Number(year) && date.getUTCMonth() + 1 === Number(month) && date.getUTCDate() === Number(day);
+}
+
+/** Whether `value` is the ISO form a `date`, `datetime` or `time` field stores. */
+export function isIsoValue(type: "date" | "datetime" | "time", value: string): boolean {
+  if (type === "time") return isoTime.test(value);
+  const match = (type === "date" ? isoDate : isoInstant).exec(value);
+  return match !== null && isCalendarDate(match[1]!, match[2]!, match[3]!);
+}
 
 const isId = (value: unknown): value is string => typeof value === "string" && z.uuid().safeParse(value).success;
 
@@ -149,15 +207,37 @@ function isRequired(field: FormField, mode: ValidationMode): boolean {
   return mode === "complete" && field.required;
 }
 
-/** What is wrong with a non-empty answer, if anything. */
-function answerError(
+/** What is wrong with one field's (non-empty) value, or null when nothing is. */
+function checkValue(
   field: FormField,
   value: unknown,
   mode: ValidationMode,
   given: Record<string, unknown>,
   context: ValidationContext,
-): FieldError["code"] | null {
+): FieldErrorCode | null {
   switch (field.type) {
+    case "text":
+    case "textarea":
+      if (typeof value !== "string") return "wrong_type";
+      if (value.length > (field.maxLength ?? defaultMaxLength[field.type])) return "too_long";
+      return mode === "complete" && field.required && value.trim() === "" ? "required" : null;
+    case "date":
+    case "datetime":
+    case "time":
+      if (typeof value !== "string") return "wrong_type";
+      return isIsoValue(field.type, value) ? null : "invalid_format";
+    case "yes_no":
+      return typeof value === "boolean" ? null : "wrong_type";
+    case "select":
+      if (typeof value !== "string") return "wrong_type";
+      return field.options.some((o) => o.value === value) ? null : "unknown_option";
+    case "multi_select": {
+      if (!Array.isArray(value) || !value.every((v) => typeof v === "string") || new Set(value).size !== value.length) {
+        return "wrong_type";
+      }
+      const known = new Set(field.options.map((o) => o.value));
+      return value.every((v) => known.has(v)) ? null : "unknown_option";
+    }
     case "trade":
     case "location":
       return isId(value) ? null : "wrong_type";
@@ -167,10 +247,6 @@ function answerError(
       const tradeId = typeof given.trade === "string" ? given.trade : "";
       return scopesFittingTrade(value, tradeId, context.scopes).length === value.length ? null : "unknown_option";
     }
-    default:
-      if (typeof value !== "string") return "wrong_type";
-      if (value.length > (field.maxLength ?? defaultMaxLength[field.type])) return "too_long";
-      return isRequired(field, mode) && value.trim() === "" ? "required" : null;
   }
 }
 
@@ -192,17 +268,17 @@ export function validateAnswers(
   const given = answers as Record<string, unknown>;
   const fields = formFields(schema);
   const errors: FieldError[] = [];
-  const clean: Record<string, unknown> = {};
+  const clean: Record<string, FormValue> = {};
 
   for (const field of fields) {
     const value = given[field.key];
-    if (isEmpty(value)) {
+    if (isUnanswered(value)) {
       if (isRequired(field, mode)) errors.push({ key: field.key, code: "required" });
       continue;
     }
-    const code = answerError(field, value, mode, given, context);
+    const code = checkValue(field, value, mode, given, context);
     if (code) errors.push({ key: field.key, code });
-    else clean[field.key] = value;
+    else clean[field.key] = value as FormValue;
   }
 
   const known = new Set(fields.map((f) => f.key));

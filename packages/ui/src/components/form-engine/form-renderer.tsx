@@ -2,20 +2,30 @@
 
 import {
   defaultMaxLength,
+  formatFormValue,
   formatNumber,
   formFields,
+  fromProjectWallTime,
   isBuiltInField,
+  isUnanswered,
   scopesFittingTrade,
+  toProjectWallTime,
+  type BuiltInFieldType,
   type FieldError,
   type FormField,
+  type FormOption,
   type FormSchema,
+  type FormValue,
   type Locale,
 } from "@rabaed/domain";
 import type { ReactNode } from "react";
 import { cn } from "../../lib/cn.ts";
+import { CheckboxGroup } from "../form/checkbox-group.tsx";
 import { focusRing } from "../form/control-styles.ts";
 import { Field } from "../form/field.tsx";
 import { Input } from "../form/input.tsx";
+import { RadioGroup } from "../form/radio-group.tsx";
+import { Select } from "../form/select.tsx";
 import { Textarea } from "../form/textarea.tsx";
 import { Icon } from "../icon/icon.tsx";
 import { BuiltInSelect, builtInAnswerLabels, noChoices, ScopesChecklist, type BuiltInChoices } from "./built-in-fields.tsx";
@@ -24,9 +34,10 @@ import { BuiltInSelect, builtInAnswerLabels, noChoices, ScopesChecklist, type Bu
 // schema with its answers and per-field errors, to fill in (`edit`) or to read
 // (`read`). Presentational only: it fetches nothing and checks nothing itself;
 // errors come from the shared validator (validateAnswers) or the API's refusal.
-// Labels follow the viewer's language; answers are shown exactly as typed.
-// The Built-in Fields (Trade, Location, Scopes) sit where the Form places them,
-// offering what the page passes in `choices`.
+// Labels follow the viewer's language; text answers are shown exactly as typed,
+// dates and times in the viewer's language with Latin digits, and date-times in
+// the Project's time zone. The Built-in Fields (Trade, Location, Scopes) sit
+// where the Form places them, offering what the page passes in `choices`.
 
 const copy = {
   en: {
@@ -34,7 +45,10 @@ const copy = {
     required: "This field is required.",
     wrongType: "This value isn't valid here.",
     tooLong: (max: number) => `Use at most ${formatNumber(max, "en")} characters.`,
-    unknownOption: "Choose from the list offered.",
+    invalidFormat: { date: "Enter a valid date.", time: "Enter a valid time.", datetime: "Enter a valid date and time." },
+    unknownOption: "Choose one of the options.",
+    choose: "Choose…",
+    none: "None",
     unanswered: "Not answered",
   },
   ar: {
@@ -50,7 +64,10 @@ const copy = {
     required: "هذا الحقل مطلوب.",
     wrongType: "هذه القيمة غير صالحة هنا.",
     tooLong: (max: number) => `استخدم ${formatNumber(max, "ar")} حرفًا على الأكثر.`,
-    unknownOption: "اختر من القائمة المعروضة.",
+    invalidFormat: { date: "أدخل تاريخًا صالحًا.", time: "أدخل وقتًا صالحًا.", datetime: "أدخل تاريخًا ووقتًا صالحين." },
+    unknownOption: "اختر أحد الخيارات.",
+    choose: "اختر…",
+    none: "بدون",
     unanswered: "لم تتم الإجابة",
   },
 } satisfies Record<Locale, unknown>;
@@ -72,10 +89,10 @@ export type FormRendererProps = {
    */
   choices?: BuiltInChoices;
   /**
-   * Called as the filler changes the Form (edit mode), with every answer that
-   * changed: one field's, or a new Trade's with the Scopes that still fit it.
+   * Called as the filler answers (edit mode), with every answer that changed:
+   * one field's, or a new Trade's with the Scopes that still fit it. `undefined` clears one.
    */
-  onChange?: (changes: Readonly<Record<string, unknown>>) => void;
+  onChange?: (changes: Readonly<Record<string, FormValue | undefined>>) => void;
   /** Prefix for the fields' ids, unique on the page. */
   idPrefix?: string;
   className?: string;
@@ -83,13 +100,116 @@ export type FormRendererProps = {
 
 function errorText(field: FormField, error: FieldError, locale: Locale): string {
   const text = copy[locale];
-  if (error.code === "too_long" && !isBuiltInField(field)) return text.tooLong(field.maxLength ?? defaultMaxLength[field.type]);
-  if (error.code === "unknown_option") return text.unknownOption;
-  return error.code === "required" ? text.required : text.wrongType;
+  switch (error.code) {
+    case "required":
+      return text.required;
+    case "too_long":
+      return field.type === "text" || field.type === "textarea"
+        ? text.tooLong(field.maxLength ?? defaultMaxLength[field.type])
+        : text.wrongType;
+    case "invalid_format":
+      return field.type === "date" || field.type === "time" || field.type === "datetime"
+        ? text.invalidFormat[field.type]
+        : text.wrongType;
+    case "unknown_option":
+      return text.unknownOption;
+    default:
+      return text.wrongType;
+  }
 }
 
 const textOf = (value: unknown) => (typeof value === "string" ? value : "");
 const idsOf = (value: unknown) => (Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : []);
+
+// A select's "no choice" item: option values are snake_case keys, so this never clashes with one.
+const noChoice = "-";
+
+/** A choice field's options as a control takes them, labelled in the viewer's language. */
+const optionsOf = (field: { options: FormOption[] }, locale: Locale) =>
+  field.options.map((o) => ({ value: o.value, label: o.label[locale] }));
+
+type OwnField = Exclude<FormField, { type: BuiltInFieldType }>;
+
+/** One of the Form's own fields' control, and whether its Field labels a group (radios, checkboxes) rather than one control. */
+function control(
+  field: OwnField,
+  value: unknown,
+  locale: Locale,
+  change: (value: FormValue | undefined) => void,
+): { element: ReactNode; group?: boolean } {
+  const text = copy[locale];
+  const name = field.key;
+  switch (field.type) {
+    case "text":
+    case "textarea": {
+      const props = {
+        name,
+        value: textOf(value),
+        maxLength: field.maxLength ?? defaultMaxLength[field.type],
+        // Answers keep the filler's own language and direction.
+        dir: "auto" as const,
+        onChange: (event: { target: { value: string } }) => change(event.target.value),
+      };
+      return { element: field.type === "textarea" ? <Textarea rows={5} {...props} /> : <Input {...props} /> };
+    }
+    case "date":
+    case "time":
+      return {
+        element: <Input type={field.type} name={name} value={textOf(value)} onChange={(e) => change(e.target.value)} />,
+      };
+    case "datetime":
+      // The control shows the Project's wall time; the answer is the UTC instant.
+      return {
+        element: (
+          <Input
+            type="datetime-local"
+            name={name}
+            value={toProjectWallTime(textOf(value))}
+            onChange={(e) => change(fromProjectWallTime(e.target.value) || undefined)}
+          />
+        ),
+      };
+    case "yes_no":
+      return {
+        group: true,
+        element: (
+          <RadioGroup
+            name={name}
+            options={[
+              { value: "yes", label: formatFormValue(field, true, locale) },
+              { value: "no", label: formatFormValue(field, false, locale) },
+            ]}
+            value={value === true ? "yes" : value === false ? "no" : ""}
+            onValueChange={(v) => change(v === "yes")}
+          />
+        ),
+      };
+    case "select":
+      return {
+        element: (
+          <Select
+            name={name}
+            placeholder={text.choose}
+            // An optional choice can be taken back.
+            options={field.required ? optionsOf(field, locale) : [{ value: noChoice, label: text.none }, ...optionsOf(field, locale)]}
+            value={textOf(value)}
+            onValueChange={(v) => change(v === noChoice ? undefined : v)}
+          />
+        ),
+      };
+    case "multi_select":
+      return {
+        group: true,
+        element: (
+          <CheckboxGroup
+            options={optionsOf(field, locale)}
+            value={Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : []}
+            onValueChange={change}
+          />
+        ),
+      };
+  }
+}
 
 /**
  * A Form: its sections in order, each with its fields. In edit mode every field
@@ -113,54 +233,53 @@ export function FormRenderer({
   // Only errors of fields on this Form can be shown and linked.
   const shown = mode === "edit" ? errors.filter((e) => byKey.has(e.key)) : [];
 
-  function control(field: FormField): ReactNode {
-    switch (field.type) {
+  /** A Built-in Field's control; Scopes label a group of checkboxes. */
+  function builtInControl(type: BuiltInFieldType): { element: ReactNode; group?: boolean } {
+    switch (type) {
       case "trade":
-        return (
-          <BuiltInSelect
-            value={textOf(answers.trade)}
-            choices={choices.trades}
-            locale={locale}
-            // A new Trade keeps only the Scopes that fit it.
-            onChange={(trade) => onChange?.({ trade, scopes: scopesFittingTrade(idsOf(answers.scopes), trade, choices.scopes) })}
-          />
-        );
-      case "location":
-        return (
-          <BuiltInSelect
-            value={textOf(answers.location)}
-            choices={choices.locations}
-            locale={locale}
-            onChange={(location) => onChange?.({ location })}
-          />
-        );
-      case "scopes":
-        return (
-          <ScopesChecklist
-            chosen={idsOf(answers.scopes)}
-            tradeId={textOf(answers.trade)}
-            scopes={choices.scopes}
-            locale={locale}
-            onChange={(scopes) => onChange?.({ scopes })}
-          />
-        );
-      default: {
-        const props = {
-          name: field.key,
-          value: textOf(answers[field.key]),
-          maxLength: field.maxLength ?? defaultMaxLength[field.type],
-          // Answers keep the filler's own language and direction.
-          dir: "auto" as const,
-          onChange: (event: { target: { value: string } }) => onChange?.({ [field.key]: event.target.value }),
+        return {
+          element: (
+            <BuiltInSelect
+              value={textOf(answers.trade)}
+              choices={choices.trades}
+              locale={locale}
+              // A new Trade keeps only the Scopes that fit it.
+              onChange={(trade) => onChange?.({ trade, scopes: scopesFittingTrade(idsOf(answers.scopes), trade, choices.scopes) })}
+            />
+          ),
         };
-        return field.type === "textarea" ? <Textarea rows={5} {...props} /> : <Input {...props} />;
-      }
+      case "location":
+        return {
+          element: (
+            <BuiltInSelect
+              value={textOf(answers.location)}
+              choices={choices.locations}
+              locale={locale}
+              onChange={(location) => onChange?.({ location })}
+            />
+          ),
+        };
+      case "scopes":
+        return {
+          group: true,
+          element: (
+            <ScopesChecklist
+              chosen={idsOf(answers.scopes)}
+              tradeId={textOf(answers.trade)}
+              scopes={choices.scopes}
+              locale={locale}
+              onChange={(scopes) => onChange?.({ scopes })}
+            />
+          ),
+        };
     }
   }
 
+  /** An answer as read; null when there is none. Built-in Fields are named from `choices`. */
   function answer(field: FormField): ReactNode {
+    const value = answers[field.key];
     if (isBuiltInField(field)) {
-      const labels = builtInAnswerLabels(field.type, answers[field.key], choices);
+      const labels = builtInAnswerLabels(field.type, value, choices);
       if (labels.length === 0) return null;
       return field.type === "scopes" ? (
         <ul className="flex flex-col gap-1">
@@ -174,8 +293,7 @@ export function FormRenderer({
         <bdi>{labels[0]}</bdi>
       );
     }
-    const value = textOf(answers[field.key]);
-    return value ? <bdi>{value}</bdi> : null;
+    return isUnanswered(value) ? null : <bdi>{formatFormValue(field, value, locale)}</bdi>;
   }
 
   return (
@@ -207,6 +325,9 @@ export function FormRenderer({
             {mode === "edit" ? (
               section.fields.map((field) => {
                 const error = errorOf(field.key);
+                const { element, group } = isBuiltInField(field)
+                  ? builtInControl(field.type)
+                  : control(field, answers[field.key], locale, (value) => onChange?.({ [field.key]: value }));
                 return (
                   <Field
                     key={field.key}
@@ -216,9 +337,9 @@ export function FormRenderer({
                     error={error && errorText(field, error, locale)}
                     // Trade and Location always are, whatever the schema says.
                     required={field.type === "trade" || field.type === "location" || field.required}
-                    group={field.type === "scopes"}
+                    group={group}
                   >
-                    {control(field)}
+                    {element}
                   </Field>
                 );
               })

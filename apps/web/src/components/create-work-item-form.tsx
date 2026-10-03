@@ -1,6 +1,6 @@
 "use client";
 
-import { validateAnswers, type FieldError, type FormVersion, type Locale } from "@rabaed/domain";
+import { validateAnswers, type FieldError, type FormValue, type FormVersion, type Locale } from "@rabaed/domain";
 import { Button, Field, FormRenderer, Input, type BuiltInChoices } from "@rabaed/ui";
 import { useTranslations } from "next-intl";
 import { useState, type FormEvent } from "react";
@@ -30,7 +30,7 @@ export function CreateWorkItemForm({
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
-  function change(changes: Readonly<Record<string, unknown>>) {
+  function change(changes: Readonly<Record<string, FormValue | undefined>>) {
     const next = { ...answers, ...changes };
     setAnswers(next);
     // Instant feedback with the same checks the server runs (draft mode). A missing
