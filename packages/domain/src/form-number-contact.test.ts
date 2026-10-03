@@ -95,7 +95,7 @@ describe("currency fields", () => {
 
 describe("email fields", () => {
   it("take an email address, without the spaces around it", () => {
-    expect(cleanOf({ contact_email: "site.engineer@contractor.com.sa" })).toEqual({ contact_email: "site.engineer@contractor.com.sa" });
+    expect(cleanOf({ contact_email: "site.engineer@contractor.example" })).toEqual({ contact_email: "site.engineer@contractor.example" });
     expect(cleanOf({ contact_email: " pm@rabaed.sa " })).toEqual({ contact_email: "pm@rabaed.sa" });
   });
 

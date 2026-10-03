@@ -88,7 +88,7 @@ const answers: Record<string, FormValue> = {
   weight: 12.5,
   floors: 3,
   unit_price: 87.25,
-  contact_email: "sales@gulf-steel.com.sa",
+  contact_email: "sales@supplier.example",
   contact_phone: "+966 50 123 4567",
 };
 
@@ -156,8 +156,8 @@ export const Edit: Story = {
     const email = labelled(context, copy.email);
     await expect(email).toHaveAttribute("type", "email");
     await expect(email).toBeRequired();
-    fireEvent.change(email, { target: { value: "sales@gulf-steel.com.sa" } });
-    await expect(args.onChange).toHaveBeenLastCalledWith({ contact_email: "sales@gulf-steel.com.sa" });
+    fireEvent.change(email, { target: { value: "sales@supplier.example" } });
+    await expect(args.onChange).toHaveBeenLastCalledWith({ contact_email: "sales@supplier.example" });
 
     const phone = labelled(context, copy.phone);
     await expect(phone).toHaveAttribute("type", "tel");
@@ -210,7 +210,7 @@ export const ReadOnly: Story = {
     await expect(shown[2]).toBe("3");
     await expect(shown[3]).toContain("87.25");
     await expect(shown[3]).toContain(storyText(context, copy.sar));
-    await expect(shown[4]).toBe("sales@gulf-steel.com.sa");
+    await expect(shown[4]).toBe("sales@supplier.example");
     await expect(shown[5]).toBe("+966 50 123 4567");
     // A number reads in the page's direction, so its unit follows it; contact details left to right.
     const [quantity, , , , email] = canvas.getAllByRole("definition").map((dd) => dd.querySelector("bdi")!);

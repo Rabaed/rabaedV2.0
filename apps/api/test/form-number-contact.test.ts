@@ -64,7 +64,7 @@ const complete = {
   quantity: 1250.5,
   floors: 0,
   unit_price: 87.25,
-  contact_email: "sales@gulf-steel.com.sa",
+  contact_email: "sales@supplier.example",
   contact_phone: "+966 50 123 4567",
 };
 
@@ -160,8 +160,8 @@ describe("answers round-trip", () => {
 
   it("on Save draft, with required fields still empty; spaces around an email address dropped", async () => {
     const id = (await ok(createDraft({}), 201)).json().id as string;
-    await ok(save(id, { floors: 12, contact_email: "  pm@contractor.sa " }));
-    expect(await answersOf(id)).toEqual({ floors: 12, contact_email: "pm@contractor.sa" });
+    await ok(save(id, { floors: 12, contact_email: "  pm@contractor.example " }));
+    expect(await answersOf(id)).toEqual({ floors: 12, contact_email: "pm@contractor.example" });
     await ok(save(id, complete));
     expect(await answersOf(id)).toEqual(complete);
   });
@@ -172,7 +172,7 @@ describe("a bad value", () => {
     quantity: 5000.01,
     floors: 2.5,
     unit_price: "87.25",
-    contact_email: "sales@gulf-steel",
+    contact_email: "sales@supplier",
     contact_phone: "050 123 456",
   };
   const perField = [
@@ -218,7 +218,7 @@ describe("leaving Draft", () => {
         { key: "contact_email", code: "required" },
       ],
     });
-    await ok(save(id, { floors: 0, quantity: 1, unit_price: 0, contact_email: "pm@contractor.sa" }));
+    await ok(save(id, { floors: 0, quantity: 1, unit_price: 0, contact_email: "pm@contractor.example" }));
     await ok(send());
   });
 });
