@@ -38,8 +38,8 @@ async function refusable<T>(run: () => Promise<T>): Promise<EditResult<T>> {
     if (error instanceof Refused) return { ok: false, reason: error.reason };
     const code = (error as { code?: string }).code;
     if (code === "23505") return { ok: false, reason: "duplicate_value" };
-    // The level trigger: a fourth level.
-    if (code === "23514") return { ok: false, reason: "too_deep" };
+    // The level trigger: a fourth level (other check violations are not this).
+    if (code === "23514" && /at most three levels/.test((error as Error).message)) return { ok: false, reason: "too_deep" };
     throw error;
   }
 }

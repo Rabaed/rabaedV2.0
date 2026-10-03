@@ -54,7 +54,7 @@ const text = {
     showLists: "Show Option Lists",
     noLists: "No Option Lists yet.",
     newList: "New Option List",
-    createList: "Create list",
+    createList: "Create Option List",
     nameEnShort: "Name (English)",
     nameArShort: "Name (Arabic)",
     optionValue: "Value (stays the same)",
@@ -84,7 +84,7 @@ const text = {
       duplicate_email: "This email already belongs to someone on Rabaed.",
       not_found: "No Company has this CR number.",
       lead_not_open: "This lead is no longer open. Show the leads again.",
-      duplicate_value: "This list already has an option with this value.",
+      duplicate_value: "This Option List already has an option with this value.",
       too_deep: "An Option List has at most three levels.",
       already_active: "This Authorized Person has already accepted.",
       invalid_request: "Check the fields and try again.",
@@ -441,7 +441,6 @@ async function loadLists() {
     heading.dir = "auto";
     box.append(heading, linkButton(t().addOption, () => openOptionForm("add-root", list.id, t().addOptionTitle(name), null, list.id)), optionTree(list.options, 1));
   }
-  $("list-form").hidden = false;
   box.hidden = false;
   if (optionLists.length === 0) notice(t().noLists);
 }
