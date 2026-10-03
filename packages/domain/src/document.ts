@@ -43,6 +43,12 @@ export const startDocumentUploadRequest = z.object({
   fileName: z.string().trim().min(1).max(255),
   sizeBytes: z.number().int().positive(),
   contentType,
+  /** The Form's `attachments` field the file is for (RP-281); none for the Attachments System Field. */
+  fieldKey: z
+    .string()
+    .regex(/^[a-z][a-z0-9_]*$/)
+    .max(64)
+    .optional(),
 });
 export type StartDocumentUploadRequest = z.infer<typeof startDocumentUploadRequest>;
 
@@ -68,6 +74,8 @@ export const documentSummary = z.object({
   uploadedBy: z.object({ companyName: bilingualText, memberName: bilingualText.nullable() }),
   /** Frozen once the item was first sent or submitted: it never changes again. */
   frozen: z.boolean(),
+  /** The Form's `attachments` field it belongs to; null for the Attachments System Field. */
+  fieldKey: z.string().nullable(),
 });
 export type DocumentSummary = z.infer<typeof documentSummary>;
 

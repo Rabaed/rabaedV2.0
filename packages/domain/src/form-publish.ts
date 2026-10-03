@@ -74,9 +74,13 @@ function duplicateKeys(schema: FormSchema): string[] {
   return [...repeated];
 }
 
-/** Sections and fields with a rule that reads a key that is no answer field. */
+/** Sections and fields with a rule that reads a key that holds no answer (a layout or `attachments` field, or none). */
 function unknownReferences(schema: FormSchema): string[] {
-  const answerKeys = new Set(formFields(schema).filter(isAnswerField).map((f) => f.key));
+  const answerKeys = new Set(
+    formFields(schema)
+      .filter((f) => isAnswerField(f) && f.type !== "attachments")
+      .map((f) => f.key),
+  );
   return sectionsAndFields(schema)
     .filter((item) => rulesOf(item).some((rule) => conditionFields(rule).some((key) => !answerKeys.has(key))))
     .map((item) => item.key);

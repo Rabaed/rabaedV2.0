@@ -10,11 +10,13 @@ import {
   type FormValue,
   type Locale,
   type NamedAnswers,
+  type DocumentList,
 } from "@rabaed/domain";
 import { Button, FormRenderer, type BuiltInChoices } from "@rabaed/ui";
 import { useTranslations } from "next-intl";
 import { createContext, useContext, useState, type ReactNode } from "react";
 import { useRouter } from "@/i18n/navigation";
+import { useDocuments } from "./use-documents";
 
 // A Work Item's Form on its page: the answers being edited, their errors, and
 // Save draft. The Transition buttons share it, so leaving Draft first saves what
@@ -147,10 +149,12 @@ export function WorkItemFormProvider({
 }
 
 /** The Form itself: to fill in while the viewer may edit it, otherwise to read. */
-export function WorkItemAnswers({ locale }: { locale: Locale }) {
+export function WorkItemAnswers({ locale, workItemId, documents }: { locale: Locale; workItemId: string; documents: DocumentList }) {
   const t = useTranslations("workItems.form");
   const tItems = useTranslations("workItems");
   const form = useWorkItemForm();
+  // The Form's `attachments` fields upload as the Attachments System Field does (RP-281).
+  const files = useDocuments(workItemId, documents.limits);
   if (!form) return null;
   // The fields the last check marked, by their labels in the viewer's language, in Form order.
   const marked = new Set(form.errors.map((e) => e.key));
@@ -170,10 +174,23 @@ export function WorkItemAnswers({ locale }: { locale: Locale }) {
         locale={locale}
         onChange={form.change}
         idPrefix="answer"
+        files={{
+          documents: documents.documents,
+          canChange: documents.canChange,
+          pending: files.fieldsPending,
+          onUpload: (fieldKey, file) => void files.upload(file, fieldKey),
+          onOpen: (documentId) => void files.open(documentId),
+          onRemove: (fieldKey, documentId) => void files.remove(documentId, fieldKey),
+        }}
       />
       {form.message && (
         <p role="status" className="text-sm text-muted">
           {form.message}
+        </p>
+      )}
+      {files.message && (
+        <p role="status" className="text-sm text-muted">
+          {files.message}
         </p>
       )}
       {toFix.length > 0 && (

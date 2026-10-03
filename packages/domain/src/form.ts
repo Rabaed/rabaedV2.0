@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { bilingualText } from "./company.ts";
 import { condition, evaluateCondition, isUnanswered, readsAttrs } from "./condition.ts";
+import { contentType } from "./document.ts";
 
 // The Form engine's schema and its one validator (form-engine.md §1, §8; ADR 0006).
 // The same code runs in the browser, for instant feedback, and on the server, as
@@ -85,6 +86,9 @@ export function currencyDecimals(currency: string): number {
 
 /** The most rows a table's answers ever hold, whatever its Form says, so an answer stays a sane size. */
 export const maxTableRows = 200;
+
+/** The most files an `attachments` field's `minFiles` and `maxFiles` may set. */
+export const maxFieldFiles = 50;
 
 const columnBase = { key: formKey, label: bilingualText, required: z.boolean().default(false) };
 
@@ -197,6 +201,22 @@ export const formField = z.discriminatedUnion("type", [
       maxRows: z.number().int().min(1).max(maxTableRows).optional(),
     })
     .refine((table) => table.minRows === undefined || table.maxRows === undefined || table.minRows <= table.maxRows, "minRows is above maxRows"),
+  /**
+   * Named files (RP-281), such as a required Datasheet, beside the Attachments
+   * System Field. The files are Documents tied to the field by its key, never
+   * answers. `contentTypes` limits what may be uploaded to it (any the Project
+   * takes when unset); `required` and `minFiles` count confirmed files, and are
+   * checked when the item leaves Draft; `maxFiles` stops further uploads.
+   */
+  z
+    .object({
+      ...fieldBase,
+      type: z.literal("attachments"),
+      contentTypes: z.array(contentType).min(1).max(30).optional(),
+      minFiles: z.number().int().min(0).max(maxFieldFiles).optional(),
+      maxFiles: z.number().int().min(1).max(maxFieldFiles).optional(),
+    })
+    .refine((field) => field.minFiles === undefined || field.maxFiles === undefined || field.minFiles <= field.maxFiles, "minFiles is above maxFiles"),
   /** Layout, display only: a heading inside a section. */
   z.object({ ...layoutBase, type: z.literal("heading"), text: bilingualText }),
   /** Layout, display only: a paragraph of guidance for the filler. */
@@ -213,6 +233,7 @@ export const formField = z.discriminatedUnion("type", [
 export type FormField = z.infer<typeof formField>;
 export type FormFieldType = FormField["type"];
 export type TableField = Extract<FormField, { type: "table" }>;
+export type AttachmentsField = Extract<FormField, { type: "attachments" }>;
 
 const layoutTypes = ["heading", "instructions", "divider"] as const;
 export type LayoutField = Extract<FormField, { type: (typeof layoutTypes)[number] }>;
@@ -305,6 +326,8 @@ export type ValidationMode = "draft" | "complete";
  *   same answer as a made-up id).
  * `too_few_rows`, `too_many_rows`: a table with fewer rows than its minimum or
  *   more than its maximum (checked when the item leaves Draft).
+ * `too_few_files`: an `attachments` field with fewer confirmed files than its
+ *   minimum (checked when the item leaves Draft).
  * A table's cell errors name the cell: `row` (from 0) and `column`.
  */
 export const fieldErrorCodes = [
@@ -319,6 +342,7 @@ export const fieldErrorCodes = [
   "unknown_field",
   "too_few_rows",
   "too_many_rows",
+  "too_few_files",
 ] as const;
 export type FieldErrorCode = (typeof fieldErrorCodes)[number];
 
@@ -347,8 +371,14 @@ export type ScopeChoice = { id: string; tradeId: string; parentId: string | null
  * What the validator checks against: the Project's Scopes for the Built-in
  * Fields, and the ids `offered` to the filler for `member` and `participant`.
  * Without them it checks only that they are ids; the server always passes them.
+ * `files`: how many confirmed files each `attachments` field has, by key, for
+ * `complete` mode (none when a key is missing).
  */
-export type ValidationContext = { scopes?: readonly ScopeChoice[]; offered?: OfferedChoices };
+export type ValidationContext = {
+  scopes?: readonly ScopeChoice[];
+  offered?: OfferedChoices;
+  files?: Readonly<Record<string, number>>;
+};
 
 /** Every field of the schema, layout included, in Form order. */
 export function formFields(schema: FormSchema): FormField[] {
@@ -559,8 +589,10 @@ function checkValue(
       const ids = context.offered && (field.type === "member" ? context.offered.members : context.offered.participants);
       return (ids ? ids.has(value) : isId(value)) ? null : "unknown_option";
     }
-    // A table is checked by checkTable, which knows its rows and columns.
+    // A table is checked by checkTable, which knows its rows and columns; an
+    // attachments field by validateAnswers, which knows its files.
     case "table":
+    case "attachments":
       return null;
   }
 }
@@ -675,6 +707,14 @@ export function validateAnswers(
       const table = checkTable(field, value, mode === "complete", required);
       errors.push(...table.errors);
       if (table.errors.length === 0 && table.rows.length > 0) clean[field.key] = table.rows;
+      continue;
+    }
+    // Its files are Documents, never answers; leaving Draft counts the confirmed ones.
+    if (field.type === "attachments") {
+      const files = context.files?.[field.key] ?? 0;
+      if (!isUnanswered(value)) errors.push({ key: field.key, code: "wrong_type" });
+      else if (mode === "complete" && required && files === 0) errors.push({ key: field.key, code: "required" });
+      else if (mode === "complete" && files < (field.minFiles ?? 0)) errors.push({ key: field.key, code: "too_few_files" });
       continue;
     }
     if (isUnanswered(value)) {

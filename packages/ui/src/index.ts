@@ -33,7 +33,8 @@ export { CheckboxGroup, type CheckboxGroupProps } from "./components/form/checkb
 export { DirectionProvider } from "./components/form/direction.tsx";
 export { Field, type ChoiceOption, type FieldProps } from "./components/form/field.tsx";
 export { type BuiltInChoice, type BuiltInChoices } from "./components/form-engine/built-in-fields.tsx";
-export { FormRenderer, type FormRendererProps } from "./components/form-engine/form-renderer.tsx";
+export { FormRenderer, type FormFiles, type FormRendererProps } from "./components/form-engine/form-renderer.tsx";
+export { contentTypeOf } from "./components/form-engine/attachments-field.tsx";
 export { Input, type InputProps } from "./components/form/input.tsx";
 export { RadioGroup, type RadioGroupProps } from "./components/form/radio-group.tsx";
 export { SegmentedControl, type SegmentedControlProps } from "./components/form/segmented-control.tsx";

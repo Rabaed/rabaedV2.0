@@ -146,6 +146,8 @@ describe("a Draft's Documents, for the raiser", () => {
         uploadedAt: expect.any(String),
         uploadedBy: { companyName: expect.any(Object), memberName: { en: "Test Member", ar: "عضو الاختبار" } },
         frozen: false,
+        // The Attachments System Field's: no Form field (RP-281).
+        fieldKey: null,
       },
     ]);
   });

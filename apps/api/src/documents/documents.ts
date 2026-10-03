@@ -33,9 +33,10 @@ export function listDocuments(db: Db, memberId: string, workItemId: string, limi
       company_name: BilingualText;
       member_name: BilingualText | null;
       frozen: boolean;
+      field_key: string | null;
     }>`
       select d.id, d.file_name, d.size_bytes, d.content_type, d.confirmed_at, co.legal_name as company_name,
-        m.full_name as member_name, d.frozen_at is not null as frozen
+        m.full_name as member_name, d.frozen_at is not null as frozen, d.field_key
       from document d
       join app.work_item_companies(d.work_item_id) co on co.participant_id = d.uploaded_by_participant_id
       -- member's own RLS shows only the viewer's own Company's people (V14).
@@ -53,6 +54,7 @@ export function listDocuments(db: Db, memberId: string, workItemId: string, limi
         uploadedAt: r.confirmed_at.toISOString(),
         uploadedBy: { companyName: r.company_name, memberName: r.member_name },
         frozen: r.frozen,
+        fieldKey: r.field_key,
       })),
       canChange: can[0]!.can,
       limits,
@@ -61,9 +63,12 @@ export function listDocuments(db: Db, memberId: string, workItemId: string, limi
 }
 
 const changeRefusals = ["not_found", "project_closed", "forbidden", "not_editable"] as const;
+/** A file a Form's `attachments` field won't take (the field_documents migration). */
+const fieldRefusals = ["field_not_found", "content_type_not_allowed", "too_many_files"] as const;
+const startRefusals = [...changeRefusals, ...fieldRefusals] as const;
 export type StartUploadResult =
   | { ok: true; started: StartedDocumentUpload }
-  | { ok: false; reason: (typeof changeRefusals)[number] | OverLimit["reason"] };
+  | { ok: false; reason: (typeof startRefusals)[number] | OverLimit["reason"] };
 
 /** A file over the configured limits: thrown inside the transaction, so its pending row is rolled back. */
 class OverLimit extends Error {
@@ -73,8 +78,9 @@ class OverLimit extends Error {
 }
 
 /**
- * Step 1: the acting Member declares a file for a visible item, and gets a URL
- * to PUT it to. The URL is signed for exactly that size and type.
+ * Step 1: the acting Member declares a file for a visible item, and for one of
+ * its Form's `attachments` fields or the Attachments System Field, and gets a
+ * URL to PUT it to. The URL is signed for exactly that size and type.
  */
 export function startUpload(
   db: Db,
@@ -88,9 +94,9 @@ export function startUpload(
   return withMember(db, memberId, async (trx): Promise<StartUploadResult> => {
     const { rows } = await sql<{ outcome: string; document_id: string | null; storage_key: string | null }>`
       select outcome, document_id, storage_key from app.start_document_upload(
-        ${workItemId}::uuid, ${file.fileName}, ${file.sizeBytes}, ${file.contentType}, ${now})
+        ${workItemId}::uuid, ${file.fileName}, ${file.sizeBytes}, ${file.contentType}, ${now}, ${file.fieldKey ?? null})
     `.execute(trx);
-    const outcome = checkedOutcome(rows[0]!.outcome, ["started", ...changeRefusals]);
+    const outcome = checkedOutcome(rows[0]!.outcome, ["started", ...startRefusals]);
     if (outcome !== "started") return { ok: false, reason: outcome };
     // Who may upload, and when, before what is wrong with the file. Thrown, so the row is rolled back.
     if (file.sizeBytes > limits.maxBytes) throw new OverLimit("file_too_large");
@@ -103,7 +109,7 @@ export function startUpload(
   });
 }
 
-const confirmRefusals = [...changeRefusals, "not_uploaded", "upload_mismatch"] as const;
+const confirmRefusals = [...changeRefusals, "not_uploaded", "upload_mismatch", "too_many_files"] as const;
 export type ConfirmUploadResult = { ok: true } | { ok: false; reason: (typeof confirmRefusals)[number] };
 
 /** Step 3: the uploader confirms; the file must be in the store, exactly as declared. */

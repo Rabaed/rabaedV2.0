@@ -426,6 +426,8 @@ export interface DocumentTable {
   removed_at: Timestamp | null;
   removed_by_member_id: string | null;
   frozen_at: Timestamp | null;
+  /** The `attachments` field it belongs to; null for the Attachments System Field (the field_documents migration). */
+  field_key: string | null;
 }
 
 export interface WorkItemTable {

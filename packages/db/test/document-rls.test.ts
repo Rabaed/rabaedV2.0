@@ -74,16 +74,16 @@ async function insertDocument(
   itemId: string,
   memberId: string,
   participantId: string,
-  state: { confirmed?: boolean; removed?: boolean },
+  state: { confirmed?: boolean; removed?: boolean; fieldKey?: string },
 ): Promise<string> {
   const id = randomUUID();
   await migrator.query(
     `insert into document (id, project_id, work_item_id, file_name, size_bytes, content_type, storage_key,
-       uploaded_by_member_id, uploaded_by_participant_id, confirmed_at, removed_at, removed_by_member_id)
+       uploaded_by_member_id, uploaded_by_participant_id, confirmed_at, removed_at, removed_by_member_id, field_key)
      values ($1::uuid, $2::uuid, $3::uuid, 'datasheet.pdf', 1024, 'application/pdf',
        app.document_storage_key($2::uuid, $3::uuid, $1::uuid), $4::uuid, $5::uuid,
-       case when $6::boolean then now() end, case when $7::boolean then now() end, case when $7 then $4::uuid end)`,
-    [id, projectId, itemId, memberId, participantId, state.confirmed ?? false, state.removed ?? false],
+       case when $6::boolean then now() end, case when $7::boolean then now() end, case when $7 then $4::uuid end, $8)`,
+    [id, projectId, itemId, memberId, participantId, state.confirmed ?? false, state.removed ?? false, state.fieldKey ?? null],
   );
   return id;
 }
@@ -121,6 +121,16 @@ describe("a Document", () => {
       sql`select app.pending_document_upload(${b.itemId}::uuid, ${b.documentId}::uuid) as key`,
     );
     expect(pending).toEqual([{ key: null }]);
+  });
+
+  it("tied to a Form field (RP-281) of Project B never returns with a Member of Project A set", async () => {
+    const participantId = (await migrator.query("select uploaded_by_participant_id as id from document where id = $1", [b.documentId]))
+      .rows[0].id;
+    const datasheet = await insertDocument(b.projectId, b.itemId, b.ap, participantId, { confirmed: true, fieldKey: "datasheet" });
+    expect(await documentIds(b.ap)).toContain(datasheet);
+    expect(await documentIds(a.ap)).not.toContain(datasheet);
+    const rows = await call<{ id: string }>(a.ap, sql`select id, field_key from document where field_key = 'datasheet'`);
+    expect(rows).toEqual([]);
   });
 
   it("returns nothing with no Member set", async () => {
