@@ -11,6 +11,7 @@ import {
   type Locale,
   type NamedAnswers,
   type DocumentList,
+  type OptionList,
 } from "@rabaed/domain";
 import { Button, FormRenderer, type BuiltInChoices } from "@rabaed/ui";
 import { useTranslations } from "next-intl";
@@ -31,6 +32,8 @@ type WorkItemFormState = {
   named: NamedAnswers;
   /** Who and which Companies those fields offer the viewer (V15). */
   people: FormChoices;
+  /** The Option Lists its `option_list` fields offer and read from. */
+  optionLists: readonly OptionList[];
   errors: readonly FieldError[];
   editable: boolean;
   /** Typed since the last save. */
@@ -58,6 +61,7 @@ export function WorkItemFormProvider({
   answers: saved,
   named,
   people,
+  optionLists,
   editable,
   children,
 }: {
@@ -67,6 +71,7 @@ export function WorkItemFormProvider({
   answers: Record<string, unknown>;
   named: NamedAnswers;
   people: FormChoices;
+  optionLists: readonly OptionList[];
   /** Save draft is offered (actions.saveAnswers). */
   editable: boolean;
   children: ReactNode;
@@ -89,6 +94,10 @@ export function WorkItemFormProvider({
     const checked = validateAnswers(schema, next, "draft", {
       scopes: choices.scopes,
       offered: offeredChoices(people, schema, saved),
+      // A retired option the saved answers hold stays valid; choosing it anew is refused. Lists that
+      // didn't load (empty) aren't checked here: the server is the authority.
+      optionLists: optionLists.length > 0 ? optionLists : undefined,
+      held: saved,
     });
     setErrors(checked.ok ? [] : checked.errors);
   }
@@ -141,7 +150,7 @@ export function WorkItemFormProvider({
 
   return (
     <WorkItemFormContext.Provider
-      value={{ schema, choices, people, answers, named, errors, editable, dirty, pending, message, change, save, showErrors }}
+      value={{ schema, choices, people, optionLists, answers, named, errors, editable, dirty, pending, message, change, save, showErrors }}
     >
       {children}
     </WorkItemFormContext.Provider>
@@ -169,6 +178,7 @@ export function WorkItemAnswers({ locale, workItemId, documents }: { locale: Loc
         answers={form.answers}
         named={form.named}
         people={form.people}
+        optionLists={form.optionLists}
         errors={form.errors}
         mode={form.editable ? "edit" : "read"}
         locale={locale}

@@ -11,6 +11,7 @@ import {
   type FormRow,
   type FormValue,
   type Locale,
+  type OptionList,
   type TableColumn,
   type TableField,
 } from "@rabaed/domain";
@@ -207,7 +208,17 @@ export function TableInput({
 }
 
 /** The table in read mode: a real table of the rows as submitted, with the totals under it. */
-export function TableRead({ field, value, locale }: { field: TableField; value: unknown; locale: Locale }) {
+export function TableRead({
+  field,
+  value,
+  locale,
+  optionLists,
+}: {
+  field: TableField;
+  value: unknown;
+  locale: Locale;
+  optionLists?: readonly OptionList[];
+}) {
   const rows = rowsOf(value).filter((row) => !Object.values(row).every(isUnanswered));
   return (
     <div className="flex flex-col gap-3">
@@ -227,7 +238,7 @@ export function TableRead({ field, value, locale }: { field: TableField; value: 
               {field.columns.map((column) => (
                 <TableCell key={column.key} align={isNumeric(column) ? "end" : "start"} className={cn(isNumeric(column) && "tabular-nums")}>
                   {/* A number reads in the page's direction so its unit follows it; text keeps its own. */}
-                  <bdi dir={isNumeric(column) ? directionOf(locale) : undefined}>{formatTableCell(column, row[column.key], locale)}</bdi>
+                  <bdi dir={isNumeric(column) ? directionOf(locale) : undefined}>{formatTableCell(column, row[column.key], locale, optionLists)}</bdi>
                 </TableCell>
               ))}
             </TableRow>

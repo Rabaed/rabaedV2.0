@@ -2,6 +2,8 @@ import { z } from "zod";
 import { bilingualText } from "./company.ts";
 import { condition, evaluateCondition, isUnanswered, readsAttrs } from "./condition.ts";
 import { contentType } from "./document.ts";
+import { evaluateFormula, formulaReferences, parseFormula, roundTo, type Formula, type FormulaReference } from "./formula.ts";
+import { OPTION_LIST_MAX_LEVELS, isChoosable, optionPath, reachesDepth, type OptionList } from "./option-list.ts";
 
 // The Form engine's schema and its one validator (form-engine.md §1, §8; ADR 0006).
 // The same code runs in the browser, for instant feedback, and on the server, as
@@ -92,6 +94,9 @@ export const maxFieldFiles = 50;
 
 const columnBase = { key: formKey, label: bilingualText, required: z.boolean().default(false) };
 
+/** How many levels the filler goes down in an Option List: 1 to the most a list has. */
+const optionDepth = z.number().int().min(1).max(OPTION_LIST_MAX_LEVELS).default(1);
+
 /**
  * A table column (form-engine.md §2). Its types are the plain ones: no files,
  * people, checklists or nested tables, so no reference ever lives in a row (ADR
@@ -123,6 +128,8 @@ export const tableColumn = z.discriminatedUnion("type", [
   z.object({ ...columnBase, type: z.literal("date") }),
   z.object({ ...columnBase, type: z.literal("yes_no") }),
   z.object({ ...columnBase, type: z.literal("select"), options: formOptions }),
+  /** One option of an Option List, by the list's id: options are never copied into the Form, so the list stays live. */
+  z.object({ ...columnBase, type: z.literal("option_list"), list: z.uuid(), depth: optionDepth }),
 ]);
 export type TableColumn = z.infer<typeof tableColumn>;
 
@@ -155,6 +162,18 @@ export const formField = z.discriminatedUnion("type", [
       max: limit.optional(),
     })
     .refine(withinLimits, "min is above max"),
+  /**
+   * A number worked out from other numeric fields by `formula` (form-engine.md
+   * §2.4), rounded to `decimals` (2 unless set). Read-only: the server works it
+   * out on every save, whatever the client sent, and stores it with the answers.
+   */
+  z.object({
+    ...fieldBase,
+    type: z.literal("calculated"),
+    formula: z.string().max(1000).refine((text) => parseFormula(text) !== null, "Not a formula"),
+    unit: z.string().trim().min(1).max(20).optional(),
+    decimals: z.number().int().min(0).max(maxDecimals).default(2),
+  }),
   /** An email address, format-checked. */
   z.object({ ...fieldBase, type: z.literal("email") }),
   /** A KSA or international phone number, format-checked, stored as typed. */
@@ -171,6 +190,14 @@ export const formField = z.discriminatedUnion("type", [
   z.object({ ...fieldBase, type: z.literal("select"), options: formOptions }),
   /** Any of the field's options, by value, in the order chosen. */
   z.object({ ...fieldBase, type: z.literal("multi_select"), options: formOptions }),
+  /**
+   * Choices from an Option List, by the list's id (never copied, so the list
+   * stays live without a new Form Version). `depth` is how many levels the
+   * filler goes down; each level's choices are those under the level above.
+   * The answer is the value of the option reached (a list of them, if
+   * `multiple`); its path follows from the list.
+   */
+  z.object({ ...fieldBase, type: z.literal("option_list"), list: z.uuid(), multiple: z.boolean().default(false), depth: optionDepth }),
   /**
    * A Project Member, by id. Offered only those the filler can see: in practice
    * their own Company's Project Members (V15). Another Company sees the answer
@@ -234,6 +261,11 @@ export type FormField = z.infer<typeof formField>;
 export type FormFieldType = FormField["type"];
 export type TableField = Extract<FormField, { type: "table" }>;
 export type AttachmentsField = Extract<FormField, { type: "attachments" }>;
+export type CalculatedField = Extract<FormField, { type: "calculated" }>;
+
+/** Whether a field is a calculated one. */
+export const isCalculatedField = (field: FormField): field is CalculatedField => field.type === "calculated";
+export type OptionListField = Extract<FormField, { type: "option_list" }>;
 
 const layoutTypes = ["heading", "instructions", "divider"] as const;
 export type LayoutField = Extract<FormField, { type: (typeof layoutTypes)[number] }>;
@@ -250,8 +282,9 @@ export const isBuiltInField = (field: FormField): field is Extract<FormField, { 
 
 /**
  * A stored answer: text (also dates, times, email addresses, phone numbers, a
- * select's option, a Trade or Location id), a number (also an amount of money),
- * Yes/No, or a list (a multi-select's options, Scope ids, a table's rows).
+ * select's option, a Trade or Location id), a number (also an amount of money
+ * and a calculated result), Yes/No, or a list (a multi-select's options, Scope
+ * ids, a table's rows).
  */
 export type FormValue = string | number | boolean | string[] | FormRow[];
 
@@ -328,6 +361,8 @@ export type ValidationMode = "draft" | "complete";
  *   more than its maximum (checked when the item leaves Draft).
  * `too_few_files`: an `attachments` field with fewer confirmed files than its
  *   minimum (checked when the item leaves Draft).
+ * `too_shallow`: an Option List choice that stops above the depth the field
+ *   asks for, though options remain below it (checked when the item leaves Draft).
  * A table's cell errors name the cell: `row` (from 0) and `column`.
  */
 export const fieldErrorCodes = [
@@ -343,6 +378,7 @@ export const fieldErrorCodes = [
   "too_few_rows",
   "too_many_rows",
   "too_few_files",
+  "too_shallow",
 ] as const;
 export type FieldErrorCode = (typeof fieldErrorCodes)[number];
 
@@ -378,6 +414,16 @@ export type ValidationContext = {
   scopes?: readonly ScopeChoice[];
   offered?: OfferedChoices;
   files?: Readonly<Record<string, number>>;
+  /**
+   * The Option Lists, as they are now. Without them an `option_list` answer is
+   * only checked to be text; the server always passes them.
+   */
+  optionLists?: readonly OptionList[];
+  /**
+   * The answers already saved. A retired option an answer already holds stays
+   * valid (and saves again unchanged); choosing it anew is refused.
+   */
+  held?: Readonly<Record<string, unknown>>;
 };
 
 /** Every field of the schema, layout included, in Form order. */
@@ -407,15 +453,75 @@ export function scopesFittingTrade(chosen: readonly string[], tradeId: string, s
 export type FormVisibility = {
   sections: ReadonlySet<string>;
   fields: ReadonlySet<string>;
-  /** The answers of shown fields only: what a save keeps. */
+  /** The answers of shown fields only, calculated fields worked out: what a save keeps. */
   answers: Record<string, unknown>;
 };
+
+// Each field's formula, parsed once: formVisibility works the results out on every pass.
+const parsedFormulas = new WeakMap<CalculatedField, Formula | null>();
+function formulaOf(field: CalculatedField): Formula | null {
+  if (!parsedFormulas.has(field)) parsedFormulas.set(field, parseFormula(field.formula));
+  return parsedFormulas.get(field)!;
+}
+
+/** What a calculated field's formula reads. */
+export function calculatedReferences(field: CalculatedField): FormulaReference[] {
+  const formula = formulaOf(field);
+  return formula ? formulaReferences(formula) : [];
+}
+
+/**
+ * The calculated fields in an order where each comes after the calculated
+ * fields it reads. One that reads itself, in the end, is left out: it stays
+ * empty (the publish checks refuse such formulas).
+ */
+function calculationOrder(fields: readonly CalculatedField[]): CalculatedField[] {
+  const byKey = new Map(fields.map((f) => [f.key, f]));
+  const state = new Map<string, "working" | "done" | "cycle">();
+  const order: CalculatedField[] = [];
+  const visit = (field: CalculatedField): boolean => {
+    const known = state.get(field.key);
+    if (known) return known === "done";
+    state.set(field.key, "working");
+    const reads = calculatedReferences(field).flatMap((r) => (r.column === undefined && byKey.has(r.key) ? [byKey.get(r.key)!] : []));
+    const inputsDone = reads.every(visit);
+    state.set(field.key, inputsDone ? "done" : "cycle");
+    if (inputsDone) order.push(field);
+    return inputsDone;
+  };
+  fields.forEach(visit);
+  return order;
+}
+
+/**
+ * `answers` with every calculated field worked out from them, replacing any
+ * value given for it; an empty result leaves the field out. With `shown`, only
+ * the calculated fields shown are worked out: a hidden one reads as cleared.
+ * A calculated field that reads another reads its rounded result, as stored.
+ */
+export function calculateAnswers(
+  schema: FormSchema,
+  answers: Readonly<Record<string, unknown>>,
+  shown?: ReadonlySet<string>,
+): Record<string, unknown> {
+  const calculated = formFields(schema).filter(isCalculatedField);
+  const out = { ...answers };
+  for (const field of calculated) delete out[field.key];
+  for (const field of calculationOrder(calculated)) {
+    if (shown && !shown.has(field.key)) continue;
+    const formula = formulaOf(field);
+    const result = formula && evaluateFormula(formula, out);
+    if (result !== null) out[field.key] = roundTo(result, field.decimals);
+  }
+  return out;
+}
 
 /**
  * Which sections and fields are shown for `answers` (`visible_if`). A hidden
  * field reads as cleared, so a field that depends on it is worked out without
- * its answer: the check repeats until nothing changes. Conditions that depend
- * on each other in a cycle are refused by the publish checks (publishProblems);
+ * its answer: the check repeats until nothing changes. Calculated fields are
+ * worked out from the shown answers (calculateAnswers), and rules read them.
+ * Conditions that depend on each other in a cycle are refused by the publish checks (publishProblems);
  * the repeats are bounded all the same, and the last pass wins. The Built-in Fields are
  * always shown: they can't be hidden.
  */
@@ -435,10 +541,14 @@ export function formVisibility(schema: FormSchema, answers: Readonly<Record<stri
   };
   // Answers to keys that aren't fields stay, for the validator to refuse as unknown.
   const answersShownIn = (shown: ReadonlySet<string>) =>
-    Object.fromEntries(Object.entries(answers).filter(([key]) => !fieldKeys.has(key) || shown.has(key)));
+    calculateAnswers(
+      schema,
+      Object.fromEntries(Object.entries(answers).filter(([key]) => !fieldKeys.has(key) || shown.has(key))),
+      shown,
+    );
   const sameKeys = (a: ReadonlySet<string>, b: ReadonlySet<string>) => a.size === b.size && [...a].every((k) => b.has(k));
 
-  let visibility = shownFor({ ...answers });
+  let visibility = shownFor(calculateAnswers(schema, answers));
   for (let i = 0; i <= fieldKeys.size; i++) {
     const next = shownFor(answersShownIn(visibility.fields));
     const settled = sameKeys(next.fields, visibility.fields) && sameKeys(next.sections, visibility.sections);
@@ -514,6 +624,42 @@ function checkNumber(value: unknown, field: { min?: number; max?: number }, deci
 
 const isId = (value: unknown): value is string => typeof value === "string" && z.uuid().safeParse(value).success;
 
+const isRow = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
+
+/** The Option Lists of a validation context by id; undefined when it has none. */
+const listsById = (context: ValidationContext) => context.optionLists && new Map(context.optionLists.map((l) => [l.id, l]));
+
+/** The option values an answer already holds: a single option, a list of them, or a table column's cells. */
+function heldValues(saved: unknown, column?: string): ReadonlySet<string> {
+  const values = (Array.isArray(saved) ? saved : [saved]).flatMap((v) => (column !== undefined ? (isRow(v) ? [v[column]] : []) : [v]));
+  return new Set(values.filter((v): v is string => typeof v === "string"));
+}
+
+/**
+ * What is wrong with one option an `option_list` field or column holds: not
+ * text, not in the list, retired or below the field's depth for a new choice,
+ * or (when `complete`) stopping short of its depth. An option the answer already
+ * holds is forgiven being retired: it stays, and saves again unchanged.
+ */
+function checkOption(
+  field: { list: string; depth: number },
+  value: unknown,
+  complete: boolean,
+  held: ReadonlySet<string>,
+  lists: ReadonlyMap<string, OptionList> | undefined,
+): FieldErrorCode | null {
+  if (typeof value !== "string") return "wrong_type";
+  if (!lists) return null;
+  const list = lists.get(field.list);
+  const path = list ? optionPath(list, value) : null;
+  if (!path) return "unknown_option";
+  const kept = held.has(value);
+  if (!kept && !isChoosable(path, field.depth)) return "unknown_option";
+  // A retired option can't be gone deeper into, so a kept one is as deep as it can be.
+  const asDeepAsItGets = kept && path.some((o) => o.retired);
+  return complete && !asDeepAsItGets && !reachesDepth(path, field.depth) ? "too_shallow" : null;
+}
+
 /** A field or a table column of a type both take: checked the same way. */
 type PlainField = Extract<AnswerField | TableColumn, { type: "text" | "textarea" | "number" | "currency" | "date" | "yes_no" | "select" }>;
 
@@ -547,6 +693,7 @@ function checkValue(
   required: boolean,
   given: Record<string, unknown>,
   context: ValidationContext,
+  complete: boolean,
 ): FieldErrorCode | null {
   switch (field.type) {
     case "text":
@@ -574,6 +721,17 @@ function checkValue(
       const known = new Set(field.options.map((o) => o.value));
       return value.every((v) => known.has(v)) ? null : "unknown_option";
     }
+    case "option_list": {
+      const lists = listsById(context);
+      const held = heldValues(context.held?.[field.key]);
+      if (!field.multiple) return checkOption(field, value, complete, held, lists);
+      if (!Array.isArray(value) || new Set(value).size !== value.length) return "wrong_type";
+      for (const v of value) {
+        const code = checkOption(field, v, complete, held, lists);
+        if (code) return code;
+      }
+      return null;
+    }
     case "trade":
     case "location":
       return isId(value) ? null : "wrong_type";
@@ -589,15 +747,15 @@ function checkValue(
       const ids = context.offered && (field.type === "member" ? context.offered.members : context.offered.participants);
       return (ids ? ids.has(value) : isId(value)) ? null : "unknown_option";
     }
-    // A table is checked by checkTable, which knows its rows and columns; an
-    // attachments field by validateAnswers, which knows its files.
+    // A table is checked by checkTable, which knows its rows and columns; a
+    // calculated field's answer is the server's own result, never the one given;
+    // an attachments field is checked by validateAnswers, which knows its files.
     case "table":
+    case "calculated":
     case "attachments":
       return null;
   }
 }
-
-const isRow = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
 
 /**
  * Checks a table's rows. Each cell is checked by its column's type; an empty
@@ -611,6 +769,7 @@ function checkTable(
   value: unknown,
   complete: boolean,
   required: boolean,
+  context: ValidationContext,
 ): { errors: FieldError[]; rows: FormRow[] } {
   const key = field.key;
   if (value === undefined || value === null) value = [];
@@ -620,6 +779,7 @@ function checkTable(
   const errors: FieldError[] = [];
   const rows: FormRow[] = [];
   const columns = new Map(field.columns.map((c) => [c.key, c]));
+  const lists = listsById(context);
   value.forEach((given: unknown, row) => {
     if (!isRow(given)) {
       errors.push({ key, code: "wrong_type", row });
@@ -634,7 +794,10 @@ function checkTable(
         if (complete && column.required) errors.push({ key, code: "required", row, column: column.key });
         continue;
       }
-      const code = checkPlain(column, cell, complete && column.required);
+      const code =
+        column.type === "option_list"
+          ? checkOption(column, cell, complete, heldValues(context.held?.[field.key], column.key), lists)
+          : checkPlain(column, cell, complete && column.required);
       if (code) errors.push({ key, code, row, column: column.key });
       else cells[column.key] = cell as string | number | boolean;
     }
@@ -651,8 +814,6 @@ function checkTable(
   }
   return { errors, rows };
 }
-
-const roundTo = (value: number, decimals: number) => Number(value.toFixed(decimals));
 
 /**
  * The total under each number and currency column that asks for one, by column
@@ -679,10 +840,12 @@ export function tableTotals(field: TableField, rows: unknown): Record<string, nu
 /**
  * Checks `answers` against a Form Version's schema in `mode`. On success it
  * answers with the values to store: exactly as typed, empty ones and hidden
- * fields' dropped (a hidden field is cleared, never checked). On failure, one
+ * fields' dropped (a hidden field is cleared, never checked), and calculated
+ * fields worked out from them, whatever was given for them. On failure, one
  * error per shown field, in Form order, then answers to unknown fields. The
  * Trade is required even in `draft` mode: no Work Item exists without one.
- * `context` holds the Project's Scopes, so that Scopes outside the chosen Trade are refused.
+ * `context` holds the Project's Scopes, so that Scopes outside the chosen Trade are refused,
+ * and the Option Lists for `option_list` answers.
  */
 export function validateAnswers(
   schema: FormSchema,
@@ -702,9 +865,16 @@ export function validateAnswers(
   for (const field of fields) {
     if (!visibility.fields.has(field.key)) continue;
     const required = field.type === "trade" || (mode === "complete" && isRequired(field, visibility.answers));
+    if (field.type === "calculated") {
+      const result = visibility.answers[field.key];
+      if (result === undefined) {
+        if (required) errors.push({ key: field.key, code: "required" });
+      } else clean[field.key] = result as number;
+      continue;
+    }
     const value = given[field.key];
     if (field.type === "table") {
-      const table = checkTable(field, value, mode === "complete", required);
+      const table = checkTable(field, value, mode === "complete", required, context);
       errors.push(...table.errors);
       if (table.errors.length === 0 && table.rows.length > 0) clean[field.key] = table.rows;
       continue;
@@ -721,7 +891,7 @@ export function validateAnswers(
       if (required) errors.push({ key: field.key, code: "required" });
       continue;
     }
-    const code = checkValue(field, value, required, given, context);
+    const code = checkValue(field, value, required, given, context, mode === "complete");
     if (code) errors.push({ key: field.key, code });
     // Email addresses and phone numbers are kept as typed, without the spaces around them.
     else if ((field.type === "email" || field.type === "phone") && typeof value === "string") {

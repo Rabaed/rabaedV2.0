@@ -65,3 +65,31 @@ export function buildOptionLists(lists: { id: string; name: { en: string; ar: st
   }
   return lists.map((l) => ({ id: l.id, name: l.name, options: roots.get(l.id)! }));
 }
+
+/** The options from the list's first level down to the option with `value`; null when the list has no such option. */
+export function optionPath(list: Pick<OptionList, "options">, value: string): OptionNode[] | null {
+  const walk = (nodes: OptionNode[], trail: OptionNode[]): OptionNode[] | null => {
+    for (const node of nodes) {
+      const next = [...trail, node];
+      if (node.value === value) return next;
+      const found = walk(node.options, next);
+      if (found) return found;
+    }
+    return null;
+  };
+  return walk(list.options, []);
+}
+
+/**
+ * Whether a path ends where an `option_list` field of `depth` levels asks for:
+ * at its depth, or sooner where no deeper option can be chosen (nothing
+ * below it, or only retired options). A path below the depth is out of reach.
+ */
+export function reachesDepth(path: readonly OptionNode[], depth: number): boolean {
+  return path.length === depth || (path.length < depth && path.at(-1)!.options.every((o) => o.retired));
+}
+
+/** Whether `path` can be chosen anew for a field of `depth` levels: reaches its depth, with no retired option on the way. */
+export function isChoosable(path: readonly OptionNode[], depth: number): boolean {
+  return path.length <= depth && !path.some((o) => o.retired);
+}
