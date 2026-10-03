@@ -103,7 +103,7 @@ export function formFields(schema: FormSchema): FormField[] {
 }
 
 /** No answer: nothing, empty text, or no option chosen. `false` is an answer (No). */
-const isEmpty = (value: unknown) =>
+export const isUnanswered = (value: unknown): boolean =>
   value === undefined || value === null || value === "" || (Array.isArray(value) && value.length === 0);
 
 const isoDate = /^(\d{4})-(\d{2})-(\d{2})$/;
@@ -167,7 +167,7 @@ export function validateAnswers(schema: FormSchema, answers: unknown, mode: Vali
 
   for (const field of fields) {
     const value = given[field.key];
-    if (isEmpty(value)) {
+    if (isUnanswered(value)) {
       if (mode === "complete" && field.required) errors.push({ key: field.key, code: "required" });
       continue;
     }

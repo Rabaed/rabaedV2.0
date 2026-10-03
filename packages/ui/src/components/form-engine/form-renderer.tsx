@@ -5,10 +5,12 @@ import {
   formatFormValue,
   formatNumber,
   formFields,
+  isUnanswered,
   fromProjectWallTime,
   toProjectWallTime,
   type FieldError,
   type FormField,
+  type FormOption,
   type FormSchema,
   type FormValue,
   type Locale,
@@ -40,8 +42,6 @@ const copy = {
     tooLong: (max: number) => `Use at most ${formatNumber(max, "en")} characters.`,
     invalidFormat: { date: "Enter a valid date.", time: "Enter a valid time.", datetime: "Enter a valid date and time." },
     unknownOption: "Choose one of the options.",
-    yes: "Yes",
-    no: "No",
     choose: "Choose…",
     none: "None",
     unanswered: "Not answered",
@@ -61,8 +61,6 @@ const copy = {
     tooLong: (max: number) => `استخدم ${formatNumber(max, "ar")} حرفًا على الأكثر.`,
     invalidFormat: { date: "أدخل تاريخًا صالحًا.", time: "أدخل وقتًا صالحًا.", datetime: "أدخل تاريخًا ووقتًا صالحين." },
     unknownOption: "اختر أحد الخيارات.",
-    yes: "نعم",
-    no: "لا",
     choose: "اختر…",
     none: "بدون",
     unanswered: "لم تتم الإجابة",
@@ -108,11 +106,13 @@ function errorText(field: FormField, error: FieldError, locale: Locale): string 
 }
 
 const textOf = (value: unknown) => (typeof value === "string" ? value : "");
-const isAnswered = (value: unknown) =>
-  value !== undefined && value !== null && value !== "" && !(Array.isArray(value) && value.length === 0);
 
 // A select's "no choice" item: option values are snake_case keys, so this never clashes with one.
-const NONE = "-";
+const noChoice = "-";
+
+/** A choice field's options as a control takes them, labelled in the viewer's language. */
+const optionsOf = (field: { options: FormOption[] }, locale: Locale) =>
+  field.options.map((o) => ({ value: o.value, label: o.label[locale] }));
 
 /** One field's control, and whether its Field labels a group (radios, checkboxes) rather than one control. */
 function control(
@@ -160,35 +160,33 @@ function control(
           <RadioGroup
             name={name}
             options={[
-              { value: "yes", label: text.yes },
-              { value: "no", label: text.no },
+              { value: "yes", label: formatFormValue(field, true, locale) },
+              { value: "no", label: formatFormValue(field, false, locale) },
             ]}
             value={value === true ? "yes" : value === false ? "no" : ""}
             onValueChange={(v) => change(v === "yes")}
           />
         ),
       };
-    case "select": {
-      const options = field.options.map((o) => ({ value: o.value, label: o.label[locale] }));
+    case "select":
       return {
         element: (
           <Select
             name={name}
             placeholder={text.choose}
             // An optional choice can be taken back.
-            options={field.required ? options : [{ value: NONE, label: text.none }, ...options]}
+            options={field.required ? optionsOf(field, locale) : [{ value: noChoice, label: text.none }, ...optionsOf(field, locale)]}
             value={textOf(value)}
-            onValueChange={(v) => change(v === NONE ? undefined : v)}
+            onValueChange={(v) => change(v === noChoice ? undefined : v)}
           />
         ),
       };
-    }
     case "multi_select":
       return {
         group: true,
         element: (
           <CheckboxGroup
-            options={field.options.map((o) => ({ value: o.value, label: o.label[locale] }))}
+            options={optionsOf(field, locale)}
             value={Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : []}
             onValueChange={change}
           />
@@ -270,8 +268,8 @@ export function FormRenderer({
                     <div key={field.key} className="flex flex-col gap-1">
                       <dt className="text-sm font-medium text-muted">{field.label[locale]}</dt>
                       {/* The answer keeps its own direction, but lines up with the page's. */}
-                      <dd className={cn("text-body", isAnswered(value) ? "whitespace-pre-wrap text-text" : "text-muted")}>
-                        {isAnswered(value) ? <bdi>{formatFormValue(field, value, locale)}</bdi> : copy[locale].unanswered}
+                      <dd className={cn("text-body", isUnanswered(value) ? "text-muted" : "whitespace-pre-wrap text-text")}>
+                        {isUnanswered(value) ? copy[locale].unanswered : <bdi>{formatFormValue(field, value, locale)}</bdi>}
                       </dd>
                     </div>
                   );
