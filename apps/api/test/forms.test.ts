@@ -92,6 +92,7 @@ describe("the Form for a new MAR", () => {
     expect(form.schema.sections.flatMap((s) => s.fields.filter(isAnswerField).map((f) => [f.key, f.type, f.required]))).toEqual([
       ["manufacturer", "text", true],
       ["model", "text", false],
+      ["quantity", "number", false],
       ["specification_section", "text", false],
       // The Built-in Fields, placed mid-Form (RP-270).
       ["trade", "trade", true],
@@ -154,6 +155,20 @@ describe("Save draft", () => {
     expect(res.statusCode).toBe(422);
     expect(res.json()).toEqual({ error: "invalid_answers", fields: [{ key: "model", code: "wrong_type" }] });
     expect((await detail(engineer, id)).answers).toEqual({ model: "CT-300", trade: electrical });
+  });
+
+  it("takes the quantity as a number with its unit, and refuses text, a negative or too many decimals", async () => {
+    const form: FormVersion = (await ok(engineer.get(`/v1/projects/${projectId}/work-item-types/MAR/form`), 200)).json();
+    const quantity = form.schema.sections.flatMap((s) => s.fields).find((f) => f.type === "number" && f.key === "quantity");
+    expect(quantity).toMatchObject({ unit: "pcs", min: 0, decimals: 2, required: false });
+    for (const [value, code] of [["12", "wrong_type"], [-1, "below_min"], [1.234, "too_many_decimals"]] as const) {
+      const res = await save(engineer, id, { quantity: value });
+      expect(res.statusCode).toBe(422);
+      expect(res.json()).toEqual({ error: "invalid_answers", fields: [{ key: "quantity", code }] });
+    }
+    await ok(save(engineer, id, { model: "CT-300", quantity: 120.5 }));
+    expect((await detail(engineer, id)).answers).toMatchObject({ quantity: 120.5 });
+    await ok(save(engineer, id, { model: "CT-300" }));
   });
 
   it("is open to the raiser's Participant only: anyone else gets 404", async () => {

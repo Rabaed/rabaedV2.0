@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { sql } from "kysely";
-import { DEMO_ENGINEER_EMAIL, DEMO_LAST_ITEM_TITLE, seedDemo, type SeedDatabases } from "./seed.ts";
+import { DEMO_ENGINEER_EMAIL, DEMO_LAST_ITEM_TITLE, seedDemo, type SeedDatabases, type SeedOptions } from "./seed.ts";
 
 // Any constant; distinct from the bootstrap and migration locks.
 const SEED_LOCK_KEY = 718_200_196;
@@ -12,7 +12,10 @@ const SEED_LOCK_KEY = 718_200_196;
  * it once: both seam suites' global setups, or two deploys in dev. `app` is
  * built only when the seed runs.
  */
-export async function ensureDemo(databases: SeedDatabases, app: () => Promise<FastifyInstance>, password: string): Promise<"seeded" | "present"> {
+export async function ensureDemo(databases: SeedDatabases, app: () => Promise<FastifyInstance>,
+  password: string,
+  options: SeedOptions = {},
+): Promise<"seeded" | "present"> {
   return databases.migrator.connection().execute(async (connection) => {
     await sql`select pg_advisory_lock(${SEED_LOCK_KEY})`.execute(connection);
     try {
@@ -24,7 +27,7 @@ export async function ensureDemo(databases: SeedDatabases, app: () => Promise<Fa
       if (state!.started) throw new Error("The demo was only partly seeded; reset it (drop the database and seed again).");
       const api = await app();
       try {
-        await seedDemo(api, databases, password);
+        await seedDemo(api, databases, password, options);
       } finally {
         await api.close();
       }
