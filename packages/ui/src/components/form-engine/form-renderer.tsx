@@ -26,7 +26,7 @@ const copy = {
   en: {
     summary: (n: number) => (n === 1 ? "1 field needs your attention:" : `${formatNumber(n, "en")} fields need your attention:`),
     required: "This field is required.",
-    wrong_type: "This value isn't valid here.",
+    wrongType: "This value isn't valid here.",
     tooLong: (max: number) => `Use at most ${formatNumber(max, "en")} characters.`,
     unanswered: "Not answered",
   },
@@ -41,7 +41,7 @@ const copy = {
             ? `${formatNumber(n, "ar")} حقول تحتاج إلى مراجعتك:`
             : `${formatNumber(n, "ar")} حقلًا يحتاج إلى مراجعتك:`,
     required: "هذا الحقل مطلوب.",
-    wrong_type: "هذه القيمة غير صالحة هنا.",
+    wrongType: "هذه القيمة غير صالحة هنا.",
     tooLong: (max: number) => `استخدم ${formatNumber(max, "ar")} حرفًا على الأكثر.`,
     unanswered: "لم تتم الإجابة",
   },
@@ -68,7 +68,7 @@ export type FormRendererProps = {
 function errorText(field: FormField, error: FieldError, locale: Locale): string {
   const text = copy[locale];
   if (error.code === "too_long") return text.tooLong(field.maxLength ?? defaultMaxLength[field.type]);
-  return error.code === "required" ? text.required : text.wrong_type;
+  return error.code === "required" ? text.required : text.wrongType;
 }
 
 const textOf = (value: unknown) => (typeof value === "string" ? value : "");

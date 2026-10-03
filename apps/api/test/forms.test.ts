@@ -171,6 +171,12 @@ describe("Send for Review", () => {
     expect(await detail(engineer, id)).toMatchObject({ stage: { key: "draft" }, documentNumber: null });
   });
 
+  it("tells someone who can't take it that they can't, not what the Form lacks", async () => {
+    const res = await sendForReview(pm, id);
+    expect(res.statusCode).toBe(409);
+    expect(res.json()).toEqual({ error: "not_holder" });
+  });
+
   it("succeeds once the Form is complete", async () => {
     await ok(save(engineer, id, { ...complete, model: "CT-300" }));
     await ok(sendForReview(engineer, id));

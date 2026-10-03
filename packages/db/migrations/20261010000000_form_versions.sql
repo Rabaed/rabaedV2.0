@@ -276,6 +276,22 @@ create function app.create_work_item(
 
 -- Saving the answers -----------------------------------------------------------------
 
+-- Whether the acting Member may save a visible item's answers now: their
+-- Participant raised it, it is open in Draft, and its Project is active (RP-268
+-- adds the raiser's internal Steps). The one rule Save draft and its button follow.
+create function app.can_save_answers(p_work_item_id uuid) returns boolean
+  language sql stable security definer
+  set search_path = pg_catalog, public
+  as $$
+    select exists (
+      select 1 from work_item w
+      join project pr on pr.id = w.project_id and pr.status = 'active'
+      cross join lateral app.acting_project_member(w.id) me
+      where w.id = p_work_item_id and me.participant_id = w.raised_by_participant_id
+        and w.closed_at is null and app.is_draft_step(w.current_step_id)
+    )
+  $$;
+
 -- The acting Member saves the answers of a visible item, already checked by the
 -- API (draft mode) against its pinned Form Version. Only the raiser's Participant,
 -- and only while the item is in Draft (RP-268 adds its internal Steps).
@@ -305,9 +321,7 @@ create function app.save_work_item_answers(p_work_item_id uuid, p_data jsonb, p_
       if v_item.project_status <> 'active' then
         return 'project_closed';
       end if;
-      if v_me.participant_id <> v_item.raised_by_participant_id or v_item.closed_at is not null
-        or not app.is_draft_step(v_item.current_step_id)
-      then
+      if not app.can_save_answers(p_work_item_id) then
         return 'not_editable';
       end if;
       update work_item set data = coalesce(p_data, '{}'), updated_at = v_at where id = p_work_item_id;
@@ -329,9 +343,10 @@ create function app.answers_sha256(p_work_item_id uuid) returns bytea
 drop function app.take_transition(uuid, text, text, text, uuid, timestamptz);
 
 -- As in the step_age_by_holder migration, with p_checked_data_sha256: the SHA-256
--- of the answers (work_item.data::text, UTF-8) the API found complete against the
--- pinned Form Version. A Transition out of a Draft Step is refused with
--- 'form_not_checked' unless it is the hash of the item's answers now.
+-- of the answers (app.answers_sha256) the API found complete against the pinned
+-- Form Version. A Transition out of a Draft Step, other than a cancel, is refused
+-- with 'form_not_checked' unless it is the hash of the item's answers now. The
+-- database doesn't validate answers itself: the shared validator does, in the API.
 create function app.take_transition(
   p_work_item_id uuid, p_transition_key text, p_reason text, p_internal_note text, p_checked_data_sha256 bytea,
   p_idempotency_key uuid, p_now timestamptz
@@ -415,9 +430,10 @@ create function app.take_transition(
       if v_transition.kind = 'return' and v_reason is null then
         return 'reason_required';
       end if;
-      -- Leaving Draft: only with the answers the API found complete (the row is locked).
-      if v_transition.from_draft
-        and p_checked_data_sha256 is distinct from sha256(convert_to(v_item.data::text, 'UTF8'))
+      -- Leaving Draft: only with the answers the API found complete (the row is
+      -- locked). Cancelling a Draft needs no complete Form.
+      if v_transition.from_draft and v_transition.kind <> 'cancel'
+        and p_checked_data_sha256 is distinct from app.answers_sha256(p_work_item_id)
       then
         return 'form_not_checked';
       end if;
@@ -539,6 +555,7 @@ revoke all on function
   app.refuse_published_form_version_change(),
   app.latest_form_version(text),
   app.answers_sha256(uuid),
+  app.can_save_answers(uuid),
   app.create_work_item(uuid, text, text, uuid, jsonb, uuid, uuid, timestamptz),
   app.save_work_item_answers(uuid, jsonb, timestamptz),
   app.take_transition(uuid, text, text, text, bytea, uuid, timestamptz)
@@ -546,6 +563,7 @@ revoke all on function
 grant execute on function
   app.latest_form_version(text),
   app.answers_sha256(uuid),
+  app.can_save_answers(uuid),
   app.create_work_item(uuid, text, text, uuid, jsonb, uuid, uuid, timestamptz),
   app.save_work_item_answers(uuid, jsonb, timestamptz),
   app.take_transition(uuid, text, text, text, bytea, uuid, timestamptz)

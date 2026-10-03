@@ -143,7 +143,7 @@ The rule "a Member's grant ⊆ their Participant's grant" is enforced on write: 
 This is the shared set per Module. Workflows reference Stages by `key`, so library Workflows work in any Project.
 
 **form_definition** / **form_version**
-- `form_definition`: `id`, `owner_kind/owner_id`, `name i18n`, `copied_from_id`.
+- `form_definition`: `id`, `owner_kind/owner_id`, `name i18n`, `copied_from_id`. As built (RP-262), like `workflow_definition`: `owner_kind {rabaed, project}` with `project_id`; `copied_from_id` arrives with the library copy-down. A published `form_version` never changes (a trigger refuses it to every role).
 - `form_version`: `id`, `form_definition_id`, `version_no`, `status {draft, published}`, `schema jsonb`, `published_at`.
 - `schema` holds the fields (type, `label i18n`, validation, options) and sections. It includes the field types `checklist`, `photo`, `boq_quantities` (future), `pick_list` (sources: Approved Supplier List, dimension values…) and `aggregate` (e.g. Weekly pulling totals from issued Dailies).
 - Published versions are immutable.

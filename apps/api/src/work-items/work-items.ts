@@ -66,17 +66,26 @@ async function latestForm(trx: Trx, typeCode: string): Promise<FormVersion | nul
   return rows[0] ? toFormVersion(rows[0]) : null;
 }
 
-/**
- * A visible item's pinned Form Version with its answers now, their hash (as
- * app.take_transition compares it) and whether the viewer sees it in Draft.
- * Null when the Member can't see the item.
- */
-async function pinnedForm(trx: Trx, workItemId: string) {
+/** A visible item's Form as the acting Member may work with it. */
+type PinnedForm = {
+  form: FormVersion;
+  /** The answers now. */
+  data: Record<string, unknown>;
+  /** Their hash, as app.take_transition compares it. */
+  dataSha256: Buffer;
+  /** The viewer sees it in Draft. */
+  inDraft: boolean;
+  /** They may save its answers now (app.can_save_answers). */
+  canSave: boolean;
+};
+
+/** A visible item's pinned Form Version and its answers; null when the Member can't see the item. */
+async function pinnedForm(trx: Trx, workItemId: string): Promise<PinnedForm | null> {
   const { rows } = await sql<
-    FormVersionRow & { data: Record<string, unknown>; data_sha256: Buffer; in_draft: boolean }
+    FormVersionRow & { data: Record<string, unknown>; data_sha256: Buffer; in_draft: boolean; can_save: boolean }
   >`
     select v.id, v.version_no, v.schema, w.data, app.answers_sha256(w.id) as data_sha256,
-      st.category = 'draft' as in_draft
+      st.category = 'draft' as in_draft, app.can_save_answers(w.id) as can_save
     from work_item w
     join form_version v on v.id = w.form_version_id
     join work_item_type t on t.id = w.work_item_type_id
@@ -85,7 +94,9 @@ async function pinnedForm(trx: Trx, workItemId: string) {
     where w.id = ${workItemId}
   `.execute(trx);
   const r = rows[0];
-  return r ? { form: toFormVersion(r), data: r.data, dataSha256: r.data_sha256, inDraft: r.in_draft } : null;
+  return r
+    ? { form: toFormVersion(r), data: r.data, dataSha256: r.data_sha256, inDraft: r.in_draft, canSave: r.can_save }
+    : null;
 }
 
 /**
@@ -234,15 +245,12 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
       holder_name: BilingualText | null;
       outcome: WorkItemOutcome | null;
       closed_at: Date | null;
-      raised_by_me: boolean;
-      project_active: boolean;
+      can_save_answers: boolean;
     }>`
       select w.data, w.form_version_id, w.created_at, w.outcome, w.closed_at, s.key as step_key, s.name as step_name,
         raiser.legal_name as raised_by, holder.legal_name as held_by, m.full_name as holder_name,
-        w.raised_by_participant_id in (select app.current_participant_ids()) as raised_by_me,
-        pr.status = 'active' as project_active
+        app.can_save_answers(w.id) as can_save_answers
       from work_item w
-      join project pr on pr.id = w.project_id
       cross join lateral app.step_as_seen(w.id) seen
       join workflow_step s on s.id = seen.step_id
       join app.work_item_companies(w.id) raiser on raiser.participant_id = w.raised_by_participant_id
@@ -263,11 +271,7 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
       outcome: d.outcome,
       closedAt: d.closed_at?.toISOString() ?? null,
       createdAt: d.created_at.toISOString(),
-      actions: {
-        ...(await actions(trx, workItemId)),
-        // As app.save_work_item_answers allows it.
-        saveAnswers: row.stage_category === "draft" && d.raised_by_me && d.project_active,
-      },
+      actions: { ...(await actions(trx, workItemId)), saveAnswers: d.can_save_answers },
     };
   });
 }
@@ -325,10 +329,18 @@ export function takeTransition(
   return withMember(db, memberId, async (trx): Promise<TakeTransitionResult> => {
     const pinned = await pinnedForm(trx, workItemId);
     if (!pinned) return { ok: false, reason: "not_found" };
-    // Every Transition out of Draft leaves it; the database refuses one whose answers weren't checked.
+    // Leaving Draft (other than cancelling it) needs a complete Form; the database refuses
+    // answers that weren't checked. Only a Transition the Member may take is checked here,
+    // so anyone else is told why they can't act, not what the Form lacks.
     if (pinned.inDraft) {
+      const { rows: takeable } = await sql<{ transition_kind: string }>`
+        select transition_kind from app.work_item_actions(${workItemId}::uuid)
+        where action = 'transition' and transition_key = ${input.transition}
+      `.execute(trx);
       const checked = validateAnswers(pinned.form.schema, pinned.data, "complete");
-      if (!checked.ok) return { ok: false, reason: "form_incomplete", errors: checked.errors };
+      if (takeable.some((t) => t.transition_kind !== "cancel") && !checked.ok) {
+        return { ok: false, reason: "form_incomplete", errors: checked.errors };
+      }
     }
     const { rows } = await sql<{ outcome: string }>`
       select app.take_transition(
@@ -356,6 +368,8 @@ export function saveAnswers(
   return withMember(db, memberId, async (trx): Promise<SaveAnswersResult> => {
     const pinned = await pinnedForm(trx, workItemId);
     if (!pinned) return { ok: false, reason: "not_found" };
+    // Who may save, and when, before what is wrong with the answers.
+    if (!pinned.canSave) return { ok: false, reason: "not_editable" };
     const checked = validateAnswers(pinned.form.schema, input.answers, "draft");
     if (!checked.ok) return { ok: false, reason: "invalid_answers", errors: checked.errors };
     const { rows } = await sql<{ outcome: string }>`

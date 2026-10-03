@@ -209,7 +209,6 @@
     "unavailable": "Something went wrong. Try again.",
     "form": {
       "title": "Form",
-      "saveDraft": "Save Draft",
       "saved": "Draft saved.",
       "invalid": "Some answers aren't valid. Check the fields marked in the Form.",
       "notEditable": "These answers can't be changed any more.",

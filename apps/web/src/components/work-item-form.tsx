@@ -115,6 +115,7 @@ export function WorkItemFormProvider({
 /** The Form itself: to fill in while the viewer may edit it, otherwise to read. */
 export function WorkItemAnswers({ locale }: { locale: Locale }) {
   const t = useTranslations("workItems.form");
+  const tItems = useTranslations("workItems");
   const form = useWorkItemForm();
   if (!form) return null;
   return (
@@ -135,7 +136,7 @@ export function WorkItemAnswers({ locale }: { locale: Locale }) {
       )}
       {form.editable && (
         <Button variant="secondary" disabled={form.pending || !form.dirty} onClick={() => void form.save()}>
-          {t("saveDraft")}
+          {tItems("saveDraft")}
         </Button>
       )}
     </section>
