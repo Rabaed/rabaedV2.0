@@ -52,7 +52,7 @@ const formOptions = z
  * places it and with the Form's label, but can't be removed or hidden (it has no
  * `visible_if`). Its key is its type, because the Work Item's Trade, Location and
  * Scopes are found by it. Trade and Location are always required
- * (formSchemaProblems refuses them optional, and validateAnswers requires them
+ * (the publish checks refuse them optional, and validateAnswers requires them
  * whatever the schema says): visibility and Consultant routing depend on them.
  */
 const builtInField = <T extends string>(type: T, required: boolean) =>
@@ -170,10 +170,6 @@ export type ScopeChoice = { id: string; tradeId: string; parentId: string | null
  */
 export type ValidationContext = { scopes?: readonly ScopeChoice[] };
 
-export const schemaProblemCodes = ["built_in_missing", "built_in_repeated", "built_in_optional", "built_in_hidden"] as const;
-/** One problem with a schema, about its field `key`. */
-export type SchemaProblem = { key: string; code: (typeof schemaProblemCodes)[number] };
-
 /** Every field of the schema, layout included, in Form order. */
 export function formFields(schema: FormSchema): FormField[] {
   return schema.sections.flatMap((s) => s.fields);
@@ -182,23 +178,6 @@ export function formFields(schema: FormSchema): FormField[] {
 /** The fields that take answers, in Form order. */
 export function answerFields(schema: FormSchema): AnswerField[] {
   return formFields(schema).filter(isAnswerField);
-}
-
-/**
- * What stops a schema from being published: each Built-in Field placed exactly
- * once, never in a section that can be hidden, with Trade and Location required.
- * Empty when there is nothing.
- */
-export function formSchemaProblems(schema: FormSchema): SchemaProblem[] {
-  return builtInFieldTypes.flatMap((type): SchemaProblem[] => {
-    const placed = schema.sections.flatMap((s) => s.fields.filter((f) => f.type === type).map((f) => ({ field: f, section: s })));
-    if (placed.length === 0) return [{ key: type, code: "built_in_missing" }];
-    if (placed.length > 1) return [{ key: type, code: "built_in_repeated" }];
-    const { field, section } = placed[0]!;
-    if (section.visible_if) return [{ key: type, code: "built_in_hidden" }];
-    if (type !== "scopes" && isBuiltInField(field) && !field.required) return [{ key: type, code: "built_in_optional" }];
-    return [];
-  });
 }
 
 /**
@@ -226,8 +205,8 @@ export type FormVisibility = {
  * Which sections and fields are shown for `answers` (`visible_if`). A hidden
  * field reads as cleared, so a field that depends on it is worked out without
  * its answer: the check repeats until nothing changes. Conditions that depend
- * on each other in a cycle are for the publish checks to refuse (RP-271); until
- * then the repeats are bounded, and the last pass wins. The Built-in Fields are
+ * on each other in a cycle are refused by the publish checks (publishProblems);
+ * the repeats are bounded all the same, and the last pass wins. The Built-in Fields are
  * always shown: they can't be hidden.
  */
 export function formVisibility(schema: FormSchema, answers: Readonly<Record<string, unknown>>): FormVisibility {

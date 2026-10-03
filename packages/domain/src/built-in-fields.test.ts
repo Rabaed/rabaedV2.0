@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { formSchema, formSchemaProblems, scopesFittingTrade, validateAnswers, type FormSchema } from "./form.ts";
+import { formSchema, scopesFittingTrade, validateAnswers, type FormSchema } from "./form.ts";
+import { formSchemaProblems } from "./form-publish.ts";
 
 // Seam 3: the Built-in Fields (form-engine.md §1; RP-270). Trade, Location and
 // Scopes sit inside every Form, where the Form places them; no Form can remove

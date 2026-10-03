@@ -69,7 +69,7 @@ System Fields   Attachments · Links
 
 - **System Fields** are outside the schema, and the engine renders them itself. The Form designer can't remove or move them, and only chooses where they appear on the PDF.
 - **Built-in Fields** sit inside the Form: Trade, Location, Scopes / Sub-scopes (filtered by the chosen Trade), and any Visibility Dimension the Project marks as required on Work Items. The designer places and labels them but can't delete them, and Trade and Location are always required. Visibility and Consultant routing depend on them.
-  - In the schema each is a field whose `key` is its `type` (`trade`, `location`, `scopes`). A schema without them, with one twice, or with Trade or Location optional is invalid (`formSchemaProblems`, which publishing will run: RP-271).
+  - In the schema each is a field whose `key` is its `type` (`trade`, `location`, `scopes`). A schema without them, with one twice, or with Trade or Location optional can't be published (§7).
   - The validator requires Trade even in a Draft (no Work Item exists without one) and Location to leave Draft, whatever the schema says. It refuses Scopes outside the chosen Trade, and Sub-scopes whose Scope isn't chosen. Changing the Trade clears the Scopes that no longer fit.
   - Their answers are ids, stored where visibility reads them (`work_item_dimension_value`, `work_item_scope`), never in `data`. The API returns them among the answers.
   - Custom Visibility Dimensions don't exist yet; their Built-in Fields come with them.
@@ -177,6 +177,16 @@ Layout is not fixed to the Form: a Form can have **several PDF Templates**, and 
 - Every checklist has items.
 - `editable_at` Step keys exist in the attached Workflow (§4).
 - `pick_list` sources exist in the Project, or will be created when a library Form is copied into it.
+
+As built (RP-271): `publishProblems(schema, earlierVersions)` in `packages/domain` (`form-publish.ts`) runs the checks of part 1. Each problem names a section or field key and a code:
+- `duplicate_key`: a key used twice. Sections and fields share one set of keys, layout fields included.
+- `unknown_reference`: a `visible_if` or conditional `required` reads a key that holds no answer (missing, a layout field or a section).
+- `condition_cycle`: whether a section or field shows depends, in the end, on its own answer. A conditional `required` hides nothing, so it can't make a cycle.
+- `required_never_shown`: a required field that no answers can ever show, because its section's rule or its own can never hold. A rule never holds when no combination of the Yes/No and choice answers it reads makes it hold, and a field that never shows reads as cleared. A rule over free text, numbers or dates is taken to be able to hold.
+- `built_in_missing`, `built_in_repeated`, `built_in_optional`, `built_in_hidden`: the Built-in Fields (§1).
+- `key_type_changed`: an earlier published Version used the key for another type, even if a later one dropped it.
+
+`formSchemaProblems(schema)` runs the same checks for a first Version. In this part Rabaed publishes its Default Forms as data. `pnpm form:publish --type MAR --schema file.json` (Rabaed Admin's `publishFormVersion`, run with the migrator connection) checks the schema against the Form's published Versions, then publishes the next Version. A refused schema is listed problem by problem, and nothing is published.
 
 ---
 
