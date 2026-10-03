@@ -54,7 +54,8 @@ export function CreateWorkItemForm({
     const checked = validateAnswers(form.schema, next, "draft", {
       scopes: choices.scopes,
       offered: offeredChoices(people),
-      optionLists,
+      // Lists that didn't load (empty) aren't checked here: the server is the authority.
+      optionLists: optionLists.length > 0 ? optionLists : undefined,
     });
     setFieldErrors(checked.ok ? [] : checked.errors.filter((e) => e.code !== "required"));
   }

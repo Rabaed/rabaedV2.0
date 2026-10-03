@@ -517,6 +517,9 @@ const isId = (value: unknown): value is string => typeof value === "string" && z
 
 const isRow = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
 
+/** The Option Lists of a validation context by id; undefined when it has none. */
+const listsById = (context: ValidationContext) => context.optionLists && new Map(context.optionLists.map((l) => [l.id, l]));
+
 /** The option values an answer already holds: a single option, a list of them, or a table column's cells. */
 function heldValues(saved: unknown, column?: string): ReadonlySet<string> {
   const values = (Array.isArray(saved) ? saved : [saved]).flatMap((v) => (column !== undefined ? (isRow(v) ? [v[column]] : []) : [v]));
@@ -610,7 +613,7 @@ function checkValue(
       return value.every((v) => known.has(v)) ? null : "unknown_option";
     }
     case "option_list": {
-      const lists = context.optionLists && new Map(context.optionLists.map((l) => [l.id, l]));
+      const lists = listsById(context);
       const held = heldValues(context.held?.[field.key]);
       if (!field.multiple) return checkOption(field, value, complete, held, lists);
       if (!Array.isArray(value) || new Set(value).size !== value.length) return "wrong_type";
@@ -663,7 +666,7 @@ function checkTable(
   const errors: FieldError[] = [];
   const rows: FormRow[] = [];
   const columns = new Map(field.columns.map((c) => [c.key, c]));
-  const lists = context.optionLists && new Map(context.optionLists.map((l) => [l.id, l]));
+  const lists = listsById(context);
   value.forEach((given: unknown, row) => {
     if (!isRow(given)) {
       errors.push({ key, code: "wrong_type", row });

@@ -4,7 +4,6 @@ import {
   formatNumber,
   optionLabel,
   optionPath,
-  retiredMark,
   type Locale,
   type OptionList,
   type OptionNode,
@@ -15,7 +14,7 @@ import { Field, useFieldControl, type FieldControlProps } from "../form/field.ts
 import { Select } from "../form/select.tsx";
 
 // The `option_list` field (form-engine.md §2, §10): a choice from an Option List
-// of up to three levels. A single choice is a drop-down per level, each offering
+// of up to three levels. A single choice is a select per level, each offering
 // the options under the one chosen above it; a multiple choice is a checkbox for
 // every option that can be chosen, named by its path. Options are read from the
 // live list, so one added in Rabaed Admin shows at once. A retired option stays
@@ -37,15 +36,13 @@ const copy = {
   },
 } satisfies Record<Locale, unknown>;
 
-// A drop-down's "no choice" item: option values never are "-" alone, so it never clashes with one.
+// A select's "no choice" item: option values never are "-" alone, so it never clashes with one.
 const noChoice = "-";
-
-const labelOf = (option: OptionNode, locale: Locale) => (option.retired ? `${option.label[locale]} (${retiredMark[locale]})` : option.label[locale]);
 
 type Level = { options: { value: string; label: string }[]; chosen: string };
 
 /**
- * The drop-downs a single choice shows: one for the first level, then one for
+ * The selects a single choice shows: one for the first level, then one for
  * each level under an option chosen above, down to `depth`. A level offers its
  * options that aren't retired (a chosen retired one stays, marked), and nothing
  * under a retired option, which can't be gone deeper into.
@@ -58,7 +55,7 @@ function levelsOf(list: OptionList, depth: number, path: readonly OptionNode[], 
     const closed = path.slice(0, i).some((o) => o.retired);
     const offered = options.filter((o) => (closed ? o === chosen : !o.retired || o === chosen));
     if (offered.length === 0) break;
-    levels.push({ options: offered.map((o) => ({ value: o.value, label: labelOf(o, locale) })), chosen: chosen?.value ?? "" });
+    levels.push({ options: offered.map((o) => ({ value: o.value, label: optionLabel([o], locale) })), chosen: chosen?.value ?? "" });
     if (!chosen) break;
     options = chosen.options;
   }

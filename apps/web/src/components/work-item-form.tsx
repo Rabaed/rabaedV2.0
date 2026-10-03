@@ -92,8 +92,9 @@ export function WorkItemFormProvider({
     const checked = validateAnswers(schema, next, "draft", {
       scopes: choices.scopes,
       offered: offeredChoices(people, schema, saved),
-      // A retired option the saved answers hold stays valid; choosing it anew is refused.
-      optionLists,
+      // A retired option the saved answers hold stays valid; choosing it anew is refused. Lists that
+      // didn't load (empty) aren't checked here: the server is the authority.
+      optionLists: optionLists.length > 0 ? optionLists : undefined,
       held: saved,
     });
     setErrors(checked.ok ? [] : checked.errors);
