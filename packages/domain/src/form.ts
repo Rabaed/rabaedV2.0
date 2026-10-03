@@ -83,6 +83,45 @@ export function currencyDecimals(currency: string): number {
   return new Intl.NumberFormat("en", { style: "currency", currency }).resolvedOptions().maximumFractionDigits ?? 2;
 }
 
+/** The most rows a table's answers ever hold, whatever its Form says, so an answer stays a sane size. */
+export const maxTableRows = 200;
+
+const columnBase = { key: formKey, label: bilingualText, required: z.boolean().default(false) };
+
+/**
+ * A table column (form-engine.md §2). Its types are the plain ones: no files,
+ * people, checklists or nested tables, so no reference ever lives in a row (ADR
+ * 0012). `total` shows the column's sum under it.
+ */
+export const tableColumn = z.discriminatedUnion("type", [
+  z.object({ ...columnBase, type: z.literal("text"), maxLength: z.number().int().positive().max(2000).optional() }),
+  z
+    .object({
+      ...columnBase,
+      type: z.literal("number"),
+      unit: z.string().trim().min(1).max(20).optional(),
+      min: limit.optional(),
+      max: limit.optional(),
+      decimals: z.number().int().min(0).max(maxDecimals).optional(),
+      total: z.boolean().optional(),
+    })
+    .refine(withinLimits, "min is above max"),
+  z
+    .object({
+      ...columnBase,
+      type: z.literal("currency"),
+      currency: currencyCode.default("SAR"),
+      min: limit.optional(),
+      max: limit.optional(),
+      total: z.boolean().optional(),
+    })
+    .refine(withinLimits, "min is above max"),
+  z.object({ ...columnBase, type: z.literal("date") }),
+  z.object({ ...columnBase, type: z.literal("yes_no") }),
+  z.object({ ...columnBase, type: z.literal("select"), options: formOptions }),
+]);
+export type TableColumn = z.infer<typeof tableColumn>;
+
 export const builtInFieldTypes = ["trade", "location", "scopes"] as const;
 export type BuiltInFieldType = (typeof builtInFieldTypes)[number];
 
@@ -140,6 +179,24 @@ export const formField = z.discriminatedUnion("type", [
    * 0009): a Company outside the Project is typed in a text field.
    */
   z.object({ ...fieldBase, type: z.literal("participant") }),
+  /**
+   * Repeating rows of typed columns, with optional row limits (checked when the
+   * item leaves Draft) and a total under number and currency columns. Answers
+   * are a list of row objects keyed by column key.
+   */
+  z
+    .object({
+      ...fieldBase,
+      type: z.literal("table"),
+      columns: z
+        .array(tableColumn)
+        .min(1)
+        .max(30)
+        .refine((columns) => new Set(columns.map((c) => c.key)).size === columns.length, "Column keys must be unique"),
+      minRows: z.number().int().min(0).max(maxTableRows).optional(),
+      maxRows: z.number().int().min(1).max(maxTableRows).optional(),
+    })
+    .refine((table) => table.minRows === undefined || table.maxRows === undefined || table.minRows <= table.maxRows, "minRows is above maxRows"),
   /** Layout, display only: a heading inside a section. */
   z.object({ ...layoutBase, type: z.literal("heading"), text: bilingualText }),
   /** Layout, display only: a paragraph of guidance for the filler. */
@@ -155,6 +212,7 @@ export const formField = z.discriminatedUnion("type", [
 ]);
 export type FormField = z.infer<typeof formField>;
 export type FormFieldType = FormField["type"];
+export type TableField = Extract<FormField, { type: "table" }>;
 
 const layoutTypes = ["heading", "instructions", "divider"] as const;
 export type LayoutField = Extract<FormField, { type: (typeof layoutTypes)[number] }>;
@@ -172,9 +230,12 @@ export const isBuiltInField = (field: FormField): field is Extract<FormField, { 
 /**
  * A stored answer: text (also dates, times, email addresses, phone numbers, a
  * select's option, a Trade or Location id), a number (also an amount of money),
- * Yes/No, or a list (a multi-select's options, Scope ids).
+ * Yes/No, or a list (a multi-select's options, Scope ids, a table's rows).
  */
-export type FormValue = string | number | boolean | string[];
+export type FormValue = string | number | boolean | string[] | FormRow[];
+
+/** One row of a table: its cells by column key. A cell is text, a number, Yes/No or an option value. */
+export type FormRow = Record<string, string | number | boolean>;
 
 export const formSection = z.object({ key: formKey, title: bilingualText, visible_if: visibleIf, fields: z.array(formField) });
 export type FormSection = z.infer<typeof formSection>;
@@ -242,6 +303,9 @@ export type ValidationMode = "draft" | "complete";
  * `unknown_option`: not one of a choice field's option values, a Scope outside
  *   the chosen Trade, or a Member or Participant the filler wasn't offered (the
  *   same answer as a made-up id).
+ * `too_few_rows`, `too_many_rows`: a table with fewer rows than its minimum or
+ *   more than its maximum (checked when the item leaves Draft).
+ * A table's cell errors name the cell: `row` (from 0) and `column`.
  */
 export const fieldErrorCodes = [
   "required",
@@ -253,11 +317,18 @@ export const fieldErrorCodes = [
   "too_many_decimals",
   "unknown_option",
   "unknown_field",
+  "too_few_rows",
+  "too_many_rows",
 ] as const;
 export type FieldErrorCode = (typeof fieldErrorCodes)[number];
 
 /** One problem with one field. `key` is empty when the answers as a whole aren't an object. */
-export const fieldError = z.object({ key: z.string(), code: z.enum(fieldErrorCodes) });
+export const fieldError = z.object({
+  key: z.string(),
+  code: z.enum(fieldErrorCodes),
+  row: z.number().int().nonnegative().optional(),
+  column: z.string().optional(),
+});
 export type FieldError = z.infer<typeof fieldError>;
 
 /**
@@ -413,6 +484,32 @@ function checkNumber(value: unknown, field: { min?: number; max?: number }, deci
 
 const isId = (value: unknown): value is string => typeof value === "string" && z.uuid().safeParse(value).success;
 
+/** A field or a table column of a type both take: checked the same way. */
+type PlainField = Extract<AnswerField | TableColumn, { type: "text" | "textarea" | "number" | "currency" | "date" | "yes_no" | "select" }>;
+
+/** What is wrong with a plain (non-empty) value, in a field or a table cell, or null when nothing is. */
+function checkPlain(field: PlainField, value: unknown, required: boolean): FieldErrorCode | null {
+  switch (field.type) {
+    case "text":
+    case "textarea":
+      if (typeof value !== "string") return "wrong_type";
+      if (value.length > (field.maxLength ?? defaultMaxLength[field.type])) return "too_long";
+      return required && value.trim() === "" ? "required" : null;
+    case "number":
+      return checkNumber(value, field, field.decimals);
+    case "currency":
+      return checkNumber(value, field, currencyDecimals(field.currency));
+    case "date":
+      if (typeof value !== "string") return "wrong_type";
+      return isIsoValue("date", value) ? null : "invalid_format";
+    case "yes_no":
+      return typeof value === "boolean" ? null : "wrong_type";
+    case "select":
+      if (typeof value !== "string") return "wrong_type";
+      return field.options.some((o) => o.value === value) ? null : "unknown_option";
+  }
+}
+
 /** What is wrong with one field's (non-empty) value, or null when nothing is. */
 function checkValue(
   field: AnswerField,
@@ -424,28 +521,22 @@ function checkValue(
   switch (field.type) {
     case "text":
     case "textarea":
-      if (typeof value !== "string") return "wrong_type";
-      if (value.length > (field.maxLength ?? defaultMaxLength[field.type])) return "too_long";
-      return required && value.trim() === "" ? "required" : null;
     case "number":
-      return checkNumber(value, field, field.decimals);
     case "currency":
-      return checkNumber(value, field, currencyDecimals(field.currency));
+    case "yes_no":
+    case "select":
+      return checkPlain(field, value, required);
     case "email":
     case "phone":
       if (typeof value !== "string") return "wrong_type";
       if (value.trim() === "") return required ? "required" : null;
       return (field.type === "email" ? isEmailAddress : isPhoneNumber)(value.trim()) ? null : "invalid_format";
     case "date":
+      return checkPlain(field, value, required);
     case "datetime":
     case "time":
       if (typeof value !== "string") return "wrong_type";
       return isIsoValue(field.type, value) ? null : "invalid_format";
-    case "yes_no":
-      return typeof value === "boolean" ? null : "wrong_type";
-    case "select":
-      if (typeof value !== "string") return "wrong_type";
-      return field.options.some((o) => o.value === value) ? null : "unknown_option";
     case "multi_select": {
       if (!Array.isArray(value) || !value.every((v) => typeof v === "string") || new Set(value).size !== value.length) {
         return "wrong_type";
@@ -468,7 +559,89 @@ function checkValue(
       const ids = context.offered && (field.type === "member" ? context.offered.members : context.offered.participants);
       return (ids ? ids.has(value) : isId(value)) ? null : "unknown_option";
     }
+    // A table is checked by checkTable, which knows its rows and columns.
+    case "table":
+      return null;
   }
+}
+
+const isRow = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
+
+/**
+ * Checks a table's rows. Each cell is checked by its column's type; an empty
+ * cell is dropped, and a row with nothing in it is dropped and not counted.
+ * Required cells and the row limits are checked in `complete` mode only, so a
+ * Draft can be saved while rows are still being added (but never more than
+ * maxTableRows). Errors name the row (from 0, as given) and column.
+ */
+function checkTable(
+  field: TableField,
+  value: unknown,
+  complete: boolean,
+  required: boolean,
+): { errors: FieldError[]; rows: FormRow[] } {
+  const key = field.key;
+  if (value === undefined || value === null) value = [];
+  if (!Array.isArray(value)) return { errors: [{ key, code: "wrong_type" }], rows: [] };
+  if (value.length > maxTableRows) return { errors: [{ key, code: "too_many_rows" }], rows: [] };
+
+  const errors: FieldError[] = [];
+  const rows: FormRow[] = [];
+  const columns = new Map(field.columns.map((c) => [c.key, c]));
+  value.forEach((given: unknown, row) => {
+    if (!isRow(given)) {
+      errors.push({ key, code: "wrong_type", row });
+      return;
+    }
+    // A row with nothing in it is a row just added: not counted, and its required cells aren't missing yet.
+    if (Object.values(given).every(isUnanswered)) return;
+    const cells: FormRow = {};
+    for (const column of field.columns) {
+      const cell = given[column.key];
+      if (isUnanswered(cell)) {
+        if (complete && column.required) errors.push({ key, code: "required", row, column: column.key });
+        continue;
+      }
+      const code = checkPlain(column, cell, complete && column.required);
+      if (code) errors.push({ key, code, row, column: column.key });
+      else cells[column.key] = cell as string | number | boolean;
+    }
+    for (const extra of Object.keys(given)) {
+      if (!columns.has(extra)) errors.push({ key, code: "unknown_field", row, column: extra });
+    }
+    if (Object.keys(cells).length > 0) rows.push(cells);
+  });
+
+  if (complete) {
+    if (rows.length === 0 && required) errors.push({ key, code: "required" });
+    else if (rows.length < (field.minRows ?? 0)) errors.push({ key, code: "too_few_rows" });
+    else if (field.maxRows !== undefined && rows.length > field.maxRows) errors.push({ key, code: "too_many_rows" });
+  }
+  return { errors, rows };
+}
+
+const roundTo = (value: number, decimals: number) => Number(value.toFixed(decimals));
+
+/**
+ * The total under each number and currency column that asks for one, by column
+ * key: the sum of its numeric cells, rounded to the column's decimals (a
+ * currency's own; ten when a number column sets none). A column with no number
+ * in it has no total. Read-only: the sums are never stored.
+ */
+export function tableTotals(field: TableField, rows: unknown): Record<string, number> {
+  const totals: Record<string, number> = {};
+  if (!Array.isArray(rows)) return totals;
+  for (const column of field.columns) {
+    if ((column.type !== "number" && column.type !== "currency") || !column.total) continue;
+    const numbers = rows.flatMap((row) => (isRow(row) && typeof row[column.key] === "number" && Number.isFinite(row[column.key]) ? [row[column.key] as number] : []));
+    if (numbers.length === 0) continue;
+    const decimals = column.type === "currency" ? currencyDecimals(column.currency) : (column.decimals ?? 10);
+    totals[column.key] = roundTo(
+      numbers.reduce((sum, n) => sum + n, 0),
+      decimals,
+    );
+  }
+  return totals;
 }
 
 /**
@@ -498,6 +671,12 @@ export function validateAnswers(
     if (!visibility.fields.has(field.key)) continue;
     const required = field.type === "trade" || (mode === "complete" && isRequired(field, visibility.answers));
     const value = given[field.key];
+    if (field.type === "table") {
+      const table = checkTable(field, value, mode === "complete", required);
+      errors.push(...table.errors);
+      if (table.errors.length === 0 && table.rows.length > 0) clean[field.key] = table.rows;
+      continue;
+    }
     if (isUnanswered(value)) {
       if (required) errors.push({ key: field.key, code: "required" });
       continue;

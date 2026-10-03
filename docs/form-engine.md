@@ -106,7 +106,16 @@ System Fields   Attachments · Links
 
 **Signatures are never Form fields.** They come only from signing Transitions ([ADR 0003](adr/0003-docusign-grade-signing-not-legally-qualified.md)).
 
-### 2.2 The MAR Form Version 1 (as built, RP-272)
+### 2.2 Tables (as built, RP-280)
+
+- A `table` has `columns` (1–30, unique keys), `minRows` and `maxRows` (0–200). A column is `text`, `number`, `currency`, `date`, `yes_no` or `select` (`option_list` columns come with Option Lists, 2a-03), with the settings its field type has plus `required`. Files, people, checklists and nested tables are refused, so a row never holds a reference and the stripping function (ADR 0012) has nothing to strip from a table.
+- The answer is a list of row objects keyed by column key, stored as given: `[{"fixture": "Downlight", "quantity": 12}]`. An empty cell is left out of its row (No is an answer), and a row with nothing in it is dropped and not counted.
+- Each cell is checked by its column's type in draft and complete mode, with the same codes as a field (`wrong_type`, `below_min`, `too_many_decimals`, `unknown_option`, …); an error names the cell with `row` (from 0, as sent) and `column`. A column the table doesn't have is `unknown_field`. A row that isn't an object is `wrong_type` with its `row`.
+- Complete mode (leaving Draft) also checks `required` cells, `too_few_rows` and `too_many_rows`; with no rows, a required table is `required`. A Draft takes any number of rows up to 200, so rows can be added before the limits are met. A hidden table is cleared like any hidden field.
+- A `number` or `currency` column with `total` shows its sum under the table (`tableTotals`), rounded to the column's decimals. Totals are read-only and never stored; a calculated field over `sum(table.column)` comes with `calculated`.
+- On screen: in edit mode each row is a labelled group of fields (one column of fields on a phone, a grid on a desktop), with a remove button per row, "Add row" and the totals; adding a row focuses its first field. In read mode it is a table, scrolling inside its own region on a phone. The history shows a table's change as its row count.
+
+### 2.3 The MAR Form Version 1 (as built, RP-272)
 
 The part-1 MAR is a Rabaed Default written as data (migration `mar_quantity` completes the Version the skeleton shipped): Manufacturer (text, required), Model (text), Quantity (`number`, unit `pcs`, 0 or more, two decimals), Specification section (text) and Description (textarea, required), with Trade, Location and Scopes as Built-in Fields among them, and the Attachments System Field below. The table of items, named attachment fields and the supplier pick list are Version 2 (part 2). The demo seeds its MARs through this Form (README, "Demo: the MAR journey"). Send for Review with the Form incomplete is refused with `form_incomplete`; the page marks each field and lists them by label.
 
