@@ -3,7 +3,7 @@
 // saves an incomplete draft, and can't Send for Review until the Form is
 // complete. The answers are filtered exactly like the Work Item: 404 when hidden.
 import { randomUUID } from "node:crypto";
-import { formSchemaProblems, type FormVersion, type WorkItemDetail } from "@rabaed/domain";
+import { formSchemaProblems, isAnswerField, type FormVersion, type WorkItemDetail } from "@rabaed/domain";
 import type { LightMyRequestResponse } from "fastify";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestApi, expectHidden, type Caller, type OnboardedCompany } from "./support/harness.ts";
@@ -89,7 +89,7 @@ describe("the Form for a new MAR", () => {
   it("is the latest published MAR Form Version, with its sections and fields", async () => {
     const form: FormVersion = (await ok(engineer.get(`/v1/projects/${projectId}/work-item-types/MAR/form`), 200)).json();
     expect(form.versionNo).toBe(1);
-    expect(form.schema.sections.flatMap((s) => s.fields.map((f) => [f.key, f.type, f.required]))).toEqual([
+    expect(form.schema.sections.flatMap((s) => s.fields.filter(isAnswerField).map((f) => [f.key, f.type, f.required]))).toEqual([
       ["manufacturer", "text", true],
       ["model", "text", false],
       ["specification_section", "text", false],

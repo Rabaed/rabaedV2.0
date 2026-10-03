@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { formatFormValue, fromProjectWallTime, toProjectWallTime } from "./form-display.ts";
-import { formFields, formSchema, type FormField } from "./form.ts";
+import { answerFields, formSchema, type AnswerField } from "./form.ts";
 
 const label = (en: string, ar = en) => ({ en, ar });
 
-const fields = formFields(
+const fields = answerFields(
   formSchema.parse({
     sections: [
       {
@@ -37,12 +37,12 @@ const fields = formFields(
 );
 const field = (key: string) => fields.find((f) => f.key === key)!;
 const [date, datetime, time, yesNo, select, multi] = ["d", "dt", "t", "yn", "finish", "certs"].map(field) as [
-  FormField,
-  FormField,
-  FormField,
-  FormField,
-  FormField,
-  FormField,
+  AnswerField,
+  AnswerField,
+  AnswerField,
+  AnswerField,
+  AnswerField,
+  AnswerField,
 ];
 
 const noArabicIndic = /[٠-٩۰-۹]/;

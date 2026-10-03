@@ -80,6 +80,34 @@ describe("formSchemaProblems: the Built-in Fields", () => {
     ]);
   });
 
+  it("refuses one in a section that can be hidden: Trade and Location can never be switched off", () => {
+    const hideable = formSchema.parse({
+      sections: [
+        {
+          key: "material",
+          title: label("Material"),
+          fields: [{ key: "has_classification", type: "yes_no", label: label("Classified?") }],
+        },
+        {
+          key: "classification",
+          title: label("Classification"),
+          visible_if: { field: "has_classification", op: "=", value: true },
+          fields: builtIns,
+        },
+      ],
+    });
+    expect(formSchemaProblems(hideable)).toEqual([
+      { key: "trade", code: "built_in_hidden" },
+      { key: "location", code: "built_in_hidden" },
+      { key: "scopes", code: "built_in_hidden" },
+    ]);
+    // Even so, the validator still requires the Trade there: a Built-in Field is never hidden.
+    expect(validateAnswers(hideable, { has_classification: false }, "draft", { scopes })).toEqual({
+      ok: false,
+      errors: [{ key: "trade", code: "required" }],
+    });
+  });
+
   it("refuses one placed twice", () => {
     expect(formSchemaProblems(withBuiltIns([...builtIns, builtIns[0]]))).toEqual([{ key: "trade", code: "built_in_repeated" }]);
   });

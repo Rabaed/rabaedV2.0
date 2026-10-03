@@ -1,6 +1,6 @@
 "use client";
 
-import { validateAnswers, type FieldError, type FormValue, type FormVersion, type Locale } from "@rabaed/domain";
+import { formVisibility, validateAnswers, type FieldError, type FormValue, type FormVersion, type Locale } from "@rabaed/domain";
 import { Button, Field, FormRenderer, Input, type BuiltInChoices } from "@rabaed/ui";
 import { useTranslations } from "next-intl";
 import { useState, type FormEvent } from "react";
@@ -48,7 +48,12 @@ export function CreateWorkItemForm({
       const res = await fetch(`/api/v1/projects/${projectId}/work-items`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ type: "MAR", title: data.get("title"), answers }),
+        body: JSON.stringify({
+          type: "MAR",
+          title: data.get("title"),
+          // Hidden fields' answers are cleared on save, here as on the server. Trade and Location are among them.
+          answers: formVisibility(form.schema, answers).answers,
+        }),
       });
       if (res.status === 201) {
         const { id } = (await res.json()) as { id: string };
