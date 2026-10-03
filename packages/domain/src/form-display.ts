@@ -1,4 +1,4 @@
-import { currencyDecimals, isIsoValue, type AnswerField, type NamedAnswer } from "./form.ts";
+import { currencyDecimals, isIsoValue, type AnswerField, type NamedAnswer, type TableColumn } from "./form.ts";
 import { formatDate, formatNumber, timeZone, type Locale } from "./locale.ts";
 
 // How answers read on screen (form-engine.md §5): the viewer's language, Latin
@@ -67,6 +67,29 @@ export function parseNumberInput(text: string): number | null {
   return Number(latin.replace(/,/g, ""));
 }
 
+/** How many rows a table holds, as a phrase: "3 rows", "صفان". */
+const rowCount = {
+  en: (n: number) => (n === 1 ? "1 row" : `${formatNumber(n, "en")} rows`),
+  // Arabic counts: one, two (dual), 3–10 (plural), 11 and more (singular accusative).
+  ar: (n: number) =>
+    n === 1 ? "صف واحد" : n === 2 ? "صفان" : n <= 10 ? `${formatNumber(n, "ar")} صفوف` : `${formatNumber(n, "ar")} صفًا`,
+} satisfies Record<Locale, (n: number) => string>;
+
+/** A table cell as the viewer reads it, by its column's type; empty when there is none. */
+export function formatTableCell(column: TableColumn, value: unknown, locale: Locale): string {
+  if (value === undefined || value === null) return "";
+  switch (column.type) {
+    case "number":
+    case "currency":
+    case "date":
+    case "yes_no":
+    case "select":
+      return formatFormValue({ ...column, label: { en: "", ar: "" }, required: false }, value, locale);
+    case "text":
+      return typeof value === "string" ? value : String(value);
+  }
+}
+
 /**
  * An answer as the viewer reads it: dates and times in their language (Latin
  * digits), Yes/No and option labels translated, text exactly as typed. A value
@@ -109,6 +132,8 @@ export function formatFormValue(field: AnswerField, value: unknown, locale: Loca
       const labelOf = (v: unknown) => field.options.find((o) => o.value === v)?.label[locale] ?? String(v);
       return Array.isArray(value) ? value.map(labelOf).join(listSeparator[locale]) : value == null ? "" : labelOf(value);
     }
+    case "table":
+      return Array.isArray(value) ? rowCount[locale](value.length) : String(value ?? "");
     case "member":
     case "participant":
       return (named?.memberName ?? named?.companyName)?.[locale] ?? anotherCompany[locale];

@@ -142,3 +142,9 @@ td {
   padding: 8px;
   border-block-end: 1px solid var(--line);
 }
+
+#lists ul { padding-inline-start: 1.5rem; }
+#lists li { margin: 0.35rem 0; }
+#lists code { font-size: 0.85em; opacity: 0.8; }
+
+[hidden] { display: none !important; }
