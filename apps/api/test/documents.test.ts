@@ -148,6 +148,9 @@ describe("a Draft's Documents, for the raiser", () => {
         frozen: false,
         // The Attachments System Field's: no Form field (RP-281).
         fieldKey: null,
+        // Not a photo: no time or place (RP-284).
+        takenAt: null,
+        takenWhere: null,
       },
     ]);
   });
