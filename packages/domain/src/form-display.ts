@@ -114,6 +114,7 @@ export function formatFormValue(field: AnswerField, value: unknown, locale: Loca
         ? formatDate(new Date(value), locale, { dateStyle: "medium", timeStyle: "short" })
         : String(value ?? "");
     case "number":
+    case "calculated":
       if (typeof value !== "number") return String(value ?? "");
       return [
         formatNumber(value, locale, { minimumFractionDigits: field.decimals ?? 0, maximumFractionDigits: field.decimals ?? 20 }),
