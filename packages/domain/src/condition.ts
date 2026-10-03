@@ -17,17 +17,19 @@ export type Comparison = ({ field: string; attr?: never } | { attr: string; fiel
 export type Condition = Comparison | { all: Condition[] } | { any: Condition[] } | { not: Condition };
 
 const scalar = z.union([z.string(), z.number(), z.boolean()]);
+/** A Form field key or an attribute name (snake_case, as Form keys are). */
+const ruleKey = z.string().regex(/^[a-z][a-z0-9_]*$/).max(64);
 
 const comparison = z
   .strictObject({
-    field: z.string().min(1).max(64).optional(),
-    attr: z.string().min(1).max(64).optional(),
+    field: ruleKey.optional(),
+    attr: ruleKey.optional(),
     op: z.enum(conditionOps),
     value: z.union([scalar, z.array(scalar)]).optional(),
   })
   .superRefine((c, ctx) => {
     if ((c.field === undefined) === (c.attr === undefined)) ctx.addIssue({ code: "custom", message: "Name one field or one attr" });
-    const wants =
+    const valueFits =
       c.op === "empty" || c.op === "not_empty"
         ? c.value === undefined
         : c.op === "in" || c.op === "not_in"
@@ -35,7 +37,7 @@ const comparison = z
           : c.op === "=" || c.op === "!="
             ? c.value !== undefined && (!Array.isArray(c.value) || c.value.every((v) => typeof v === "string"))
             : typeof c.value === "string" || typeof c.value === "number";
-    if (!wants) ctx.addIssue({ code: "custom", message: `The value doesn't fit the operator ${c.op}` });
+    if (!valueFits) ctx.addIssue({ code: "custom", message: `The value doesn't fit the operator ${c.op}` });
   }) as unknown as z.ZodType<Comparison>;
 
 export const condition: z.ZodType<Condition> = z.lazy(() =>
@@ -67,11 +69,23 @@ function equals(actual: unknown, expected: unknown): boolean {
   return actual === expected;
 }
 
-/** Orders two numbers, or two strings (ISO dates and times sort as text); null across kinds or when empty. */
+const isoKinds = [
+  { pattern: /^\d{4}-\d{2}-\d{2}$/, sortKey: (v: string) => v },
+  { pattern: /^\d{2}:\d{2}(:\d{2})?$/, sortKey: (v: string) => (v.length === 5 ? `${v}:00` : v) },
+  { pattern: /^\d{4}-\d{2}-\d{2}T[\d:.]+Z$/, sortKey: (v: string) => Date.parse(v) },
+];
+
+/**
+ * Orders like with like: two numbers, or two ISO values of one kind (dates,
+ * times of day, or UTC instants). Anything else, empty included, has no order: null.
+ */
 function order(actual: unknown, expected: unknown): number | null {
   if (typeof actual === "number" && typeof expected === "number") return actual - expected;
-  if (typeof actual === "string" && typeof expected === "string" && actual !== "") return actual < expected ? -1 : actual > expected ? 1 : 0;
-  return null;
+  if (typeof actual !== "string" || typeof expected !== "string") return null;
+  const kind = isoKinds.find((k) => k.pattern.test(actual) && k.pattern.test(expected));
+  if (!kind) return null;
+  const [a, b] = [kind.sortKey(actual), kind.sortKey(expected)];
+  return a < b ? -1 : a > b ? 1 : 0;
 }
 
 function compare(c: Comparison, sources: ConditionSources): boolean {
@@ -98,6 +112,14 @@ function compare(c: Comparison, sources: ConditionSources): boolean {
       return c.op === ">" ? diff > 0 : c.op === ">=" ? diff >= 0 : c.op === "<" ? diff < 0 : diff <= 0;
     }
   }
+}
+
+/** Whether a rule reads any item attribute (`attr`), at any depth. */
+export function readsAttrs(rule: Condition): boolean {
+  if ("all" in rule) return rule.all.some(readsAttrs);
+  if ("any" in rule) return rule.any.some(readsAttrs);
+  if ("not" in rule) return readsAttrs(rule.not);
+  return rule.attr !== undefined;
 }
 
 /** Whether `rule` holds for the given answers and attributes. A missing attribute reads as empty. */

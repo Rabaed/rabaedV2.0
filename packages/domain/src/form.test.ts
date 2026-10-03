@@ -348,6 +348,18 @@ describe("layout fields", () => {
   });
 });
 
+describe("conditions in a Form", () => {
+  it("can't read item attributes yet: the Form has none to give them (Built-in Fields, RP-270)", () => {
+    const withRule = (visible_if: unknown) =>
+      formSchema.safeParse({
+        sections: [{ key: "a", title: label("A"), fields: [{ key: "x", type: "text", label: label("X"), visible_if }] }],
+      }).success;
+    expect(withRule({ field: "y", op: "empty" })).toBe(true);
+    expect(withRule({ attr: "trade", op: "in", value: ["EL"] })).toBe(false);
+    expect(withRule({ all: [{ field: "y", op: "empty" }, { not: { attr: "trade", op: "empty" } }] })).toBe(false);
+  });
+});
+
 describe("formVisibility", () => {
   it("shows a field or section only while its condition holds", () => {
     const hidden = formVisibility(conditional, { sample_provided: false });

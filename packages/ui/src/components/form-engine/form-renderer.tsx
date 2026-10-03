@@ -213,7 +213,7 @@ function Layout({ field, locale }: { field: LayoutField; locale: Locale }) {
 }
 
 /** Splits fields into runs: each layout field alone, consecutive answer fields together (one list each). */
-function runs(fields: FormField[]): (LayoutField | AnswerField[])[] {
+function fieldRuns(fields: FormField[]): (LayoutField | AnswerField[])[] {
   const out: (LayoutField | AnswerField[])[] = [];
   for (const field of fields) {
     const last = out.at(-1);
@@ -245,18 +245,18 @@ export function FormRenderer({
   const visibility = formVisibility(schema, answers);
   const errorOf = (key: string) => errors.find((e) => e.key === key);
   // Only errors of fields shown on this Form can be shown and linked.
-  const shown = mode === "edit" ? errors.filter((e) => byKey.has(e.key) && visibility.fields.has(e.key)) : [];
+  const shownErrors = mode === "edit" ? errors.filter((e) => byKey.has(e.key) && visibility.fields.has(e.key)) : [];
 
   return (
     <div className={cn("flex flex-col gap-6", className)}>
-      {shown.length > 0 && (
+      {shownErrors.length > 0 && (
         <div role="alert" className="flex flex-col gap-2 rounded-md border border-danger bg-danger-tint p-4 text-body text-text">
           <p className="flex items-center gap-2 font-semibold">
             <Icon name="alert-circle" size={20} className="text-danger" />
-            {copy[locale].summary(shown.length)}
+            {copy[locale].summary(shownErrors.length)}
           </p>
           <ul className="flex flex-col gap-1 ps-7">
-            {shown.map((e) => (
+            {shownErrors.map((e) => (
               <li key={e.key}>
                 <a href={`#${fieldId(e.key)}`} className={cn("font-medium text-text underline underline-offset-4", focusRing)}>
                   {byKey.get(e.key)!.label[locale]}
@@ -295,7 +295,7 @@ export function FormRenderer({
                 );
               })
             ) : (
-              runs(fields).map((run) =>
+              fieldRuns(fields).map((run) =>
                 Array.isArray(run) ? (
                   <dl key={run[0]!.key} className="flex flex-col gap-4">
                     {run.map((field) => {

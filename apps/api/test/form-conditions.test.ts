@@ -4,7 +4,7 @@
 // it clears exactly what the browser does.
 //
 // The MAR Form Version 1 has no conditions, so this file adds a test-only
-// Rabaed Default Type (the MAR's Workflow) whose Form has them.
+// Rabaed Default Work Item Type (the MAR's Workflow) whose Form has them.
 import { randomUUID } from "node:crypto";
 import { createDb } from "@rabaed/db";
 import { testDatabaseUrls } from "@rabaed/db/test-support";

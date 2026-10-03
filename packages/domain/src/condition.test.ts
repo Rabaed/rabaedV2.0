@@ -35,6 +35,17 @@ describe("evaluateCondition: comparing a value", () => {
     expect(holds({ field: "delivery_date", op: "<", value: "2026-09-30" })).toBe(false);
   });
 
+  it("orders only like with like: two numbers, two dates, two times or two instants", () => {
+    const at = (a: unknown, op: string, b: unknown) => evaluateCondition(condition.parse({ field: "x", op, value: b }), { fields: { x: a } });
+    expect(at("07:30", "<", "16:00")).toBe(true);
+    expect(at("2026-10-03T06:30:00Z", ">", "2026-10-03T06:29:59.999Z")).toBe(true);
+    expect(at("2026-10-03T06:30:00Z", "<", "2026-10-03T09:30:00.000Z")).toBe(true);
+    // An instant against a date, or plain text: different kinds, so no order.
+    expect(at("2026-10-03T06:30:00Z", ">", "2026-10-03")).toBe(false);
+    expect(at("10", ">", "9")).toBe(false);
+    expect(at("b", ">", "a")).toBe(false);
+  });
+
   it("an ordering never holds across kinds, or on an empty field", () => {
     expect(holds({ field: "finish", op: ">", value: 3 })).toBe(false);
     expect(holds({ field: "cost_impact", op: "<", value: "2026-01-01" })).toBe(false);
@@ -96,6 +107,10 @@ describe("condition (the schema)", () => {
     expect(condition.safeParse({ field: "a", op: "=" }).success).toBe(false);
     expect(condition.safeParse({ field: "a", op: "in", value: "x" }).success).toBe(false);
     expect(condition.safeParse({ field: "a", op: "empty" }).success).toBe(true);
+  });
+
+  it("refuses a key that isn't snake_case", () => {
+    expect(condition.safeParse({ field: "Sample Provided", op: "empty" }).success).toBe(false);
   });
 
   it("refuses a rule that is neither a comparison nor all/any/not", () => {

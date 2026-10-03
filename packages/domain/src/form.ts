@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { bilingualText } from "./company.ts";
-import { condition, evaluateCondition, isUnanswered } from "./condition.ts";
+import { condition, evaluateCondition, isUnanswered, readsAttrs } from "./condition.ts";
 
 // The Form engine's schema and its one validator (form-engine.md §1, §8; ADR 0006).
 // The same code runs in the browser, for instant feedback, and on the server, as
@@ -12,15 +12,22 @@ export const formKey = z.string().regex(/^[a-z][a-z0-9_]*$/).max(64);
 
 const helpText = z.object({ en: z.string().trim().min(1).max(1000), ar: z.string().trim().min(1).max(1000) });
 
+/**
+ * A Form's conditions read its own fields only. The item's attributes (Trade,
+ * Location) reach the Form with the Built-in Fields (RP-270); until then an
+ * `attr` rule could never hold, so it is refused.
+ */
+const formCondition = condition.refine((rule) => !readsAttrs(rule), "A Form condition reads Form fields only");
+
 /** Shown only while this condition holds; hidden fields aren't checked, and their answers are cleared on save. */
-const visibleIf = condition.optional();
+const visibleIf = formCondition.optional();
 
 const fieldBase = {
   key: formKey,
   label: bilingualText,
   help: helpText.optional(),
   /** Always, never, or while a condition holds (checked only when the field is shown). */
-  required: z.union([z.boolean(), condition]).default(false),
+  required: z.union([z.boolean(), formCondition]).default(false),
   visible_if: visibleIf,
 };
 
@@ -141,12 +148,13 @@ export type FormVisibility = {
 /**
  * Which sections and fields are shown for `answers` (`visible_if`). A hidden
  * field reads as cleared, so a field that depends on it is worked out without
- * its answer: the check repeats until nothing changes (the publish checks keep
- * conditions free of cycles; the repeats are bounded anyway).
+ * its answer: the check repeats until nothing changes. Conditions that depend
+ * on each other in a cycle are for the publish checks to refuse (RP-271); until
+ * then the repeats are bounded, and the last pass wins.
  */
 export function formVisibility(schema: FormSchema, answers: Readonly<Record<string, unknown>>): FormVisibility {
-  const fields = formFields(schema);
-  const shownWith = (current: Record<string, unknown>) => {
+  const fieldKeys = new Set(formFields(schema).map((f) => f.key));
+  const shownFor = (current: Record<string, unknown>) => {
     const holds = (rule: FormField["visible_if"]) => !rule || evaluateCondition(rule, { fields: current });
     const sections = new Set(schema.sections.filter((s) => holds(s.visible_if)).map((s) => s.key));
     const shown = new Set(
@@ -154,17 +162,19 @@ export function formVisibility(schema: FormSchema, answers: Readonly<Record<stri
     );
     return { sections, fields: shown };
   };
-  const keep = (shown: ReadonlySet<string>) =>
-    Object.fromEntries(Object.entries(answers).filter(([key]) => !fields.some((f) => f.key === key) || shown.has(key)));
+  // Answers to keys that aren't fields stay, for the validator to refuse as unknown.
+  const answersShownIn = (shown: ReadonlySet<string>) =>
+    Object.fromEntries(Object.entries(answers).filter(([key]) => !fieldKeys.has(key) || shown.has(key)));
+  const sameKeys = (a: ReadonlySet<string>, b: ReadonlySet<string>) => a.size === b.size && [...a].every((k) => b.has(k));
 
-  let visibility = shownWith({ ...answers });
-  for (let i = 0; i <= fields.length; i++) {
-    const next = shownWith(keep(visibility.fields));
-    const same = next.fields.size === visibility.fields.size && [...next.fields].every((k) => visibility.fields.has(k));
+  let visibility = shownFor({ ...answers });
+  for (let i = 0; i <= fieldKeys.size; i++) {
+    const next = shownFor(answersShownIn(visibility.fields));
+    const settled = sameKeys(next.fields, visibility.fields) && sameKeys(next.sections, visibility.sections);
     visibility = next;
-    if (same) break;
+    if (settled) break;
   }
-  return { ...visibility, answers: keep(visibility.fields) };
+  return { ...visibility, answers: answersShownIn(visibility.fields) };
 }
 
 /** Whether a field must be answered now: `required` itself, or its condition over `answers`. */

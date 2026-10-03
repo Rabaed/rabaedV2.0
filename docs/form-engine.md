@@ -49,9 +49,11 @@ Conditions use the **same JSON rule language as Workflow conditions** ([workflow
 
 As built (RP-267): `evaluateCondition` in `packages/domain` (`condition.ts`). A comparison reads a Form `field` or an item `attr`.
 - `=` and `!=` compare exactly. A multi-select equals a list holding the same options, in any order.
-- `> >= < <=` order two numbers, or two ISO dates or times; across kinds they never hold.
+- `> >= < <=` order like with like: two numbers, or two ISO values of one kind (dates, times of day or UTC instants). Anything else, plain text included, has no order, so the rule doesn't hold.
 - `in` and `not_in` take a list. A multi-select is `in` when any of its options is.
 - `empty` matches nothing, empty text or no option; No is not empty.
+
+A Form's conditions read its own fields only, for now. The item's attributes reach the Form with the Built-in Fields (RP-270), so until then a rule with `attr` is refused.
 
 `visible_if` works on sections and fields. A hidden field reads as cleared, so a field that depends on it hides too. `formVisibility` works out what is shown, and `isRequired` evaluates `required` when it is a condition. The validator skips hidden fields and drops their answers. The API stores what it returns, and the web sends only shown answers.
 
