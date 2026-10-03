@@ -1,4 +1,4 @@
-import { isIsoValue, type FormField } from "./form.ts";
+import { isIsoValue, type AnswerField } from "./form.ts";
 import { formatDate, timeZone, type Locale } from "./locale.ts";
 
 // How answers read on screen (form-engine.md §5): the viewer's language, Latin
@@ -43,7 +43,7 @@ export function fromProjectWallTime(wallTime: string): string {
  * digits), Yes/No and option labels translated, text exactly as typed. A value
  * the field can't read (e.g. a retired option) is shown as stored.
  */
-export function formatFormValue(field: FormField, value: unknown, locale: Locale): string {
+export function formatFormValue(field: AnswerField, value: unknown, locale: Locale): string {
   switch (field.type) {
     case "date":
       return typeof value === "string" && isIsoValue("date", value)

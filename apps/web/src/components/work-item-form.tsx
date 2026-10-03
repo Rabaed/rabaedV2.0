@@ -1,6 +1,6 @@
 "use client";
 
-import { validateAnswers, type FieldError, type FormSchema, type FormValue, type Locale } from "@rabaed/domain";
+import { formVisibility, validateAnswers, type FieldError, type FormSchema, type FormValue, type Locale } from "@rabaed/domain";
 import { Button, FormRenderer } from "@rabaed/ui";
 import { useTranslations } from "next-intl";
 import { createContext, useContext, useState, type ReactNode } from "react";
@@ -69,13 +69,16 @@ export function WorkItemFormProvider({
     if (!dirty) return true;
     setPending(true);
     setMessage(null);
+    const shownAnswers = formVisibility(schema, answers).answers;
     try {
       const res = await fetch(`/api/v1/work-items/${workItemId}/answers`, {
         method: "PUT",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ answers }),
+        // Hidden fields' answers are cleared on save, here as on the server.
+        body: JSON.stringify({ answers: shownAnswers }),
       });
       if (res.ok) {
+        setAnswers(shownAnswers);
         setDirty(false);
         setErrors([]);
         setMessage(t("saved"));
