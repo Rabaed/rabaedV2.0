@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  formFields,
   formVisibility,
   offeredChoices,
   validateAnswers,
@@ -17,7 +18,7 @@ import { Button, FormRenderer, type BuiltInChoices } from "@rabaed/ui";
 import { useTranslations } from "next-intl";
 import { createContext, useContext, useState, type ReactNode } from "react";
 import { useRouter } from "@/i18n/navigation";
-import { useDocuments } from "./use-documents";
+import { useDocuments, useImageUrls } from "./use-documents";
 
 // A Work Item's Form on its page: the answers being edited, their errors, and
 // Save draft. The Transition buttons share it, so leaving Draft first saves what
@@ -162,8 +163,13 @@ export function WorkItemAnswers({ locale, workItemId, documents }: { locale: Loc
   const t = useTranslations("workItems.form");
   const tItems = useTranslations("workItems");
   const form = useWorkItemForm();
-  // The Form's `attachments` fields upload as the Attachments System Field does (RP-281).
+  // The Form's `attachments` and `photos` fields upload as the Attachments System Field does (RP-281, RP-284).
   const files = useDocuments(workItemId, documents.limits);
+  const photoKeys = new Set(form ? formFields(form.schema).flatMap((f) => (f.type === "photos" ? [f.key] : [])) : []);
+  const imageUrls = useImageUrls(
+    workItemId,
+    documents.documents.filter((d) => d.fieldKey !== null && photoKeys.has(d.fieldKey)),
+  );
   if (!form) return null;
   // The fields the last check marked, by their labels in the viewer's language, in Form order.
   const marked = new Set(form.errors.map((e) => e.key));
@@ -188,7 +194,8 @@ export function WorkItemAnswers({ locale, workItemId, documents }: { locale: Loc
           documents: documents.documents,
           canChange: documents.canChange,
           pending: files.pending,
-          onUpload: (fieldKey, file) => void files.upload(file, fieldKey),
+          imageUrls,
+          onUpload: (fieldKey, picked) => void files.upload(picked, fieldKey),
           onOpen: (documentId) => void files.open(documentId),
           onRemove: (fieldKey, documentId) => void files.remove(documentId, fieldKey),
         }}

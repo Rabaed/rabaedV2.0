@@ -6,6 +6,7 @@ import {
   isAnswerField,
   isBuiltInField,
   isCalculatedField,
+  isFileField,
   type FormField,
   type FormSchema,
   type FormSection,
@@ -99,14 +100,14 @@ function duplicateKeys(schema: FormSchema): string[] {
 
 /**
  * Sections and fields with a rule that reads a key that holds no answer (a
- * layout or `attachments` field, or none), and calculated fields whose formula
+ * layout or file field, or none), and calculated fields whose formula
  * reads one that holds no number: a key that isn't a `number`, `currency` or
  * `calculated` field, or a `sum` over a column that isn't a table's `number` or
  * `currency` column.
  */
 function unknownReferences(schema: FormSchema): string[] {
   const fields = formFields(schema);
-  const answerKeys = new Set(fields.filter((f) => isAnswerField(f) && f.type !== "attachments").map((f) => f.key));
+  const answerKeys = new Set(fields.filter((f) => isAnswerField(f) && !isFileField(f)).map((f) => f.key));
   const numberKeys = new Set(fields.filter((f) => f.type === "number" || f.type === "currency" || f.type === "calculated").map((f) => f.key));
   const holdsNumbers = ({ key, column }: { key: string; column?: string }) => {
     if (column === undefined) return numberKeys.has(key);

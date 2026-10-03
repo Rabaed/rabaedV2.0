@@ -1,15 +1,18 @@
 import { withMember, type Db } from "@rabaed/db";
-import type {
-  BilingualText,
-  DocumentList,
-  SignedUrl,
-  StartDocumentUploadRequest,
-  StartedDocumentUpload,
+import {
+  photoContentTypes,
+  type BilingualText,
+  type DocumentList,
+  type PhotoMetadata,
+  type SignedUrl,
+  type StartDocumentUploadRequest,
+  type StartedDocumentUpload,
 } from "@rabaed/domain";
 import { sql } from "kysely";
 import type { ApiConfig } from "../config.ts";
 import { checkedOutcome, commandResult } from "../outcomes.ts";
 import type { FileStore } from "./file-store.ts";
+import { readPhotoMetadata } from "./photo-metadata.ts";
 
 // Documents: the Attachments System Field (RP-269). Rows are read through RLS,
 // which answers only for items the Member can see (the documents migration);
@@ -34,9 +37,13 @@ export function listDocuments(db: Db, memberId: string, workItemId: string, limi
       member_name: BilingualText | null;
       frozen: boolean;
       field_key: string | null;
+      taken_at: Date | null;
+      taken_latitude: number | null;
+      taken_longitude: number | null;
     }>`
       select d.id, d.file_name, d.size_bytes, d.content_type, d.confirmed_at, co.legal_name as company_name,
-        m.full_name as member_name, d.frozen_at is not null as frozen, d.field_key
+        m.full_name as member_name, d.frozen_at is not null as frozen, d.field_key,
+        d.taken_at, d.taken_latitude, d.taken_longitude
       from document d
       join app.work_item_companies(d.work_item_id) co on co.participant_id = d.uploaded_by_participant_id
       -- member's own RLS shows only the viewer's own Company's people (V14).
@@ -55,6 +62,9 @@ export function listDocuments(db: Db, memberId: string, workItemId: string, limi
         uploadedBy: { companyName: r.company_name, memberName: r.member_name },
         frozen: r.frozen,
         fieldKey: r.field_key,
+        takenAt: r.taken_at?.toISOString() ?? null,
+        takenWhere:
+          r.taken_latitude !== null && r.taken_longitude !== null ? { latitude: r.taken_latitude, longitude: r.taken_longitude } : null,
       })),
       canChange: can[0]!.can,
       limits,
@@ -63,7 +73,7 @@ export function listDocuments(db: Db, memberId: string, workItemId: string, limi
 }
 
 const changeRefusals = ["not_found", "project_closed", "forbidden", "not_editable"] as const;
-/** A file a Form's `attachments` field won't take (the field_documents migration). */
+/** A file a Form's `attachments` or `photos` field won't take (the field_documents migration). */
 const fieldRefusals = ["field_not_found", "content_type_not_allowed", "too_many_files"] as const;
 const startRefusals = [...changeRefusals, ...fieldRefusals] as const;
 export type StartUploadResult =
@@ -79,7 +89,7 @@ class OverLimit extends Error {
 
 /**
  * Step 1: the acting Member declares a file for a visible item, and for one of
- * its Form's `attachments` fields or the Attachments System Field, and gets a
+ * its Form's `attachments` or `photos` fields or the Attachments System Field, and gets a
  * URL to PUT it to. The URL is signed for exactly that size and type.
  */
 export function startUpload(
@@ -112,7 +122,11 @@ export function startUpload(
 const confirmRefusals = [...changeRefusals, "not_uploaded", "upload_mismatch", "too_many_files"] as const;
 export type ConfirmUploadResult = { ok: true } | { ok: false; reason: (typeof confirmRefusals)[number] };
 
-/** Step 3: the uploader confirms; the file must be in the store, exactly as declared. */
+/**
+ * Step 3: the uploader confirms; the file must be in the store, exactly as
+ * declared. An image's EXIF time and place are read from the stored file and
+ * kept with it (RP-284).
+ */
 export function confirmUpload(
   db: Db,
   files: FileStore,
@@ -127,14 +141,22 @@ export function confirmUpload(
     `.execute(trx);
     const pendingKey = rows[0]!.storage_key;
     let stored: { sizeBytes: number; contentType: string } | null = null;
+    let photo: PhotoMetadata = { takenAt: null, takenWhere: null };
     if (pendingKey) {
       stored = await files.stat(pendingKey);
       if (!stored) return { ok: false, reason: "not_uploaded" };
+      // A photo's time and place come from the stored file itself, never from the browser.
+      if (photoContentTypes.includes(stored.contentType)) {
+        const bytes = await files.read(pendingKey);
+        if (bytes) photo = await readPhotoMetadata(bytes);
+      }
     }
     // No pending upload of theirs: the function answers for a confirmed one, or not_found.
     const { rows: confirmed } = await sql<{ outcome: string }>`
       select app.confirm_document_upload(${workItemId}::uuid, ${documentId}::uuid,
-        ${stored?.sizeBytes ?? null}::bigint, ${stored?.contentType ?? null}, ${now}) as outcome
+        ${stored?.sizeBytes ?? null}::bigint, ${stored?.contentType ?? null}, ${now},
+        ${photo.takenAt}::timestamptz, ${photo.takenWhere?.latitude ?? null}::double precision,
+        ${photo.takenWhere?.longitude ?? null}::double precision) as outcome
     `.execute(trx);
     return commandResult(confirmed[0]!.outcome, "confirmed", confirmRefusals);
   });

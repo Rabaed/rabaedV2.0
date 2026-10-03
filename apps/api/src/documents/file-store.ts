@@ -2,6 +2,7 @@ import {
   CreateBucketCommand,
   HeadBucketCommand,
   HeadObjectCommand,
+  NoSuchKey,
   NotFound,
   PutBucketCorsCommand,
   S3Client,
@@ -31,6 +32,8 @@ export interface FileStore {
   signDownload(key: string, file: { fileName: string; contentType: string }, signedAt: Date): Promise<SignedUrl>;
   /** The stored file's size and type, or null when nothing is stored under `key`. */
   stat(key: string): Promise<{ sizeBytes: number; contentType: string } | null>;
+  /** The stored file's bytes (a photo's, to read its EXIF), or null when nothing is stored under `key`. */
+  read(key: string): Promise<Uint8Array | null>;
 }
 
 export interface FileStoreSettings {
@@ -129,6 +132,18 @@ export function createFileStore(settings: FileStoreSettings): FileStore {
         throw error;
       }
     },
+
+    async read(key) {
+      try {
+        const object = await s3.send(new GetObjectCommand({ Bucket: settings.bucket, Key: key }));
+        return (await object.Body?.transformToByteArray()) ?? null;
+      } catch (error) {
+        if (error instanceof NoSuchKey || (error as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode === 404) {
+          return null;
+        }
+        throw error;
+      }
+    },
   };
 }
 
@@ -160,4 +175,5 @@ export const noFileStore: FileStore = {
   signUpload: () => Promise.reject(new Error("No file store configured")),
   signDownload: () => Promise.reject(new Error("No file store configured")),
   stat: () => Promise.reject(new Error("No file store configured")),
+  read: () => Promise.reject(new Error("No file store configured")),
 };

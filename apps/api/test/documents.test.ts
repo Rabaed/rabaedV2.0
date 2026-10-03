@@ -130,7 +130,7 @@ describe("a Draft's Documents, for the raiser", () => {
     expect(await list(engineer, itemId)).toEqual({
       documents: [],
       canChange: true,
-      limits: { maxBytes: 1024 * 1024, contentTypes: ["application/pdf", "image/png", "text/plain"] },
+      limits: { maxBytes: 1024 * 1024, contentTypes: ["application/pdf", "image/jpeg", "image/png", "text/plain"] },
     });
   });
 
@@ -148,6 +148,9 @@ describe("a Draft's Documents, for the raiser", () => {
         frozen: false,
         // The Attachments System Field's: no Form field (RP-281).
         fieldKey: null,
+        // Not a photo: no time or place (RP-284).
+        takenAt: null,
+        takenWhere: null,
       },
     ]);
   });

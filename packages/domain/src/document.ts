@@ -28,6 +28,9 @@ export const defaultDocumentContentTypes = [
   "application/zip",
 ] as const;
 
+/** The image types a `photos` field takes (RP-284): those phone cameras write and the api reads EXIF from. */
+export const photoContentTypes: readonly string[] = ["image/jpeg", "image/png", "image/webp", "image/heic"];
+
 /** The largest Document unless the environment configures another size (DOCUMENT_MAX_MB). */
 export const defaultDocumentMaxBytes = 50 * 1024 * 1024;
 
@@ -51,7 +54,7 @@ export const startDocumentUploadRequest = z.object({
   fileName: z.string().trim().min(1).max(255),
   sizeBytes: z.number().int().positive(),
   contentType,
-  /** The Form's `attachments` field the file is for (RP-281); none for the Attachments System Field. */
+  /** The Form's `attachments` or `photos` field the file is for (RP-281); none for the Attachments System Field. */
   fieldKey: z
     .string()
     .regex(/^[a-z][a-z0-9_]*$/)
@@ -71,6 +74,18 @@ export const startedDocumentUpload = z.object({
 });
 export type StartedDocumentUpload = z.infer<typeof startedDocumentUpload>;
 
+/** Where a photo was taken, from its GPS (WGS 84 degrees; south and west negative). */
+export const takenWhere = z.object({ latitude: z.number().min(-90).max(90), longitude: z.number().min(-180).max(180) });
+export type TakenWhere = z.infer<typeof takenWhere>;
+
+/**
+ * When and where a photo was taken (RP-284): read by the api from the stored
+ * file's EXIF when its upload is confirmed, never from the browser. Null when
+ * the file records none.
+ */
+export const photoMetadata = z.object({ takenAt: z.iso.datetime().nullable(), takenWhere: takenWhere.nullable() });
+export type PhotoMetadata = z.infer<typeof photoMetadata>;
+
 /** One Document of a Work Item, for someone who can see the item. */
 export const documentSummary = z.object({
   id: z.uuid(),
@@ -82,8 +97,10 @@ export const documentSummary = z.object({
   uploadedBy: z.object({ companyName: bilingualText, memberName: bilingualText.nullable() }),
   /** Frozen once the item was first sent or submitted: it never changes again. */
   frozen: z.boolean(),
-  /** The Form's `attachments` field it belongs to; null for the Attachments System Field. */
+  /** The Form's `attachments` or `photos` field it belongs to; null for the Attachments System Field. */
   fieldKey: z.string().nullable(),
+  /** An image's time and place, from its EXIF; null for any other file, or an image without them (visibility.md V13). */
+  ...photoMetadata.shape,
 });
 export type DocumentSummary = z.infer<typeof documentSummary>;
 

@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { bilingualText } from "./company.ts";
 import { condition, evaluateCondition, isUnanswered, readsAttrs } from "./condition.ts";
-import { contentType } from "./document.ts";
+import { contentType, photoContentTypes } from "./document.ts";
 import { evaluateFormula, formulaReferences, parseFormula, roundTo, type Formula, type FormulaReference } from "./formula.ts";
 import { OPTION_LIST_MAX_LEVELS, isChoosable, optionPath, reachesDepth, type OptionList } from "./option-list.ts";
 
@@ -89,8 +89,11 @@ export function currencyDecimals(currency: string): number {
 /** The most rows a table's answers ever hold, whatever its Form says, so an answer stays a sane size. */
 export const maxTableRows = 200;
 
-/** The most files an `attachments` field's `minFiles` and `maxFiles` may set. */
+/** The most files an `attachments` or `photos` field's `minFiles` and `maxFiles` may set. */
 export const maxFieldFiles = 50;
+
+const fileLimitsInOrder = (field: { minFiles?: number; maxFiles?: number }) =>
+  field.minFiles === undefined || field.maxFiles === undefined || field.minFiles <= field.maxFiles;
 
 const columnBase = { key: formKey, label: bilingualText, required: z.boolean().default(false) };
 
@@ -243,7 +246,21 @@ export const formField = z.discriminatedUnion("type", [
       minFiles: z.number().int().min(0).max(maxFieldFiles).optional(),
       maxFiles: z.number().int().min(1).max(maxFieldFiles).optional(),
     })
-    .refine((field) => field.minFiles === undefined || field.maxFiles === undefined || field.minFiles <= field.maxFiles, "minFiles is above maxFiles"),
+    .refine(fileLimitsInOrder, "minFiles is above maxFiles"),
+  /**
+   * Photos (RP-284): a named file field that takes images only
+   * (photoContentTypes), taken with the phone's camera. Their time and place
+   * come from each file's EXIF, read by the api, and are shown to everyone who
+   * sees the item (visibility.md V13). Otherwise as an `attachments` field.
+   */
+  z
+    .object({
+      ...fieldBase,
+      type: z.literal("photos"),
+      minFiles: z.number().int().min(0).max(maxFieldFiles).optional(),
+      maxFiles: z.number().int().min(1).max(maxFieldFiles).optional(),
+    })
+    .refine(fileLimitsInOrder, "minFiles is above maxFiles"),
   /** Layout, display only: a heading inside a section. */
   z.object({ ...layoutBase, type: z.literal("heading"), text: bilingualText }),
   /** Layout, display only: a paragraph of guidance for the filler. */
@@ -261,6 +278,16 @@ export type FormField = z.infer<typeof formField>;
 export type FormFieldType = FormField["type"];
 export type TableField = Extract<FormField, { type: "table" }>;
 export type AttachmentsField = Extract<FormField, { type: "attachments" }>;
+export type PhotosField = Extract<FormField, { type: "photos" }>;
+/** A named file field: its files are Documents with its key, never answers. */
+export type FileField = AttachmentsField | PhotosField;
+
+/** Whether a field is a named file field (`attachments` or `photos`). */
+export const isFileField = (field: FormField): field is FileField => field.type === "attachments" || field.type === "photos";
+
+/** The content types a file field takes: a photos field's images; an attachments field's own, or undefined for any the Project takes. */
+export const fileFieldContentTypes = (field: FileField): readonly string[] | undefined =>
+  field.type === "photos" ? photoContentTypes : field.contentTypes;
 export type CalculatedField = Extract<FormField, { type: "calculated" }>;
 
 /** Whether a field is a calculated one. */
@@ -359,7 +386,7 @@ export type ValidationMode = "draft" | "complete";
  *   same answer as a made-up id).
  * `too_few_rows`, `too_many_rows`: a table with fewer rows than its minimum or
  *   more than its maximum (checked when the item leaves Draft).
- * `too_few_files`: an `attachments` field with fewer confirmed files than its
+ * `too_few_files`: an `attachments` or `photos` field with fewer confirmed files than its
  *   minimum (checked when the item leaves Draft).
  * `too_shallow`: an Option List choice that stops above the depth the field
  *   asks for, though options remain below it (checked when the item leaves Draft).
@@ -407,7 +434,7 @@ export type ScopeChoice = { id: string; tradeId: string; parentId: string | null
  * What the validator checks against: the Project's Scopes for the Built-in
  * Fields, and the ids `offered` to the filler for `member` and `participant`.
  * Without them it checks only that they are ids; the server always passes them.
- * `files`: how many confirmed files each `attachments` field has, by key, for
+ * `files`: how many confirmed files each `attachments` or `photos` field has, by key, for
  * `complete` mode (none when a key is missing).
  */
 export type ValidationContext = {
@@ -749,10 +776,11 @@ function checkValue(
     }
     // A table is checked by checkTable, which knows its rows and columns; a
     // calculated field's answer is the server's own result, never the one given;
-    // an attachments field is checked by validateAnswers, which knows its files.
+    // a file field is checked by validateAnswers, which knows its files.
     case "table":
     case "calculated":
     case "attachments":
+    case "photos":
       return null;
   }
 }
@@ -880,7 +908,7 @@ export function validateAnswers(
       continue;
     }
     // Its files are Documents, never answers; leaving Draft counts the confirmed ones.
-    if (field.type === "attachments") {
+    if (isFileField(field)) {
       const files = context.files?.[field.key] ?? 0;
       if (!isUnanswered(value)) errors.push({ key: field.key, code: "wrong_type" });
       else if (mode === "complete" && required && files === 0) errors.push({ key: field.key, code: "required" });
