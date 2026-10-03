@@ -125,3 +125,161 @@ describe("formSchema", () => {
     ).toBe(false);
   });
 });
+
+// Dates, times and choices (RP-265; form-engine.md §2, §5).
+const typed: FormSchema = formSchema.parse({
+  sections: [
+    {
+      key: "delivery",
+      title: label("Delivery"),
+      fields: [
+        { key: "delivery_date", type: "date", label: label("Delivery date"), required: true },
+        { key: "inspected_at", type: "datetime", label: label("Inspected at") },
+        { key: "start_time", type: "time", label: label("Start time") },
+        { key: "sample_provided", type: "yes_no", label: label("Sample provided"), required: true },
+        {
+          key: "finish",
+          type: "select",
+          label: label("Finish"),
+          options: [
+            { value: "galvanised", label: label("Galvanised") },
+            { value: "powder_coated", label: label("Powder coated") },
+          ],
+        },
+        {
+          key: "certificates",
+          type: "multi_select",
+          label: label("Certificates"),
+          required: true,
+          options: [
+            { value: "iso_9001", label: label("ISO 9001") },
+            { value: "saso", label: label("SASO") },
+            { value: "ce", label: label("CE") },
+          ],
+        },
+      ],
+    },
+  ],
+});
+
+const errorsOf = (answers: unknown, mode: "draft" | "complete" = "draft") => {
+  const result = validateAnswers(typed, answers, mode);
+  return result.ok ? [] : result.errors;
+};
+
+describe("date, datetime and time fields", () => {
+  it("take ISO values: a calendar date, a UTC instant, a time of day", () => {
+    const answers = { delivery_date: "2026-10-03", inspected_at: "2026-10-03T06:30:00.000Z", start_time: "07:30" };
+    expect(validateAnswers(typed, answers, "draft")).toEqual({ ok: true, answers });
+    expect(errorsOf({ inspected_at: "2026-10-03T06:30Z", start_time: "23:59:59" })).toEqual([]);
+  });
+
+  it("refuse values that aren't ISO, or aren't real dates and times", () => {
+    for (const delivery_date of ["03/10/2026", "2026-10-3", "2026-02-30", "2026-13-01", "2026-10-03T00:00:00Z", "tomorrow"]) {
+      expect(errorsOf({ delivery_date }), delivery_date).toEqual([{ key: "delivery_date", code: "invalid_format" }]);
+    }
+    // An instant must say it is UTC, so it can't be read in the wrong time zone.
+    for (const inspected_at of ["2026-10-03T09:30:00", "2026-10-03T09:30:00+03:00", "2026-10-03", "2026-10-03T24:00:00Z"]) {
+      expect(errorsOf({ inspected_at }), inspected_at).toEqual([{ key: "inspected_at", code: "invalid_format" }]);
+    }
+    for (const start_time of ["7:30", "24:00", "07:60", "07:30 PM", "0730"]) {
+      expect(errorsOf({ start_time }), start_time).toEqual([{ key: "start_time", code: "invalid_format" }]);
+    }
+  });
+
+  it("refuse a value that isn't text", () => {
+    expect(errorsOf({ delivery_date: 20261003, inspected_at: Date.now() })).toEqual([
+      { key: "delivery_date", code: "wrong_type" },
+      { key: "inspected_at", code: "wrong_type" },
+    ]);
+  });
+});
+
+describe("yes/no fields", () => {
+  it("take true or false; No is an answer, not an empty field", () => {
+    expect(validateAnswers(typed, { sample_provided: false }, "draft")).toEqual({ ok: true, answers: { sample_provided: false } });
+    expect(errorsOf({ sample_provided: false, delivery_date: "2026-10-03", certificates: ["saso"] }, "complete")).toEqual([]);
+  });
+
+  it("refuse anything else", () => {
+    for (const sample_provided of ["yes", "false", 1, 0, ["true"]]) {
+      expect(errorsOf({ sample_provided }), String(sample_provided)).toEqual([{ key: "sample_provided", code: "wrong_type" }]);
+    }
+  });
+});
+
+describe("select fields", () => {
+  it("take one of the field's option values", () => {
+    expect(validateAnswers(typed, { finish: "powder_coated" }, "draft")).toEqual({ ok: true, answers: { finish: "powder_coated" } });
+  });
+
+  it("refuse an option the field doesn't have, or a label instead of a value", () => {
+    for (const finish of ["painted", "Galvanised", "GALVANISED"]) {
+      expect(errorsOf({ finish }), finish).toEqual([{ key: "finish", code: "unknown_option" }]);
+    }
+    expect(errorsOf({ finish: ["galvanised"] })).toEqual([{ key: "finish", code: "wrong_type" }]);
+  });
+});
+
+describe("multi-select fields", () => {
+  it("take a list of the field's option values, in the order chosen", () => {
+    const answers = { certificates: ["saso", "iso_9001"] };
+    expect(validateAnswers(typed, answers, "draft")).toEqual({ ok: true, answers });
+  });
+
+  it("refuse an option the field doesn't have", () => {
+    expect(errorsOf({ certificates: ["saso", "ul"] })).toEqual([{ key: "certificates", code: "unknown_option" }]);
+  });
+
+  it("refuse a value that isn't a list of option values, or names one twice", () => {
+    for (const certificates of ["saso", [1], ["saso", "saso"]]) {
+      expect(errorsOf({ certificates }), JSON.stringify(certificates)).toEqual([{ key: "certificates", code: "wrong_type" }]);
+    }
+  });
+
+  it("count an empty list as unanswered: dropped in a draft, required when complete", () => {
+    expect(validateAnswers(typed, { certificates: [] }, "draft")).toEqual({ ok: true, answers: {} });
+    expect(errorsOf({ certificates: [], delivery_date: "2026-10-03", sample_provided: true }, "complete")).toEqual([
+      { key: "certificates", code: "required" },
+    ]);
+  });
+});
+
+describe("draft vs complete with the new types", () => {
+  it("a draft skips required, but still refuses a bad value", () => {
+    expect(errorsOf({})).toEqual([]);
+    expect(errorsOf({ finish: "painted" })).toEqual([{ key: "finish", code: "unknown_option" }]);
+  });
+
+  it("complete lists each required field still empty, in Form order", () => {
+    expect(errorsOf({ finish: "galvanised" }, "complete")).toEqual([
+      { key: "delivery_date", code: "required" },
+      { key: "sample_provided", code: "required" },
+      { key: "certificates", code: "required" },
+    ]);
+  });
+});
+
+describe("formSchema for choice fields", () => {
+  const choice = (options: unknown) => ({
+    sections: [{ key: "a", title: label("A"), fields: [{ key: "x", type: "select", label: label("X"), options }] }],
+  });
+
+  it("needs options, each with a snake_case value and labels in both languages", () => {
+    expect(formSchema.safeParse(choice([{ value: "a", label: label("A") }])).success).toBe(true);
+    expect(formSchema.safeParse(choice([])).success).toBe(false);
+    expect(formSchema.safeParse(choice([{ value: "Option A", label: label("A") }])).success).toBe(false);
+    expect(formSchema.safeParse(choice([{ value: "a", label: { en: "A" } }])).success).toBe(false);
+  });
+
+  it("refuses the same option value twice", () => {
+    expect(
+      formSchema.safeParse(
+        choice([
+          { value: "a", label: label("A") },
+          { value: "a", label: label("Also A") },
+        ]),
+      ).success,
+    ).toBe(false);
+  });
+});

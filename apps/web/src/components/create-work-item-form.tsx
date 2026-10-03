@@ -1,6 +1,6 @@
 "use client";
 
-import { validateAnswers, type FieldError, type FormVersion, type Locale } from "@rabaed/domain";
+import { validateAnswers, type FieldError, type FormValue, type FormVersion, type Locale } from "@rabaed/domain";
 import { Button, Field, FormRenderer, Input, Select } from "@rabaed/ui";
 import { useTranslations } from "next-intl";
 import { useState, type FormEvent } from "react";
@@ -36,7 +36,7 @@ export function CreateWorkItemForm({
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
-  function change(key: string, value: string) {
+  function change(key: string, value: FormValue | undefined) {
     const next = { ...answers, [key]: value };
     setAnswers(next);
     // Instant feedback with the same checks the server runs (draft mode: types only).

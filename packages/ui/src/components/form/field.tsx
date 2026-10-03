@@ -55,6 +55,15 @@ export function useFieldControl<P extends FieldControlProps>(props: P) {
   };
 }
 
+/**
+ * Controls inside a group control (e.g. each checkbox of a CheckboxGroup): the
+ * Field names and describes the group, so its id, help and error must not
+ * reach every control in it too.
+ */
+export function OutsideField({ children }: { children: ReactNode }) {
+  return <FieldContext.Provider value={null}>{children}</FieldContext.Provider>;
+}
+
 export type FieldProps = {
   label: ReactNode;
   /** A hint shown under the control and read with it. */
