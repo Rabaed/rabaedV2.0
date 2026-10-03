@@ -9,6 +9,7 @@ import {
   answerFields,
   intlLocaleOf,
   formVisibility,
+  maxTableRows,
   fromProjectWallTime,
   isAnswerField,
   isBuiltInField,
@@ -29,6 +30,7 @@ import {
   type FormValue,
   type Locale,
   type NamedAnswers,
+  type TableColumn,
 } from "@rabaed/domain";
 import { useState, type ReactNode } from "react";
 import { cn } from "../../lib/cn.ts";
@@ -41,6 +43,7 @@ import { Select } from "../form/select.tsx";
 import { Textarea } from "../form/textarea.tsx";
 import { Icon } from "../icon/icon.tsx";
 import { BuiltInSelect, builtInAnswerLabels, noChoices, ScopesChecklist, type BuiltInChoices } from "./built-in-fields.tsx";
+import { TableInput, TableRead } from "./table-field.tsx";
 
 // The Form engine's renderer (form-engine.md §1, §5): draws a Form Version's
 // schema with its answers and per-field errors, to fill in (`edit`) or to read
@@ -73,6 +76,8 @@ const copy = {
     tooManyDecimals: (n: number) =>
       n === 0 ? "Enter a whole number." : n === 1 ? "Use at most 1 decimal place." : `Use at most ${formatNumber(n, "en")} decimal places.`,
     unknownOption: "Choose one of the options.",
+    tooFewRows: (n: number) => (n === 1 ? "Add at least 1 row." : `Add at least ${formatNumber(n, "en")} rows.`),
+    tooManyRows: (n: number) => (n === 1 ? "Use at most 1 row." : `Use at most ${formatNumber(n, "en")} rows.`),
     choose: "Choose…",
     none: "None",
     unanswered: "Not answered",
@@ -110,6 +115,16 @@ const copy = {
             ? "استخدم منزلتين عشريتين على الأكثر."
             : `استخدم ${formatNumber(n, "ar")} منازل عشرية على الأكثر.`,
     unknownOption: "اختر أحد الخيارات.",
+    tooFewRows: (n: number) =>
+      n === 1 ? "أضف صفًا واحدًا على الأقل." : n === 2 ? "أضف صفين على الأقل." : n <= 10 ? `أضف ${formatNumber(n, "ar")} صفوف على الأقل.` : `أضف ${formatNumber(n, "ar")} صفًا على الأقل.`,
+    tooManyRows: (n: number) =>
+      n === 1
+        ? "استخدم صفًا واحدًا على الأكثر."
+        : n === 2
+          ? "استخدم صفين على الأكثر."
+          : n <= 10
+            ? `استخدم ${formatNumber(n, "ar")} صفوف على الأكثر.`
+            : `استخدم ${formatNumber(n, "ar")} صفًا على الأكثر.`,
     choose: "اختر…",
     none: "بدون",
     unanswered: "لم تتم الإجابة",
@@ -146,9 +161,13 @@ export type FormRendererProps = {
   className?: string;
 };
 
-function errorText(field: AnswerField, error: FieldError, locale: Locale): string {
+function errorText(field: AnswerField | TableColumn, error: FieldError, locale: Locale): string {
   const text = copy[locale];
   switch (error.code) {
+    case "too_few_rows":
+      return field.type === "table" ? text.tooFewRows(Math.max(field.minRows ?? 1, 1)) : text.wrongType;
+    case "too_many_rows":
+      return field.type === "table" ? text.tooManyRows(field.maxRows ?? maxTableRows) : text.wrongType;
     case "required":
       return text.required;
     case "too_long":
@@ -256,16 +275,18 @@ const optionsOf = (field: { options: FormOption[] }, locale: Locale) =>
 type OwnField = Exclude<AnswerField, { type: BuiltInFieldType }>;
 
 /** A select's options, with "None" first when the field is optional, so a choice can be taken back. */
-const withNone = (field: OwnField, options: { value: string; label: string }[], locale: Locale) =>
+const withNone = (field: { required: unknown }, options: { value: string; label: string }[], locale: Locale) =>
   field.required ? options : [{ value: noChoice, label: copy[locale].none }, ...options];
 
 /** One of the Form's own fields' control, and whether its Field labels a group (radios, checkboxes) rather than one control. */
 function control(
-  field: OwnField,
+  field: OwnField | TableColumn,
   value: unknown,
   locale: Locale,
   people: FormChoices,
   change: (value: FormValue | undefined) => void,
+  /** A table's cell errors (it has no others). */
+  errors: readonly FieldError[] = [],
 ): { element: ReactNode; group?: boolean } {
   const text = copy[locale];
   const name = field.key;
@@ -374,6 +395,23 @@ function control(
         ),
       };
     }
+    case "table":
+      return {
+        element: (
+          <TableInput
+            field={field}
+            value={value}
+            locale={locale}
+            errors={errors}
+            // A cell is a control of its column's type, named by its row and column.
+            cell={(column, row, cellValue, changeCell) =>
+              control({ ...column, key: `${field.key}.${row}.${column.key}` }, cellValue, locale, people, changeCell)
+            }
+            cellError={(column, error) => errorText(column, error, locale)}
+            onChange={change}
+          />
+        ),
+      };
     case "multi_select":
       return {
         group: true,
@@ -434,9 +472,14 @@ export function FormRenderer({
   const fieldId = (key: string) => `${idPrefix}-${key}`;
   const byKey = new Map(answerFields(schema).map((f) => [f.key, f]));
   const visibility = formVisibility(schema, answers);
-  const errorOf = (key: string) => errors.find((e) => e.key === key);
-  // Only errors of fields shown on this Form can be shown and linked.
-  const shownErrors = mode === "edit" ? errors.filter((e) => byKey.has(e.key) && visibility.fields.has(e.key)) : [];
+  // A field's own error; a table's cell errors (row and column) are shown at the cells.
+  const errorOf = (key: string) => errors.find((e) => e.key === key && e.row === undefined);
+  const cellErrorsOf = (key: string) => errors.filter((e) => e.key === key && e.row !== undefined);
+  // Only errors of fields shown on this Form can be shown and linked, once per field.
+  const shownErrors =
+    mode === "edit"
+      ? errors.filter((e, i) => byKey.has(e.key) && visibility.fields.has(e.key) && errors.findIndex((o) => o.key === e.key) === i)
+      : [];
 
   /** A Built-in Field's control; Scopes label a group of checkboxes. */
   function builtInControl(type: BuiltInFieldType): { element: ReactNode; group?: boolean } {
@@ -501,6 +544,7 @@ export function FormRenderer({
     // Another Company's Member comes named, without their id (V14).
     const naming = named[field.key];
     if (isUnanswered(value) && !naming) return null;
+    if (field.type === "table") return <TableRead field={field} value={value} locale={locale} />;
     const shown = formatFormValue(field, value, locale, naming);
     // A number reads in the page's direction, so its unit follows it; an address or a phone number left to right.
     if (field.type === "number" || field.type === "currency") return <bdi dir={directionOf(locale)}>{shown}</bdi>;
@@ -542,7 +586,7 @@ export function FormRenderer({
                 const error = errorOf(field.key);
                 const { element, group } = isBuiltInField(field)
                   ? builtInControl(field.type)
-                  : control(field, answers[field.key], locale, people, (value) => onChange?.({ [field.key]: value }));
+                  : control(field, answers[field.key], locale, people, (value) => onChange?.({ [field.key]: value }), cellErrorsOf(field.key));
                 return (
                   <Field
                     key={field.key}
