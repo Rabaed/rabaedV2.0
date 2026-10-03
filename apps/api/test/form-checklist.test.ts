@@ -15,7 +15,7 @@ import type { DocumentList, StartedDocumentUpload, WorkItemDetail } from "@rabae
 import { sql } from "kysely";
 import type { LightMyRequestResponse } from "fastify";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { jpegWithExif } from "./support/exif-jpeg.ts";
+import { jpegWithExif } from "../src/demo/exif-jpeg.ts";
 import { createTestApi, expectHidden, type Caller } from "./support/harness.ts";
 
 const api = await createTestApi({ files: true });
