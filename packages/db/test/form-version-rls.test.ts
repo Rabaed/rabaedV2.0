@@ -87,6 +87,53 @@ describe("a published Form Version, as the app role", () => {
   });
 });
 
+describe("a later Version of a Form, as the app role (RP-271)", () => {
+  let definition = "";
+  let version2 = "";
+  let draft = "";
+
+  beforeAll(async () => {
+    // The MAR Form Version 1's schema serves as every Version here: only the rows matter.
+    const one = async (text: string, values: unknown[]) => (await migrator.query(text, values)).rows[0].id as string;
+    definition = await one(`insert into form_definition (owner_kind, name) values ('rabaed', '{"en": "V", "ar": "ف"}') returning id`, []);
+    const add = (no: number, status: string) =>
+      one(
+        `insert into form_version (form_definition_id, version_no, status, published_at, schema)
+         select $1, $2, $3::text, case when $3::text = 'published' then now() end, schema from form_version where id = $4
+         returning id`,
+        [definition, no, status, marVersion],
+      );
+    await add(1, "published");
+    version2 = await add(2, "published");
+    draft = await add(3, "draft");
+  });
+
+  for (const [what, statement] of [
+    ["updated", () => sql`update form_version set schema = '{"sections": []}' where id = ${version2}::uuid`],
+    ["deleted", () => sql`delete from form_version where id = ${version2}::uuid`],
+  ] as const) {
+    it(`can't be ${what}`, async () => {
+      await expect(withMember(app, memberId, (trx) => statement().execute(trx))).rejects.toMatchObject({ code: "42501" });
+    });
+  }
+
+  it("is read once published; a draft is neither read nor published", async () => {
+    const rows = await asMember<{ version_no: number }>(sql`
+      select version_no from form_version where form_definition_id = ${definition}::uuid order by version_no`);
+    expect(rows).toEqual([{ version_no: 1 }, { version_no: 2 }]);
+    await expect(
+      withMember(app, memberId, (trx) =>
+        sql`update form_version set status = 'published', published_at = now() where id = ${draft}::uuid`.execute(trx),
+      ),
+    ).rejects.toMatchObject({ code: "42501" });
+  });
+
+  it("freezes once published: a draft its owner publishes is frozen too", async () => {
+    await migrator.query("update form_version set status = 'published', published_at = now() where id = $1", [draft]);
+    await expect(migrator.query("delete from form_version where id = $1", [draft])).rejects.toMatchObject({ code: "42501" });
+  });
+});
+
 describe("a published Form Version, even as its owner", () => {
   it("refuses any change or removal", async () => {
     await expect(

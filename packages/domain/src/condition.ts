@@ -122,6 +122,17 @@ export function readsAttrs(rule: Condition): boolean {
   return rule.attr !== undefined;
 }
 
+/** The Form field keys a rule reads, at any depth, each once, in the order first read. */
+export function conditionFields(rule: Condition): string[] {
+  const read = (r: Condition): string[] => {
+    if ("all" in r) return r.all.flatMap(read);
+    if ("any" in r) return r.any.flatMap(read);
+    if ("not" in r) return read(r.not);
+    return r.field !== undefined ? [r.field] : [];
+  };
+  return [...new Set(read(rule))];
+}
+
 /** Whether `rule` holds for the given answers and attributes. A missing attribute reads as empty. */
 export function evaluateCondition(rule: Condition, sources: ConditionSources): boolean {
   if ("all" in rule) return rule.all.every((r) => evaluateCondition(r, sources));
