@@ -317,7 +317,7 @@ Each created Draft carries `import_id` for traceability.
 | column | notes |
 |---|---|
 | `id`, `work_item_id`, `seq` | `seq` is gap-free per item |
-| `type` | `created, transition, recommend_code, issue_code, assigned, claimed, vacated, admin_reassigned, admin_reset, internal_note, cancelled` |
+| `type` | `created, transition, recommend_code, issue_code, assigned, claimed, released, vacated, admin_reassigned, admin_reset, internal_note, cancelled, answers_changed` (field-level diffs of the answers after Draft: `payload.changes`) |
 | `actor_member_id` / `actor_engineer_id` | exactly one |
 | `actor_participant_id` | |
 | `transition_id`, `from_step_id`, `to_step_id` | |

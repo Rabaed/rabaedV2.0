@@ -109,8 +109,8 @@ type PinnedForm = {
   data: Record<string, unknown>;
   /** Their hash, as app.take_transition compares it. */
   dataSha256: Buffer;
-  /** The viewer sees it in Draft. */
-  inDraft: boolean;
+  /** Its answers are open to the raiser: Draft and the raiser's internal Steps (app.answers_open). */
+  answersOpen: boolean;
   /** They may save its answers now (app.can_save_answers). */
   canSave: boolean;
 };
@@ -122,17 +122,14 @@ async function pinnedForm(trx: Trx, workItemId: string): Promise<PinnedForm | nu
       project_id: string;
       data: Record<string, unknown>;
       data_sha256: Buffer;
-      in_draft: boolean;
+      answers_open: boolean;
       can_save: boolean;
     }
   >`
     select v.id, v.version_no, v.schema, w.project_id, app.work_item_answers(w.id) as data,
-      app.answers_sha256(w.id) as data_sha256, st.category = 'draft' as in_draft, app.can_save_answers(w.id) as can_save
+      app.answers_sha256(w.id) as data_sha256, app.answers_open(w.id) as answers_open, app.can_save_answers(w.id) as can_save
     from work_item w
     join form_version v on v.id = w.form_version_id
-    join work_item_type t on t.id = w.work_item_type_id
-    cross join lateral app.step_as_seen(w.id) seen
-    join stage st on st.module_key = t.module_key and st.key = seen.stage_key and st.project_id is null
     where w.id = ${workItemId}
   `.execute(trx);
   const r = rows[0];
@@ -142,7 +139,7 @@ async function pinnedForm(trx: Trx, workItemId: string): Promise<PinnedForm | nu
     projectId: r.project_id,
     data: r.data,
     dataSha256: r.data_sha256,
-    inDraft: r.in_draft,
+    answersOpen: r.answers_open,
     canSave: r.can_save,
   };
 }
@@ -451,7 +448,8 @@ export type TakeTransitionResult = { ok: true } | AnswersRefused | { ok: false; 
 /**
  * The holder of the item's current Step takes one of its Transitions, in one
  * transaction (workflow-engine.md §5.1), with their Internal Note if they wrote
- * one. The same idempotency key again applies nothing. Leaving Draft needs a
+ * one. The same idempotency key again applies nothing. Moving on while the
+ * answers are open to the raiser (leaving Draft, and the Submit) needs a
  * complete Form: otherwise it is refused with the per-field errors.
  */
 export function takeTransition(
@@ -464,17 +462,17 @@ export function takeTransition(
   return withMember(db, memberId, async (trx): Promise<TakeTransitionResult> => {
     const pinned = await pinnedForm(trx, workItemId);
     if (!pinned) return { ok: false, reason: "not_found" };
-    // Leaving Draft (other than cancelling it) needs a complete Form; the database refuses
-    // answers that weren't checked. Only a Transition the Member may take is checked here,
-    // so anyone else is told why they can't act, not what the Form lacks.
-    if (pinned.inDraft) {
+    // Moving on while the answers are open (other than a cancel or a Return) needs a complete
+    // Form; the database refuses answers that weren't checked. Only a Transition the Member
+    // may take is checked here, so anyone else is told why they can't act, not what the Form lacks.
+    if (pinned.answersOpen) {
       const { rows: takeable } = await sql<{ transition_kind: string }>`
         select transition_kind from app.work_item_actions(${workItemId}::uuid)
         where action = 'transition' and transition_key = ${input.transition}
       `.execute(trx);
       const scopes = await projectScopes(trx, pinned.projectId);
       const checked = validateAnswers(pinned.form.schema, pinned.data, "complete", { scopes });
-      if (takeable.some((t) => t.transition_kind !== "cancel") && !checked.ok) {
+      if (takeable.some((t) => t.transition_kind !== "cancel" && t.transition_kind !== "return") && !checked.ok) {
         return { ok: false, reason: "form_incomplete", errors: checked.errors };
       }
     }
@@ -498,8 +496,10 @@ const saveAnswersRefusals = [
 export type SaveAnswersResult = { ok: true } | AnswersRefused | { ok: false; reason: (typeof saveAnswersRefusals)[number] };
 
 /**
- * Save draft: the raiser's Participant saves a Draft's answers so far, checked
- * in draft mode against its pinned Form Version (required fields may be empty).
+ * Save draft: the raiser's Participant saves the answers so far, in Draft or one
+ * of its internal Steps, checked in draft mode against its pinned Form Version
+ * (required fields may be empty). After Draft, the database records each change
+ * as a field-level diff in the raiser's history.
  */
 export function saveAnswers(
   db: Db,
@@ -575,6 +575,7 @@ export function getWorkItemHistory(db: Db, memberId: string, workItemId: string)
       document_number: string | null;
       outcome: WorkItemOutcome | null;
       internal_note: string | null;
+      changes: { field: string; old: unknown; new: unknown }[] | null;
     }>`select * from app.work_item_history(${workItemId}::uuid)`.execute(trx);
     return {
       events: rows.map((r) => ({
@@ -590,6 +591,7 @@ export function getWorkItemHistory(db: Db, memberId: string, workItemId: string)
         documentNumber: r.document_number,
         outcome: r.outcome,
         internalNote: r.internal_note,
+        changes: r.changes,
       })),
     };
   });

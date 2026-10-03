@@ -150,6 +150,7 @@ export const workItemEventTypes = [
   "admin_reset",
   "internal_note",
   "cancelled",
+  "answers_changed",
 ] as const;
 
 /**
@@ -179,6 +180,11 @@ export const workItemHistory = z.object({
       outcome: workItemOutcome.nullable(),
       /** Set on an internal_note event: the Internal Note, written with its `transition`. */
       internalNote: z.string().nullable(),
+      /**
+       * Set on an answers_changed event: each answer changed after Draft, by field
+       * key, a missing answer as null. Internal to the raiser's Participant (V5).
+       */
+      changes: z.array(z.object({ field: z.string(), old: z.unknown(), new: z.unknown() })).nullable(),
     }),
   ),
 });
