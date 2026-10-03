@@ -17,7 +17,7 @@ export default async function setup(): Promise<void> {
   const db = createDb(urls.app, { max: 2 });
   const adminDb = createDb(urls.admin, { max: 1 });
   try {
-    // The local file store (docker-compose.yml, ci.yml), for the datasheet attached to a MAR.
+    // The local file store (docker-compose.yml, ci.yml), for the Datasheet and Sample photo of a MAR.
     const settings = fileStoreSettingsFromEnv();
     await ensureLocalBucket(settings);
     const files = createFileStore(settings);

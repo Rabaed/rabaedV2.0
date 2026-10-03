@@ -13,9 +13,9 @@ import { testDatabaseUrls } from "@rabaed/db/test-support";
 import type { WorkItemDetail, WorkItemSummary } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createTestApi, DEFAULT_PASSWORD, type Caller, type OnboardedCompany } from "./support/harness.ts";
+import { attachDatasheet, createTestApi, DEFAULT_PASSWORD, type Caller, type OnboardedCompany } from "./support/harness.ts";
 
-const api = await createTestApi();
+const api = await createTestApi({ files: true });
 const migrator = createDb(testDatabaseUrls().migrator, { max: 1 });
 afterAll(async () => {
   await api.close();
@@ -194,6 +194,7 @@ describe("K1 moves the Submitted item internally (scenario 35)", () => {
     });
     expect(res.statusCode, res.body).toBe(201);
     id = res.json().id;
+    await attachDatasheet(engineer, id);
     await ok(take(engineer, id, "send_for_review"));
     await ok(pm.post(`/v1/work-items/${id}/claim`));
     await ok(take(pm, id, "submit"));

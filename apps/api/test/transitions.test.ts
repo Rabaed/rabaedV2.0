@@ -5,9 +5,9 @@
 import { randomUUID } from "node:crypto";
 import type { WorkItemDetail, WorkItemHistory } from "@rabaed/domain";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createTestApi, expectHidden, type Caller, type OnboardedCompany } from "./support/harness.ts";
+import { attachDatasheet, createTestApi, expectHidden, type Caller, type OnboardedCompany } from "./support/harness.ts";
 
-const api = await createTestApi();
+const api = await createTestApi({ files: true });
 afterAll(() => api.close());
 
 type Company = { company: OnboardedCompany; caller: Caller };
@@ -56,13 +56,16 @@ async function otherParticipant(role: "contractor" | "consultant" | "owner_repre
   return projectMember(company, participantId, positions);
 }
 
-async function createDraft(by: Caller, title = "Cable trays"): Promise<string> {
+/** A complete Draft MAR. `datasheet: false` leaves out its Datasheet, for a raiser who can't attach files. */
+async function createDraft(by: Caller, title = "Cable trays", { datasheet = true } = {}): Promise<string> {
   const res = await by.post(`/v1/projects/${projectId}/work-items`, {
     type: "MAR",
     title,
     answers: { manufacturer: "ACME Cables", description: "Galvanised, 300 mm", trade: electrical, location: buildingA },
   });
   expect(res.statusCode, res.body).toBe(201);
+  // The MAR Form Version 2 needs its Datasheet to leave Draft.
+  if (datasheet) await attachDatasheet(by, res.json().id);
   return res.json().id;
 }
 
@@ -306,7 +309,7 @@ describe("a Transition", () => {
   });
 
   it("is refused to a holder without the permission, and nothing changes (scenario 11)", async () => {
-    const id = await createDraft(noPosition, "Cable glands");
+    const id = await createDraft(noPosition, "Cable glands", { datasheet: false });
     expect(buttons(await detail(noPosition, id))).toEqual([]);
     const res = await take(noPosition, id, "send_for_review");
     expect(res.statusCode).toBe(403);

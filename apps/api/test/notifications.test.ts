@@ -10,9 +10,9 @@ import { testDatabaseUrls } from "@rabaed/db/test-support";
 import type { NotificationList } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createTestApi, type Caller, type OnboardedCompany } from "./support/harness.ts";
+import { attachDatasheet, createTestApi, type Caller, type OnboardedCompany } from "./support/harness.ts";
 
-const api = await createTestApi();
+const api = await createTestApi({ files: true });
 const urls = testDatabaseUrls();
 // The worker connects as the app role, with no Member set.
 const worker = createDb(urls.app, { max: 2 });
@@ -80,6 +80,8 @@ async function createDraft(title: string, by: Member = engineer): Promise<string
     answers: { manufacturer: "ACME Cables", description: "Galvanised, 300 mm", trade: electrical, location: buildingA },
   });
   expect(res.statusCode, res.body).toBe(201);
+  // The MAR Form Version 2 needs its Datasheet to leave Draft.
+  await attachDatasheet(by.caller, res.json().id);
   return res.json().id;
 }
 

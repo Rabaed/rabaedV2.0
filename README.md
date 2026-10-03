@@ -46,9 +46,9 @@ Everyone signs in with one password, generated on your machine the first time an
 | | | | Mohammed Al Shamsi (Manager) | `mohammed.alshamsi@designconsultants.demo.rabaed.test` |
 | Al Waha PMC | Owner Representative | Electrical, everywhere | Faisal Al Otaibi (Engineer, Arabic) | `faisal.alotaibi@alwaha.demo.rabaed.test` |
 
-Each Company's Authorized Person (`<first>.<last>@<company>.demo.rabaed.test`) can sign in too, and the Rabaed Engineer is `engineer@rabaed.demo.rabaed.test`. The seed also leaves one Draft of Hafiz's, "Emergency lighting – Tower 2", which only TMC sees, filled through the MAR Form Version 1 (every field, a quantity of 48 pcs) with its datasheet attached; the walkthrough's MARs come on top of it.
+Each Company's Authorized Person (`<first>.<last>@<company>.demo.rabaed.test`) can sign in too, and the Rabaed Engineer is `engineer@rabaed.demo.rabaed.test`. The seed also leaves one Draft of Hafiz's, "Emergency lighting – Tower 2", which only TMC sees, filled through the MAR Form Version 2: two Items (36 + 12 pcs, a total of 48), its Datasheet (a PDF) and a Sample photo taken in Riyadh, whose time and place show under it. The walkthrough's MARs come on top of it.
 
-**The MAR Form (Version 1)**, the same in English and Arabic: Manufacturer, Model, Quantity (a number, in pieces), Specification section and Description, with Trade, Location and Scopes among them. Manufacturer, Trade, Location and Description are required to Send for Review; Attachments sit below the Form. (The richer MAR, with a table of items, named attachment fields and a supplier pick list, is Version 2.) The seed attaches the datasheet through the local file store, so Docker must be up; the dev demo, whose seed has no reach to the files bucket, has no seeded attachment.
+**The MAR Form (Version 2)**, the same in English and Arabic: Manufacturer, Model, Specification section and Description; **Items**, a table of Fixture type, Description, Quantity and Unit, with the total quantity under it; **Datasheet (PDF)**, **Test certificate** and **Sample photo**; then Trade, Location and Scopes. Manufacturer, Description, the Datasheet, Trade and Location are required to Send for Review. The Datasheet, Test certificate and Sample photo can be added once the Draft is saved; the Attachments System Field still sits below the Form for anything else. A MAR started on Version 1 (with a single Quantity and no Datasheet) keeps Version 1. The seed uploads the Datasheet and the photo through the local file store, so Docker must be up; the dev demo, whose seed has no reach to the files bucket, has no seeded files.
 
 **A second Project:** Jeddah Corniche Villas (`JCV`), Beta Build's own, with one Trade (Plumbing Works) and one Draft MAR ("Pump room ventilation"). Its only Member is Beta Build's Authorized Person, Nasser Al Dosari (`nasser.aldosari@betabuild.demo.rabaed.test`), who is on no other Project. Nobody on Riyadh Gate Tower can see it, and Nasser cannot see Riyadh Gate Tower: each gets 404. Dev's deploy checks exactly that after every deploy (see "Demo in dev").
 
@@ -59,6 +59,8 @@ Open http://localhost:3000/en (or `http://laneN.localhost:<port>/en` in a lane).
 | English | العربية |
 |---|---|
 | Submittals · New Material Submittal · Save Draft | الاعتمادات · اعتماد مواد جديد · حفظ المسودة |
+| Items · Add row | البنود · إضافة صف |
+| Datasheet (PDF) · Sample photo · Take a photo | نشرة البيانات (PDF) · صورة العينة · التقط صورة |
 | Attachments · Attach a Document | المرفقات · إرفاق مستند |
 | Send for Review | إرسال للمراجعة |
 | Claim · Release to pool | استلام · إعادة إلى المجموعة |
@@ -71,12 +73,12 @@ Open http://localhost:3000/en (or `http://laneN.localhost:<port>/en` in a lane).
 | # | Who | Do | What each Company sees |
 |---|---|---|---|
 | 1 | Hafiz | Riyadh Gate Tower – Phase 2 → Submittals → New Material Submittal: "Lighting Fixtures", Electrical Works, Tower 1 Floor 02, Manufacturer "Philips", leaving Description empty → Save Draft | TMC sees the Draft (no number yet). Beta Build, Design Consultants and Al Waha see nothing, not even in the counts. |
-| 2 | Hafiz | Send for Review | Refused: the Form lists what is missing ("Fix these fields: Description") and marks it. Nothing moves; still nothing outside TMC. |
-| 3 | Hafiz | Fill in Description, Model "CoreLine Panel", Quantity 240 (shown as "240 pcs"), Specification section "26 51 00" → Save Draft; Attach a Document (a PDF, PNG or text file) → Send for Review | It gets its Document Number (`TWR-MAR-01-0001`) and waits in Ali's pool. Ali's bell shows 1 (the worker delivers within seconds). Still nothing outside TMC. Sent, the Document can't be removed. |
+| 2 | Hafiz | Send for Review | Refused: the Form lists what is missing ("2 fields need your attention: Description, Datasheet (PDF)") and marks each. Nothing moves; still nothing outside TMC. |
+| 3 | Hafiz | Fill in Description, Model "CoreLine Panel", Specification section "26 51 00"; under Items, Add row twice: "Recessed panel", 200, Pieces and "Surface panel", 40, Pieces (the total shows 240) → Save Draft; add a PDF to Datasheet (PDF), and if you like a photo to Sample photo (on a phone, Take a photo) → Send for Review | It gets its Document Number (`TWR-MAR-01-0001`) and waits in Ali's pool. Ali's bell shows 1 (the worker delivers within seconds). Still nothing outside TMC. Sent, its Documents can't be removed. |
 | 4 | Ali | Open it from the bell → Claim → Return, with the reason "Add emergency duration" | Back in Hafiz's Draft, the reason in TMC's history, marked internal. |
 | 5 | Hafiz | Send for Review again | Hafiz's bell showed the Return; now Ali's pool has it again. |
 | 6 | Ali | Claim → Submit | Pending Approval. TMC sees "With Design Consultants LLC", never a Consultant's name. Mohammed's bell shows it. Ahmed and Sara see it but have no buttons (only a Manager can issue a Code). Faisal (Al Waha) sees it as oversight, read-only. Yousef (Beta Build) still sees nothing. The Consultant's history shows the Submit only, never the Return. |
-| 7 | Ahmed | Open it → read the Form (Manufacturer, Model, Quantity, Specification section, Description, Trade, Location) and open the datasheet under Attachments | The Consultant reads every answer and the Attachments, none of them editable, the Document frozen. Yousef (Beta Build) still gets nothing. |
+| 7 | Ahmed | Open it → read the Form (Manufacturer, Model, Specification section, Description, the Items and their total, Trade, Location) and open the PDF under Datasheet (PDF) | The Consultant reads every answer and the Documents, none of them editable, each Document frozen; a Sample photo shows its time and place. Yousef (Beta Build) still gets nothing. |
 | 8 | Mohammed | Claim → Approve · A | Approved, Code A. TMC and Al Waha see the Code and that Mohammed Al Shamsi issued it; nobody else of the Consultant is named to them. The item accepts no more moves. |
 | 9 | Hafiz, Ali, Mohammed | Repeat with "Cable tray layout – Level 2" and end with Revise & Resubmit · C | Revise & Resubmit, Code C. |
 

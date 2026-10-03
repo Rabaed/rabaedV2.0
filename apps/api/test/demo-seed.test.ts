@@ -6,11 +6,11 @@
 import { randomUUID } from "node:crypto";
 import { createDb, processOutbox } from "@rabaed/db";
 import { testDatabaseUrls } from "@rabaed/db/test-support";
-import type { DocumentList, FormVersion, StartedDocumentUpload, WorkItemDetail } from "@rabaed/domain";
+import type { DocumentList, FormVersion, WorkItemDetail } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { DEMO_ENGINEER_EMAIL } from "../src/demo/seed.ts";
-import { createTestApi, expectHidden, DEFAULT_PASSWORD, type Caller } from "./support/harness.ts";
+import { createTestApi, expectHidden, DEFAULT_PASSWORD, uploadDocument, type Caller } from "./support/harness.ts";
 
 const api = await createTestApi({ files: true });
 const urls = testDatabaseUrls();
@@ -86,42 +86,56 @@ describe("the demo seed", () => {
   });
 });
 
-describe("the MAR Form Version 1, as the demo uses it", () => {
-  it("lists every field of Version 1, labelled in English and Arabic, with the quantity as a number with its unit", async () => {
+describe("the MAR Form Version 2, as the demo uses it", () => {
+  it("lists every field of Version 2, labelled in English and Arabic", async () => {
     const form: FormVersion = (await hafiz.get(`/v1/projects/${projectId}/work-item-types/MAR/form`)).json();
-    expect(form.versionNo).toBe(1);
+    expect(form.versionNo).toBe(2);
     const fields = form.schema.sections.flatMap((s) => s.fields).filter((f) => "label" in f);
     expect(fields.map((f) => [f.key, f.type])).toEqual([
       ["manufacturer", "text"],
       ["model", "text"],
-      ["quantity", "number"],
       ["specification_section", "text"],
+      ["description", "textarea"],
+      ["items", "table"],
+      ["datasheet", "attachments"],
+      ["test_certificate", "attachments"],
+      ["sample_photo", "photos"],
       ["trade", "trade"],
       ["location", "location"],
       ["scopes", "scopes"],
-      ["description", "textarea"],
     ]);
     for (const f of fields) {
       expect("label" in f && f.label.en && f.label.ar, f.key).toBeTruthy();
     }
-    expect(fields.find((f) => f.key === "quantity")).toMatchObject({ unit: "pcs" });
   });
 
-  it("is what the seeded Draft is filled through, with an Attachment", async () => {
+  it("is what the seeded Draft is filled through: Items, a Datasheet and a Sample photo with its time and place", async () => {
     const items = (await hafiz.get(`/v1/projects/${projectId}/work-items`)).json().items as { id: string; title: string }[];
     const id = items.find((i) => i.title === "Emergency lighting – Tower 2")!.id;
     const item: WorkItemDetail = (await hafiz.get(`/v1/work-items/${id}`)).json();
     expect(item.answers).toMatchObject({
       manufacturer: "Zumtobel",
       model: "RESCLITE PRO",
-      quantity: 48,
       specification_section: "26 52 13",
       description: expect.any(String),
+      items: [
+        { fixture_type: "Escape route luminaire", quantity: 36, unit: "pcs" },
+        { fixture_type: "Anti-panic luminaire", quantity: 12, unit: "pcs" },
+      ],
       trade: electrical,
     });
-    expect((await hafiz.get(`/v1/work-items/${id}/documents`)).json()).toMatchObject({
-      documents: [{ fileName: "RESCLITE-PRO-datasheet.txt", frozen: false }],
-    });
+    const { documents } = (await hafiz.get(`/v1/work-items/${id}/documents`)).json() as DocumentList;
+    expect(documents).toMatchObject([
+      { fieldKey: "datasheet", fileName: "RESCLITE-PRO-datasheet.pdf", contentType: "application/pdf", frozen: false },
+      {
+        fieldKey: "sample_photo",
+        fileName: "RESCLITE-PRO-sample.jpg",
+        takenAt: "2026-09-28T07:15:00.000Z",
+        takenWhere: { latitude: expect.closeTo(24.7136, 4), longitude: expect.closeTo(46.6753, 4) },
+      },
+    ]);
+    const link = (await hafiz.get(`/v1/work-items/${id}/documents/${documents[0]!.id}/download`)).json().url as string;
+    expect((await (await fetch(link)).text()).startsWith("%PDF-")).toBe(true);
   });
 });
 
@@ -148,9 +162,12 @@ describe("the README walkthrough", () => {
   const filled = () => ({
     manufacturer: "Philips",
     model: "CoreLine Panel",
-    quantity: 240,
     specification_section: "26 51 00",
     description: "LED panel fixtures, 600 × 600",
+    items: [
+      { fixture_type: "Recessed panel", description: "600 × 600, 34 W", quantity: 200, unit: "pcs" },
+      { fixture_type: "Surface panel", description: "600 × 600, 34 W", quantity: 40, unit: "pcs" },
+    ],
     trade: electrical,
     location: tower1Floor2,
   });
@@ -159,14 +176,9 @@ describe("the README walkthrough", () => {
     expect(r.statusCode, r.body).toBe(201);
     return r.json().id as string;
   };
-  /** Uploads a file to the item's Attachments, as the browser does: a signed URL, the file, then the API told. */
-  const attach = async (who: Caller, fileName: string, body: string) => {
-    const documents = `/v1/work-items/${mar}/documents`;
-    const started: StartedDocumentUpload = (await who.post(documents, { fileName, contentType: "text/plain", sizeBytes: body.length })).json();
-    const stored = await fetch(started.upload.url, { method: started.upload.method, headers: started.upload.headers, body });
-    expect(stored.status).toBe(200);
-    expect((await who.post(`${documents}/${started.id}/confirm`)).statusCode).toBe(204);
-  };
+  /** Uploads a PDF to the item's Datasheet field, as the browser does: a signed URL, the file, then the API told. */
+  const attachDatasheet = (who: Caller, fileName: string, body: string) =>
+    uploadDocument(who, mar, { fieldKey: "datasheet", fileName, contentType: "application/pdf", body });
   const documents = async (who: Caller): Promise<DocumentList> => (await who.get(`/v1/work-items/${mar}/documents`)).json();
 
   it("1. Hafiz creates a MAR with the Form half filled: a Draft only TMC sees", async () => {
@@ -179,16 +191,22 @@ describe("the README walkthrough", () => {
   it("2. Send for Review is refused while the Form is incomplete, with the list of what is missing", async () => {
     const r = await hafiz.post(`/v1/work-items/${mar}/transitions`, { transition: "send_for_review", reason: "", idempotencyKey: randomUUID() });
     expect(r.statusCode, r.body).toBe(422);
-    expect(r.json()).toEqual({ error: "form_incomplete", fields: [{ key: "description", code: "required" }] });
+    expect(r.json()).toEqual({
+      error: "form_incomplete",
+      fields: [
+        { key: "description", code: "required" },
+        { key: "datasheet", code: "required" },
+      ],
+    });
     expect((await detail(hafiz)).stage.key).toBe("draft");
   });
 
-  it("3. Hafiz completes the Form with a quantity and a datasheet, and Saves the Draft", async () => {
+  it("3. Hafiz completes the Form with its Items and a Datasheet, and Saves the Draft", async () => {
     const saved = await hafiz.request("PUT", `/v1/work-items/${mar}/answers`, { answers: filled() });
     expect(saved.statusCode, saved.body).toBe(204);
-    await attach(hafiz, "CoreLine-datasheet.txt", "Philips CoreLine Panel 600 x 600 datasheet (demo)");
+    await attachDatasheet(hafiz, "CoreLine-datasheet.pdf", "%PDF-1.4 Philips CoreLine Panel 600 x 600 datasheet (demo)");
     expect((await detail(hafiz)).answers).toMatchObject(filled());
-    expect((await documents(hafiz)).documents.map((d) => d.fileName)).toEqual(["CoreLine-datasheet.txt"]);
+    expect((await documents(hafiz)).documents.map((d) => [d.fieldKey, d.fileName])).toEqual([["datasheet", "CoreLine-datasheet.pdf"]]);
     await hidden(yousef, { countsZero: true });
   });
 
@@ -223,12 +241,12 @@ describe("the README walkthrough", () => {
     expect((await ahmed.get(`/v1/work-items/${mar}/history`)).body).not.toContain("Add emergency duration");
   });
 
-  it("7. The Consultant reads the Form's answers and the frozen Attachments; the other Contractor still sees nothing", async () => {
+  it("7. The Consultant reads the Form's answers and the frozen Datasheet; the other Contractor still sees nothing", async () => {
     expect((await detail(ahmed)).answers).toMatchObject(filled());
     const seen = await documents(ahmed);
-    expect(seen).toMatchObject({ canChange: false, documents: [{ fileName: "CoreLine-datasheet.txt", frozen: true }] });
+    expect(seen).toMatchObject({ canChange: false, documents: [{ fieldKey: "datasheet", fileName: "CoreLine-datasheet.pdf", frozen: true }] });
     const link = (await ahmed.get(`/v1/work-items/${mar}/documents/${seen.documents[0]!.id}/download`)).json().url as string;
-    expect(await (await fetch(link)).text()).toBe("Philips CoreLine Panel 600 x 600 datasheet (demo)");
+    expect(await (await fetch(link)).text()).toBe("%PDF-1.4 Philips CoreLine Panel 600 x 600 datasheet (demo)");
     await expectHidden(yousef.get(`/v1/work-items/${mar}/documents`));
   });
 
@@ -245,6 +263,7 @@ describe("the README walkthrough", () => {
 
   it("9. A second MAR ends Revise & Resubmit with Code C", async () => {
     mar = await raise("Cable tray layout – Level 2");
+    await attachDatasheet(hafiz, "cable-tray-datasheet.pdf", "%PDF-1.4 Cable tray datasheet (demo)");
     await take(hafiz, "send_for_review");
     await claim(ali);
     await take(ali, "submit");

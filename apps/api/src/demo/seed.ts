@@ -3,6 +3,8 @@ import type { Db } from "@rabaed/db";
 import type { BaseRole, BilingualText, Locale, StartedDocumentUpload, VisibilityGrant } from "@rabaed/domain";
 import type { FastifyInstance } from "fastify";
 import { SESSION_COOKIE } from "../app.ts";
+import { demoPdf } from "./demo-pdf.ts";
+import { jpegWithExif } from "./exif-jpeg.ts";
 
 // The demo Project (RP-196): "Riyadh Gate Tower – Phase 2" with four Companies,
 // their Members, Positions and Visibility, and a second Project no other demo
@@ -36,6 +38,10 @@ export interface DemoSeed {
 
 /** The Rabaed Engineer's email: created first, so whether a seed started can be told from it. */
 export const DEMO_ENGINEER_EMAIL = "engineer@rabaed.demo.rabaed.test";
+
+/** A small photo of a sample luminaire (a JPEG, 96 × 64), for the demo MAR's Sample photo. */
+const SAMPLE_PHOTO_JPEG =
+  "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDABALDA4MChAODQ4SERATGCgaGBYWGDEjJR0oOjM9PDkzODdASFxOQERXRTc4UG1RV19iZ2hnPk1xeXBkeFxlZ2P/2wBDARESEhgVGC8aGi9jQjhCY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2P/wAARCABAAGADASIAAhEBAxEB/8QAGQABAQEBAQEAAAAAAAAAAAAAAAUEAQMG/8QALxAAAQICBgkEAwEAAAAAAAAAAAEEAgMFERIUFdEhUlNUc5GTorETNUbBBiJB8f/EABcBAQEBAQAAAAAAAAAAAAAAAAABAgP/xAAXEQEBAQEAAAAAAAAAAAAAAAAAAQIR/9oADAMBAAIRAxEAPwD60AFQB4uHUltZ9aOzarq0Kvg8cUZ7btXIDYDHijPbdq5DFGe27VyA2Ax4oz23auQxRntu1cgNgMeKM9t2rkekh63cRrBJmWokSuqpU0AaAAAAAE6koUifMIYkRYVmVKipoXTCV7i03WR00JNIe4UfxfuEvE0sZ7i03WR00FxabrI6aGg6c7ris1wabrI6aC4tN1kdNDScUTXTjPcWm6yOmhIly4JX5A5glwQwQpLSqGFKkTRCXyF8jdcNPEJuJW8AGkAABPpD3Cj+L9wl4g0h7hR/F+4S8Z0sDpwVmLOq6cUVgScAhfI3XDTxCXSF8jdcNPEJvKVvABpAAAZnjKW8sepFGliuqyqf3/DNgrbXm80yKQAm4K215vNMhgrbXm80yKQKJuCttebzTIYK215vNMikAJuCttebzTI9mlHymk1ZkuKNVVLP7KmRsBAAAH//2Q==";
 
 /** The Draft the seed creates last: whether a seed finished can be told from it. */
 export const DEMO_LAST_ITEM_TITLE = "Pump room ventilation";
@@ -92,7 +98,7 @@ export interface SeedDatabases {
 
 export interface SeedOptions {
   /**
-   * The api `app` has a file store, so the seed may attach a file to a MAR.
+   * The api `app` has a file store, so the seed may upload a MAR's Datasheet and Sample photo.
    * Left off where none is reachable: the migration task has no access to
    * the Project files bucket (only the api does, ADR 0007).
    */
@@ -278,32 +284,54 @@ export async function seedDemo(
   const { id: emergencyLightingId } = await hafizCaller<{ id: string }>("POST", `/v1/projects/${projectId}/work-items`, {
     type: "MAR",
     title: "Emergency lighting – Tower 2",
-    // Filled through the MAR Form Version 1, its Built-in Fields included.
+    // Filled through the MAR Form Version 2: its Items, and its Built-in Fields.
     answers: {
       manufacturer: "Zumtobel",
       model: "RESCLITE PRO",
-      quantity: 48,
       specification_section: "26 52 13",
+      description: "LED emergency luminaires for the Tower 2 escape routes, 3-hour duration, self-test.",
+      items: [
+        { fixture_type: "Escape route luminaire", description: "Ceiling mounted, 3-hour, self-test", quantity: 36, unit: "pcs" },
+        { fixture_type: "Anti-panic luminaire", description: "Wall mounted, 3-hour, self-test", quantity: 12, unit: "pcs" },
+      ],
       trade: electrical,
       location: tower2Floor1,
       scopes: [lighting, emergencyLighting],
-      description: "LED emergency luminaires for the Tower 2 escape routes, 3-hour duration, self-test.",
     },
   });
 
-  // Its Attachments System Field holds the datasheet, uploaded as the browser does:
-  // a signed URL from the API, the file, then the API told it is there.
+  // Its Datasheet (a PDF) and a Sample photo, taken on site with its time and
+  // place, uploaded as the browser does: a signed URL from the API, the file,
+  // then the API told it is there.
   if (options.files) {
-    const datasheet = "Zumtobel RESCLITE PRO: LED emergency luminaire, 3-hour duration, self-test. Demo datasheet.\n";
-    const documents = `/v1/work-items/${emergencyLightingId}/documents`;
-    const started = await hafizCaller<StartedDocumentUpload>("POST", documents, {
-      fileName: "RESCLITE-PRO-datasheet.txt",
-      contentType: "text/plain",
-      sizeBytes: Buffer.byteLength(datasheet),
+    const upload = async (file: { fieldKey: string; fileName: string; contentType: string; body: Buffer }) => {
+      const documents = `/v1/work-items/${emergencyLightingId}/documents`;
+      const { body, ...start } = file;
+      const started = await hafizCaller<StartedDocumentUpload>("POST", documents, { ...start, sizeBytes: body.byteLength });
+      const put = await fetch(started.upload.url, { method: started.upload.method, headers: started.upload.headers, body });
+      if (!put.ok) throw new Error(`Demo seed: the file store answered ${put.status} to ${file.fileName}`);
+      await hafizCaller("POST", `${documents}/${started.id}/confirm`);
+    };
+    await upload({
+      fieldKey: "datasheet",
+      fileName: "RESCLITE-PRO-datasheet.pdf",
+      contentType: "application/pdf",
+      body: demoPdf([
+        "Zumtobel RESCLITE PRO",
+        "LED emergency luminaire for escape routes and anti-panic areas.",
+        "Duration: 3 hours. Self-test. IP 65.",
+        "Demo datasheet: made up for the Rabaed demo.",
+      ]),
     });
-    const put = await fetch(started.upload.url, { method: started.upload.method, headers: started.upload.headers, body: datasheet });
-    if (!put.ok) throw new Error(`Demo seed: the file store answered ${put.status} to the datasheet upload`);
-    await hafizCaller("POST", `${documents}/${started.id}/confirm`);
+    await upload({
+      fieldKey: "sample_photo",
+      fileName: "RESCLITE-PRO-sample.jpg",
+      contentType: "image/jpeg",
+      body: jpegWithExif(
+        { takenAt: "2026:09:28 10:15:00", offset: "+03:00", latitude: 24.7136, longitude: 46.6753 },
+        Buffer.from(SAMPLE_PHOTO_JPEG, "base64"),
+      ),
+    });
   }
 
   // A second Project: Beta Build's own, with only its Authorized Person on it
@@ -329,7 +357,12 @@ export async function seedDemo(
   await beta.caller("POST", `/v1/projects/${otherProjectId}/work-items`, {
     type: "MAR",
     title: DEMO_LAST_ITEM_TITLE,
-    answers: { manufacturer: "Geberit", quantity: 120, trade: plumbing, description: "PP-R water supply pipes and fittings for the villas." },
+    answers: {
+      manufacturer: "Geberit",
+      description: "PP-R water supply pipes and fittings for the villas.",
+      items: [{ fixture_type: "PP-R pipe", description: "25 mm, PN 20", quantity: 120, unit: "m" }],
+      trade: plumbing,
+    },
   });
 
   return { projectId, otherProjectId, engineer, people };

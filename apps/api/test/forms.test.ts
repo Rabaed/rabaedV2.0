@@ -6,9 +6,9 @@ import { randomUUID } from "node:crypto";
 import { formSchemaProblems, isAnswerField, type FormVersion, type WorkItemDetail } from "@rabaed/domain";
 import type { LightMyRequestResponse } from "fastify";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createTestApi, expectHidden, type Caller, type OnboardedCompany } from "./support/harness.ts";
+import { attachDatasheet, createTestApi, expectHidden, type Caller, type OnboardedCompany } from "./support/harness.ts";
 
-const api = await createTestApi();
+const api = await createTestApi({ files: true });
 afterAll(() => api.close());
 
 type Company = { company: OnboardedCompany; caller: Caller };
@@ -88,17 +88,21 @@ beforeAll(async () => {
 describe("the Form for a new MAR", () => {
   it("is the latest published MAR Form Version, with its sections and fields", async () => {
     const form: FormVersion = (await ok(engineer.get(`/v1/projects/${projectId}/work-item-types/MAR/form`), 200)).json();
-    expect(form.versionNo).toBe(1);
+    // The MAR Form Version 2 (RP-286); mar-form-v2.test.ts follows it further.
+    expect(form.versionNo).toBe(2);
     expect(form.schema.sections.flatMap((s) => s.fields.filter(isAnswerField).map((f) => [f.key, f.type, f.required]))).toEqual([
       ["manufacturer", "text", true],
       ["model", "text", false],
-      ["quantity", "number", false],
       ["specification_section", "text", false],
-      // The Built-in Fields, placed mid-Form (RP-270).
+      ["description", "textarea", true],
+      ["items", "table", false],
+      ["datasheet", "attachments", true],
+      ["test_certificate", "attachments", false],
+      ["sample_photo", "photos", false],
+      // The Built-in Fields, placed in the Form (RP-270).
       ["trade", "trade", true],
       ["location", "location", true],
       ["scopes", "scopes", false],
-      ["description", "textarea", true],
     ]);
     expect(form.schema.sections[0]!.title).toEqual({ en: "Material details", ar: "تفاصيل المادة" });
     // A Form that could be published: every Built-in Field once, Trade and Location required.
@@ -157,17 +161,15 @@ describe("Save draft", () => {
     expect((await detail(engineer, id)).answers).toEqual({ model: "CT-300", trade: electrical });
   });
 
-  it("takes the quantity as a number with its unit, and refuses text, a negative or too many decimals", async () => {
-    const form: FormVersion = (await ok(engineer.get(`/v1/projects/${projectId}/work-item-types/MAR/form`), 200)).json();
-    const quantity = form.schema.sections.flatMap((s) => s.fields).find((f) => f.type === "number" && f.key === "quantity");
-    expect(quantity).toMatchObject({ unit: "pcs", min: 0, decimals: 2, required: false });
+  it("takes each Item's quantity as a number, and refuses text, a negative or too many decimals, naming the cell", async () => {
+    const row = (quantity: unknown) => ({ fixture_type: "Cable tray", quantity, unit: "m" });
     for (const [value, code] of [["12", "wrong_type"], [-1, "below_min"], [1.234, "too_many_decimals"]] as const) {
-      const res = await save(engineer, id, { quantity: value });
+      const res = await save(engineer, id, { items: [row(value)] });
       expect(res.statusCode).toBe(422);
-      expect(res.json()).toEqual({ error: "invalid_answers", fields: [{ key: "quantity", code }] });
+      expect(res.json()).toEqual({ error: "invalid_answers", fields: [{ key: "items", code, row: 0, column: "quantity" }] });
     }
-    await ok(save(engineer, id, { model: "CT-300", quantity: 120.5 }));
-    expect((await detail(engineer, id)).answers).toMatchObject({ quantity: 120.5 });
+    await ok(save(engineer, id, { model: "CT-300", items: [row(120.5)] }));
+    expect((await detail(engineer, id)).answers).toMatchObject({ items: [row(120.5)] });
     await ok(save(engineer, id, { model: "CT-300" }));
   });
 
@@ -189,8 +191,9 @@ describe("Send for Review", () => {
       error: "form_incomplete",
       fields: [
         { key: "manufacturer", code: "required" },
-        { key: "location", code: "required" },
         { key: "description", code: "required" },
+        { key: "datasheet", code: "required" },
+        { key: "location", code: "required" },
       ],
     });
     expect(await detail(engineer, id)).toMatchObject({ stage: { key: "draft" }, documentNumber: null });
@@ -204,6 +207,7 @@ describe("Send for Review", () => {
 
   it("succeeds once the Form is complete", async () => {
     await ok(save(engineer, id, { ...complete, location: buildingA, model: "CT-300" }));
+    await attachDatasheet(engineer, id);
     await ok(sendForReview(engineer, id));
     expect(await detail(engineer, id)).toMatchObject({
       stage: { key: "internal_review" },
