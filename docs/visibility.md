@@ -49,6 +49,7 @@ Every one of these must apply the same layers. A new feature that adds a channel
 | Direct URL or ID | An inaccessible item returns **404, never 403**, so its existence isn't revealed. IDs are UUIDs and can't be guessed. |
 | Files Module | Work Item folders appear only for visible items. Free folders follow folder permissions. |
 | File downloads | Short-lived signed URLs, issued only after an access check. A Document follows its Work Item: who can't see the item gets 404 for its Documents and their URLs. Files are stored under their Project's prefix, and only the api signs (ADR 0007). |
+| Form `member` and `participant` fields | Offer only the Project Members and Participants the filler can see (V15): their own Participant's Members; their own Participant, the Host Company's and the Companies on the item. A saved id they couldn't have been offered is refused like a made-up one. Another Company reads a `member` answer as the Company's name only, without the Member's id (V14). |
 | Pins on shared Drawings | Show only Pins of visible items. A shared floor plan must not show a competitor's Snags. |
 | Links | Show a target's number, title and Documental Record (E1). Never its live data or history. |
 | Notifications and emails | Sent only to Members with access. The subject line holds only what the recipient may see. |
@@ -112,6 +113,7 @@ Setup, Project "Tower": Contractors **C1** (Electrical) and **C2** (Electrical, 
 | 40 | A C1 member who isn't a Project Admin, K1's Authorized Person, or the Project Admin of another Project adds, renames or deactivates a Scope of "Tower" | Each of them | 404, the same as for a made-up id; the Scope is unchanged. Nobody outside "Tower" ever reads its Scopes (V16) |
 | 41 | C1 engineer attaches a datasheet to a Draft MAR; C2, K1 and a C1 member off the Project ask for its Documents, a download URL, or try to upload or remove one | Each of them | 404, the same as for a made-up id, naming nothing. After the Submit, K1 sees and downloads it, with C1's Company name but not the engineer's (V13, V14) |
 | 42 | A Member of Project A reads Documents with the database role directly | That Member | Never a Document of Project B, not even by its id |
+| 43 | C1 engineer fills a `member` and a `participant` field on a MAR, then C1 Submits it | C1 engineer; K1 | C1 is offered only C1's Project Members, and C1 and the Host Company; saving C2's, K1's or OR's id (or one of their Members') is refused exactly like a random id. After the Submit, K1 reads the `member` answer as C1's name, with no id or name of the person (V14, V15) |
 
 Every change to rules or channels must add or update rows here and in the test suite. A failing visibility test blocks release.
 

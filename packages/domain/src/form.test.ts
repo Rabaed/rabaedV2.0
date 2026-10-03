@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { answerFields, formFields, formSchema, formVisibility, isRequired, validateAnswers, type FormSchema } from "./form.ts";
+import {
+  answerFields,
+  formFields,
+  formSchema,
+  formVisibility,
+  isRequired,
+  offeredChoices,
+  validateAnswers,
+  type FormSchema,
+} from "./form.ts";
 
 const label = (en: string) => ({ en, ar: en });
 
@@ -281,6 +290,96 @@ describe("formSchema for choice fields", () => {
         ]),
       ).success,
     ).toBe(false);
+  });
+});
+
+describe("member and participant fields (RP-266)", () => {
+  const people: FormSchema = formSchema.parse({
+    sections: [
+      {
+        key: "people",
+        title: label("People"),
+        fields: [
+          { key: "site_engineer", type: "member", label: label("Site engineer"), required: true },
+          { key: "supplier", type: "participant", label: label("Supplier") },
+        ],
+      },
+    ],
+  });
+  const ownMember = "0199a3b0-0000-7000-8000-000000000001";
+  const ownParticipant = "0199a3b0-0000-7000-8000-000000000002";
+  const otherMember = "0199a3b0-0000-7000-8000-000000000003";
+  const offered = { members: new Set([ownMember]), participants: new Set([ownParticipant]) };
+
+  it("take the id of a Member or Participant the filler was offered", () => {
+    const answers = { site_engineer: ownMember, supplier: ownParticipant };
+    expect(validateAnswers(people, answers, "complete", { offered })).toEqual({ ok: true, answers });
+  });
+
+  it("refuse an id the filler wasn't offered exactly like a made-up one", () => {
+    const refused = (value: string) =>
+      validateAnswers(people, { site_engineer: value, supplier: value }, "draft", { offered });
+    const expected = {
+      ok: false,
+      errors: [
+        { key: "site_engineer", code: "unknown_option" },
+        { key: "supplier", code: "unknown_option" },
+      ],
+    };
+    expect(refused(otherMember)).toEqual(expected);
+    expect(refused("0199a3b0-0000-7000-8000-00000000dead")).toEqual(expected);
+    // A Member's id is not a Participant's, and the other way round.
+    expect(validateAnswers(people, { site_engineer: ownParticipant, supplier: ownMember }, "draft", { offered })).toEqual(expected);
+  });
+
+  it("without the offered ids (no I/O in the browser), take any id but nothing else", () => {
+    expect(validateAnswers(people, { site_engineer: otherMember }, "draft")).toEqual({
+      ok: true,
+      answers: { site_engineer: otherMember },
+    });
+    expect(validateAnswers(people, { site_engineer: "Ahmed", supplier: 7 }, "draft")).toEqual({
+      ok: false,
+      errors: [
+        { key: "site_engineer", code: "unknown_option" },
+        { key: "supplier", code: "wrong_type" },
+      ],
+    });
+  });
+
+  it("keep an id already saved, even once it is no longer offered, but take no other new one", () => {
+    const choices = { members: [], participants: [{ id: ownParticipant, name: label("C1") }] };
+    const offered = offeredChoices(choices, people, { site_engineer: otherMember, note: ownMember });
+    expect(validateAnswers(people, { site_engineer: otherMember }, "draft", { offered }).ok).toBe(true);
+    expect(validateAnswers(people, { site_engineer: ownMember }, "draft", { offered })).toEqual({
+      ok: false,
+      errors: [{ key: "site_engineer", code: "unknown_option" }],
+    });
+  });
+
+  it("are unanswered when empty: dropped in a draft, required when complete", () => {
+    expect(validateAnswers(people, { site_engineer: "" }, "draft", { offered })).toEqual({ ok: true, answers: {} });
+    expect(validateAnswers(people, {}, "complete", { offered })).toEqual({
+      ok: false,
+      errors: [{ key: "site_engineer", code: "required" }],
+    });
+  });
+
+  it("take no options in the schema: a Form never lists people or Companies itself", () => {
+    const withOptions = {
+      sections: [
+        {
+          key: "people",
+          title: label("People"),
+          fields: [{ key: "who", type: "member", label: label("Who"), options: [{ value: "x", label: label("X") }] }],
+        },
+      ],
+    };
+    expect(formSchema.parse(withOptions).sections[0]!.fields[0]).toEqual({
+      key: "who",
+      type: "member",
+      label: label("Who"),
+      required: false,
+    });
   });
 });
 

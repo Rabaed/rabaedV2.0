@@ -5,6 +5,7 @@ import type {
   CompanyParticipations,
   DimensionValues,
   DocumentList,
+  FormChoices,
   FormVersion,
   MemberVisibility,
   MyProjects,
@@ -131,6 +132,16 @@ export function getNewWorkItemForm(projectId: string, typeCode: string): Promise
   return apiGet<FormVersion>(
     `/v1/projects/${encodeURIComponent(projectId)}/work-item-types/${encodeURIComponent(typeCode)}/form`,
   );
+}
+
+/** Who and which Companies the Member may choose in a new item's Form (only those they can see); null when hidden. */
+export function getNewWorkItemFormChoices(projectId: string): Promise<FormChoices | null> {
+  return apiGet<FormChoices>(`/v1/projects/${encodeURIComponent(projectId)}/form-choices`);
+}
+
+/** Who and which Companies the Member may choose in a visible item's Form; null when hidden. */
+export function getWorkItemFormChoices(workItemId: string): Promise<FormChoices | null> {
+  return apiGet<FormChoices>(`/v1/work-items/${encodeURIComponent(workItemId)}/form-choices`);
 }
 
 /** A visible item's Documents, with whether the Member may change them now; null when hidden. */

@@ -16,12 +16,14 @@ import {
   type AnswerField,
   type BuiltInFieldType,
   type FieldError,
+  type FormChoices,
   type FormField,
   type LayoutField,
   type FormOption,
   type FormSchema,
   type FormValue,
   type Locale,
+  type NamedAnswers,
 } from "@rabaed/domain";
 import type { ReactNode } from "react";
 import { cn } from "../../lib/cn.ts";
@@ -42,7 +44,10 @@ import { BuiltInSelect, builtInAnswerLabels, noChoices, ScopesChecklist, type Bu
 // Labels follow the viewer's language; text answers are shown exactly as typed,
 // dates and times in the viewer's language with Latin digits, and date-times in
 // the Project's time zone. The Built-in Fields (Trade, Location, Scopes) sit
-// where the Form places them, offering what the page passes in `choices`.
+// where the Form places them, offering what the page passes in `choices`. A
+// `member` or `participant` field offers only the `people` the API gave this
+// filler, and reads as the API named it for this viewer: another Company's
+// Member by the Company's name only (V14).
 
 const copy = {
   en: {
@@ -93,6 +98,10 @@ export type FormRendererProps = {
    * values (read mode). Scopes are filtered here by the chosen Trade.
    */
   choices?: BuiltInChoices;
+  /** Who and which Companies `member` and `participant` fields offer (edit mode): the API's form choices. */
+  people?: FormChoices;
+  /** The `member` and `participant` answers as the API named them for this viewer (read mode). */
+  named?: NamedAnswers;
   /**
    * Called as the filler answers (edit mode), with every answer that changed:
    * one field's, or a new Trade's with the Scopes that still fit it. `undefined` clears one.
@@ -129,6 +138,8 @@ const idsOf = (value: unknown) => (Array.isArray(value) ? value.filter((v): v is
 // A select's "no choice" item: option values are snake_case keys, so this never clashes with one.
 const noChoice = "-";
 
+const noPeople: FormChoices = { members: [], participants: [] };
+
 /** A choice field's options as a control takes them, labelled in the viewer's language. */
 const optionsOf = (field: { options: FormOption[] }, locale: Locale) =>
   field.options.map((o) => ({ value: o.value, label: o.label[locale] }));
@@ -136,11 +147,16 @@ const optionsOf = (field: { options: FormOption[] }, locale: Locale) =>
 /** A field the Form itself defines: one that takes an answer, but not a Built-in Field. */
 type OwnField = Exclude<AnswerField, { type: BuiltInFieldType }>;
 
+/** A select's options, with "None" first when the field is optional, so a choice can be taken back. */
+const withNone = (field: OwnField, options: { value: string; label: string }[], locale: Locale) =>
+  field.required ? options : [{ value: noChoice, label: copy[locale].none }, ...options];
+
 /** One of the Form's own fields' control, and whether its Field labels a group (radios, checkboxes) rather than one control. */
 function control(
   field: OwnField,
   value: unknown,
   locale: Locale,
+  people: FormChoices,
   change: (value: FormValue | undefined) => void,
 ): { element: ReactNode; group?: boolean } {
   const text = copy[locale];
@@ -196,13 +212,32 @@ function control(
           <Select
             name={name}
             placeholder={text.choose}
-            // An optional choice can be taken back.
-            options={field.required ? optionsOf(field, locale) : [{ value: noChoice, label: text.none }, ...optionsOf(field, locale)]}
+            options={withNone(field, optionsOf(field, locale), locale)}
             value={textOf(value)}
             onValueChange={(v) => change(v === noChoice ? undefined : v)}
           />
         ),
       };
+    case "member":
+    case "participant": {
+      // Only those the API offered this filler (V15); ids, unlike option values, never clash with "-".
+      const offered = field.type === "member" ? people.members : people.participants;
+      return {
+        element: (
+          <Select
+            name={name}
+            placeholder={text.choose}
+            options={withNone(
+              field,
+              offered.map((c) => ({ value: c.id, label: c.name[locale] })),
+              locale,
+            )}
+            value={textOf(value)}
+            onValueChange={(v) => change(v === noChoice ? undefined : v)}
+          />
+        ),
+      };
+    }
     case "multi_select":
       return {
         group: true,
@@ -254,6 +289,8 @@ export function FormRenderer({
   mode,
   locale,
   choices = noChoices,
+  people = noPeople,
+  named = {},
   onChange,
   idPrefix = "form",
   className,
@@ -325,7 +362,9 @@ export function FormRenderer({
         <bdi>{labels[0]}</bdi>
       );
     }
-    return isUnanswered(value) ? null : <bdi>{formatFormValue(field, value, locale)}</bdi>;
+    // Another Company's Member comes named, without their id (V14).
+    const naming = named[field.key];
+    return isUnanswered(value) && !naming ? null : <bdi>{formatFormValue(field, value, locale, naming)}</bdi>;
   }
 
   return (
@@ -362,7 +401,7 @@ export function FormRenderer({
                 const error = errorOf(field.key);
                 const { element, group } = isBuiltInField(field)
                   ? builtInControl(field.type)
-                  : control(field, answers[field.key], locale, (value) => onChange?.({ [field.key]: value }));
+                  : control(field, answers[field.key], locale, people, (value) => onChange?.({ [field.key]: value }));
                 return (
                   <Field
                     key={field.key}

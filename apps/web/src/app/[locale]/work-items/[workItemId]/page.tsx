@@ -15,6 +15,7 @@ import {
   getWorkItem,
   getWorkItemDocuments,
   getWorkItemForm,
+  getWorkItemFormChoices,
   getWorkItemHistory,
 } from "@/lib/session";
 import { stageColour } from "@/lib/stage-colour";
@@ -28,15 +29,16 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
   const { locale, workItemId } = await params;
   setRequestLocale(locale);
   const t = await getTranslations("workItems");
-  const [me, item, form, documents, history] = await Promise.all([
+  const [me, item, form, people, documents, history] = await Promise.all([
     getMe(),
     getWorkItem(workItemId),
     getWorkItemForm(workItemId),
+    getWorkItemFormChoices(workItemId),
     getWorkItemDocuments(workItemId),
     getWorkItemHistory(workItemId),
   ]);
   if (!me) return redirect({ href: "/sign-in", locale });
-  if (!item || !form || !documents) notFound();
+  if (!item || !form || !people || !documents) notFound();
   // Editable: the Built-in Fields offer what a new item's do. Otherwise they only name the item's own values.
   const editable = item.actions.saveAnswers;
   const [mine, scopes] = editable
@@ -50,7 +52,9 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
       workItemId={item.id}
       schema={form.schema}
       choices={choices}
+      people={people}
       answers={item.answers}
+      named={item.namedAnswers}
       editable={editable && !!mine && !!scopes}
     >
       <div className="max-w-3xl space-y-6">

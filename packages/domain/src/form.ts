@@ -84,6 +84,18 @@ export const formField = z.discriminatedUnion("type", [
   z.object({ ...fieldBase, type: z.literal("select"), options: formOptions }),
   /** Any of the field's options, by value, in the order chosen. */
   z.object({ ...fieldBase, type: z.literal("multi_select"), options: formOptions }),
+  /**
+   * A Project Member, by id. Offered only those the filler can see: in practice
+   * their own Company's Project Members (V15). Another Company sees the answer
+   * as that Company's name, never the person (V14).
+   */
+  z.object({ ...fieldBase, type: z.literal("member") }),
+  /**
+   * A Participant, by id. Offered only those the filler can see: their own, the
+   * Host Company and those on the item (V15). Never any Company on Rabaed (ADR
+   * 0009): a Company outside the Project is typed in a text field.
+   */
+  z.object({ ...fieldBase, type: z.literal("participant") }),
   /** Layout, display only: a heading inside a section. */
   z.object({ ...layoutBase, type: z.literal("heading"), text: bilingualText }),
   /** Layout, display only: a paragraph of guidance for the filler. */
@@ -135,6 +147,43 @@ export const formAnswers = z.record(z.string(), z.unknown());
 export type FormAnswers = z.infer<typeof formAnswers>;
 
 /**
+ * A `member` or `participant` answer as one viewer may read it (V14, V15): the
+ * Company's name when they may see that Company, and a Member's name only for
+ * their own Company's Members.
+ */
+export const namedAnswer = z.object({ companyName: bilingualText.nullable(), memberName: bilingualText.nullable() });
+export type NamedAnswer = z.infer<typeof namedAnswer>;
+
+/** A `member` or `participant` field's answers as the viewer may read them, by field key. */
+export const namedAnswers = z.record(z.string(), namedAnswer);
+export type NamedAnswers = z.infer<typeof namedAnswers>;
+
+/** One Project Member or Participant a filler may choose, with their name in both languages. */
+const formChoice = z.object({ id: z.uuid(), name: bilingualText });
+export type FormChoice = z.infer<typeof formChoice>;
+
+/**
+ * What a filler may choose in `member` and `participant` fields: only those they
+ * can see (V15). Their own Company's Project Members; their own Participant, the
+ * Host Company's, and those on the item.
+ */
+export const formChoices = z.object({ members: z.array(formChoice), participants: z.array(formChoice) });
+export type FormChoices = z.infer<typeof formChoices>;
+
+/** The ids of `choices`, as the validator takes them, with `saved` answers' ids (still taken once saved). */
+export function offeredChoices(choices: FormChoices, schema?: FormSchema, saved: Record<string, unknown> = {}): OfferedChoices {
+  const members = new Set(choices.members.map((m) => m.id));
+  const participants = new Set(choices.participants.map((p) => p.id));
+  for (const field of schema ? formFields(schema) : []) {
+    const value = saved[field.key];
+    if (typeof value !== "string") continue;
+    if (field.type === "member") members.add(value);
+    if (field.type === "participant") participants.add(value);
+  }
+  return { members, participants };
+}
+
+/**
  * `draft`: types only, so a Save draft with required fields empty succeeds.
  * `complete`: types and required, checked when the item leaves Draft.
  */
@@ -143,7 +192,9 @@ export type ValidationMode = "draft" | "complete";
 /**
  * `wrong_type`: not the kind of value the field holds (text, true/false, a list).
  * `invalid_format`: text, but not a real ISO date, time or UTC instant.
- * `unknown_option`: not one of a choice field's option values, or a Scope outside the chosen Trade.
+ * `unknown_option`: not one of a choice field's option values, a Scope outside
+ *   the chosen Trade, or a Member or Participant the filler wasn't offered (the
+ *   same answer as a made-up id).
  */
 export const fieldErrorCodes = [
   "required",
@@ -159,16 +210,24 @@ export type FieldErrorCode = (typeof fieldErrorCodes)[number];
 export const fieldError = z.object({ key: z.string(), code: z.enum(fieldErrorCodes) });
 export type FieldError = z.infer<typeof fieldError>;
 
+/**
+ * The ids a `member` or `participant` field may take for this filler: those the
+ * API offered them (form choices), and on the server those already saved.
+ * Without them (complete mode, after the answers were saved) any id is taken.
+ */
+export type OfferedChoices = { members: ReadonlySet<string>; participants: ReadonlySet<string> };
+
 export type ValidationResult = { ok: true; answers: Record<string, FormValue> } | { ok: false; errors: FieldError[] };
 
 /** A Scope or Sub-scope, as the validator and the renderer filter them. */
 export type ScopeChoice = { id: string; tradeId: string; parentId: string | null };
 
 /**
- * What the validator checks the Built-in Fields against: the Project's Scopes.
- * Without them it checks only that Scopes are ids; the server always passes them.
+ * What the validator checks against: the Project's Scopes for the Built-in
+ * Fields, and the ids `offered` to the filler for `member` and `participant`.
+ * Without them it checks only that they are ids; the server always passes them.
  */
-export type ValidationContext = { scopes?: readonly ScopeChoice[] };
+export type ValidationContext = { scopes?: readonly ScopeChoice[]; offered?: OfferedChoices };
 
 export const schemaProblemCodes = ["built_in_missing", "built_in_repeated", "built_in_optional", "built_in_hidden"] as const;
 /** One problem with a schema, about its field `key`. */
@@ -327,6 +386,12 @@ function checkValue(
       if (!context.scopes) return null;
       const tradeId = typeof given.trade === "string" ? given.trade : "";
       return scopesFittingTrade(value, tradeId, context.scopes).length === value.length ? null : "unknown_option";
+    }
+    case "member":
+    case "participant": {
+      if (typeof value !== "string") return "wrong_type";
+      const ids = context.offered && (field.type === "member" ? context.offered.members : context.offered.participants);
+      return (ids ? ids.has(value) : isId(value)) ? null : "unknown_option";
     }
   }
 }
