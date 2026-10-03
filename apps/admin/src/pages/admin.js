@@ -42,6 +42,13 @@ const text = {
     waiting: "Waiting",
     onboarded: "Onboarded",
     noLeads: "No onboarding leads.",
+    close: "Close",
+    closeTitle: (cr) => `Close the lead for CR ${cr}`,
+    closeHint: "Takes it off this list only. The Project Admin still sees their invitation pending until they withdraw it.",
+    closeLead: "Close lead",
+    cancel: "Cancel",
+    closedNotice: "Lead closed.",
+    leadNotOpen: "This lead is no longer open. Show the leads again.",
     onboardedNotice: (email) => `Company onboarded. The invitation went to ${email}.`,
     invitedNotice: (email) => `Invitation sent to ${email}.`,
     errors: {
@@ -96,6 +103,13 @@ const text = {
     waiting: "بالانتظار",
     onboarded: "أُضيفت",
     noLeads: "لا توجد طلبات إضافة.",
+    close: "إغلاق",
+    closeTitle: (cr) => `إغلاق طلب السجل التجاري ${cr}`,
+    closeHint: "يزيله من هذه القائمة فقط. يبقى مسؤول المشروع يرى دعوته بانتظار الرد حتى يسحبها.",
+    closeLead: "إغلاق الطلب",
+    cancel: "إلغاء",
+    closedNotice: "أُغلق الطلب.",
+    leadNotOpen: "لم يعد هذا الطلب مفتوحاً. اعرض الطلبات مجدداً.",
     onboardedNotice: (email) => `أُضيفت الشركة، وأُرسلت الدعوة إلى ${email}.`,
     invitedNotice: (email) => `أُرسلت الدعوة إلى ${email}.`,
     errors: {
@@ -139,7 +153,7 @@ function notice(message, kind = "info") {
   el.hidden = !message;
 }
 
-const errorMessage = (code) => t().errors[code] ?? t().errors.other;
+const errorMessage = (code) => (code === "lead_not_open" ? t().leadNotOpen : (t().errors[code] ?? t().errors.other));
 
 /** Calls the API; returns the parsed body, or throws the API's error code. */
 async function api(method, path, body) {
@@ -257,11 +271,52 @@ onSubmit("leads-form", async ({ reason }) => {
         if (dir) cell.dir = dir;
         row.append(cell);
       }
+      const actions = document.createElement("td");
+      if (!lead.convertedAt) {
+        const close = document.createElement("button");
+        close.type = "button";
+        close.className = "link";
+        close.textContent = t().close;
+        close.addEventListener("click", () => openCloseForm(lead, row));
+        actions.append(close);
+      }
+      row.append(actions);
       return row;
     }),
   );
   table.hidden = leads.length === 0;
   notice(leads.length === 0 ? t().noLeads : "");
+});
+
+// Closing a lead: the row it came from, removed once closed.
+let closingRow = null;
+
+function openCloseForm(lead, row) {
+  const form = $("close-form");
+  form.reset();
+  form.elements.leadId.value = lead.id;
+  $("close-title").textContent = t().closeTitle(lead.crNumber);
+  $("close-title").dir = "auto";
+  closingRow = row;
+  form.hidden = false;
+  form.elements.reason.focus();
+}
+
+$("close-cancel").addEventListener("click", () => {
+  $("close-form").hidden = true;
+  closingRow = null;
+});
+
+onSubmit("close-form", async ({ leadId, reason }, form) => {
+  try {
+    await api("POST", `/v1/onboarding-leads/${encodeURIComponent(leadId)}/close`, { reason });
+  } catch (code) {
+    throw code === "not_found" ? "lead_not_open" : code;
+  }
+  form.hidden = true;
+  closingRow?.remove();
+  closingRow = null;
+  notice(t().closedNotice);
 });
 
 $("sign-out").addEventListener("click", async () => {

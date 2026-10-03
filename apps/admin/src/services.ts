@@ -4,5 +4,5 @@
 // (apps/api/src/admin-boundary.test.ts checks).
 export { asEngineer } from "./admin-action.ts";
 export { createEngineer } from "./engineers.ts";
-export { listOnboardingLeads } from "./onboarding-leads.ts";
+export { closeOnboardingLead, listOnboardingLeads, type CloseLeadResult } from "./onboarding-leads.ts";
 export { inviteAuthorizedPerson, onboardCompany, type OnboardingResult } from "./onboarding.ts";

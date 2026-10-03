@@ -346,6 +346,33 @@ describe("a Participant Invitation", () => {
     // Inviting it again is refused: its Project Admins see it already.
     expect(await invite(host.ap, other.cr)).toBe("already_participant");
   });
+  // RP-260, scenario 38: withdrawing goes through the pending list alone, and both kinds answer alike.
+  it("is withdrawn only by a Project Admin, a lead and a Company on Rabaed alike, even calling the database directly", async () => {
+    const withdraw = (as: string, id: string) =>
+      withMember(app, as, (trx) =>
+        sql<{ outcome: string }>`select app.withdraw_invitation(${project}::uuid, ${id}::uuid, now()) as outcome`
+          .execute(trx)
+          .then((r) => r.rows[0]!.outcome),
+      );
+    const leadCr = digits(10);
+    expect(await invite(host.ap, leadCr)).toBe("invited");
+    const k1 = await company(engineer, "K1");
+    expect(await invite(host.ap, k1.cr)).toBe("invited");
+    const ids = (await pending(host.ap)).filter((r) => [leadCr, k1.cr].includes(r.cr_number as string)).map((r) => r.invitation_id as string);
+    expect(ids).toHaveLength(2);
+
+    // A Project Member who is not a Project Admin, another Participant and the invited Company.
+    for (const as of [host.member, consultant.ap, consultant.member, k1.ap]) {
+      for (const id of ids) expect(await withdraw(as, id)).toBe("not_found");
+    }
+    for (const id of ids) expect(await withdraw(host.ap, id)).toBe("withdrawn");
+    for (const id of ids) expect(await withdraw(host.ap, id)).toBe("not_found");
+
+    const left = (await pending(host.ap)).map((r) => r.invitation_id);
+    for (const id of ids) expect(left).not.toContain(id);
+    expect(await invitations(k1.ap)).toEqual([]);
+    for (const as of [host.ap, k1.ap]) expect(await participantsSeen(as)).not.toContain(ids[1]);
+  });
 });
 
 // RP-252: Rabaed onboards a Company whose CR number was invited as an onboarding

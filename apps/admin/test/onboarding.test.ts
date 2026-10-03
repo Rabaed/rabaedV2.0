@@ -1,6 +1,7 @@
 // Seam 1: a Rabaed Engineer onboards a Company in Rabaed Admin and invites its
 // Authorized Person, each with a reason written to admin_action (RP-187;
-// RP-185 scenario 13; RP-254).
+// RP-185 scenario 13; RP-254), and closes onboarding leads (RP-260).
+import { randomUUID } from "node:crypto";
 import { createDb } from "@rabaed/db";
 import { testDatabaseUrls } from "@rabaed/db/test-support";
 import type { MailMessage } from "@rabaed/mailer";
@@ -143,5 +144,18 @@ describe("onboarding leads", () => {
       .where("action", "=", "read_onboarding_leads")
       .execute();
     expect(logged).toEqual([{ reason: "Weekly onboarding call" }]);
+  });
+
+  // The happy path, against a real lead, is in apps/api/test/participant-invitations.test.ts (RP-260).
+  it("are closed with a reason, by a signed-in Engineer, and only when open", async () => {
+    const { id, browser } = await admin.signedInEngineer();
+    const url = `/v1/onboarding-leads/${randomUUID()}/close`;
+    expect((await admin.browser().post(url, { reason: "Tidying up" })).statusCode).toBe(401);
+    expect((await browser.post(url, { reason: "  " })).statusCode).toBe(400);
+    expect((await browser.post("/v1/onboarding-leads/not-a-uuid/close", { reason: "Tidying up" })).statusCode).toBe(400);
+    const res = await browser.post(url, { reason: "Tidying up" });
+    expect({ status: res.statusCode, body: res.json() }).toEqual({ status: 404, body: { error: "not_found" } });
+    const logged = await adminDb.selectFrom("admin_action").select("id").where("engineer_id", "=", id).execute();
+    expect(logged).toEqual([]);
   });
 });

@@ -2,7 +2,7 @@ import { crNumber, engineerReason, onboardCompanyRequest, onboardingLeads, type 
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { HttpError, type AdminContext } from "../app.ts";
-import { listOnboardingLeads } from "../onboarding-leads.ts";
+import { closeOnboardingLead, listOnboardingLeads } from "../onboarding-leads.ts";
 import { inviteAuthorizedPerson, onboardCompany } from "../onboarding.ts";
 
 export const companyRoutes =
@@ -73,6 +73,19 @@ export const companyRoutes =
       async (request) => {
         const engineerId = ctx.requireEngineer(request);
         return { leads: await listOnboardingLeads(ctx.db, engineerId, request.query.reason) };
+      },
+    );
+
+    // Takes a lead that won't be onboarded off Rabaed's list. The Project Admin's
+    // invitation stays pending until they withdraw it (ADR 0009).
+    app.post(
+      "/v1/onboarding-leads/:leadId/close",
+      { ...signedIn, schema: { params: z.object({ leadId: z.uuid() }), body: z.object({ reason: engineerReason }) } },
+      async (request, reply) => {
+        const engineerId = ctx.requireEngineer(request);
+        const result = await closeOnboardingLead(ctx.db, engineerId, request.params.leadId, request.body.reason, ctx.now());
+        if (!result.ok) throw new HttpError(404, "not_found");
+        return reply.code(204).send();
       },
     );
   };
