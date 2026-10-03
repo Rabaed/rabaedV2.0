@@ -336,3 +336,173 @@ describe("an onboarding lead, once Rabaed onboards its Company", () => {
     }
   });
 });
+
+// RP-260: a Project Admin withdraws a pending invitation, a lead or a Company on
+// Rabaed alike, and Rabaed closes leads for its own housekeeping (ADR 0009;
+// visibility.md scenario 38).
+type Pending = { id: string; crNumber: string; projectRole: { baseRole: string }; invitedAt: string };
+const pending = async () => (await host.caller.get(`/v1/projects/${projectId}/invitations`)).json().invitations as Pending[];
+const withdraw = (caller: Caller, id: string, project = projectId) => caller.post(`/v1/projects/${project}/invitations/${id}/withdraw`);
+const inviteCr = (crNumber: string, role = "consultant") => host.caller.post(`/v1/projects/${projectId}/participants`, { crNumber, role });
+
+/** Invites a CR number that isn't on Rabaed, and returns its pending row's id. */
+async function lead(crNumber = uniqueCr()): Promise<string> {
+  expect((await inviteCr(crNumber)).statusCode).toBe(202);
+  return (await pending()).find((i) => i.crNumber === crNumber)!.id;
+}
+
+describe("withdrawing a pending invitation (scenario 38)", () => {
+  /** Everything a response says, but for what differs between any two requests. */
+  const answer = (res: Awaited<ReturnType<Caller["post"]>>) => ({
+    status: res.statusCode,
+    body: res.body,
+    headers: Object.fromEntries(Object.entries(res.headers).filter(([name]) => !["date", "x-request-id"].includes(name))),
+  });
+
+  it("answers a lead, a pending invitation and a declined one identically, and each leaves the list the same way", async () => {
+    const leadId = await lead();
+    const k1 = await invited();
+    const k1Declined = await invited();
+    expect((await k1Declined.caller.post(`/v1/participant-invitations/${k1Declined.invitationId}/decline`)).statusCode).toBe(204);
+
+    const answers = [];
+    for (const id of [leadId, k1.invitationId, k1Declined.invitationId]) {
+      const before = await pending();
+      expect(before.map((i) => i.id)).toContain(id);
+      answers.push(answer(await withdraw(host.caller, id)));
+      expect(await pending()).toEqual(before.filter((i) => i.id !== id));
+    }
+    expect(answers[0]).toEqual(expect.objectContaining({ status: 204, body: "" }));
+    expect(answers[1]).toEqual(answers[0]);
+    expect(answers[2]).toEqual(answers[0]);
+
+    // K1's invitation also leaves its Authorized Person's list, and nothing is left to accept.
+    expect((await k1.caller.get("/v1/participant-invitations")).json().invitations).toEqual([]);
+    await expectHidden(k1.caller.post(`/v1/participant-invitations/${k1.invitationId}/accept`));
+    expect(await participantIds(host.caller)).not.toContain(k1.invitationId);
+
+    // Withdrawn already: all three are gone alike.
+    const again: Awaited<ReturnType<Caller["post"]>>[] = [];
+    for (const id of [leadId, k1.invitationId, k1Declined.invitationId]) again.push(await withdraw(host.caller, id));
+    for (const res of again) await expectHidden(res);
+    expect(again.map(answer)).toEqual(again.map(() => answer(again[0]!)));
+  });
+
+  it("leaves other Companies' invitations where they are", async () => {
+    const k2 = await invited();
+    const k3 = await invited();
+    expect((await withdraw(host.caller, k2.invitationId)).statusCode).toBe(204);
+    expect((await k3.caller.get("/v1/participant-invitations")).json().invitations).toEqual([expect.objectContaining({ id: k3.invitationId })]);
+  });
+
+  it("lets the Project Admin invite the same CR number again, a lead or a Company on Rabaed alike", async () => {
+    const cr = uniqueCr();
+    const leadId = await lead(cr);
+    const k4 = await invited();
+    for (const id of [leadId, k4.invitationId]) expect((await withdraw(host.caller, id)).statusCode).toBe(204);
+
+    // Each keeps its id, as a lead does when its Company is onboarded (scenario 31).
+    for (const [crNumber, id] of [[cr, leadId], [k4.company.crNumber, k4.invitationId]] as const) {
+      expect((await inviteCr(crNumber, "owner_representative")).statusCode).toBe(202);
+      expect((await pending()).filter((i) => i.crNumber === crNumber)).toEqual([
+        {
+          id,
+          crNumber,
+          projectRole: expect.objectContaining({ baseRole: "owner_representative" }),
+          invitedAt: expect.any(String),
+        },
+      ]);
+    }
+    const [again] = (await k4.caller.get("/v1/participant-invitations")).json().invitations;
+    expect(again.projectRole.baseRole).toBe("owner_representative");
+    expect((await k4.caller.post(`/v1/participant-invitations/${again.id}/accept`)).statusCode).toBe(204);
+    expect(await participantIds(host.caller)).toContain(again.id);
+  });
+
+  it("is for the Project's Project Admins only: anyone else gets a 404 that names nothing", async () => {
+    const leadId = await lead();
+    const k5 = await invited();
+    const outsider = await api.projectCreator();
+    const otherProjectId = (await api.createProject(host.caller, { code: "TW3", role: "owner" })).id;
+    for (const id of [leadId, k5.invitationId]) {
+      // A Project Member who isn't a Project Admin, another Participant's Authorized
+      // Person, the invited Company itself and someone off the Project.
+      for (const caller of [c1Member, c1.caller, k5.caller, outsider.caller]) {
+        await expectHidden(withdraw(caller, id), `${id} as another caller`);
+      }
+      // The Project Admin, but through another of their Projects.
+      await expectHidden(withdraw(host.caller, id, otherProjectId));
+      expect((await withdraw(api.anonymous(), id)).statusCode).toBe(401);
+    }
+    for (const id of [randomUUID(), "not-a-uuid"]) await expectHidden(withdraw(host.caller, id));
+    // A Participant that joined isn't a pending invitation.
+    const [joined] = await participantIds(host.caller);
+    await expectHidden(withdraw(host.caller, joined));
+
+    expect((await pending()).map((i) => i.id)).toEqual(expect.arrayContaining([leadId, k5.invitationId]));
+    expect((await k5.caller.get("/v1/participant-invitations")).json().invitations).toHaveLength(1);
+  });
+
+  it("drops a withdrawn lead: onboarding its Company later invites it nowhere", async () => {
+    const cr = uniqueCr();
+    expect((await withdraw(host.caller, await lead(cr))).statusCode).toBe(204);
+    const company = await api.onboardCompany({ crNumber: cr });
+    const caller = await api.acceptInvitation(company.invitationToken);
+    expect((await caller.get("/v1/participant-invitations")).json().invitations).toEqual([]);
+    expect((await api.onboardingLeads("Weekly onboarding call")).map((l) => l.crNumber)).not.toContain(cr);
+  });
+
+  it("keeps the lead's id when its CR number is invited again after Rabaed onboarded it: nothing shows it is now on Rabaed", async () => {
+    const cr = uniqueCr();
+    const leadId = await lead(cr);
+    expect((await withdraw(host.caller, leadId)).statusCode).toBe(204);
+    const company = await api.onboardCompany({ crNumber: cr });
+    const caller = await api.acceptInvitation(company.invitationToken);
+
+    expect((await inviteCr(cr)).statusCode).toBe(202);
+    expect((await pending()).filter((i) => i.crNumber === cr).map((i) => i.id)).toEqual([leadId]);
+    expect((await caller.get("/v1/participant-invitations")).json().invitations.map((i: { id: string }) => i.id)).toEqual([leadId]);
+  });
+});
+
+describe("closing an onboarding lead in Rabaed Admin", () => {
+  it("takes it off Rabaed's list, with the reason in admin_action, and changes nothing for the Project Admin", async () => {
+    const leadId = await lead();
+    const before = await pending();
+    const reason = `Host Company says the subcontractor pulled out ${randomUUID()}`;
+    expect(await api.closeOnboardingLead(leadId, reason)).toEqual({ ok: true });
+
+    expect(await pending()).toEqual(before);
+    expect((await api.onboardingLeads("Weekly onboarding call")).map((l) => l.id)).not.toContain(leadId);
+    const logged = await adminDb
+      .selectFrom("admin_action")
+      .select(["action", "target_kind", "target_id"])
+      .where("reason", "=", reason)
+      .execute();
+    expect(logged).toEqual([{ action: "close_onboarding_lead", target_kind: "onboarding_lead", target_id: leadId }]);
+
+    // Still the Project Admin's to withdraw, answered like any other.
+    const res = await withdraw(host.caller, leadId);
+    expect({ status: res.statusCode, body: res.body }).toEqual({ status: 204, body: "" });
+  });
+
+  it("still invites the Company if Rabaed onboards it after all: the Project Admin's invitation stands", async () => {
+    const cr = uniqueCr();
+    const leadId = await lead(cr);
+    expect(await api.closeOnboardingLead(leadId, "No answer from the Host Company")).toEqual({ ok: true });
+    const company = await api.onboardCompany({ crNumber: cr });
+    const caller = await api.acceptInvitation(company.invitationToken);
+    expect((await caller.get("/v1/participant-invitations")).json().invitations.map((i: { id: string }) => i.id)).toEqual([leadId]);
+  });
+
+  it("closes only an open lead, and needs a reason", async () => {
+    const withdrawn = await lead();
+    expect((await withdraw(host.caller, withdrawn)).statusCode).toBe(204);
+    const closed = await lead();
+    expect(await api.closeOnboardingLead(closed, "Duplicate of another lead")).toEqual({ ok: true });
+    for (const id of [withdrawn, closed, randomUUID(), c1.company.companyId]) {
+      expect(await api.closeOnboardingLead(id, "Tidying up")).toEqual({ ok: false, reason: "not_found" });
+    }
+    await expect(api.closeOnboardingLead(await lead(), "  ")).rejects.toThrow();
+  });
+});

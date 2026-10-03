@@ -118,7 +118,7 @@ export interface InvitationTable {
 export interface AdminActionTable {
   id: Generated<string>;
   engineer_id: string;
-  action: "onboard_company" | "read_onboarding_leads" | "invite_authorized_person";
+  action: "onboard_company" | "read_onboarding_leads" | "invite_authorized_person" | "close_onboarding_lead";
   target_kind: string;
   /** Null for a read of a list. */
   target_id: string | null;
@@ -166,12 +166,16 @@ export interface ParticipantTable {
   project_role_id: string;
   /** Its place on the Project (1, 2, 3…), set by a trigger when it becomes Active. */
   ordinal: Generated<number | null>;
-  /** Invited until its Authorized Person accepts (Active) or declines (ADR 0009). */
-  status: Generated<"invited" | "declined" | "active" | "withdrawn">;
+  /**
+   * Invited until its Authorized Person accepts (Active) or declines, or a
+   * Project Admin withdraws the invitation (ADR 0009).
+   */
+  status: Generated<"invited" | "declined" | "invitation_withdrawn" | "active" | "withdrawn">;
   invited_by_member_id: string | null;
   invited_at: Timestamp | null;
   responded_at: Timestamp | null;
   withdrawn_at: Timestamp | null;
+  withdrawn_by_member_id: string | null;
   created_at: Generated<Timestamp>;
   updated_at: Generated<Timestamp>;
 }
@@ -188,6 +192,11 @@ export interface OnboardingLeadTable {
   /** Set, with participant_id, when Rabaed onboarded its Company and the lead became that invitation. */
   converted_at: Timestamp | null;
   participant_id: string | null;
+  /** Set, with withdrawn_by_member_id, when a Project Admin withdrew it: off every list, never converted. */
+  withdrawn_at: Timestamp | null;
+  withdrawn_by_member_id: string | null;
+  /** Set when Rabaed Admin closed it: off Rabaed's list only, the reason in admin_action. */
+  closed_at: Timestamp | null;
 }
 
 export interface ProjectMemberTable {

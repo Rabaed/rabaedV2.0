@@ -82,10 +82,18 @@
         </form>
         <table id="leads" hidden>
           <thead>
-            <tr><th data-t="cr">CR number</th><th data-t="project">Project</th><th data-t="host">Host Company</th><th data-t="requested">Requested</th><th data-t="state">State</th></tr>
+            <tr><th data-t="cr">CR number</th><th data-t="project">Project</th><th data-t="host">Host Company</th><th data-t="requested">Requested</th><th data-t="state">State</th><th></th></tr>
           </thead>
           <tbody></tbody>
         </table>
+        <form id="close-form" hidden>
+          <h3 id="close-title"></h3>
+          <p class="muted" data-t="closeHint">Takes it off this list only. The Project Admin still sees their invitation pending until they withdraw it.</p>
+          <input type="hidden" name="leadId" />
+          <label><span data-t="reason">Reason</span><textarea name="reason" required maxlength="1000" rows="2"></textarea></label>
+          <button type="submit" data-t="closeLead">Close lead</button>
+          <button type="button" id="close-cancel" class="link" data-t="cancel">Cancel</button>
+        </form>
       </section>
     </main>
   </body>

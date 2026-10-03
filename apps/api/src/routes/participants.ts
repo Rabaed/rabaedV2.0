@@ -23,6 +23,7 @@ import {
   removeProjectMember,
   respondToInvitation,
   setMemberPositions,
+  withdrawInvitation,
 } from "../projects/participants.ts";
 import { refusal } from "../refusals.ts";
 
@@ -31,7 +32,8 @@ const participantParams = z.object({ participantId: z.string() });
 // Participants of a Project, their invitations, and each Participant's Project
 // Members. A Project Admin invites a Company by its CR number and gets one
 // answer whether or not it is on Rabaed; the Company joins only when its
-// Authorized Person accepts (ADR 0009). A Project's
+// Authorized Person accepts (ADR 0009). The Project Admin may withdraw any
+// pending invitation, again with one answer for both kinds. A Project's
 // Members see their own Company's Participant and the Host Company's name; its
 // Project Admins see every Participant (V15). Only a Participant's own Company
 // sees its Project Members, and only its Authorized Person changes them.
@@ -69,6 +71,21 @@ export const participantRoutes =
         if (!result) throw notFound();
         if ("ok" in result) throw forbidden();
         return result;
+      },
+    );
+
+    // 204 with no body, alike for an invitation to a Company on Rabaed and for an
+    // onboarding lead; a 404 for anyone but the Project's Project Admins (scenario 38).
+    app.post(
+      "/v1/projects/:projectId/invitations/:invitationId/withdraw",
+      { schema: { params: z.object({ projectId: z.string(), invitationId: z.string() }) } },
+      async (request, reply) => {
+        const memberId = ctx.requireMember(request);
+        const projectId = idOrNotFound(request.params.projectId);
+        const invitationId = idOrNotFound(request.params.invitationId);
+        const result = await withdrawInvitation(ctx.db, memberId, projectId, invitationId, ctx.now());
+        if (!result.ok) throw refusal(result);
+        return reply.code(204).send();
       },
     );
 

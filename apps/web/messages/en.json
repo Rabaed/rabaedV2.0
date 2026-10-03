@@ -114,7 +114,9 @@
     "submittals": "Submittals",
     "pendingInvitations": "Pending invitations",
     "crNumber": "CR",
-    "awaitingAnswer": "Awaiting an answer"
+    "awaitingAnswer": "Awaiting an answer",
+    "withdraw": "Withdraw",
+    "confirmWithdraw": "Withdraw this invitation? You can invite the same CR number again later."
   },
   "participants": {
     "title": "Company Projects",

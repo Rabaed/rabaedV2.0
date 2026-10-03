@@ -114,7 +114,9 @@
     "submittals": "الاعتمادات",
     "pendingInvitations": "دعوات بانتظار الرد",
     "crNumber": "السجل التجاري",
-    "awaitingAnswer": "بانتظار الرد"
+    "awaitingAnswer": "بانتظار الرد",
+    "withdraw": "سحب الدعوة",
+    "confirmWithdraw": "سحب هذه الدعوة؟ يمكنك دعوة السجل التجاري نفسه لاحقاً."
   },
   "participants": {
     "title": "مشاريع الشركة",

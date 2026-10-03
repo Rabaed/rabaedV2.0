@@ -42,6 +42,12 @@ const text = {
     waiting: "Waiting",
     onboarded: "Onboarded",
     noLeads: "No onboarding leads.",
+    close: "Close",
+    closeTitle: (cr) => `Close the lead for CR ${cr}`,
+    closeHint: "Takes it off this list only. The Project Admin still sees their invitation pending until they withdraw it.",
+    closeLead: "Close lead",
+    cancel: "Cancel",
+    closedNotice: "Lead closed.",
     onboardedNotice: (email) => `Company onboarded. The invitation went to ${email}.`,
     invitedNotice: (email) => `Invitation sent to ${email}.`,
     errors: {
@@ -53,6 +59,7 @@ const text = {
       duplicate_vat_number: "A Company with this VAT number is already on Rabaed.",
       duplicate_email: "This email already belongs to someone on Rabaed.",
       not_found: "No Company has this CR number.",
+      lead_not_open: "This lead is no longer open. Show the leads again.",
       already_active: "This Authorized Person has already accepted.",
       invalid_request: "Check the fields and try again.",
       other: "Something went wrong. Try again.",
@@ -96,6 +103,12 @@ const text = {
     waiting: "بالانتظار",
     onboarded: "أُضيفت",
     noLeads: "لا توجد طلبات إضافة.",
+    close: "إغلاق",
+    closeTitle: (cr) => `إغلاق طلب السجل التجاري ${cr}`,
+    closeHint: "يزيله من هذه القائمة فقط. يبقى مسؤول المشروع يرى دعوته بانتظار الرد حتى يسحبها.",
+    closeLead: "إغلاق الطلب",
+    cancel: "إلغاء",
+    closedNotice: "أُغلق الطلب.",
     onboardedNotice: (email) => `أُضيفت الشركة، وأُرسلت الدعوة إلى ${email}.`,
     invitedNotice: (email) => `أُرسلت الدعوة إلى ${email}.`,
     errors: {
@@ -107,6 +120,7 @@ const text = {
       duplicate_vat_number: "توجد شركة بهذا الرقم الضريبي على ربائد.",
       duplicate_email: "هذا البريد الإلكتروني مستخدم على ربائد.",
       not_found: "لا توجد شركة بهذا السجل التجاري.",
+      lead_not_open: "لم يعد هذا الطلب مفتوحاً. اعرض الطلبات مجدداً.",
       already_active: "قبل الشخص المفوّض الدعوة من قبل.",
       invalid_request: "راجع الحقول وحاول مجدداً.",
       other: "حدث خطأ. حاول مجدداً.",
@@ -257,11 +271,53 @@ onSubmit("leads-form", async ({ reason }) => {
         if (dir) cell.dir = dir;
         row.append(cell);
       }
+      const actions = document.createElement("td");
+      if (!lead.convertedAt) {
+        const close = document.createElement("button");
+        close.type = "button";
+        close.className = "link";
+        close.textContent = t().close;
+        close.addEventListener("click", () => openCloseForm(lead, row));
+        actions.append(close);
+      }
+      row.append(actions);
       return row;
     }),
   );
   table.hidden = leads.length === 0;
   notice(leads.length === 0 ? t().noLeads : "");
+});
+
+// Closing a lead: the row it came from, removed once closed.
+let closingRow = null;
+
+function openCloseForm(lead, row) {
+  const form = $("close-form");
+  form.reset();
+  form.elements.leadId.value = lead.id;
+  $("close-title").textContent = t().closeTitle(lead.crNumber);
+  $("close-title").dir = "auto";
+  closingRow = row;
+  form.hidden = false;
+  form.elements.reason.focus();
+}
+
+$("close-cancel").addEventListener("click", () => {
+  $("close-form").hidden = true;
+  closingRow = null;
+});
+
+onSubmit("close-form", async ({ leadId, reason }, form) => {
+  try {
+    await api("POST", `/v1/onboarding-leads/${encodeURIComponent(leadId)}/close`, { reason });
+  } catch (code) {
+    // The API's not_found here is the lead, not a CR number.
+    throw code === "not_found" ? "lead_not_open" : code;
+  }
+  form.hidden = true;
+  closingRow?.remove();
+  closingRow = null;
+  notice(t().closedNotice);
 });
 
 $("sign-out").addEventListener("click", async () => {

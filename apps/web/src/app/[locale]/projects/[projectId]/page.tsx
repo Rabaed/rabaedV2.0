@@ -2,6 +2,7 @@ import type { Locale } from "@rabaed/domain";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
 import { AddParticipantForm } from "@/components/add-participant-form";
+import { WithdrawInvitationButton } from "@/components/withdraw-invitation-button";
 import { Link, redirect } from "@/i18n/navigation";
 import { getMe, getProject, getProjectInvitations, getProjectParticipants } from "@/lib/session";
 
@@ -74,12 +75,15 @@ export default async function ProjectPage({ params }: { params: Promise<{ locale
             <h3 className="text-sm font-semibold">{t("pendingInvitations")}</h3>
             <ul className="divide-y divide-border border-y border-border" data-testid="pending-invitations">
               {invitations.invitations.map((i) => (
-                <li key={i.id} className="flex flex-wrap items-baseline justify-between gap-4 py-2 text-sm">
+                <li key={i.id} className="flex flex-wrap items-center justify-between gap-4 py-2 text-sm">
                   <span>
                     {t("crNumber")} <bdi dir="ltr">{i.crNumber}</bdi>{" "}
                     <span className="text-muted">· {i.projectRole.name[locale]}</span>
                   </span>
-                  <span className="text-muted">{t("awaitingAnswer")}</span>
+                  <span className="flex flex-wrap items-center gap-4">
+                    <span className="text-muted">{t("awaitingAnswer")}</span>
+                    <WithdrawInvitationButton projectId={project.id} invitationId={i.id} />
+                  </span>
                 </li>
               ))}
             </ul>

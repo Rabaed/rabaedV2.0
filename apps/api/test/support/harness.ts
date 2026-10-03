@@ -1,5 +1,5 @@
 import { randomInt, randomUUID } from "node:crypto";
-import { createEngineer, listOnboardingLeads, onboardCompany } from "@rabaed/admin/services";
+import { closeOnboardingLead, createEngineer, listOnboardingLeads, onboardCompany, type CloseLeadResult } from "@rabaed/admin/services";
 import { createDb } from "@rabaed/db";
 import { testDatabaseUrls } from "@rabaed/db/test-support";
 import type { BaseRole, CreateProjectRequest, InviteMemberRequest, OnboardCompanyRequest, OnboardingLeads } from "@rabaed/domain";
@@ -76,6 +76,8 @@ export interface TestApi {
   onboardCompany(overrides?: Partial<OnboardCompanyRequest>): Promise<OnboardedCompany>;
   /** A Rabaed Engineer reads the onboarding leads, with a reason, through Rabaed Admin's service. */
   onboardingLeads(reason: string): Promise<OnboardingLeads["leads"]>;
+  /** A Rabaed Engineer closes an open onboarding lead, with a reason, through Rabaed Admin's service. */
+  closeOnboardingLead(leadId: string, reason: string): Promise<CloseLeadResult>;
   /** Accepts an invitation and returns the signed-in caller. */
   acceptInvitation(token: string, password?: string): Promise<Caller>;
   /** Onboards a Company and signs its Authorized Person in. */
@@ -192,6 +194,10 @@ export async function createTestApi(options: { databaseUrl?: string } = {}): Pro
 
     async onboardingLeads(reason) {
       return listOnboardingLeads(adminDb, await theEngineer(), reason);
+    },
+
+    async closeOnboardingLead(leadId, reason) {
+      return closeOnboardingLead(adminDb, await theEngineer(), leadId, reason, now());
     },
 
     async acceptInvitation(token, password = DEFAULT_PASSWORD) {

@@ -125,6 +125,30 @@ export async function listProjectInvitations(
   });
 }
 
+const withdrawRefusals = ["not_found", "project_closed"] as const;
+/** The same answer for an invitation to a Company on Rabaed and for an onboarding lead (scenario 38). */
+export type WithdrawInvitationResult = { ok: true } | { ok: false; reason: (typeof withdrawRefusals)[number] };
+
+/**
+ * A Project Admin withdraws one of the Project's pending invitations, whether
+ * it went to a Company on Rabaed or became an onboarding lead. Not found for
+ * anyone else.
+ */
+export function withdrawInvitation(
+  db: Db,
+  memberId: string,
+  projectId: string,
+  invitationId: string,
+  now: Date,
+): Promise<WithdrawInvitationResult> {
+  return withMember(db, memberId, async (trx) => {
+    const { rows } = await sql<{ outcome: string }>`
+      select app.withdraw_invitation(${projectId}::uuid, ${invitationId}::uuid, ${now}) as outcome
+    `.execute(trx);
+    return commandResult(rows[0]!.outcome, "withdrawn", withdrawRefusals);
+  });
+}
+
 /** The Authorized Person's Company's pending Participant Invitations. */
 export function listCompanyInvitations(db: Db, memberId: string): Promise<CompanyInvitations | Forbidden> {
   return refusedAsForbidden(() =>
