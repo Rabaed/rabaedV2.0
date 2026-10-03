@@ -48,6 +48,30 @@ const text = {
     closeLead: "Close lead",
     cancel: "Cancel",
     closedNotice: "Lead closed.",
+    listsTitle: "Option Lists",
+    listsHint:
+      "Choices for Form fields, in up to three levels. Every edit needs a reason. An option is never deleted: retire it and it stops being offered, but stays where it was chosen.",
+    showLists: "Show Option Lists",
+    noLists: "No Option Lists yet.",
+    newList: "New Option List",
+    createList: "Create list",
+    nameEnShort: "Name (English)",
+    nameArShort: "Name (Arabic)",
+    optionValue: "Value (stays the same)",
+    save: "Save",
+    confirm: "Confirm",
+    addOption: "Add option",
+    addSubOption: "Add sub-option",
+    rename: "Rename",
+    retire: "Retire",
+    restore: "Restore",
+    retired: "Retired",
+    addOptionTitle: (where) => `Add an option to ${where}`,
+    renameTitle: (label) => `Rename ${label}`,
+    retireTitle: (label) => `Retire ${label}`,
+    restoreTitle: (label) => `Restore ${label}`,
+    listCreatedNotice: "Option List created.",
+    savedNotice: "Saved.",
     onboardedNotice: (email) => `Company onboarded. The invitation went to ${email}.`,
     invitedNotice: (email) => `Invitation sent to ${email}.`,
     errors: {
@@ -60,6 +84,8 @@ const text = {
       duplicate_email: "This email already belongs to someone on Rabaed.",
       not_found: "No Company has this CR number.",
       lead_not_open: "This lead is no longer open. Show the leads again.",
+      duplicate_value: "This list already has an option with this value.",
+      too_deep: "An Option List has at most three levels.",
       already_active: "This Authorized Person has already accepted.",
       invalid_request: "Check the fields and try again.",
       other: "Something went wrong. Try again.",
@@ -109,6 +135,30 @@ const text = {
     closeLead: "إغلاق الطلب",
     cancel: "إلغاء",
     closedNotice: "أُغلق الطلب.",
+    listsTitle: "القوائم الاختيارية",
+    listsHint:
+      "خيارات لحقول النماذج، بحد أقصى ثلاثة مستويات. كل تعديل يحتاج سبباً. لا يُحذف أي خيار: عند إيقافه لا يعود معروضاً، لكنه يبقى حيث اختير.",
+    showLists: "عرض القوائم الاختيارية",
+    noLists: "لا توجد قوائم اختيارية بعد.",
+    newList: "قائمة اختيارية جديدة",
+    createList: "إنشاء القائمة",
+    nameEnShort: "الاسم (بالإنجليزية)",
+    nameArShort: "الاسم (بالعربية)",
+    optionValue: "القيمة (لا تتغير)",
+    save: "حفظ",
+    confirm: "تأكيد",
+    addOption: "إضافة خيار",
+    addSubOption: "إضافة خيار فرعي",
+    rename: "إعادة تسمية",
+    retire: "إيقاف",
+    restore: "استعادة",
+    retired: "موقوف",
+    addOptionTitle: (where) => `إضافة خيار إلى ${where}`,
+    renameTitle: (label) => `إعادة تسمية ${label}`,
+    retireTitle: (label) => `إيقاف ${label}`,
+    restoreTitle: (label) => `استعادة ${label}`,
+    listCreatedNotice: "أُنشئت القائمة الاختيارية.",
+    savedNotice: "تم الحفظ.",
     onboardedNotice: (email) => `أُضيفت الشركة، وأُرسلت الدعوة إلى ${email}.`,
     invitedNotice: (email) => `أُرسلت الدعوة إلى ${email}.`,
     errors: {
@@ -121,6 +171,8 @@ const text = {
       duplicate_email: "هذا البريد الإلكتروني مستخدم على ربائد.",
       not_found: "لا توجد شركة بهذا السجل التجاري.",
       lead_not_open: "لم يعد هذا الطلب مفتوحاً. اعرض الطلبات مجدداً.",
+      duplicate_value: "في القائمة خيار بهذه القيمة بالفعل.",
+      too_deep: "للقائمة الاختيارية ثلاثة مستويات على الأكثر.",
       already_active: "قبل الشخص المفوّض الدعوة من قبل.",
       invalid_request: "راجع الحقول وحاول مجدداً.",
       other: "حدث خطأ. حاول مجدداً.",
@@ -318,6 +370,155 @@ onSubmit("close-form", async ({ leadId, reason }, form) => {
   closingRow?.remove();
   closingRow = null;
   notice(t().closedNotice);
+});
+
+// Option Lists (RP-279): every edit asks for a reason; options are never deleted.
+const MAX_LEVELS = 3;
+
+function linkButton(label, onClick) {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.className = "link";
+  b.textContent = label;
+  b.addEventListener("click", onClick);
+  return b;
+}
+
+function optionItem(option, level) {
+  const item = document.createElement("li");
+  const label = document.createElement("span");
+  label.textContent = option.label[locale];
+  label.dir = "auto";
+  const value = document.createElement("code");
+  value.textContent = option.value;
+  value.dir = "ltr";
+  item.append(label, " ", value);
+  if (option.retired) {
+    const tag = document.createElement("em");
+    tag.className = "muted";
+    tag.textContent = ` (${t().retired})`;
+    item.append(tag);
+  }
+  const name = option.label[locale];
+  item.append(
+    " ",
+    linkButton(t().rename, () => openOptionForm("rename", option.id, t().renameTitle(name), option.label)),
+    " ",
+    option.retired
+      ? linkButton(t().restore, () => openReasonForm("restore", option.id, t().restoreTitle(name)))
+      : linkButton(t().retire, () => openReasonForm("retire", option.id, t().retireTitle(name))),
+  );
+  if (level < MAX_LEVELS) {
+    item.append(" ", linkButton(t().addSubOption, () => openOptionForm("add", option.id, t().addOptionTitle(name), null, option.listId)));
+  }
+  if (option.options.length > 0) item.append(optionTree(option.options, level + 1));
+  return item;
+}
+
+function optionTree(options, level) {
+  const ul = document.createElement("ul");
+  for (const option of options) ul.append(optionItem(option, level));
+  return ul;
+}
+
+/** Marks every option with its list, so "add a sub-option" knows where to add. */
+function withList(options, listId) {
+  for (const option of options) {
+    option.listId = listId;
+    withList(option.options, listId);
+  }
+}
+
+async function loadLists() {
+  const { optionLists } = await api("GET", "/v1/option-lists");
+  const box = $("lists");
+  box.replaceChildren();
+  for (const list of optionLists) {
+    withList(list.options, list.id);
+    const name = list.name[locale];
+    const heading = document.createElement("h3");
+    heading.textContent = name;
+    heading.dir = "auto";
+    box.append(heading, linkButton(t().addOption, () => openOptionForm("add-root", list.id, t().addOptionTitle(name), null, list.id)), optionTree(list.options, 1));
+  }
+  $("list-form").hidden = false;
+  box.hidden = false;
+  if (optionLists.length === 0) notice(t().noLists);
+}
+
+function openOptionForm(mode, targetId, title, label, listId) {
+  const form = $("option-form");
+  form.reset();
+  $("reason-form").hidden = true;
+  form.elements.mode.value = mode;
+  form.elements.targetId.value = targetId;
+  form.dataset.listId = listId ?? "";
+  const adding = mode !== "rename";
+  $("option-value-label").hidden = !adding;
+  form.elements.value.required = adding;
+  if (label) {
+    form.elements.labelEn.value = label.en;
+    form.elements.labelAr.value = label.ar;
+  }
+  $("option-title").textContent = title;
+  $("option-title").dir = "auto";
+  form.hidden = false;
+  (adding ? form.elements.value : form.elements.labelEn).focus();
+}
+
+function openReasonForm(mode, targetId, title) {
+  const form = $("reason-form");
+  form.reset();
+  $("option-form").hidden = true;
+  form.elements.mode.value = mode;
+  form.elements.targetId.value = targetId;
+  $("reason-title").textContent = title;
+  $("reason-title").dir = "auto";
+  form.hidden = false;
+  form.elements.reason.focus();
+}
+
+$("lists-load").addEventListener("click", () => {
+  loadLists().catch((code) => notice(errorMessage(typeof code === "string" ? code : "other"), "error"));
+});
+$("option-cancel").addEventListener("click", () => {
+  $("option-form").hidden = true;
+});
+$("reason-cancel").addEventListener("click", () => {
+  $("reason-form").hidden = true;
+});
+
+onSubmit("list-form", async (f, form) => {
+  await api("POST", "/v1/option-lists", { name: { en: f.nameEn, ar: f.nameAr }, reason: f.reason });
+  form.reset();
+  await loadLists();
+  notice(t().listCreatedNotice);
+});
+
+onSubmit("option-form", async (f, form) => {
+  const label = { en: f.labelEn, ar: f.labelAr };
+  if (f.mode === "rename") {
+    await api("POST", `/v1/options/${encodeURIComponent(f.targetId)}/rename`, { label, reason: f.reason });
+  } else {
+    // "add-root": the target is the list; "add": it is the parent option, in the list this form was opened for.
+    const root = f.mode === "add-root";
+    await api("POST", `/v1/option-lists/${encodeURIComponent(root ? f.targetId : form.dataset.listId)}/options`, {
+      parentId: root ? null : f.targetId,
+      value: f.value,
+      label,
+      reason: f.reason,
+    });
+  }
+  form.hidden = true;
+  await loadLists();
+  notice(t().savedNotice);
+});
+
+onSubmit("reason-form", async (f, form) => {
+  await api("POST", `/v1/options/${encodeURIComponent(f.targetId)}/${f.mode}`, { reason: f.reason });
+  form.hidden = true;
+  await loadLists();
+  notice(t().savedNotice);
 });
 
 $("sign-out").addEventListener("click", async () => {

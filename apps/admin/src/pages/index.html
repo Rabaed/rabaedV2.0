@@ -94,6 +94,37 @@
           <button type="submit" data-t="closeLead">Close lead</button>
           <button type="button" id="close-cancel" class="link" data-t="cancel">Cancel</button>
         </form>
+
+        <h2 data-t="listsTitle">Option Lists</h2>
+        <p class="muted" data-t="listsHint">Choices for Form fields, in up to three levels. Every edit needs a reason. An option is never deleted: retire it and it stops being offered, but stays where it was chosen.</p>
+        <button type="button" id="lists-load" data-t="showLists">Show Option Lists</button>
+        <div id="lists" hidden></div>
+        <form id="list-form" hidden>
+          <h3 data-t="newList">New Option List</h3>
+          <label><span data-t="nameEnShort">Name (English)</span><input name="nameEn" dir="ltr" required maxlength="200" /></label>
+          <label><span data-t="nameArShort">Name (Arabic)</span><input name="nameAr" dir="rtl" required maxlength="200" /></label>
+          <label><span data-t="reason">Reason</span><textarea name="reason" required maxlength="1000" rows="2"></textarea></label>
+          <button type="submit" data-t="createList">Create list</button>
+        </form>
+        <form id="option-form" hidden>
+          <h3 id="option-title"></h3>
+          <input type="hidden" name="mode" />
+          <input type="hidden" name="targetId" />
+          <label id="option-value-label"><span data-t="optionValue">Value (stays the same)</span><input name="value" dir="ltr" pattern="[a-z0-9][a-z0-9_\-]{0,63}" maxlength="64" /></label>
+          <label><span data-t="nameEnShort">Name (English)</span><input name="labelEn" dir="ltr" required maxlength="200" /></label>
+          <label><span data-t="nameArShort">Name (Arabic)</span><input name="labelAr" dir="rtl" required maxlength="200" /></label>
+          <label><span data-t="reason">Reason</span><textarea name="reason" required maxlength="1000" rows="2"></textarea></label>
+          <button type="submit" data-t="save">Save</button>
+          <button type="button" id="option-cancel" class="link" data-t="cancel">Cancel</button>
+        </form>
+        <form id="reason-form" hidden>
+          <h3 id="reason-title"></h3>
+          <input type="hidden" name="mode" />
+          <input type="hidden" name="targetId" />
+          <label><span data-t="reason">Reason</span><textarea name="reason" required maxlength="1000" rows="2"></textarea></label>
+          <button type="submit" data-t="confirm">Confirm</button>
+          <button type="button" id="reason-cancel" class="link" data-t="cancel">Cancel</button>
+        </form>
       </section>
     </main>
   </body>

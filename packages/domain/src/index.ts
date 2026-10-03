@@ -9,6 +9,7 @@ export * from "./health.ts";
 export * from "./locale.ts";
 export * from "./member.ts";
 export * from "./notification.ts";
+export * from "./option-list.ts";
 export * from "./participant.ts";
 export * from "./project.ts";
 export * from "./scope.ts";

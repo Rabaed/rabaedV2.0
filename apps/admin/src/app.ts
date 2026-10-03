@@ -7,6 +7,7 @@ import { hasZodFastifySchemaValidationErrors, serializerCompiler, validatorCompi
 import type { AdminConfig } from "./config.ts";
 import { companyRoutes } from "./routes/companies.ts";
 import { healthRoutes } from "./routes/health.ts";
+import { optionListRoutes } from "./routes/option-lists.ts";
 import { pageRoutes } from "./routes/pages.ts";
 import { sessionRoutes } from "./routes/session.ts";
 import { resolveSession, type Seen } from "./sign-in.ts";
@@ -136,5 +137,6 @@ export async function buildAdminApp({ db, config, mailer, now = () => new Date()
   await app.register(pageRoutes());
   await app.register(sessionRoutes(context));
   await app.register(companyRoutes(context));
+  await app.register(optionListRoutes(context));
   return app;
 }
