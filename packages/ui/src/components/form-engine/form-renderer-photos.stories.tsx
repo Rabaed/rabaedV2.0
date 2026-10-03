@@ -55,6 +55,7 @@ const photo = (id: string, fileName: string, taken: Pick<DocumentSummary, "taken
   uploadedBy: { companyName: { en: "C1 Contracting", ar: "سي ون للمقاولات" }, memberName: null },
   frozen,
   fieldKey: "sample_photos",
+  itemKey: null,
   ...taken,
 });
 

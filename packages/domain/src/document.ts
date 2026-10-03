@@ -54,13 +54,19 @@ export const startDocumentUploadRequest = z.object({
   fileName: z.string().trim().min(1).max(255),
   sizeBytes: z.number().int().positive(),
   contentType,
-  /** The Form's `attachments` or `photos` field the file is for (RP-281); none for the Attachments System Field. */
+  /** The Form's `attachments`, `photos` or `checklist` field the file is for (RP-281); none for the Attachments System Field. */
   fieldKey: z
     .string()
     .regex(/^[a-z][a-z0-9_]*$/)
     .max(64)
     .optional(),
-});
+  /** The checklist item the photo is evidence for (RP-285); with a `checklist` field's key, and only then. */
+  itemKey: z
+    .string()
+    .regex(/^[a-z][a-z0-9_]*$/)
+    .max(64)
+    .optional(),
+}).refine((file) => file.itemKey === undefined || file.fieldKey !== undefined, "An item needs its checklist field");
 export type StartDocumentUploadRequest = z.infer<typeof startDocumentUploadRequest>;
 
 /** A short-lived signed URL. */
@@ -97,8 +103,10 @@ export const documentSummary = z.object({
   uploadedBy: z.object({ companyName: bilingualText, memberName: bilingualText.nullable() }),
   /** Frozen once the item was first sent or submitted: it never changes again. */
   frozen: z.boolean(),
-  /** The Form's `attachments` or `photos` field it belongs to; null for the Attachments System Field. */
+  /** The Form's `attachments`, `photos` or `checklist` field it belongs to; null for the Attachments System Field. */
   fieldKey: z.string().nullable(),
+  /** The checklist item it is evidence for (RP-285); null for any other Document. */
+  itemKey: z.string().nullable(),
   /** An image's time and place, from its EXIF; null for any other file, or an image without them (visibility.md V13). */
   ...photoMetadata.shape,
 });

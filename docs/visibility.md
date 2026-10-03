@@ -116,6 +116,7 @@ Setup, Project "Tower": Contractors **C1** (Electrical) and **C2** (Electrical, 
 | 42 | A Member of Project A reads Documents with the database role directly | That Member | Never a Document of Project B, not even by its id |
 | 43 | C1 engineer fills a `member` and a `participant` field on a MAR, then C1 Submits it | C1 engineer; K1 | C1 is offered only C1's Project Members, and C1 and the Host Company; saving C2's, K1's or OR's id (or one of their Members') is refused exactly like a random id. After the Submit, K1 reads the `member` answer as C1's name, with no id or name of the person (V14, V15) |
 | 44 | C1 engineer takes site photos into a MAR's `photos` field; C1 Submits it; C2 asks for its Documents or a photo's download URL | K1; C2 | K1 sees each photo with the time and place its EXIF records, as C1 does (V13). C2 gets 404 for the Documents and the URLs, the same as for a made-up id |
+| 45 | C1 engineer fails an item of a MAR's `checklist` field and attaches its evidence photo and comment; C1 Submits it; C2 asks for the item's Documents or the photo's download URL | K1; C2 | K1 reads the answers, the comment and the evidence photo (with its time and place) as C1 does (V13). C2 gets 404 for the Documents and the URLs, the same as for a made-up id |
 
 Every change to rules or channels must add or update rows here and in the test suite. A failing visibility test blocks release.
 

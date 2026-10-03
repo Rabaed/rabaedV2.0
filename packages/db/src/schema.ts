@@ -426,8 +426,10 @@ export interface DocumentTable {
   removed_at: Timestamp | null;
   removed_by_member_id: string | null;
   frozen_at: Timestamp | null;
-  /** The `attachments` or `photos` field it belongs to; null for the Attachments System Field (the field_documents migration). */
+  /** The `attachments`, `photos` or `checklist` field it belongs to; null for the Attachments System Field (the field_documents migration). */
   field_key: string | null;
+  /** The checklist item a photo is evidence for, with that checklist's `field_key`; null for any other Document (the checklist migration). */
+  item_key: string | null;
   /** When and where an image was taken, from its EXIF as the api read it at confirming; null when it records none (the photos migration). */
   taken_at: Timestamp | null;
   taken_latitude: number | null;

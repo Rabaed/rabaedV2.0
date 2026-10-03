@@ -95,6 +95,50 @@ export const maxFieldFiles = 50;
 const fileLimitsInOrder = (field: { minFiles?: number; maxFiles?: number }) =>
   field.minFiles === undefined || field.maxFiles === undefined || field.minFiles <= field.maxFiles;
 
+/** The most items a checklist holds, so an answer stays a sane size. */
+export const maxChecklistItems = 100;
+
+/** The most photos one checklist item takes. */
+export const maxItemPhotos = 10;
+
+/** The longest comment an item takes. */
+export const maxChecklistComment = 1000;
+
+/**
+ * The answer sets of a checklist item (form-engine.md §3): the answers it takes, in the order
+ * offered. `no` and `fail` are the negative answers; `na` is neither.
+ */
+export const checklistAnswerSets = { yes_no_na: ["yes", "no", "na"], pass_fail_na: ["pass", "fail", "na"] } as const;
+export type ChecklistAnswerSet = keyof typeof checklistAnswerSets;
+export type ChecklistAnswer = (typeof checklistAnswerSets)[ChecklistAnswerSet][number];
+
+/** Whether an answer is a negative one, which an item may ask evidence for: No or Fail. */
+export const isNegativeAnswer = (answer: string): boolean => answer === "no" || answer === "fail";
+
+/** What an item asks for as evidence: nothing, whatever the filler likes, or something once the answer is negative. */
+export const evidenceRules = ["off", "optional", "required_on_negative"] as const;
+export type EvidenceRule = (typeof evidenceRules)[number];
+
+/**
+ * One check of a checklist (RP-285): a `key`, its text, the answers it takes, and
+ * whether a comment and photos go with the answer. Items are written in the Form;
+ * checklist templates come with Libraries (part 5).
+ */
+export const checklistItem = z.object({
+  key: formKey,
+  text: bilingualText,
+  answers: z.enum(["yes_no_na", "pass_fail_na"]).default("pass_fail_na"),
+  comment: z.enum(evidenceRules).default("optional"),
+  photo: z.enum(evidenceRules).default("off"),
+});
+export type ChecklistItem = z.infer<typeof checklistItem>;
+
+/**
+ * The key under which `ValidationContext.files` counts a checklist item's confirmed
+ * photos: a field key and an item key are never `.`-separated, so it can't clash with a field's own.
+ */
+export const checklistItemFilesKey = (fieldKey: string, itemKey: string): string => `${fieldKey}.${itemKey}`;
+
 const columnBase = { key: formKey, label: bilingualText, required: z.boolean().default(false) };
 
 /** How many levels the filler goes down in an Option List: 1 to the most a list has. */
@@ -261,6 +305,23 @@ export const formField = z.discriminatedUnion("type", [
       maxFiles: z.number().int().min(1).max(maxFieldFiles).optional(),
     })
     .refine(fileLimitsInOrder, "minFiles is above maxFiles"),
+  /**
+   * A list of check items, each answered from its own answer set, with a comment
+   * and photos that are off, optional or required on a negative answer (RP-285,
+   * form-engine.md §3). Answers are stored per item; the photos are Documents
+   * tied to the field and the item's key, never answers. The summary (18 Pass /
+   * 2 Fail / 1 N/A) is derived, never stored. `required` asks every item for an
+   * answer when the item leaves Draft.
+   */
+  z.object({
+    ...fieldBase,
+    type: z.literal("checklist"),
+    items: z
+      .array(checklistItem)
+      .min(1)
+      .max(maxChecklistItems)
+      .refine((items) => new Set(items.map((i) => i.key)).size === items.length, "Item keys must be unique"),
+  }),
   /** Layout, display only: a heading inside a section. */
   z.object({ ...layoutBase, type: z.literal("heading"), text: bilingualText }),
   /** Layout, display only: a paragraph of guidance for the filler. */
@@ -288,6 +349,7 @@ export const isFileField = (field: FormField): field is FileField => field.type 
 /** The content types a file field takes: a photos field's images; an attachments field's own, or undefined for any the Project takes. */
 export const fileFieldContentTypes = (field: FileField): readonly string[] | undefined =>
   field.type === "photos" ? photoContentTypes : field.contentTypes;
+export type ChecklistField = Extract<FormField, { type: "checklist" }>;
 export type CalculatedField = Extract<FormField, { type: "calculated" }>;
 
 /** Whether a field is a calculated one. */
@@ -311,9 +373,12 @@ export const isBuiltInField = (field: FormField): field is Extract<FormField, { 
  * A stored answer: text (also dates, times, email addresses, phone numbers, a
  * select's option, a Trade or Location id), a number (also an amount of money
  * and a calculated result), Yes/No, or a list (a multi-select's options, Scope
- * ids, a table's rows).
+ * ids, a table's rows), or a checklist's answers by item.
  */
-export type FormValue = string | number | boolean | string[] | FormRow[];
+export type FormValue = string | number | boolean | string[] | FormRow[] | ChecklistAnswers;
+
+/** A checklist's answers: for each item answered or commented on, by item key, its answer and comment. */
+export type ChecklistAnswers = Record<string, { answer?: string; comment?: string }>;
 
 /** One row of a table: its cells by column key. A cell is text, a number, Yes/No or an option value. */
 export type FormRow = Record<string, string | number | boolean>;
@@ -390,7 +455,10 @@ export type ValidationMode = "draft" | "complete";
  *   minimum (checked when the item leaves Draft).
  * `too_shallow`: an Option List choice that stops above the depth the field
  *   asks for, though options remain below it (checked when the item leaves Draft).
- * A table's cell errors name the cell: `row` (from 0) and `column`.
+ * `comment_required`, `photo_required`: a checklist item answered negatively
+ *   (No or Fail) without the comment or photo it requires (checked when the item leaves Draft).
+ * A table's cell errors name the cell: `row` (from 0) and `column`. A checklist's
+ * name the item: `item`.
  */
 export const fieldErrorCodes = [
   "required",
@@ -406,6 +474,8 @@ export const fieldErrorCodes = [
   "too_many_rows",
   "too_few_files",
   "too_shallow",
+  "comment_required",
+  "photo_required",
 ] as const;
 export type FieldErrorCode = (typeof fieldErrorCodes)[number];
 
@@ -415,6 +485,8 @@ export const fieldError = z.object({
   code: z.enum(fieldErrorCodes),
   row: z.number().int().nonnegative().optional(),
   column: z.string().optional(),
+  /** The checklist item (its key) the error is about. */
+  item: z.string().optional(),
 });
 export type FieldError = z.infer<typeof fieldError>;
 
@@ -434,8 +506,8 @@ export type ScopeChoice = { id: string; tradeId: string; parentId: string | null
  * What the validator checks against: the Project's Scopes for the Built-in
  * Fields, and the ids `offered` to the filler for `member` and `participant`.
  * Without them it checks only that they are ids; the server always passes them.
- * `files`: how many confirmed files each `attachments` or `photos` field has, by key, for
- * `complete` mode (none when a key is missing).
+ * `files`: how many confirmed files each `attachments` or `photos` field has, by key, and
+ * each checklist item's photos (checklistItemFilesKey), for `complete` mode (none when a key is missing).
  */
 export type ValidationContext = {
   scopes?: readonly ScopeChoice[];
@@ -778,6 +850,7 @@ function checkValue(
     // calculated field's answer is the server's own result, never the one given;
     // a file field is checked by validateAnswers, which knows its files.
     case "table":
+    case "checklist":
     case "calculated":
     case "attachments":
     case "photos":
@@ -844,6 +917,97 @@ function checkTable(
 }
 
 /**
+ * Checks a checklist's answers, item by item (RP-285). An item's answer is one of
+ * its set's; its comment is text (at most maxChecklistComment characters), taken
+ * only where the item has comments. An entry with nothing in it, and a blank
+ * comment, are dropped. In `complete` mode: a `required` checklist wants every
+ * item answered; and any item answered negatively (No or Fail) wants the
+ * comment, and the photo, it requires (`photos`: how many confirmed photos each
+ * item has). Errors name the item, in the checklist's order.
+ */
+function checkChecklist(
+  field: ChecklistField,
+  value: unknown,
+  complete: boolean,
+  required: boolean,
+  photos: (item: string) => number,
+): { errors: FieldError[]; checked: ChecklistAnswers } {
+  const key = field.key;
+  if (value === undefined || value === null) value = {};
+  if (!isRow(value)) return { errors: [{ key, code: "wrong_type" }], checked: {} };
+  const errors: FieldError[] = [];
+  const checked: ChecklistAnswers = {};
+  const items = new Map(field.items.map((i) => [i.key, i]));
+  for (const extra of Object.keys(value)) {
+    if (!items.has(extra)) errors.push({ key, code: "unknown_field", item: extra });
+  }
+  for (const item of field.items) {
+    const given = value[item.key];
+    if (given === undefined) continue;
+    const fault = (code: FieldErrorCode) => errors.push({ key, code, item: item.key });
+    if (!isRow(given)) {
+      fault("wrong_type");
+      continue;
+    }
+    const { answer, comment } = given;
+    if (answer !== undefined && typeof answer !== "string") {
+      fault("wrong_type");
+      continue;
+    }
+    if (answer !== undefined && !(checklistAnswerSets[item.answers] as readonly string[]).includes(answer)) {
+      fault("unknown_option");
+      continue;
+    }
+    if (comment !== undefined && (typeof comment !== "string" || item.comment === "off")) {
+      fault("wrong_type");
+      continue;
+    }
+    if (typeof comment === "string" && comment.length > maxChecklistComment) {
+      fault("too_long");
+      continue;
+    }
+    const entry: ChecklistAnswers[string] = {};
+    if (answer !== undefined) entry.answer = answer;
+    if (typeof comment === "string" && comment.trim() !== "") entry.comment = comment;
+    if (Object.keys(entry).length > 0) checked[item.key] = entry;
+  }
+  if (!complete) return { errors, checked };
+  for (const item of field.items) {
+    const entry = checked[item.key];
+    if (entry?.answer === undefined) {
+      if (required && !errors.some((e) => e.item === item.key)) errors.push({ key, code: "required", item: item.key });
+    } else if (isNegativeAnswer(entry.answer)) {
+      if (item.comment === "required_on_negative" && entry.comment === undefined) errors.push({ key, code: "comment_required", item: item.key });
+      if (item.photo === "required_on_negative" && photos(item.key) === 0) errors.push({ key, code: "photo_required", item: item.key });
+    }
+  }
+  return { errors, checked };
+}
+
+/** One answer of a checklist's summary: how many items were answered so. */
+export type ChecklistCount = { answer: ChecklistAnswer; count: number };
+
+/**
+ * A checklist's summary, derived from its answers and never stored (form-engine.md
+ * §3): how many items were answered each way, for each answer its items offer
+ * (Pass, Fail, Yes, No, then N/A), and how many are not answered yet.
+ */
+export function checklistSummary(field: ChecklistField, value: unknown): { counts: ChecklistCount[]; unanswered: number } {
+  const answers = isRow(value) ? value : {};
+  const offered = new Set<string>(field.items.flatMap((i) => checklistAnswerSets[i.answers]));
+  const counts: ChecklistCount[] = (["pass", "fail", "yes", "no", "na"] as const).filter((a) => offered.has(a)).map((answer) => ({ answer, count: 0 }));
+  let unanswered = 0;
+  for (const item of field.items) {
+    const entry = answers[item.key];
+    const answer = isRow(entry) ? entry.answer : undefined;
+    const counted = (checklistAnswerSets[item.answers] as readonly unknown[]).includes(answer) ? counts.find((c) => c.answer === answer) : undefined;
+    if (counted) counted.count++;
+    else unanswered++;
+  }
+  return { counts, unanswered };
+}
+
+/**
  * The total under each number and currency column that asks for one, by column
  * key: the sum of its numeric cells, rounded to the column's decimals (a
  * currency's own; ten when a number column sets none). A column with no number
@@ -905,6 +1069,13 @@ export function validateAnswers(
       const table = checkTable(field, value, mode === "complete", required, context);
       errors.push(...table.errors);
       if (table.errors.length === 0 && table.rows.length > 0) clean[field.key] = table.rows;
+      continue;
+    }
+    if (field.type === "checklist") {
+      const photos = (item: string) => context.files?.[checklistItemFilesKey(field.key, item)] ?? 0;
+      const checklist = checkChecklist(field, value, mode === "complete", required, photos);
+      errors.push(...checklist.errors);
+      if (checklist.errors.length === 0 && Object.keys(checklist.checked).length > 0) clean[field.key] = checklist.checked;
       continue;
     }
     // Its files are Documents, never answers; leaving Draft counts the confirmed ones.

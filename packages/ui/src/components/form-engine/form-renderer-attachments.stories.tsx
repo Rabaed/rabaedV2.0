@@ -48,6 +48,7 @@ const document = (id: string, fieldKey: string | null, fileName: string, sizeByt
   uploadedBy: { companyName: { en: "C1 Contracting", ar: "سي ون للمقاولات" }, memberName: null },
   frozen,
   fieldKey,
+  itemKey: null,
   takenAt: null,
   takenWhere: null,
 });

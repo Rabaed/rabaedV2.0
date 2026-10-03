@@ -1,4 +1,13 @@
-import { currencyDecimals, isIsoValue, type AnswerField, type NamedAnswer, type TableColumn } from "./form.ts";
+import {
+  checklistSummary,
+  currencyDecimals,
+  isIsoValue,
+  type AnswerField,
+  type ChecklistAnswer,
+  type ChecklistCount,
+  type NamedAnswer,
+  type TableColumn,
+} from "./form.ts";
 import { formatDate, formatNumber, timeZone, type Locale } from "./locale.ts";
 import { optionPath, type OptionList, type OptionNode } from "./option-list.ts";
 
@@ -86,6 +95,30 @@ const rowCount = {
     n === 1 ? "صف واحد" : n === 2 ? "صفان" : n <= 10 ? `${formatNumber(n, "ar")} صفوف` : `${formatNumber(n, "ar")} صفًا`,
 } satisfies Record<Locale, (n: number) => string>;
 
+/** How a checklist item's answers read: the answer set's own words. */
+export const checklistAnswerLabels = {
+  en: { yes: "Yes", no: "No", pass: "Pass", fail: "Fail", na: "N/A" },
+  ar: { yes: "نعم", no: "لا", pass: "مقبول", fail: "مرفوض", na: "لا ينطبق" },
+} satisfies Record<Locale, Record<ChecklistAnswer, string>>;
+
+const summaryWords = {
+  en: { unanswered: "not answered", none: "Not answered" },
+  ar: { unanswered: "بلا إجابة", none: "لم تتم الإجابة" },
+} satisfies Record<Locale, Record<string, string>>;
+
+/**
+ * A checklist's summary as read (form-engine.md §3): `18 Pass / 2 Fail / 1 N/A`, in
+ * the viewer's language and Latin digits. Answers nobody gave are left out; items not
+ * answered yet are counted last, and a checklist with no answers reads "Not answered".
+ */
+export function checklistSummaryText(summary: { counts: readonly ChecklistCount[]; unanswered: number }, locale: Locale): string {
+  const given = summary.counts.filter((c) => c.count > 0);
+  if (given.length === 0) return summaryWords[locale].none;
+  const parts = given.map((c) => `${formatNumber(c.count, locale)} ${checklistAnswerLabels[locale][c.answer]}`);
+  if (summary.unanswered > 0) parts.push(`${formatNumber(summary.unanswered, locale)} ${summaryWords[locale].unanswered}`);
+  return parts.join(" / ");
+}
+
 /** A table cell as the viewer reads it, by its column's type; empty when there is none. */
 export function formatTableCell(column: TableColumn, value: unknown, locale: Locale, optionLists: readonly OptionList[] = []): string {
   if (value === undefined || value === null) return "";
@@ -162,6 +195,9 @@ export function formatFormValue(
     }
     case "table":
       return Array.isArray(value) ? rowCount[locale](value.length) : String(value ?? "");
+    // A checklist reads as its summary, counted from its answers.
+    case "checklist":
+      return checklistSummaryText(checklistSummary(field, value), locale);
     // Its files are Documents, listed by the page; there is no answer to show.
     case "attachments":
     case "photos":

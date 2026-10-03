@@ -4,6 +4,7 @@ import {
   formSchema,
   offeredChoices,
   stepAgeWeeks,
+  checklistItemFilesKey,
   validateAnswers,
   type BilingualText,
   type CreateWorkItemRequest,
@@ -465,16 +466,18 @@ const transitionRefusals = [
 export type TakeTransitionResult = { ok: true } | AnswersRefused | { ok: false; reason: (typeof transitionRefusals)[number] };
 
 /**
- * How many confirmed files each `attachments` field of a visible item has, by
- * field key (RLS shows only confirmed, unremoved Documents), for leaving Draft.
+ * How many confirmed files each `attachments` or `photos` field of a visible
+ * item has, by field key, and each checklist item's photos, by
+ * checklistItemFilesKey (RLS shows only confirmed, unremoved Documents), for
+ * leaving Draft.
  */
 async function fieldFileCounts(trx: Trx, workItemId: string): Promise<Record<string, number>> {
-  const { rows } = await sql<{ field_key: string; files: number }>`
-    select field_key, count(*)::integer as files from document
+  const { rows } = await sql<{ field_key: string; item_key: string | null; files: number }>`
+    select field_key, item_key, count(*)::integer as files from document
     where work_item_id = ${workItemId} and field_key is not null
-    group by field_key
+    group by field_key, item_key
   `.execute(trx);
-  return Object.fromEntries(rows.map((r) => [r.field_key, r.files]));
+  return Object.fromEntries(rows.map((r) => [r.item_key === null ? r.field_key : checklistItemFilesKey(r.field_key, r.item_key), r.files]));
 }
 
 /**

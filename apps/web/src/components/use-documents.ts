@@ -1,6 +1,6 @@
 "use client";
 
-import { contentTypeOfFile, type DocumentList, type DocumentSummary, type StartedDocumentUpload } from "@rabaed/domain";
+import { checklistItemFilesKey, contentTypeOfFile, type DocumentList, type DocumentSummary, type StartedDocumentUpload } from "@rabaed/domain";
 import { useFormatter, useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 import { useRouter } from "@/i18n/navigation";
@@ -27,6 +27,10 @@ const refusals: Record<string, string> = {
 
 /** The Attachments System Field's Documents have no field key: this key stands for them in `pending`. */
 const systemField = "";
+
+/** What stands for a field's (or a checklist item's) Documents in `pending`. */
+const pendingKeyOf = (fieldKey?: string, itemKey?: string) =>
+  fieldKey === undefined ? systemField : itemKey === undefined ? fieldKey : checklistItemFilesKey(fieldKey, itemKey);
 
 export function useDocuments(workItemId: string, limits: DocumentList["limits"]) {
   const t = useTranslations("workItems.attachments");
@@ -57,25 +61,27 @@ export function useDocuments(workItemId: string, limits: DocumentList["limits"])
 
   /**
    * Uploads files one after another, to the Form's `attachments` or `photos`
-   * field `fieldKey`, or to the System Field; stops at the first refused.
+   * field `fieldKey` (or, as evidence, to the item `itemKey` of its `checklist`
+   * field), or to the System Field; stops at the first refused.
    */
-  async function upload(files: readonly File[], fieldKey?: string) {
+  async function upload(files: readonly File[], fieldKey?: string, itemKey?: string) {
     setMessage(null);
-    start(fieldKey ?? systemField);
+    const pendingKey = pendingKeyOf(fieldKey, itemKey);
+    start(pendingKey);
     let uploaded = false;
     try {
       for (const file of files) {
-        if (!(await uploadOne(file, fieldKey))) break;
+        if (!(await uploadOne(file, fieldKey, itemKey))) break;
         uploaded = true;
       }
     } finally {
-      done(fieldKey ?? systemField);
+      done(pendingKey);
       if (uploaded) router.refresh();
     }
   }
 
   /** Uploads one file; whether it was attached (otherwise the message says why). */
-  async function uploadOne(file: File, fieldKey?: string): Promise<boolean> {
+  async function uploadOne(file: File, fieldKey?: string, itemKey?: string): Promise<boolean> {
     // The same limits the API checks, before sending anything.
     if (file.size > limits.maxBytes) {
       setMessage(t("tooLarge", { size: size(limits.maxBytes) }));
@@ -90,7 +96,7 @@ export function useDocuments(workItemId: string, limits: DocumentList["limits"])
       const res = await fetch(base, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ fileName: file.name, sizeBytes: file.size, contentType, fieldKey }),
+        body: JSON.stringify({ fileName: file.name, sizeBytes: file.size, contentType, fieldKey, itemKey }),
       });
       if (!res.ok) {
         await refused(res);
@@ -134,8 +140,9 @@ export function useDocuments(workItemId: string, limits: DocumentList["limits"])
     }
   }
 
-  async function remove(documentId: string, fieldKey?: string) {
-    start(fieldKey ?? systemField);
+  async function remove(documentId: string, fieldKey?: string, itemKey?: string) {
+    const pendingKey = pendingKeyOf(fieldKey, itemKey);
+    start(pendingKey);
     setMessage(null);
     try {
       const res = await fetch(`${base}/${documentId}`, { method: "DELETE" });
@@ -145,7 +152,7 @@ export function useDocuments(workItemId: string, limits: DocumentList["limits"])
     } catch {
       setMessage(t("unavailable"));
     } finally {
-      done(fieldKey ?? systemField);
+      done(pendingKey);
     }
   }
 
@@ -157,7 +164,7 @@ export function useDocuments(workItemId: string, limits: DocumentList["limits"])
     message,
     /** Whether the System Field's upload or removal is under way. */
     systemPending: pending.has(systemField),
-    /** The keys with an upload or removal under way: the Form's fields read their own. */
+    /** The keys with an upload or removal under way: the Form's fields (and a checklist's items) read their own. */
     pending,
   };
 }
