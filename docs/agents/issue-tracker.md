@@ -9,7 +9,7 @@ Use the Atlassian MCP tools (`createJiraIssue`, `editJiraIssue`, `getJiraIssue`,
 - **Hierarchy**: Epic → Task / Bug (RP has no Story type; plan stories are Tasks). Every Task has an Epic as `parent`. Epics are RP-9 … RP-39. The first epics come from `planning/backlog.py` (one per plan epic, labelled with its phase, e.g. `phase-1-foundations`).
 - **Create an issue**: `createJiraIssue` with `projectKey: "RP"`, `issueType`, `summary`, markdown `description`, `parent` (the Epic key), `labels`.
 - **Read an issue**: `getJiraIssue` with `view: "evidence"` (includes links); comments via `listJiraIssueComments`.
-- **List issues**: `searchJiraIssuesUsingJql`, e.g. `project = RP AND labels = ready-for-agent AND statusCategory != Done ORDER BY rank`.
+- **List issues**: `searchJiraIssuesUsingJql`, e.g. `project = RP AND labels = ready-for-agent AND statusCategory != Done ORDER BY rank`. Pass `fields: ["summary","status","labels"]` to check status; ask for `view: "full"` only when you need the descriptions.
 - **Comment**: `addOrEditJiraIssueComment`.
 - **Labels**: edit the `labels` field with `editJiraIssue` (add/remove the triage labels in `docs/agents/triage-labels.md`).
 - **Close**: `transitionJiraIssue` to a Done-category status, with a comment saying why.

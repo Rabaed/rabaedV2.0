@@ -2,14 +2,16 @@
 
 Four lanes. **main** plans; **A, B and C** implement. Each implementing session works on **one ticket** in its **own app-made worktree**, so the desktop app binds its PR and sends CI / PR notifications.
 
-| Lane | Session | Job | Tickets | `pnpm lane:env N` | Web |
-|---|---|---|---|---|---|
-| 1 | **main** | Planning only: grilling, `/to-spec`, `/to-tickets`, questions, design prompts. No implementation. | — | 1 (only if you want to run the app) | lane1.localhost:3100 |
-| 2 | **Agent A** | Walking skeleton | RP-186 → RP-196 (spec RP-185) | 2 | lane2.localhost:3200 |
-| 3 | **Agent B** | Design system in code | RP-198 → RP-206 (spec RP-197) | 3 | lane3.localhost:3300 |
-| 4 | **Agent C** | AWS dev environment | RP-208 → RP-213 (spec RP-207) | 4 | lane4.localhost:3400 |
+| Lane | Session | Job | `pnpm lane:env N` | Web |
+|---|---|---|---|---|
+| 1 | **main** | Planning only: grilling, `/to-spec`, `/to-tickets`, reviews, questions, design prompts. It edits docs in its own worktree, never in the main folder. | 1 (only to run the app) | lane1.localhost:3100 |
+| 2 | **Agent A** | Implements tickets labelled `lane-a` | 2 | lane2.localhost:3200 |
+| 3 | **Agent B** | Implements tickets labelled `lane-b` | 3 | lane3.localhost:3300 |
+| 4 | **Agent C** | Implements tickets labelled `lane-c` | 4 | lane4.localhost:3400 |
 
-Lane `n` has its own Postgres (5432+100n), api (4000+100n), web (3000+100n) and Docker Compose project `rabaed-laneN`. See "Several worktrees at once" in the README.
+Each lane has its own ports, database and Docker Compose project: see "Several worktrees at once" in the README.
+
+**Which ticket is next** comes from Jira, not this file: a lane's frontier is its `lane-x` tickets that are `ready-for-agent` and have every "Blocks" blocker Done. The ticket gives a suggested model (Opus or Sonnet).
 
 ## How to start every implementing ticket
 
@@ -22,49 +24,19 @@ Lane `n` has its own Postgres (5432+100n), api (4000+100n), web (3000+100n) and 
 4. When the PR opens, it appears in that session's PR bar: turn on **Auto-fix**. CI failures, merge conflicts and review comments will wake that session.
 5. After the PR merges, archive the session. The next ticket gets a fresh session (this replaces `/clear`).
 
-## Status (2026-09-28)
+## Epic review when a spec is finished
 
-| Lane | Done | Open PR | Next ticket(s) that can start now |
-|---|---|---|---|
-| A | RP-186, 187, 188, 189, 190 | — | **RP-191** Trades, Locations and Visibility grants |
-| B | RP-198, 199 | #10 RP-200 (fonts, digits, DocNo, Icon) | **RP-201, RP-202, RP-203** (only need RP-198; can run as three parallel B sessions). RP-204 waits for RP-200. |
-| C | RP-208 | #11 RP-209 (first deploy) | none until #11 merges → then RP-210 |
+Every ticket already gets a `/code-review` inside `/implement`. When all of a spec's tickets are merged, one more review looks at the whole spec:
 
-## Order and cross-lane dependencies
-
-```
-A: 186 → 187 → 188 → 189 → 190 → 191 → 192 → 193 → ┬ 194 ┬→ 196
-                                                     └ 195 ┘
-B: 198 → ┬ 199
-         ├ 200 → 204 ┐
-         ├ 201       ├→ 205
-         ├ 202       │
-         └ 203 ──────┴→ 206 (also needs 200)
-C: 208 → 209 → 210 → ┬ 211 (also needs B's 200)
-                     └ 212
-         209 ────────→ 213 (also needs A's 196)
-```
-
-## Epic review when a lane's spec is finished
-
-Every ticket already gets a `/code-review` inside `/implement`. When a whole spec's tickets are merged, one more review looks at the lane as a whole against its spec. Each lane has a review ticket that appears on the frontier by itself once its last tickets are Done:
-
-| Lane | Review ticket | Starts after | Command (fresh session on the main folder, no worktree — it only reads) |
-|---|---|---|---|
-| A | RP-217 | RP-196 | `/mattpocock-skills:code-review since tag epic-start/walking-skeleton, only apps/ packages/db packages/domain, against spec RP-185` |
-| B | RP-218 | RP-199, 201, 202, 205, 206 | `/mattpocock-skills:code-review since tag epic-start/design-system, only packages/ui packages/eslint-plugin, against spec RP-197` |
-| C | RP-219 | RP-211, 212, 213 | `/mattpocock-skills:code-review since tag epic-start/aws-dev, only packages/infra .github/workflows, against spec RP-207` |
-
-- The `epic-start/*` tags mark `main` just before each lane's first ticket. Lanes interleave on `main`, so each review is limited to its lane's folders.
-- Every confirmed finding becomes a `ready-for-agent` Task under the same Epic, linked to the review ticket, and goes back to that lane. Visibility and security findings are Highest.
-- For each future spec: tag `epic-start/<name>` on `main` before its first ticket, and add a review ticket blocked by its last tickets when running `/to-tickets`.
+- Before the spec's first ticket, tag `main` as `epic-start/<name>`. When running `/to-tickets`, add a review ticket blocked by the spec's last tickets.
+- The review runs in a fresh session with no worktree (it only reads): `/mattpocock-skills:code-review since tag epic-start/<name>, only <folders>, against spec RP-nnn`.
+- Every confirmed finding becomes a `ready-for-agent` Task under the same Epic, linked to the review ticket. Visibility and security findings are Highest.
 
 ## Rules that keep lanes from colliding
 
 1. One ticket = one app-made worktree session = one branch named with the key (`RP-191-...`) = one PR.
-2. Assign the Jira ticket before starting; start only tickets whose blockers are Done.
-3. Stay in your lane's folders: A owns `apps/*` and `packages/db|domain`; B owns `packages/ui` and Storybook; C owns the CDK package and deploy workflow. Shared root files (root package.json, lockfile, CI workflow) change in small PRs of their own.
-4. Migrations are timestamp-named.
+2. Start only tickets whose blockers are Done.
+3. When another lane's open ticket touches the same files (the ticket names them), keep your changes to those files in their own commits, and merge `main` right before opening the PR. Shared root files (root `package.json`, lockfile, CI workflows) change in small PRs of their own.
+4. Migrations are timestamp-named (and follow `CODING_STANDARDS.md`).
 5. Merge only through a PR with green CI (both visibility suites must pass). Merge `main` into your branch when it moves; use `/resolving-merge-conflicts` if needed.
-6. main never commits while an implementing session has the main folder checked out on another branch.
-7. Parallel sessions multiply usage — close finished sessions.
+6. Parallel sessions multiply usage — close finished sessions.

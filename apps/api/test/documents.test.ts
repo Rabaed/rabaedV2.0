@@ -7,7 +7,7 @@ import { randomUUID } from "node:crypto";
 import type { DocumentList, StartedDocumentUpload } from "@rabaed/domain";
 import type { LightMyRequestResponse } from "fastify";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createTestApi, expectHidden, type Caller, type OnboardedCompany } from "./support/harness.ts";
+import { attachDatasheet, createTestApi, expectHidden, type Caller, type OnboardedCompany } from "./support/harness.ts";
 
 const api = await createTestApi({ files: true });
 afterAll(() => api.close());
@@ -206,15 +206,23 @@ describe("a Draft's Documents, for the raiser", () => {
 describe("Documents once the item is sent", () => {
   let itemId = "";
   let documentId = "";
+  let datasheetId = ""; // The MAR Form Version 2's Datasheet field, which it needs to leave Draft.
 
   beforeAll(async () => {
     itemId = await draft();
     documentId = await uploaded(engineer, itemId);
+    datasheetId = await attachDatasheet(engineer, itemId);
     await ok(take(engineer, itemId, "send_for_review"));
   });
 
   it("are frozen: no removal, no replacement, no new upload", async () => {
-    expect(await list(engineer, itemId)).toMatchObject({ documents: [{ id: documentId, frozen: true }], canChange: false });
+    expect(await list(engineer, itemId)).toMatchObject({
+      documents: [
+        { id: documentId, frozen: true },
+        { id: datasheetId, frozen: true },
+      ],
+      canChange: false,
+    });
     const removed = await engineer.delete(documentUrl(itemId, documentId));
     expect({ status: removed.statusCode, body: removed.json() }).toEqual({ status: 409, body: { error: "document_frozen" } });
     for (const who of [engineer, pm]) {
@@ -234,6 +242,7 @@ describe("Documents once the item is sent", () => {
     const certificate = await uploaded(engineer, itemId, "%PDF-1.7 certificate", "certificate.pdf");
     expect((await list(engineer, itemId)).documents.map((d) => [d.id, d.frozen])).toEqual([
       [documentId, true],
+      [datasheetId, true],
       [certificate, false],
     ]);
     await ok(engineer.delete(documentUrl(itemId, certificate)));
@@ -244,7 +253,13 @@ describe("Documents once the item is sent", () => {
     await ok(pm.post(`/v1/work-items/${itemId}/claim`));
     await ok(take(pm, itemId, "submit"));
     const seen = await list(k1Engineer, itemId);
-    expect(seen).toMatchObject({ documents: [{ id: documentId, frozen: true, uploadedBy: { memberName: null } }], canChange: false });
+    expect(seen).toMatchObject({
+      documents: [
+        { id: documentId, frozen: true, uploadedBy: { memberName: null } },
+        { id: datasheetId, frozen: true, uploadedBy: { memberName: null } },
+      ],
+      canChange: false,
+    });
     expect((await fetch(await downloadUrl(k1Engineer, itemId, documentId))).status).toBe(200);
     await ok(k1Manager.post(`/v1/work-items/${itemId}/claim`));
     expect((await k1Manager.delete(documentUrl(itemId, documentId))).json()).toEqual({ error: "document_frozen" });

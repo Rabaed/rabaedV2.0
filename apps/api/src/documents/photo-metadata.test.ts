@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { jpegWithExif } from "../../test/support/exif-jpeg.ts";
+import { jpegWithExif } from "../demo/exif-jpeg.ts";
 import { readPhotoMetadata } from "./photo-metadata.ts";
 
 describe("a photo's time and place, from its EXIF", () => {
