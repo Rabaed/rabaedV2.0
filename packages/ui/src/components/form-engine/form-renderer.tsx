@@ -32,6 +32,7 @@ import {
   type Locale,
   type NamedAnswer,
   type NamedAnswers,
+  type DocumentSummary,
   type OptionList,
   type TableColumn,
 } from "@rabaed/domain";
@@ -46,6 +47,7 @@ import { Select } from "../form/select.tsx";
 import { Textarea } from "../form/textarea.tsx";
 import { Icon } from "../icon/icon.tsx";
 import { BuiltInSelect, builtInAnswerLabels, noChoices, ScopesChecklist, type BuiltInChoices } from "./built-in-fields.tsx";
+import { AttachmentsField, attachmentsLimits, takesUpload, type AttachmentsFieldFiles } from "./attachments-field.tsx";
 import { OptionListInput } from "./option-list-field.tsx";
 import { TableInput, TableRead } from "./table-field.tsx";
 
@@ -88,6 +90,7 @@ const copy = {
     tooShallow: "Keep choosing down to the last level.",
     tooFewRows: (n: number) => (n === 1 ? "Add at least 1 row." : `Add at least ${formatNumber(n, "en")} rows.`),
     tooManyRows: (n: number) => (n === 1 ? "Use at most 1 row." : `Use at most ${formatNumber(n, "en")} rows.`),
+    tooFewFiles: (n: number) => (n === 1 ? "Add at least 1 Document." : `Add at least ${formatNumber(n, "en")} Documents.`),
     choose: "Choose…",
     none: "None",
     // The name sits in an isolate (\u2068 first strong, \u2069 ends), so an Arabic name keeps its place.
@@ -140,6 +143,14 @@ const copy = {
           : n <= 10
             ? `استخدم ${formatNumber(n, "ar")} صفوف على الأكثر.`
             : `استخدم ${formatNumber(n, "ar")} صفًا على الأكثر.`,
+    tooFewFiles: (n: number) =>
+      n === 1
+        ? "أضف مستندًا واحدًا على الأقل."
+        : n === 2
+          ? "أضف مستندين على الأقل."
+          : n <= 10
+            ? `أضف ${formatNumber(n, "ar")} مستندات على الأقل.`
+            : `أضف ${formatNumber(n, "ar")} مستندًا على الأقل.`,
     choose: "اختر…",
     none: "بدون",
     leftProject: (name: string) => `\u2068${name}\u2069 (لم يعد في المشروع)`,
@@ -176,6 +187,11 @@ export type FormRendererProps = {
    */
   named?: NamedAnswers;
   /**
+   * The files of the Form's `attachments` fields: the item's Documents tied to
+   * a field, and what may be done with them. Undefined before the item exists.
+   */
+  files?: FormFiles;
+  /**
    * Called as the filler answers (edit mode), with every answer that changed:
    * one field's, or a new Trade's with the Scopes that still fit it. `undefined` clears one.
    */
@@ -185,9 +201,28 @@ export type FormRendererProps = {
   className?: string;
 };
 
+/** The files of a Form's `attachments` fields, and what the page does with them (RP-281). */
+export type FormFiles = {
+  /** The item's confirmed Documents tied to a field (`fieldKey`); others are ignored. */
+  documents: readonly DocumentSummary[];
+  /** Files may be uploaded and removed now (the raiser's Company, in Draft, with Attach). */
+  canChange: boolean;
+  /** The fields with an upload or removal under way. */
+  pending?: ReadonlySet<string>;
+  onUpload?: (fieldKey: string, file: File) => void;
+  onOpen?: (documentId: string) => void;
+  onRemove?: (fieldKey: string, documentId: string) => void;
+};
+
+/** One `attachments` field's files, out of the Form's. */
+const filesOf = (files: FormFiles | undefined, key: string): AttachmentsFieldFiles | undefined =>
+  files && { documents: files.documents.filter((d) => d.fieldKey === key), canChange: files.canChange, pending: files.pending?.has(key) };
+
 function errorText(field: AnswerField | TableColumn, error: FieldError, locale: Locale): string {
   const text = copy[locale];
   switch (error.code) {
+    case "too_few_files":
+      return field.type === "attachments" ? text.tooFewFiles(Math.max(field.minFiles ?? 1, 1)) : text.wrongType;
     case "too_few_rows":
       return field.type === "table" ? text.tooFewRows(Math.max(field.minRows ?? 1, 1)) : text.wrongType;
     case "too_many_rows":
@@ -322,6 +357,7 @@ const optionsOf = (field: { options: FormOption[] }, locale: Locale) =>
 
 /** A field the Form itself defines: one that takes an answer, but not a Built-in Field. */
 type OwnField = Exclude<AnswerField, { type: BuiltInFieldType }>;
+type AttachmentsFieldSchema = Extract<AnswerField, { type: "attachments" }>;
 
 /** A select's options, with "None" first when the field is optional, so a choice can be taken back. */
 const withNone = (field: { required: unknown }, options: { value: string; label: string }[], locale: Locale) =>
@@ -329,7 +365,8 @@ const withNone = (field: { required: unknown }, options: { value: string; label:
 
 /** One of the Form's own fields' control, and whether its Field labels a group (radios, checkboxes) rather than one control. */
 function control(
-  field: OwnField | TableColumn,
+  // An `attachments` field holds files, not a value: FormRenderer draws it (attachmentsControl).
+  field: Exclude<OwnField, { type: "attachments" }> | TableColumn,
   value: unknown,
   locale: Locale,
   people: FormChoices,
@@ -538,6 +575,7 @@ export function FormRenderer({
   people = noPeople,
   optionLists = noOptionLists,
   named = {},
+  files,
   onChange,
   idPrefix = "form",
   className,
@@ -596,9 +634,51 @@ export function FormRenderer({
     }
   }
 
+  /** An `attachments` field's files, to upload and remove while they may change; a group when there is no file input. */
+  function attachmentsControl(field: AttachmentsFieldSchema): { element: ReactNode; group?: boolean } {
+    const own = filesOf(files, field.key);
+    return {
+      group: !takesUpload(field, own, "edit"),
+      element: (
+        <AttachmentsField
+          field={field}
+          files={own}
+          mode="edit"
+          locale={locale}
+          onUpload={(file) => files?.onUpload?.(field.key, file)}
+          onOpen={files?.onOpen}
+          onRemove={(documentId) => files?.onRemove?.(field.key, documentId)}
+        />
+      ),
+    };
+  }
+
+  /** A field's help, and for an `attachments` field its limits (file types, most files) after it. */
+  function helpOf(field: AnswerField): ReactNode {
+    const help = field.help?.[locale];
+    const limits = field.type === "attachments" ? attachmentsLimits(field, locale) : undefined;
+    if (!limits) return help;
+    return help ? (
+      <>
+        {help}
+        <br />
+        {limits}
+      </>
+    ) : (
+      limits
+    );
+  }
+
   /** An answer as read; null when there is none. Built-in Fields are named from `choices`. */
   function answer(field: AnswerField): ReactNode {
     const value = answers[field.key];
+    // Its answer is its files.
+    if (field.type === "attachments") {
+      const own = filesOf(files, field.key);
+      return own && own.documents.length > 0 ? (
+        <AttachmentsField field={field} files={own} mode="read" locale={locale} onOpen={files?.onOpen} />
+      ) : null;
+    }
     if (isBuiltInField(field)) {
       const labels = builtInAnswerLabels(field.type, value, choices);
       if (labels.length === 0) return null;
@@ -661,23 +741,25 @@ export function FormRenderer({
                 const error = errorOf(field.key);
                 const { element, group } = isBuiltInField(field)
                   ? builtInControl(field.type)
-                  : control(
-                      field,
-                      // A calculated field shows the result worked out from the answers now, never one given.
-                      field.type === "calculated" ? visibility.answers[field.key] : answers[field.key],
-                      locale,
-                      people,
-                      named[field.key],
-                      optionLists,
-                      (value) => onChange?.({ [field.key]: value }),
-                      cellErrorsOf(field.key),
-                    );
+                  : field.type === "attachments"
+                    ? attachmentsControl(field)
+                    : control(
+                        field,
+                        // A calculated field shows the result worked out from the answers now, never one given.
+                        field.type === "calculated" ? visibility.answers[field.key] : answers[field.key],
+                        locale,
+                        people,
+                        named[field.key],
+                        optionLists,
+                        (value) => onChange?.({ [field.key]: value }),
+                        cellErrorsOf(field.key),
+                      );
                 return (
                   <Field
                     key={field.key}
                     id={fieldId(field.key)}
                     label={field.label[locale]}
-                    help={field.help?.[locale]}
+                    help={helpOf(field)}
                     error={error && errorText(field, error, locale)}
                     // Trade and Location always are, whatever the schema says (isRequired).
                     required={isRequired(field, visibility.answers)}

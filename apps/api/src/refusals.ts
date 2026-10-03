@@ -48,6 +48,9 @@ const answers = {
   not_uploaded: () => new HttpError(409, "not_uploaded"),
   upload_mismatch: () => new HttpError(409, "upload_mismatch"),
   document_frozen: () => new HttpError(409, "document_frozen"),
+  // A Form's `attachments` field (RP-281).
+  field_not_found: () => new HttpError(422, "field_not_found"),
+  too_many_files: () => new HttpError(409, "too_many_files"),
 } satisfies Record<string, () => HttpError>;
 
 export type RefusalReason = keyof typeof answers;

@@ -278,7 +278,8 @@
       "kb": "{size} KB",
       "mb": "{size} MB",
       "projectClosed": "This Project is closed.",
-      "notUploaded": "The file didn't finish uploading. Attach it again."
+      "notUploaded": "The file didn't finish uploading. Attach it again.",
+      "tooManyFiles": "This field has all the Documents it takes. Remove one to add another."
     },
     "history": {
       "title": "History",

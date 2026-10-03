@@ -162,6 +162,9 @@ export function formatFormValue(
     }
     case "table":
       return Array.isArray(value) ? rowCount[locale](value.length) : String(value ?? "");
+    // Its files are Documents, listed by the page; there is no answer to show.
+    case "attachments":
+      return "";
     case "member":
     case "participant":
       return (named?.memberName ?? named?.companyName)?.[locale] ?? anotherCompany[locale];

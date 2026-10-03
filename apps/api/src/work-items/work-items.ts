@@ -465,11 +465,25 @@ const transitionRefusals = [
 export type TakeTransitionResult = { ok: true } | AnswersRefused | { ok: false; reason: (typeof transitionRefusals)[number] };
 
 /**
+ * How many confirmed files each `attachments` field of a visible item has, by
+ * field key (RLS shows only confirmed, unremoved Documents), for leaving Draft.
+ */
+async function fieldFileCounts(trx: Trx, workItemId: string): Promise<Record<string, number>> {
+  const { rows } = await sql<{ field_key: string; files: number }>`
+    select field_key, count(*)::integer as files from document
+    where work_item_id = ${workItemId} and field_key is not null
+    group by field_key
+  `.execute(trx);
+  return Object.fromEntries(rows.map((r) => [r.field_key, r.files]));
+}
+
+/**
  * The holder of the item's current Step takes one of its Transitions, in one
  * transaction (workflow-engine.md §5.1), with their Internal Note if they wrote
  * one. The same idempotency key again applies nothing. Moving on while the
  * answers are open to the raiser (leaving Draft, and the Submit) needs a
- * complete Form: otherwise it is refused with the per-field errors.
+ * complete Form, its `attachments` fields' files included: otherwise it is
+ * refused with the per-field errors.
  */
 export function takeTransition(
   db: Db,
@@ -495,6 +509,7 @@ export function takeTransition(
         scopes,
         optionLists: await optionListsFor(trx, pinned.form.schema),
         held: pinned.data,
+        files: await fieldFileCounts(trx, workItemId),
       });
       if (takeable.some((t) => t.transition_kind !== "cancel" && t.transition_kind !== "return") && !checked.ok) {
         return { ok: false, reason: "form_incomplete", errors: checked.errors };

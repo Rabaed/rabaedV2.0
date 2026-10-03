@@ -93,7 +93,7 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
           <dd>{item.documentNumber ? <DocNo value={item.documentNumber} /> : t("noNumber")}</dd>
         </dl>
 
-        <WorkItemAnswers locale={locale} />
+        <WorkItemAnswers locale={locale} workItemId={item.id} documents={documents} />
 
         {/* The System Field below the Form. */}
         <WorkItemAttachments workItemId={item.id} list={documents} locale={locale} />
