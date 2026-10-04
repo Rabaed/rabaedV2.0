@@ -11,7 +11,13 @@ Four lanes. **main** plans; **A, B and C** implement. Each implementing session 
 
 Each lane has its own ports, database and Docker Compose project: see "Several worktrees at once" in the README.
 
-**Which ticket is next** comes from Jira, not this file: a lane's frontier is its `lane-x` tickets that are `ready-for-agent` and have every "Blocks" blocker Done. The ticket gives a suggested model (Opus or Sonnet).
+**Which ticket is next** comes from Jira, not this file: a lane's frontier is its `lane-x` tickets that are `ready-for-agent` and have every "Blocks" blocker Done. The ticket gives a suggested model (Opus or Sonnet). To list a lane's open tickets:
+
+```
+project = RP AND labels = lane-a AND labels = ready-for-agent AND statusCategory != Done ORDER BY rank
+```
+
+A lane takes work in one of two ways: **one ticket per session** (below), or **a whole spec in one session** with `/implement-spec`.
 
 ## How to start every implementing ticket
 
@@ -22,7 +28,25 @@ Each lane has its own ports, database and Docker Compose project: see "Several w
    Lane N. Run `pnpm lane:env N --force`, then /mattpocock-skills:implement RP-nnn
    ```
 4. When the PR opens, it appears in that session's PR bar: turn on **Auto-fix**. CI failures, merge conflicts and review comments will wake that session.
-5. After the PR merges, archive the session. The next ticket gets a fresh session (this replaces `/clear`).
+5. After the PR merges, run `/mattpocock-skills:retro` in that session (see below), then archive it. The next ticket gets a fresh session (this replaces `/clear`).
+
+## A whole spec in one session (`/implement-spec`)
+
+Use it when a spec's tickets form a chain that one lane would otherwise work through one session at a time (e.g. RP-290 → RP-294 under spec RP-289). Implementer subagents build the ready tickets in parallel, each in its own worktree, and merge them onto one **integration branch**; one `/code-review` runs over the whole branch at the end, which counts as the spec's epic review.
+
+1. Start the session as in step 1 above, named `Agent X – RP-nnn (spec)`, with the spec's key.
+2. First message:
+   ```
+   Lane N. Run `pnpm lane:env N --force`, then /mattpocock-skills:implement-spec RP-nnn. Name the integration branch RP-nnn-<spec-name> and open its draft PR after the first merge.
+   ```
+3. Label every ticket of the spec with this lane, so no other lane starts one of them.
+4. The subagents share the lane's ports and database. If their tests collide, ask the session to run fewer subagents at once.
+5. Jira's automation closes only the ticket named in the branch, which is the spec. When the PR merges, close the spec's other tickets with `transitionJiraIssue` and a comment naming the PR.
+6. Run `/mattpocock-skills:retro`, then archive the session.
+
+## Retro before archiving
+
+`/mattpocock-skills:retro` looks back at the session and suggests changes to the agents' environment, not the code. A mistake that a rule could catch becomes a check (a lint rule, a pre-commit hook or a CI job). A judgement call becomes a line in `CODING_STANDARDS.md`. Each accepted suggestion becomes a `ready-for-agent` Task, as RP-287 did. A new required CI check also has to be added to the `main` ruleset.
 
 ## Epic review when a spec is finished
 
@@ -34,9 +58,9 @@ Every ticket already gets a `/code-review` inside `/implement`. When all of a sp
 
 ## Rules that keep lanes from colliding
 
-1. One ticket = one app-made worktree session = one branch named with the key (`RP-191-...`) = one PR.
+1. One ticket = one app-made worktree session = one branch named with the key (`RP-191-...`) = one PR. With `/implement-spec`, one spec = one session = one integration branch named with the spec's key = one PR.
 2. Start only tickets whose blockers are Done.
 3. When another lane's open ticket touches the same files (the ticket names them), keep your changes to those files in their own commits, and merge `main` right before opening the PR. Shared root files (root `package.json`, lockfile, CI workflows) change in small PRs of their own.
 4. Migrations are timestamp-named (and follow `CODING_STANDARDS.md`).
-5. Merge only through a PR with green CI (both visibility suites must pass). Merge `main` into your branch when it moves; use `/resolving-merge-conflicts` if needed.
+5. Merge only through a PR with green CI (both visibility suites must pass). Merge `main` into your branch when it moves, and resolve any conflicts in that session.
 6. Parallel sessions multiply usage — close finished sessions.
