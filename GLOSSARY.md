@@ -177,6 +177,10 @@ _Avoid_: Deleted, voided
 The customisable middle of a Work Item, built in the form builder: the fields a Work Item Type captures between the System Fields above and below it. Field labels are in Arabic and English. A Form is a Rabaed Default, kept in a Company's Library, or copied into a Project.
 _Avoid_: Template (on its own), general template
 
+**Form Section**:
+A titled group of fields in a Form, filled in by one Participant at the Steps the Form names. A Form Section filled in by a Participant other than the raiser, such as the Consultant's verification on a submittal, is read-only to the raiser.
+_Avoid_: Section (on its own), panel, tab
+
 **System Field**:
 A part of every Work Item that no Form can remove or move out: Subject and Document Number above the Form, Attachments and Links below it.
 _Avoid_: Default field, header
