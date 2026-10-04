@@ -1,11 +1,9 @@
 "use client";
 
 import type { LinkedFromItem, Locale } from "@rabaed/domain";
-import { useId, useState, type ElementType } from "react";
+import { useId, type ElementType } from "react";
 import { cn } from "../../lib/cn.ts";
-import { focusRing } from "../form/control-styles.ts";
-import { DocNo } from "../doc-no/doc-no.tsx";
-import { Icon } from "../icon/icon.tsx";
+import { LinkedItemRow } from "./linked-item-row.tsx";
 
 // "Linked from" (form-engine.md part 2b; visibility.md E3): the Submitted items
 // that link to this one, shown in the Links section below its Links. Each is the
@@ -18,12 +16,10 @@ const copy = {
   en: {
     title: "Linked from",
     none: "No Submitted item links here yet.",
-    hidden: "You are not allowed to see the details of this item.",
   },
   ar: {
     title: "مرتبط من",
     none: "لا يرتبط بهذا البند أي بند مُقدَّم بعد.",
-    hidden: "غير مسموح لك برؤية تفاصيل هذا البند.",
   },
 } satisfies Record<Locale, unknown>;
 
@@ -37,62 +33,6 @@ export type LinkedFromListProps = {
   linkAs?: ElementType;
   className?: string;
 };
-
-/** One linking item: opening it, or saying the viewer may not see it. */
-function LinkedFromRow({
-  item,
-  locale,
-  hrefFor,
-  linkAs: Anchor,
-}: {
-  item: LinkedFromItem;
-  locale: Locale;
-  hrefFor: (workItemId: string) => string;
-  linkAs: ElementType;
-}) {
-  const text = copy[locale];
-  const messageId = useId();
-  const [explained, setExplained] = useState(false);
-  const target = cn(
-    "flex min-h-11 min-w-0 flex-1 flex-col items-start gap-0.5 rounded-sm px-3 py-2 text-start hover:bg-ghost-hover active:bg-ghost-press",
-    focusRing,
-  );
-  const label = (
-    <>
-      <DocNo value={item.documentNumber} className="text-sm text-text" />
-      <span className="text-body text-text">
-        <bdi>{item.subject}</bdi>
-      </span>
-    </>
-  );
-  return (
-    <li className="flex flex-col">
-      <div className="flex items-center gap-1 pe-1">
-        {item.workItemId ? (
-          <Anchor href={hrefFor(item.workItemId)} className={target}>
-            {label}
-          </Anchor>
-        ) : (
-          <button
-            type="button"
-            className={target}
-            aria-expanded={explained}
-            aria-controls={messageId}
-            onClick={() => setExplained((open) => !open)}
-          >
-            {label}
-          </button>
-        )}
-        {!item.workItemId && <Icon name="lock" size={16} label={text.hidden} className="shrink-0 text-muted" />}
-      </div>
-      {!item.workItemId && (
-        <p id={messageId} className={cn("px-3 pb-2 text-sm text-muted", !explained && "hidden")}>
-          {text.hidden}
-        </p>
-      )}
-    </li>
-  );
-}
 
 /** "Linked from": the Submitted items linking to this one, under its own heading in the Links section. */
 export function LinkedFromList({ locale, items, hrefFor, linkAs = "a", className }: LinkedFromListProps) {
@@ -109,7 +49,14 @@ export function LinkedFromList({ locale, items, hrefFor, linkAs = "a", className
         <ul aria-labelledby={titleId} className="flex flex-col divide-y divide-border rounded-md border border-border">
           {items.map((item, i) => (
             // A hidden item has no id; the API lists each item once, by Document Number.
-            <LinkedFromRow key={item.workItemId ?? `${item.documentNumber}-${i}`} item={item} locale={locale} hrefFor={hrefFor} linkAs={linkAs} />
+            <LinkedItemRow
+              key={item.workItemId ?? `${item.documentNumber}-${i}`}
+              locale={locale}
+              documentNumber={item.documentNumber}
+              subject={item.subject}
+              href={item.workItemId ? hrefFor(item.workItemId) : null}
+              linkAs={linkAs}
+            />
           ))}
         </ul>
       )}

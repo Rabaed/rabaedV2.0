@@ -1,13 +1,10 @@
 "use client";
 
 import type { LinkSearchResults, LinkTarget, Locale, WorkItemLink } from "@rabaed/domain";
-import { useId, useState, type ElementType, type ReactNode } from "react";
+import { useId, type ElementType, type ReactNode } from "react";
 import { cn } from "../../lib/cn.ts";
-import { IconButton } from "../button/button.tsx";
-import { focusRing } from "../form/control-styles.ts";
-import { DocNo } from "../doc-no/doc-no.tsx";
-import { Icon } from "../icon/icon.tsx";
 import { LinkSearch } from "./link-search.tsx";
+import { LinkedItemRow } from "./linked-item-row.tsx";
 
 // The Links System Field, below the Form (form-engine.md part 2b; visibility.md
 // E1): every Link of the item, each the other item's Document Number and
@@ -22,13 +19,11 @@ const copy = {
   en: {
     title: "Links",
     none: "No Links yet.",
-    hidden: "You are not allowed to see the details of this item.",
     remove: (number: string) => `Remove the Link to ${number}`,
   },
   ar: {
     title: "الروابط",
     none: "لا توجد روابط بعد.",
-    hidden: "غير مسموح لك برؤية تفاصيل هذا البند.",
     // The Document Number sits in a left-to-right isolate (\u2066, ended by \u2069).
     remove: (number: string) => `إزالة الربط مع \u2066${number}\u2069`,
   },
@@ -65,74 +60,6 @@ export type LinksSectionProps = {
   className?: string;
 };
 
-/** One Link: the other item's Document Number and Subject, opening it, or saying the viewer may not see it. */
-function LinkRow({
-  link,
-  locale,
-  removable,
-  pending,
-  onRemove,
-  hrefFor,
-  linkAs: Anchor,
-}: {
-  link: WorkItemLink;
-  locale: Locale;
-  removable: boolean;
-  pending: boolean;
-  onRemove: (link: WorkItemLink) => void;
-  hrefFor: (workItemId: string) => string;
-  linkAs: ElementType;
-}) {
-  const text = copy[locale];
-  const messageId = useId();
-  const [explained, setExplained] = useState(false);
-  const target = cn(
-    "flex min-h-11 min-w-0 flex-1 flex-col items-start gap-0.5 rounded-sm px-3 py-2 text-start hover:bg-ghost-hover active:bg-ghost-press",
-    focusRing,
-  );
-  const label = (
-    <>
-      <DocNo value={link.documentNumber} className="text-sm text-text" />
-      <span className="text-body text-text">
-        <bdi>{link.subject}</bdi>
-      </span>
-    </>
-  );
-  return (
-    <li className="flex flex-col">
-      <div className="flex items-center gap-1 pe-1">
-        {link.workItemId ? (
-          <Anchor href={hrefFor(link.workItemId)} className={target}>
-            {label}
-          </Anchor>
-        ) : (
-          // No id for an item the viewer can't see: opening it only explains why.
-          <button
-            type="button"
-            className={target}
-            aria-expanded={explained}
-            aria-controls={messageId}
-            onClick={() => setExplained((open) => !open)}
-          >
-            {label}
-          </button>
-        )}
-        {!link.workItemId && <Icon name="lock" size={16} label={text.hidden} className="shrink-0 text-muted" />}
-        {removable && (
-          <IconButton label={text.remove(link.documentNumber)} size="sm" disabled={pending} onClick={() => onRemove(link)}>
-            <Icon name="trash" size={16} />
-          </IconButton>
-        )}
-      </div>
-      {!link.workItemId && (
-        <p id={messageId} className={cn("px-3 pb-2 text-sm text-muted", !explained && "hidden")}>
-          {text.hidden}
-        </p>
-      )}
-    </li>
-  );
-}
-
 /**
  * The Links System Field: the item's Links, free ones first, then each link
  * question's under its label; the picker and remove while they may change.
@@ -160,15 +87,18 @@ export function LinksSection({
   const byQuestion = new Map<string, WorkItemLink[]>();
   for (const l of links) if (l.fieldKey !== null) byQuestion.set(l.fieldKey, [...(byQuestion.get(l.fieldKey) ?? []), l]);
   const row = (link: WorkItemLink) => (
-    <LinkRow
+    <LinkedItemRow
       key={link.id}
-      link={link}
       locale={locale}
-      removable={canChange && link.kind === "related"}
-      pending={pending}
-      onRemove={onRemove}
-      hrefFor={hrefFor}
+      documentNumber={link.documentNumber}
+      subject={link.subject}
+      href={link.workItemId ? hrefFor(link.workItemId) : null}
       linkAs={linkAs}
+      remove={
+        canChange && link.kind === "related"
+          ? { label: text.remove(link.documentNumber), icon: "trash", disabled: pending, onRemove: () => onRemove(link) }
+          : undefined
+      }
     />
   );
   const list = (items: readonly WorkItemLink[], label: string) => (

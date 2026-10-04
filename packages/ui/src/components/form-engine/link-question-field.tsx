@@ -1,13 +1,9 @@
 "use client";
 
 import { isHiddenLinkChoice, type HiddenLinkChoice, type LinkSearchResults, type LinkTarget, type Locale } from "@rabaed/domain";
-import { useId, useState, type ElementType } from "react";
-import { cn } from "../../lib/cn.ts";
-import { IconButton } from "../button/button.tsx";
-import { focusRing } from "../form/control-styles.ts";
-import { DocNo } from "../doc-no/doc-no.tsx";
-import { Icon } from "../icon/icon.tsx";
+import { useState, type ElementType } from "react";
 import { LinkSearch } from "./link-search.tsx";
+import { LinkedItemRow } from "./linked-item-row.tsx";
 
 // The link question, `work_item_ref` (RP-293, form-engine.md part 2b): the items
 // chosen, each its Document Number (left to right) and Subject, and Link search
@@ -19,11 +15,9 @@ import { LinkSearch } from "./link-search.tsx";
 
 const copy = {
   en: {
-    hidden: "You are not allowed to see the details of this item.",
     remove: (number: string) => `Remove ${number}`,
   },
   ar: {
-    hidden: "غير مسموح لك برؤية تفاصيل هذا البند.",
     // The Document Number sits in a left-to-right isolate (\u2066, ended by \u2069).
     remove: (number: string) => `إزالة \u2066${number}\u2069`,
   },
@@ -68,51 +62,19 @@ function ChosenItem({
   links: FormLinks;
   onRemove?: () => void;
 }) {
-  const text = copy[locale];
-  const messageId = useId();
-  const [explained, setExplained] = useState(false);
   const Anchor = links.linkAs ?? "a";
   const shown = isHiddenLinkChoice(choice) ? choice : name;
   // A visible item the page can't name yet (not saved yet, nor picked here) has nothing to show but its id: never shown.
   if (!shown) return null;
-  const hidden = typeof choice !== "string";
-  const target = cn(
-    "flex min-h-11 min-w-0 flex-1 flex-col items-start gap-0.5 rounded-sm px-3 py-2 text-start hover:bg-ghost-hover active:bg-ghost-press",
-    focusRing,
-  );
-  const label = (
-    <>
-      <DocNo value={shown.documentNumber} className="text-sm text-text" />
-      <span className="text-body text-text">
-        <bdi>{shown.subject}</bdi>
-      </span>
-    </>
-  );
   return (
-    <li className="flex flex-col">
-      <div className="flex items-center gap-1 pe-1">
-        {hidden ? (
-          <button type="button" className={target} aria-expanded={explained} aria-controls={messageId} onClick={() => setExplained((open) => !open)}>
-            {label}
-          </button>
-        ) : (
-          <Anchor href={links.hrefFor(choice)} className={target}>
-            {label}
-          </Anchor>
-        )}
-        {hidden && <Icon name="lock" size={16} label={text.hidden} className="shrink-0 text-muted" />}
-        {onRemove && (
-          <IconButton label={text.remove(shown.documentNumber)} size="sm" onClick={onRemove}>
-            <Icon name="x" size={16} />
-          </IconButton>
-        )}
-      </div>
-      {hidden && (
-        <p id={messageId} className={cn("px-3 pb-2 text-sm text-muted", !explained && "hidden")}>
-          {text.hidden}
-        </p>
-      )}
-    </li>
+    <LinkedItemRow
+      locale={locale}
+      documentNumber={shown.documentNumber}
+      subject={shown.subject}
+      href={typeof choice === "string" ? links.hrefFor(choice) : null}
+      linkAs={Anchor}
+      remove={onRemove && { label: copy[locale].remove(shown.documentNumber), icon: "x", onRemove }}
+    />
   );
 }
 
