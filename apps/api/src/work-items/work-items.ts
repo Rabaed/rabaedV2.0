@@ -13,6 +13,8 @@ import {
   type FormSchema,
   type FormFieldType,
   type FormVersion,
+  type LinkSearchQuery,
+  type LinkSearchResults,
   type NamedAnswers,
   type SaveAnswersRequest,
   type ScopeChoice,
@@ -344,6 +346,38 @@ export function listWorkItems(db: Db, memberId: string, projectId: string, now: 
     return {
       stages: stages.map((s) => ({ ...s, count: items.filter((i) => i.stage.key === s.key).length })),
       items,
+    };
+  });
+}
+
+/** `text` as a LIKE pattern that matches it anywhere, with its own %, _ and \ taken literally. */
+const containsPattern = (text: string) => `%${text.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+
+/**
+ * Link search (visibility.md "Link search", scenario 29): the Project's items
+ * whose Document Number or Subject contains `q`, whatever the case, newest
+ * first, one page at a time. Only items the Member sees (RLS, the list's own
+ * path) that have been Submitted (app.work_item_submitted): never a Draft or an
+ * item in internal review. One row more than the page is read only to tell
+ * whether there is a next page; there is no total, so nothing counts hidden
+ * matches. Null when it isn't one of the Member's Projects.
+ */
+export function searchLinkTargets(db: Db, memberId: string, projectId: string, query: LinkSearchQuery): Promise<LinkSearchResults | null> {
+  return withMember(db, memberId, async (trx) => {
+    const onProject = await trx.selectFrom("project").select("id").where("id", "=", projectId).executeTakeFirst();
+    if (!onProject) return null;
+    const pattern = containsPattern(query.q);
+    const { rows } = await sql<{ id: string; document_number: string; title: string }>`
+      select w.id, w.document_number, w.title
+      from work_item w
+      where w.project_id = ${projectId} and app.work_item_submitted(w.id)
+        and (w.document_number ilike ${pattern} or w.title ilike ${pattern})
+      order by w.created_at desc, w.id desc
+      limit ${query.limit + 1} offset ${(query.page - 1) * query.limit}
+    `.execute(trx);
+    return {
+      links: rows.slice(0, query.limit).map((r) => ({ id: r.id, documentNumber: r.document_number, subject: r.title })),
+      nextPage: rows.length > query.limit ? query.page + 1 : null,
     };
   });
 }

@@ -3,6 +3,8 @@ import {
   createWorkItemRequest,
   formChoices,
   formVersion,
+  linkSearchQuery,
+  linkSearchResults,
   saveAnswersRequest,
   takeTransitionRequest,
   workItemTypeCode,
@@ -27,6 +29,7 @@ import {
   listWorkItems,
   releaseStep,
   saveAnswers,
+  searchLinkTargets,
   takeTransition,
 } from "../work-items/work-items.ts";
 
@@ -58,6 +61,17 @@ export const workItemRoutes =
       async (request) => {
         const memberId = ctx.requireMember(request);
         return visibleOrNotFound(listWorkItems(ctx.db, memberId, idOrNotFound(request.params.projectId), ctx.now()));
+      },
+    );
+
+    // Link search: the Project's Submitted items the Member sees whose Document
+    // Number or Subject contains `q`, a page at a time (visibility.md scenario 29).
+    app.get(
+      "/v1/projects/:projectId/work-items/link-search",
+      { schema: { params: projectParams, querystring: linkSearchQuery, response: { 200: linkSearchResults } } },
+      async (request) => {
+        const memberId = ctx.requireMember(request);
+        return visibleOrNotFound(searchLinkTargets(ctx.db, memberId, idOrNotFound(request.params.projectId), request.query));
       },
     );
 

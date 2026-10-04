@@ -66,6 +66,31 @@ export const workItemList = z.object({
 });
 export type WorkItemList = z.infer<typeof workItemList>;
 
+/**
+ * Link search (form-engine.md part 2b; visibility.md "Link search"): part of a
+ * Document Number or Subject, matched case-insensitively, and the page wanted.
+ * A page holds at most `linkSearchPageMax` items.
+ */
+export const linkSearchPageMax = 20;
+export const linkSearchQuery = z.object({
+  q: z.string().trim().min(1).max(200),
+  page: z.coerce.number().int().positive().default(1),
+  limit: z.coerce.number().int().positive().max(linkSearchPageMax).default(linkSearchPageMax),
+});
+export type LinkSearchQuery = z.infer<typeof linkSearchQuery>;
+
+/** A Work Item that can be linked, in the Link shape: its id, Document Number and Subject. */
+export const linkTarget = z.object({ id: z.uuid(), documentNumber: z.string(), subject: z.string() });
+export type LinkTarget = z.infer<typeof linkTarget>;
+
+/**
+ * One page of Link search: only items the searcher sees that have been
+ * Submitted, in the same Project. `nextPage` is null on the last page; there is
+ * no total, so nothing hints at matches the searcher can't see.
+ */
+export const linkSearchResults = z.object({ links: z.array(linkTarget), nextPage: z.number().int().positive().nullable() });
+export type LinkSearchResults = z.infer<typeof linkSearchResults>;
+
 /** How a closed Work Item ended: its Issued Code, Inspection result, or cancelled (workflow-engine.md §1). */
 export const workItemOutcomes = ["A", "B", "C", "D", "passed", "passed_with_comments", "failed", "cancelled", "closed"] as const;
 export const workItemOutcome = z.enum(workItemOutcomes);
