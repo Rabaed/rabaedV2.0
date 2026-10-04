@@ -4,7 +4,7 @@ import { storyText } from "../../storybook/locale.ts";
 import { stageKeys } from "../../tokens/themes.ts";
 import { StagePill } from "./stage-pill.tsx";
 
-// The Rabaed Default Stages (CONTEXT.md).
+// The Rabaed Default Stages (GLOSSARY.md).
 const stages = {
   draft: { en: "Drafts", ar: "المسودات" },
   internal: { en: "Internal Review", ar: "مراجعة داخلية" },

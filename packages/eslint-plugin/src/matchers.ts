@@ -171,7 +171,7 @@ export function physicalClasses(classes: string): LogicalFix[] {
 
 // ---- Step Age only --------------------------------------------------------
 
-// Rabaed shows Step Age only: no due dates, deadlines, SLAs or lateness (CONTEXT.md, CLAUDE.md).
+// Rabaed shows Step Age only: no due dates, deadlines, SLAs or lateness (GLOSSARY.md, CLAUDE.md).
 const deadline = /overdue|due[\s_-]?date|deadline|متأخر|موعد نهائي|تاريخ الاستحقاق/i;
 const sla = /\bSLAs?\b|^sla(?=[A-Z_])|(?<=[a-z])Sla(?=[A-Z_]|s?$)/;
 

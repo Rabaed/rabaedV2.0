@@ -1,7 +1,7 @@
 import { formatNumber, type Locale } from "./locale.ts";
 
 /**
- * Step Age (CONTEXT.md): the week a Work Item is in at its current Step,
+ * Step Age (GLOSSARY.md): the week a Work Item is in at its current Step,
  * counting from 1. Rabaed shows age only. The one home of the rule, for the UI
  * (AgeDots) and for places that aren't a component (emails, reports).
  */

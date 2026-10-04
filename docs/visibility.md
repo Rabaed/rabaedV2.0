@@ -2,7 +2,7 @@
 
 **The #1 rule of Rabaed: no one sees another company's work unless a rule below explicitly allows it.** When a case isn't covered, the answer is *hidden* until a rule is added here.
 
-Terms follow [CONTEXT.md](../CONTEXT.md). Enforcement follows [ADR 0007](adr/0007-project-is-the-tenancy-boundary.md) (Project is the tenancy boundary, row-level security) and [data-model.md](data-model.md).
+Terms follow [GLOSSARY.md](../GLOSSARY.md). Enforcement follows [ADR 0007](adr/0007-project-is-the-tenancy-boundary.md) (Project is the tenancy boundary, row-level security) and [data-model.md](data-model.md).
 
 ## The layers
 

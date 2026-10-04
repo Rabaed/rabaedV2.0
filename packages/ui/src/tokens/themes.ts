@@ -1,7 +1,7 @@
 import { palette, type PaletteColour } from "./palette.ts";
 
 /**
- * Colour keys for the Rabaed Default Stages (CONTEXT.md): Drafts, Internal Review,
+ * Colour keys for the Rabaed Default Stages (GLOSSARY.md): Drafts, Internal Review,
  * Revised & Resubmitted, Pending Approval, Approved, Rejected, Cancelled.
  */
 export const stageKeys = ["draft", "internal", "resubmitted", "pending", "approved", "rejected", "cancelled"] as const;

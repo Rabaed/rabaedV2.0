@@ -4,7 +4,7 @@ Rabaed is a B2B construction management platform for KSA (Project Module first; 
 
 ## Read first
 
-- `CONTEXT.md`: the glossary. Use its terms; avoid the terms it lists under _Avoid_.
+- `GLOSSARY.md`: the glossary. Use its terms; avoid the terms it lists under _Avoid_.
 - `docs/visibility.md`: **visibility is the top requirement.** No company may see another company's work beyond these rules. Every feature is checked against it, and its scenarios are automated tests.
 - `docs/adr/`, `docs/data-model.md`, `docs/workflow-engine.md`, `docs/form-engine.md`.
 - `docs/tech-stack.md`: what Rabaed is built with, and why.
@@ -30,4 +30,4 @@ The five default labels (needs-triage, needs-info, ready-for-agent, ready-for-hu
 
 ### Domain docs
 
-Single-context: `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.
+Single-context: `GLOSSARY.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.
