@@ -35,6 +35,7 @@ export { Field, type ChoiceOption, type FieldProps } from "./components/form/fie
 export { type BuiltInChoice, type BuiltInChoices } from "./components/form-engine/built-in-fields.tsx";
 export { FormRenderer, type FormFiles, type FormRendererProps } from "./components/form-engine/form-renderer.tsx";
 export { LinkSearch, type LinkSearchProps } from "./components/form-engine/link-search.tsx";
+export { LinksSection, type LinksSectionProps } from "./components/form-engine/links-section.tsx";
 export { Input, type InputProps } from "./components/form/input.tsx";
 export { RadioGroup, type RadioGroupProps } from "./components/form/radio-group.tsx";
 export { SegmentedControl, type SegmentedControlProps } from "./components/form/segmented-control.tsx";

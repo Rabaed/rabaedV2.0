@@ -18,6 +18,7 @@ import type {
   Scopes,
   SignedInMember,
   WorkItemDetail,
+  WorkItemLinks,
   WorkItemHistory,
   WorkItemList,
   OptionList,
@@ -156,6 +157,11 @@ export async function getOptionLists(): Promise<OptionList[]> {
 /** A visible item's Documents, with whether the Member may change them now; null when hidden. */
 export function getWorkItemDocuments(workItemId: string): Promise<DocumentList | null> {
   return apiGet<DocumentList>(`/v1/work-items/${encodeURIComponent(workItemId)}/documents`);
+}
+
+/** A Work Item's Links as the signed-in Member may read them (E1); null if they can't see the item. */
+export function getWorkItemLinks(workItemId: string): Promise<WorkItemLinks | null> {
+  return apiGet<WorkItemLinks>(`/v1/work-items/${encodeURIComponent(workItemId)}/links`);
 }
 
 /** A Work Item's history as the signed-in Member may see it; null if they can't see the item. */
