@@ -48,7 +48,7 @@ const asMember = <T extends object>(query: ReturnType<typeof sql<T>>) =>
   withMember(app, memberId, (trx) => query.execute(trx).then((r) => r.rows));
 
 describe("the Rabaed Default MAR Form", () => {
-  it("is published as Versions 1 and 2, and Version 2 (RP-286) is the MAR's latest", async () => {
+  it("is published as Versions 1, 2 and 3, and Version 3 (RP-294) is the MAR's latest", async () => {
     const rows = await asMember<{ id: string; version_no: number; status: string; latest: boolean }>(sql`
       select v.id, v.version_no, v.status, v.id = app.latest_form_version('MAR') as latest
       from form_version v
@@ -56,7 +56,8 @@ describe("the Rabaed Default MAR Form", () => {
       order by v.version_no`);
     expect(rows).toEqual([
       { id: marVersion, version_no: 1, status: "published", latest: false },
-      { id: expect.any(String), version_no: 2, status: "published", latest: true },
+      { id: expect.any(String), version_no: 2, status: "published", latest: false },
+      { id: expect.any(String), version_no: 3, status: "published", latest: true },
     ]);
   });
 

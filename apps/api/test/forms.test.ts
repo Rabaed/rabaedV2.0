@@ -88,8 +88,8 @@ beforeAll(async () => {
 describe("the Form for a new MAR", () => {
   it("is the latest published MAR Form Version, with its sections and fields", async () => {
     const form: FormVersion = (await ok(engineer.get(`/v1/projects/${projectId}/work-item-types/MAR/form`), 200)).json();
-    // The MAR Form Version 2 (RP-286); mar-form-v2.test.ts follows it further.
-    expect(form.versionNo).toBe(2);
+    // The MAR Form Version 3 (RP-294); mar-form-v2.test.ts and mar-form-v3.test.ts follow it further.
+    expect(form.versionNo).toBe(3);
     expect(form.schema.sections.flatMap((s) => s.fields.filter(isAnswerField).map((f) => [f.key, f.type, f.required]))).toEqual([
       ["manufacturer", "text", true],
       ["model", "text", false],
@@ -99,6 +99,7 @@ describe("the Form for a new MAR", () => {
       ["datasheet", "attachments", true],
       ["test_certificate", "attachments", false],
       ["sample_photo", "photos", false],
+      ["related_submittals", "work_item_ref", false],
       // The Built-in Fields, placed in the Form (RP-270).
       ["trade", "trade", true],
       ["location", "location", true],

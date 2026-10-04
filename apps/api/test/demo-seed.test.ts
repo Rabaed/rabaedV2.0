@@ -86,10 +86,10 @@ describe("the demo seed", () => {
   });
 });
 
-describe("the MAR Form Version 2, as the demo uses it", () => {
-  it("lists every field of Version 2, labelled in English and Arabic", async () => {
+describe("the MAR Form Version 3, as the demo uses it", () => {
+  it("lists every field of Version 3, labelled in English and Arabic", async () => {
     const form: FormVersion = (await hafiz.get(`/v1/projects/${projectId}/work-item-types/MAR/form`)).json();
-    expect(form.versionNo).toBe(2);
+    expect(form.versionNo).toBe(3);
     const fields = form.schema.sections.flatMap((s) => s.fields).filter((f) => "label" in f);
     expect(fields.map((f) => [f.key, f.type])).toEqual([
       ["manufacturer", "text"],
@@ -100,6 +100,7 @@ describe("the MAR Form Version 2, as the demo uses it", () => {
       ["datasheet", "attachments"],
       ["test_certificate", "attachments"],
       ["sample_photo", "photos"],
+      ["related_submittals", "work_item_ref"],
       ["trade", "trade"],
       ["location", "location"],
       ["scopes", "scopes"],
