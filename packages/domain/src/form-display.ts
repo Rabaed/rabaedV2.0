@@ -211,7 +211,8 @@ export function formatFormValue(
     case "work_item_ref": {
       const read = (v: unknown) => {
         const target = isHiddenLinkChoice(v) ? v : typeof v === "string" ? linkTargets[v] : undefined;
-        return target ? `${target.documentNumber} ${target.subject}` : null;
+        // The Document Number in a left-to-right isolate (\u2066, ended by \u2069), so it reads right in Arabic.
+        return target ? `\u2066${target.documentNumber}\u2069 ${target.subject}` : null;
       };
       return Array.isArray(value) ? value.flatMap((v) => read(v) ?? []).join(listSeparator[locale]) : "";
     }

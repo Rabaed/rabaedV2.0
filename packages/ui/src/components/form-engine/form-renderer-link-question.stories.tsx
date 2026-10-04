@@ -63,7 +63,7 @@ const copy = {
   required: { en: "This field is required.", ar: "هذا الحقل مطلوب." },
   unanswered: { en: "Not answered", ar: "لم تتم الإجابة" },
 };
-const removeLabel = (locale: Locale, number: string) => (locale === "en" ? `Remove ${number}` : `إزالة ⁦${number}⁩`);
+const removeLabel = (locale: Locale, number: string) => (locale === "en" ? `Remove ${number}` : `إزالة \u2066${number}\u2069`);
 
 const meta = {
   title: "Form engine/FormRenderer/LinkQuestion",

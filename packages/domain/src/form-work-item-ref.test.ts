@@ -113,9 +113,9 @@ describe("conditions", () => {
 describe("formatFormValue", () => {
   const field = build([related()]).sections[0]!.fields[0]! as Parameters<typeof formatFormValue>[0];
 
-  it("reads each chosen item as its Document Number and Subject, never an id", () => {
+  it("reads each chosen item as its Document Number (left to right) and Subject, never an id", () => {
     const targets = { [a]: { documentNumber: "RGT-MAR-0003", subject: "Copper cables" } };
-    expect(formatFormValue(field, [a, hidden], "en", undefined, [], targets)).toBe("RGT-MAR-0003 Copper cables, RGT-MAR-0007 Cable trays");
+    expect(formatFormValue(field, [a, hidden], "en", undefined, [], targets)).toBe("\u2066RGT-MAR-0003\u2069 Copper cables, \u2066RGT-MAR-0007\u2069 Cable trays");
     expect(formatFormValue(field, [b], "en", undefined, [], targets)).toBe("");
   });
 });
