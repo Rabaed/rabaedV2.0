@@ -12,25 +12,12 @@
 // manager: the same E3 rule, one viewer who sees the target and not the linker.
 import { randomUUID } from "node:crypto";
 import type { LinkedFrom } from "@rabaed/domain";
-import type { LightMyRequestResponse } from "fastify";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { attachDatasheet, createTestApi, expectHidden, type Caller, type OnboardedCompany } from "./support/harness.ts";
+import { attachDatasheet, createTestApi, expectHidden, type Caller } from "./support/harness.ts";
+import { all, bilingual, ok, only, projectMember, type Company } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
 afterAll(() => api.close());
-
-type Company = { company: OnboardedCompany; caller: Caller };
-type Coverage = { isAll: boolean; valueIds: string[] };
-
-const bilingual = (text: string) => ({ en: text, ar: text });
-const all: Coverage = { isAll: true, valueIds: [] };
-const only = (...valueIds: string[]): Coverage => ({ isAll: false, valueIds });
-
-async function ok(res: Promise<LightMyRequestResponse>, status = 204) {
-  const r = await res;
-  expect(r.statusCode, r.body).toBe(status);
-  return r;
-}
 
 let c1: Company;
 let k1: Company;
@@ -44,15 +31,6 @@ let c1Pm: Caller;
 let k1Manager: Caller; // Covers the whole Project.
 let k1Mechanical: Caller; // Covers Mechanical only.
 let c2Engineer: Caller; // Another Contractor on the Project, who sees none of C1's items.
-
-/** A signed-in Member of `company`, on the Project through `participantId`, with `positions`. */
-async function projectMember(company: Company, participantId: string, positions: string[], trade: Coverage = all) {
-  const { member, caller } = await api.member(company.caller);
-  await api.addProjectMember(company.caller, participantId, member.id);
-  await ok(company.caller.request("PUT", `/v1/participants/${participantId}/members/${member.id}/visibility`, { trade, location: all }));
-  await ok(company.caller.request("PUT", `/v1/participants/${participantId}/members/${member.id}/positions`, { positions }));
-  return caller;
-}
 
 const take = (by: Caller, id: string, transition: string) =>
   ok(by.post(`/v1/work-items/${id}/transitions`, { transition, idempotencyKey: randomUUID() }));
@@ -101,11 +79,11 @@ beforeAll(async () => {
   await ok(c1.caller.request("PUT", `/v1/participants/${k1ParticipantId}/visibility`, { trade: all, location: all }));
   const c2ParticipantId = await api.addParticipant(c1.caller, projectId, c2.company, "contractor");
   await ok(c1.caller.request("PUT", `/v1/participants/${c2ParticipantId}/visibility`, { trade: all, location: all }));
-  c1Engineer = await projectMember(c1, c1ParticipantId, ["engineer"]);
-  c1Pm = await projectMember(c1, c1ParticipantId, ["project_manager"]);
-  k1Manager = await projectMember(k1, k1ParticipantId, ["manager"]);
-  k1Mechanical = await projectMember(k1, k1ParticipantId, ["manager"], only(mechanical));
-  c2Engineer = await projectMember(c2, c2ParticipantId, ["engineer"]);
+  c1Engineer = await projectMember(api, c1, c1ParticipantId, ["engineer"]);
+  c1Pm = await projectMember(api, c1, c1ParticipantId, ["project_manager"]);
+  k1Manager = await projectMember(api, k1, k1ParticipantId, ["manager"]);
+  k1Mechanical = await projectMember(api, k1, k1ParticipantId, ["manager"], only(mechanical));
+  c2Engineer = await projectMember(api, c2, c2ParticipantId, ["engineer"]);
 });
 
 describe("Linked from", () => {

@@ -14,9 +14,9 @@ import { createDb } from "@rabaed/db";
 import { testDatabaseUrls } from "@rabaed/db/test-support";
 import { linksChangeField, type WorkItemHistory, type WorkItemLinks } from "@rabaed/domain";
 import { sql } from "kysely";
-import type { LightMyRequestResponse } from "fastify";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { attachDatasheet, createTestApi, expectHidden, type Caller, type OnboardedCompany } from "./support/harness.ts";
+import { createTestApi, expectHidden, type Caller } from "./support/harness.ts";
+import { all, bilingual, buildTower, draft, inInternalReview, ok, only, projectMember, submitted, type Company, type Tower } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
 const migrator = createDb(testDatabaseUrls().migrator, { max: 1 });
@@ -24,30 +24,6 @@ afterAll(async () => {
   await api.close();
   await migrator.destroy();
 });
-
-type Company = { company: OnboardedCompany; caller: Caller };
-type Coverage = { isAll: boolean; valueIds: string[] };
-
-const bilingual = (text: string) => ({ en: text, ar: text });
-const all: Coverage = { isAll: true, valueIds: [] };
-const only = (...valueIds: string[]): Coverage => ({ isAll: false, valueIds });
-
-async function ok(res: Promise<LightMyRequestResponse>, status = 204) {
-  const r = await res;
-  expect(r.statusCode, r.body).toBe(status);
-  return r;
-}
-
-/** One Project as the Tower setup builds it, with the people who work on it. */
-type Tower = {
-  projectId: string;
-  electrical: string;
-  mechanical: string;
-  buildingA: string;
-  c1Engineer: Caller;
-  c1Pm: Caller;
-  k1Manager: Caller;
-};
 
 let c1: Company;
 let k1: Company;
@@ -58,69 +34,8 @@ let c2Engineer: Caller;
 let c2Pm: Caller;
 let k1Mechanical: Caller; // A K1 manager covering Mechanical only.
 
-/** A signed-in Member of `company`, on the Project through `participantId`, with `positions`. */
-async function projectMember(company: Company, participantId: string, positions: string[], trade: Coverage = all) {
-  const { member, caller } = await api.member(company.caller);
-  await api.addProjectMember(company.caller, participantId, member.id);
-  await ok(company.caller.request("PUT", `/v1/participants/${participantId}/members/${member.id}/visibility`, { trade, location: all }));
-  await ok(company.caller.request("PUT", `/v1/participants/${participantId}/members/${member.id}/positions`, { positions }));
-  return caller;
-}
-
-/** A Project of C1's, with a C1 engineer and PM, and K1 as its Consultant with a manager. */
-async function buildTower(code: string): Promise<Tower> {
-  const projectId = (await api.createProject(c1.caller, { code })).id;
-  const post = async (path: string, body: unknown) => (await c1.caller.post(`/v1/projects/${projectId}/${path}`, body)).json().id;
-  const electrical = await post("trades", { code: "EL", name: bilingual("Electrical") });
-  const mechanical = await post("trades", { code: "ME", name: bilingual("Mechanical") });
-  const buildingA = await post("locations", { code: "BA", name: bilingual("Building A"), parentId: null });
-  const c1ParticipantId = (await c1.caller.get(`/v1/projects/${projectId}/participants`))
-    .json()
-    .participants.find((p: { isOwnCompany: boolean }) => p.isOwnCompany).id;
-  await ok(c1.caller.request("PUT", `/v1/participants/${c1ParticipantId}/visibility`, { trade: all, location: all }));
-  const k1ParticipantId = await api.addParticipant(c1.caller, projectId, k1.company, "consultant");
-  await ok(c1.caller.request("PUT", `/v1/participants/${k1ParticipantId}/visibility`, { trade: all, location: all }));
-  return {
-    projectId,
-    electrical,
-    mechanical,
-    buildingA,
-    c1Engineer: await projectMember(c1, c1ParticipantId, ["engineer"]),
-    c1Pm: await projectMember(c1, c1ParticipantId, ["project_manager"]),
-    k1Manager: await projectMember(k1, k1ParticipantId, ["manager"]),
-  };
-}
-
 const take = (by: Caller, id: string, transition: string) =>
   ok(by.post(`/v1/work-items/${id}/transitions`, { transition, idempotencyKey: randomUUID() }));
-
-/** A Draft MAR with the Subject `title`, on `at`'s Project. */
-async function draft(at: Tower, engineer: Caller, title: string, trade = at.electrical): Promise<string> {
-  const res = await engineer.post(`/v1/projects/${at.projectId}/work-items`, {
-    type: "MAR",
-    title,
-    answers: { manufacturer: "ACME Cables", description: "Galvanised, 300 mm", trade, location: at.buildingA },
-  });
-  expect(res.statusCode, res.body).toBe(201);
-  await attachDatasheet(engineer, res.json().id);
-  return res.json().id;
-}
-
-/** A MAR sent to the raiser's own internal review. */
-async function inInternalReview(at: Tower, engineer: Caller, title: string): Promise<string> {
-  const id = await draft(at, engineer, title);
-  await take(engineer, id, "send_for_review");
-  return id;
-}
-
-/** A MAR Submitted to the Consultant. */
-async function submitted(at: Tower, engineer: Caller, pm: Caller, title: string, trade = at.electrical): Promise<string> {
-  const id = await draft(at, engineer, title, trade);
-  await take(engineer, id, "send_for_review");
-  await ok(pm.post(`/v1/work-items/${id}/claim`));
-  await take(pm, id, "submit");
-  return id;
-}
 
 const linksUrl = (id: string) => `/v1/work-items/${id}/links`;
 const addLink = (by: Caller, from: string, to: string) => by.post(linksUrl(from), { workItemId: to });
@@ -152,17 +67,17 @@ beforeAll(async () => {
   };
   k1 = await onboard("Design Consultants LLC");
   c2 = await onboard("Second Contractor Co");
-  tower = await buildTower("TWR");
-  elsewhere = await buildTower("MAL");
+  tower = await buildTower(api, { c1, k1 }, "TWR");
+  elsewhere = await buildTower(api, { c1, k1 }, "MAL");
 
   const c2ParticipantId = await api.addParticipant(c1.caller, tower.projectId, c2.company, "contractor");
   await ok(c1.caller.request("PUT", `/v1/participants/${c2ParticipantId}/visibility`, { trade: all, location: all }));
-  c2Engineer = await projectMember(c2, c2ParticipantId, ["engineer"]);
-  c2Pm = await projectMember(c2, c2ParticipantId, ["project_manager"]);
+  c2Engineer = await projectMember(api, c2, c2ParticipantId, ["engineer"]);
+  c2Pm = await projectMember(api, c2, c2ParticipantId, ["project_manager"]);
   const k1ParticipantId = (await tower.k1Manager.get(`/v1/projects/${tower.projectId}/participants`))
     .json()
     .participants.find((p: { isOwnCompany: boolean }) => p.isOwnCompany).id;
-  k1Mechanical = await projectMember(k1, k1ParticipantId, ["manager"], only(tower.mechanical));
+  k1Mechanical = await projectMember(api, k1, k1ParticipantId, ["manager"], only(tower.mechanical));
 
   const { c1Engineer, c1Pm, k1Manager } = tower;
   item.c1Draft = await draft(tower, c1Engineer, "Cable trays, draft");
