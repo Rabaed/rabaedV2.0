@@ -17,9 +17,12 @@ export const notFound = () => new HttpError(404, "not_found");
 export const notSignedIn = () => new HttpError(401, "not_signed_in");
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/** Whether `value` has the shape of an id (ids are UUIDs). */
+export const isUuid = (value: string): boolean => uuid.test(value);
+
 /** An id from the URL, or a 404 exactly like one that doesn't exist (ids are UUIDs). */
 export function idOrNotFound(value: string): string {
-  if (!uuid.test(value)) throw notFound();
+  if (!isUuid(value)) throw notFound();
   return value;
 }
 

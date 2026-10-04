@@ -161,7 +161,7 @@ The part-1 MAR is a Rabaed Default written as data (migration `mar_quantity` com
 
 ### 2.9 The link question (as built, RP-293)
 
-- A `work_item_ref` answer is a list of item ids in the order chosen, no duplicates (`wrong_type` otherwise); `required` wants at least one when leaving Draft. Each id must be one Link search could offer the filler, else `unknown_option` (hidden, Draft, internal, another Project's, made up, the item itself alike).
+- A `work_item_ref` answer is a list of item ids in the order chosen, no duplicates (`wrong_type` otherwise); `required` wants at least one when leaving Draft. Each new id must be one Link search could offer the filler, else `unknown_option` (hidden, Draft, internal, another Project's, made up, the item itself alike); an id the field already holds stays acceptable on re-save while the filler still sees it, even if its item has since gone back to a Draft.
 - Every save, and a create, makes the field's `relies_on` Links equal to the answer in the same transaction (`app.save_work_item_answers`); the database refuses anything else as `target_not_found`, whatever the API sends.
 - `app.work_item_answers` gives a chosen item the reader can't see as `{document_number, subject}`; the API carries it as `{documentNumber, subject}`. Saved back as read, it keeps that item (matched by Document Number among those already chosen); left out, it is removed. Its id never reaches that reader, so it can't be chosen anew.
 - After Draft, a change is recorded under the field's key, its old and new items as Document Number and Subject, never ids.

@@ -29,6 +29,7 @@ import {
 } from "@rabaed/domain";
 import { sql, type RawBuilder, type Transaction } from "kysely";
 import { refusedAsForbidden, type Forbidden } from "../db-error.ts";
+import { isUuid } from "../http-error.ts";
 import { readOptionLists } from "../option-lists/option-lists.ts";
 import { checkedOutcome, commandResult } from "../outcomes.ts";
 
@@ -54,8 +55,8 @@ import { checkedOutcome, commandResult } from "../outcomes.ts";
 // puts them back (RP-270).
 //
 // A link question (`work_item_ref`, RP-293) takes only items Link search could
-// have offered the filler (linkableIds); anything else is refused like an
-// unknown option. Its items are also `relies_on` Links, which
+// have offered the filler, or ones it already holds that they still see
+// (linkableIds); anything else is refused like an unknown option. Its items are also `relies_on` Links, which
 // app.save_work_item_answers keeps equal to the answer. A chosen item the reader
 // can't see reaches them as a HiddenLinkChoice, never its id (ADR 0012), and
 // saved back so, it keeps that choice.
@@ -149,12 +150,12 @@ const answersFromDb = (schema: FormSchema, data: Record<string, unknown>) =>
 const answersToDb = (schema: FormSchema, answers: Record<string, unknown>) =>
   mapLinkItems(schema, answers, (item) => (isHiddenLinkChoice(item) ? { document_number: item.documentNumber, subject: item.subject } : item));
 
-const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 /**
- * The ids given in the link questions of `answers` that Link search could have
- * offered the acting Member: Submitted, visible to them, in the Project, and not
- * `workItemId` itself. Undefined when the Form has no link question.
+ * The ids given in the link questions of `answers` that the acting Member may
+ * choose: those Link search could have offered them (Submitted, visible, in the
+ * Project, not `workItemId` itself), and those the field already holds in
+ * `held` (as they may read it) while they still see them, even if they have
+ * gone back to a Draft. Undefined when the Form has no link question.
  */
 async function linkableIds(
   trx: Trx,
@@ -162,18 +163,19 @@ async function linkableIds(
   projectId: string,
   workItemId: string | null,
   answers: unknown,
+  held: Readonly<Record<string, unknown>> = {},
 ): Promise<Set<string> | undefined> {
   const keys = linkQuestionKeys(schema);
   if (keys.length === 0) return undefined;
   const given: Record<string, unknown> = typeof answers === "object" && answers !== null ? { ...answers } : {};
-  const ids = keys
-    .flatMap((key) => (Array.isArray(given[key]) ? (given[key] as unknown[]) : []))
-    .filter((v): v is string => typeof v === "string" && uuidPattern.test(v));
+  const idsIn = (items: unknown) => (Array.isArray(items) ? items : []).filter((v): v is string => typeof v === "string" && isUuid(v));
+  const ids = keys.flatMap((key) => idsIn(given[key]));
   if (ids.length === 0) return new Set();
+  const kept = keys.flatMap((key) => idsIn(held[key]).filter((id) => idsIn(given[key]).includes(id)));
   const { rows } = await sql<{ id: string }>`
     select t.id from work_item t
     where t.id = any(${ids}::uuid[]) and t.project_id = ${projectId} and t.id is distinct from ${workItemId}::uuid
-      and app.work_item_submitted(t.id)
+      and (app.work_item_submitted(t.id) or (t.id = any(${kept}::uuid[]) and app.sees_work_item(t.id)))
   `.execute(trx);
   return new Set(rows.map((r) => r.id));
 }
@@ -674,7 +676,7 @@ export function saveAnswers(
       offered: await offeredFor(trx, pinned.form.schema, pinned.projectId, workItemId, pinned.data),
       optionLists: await optionListsFor(trx, pinned.form.schema),
       held: pinned.data,
-      linkable: await linkableIds(trx, pinned.form.schema, pinned.projectId, workItemId, input.answers),
+      linkable: await linkableIds(trx, pinned.form.schema, pinned.projectId, workItemId, input.answers, pinned.data),
     });
     if (!checked.ok) return { ok: false, reason: "invalid_answers", errors: checked.errors };
     const stored = storedAnswers(answersToDb(pinned.form.schema, checked.answers));

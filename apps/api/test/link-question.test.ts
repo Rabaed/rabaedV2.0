@@ -327,3 +327,39 @@ describe("a link question", () => {
     expect((await detail(tower.k1Manager, lq)).answers).toMatchObject({ related: [item.c1Submitted, item.c1Approved] });
   });
 });
+
+describe("an item already chosen that goes back to Draft", () => {
+  let target = "";
+  let lq = "";
+
+  beforeAll(async () => {
+    target = await submitted(tower, tower.c1Engineer, tower.c1Pm, "Cable trays, taken back");
+    lq = (await ok(createLq(tower.c1Engineer, { relies: true, related: [target] }), 201)).json().id;
+    // As the owner: back with its raiser, in Draft, as a Return to Draft would leave it.
+    await sql`
+      update work_item w set participant_entered_step_id = (
+        select s.id from workflow_step s where s.workflow_version_id = w.workflow_version_id and app.is_draft_step(s.id)
+        order by s.id limit 1)
+      where w.id = ${target}::uuid
+    `.execute(migrator);
+  });
+
+  it("stays in the answer and its Links when the answers are saved again", async () => {
+    await ok(save(tower.c1Engineer, lq, { relies: true, related: [target] }));
+    expect((await detail(tower.c1Engineer, lq)).answers).toMatchObject({ related: [target] });
+    expect(await questionLinks(tower.c1Engineer, lq)).toEqual([["related", target]]);
+  });
+
+  it("can't be chosen anew, refused like any item Link search couldn't offer", async () => {
+    expect(refusal(await createLq(tower.c1Engineer, { relies: true, related: [target] }))).toEqual(unknownRelated);
+    await ok(save(tower.c1Engineer, lq, { relies: true, related: [] }));
+    expect(refusal(await save(tower.c1Engineer, lq, { relies: true, related: [target] }))).toEqual(unknownRelated);
+    expect(await questionLinks(tower.c1Engineer, lq)).toEqual([]);
+  });
+
+  it("is refused by its id to a saver who can't see it, even while chosen", async () => {
+    const approved = await submitted(tower, tower.c1Engineer, tower.c1Pm, "Cable trays, chosen and hidden");
+    await ok(save(tower.c1Engineer, lq, { relies: true, related: [approved] }));
+    expect(refusal(await save(c1Mechanical, lq, { relies: true, related: [approved] }))).toEqual(unknownRelated);
+  });
+});

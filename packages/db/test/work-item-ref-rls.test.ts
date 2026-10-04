@@ -80,6 +80,17 @@ async function submit(item: string, number: string) {
   );
 }
 
+/** As the owner: the item is back with its raiser, in Draft, as a Return to Draft would leave it. */
+async function unsubmit(item: string) {
+  await migrator.query(
+    `update work_item w set participant_entered_step_id = (
+       select s.id from workflow_step s where s.workflow_version_id = w.workflow_version_id and app.is_draft_step(s.id)
+       order by s.id limit 1)
+     where w.id = $1`,
+    [item],
+  );
+}
+
 async function side(engineer: string, name: string, code: string): Promise<Side> {
   const companyId = await one(
     "insert into company (legal_name, cr_number, vat_number, onboarded_by) values ($1, $2, $3, $4) returning id",
@@ -253,5 +264,26 @@ describe("saving a link question's answer", () => {
     }
     expect(await answers(a.ap, a.from)).toMatchObject({ related: [a.seen] });
     expect(await reliesOn(a)).toEqual([["relies_on", "related", a.seen]]);
+  });
+
+  it("keeps an item already chosen that has gone back to Draft, while the saver sees it, but never takes it as a new choice", async () => {
+    expect(await save(a.ap, a, [a.seen])).toBe("saved");
+    await unsubmit(a.seen);
+    try {
+      expect(await save(a.narrow, a, [a.seen])).toBe("saved");
+      expect(await answers(a.ap, a.from)).toMatchObject({ related: [a.seen] });
+      expect(await reliesOn(a)).toEqual([["relies_on", "related", a.seen]]);
+      expect(await save(a.narrow, a, [])).toBe("saved");
+      expect(await save(a.narrow, a, [a.seen])).toBe("target_not_found");
+      expect(await reliesOn(a)).toEqual([]);
+    } finally {
+      await submit(a.seen, "AAA-MAR-01-0001");
+    }
+  });
+
+  it("refuses by its id an item already chosen that the saver can't see, like any other", async () => {
+    expect(await save(a.ap, a, [a.seen, a.hidden])).toBe("saved");
+    expect(await save(a.narrow, a, [a.seen, a.hidden])).toBe("target_not_found");
+    expect(await answers(a.ap, a.from)).toMatchObject({ related: [a.seen, a.hidden] });
   });
 });
