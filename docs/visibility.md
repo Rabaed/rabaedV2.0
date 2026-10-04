@@ -16,9 +16,10 @@ A Member sees a thing only if it passes **every** layer, in order.
 | 4 | Member Visibility | Does my own Visibility cover the item's Trade, Location and other dimension values? | RLS join on `visibility_grant` |
 | 5 | Audience | Is this history entry shared, or internal to my Participant? | `work_item_event.audience` |
 
-**Exceptions** open only the sealed Documental Record PDF, never the live item:
-- **E1 Link:** you can open the Documental Record of an item linked from one you can see.
+**Exceptions** show a sealed Documental Record PDF or an item's Document Number and Subject, never the live item:
+- **E1 Link:** you see the Document Number and Subject of an item linked from one you can see, and can open its Documental Record (from Form engine part 4).
 - **E2 Signatory Access:** you keep, forever, the Documental Records of items you signed, and your Company keeps those its Members signed.
+- **E3 Linked from:** you see the Document Number and Subject of a Submitted item that links to one you can see. Nothing more, ever: not its Documental Record (settled 2026-10-05).
 
 ## Rules
 
@@ -51,7 +52,9 @@ Every one of these must apply the same layers. A new feature that adds a channel
 | File downloads | Short-lived signed URLs, issued only after an access check. A Document follows its Work Item: who can't see the item gets 404 for its Documents and their URLs. Files are stored under their Project's prefix, and only the api signs (ADR 0007). |
 | Form `member` and `participant` fields | Offer only the Project Members and Participants the filler can see (V15): their own Participant's Members; their own Participant, the Host Company's and the Companies on the item. A saved id they couldn't have been offered is refused like a made-up one. Another Company reads a `member` answer as the Company's name only, without the Member's id (V14). |
 | Pins on shared Drawings | Show only Pins of visible items. A shared floor plan must not show a competitor's Snags. |
-| Links | Show a target's number, title and Documental Record (E1). Never its live data or history. |
+| Links | Show a target's number, title and Documental Record (E1). Never its live data or history. A target the viewer can't see reaches the browser as its number and title only, without its id, and opening it says only that the viewer may not see its details; the item's own URL still returns 404. |
+| Linked from | Lists the items that link to one the viewer can see, with number and title only for those the viewer can't see (E3). Only Submitted items are listed, never a Draft or an item in internal review. |
+| Link search | Offers only items in the same Project that the linker can see and that have been Submitted. A saved id they couldn't have been offered is refused like a made-up one. |
 | Notifications and emails | Sent only to Members with access. The subject line holds only what the recipient may see. |
 | Distribution List | Receives the Documental Record link only (E2-style sealed PDF), and the link expires. |
 | Activity Feed | Built from `work_item_event` and `project_event`, filtered through layers 3 to 5. |
@@ -59,7 +62,7 @@ Every one of these must apply the same layers. A new feature that adds a channel
 | Step Age reports | Each Participant's report covers items it has access to. The Owner-level report covers oversight items. |
 | Exports and handover | An export contains only what the exporter could see, plus their E2 records. |
 | Document Numbers | Numbering patterns that include a Company segment give each Company its own counter, so sequence gaps don't reveal a competitor's volume. |
-| Form answers | Read only through one database function, never from `work_item.data` directly. It strips every reference the reader may not see: another Company's Member (V14), a Participant they may not see, and a Work Item they may not see (ADR 0012). |
+| Form answers | Read only through one database function, never from `work_item.data` directly. It strips every reference the reader may not see: another Company's Member (V14), a Participant they may not see, and a Work Item they may not see, which is replaced by its Document Number and Subject without its id (E1, ADR 0012). |
 | Errors and logs shown to users | Never include another item's title, number or Company. |
 | Refusals of a Transition | Never say why another Participant can't take the next Step (no Participant covers the item, several do, or nobody there holds the Position): one answer for all, so its Visibility and Positions stay its own (V14, V16). |
 | Visibility Gap warnings | A Project Admin's warnings come from Participant grants only; an Authorized Person's cover only their own Participant's Members (V16). |
@@ -83,7 +86,7 @@ Setup, Project "Tower": Contractors **C1** (Electrical) and **C2** (Electrical, 
 | 9 | C1 PM posts in Chat | K1, OR | Visible to both (V6) |
 | 10 | Documental Record of the MAR | C1, K1 | Contains all Signatures and cross-Participant events. No internal notes, no Chat (V7) |
 | 11 | C2 creates an Inspection linking C1's approved MAR | C2 | Can't create the link: C2 can't see the MAR (only visible items can be linked) |
-| 12 | K1 creates an Inspection linking an item outside the inspector's Visibility | Inspector | Sees the number, title and Documental Record only (E1) |
+| 12 | K1 creates an Inspection linking an item outside the inspector's Visibility | Inspector | Sees the number and title only; opening it says they may not see its details. The Documental Record from Form engine part 4 (E1) |
 | 13 | C1 engineer who signed is removed from the Project | That engineer | Sees the Project name and their signed Documental Records only (E2) |
 | 14 | C1 is withdrawn | C1 Authorized Person | Sees only the Documental Records C1's Members signed. Open items are Cancelled |
 | 15 | Project closed | Any Member | Read-only. E2 records still available |
@@ -98,6 +101,11 @@ Setup, Project "Tower": Contractors **C1** (Electrical) and **C2** (Electrical, 
 | 24 | Project Admin narrows K1 from Tower 1 to Building A | K1 engineer who had Tower 1 | Now covers Building A only; widening K1 again doesn't widen them (V4) |
 | 25 | C1 member opens K1's Visibility, or a K1 engineer's | C1 member | 404 (V16) |
 | 26 | Project Admin (C1 Company) opens a K1 engineer's Visibility | Project Admin | 404; K1's own Participant grant is visible to them (V16) |
+| 27 | K1 submits a Work Item linking C1's MAR | C1 | The MAR's Linked from shows K1's item number and title only; opening it says C1 may not see its details. Its answers, history and Documents stay hidden, and its URL returns 404 (E3) |
+| 28 | C1 links its Draft MAR-2 to its submitted MAR-1 | K1, who sees MAR-1 | MAR-1's Linked from doesn't list MAR-2 while it is in Draft or internal review; it appears once MAR-2 is Submitted |
+| 29 | C1 searches for an item to link | C1 | Only items in this Project that C1 can see and that have been Submitted: no Drafts, no items in internal review, nothing from another Project, nothing of C2's |
+| 30 | A C1 caller saves a link to a C2 item id, or to an item in another Project | C1 | Refused like a made-up id |
+| 31 | K1 reads the answers of an item whose link question points at an item K1 can't see | K1 (app database role) | The answer holds that item's number and title, never its id (ADR 0012) |
 | 27 | K1's Authorized Person, not a Project Member, narrows a K1 engineer | K1 Authorized Person | Sees only the Trades and Locations K1 covers, with the names of the Locations above them, and the Scopes and Sub-scopes under those Trades; nothing else of the Project (V15, V16) |
 | 28 | C1 member opens the Project's Participants | C1 member (not a Project Admin) | Sees C1's own Participant, its Project Role and Project Members, and the Host Company's name. C2, K1 and OR are not listed (V15) |
 | 29 | Project Admin opens the Project's Participants | Project Admin | Every Participant is listed (V15) |

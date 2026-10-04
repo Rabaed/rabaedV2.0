@@ -129,7 +129,6 @@ Checks, in order. Any failure aborts with nothing written.
 5. The Action Form answers validate. With Code B, there is at least one comment.
 6. **Signing:** if the Transition is signing, the caller has an active `member_signature` and `confirm_signing = true` from the confirmation pop-up.
 7. **On `submit`:**
-   - required Links exist, and are approved where required;
    - all Form-required fields are complete;
    - for a Revision of a drawing submittal, every carried Markup has a reply.
 8. Actor resolution for the target Step succeeds (§3).

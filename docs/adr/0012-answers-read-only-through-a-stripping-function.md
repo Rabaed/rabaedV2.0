@@ -12,3 +12,7 @@ We decided that the app role can't read `work_item.data` directly. Answers are r
 ## Consequences
 
 Any new field type that stores an id must declare how the function strips it, and a seam-2 test must prove that the app role can't read it for another Company.
+
+## Amended 2026-10-05 (Form engine part 2b)
+
+A `work_item_ref` reference the caller may not see is **replaced, not dropped**: the function returns that item's Document Number and Subject in place of its id. E1 lets everyone who sees a Work Item see the number and Subject of every item it links to, so dropping the reference would hide a Link the rules allow, while keeping the id would let the caller ask for the item. `member` and `participant` references are still dropped.
