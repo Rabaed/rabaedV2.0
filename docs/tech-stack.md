@@ -91,7 +91,7 @@ Stacks: account, network, data, storage, registry, migrations, app and monitorin
 
 | Workflow | Does |
 |---|---|
-| `ci.yml` | Lint, typecheck, unit tests, seam 1 (the API as a Member), seam 2 (database RLS), story tests, infra assertions, mail, web build and web image start |
+| `ci.yml` | Lint (including the rule against logging an error's message), typecheck, unit tests, seam 1 (the API as a Member), seam 2 (database RLS, and every `security definer` function sets `search_path`), story tests, infra assertions, mail, web build, web image start, and on pull requests that no existing migration was changed |
 | `secret-scan.yml` | gitleaks; refuses font files |
 | `infra-diff.yml` | Posts a `cdk diff` on each PR, using a read-only role |
 | `deploy-dev.yml` | On merge to `main`: build and push images → migrate → deploy → smoke tests (including the visibility checks in the cloud); serialised; rolls back on smoke failure |

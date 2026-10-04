@@ -148,3 +148,24 @@ jsonTester.run("json-no-deadline-words", rules["json-no-deadline-words"], {
     { code: `{ "home": { "kpi": "متأخر" } }`, errors: [{ messageId: "value" }] },
   ],
 });
+
+tsx.run("no-raw-error-logging", rules["no-raw-error-logging"], {
+  valid: [
+    `log.error({ err: error }, "outbox run failed");`,
+    `request.log.error(error);`,
+    `request.log.error({ type: (error as Error).constructor?.name, code: (error as { code?: unknown }).code }, "request failed");`,
+    `log.warn({ code: error.code }, "report failed");`,
+    `log.info({ run }, "outbox run");`,
+    `console.error(error instanceof Error ? error.message : error);`,
+    `const reason = error.message;`,
+    `reply.send({ message: error.message });`,
+  ],
+  invalid: [
+    { code: `log.error(error.message);`, errors: [{ messageId: "message" }] },
+    { code: `request.log.error({ reason: err.message }, "failed");`, errors: [{ messageId: "message" }] },
+    { code: "logger.warn(`failed: ${error.message}`);", errors: [{ messageId: "message" }] },
+    { code: `app.log.error({ msg: (e as Error).message });`, errors: [{ messageId: "message" }] },
+    { code: `log.error({ error }, "failed");`, errors: [{ messageId: "wholeError", data: { key: "error" } }] },
+    { code: `log.error({ cause: dbError }, "failed");`, errors: [{ messageId: "wholeError", data: { key: "cause" } }] },
+  ],
+});

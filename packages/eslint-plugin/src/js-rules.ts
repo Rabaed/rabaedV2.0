@@ -161,3 +161,63 @@ export const noDeadlineWords: Rule.RuleModule = {
     };
   },
 };
+
+const logLevels = new Set(["trace", "debug", "info", "warn", "error", "fatal"]);
+const errorName = /^(e|err|error|\w+Error)$/;
+
+type AnyNode = { type: string; [key: string]: unknown };
+
+/** `log.error(…)`, `logger.warn(…)`, `request.log.info(…)`, `app.log.…`. */
+function isLogCall(node: Node): boolean {
+  if (node.type !== "CallExpression" || node.callee.type !== "MemberExpression") return false;
+  const { object, property } = node.callee;
+  if (property.type !== "Identifier" || !logLevels.has(property.name)) return false;
+  if (object.type === "Identifier") return object.name === "log" || object.name === "logger";
+  return object.type === "MemberExpression" && object.property.type === "Identifier" && object.property.name === "log";
+}
+
+/** `error`, `err`, `e`, `dbError`…, also as `(error as Error)` or `error!`. */
+function isErrorValue(node: AnyNode): boolean {
+  if (node.type === "TSAsExpression" || node.type === "TSNonNullExpression") return isErrorValue(node.expression as AnyNode);
+  return node.type === "Identifier" && errorName.test(String(node.name));
+}
+
+export const noRawErrorLogging: Rule.RuleModule = {
+  meta: {
+    type: "problem",
+    docs: {
+      description: "Log an error by class and code, never its message: PostgreSQL messages and details can quote customer content (RP-238).",
+    },
+    messages: {
+      message:
+        "Do not log an error's message: it can quote customer content. Log the error as `{ err: error }` (the logger's serializer keeps class and code, as failureOf does), or by class and code.",
+      wholeError: "Do not log a whole error under '{{key}}': only `err` goes through the logger's serializer. Use `{ err: error }`, or the class and code.",
+    },
+    schema: [],
+  },
+  create(context) {
+    const keys = context.sourceCode.visitorKeys;
+    const scan = (node: AnyNode): void => {
+      if (node.type === "MemberExpression" && !node.computed) {
+        const property = node.property as AnyNode;
+        if (property.type === "Identifier" && property.name === "message" && isErrorValue(node.object as AnyNode)) {
+          context.report({ node: node as unknown as Node, messageId: "message" });
+        }
+      }
+      if (node.type === "Property" && !node.computed && isErrorValue(node.value as AnyNode)) {
+        const key = node.key as AnyNode;
+        const name = key.type === "Identifier" ? String(key.name) : String(key.value);
+        if (name !== "err") context.report({ node: node as unknown as Node, messageId: "wholeError", data: { key: name } });
+      }
+      for (const key of keys[node.type] ?? []) {
+        const child = node[key] as AnyNode | AnyNode[] | null | undefined;
+        for (const item of Array.isArray(child) ? child : [child]) if (item) scan(item);
+      }
+    };
+    return {
+      CallExpression(node) {
+        if (isLogCall(node)) for (const argument of node.arguments) scan(argument as unknown as AnyNode);
+      },
+    };
+  },
+};

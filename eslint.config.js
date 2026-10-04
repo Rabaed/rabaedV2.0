@@ -35,6 +35,12 @@ export default tseslint.config(
     rules: { "rabaed/no-deadline-words": "error" },
   },
   {
+    // Logs are kept by CloudWatch and must hold no customer content (RP-238, RP-287).
+    files: ["apps/api/**/*.ts", "apps/worker/**/*.ts", "apps/admin/**/*.{ts,js}"],
+    plugins: { rabaed },
+    rules: { "rabaed/no-raw-error-logging": "error" },
+  },
+  {
     files: ["apps/web/**/*.{ts,tsx}"],
     plugins: { "@next/next": nextPlugin },
     languageOptions: { globals: { ...globals.browser } },

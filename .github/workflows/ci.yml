@@ -200,3 +200,17 @@ jobs:
         with: { node-version: 24, cache: pnpm }
       - run: pnpm install --frozen-lockfile
       - run: pnpm test:infra
+
+  # A migration already on the base branch must stay byte-identical; only new
+  # files are allowed (RP-287). Pull requests only: a push has no base.
+  migrations-immutable:
+    name: migrations immutable
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with: { node-version: 24 }
+      - run: node scripts/check-migrations-immutable.ts "origin/${{ github.base_ref }}"
