@@ -153,7 +153,13 @@ The part-1 MAR is a Rabaed Default written as data (migration `mar_quantity` com
 - A target Link search couldn't have offered (hidden, Draft, internal, another Project's, made up, the item itself) is refused alike as `target_not_found`; the same target twice is `already_linked`.
 - After Draft, each change is an internal `answers_changed` event whose change names the field `$links`, its old and new free Links as Document Number and Subject, never an id. Nobody is notified.
 
-### 2.8 The link question (as built, RP-293)
+### 2.8 Linked from (as built, RP-292)
+
+- In the Links System Field, below the item's Links. `GET /v1/work-items/:id/linked-from` returns `{items}`: every Submitted item linking to it, free Links and link questions alike, once each, by Document Number. Each is its Document Number and Subject, with its id only when the viewer sees it (E3); nothing else.
+- A Draft or an item in its raiser's internal review is never listed, whoever asks; it appears once Submitted. An item the viewer can't see is 404, like its other reads.
+- Served by `app.work_item_linked_from` (security definer), never the table: the app role can't read a Link's target.
+
+### 2.9 The link question (as built, RP-293)
 
 - A `work_item_ref` answer is a list of item ids in the order chosen, no duplicates (`wrong_type` otherwise); `required` wants at least one when leaving Draft. Each id must be one Link search could offer the filler, else `unknown_option` (hidden, Draft, internal, another Project's, made up, the item itself alike).
 - Every save, and a create, makes the field's `relies_on` Links equal to the answer in the same transaction (`app.save_work_item_answers`); the database refuses anything else as `target_not_found`, whatever the API sends.

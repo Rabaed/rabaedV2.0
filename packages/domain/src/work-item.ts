@@ -141,6 +141,23 @@ export const addedLink = z.object({ id: z.uuid() });
 export const linksChangeField = "$links";
 export const linksChangeValue = z.array(z.object({ documentNumber: z.string(), subject: z.string() }));
 
+/**
+ * One Submitted item that links to a Work Item, as the viewer may read it
+ * (visibility.md E3): its Document Number and Subject always, its id only when
+ * the viewer can see it. Nothing else about a hidden one ever reaches them.
+ */
+export const linkedFromItem = z.object({
+  documentNumber: z.string(),
+  subject: z.string(),
+  /** The linking item's id, only when the viewer can see it; null otherwise. */
+  workItemId: z.uuid().nullable(),
+});
+export type LinkedFromItem = z.infer<typeof linkedFromItem>;
+
+/** "Linked from": every Submitted item linking to a Work Item, by Document Number. Never a Draft or internal item. */
+export const linkedFrom = z.object({ items: z.array(linkedFromItem) });
+export type LinkedFrom = z.infer<typeof linkedFrom>;
+
 /** How a closed Work Item ended: its Issued Code, Inspection result, or cancelled (workflow-engine.md §1). */
 export const workItemOutcomes = ["A", "B", "C", "D", "passed", "passed_with_comments", "failed", "cancelled", "closed"] as const;
 export const workItemOutcome = z.enum(workItemOutcomes);

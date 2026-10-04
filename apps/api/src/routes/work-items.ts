@@ -5,6 +5,7 @@ import {
   createWorkItemRequest,
   formChoices,
   formVersion,
+  linkedFrom,
   linkSearchQuery,
   linkSearchResults,
   saveAnswersRequest,
@@ -20,6 +21,7 @@ import { z } from "zod";
 import type { AppContext } from "../app.ts";
 import { idOrNotFound, notFound, visibleOrNotFound } from "../http-error.ts";
 import { refusal } from "../refusals.ts";
+import { getLinkedFrom } from "../work-items/linked-from.ts";
 import { addWorkItemLink, getWorkItemLinks, removeWorkItemLink } from "../work-items/links.ts";
 import {
   claimStep,
@@ -162,6 +164,17 @@ export const workItemRoutes =
       async (request) => {
         const memberId = ctx.requireMember(request);
         return visibleOrNotFound(getWorkItemLinks(ctx.db, memberId, idOrNotFound(request.params.workItemId)));
+      },
+    );
+
+    // Linked from (visibility.md E3): the Submitted items linking to a visible item,
+    // a linking item's id only when the Member sees it too. Never a Draft or internal item.
+    app.get(
+      "/v1/work-items/:workItemId/linked-from",
+      { schema: { params: workItemParams, response: { 200: linkedFrom } } },
+      async (request) => {
+        const memberId = ctx.requireMember(request);
+        return visibleOrNotFound(getLinkedFrom(ctx.db, memberId, idOrNotFound(request.params.workItemId)));
       },
     );
 
