@@ -147,6 +147,12 @@ The part-1 MAR is a Rabaed Default written as data (migration `mar_quantity` com
 - Leaving Draft without the Datasheet is refused per field (`form_incomplete`, `datasheet: required`).
 - The demo seeds its MARs through this Form: Items, the Datasheet (a generated PDF) and a Sample photo with EXIF time and GPS (README, "Demo: the MAR journey"). The supplier pick list comes with the Approved Supplier List.
 
+### 2.7 Free Links (as built, RP-291)
+
+- The Links System Field sits below Attachments. `GET /v1/work-items/:id/links` returns every Link (kind, field key, Document Number, Subject) and the linked item's id only when the viewer sees it; `canChange` follows Save draft. `POST /v1/work-items/:id/links {workItemId}` and `DELETE /v1/work-items/:id/links/:linkId` add and remove free (`related`) Links, until Submit.
+- A target Link search couldn't have offered (hidden, Draft, internal, another Project's, made up, the item itself) is refused alike as `target_not_found`; the same target twice is `already_linked`.
+- After Draft, each change is an internal `answers_changed` event whose change names the field `$links`, its old and new free Links as Document Number and Subject, never an id. Nobody is notified.
+
 ---
 
 ## 3. Checklists
