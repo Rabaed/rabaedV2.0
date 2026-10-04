@@ -3,9 +3,8 @@ import { resolve } from "node:path";
 
 // A migration that already exists on the base branch is never edited, renamed
 // or deleted: databases that ran it would differ from a fresh one. A change goes
-// in a new migration; only new files are allowed (RP-287). ADR 0006's exception
-// is a published Form Version changed through a new migration, so nothing is
-// exempt.
+// in a new migration; only new files are allowed (RP-287). Nothing is
+// exempt: ADR 0006's exception is a new migration, not an edit of an old one.
 //
 // Usage: node scripts/check-migrations-immutable.ts <base-ref>   (CI: origin/<base branch>; needs its history)
 

@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { alteredMigrations } from "./check-migrations-immutable.ts";
 
@@ -12,7 +12,7 @@ const dir = "packages/db/migrations";
 
 function commit(files: Record<string, string>, message = "change") {
   for (const [path, content] of Object.entries(files)) {
-    mkdirSync(join(repo, path, ".."), { recursive: true });
+    mkdirSync(dirname(join(repo, path)), { recursive: true });
     writeFileSync(join(repo, path), content);
   }
   git("add", "-A");
@@ -47,12 +47,12 @@ describe("alteredMigrations", () => {
   it("fails when an existing migration is deleted or renamed", () => {
     git("mv", `${dir}/20260928150000_a.sql`, `${dir}/20260928150000_renamed.sql`);
     git("commit", "-q", "-m", "rename");
-    expect(alteredMigrations(repo, "main").sort()).toEqual([
+    expect(alteredMigrations(repo, "main")).toEqual([
       `${dir}/20260928150000_a.sql (deleted or renamed)`,
     ]);
   });
 
-  it("fails an edit made and then reverted in another commit only if the end state differs", () => {
+  it("passes an edit that a later commit reverts (only the end state counts)", () => {
     commit({ [`${dir}/20260928150000_a.sql`]: "changed\n" });
     commit({ [`${dir}/20260928150000_a.sql`]: "create table a ();\n" });
     expect(alteredMigrations(repo, "main")).toEqual([]);

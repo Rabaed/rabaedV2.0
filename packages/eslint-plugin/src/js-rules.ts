@@ -167,10 +167,13 @@ const errorName = /^(e|err|error|\w+Error)$/;
 
 type AnyNode = { type: string; [key: string]: unknown };
 
-/** `log.error(…)`, `logger.warn(…)`, `request.log.info(…)`, `app.log.…`. */
+/** `log.error(…)`, `logger.warn(…)`, `request.log.info(…)`, `app.log.…`. Not `console`, which only the local CLIs use. */
 function isLogCall(node: Node): boolean {
   if (node.type !== "CallExpression" || node.callee.type !== "MemberExpression") return false;
-  const { object, property } = node.callee;
+  const { property } = node.callee;
+  let object = node.callee.object;
+  // log.child({ … }).error(…)
+  while (object.type === "CallExpression" && object.callee.type === "MemberExpression" && object.callee.property.type === "Identifier" && object.callee.property.name === "child") object = object.callee.object;
   if (property.type !== "Identifier" || !logLevels.has(property.name)) return false;
   if (object.type === "Identifier") return object.name === "log" || object.name === "logger";
   return object.type === "MemberExpression" && object.property.type === "Identifier" && object.property.name === "log";
@@ -202,6 +205,11 @@ export const noRawErrorLogging: Rule.RuleModule = {
         const property = node.property as AnyNode;
         if (property.type === "Identifier" && property.name === "message" && isErrorValue(node.object as AnyNode)) {
           context.report({ node: node as unknown as Node, messageId: "message" });
+        }
+      }
+      if (node.type === "TemplateLiteral") {
+        for (const expression of node.expressions as AnyNode[]) {
+          if (isErrorValue(expression)) context.report({ node: expression as unknown as Node, messageId: "message" });
         }
       }
       if (node.type === "Property" && !node.computed && isErrorValue(node.value as AnyNode)) {

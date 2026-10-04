@@ -165,6 +165,8 @@ tsx.run("no-raw-error-logging", rules["no-raw-error-logging"], {
     { code: `request.log.error({ reason: err.message }, "failed");`, errors: [{ messageId: "message" }] },
     { code: "logger.warn(`failed: ${error.message}`);", errors: [{ messageId: "message" }] },
     { code: `app.log.error({ msg: (e as Error).message });`, errors: [{ messageId: "message" }] },
+    { code: `log.child({ reqId }).error(err.message);`, errors: [{ messageId: "message" }] },
+    { code: "log.error(`failed: ${err}`);", errors: [{ messageId: "message" }] },
     { code: `log.error({ error }, "failed");`, errors: [{ messageId: "wholeError", data: { key: "error" } }] },
     { code: `log.error({ cause: dbError }, "failed");`, errors: [{ messageId: "wholeError", data: { key: "cause" } }] },
   ],

@@ -213,4 +213,6 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-node@v7
         with: { node-version: 24 }
-      - run: node scripts/check-migrations-immutable.ts "origin/${{ github.base_ref }}"
+      - run: node scripts/check-migrations-immutable.ts "origin/$BASE_REF"
+        env:
+          BASE_REF: ${{ github.base_ref }}
