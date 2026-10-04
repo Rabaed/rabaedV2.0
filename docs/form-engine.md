@@ -143,7 +143,7 @@ The part-1 MAR is a Rabaed Default written as data (migration `mar_quantity` com
 - Published by migration `mar_form_version_2` as a Rabaed Default, written as data like Version 1, so every environment has it once migrated. `apps/api/test/mar-form-v2.test.ts` runs the part-1 publish checks (`publishProblems`, §7) on it against Version 1; published Versions never change, so it stays checked.
 - Sections and fields: **Material details** (Manufacturer, text, required; Model; Specification section; Description, textarea, required), **Items** (`items`, a `table` of Fixture type (text, required), Description (text), Quantity (`number`, 0 or more, two decimals, required, with a total) and Unit (`select`: Pieces, Metres, Square metres, Sets; required)), **Documents** (Datasheet, `attachments`, PDF only, required; Test certificate, `attachments`, optional; Sample photo, `photos`, optional) and **Classification** (Trade, Location, Scopes).
 - Version 1's `quantity` field is gone: the Items hold the quantities. The key is never reused for another type (§7).
-- New MARs pin Version 2. A MAR on Version 1 keeps showing and validating with Version 1, leaving Draft included, so it needs no Datasheet.
+- New MARs pinned Version 2 until Version 3 (§2.10). A MAR on Version 1 keeps showing and validating with Version 1, leaving Draft included, so it needs no Datasheet.
 - Leaving Draft without the Datasheet is refused per field (`form_incomplete`, `datasheet: required`).
 - The demo seeds its MARs through this Form: Items, the Datasheet (a generated PDF) and a Sample photo with EXIF time and GPS (README, "Demo: the MAR journey"). The supplier pick list comes with the Approved Supplier List.
 
@@ -165,6 +165,13 @@ The part-1 MAR is a Rabaed Default written as data (migration `mar_quantity` com
 - Every save, and a create, makes the field's `relies_on` Links equal to the answer in the same transaction (`app.save_work_item_answers`); the database refuses anything else as `target_not_found`, whatever the API sends.
 - `app.work_item_answers` gives a chosen item the reader can't see as `{document_number, subject}`; the API carries it as `{documentNumber, subject}`. Saved back as read, it keeps that item (matched by Document Number among those already chosen); left out, it is removed. Its id never reaches that reader, so it can't be chosen anew.
 - After Draft, a change is recorded under the field's key, its old and new items as Document Number and Subject, never ids.
+
+### 2.10 The MAR Form Version 3 (as built, RP-294)
+
+- Published by migration `mar_form_version_3` as a Rabaed Default, like Version 2. `apps/api/test/mar-form-v3.test.ts` runs the part-1 publish checks on it against Versions 1 and 2.
+- Version 2 unchanged, plus a **References** section (before Classification) with one field: **Related submittals** (`related_submittals`, `work_item_ref`, optional; "الاعتمادات ذات الصلة"). No Rabaed Default makes a link question required.
+- New MARs pin Version 3. MARs on Version 1 or 2 keep showing and validating with theirs, leaving Draft included; Version 2 knows no `related_submittals`.
+- The demo (README, "Demo: the MAR journey") seeds an approved MAR in Tower 1 and a Submitted MAR on Version 3 in Tower 2 that links it under Related submittals and as a free Link, plus a TMC engineer (Omar) who covers Tower 2 only, so he reads the approved MAR as its Document Number and Subject (E1). The walkthrough's steps 10–12 show the Links, the hidden Link and Linked from (E3), and `apps/api/test/demo-seed.test.ts` follows them through the API.
 
 ---
 

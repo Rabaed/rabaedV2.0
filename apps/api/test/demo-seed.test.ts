@@ -6,7 +6,7 @@
 import { randomUUID } from "node:crypto";
 import { createDb, processOutbox } from "@rabaed/db";
 import { testDatabaseUrls } from "@rabaed/db/test-support";
-import type { DocumentList, FormVersion, WorkItemDetail } from "@rabaed/domain";
+import type { DocumentList, FormVersion, LinkedFrom, WorkItemDetail, WorkItemLinks } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { DEMO_ENGINEER_EMAIL } from "../src/demo/seed.ts";
@@ -34,6 +34,7 @@ const demo = {
   nasser: "nasser.aldosari@betabuild.demo.rabaed.test",
   layla: "layla.mansour@designconsultants.demo.rabaed.test",
   hind: "hind.almutairi@alwaha.demo.rabaed.test",
+  omar: "omar.alharbi@tmc.demo.rabaed.test",
 } as const;
 type Who = keyof typeof demo;
 const signIn = (who: Who) => api.signIn(demo[who], DEFAULT_PASSWORD);
@@ -44,6 +45,7 @@ let yousef: Caller; // Beta Build (second Contractor)
 let ahmed: Caller; // Design Consultants LLC Engineer
 let mohammed: Caller; // Design Consultants LLC Manager
 let faisal: Caller; // Al Waha PMC (Owner Representative)
+let omar: Caller; // TMC Contractor Engineer who covers Tower 2 only
 let projectId = "";
 let electrical = "";
 let tower1Floor2 = "";
@@ -55,6 +57,7 @@ beforeAll(async () => {
   ahmed = await signIn("ahmed");
   mohammed = await signIn("mohammed");
   faisal = await signIn("faisal");
+  omar = await signIn("omar");
   const projects = (await hafiz.get("/v1/projects")).json().projects as { id: string; code: string; name: { en: string } }[];
   projectId = projects.find((p) => p.code === "TWR" && p.name.en === "Riyadh Gate Tower – Phase 2")!.id;
   const dimensions = (await hafiz.get(`/v1/projects/${projectId}/dimensions`)).json();
@@ -137,6 +140,85 @@ describe("the MAR Form Version 3, as the demo uses it", () => {
     ]);
     const link = (await hafiz.get(`/v1/work-items/${id}/documents/${documents[0]!.id}/download`)).json().url as string;
     expect((await (await fetch(link)).text()).startsWith("%PDF-")).toBe(true);
+  });
+});
+
+// Links (RP-294, spec RP-289): the seed leaves an approved MAR in Tower 1, and a
+// MAR on Version 3 in Tower 2 that links it twice: under Related submittals and
+// as a free Link. Omar covers Tower 2 only, so he reads the approved MAR as its
+// number and Subject, and nothing more (E1).
+const APPROVED_TITLE = "Exit signage – Tower 1";
+const LINKING_TITLE = "Emergency lighting control panel – Tower 2";
+const titled = async (who: Caller, title: string) => {
+  const items = (await who.get(`/v1/projects/${projectId}/work-items`)).json().items as { id: string; title: string }[];
+  return items.find((i) => i.title === title)?.id;
+};
+const links = async (who: Caller, id: string): Promise<WorkItemLinks> => {
+  const r = await who.get(`/v1/work-items/${id}/links`);
+  expect(r.statusCode, r.body).toBe(200);
+  return r.json();
+};
+const linkedFrom = async (who: Caller, id: string): Promise<LinkedFrom> => {
+  const r = await who.get(`/v1/work-items/${id}/linked-from`);
+  expect(r.statusCode, r.body).toBe(200);
+  return r.json();
+};
+
+describe("the seeded Links", () => {
+  let approved = "";
+  let linking = "";
+  let approvedNumber = "";
+
+  beforeAll(async () => {
+    approved = (await titled(hafiz, APPROVED_TITLE))!;
+    linking = (await titled(hafiz, LINKING_TITLE))!;
+    approvedNumber = (await hafiz.get(`/v1/work-items/${approved}`)).json().documentNumber;
+  });
+
+  it("include an approved MAR, Code A, in Tower 1", async () => {
+    expect((await hafiz.get(`/v1/work-items/${approved}`)).json()).toMatchObject({
+      stage: { key: "approved" },
+      outcome: "A",
+      documentNumber: expect.stringMatching(/^TWR-MAR-01-\d{4}$/),
+    });
+  });
+
+  it("include a MAR on Version 3, sent to the Consultant, linking it under Related submittals and as a free Link", async () => {
+    const form: FormVersion = (await hafiz.get(`/v1/work-items/${linking}/form`)).json();
+    expect(form.versionNo).toBe(3);
+    const item: WorkItemDetail = (await hafiz.get(`/v1/work-items/${linking}`)).json();
+    expect(item).toMatchObject({ stage: { key: "pending_approval" }, answers: { related_submittals: [approved] } });
+    const { links: seen } = await links(hafiz, linking);
+    expect(seen.map((l) => [l.kind, l.fieldKey, l.documentNumber, l.subject, l.workItemId]).sort()).toEqual(
+      [
+        ["related", null, approvedNumber, APPROVED_TITLE, approved],
+        ["relies_on", "related_submittals", approvedNumber, APPROVED_TITLE, approved],
+      ].sort(),
+    );
+  });
+
+  it("show the approved MAR's Linked from: the MAR linking it, which Hafiz and the Consultant can open", async () => {
+    const linkingNumber = (await hafiz.get(`/v1/work-items/${linking}`)).json().documentNumber;
+    for (const who of [hafiz, ahmed]) {
+      expect((await linkedFrom(who, approved)).items).toEqual([{ documentNumber: linkingNumber, subject: LINKING_TITLE, workItemId: linking }]);
+    }
+  });
+
+  it("show Omar, who covers Tower 2 only, the approved MAR as its number and Subject only, and 404 on it", async () => {
+    const item = (await omar.get(`/v1/work-items/${linking}`)).json();
+    expect(item.answers).toMatchObject({ related_submittals: [{ documentNumber: approvedNumber, subject: APPROVED_TITLE }] });
+    expect(JSON.stringify(item)).not.toContain(approved);
+    const { links: seen } = await links(omar, linking);
+    expect(seen).toHaveLength(2);
+    for (const link of seen) expect(link).toMatchObject({ documentNumber: approvedNumber, subject: APPROVED_TITLE, workItemId: null });
+    expect(JSON.stringify(seen)).not.toContain(approved);
+    await expectHidden(omar.get(`/v1/work-items/${approved}`));
+    await expectHidden(omar.get(`/v1/work-items/${approved}/linked-from`));
+    expect(await titled(omar, APPROVED_TITLE)).toBeUndefined();
+  });
+
+  it("are nothing to the other Contractor", async () => {
+    for (const id of [approved, linking]) await expectHidden(yousef.get(`/v1/work-items/${id}/links`));
   });
 });
 
@@ -271,6 +353,47 @@ describe("the README walkthrough", () => {
     await claim(mohammed);
     await take(mohammed, "revise_c");
     expect(await detail(hafiz)).toMatchObject({ stage: { key: "revise_resubmit" }, outcome: "C" });
+  });
+
+  it("10. Hafiz opens the seeded MAR on Version 3: its Links open the approved MAR, which lists it under Linked from", async () => {
+    const linking = (await titled(hafiz, LINKING_TITLE))!;
+    const approved = (await titled(hafiz, APPROVED_TITLE))!;
+    const seen = await links(hafiz, linking);
+    expect(seen.canChange).toBe(false);
+    expect(seen.links.map((l) => l.workItemId)).toEqual([approved, approved]);
+    expect((await hafiz.get(`/v1/work-items/${approved}`)).statusCode).toBe(200);
+    expect((await linkedFrom(hafiz, approved)).items.map((i) => i.workItemId)).toEqual([linking]);
+  });
+
+  it("11. Omar opens the same MAR: the approved MAR is a number and a Subject only, and its own page is 404", async () => {
+    const linking = (await titled(omar, LINKING_TITLE))!;
+    const seen = await links(omar, linking);
+    expect(seen.links.every((l) => l.workItemId === null && l.subject === APPROVED_TITLE)).toBe(true);
+    await expectHidden(omar.get(`/v1/work-items/${(await titled(hafiz, APPROVED_TITLE))!}`));
+  });
+
+  it("12. Hafiz links a new MAR to it under Related submittals; once Submitted, Omar sees it under Linked from as a number and Subject only", async () => {
+    const linking = (await titled(hafiz, LINKING_TITLE))!;
+    const lightingFixtures = (await titled(hafiz, "Lighting Fixtures"))!;
+    // Link search finds it by part of its Subject.
+    const found = (await hafiz.get(`/v1/projects/${projectId}/work-items/link-search?q=${encodeURIComponent("control panel")}`)).json();
+    expect(found.links.map((l: { id: string }) => l.id)).toContain(linking);
+    mar = await raise("Lighting control wiring – Tower 1", { ...filled(), related_submittals: [linking] });
+    // And a free Link, from the Links section, to the MAR approved in step 8.
+    const free = await hafiz.post(`/v1/work-items/${mar}/links`, { workItemId: lightingFixtures });
+    expect(free.statusCode, free.body).toBe(201);
+    await attachDatasheet(hafiz, "wiring-datasheet.pdf", "%PDF-1.4 Lighting control wiring datasheet (demo)");
+    await take(hafiz, "send_for_review");
+    // In TMC's internal review it isn't listed yet, whoever asks.
+    expect((await linkedFrom(hafiz, linking)).items).toEqual([]);
+    expect((await linkedFrom(omar, linking)).items).toEqual([]);
+    await claim(ali);
+    await take(ali, "submit");
+    const documentNumber = (await detail(hafiz)).documentNumber;
+    const subject = "Lighting control wiring – Tower 1";
+    expect((await linkedFrom(hafiz, linking)).items).toEqual([{ documentNumber, subject, workItemId: mar }]);
+    expect((await linkedFrom(omar, linking)).items).toEqual([{ documentNumber, subject, workItemId: null }]);
+    await expectHidden(omar.get(`/v1/work-items/${mar}`));
   });
 });
 
