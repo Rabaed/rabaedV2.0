@@ -171,7 +171,7 @@ const chip: WithChipHolder =
 <WithChip {...chip} />
 ```
 
-- `AgeDots` takes Step Age as CONTEXT.md defines it: **1 in the first week** at the Step, 2 in the second, and so on (`stepAgeWeeks` in `@rabaed/domain`). The whole rule lives in `@rabaed/domain`: the dots come from `stepAgeDots`, and `stepAgeLabel` gives the same words for places that aren't a component (an email, a report), without importing this package.
+- `AgeDots` takes Step Age as GLOSSARY.md defines it: **1 in the first week** at the Step, 2 in the second, and so on (`stepAgeWeeks` in `@rabaed/domain`). The whole rule lives in `@rabaed/domain`: the dots come from `stepAgeDots`, and `stepAgeLabel` gives the same words for places that aren't a component (an email, a report), without importing this package.
 - `WithChip` is the last line of defence, not the first. Its types stop a caller from passing another company's person, but the API must still never send that person to the browser (V14): build the holder on the server from what the viewer may see, since props of a client component travel in the page payload.
 
 ## Shell

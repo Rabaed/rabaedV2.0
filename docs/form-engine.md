@@ -1,6 +1,6 @@
 # Form engine design
 
-How Forms are defined, filled, validated, versioned and printed. Terms follow [CONTEXT.md](../CONTEXT.md). Storage follows [ADR 0006](adr/0006-form-data-as-jsonb-against-versioned-schemas.md): answers are one JSONB document per Work Item, validated against the pinned, immutable `form_version.schema`.
+How Forms are defined, filled, validated, versioned and printed. Terms follow [GLOSSARY.md](../GLOSSARY.md). Storage follows [ADR 0006](adr/0006-form-data-as-jsonb-against-versioned-schemas.md): answers are one JSONB document per Work Item, validated against the pinned, immutable `form_version.schema`.
 
 One engine serves:
 - every **Work Item Form**: submittals, Inspections, Snags, Site Reports, Packages;

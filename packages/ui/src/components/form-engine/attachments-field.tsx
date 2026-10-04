@@ -11,7 +11,7 @@ import { Icon } from "../icon/icon.tsx";
 // (the same signed URLs as the Attachments System Field) and passes the
 // field's Documents back in.
 
-// Words as the Attachments System Field's (the web app's messages): a Document, never a "file" (CONTEXT.md).
+// Words as the Attachments System Field's (the web app's messages): a Document, never a "file" (GLOSSARY.md).
 const copy = {
   en: {
     none: "No Documents yet.",

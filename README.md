@@ -1,6 +1,6 @@
 # Rabaed v2.0
 
-B2B construction management platform for KSA. Start with `CLAUDE.md`, `CONTEXT.md` and `docs/visibility.md`.
+B2B construction management platform for KSA. Start with `CLAUDE.md`, `GLOSSARY.md` and `docs/visibility.md`.
 
 ## Run it locally
 

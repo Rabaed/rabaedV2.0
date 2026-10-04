@@ -32,7 +32,7 @@ Visibility is the top requirement (`docs/visibility.md`). Check every read path 
 
 ## Domain language
 
-- **Use `CONTEXT.md` terms** in identifiers, UI strings and docs, e.g. Subject (not title), Participant, Visibility, Internal Note. A term on a glossary entry's _Avoid_ list is a finding (e.g. `Coverage` for Visibility, RP-240).
+- **Use `GLOSSARY.md` terms** in identifiers, UI strings and docs, e.g. Subject (not title), Participant, Visibility, Internal Note. A term on a glossary entry's _Avoid_ list is a finding (e.g. `Coverage` for Visibility, RP-240).
 
 ## Tests
 

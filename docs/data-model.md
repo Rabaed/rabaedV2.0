@@ -1,6 +1,6 @@
 # Rabaed data model (Project Module, v1 draft)
 
-The logical data model for the platform and the Project Module, in PostgreSQL terms. Names follow [CONTEXT.md](../CONTEXT.md). Schedule, Tendering and Financial are out of scope. Each Instance (standard / KSA) runs this same schema independently.
+The logical data model for the platform and the Project Module, in PostgreSQL terms. Names follow [GLOSSARY.md](../GLOSSARY.md). Schedule, Tendering and Financial are out of scope. Each Instance (standard / KSA) runs this same schema independently.
 
 ## Conventions
 

@@ -1,6 +1,6 @@
 # Workflow engine design
 
-How Work Items move through Workflows. Terms follow [CONTEXT.md](../CONTEXT.md); tables follow [data-model.md](data-model.md); every read and write obeys [visibility.md](visibility.md). The engine is built in-house on PostgreSQL ([ADR 0008](adr/0008-in-house-workflow-engine-on-postgres.md)).
+How Work Items move through Workflows. Terms follow [GLOSSARY.md](../GLOSSARY.md); tables follow [data-model.md](data-model.md); every read and write obeys [visibility.md](visibility.md). The engine is built in-house on PostgreSQL ([ADR 0008](adr/0008-in-house-workflow-engine-on-postgres.md)).
 
 The engine has two halves:
 - **Definition time:** the visual builder, validation and publishing.
