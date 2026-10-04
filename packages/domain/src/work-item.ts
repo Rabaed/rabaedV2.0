@@ -91,6 +91,56 @@ export type LinkTarget = z.infer<typeof linkTarget>;
 export const linkSearchResults = z.object({ links: z.array(linkTarget), nextPage: z.number().int().positive().nullable() });
 export type LinkSearchResults = z.infer<typeof linkSearchResults>;
 
+/**
+ * How a Link was made: `related` freely in the Links System Field, `relies_on`
+ * by a link question (its field key says which), `raised_from` by the Snag List.
+ */
+export const linkKinds = ["related", "relies_on", "raised_from"] as const;
+export type LinkKind = (typeof linkKinds)[number];
+
+/**
+ * One Link of a Work Item, as its viewer may read it (visibility.md E1): the
+ * linked item's Document Number and Subject always, and its id only when the
+ * viewer can see it. A hidden item's id never reaches the viewer, so opening it
+ * can only say they may not see its details.
+ */
+export const workItemLink = z.object({
+  /** The Link's own id, to remove it by. */
+  id: z.uuid(),
+  kind: z.enum(linkKinds),
+  /** For `relies_on`: the link question that made it. */
+  fieldKey: z.string().nullable(),
+  documentNumber: z.string(),
+  subject: z.string(),
+  /** The linked item's id, only when the viewer can see it; null otherwise. */
+  workItemId: z.uuid().nullable(),
+});
+export type WorkItemLink = z.infer<typeof workItemLink>;
+
+/**
+ * A Work Item's Links, oldest first, and whether the viewer may add and remove
+ * its free Links now: the raiser's Company, until Submit (as Save draft).
+ */
+export const workItemLinks = z.object({ links: z.array(workItemLink), canChange: z.boolean() });
+export type WorkItemLinks = z.infer<typeof workItemLinks>;
+
+/**
+ * Add a free Link to an item found with Link search. Anything Link search
+ * couldn't have offered is refused like a made-up id (`target_not_found`).
+ */
+export const addLinkRequest = z.object({ workItemId: z.uuid() });
+export type AddLinkRequest = z.infer<typeof addLinkRequest>;
+
+export const addedLink = z.object({ id: z.uuid() });
+
+/**
+ * The field an answers_changed event names for a change to the free Links: the
+ * Links System Field. No Form field key starts with `$`. Its old and new values
+ * are the free Links as Document Number and Subject, never an id.
+ */
+export const linksChangeField = "$links";
+export const linksChangeValue = z.array(z.object({ documentNumber: z.string(), subject: z.string() }));
+
 /** How a closed Work Item ended: its Issued Code, Inspection result, or cancelled (workflow-engine.md §1). */
 export const workItemOutcomes = ["A", "B", "C", "D", "passed", "passed_with_comments", "failed", "cancelled", "closed"] as const;
 export const workItemOutcome = z.enum(workItemOutcomes);
