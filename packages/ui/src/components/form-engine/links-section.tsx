@@ -29,8 +29,8 @@ const copy = {
     title: "الروابط",
     none: "لا توجد روابط بعد.",
     hidden: "غير مسموح لك برؤية تفاصيل هذا البند.",
-    // The Document Number sits in a left-to-right isolate (⁦, ended by ⁩).
-    remove: (number: string) => `إزالة الربط مع ⁦${number}⁩`,
+    // The Document Number sits in a left-to-right isolate (\u2066, ended by \u2069).
+    remove: (number: string) => `إزالة الربط مع \u2066${number}\u2069`,
   },
 } satisfies Record<Locale, unknown>;
 

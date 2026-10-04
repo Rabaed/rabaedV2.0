@@ -48,7 +48,7 @@ const copy = {
   refused: { en: "That item can't be linked.", ar: "لا يمكن ربط هذا البند." },
 };
 const removeLabel = (locale: Locale, number: string) =>
-  locale === "en" ? `Remove the Link to ${number}` : `إزالة الربط مع ⁦${number}⁩`;
+  locale === "en" ? `Remove the Link to ${number}` : `إزالة الربط مع \u2066${number}\u2069`;
 
 type Args = { onAdd: (target: LinkTarget) => void; onRemove: (link: WorkItemLink) => void };
 
