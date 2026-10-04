@@ -14,10 +14,11 @@ import {
   type DocumentList,
   type OptionList,
 } from "@rabaed/domain";
-import { Button, FormRenderer, type BuiltInChoices } from "@rabaed/ui";
+import { Button, FormRenderer, type BuiltInChoices, type LinkTargetNames } from "@rabaed/ui";
 import { useTranslations } from "next-intl";
 import { createContext, useContext, useState, type ReactNode } from "react";
-import { useRouter } from "@/i18n/navigation";
+import { Link, useRouter } from "@/i18n/navigation";
+import { linkSearch } from "@/lib/link-search";
 import { useDocuments, useImageUrls } from "./use-documents";
 
 // A Work Item's Form on its page: the answers being edited, their errors, and
@@ -35,6 +36,10 @@ type WorkItemFormState = {
   people: FormChoices;
   /** The Option Lists its `option_list` fields offer and read from. */
   optionLists: readonly OptionList[];
+  /** Its Project, which a link question's Link search searches. */
+  projectId: string;
+  /** The number and Subject of each item its link questions chose that the viewer sees. */
+  linkTargets: LinkTargetNames;
   errors: readonly FieldError[];
   editable: boolean;
   /** Typed since the last save. */
@@ -57,6 +62,8 @@ export function useWorkItemForm(): WorkItemFormState | null {
 
 export function WorkItemFormProvider({
   workItemId,
+  projectId,
+  linkTargets,
   schema,
   choices,
   answers: saved,
@@ -67,6 +74,8 @@ export function WorkItemFormProvider({
   children,
 }: {
   workItemId: string;
+  projectId: string;
+  linkTargets: LinkTargetNames;
   schema: FormSchema;
   choices: BuiltInChoices;
   answers: Record<string, unknown>;
@@ -151,7 +160,24 @@ export function WorkItemFormProvider({
 
   return (
     <WorkItemFormContext.Provider
-      value={{ schema, choices, people, optionLists, answers, named, errors, editable, dirty, pending, message, change, save, showErrors }}
+      value={{
+        schema,
+        choices,
+        people,
+        optionLists,
+        projectId,
+        linkTargets,
+        answers,
+        named,
+        errors,
+        editable,
+        dirty,
+        pending,
+        message,
+        change,
+        save,
+        showErrors,
+      }}
     >
       {children}
     </WorkItemFormContext.Provider>
@@ -190,6 +216,13 @@ export function WorkItemAnswers({ locale, workItemId, documents }: { locale: Loc
         locale={locale}
         onChange={form.change}
         idPrefix="answer"
+        links={{
+          targets: form.linkTargets,
+          search: linkSearch(form.projectId),
+          hrefFor: (id) => `/work-items/${id}`,
+          linkAs: Link,
+          workItemId,
+        }}
         files={{
           documents: documents.documents,
           canChange: documents.canChange,

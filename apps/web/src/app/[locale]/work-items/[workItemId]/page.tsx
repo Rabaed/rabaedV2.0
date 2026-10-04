@@ -1,4 +1,4 @@
-import { isOpenStageCategory, stepAgeLabel, type Locale } from "@rabaed/domain";
+import { answerFields, isOpenStageCategory, stepAgeLabel, type Locale } from "@rabaed/domain";
 import { AgeDots, DocNo, StagePill } from "@rabaed/ui";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
@@ -9,6 +9,7 @@ import { WorkItemHistory } from "@/components/work-item-history";
 import { WorkItemLinks } from "@/components/work-item-links";
 import { Link, redirect } from "@/i18n/navigation";
 import { fillingChoices, readingChoices } from "@/lib/built-in-choices";
+import { linkTargetNames } from "@/lib/link-search";
 import {
   getMe,
   getMyVisibility,
@@ -55,6 +56,8 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
   return (
     <WorkItemFormProvider
       workItemId={item.id}
+      projectId={item.projectId}
+      linkTargets={linkTargetNames(links.links)}
       schema={form.schema}
       choices={choices}
       people={people}
@@ -100,7 +103,13 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
 
         {/* The System Fields below the Form. */}
         <WorkItemAttachments workItemId={item.id} list={documents} locale={locale} />
-        <WorkItemLinks workItemId={item.id} projectId={item.projectId} list={links} locale={locale} />
+        <WorkItemLinks
+          workItemId={item.id}
+          projectId={item.projectId}
+          list={links}
+          locale={locale}
+          questionLabels={Object.fromEntries(answerFields(form.schema).map((f) => [f.key, f.label[locale]]))}
+        />
 
         <dl className="grid grid-cols-[max-content_1fr] gap-x-6 gap-y-2">
           <dt className="text-muted">{t("fields.type")}</dt>

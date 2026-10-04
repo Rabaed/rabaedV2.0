@@ -24,11 +24,14 @@ export function WorkItemLinks({
   projectId,
   list,
   locale,
+  questionLabels,
 }: {
   workItemId: string;
   projectId: string;
   list: Links;
   locale: Locale;
+  /** Each link question's label, by field key, to list its Links under (RP-293). */
+  questionLabels?: Readonly<Record<string, string>>;
 }) {
   const t = useTranslations("workItems.links");
   const router = useRouter();
@@ -75,6 +78,7 @@ export function WorkItemLinks({
       onRemove={(link: WorkItemLink) => void change(() => fetch(`${base}/${link.id}`, { method: "DELETE" }))}
       hrefFor={(id) => `/work-items/${id}`}
       linkAs={Link}
+      questionLabels={questionLabels}
       pending={pending}
       message={message}
     />
