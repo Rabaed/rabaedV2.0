@@ -174,7 +174,7 @@ This is the shared set per Module. Workflows reference Stages by `key`, so libra
 - `notifications`: who gets what, on which channel.
 
 **work_item_type**
-`id`, `project_id`, `module_key`, `code` (MAR, SAR, DAR…), `name i18n`, `form_definition_id`, `workflow_definition_id`, `outcome_kind {review_code, inspection_result, none}`, `required_links jsonb`, `expected_frequency {none, daily, weekly, monthly}`, `allows_subtasks bool`, `copied_from_id`.
+`id`, `project_id`, `module_key`, `code` (MAR, SAR, DAR…), `name i18n`, `form_definition_id`, `workflow_definition_id`, `outcome_kind {review_code, inspection_result, none}`, `expected_frequency {none, daily, weekly, monthly}`, `allows_subtasks bool`, `copied_from_id`.
 New items use the latest *published* versions of the Form and Workflow at creation time.
 
 **step_default_holder**
@@ -234,9 +234,10 @@ When an assignee is removed from the Project, the row becomes `vacant`, and the 
 - Row-level security joins this table with the Member's own Visibility grant. This keeps "Contractor B never sees Contractor A's submittals" a cheap, indexable check instead of a runtime rule walk.
 
 **work_item_link**
-`id`, `from_id`, `to_id`, `kind {related, raised_from, relies_on}`, `created_by`.
-- A `relies_on` link satisfies `required_links`.
-- A viewer without access to the target may open only the target's latest Documental Record.
+`id`, `project_id`, `from_id`, `to_id`, `kind {related, raised_from, relies_on}`, `field_key` (nullable; set for `relies_on`, the `work_item_ref` field that made it), `created_by`.
+- Both items are in the same Project, and the target has been Submitted.
+- A viewer without access to the target sees only its Document Number and Subject (E1), and from Form engine part 4 may open its latest Documental Record. A viewer of the target sees every Submitted item linking to it, with number and Subject only for those they can't see (E3).
+- Written only through `app.*` functions, with the answers; frozen at Submit.
 
 **chat_message**
 `id`, `work_item_id`, `author_member_id`, `participant_id`, `body`, `file_ids`, `created_at`. Insert-only.

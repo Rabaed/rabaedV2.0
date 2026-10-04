@@ -133,7 +133,7 @@ A Work Item created under another Work Item, of any Type in the same Module and 
 _Avoid_: Child item
 
 **Link**:
-A reference from one Work Item to another in any Module, which opens the other item; for example an Inspection linking the approved material, drawing and method submittals it relies on, instead of attaching their PDFs. A viewer who cannot see the linked item can still open its Documental Record, but not the item itself. A Work Item Type can require certain Links, optionally to approved items. A Link is not a parent–child relationship and does not block anything.
+A reference from one Work Item to another in the same Project, in any Module, which opens the other item; for example an Inspection linking the approved material, drawing and method submittals it relies on, instead of attaching their PDFs. A Link is added freely in the Links System Field or by answering a link question in the Form, and an item can have any number of them. Only an item the linker can see, and that has been Submitted, can be linked. Every Link shows the other item's Document Number and Subject; a viewer who cannot see the linked item sees only those, and can open its Documental Record but not the item itself. The linked item lists the Submitted items that link to it as **Linked from**, with their Document Number and Subject, whoever is viewing. A Link is not a parent–child relationship and does not block anything.
 _Avoid_: Relationship, dependency
 
 **Inspection**:
