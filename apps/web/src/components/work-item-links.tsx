@@ -3,7 +3,7 @@
 import type { LinkSearchResults, LinkTarget, Locale, WorkItemLink, WorkItemLinks as Links } from "@rabaed/domain";
 import { LinksSection } from "@rabaed/ui";
 import { useTranslations } from "next-intl";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Link, useRouter } from "@/i18n/navigation";
 
 // The Links System Field, below the Form (form-engine.md part 2b): the item's
@@ -24,11 +24,14 @@ export function WorkItemLinks({
   projectId,
   list,
   locale,
+  children,
 }: {
   workItemId: string;
   projectId: string;
   list: Links;
   locale: Locale;
+  /** Shown below the Links: "Linked from". */
+  children?: ReactNode;
 }) {
   const t = useTranslations("workItems.links");
   const router = useRouter();
@@ -77,6 +80,8 @@ export function WorkItemLinks({
       linkAs={Link}
       pending={pending}
       message={message}
-    />
+    >
+      {children}
+    </LinksSection>
   );
 }

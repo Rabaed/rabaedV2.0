@@ -7,6 +7,7 @@ import type {
   DocumentList,
   FormChoices,
   FormVersion,
+  LinkedFrom,
   MemberVisibility,
   MyProjects,
   NotificationList,
@@ -162,6 +163,11 @@ export function getWorkItemDocuments(workItemId: string): Promise<DocumentList |
 /** A Work Item's Links as the signed-in Member may read them (E1); null if they can't see the item. */
 export function getWorkItemLinks(workItemId: string): Promise<WorkItemLinks | null> {
   return apiGet<WorkItemLinks>(`/v1/work-items/${encodeURIComponent(workItemId)}/links`);
+}
+
+/** The Submitted items linking to a Work Item, hidden ones as number and Subject only (E3); null if the Member can't see the item. */
+export function getLinkedFrom(workItemId: string): Promise<LinkedFrom | null> {
+  return apiGet<LinkedFrom>(`/v1/work-items/${encodeURIComponent(workItemId)}/linked-from`);
 }
 
 /** A Work Item's history as the signed-in Member may see it; null if they can't see the item. */
