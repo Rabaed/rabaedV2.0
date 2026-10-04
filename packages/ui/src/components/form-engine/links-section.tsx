@@ -191,6 +191,8 @@ export function LinksSection({
       ))}
       {canChange && (
         <LinkSearch
+          // A fresh search once the picked item is linked, rather than results that no longer offer it.
+          key={free.length}
           locale={locale}
           search={search}
           onPick={onAdd}

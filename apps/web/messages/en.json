@@ -281,6 +281,13 @@
       "notUploaded": "The file didn't finish uploading. Attach it again.",
       "tooManyFiles": "This field has all the Documents it takes. Remove one to add another."
     },
+    "links": {
+      "targetNotFound": "That item can't be linked. Only Submitted items you can see in this Project can be linked.",
+      "alreadyLinked": "That item is already linked.",
+      "notEditable": "Links can't be changed any more.",
+      "projectClosed": "This Project is closed.",
+      "unavailable": "Something went wrong. Try again."
+    },
     "history": {
       "title": "History",
       "created": "Created",
@@ -293,7 +300,8 @@
       "internal": "Internal: only your Company sees this.",
       "answersChanged": "Form changed",
       "emptyAnswer": "(empty)",
-      "changedValue": "changed"
+      "changedValue": "changed",
+      "linksField": "Links"
     }
   },
   "notifications": {
