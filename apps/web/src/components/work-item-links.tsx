@@ -1,10 +1,11 @@
 "use client";
 
-import type { LinkSearchResults, LinkTarget, Locale, WorkItemLink, WorkItemLinks as Links } from "@rabaed/domain";
+import type { LinkTarget, Locale, WorkItemLink, WorkItemLinks as Links } from "@rabaed/domain";
 import { LinksSection } from "@rabaed/ui";
 import { useTranslations } from "next-intl";
 import { useState, type ReactNode } from "react";
 import { Link, useRouter } from "@/i18n/navigation";
+import { linkSearch } from "@/lib/link-search";
 
 // The Links System Field, below the Form (form-engine.md part 2b): the item's
 // Links as the API returns them for the viewer, a linked item they can't see by
@@ -41,13 +42,6 @@ export function WorkItemLinks({
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
-  const search = async (q: string, page: number): Promise<LinkSearchResults> => {
-    const query = new URLSearchParams({ q, page: String(page) });
-    const res = await fetch(`/api/v1/projects/${projectId}/work-items/link-search?${query.toString()}`);
-    if (!res.ok) throw new Error(`Link search: ${res.status}`);
-    return (await res.json()) as LinkSearchResults;
-  };
-
   async function change(request: () => Promise<Response>) {
     setMessage(null);
     setPending(true);
@@ -72,7 +66,7 @@ export function WorkItemLinks({
       links={list.links}
       canChange={list.canChange}
       workItemId={workItemId}
-      search={search}
+      search={linkSearch(projectId)}
       onAdd={(target: LinkTarget) =>
         void change(() =>
           fetch(base, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ workItemId: target.id }) }),
