@@ -234,9 +234,10 @@ When an assignee is removed from the Project, the row becomes `vacant`, and the 
 - Row-level security joins this table with the Member's own Visibility grant. This keeps "Contractor B never sees Contractor A's submittals" a cheap, indexable check instead of a runtime rule walk.
 
 **work_item_link**
-`id`, `project_id`, `from_id`, `to_id`, `kind {related, raised_from, relies_on}`, `field_key` (nullable; set for `relies_on`, the `work_item_ref` field that made it), `created_by`.
+`id`, `project_id`, `from_id`, `to_id`, `kind {related, raised_from, relies_on}`, `field_key` (nullable; set for `relies_on`, the `work_item_ref` field that made it), `created_by_member_id`, `created_at`. One row per (from, to, field key); never from an item to itself.
+- Read under the _from_ item's row-level security, keyed by Project. The app role can't read `to_id` (nor `created_by_member_id`): the targets come through `app.work_item_links`, with the id only for a target the reader sees (as built, RP-291).
 - Both items are in the same Project, and the target has been Submitted.
-- A viewer without access to the target sees only its Document Number and Subject (E1), and from Form engine part 4 may open its latest Documental Record. A viewer of the target sees every Submitted item linking to it, with number and Subject only for those they can't see (E3).
+- A viewer without access to the target sees only its Document Number and Subject (E1), and from Form engine part 4 may open its latest Documental Record. A viewer of the target sees every Submitted item linking to it, with number and Subject only for those they can't see (E3), through `app.work_item_linked_from` (as built, RP-292).
 - Written only through `app.*` functions, with the answers; frozen at Submit.
 
 **chat_message**

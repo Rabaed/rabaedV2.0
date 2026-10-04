@@ -51,6 +51,9 @@ const answers = {
   // A Form's `attachments` field (RP-281).
   field_not_found: () => new HttpError(422, "field_not_found"),
   too_many_files: () => new HttpError(409, "too_many_files"),
+  // Links (RP-291): an item Link search couldn't have offered, whatever the reason, made-up ids included.
+  target_not_found: () => new HttpError(422, "target_not_found"),
+  already_linked: () => new HttpError(409, "already_linked"),
 } satisfies Record<string, () => HttpError>;
 
 export type RefusalReason = keyof typeof answers;

@@ -1,10 +1,12 @@
 import {
   checklistSummary,
   currencyDecimals,
+  isHiddenLinkChoice,
   isIsoValue,
   type AnswerField,
   type ChecklistAnswer,
   type ChecklistCount,
+  type HiddenLinkChoice,
   type NamedAnswer,
   type TableColumn,
 } from "./form.ts";
@@ -142,7 +144,10 @@ export function formatTableCell(column: TableColumn, value: unknown, locale: Loc
  * `participant` answer reads as the API `named` it for this viewer (V14): a
  * Member of their own Company by name, anyone else by their Company's name;
  * never by its id. An `option_list` answer reads as the path to the option
- * (`optionLists` names it), marked when an option on the way is retired.
+ * (`optionLists` names it), marked when an option on the way is retired. A
+ * link question's items read as Document Number and Subject: a hidden one as it
+ * came, a visible one as `linkTargets` names it (one it doesn't name is left out,
+ * never shown as an id).
  */
 export function formatFormValue(
   field: AnswerField | (TableColumn & { type: "option_list" }),
@@ -150,6 +155,7 @@ export function formatFormValue(
   locale: Locale,
   named?: NamedAnswer,
   optionLists: readonly OptionList[] = [],
+  linkTargets: Readonly<Record<string, HiddenLinkChoice>> = {},
 ): string {
   switch (field.type) {
     case "date":
@@ -202,6 +208,14 @@ export function formatFormValue(
     case "attachments":
     case "photos":
       return "";
+    case "work_item_ref": {
+      const read = (v: unknown) => {
+        const target = isHiddenLinkChoice(v) ? v : typeof v === "string" ? linkTargets[v] : undefined;
+        // The Document Number in a left-to-right isolate (\u2066, ended by \u2069), so it reads right in Arabic.
+        return target ? `\u2066${target.documentNumber}\u2069 ${target.subject}` : null;
+      };
+      return Array.isArray(value) ? value.flatMap((v) => read(v) ?? []).join(listSeparator[locale]) : "";
+    }
     case "member":
     case "participant":
       return (named?.memberName ?? named?.companyName)?.[locale] ?? anotherCompany[locale];

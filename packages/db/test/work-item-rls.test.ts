@@ -535,6 +535,17 @@ describe("Submit and Code A", () => {
     expect(await take(manager, "revise_c")).toBe("item_closed");
   });
 
+  // RP-290: what Link search offers. Submitted, closed after Submit too; a Draft
+  // never is; an item the Member can't see answers false, like a made-up id.
+  it("counts as Submitted, closed or not, to those who see it, and to nobody else (app.work_item_submitted)", async () => {
+    const submitted = (as: string, id: string) =>
+      call<{ submitted: boolean }>(as, sql`select app.work_item_submitted(${id}::uuid) as submitted`).then((rows) => rows[0]!.submitted);
+    for (const who of [c1.member, pm, k1.member, manager, or.member]) expect(await submitted(who, item), who).toBe(true);
+    expect(await submitted(c2.member, item)).toBe(false);
+    expect(await submitted(c1.member, draft)).toBe(false);
+    expect(await submitted(c1.member, randomUUID())).toBe(false);
+  });
+
   it("names the Code's signer to those who see it, and to nobody else, for no other event (V14)", async () => {
     const all = await events();
     const code = all.find((e) => e.type === "issue_code")!;

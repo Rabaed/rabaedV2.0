@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { createEngineer, onboardCompany } from "@rabaed/admin/services";
 import type { Db } from "@rabaed/db";
 import type { BaseRole, BilingualText, Locale, StartedDocumentUpload, VisibilityGrant } from "@rabaed/domain";
@@ -200,8 +201,9 @@ export async function seedDemo(
   const zone = await location("MZ", bi("Main Zone", "المنطقة الرئيسية"), null);
   const tower1 = await location("T1", bi("Tower 1", "البرج 1"), zone);
   const tower2 = await location("T2", bi("Tower 2", "البرج 2"), zone);
+  const tower1Floors: string[] = [];
   for (const floor of ["01", "02", "03"]) {
-    await location(`T1F${floor}`, bi(`Tower 1 Floor ${floor}`, `البرج 1 الطابق ${floor}`), tower1);
+    tower1Floors.push(await location(`T1F${floor}`, bi(`Tower 1 Floor ${floor}`, `البرج 1 الطابق ${floor}`), tower1));
   }
   const tower2Floor1 = await location("T2F01", bi("Tower 2 Floor 01", "البرج 2 الطابق 01"), tower2);
 
@@ -238,8 +240,11 @@ export async function seedDemo(
   await grantVisibility(participant.dcl, only(electrical, mechanical), all);
   await grantVisibility(participant.waha, only(electrical), all);
 
-  /** Invited by their Authorized Person, added to the Project with a Position and all of their Participant's Visibility. */
-  async function member(company: Onboarded, participantId: string, person: Person, positions: string[]) {
+  /**
+   * Invited by their Authorized Person, added to the Project with a Position and
+   * all of their Participant's Visibility, or only the Locations in `locations`.
+   */
+  async function member(company: Onboarded, participantId: string, person: Person, positions: string[], locations: VisibilityGrant = all) {
     const address = email(person.local, company.domain);
     const invited = await company.caller<{ memberId: string; invitation: { token: string } }>("POST", "/v1/members", {
       email: address,
@@ -250,7 +255,7 @@ export async function seedDemo(
     await company.caller("POST", `/v1/participants/${participantId}/members`, { memberId: invited.memberId });
     await company.caller("PUT", `/v1/participants/${participantId}/members/${invited.memberId}/visibility`, {
       trade: all,
-      location: all,
+      location: locations,
     });
     await company.caller("PUT", `/v1/participants/${participantId}/members/${invited.memberId}/positions`, { positions });
     people.push({ key: person.key, email: address, name: person.name, company: company.legalName.en, label: person.label });
@@ -276,6 +281,15 @@ export async function seedDemo(
     locale: "ar",
   };
   await member(waha, participant.waha, faisal, ["engineer"]);
+  // A second TMC engineer who covers Tower 2 only: a Link to a Tower 1 item is
+  // its Document Number and Subject to him, nothing more (E1, RP-294).
+  const omar = {
+    key: "tmc-engineer-tower2",
+    local: "omar.alharbi",
+    name: bi("Omar Al Harbi", "عمر الحربي"),
+    label: "Contractor Engineer (Tower 2 only)",
+  };
+  await member(tmc, participant.tmc, omar, ["engineer"], only(tower2));
 
   // One Draft of TMC's own, so a fresh demo has a Riyadh Gate Tower Work Item
   // for the deploy's visibility check to try as someone from another Project.
@@ -284,7 +298,7 @@ export async function seedDemo(
   const { id: emergencyLightingId } = await hafizCaller<{ id: string }>("POST", `/v1/projects/${projectId}/work-items`, {
     type: "MAR",
     title: "Emergency lighting – Tower 2",
-    // Filled through the MAR Form Version 2: its Items, and its Built-in Fields.
+    // Filled through the MAR Form (Version 3): its Items, and its Built-in Fields; no Related submittals.
     answers: {
       manufacturer: "Zumtobel",
       model: "RESCLITE PRO",
@@ -303,16 +317,16 @@ export async function seedDemo(
   // Its Datasheet (a PDF) and a Sample photo, taken on site with its time and
   // place, uploaded as the browser does: a signed URL from the API, the file,
   // then the API told it is there.
+  const upload = async (itemId: string, file: { fieldKey: string; fileName: string; contentType: string; body: Buffer }) => {
+    const documents = `/v1/work-items/${itemId}/documents`;
+    const { body, ...start } = file;
+    const started = await hafizCaller<StartedDocumentUpload>("POST", documents, { ...start, sizeBytes: body.byteLength });
+    const put = await fetch(started.upload.url, { method: started.upload.method, headers: started.upload.headers, body });
+    if (!put.ok) throw new Error(`Demo seed: the file store answered ${put.status} to ${file.fileName}`);
+    await hafizCaller("POST", `${documents}/${started.id}/confirm`);
+  };
   if (options.files) {
-    const upload = async (file: { fieldKey: string; fileName: string; contentType: string; body: Buffer }) => {
-      const documents = `/v1/work-items/${emergencyLightingId}/documents`;
-      const { body, ...start } = file;
-      const started = await hafizCaller<StartedDocumentUpload>("POST", documents, { ...start, sizeBytes: body.byteLength });
-      const put = await fetch(started.upload.url, { method: started.upload.method, headers: started.upload.headers, body });
-      if (!put.ok) throw new Error(`Demo seed: the file store answered ${put.status} to ${file.fileName}`);
-      await hafizCaller("POST", `${documents}/${started.id}/confirm`);
-    };
-    await upload({
+    await upload(emergencyLightingId, {
       fieldKey: "datasheet",
       fileName: "RESCLITE-PRO-datasheet.pdf",
       contentType: "application/pdf",
@@ -323,7 +337,7 @@ export async function seedDemo(
         "Demo datasheet: made up for the Rabaed demo.",
       ]),
     });
-    await upload({
+    await upload(emergencyLightingId, {
       fieldKey: "sample_photo",
       fileName: "RESCLITE-PRO-sample.jpg",
       contentType: "image/jpeg",
@@ -332,6 +346,68 @@ export async function seedDemo(
         Buffer.from(SAMPLE_PHOTO_JPEG, "base64"),
       ),
     });
+
+    // Links (RP-294): an approved MAR in Tower 1, and a MAR on the Form Version 3
+    // in Tower 2 that links it under Related submittals and as a free Link,
+    // Submitted to the Consultant. Omar, who covers Tower 2 only, reads the
+    // approved MAR as its number and Subject. Each MAR needs its Datasheet to
+    // leave Draft, so they come only with the file store.
+    const signedIn = async (company: Onboarded, person: Person) => {
+      const caller = browser(app);
+      await caller("POST", "/v1/session", { email: email(person.local, company.domain), password });
+      return caller;
+    };
+    const aliCaller = await signedIn(tmc, ali);
+    const mohammedCaller = await signedIn(dcl, mohammed);
+    const take = (caller: Call, itemId: string, transition: string) =>
+      caller("POST", `/v1/work-items/${itemId}/transitions`, { transition, reason: "", idempotencyKey: randomUUID() });
+    /**
+     * Hafiz raises the MAR with its Datasheet and its free Links to `freeLinks`, and
+     * sends it; Ali claims it and Submits it to the Consultant.
+     */
+    const submitted = async (title: string, datasheet: string[], answers: Record<string, unknown>, freeLinks: string[] = []) => {
+      const { id } = await hafizCaller<{ id: string }>("POST", `/v1/projects/${projectId}/work-items`, { type: "MAR", title, answers });
+      for (const target of freeLinks) await hafizCaller("POST", `/v1/work-items/${id}/links`, { workItemId: target });
+      await upload(id, { fieldKey: "datasheet", fileName: `${datasheet[0]!.replaceAll(" ", "-")}-datasheet.pdf`, contentType: "application/pdf", body: demoPdf(datasheet) });
+      await take(hafizCaller, id, "send_for_review");
+      await aliCaller("POST", `/v1/work-items/${id}/claim`);
+      await take(aliCaller, id, "submit");
+      return id;
+    };
+    const exitSignage = await submitted(
+      "Exit signage – Tower 1",
+      ["Thorn Voyager", "LED exit sign, maintained, 3-hour duration.", "Demo datasheet: made up for the Rabaed demo."],
+      {
+        manufacturer: "Thorn",
+        model: "Voyager",
+        specification_section: "26 52 13",
+        description: "LED exit signs for the Tower 1 escape routes, maintained, 3-hour duration.",
+        items: [{ fixture_type: "Exit sign", description: "Ceiling mounted, double sided", quantity: 24, unit: "pcs" }],
+        trade: electrical,
+        location: tower1Floors[0],
+        scopes: [lighting, emergencyLighting],
+      },
+    );
+    await mohammedCaller("POST", `/v1/work-items/${exitSignage}/claim`);
+    await take(mohammedCaller, exitSignage, "approve_a");
+    // In Tower 2, linking the approved exit signs it supervises twice: under
+    // Related submittals (the Form Version 3's link question) and as a free Link.
+    await submitted(
+      "Emergency lighting control panel – Tower 2",
+      ["Zumtobel ONLITE CPS", "Central battery panel for emergency luminaires and exit signs.", "Demo datasheet: made up for the Rabaed demo."],
+      {
+        manufacturer: "Zumtobel",
+        model: "ONLITE CPS",
+        specification_section: "26 52 13",
+        description: "Central battery panel monitoring the Tower 2 emergency luminaires and exit signs.",
+        items: [{ fixture_type: "Central battery panel", description: "Wall mounted, 3-hour", quantity: 1, unit: "set" }],
+        trade: electrical,
+        location: tower2Floor1,
+        scopes: [lighting, emergencyLighting],
+        related_submittals: [exitSignage],
+      },
+      [exitSignage],
+    );
   }
 
   // A second Project: Beta Build's own, with only its Authorized Person on it

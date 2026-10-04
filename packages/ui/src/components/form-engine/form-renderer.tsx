@@ -51,6 +51,7 @@ import { Icon } from "../icon/icon.tsx";
 import { BuiltInSelect, builtInAnswerLabels, noChoices, ScopesChecklist, type BuiltInChoices } from "./built-in-fields.tsx";
 import { AttachmentsField, attachmentsLimits, takesUpload } from "./attachments-field.tsx";
 import { ChecklistField, type ChecklistFiles } from "./checklist-field.tsx";
+import { LinkQuestionField, linkChoicesOf, type FormLinks } from "./link-question-field.tsx";
 import { OptionListInput } from "./option-list-field.tsx";
 import { PhotosField, photosLimits, takesPhotos, type PhotosFieldFiles } from "./photos-field.tsx";
 import { TableInput, TableRead } from "./table-field.tsx";
@@ -69,6 +70,10 @@ import { TableInput, TableRead } from "./table-field.tsx";
 // Member who left the Project) stays the choice, marked, until changed. A
 // calculated field is worked out here as it is on the server (formVisibility),
 // so its result follows its inputs live; read mode shows the stored result.
+// A link question (`work_item_ref`) picks items with Link search (`links`); a
+// chosen item the viewer can't see shows as its number and Subject only (E1).
+
+export type { FormLinks } from "./link-question-field.tsx";
 
 const copy = {
   en: {
@@ -196,6 +201,8 @@ export type FormRendererProps = {
    * be done with them. Undefined before the item exists.
    */
   files?: FormFiles;
+  /** Link search and the chosen items' names, for `work_item_ref` fields (RP-293). */
+  links?: FormLinks;
   /**
    * Called as the filler answers (edit mode), with every answer that changed:
    * one field's, or a new Trade's with the Scopes that still fit it. `undefined` clears one.
@@ -377,14 +384,18 @@ type AttachmentsFieldSchema = Extract<AnswerField, { type: "attachments" }>;
 type PhotosFieldSchema = Extract<AnswerField, { type: "photos" }>;
 type ChecklistFieldSchema = Extract<AnswerField, { type: "checklist" }>;
 
+/** Without `links`, a link question offers nothing to pick and names only the hidden items. */
+const noLinks: FormLinks = { targets: {}, search: async () => ({ links: [], nextPage: null }), hrefFor: () => "#" };
+
 /** A select's options, with "None" first when the field is optional, so a choice can be taken back. */
 const withNone = (field: { required: unknown }, options: { value: string; label: string }[], locale: Locale) =>
   field.required ? options : [{ value: noChoice, label: copy[locale].none }, ...options];
 
 /** One of the Form's own fields' control, and whether its Field labels a group (radios, checkboxes) rather than one control. */
 function control(
-  // A file field holds files, not a value, and a checklist's photos are files too: FormRenderer draws them (attachmentsControl, photosControl, checklistControl).
-  field: Exclude<OwnField, { type: "attachments" | "photos" | "checklist" }> | TableColumn,
+  // A file field holds files, not a value, and a checklist's photos are files too: FormRenderer draws them
+  // (attachmentsControl, photosControl, checklistControl), and a link question too (linkQuestionControl).
+  field: Exclude<OwnField, { type: "attachments" | "photos" | "checklist" | "work_item_ref" }> | TableColumn,
   value: unknown,
   locale: Locale,
   people: FormChoices,
@@ -594,6 +605,7 @@ export function FormRenderer({
   optionLists = noOptionLists,
   named = {},
   files,
+  links = noLinks,
   onChange,
   idPrefix = "form",
   className,
@@ -723,6 +735,22 @@ export function FormRenderer({
     };
   }
 
+  /** A link question: its chosen items, and Link search, which its Field's label names. */
+  function linkQuestionControl(field: Extract<AnswerField, { type: "work_item_ref" }>): { element: ReactNode; group?: boolean } {
+    return {
+      element: (
+        <LinkQuestionField
+          label={field.label[locale]}
+          value={answers[field.key]}
+          mode="edit"
+          locale={locale}
+          links={links}
+          onChange={(value) => onChange?.({ [field.key]: value })}
+        />
+      ),
+    };
+  }
+
   /** A field's help, and for a file field its limits (file types, most files) after it. */
   function helpOf(field: AnswerField): ReactNode {
     const help = field.help?.[locale];
@@ -761,6 +789,11 @@ export function FormRenderer({
       const answered = typeof value === "object" && value !== null && Object.keys(value).length > 0;
       return answered || (own && own.documents.length > 0) ? (
         <ChecklistField field={field} value={value} mode="read" locale={locale} files={own} onOpen={files?.onOpen} />
+      ) : null;
+    }
+    if (field.type === "work_item_ref") {
+      return linkChoicesOf(value).length > 0 ? (
+        <LinkQuestionField label={field.label[locale]} value={value} mode="read" locale={locale} links={links} />
       ) : null;
     }
     if (isBuiltInField(field)) {
@@ -831,7 +864,9 @@ export function FormRenderer({
                       ? photosControl(field)
                       : field.type === "checklist"
                         ? checklistControl(field)
-                        : control(
+                        : field.type === "work_item_ref"
+                          ? linkQuestionControl(field)
+                          : control(
                         field,
                         // A calculated field shows the result worked out from the answers now, never one given.
                         field.type === "calculated" ? visibility.answers[field.key] : answers[field.key],

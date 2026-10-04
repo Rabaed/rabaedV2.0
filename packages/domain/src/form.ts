@@ -258,6 +258,14 @@ export const formField = z.discriminatedUnion("type", [
    */
   z.object({ ...fieldBase, type: z.literal("participant") }),
   /**
+   * A link question (RP-293, form-engine.md part 2b): any number of Work Items
+   * chosen with Link search (Submitted items the filler sees, in the same
+   * Project), by id, in the order chosen. Each is also a `relies_on` Link under
+   * the field's label. No limit by Type or outcome. A reader who can't see a
+   * chosen item gets it as a HiddenLinkChoice, never its id (ADR 0012).
+   */
+  z.object({ ...fieldBase, type: z.literal("work_item_ref") }),
+  /**
    * Repeating rows of typed columns, with optional row limits (checked when the
    * item leaves Draft) and a total under number and currency columns. Answers
    * are a list of row objects keyed by column key.
@@ -355,6 +363,18 @@ export type CalculatedField = Extract<FormField, { type: "calculated" }>;
 /** Whether a field is a calculated one. */
 export const isCalculatedField = (field: FormField): field is CalculatedField => field.type === "calculated";
 export type OptionListField = Extract<FormField, { type: "option_list" }>;
+export type WorkItemRefField = Extract<FormField, { type: "work_item_ref" }>;
+
+/**
+ * A chosen item of a link question that the reader can't see, as the answers
+ * reach them (ADR 0012, visibility.md scenario 31): its Document Number and
+ * Subject in place of its id. Saved back as it came, it keeps that choice.
+ */
+export const hiddenLinkChoice = z.strictObject({ documentNumber: z.string(), subject: z.string() });
+export type HiddenLinkChoice = z.infer<typeof hiddenLinkChoice>;
+
+/** Whether one chosen item of a link question is one the reader can't see. */
+export const isHiddenLinkChoice = (value: unknown): value is HiddenLinkChoice => hiddenLinkChoice.safeParse(value).success;
 
 const layoutTypes = ["heading", "instructions", "divider"] as const;
 export type LayoutField = Extract<FormField, { type: (typeof layoutTypes)[number] }>;
@@ -373,9 +393,9 @@ export const isBuiltInField = (field: FormField): field is Extract<FormField, { 
  * A stored answer: text (also dates, times, email addresses, phone numbers, a
  * select's option, a Trade or Location id), a number (also an amount of money
  * and a calculated result), Yes/No, or a list (a multi-select's options, Scope
- * ids, a table's rows), or a checklist's answers by item.
+ * ids, a table's rows, a link question's items), or a checklist's answers by item.
  */
-export type FormValue = string | number | boolean | string[] | FormRow[] | ChecklistAnswers;
+export type FormValue = string | number | boolean | string[] | FormRow[] | ChecklistAnswers | (string | HiddenLinkChoice)[];
 
 /** A checklist's answers: for each item answered or commented on, by item key, its answer and comment. */
 export type ChecklistAnswers = Record<string, { answer?: string; comment?: string }>;
@@ -523,6 +543,12 @@ export type ValidationContext = {
    * valid (and saves again unchanged); choosing it anew is refused.
    */
   held?: Readonly<Record<string, unknown>>;
+  /**
+   * The Work Item ids a link question may take for this filler: those Link
+   * search could offer them (Submitted, visible, same Project) and those already
+   * chosen. Without it any id is taken; the server always passes it.
+   */
+  linkable?: ReadonlySet<string>;
 };
 
 /** Every field of the schema, layout included, in Form order. */
@@ -845,6 +871,13 @@ function checkValue(
       if (typeof value !== "string") return "wrong_type";
       const ids = context.offered && (field.type === "member" ? context.offered.members : context.offered.participants);
       return (ids ? ids.has(value) : isId(value)) ? null : "unknown_option";
+    }
+    case "work_item_ref": {
+      if (!Array.isArray(value) || !value.every((v) => isId(v) || isHiddenLinkChoice(v))) return "wrong_type";
+      const ids = value.filter((v): v is string => typeof v === "string");
+      const hiddenNumbers = value.flatMap((v) => (isHiddenLinkChoice(v) ? [v.documentNumber] : []));
+      if (new Set(ids).size !== ids.length || new Set(hiddenNumbers).size !== hiddenNumbers.length) return "wrong_type";
+      return !context.linkable || ids.every((id) => context.linkable!.has(id)) ? null : "unknown_option";
     }
     // A table is checked by checkTable, which knows its rows and columns; a
     // calculated field's answer is the server's own result, never the one given;

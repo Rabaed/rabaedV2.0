@@ -66,6 +66,98 @@ export const workItemList = z.object({
 });
 export type WorkItemList = z.infer<typeof workItemList>;
 
+/**
+ * Link search (form-engine.md part 2b; visibility.md "Link search"): part of a
+ * Document Number or Subject, matched case-insensitively, and the page wanted.
+ * A page holds at most `linkSearchPageMax` items.
+ */
+export const linkSearchPageMax = 20;
+export const linkSearchQuery = z.object({
+  q: z.string().trim().min(1).max(200),
+  page: z.coerce.number().int().positive().default(1),
+  limit: z.coerce.number().int().positive().max(linkSearchPageMax).default(linkSearchPageMax),
+});
+export type LinkSearchQuery = z.infer<typeof linkSearchQuery>;
+
+/** A Work Item that can be linked, in the Link shape: its id, Document Number and Subject. */
+export const linkTarget = z.object({ id: z.uuid(), documentNumber: z.string(), subject: z.string() });
+export type LinkTarget = z.infer<typeof linkTarget>;
+
+/**
+ * One page of Link search: only items the searcher sees that have been
+ * Submitted, in the same Project. `nextPage` is null on the last page; there is
+ * no total, so nothing hints at matches the searcher can't see.
+ */
+export const linkSearchResults = z.object({ links: z.array(linkTarget), nextPage: z.number().int().positive().nullable() });
+export type LinkSearchResults = z.infer<typeof linkSearchResults>;
+
+/**
+ * How a Link was made: `related` freely in the Links System Field, `relies_on`
+ * by a link question (its field key says which), `raised_from` by the Snag List.
+ */
+export const linkKinds = ["related", "relies_on", "raised_from"] as const;
+export type LinkKind = (typeof linkKinds)[number];
+
+/**
+ * One Link of a Work Item, as its viewer may read it (visibility.md E1): the
+ * linked item's Document Number and Subject always, and its id only when the
+ * viewer can see it. A hidden item's id never reaches the viewer, so opening it
+ * can only say they may not see its details.
+ */
+export const workItemLink = z.object({
+  /** The Link's own id, to remove it by. */
+  id: z.uuid(),
+  kind: z.enum(linkKinds),
+  /** For `relies_on`: the link question that made it. */
+  fieldKey: z.string().nullable(),
+  documentNumber: z.string(),
+  subject: z.string(),
+  /** The linked item's id, only when the viewer can see it; null otherwise. */
+  workItemId: z.uuid().nullable(),
+});
+export type WorkItemLink = z.infer<typeof workItemLink>;
+
+/**
+ * A Work Item's Links, oldest first, and whether the viewer may add and remove
+ * its free Links now: the raiser's Company, until Submit (as Save draft).
+ */
+export const workItemLinks = z.object({ links: z.array(workItemLink), canChange: z.boolean() });
+export type WorkItemLinks = z.infer<typeof workItemLinks>;
+
+/**
+ * Add a free Link to an item found with Link search. Anything Link search
+ * couldn't have offered is refused like a made-up id (`target_not_found`).
+ */
+export const addLinkRequest = z.object({ workItemId: z.uuid() });
+export type AddLinkRequest = z.infer<typeof addLinkRequest>;
+
+export const addedLink = z.object({ id: z.uuid() });
+
+/**
+ * The field an answers_changed event names for a change to the free Links: the
+ * Links System Field. No Form field key starts with `$`. Its old and new values
+ * are the free Links as Document Number and Subject, never an id.
+ */
+export const linksChangeField = "$links";
+export const linksChangeValue = z.array(z.object({ documentNumber: z.string(), subject: z.string() }));
+
+/**
+ * One Submitted item that links to a Work Item, as the viewer may read it
+ * (visibility.md E3): its Document Number and Subject always, its id only when
+ * the viewer can see it. Nothing else about a hidden one ever reaches them.
+ */
+export const linkedFromItem = z.object({
+  documentNumber: z.string(),
+  subject: z.string(),
+  /** The linking item's id, only when the viewer can see it; null otherwise. */
+  workItemId: z.uuid().nullable(),
+});
+export type LinkedFromItem = z.infer<typeof linkedFromItem>;
+
+/** "Linked from": every Submitted item linking to a Work Item, by Document Number. Never a Draft or internal item. */
+export const linkedFrom = z.object({ items: z.array(linkedFromItem) });
+export type LinkedFrom = z.infer<typeof linkedFrom>;
+
 /** How a closed Work Item ended: its Issued Code, Inspection result, or cancelled (workflow-engine.md §1). */
 export const workItemOutcomes = ["A", "B", "C", "D", "passed", "passed_with_comments", "failed", "cancelled", "closed"] as const;
 export const workItemOutcome = z.enum(workItemOutcomes);

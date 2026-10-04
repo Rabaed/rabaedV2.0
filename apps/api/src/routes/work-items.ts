@@ -1,13 +1,19 @@
 import {
+  addedLink,
+  addLinkRequest,
   createdWorkItem,
   createWorkItemRequest,
   formChoices,
   formVersion,
+  linkedFrom,
+  linkSearchQuery,
+  linkSearchResults,
   saveAnswersRequest,
   takeTransitionRequest,
   workItemTypeCode,
   workItemDetail,
   workItemHistory,
+  workItemLinks,
   workItemList,
 } from "@rabaed/domain";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
@@ -15,6 +21,8 @@ import { z } from "zod";
 import type { AppContext } from "../app.ts";
 import { idOrNotFound, notFound, visibleOrNotFound } from "../http-error.ts";
 import { refusal } from "../refusals.ts";
+import { getLinkedFrom } from "../work-items/linked-from.ts";
+import { addWorkItemLink, getWorkItemLinks, removeWorkItemLink } from "../work-items/links.ts";
 import {
   claimStep,
   createWorkItem,
@@ -27,11 +35,13 @@ import {
   listWorkItems,
   releaseStep,
   saveAnswers,
+  searchLinkTargets,
   takeTransition,
 } from "../work-items/work-items.ts";
 
 const projectParams = z.object({ projectId: z.string() });
 const workItemParams = z.object({ workItemId: z.string() });
+const linkParams = z.object({ workItemId: z.string(), linkId: z.string() });
 const typeFormParams = z.object({ projectId: z.string(), typeCode: z.string() });
 
 // Work Items. A Member sees only the items that pass every visibility layer;
@@ -58,6 +68,17 @@ export const workItemRoutes =
       async (request) => {
         const memberId = ctx.requireMember(request);
         return visibleOrNotFound(listWorkItems(ctx.db, memberId, idOrNotFound(request.params.projectId), ctx.now()));
+      },
+    );
+
+    // Link search: the Project's Submitted items the Member sees whose Document
+    // Number or Subject contains `q`, a page at a time (visibility.md scenario 29).
+    app.get(
+      "/v1/projects/:projectId/work-items/link-search",
+      { schema: { params: projectParams, querystring: linkSearchQuery, response: { 200: linkSearchResults } } },
+      async (request) => {
+        const memberId = ctx.requireMember(request);
+        return visibleOrNotFound(searchLinkTargets(ctx.db, memberId, idOrNotFound(request.params.projectId), request.query));
       },
     );
 
@@ -134,6 +155,49 @@ export const workItemRoutes =
         return visibleOrNotFound(getWorkItemHistory(ctx.db, memberId, idOrNotFound(request.params.workItemId)));
       },
     );
+
+    // The Links System Field (visibility.md E1): every Link of a visible item, the
+    // linked item's id only when the Member sees it too.
+    app.get(
+      "/v1/work-items/:workItemId/links",
+      { schema: { params: workItemParams, response: { 200: workItemLinks } } },
+      async (request) => {
+        const memberId = ctx.requireMember(request);
+        return visibleOrNotFound(getWorkItemLinks(ctx.db, memberId, idOrNotFound(request.params.workItemId)));
+      },
+    );
+
+    // Linked from (visibility.md E3): the Submitted items linking to a visible item,
+    // a linking item's id only when the Member sees it too. Never a Draft or internal item.
+    app.get(
+      "/v1/work-items/:workItemId/linked-from",
+      { schema: { params: workItemParams, response: { 200: linkedFrom } } },
+      async (request) => {
+        const memberId = ctx.requireMember(request);
+        return visibleOrNotFound(getLinkedFrom(ctx.db, memberId, idOrNotFound(request.params.workItemId)));
+      },
+    );
+
+    // Free Links, added and removed by the raiser's Company until Submit. A refusal changes nothing.
+    app.post(
+      "/v1/work-items/:workItemId/links",
+      { schema: { params: workItemParams, body: addLinkRequest, response: { 201: addedLink } } },
+      async (request, reply) => {
+        const memberId = ctx.requireMember(request);
+        const id = idOrNotFound(request.params.workItemId);
+        const result = await addWorkItemLink(ctx.db, memberId, id, request.body.workItemId, ctx.now());
+        if (!result.ok) throw refusal(result);
+        return reply.code(201).send({ id: result.id });
+      },
+    );
+
+    app.delete("/v1/work-items/:workItemId/links/:linkId", { schema: { params: linkParams } }, async (request, reply) => {
+      const memberId = ctx.requireMember(request);
+      const id = idOrNotFound(request.params.workItemId);
+      const result = await removeWorkItemLink(ctx.db, memberId, id, idOrNotFound(request.params.linkId), ctx.now());
+      if (!result.ok) throw refusal(result);
+      return reply.code(204).send();
+    });
 
     // Moving an item. A refusal changes nothing.
     app.post(

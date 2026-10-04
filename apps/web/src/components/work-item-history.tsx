@@ -1,6 +1,8 @@
 import {
   answerFields,
   formatFormValue,
+  linksChangeField,
+  linksChangeValue,
   type FormSchema,
   type Locale,
   type OptionList,
@@ -52,7 +54,16 @@ export async function WorkItemHistory({
     if (v === null || v === undefined || v === "" || (Array.isArray(v) && v.length === 0)) return t("emptyAnswer");
     return field ? formatFormValue(field, v, locale, undefined, optionLists) : String(v);
   };
+  // The free Links (the Links System Field): each Link by its Document Number and Subject, never an id.
+  const linksText = (v: unknown) => {
+    const links = linksChangeValue.safeParse(v);
+    if (!links.success || links.data.length === 0) return t("emptyAnswer");
+    return links.data.map((l) => `\u2066${l.documentNumber}\u2069 ${l.subject}`).join(", ");
+  };
   const changeText = (change: Change) => {
+    if (change.field === linksChangeField) {
+      return `${t("linksField")}: ${linksText(change.old)} ${locale === "ar" ? "←" : "→"} ${linksText(change.new)}`;
+    }
     const field = fields.get(change.field);
     const label = field?.label[locale] ?? change.field;
     if (field && idTypes.has(field.type)) return `${label}: ${t("changedValue")}`;

@@ -1,4 +1,4 @@
-import { isOpenStageCategory, stepAgeLabel, type Locale } from "@rabaed/domain";
+import { answerFields, isOpenStageCategory, stepAgeLabel, type Locale } from "@rabaed/domain";
 import { AgeDots, DocNo, StagePill } from "@rabaed/ui";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
@@ -6,9 +6,13 @@ import { WorkItemActions } from "@/components/work-item-actions";
 import { WorkItemAttachments } from "@/components/work-item-attachments";
 import { WorkItemAnswers, WorkItemFormProvider } from "@/components/work-item-form";
 import { WorkItemHistory } from "@/components/work-item-history";
+import { WorkItemLinkedFrom } from "@/components/work-item-linked-from";
+import { WorkItemLinks } from "@/components/work-item-links";
 import { Link, redirect } from "@/i18n/navigation";
 import { fillingChoices, readingChoices } from "@/lib/built-in-choices";
+import { linkTargetNames } from "@/lib/link-search";
 import {
+  getLinkedFrom,
   getMe,
   getMyVisibility,
   getOptionLists,
@@ -18,29 +22,32 @@ import {
   getWorkItemForm,
   getWorkItemFormChoices,
   getWorkItemHistory,
+  getWorkItemLinks,
 } from "@/lib/session";
 import { stageColour } from "@/lib/stage-colour";
 
 /**
  * One Work Item, in the frame every item has (form-engine.md §1): the System
- * Fields Subject and Document Number above its Form, Attachments below it. One
+ * Fields Subject and Document Number above its Form, Attachments and Links below it. One
  * the Member can't see is not found, exactly like one that doesn't exist.
  */
 export default async function WorkItemPage({ params }: { params: Promise<{ locale: Locale; workItemId: string }> }) {
   const { locale, workItemId } = await params;
   setRequestLocale(locale);
   const t = await getTranslations("workItems");
-  const [me, item, form, people, documents, history, optionLists] = await Promise.all([
+  const [me, item, form, people, documents, links, linkedFrom, history, optionLists] = await Promise.all([
     getMe(),
     getWorkItem(workItemId),
     getWorkItemForm(workItemId),
     getWorkItemFormChoices(workItemId),
     getWorkItemDocuments(workItemId),
+    getWorkItemLinks(workItemId),
+    getLinkedFrom(workItemId),
     getWorkItemHistory(workItemId),
     getOptionLists(),
   ]);
   if (!me) return redirect({ href: "/sign-in", locale });
-  if (!item || !form || !people || !documents) notFound();
+  if (!item || !form || !people || !documents || !links || !linkedFrom) notFound();
   // Editable: the Built-in Fields offer what a new item's do. Otherwise they only name the item's own values.
   const editable = item.actions.saveAnswers;
   const [mine, scopes] = editable
@@ -52,6 +59,8 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
   return (
     <WorkItemFormProvider
       workItemId={item.id}
+      projectId={item.projectId}
+      linkTargets={linkTargetNames(links.links)}
       schema={form.schema}
       choices={choices}
       people={people}
@@ -95,8 +104,17 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
 
         <WorkItemAnswers locale={locale} workItemId={item.id} documents={documents} />
 
-        {/* The System Field below the Form. */}
+        {/* The System Fields below the Form. */}
         <WorkItemAttachments workItemId={item.id} list={documents} locale={locale} />
+        <WorkItemLinks
+          workItemId={item.id}
+          projectId={item.projectId}
+          list={links}
+          locale={locale}
+          questionLabels={Object.fromEntries(answerFields(form.schema).map((f) => [f.key, f.label[locale]]))}
+        >
+          <WorkItemLinkedFrom items={linkedFrom.items} locale={locale} />
+        </WorkItemLinks>
 
         <dl className="grid grid-cols-[max-content_1fr] gap-x-6 gap-y-2">
           <dt className="text-muted">{t("fields.type")}</dt>

@@ -519,6 +519,23 @@ export interface WorkItemEventTable {
   created_at: Generated<Timestamp>;
 }
 
+/**
+ * A Link from one Work Item to another in the same Project (RP-291). Written only
+ * by app.* functions. The app role reads neither `to_id` nor
+ * `created_by_member_id`: targets come from app.work_item_links (visibility.md E1).
+ */
+export interface WorkItemLinkTable {
+  id: Generated<string>;
+  project_id: string;
+  from_id: string;
+  to_id: string;
+  kind: "related" | "relies_on" | "raised_from";
+  /** Set for `relies_on`: the link question (`work_item_ref` field) that made it. */
+  field_key: string | null;
+  created_by_member_id: string;
+  created_at: Generated<Timestamp>;
+}
+
 /** A Rabaed Default Position of one base role. */
 export interface PositionTable {
   id: Generated<string>;
@@ -583,6 +600,7 @@ export interface Database {
   work_item_access: WorkItemAccessTable;
   work_item_event: WorkItemEventTable;
   document: DocumentTable;
+  work_item_link: WorkItemLinkTable;
   position: PositionTable;
   position_permission: PositionPermissionTable;
   project_member_position: ProjectMemberPositionTable;

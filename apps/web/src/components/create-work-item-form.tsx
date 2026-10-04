@@ -14,7 +14,8 @@ import {
 import { Button, Field, FormRenderer, Input, type BuiltInChoices } from "@rabaed/ui";
 import { useTranslations } from "next-intl";
 import { useState, type FormEvent } from "react";
-import { useRouter } from "@/i18n/navigation";
+import { Link, useRouter } from "@/i18n/navigation";
+import { linkSearch } from "@/lib/link-search";
 
 /**
  * Creates a MAR in Draft, then opens it: its Subject, then its Form (the latest
@@ -119,6 +120,7 @@ export function CreateWorkItemForm({
         optionLists={optionLists}
         onChange={change}
         idPrefix="answer"
+        links={{ targets: {}, search: linkSearch(projectId), hrefFor: (id) => `/work-items/${id}`, linkAs: Link }}
       />
       {error && (
         <p role="alert" className="text-sm text-danger">

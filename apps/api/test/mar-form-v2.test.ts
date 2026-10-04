@@ -1,7 +1,8 @@
 // Seam 1 for the MAR Form Version 2 (RP-286, spec RP-278; form-engine.md §2.6):
 // a MAR records what real submittals contain: its Items as a table with a total
 // quantity, a required Datasheet (PDF), an optional Test certificate and Sample
-// photo. New MARs pin Version 2; a MAR already on Version 1 keeps showing and
+// photo. A MAR on Version 2 keeps it (new MARs pin Version 3 since RP-294,
+// mar-form-v3.test.ts); a MAR already on Version 1 keeps showing and
 // validating with Version 1, leaving Draft included. Version 2 passes the
 // part-1 publish checks against Version 1.
 import { randomUUID } from "node:crypto";
@@ -51,9 +52,15 @@ const items = [
   { fixture_type: "Linear", description: "LED linear, 1.2 m", quantity: 36.5, unit: "m" },
 ];
 const complete = { manufacturer: "Philips", model: "CoreLine", specification_section: "26 51 00", description: "LED fixtures", items };
-const created = async (answers: Record<string, unknown>) =>
-  (await ok(engineer.post(`/v1/projects/${projectId}/work-items`, { type: "MAR", title: "Lighting fixtures", answers: { ...builtIns(), ...answers } }), 201)).json()
-    .id as string;
+/** A MAR on Version 2: created on the latest Version, with no answers Version 2 lacks, then pinned to Version 2. */
+const created = async (answers: Record<string, unknown>) => {
+  const id = (
+    await ok(engineer.post(`/v1/projects/${projectId}/work-items`, { type: "MAR", title: "Lighting fixtures", answers: { ...builtIns(), ...answers } }), 201)
+  ).json().id as string;
+  const [, v2] = await marVersions();
+  await sql`update work_item set form_version_id = ${v2!.id}::uuid where id = ${id}::uuid`.execute(migrator);
+  return id;
+};
 const save = (id: string, answers: Record<string, unknown>) =>
   engineer.request("PUT", `/v1/work-items/${id}/answers`, { answers: { ...builtIns(), ...answers } });
 const send = (id: string) => engineer.post(`/v1/work-items/${id}/transitions`, { transition: "send_for_review", idempotencyKey: randomUUID() });
@@ -82,16 +89,16 @@ beforeAll(async () => {
 });
 
 describe("the MAR Form Version 2", () => {
-  it("is the MAR's latest Version, and passes the part-1 publish checks against Version 1", async () => {
+  it("follows Version 1, and passes the part-1 publish checks against it", async () => {
     const versions = await marVersions();
-    expect(versions.map((v) => v.version_no)).toEqual([1, 2]);
+    expect(versions.map((v) => v.version_no).slice(0, 2)).toEqual([1, 2]);
     const [v1, v2] = versions.map((v) => formSchema.parse(v.schema));
     const { rows: lists } = await sql<{ id: string }>`select id from option_list`.execute(migrator);
     expect(publishProblems(v2!, [v1!], { optionListIds: new Set(lists.map((l) => l.id)) })).toEqual([]);
   });
 
   it("asks for the material, its Items with a total quantity, the Datasheet, Test certificate and Sample photo, and Trade, Location and Scopes", async () => {
-    const form: FormVersion = (await ok(engineer.get(`/v1/projects/${projectId}/work-item-types/MAR/form`), 200)).json();
+    const form: FormVersion = (await ok(engineer.get(`/v1/work-items/${await created(complete)}/form`), 200)).json();
     expect(form.versionNo).toBe(2);
     const fields = form.schema.sections.flatMap((s) => s.fields);
     expect(fields.map((f) => [f.key, f.type, "required" in f ? f.required : undefined])).toEqual([
@@ -115,8 +122,8 @@ describe("the MAR Form Version 2", () => {
   });
 });
 
-describe("a new MAR", () => {
-  it("pins Version 2, and keeps its Items as rows", async () => {
+describe("a MAR on Version 2", () => {
+  it("is pinned to Version 2, and keeps its Items as rows", async () => {
     const [, v2] = await marVersions();
     const id = await created(complete);
     expect(await detail(id)).toMatchObject({ formVersionId: v2!.id, answers: { ...complete } });
