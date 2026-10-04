@@ -2,6 +2,7 @@ import { withMember, type Database, type Db } from "@rabaed/db";
 import {
   formFields,
   formSchema,
+  isHiddenLinkChoice,
   offeredChoices,
   stepAgeWeeks,
   checklistItemFilesKey,
@@ -51,6 +52,13 @@ import { checkedOutcome, commandResult } from "../outcomes.ts";
 // to the Member, but are stored where visibility reads them: the database
 // functions take them apart from the Form's own answers, and app.work_item_answers
 // puts them back (RP-270).
+//
+// A link question (`work_item_ref`, RP-293) takes only items Link search could
+// have offered the filler (linkableIds); anything else is refused like an
+// unknown option. Its items are also `relies_on` Links, which
+// app.save_work_item_answers keeps equal to the answer. A chosen item the reader
+// can't see reaches them as a HiddenLinkChoice, never its id (ADR 0012), and
+// saved back so, it keeps that choice.
 
 type Trx = Transaction<Database>;
 
@@ -116,6 +124,60 @@ function storedAnswers({ trade, location, scopes, ...data }: Record<string, unkn
   };
 }
 
+/** The keys of a Form's link questions. */
+const linkQuestionKeys = (schema: FormSchema) => formFields(schema).flatMap((f) => (f.type === "work_item_ref" ? [f.key] : []));
+
+/** A link question's item as app.work_item_answers gives one the reader can't see. */
+type HiddenFromDb = { document_number: string; subject: string };
+const isHiddenFromDb = (value: unknown): value is HiddenFromDb => typeof value === "object" && value !== null && "document_number" in value;
+
+/** Each link question's items in `answers`, mapped by `map`. */
+function mapLinkItems(schema: FormSchema, answers: Record<string, unknown>, map: (item: unknown) => unknown): Record<string, unknown> {
+  const out = { ...answers };
+  for (const key of linkQuestionKeys(schema)) {
+    const items = out[key];
+    if (Array.isArray(items)) out[key] = items.map(map);
+  }
+  return out;
+}
+
+/** Answers as app.work_item_answers gives them, as the API carries them: a hidden link item as a HiddenLinkChoice. */
+const answersFromDb = (schema: FormSchema, data: Record<string, unknown>) =>
+  mapLinkItems(schema, data, (item) => (isHiddenFromDb(item) ? { documentNumber: item.document_number, subject: item.subject } : item));
+
+/** Checked answers as app.save_work_item_answers takes them: a hidden link item back as it gave it. */
+const answersToDb = (schema: FormSchema, answers: Record<string, unknown>) =>
+  mapLinkItems(schema, answers, (item) => (isHiddenLinkChoice(item) ? { document_number: item.documentNumber, subject: item.subject } : item));
+
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * The ids given in the link questions of `answers` that Link search could have
+ * offered the acting Member: Submitted, visible to them, in the Project, and not
+ * `workItemId` itself. Undefined when the Form has no link question.
+ */
+async function linkableIds(
+  trx: Trx,
+  schema: FormSchema,
+  projectId: string,
+  workItemId: string | null,
+  answers: unknown,
+): Promise<Set<string> | undefined> {
+  const keys = linkQuestionKeys(schema);
+  if (keys.length === 0) return undefined;
+  const given: Record<string, unknown> = typeof answers === "object" && answers !== null ? { ...answers } : {};
+  const ids = keys
+    .flatMap((key) => (Array.isArray(given[key]) ? (given[key] as unknown[]) : []))
+    .filter((v): v is string => typeof v === "string" && uuidPattern.test(v));
+  if (ids.length === 0) return new Set();
+  const { rows } = await sql<{ id: string }>`
+    select t.id from work_item t
+    where t.id = any(${ids}::uuid[]) and t.project_id = ${projectId} and t.id is distinct from ${workItemId}::uuid
+      and app.work_item_submitted(t.id)
+  `.execute(trx);
+  return new Set(rows.map((r) => r.id));
+}
+
 /** A visible item's Form as the acting Member may work with it. */
 type PinnedForm = {
   form: FormVersion;
@@ -155,10 +217,11 @@ async function pinnedForm(trx: Trx, workItemId: string): Promise<PinnedForm | nu
   `.execute(trx);
   const r = rows[0];
   if (!r) return null;
+  const form = toFormVersion(r);
   return {
-    form: toFormVersion(r),
+    form,
     projectId: r.project_id,
-    data: r.data,
+    data: answersFromDb(form.schema, r.data),
     dataSha256: r.data_sha256,
     answersOpen: r.answers_open,
     canSave: r.can_save,
@@ -312,9 +375,12 @@ export function createWorkItem(
         scopes: await projectScopes(trx, projectId),
         offered: await offeredFor(trx, form.schema, projectId, null),
         optionLists: await optionListsFor(trx, form.schema),
+        linkable: await linkableIds(trx, form.schema, projectId, null, input.answers),
       });
       if (!checked.ok) return { ok: false, reason: "invalid_answers", errors: checked.errors };
-      const stored = storedAnswers(checked.answers);
+      // A link question's items are saved with their Links, by app.save_work_item_answers below.
+      const linkKeys = linkQuestionKeys(form.schema).filter((key) => key in checked.answers);
+      const stored = storedAnswers(Object.fromEntries(Object.entries(checked.answers).filter(([key]) => !linkKeys.includes(key))));
       const { rows } = await sql<{ outcome: string; work_item_id: string | null }>`
         select outcome, work_item_id from app.create_work_item(
           ${projectId}::uuid, ${input.type}, ${input.title}, ${form.id}::uuid, ${stored.data}::jsonb,
@@ -322,7 +388,18 @@ export function createWorkItem(
       `.execute(trx);
       const outcome = checkedOutcome(rows[0]!.outcome, ["created", ...createWorkItemRefusals]);
       const { work_item_id } = rows[0]!;
-      return outcome === "created" ? { ok: true, id: work_item_id! } : { ok: false, reason: outcome };
+      if (outcome !== "created") return { ok: false, reason: outcome };
+      if (linkKeys.length > 0) {
+        // In the same transaction. Its items were checked above, so anything but
+        // saved is unexpected: it throws, and nothing is created.
+        const all = storedAnswers(checked.answers);
+        const { rows: saved } = await sql<{ outcome: string }>`
+          select app.save_work_item_answers(
+            ${work_item_id}::uuid, ${all.data}::jsonb, ${all.tradeId}::uuid, ${all.locationId}::uuid, ${all.scopeIds}::uuid[], ${now}) as outcome
+        `.execute(trx);
+        checkedOutcome(saved[0]!.outcome, ["saved"]);
+      }
+      return { ok: true, id: work_item_id! };
     }),
   );
 }
@@ -414,6 +491,8 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
       where w.id = ${workItemId}
     `.execute(trx);
     const d = rows[0]!;
+    const { schema } = await trx.selectFrom("form_version").select("schema").where("id", "=", d.form_version_id).executeTakeFirstOrThrow();
+    const answers = answersFromDb(formSchema.parse(schema), d.data);
     // work_item_scope shows only a visible item's; every Project Member reads the Project's Scopes.
     const { rows: scopes } = await sql<{ id: string; parent_id: string | null; name: BilingualText }>`
       select s.id, s.parent_id, s.name
@@ -428,7 +507,7 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
       ...toSummary(row, now),
       formVersionId: d.form_version_id,
       // Another Company's people, and a Company the viewer may not see, are never identified, not even by an id (V14, V15).
-      answers: Object.fromEntries(Object.entries(d.data).filter(([key]) => !unnamed.has(key))),
+      answers: Object.fromEntries(Object.entries(answers).filter(([key]) => !unnamed.has(key))),
       namedAnswers: named,
       scopes: scopes.map((s) => ({ id: s.id, parentId: s.parent_id, name: s.name })),
       step: { key: d.step_key, name: d.step_name },
@@ -568,6 +647,7 @@ const saveAnswersRefusals = [
   "trade_required",
   "value_not_found",
   "outside_visibility",
+  "target_not_found",
 ] as const;
 export type SaveAnswersResult = { ok: true } | AnswersRefused | { ok: false; reason: (typeof saveAnswersRefusals)[number] };
 
@@ -594,9 +674,10 @@ export function saveAnswers(
       offered: await offeredFor(trx, pinned.form.schema, pinned.projectId, workItemId, pinned.data),
       optionLists: await optionListsFor(trx, pinned.form.schema),
       held: pinned.data,
+      linkable: await linkableIds(trx, pinned.form.schema, pinned.projectId, workItemId, input.answers),
     });
     if (!checked.ok) return { ok: false, reason: "invalid_answers", errors: checked.errors };
-    const stored = storedAnswers(checked.answers);
+    const stored = storedAnswers(answersToDb(pinned.form.schema, checked.answers));
     const { rows } = await sql<{ outcome: string }>`
       select app.save_work_item_answers(
         ${workItemId}::uuid, ${stored.data}::jsonb, ${stored.tradeId}::uuid, ${stored.locationId}::uuid,
