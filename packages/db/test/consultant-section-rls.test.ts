@@ -352,17 +352,17 @@ describe("the Creation Date and the Submission Date (scenario 61)", () => {
 
   it("lets everyone who sees the item read the Submission Date", async () => {
     for (const who of [c1.member, c1Pm, k1.member, k1Other, ow.member]) {
-      expect(await call(who, sql`select submitted_at from work_item where id = ${id}`)).toEqual([{ submitted_at: recorded.submitted_at }]);
+      expect(await call(who, sql<{ submitted_at: Date }>`select submitted_at from work_item where id = ${id}`)).toEqual([{ submitted_at: recorded.submitted_at }]);
     }
   });
 
   it("never lets anyone read when the Draft was started, nor the Creation Date, from the table or the history", async () => {
     for (const who of [c1.member, c1Pm, k1.member, ow.member]) {
       for (const column of ["created_at", "numbered_at"]) {
-        await expect(call(who, sql`select ${sql.ref(column)} from work_item where id = ${id}`)).rejects.toThrow(/permission denied/);
+        await expect(call(who, sql<{ at: Date }>`select ${sql.ref(column)} as at from work_item where id = ${id}`)).rejects.toThrow(/permission denied/);
       }
-      expect(await call(who, sql`select seq from work_item_event where work_item_id = ${id} and type = 'created'`)).toEqual([]);
-      expect(await call(who, sql`select seq from app.work_item_history(${id}::uuid) where type = 'created'`)).toEqual([]);
+      expect(await call(who, sql<{ seq: number }>`select seq from work_item_event where work_item_id = ${id} and type = 'created'`)).toEqual([]);
+      expect(await call(who, sql<{ seq: number }>`select seq from app.work_item_history(${id}::uuid) where type = 'created'`)).toEqual([]);
     }
   });
 

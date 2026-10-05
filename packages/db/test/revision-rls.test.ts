@@ -382,6 +382,9 @@ describe("a discarded Revision (scenario 56)", () => {
     for (const who of [c1.member, c1Pm, k1.member, ow.member]) expect(await everythingOf(who, revision)).toEqual(nothing);
     expect((await chain(c1.member, closed)).map((r) => r.work_item_id)).toEqual([closed]);
     expect(await chain(c1.member, revision)).toEqual([]);
+    // Kept, with when its Draft was started, for audit: a Work Item is never deleted (RP-334).
+    const kept = await migrator.query("select created_at, discarded_at from work_item where id = $1", [revision]);
+    expect(kept.rows).toEqual([{ created_at: expect.any(Date), discarded_at: expect.any(Date) }]);
     const again = await createRevision(c1.member, closed);
     expect(again.outcome).toBe("created");
     expect(await call(c1.member, sql`select revision_no from work_item where id = ${again.work_item_id}`)).toEqual([{ revision_no: 1 }]);

@@ -134,7 +134,7 @@ export function WorkItemActions({
         {actions.transitions.map((tr) => (
           <Button
             key={tr.key}
-            variant={tr.kind === "return" ? "secondary" : "primary"}
+            variant={tr.kind === "return" || tr.kind === "send_back" ? "secondary" : "primary"}
             disabled={pending}
             onClick={() => press(tr)}
           >

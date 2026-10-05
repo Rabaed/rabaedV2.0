@@ -288,7 +288,7 @@ describe("a Draft Work Item", () => {
     ]);
     expect(rows).toEqual([{ seq: 1, type: "created", audience: "internal", audience_participant_id: participant.c1 }]);
     // When the Draft was started is audit only, shown to nobody (scenario 61).
-    expect(await call(c1.member, sql`select seq from work_item_event where work_item_id = ${draft}`)).toEqual([]);
+    expect(await call(c1.member, sql<{ seq: number }>`select seq from work_item_event where work_item_id = ${draft}`)).toEqual([]);
   });
 });
 
