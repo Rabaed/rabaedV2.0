@@ -209,7 +209,7 @@ describe("Participant Codes from Rabaed Admin", () => {
     const dup = await set(p.p2, "ccm");
     expect([dup.statusCode, dup.json()]).toEqual([409, { error: "duplicate_code" }]);
     for (const bad of ["C", "1234", "TOOLONGX", "A-B"]) {
-      expect(await set(p.p2, bad).then((r) => r.json())).toEqual({ error: "invalid_code" });
+      expect(await set(p.p2, bad).then((r) => r.json())).toEqual({ error: "invalid_participant_code" });
     }
     expect((await set("00000000-0000-4000-8000-000000000000", "ZZ")).statusCode).toBe(404);
 
@@ -317,5 +317,42 @@ describe("who can use it", () => {
     // The Project Admin's own function still works, with its checks.
     const { rows } = await asApp(sql`select app.set_participant_code(${p.p1}::uuid, 'ZZ') as outcome`);
     expect(rows).toEqual([{ outcome: "set" }]);
+  });
+});
+
+describe("the Numbering screens", () => {
+  it("are served with every label, and every refusal the API gives, in English and Arabic", async () => {
+    const page = (await admin.browser().get("/")).body;
+    const script = (await admin.browser().get("/assets/admin.js")).body;
+    expect(page).toContain('id="numbering"');
+    for (const form of ["numbering-form", "pattern-form", "code-edit-form", "start-form"]) expect(page).toContain(`id="${form}"`);
+    const [english, arabic] = script.split(/\n {2}ar: \{/);
+    const keys = [...page.matchAll(/data-t="(\w+)"/g)].map((m) => m[1]!);
+    expect(keys).toContain("numberingTitle");
+    for (const key of new Set(keys)) {
+      expect(english, `en.${key}`).toMatch(new RegExp(`\n    ${key}:`));
+      expect(arabic, `ar.${key}`).toMatch(new RegExp(`\n    ${key}:`));
+    }
+    // The refusals the numbering screens show, in the page's language.
+    const refusals = [
+      "numbering_not_found",
+      "shared_counter_not_accepted",
+      "invalid_pattern",
+      "type_not_found",
+      "project_closed",
+      "invalid_participant_code",
+      "duplicate_code",
+      "code_in_use",
+      "counter_used",
+      "participant_required",
+      "trade_required",
+      "location_required",
+      "value_not_found",
+      "bad_segments",
+    ];
+    for (const code of refusals) {
+      expect(english, `en.errors.${code}`).toMatch(new RegExp(`\n      ${code}:`));
+      expect(arabic, `ar.errors.${code}`).toMatch(new RegExp(`\n      ${code}:`));
+    }
   });
 });

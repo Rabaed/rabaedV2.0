@@ -74,7 +74,61 @@ const text = {
     savedNotice: "Saved.",
     onboardedNotice: (email) => `Company onboarded. The invitation went to ${email}.`,
     invitedNotice: (email) => `Invitation sent to ${email}.`,
+    numberingTitle: "Numbering",
+    numberingHint:
+      "Sets a Project's Numbering Pattern, Participant Codes and starting numbers during onboarding, with the same rules as the Project Admin's. Every read and edit needs a reason.",
+    projectId: "Project id",
+    showNumbering: "Show numbering",
+    segments: "Segments, in order",
+    segmentsHint:
+      "Up to 6 of: project, type, trade, participant, location:1 to location:3 (the level), text:ABC (fixed text, capitals and digits).",
+    countedBy: "Counted separately for (positions in the list, from 1)",
+    separator: "Separator",
+    seqDigits: "Sequence digits (3 to 7)",
+    acceptShared: "Accept that without the Participant, every Company can tell the others' volume from the gaps",
+    participantCode: "Participant Code (2 to 6 letters or digits)",
+    startTitle: "Set a starting number",
+    startHint: "For the counter these values fall under, while it has issued nothing. Give the Participant, Trade and Location the pattern counts by.",
+    typeCode: "Work Item Type code",
+    participantId: "Participant id",
+    tradeId: "Trade id",
+    locationId: "Location id",
+    startingNumber: "Starting number",
+    patternFor: (what) => `Numbering Pattern: ${what}`,
+    wholeProject: "the whole Project",
+    rabaedDefault: "Rabaed Default (Project, Type, Participant Code, 4 digits)",
+    followsProject: "follows the Project",
+    editPattern: "Edit pattern",
+    patternsHeading: "Numbering Patterns",
+    participantsHeading: "Participants and their codes",
+    countersHeading: "Counters",
+    noCounters: "No counters yet.",
+    noCode: "no code yet",
+    codeFixed: "fixed: a number uses it",
+    setCode: "Set code",
+    setCodeTitle: (who) => `Participant Code for ${who}`,
+    startNumber: "Set a starting number",
+    counterUsed: "issued",
+    counterAhead: "not yet used",
+    sharedAccepted: "shared counter accepted",
+    patternSavedNotice: "Numbering Pattern saved.",
+    codeSavedNotice: "Participant Code saved.",
+    startSavedNotice: (next) => `Starting number set. The next number is ${next}.`,
     errors: {
+      numbering_not_found: "No such Project, Participant or counter value.",
+      shared_counter_not_accepted: "Without the Participant in the count, tick the box to accept that every Company can tell the others' volume.",
+      invalid_pattern: "The pattern isn't valid: up to 6 known segments, 3 to 7 digits, and the count only by segments in the list.",
+      type_not_found: "This Work Item Type isn't one the Project can use.",
+      project_closed: "The Project is closed.",
+      invalid_participant_code: "A Participant Code is 2 to 6 letters or digits with at least one letter.",
+      duplicate_code: "Another Participant of the Project has this code.",
+      code_in_use: "A number already uses this Participant's code, so it is fixed.",
+      counter_used: "This counter has already issued a number, so its starting number is fixed.",
+      participant_required: "The pattern counts by Participant: give the Participant id.",
+      trade_required: "The pattern counts by Trade: give the Trade id.",
+      location_required: "The pattern counts by Location: give the Location id.",
+      value_not_found: "That Participant, Trade or Location isn't one of the Project's.",
+      bad_segments: "Check the segments and the positions to count by.",
       invalid_credentials: "That email and password don't match. After several failures, sign-in is locked for 15 minutes.",
       too_many_codes: "Too many codes asked for. Wait 15 minutes and try again.",
       invalid_code: "That code doesn't work. Codes work once, for 10 minutes; after 3 wrong tries, start again.",
@@ -161,7 +215,61 @@ const text = {
     savedNotice: "تم الحفظ.",
     onboardedNotice: (email) => `أُضيفت الشركة، وأُرسلت الدعوة إلى ${email}.`,
     invitedNotice: (email) => `أُرسلت الدعوة إلى ${email}.`,
+    numberingTitle: "الترقيم",
+    numberingHint:
+      "يضبط نمط ترقيم المشروع ورموز المشاركين وأرقام البداية أثناء الإضافة، بالقواعد نفسها التي لمسؤول المشروع. كل قراءة وتعديل يحتاج سبباً.",
+    projectId: "معرّف المشروع",
+    showNumbering: "عرض الترقيم",
+    segments: "المقاطع بالترتيب",
+    segmentsHint:
+      "حتى 6 من: project، type، trade، participant، location:1 إلى location:3 (المستوى)، text:ABC (نص ثابت بحروف كبيرة وأرقام).",
+    countedBy: "يُعدّ التسلسل منفصلاً حسب (مواضع المقاطع في القائمة، من 1)",
+    separator: "الفاصل",
+    seqDigits: "خانات التسلسل (من 3 إلى 7)",
+    acceptShared: "أقبل أنه بدون المشارك يستطيع كل طرف معرفة حجم عمل الآخرين من الفجوات",
+    participantCode: "رمز المشارك (من 2 إلى 6 حروف أو أرقام)",
+    startTitle: "ضبط رقم البداية",
+    startHint: "للعدّاد الذي تقع فيه هذه القيم، ما دام لم يُصدر شيئاً. أدخل المشارك والتخصص والموقع التي يعدّ النمط بحسبها.",
+    typeCode: "رمز نوع العمل",
+    participantId: "معرّف المشارك",
+    tradeId: "معرّف التخصص",
+    locationId: "معرّف الموقع",
+    startingNumber: "رقم البداية",
+    patternFor: (what) => `نمط الترقيم: ${what}`,
+    wholeProject: "المشروع كله",
+    rabaedDefault: "الافتراضي من ربائد (المشروع، النوع، رمز المشارك، 4 خانات)",
+    followsProject: "يتبع المشروع",
+    editPattern: "تعديل النمط",
+    patternsHeading: "أنماط الترقيم",
+    participantsHeading: "المشاركون ورموزهم",
+    countersHeading: "العدّادات",
+    noCounters: "لا توجد عدّادات بعد.",
+    noCode: "بلا رمز بعد",
+    codeFixed: "ثابت: يستخدمه رقم صادر",
+    setCode: "ضبط الرمز",
+    setCodeTitle: (who) => `رمز المشارك لـ ${who}`,
+    startNumber: "ضبط رقم البداية",
+    counterUsed: "أصدر أرقاماً",
+    counterAhead: "لم يُستخدم بعد",
+    sharedAccepted: "قُبل العدّاد المشترك",
+    patternSavedNotice: "حُفظ نمط الترقيم.",
+    codeSavedNotice: "حُفظ رمز المشارك.",
+    startSavedNotice: (next) => `ضُبط رقم البداية. الرقم التالي هو ${next}.`,
     errors: {
+      numbering_not_found: "لا يوجد مشروع أو مشارك أو قيمة عدّاد بهذا الوصف.",
+      shared_counter_not_accepted: "بدون المشارك في العدّ، علّم المربع لقبول أن كل طرف يستطيع معرفة حجم عمل الآخرين.",
+      invalid_pattern: "النمط غير صالح: حتى 6 مقاطع معروفة، و3 إلى 7 خانات، والعدّ بحسب مقاطع من القائمة فقط.",
+      type_not_found: "هذا النوع من العمل لا يستطيع المشروع استخدامه.",
+      project_closed: "المشروع مغلق.",
+      invalid_participant_code: "رمز المشارك من 2 إلى 6 حروف أو أرقام، على أن يكون فيه حرف واحد على الأقل.",
+      duplicate_code: "لدى مشارك آخر في المشروع هذا الرمز.",
+      code_in_use: "رقم صادر يستخدم رمز هذا المشارك، لذا فهو ثابت.",
+      counter_used: "أصدر هذا العدّاد رقماً بالفعل، لذا رقم بدايته ثابت.",
+      participant_required: "النمط يعدّ بحسب المشارك: أدخل معرّف المشارك.",
+      trade_required: "النمط يعدّ بحسب التخصص: أدخل معرّف التخصص.",
+      location_required: "النمط يعدّ بحسب الموقع: أدخل معرّف الموقع.",
+      value_not_found: "هذا المشارك أو التخصص أو الموقع ليس من المشروع.",
+      bad_segments: "راجع المقاطع ومواضع العدّ.",
       invalid_credentials: "البريد الإلكتروني وكلمة المرور غير متطابقين. بعد عدة محاولات فاشلة يُوقف الدخول 15 دقيقة.",
       too_many_codes: "طُلبت رموز كثيرة. انتظر 15 دقيقة وحاول مجدداً.",
       invalid_code: "الرمز غير صحيح. يعمل الرمز مرة واحدة لمدة 10 دقائق؛ بعد 3 محاولات خاطئة ابدأ من جديد.",
@@ -518,6 +626,199 @@ onSubmit("reason-form", async (f, form) => {
   form.hidden = true;
   await loadLists();
   notice(t().savedNotice);
+});
+
+// Numbering (RP-317): a Project's Numbering Pattern, Participant Codes and starting
+// numbers, as the Project Admin sets them, each edit with a reason.
+let numberingProject = null;
+let numberingReason = "";
+
+/** The API's not_found in these screens is the Project, Participant or counter value, not a CR number. */
+const numberingCall = async (method, path, body) => {
+  try {
+    return await api(method, path, body);
+  } catch (code) {
+    throw code === "not_found" ? "numbering_not_found" : code;
+  }
+};
+
+/** "project, type, text:SUB, location:2" as the API's segments; null when a part isn't one. */
+function parseSegments(value) {
+  const segments = [];
+  for (const part of value.split(",").map((p) => p.trim()).filter(Boolean)) {
+    const [kind, arg] = part.split(":");
+    if (["project", "type", "trade", "participant"].includes(kind) && arg === undefined) segments.push({ kind });
+    else if (kind === "location" && ["1", "2", "3"].includes(arg)) segments.push({ kind, level: Number(arg) });
+    else if (kind === "text" && /^[A-Z0-9]{1,10}$/.test(arg ?? "")) segments.push({ kind, text: arg });
+    else return null;
+  }
+  return segments.length >= 1 && segments.length <= 6 ? segments : null;
+}
+
+const describeSegment = (s) => (s.kind === "location" ? `location:${s.level}` : s.kind === "text" ? `text:${s.text}` : s.kind);
+
+function describePattern(saved) {
+  const { pattern } = saved;
+  const parts = [
+    pattern.segments.map(describeSegment).join(` ${pattern.separator} `),
+    `${pattern.seqDigits} digits`,
+    `#: ${pattern.countedBy.map((i) => i + 1).join(", ")}`,
+  ];
+  if (saved.sharedCounterAcceptedAt) parts.push(t().sharedAccepted);
+  return parts.join(" · ");
+}
+
+function heading(label) {
+  const h = document.createElement("h3");
+  h.textContent = label;
+  return h;
+}
+
+function patternLine(label, saved, typeId, fallback) {
+  const p = document.createElement("p");
+  const name = document.createElement("strong");
+  name.textContent = label;
+  name.dir = "auto";
+  const value = document.createElement("span");
+  value.textContent = saved ? describePattern(saved) : fallback;
+  value.dir = saved ? "ltr" : "auto";
+  p.append(name, ": ", value, " ", linkButton(t().editPattern, () => openPatternForm(typeId, label, saved)));
+  return p;
+}
+
+function renderNumbering(n) {
+  const participants = document.createElement("ul");
+  for (const p of n.participants) {
+    const li = document.createElement("li");
+    const company = document.createElement("span");
+    company.textContent = `${String(p.ordinal).padStart(2, "0")} ${p.companyName[locale]}`;
+    company.dir = "auto";
+    const code = document.createElement("code");
+    code.textContent = p.code ?? t().noCode;
+    code.dir = p.code ? "ltr" : "auto";
+    const id = document.createElement("code");
+    id.textContent = p.id;
+    id.dir = "ltr";
+    li.append(company, " ", code, " ", p.codeLocked ? t().codeFixed : linkButton(t().setCode, () => openCodeForm(p)), " ", id);
+    participants.append(li);
+  }
+  const counters = document.createElement("table");
+  const body = document.createElement("tbody");
+  for (const c of n.counters.counters) {
+    const row = document.createElement("tr");
+    const cells = [c.counterKey, `${c.lastValue}`, c.startingNumber === null ? "" : `${c.startingNumber}`, c.issued ? t().counterUsed : t().counterAhead];
+    for (const [i, value] of cells.entries()) {
+      const cell = document.createElement("td");
+      cell.textContent = value;
+      if (i < 3) cell.dir = "ltr";
+      row.append(cell);
+    }
+    body.append(row);
+  }
+  counters.append(body);
+  const noCounters = document.createElement("p");
+  noCounters.textContent = t().noCounters;
+  $("numbering").replaceChildren(
+    heading(t().patternsHeading),
+    patternLine(t().wholeProject, n.project, null, t().rabaedDefault),
+    ...n.types.map((type) => patternLine(type.code, type.override, type.id, t().followsProject)),
+    heading(t().participantsHeading),
+    participants,
+    heading(t().countersHeading),
+    n.counters.counters.length === 0 ? noCounters : counters,
+    linkButton(t().startNumber, () => openNumberingForm("start-form").elements.startingNumber.focus()),
+  );
+  $("numbering").hidden = false;
+}
+
+async function loadNumbering(projectId, reason) {
+  const n = await numberingCall("GET", `/v1/projects/${encodeURIComponent(projectId)}/numbering?${new URLSearchParams({ reason })}`);
+  numberingProject = projectId;
+  numberingReason = reason;
+  renderNumbering(n);
+}
+
+function openNumberingForm(id) {
+  for (const other of ["pattern-form", "code-edit-form", "start-form"]) $(other).hidden = other !== id;
+  const form = $(id);
+  form.reset();
+  form.hidden = false;
+  return form;
+}
+
+function openPatternForm(typeId, label, saved) {
+  const form = openNumberingForm("pattern-form");
+  form.elements.workItemTypeId.value = typeId ?? "";
+  $("pattern-title").textContent = t().patternFor(label);
+  $("pattern-title").dir = "auto";
+  if (saved) {
+    form.elements.segments.value = saved.pattern.segments.map(describeSegment).join(", ");
+    form.elements.countedBy.value = saved.pattern.countedBy.map((i) => i + 1).join(", ");
+    form.elements.separator.value = saved.pattern.separator;
+    form.elements.seqDigits.value = saved.pattern.seqDigits;
+  }
+  form.elements.segments.focus();
+}
+
+function openCodeForm(participant) {
+  const form = openNumberingForm("code-edit-form");
+  form.elements.participantId.value = participant.id;
+  if (participant.code) form.elements.code.value = participant.code;
+  $("code-edit-title").textContent = t().setCodeTitle(participant.companyName[locale]);
+  $("code-edit-title").dir = "auto";
+  form.elements.code.focus();
+}
+
+for (const [button, form] of [
+  ["pattern-cancel", "pattern-form"],
+  ["code-edit-cancel", "code-edit-form"],
+  ["start-cancel", "start-form"],
+]) {
+  $(button).addEventListener("click", () => {
+    $(form).hidden = true;
+  });
+}
+
+onSubmit("numbering-form", async ({ projectId, reason }) => {
+  await loadNumbering(projectId.trim(), reason);
+  notice("");
+});
+
+onSubmit("pattern-form", async (f, form) => {
+  const segments = parseSegments(f.segments);
+  const countedBy = f.countedBy.split(",").map((p) => Number(p.trim()) - 1);
+  if (!segments || countedBy.some((i) => !Number.isInteger(i) || i < 0 || i >= segments.length)) throw "bad_segments";
+  await numberingCall("POST", `/v1/projects/${encodeURIComponent(numberingProject)}/numbering-pattern`, {
+    workItemTypeId: f.workItemTypeId || null,
+    pattern: { segments, separator: f.separator, seqDigits: Number(f.seqDigits), countedBy },
+    sharedCounterAccepted: form.elements.sharedCounterAccepted.checked,
+    reason: f.reason,
+  });
+  form.hidden = true;
+  await loadNumbering(numberingProject, numberingReason);
+  notice(t().patternSavedNotice);
+});
+
+onSubmit("code-edit-form", async (f, form) => {
+  await numberingCall("POST", `/v1/participants/${encodeURIComponent(f.participantId)}/code`, { code: f.code, reason: f.reason });
+  form.hidden = true;
+  await loadNumbering(numberingProject, numberingReason);
+  notice(t().codeSavedNotice);
+});
+
+onSubmit("start-form", async (f, form) => {
+  const id = (value) => value.trim() || null;
+  const { nextNumber } = await numberingCall("POST", `/v1/projects/${encodeURIComponent(numberingProject)}/numbering-counters/start`, {
+    workItemType: f.workItemType.trim(),
+    participantId: id(f.participantId),
+    tradeId: id(f.tradeId),
+    locationId: id(f.locationId),
+    startingNumber: Number(f.startingNumber),
+    reason: f.reason,
+  });
+  form.hidden = true;
+  await loadNumbering(numberingProject, numberingReason);
+  notice(t().startSavedNotice(nextNumber));
 });
 
 $("sign-out").addEventListener("click", async () => {

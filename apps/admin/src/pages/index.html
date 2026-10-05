@@ -125,6 +125,48 @@
           <button type="submit" data-t="confirm">Confirm</button>
           <button type="button" id="reason-cancel" class="link" data-t="cancel">Cancel</button>
         </form>
+
+        <h2 data-t="numberingTitle">Numbering</h2>
+        <p class="muted" data-t="numberingHint">Sets a Project's Numbering Pattern, Participant Codes and starting numbers during onboarding, with the same rules as the Project Admin's. Every read and edit needs a reason.</p>
+        <form id="numbering-form">
+          <label><span data-t="projectId">Project id</span><input name="projectId" dir="ltr" required pattern="[0-9a-fA-F\-]{36}" maxlength="36" /></label>
+          <label><span data-t="reason">Reason</span><input name="reason" required maxlength="1000" /></label>
+          <button type="submit" data-t="showNumbering">Show numbering</button>
+        </form>
+        <div id="numbering" hidden></div>
+        <form id="pattern-form" hidden>
+          <h3 id="pattern-title"></h3>
+          <input type="hidden" name="workItemTypeId" />
+          <label><span data-t="segments">Segments, in order</span><input name="segments" dir="ltr" required placeholder="project, type, participant" maxlength="200" /></label>
+          <p class="muted" data-t="segmentsHint">Up to 6 of: project, type, trade, participant, location:1 to location:3 (the level), text:ABC (fixed text, capitals and digits).</p>
+          <label><span data-t="countedBy">Counted separately for (positions in the list, from 1)</span><input name="countedBy" dir="ltr" required placeholder="1, 2, 3" maxlength="50" /></label>
+          <label><span data-t="separator">Separator</span><select name="separator" dir="ltr"><option value="-">-</option><option value="/">/</option></select></label>
+          <label><span data-t="seqDigits">Sequence digits (3 to 7)</span><input name="seqDigits" type="number" min="3" max="7" value="4" dir="ltr" required /></label>
+          <label><span data-t="acceptShared">Accept that without the Participant, every Company can tell the others' volume from the gaps</span><input name="sharedCounterAccepted" type="checkbox" /></label>
+          <label><span data-t="reason">Reason</span><textarea name="reason" required maxlength="1000" rows="2"></textarea></label>
+          <button type="submit" data-t="save">Save</button>
+          <button type="button" id="pattern-cancel" class="link" data-t="cancel">Cancel</button>
+        </form>
+        <form id="code-edit-form" hidden>
+          <h3 id="code-edit-title"></h3>
+          <input type="hidden" name="participantId" />
+          <label><span data-t="participantCode">Participant Code (2 to 6 letters or digits)</span><input name="code" dir="ltr" required maxlength="20" /></label>
+          <label><span data-t="reason">Reason</span><textarea name="reason" required maxlength="1000" rows="2"></textarea></label>
+          <button type="submit" data-t="save">Save</button>
+          <button type="button" id="code-edit-cancel" class="link" data-t="cancel">Cancel</button>
+        </form>
+        <form id="start-form" hidden>
+          <h3 data-t="startTitle">Set a starting number</h3>
+          <p class="muted" data-t="startHint">For the counter these values fall under, while it has issued nothing. Give the Participant, Trade and Location the pattern counts by.</p>
+          <label><span data-t="typeCode">Work Item Type code</span><input name="workItemType" dir="ltr" required maxlength="6" value="MAR" /></label>
+          <label><span data-t="participantId">Participant id</span><input name="participantId" dir="ltr" maxlength="36" /></label>
+          <label><span data-t="tradeId">Trade id</span><input name="tradeId" dir="ltr" maxlength="36" /></label>
+          <label><span data-t="locationId">Location id</span><input name="locationId" dir="ltr" maxlength="36" /></label>
+          <label><span data-t="startingNumber">Starting number</span><input name="startingNumber" type="number" min="1" max="9999999" dir="ltr" required /></label>
+          <label><span data-t="reason">Reason</span><textarea name="reason" required maxlength="1000" rows="2"></textarea></label>
+          <button type="submit" data-t="save">Save</button>
+          <button type="button" id="start-cancel" class="link" data-t="cancel">Cancel</button>
+        </form>
       </section>
     </main>
   </body>

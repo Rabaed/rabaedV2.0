@@ -18,6 +18,8 @@ import {
 } from "../numbering.ts";
 
 const refused = (reason: NumberingRefusal) => new HttpError(reason === "not_found" ? 404 : 409, reason);
+// "invalid_code" is the sign-in code in this service; a malformed Participant Code is its own error.
+const refusedCode = (reason: NumberingRefusal) => (reason === "invalid_code" ? new HttpError(409, "invalid_participant_code") : refused(reason));
 
 // Numbering from Rabaed Admin (RP-317): a Rabaed Engineer sets a Project's Numbering
 // Pattern, Participant Codes and starting numbers, each edit with a reason.
@@ -62,7 +64,7 @@ export const numberingRoutes =
       async (request, reply) => {
         const engineerId = ctx.requireEngineer(request);
         const result = await setParticipantCode(ctx.db, engineerId, request.params.participantId, request.body);
-        if (!result.ok) throw refused(result.reason);
+        if (!result.ok) throw refusedCode(result.reason);
         return reply.code(204).send();
       },
     );
