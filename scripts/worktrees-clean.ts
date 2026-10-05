@@ -1,25 +1,30 @@
 // Removes the merged agent worktrees (.claude/worktrees/agent-*) `/implement-spec`
 // leaves behind: those whose branch is merged into the target branch, or whose HEAD
 // is detached with no unique commits. Each goes with its leftover folder (node_modules
-// included) and its branch. Worktrees with uncommitted changes or unmerged commits are
-// never touched; they are listed as skipped.
+// included) and its branch (`git branch -d`; a branch git refuses to delete is kept and
+// named). Worktrees with uncommitted changes or unmerged commits are never touched, nor,
+// without --include-empty, those whose branch has no commit of its own yet: their
+// subagent may still be running. They are listed as skipped.
 //
-//   pnpm worktrees:clean [--into <branch>] [--yes]     default branch: main; --yes skips the confirmation
-import { createInterface } from "node:readline/promises";
+//   pnpm worktrees:clean [--into <branch>] [--include-empty] [--yes]     default branch: main; --yes skips the confirmation
+import { confirmOrExit } from "./confirm.ts";
 import { chooseWorktrees, currentRoot, gatherFacts, gitError, isAgentWorktree, listWorktrees, pruneWorktrees, refExists, removeWorktree } from "./worktrees.ts";
 
+const usage = "Usage: pnpm worktrees:clean [--into <branch>] [--include-empty] [--yes]";
 const args = process.argv.slice(2);
 let target = "main";
 let yes = false;
+let includeEmpty = false;
 for (let i = 0; i < args.length; i++) {
   const a = args[i]!;
   const next = args[i + 1];
   if (a === "--yes") yes = true;
+  else if (a === "--include-empty") includeEmpty = true;
   else if (a === "--into" && next && !next.startsWith("--")) {
     target = next;
     i++;
   } else {
-    console.error("Usage: pnpm worktrees:clean [--into <branch>] [--yes]");
+    console.error(usage);
     process.exit(1);
   }
 }
@@ -35,7 +40,7 @@ const agents = gatherFacts(
   target,
   mainRoot,
 );
-const { remove, skipped } = chooseWorktrees({ worktrees: agents, currentPath: currentRoot() });
+const { remove, skipped } = chooseWorktrees({ worktrees: agents, currentPath: currentRoot(), includeEmpty });
 
 const name = (w: { path: string; branch: string | undefined }) => `${w.path} (${w.branch ?? "detached HEAD"})`;
 if (skipped.length > 0) {
@@ -49,25 +54,14 @@ if (remove.length === 0) {
 console.log(`Agent worktrees merged into ${target}:`);
 for (const w of remove) console.log(`  ${name(w)}`);
 
-if (!yes) {
-  if (!process.stdin.isTTY) {
-    console.error("Not removed: re-run with --yes to remove them without a prompt.");
-    process.exit(1);
-  }
-  const prompt = createInterface({ input: process.stdin, output: process.stdout });
-  const answer = await prompt.question("Remove them with their folders and branches? [y/N] ");
-  prompt.close();
-  if (!/^y(es)?$/i.test(answer.trim())) {
-    console.log("Nothing removed.");
-    process.exit(0);
-  }
-}
+await confirmOrExit("Remove them with their folders and branches?", { yes, verb: "remove", done: "removed" });
 
 let failed = 0;
 for (const w of remove) {
   try {
-    removeWorktree(w, mainRoot);
+    const { branchKept } = removeWorktree(w, mainRoot);
     console.log(`Removed ${w.path}.`);
+    if (branchKept) console.log(`  Kept branch ${w.branch}: ${branchKept}`);
   } catch (error) {
     failed++;
     console.error(`Could not remove ${w.path}: ${gitError(error)}`);

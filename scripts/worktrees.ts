@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, rmSync } from "node:fs";
+import { normalPath, samePath } from "./paths.ts";
 
 // Cleaning up the app-made agent worktrees `/implement-spec` leaves under
 // .claude/worktrees/agent-* (RP-326, planning/parallel-sessions.md). On Windows
@@ -22,7 +23,23 @@ export type WorktreeFacts = Worktree & {
   ahead: number;
   /** Uncommitted changes, including untracked files that are not ignored. */
   dirty: boolean;
+  /**
+   * Its branch (or detached HEAD) has never had a commit of its own (see hasOwnCommit),
+   * so its subagent may still be running: a new agent worktree has nothing ahead and
+   * nothing tracked changed, and the app's lock names the parent session's pid.
+   */
+  noCommitsYet: boolean;
 };
+
+/**
+ * Whether a reflog (its entries' subjects, `git reflog --format=%gs`) shows a commit
+ * made on that branch: a commit, merge commit, cherry-pick, revert or `git am`.
+ * Creating, renaming or resetting the branch, and fast-forwarding it, make none.
+ * A subject not recognised counts as no commit, so such a worktree is kept.
+ */
+export function hasOwnCommit(subjects: string[]): boolean {
+  return subjects.some((s) => /^(commit|cherry-pick|revert|am)\b/.test(s) || (/^(merge|pull)\b/.test(s) && !/: Fast-forward$/.test(s)));
+}
 
 export type Skipped = { worktree: Worktree; reason: string };
 
@@ -43,20 +60,10 @@ export function parseWorktrees(out: string): Worktree[] {
   return worktrees;
 }
 
-const slashed = (p: string, platform: NodeJS.Platform) => {
-  const s = p.replace(/\\/g, "/").replace(/\/+$/, "");
-  return platform === "win32" ? s.toLowerCase() : s;
-};
-
-/** Whether two paths name the same folder. */
-export function samePath(a: string, b: string, platform: NodeJS.Platform = process.platform): boolean {
-  return a !== "" && b !== "" && slashed(a, platform) === slashed(b, platform);
-}
-
 /** Whether the path is `<mainRoot>/.claude/worktrees/agent-*`: the folders the app makes for subagents. */
 export function isAgentWorktree(path: string, mainRoot: string, platform: NodeJS.Platform = process.platform): boolean {
-  const p = slashed(path, platform);
-  const dir = `${slashed(mainRoot, platform)}/.claude/worktrees/`;
+  const p = normalPath(path, platform);
+  const dir = `${normalPath(mainRoot, platform)}/.claude/worktrees/`;
   return p.startsWith(dir) && /^agent-[^/]+$/.test(p.slice(dir.length));
 }
 
@@ -67,28 +74,33 @@ type ChooseInput = {
   worktrees: WorktreeFacts[];
   /** The worktree this runs from; it is never removed. */
   currentPath: string;
+  /** Also remove worktrees with no commits yet (--include-empty). */
+  includeEmpty?: boolean;
   platform?: NodeJS.Platform;
 };
 
 /**
  * Which agent worktrees to remove: those whose commits are all in the target
- * branch (a merged branch, or a detached HEAD with no unique commits) and that
- * have no uncommitted changes. Everything else is skipped with its reason.
+ * branch (a merged branch, or a detached HEAD with no unique commits), that
+ * have no uncommitted changes, and whose branch has had a commit of its own
+ * (unless includeEmpty). Everything else is skipped with its reason.
  * The caller passes agent worktrees only.
  */
-export function chooseWorktrees({ worktrees, currentPath, platform }: ChooseInput): { remove: Worktree[]; skipped: Skipped[] } {
+export function chooseWorktrees({ worktrees, currentPath, includeEmpty = false, platform }: ChooseInput): { remove: Worktree[]; skipped: Skipped[] } {
   const remove: Worktree[] = [];
   const skipped: Skipped[] = [];
-  for (const { ahead, dirty, ...w } of worktrees) {
+  for (const { ahead, dirty, noCommitsYet, ...w } of worktrees) {
     const reason = samePath(w.path, currentPath, platform)
       ? "this is the current worktree"
       : dirty
         ? "uncommitted changes"
         : ahead > 0
           ? `${ahead} unmerged commit${ahead === 1 ? "" : "s"}${w.branch ? ` on ${w.branch}` : " (detached HEAD)"}`
-          : w.locked !== undefined && !lockedByApp(w.locked)
-            ? `locked by hand (${w.locked || "no reason"})`
-            : undefined;
+          : noCommitsYet && !includeEmpty
+            ? "no commits yet, may still be running (--include-empty removes it)"
+            : w.locked !== undefined && !lockedByApp(w.locked)
+              ? `locked by hand (${w.locked || "no reason"})`
+              : undefined;
     if (reason) skipped.push({ worktree: w, reason });
     else remove.push(w);
   }
@@ -117,21 +129,37 @@ export function refExists(ref: string, cwd: string): boolean {
   }
 }
 
-/** Looks each worktree up: its commits the target lacks, and whether it has uncommitted changes. */
+/** The subjects of a ref's reflog, newest first; none when it has no reflog. */
+function reflogSubjects(ref: string, cwd: string): string[] {
+  try {
+    return git(["reflog", "show", "--format=%gs", ref, "--"], cwd)
+      .split(/\r?\n/)
+      .filter((s) => s !== "");
+  } catch {
+    return [];
+  }
+}
+
+/** Looks each worktree up: its commits the target lacks, whether it has uncommitted changes, and whether it has had a commit of its own. */
 export function gatherFacts(worktrees: Worktree[], target: string, mainRoot: string): WorktreeFacts[] {
   return worktrees.map((w) => {
-    // A folder deleted by hand is still listed; it has nothing uncommitted.
-    const dirty = existsSync(w.path) && git(["status", "--porcelain"], w.path).trim() !== "";
+    // A folder deleted by hand is still listed; it has nothing uncommitted, and no subagent runs in it.
+    const exists = existsSync(w.path);
+    const dirty = exists && git(["status", "--porcelain"], w.path).trim() !== "";
     const ahead = Number(git(["rev-list", "--count", `${target}..${w.head}`], mainRoot).trim());
-    return { ...w, ahead, dirty };
+    // A branch's reflog is shared by every worktree; a detached HEAD's is the worktree's own.
+    const subjects = w.branch ? reflogSubjects(`refs/heads/${w.branch}`, mainRoot) : exists ? reflogSubjects("HEAD", w.path) : [];
+    return { ...w, ahead, dirty, noCommitsYet: exists && !hasOwnCommit(subjects) };
   });
 }
 
 /**
  * Unlocks, removes and deletes one worktree: its folder (git leaves it behind on
- * Windows when node_modules is in it) and its branch, which the caller found merged.
+ * Windows when node_modules is in it) and its branch, with `git branch -d`, which
+ * deletes only a branch merged into the main folder's HEAD (or its upstream).
+ * Returns why the branch was kept, if it was.
  */
-export function removeWorktree(w: Worktree, mainRoot: string): void {
+export function removeWorktree(w: Worktree, mainRoot: string): { branchKept?: string } {
   if (!isAgentWorktree(w.path, mainRoot)) throw new Error(`refusing to remove ${w.path}: not an agent worktree`);
   if (w.locked !== undefined) git(["worktree", "unlock", w.path], mainRoot);
   try {
@@ -141,7 +169,13 @@ export function removeWorktree(w: Worktree, mainRoot: string): void {
     if (listWorktrees(mainRoot).some((x) => samePath(x.path, w.path))) throw error;
   }
   if (existsSync(w.path)) rmSync(w.path, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
-  if (w.branch) git(["branch", "-D", w.branch], mainRoot);
+  if (!w.branch) return {};
+  try {
+    git(["branch", "-d", w.branch], mainRoot);
+    return {};
+  } catch (error) {
+    return { branchKept: gitError(error) };
+  }
 }
 
 export function pruneWorktrees(mainRoot: string): void {
