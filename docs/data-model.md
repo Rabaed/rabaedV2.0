@@ -205,7 +205,9 @@ Until numbering patterns exist, the key is `<project code>-<type code>-<Particip
 | `raised_by_participant_id`, `created_by_member_id` | |
 | `title`, `data jsonb` | Form answers, validated against `form_version.schema`. Read only through `app.work_item_answers` (§10) |
 | `form_version_id`, `workflow_version_id` | pinned forever |
-| `document_number` | null while Draft; set at first leaving Draft |
+| `created_at` | when the Draft was started: kept for audit, shown to nobody, also for a cancelled or discarded Draft. A Work Item is never deleted |
+| `document_number`, `numbered_at` | null while Draft; set at first leaving Draft. `numbered_at` is the **Creation Date**, shown only to the raiser's Participant |
+| `submitted_at` | the **Submission Date**: the first Submit out of the raiser's Participant; never changes, also after a Send Back. Link search and Linked from offer only items that have it |
 | `revision_no` (0 = original), `revision_of_id`, `root_id` | Revision chain; display `MS-003 Rev 1` |
 | `parent_id` | Subtask; check: parent's `parent_id` is null |
 | `package_id` | nullable |
@@ -236,8 +238,8 @@ When an assignee is removed from the Project, the row becomes `vacant`, and the 
 **work_item_link**
 `id`, `project_id`, `from_id`, `to_id`, `kind {related, raised_from, relies_on}`, `field_key` (nullable; set for `relies_on`, the `work_item_ref` field that made it), `created_by_member_id`, `created_at`. One row per (from, to, field key); never from an item to itself.
 - Read under the _from_ item's row-level security, keyed by Project. The app role can't read `to_id` (nor `created_by_member_id`): the targets come through `app.work_item_links`, with the id only for a target the reader sees (as built, RP-291).
-- Both items are in the same Project, and the target has been Submitted.
-- A viewer without access to the target sees only its Document Number and Subject (E1), and from Form engine part 4 may open its latest Documental Record. A viewer of the target sees every Submitted item linking to it, with number and Subject only for those they can't see (E3), through `app.work_item_linked_from` (as built, RP-292).
+- Both items are in the same Project, and the target has been Submitted (`submitted_at` set).
+- A viewer without access to the target sees only its Document Number and Subject (E1), and from Form engine part 4 may open its latest Documental Record. A viewer of the target sees every item with a `submitted_at` linking to it (with its Links as they were at a Send Back, while it is Sent Back), with number and Subject only for those they can't see (E3), through `app.work_item_linked_from` (as built, RP-292).
 - Written only through `app.*` functions, with the answers; frozen at Submit.
 
 **chat_message**
