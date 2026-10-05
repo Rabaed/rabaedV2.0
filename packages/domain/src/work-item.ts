@@ -204,8 +204,9 @@ export const workItemOutcomes = ["A", "B", "C", "D", "passed", "passed_with_comm
 export const workItemOutcome = z.enum(workItemOutcomes);
 export type WorkItemOutcome = z.infer<typeof workItemOutcome>;
 
-/** A Transition's kind (workflow-engine.md §1). */
-export const transitionKinds = ["send", "submit", "return", "close", "cancel"] as const;
+/** A Transition's kind (workflow-engine.md §1; `send_back` ADR 0014). */
+export const transitionKinds = ["send", "submit", "return", "send_back", "close", "cancel"] as const;
+export type TransitionKind = (typeof transitionKinds)[number];
 
 /**
  * The holder of the current Step takes one of its Transitions. The key makes a
