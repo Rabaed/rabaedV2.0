@@ -174,7 +174,8 @@ export function removeWorktree(w: Worktree, mainRoot: string): { branchKept?: st
     git(["branch", "-d", w.branch], mainRoot);
     return {};
   } catch (error) {
-    return { branchKept: gitError(error) };
+    // The first line is the reason; git's hints after it suggest branch -D.
+    return { branchKept: gitError(error).split(/\r?\n/)[0] };
   }
 }
 
