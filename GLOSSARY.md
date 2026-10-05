@@ -133,7 +133,7 @@ A Work Item created under another Work Item, of any Type in the same Module and 
 _Avoid_: Child item
 
 **Link**:
-A reference from one Work Item to another in the same Project, in any Module, which opens the other item; for example an Inspection linking the approved material, drawing and method submittals it relies on, instead of attaching their PDFs. A Link is added freely in the Links System Field or by answering a link question in the Form, and an item can have any number of them. Only an item the linker can see, and that has been Submitted, can be linked. Every Link shows the other item's Document Number and Subject; a viewer who cannot see the linked item sees only those, and can open its Documental Record but not the item itself. The linked item lists the Submitted items that link to it as **Linked from**, with their Document Number and Subject, whoever is viewing. A Link is not a parent–child relationship and does not block anything.
+A reference from one Work Item to another in the same Project, in any Module, which opens the other item; for example an Inspection linking the approved material, drawing and method submittals it relies on, instead of attaching their PDFs. A Link is added freely in the Links System Field or by answering a link question in the Form, and an item can have any number of them. Only an item the linker can see, and that has been Submitted at least once (it has a Submission Date), can be linked, even while it is Sent Back to its raiser. Every Link shows the other item's Document Number and Subject; a viewer who cannot see the linked item sees only those, and can open its Documental Record but not the item itself. The linked item lists the items that have been Submitted and link to it as **Linked from**, with their Document Number and Subject, whoever is viewing. A Link is not a parent–child relationship and does not block anything.
 _Avoid_: Relationship, dependency
 
 **Inspection**:
@@ -149,7 +149,7 @@ How often a Work Item Type, such as the Daily Site Report, must be issued. A mis
 _Avoid_: Recurrence, schedule
 
 **Site Report**:
-A Work Item in the Site Reports Module that records site conditions or findings, such as a Daily Site Report (weather, manpower, equipment, materials, work done, problems), a Weekly report, a Quality report or a Safety report. It is Submitted by the Contractor and Acknowledged by the Consultant, who can instead Return it with comments; it carries no Review Code.
+A Work Item in the Site Reports Module that records site conditions or findings, such as a Daily Site Report (weather, manpower, equipment, materials, work done, problems), a Weekly report, a Quality report or a Safety report. It is Submitted by the Contractor. The Consultant Approves it, Sends it Back with comments ("Return for Comment") to be fixed and Submitted again, or Rejects it. It ends Approved or Rejected; it carries no Review Code and is not a submittal.
 _Avoid_: Site log, diary, Affirm
 
 **Checklist**:
@@ -238,6 +238,16 @@ The Transition that hands a Work Item from one Participant to another, such as f
 **Return**:
 A Transition that sends a Work Item back to an earlier step within the same Participant, such as a Contractor manager asking their engineer for more information.
 _Avoid_: Reject, RFI
+
+**Send Back**:
+A Transition that hands a Work Item back to the Participant that Submitted it, with a comment saying what to change and no Review Code. It stays the same item with the same Document Number, and carries on when that Participant Submits it again. Unlike Code C, it neither closes the item nor starts a Revision. A Workflow may offer it; the Rabaed Default submittal Workflows don't, and use Code C instead.
+_Avoid_: Return (which stays inside one Participant), RFI, Reject
+
+**Creation Date**:
+The date a Work Item got its Document Number, when it first left Draft (for a MAR, when the engineer sends it to their PM). Only the raiser's Participant sees it; other Companies see the Submission Date. When a Draft was first started is kept for audit, even if the Draft is cancelled or discarded, and shown to nobody.
+
+**Submission Date**:
+The date a Work Item was first Submitted out of its raiser's Participant, such as from the Contractor to the Consultant. It is empty until then, a later Submit doesn't change it, and each Revision has its own. Other Companies see a Work Item from its Submission Date: before it, the item is the raiser's own work.
 
 **Step Age**:
 How many weeks a Work Item has sat at its current step (1, 2, 3, 4+), shown as dots and sent in a periodic ageing report. Inside the Company holding the item it counts from the current Step; every other Company sees it counted from when the item reached that Company. Rabaed shows age only; it sets no due dates or SLAs.
