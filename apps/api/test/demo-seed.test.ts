@@ -4,8 +4,8 @@
 // Send for Review → Return → re-send → Submit → Code A / Code C, with what each
 // Company sees at each step. Each run adds its own MARs to the one demo Project.
 import { randomUUID } from "node:crypto";
-import { createDb, processOutbox } from "@rabaed/db";
-import { testDatabaseUrls } from "@rabaed/db/test-support";
+import { createDb } from "@rabaed/db";
+import { drainOutbox, testDatabaseUrls } from "@rabaed/db/test-support";
 import type { DocumentList, FormToFill, FormVersion, LinkedFrom, WorkItemDetail, WorkItemHistory, WorkItemLinks } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -303,11 +303,7 @@ describe("the README walkthrough", () => {
 
   it("3. Sent for Review, it reaches Ali, with a notification; still nobody outside TMC", async () => {
     await take(hafiz, "send_for_review");
-    // Until nothing is due: files run before this one can leave more than one run's 100 rows waiting, older than this one.
-    for (;;) {
-      const run = await processOutbox(worker);
-      if (run.processed + run.failed + run.dead === 0) break;
-    }
+    await drainOutbox(worker);
     const notifications = (await ali.get("/v1/notifications")).json().notifications;
     expect(notifications.map((n: { workItemId: string }) => n.workItemId)).toContain(mar);
     expect((await detail(ali)).documentNumber).toMatch(/^TWR-MAR-01-\d{4}$/);
