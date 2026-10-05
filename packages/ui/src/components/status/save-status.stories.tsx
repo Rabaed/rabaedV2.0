@@ -42,9 +42,16 @@ export const ChangedByAnotherMember: Story = {
   },
 };
 
-/** Before the first save and with nothing changed by others, there is nothing to say. */
+/** Before the first save and with nothing changed by others, there is nothing to say beside the Save button. */
 export const Nothing: Story = {
   args: { savedAt: null },
+  // SaveStatus renders nothing, so the story shows it beside the button it sits next to.
+  render: (args, context) => (
+    <div className="flex items-center gap-3">
+      <button type="button">{storyLocale(context) === "ar" ? "حفظ" : "Save"}</button>
+      <SaveStatus {...args} locale={storyLocale(context)} />
+    </div>
+  ),
   play: async (context) => {
     await expect(context.canvas.queryByRole("status")).toBeNull();
   },
