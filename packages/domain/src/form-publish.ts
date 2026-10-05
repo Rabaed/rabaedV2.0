@@ -11,7 +11,7 @@ import {
   type FormSchema,
   type FormSection,
 } from "./form.ts";
-import { editableAtProblem, type WorkflowStepHolder } from "./form-sections.ts";
+import { editableAtProblem, sectionsFilledBy, type WorkflowStepHolder } from "./form-sections.ts";
 
 // The publish-time checks (form-engine.md §7; RP-271). Publishing freezes a Form
 // Version for good, so a schema that would break Work Items is refused first:
@@ -34,6 +34,7 @@ export const schemaProblemCodes = [
   "unknown_option_list",
   "unknown_step",
   "mixed_roles",
+  "not_for_other_participant",
   // Action Forms only (action-form.ts).
   "not_in_action_form",
   "reserved_key",
@@ -284,13 +285,28 @@ function builtInProblems(schema: FormSchema): SchemaProblem[] {
 }
 
 /**
- * Sections whose `editable_at` names a Step one of the Workflows doesn't have, or
- * Steps held by two Participant roles (form-engine.md §4): once each, the first
- * problem found.
+ * The field types a section another Participant fills can't hold: a link question
+ * creates Links on every save, seen by everyone at once, and files, photos and
+ * checklist evidence change in Draft only (form-engine.md §4).
+ */
+const notForOtherParticipant: ReadonlySet<FormField["type"]> = new Set(["work_item_ref", "attachments", "photos", "checklist"]);
+
+/**
+ * Sections whose `editable_at` names a Step one of the Workflows doesn't have,
+ * Steps held by two Participant roles, or, filled by a Participant other than
+ * the raiser, a field type only the raiser's sections take (form-engine.md §4):
+ * once each, the first problem found.
  */
 function editableAtProblems(schema: FormSchema, workflows: readonly (readonly WorkflowStepHolder[])[]): SchemaProblem[] {
   return schema.sections.flatMap((s) => {
-    const found = workflows.map((steps) => editableAtProblem(s, steps)).find((p) => p !== null);
+    const found = workflows
+      .map((steps) =>
+        editableAtProblem(s, steps) ??
+        (s.key in sectionsFilledBy({ sections: [s] }, steps) && s.fields.some((f) => notForOtherParticipant.has(f.type))
+          ? "not_for_other_participant"
+          : null),
+      )
+      .find((p) => p !== null);
     return found ? [problem(s.key, found)] : [];
   });
 }

@@ -461,6 +461,21 @@ describe("Send for Review and Return", () => {
     }
     expect(await eventCount()).toBe(before);
   });
+
+  // The domain validator is the reference: an empty object is an answer (of the
+  // wrong type, which only the API checks), not a missing one.
+  it("counts a required answer missing as the domain does: null, an empty or blank text, an empty list", async () => {
+    const schema = JSON.stringify({ sections: [{ key: "action", fields: [{ key: "reason", type: "textarea", required: true }] }] });
+    const fits = async (answer: string) => {
+      const { rows } = await migrator.query<{ fits: boolean }>(
+        "select app.action_form_fits($1::jsonb, jsonb_build_object('reason', $2::jsonb)) as fits",
+        [schema, answer],
+      );
+      return rows[0]!.fits;
+    };
+    for (const missing of ["null", '""', '"  "', "[]"]) expect(await fits(missing), missing).toBe(false);
+    for (const answered of ["{}", '"Wrong tray size"']) expect(await fits(answered), answered).toBe(true);
+  });
 });
 
 // RP-194: Submit to the Consultant and Code A, called as the app role.

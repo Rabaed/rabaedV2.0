@@ -97,4 +97,16 @@ describe("filling an Action Form", () => {
     });
     expect(validateAnswers(form, { reason: "Wrong tray size" }, "complete")).toEqual({ ok: true, answers: { reason: "Wrong tray size" } });
   });
+
+  // The database's backstop (app.action_form_fits) counts an answer missing as this does.
+  it("counts null, an empty text or list as missing, and an empty object as an answer of the wrong type", () => {
+    const form = schema(reason);
+    for (const missing of [null, "", [], "  "]) {
+      expect(validateAnswers(form, { reason: missing }, "complete"), JSON.stringify(missing)).toEqual({
+        ok: false,
+        errors: [{ key: "reason", code: "required" }],
+      });
+    }
+    expect(validateAnswers(form, { reason: {} }, "complete")).toEqual({ ok: false, errors: [{ key: "reason", code: "wrong_type" }] });
+  });
 });

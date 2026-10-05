@@ -2,7 +2,9 @@
 // V19 and scenario 47; ADR 0013), as the app role: while K1 holds the item, a
 // Contractor Member and the Owner read the answers as they arrived and none of
 // K1's answers_changed events, whatever they query; K1 saves only its section;
-// and K1 moves on only with the answers the API checked.
+// and K1 moves on only with the answers the API checked. A Return out of K1's
+// Step discards what K1 wrote (RP-299 review). The field-times functions run
+// only as the app role, and stamp only for a Member who may save.
 import { randomInt, randomUUID } from "node:crypto";
 import { sql } from "kysely";
 import pg from "pg";
@@ -65,7 +67,12 @@ async function addType() {
         key: "verification",
         title: { en: "Consultant verification", ar: "تحقق الاستشاري" },
         editable_at: ["consultant_review"],
-        fields: [{ key: "sample_checked", type: "yes_no", label: { en: "Sample checked", ar: "فحص العينة" }, required: true }],
+        // Published by SQL, past the publish check that keeps file fields out of another Participant's section:
+        // the database refuses a file into it on its own.
+        fields: [
+          { key: "sample_checked", type: "yes_no", label: { en: "Sample checked", ar: "فحص العينة" }, required: true },
+          { key: "evidence", type: "attachments", label: { en: "Evidence", ar: "الأدلة" } },
+        ],
       },
       {
         key: "classification",
@@ -108,7 +115,8 @@ async function addType() {
           ('send_for_review', 'draft', 'internal_review', '{"en": "Send", "ar": "إرسال"}', 'send', null, 'create', 1),
           ('submit', 'internal_review', 'consultant_review', '{"en": "Submit", "ar": "تقديم"}', 'submit', null, 'submit', 2),
           ('send_to_manager', 'consultant_review', 'consultant_approval', '{"en": "Send", "ar": "إرسال"}', 'send', null, 'review', 3),
-          ('approve_a', 'consultant_approval', 'approved', '{"en": "A", "ar": "A"}', 'close', 'A', 'approve', 4)
+          ('approve_a', 'consultant_approval', 'approved', '{"en": "A", "ar": "A"}', 'close', 'A', 'approve', 4),
+          ('return_to_contractor', 'consultant_review', 'internal_review', '{"en": "Return", "ar": "إعادة"}', 'return', null, 'review', 5)
         ) as t (key, from_key, to_key, label, kind, outcome, permission, sort)
         join workflow_step f on f.workflow_version_id = v_version and f.key = t.from_key
         join workflow_step s on s.workflow_version_id = v_version and s.key = t.to_key;
@@ -118,15 +126,34 @@ async function addType() {
     $$`);
 }
 
-const take = (as: string, transition: string, hash = sql`app.answers_sha256(${item}::uuid)`) =>
-  outcome(as, sql`select app.take_transition(${item}::uuid, ${transition}, '{}'::jsonb, '', ${hash}, ${randomUUID()}::uuid, now()) as outcome`);
-const save = (as: string, data: object) =>
+const take = (as: string, transition: string, hash = sql`app.answers_sha256(${item}::uuid)`, id = item) =>
+  outcome(as, sql`select app.take_transition(${id}::uuid, ${transition}, '{}'::jsonb, '', ${hash}, ${randomUUID()}::uuid, now()) as outcome`);
+const save = (as: string, data: object, id = item) =>
   outcome(
     as,
-    sql`select app.save_work_item_answers(${item}::uuid, ${JSON.stringify(data)}::jsonb, ${electrical}::uuid, ${buildingA}::uuid, '{}'::uuid[], now()) as outcome`,
+    sql`select app.save_work_item_answers(${id}::uuid, ${JSON.stringify(data)}::jsonb, ${electrical}::uuid, ${buildingA}::uuid, '{}'::uuid[], now()) as outcome`,
   );
-const answers = (as: string) =>
-  call<{ answers: Record<string, unknown> }>(as, sql`select app.work_item_answers(${item}::uuid) as answers`).then((rows) => {
+const recordTimes = (as: string, id: string) => outcome(as, sql`select app.record_field_times(${id}::uuid, now()) as outcome`);
+const claim = (as: string, id: string) => outcome(as, sql`select app.claim_step(${id}::uuid, now()) as outcome`);
+/** A new item, Submitted to K1 and claimed by its engineer. */
+async function atConsultantReview(model: string): Promise<string> {
+  const [draft] = await call<{ outcome: string; work_item_id: string }>(
+    c1.member,
+    sql`select outcome, work_item_id from app.create_work_item(
+      ${projectId}::uuid, ${TYPE}, ${model}, app.latest_form_version(${TYPE}), ${JSON.stringify({ model })}::jsonb,
+      ${electrical}::uuid, ${buildingA}::uuid, now())`,
+  );
+  const id = draft!.work_item_id;
+  // As the API does after every save.
+  expect(await recordTimes(c1.member, id)).toBe("recorded");
+  expect(await take(c1.member, "send_for_review", sql`app.answers_sha256(${id}::uuid)`, id)).toBe("applied");
+  expect(await claim(c1Pm, id)).toBe("claimed");
+  expect(await take(c1Pm, "submit", sql`app.answers_sha256(${id}::uuid)`, id)).toBe("applied");
+  expect(await claim(k1.member, id)).toBe("claimed");
+  return id;
+}
+const answers = (as: string, id = item) =>
+  call<{ answers: Record<string, unknown> }>(as, sql`select app.work_item_answers(${id}::uuid) as answers`).then((rows) => {
     const { trade: _t, location: _l, ...own } = rows[0]!.answers;
     return own;
   });
@@ -252,5 +279,79 @@ describe("K1 at the Step its section names", () => {
       expect(await answers(other)).toEqual({ model: "FD-90", sample_checked: false });
       expect(await changes(other)).toEqual({ events: [], history: [] });
     }
+  });
+});
+
+describe("the field-times functions", () => {
+  const functions = [
+    "app.work_item_field_times(uuid, boolean)",
+    "app.record_field_times(uuid, timestamptz)",
+    "app.answers_autosave(uuid)",
+  ];
+
+  it("run only as the app role: not as rabaed_admin, nor granted to everyone", async () => {
+    for (const f of functions) {
+      const { rows } = await migrator.query<{ app: boolean; admin: boolean; to_public: boolean }>(
+        `select has_function_privilege('rabaed_app', $1, 'execute') as app,
+           has_function_privilege('rabaed_admin', $1, 'execute') as admin,
+           exists (select 1 from aclexplode((select proacl from pg_proc where oid = $1::regprocedure)) a where a.grantee = 0) as to_public`,
+        [f],
+      );
+      expect(rows[0], f).toEqual({ app: true, admin: false, to_public: false });
+    }
+  });
+
+  it("stamp the answers only for a Member who may save them, not one who only sees the item", async () => {
+    const id = await atConsultantReview("FD-30");
+    for (const onlySees of [c1.member, c1Pm, ow.member]) {
+      expect(await recordTimes(onlySees, id), onlySees).toBe("not_editable");
+    }
+    expect(await recordTimes(k1.member, id)).toBe("recorded");
+  });
+});
+
+describe("a file into a field of a section not editable now", () => {
+  it("is refused to the raiser in Draft", async () => {
+    const [draft] = await call<{ work_item_id: string }>(
+      c1.member,
+      sql`select work_item_id from app.create_work_item(
+        ${projectId}::uuid, ${TYPE}, 'Evidence', app.latest_form_version(${TYPE}), '{}'::jsonb, ${electrical}::uuid, ${buildingA}::uuid, now())`,
+    );
+    expect(
+      await outcome(
+        c1.member,
+        sql`select outcome from app.start_document_upload(${draft!.work_item_id}::uuid, 'evidence.pdf', 10, 'application/pdf', now(), 'evidence')`,
+      ),
+    ).toBe("not_editable");
+  });
+});
+
+describe("a Return out of K1's Step", () => {
+  let id = "";
+  beforeAll(async () => {
+    id = await atConsultantReview("FD-40");
+    expect(await save(k1.member, { model: "FD-40", sample_checked: true }, id)).toBe("saved");
+    expect(await recordTimes(k1.member, id)).toBe("recorded");
+    expect(await take(k1.member, "return_to_contractor", sql`null`, id)).toBe("applied");
+  });
+
+  it("discards K1's answers: C1, holding it again, reads K1's section as it arrived", async () => {
+    for (const who of [c1.member, c1Pm]) {
+      expect(await answers(who, id)).toEqual({ model: "FD-40" });
+    }
+  });
+
+  it("puts the field times of K1's section back, and hashes the answers it leaves with", async () => {
+    const { rows } = await migrator.query<{ data: object; data_as_arrived: object | null; times: string[]; same_hash: boolean }>(
+      `select w.data, w.data_as_arrived, array(select jsonb_object_keys(w.field_times) order by 1) as times,
+         e.content_sha256 = sha256(convert_to(jsonb_build_object('title', w.title, 'data', w.data)::text, 'UTF8')) as same_hash
+       from work_item w
+       cross join lateral (
+         select x.content_sha256 from work_item_event x where x.work_item_id = w.id and x.type = 'transition' order by x.seq desc limit 1
+       ) e
+       where w.id = $1`,
+      [id],
+    );
+    expect(rows[0]).toEqual({ data: { model: "FD-40" }, data_as_arrived: null, times: ["location", "model", "trade"], same_hash: true });
   });
 });
