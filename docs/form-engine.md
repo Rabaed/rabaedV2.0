@@ -159,6 +159,13 @@ The part-1 MAR is a Rabaed Default written as data (migration `mar_quantity` com
 - A Draft or an item in its raiser's internal review is never listed, whoever asks; it appears once Submitted. An item the viewer can't see is 404, like its other reads.
 - Served by `app.work_item_linked_from` (security definer), never the table: the app role can't read a Link's target.
 
+### 2.8a Links within a Revision chain (RP-311 review, `20261107000000_revision_links_follow_chain.sql`)
+
+- Settled with the user (2026-10-05): the Links agree with the Revision drop-down (workflow-engine.md §5.4). Every Link read leaves out an item of the reading item's **own chain** that the reader can't see, instead of showing its Document Number and Subject (E1, E3 still apply to items of other chains). `app.chain_item_hidden(item, other)` is the test (same `root_id`, not the item itself, `app.sees_work_item` false).
+- `app.work_item_links` (the Links System Field and the link questions' Links) and `app.work_item_linked_from` use it; Linked from also leaves out a discarded Revision. So the original's `related` Link to a Rev 1 moved to a Location the reader doesn't cover is not shown, nor the original in that Rev 1's Linked from (visibility.md scenario 58).
+- `app.work_item_answers` reads each link question through `app.link_choices_as_seen(item, project, ids)`, which leaves such an item out of the answer (the two-argument version is dropped). `app.resolve_link_answers` keeps it where the stored answer held it when a saver who couldn't read it saves the answer back.
+- A discarded Revision is seen by nobody, so its Links, Linked from and copied Documents answer 404, and its link-question Links never reach the Linked from of the items it named (it never left Draft).
+
 ### 2.9 The link question (as built, RP-293)
 
 - A `work_item_ref` answer is a list of item ids in the order chosen, no duplicates (`wrong_type` otherwise); `required` wants at least one when leaving Draft. Each new id must be one Link search could offer the filler, else `unknown_option` (hidden, Draft, internal, another Project's, made up, the item itself alike); an id the field already holds stays acceptable on re-save while the filler still sees it, even if its item has since gone back to a Draft.
@@ -273,6 +280,7 @@ Layout is not fixed to the Form: a Form can have **several PDF Templates**, and 
 - **Keys are forever.** A key can't be reused for a field of a different type, and the builder enforces this across all versions of the definition.
 - **Dropping a field** in a new version doesn't touch items pinned to older versions: they keep rendering with their own schema.
 - **A Revision onto a newer Form version** copies values by matching key and type. Values for fields that no longer exist stay visible in the previous revision only. The new revision shows a notice listing them.
+  - As built (RP-316, RP-311 review): `app.revision_dropped_fields(item)` (security definer, granted to the app role) returns, for a Revision the caller sees, the fields (key and label) of the revised item's Form Version that the Revision's Version doesn't have with the same type, in schema order, layout fields aside; nothing for an original or an unchanged Version. It reads the two schemas only, never the revised item's answers. `WorkItemDetail.droppedFields` carries them, and the item page lists them under the `versionsChanged` notice, in English and Arabic.
 
 ### Publish-time validation
 

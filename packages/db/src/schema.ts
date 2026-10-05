@@ -181,7 +181,11 @@ export interface ParticipantTable {
   ordinal: Generated<number | null>;
   /** The Participant Code (2–6 letters or digits, in capitals) set by a Project Admin; null until set. */
   code: string | null;
-  /** When a number was first built with the code, fixing it. */
+  /**
+   * When a number was first built with the code, or a starting number set for a
+   * counter whose key holds it, fixing it. Set with a null code, the position was
+   * fixed: no code can be set.
+   */
   code_locked_at: Timestamp | null;
   /**
    * Invited until its Authorized Person accepts (Active) or declines, or a
