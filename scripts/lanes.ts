@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { connect, createServer } from "node:net";
+import { samePath } from "./paths.ts";
 
 // Lanes: each worktree's own ports and Docker Compose project (README "Several
 // worktrees at once", planning/parallel-sessions.md). Used by lane-env.ts, which
@@ -55,22 +56,13 @@ export function parseVolumes(out: string): Volume[] {
 
 const lines = (out: string) => out.split(/\r?\n/).filter((line) => line.trim() !== "");
 
-/** Whether two paths name the same folder (Docker reports Windows paths as it was given them). */
-export function samePath(a: string, b: string, platform: NodeJS.Platform = process.platform): boolean {
-  const norm = (p: string) => {
-    const slashed = p.replace(/\\/g, "/").replace(/\/+$/, "");
-    return platform === "win32" ? slashed.toLowerCase() : slashed;
-  };
-  return a !== "" && b !== "" && norm(a) === norm(b);
-}
-
 type ClashInput = {
   containers: Container[];
   takenPorts: ReadonlySet<number>;
   cwd: string;
   platform?: NodeJS.Platform;
-  /** --db: the lane's containers may run from another worktree; this one only adds a database on its Postgres. */
-  sharedLane?: boolean;
+  /** The caller has its own database (lane:env --db), so other worktrees' containers of this lane's compose project are not a clash. */
+  ownDatabase?: boolean;
 };
 
 /**
@@ -78,8 +70,8 @@ type ClashInput = {
  * something other than this worktree's own containers, or its compose project
  * already used from another worktree (it would share that worktree's database).
  */
-export function laneClashes(n: number, { containers, takenPorts, cwd, platform, sharedLane }: ClashInput): string[] {
-  const own = (c: Container) => samePath(c.workingDir, cwd, platform) || (sharedLane === true && c.project === laneProject(n));
+export function laneClashes(n: number, { containers, takenPorts, cwd, platform, ownDatabase }: ClashInput): string[] {
+  const own = (c: Container) => samePath(c.workingDir, cwd, platform) || (ownDatabase === true && c.project === laneProject(n));
   const clashes: string[] = [];
   for (const [key, port] of Object.entries(lanePorts(n)) as [keyof LanePorts, number][]) {
     if (!takenPorts.has(port)) continue;
@@ -92,34 +84,11 @@ export function laneClashes(n: number, { containers, takenPorts, cwd, platform, 
         : `${portNames[key]} port ${port} is held by another process (not a Docker container).`,
     );
   }
-  if (sharedLane) return clashes; // --db: the lane's project may belong to another worktree
   const others = [...new Set(containers.filter((c) => c.project === laneProject(n) && !own(c)).map((c) => c.workingDir))];
   if (others.length > 0) {
     clashes.push(`Compose project ${laneProject(n)} already belongs to ${others.join(", ")} (it would share that worktree's database).`);
   }
   return clashes;
-}
-
-const MAX_SUFFIX = 40;
-
-/** Why `--db <suffix>` is not usable, or undefined. The name becomes rabaed_<suffix> and rabaed_<suffix>_test. */
-export function databaseSuffixError(suffix: string): string | undefined {
-  if (!/^[a-z][a-z0-9_]*$/.test(suffix) || suffix.length > MAX_SUFFIX || suffix.endsWith("_test")) {
-    return `--db takes a lower-case name of letters, digits and underscores, starting with a letter, at most ${MAX_SUFFIX} characters, not ending in _test (got "${suffix}").`;
-  }
-  return undefined;
-}
-
-/** The .env text with the migrator, app and admin URLs on rabaed_<suffix>. The tests derive rabaed_<suffix>_test from the app URL. */
-export function withDatabase(env: string, suffix: string): string {
-  let out = env;
-  for (const role of ["MIGRATOR", "APP", "ADMIN"]) {
-    const key = `DATABASE_${role}_URL`;
-    const url = new RegExp(`^(${key}=.*)/rabaed(?=\r?$)`, "m");
-    if (!url.test(out)) throw new Error(`${key} in .env.example does not end in /rabaed, so --db cannot point it at rabaed_${suffix}.`);
-    out = out.replace(url, `$1/rabaed_${suffix}`);
-  }
-  return out;
 }
 
 /** The first lane from start (wrapping round, never lane 0, which is the main folder's) with no clash. */
@@ -219,4 +188,96 @@ export function removeProject(stale: StaleProject): void {
   if (stale.volumes.length > 0) docker(["volume", "rm", ...stale.volumes]);
   const networks = lines(docker(["network", "ls", "-q", "--filter", `label=com.docker.compose.project=${stale.project}`]));
   if (networks.length > 0) docker(["network", "rm", ...networks]);
+}
+
+/** A --db suffix: lowercase letters and digits, starting with a letter, and not "test" (rabaed_test is the shared test database). */
+export const isValidDbSuffix = (suffix: string | undefined): suffix is string => suffix !== undefined && /^[a-z][a-z0-9]*$/.test(suffix) && suffix !== "test";
+
+/**
+ * The .env text for lane n from .env.example: its ports and compose project, and with
+ * db the three database URLs naming rabaed_<db> (seam suites then use rabaed_<db>_test).
+ */
+export function laneEnv(example: string, lane: number, db?: string): string {
+  const { postgres: pg, api, admin, web, mailpit, files } = lanePorts(lane);
+  const env = example
+    .replace(/^COMPOSE_PROJECT_NAME=.*$/m, `COMPOSE_PROJECT_NAME=${laneProject(lane)}`)
+    .replace(/^POSTGRES_PORT=.*$/m, `POSTGRES_PORT=${pg}`)
+    .replace(/^PORT=.*$/m, `PORT=${web}`)
+    .replace(/^API_PORT=.*$/m, `API_PORT=${api}`)
+    .replace(/^ADMIN_PORT=.*$/m, `ADMIN_PORT=${admin}`)
+    .replace(/^WEB_URL=.*$/m, `WEB_URL=http://lane${lane}.localhost:${web}`)
+    .replace(/^MAILPIT_PORT=.*$/m, `MAILPIT_PORT=${mailpit}`)
+    .replace(/^FILE_STORE_PORT=.*$/m, `FILE_STORE_PORT=${files}`)
+    .replace(/^FILE_STORE_ENDPOINT=http:\/\/127\.0\.0\.1:9000$/m, `FILE_STORE_ENDPOINT=http://127.0.0.1:${files}`)
+    .replace(/^MAIL_CATCHER_URL=http:\/\/127\.0\.0\.1:8025$/m, `MAIL_CATCHER_URL=http://127.0.0.1:${mailpit}`)
+    .replace(/@localhost:5432\//g, `@localhost:${pg}/`)
+    .replace(/^API_URL=http:\/\/127\.0\.0\.1:4000$/m, `API_URL=http://127.0.0.1:${api}`);
+  return db === undefined ? env : env.replace(/^(DATABASE_(?:MIGRATOR|APP|ADMIN)_URL=.*\/)rabaed$/gm, `$1rabaed_${db}`);
+}
+
+const SUFFIXED_DB = /^rabaed_([a-z][a-z0-9]*)(_test)?$/;
+
+/**
+ * The per-worktree databases (rabaed_<suffix> and rabaed_<suffix>_test, as lane:env --db
+ * makes them) that no existing worktree names in its .env. Never rabaed, rabaed_test or any
+ * other name. inUse: the database names from the .env files of the worktrees that still exist.
+ */
+export function orphanDatabases(names: string[], inUse: ReadonlySet<string>): string[] {
+  return names
+    .filter((name) => {
+      const m = SUFFIXED_DB.exec(name);
+      return m !== null && m[1] !== "test" && !inUse.has(`rabaed_${m[1]}`);
+    })
+    .sort();
+}
+
+/** The database name in a Postgres URL, e.g. rabaed_rp322 for postgres://u:p@localhost:5832/rabaed_rp322. */
+export const databaseOfUrl = (url: string): string | undefined => /\/([^/?]+)(?:\?.*)?$/.exec(url)?.[1];
+
+/** The databases an .env file's DATABASE_MIGRATOR_URL, DATABASE_APP_URL and DATABASE_ADMIN_URL name; a value may be quoted. */
+export function databasesOfEnv(env: string): string[] {
+  const names: string[] = [];
+  for (const [, value = ""] of env.matchAll(/^DATABASE_(?:MIGRATOR|APP|ADMIN)_URL=(.*)$/gm)) {
+    const name = databaseOfUrl(value.trim().replace(/^(["'])(.*)\1$/, "$2"));
+    if (name) names.push(name);
+  }
+  return names;
+}
+
+/**
+ * The databases some worktree still uses: those named in the .env of any of dirs
+ * (the existing worktrees of this clone). readEnv returns a folder's .env text,
+ * or undefined when it has none.
+ */
+export function databasesInUse(dirs: string[], readEnv: (dir: string) => string | undefined): Set<string> {
+  return new Set(dirs.flatMap((dir) => databasesOfEnv(readEnv(dir) ?? "")));
+}
+
+/**
+ * Splits orphan databases into those to drop and those to keep because something
+ * is connected to them right now (pg_stat_activity), such as a worktree of another
+ * clone or a test run. connections: the number of connections per database.
+ */
+export function dropOrKeep(orphans: string[], connections: ReadonlyMap<string, number>): { drop: string[]; busy: { name: string; connections: number }[] } {
+  const drop: string[] = [];
+  const busy: { name: string; connections: number }[] = [];
+  for (const name of orphans) {
+    const n = connections.get(name) ?? 0;
+    if (n > 0) busy.push({ name, connections: n });
+    else drop.push(name);
+  }
+  return { drop, busy };
+}
+
+/** Parses `datname|count` lines (psql -At) into connections per database. */
+export function parseConnections(lines: string[]): Map<string, number> {
+  return new Map(lines.map((line) => line.split("|")).map(([name = "", count = "0"]) => [name, Number(count)] as const));
+}
+
+/** The `db` service containers of the running rabaed-* compose projects. */
+export const dbContainers = (containers: Container[]): Container[] => containers.filter((c) => c.state === "running" && c.project.startsWith("rabaed") && /-db-\d+$/.test(c.name));
+
+/** Runs SQL as the superuser inside a db container and returns one value per line. */
+export function psql(container: string, sql: string): string[] {
+  return lines(docker(["exec", container, "psql", "-U", "postgres", "-d", "postgres", "-At", "-c", sql]));
 }

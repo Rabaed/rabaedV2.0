@@ -1,6 +1,24 @@
+import { readFileSync } from "node:fs";
 import { createServer, type Server } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
-import { databaseSuffixError, firstFreeLane, isPortTaken, laneClashes, lanePorts, parseContainers, parseVolumes, staleProjects, withDatabase, type Container } from "./lanes.ts";
+import {
+  databaseOfUrl,
+  databasesInUse,
+  databasesOfEnv,
+  dropOrKeep,
+  firstFreeLane,
+  isPortTaken,
+  isValidDbSuffix,
+  laneClashes,
+  laneEnv,
+  lanePorts,
+  orphanDatabases,
+  parseConnections,
+  parseContainers,
+  parseVolumes,
+  staleProjects,
+  type Container,
+} from "./lanes.ts";
 
 // `docker ps -a --format` lines as lanes.ts asks for them: name, state, compose project, working dir, ports.
 const psLine = (name: string, state: string, project: string, dir: string, ports: string) => [name, state, project, dir, ports].join("\t");
@@ -77,64 +95,6 @@ describe("laneClashes", () => {
   });
 });
 
-describe("laneClashes with sharedLane (--db)", () => {
-  const here = "G:\\rabaed-wt\\RP-312-a";
-  const lane2 = (extra: Partial<Container> = {}) =>
-    container({ name: "rabaed-lane2-db-1", project: "rabaed-lane2", workingDir: "G:\\rabaed-wt\\RP-337", ports: [5632], ...extra });
-
-  it("shares the lane's ports and compose project with the worktree that runs it", () => {
-    const input = { containers: [lane2()], takenPorts: new Set([5632]), cwd: here };
-    expect(laneClashes(2, input)).not.toEqual([]);
-    expect(laneClashes(2, { ...input, sharedLane: true })).toEqual([]);
-  });
-
-  it("still refuses a lane port held by something outside the lane's compose project", () => {
-    const other = container({ name: "stray-db", project: "other", workingDir: "G:\\x", ports: [5632] });
-    expect(laneClashes(2, { containers: [other], takenPorts: new Set([5632]), cwd: here, sharedLane: true })).toEqual([
-      "Postgres port 5632 is held by container stray-db (compose project other, from G:\\x).",
-    ]);
-    expect(laneClashes(2, { containers: [], takenPorts: new Set([5632]), cwd: here, sharedLane: true })).toEqual([
-      "Postgres port 5632 is held by another process (not a Docker container).",
-    ]);
-  });
-});
-
-describe("databaseSuffixError", () => {
-  it("accepts short lower-case names", () => {
-    for (const ok of ["rp312", "x", "rp312_b"]) expect(databaseSuffixError(ok)).toBeUndefined();
-  });
-
-  it("rejects anything that is not a safe database name part", () => {
-    for (const bad of ["", "RP312", "rp-312", "1abc", "a b", "a/b", "a".repeat(41), "x_test"]) expect(databaseSuffixError(bad)).toMatch(/--db/);
-  });
-});
-
-describe("withDatabase", () => {
-  const env = [
-    "DATABASE_SUPERUSER_URL=postgres://postgres:pw@localhost:5632/postgres",
-    "DATABASE_MIGRATOR_URL=postgres://rabaed_migrator:pw@localhost:5632/rabaed",
-    "DATABASE_APP_URL=postgres://rabaed_app:pw@localhost:5632/rabaed",
-    "DATABASE_ADMIN_URL=postgres://rabaed_admin:pw@localhost:5632/rabaed",
-    "OTHER=postgres://x@localhost/rabaed",
-  ].join("\n");
-
-  it("points every role URL at rabaed_<suffix> and leaves the superuser's maintenance database and other lines alone", () => {
-    expect(withDatabase(env, "rp312")).toBe(
-      [
-        "DATABASE_SUPERUSER_URL=postgres://postgres:pw@localhost:5632/postgres",
-        "DATABASE_MIGRATOR_URL=postgres://rabaed_migrator:pw@localhost:5632/rabaed_rp312",
-        "DATABASE_APP_URL=postgres://rabaed_app:pw@localhost:5632/rabaed_rp312",
-        "DATABASE_ADMIN_URL=postgres://rabaed_admin:pw@localhost:5632/rabaed_rp312",
-        "OTHER=postgres://x@localhost/rabaed",
-      ].join("\n"),
-    );
-  });
-
-  it("throws when a role URL does not end in /rabaed, rather than silently sharing the database", () => {
-    expect(() => withDatabase(env.replace("rabaed_app:pw@localhost:5632/rabaed", "rabaed_app:pw@localhost:5632/custom"), "x")).toThrow(/DATABASE_APP_URL/);
-  });
-});
-
 describe("firstFreeLane", () => {
   it("returns the first lane from the start that has no clash", () => {
     const busy = new Set([2, 3]);
@@ -207,5 +167,152 @@ describe("isPortTaken", () => {
     await new Promise<void>((done) => server!.close(() => done()));
     server = undefined;
     expect(await isPortTaken(port)).toBe(false);
+  });
+});
+
+describe("laneEnv", () => {
+  const example = [
+    "COMPOSE_PROJECT_NAME=rabaed",
+    "POSTGRES_PORT=5432",
+    "PORT=3000",
+    "API_PORT=4000",
+    "ADMIN_PORT=4050",
+    "WEB_URL=http://localhost:3000",
+    "MAILPIT_PORT=8025",
+    "FILE_STORE_PORT=9000",
+    "FILE_STORE_ENDPOINT=http://127.0.0.1:9000",
+    "MAIL_CATCHER_URL=http://127.0.0.1:8025",
+    "API_URL=http://127.0.0.1:4000",
+    "DATABASE_SUPERUSER_URL=postgres://postgres:local-dev-only@localhost:5432/postgres",
+    "DATABASE_MIGRATOR_URL=postgres://rabaed_migrator:local-dev-only@localhost:5432/rabaed",
+    "DATABASE_APP_URL=postgres://rabaed_app:local-dev-only@localhost:5432/rabaed",
+    "DATABASE_ADMIN_URL=postgres://rabaed_admin:local-dev-only@localhost:5432/rabaed",
+    "MAIL_FROM=no-reply@rabaed.test",
+    "",
+  ].join("\n");
+
+  it("without a database suffix writes the lane's ports and project and leaves the database URLs alone", () => {
+    expect(laneEnv(example, 3)).toBe(
+      [
+        "COMPOSE_PROJECT_NAME=rabaed-lane3",
+        "POSTGRES_PORT=5732",
+        "PORT=3300",
+        "API_PORT=4300",
+        "ADMIN_PORT=4350",
+        "WEB_URL=http://lane3.localhost:3300",
+        "MAILPIT_PORT=8325",
+        "FILE_STORE_PORT=9300",
+        "FILE_STORE_ENDPOINT=http://127.0.0.1:9300",
+        "MAIL_CATCHER_URL=http://127.0.0.1:8325",
+        "API_URL=http://127.0.0.1:4300",
+        "DATABASE_SUPERUSER_URL=postgres://postgres:local-dev-only@localhost:5732/postgres",
+        "DATABASE_MIGRATOR_URL=postgres://rabaed_migrator:local-dev-only@localhost:5732/rabaed",
+        "DATABASE_APP_URL=postgres://rabaed_app:local-dev-only@localhost:5732/rabaed",
+        "DATABASE_ADMIN_URL=postgres://rabaed_admin:local-dev-only@localhost:5732/rabaed",
+        "MAIL_FROM=no-reply@rabaed.test",
+        "",
+      ].join("\n"),
+    );
+  });
+
+  it("with a suffix points the migrator, app and admin URLs at rabaed_<suffix> and nothing else", () => {
+    const env = laneEnv(example, 4, "rp322");
+    expect(env).toContain("DATABASE_MIGRATOR_URL=postgres://rabaed_migrator:local-dev-only@localhost:5832/rabaed_rp322\n");
+    expect(env).toContain("DATABASE_APP_URL=postgres://rabaed_app:local-dev-only@localhost:5832/rabaed_rp322\n");
+    expect(env).toContain("DATABASE_ADMIN_URL=postgres://rabaed_admin:local-dev-only@localhost:5832/rabaed_rp322\n");
+    expect(env).toContain("DATABASE_SUPERUSER_URL=postgres://postgres:local-dev-only@localhost:5832/postgres\n");
+    expect(env).toContain("COMPOSE_PROJECT_NAME=rabaed-lane4\n");
+    expect(env).toBe(laneEnv(example, 4).replace(/\/rabaed$/gm, "/rabaed_rp322"));
+  });
+
+  it("works on the real .env.example: only the three database names differ with a suffix", () => {
+    const real = readFileSync(new URL("../.env.example", import.meta.url), "utf8");
+    const plain = laneEnv(real, 2).split("\n");
+    const changed = laneEnv(real, 2, "rp9")
+      .split("\n")
+      .filter((line, i) => line !== plain[i]);
+    expect(changed.map((l) => l.split("=")[0])).toEqual(["DATABASE_MIGRATOR_URL", "DATABASE_APP_URL", "DATABASE_ADMIN_URL"]);
+    expect(changed.every((l) => l.endsWith("/rabaed_rp9"))).toBe(true);
+  });
+});
+
+describe("isValidDbSuffix", () => {
+  it("takes lowercase letters and digits starting with a letter, never test", () => {
+    expect(["rp322", "a", "rp322b"].every(isValidDbSuffix)).toBe(true);
+    for (const bad of [undefined, "", "322", "RP322", "rp-322", "rp_322", "a;drop", "test"]) expect(isValidDbSuffix(bad)).toBe(false);
+  });
+});
+
+describe("laneClashes with a shared lane (lane:env --db)", () => {
+  const here = "G:\\rabaed-wt\\RP-322";
+  const other = container({ name: "rabaed-lane4-db-1", project: "rabaed-lane4", workingDir: "G:\\Rabaed Contech\\.claude\\worktrees\\RP-299", ports: [5832] });
+
+  it("refuses without --db: the lane's Postgres and project belong to another worktree", () => {
+    expect(laneClashes(4, { containers: [other], takenPorts: new Set([5832]), cwd: here })).toHaveLength(2);
+  });
+
+  it("allows it with --db: sharing the lane's compose project is the point", () => {
+    expect(laneClashes(4, { containers: [other], takenPorts: new Set([5832]), cwd: here, ownDatabase: true })).toEqual([]);
+  });
+
+  it("still refuses a lane port held by something outside the lane's compose project", () => {
+    const stranger = container({ name: "rabaed-rp263-db-1", project: "rabaed-rp263", workingDir: "G:\\rabaed-wt\\RP-263", ports: [5832] });
+    expect(laneClashes(4, { containers: [stranger], takenPorts: new Set([5832]), cwd: here, ownDatabase: true })).toHaveLength(1);
+    expect(laneClashes(4, { containers: [], takenPorts: new Set([4400]), cwd: here, ownDatabase: true })).toEqual(["api port 4400 is held by another process (not a Docker container)."]);
+  });
+});
+
+describe("orphanDatabases", () => {
+  it("lists the suffixed databases no worktree names, and never the shared ones", () => {
+    const names = ["rabaed", "rabaed_test", "rabaed_rp322", "rabaed_rp322_test", "rabaed_rp323", "rabaed_rp323_test", "rabaed_rp324_test", "rabaed_test_rds_master", "postgres"];
+    expect(orphanDatabases(names, new Set(["rabaed_rp322", "rabaed"]))).toEqual(["rabaed_rp323", "rabaed_rp323_test", "rabaed_rp324_test"]);
+  });
+
+  it("finds nothing when every worktree still exists", () => {
+    expect(orphanDatabases(["rabaed_rp1", "rabaed_rp1_test"], new Set(["rabaed_rp1"]))).toEqual([]);
+  });
+});
+
+describe("databasesOfEnv", () => {
+  it("reads the migrator, app and admin URLs' databases, quoted or not, and nothing else", () => {
+    const env = [
+      "DATABASE_SUPERUSER_URL=postgres://postgres:x@localhost:5832/postgres",
+      "DATABASE_MIGRATOR_URL=postgres://rabaed_migrator:x@localhost:5832/rabaed_rp322",
+      `DATABASE_APP_URL="postgres://rabaed_app:x@localhost:5832/rabaed_rp322"`,
+      "DATABASE_ADMIN_URL='postgres://rabaed_admin:x@localhost:5832/rabaed_rp322?sslmode=disable'  ",
+      "# DATABASE_APP_URL=postgres://rabaed_app:x@localhost:5832/rabaed_old",
+      "DATABASE_APP_URL_EXTRA=postgres://u:p@h/rabaed_other",
+    ].join("\r\n");
+    expect(databasesOfEnv(env)).toEqual(["rabaed_rp322", "rabaed_rp322", "rabaed_rp322"]);
+  });
+});
+
+describe("databasesInUse", () => {
+  it("collects the databases of every worktree that has an .env", () => {
+    const envs: Record<string, string> = {
+      "G:/a": "DATABASE_APP_URL=postgres://u:p@h:5832/rabaed_rp1\n",
+      "G:/b": "DATABASE_MIGRATOR_URL=postgres://u:p@h:5832/rabaed\n",
+    };
+    expect(databasesInUse(["G:/a", "G:/b", "G:/no-env"], (dir) => envs[dir])).toEqual(new Set(["rabaed_rp1", "rabaed"]));
+  });
+});
+
+describe("dropOrKeep", () => {
+  it("keeps an orphan with an open connection (another clone's worktree, a test run) and drops the rest", () => {
+    const connections = parseConnections(["rabaed_rp9_test|2", "rabaed_rp7|1", ""].filter((l) => l !== ""));
+    expect(dropOrKeep(["rabaed_rp7", "rabaed_rp8", "rabaed_rp8_test", "rabaed_rp9_test"], connections)).toEqual({
+      drop: ["rabaed_rp8", "rabaed_rp8_test"],
+      busy: [
+        { name: "rabaed_rp7", connections: 1 },
+        { name: "rabaed_rp9_test", connections: 2 },
+      ],
+    });
+  });
+});
+
+describe("databaseOfUrl", () => {
+  it("reads the database name", () => {
+    expect(databaseOfUrl("postgres://rabaed_app:x@localhost:5832/rabaed_rp322")).toBe("rabaed_rp322");
+    expect(databaseOfUrl("postgres://u:p@h:5432/rabaed?sslmode=disable")).toBe("rabaed");
   });
 });

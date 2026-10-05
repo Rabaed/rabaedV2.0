@@ -5,7 +5,7 @@
 //
 //   pnpm lanes:prune [--yes]     --yes skips the confirmation
 import { existsSync, readFileSync } from "node:fs";
-import { createInterface } from "node:readline/promises";
+import { confirmOrExit } from "./confirm.ts";
 import { listContainers, listVolumes, removeProject, staleProjects } from "./lanes.ts";
 
 const args = process.argv.slice(2);
@@ -31,19 +31,11 @@ for (const s of stale) {
   console.log(`  ${s.project}: ${s.reason}; containers: ${s.containers.join(", ") || "none"}; volumes: ${s.volumes.join(", ") || "none"}`);
 }
 
-if (!args.includes("--yes")) {
-  if (!process.stdin.isTTY) {
-    console.error("Not removed: re-run with --yes to remove them without a prompt.");
-    process.exit(1);
-  }
-  const prompt = createInterface({ input: process.stdin, output: process.stdout });
-  const answer = await prompt.question("Remove them with their volumes? Their databases are lost, including those of stopped worktrees that still exist. [y/N] ");
-  prompt.close();
-  if (!/^y(es)?$/i.test(answer.trim())) {
-    console.log("Nothing removed.");
-    process.exit(0);
-  }
-}
+await confirmOrExit("Remove them with their volumes? Their databases are lost, including those of stopped worktrees that still exist.", {
+  yes: args.includes("--yes"),
+  verb: "remove",
+  done: "removed",
+});
 
 let failed = 0;
 for (const s of stale) {

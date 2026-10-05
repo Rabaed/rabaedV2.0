@@ -3,38 +3,36 @@
 //
 //   pnpm lane:env <n> [--force] [--free] [--db <suffix>]     n = 0..9, one number per worktree
 //
-// --db <suffix> is for an implementer subagent's worktree (/implement-spec): the migrator,
-// app and admin URLs name rabaed_<suffix> (the tests use rabaed_<suffix>_test, derived from
-// the app URL) and the lane's ports and compose project may be in use by the worktree that
-// runs the lane. Then `pnpm db:setup`; start no containers.
-//
 // Lane n uses Postgres 5432+100n, api 4000+100n, Rabaed Admin 4050+100n, web 3000+100n,
 // Mailpit 8025+100n, the file store 9000+100n and its own Docker Compose project (container + volume). Lane 0 keeps the defaults.
 //
 // It refuses a lane whose ports are taken, or whose compose project another worktree
 // already uses, and names the holder. --free takes the next lane that is free instead.
-// `pnpm lanes:prune` removes the compose projects old worktrees left behind.
+// --db <suffix> (e.g. rp322) names the three database URLs rabaed_<suffix>, so the seam suites
+// use rabaed_<suffix>_test: several worktrees of one lane (e.g. /implement-spec's implementer
+// subagents) can share its Postgres without migrating the same database. A --db run may share
+// a lane with another worktree. Without --db the .env is as before.
+// `pnpm lanes:prune` removes the compose projects old worktrees left behind;
+// `pnpm lanes:drop-dbs` drops the --db databases of worktrees that are gone.
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { databaseSuffixError, firstFreeLane, laneClashes, lanePorts, laneProject, listContainers, takenLanePorts, withDatabase } from "./lanes.ts";
+import { firstFreeLane, isValidDbSuffix, laneClashes, laneEnv, lanePorts, laneProject, listContainers, takenLanePorts } from "./lanes.ts";
 
-let args = process.argv.slice(2);
-let suffix: string | undefined;
-const dbAt = args.indexOf("--db");
-if (dbAt >= 0) {
-  suffix = args[dbAt + 1] ?? "";
-  args = args.filter((_, i) => i !== dbAt && i !== dbAt + 1);
-  const bad = databaseSuffixError(suffix);
-  if (bad) {
-    console.error(bad);
-    process.exit(1);
-  }
-}
+const args = process.argv.slice(2);
 const force = args.includes("--force");
 const free = args.includes("--free");
-const positional = args.filter((a) => !a.startsWith("--"));
+const dbAt = args.indexOf("--db");
+const db = dbAt === -1 ? undefined : args[dbAt + 1];
+const positional = args.filter((a, i) => !a.startsWith("--") && !(dbAt !== -1 && i === dbAt + 1));
 const n = positional.length === 0 && free ? 1 : Number(positional[0]);
-if (!Number.isInteger(n) || n < 0 || n > 9 || positional.length > 1 || args.some((a) => a.startsWith("--") && a !== "--force" && a !== "--free")) {
-  console.error("Usage: pnpm lane:env <n> [--force] [--free] [--db <suffix>]   (n = 0..9, one per worktree)");
+if (
+  !Number.isInteger(n) ||
+  n < 0 ||
+  n > 9 ||
+  positional.length > 1 ||
+  args.some((a) => a.startsWith("--") && !["--force", "--free", "--db"].includes(a)) ||
+  (dbAt !== -1 && !isValidDbSuffix(db))
+) {
+  console.error("Usage: pnpm lane:env <n> [--force] [--free] [--db <suffix>]   (n = 0..9, one per worktree; suffix: lowercase letters and digits, e.g. rp322)");
   process.exit(1);
 }
 if (existsSync(".env") && !force) {
@@ -44,7 +42,7 @@ if (existsSync(".env") && !force) {
 
 const containers = listContainers();
 if (!containers) console.warn("Docker is not running, so only the ports were checked, not the compose projects.");
-const check = { containers: containers ?? [], takenPorts: await takenLanePorts(), cwd: process.cwd(), sharedLane: suffix !== undefined };
+const check = { containers: containers ?? [], takenPorts: await takenLanePorts(), cwd: process.cwd(), ownDatabase: db !== undefined };
 const clashesOf = (lane: number) => laneClashes(lane, check);
 
 let lane = n;
@@ -64,24 +62,6 @@ if (clashes.length > 0) {
 
 const { postgres: pg, api, admin, web, mailpit, files } = lanePorts(lane);
 
-const base = readFileSync(".env.example", "utf8")
-  .replace(/^COMPOSE_PROJECT_NAME=.*$/m, `COMPOSE_PROJECT_NAME=${laneProject(lane)}`)
-  .replace(/^POSTGRES_PORT=.*$/m, `POSTGRES_PORT=${pg}`)
-  .replace(/^PORT=.*$/m, `PORT=${web}`)
-  .replace(/^API_PORT=.*$/m, `API_PORT=${api}`)
-  .replace(/^ADMIN_PORT=.*$/m, `ADMIN_PORT=${admin}`)
-  .replace(/^WEB_URL=.*$/m, `WEB_URL=http://lane${lane}.localhost:${web}`)
-  .replace(/^MAILPIT_PORT=.*$/m, `MAILPIT_PORT=${mailpit}`)
-  .replace(/^FILE_STORE_PORT=.*$/m, `FILE_STORE_PORT=${files}`)
-  .replace(/^FILE_STORE_ENDPOINT=http:\/\/127\.0\.0\.1:9000$/m, `FILE_STORE_ENDPOINT=http://127.0.0.1:${files}`)
-  .replace(/^MAIL_CATCHER_URL=http:\/\/127\.0\.0\.1:8025$/m, `MAIL_CATCHER_URL=http://127.0.0.1:${mailpit}`)
-  .replace(/@localhost:5432\//g, `@localhost:${pg}/`)
-  .replace(/^API_URL=http:\/\/127\.0\.0\.1:4000$/m, `API_URL=http://127.0.0.1:${api}`);
-
-const env = suffix === undefined ? base : withDatabase(base, suffix);
-writeFileSync(".env", env);
-console.log(`Wrote .env for lane ${lane}: Postgres ${pg}, api ${api}, Rabaed Admin ${admin}, web ${web}, Mailpit ${mailpit}, file store ${files}, compose project ${laneProject(lane)}.`);
-if (suffix !== undefined) {
-  console.log(`Databases: rabaed_${suffix}, tests on rabaed_${suffix}_test, both on the lane's Postgres. Run \`pnpm db:setup\` to create and migrate it; start no containers.`);
-}
+writeFileSync(".env", laneEnv(readFileSync(".env.example", "utf8"), lane, db));
+console.log(`Wrote .env for lane ${lane}${db ? `, database rabaed_${db}` : ""}: Postgres ${pg}, api ${api}, Rabaed Admin ${admin}, web ${web}, Mailpit ${mailpit}, file store ${files}, compose project ${laneProject(lane)}.`);
 console.log(`Open the web app at http://lane${lane}.localhost:${web}/en (its own host keeps sign-in cookies separate).`);
