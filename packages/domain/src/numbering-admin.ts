@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { bilingualText, engineerReason } from "./company.ts";
 import { counterStartRequest, numberingCounters } from "./numbering-counter.ts";
-import { saveNumberingPatternRequest, savedNumberingPattern } from "./numbering.ts";
+import { numberingTypeOverride, saveNumberingPatternRequest, savedNumberingPattern } from "./numbering.ts";
 import { setParticipantCodeRequest } from "./participant.ts";
 
 /**
@@ -35,9 +35,7 @@ export const adminNumberingParticipant = z.object({
  */
 export const adminNumbering = z.object({
   project: savedNumberingPattern.nullable(),
-  types: z.array(
-    z.object({ id: z.uuid(), code: z.string(), name: bilingualText, override: savedNumberingPattern.nullable() }),
-  ),
+  types: z.array(numberingTypeOverride),
   participants: z.array(adminNumberingParticipant),
   counters: numberingCounters,
 });

@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { bilingualText } from "./company.ts";
+import { bilingualText, type BilingualText } from "./company.ts";
+import { sequencedNumber } from "./numbering.ts";
 
 /**
  * Numbering counters and starting numbers (workflow-engine.md §8 "Starting
@@ -68,5 +69,45 @@ export type CounterStart = z.infer<typeof counterStart>;
 
 /** The number a counter issues as `seq`: its prefix, the separator and `seq` zero-padded to the pattern's digits. */
 export function counterNumber(preview: Pick<CounterPreview, "prefix" | "separator" | "seqDigits">, seq: number): string {
-  return preview.prefix + preview.separator + String(seq).padStart(preview.seqDigits, "0");
+  return sequencedNumber(preview.prefix, preview.separator, preview.seqDigits, seq);
 }
+
+/** A numbering_counter row as the database stores it. */
+export type StoredNumberingCounter = { counter_key: string; last_value: number; starting_value: number | null };
+
+/**
+ * A counter as Project Admins and Rabaed Engineers read it. It has issued a number
+ * unless a starting number was set ahead and nothing has been issued since.
+ */
+export function toNumberingCounter(row: StoredNumberingCounter): NumberingCounter {
+  return {
+    counterKey: row.counter_key,
+    lastValue: row.last_value,
+    startingNumber: row.starting_value,
+    issued: row.starting_value === null || row.last_value !== row.starting_value - 1,
+  };
+}
+
+/**
+ * The Work Item Types a counter can be started for, by code: the Rabaed Default
+ * Types and the Project's own, `rows` ordered by code with a Project's own before
+ * a Default of the same code, which it replaces.
+ */
+export function counterWorkItemTypes(rows: readonly { code: string; name: BilingualText }[]): NumberingCounters["workItemTypes"] {
+  const byCode = new Map<string, BilingualText>();
+  for (const t of rows) if (!byCode.has(t.code)) byCode.set(t.code, t.name);
+  return [...byCode].map(([code, name]) => ({ code, name }));
+}
+
+/** The refusals of finding a counter for some values (app.numbering_counter, app.numbering_counter_for). */
+export const numberingCounterRefusals = [
+  "not_found",
+  "type_not_found",
+  "participant_required",
+  "trade_required",
+  "location_required",
+  "value_not_found",
+] as const;
+
+/** The refusals of setting a starting number (app.set_numbering_counter_start, app.start_numbering_counter). */
+export const counterStartRefusals = [...numberingCounterRefusals, "project_closed", "counter_used"] as const;

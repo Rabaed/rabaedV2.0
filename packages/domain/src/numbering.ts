@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { bilingualText } from "./company.ts";
 
 /**
  * Numbering Patterns (GLOSSARY.md; workflow-engine.md §8, "Settled 2026-10-05
@@ -70,16 +71,17 @@ export const rabaedDefaultNumberingPattern: NumberingPattern = {
 };
 
 /** What a Work Item's number is built from, when it first leaves Draft. */
-export type NumberingAttributes = {
-  projectCode: string;
-  typeCode: string;
+export const numberingAttributes = z.object({
+  projectCode: z.string(),
+  typeCode: z.string(),
   /** Null without a Trade: the segment prints nothing. */
-  tradeCode: string | null;
+  tradeCode: z.string().nullable(),
   /** The raiser's Participant: its Participant Code, null until set, and its position on the Project. */
-  participant: { code: string | null; ordinal: number };
+  participant: z.object({ code: z.string().nullable(), ordinal: z.number().int() }),
   /** The codes of the item's Location and its parents, from the Zone down; empty without a Location. */
-  locationPath: readonly string[];
-};
+  locationPath: z.array(z.string()),
+});
+export type NumberingAttributes = z.infer<typeof numberingAttributes>;
 
 /** A saved pattern: in effect from `effectiveFrom`, and when its saver accepted the shared-counter warning. */
 export const savedNumberingPattern = z.object({
@@ -88,6 +90,53 @@ export const savedNumberingPattern = z.object({
   sharedCounterAcceptedAt: z.iso.datetime().nullable(),
 });
 export type SavedNumberingPattern = z.infer<typeof savedNumberingPattern>;
+
+/** A Work Item Type the Project can number, with its override (null: it follows the Project's pattern). */
+export const numberingTypeOverride = z.object({
+  id: z.uuid(),
+  code: z.string(),
+  name: bilingualText,
+  override: savedNumberingPattern.nullable(),
+});
+export type NumberingTypeOverride = z.infer<typeof numberingTypeOverride>;
+
+/** A numbering_pattern row as the database stores it: `seq_scope` is the pattern's `countedBy`. */
+export type StoredNumberingPattern = {
+  work_item_type_id: string | null;
+  segments: unknown;
+  separator: string;
+  seq_digits: number;
+  seq_scope: unknown;
+  effective_from: Date;
+  shared_counter_accepted_at: Date | null;
+};
+
+/** A stored pattern as the API returns it. */
+export function toSavedNumberingPattern(row: StoredNumberingPattern): SavedNumberingPattern {
+  return {
+    pattern: numberingPattern.parse({ segments: row.segments, separator: row.separator, seqDigits: row.seq_digits, countedBy: row.seq_scope }),
+    effectiveFrom: row.effective_from.toISOString(),
+    sharedCounterAcceptedAt: row.shared_counter_accepted_at?.toISOString() ?? null,
+  };
+}
+
+/**
+ * The Project's pattern and each Type's override from the patterns in effect
+ * (one row per scope, `work_item_type_id` null for the Project's).
+ */
+export function numberingPatternsInEffect(
+  patterns: readonly StoredNumberingPattern[],
+  types: readonly { id: string; code: string; name: z.infer<typeof bilingualText> }[],
+): { project: SavedNumberingPattern | null; types: NumberingTypeOverride[] } {
+  const of = (typeId: string | null) => {
+    const row = patterns.find((p) => p.work_item_type_id === typeId);
+    return row ? toSavedNumberingPattern(row) : null;
+  };
+  return { project: of(null), types: types.map((t) => ({ id: t.id, code: t.code, name: t.name, override: of(t.id) })) };
+}
+
+/** The refusals of saving a pattern (app.set_numbering_pattern, app.apply_numbering_pattern). */
+export const numberingPatternRefusals = ["not_found", "project_closed", "type_not_found", "invalid_pattern", "shared_counter_not_accepted"] as const;
 
 /**
  * A Project's numbering, as every Project Member reads it on the Numbering page.
@@ -99,25 +148,21 @@ export type SavedNumberingPattern = z.infer<typeof savedNumberingPattern>;
 export const numberingSettings = z.object({
   canEdit: z.boolean(),
   project: savedNumberingPattern.nullable(),
-  types: z.array(
-    z.object({
-      id: z.uuid(),
-      code: z.string(),
-      name: z.object({ en: z.string(), ar: z.string() }),
-      override: savedNumberingPattern.nullable(),
-    }),
-  ),
-  example: z.object({
-    projectCode: z.string(),
-    tradeCode: z.string().nullable(),
-    participant: z.object({ code: z.string().nullable(), ordinal: z.number().int() }),
-    locationPath: z.array(z.string()),
-  }),
+  types: z.array(numberingTypeOverride),
+  example: numberingAttributes.omit({ typeCode: true }),
 });
 export type NumberingSettings = z.infer<typeof numberingSettings>;
 
 /** Zero-padded to `digits`, never cut. */
 const padded = (value: number, digits: number) => String(value).padStart(digits, "0");
+
+/**
+ * A number from its prefix and its sequence value: the separator, then the value
+ * zero-padded to the pattern's digits, never cut (`app.sequenced_document_number`).
+ */
+export function sequencedNumber(prefix: string, separator: string, seqDigits: number, seq: number): string {
+  return prefix + separator + padded(seq, seqDigits);
+}
 
 function segmentValue(segment: NumberingSegment, item: NumberingAttributes): string | null {
   switch (segment.kind) {
@@ -149,6 +194,6 @@ export function documentNumbering(pattern: NumberingPattern, item: NumberingAttr
   const counterKey = values.filter((v, i) => pattern.countedBy.includes(i)).filter(present).join("-");
   return {
     counterKey,
-    number: (seq: number) => prefix + pattern.separator + padded(seq, pattern.seqDigits),
+    number: (seq: number) => sequencedNumber(prefix, pattern.separator, pattern.seqDigits, seq),
   };
 }

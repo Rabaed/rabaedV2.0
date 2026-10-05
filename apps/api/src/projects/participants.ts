@@ -1,13 +1,14 @@
 import { withMember, type Db } from "@rabaed/db";
-import type {
-  AddParticipantRequest,
-  BaseRole,
-  BilingualText,
-  CompanyInvitations,
-  CompanyParticipation,
-  ParticipantMembers,
-  ProjectInvitations,
-  ProjectParticipants,
+import {
+  participantCodeRefusals,
+  type AddParticipantRequest,
+  type BaseRole,
+  type BilingualText,
+  type CompanyInvitations,
+  type CompanyParticipation,
+  type ParticipantMembers,
+  type ProjectInvitations,
+  type ProjectParticipants,
 } from "@rabaed/domain";
 import { sql, type RawBuilder } from "kysely";
 import { refusedAsForbidden, type Forbidden } from "../db-error.ts";
@@ -24,8 +25,7 @@ export type AddParticipantResult =
   | Forbidden
   | { ok: false; reason: (typeof addParticipantRefusals)[number] };
 
-const setCodeRefusals = ["not_found", "project_closed", "invalid_code", "duplicate_code", "code_in_use"] as const;
-export type SetParticipantCodeResult = { ok: true } | Forbidden | { ok: false; reason: (typeof setCodeRefusals)[number] };
+export type SetParticipantCodeResult = { ok: true } | Forbidden | { ok: false; reason: (typeof participantCodeRefusals)[number] };
 
 const respondRefusals = ["not_found", "project_closed"] as const;
 export type RespondToInvitationResult =
@@ -360,7 +360,7 @@ export function setParticipantCode(
       const { rows } = await sql<{ outcome: string }>`
         select app.set_participant_code(${participantId}::uuid, ${code}) as outcome
       `.execute(trx);
-      return commandResult(rows[0]!.outcome, "set", setCodeRefusals);
+      return commandResult(rows[0]!.outcome, "set", participantCodeRefusals);
     }),
   );
 }

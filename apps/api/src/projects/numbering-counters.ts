@@ -1,11 +1,14 @@
-import { withMember, type Db } from "@rabaed/db";
-import type {
-  BilingualText,
-  CounterPreview,
-  CounterStart,
-  CounterStartRequest,
-  CounterValues,
-  NumberingCounters,
+import { readCounterWorkItemTypes, readNumberingCounters, withMember, type Db } from "@rabaed/db";
+import {
+  counterStartRefusals,
+  counterWorkItemTypes,
+  numberingCounterRefusals,
+  toNumberingCounter,
+  type CounterPreview,
+  type CounterStart,
+  type CounterStartRequest,
+  type CounterValues,
+  type NumberingCounters,
 } from "@rabaed/domain";
 import { sql } from "kysely";
 import { checkedOutcome } from "../outcomes.ts";
@@ -16,20 +19,10 @@ import { checkedOutcome } from "../outcomes.ts";
 // and the checks in app.numbering_counter and app.set_numbering_counter_start).
 // Anyone else gets 'not_found', exactly like a made-up Project (scenario 55).
 
-const counterRefusals = [
-  "not_found",
-  "type_not_found",
-  "participant_required",
-  "trade_required",
-  "location_required",
-  "value_not_found",
-] as const;
-type CounterRefusal = (typeof counterRefusals)[number];
-
-const startRefusals = [...counterRefusals, "project_closed", "counter_used"] as const;
+type CounterRefusal = (typeof numberingCounterRefusals)[number];
 
 export type CounterPreviewResult = { ok: true; preview: CounterPreview } | { ok: false; reason: CounterRefusal };
-export type CounterStartResult = { ok: true; start: CounterStart } | { ok: false; reason: (typeof startRefusals)[number] };
+export type CounterStartResult = { ok: true; start: CounterStart } | { ok: false; reason: (typeof counterStartRefusals)[number] };
 
 const isProjectAdmin = (trx: Db, projectId: string) =>
   sql`select 1 from app.current_admin_project_ids() x where x = ${projectId}::uuid`.execute(trx).then((r) => r.rows.length > 0);
@@ -38,28 +31,9 @@ const isProjectAdmin = (trx: Db, projectId: string) =>
 export function listNumberingCounters(db: Db, memberId: string, projectId: string): Promise<NumberingCounters | null> {
   return withMember(db, memberId, async (trx) => {
     if (!(await isProjectAdmin(trx, projectId))) return null;
-    const { rows: counters } = await sql<{ counter_key: string; last_value: number; starting_value: number | null }>`
-      select counter_key, last_value, starting_value from numbering_counter
-      where project_id = ${projectId}::uuid order by counter_key
-    `.execute(trx);
-    // The Rabaed Default Types and the Project's own, by code; a Project's own replaces a Default of the same code.
-    const types = await trx
-      .selectFrom("work_item_type")
-      .select(["code", "name"])
-      .where((eb) => eb.or([eb("project_id", "=", projectId), eb("project_id", "is", null)]))
-      .orderBy("code")
-      .orderBy(sql`project_id nulls last`)
-      .execute();
-    const byCode = new Map<string, BilingualText>();
-    for (const t of types) if (!byCode.has(t.code)) byCode.set(t.code, t.name);
     return {
-      counters: counters.map((c) => ({
-        counterKey: c.counter_key,
-        lastValue: c.last_value,
-        startingNumber: c.starting_value,
-        issued: c.starting_value === null || c.last_value !== c.starting_value - 1,
-      })),
-      workItemTypes: [...byCode].map(([code, name]) => ({ code, name })),
+      counters: (await readNumberingCounters(trx, projectId)).map(toNumberingCounter),
+      workItemTypes: counterWorkItemTypes(await readCounterWorkItemTypes(trx, projectId)),
     };
   });
 }
@@ -87,7 +61,7 @@ export function previewNumberingCounter(
         ${values.locationId}::uuid, ${now})
     `.execute(trx);
     const row = rows[0]!;
-    const outcome = checkedOutcome(row.outcome, ["found", ...counterRefusals]);
+    const outcome = checkedOutcome(row.outcome, ["found", ...numberingCounterRefusals]);
     if (outcome !== "found") return { ok: false, reason: outcome };
     return {
       ok: true,
@@ -118,7 +92,7 @@ export function setNumberingCounterStart(
         ${input.locationId}::uuid, ${input.startingNumber}::integer, ${now})
     `.execute(trx);
     const row = rows[0]!;
-    const outcome = checkedOutcome(row.outcome, ["set", ...startRefusals]);
+    const outcome = checkedOutcome(row.outcome, ["set", ...counterStartRefusals]);
     if (outcome !== "set") return { ok: false, reason: outcome };
     return { ok: true, start: { counterKey: row.counter_key, nextNumber: row.next_number } };
   });

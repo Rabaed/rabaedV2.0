@@ -1,15 +1,20 @@
 import { randomUUID } from "node:crypto";
-import type { Db } from "@rabaed/db";
-import type {
-  AdminCounterStartRequest,
-  AdminNumbering,
-  AdminSaveNumberingPatternRequest,
-  BilingualText,
-  CounterStart,
-  NumberingPattern,
-  SavedNumberingPattern,
+import { readCounterWorkItemTypes, readNumberingCounters, readNumberingPatterns, readNumberingWorkItemTypes, type Db } from "@rabaed/db";
+import {
+  counterStartRefusals,
+  counterWorkItemTypes,
+  countsByParticipant,
+  numberingPatternRefusals,
+  numberingPatternsInEffect,
+  participantCodeRefusals,
+  toNumberingCounter,
+  toSavedNumberingPattern,
+  type AdminCounterStartRequest,
+  type AdminNumbering,
+  type AdminSaveNumberingPatternRequest,
+  type CounterStart,
 } from "@rabaed/domain";
-import { sql } from "kysely";
+import { sql, type NotNull } from "kysely";
 import { asEngineer } from "./admin-action.ts";
 
 // Numbering from Rabaed Admin (RP-317; workflow-engine.md §8 "Who sets the pattern").
@@ -21,20 +26,7 @@ import { asEngineer } from "./admin-action.ts";
 // Participant records the Engineer as accepting the warning: the numbering_pattern
 // row names the admin_action, whose Engineer accepted it and whose `after` says so.
 
-const patternRefusals = ["not_found", "project_closed", "type_not_found", "invalid_pattern", "shared_counter_not_accepted"] as const;
-const codeRefusals = ["not_found", "project_closed", "invalid_code", "duplicate_code", "code_in_use"] as const;
-const counterRefusals = [
-  "not_found",
-  "type_not_found",
-  "participant_required",
-  "trade_required",
-  "location_required",
-  "value_not_found",
-  "project_closed",
-  "counter_used",
-] as const;
-
-export type NumberingRefusal = (typeof patternRefusals | typeof codeRefusals | typeof counterRefusals)[number];
+export type NumberingRefusal = (typeof numberingPatternRefusals | typeof participantCodeRefusals | typeof counterStartRefusals)[number];
 export type NumberingEditResult<T> = { ok: true; value: T } | { ok: false; reason: NumberingRefusal };
 
 class Refused extends Error {
@@ -59,33 +51,6 @@ function expectOutcome(outcome: string, success: string, refusals: readonly Numb
   throw new Error(`unexpected numbering outcome: ${outcome}`);
 }
 
-type StoredPattern = {
-  work_item_type_id: string | null;
-  segments: NumberingPattern["segments"];
-  separator: NumberingPattern["separator"];
-  seq_digits: number;
-  seq_scope: number[];
-  effective_from: Date;
-  shared_counter_accepted_at: Date | null;
-};
-
-const toSaved = (r: StoredPattern): SavedNumberingPattern => ({
-  pattern: { segments: r.segments, separator: r.separator, seqDigits: r.seq_digits, countedBy: r.seq_scope },
-  effectiveFrom: r.effective_from.toISOString(),
-  sharedCounterAcceptedAt: r.shared_counter_accepted_at?.toISOString() ?? null,
-});
-
-const currentPatterns = (trx: Parameters<Parameters<typeof asEngineer>[2]>[0], projectId: string, at: Date) =>
-  sql<StoredPattern>`
-    select distinct on (work_item_type_id)
-      work_item_type_id, segments, separator, seq_digits, seq_scope, effective_from, shared_counter_accepted_at
-    from numbering_pattern
-    where project_id = ${projectId}::uuid and effective_from <= greatest(${at}::timestamptz, now())
-    order by work_item_type_id, effective_from desc, id desc
-  `
-    .execute(trx)
-    .then((r) => r.rows);
-
 /**
  * A Project's numbering: the patterns in effect, the Participants with their codes, and
  * every counter. Customer data, so logged as a read with the Engineer's reason (V9).
@@ -102,12 +67,8 @@ export function readProjectNumbering(
     const project = await trx.selectFrom("project").select("id").where("id", "=", projectId).executeTakeFirst();
     if (!project) return { target: { kind: "project", id: projectId }, result: null };
 
-    const patterns = await currentPatterns(trx, projectId, now);
-    const types = await sql<{ id: string; code: string; name: BilingualText }>`
-      select id, code, name from work_item_type where project_id is null or project_id = ${projectId}::uuid order by code, id
-    `
-      .execute(trx)
-      .then((r) => r.rows);
+    const patterns = await readNumberingPatterns(trx, projectId, now);
+    const types = await readNumberingWorkItemTypes(trx, projectId);
     const participants = await trx
       .selectFrom("participant as p")
       .innerJoin("company as c", "c.id", "p.company_id")
@@ -115,45 +76,23 @@ export function readProjectNumbering(
       .where("p.project_id", "=", projectId)
       .where("p.status", "=", "active")
       .orderBy("p.ordinal")
+      // An active Participant always has its position (participant_ordinal_when_joined).
+      .$narrowType<{ ordinal: NotNull }>()
       .execute();
-    const counters = await sql<{ counter_key: string; last_value: number; starting_value: number | null }>`
-      select counter_key, last_value, starting_value from numbering_counter where project_id = ${projectId}::uuid order by counter_key
-    `
-      .execute(trx)
-      .then((r) => r.rows);
-    // The Rabaed Default Types and the Project's own, by code; a Project's own replaces a Default of the same code.
-    const typeNames = await trx
-      .selectFrom("work_item_type")
-      .select(["code", "name"])
-      .where((eb) => eb.or([eb("project_id", "=", projectId), eb("project_id", "is", null)]))
-      .orderBy("code")
-      .orderBy(sql`project_id nulls last`)
-      .execute();
-    const byCode = new Map<string, BilingualText>();
-    for (const t of typeNames) if (!byCode.has(t.code)) byCode.set(t.code, t.name);
+    const counters = await readNumberingCounters(trx, projectId);
 
-    const projectPattern = patterns.find((p) => p.work_item_type_id === null);
     const result: AdminNumbering = {
-      project: projectPattern ? toSaved(projectPattern) : null,
-      types: types.map((t) => {
-        const override = patterns.find((p) => p.work_item_type_id === t.id);
-        return { id: t.id, code: t.code, name: t.name, override: override ? toSaved(override) : null };
-      }),
+      ...numberingPatternsInEffect(patterns, types),
       participants: participants.map((p) => ({
         id: p.id,
-        ordinal: p.ordinal ?? 0,
+        ordinal: p.ordinal,
         code: p.code,
         codeLocked: p.code_locked_at !== null,
         companyName: p.legal_name,
       })),
       counters: {
-        counters: counters.map((c) => ({
-          counterKey: c.counter_key,
-          lastValue: c.last_value,
-          startingNumber: c.starting_value,
-          issued: c.starting_value === null || c.last_value !== c.starting_value - 1,
-        })),
-        workItemTypes: [...byCode].map(([code, name]) => ({ code, name })),
+        counters: counters.map(toNumberingCounter),
+        workItemTypes: counterWorkItemTypes(await readCounterWorkItemTypes(trx, projectId)),
       },
     };
     return { target: { kind: "project", id: projectId }, after: { counterKeys: counters.map((c) => c.counter_key) }, result };
@@ -175,7 +114,7 @@ export function saveNumberingPattern(
   return refusable(() =>
     asEngineer(adminDb, { engineerId, action: "set_numbering_pattern", reason: input.reason, id: actionId }, async (trx) => {
       const { pattern } = input;
-      const before = (await currentPatterns(trx, projectId, now)).find((p) => p.work_item_type_id === input.workItemTypeId);
+      const before = (await readNumberingPatterns(trx, projectId, now)).find((p) => p.work_item_type_id === input.workItemTypeId);
       const { rows } = await sql<{ outcome: string }>`
         select app.apply_numbering_pattern(
           ${projectId}::uuid, ${input.workItemTypeId}::uuid, ${JSON.stringify(pattern.segments)}::jsonb, ${pattern.separator},
@@ -183,15 +122,15 @@ export function saveNumberingPattern(
           null, ${actionId}::uuid
         ) as outcome
       `.execute(trx);
-      expectOutcome(rows[0]!.outcome, "saved", patternRefusals);
+      expectOutcome(rows[0]!.outcome, "saved", numberingPatternRefusals);
       return {
         target: { kind: "project", id: projectId },
-        before: before ? toSaved(before) : null,
+        before: before ? toSavedNumberingPattern(before) : null,
         after: {
           workItemTypeId: input.workItemTypeId,
           pattern,
           // Accepting the shared-counter warning is the Engineer's, when it applied.
-          sharedCounterAccepted: !pattern.countedBy.some((i) => pattern.segments[i]?.kind === "participant"),
+          sharedCounterAccepted: !countsByParticipant(pattern),
         },
         result: undefined,
       };
@@ -212,7 +151,7 @@ export function setParticipantCode(
       const { rows } = await sql<{ outcome: string }>`
         select app.assign_participant_code(${participantId}::uuid, ${input.code}) as outcome
       `.execute(trx);
-      expectOutcome(rows[0]!.outcome, "set", codeRefusals);
+      expectOutcome(rows[0]!.outcome, "set", participantCodeRefusals);
       return {
         target: { kind: "participant", id: participantId },
         before: { code: before?.code ?? null },
@@ -239,7 +178,7 @@ export function setNumberingCounterStart(
           ${input.locationId}::uuid, ${input.startingNumber}::integer, ${now})
       `.execute(trx);
       const row = rows[0]!;
-      expectOutcome(row.outcome, "set", counterRefusals);
+      expectOutcome(row.outcome, "set", counterStartRefusals);
       return {
         target: { kind: "project", id: projectId },
         after: { counterKey: row.counter_key, startingNumber: input.startingNumber },

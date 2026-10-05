@@ -131,3 +131,6 @@ export type SetMemberPositionsRequest = z.infer<typeof setMemberPositionsRequest
  */
 export const setParticipantCodeRequest = z.object({ code: z.string().max(20) });
 export type SetParticipantCodeRequest = z.infer<typeof setParticipantCodeRequest>;
+
+/** The refusals of setting a Participant Code (app.set_participant_code, app.assign_participant_code). */
+export const participantCodeRefusals = ["not_found", "project_closed", "invalid_code", "duplicate_code", "code_in_use"] as const;

@@ -222,7 +222,10 @@ export function NumberingCounters({
               counters.map((c) => (
                 <TableRow key={c.counterKey}>
                   <TableCell>
-                    <DocNo value={c.counterKey} />
+                    {/* A counter key isn't a Document Number, but reads left to right like one. */}
+                    <bdi dir="ltr" translate="no" className="whitespace-nowrap font-medium tabular-nums">
+                      {c.counterKey}
+                    </bdi>
                   </TableCell>
                   <TableCell align="end" className="tabular-nums">
                     {c.issued ? formatNumber(c.lastValue, locale, { useGrouping: false }) : "—"}

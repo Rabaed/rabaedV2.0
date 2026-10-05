@@ -305,6 +305,10 @@ function applyLanguage() {
   $("language").textContent = t().otherLanguage;
 }
 
+// Isolates a Document Number left to right inside a sentence in either language.
+const LRI = String.fromCodePoint(0x2066);
+const PDI = String.fromCodePoint(0x2069);
+
 function notice(message, kind = "info") {
   const el = $("notice");
   el.textContent = message;
@@ -818,7 +822,8 @@ onSubmit("start-form", async (f, form) => {
   });
   form.hidden = true;
   await loadNumbering(numberingProject, numberingReason);
-  notice(t().startSavedNotice(nextNumber));
+  // The Document Number reads left to right inside an Arabic sentence too.
+  notice(t().startSavedNotice(`${LRI}${nextNumber}${PDI}`));
 });
 
 $("sign-out").addEventListener("click", async () => {
