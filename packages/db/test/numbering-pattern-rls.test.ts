@@ -107,7 +107,7 @@ async function tower(code: string) {
     expect(
       await outcome(
         as,
-        sql`select app.take_transition(${item}::uuid, 'send_for_review', '{}'::jsonb, '', app.answers_sha256(${item}::uuid), ${randomUUID()}::uuid, now()) as outcome`,
+        sql`select app.take_transition(${item}::uuid, 'send_for_review', '{}', '', app.answers_sha256(${item}::uuid), ${randomUUID()}::uuid, now()) as outcome`,
       ),
     ).toBe("applied");
     return (await migrator.query("select document_number from work_item where id = $1", [item])).rows[0].document_number as string;

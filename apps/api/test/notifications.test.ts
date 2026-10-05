@@ -6,7 +6,7 @@
 // recipient may see.
 import { randomUUID } from "node:crypto";
 import { createDb, deliverNotification, outboxStats, processOutbox, withMember, type OutboxRow } from "@rabaed/db";
-import { testDatabaseUrls } from "@rabaed/db/test-support";
+import { drainOutbox, testDatabaseUrls } from "@rabaed/db/test-support";
 import type { NotificationList } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -127,7 +127,7 @@ beforeAll(async () => {
   c2Engineer = await projectMember(c2.company, c2.participantId, ["engineer"]);
   engineerPm = await projectMember(c1, c1ParticipantId, ["engineer", "project_manager"]);
   // Anything earlier tests left in the outbox is not ours to judge.
-  await processOutbox(worker);
+  await drainOutbox(worker);
 });
 
 describe("Send for Review", () => {
@@ -145,7 +145,7 @@ describe("Send for Review", () => {
   it("is delivered to the PM pool's Members who still see the item, and nobody else (scenario 12)", async () => {
     await ok(c1.caller.delete(`/v1/participants/${c1ParticipantId}/members/${pmRemoved.id}`));
     await setVisibility(c1, c1ParticipantId, pmNarrowed.id, only(mechanical));
-    await processOutbox(worker);
+    await drainOutbox(worker);
 
     const [n] = await about(pm, id);
     expect(n).toMatchObject({ workItemId: id, title: "Cable trays", documentNumber: "TWR-MAR-01-0001", readAt: null });
@@ -171,13 +171,13 @@ describe("Send for Review", () => {
   it("never notifies the Member whose move it was, even when they are in the pool", async () => {
     const own = await createDraft("Cable ladders", engineerPm);
     await take(engineerPm, own, "send_for_review");
-    await processOutbox(worker);
+    await drainOutbox(worker);
     expect(await about(engineerPm, own)).toEqual([]);
     expect(await about(pm, own)).toHaveLength(1);
   });
 
   it("is delivered once, however often the worker runs", async () => {
-    await processOutbox(worker);
+    await drainOutbox(worker);
     expect(await about(pm, id)).toHaveLength(1);
   });
 });
@@ -189,7 +189,7 @@ describe("Return and Submit", () => {
     await take(engineer, id, "send_for_review");
     await ok(pm.caller.post(`/v1/work-items/${id}/claim`));
     await take(pm, id, "return", "Wrong tray size");
-    await processOutbox(worker);
+    await drainOutbox(worker);
   });
 
   it("notifies the Engineer the Return comes back to, not the PM who returned it", async () => {
@@ -203,7 +203,7 @@ describe("Return and Submit", () => {
     await take(engineer, id, "send_for_review");
     await ok(pm.caller.post(`/v1/work-items/${id}/claim`));
     await take(pm, id, "submit");
-    await processOutbox(worker);
+    await drainOutbox(worker);
     const [n] = await about(manager, id);
     expect(n).toMatchObject({ title: "Lighting fixtures", step: { name: { en: "Consultant review" } } });
     for (const who of [k1Engineer, c2Engineer]) expect(await about(who, id)).toEqual([]);
@@ -239,7 +239,7 @@ describe("a rolled-back Transition", () => {
       }),
     ).rejects.toThrow("roll back");
     expect(await outboxRows(id)).toEqual([]);
-    await processOutbox(worker);
+    await drainOutbox(worker);
     expect(await about(pm, id)).toEqual([]);
   });
 });
@@ -280,7 +280,7 @@ describe("the outbox", () => {
     const before = await outboxStats(worker);
     expect(before.backlog).toBeGreaterThanOrEqual(1);
     expect(before.oldestAgeSeconds).toBeGreaterThanOrEqual(0);
-    await processOutbox(worker);
+    await drainOutbox(worker);
     // What is left is dead-lettered: still counted, so the alarms see it.
     const { rows } = await sql<{ n: number }>`select count(*)::int as n from outbox where processed_at is null`.execute(migrator);
     const after = await outboxStats(worker);

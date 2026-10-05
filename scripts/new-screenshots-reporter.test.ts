@@ -23,6 +23,12 @@ describe("onlyMissingReferences", () => {
     expect(onlyMissingReferences(run({ failedTests: [[missingReference], [missingReference], [missingReference]] }))).toEqual({ onlyMissingReferences: true, newBaselines: 3 });
   });
 
+  it("counts a missing reference whose message ends with the matcher's cause", () => {
+    const withCause = `${missingReference}
+Caused by: Error: Matcher did not succeed in time.`;
+    expect(onlyMissingReferences(run({ failedTests: [[withCause]] }))).toEqual({ onlyMissingReferences: true, newBaselines: 1 });
+  });
+
   it("recognises a missing reference without the matcher header", () => {
     const bare = "No existing reference screenshot found; a new one was created. Review it before running tests again.";
     expect(onlyMissingReferences(run({ failedTests: [[bare]] }))).toEqual({ onlyMissingReferences: true, newBaselines: 1 });
