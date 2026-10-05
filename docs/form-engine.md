@@ -205,12 +205,27 @@ A `checklist` field holds a list of **check items**:
 
 A Work Item's Form is filled by different Participants at different times. For example, the Contractor fills in the Inspection request, and the Consultant fills in the checklist on site.
 
-- Each section has `editable_at`: the list of Workflow Step keys where its fields can be changed. The default is the raiser's Draft and internal Steps.
+- Each Form Section has `editable_at`: the list of Workflow Step keys where its fields can be changed. The default is the raiser's Draft and internal Steps.
 - Outside those Steps the section is read-only. Once an item is Submitted, the Contractor's sections are locked, which matches the Documents being frozen.
 - The Workflow builder checks that every `editable_at` key exists in the Workflow attached to the Type.
 - Each change to a section after Draft is recorded in the event trail as a field-level diff, with an internal or shared audience following the rule in [workflow-engine.md §5.1](workflow-engine.md).
 
 Action Forms remain the place for per-Transition input: Review Code, comments, "assign to", reasons. The Form holds the content of the Work Item itself.
+
+### Settled 2026-10-05 (part 3)
+
+- **One Participant per Form Section.** Every Step in a section's `editable_at` is held by the same Participant role. Publishing refuses a section that mixes roles, or names a Step key the Type's Workflow doesn't have. After Submit, nobody edits the raiser's sections: a reviewer never changes what it reviews.
+- **Who edits:** any Member of the Participant holding the current Step who can see the item, not only the holder of the assignment (the same as the raiser's rule today).
+- **Required** fields of a section are checked on any forward Transition out of a Step it names, as when leaving Draft. A Return or a cancel isn't checked.
+- **In-progress answers stay with the Participant holding the Step** (V19, ADR 0013). Its saved answers and their `answers_changed` events reach only its Members until the item leaves it. Everyone else reads the answers as they were when the item arrived.
+- **Before it is filled,** the raiser sees a section filled by another Participant empty and read-only, marked "Filled in by the Consultant" (by that Participant's Project Role).
+- **Revisions** (`create_revision`) clear every section filled by another Participant. The closed item keeps its answers.
+- **Action Forms built from Forms.** Each Transition's Action Form is a Form schema on `workflow_transition`, rendered and validated by the same engine. Its answers go in the Transition event's payload.
+  - `reason` is an ordinary required textarea on the Return Transition.
+  - The **Internal Note** is not a schema field. It is a fixed element under every Action Form, as System Fields frame a Form, and stays its own `internal` event (V5).
+  - **Remarks** (textarea) on the Code Transitions: optional with A, required with C. Shared, shown in the item's history, printed in the Documental Record (part 4).
+  - MAR Workflow Version 1's Transitions get schemas equal to today's fixed fields (no change in behaviour, because dev has no real data), and the fixed code goes. Remarks arrive in MAR Workflow Version 2.
+- **MAR Form Version 4** adds the **Consultant verification** section, `editable_at: ["consultant_review"]`: Sample checked (yes/no, required), Matches specification (yes/no, required), Verification note (textarea, required when Matches specification is No). The demo: the Contractor sees it empty; the Consultant fills it while the Contractor still sees it empty; the Code C with Remarks; both companies then see the answers.
 
 ---
 
@@ -282,7 +297,8 @@ As built (RP-271): `publishProblems(schema, earlierVersions)` in `packages/domai
 - **One validator**, generated from the schema, runs in the browser (instant feedback) and on the server (authoritative). Save as draft skips "required" checks but not type checks.
   - It lives in `packages/domain` (`validateAnswers`, modes `draft` and `complete`), so the server runs it in the api. The database keeps who may write answers and when, and `take_transition` lets an item move on while its answers are open (leaving Draft, and the Submit; not a cancel or a Return) only with the hash of the answers the api found complete. Answers changed in between are refused with `form_not_checked` (RP-262, RP-268).
 - **Autosave** runs every few seconds while editing a Draft. Each save records the values plus `updated_at` per field, so the offline mobile app (ADR 0004) can later merge field by field.
-- **Reporting:** `reportable` fields are copied on each save into `work_item_field_value (work_item_id, field_key, value_text, value_num, value_date)`. Dashboards and filters query this table, which is under the same row-level security as `work_item`. A GIN index on `work_item.data` covers ad-hoc search.
+  - Settled 2026-10-05 (part 3): autosave runs **in Draft only**, where saves write no diff events. When two Members edit at once, the later save of a field wins, and the other editor sees "changed by X just now" on it. The "Save" button stays, showing when the item was last saved. After Draft, only the button saves, so each `answers_changed` event is one deliberate save.
+- **Reporting** (moved out of part 3 on 2026-10-05: built with the first feature that filters or charts by a Form field, such as RP-25 or RP-33): `reportable` fields are copied on each save into `work_item_field_value (work_item_id, field_key, value_text, value_num, value_date)`. Dashboards and filters query this table, which is under the same row-level security as `work_item`. A GIN index on `work_item.data` covers ad-hoc search.
 
 ---
 
@@ -333,7 +349,7 @@ The full engine is built in five parts. Each part is merged and usable before th
      - **No required Links on the Type:** `required_links` is dropped. A Form can make a `work_item_ref` field required instead; no Rabaed Default Form does.
      - **MAR Form Version 3** adds an optional **Related submittals** `work_item_ref` field. The demo shows a MAR linking an approved MAR, and a Contractor who sees only its number and Subject.
    - Before 2b, answers are read only through the stripping function (ADR 0012, RP-275).
-3. **Who fills what:** `editable_at` per section, Action Forms built from Forms, autosave with per-field timestamps, and the reporting table.
+3. **Who fills what:** `editable_at` per Form Section, Action Forms built from Forms, and autosave with per-field timestamps (settled 2026-10-05, §4 and §8). Publishes MAR Form Version 4 and MAR Workflow Version 2. The reporting table moved to its first reader.
 4. **PDF output:** the Documental Record layout and PDF Templates, and optional Hijri dates per Project (part 1 shows Gregorian only).
 5. **The builder and Libraries:** the Form builder, the Field Library (Saved Fields), Company Libraries with "Copy to my Library" and offering to a Project (V18 tests), and the Company Trade/Scope lists with "pull updates".
 
