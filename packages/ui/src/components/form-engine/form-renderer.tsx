@@ -37,6 +37,7 @@ import {
   type DocumentSummary,
   type OptionList,
   type TableColumn,
+  type BilingualText,
 } from "@rabaed/domain";
 import { useState, type ReactNode } from "react";
 import { cn } from "../../lib/cn.ts";
@@ -105,6 +106,8 @@ const copy = {
     // The name sits in an isolate (\u2068 first strong, \u2069 ends), so an Arabic name keeps its place.
     leftProject: (name: string) => `\u2068${name}\u2069 (no longer on the Project)`,
     unanswered: "Not answered",
+    // A Project Role's name, e.g. "Filled in by the Consultant".
+    filledBy: (role: string) => `Filled in by the ${role}`,
   },
   ar: {
     // Arabic counts: one, two (dual), 3–10 (plural), 11 and more (singular accusative).
@@ -164,6 +167,7 @@ const copy = {
     none: "بدون",
     leftProject: (name: string) => `\u2068${name}\u2069 (لم يعد في المشروع)`,
     unanswered: "لم تتم الإجابة",
+    filledBy: (role: string) => `يعبّئه ${role}`,
   },
 } satisfies Record<Locale, unknown>;
 
@@ -176,6 +180,17 @@ export type FormRendererProps = {
   errors?: readonly FieldError[];
   /** `edit` to fill in, `read` to show the answers only. */
   mode: "edit" | "read";
+  /**
+   * In edit mode, the Form Sections the viewer may change now, by key; the
+   * others read. Left out, every section (form-engine.md §4).
+   */
+  editableSections?: readonly string[];
+  /**
+   * The Form Sections filled in by a Participant other than the raiser, each by
+   * that Participant's Project Role: marked "Filled in by the Consultant" while
+   * they hold no answers.
+   */
+  filledBy?: Readonly<Record<string, BilingualText>>;
   /** The viewer's language: labels, help and messages. */
   locale: Locale;
   /**
@@ -210,6 +225,12 @@ export type FormRendererProps = {
   onChange?: (changes: Readonly<Record<string, FormValue | undefined>>) => void;
   /** Prefix for the fields' ids, unique on the page. */
   idPrefix?: string;
+  /**
+   * `hidden`: the sections' titles still name their regions for assistive
+   * technology, but aren't shown, as in an Action Form, whose pop-up the
+   * Transition already titles. Default `shown`.
+   */
+  sectionTitles?: "shown" | "hidden";
   className?: string;
 };
 
@@ -599,6 +620,8 @@ export function FormRenderer({
   answers,
   errors = [],
   mode,
+  editableSections,
+  filledBy = {},
   locale,
   choices = noChoices,
   people = noPeople,
@@ -608,6 +631,7 @@ export function FormRenderer({
   links = noLinks,
   onChange,
   idPrefix = "form",
+  sectionTitles = "shown",
   className,
 }: FormRendererProps) {
   const fieldId = (key: string) => `${idPrefix}-${key}`;
@@ -847,12 +871,17 @@ export function FormRenderer({
         if (!visibility.sections.has(section.key)) return null;
         const fields = section.fields.filter((f) => visibility.fields.has(f.key));
         const headingId = `${idPrefix}-section-${section.key}`;
+        const editing = mode === "edit" && (editableSections === undefined || editableSections.includes(section.key));
+        // Another Participant's section, not filled in yet: who fills it, instead of nothing.
+        const filler = filledBy[section.key];
+        const unfilled = filler && section.fields.every((f) => !isAnswerField(f) || isUnanswered(answers[f.key]));
         return (
           <section key={section.key} aria-labelledby={headingId} className="flex flex-col gap-4">
-            <h3 id={headingId} className="font-display text-h6 font-semibold text-text">
+            <h3 id={headingId} className={cn("font-display text-h6 font-semibold text-text", sectionTitles === "hidden" && "sr-only")}>
               {section.title[locale]}
             </h3>
-            {mode === "edit" ? (
+            {unfilled && <p className="text-body text-muted">{copy[locale].filledBy(filler[locale])}</p>}
+            {editing ? (
               fields.map((field) => {
                 if (!isAnswerField(field)) return <Layout key={field.key} field={field} locale={locale} />;
                 const error = errorOf(field.key);

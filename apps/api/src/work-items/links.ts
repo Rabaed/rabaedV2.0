@@ -29,7 +29,7 @@ export function getWorkItemLinks(db: Db, memberId: string, workItemId: string): 
       select id, kind, field_key, document_number, subject, work_item_id from app.work_item_links(${workItemId}::uuid)
     `.execute(trx);
     const { rows: can } = await sql<{ can_change: boolean }>`
-      select app.can_save_answers(${workItemId}::uuid) as can_change
+      select app.can_change_links(${workItemId}::uuid) as can_change
     `.execute(trx);
     return {
       links: rows.map((r) => ({

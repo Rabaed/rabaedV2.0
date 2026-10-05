@@ -69,8 +69,8 @@ async function createDraft(by: Caller, title = "Cable trays", { datasheet = true
   return res.json().id;
 }
 
-const take = (by: Caller, id: string, transition: string, extra: { reason?: string; idempotencyKey?: string } = {}) =>
-  by.post(`/v1/work-items/${id}/transitions`, { transition, idempotencyKey: randomUUID(), ...extra });
+const take = (by: Caller, id: string, transition: string, { reason, ...extra }: { reason?: string; idempotencyKey?: string } = {}) =>
+  by.post(`/v1/work-items/${id}/transitions`, { transition, idempotencyKey: randomUUID(), ...(reason === undefined ? {} : { answers: { reason } }), ...extra });
 
 async function detail(by: Caller, id: string): Promise<WorkItemDetail> {
   const res = await by.get(`/v1/work-items/${id}`);
@@ -120,7 +120,7 @@ describe("Send for Review", () => {
     expect(buttons(await detail(engineer, id))).toEqual(["send_for_review"]);
     expect((await detail(engineer, id)).actions.transitions[0]).toMatchObject({
       label: { en: "Send for Review" },
-      needsReason: false,
+      actionForm: null,
     });
     expect(buttons(await detail(pm1, id))).toEqual([]);
   });
@@ -178,7 +178,10 @@ describe("Claim, Return and re-send", () => {
     const d = await detail(pm1, id);
     expect(d.heldBy?.memberName).toEqual({ en: "Test Member", ar: "عضو الاختبار" });
     expect(buttons(d)).toEqual(["release", "return"]);
-    expect(d.actions.transitions[0]).toMatchObject({ label: { en: "Return" }, needsReason: true });
+    expect(d.actions.transitions[0]).toMatchObject({
+      label: { en: "Return" },
+      actionForm: { sections: [{ fields: [{ key: "reason", type: "textarea", required: true }] }] },
+    });
     expect(buttons(await detail(pm2, id))).toEqual([]);
   });
 
@@ -197,7 +200,7 @@ describe("Claim, Return and re-send", () => {
   it("needs a reason to Return", async () => {
     const res = await take(pm1, id, "return", { reason: "   " });
     expect(res.statusCode).toBe(422);
-    expect(res.json()).toEqual({ error: "reason_required" });
+    expect(res.json()).toEqual({ error: "invalid_action_form", fields: [{ key: "reason", code: "required" }] });
   });
 
   it("refuses a Transition that doesn't leave the current Step, or whose next Step nobody could hold", async () => {

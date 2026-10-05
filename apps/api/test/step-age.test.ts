@@ -59,6 +59,15 @@ async function addInternalConsultantStepsType() {
           -- Written before Types had Forms: it fills the MAR's.
           update work_item_type set form_definition_id = (select form_definition_id from work_item_type where code = 'MAR')
           where owner_kind = 'rabaed' and code = ${sql.lit(TYPE)} and form_definition_id is null;
+          -- Written before Action Forms (RP-300): its Return asks for a reason, as the MAR's.
+          update workflow_transition tr set action_form = (
+            select mar.action_form from workflow_transition mar
+            join work_item_type t on t.code = 'MAR' and t.owner_kind = 'rabaed'
+            join workflow_version v on v.workflow_definition_id = t.workflow_definition_id and v.id = mar.workflow_version_id
+            where v.version_no = 1 and mar.key = 'return')
+          where tr.key = 'return_to_engineer' and tr.action_form is null and tr.workflow_version_id in (
+            select v.id from workflow_version v join work_item_type t on t.workflow_definition_id = v.workflow_definition_id
+            where t.owner_kind = 'rabaed' and t.code = ${sql.lit(TYPE)});
           return;
         end if;
         insert into workflow_definition (owner_kind, name)
@@ -79,8 +88,14 @@ async function addInternalConsultantStepsType() {
             'internal_review', '{"base_role": "consultant", "permission": "approve"}', 'issue_code'),
           (v_version, 'approved', '{"en": "Approved", "ar": "معتمد"}', 'approved', '{}', 'none');
 
-        insert into workflow_transition (workflow_version_id, key, from_step_id, to_step_id, label, kind, outcome, permission, sort)
-        select v_version, t.key, f.id, s.id, t.label::jsonb, t.kind, t.outcome, t.permission, t.sort
+        -- Its Return asks for a reason, as the MAR's (RP-300).
+        insert into workflow_transition (workflow_version_id, key, from_step_id, to_step_id, label, kind, outcome, permission, sort, action_form)
+        select v_version, t.key, f.id, s.id, t.label::jsonb, t.kind, t.outcome, t.permission, t.sort,
+          case when t.kind = 'return' then (
+            select mar.action_form from workflow_transition mar
+            join work_item_type wt on wt.code = 'MAR' and wt.owner_kind = 'rabaed'
+            join workflow_version v on v.workflow_definition_id = wt.workflow_definition_id and v.id = mar.workflow_version_id
+            where v.version_no = 1 and mar.key = 'return') end
         from (values
           ('send_for_review', 'draft', 'internal_review', '{"en": "Send for Review", "ar": "إرسال للمراجعة"}', 'send', null, 'create', 1),
           ('submit', 'internal_review', 'consultant_engineer', '{"en": "Submit", "ar": "تقديم"}', 'submit', null, 'submit', 2),
@@ -131,8 +146,8 @@ async function participant(c1: Company, role: "consultant" | "owner", legalName:
   return { company, participantId };
 }
 
-const take = (by: Caller, id: string, transition: string, extra: { reason?: string } = {}) =>
-  by.post(`/v1/work-items/${id}/transitions`, { transition, idempotencyKey: randomUUID(), ...extra });
+const take = (by: Caller, id: string, transition: string, { reason, ...extra }: { reason?: string } = {}) =>
+  by.post(`/v1/work-items/${id}/transitions`, { transition, idempotencyKey: randomUUID(), ...(reason === undefined ? {} : { answers: { reason } }), ...extra });
 
 /** Everything a caller learns of the item: its list row, detail and history. */
 async function seenBy(by: Caller, id: string) {
