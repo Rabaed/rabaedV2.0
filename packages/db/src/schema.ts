@@ -463,6 +463,13 @@ export interface WorkItemTable {
   participant_entered_step_id: Generated<string>;
   outcome: string | null;
   closed_at: Timestamp | null;
+  /** Its place in its chain of Revisions: 0 for the original (the create_revision migration). */
+  revision_no: Generated<number>;
+  /** The item it revises, and its chain's original (its own id for an original); never granted to the app role. */
+  revision_of_id: string | null;
+  root_id: Generated<string>;
+  /** Set when a Draft Revision was discarded: nobody sees it again. */
+  discarded_at: Timestamp | null;
   created_at: Generated<Timestamp>;
   updated_at: Generated<Timestamp>;
 }

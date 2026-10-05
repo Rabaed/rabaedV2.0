@@ -209,6 +209,13 @@ export const takeTransitionRequest = z.object({
 });
 export type TakeTransitionRequest = z.input<typeof takeTransitionRequest>;
 
+/**
+ * Create a Revision of a closed item (workflow-engine.md §5.4). The key makes a
+ * repeated request apply only once, answering with the same Revision.
+ */
+export const createRevisionRequest = z.object({ idempotencyKey: z.uuid() });
+export type CreateRevisionRequest = z.infer<typeof createRevisionRequest>;
+
 /** Exactly what the viewer may press on the item now. */
 export const workItemActions = z.object({
   /** Take the pooled Step. */
@@ -217,6 +224,14 @@ export const workItemActions = z.object({
   release: z.boolean(),
   /** Save draft: change the Form's answers (the raiser's Company, in Draft). */
   saveAnswers: z.boolean(),
+  /**
+   * Create a Revision (workflow-engine.md §5.4): the latest item of its chain,
+   * closed with Code C, no Revision of it open, for a Member of the raiser's
+   * Company whom the Workflow's Draft Step allows.
+   */
+  createRevision: z.boolean(),
+  /** Discard this Revision: still in Draft, never numbered, for the raiser's Company. */
+  discardRevision: z.boolean(),
   transitions: z.array(
     z.object({
       key: z.string(),
@@ -236,6 +251,10 @@ export type WorkItemActions = z.infer<typeof workItemActions>;
 export const workItemDetail = workItemSummary.extend({
   /** The Form Version the item is pinned to, for good (ADR 0006). */
   formVersionId: z.uuid(),
+  /** Its place in its chain of Revisions: 0 for the first submission, then 1, 2… (its number's " Rev n"). */
+  revisionNo: z.number().int().nonnegative(),
+  /** A Revision pinned to a newer Form or Workflow Version than the item it revises: the page says so. */
+  versionsChanged: z.boolean(),
   /**
    * The Form's answers by field key, exactly as typed. The Built-in Fields hold
    * ids: `trade` and `location` the item's `trade` and `location`, `scopes` its `scopes`.

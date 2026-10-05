@@ -67,6 +67,11 @@ const answers = {
   participant_required: () => new HttpError(422, "participant_required"),
   location_required: () => new HttpError(422, "location_required"),
   counter_used: () => new HttpError(409, "counter_used"),
+  // Revisions (RP-316): one answer whatever the reason (not Code C, not the latest,
+  // a Revision already open, a Member the Draft Step doesn't allow), so nobody
+  // outside the raiser learns whether a Draft Revision is open.
+  revision_not_allowed: () => new HttpError(409, "revision_not_allowed"),
+  not_discardable: () => new HttpError(409, "not_discardable"),
 } satisfies Record<string, () => HttpError>;
 
 export type RefusalReason = keyof typeof answers;
