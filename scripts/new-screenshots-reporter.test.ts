@@ -1,14 +1,36 @@
 import { describe, expect, it } from "vitest";
 import { onlyMissingReferences, type StoryRun } from "./new-screenshots-reporter.ts";
 
-const missingReference = "No existing reference screenshot found; a new one was created. Review it before running tests again.";
-const mismatch = "Screenshot does not match the stored reference. 312 pixels (ratio 0.01) differ.";
+// The messages as Vitest reports them on CI, header line included.
+const missingReference = `expect(element).toMatchScreenshot()
+
+No existing reference screenshot found; a new one was created. Review it before running tests again.
+
+Reference screenshot:
+  /home/runner/work/rabaedV2.0/rabaedV2.0/packages/ui/test/__screenshots__/button-en-chromium-linux.png`;
+const mismatch = `expect(element).toMatchScreenshot()
+
+Screenshot does not match the stored reference.
+312 pixels (ratio 0.01) differ.
+
+Reference screenshot:
+  /home/runner/work/rabaedV2.0/rabaedV2.0/packages/ui/test/__screenshots__/button-en-chromium-linux.png`;
 
 const run = (overrides: Partial<StoryRun>): StoryRun => ({ reason: "failed", unhandledErrors: 0, hookErrors: 0, failedTests: [], ...overrides });
 
 describe("onlyMissingReferences", () => {
   it("counts the new baselines when every failure is a missing reference", () => {
     expect(onlyMissingReferences(run({ failedTests: [[missingReference], [missingReference], [missingReference]] }))).toEqual({ onlyMissingReferences: true, newBaselines: 3 });
+  });
+
+  it("recognises a missing reference without the matcher header", () => {
+    const bare = "No existing reference screenshot found; a new one was created. Review it before running tests again.";
+    expect(onlyMissingReferences(run({ failedTests: [[bare]] }))).toEqual({ onlyMissingReferences: true, newBaselines: 1 });
+  });
+
+  it("is not only missing references when another error only mentions the missing-reference text", () => {
+    const quoted = `expect(element).toMatchScreenshot()\n\nScreenshot does not match the stored reference.\nNote: No existing reference screenshot found for the dark theme.`;
+    expect(onlyMissingReferences(run({ failedTests: [[quoted]] }))).toEqual({ onlyMissingReferences: false });
   });
 
   it("is not only missing references when a screenshot changed", () => {
