@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { formSchema, type FormSchema } from "./form.ts";
 import { publishProblems } from "./form-publish.ts";
-import { changedOutside, editableSections, sectionsFilledBy, type WorkflowStepHolder } from "./form-sections.ts";
+import { changedOutside, editableSections, errorsInSections, sectionsFilledBy, type WorkflowStepHolder } from "./form-sections.ts";
 
 // Seam 3: who fills which Form Section (form-engine.md §4, "Settled 2026-10-05
 // (part 3)"; RP-301). A Form Section names the Workflow Steps where it is edited
@@ -143,5 +143,30 @@ describe("changedOutside: answers changed in sections that aren't editable", () 
   it("reads a list's options in any order", () => {
     const locked = new Set(["classification", "verification"]);
     expect(changedOutside(schema, locked, { colours: ["red", "blue"] }, { colours: ["blue", "red"] })).toEqual([]);
+  });
+});
+
+describe("errorsInSections: required checks on leaving a Step, per section (RP-304)", () => {
+  const schema = form(
+    section("material", [text("model"), text("maker")]),
+    section("verification", [text("note")], { editable_at: ["consultant_review"] }),
+  );
+  const errors = [
+    { key: "location", code: "required" as const },
+    { key: "model", code: "required" as const },
+    { key: "note", code: "required" as const },
+    { key: "unknown", code: "unknown_field" as const },
+  ];
+
+  it("keeps only the errors of the fields of those sections", () => {
+    expect(errorsInSections(schema, ["verification"], errors)).toEqual([{ key: "note", code: "required" }]);
+    expect(errorsInSections(schema, ["classification", "material"], errors)).toEqual([
+      { key: "location", code: "required" },
+      { key: "model", code: "required" },
+    ]);
+  });
+
+  it("keeps none when no section is named", () => {
+    expect(errorsInSections(schema, [], errors)).toEqual([]);
   });
 });
