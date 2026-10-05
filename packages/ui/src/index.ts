@@ -50,6 +50,12 @@ export { SegmentedControl, type SegmentedControlProps } from "./components/form/
 export { Select, type SelectProps } from "./components/form/select.tsx";
 export { Switch, type SwitchProps } from "./components/form/switch.tsx";
 export { Textarea, type TextareaProps } from "./components/form/textarea.tsx";
+export {
+  NumberingCounters,
+  type CounterCall,
+  type CounterRefusal,
+  type NumberingCountersProps,
+} from "./components/numbering/numbering-counters.tsx";
 export { Icon, directionalIconNames, iconNames, type IconName, type IconProps } from "./components/icon/icon.tsx";
 export { Tabs, TabsContent, TabsList, TabsTrigger, type TabsListProps, type TabsTriggerProps } from "./components/navigation/tabs.tsx";
 export { Dialog, DialogClose, DialogContent, DialogFooter, DialogTrigger, type DialogContentProps } from "./components/overlay/dialog.tsx";

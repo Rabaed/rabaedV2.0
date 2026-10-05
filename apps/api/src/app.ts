@@ -19,6 +19,7 @@ import { healthRoutes } from "./routes/health.ts";
 import { memberRoutes } from "./routes/members.ts";
 import { notificationRoutes } from "./routes/notifications.ts";
 import { numberingRoutes } from "./routes/numbering.ts";
+import { numberingCounterRoutes } from "./routes/numbering-counters.ts";
 import { optionListRoutes } from "./routes/option-lists.ts";
 import { participantRoutes } from "./routes/participants.ts";
 import { projectRoutes } from "./routes/projects.ts";
@@ -129,5 +130,6 @@ export async function buildApp({
   await app.register(notificationRoutes(context));
   await app.register(optionListRoutes(context));
   await app.register(numberingRoutes(context));
+  await app.register(numberingCounterRoutes(context));
   return app;
 }

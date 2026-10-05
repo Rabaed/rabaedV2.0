@@ -61,6 +61,11 @@ const answers = {
   // invalid_pattern answers only what slipped past it.
   invalid_pattern: () => new HttpError(422, "invalid_pattern"),
   shared_counter_not_accepted: () => new HttpError(422, "shared_counter_not_accepted"),
+  // Starting numbers (RP-315): a value the pattern in effect counts by is missing,
+  // or the counter has issued a number, so its starting number is locked.
+  participant_required: () => new HttpError(422, "participant_required"),
+  location_required: () => new HttpError(422, "location_required"),
+  counter_used: () => new HttpError(409, "counter_used"),
 } satisfies Record<string, () => HttpError>;
 
 export type RefusalReason = keyof typeof answers;

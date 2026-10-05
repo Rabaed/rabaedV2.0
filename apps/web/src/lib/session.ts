@@ -12,6 +12,7 @@ import type {
   MyProjects,
   NotificationList,
   NumberingSettings,
+  NumberingCounters,
   ParticipantMembers,
   ParticipantVisibility,
   ProjectInvitations,
@@ -102,6 +103,11 @@ export function getProjectScopes(projectId: string): Promise<Scopes | null> {
 /** A Project's Numbering Pattern and per-Type overrides, for its Project Members; null otherwise. */
 export function getNumberingSettings(projectId: string): Promise<NumberingSettings | null> {
   return apiGet<NumberingSettings>(`/v1/projects/${encodeURIComponent(projectId)}/numbering`);
+}
+
+/** A Project's numbering counters, for its Project Admins only; null for anyone else (scenario 55). */
+export function getNumberingCounters(projectId: string): Promise<NumberingCounters | null> {
+  return apiGet<NumberingCounters>(`/v1/projects/${encodeURIComponent(projectId)}/numbering/counters`);
 }
 
 /** A Participant's Visibility, for its own Company and the Project Admins; null otherwise. */
