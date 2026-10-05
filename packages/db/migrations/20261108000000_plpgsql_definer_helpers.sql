@@ -1,9 +1,9 @@
--- Security definer helpers in plpgsql, so they stop being planned again on every
--- call (RP-310; found in RP-299's seam-1 slowdown). PostgreSQL never inlines a
--- `language sql` function that is security definer or sets search_path, and
--- keeps no plan for it: each call, nested helpers included, plans its body from
--- scratch (up to PostgreSQL 17; Rabaed runs 16). A plpgsql function keeps its
--- plans for the session. In a rolled-back
+-- Security definer helpers in plpgsql, so they stop being planned again in every
+-- query (RP-310; found in RP-299's seam-1 slowdown). PostgreSQL never inlines a
+-- `language sql` function that is security definer or sets search_path, and up
+-- to PostgreSQL 17 (Rabaed runs 16) keeps its plan only while one calling query
+-- runs: every query that calls it, nested helpers included, plans its body from
+-- scratch. A plpgsql function keeps its plans for the session. In a rolled-back
 -- benchmark, app.can_save_answers went from 24 ms to 0.8 ms and
 -- app.work_item_actions from 32 ms to 1.2 ms.
 --
