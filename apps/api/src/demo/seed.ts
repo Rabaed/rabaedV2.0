@@ -360,7 +360,7 @@ export async function seedDemo(
     const aliCaller = await signedIn(tmc, ali);
     const mohammedCaller = await signedIn(dcl, mohammed);
     const take = (caller: Call, itemId: string, transition: string) =>
-      caller("POST", `/v1/work-items/${itemId}/transitions`, { transition, reason: "", idempotencyKey: randomUUID() });
+      caller("POST", `/v1/work-items/${itemId}/transitions`, { transition, idempotencyKey: randomUUID() });
     /**
      * Hafiz raises the MAR with its Datasheet and its free Links to `freeLinks`, and
      * sends it; Ali claims it and Submits it to the Consultant.

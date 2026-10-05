@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { bilingualText } from "./company.ts";
-import { formAnswers, namedAnswers } from "./form.ts";
+import { formAnswers, formSchema, namedAnswers } from "./form.ts";
 
 /** A Work Item Type's short code, used in filters and Document Numbers (MAR, SAR…). */
 export const workItemTypeCode = z.string().regex(/^[A-Z]{2,6}$/);
@@ -172,8 +172,12 @@ export const transitionKinds = ["send", "submit", "return", "close", "cancel"] a
  */
 export const takeTransitionRequest = z.object({
   transition: z.string().regex(/^[a-z][a-z0-9_]*$/),
-  /** Required for a Return. */
-  reason: z.string().trim().max(2000).default(""),
+  /**
+   * The answers to the Transition's Action Form, by field key, checked against
+   * its schema in complete mode (a Return's `reason` is one). Refused with
+   * `invalid_action_form` and one FieldError per field.
+   */
+  answers: formAnswers.default({}),
   /**
    * Optional on any Transition. Seen only by the writer's own Participant, even
    * when the Transition goes to another, such as Submit (visibility.md V5).
@@ -192,7 +196,16 @@ export const workItemActions = z.object({
   /** Save draft: change the Form's answers (the raiser's Company, in Draft). */
   saveAnswers: z.boolean(),
   transitions: z.array(
-    z.object({ key: z.string(), label: bilingualText, kind: z.enum(transitionKinds), needsReason: z.boolean() }),
+    z.object({
+      key: z.string(),
+      label: bilingualText,
+      kind: z.enum(transitionKinds),
+      /**
+       * Its Action Form, filled in its pop-up above the Internal Note, which
+       * every pop-up has; null when it asks nothing else.
+       */
+      actionForm: formSchema.nullable(),
+    }),
   ),
 });
 export type WorkItemActions = z.infer<typeof workItemActions>;

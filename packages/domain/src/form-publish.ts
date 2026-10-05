@@ -31,6 +31,9 @@ export const schemaProblemCodes = [
   "built_in_hidden",
   "key_type_changed",
   "unknown_option_list",
+  // Action Forms only (action-form.ts).
+  "not_in_action_form",
+  "reserved_key",
 ] as const;
 export type SchemaProblemCode = (typeof schemaProblemCodes)[number];
 
