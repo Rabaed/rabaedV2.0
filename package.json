@@ -11,6 +11,7 @@
     "lane:env": "node scripts/lane-env.ts",
     "lanes:prune": "node scripts/lanes-prune.ts",
     "lanes:drop-dbs": "node scripts/lanes-drop-dbs.ts",
+    "worktrees:clean": "node scripts/worktrees-clean.ts",
     "db:setup": "node scripts/pnpm.ts --filter @rabaed/db run setup",
     "demo": "docker compose up -d --wait db mailpit files && node scripts/pnpm.ts db:reset && node scripts/pnpm.ts demo:seed && node scripts/pnpm.ts dev:apps",
     "demo:seed": "node scripts/pnpm.ts --filter @rabaed/api run demo:seed",

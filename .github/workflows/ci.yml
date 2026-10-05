@@ -149,6 +149,7 @@ jobs:
   seam1:
     name: seam 1 (API as a Member)
     runs-on: ubuntu-latest
+    permissions: { contents: read, actions: read } # actions: finds main's timing report (RP-321)
     services:
       postgres:
         image: postgres:16
@@ -177,11 +178,15 @@ jobs:
       - uses: actions/setup-node@v7
         with: { node-version: 24, cache: pnpm }
       - run: pnpm install --frozen-lockfile
-      - run: pnpm test:seam1
+      - run: pnpm test:seam1 --reporter=default --reporter=json --outputFile.json=seam1-timing.json
+      - if: always()
+        uses: ./.github/actions/test-timing
+        with: { title: "seam 1", report: seam1-timing.json, artifact: seam1-timing }
 
   seam2:
     name: seam 2 (database RLS)
     runs-on: ubuntu-latest
+    permissions: { contents: read, actions: read } # actions: finds main's timing report (RP-321)
     services:
       postgres:
         image: postgres:16
@@ -210,7 +215,10 @@ jobs:
       - uses: actions/setup-node@v7
         with: { node-version: 24, cache: pnpm }
       - run: pnpm install --frozen-lockfile
-      - run: pnpm test:seam2
+      - run: pnpm test:seam2 --reporter=default --reporter=json --outputFile.json=seam2-timing.json
+      - if: always()
+        uses: ./.github/actions/test-timing
+        with: { title: "seam 2", report: seam2-timing.json, artifact: seam2-timing }
 
   mail:
     name: mail (mailer against the catcher)
