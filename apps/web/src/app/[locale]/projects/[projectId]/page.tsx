@@ -118,6 +118,11 @@ export default async function ProjectPage({ params }: { params: Promise<{ locale
               </Link>
             </li>
           )}
+          <li>
+            <Link href={`/projects/${project.id}/settings/numbering`} className="text-primary underline underline-offset-4">
+              {t("numbering")}
+            </Link>
+          </li>
           {ownParticipant && (
             <li>
               <Link href={`/participants/${ownParticipant.id}`} className="text-primary underline underline-offset-4">

@@ -251,6 +251,13 @@ describe("app.set_numbering_counter_start", () => {
     expect((await t.setStart(t.c1.ap, 5, { trade: t.trade, location: t.zone })).next_number).toBe("EL-Z1-01-0005");
   });
 
+  it("counts under the Participant Code once the Participant has one", async () => {
+    const t = await tower("NCK");
+    expect(await outcome(t.c1.ap, sql`select app.set_participant_code(${t.p1}::uuid, 'CCM') as outcome`)).toBe("set");
+    expect(await t.setStart(t.c1.ap, 144)).toEqual({ outcome: "set", counter_key: "NCK-MAR-CCM", next_number: "NCK-MAR-CCM-0144" });
+    expect(await t.numbered(t.c1.member)).toBe("NCK-MAR-CCM-0144");
+  });
+
   it("is refused on a Closed Project", async () => {
     const t = await tower("NCC");
     await migrator.query("update project set status = 'closed', closed_at = now() where id = $1", [t.projectId]);
@@ -264,7 +271,7 @@ describe("app.numbering_counter", () => {
     const counter = (as: string) =>
       call(
         as,
-        sql`select outcome, counter_key, prefix, separator, seq_digits, last_value, issued
+        sql<object>`select outcome, counter_key, prefix, separator, seq_digits, last_value, issued
             from app.numbering_counter(${t.projectId}::uuid, 'MAR', ${t.p1}::uuid, null, null, now())`,
       );
     expect(await counter(t.c1.ap)).toEqual([

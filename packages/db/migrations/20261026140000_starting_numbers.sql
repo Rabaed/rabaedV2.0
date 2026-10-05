@@ -92,9 +92,9 @@ create function app.numbering_counter(
         return;
       end if;
       if p_participant_id is not null then
-        -- The Participant Code (participant.code, RP-314) when the column exists
-        -- and is set; until then the ordinal stands in, as in app.document_numbering.
-        select to_jsonb(p) into v_participant from participant p
+        -- Its Participant Code (RP-314); while it has none, the ordinal stands in,
+        -- as in app.document_numbering.
+        select jsonb_build_object('code', p.code, 'ordinal', p.ordinal) into v_participant from participant p
         where p.id = p_participant_id and p.project_id = p_project_id and p.status = 'active';
         if v_participant is null then
           return query select 'value_not_found'::text, null::text, null::text, null::text, null::smallint, null::integer, null::boolean;
