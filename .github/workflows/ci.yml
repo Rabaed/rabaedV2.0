@@ -88,14 +88,56 @@ jobs:
     # Pinned so fonts and rendering match the committed screenshot baselines.
     runs-on: ubuntu-24.04
     steps:
+      # PR code runs in this job: leave no credentials behind for it (RP-248).
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
       - uses: actions/setup-node@v7
         with: { node-version: 24, cache: pnpm }
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @rabaed/ui exec playwright install --with-deps chromium
-      - run: pnpm test:stories
+      # --update=new writes each missing reference and still fails its test; the
+      # reporter records whether those are the only failures (RP-296).
+      - id: stories
+        run: pnpm test:stories --update=new --reporter=default --reporter=../../scripts/new-screenshots-reporter.ts
       - run: pnpm --filter @rabaed/ui build-storybook
+      # The job still fails. On a push to a branch, it uploads the new PNGs;
+      # after CI, update-screenshots.yml commits them to the PR and re-runs CI.
+      - name: Collect the baselines of new stories
+        id: new-baselines
+        if: failure() && steps.stories.outcome == 'failure'
+        env:
+          SCREENSHOTS: packages/ui/test/__screenshots__
+          VERDICT: packages/ui/.vitest/new-screenshots.json
+          OUT: ${{ runner.temp }}/new-screenshots
+          UPLOAD: ${{ github.event_name == 'push' && github.ref != 'refs/heads/main' }}
+        run: |
+          if [ "$(jq -r .onlyMissingReferences "$VERDICT" 2>/dev/null)" != true ]; then
+            echo "Story tests failed for more than missing screenshot references."
+            exit 0
+          fi
+          missing=$(jq -r .newBaselines "$VERDICT")
+          changed=$(git status --porcelain --untracked-files=no -- "$SCREENSHOTS")
+          new=$(git ls-files --others --exclude-standard -- "$SCREENSHOTS" | grep -c . || true)
+          if [ -n "$changed" ] || [ "$new" != "$missing" ]; then
+            echo "::warning::$missing missing references, but $new new files and these changed ones: $changed"
+            exit 0
+          fi
+          echo "::notice::The only story test failures are $missing new stories without a screenshot baseline. On a push to an open PR's branch in this repository, the Update screenshots workflow commits them after CI and runs CI again; nothing to fix."
+          if [ "$UPLOAD" = true ]; then
+            mkdir -p "$OUT"
+            (cd "$SCREENSHOTS" && git ls-files --others --exclude-standard -z . | xargs -0 cp --parents -t "$OUT")
+            echo "staged=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Upload the baselines of new stories
+        if: failure() && steps.new-baselines.outputs.staged == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: new-screenshots
+          path: ${{ runner.temp }}/new-screenshots
+          if-no-files-found: error
+          retention-days: 1
       - name: Upload screenshot diffs
         if: failure()
         uses: actions/upload-artifact@v7

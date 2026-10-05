@@ -12,7 +12,8 @@
  * `parameters.overlay` (dialogs, sheets, toasts) leave their overlay open and
  * are screenshotted as a 1024 × 768 page, portals included. Motion is reduced,
  * so animations never reach a screenshot.
- * Update screenshots on purpose with the "update-screenshots" PR label.
+ * Update screenshots on purpose with the "update-screenshots" PR label; CI
+ * commits the baselines of new stories itself (RP-296).
  */
 import { directionOf, locales } from "@rabaed/domain";
 import { deadlineWordInCopy } from "@rabaed/eslint-plugin/matchers";
