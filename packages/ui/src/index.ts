@@ -54,6 +54,7 @@ export { ToastProvider, useToast, type ToastInput, type ToastProviderProps, type
 export { Tooltip, type TooltipProps } from "./components/overlay/tooltip.tsx";
 export { AgeDots, type AgeDotsProps } from "./components/status/age-dots.tsx";
 export { CodeBadge, type CodeBadgeProps } from "./components/status/code-badge.tsx";
+export { SaveStatus, type SaveStatusProps } from "./components/status/save-status.tsx";
 export { StagePill, type StagePillProps } from "./components/status/stage-pill.tsx";
 export { WithChip, type WithChipHolder, type WithChipProps } from "./components/status/with-chip.tsx";
 export { WorkItemCard, type WorkItemCardProps, type WorkItemState } from "./components/status/work-item-card.tsx";
