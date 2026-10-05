@@ -8,7 +8,8 @@
   "scripts": {
     "dev": "docker compose up -d --wait db mailpit files && pnpm db:setup && pnpm dev:apps",
     "dev:apps": "pnpm --parallel --filter @rabaed/api --filter @rabaed/web --filter @rabaed/worker --filter @rabaed/admin run dev",
-    "lane:env": "node scripts/lane-env.mjs",
+    "lane:env": "node scripts/lane-env.ts",
+    "lanes:prune": "node scripts/lanes-prune.ts",
     "db:setup": "pnpm --filter @rabaed/db run setup",
     "demo": "docker compose up -d --wait db mailpit files && pnpm db:reset && pnpm demo:seed && pnpm dev:apps",
     "demo:seed": "pnpm --filter @rabaed/api run demo:seed",

@@ -109,9 +109,12 @@ Lane `n` gets its own Docker Compose project (`rabaed-laneN`, with its own conta
 |---|---|---|
 | Postgres | 5432 | 5432 + 100n |
 | api | 4000 | 4000 + 100n |
+| Rabaed Admin | 4050 | 4050 + 100n |
 | web | 3000 | 3000 + 100n |
 | Mailpit | 8025 | 8025 + 100n |
 | File store | 9000 | 9000 + 100n |
+
+`pnpm lane:env N` first checks that lane N's ports are free and that no other worktree uses its compose project. If one is taken it stops and names the container (or other process) holding it, and suggests a free lane; `pnpm lane:env N --free` takes the next free lane itself. Old worktrees leave their compose projects running or stopped: `pnpm lanes:prune` lists the `rabaed-*` projects whose worktree is gone, that are not running, or that only have volumes left, and removes them with their volumes after you confirm (`--yes` skips the prompt). It never removes the current worktree's project.
 
 Open each lane's web app at `http://laneN.localhost:<web port>/en`. Browsers keep cookies per host name, not per port, so a separate `laneN.localhost` host stops one lane's sign-in from replacing another's. Tests read the same `.env`, so each lane's test runs use its own database.
 
