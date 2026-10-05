@@ -33,8 +33,8 @@ export function getNumberingSettings(db: Db, memberId: string, projectId: string
     const { rows: projects } = await sql<{ code: string; is_admin: boolean; participant_code: string | null; ordinal: number }>`
       select pr.code,
         exists (select 1 from app.current_admin_project_ids() a where a = pr.id) as is_admin,
-        -- The reader's own Participant; its Participant Code arrives with RP-314.
-        null::text as participant_code, p.ordinal
+        -- The reader's own Participant: its Participant Code, or its position until set.
+        p.code as participant_code, p.ordinal
       from project pr
       join project_member pm on pm.project_id = pr.id and pm.member_id = app.current_member_id() and pm.status = 'active'
       join participant p on p.id = pm.participant_id

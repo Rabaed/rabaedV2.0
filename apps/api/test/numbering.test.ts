@@ -79,6 +79,17 @@ describe("the Numbering page's settings", () => {
     expect(s.example).toEqual({ projectCode: "NDF", tradeCode: "EL", participant: { code: null, ordinal: 1 }, locationPath: ["BA"] });
   });
 
+  it("give the example the reader's own Participant Code once it is set", async () => {
+    const t = await tower("NPC");
+    await ok(c1.caller.request("PUT", `/v1/participants/${t.c1ParticipantId}/code`, { code: "CCM" }));
+    const s = (await ok(settingsOf(t.c1Engineer, t), 200)).json() as NumberingSettings;
+    expect(s.example.participant).toEqual({ code: "CCM", ordinal: 1 });
+    expect(((await ok(settingsOf(t.c2Engineer, t), 200)).json() as NumberingSettings).example.participant).toEqual({
+      code: null,
+      ordinal: 3,
+    });
+  });
+
   it("are saved by the Project Admin, Project pattern and per-Type override, and read by every other Project Member", async () => {
     const t = await tower("NSV");
     const mar = ((await settingsOf(c1.caller, t)).json() as NumberingSettings).types.find((x) => x.code === "MAR")!.id;
