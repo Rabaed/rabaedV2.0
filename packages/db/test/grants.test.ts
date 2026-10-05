@@ -4,27 +4,12 @@
 // catalog after every migration, so it covers past and future migrations alike.
 import { sql } from "kysely";
 import { afterAll, describe, expect, it } from "vitest";
-import { createDb, type Db } from "../src/client.ts";
+import { createDb } from "../src/client.ts";
 import { appFunctionsExecutableByPublic, wholeTableGrantsOnWorkItem } from "../test-support/grants.ts";
-import { testDatabaseUrls } from "../test-support/index.ts";
+import { rolledBack, testDatabaseUrls } from "../test-support/index.ts";
 
 const migrator = createDb(testDatabaseUrls().migrator, { max: 1 });
 afterAll(() => migrator.destroy());
-
-class Rollback extends Error {}
-
-/** Runs `fn` as the migrator in a transaction that is always rolled back. */
-async function rolledBack(fn: (trx: Db) => Promise<void>): Promise<void> {
-  await migrator
-    .transaction()
-    .execute(async (trx) => {
-      await fn(trx);
-      throw new Rollback();
-    })
-    .catch((error: unknown) => {
-      if (!(error instanceof Rollback)) throw error;
-    });
-}
 
 // Functions PUBLIC may execute on purpose, as `app.name(argument types)`. Each
 // entry states why every role that can connect needs it. Empty since RP-328.
@@ -37,14 +22,14 @@ describe("functions in the app schema", () => {
   });
 
   it("are caught when a new one keeps the default grant to public", async () => {
-    await rolledBack(async (trx) => {
+    await rolledBack(migrator, async (trx) => {
       await sql.raw("create function app.grants_probe(int) returns int language sql as $$ select 1 $$").execute(trx);
       expect(await appFunctionsExecutableByPublic(trx)).toContain("app.grants_probe(integer)");
     });
   });
 
   it("are caught when one is granted to public explicitly", async () => {
-    await rolledBack(async (trx) => {
+    await rolledBack(migrator, async (trx) => {
       await sql.raw("create function app.grants_probe(int) returns int language sql as $$ select 1 $$").execute(trx);
       await sql.raw("revoke all on function app.grants_probe(int) from public").execute(trx);
       expect(await appFunctionsExecutableByPublic(trx)).not.toContain("app.grants_probe(integer)");
@@ -60,14 +45,14 @@ describe("work_item", () => {
   });
 
   it("is caught when the app role gets a whole-table grant", async () => {
-    await rolledBack(async (trx) => {
+    await rolledBack(migrator, async (trx) => {
       await sql.raw("grant select, update on work_item to rabaed_app").execute(trx);
       expect(await wholeTableGrantsOnWorkItem(trx)).toEqual(["SELECT", "UPDATE"]);
     });
   });
 
   it("is caught when the grant reaches the app role through public", async () => {
-    await rolledBack(async (trx) => {
+    await rolledBack(migrator, async (trx) => {
       await sql.raw("grant delete, truncate on work_item to public").execute(trx);
       expect(await wholeTableGrantsOnWorkItem(trx)).toEqual(["DELETE", "TRUNCATE"]);
     });

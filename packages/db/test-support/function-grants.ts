@@ -59,3 +59,18 @@ export function functionGrantProblems(grants: FunctionGrant[], allow: GrantAllow
   }
   return problems;
 }
+
+/**
+ * One line per function name with more than one overload, unless `allowed`
+ * names it. `create or replace` with a changed signature makes a second
+ * function instead of replacing the first, and the stale copy keeps its own
+ * grants and misses every later rule (RP-311 re-created take_transition's
+ * `p_reason` signature next to the `p_answers` one; RP-341).
+ */
+export function overloadProblems(grants: FunctionGrant[], allowed: readonly string[]): string[] {
+  const byName = new Map<string, string[]>();
+  for (const { fn, name } of grants) byName.set(name, [...(byName.get(name) ?? []), fn]);
+  return [...byName]
+    .filter(([name, fns]) => fns.length > 1 && !allowed.includes(name))
+    .map(([name, fns]) => `${name} has ${fns.length} overloads: ${fns.join(", ")} (drop the stale one in a new migration)`);
+}
