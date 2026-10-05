@@ -22,6 +22,10 @@ A lane takes work in one of two ways: **one ticket per session** (below), or **a
 ## How to start every implementing ticket
 
 1. In the Claude desktop app → Code tab → **new session** on `G:\Rabaed Contech` with the **worktree** option on (the app creates the worktree and branch). Never start an implementing session in the main folder, and never run `git worktree add` by hand for it — the app wouldn't see the PR.
+   **Session already open on the main folder?** Keep it and recover in place, in this order. The rule above still holds: nothing is implemented in the main folder.
+   1. Call the `EnterWorktree` tool, named after the branch. It creates `.claude/worktrees/<name>` from `origin/main`.
+   2. Rename the branch to the key's name (`git branch -m RP-nnn-...`), then run `pnpm lane:env N --force`.
+   3. After `gh pr create`, link the PR to the session with `bind_pr`, so CI and Auto-fix notifications still arrive.
 2. Name it `Agent X – RP-nnn`.
 3. First message:
    ```
@@ -69,3 +73,4 @@ Every ticket already gets a `/code-review` inside `/implement`. When all of a sp
 4. Migrations are timestamp-named (and follow `CODING_STANDARDS.md`).
 5. Merge only through a PR with green CI (both visibility suites must pass). Merge `main` into your branch when it moves, and resolve any conflicts in that session.
 6. Parallel sessions multiply usage — close finished sessions.
+7. A ticket whose spec is being built by `/implement-spec` (its lane label is set and its spec has an open integration PR) stays under that spec. If it must move, the planning session comments on the integration PR.
