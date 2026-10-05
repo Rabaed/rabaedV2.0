@@ -95,7 +95,7 @@ Stacks: account, network, data, storage, registry, migrations, app and monitorin
 | `secret-scan.yml` | gitleaks; refuses font files |
 | `infra-diff.yml` | Posts a `cdk diff` on each PR, using a read-only role |
 | `deploy-dev.yml` | On merge to `main`: build and push images → migrate → deploy → smoke tests (including the visibility checks in the cloud); serialised; rolls back on smoke failure |
-| `update-screenshots.yml` | Refreshes story screenshot baselines on a labelled PR, with least privilege |
+| `update-screenshots.yml` | Refreshes story screenshot baselines on a labelled PR, with least privilege (new stories' baselines are committed by `ci.yml` itself) |
 
 GitHub reaches AWS through **OIDC only**: no stored AWS keys. The deploy role is trusted only by the deploy job on `main`, and deploys run under a least-privilege execution policy, not AdministratorAccess. Third-party actions are pinned to commit SHAs (Dependabot updates them).
 

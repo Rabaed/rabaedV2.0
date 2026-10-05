@@ -4,6 +4,11 @@
 #   gh workflow run update-screenshots.yml --ref <your-branch>).
 # Then review the changed PNGs in the PR like any other change.
 #
+# Baselines for new stories need neither: when the only story test failures
+# are missing references, CI commits the new PNGs itself (the "commit new
+# screenshot baselines" job in ci.yml, RP-296). A changed baseline still fails
+# CI until this workflow re-renders it.
+#
 # The PR's code runs only in the render job, with a read-only token and no
 # persisted credentials. The commit job holds the write token and never runs
 # PR code: it only commits the baselines the render job uploaded (RP-248).
@@ -63,40 +68,18 @@ jobs:
     steps:
       # The commit the render job rendered: if the branch has moved since,
       # the push below is rejected rather than overwriting the newer commit.
-      # Credentials stay persisted for that push; nothing here runs PR code.
+      # Credentials stay persisted for that push. Nothing here installs or
+      # runs the app's code; the commit action, like this workflow file, comes
+      # from the branch.
       - uses: actions/checkout@v7
         with:
           ref: ${{ needs.render.outputs.sha }}
-      - name: Remove the old baselines
-        run: rm -rf "$SCREENSHOTS"
-      - uses: actions/download-artifact@v8
+      - uses: ./.github/actions/commit-screenshots
         with:
-          name: screenshots
-          path: ${{ env.SCREENSHOTS }}
-      # The artifact came from a job that ran PR code: commit baselines only.
-      - name: Only PNGs in the artifact
-        run: |
-          others=$(find "$SCREENSHOTS" -type f ! -name '*.png')
-          if [ -n "$others" ]; then
-            echo "::error::The artifact holds files other than PNGs:"
-            echo "$others"
-            exit 1
-          fi
-      - name: Commit changed baselines
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          git add -A "$SCREENSHOTS"
-          if git diff --cached --quiet; then
-            echo "Screenshots are already up to date."
-          else
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git commit -m "Update story screenshot baselines"
-            git push origin "HEAD:refs/heads/$BRANCH"
-            # Pushes made with the workflow token do not start CI; start it explicitly.
-            gh workflow run ci.yml --ref "$BRANCH" || echo "::warning::Could not start CI; push any commit to re-run it."
-          fi
+          artifact: screenshots
+          branch: ${{ env.BRANCH }}
+          mode: all
+          message: Update story screenshot baselines
 
   unlabel:
     name: Remove the label so it can be added again

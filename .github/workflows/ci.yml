@@ -87,6 +87,8 @@ jobs:
     name: story tests (behaviour, axe, screenshots)
     # Pinned so fonts and rendering match the committed screenshot baselines.
     runs-on: ubuntu-24.04
+    outputs:
+      new-screenshots: ${{ steps.new.outputs.found }}
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
@@ -94,8 +96,47 @@ jobs:
         with: { node-version: 24, cache: pnpm }
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @rabaed/ui exec playwright install --with-deps chromium
-      - run: pnpm test:stories
+      # --update=new writes each missing reference and still fails its test; the
+      # reporter records whether those are the only failures (RP-296).
+      - id: stories
+        run: pnpm --filter @rabaed/ui exec vitest run --update=new --reporter=default --reporter=../../scripts/new-screenshots-reporter.ts
       - run: pnpm --filter @rabaed/ui build-storybook
+      # The job still fails; on a push to a branch, "commit new screenshot
+      # baselines" below commits the PNGs and re-runs CI.
+      - name: Collect the baselines of new stories
+        id: new
+        if: failure() && steps.stories.outcome == 'failure'
+        env:
+          SCREENSHOTS: packages/ui/test/__screenshots__
+          VERDICT: packages/ui/.vitest/new-screenshots.json
+          OUT: ${{ runner.temp }}/new-screenshots
+          COMMIT: ${{ github.event_name == 'push' && github.ref != 'refs/heads/main' }}
+        run: |
+          if [ "$(jq -r .only "$VERDICT" 2>/dev/null)" != true ]; then
+            echo "Story tests failed for more than missing screenshot references."
+            exit 0
+          fi
+          missing=$(jq -r .missing "$VERDICT")
+          changed=$(git status --porcelain --untracked-files=no -- "$SCREENSHOTS")
+          new=$(git ls-files --others --exclude-standard -- "$SCREENSHOTS" | grep -c . || true)
+          if [ -n "$changed" ] || [ "$new" != "$missing" ]; then
+            echo "::warning::$missing missing references, but $new new files and these changed ones: $changed"
+            exit 0
+          fi
+          echo "::notice::The only story test failures are $missing new stories without a screenshot baseline. On a push to a branch of this repository, CI commits them and runs again; nothing to fix."
+          if [ "$COMMIT" = true ]; then
+            mkdir -p "$OUT"
+            (cd "$SCREENSHOTS" && git ls-files --others --exclude-standard -z . | xargs -0 cp --parents -t "$OUT")
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Upload the baselines of new stories
+        if: failure() && steps.new.outputs.found == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: new-screenshots
+          path: ${{ runner.temp }}/new-screenshots
+          if-no-files-found: error
+          retention-days: 1
       - name: Upload screenshot diffs
         if: failure()
         uses: actions/upload-artifact@v7
@@ -103,6 +144,36 @@ jobs:
           name: story-screenshot-diffs
           path: packages/ui/.vitest/attachments/
           if-no-files-found: ignore
+
+  # Commits the baselines of new stories, so a PR that only adds stories goes
+  # green without a manual step (RP-296). Changed baselines never come here:
+  # they need the update-screenshots label (update-screenshots.yml).
+  # Runs only on a push to a branch of this repository, never on main: fork
+  # PRs run CI as pull_request only, so they get no write path. Like the
+  # commit job in update-screenshots.yml (RP-248), it installs and runs none
+  # of the app's code: it only commits the PNGs the stories job uploaded.
+  new-screenshots:
+    name: commit new screenshot baselines
+    needs: stories
+    if: >-
+      !cancelled() && needs.stories.outputs.new-screenshots == 'true' &&
+      github.event_name == 'push' && github.ref != 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: write
+    steps:
+      # The commit the stories job rendered: if the branch has moved since,
+      # the push is rejected rather than overwriting the newer commit.
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+      - uses: ./.github/actions/commit-screenshots
+        with:
+          artifact: new-screenshots
+          branch: ${{ github.ref_name }}
+          mode: new
+          message: Add screenshot baselines for new stories
 
   seam1:
     name: seam 1 (API as a Member)
