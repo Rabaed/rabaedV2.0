@@ -6,9 +6,10 @@
 // answers it has; and the closed item still shows the Consultant's answers to
 // everyone who can see it.
 //
-// `create_revision` is RP-103's: this test stands in for it with a new Draft of
-// the same Type and app.fill_revision, the part RP-305 gives it. The Type is
-// test-only (3-07 brings the MAR Form Version 4).
+// The Revision is made by `create_revision` (RP-316), which fills it through
+// app.fill_revision, the part RP-305 gives it; a newer Form Version keeps only
+// the answers whose field it still has, with the same type. The Type is
+// test-only; revisions.test.ts covers the MAR (Form Version 4).
 import { randomUUID } from "node:crypto";
 import { publishFormVersion } from "@rabaed/admin/services";
 import { createDb, withMember } from "@rabaed/db";
@@ -28,6 +29,7 @@ afterAll(async () => {
   await migrator.destroy();
   await app.destroy();
 });
+let formId = "";
 
 const TYPE = "MARRV";
 const bilingual = (text: string) => ({ en: text, ar: text });
@@ -166,10 +168,9 @@ const answersOf = async (by: Person, id: string) => {
 };
 const saveOver = async (by: Person, id: string, changes: Record<string, unknown>) =>
   by.caller.request("PUT", `/v1/work-items/${id}/answers`, { answers: { ...(await detail(by, id)).answers, ...changes } });
-const fill = (by: Person, revision: string, closed: string) =>
-  withMember(app, by.id, (trx) =>
-    sql<{ outcome: string }>`select app.fill_revision(${revision}::uuid, ${closed}::uuid, now()) as outcome`.execute(trx).then((r) => r.rows[0]!.outcome),
-  );
+/** C1's engineer creates a Revision of `closed`. */
+const revisionOf = async (closed: string) =>
+  (await ok(engineer.caller.post(`/v1/work-items/${closed}/revisions`, { idempotencyKey: randomUUID() }), 201)).json().id as string;
 
 /** An item of the test Type, closed at Code C after K1 filled its section. */
 async function closedAtCodeC(model: string, answers: Record<string, unknown> = {}): Promise<string> {
@@ -196,12 +197,8 @@ const rowOf = (id: string) =>
     .execute(migrator)
     .then((r) => r.rows[0]!);
 
-const newDraft = async (title: string) =>
-  (await ok(engineer.caller.post(`/v1/projects/${projectId}/work-items`, { type: TYPE, title, answers: { ...builtIns(), model: "to be replaced" } }), 201)).json()
-    .id as string;
-
 beforeAll(async () => {
-  const formId = await addType();
+  formId = await addType();
   expect(await publishFormVersion(migrator, formId, schema)).toMatchObject({ ok: true, versionNo: 1 });
   c1 = await api.projectCreator();
   projectId = (await api.createProject(c1.caller)).id;
@@ -228,8 +225,7 @@ describe("C1 creates a Revision of the item that got Code C (scenario 49)", () =
   let revision = "";
   beforeAll(async () => {
     closed = await closedAtCodeC("FD-90");
-    revision = await newDraft("FD-90 Rev 1");
-    expect(await fill(engineer, revision, closed)).toBe("filled");
+    revision = await revisionOf(closed);
   });
 
   it("starts with the raiser's answers and the Consultant's section empty", async () => {
@@ -276,8 +272,7 @@ describe("a Revision of an item whose answers name other items", () => {
   it("has the Links those answers stand for, as the item it revises had", async () => {
     const target = await closedAtCodeC("FD-10");
     const closed = await closedAtCodeC("FD-11", { related: [target] });
-    const revision = await newDraft("FD-11 Rev 1");
-    expect(await fill(engineer, revision, closed)).toBe("filled");
+    const revision = await revisionOf(closed);
     expect((await detail(engineer, revision)).answers).toMatchObject({ related: [target] });
     const links: WorkItemLinks = (await ok(engineer.caller.get(`/v1/work-items/${revision}/links`), 200)).json();
     expect(links.links.filter((l) => l.kind === "relies_on").map((l) => [l.fieldKey, l.workItemId])).toEqual([["related", target]]);
@@ -285,15 +280,35 @@ describe("a Revision of an item whose answers name other items", () => {
 });
 
 describe("filling a Revision", () => {
-  it("is refused for an item without Code C, someone else's, or a Revision that isn't a fresh Draft", async () => {
+  it("is only create_revision's: the app role can't fill a Draft with another item's answers", async () => {
     const closed = await closedAtCodeC("FD-92");
-    const draft = await newDraft("FD-92 Rev 1");
-    expect(await fill(engineer, draft, draft)).toBe("not_allowed");
-    // K1 doesn't see C1's Draft.
-    expect(await fill(k1Engineer, draft, closed)).toBe("not_found");
-    expect(await fill(engineer, closed, closed)).toBe("not_allowed");
-    // A Draft already sent for review isn't fresh.
-    await ok(take(engineer, draft, "send_for_review"));
-    expect(await fill(engineer, draft, closed)).toBe("not_allowed");
+    const draft = (await ok(engineer.caller.post(`/v1/projects/${projectId}/work-items`, { type: TYPE, title: "FD-92", answers: builtIns() }), 201)).json()
+      .id as string;
+    await expect(
+      withMember(app, engineer.id, (trx) => sql`select app.fill_revision(${draft}::uuid, ${closed}::uuid, now())`.execute(trx)),
+    ).rejects.toThrow(/permission denied/);
+  });
+});
+
+// Last: it publishes a newer Version of the test Form, which later new items would pin.
+describe("a Revision onto a newer Form Version", () => {
+  it("keeps only the answers whose field the newer Version still has, and says the Versions changed", async () => {
+    const target = await closedAtCodeC("FD-20");
+    const closed = await closedAtCodeC("FD-21", { related: [target] });
+    const [material, ...rest] = schema.sections;
+    const newer = {
+      sections: [
+        { ...material!, fields: [material!.fields[0]!, { key: "finish", type: "text", label: bilingual("Finish") }] },
+        ...rest,
+      ],
+    };
+    expect(await publishFormVersion(migrator, formId, newer)).toMatchObject({ ok: true, versionNo: 2 });
+    const revision = await revisionOf(closed);
+    const d = await detail(engineer, revision);
+    expect(d.versionsChanged).toBe(true);
+    expect(d.answers).toEqual({ model: "FD-21", trade: electrical, location: buildingA });
+    const links: WorkItemLinks = (await ok(engineer.caller.get(`/v1/work-items/${revision}/links`), 200)).json();
+    expect(links.links).toEqual([]);
+    expect((await detail(engineer, closed)).versionsChanged).toBe(false);
   });
 });
