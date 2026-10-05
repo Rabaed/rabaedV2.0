@@ -24,6 +24,8 @@ export default defineConfig({
       {
         test: {
           name: "seam1",
+          // Seam tests drive whole Workflows through the API or the database; 5 s is too tight on CI.
+          testTimeout: 20_000,
           include: ["apps/api/test/**/*.test.ts", "apps/admin/test/**/*.test.ts"],
           globalSetup: ["packages/db/test-support/global-setup.ts", "apps/api/test/support/seed-demo.ts"],
           fileParallelism: false,
@@ -32,6 +34,7 @@ export default defineConfig({
       {
         test: {
           name: "seam2",
+          testTimeout: 20_000,
           include: ["packages/db/test/**/*.test.ts"],
           globalSetup: ["packages/db/test-support/global-setup.ts", "apps/api/test/support/seed-demo.ts"],
           fileParallelism: false,

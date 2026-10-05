@@ -258,5 +258,5 @@ describe("issuing a Code (scenario 48)", () => {
       expect(seen.events.filter((e) => e.type === "answers_changed")).toEqual([]);
     }
     // The whole review, from Draft to Code C, as four Members: over the default 5 s on CI.
-  }, 20_000);
+  });
 });
