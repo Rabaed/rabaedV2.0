@@ -210,6 +210,12 @@ export type FormRendererProps = {
   onChange?: (changes: Readonly<Record<string, FormValue | undefined>>) => void;
   /** Prefix for the fields' ids, unique on the page. */
   idPrefix?: string;
+  /**
+   * `hidden`: the sections' titles still name their regions for assistive
+   * technology, but aren't shown, as in an Action Form, whose pop-up the
+   * Transition already titles. Default `shown`.
+   */
+  sectionTitles?: "shown" | "hidden";
   className?: string;
 };
 
@@ -608,6 +614,7 @@ export function FormRenderer({
   links = noLinks,
   onChange,
   idPrefix = "form",
+  sectionTitles = "shown",
   className,
 }: FormRendererProps) {
   const fieldId = (key: string) => `${idPrefix}-${key}`;
@@ -849,7 +856,7 @@ export function FormRenderer({
         const headingId = `${idPrefix}-section-${section.key}`;
         return (
           <section key={section.key} aria-labelledby={headingId} className="flex flex-col gap-4">
-            <h3 id={headingId} className="font-display text-h6 font-semibold text-text">
+            <h3 id={headingId} className={cn("font-display text-h6 font-semibold text-text", sectionTitles === "hidden" && "sr-only")}>
               {section.title[locale]}
             </h3>
             {mode === "edit" ? (
