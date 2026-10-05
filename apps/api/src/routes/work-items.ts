@@ -2,12 +2,14 @@ import {
   addedLink,
   addLinkRequest,
   createdWorkItem,
+  createRevisionRequest,
   createWorkItemRequest,
   formChoices,
   formToFill,
   linkedFrom,
   linkSearchQuery,
   linkSearchResults,
+  revisionChain,
   saveAnswersRequest,
   savedAnswers,
   takeTransitionRequest,
@@ -24,6 +26,7 @@ import { idOrNotFound, notFound, visibleOrNotFound } from "../http-error.ts";
 import { refusal } from "../refusals.ts";
 import { getLinkedFrom } from "../work-items/linked-from.ts";
 import { addWorkItemLink, getWorkItemLinks, removeWorkItemLink } from "../work-items/links.ts";
+import { createRevision, discardRevision, getRevisionChain } from "../work-items/revisions.ts";
 import {
   claimStep,
   createWorkItem,
@@ -213,6 +216,39 @@ export const workItemRoutes =
         return reply.code(204).send();
       },
     );
+
+    // Create a Revision of a closed item (workflow-engine.md §5.4): a new Draft of
+    // the raiser's. Refused alike for every reason but a hidden item (404).
+    app.post(
+      "/v1/work-items/:workItemId/revisions",
+      { schema: { params: workItemParams, body: createRevisionRequest, response: { 201: createdWorkItem } } },
+      async (request, reply) => {
+        const memberId = ctx.requireMember(request);
+        const id = idOrNotFound(request.params.workItemId);
+        const result = await createRevision(ctx.db, ctx.files, memberId, id, request.body.idempotencyKey, ctx.now());
+        if (!result.ok) throw refusal(result);
+        return reply.code(201).send({ id: result.id });
+      },
+    );
+
+    // The Revision drop-down (workflow-engine.md §5.4): the Revisions of the item's
+    // chain the Member sees, each by V1 on its own. A hidden item is the plain 404.
+    app.get(
+      "/v1/work-items/:workItemId/revisions",
+      { schema: { params: workItemParams, response: { 200: revisionChain } } },
+      async (request) => {
+        const memberId = ctx.requireMember(request);
+        return visibleOrNotFound(getRevisionChain(ctx.db, memberId, idOrNotFound(request.params.workItemId)));
+      },
+    );
+
+    // Discard a Revision still in Draft: afterwards it is hidden from everyone.
+    app.post("/v1/work-items/:workItemId/discard", { schema: { params: workItemParams } }, async (request, reply) => {
+      const memberId = ctx.requireMember(request);
+      const result = await discardRevision(ctx.db, memberId, idOrNotFound(request.params.workItemId), ctx.now());
+      if (!result.ok) throw refusal(result);
+      return reply.code(204).send();
+    });
 
     app.post("/v1/work-items/:workItemId/claim", { schema: { params: workItemParams } }, async (request, reply) => {
       const memberId = ctx.requireMember(request);

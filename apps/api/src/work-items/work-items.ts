@@ -558,10 +558,15 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
       outcome: WorkItemOutcome | null;
       closed_at: Date | null;
       can_save_answers: boolean;
+      revision_no: number;
+      versions_changed: boolean;
+      can_create_revision: boolean;
+      can_discard_revision: boolean;
     }>`
       select app.work_item_answers(w.id) as data, w.form_version_id, w.created_at, w.outcome, w.closed_at, s.key as step_key, s.name as step_name,
         raiser.legal_name as raised_by, holder.legal_name as held_by, m.full_name as holder_name,
-        app.can_save_answers(w.id) as can_save_answers
+        app.can_save_answers(w.id) as can_save_answers, w.revision_no, app.revision_versions_changed(w.id) as versions_changed,
+        app.can_create_revision(w.id) as can_create_revision, app.can_discard_revision(w.id) as can_discard_revision
       from work_item w
       cross join lateral app.step_as_seen(w.id) seen
       join workflow_step s on s.id = seen.step_id
@@ -586,10 +591,16 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
     `.execute(trx);
     const { named, unnamed } = await namedAnswers(trx, workItemId);
     const stamps = await fieldStamps(trx, workItemId, false);
+    const { rows: dropped } = await sql<{ field_key: string; label: BilingualText }>`
+      select field_key, label from app.revision_dropped_fields(${workItemId}::uuid)
+    `.execute(trx);
     const { rows: auto } = await sql<{ autosave: boolean }>`select app.answers_autosave(${workItemId}::uuid) as autosave`.execute(trx);
     return {
       ...toSummary(row, now),
       formVersionId: d.form_version_id,
+      revisionNo: d.revision_no,
+      versionsChanged: d.versions_changed,
+      droppedFields: dropped.map((f) => ({ key: f.field_key, label: f.label })),
       // Another Company's people, and a Company the viewer may not see, are never identified, not even by an id (V14, V15).
       answers: Object.fromEntries(Object.entries(answers).filter(([key]) => !unnamed.has(key))),
       namedAnswers: named,
@@ -602,7 +613,12 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
       outcome: d.outcome,
       closedAt: d.closed_at?.toISOString() ?? null,
       createdAt: d.created_at.toISOString(),
-      actions: { ...(await actions(trx, workItemId)), saveAnswers: d.can_save_answers },
+      actions: {
+        ...(await actions(trx, workItemId)),
+        saveAnswers: d.can_save_answers,
+        createRevision: d.can_create_revision,
+        discardRevision: d.can_discard_revision,
+      },
     };
   });
 }
@@ -673,7 +689,7 @@ async function actionRows(trx: Trx, workItemId: string, transitionKey?: string):
 }
 
 /** What the acting Member may press on a visible item now. */
-async function actions(trx: Trx, workItemId: string): Promise<Omit<WorkItemActions, "saveAnswers">> {
+async function actions(trx: Trx, workItemId: string): Promise<Omit<WorkItemActions, "saveAnswers" | "createRevision" | "discardRevision">> {
   const rows = await actionRows(trx, workItemId);
   return {
     claim: rows.some((r) => r.action === "claim"),

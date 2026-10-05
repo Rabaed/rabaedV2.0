@@ -5,6 +5,8 @@ export interface AdminActionContext {
   engineerId: string;
   action: AdminActionTable["action"];
   reason: string;
+  /** The admin_action's id, when the action's own rows must name it (a numbering_pattern row); else generated. */
+  id?: string;
 }
 
 export interface AdminActionOutcome<T> {
@@ -33,6 +35,7 @@ export async function asEngineer<T>(
     await trx
       .insertInto("admin_action")
       .values({
+        ...(context.id ? { id: context.id } : {}),
         engineer_id: context.engineerId,
         action: context.action,
         target_kind: outcome.target.kind,

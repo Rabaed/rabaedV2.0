@@ -424,8 +424,7 @@ export async function seedDemo(
     // The part 3 flow (Form Version 4, MAR Workflow Version 2), ending with Code C and
     // Remarks. The Consultant's verification sits empty for the Contractor, marked
     // "Filled in by the Consultant", until the Code is issued; Ahmed fills it at the review
-    // Step, and Mohammed issues Code C with Remarks. No Revision follows: create_revision
-    // comes with RP-103.
+    // Step, and Mohammed issues Code C with Remarks. Its Rev 1 follows.
     const cableTray = await submitted(
       CODE_C_TITLE,
       ["Legrand Cablofil CF 54", "Wire mesh cable tray, hot dip galvanised.", "Demo datasheet: made up for the Rabaed demo."],
@@ -454,6 +453,24 @@ export async function seedDemo(
       },
       idempotencyKey: randomUUID(),
     });
+
+    // Its Rev 1 (RP-316, RP-318): Hafiz creates it from the closed MAR, with his
+    // answers and the Datasheet copied and the Consultant's verification empty,
+    // changes the trays to hot dip galvanised, and sends it; Ali Submits it. The
+    // Consultant receives `… Rev 1`, and the item page's Revision drop-down opens
+    // the original to compare.
+    const { id: rev1 } = await hafizCaller<{ id: string }>("POST", `/v1/work-items/${cableTray}/revisions`, { idempotencyKey: randomUUID() });
+    const { answers: copied } = await hafizCaller<{ answers: Record<string, unknown> }>("GET", `/v1/work-items/${rev1}`);
+    await hafizCaller("PUT", `/v1/work-items/${rev1}/answers`, {
+      answers: {
+        ...copied,
+        model: "Cablofil CF 54 HDG",
+        description: "Wire mesh cable trays for the Tower 1 electrical risers, hot dip galvanised to EN ISO 1461.",
+      },
+    });
+    await take(hafizCaller, rev1, "send_for_review");
+    await aliCaller("POST", `/v1/work-items/${rev1}/claim`);
+    await take(aliCaller, rev1, "submit");
   }
 
   // A second Project: Beta Build's own, with only its Authorized Person on it

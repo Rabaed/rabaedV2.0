@@ -127,7 +127,11 @@ export interface AdminActionTable {
     | "add_option"
     | "rename_option"
     | "retire_option"
-    | "restore_option";
+    | "restore_option"
+    | "read_numbering"
+    | "set_numbering_pattern"
+    | "set_participant_code"
+    | "set_numbering_counter_start";
   target_kind: string;
   /** Null for a read of a list. */
   target_id: string | null;
@@ -175,6 +179,14 @@ export interface ParticipantTable {
   project_role_id: string;
   /** Its place on the Project (1, 2, 3…), set by a trigger when it becomes Active. */
   ordinal: Generated<number | null>;
+  /** The Participant Code (2–6 letters or digits, in capitals) set by a Project Admin; null until set. */
+  code: string | null;
+  /**
+   * When a number was first built with the code, or a starting number set for a
+   * counter whose key holds it, fixing it. Set with a null code, the position was
+   * fixed: no code can be set.
+   */
+  code_locked_at: Timestamp | null;
   /**
    * Invited until its Authorized Person accepts (Active) or declines, or a
    * Project Admin withdraws the invitation (ADR 0009).
@@ -459,6 +471,13 @@ export interface WorkItemTable {
   participant_entered_step_id: Generated<string>;
   outcome: string | null;
   closed_at: Timestamp | null;
+  /** Its place in its chain of Revisions: 0 for the original (the create_revision migration). */
+  revision_no: Generated<number>;
+  /** The item it revises, and its chain's original (its own id for an original); never granted to the app role. */
+  revision_of_id: string | null;
+  root_id: Generated<string>;
+  /** Set when a Draft Revision was discarded: nobody sees it again. */
+  discarded_at: Timestamp | null;
   created_at: Generated<Timestamp>;
   updated_at: Generated<Timestamp>;
 }

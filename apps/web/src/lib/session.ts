@@ -11,11 +11,14 @@ import type {
   MemberVisibility,
   MyProjects,
   NotificationList,
+  NumberingSettings,
+  NumberingCounters,
   ParticipantMembers,
   ParticipantVisibility,
   ProjectInvitations,
   ProjectParticipants,
   ProjectSummary,
+  RevisionChain,
   Scopes,
   SignedInMember,
   WorkItemDetail,
@@ -98,6 +101,16 @@ export function getProjectScopes(projectId: string): Promise<Scopes | null> {
   return apiGet<Scopes>(`/v1/projects/${encodeURIComponent(projectId)}/scopes`);
 }
 
+/** A Project's Numbering Pattern and per-Type overrides, for its Project Members; null otherwise. */
+export function getNumberingSettings(projectId: string): Promise<NumberingSettings | null> {
+  return apiGet<NumberingSettings>(`/v1/projects/${encodeURIComponent(projectId)}/numbering`);
+}
+
+/** A Project's numbering counters, for its Project Admins only; null for anyone else (scenario 55). */
+export function getNumberingCounters(projectId: string): Promise<NumberingCounters | null> {
+  return apiGet<NumberingCounters>(`/v1/projects/${encodeURIComponent(projectId)}/numbering/counters`);
+}
+
 /** A Participant's Visibility, for its own Company and the Project Admins; null otherwise. */
 export function getParticipantVisibility(participantId: string): Promise<ParticipantVisibility | null> {
   return apiGet<ParticipantVisibility>(`/v1/participants/${encodeURIComponent(participantId)}/visibility`);
@@ -168,6 +181,11 @@ export function getWorkItemLinks(workItemId: string): Promise<WorkItemLinks | nu
 /** The Submitted items linking to a Work Item, hidden ones as number and Subject only (E3); null if the Member can't see the item. */
 export function getLinkedFrom(workItemId: string): Promise<LinkedFrom | null> {
   return apiGet<LinkedFrom>(`/v1/work-items/${encodeURIComponent(workItemId)}/linked-from`);
+}
+
+/** The Revisions of a Work Item's chain the signed-in Member may see (the Revision drop-down); null if they can't see the item. */
+export function getRevisionChain(workItemId: string): Promise<RevisionChain | null> {
+  return apiGet<RevisionChain>(`/v1/work-items/${encodeURIComponent(workItemId)}/revisions`);
 }
 
 /** A Work Item's history as the signed-in Member may see it; null if they can't see the item. */

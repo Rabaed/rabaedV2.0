@@ -1,0 +1,122 @@
+[
+  {
+    "name": "the Rabaed Default: Project, Type and the Participant's position, 4 digits, counted by all three",
+    "pattern": { "segments": [{ "kind": "project" }, { "kind": "type" }, { "kind": "participant" }], "separator": "-", "seqDigits": 4, "countedBy": [0, 1, 2] },
+    "item": { "projectCode": "TWR", "typeCode": "MAR", "tradeCode": "EL", "participant": { "code": null, "ordinal": 1 }, "locationPath": ["Z1", "B1", "F2"] },
+    "seq": 37,
+    "counterKey": "TWR-MAR-01",
+    "number": "TWR-MAR-01-0037"
+  },
+  {
+    "name": "the Participant Code, once set, instead of the position",
+    "pattern": { "segments": [{ "kind": "project" }, { "kind": "type" }, { "kind": "participant" }], "separator": "-", "seqDigits": 4, "countedBy": [0, 1, 2] },
+    "item": { "projectCode": "TWR", "typeCode": "MAR", "tradeCode": "EL", "participant": { "code": "CCM", "ordinal": 3 }, "locationPath": ["Z1", "B1", "F2"] },
+    "seq": 1,
+    "counterKey": "TWR-MAR-CCM",
+    "number": "TWR-MAR-CCM-0001"
+  },
+  {
+    "name": "a position padded to two digits",
+    "pattern": { "segments": [{ "kind": "project" }, { "kind": "type" }, { "kind": "participant" }], "separator": "-", "seqDigits": 4, "countedBy": [0, 1, 2] },
+    "item": { "projectCode": "TWR", "typeCode": "MAR", "tradeCode": "EL", "participant": { "code": null, "ordinal": 7 }, "locationPath": [] },
+    "seq": 1,
+    "counterKey": "TWR-MAR-07",
+    "number": "TWR-MAR-07-0001"
+  },
+  {
+    "name": "a position above 99, never cut",
+    "pattern": { "segments": [{ "kind": "project" }, { "kind": "type" }, { "kind": "participant" }], "separator": "-", "seqDigits": 4, "countedBy": [0, 1, 2] },
+    "item": { "projectCode": "TWR", "typeCode": "MAR", "tradeCode": "EL", "participant": { "code": null, "ordinal": 123 }, "locationPath": [] },
+    "seq": 1,
+    "counterKey": "TWR-MAR-123",
+    "number": "TWR-MAR-123-0001"
+  },
+  {
+    "name": "a sequence longer than its digits, never cut",
+    "pattern": { "segments": [{ "kind": "project" }, { "kind": "type" }, { "kind": "participant" }], "separator": "-", "seqDigits": 4, "countedBy": [0, 1, 2] },
+    "item": { "projectCode": "TWR", "typeCode": "MAR", "tradeCode": "EL", "participant": { "code": null, "ordinal": 1 }, "locationPath": [] },
+    "seq": 12345,
+    "counterKey": "TWR-MAR-01",
+    "number": "TWR-MAR-01-12345"
+  },
+  {
+    "name": "the Trade code",
+    "pattern": { "segments": [{ "kind": "project" }, { "kind": "trade" }, { "kind": "type" }], "separator": "-", "seqDigits": 4, "countedBy": [0, 1, 2] },
+    "item": { "projectCode": "TWR", "typeCode": "MAR", "tradeCode": "EL", "participant": { "code": null, "ordinal": 1 }, "locationPath": ["Z1", "B1", "F2"] },
+    "seq": 4,
+    "counterKey": "TWR-EL-MAR",
+    "number": "TWR-EL-MAR-0004"
+  },
+  {
+    "name": "no Trade: the Trade segment prints nothing",
+    "pattern": { "segments": [{ "kind": "project" }, { "kind": "trade" }, { "kind": "participant" }], "separator": "-", "seqDigits": 4, "countedBy": [0, 1, 2] },
+    "item": { "projectCode": "TWR", "typeCode": "MAR", "tradeCode": null, "participant": { "code": null, "ordinal": 1 }, "locationPath": ["Z1"] },
+    "seq": 1,
+    "counterKey": "TWR-01",
+    "number": "TWR-01-0001"
+  },
+  {
+    "name": "fixed text as it is",
+    "pattern": { "segments": [{ "kind": "project" }, { "kind": "text", "text": "SUB" }, { "kind": "type" }], "separator": "-", "seqDigits": 4, "countedBy": [0, 1, 2] },
+    "item": { "projectCode": "TWR", "typeCode": "MAR", "tradeCode": "EL", "participant": { "code": null, "ordinal": 1 }, "locationPath": ["Z1", "B1", "F2"] },
+    "seq": 4,
+    "counterKey": "TWR-SUB-MAR",
+    "number": "TWR-SUB-MAR-0004"
+  },
+  {
+    "name": "the Location at level 1, the Zone",
+    "pattern": { "segments": [{ "kind": "type" }, { "kind": "location", "level": 1 }], "separator": "-", "seqDigits": 4, "countedBy": [0, 1] },
+    "item": { "projectCode": "TWR", "typeCode": "MAR", "tradeCode": "EL", "participant": { "code": null, "ordinal": 1 }, "locationPath": ["Z1", "B1", "F2"] },
+    "seq": 1,
+    "counterKey": "MAR-Z1",
+    "number": "MAR-Z1-0001"
+  },
+  {
+    "name": "the Location at level 3",
+    "pattern": { "segments": [{ "kind": "type" }, { "kind": "location", "level": 3 }], "separator": "-", "seqDigits": 4, "countedBy": [0, 1] },
+    "item": { "projectCode": "TWR", "typeCode": "MAR", "tradeCode": "EL", "participant": { "code": null, "ordinal": 1 }, "locationPath": ["Z1", "B1", "F2"] },
+    "seq": 1,
+    "counterKey": "MAR-F2",
+    "number": "MAR-F2-0001"
+  },
+  {
+    "name": "the item's own Location when it sits above the chosen level",
+    "pattern": { "segments": [{ "kind": "type" }, { "kind": "location", "level": 3 }], "separator": "-", "seqDigits": 4, "countedBy": [0, 1] },
+    "item": { "projectCode": "TWR", "typeCode": "MAR", "tradeCode": "EL", "participant": { "code": null, "ordinal": 1 }, "locationPath": ["Z1", "B1"] },
+    "seq": 1,
+    "counterKey": "MAR-B1",
+    "number": "MAR-B1-0001"
+  },
+  {
+    "name": "no Location: the Location segment prints nothing",
+    "pattern": { "segments": [{ "kind": "type" }, { "kind": "location", "level": 2 }], "separator": "-", "seqDigits": 4, "countedBy": [0, 1] },
+    "item": { "projectCode": "TWR", "typeCode": "MAR", "tradeCode": "EL", "participant": { "code": null, "ordinal": 1 }, "locationPath": [] },
+    "seq": 1,
+    "counterKey": "MAR",
+    "number": "MAR-0001"
+  },
+  {
+    "name": "'/' throughout and 5 digits; the key still joins with '-'",
+    "pattern": { "segments": [{ "kind": "project" }, { "kind": "type" }, { "kind": "participant" }], "separator": "/", "seqDigits": 5, "countedBy": [0, 1, 2] },
+    "item": { "projectCode": "TWR", "typeCode": "MAR", "tradeCode": "EL", "participant": { "code": null, "ordinal": 1 }, "locationPath": [] },
+    "seq": 144,
+    "counterKey": "TWR-MAR-01",
+    "number": "TWR/MAR/01/00144"
+  },
+  {
+    "name": "counted only by the ticked segments",
+    "pattern": { "segments": [{ "kind": "project" }, { "kind": "type" }, { "kind": "trade" }, { "kind": "participant" }], "separator": "-", "seqDigits": 4, "countedBy": [0, 1] },
+    "item": { "projectCode": "TWR", "typeCode": "MAR", "tradeCode": "ME", "participant": { "code": "KCC", "ordinal": 2 }, "locationPath": [] },
+    "seq": 2,
+    "counterKey": "TWR-MAR",
+    "number": "TWR-MAR-ME-KCC-0002"
+  },
+  {
+    "name": "3 digits, counted by nothing",
+    "pattern": { "segments": [{ "kind": "text", "text": "REG" }], "separator": "-", "seqDigits": 3, "countedBy": [] },
+    "item": { "projectCode": "TWR", "typeCode": "MAR", "tradeCode": "EL", "participant": { "code": null, "ordinal": 1 }, "locationPath": [] },
+    "seq": 9,
+    "counterKey": "",
+    "number": "REG-009"
+  }
+]

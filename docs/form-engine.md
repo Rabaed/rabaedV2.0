@@ -159,6 +159,13 @@ The part-1 MAR is a Rabaed Default written as data (migration `mar_quantity` com
 - An item that has never left its raiser (Draft or internal review) is never listed, whoever asks; it appears at its first Submit. From then on it stays listed, also while it is Sent Back to its raiser, with its Links as they were at the Send Back until it is Submitted again (settled 2026-10-06, RP-295; to build with RP-309). An item the viewer can't see is 404, like its other reads.
 - Served by `app.work_item_linked_from` (security definer), never the table: the app role can't read a Link's target.
 
+### 2.8a Links within a Revision chain (RP-311 review, `20261107000000_revision_links_follow_chain.sql`)
+
+- Settled with the user (2026-10-05): the Links agree with the Revision drop-down (workflow-engine.md §5.4). Every Link read leaves out an item of the reading item's **own chain** that the reader can't see, instead of showing its Document Number and Subject (E1, E3 still apply to items of other chains). `app.chain_item_hidden(item, other)` is the test (same `root_id`, not the item itself, `app.sees_work_item` false).
+- `app.work_item_links` (the Links System Field and the link questions' Links) and `app.work_item_linked_from` use it; Linked from also leaves out a discarded Revision. So the original's `related` Link to a Rev 1 moved to a Location the reader doesn't cover is not shown, nor the original in that Rev 1's Linked from (visibility.md scenario 62).
+- `app.work_item_answers` reads each link question through `app.link_choices_as_seen(item, project, ids)`, which leaves such an item out of the answer (the two-argument version is dropped). `app.resolve_link_answers` keeps it where the stored answer held it when a saver who couldn't read it saves the answer back.
+- A discarded Revision is seen by nobody, so its Links, Linked from and copied Documents answer 404, and its link-question Links never reach the Linked from of the items it named (it never left Draft).
+
 ### 2.9 The link question (as built, RP-293)
 
 - A `work_item_ref` answer is a list of item ids in the order chosen, no duplicates (`wrong_type` otherwise); `required` wants at least one when leaving Draft. Each new id must be one Link search could offer the filler, else `unknown_option` (hidden, never Submitted, another Project's, made up, the item itself alike); an id the field already holds stays acceptable on re-save while the filler still sees it.
@@ -219,7 +226,7 @@ Action Forms remain the place for per-Transition input: Review Code, comments, "
 - **Required** fields of a section are checked on any forward Transition out of a Step it names, as when leaving Draft. A Return, a Send Back or a cancel isn't checked.
 - **In-progress answers stay with the Participant holding the Step** (V19, ADR 0013). Its saved answers and their `answers_changed` events reach only its Members until the item leaves it (Submit, Code, close). Everyone else reads the answers as they were when the item arrived. **A Send Back discards the in-progress answers** (settled 2026-10-05, RP-299 review; called a Return until ADR 0014): a Send Back out of a Step of a Participant other than the raiser puts every section another Participant fills back to its answers as they arrived, their field times too, and the Transition event's hash covers those answers; that Participant's `answers_changed` events stay its own. When the item comes back, it starts again from the answers as they arrived.
 - **Before it is filled,** the raiser sees a section filled by another Participant empty and read-only, marked "Filled in by the Consultant" (by that Participant's Project Role).
-- **Revisions** (`create_revision`) clear every section filled by another Participant. The closed item keeps its answers.
+- **Revisions** (`create_revision`) clear every section filled by another Participant. The closed item keeps its answers. As built (RP-316, RP-305): `app.create_revision` fills the new Revision with `app.fill_revision`, now executable by nobody else (revoked from the app role), and keeping only the answers whose field the Revision's Form Version has with the same type (§7). Scenario 49 runs in `revision-sections.test.ts` (test-only Form) and `revisions.test.ts` (the MAR Form Version 4).
 - **Action Forms built from Forms.** Each Transition's Action Form is a Form schema on `workflow_transition`, rendered and validated by the same engine. Its answers go in the Transition event's payload.
   - `reason` is an ordinary required textarea on the Return and Send Back Transitions.
   - The **Internal Note** is not a schema field. It is a fixed element under every Action Form, as System Fields frame a Form, and stays its own `internal` event (V5).
@@ -273,6 +280,7 @@ Layout is not fixed to the Form: a Form can have **several PDF Templates**, and 
 - **Keys are forever.** A key can't be reused for a field of a different type, and the builder enforces this across all versions of the definition.
 - **Dropping a field** in a new version doesn't touch items pinned to older versions: they keep rendering with their own schema.
 - **A Revision onto a newer Form version** copies values by matching key and type. Values for fields that no longer exist stay visible in the previous revision only. The new revision shows a notice listing them.
+  - As built (RP-316, RP-311 review): `app.revision_dropped_fields(item)` (security definer, granted to the app role) returns, for a Revision the caller sees, the fields (key and label) of the revised item's Form Version that the Revision's Version doesn't have with the same type, in schema order, layout fields aside; nothing for an original or an unchanged Version. It reads the two schemas only, never the revised item's answers. `WorkItemDetail.droppedFields` carries them, and the item page lists them under the `versionsChanged` notice, in English and Arabic.
 
 ### Publish-time validation
 

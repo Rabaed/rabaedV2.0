@@ -7,6 +7,7 @@ import {
   projectInvitations,
   projectParticipants,
   setMemberPositionsRequest,
+  setParticipantCodeRequest,
 } from "@rabaed/domain";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
@@ -23,6 +24,7 @@ import {
   removeProjectMember,
   respondToInvitation,
   setMemberPositions,
+  setParticipantCode,
   withdrawInvitation,
 } from "../projects/participants.ts";
 import { refusal } from "../refusals.ts";
@@ -109,6 +111,20 @@ export const participantRoutes =
         },
       );
     }
+
+    // A Project Admin sets the Participant Code; 404 for a Participant the Member can't see, 403 for
+    // a Member who can see it but isn't a Project Admin.
+    app.put(
+      "/v1/participants/:participantId/code",
+      { schema: { params: participantParams, body: setParticipantCodeRequest } },
+      async (request, reply) => {
+        const memberId = ctx.requireMember(request);
+        const participantId = idOrNotFound(request.params.participantId);
+        const result = await setParticipantCode(ctx.db, memberId, participantId, request.body.code);
+        if (!result.ok) throw refusal(result);
+        return reply.code(204).send();
+      },
+    );
 
     app.get("/v1/participants", { schema: { response: { 200: companyParticipations } } }, async (request) => {
       const actorId = ctx.requireMember(request);

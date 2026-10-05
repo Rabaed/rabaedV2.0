@@ -2,6 +2,7 @@ import type { Locale } from "@rabaed/domain";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
 import { AddParticipantForm } from "@/components/add-participant-form";
+import { ParticipantCodeForm } from "@/components/participant-code-form";
 import { WithdrawInvitationButton } from "@/components/withdraw-invitation-button";
 import { Link, redirect } from "@/i18n/navigation";
 import { getMe, getProject, getProjectInvitations, getProjectParticipants } from "@/lib/session";
@@ -55,16 +56,26 @@ export default async function ProjectPage({ params }: { params: Promise<{ locale
         {participants && (
           <ul className="divide-y divide-border border-y border-border" data-testid="participants">
             {participants.participants.map((p) => (
-              <li key={p.id} className="flex flex-wrap items-baseline justify-between gap-4 py-3">
-                <span>
-                  <span className="font-medium">{p.company.legalName[locale]}</span>{" "}
-                  <span className="text-muted">· {p.projectRole.name[locale]}</span>
-                </span>
-                {p.isOwnCompany && (
-                  <Link href={`/participants/${p.id}`} className="text-sm text-primary underline underline-offset-4">
-                    {t("projectMembers")}
-                  </Link>
-                )}
+              <li key={p.id} className="space-y-3 py-3">
+                <div className="flex flex-wrap items-baseline justify-between gap-4">
+                  <span>
+                    <span className="font-medium">{p.company.legalName[locale]}</span>{" "}
+                    <span className="text-muted">· {p.projectRole.name[locale]}</span>
+                    {/* The Participant Code, as in Document Numbers: always left-to-right. */}
+                    {p.code && (
+                      <span className="text-muted">
+                        {" "}
+                        · {t("participantCode")} <bdi dir="ltr">{p.code}</bdi>
+                      </span>
+                    )}
+                  </span>
+                  {p.isOwnCompany && (
+                    <Link href={`/participants/${p.id}`} className="text-sm text-primary underline underline-offset-4">
+                      {t("projectMembers")}
+                    </Link>
+                  )}
+                </div>
+                {project.isProjectAdmin && <ParticipantCodeForm participantId={p.id} code={p.code} />}
               </li>
             ))}
           </ul>
@@ -98,6 +109,11 @@ export default async function ProjectPage({ params }: { params: Promise<{ locale
           <li>
             <Link href={`/projects/${project.id}/settings/trades-locations`} className="text-primary underline underline-offset-4">
               {t("tradesLocations")}
+            </Link>
+          </li>
+          <li>
+            <Link href={`/projects/${project.id}/settings/numbering`} className="text-primary underline underline-offset-4">
+              {t("numbering")}
             </Link>
           </li>
           {project.isProjectAdmin && (
