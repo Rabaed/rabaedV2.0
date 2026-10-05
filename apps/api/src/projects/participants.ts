@@ -24,6 +24,9 @@ export type AddParticipantResult =
   | Forbidden
   | { ok: false; reason: (typeof addParticipantRefusals)[number] };
 
+const setCodeRefusals = ["not_found", "project_closed", "invalid_code", "duplicate_code", "code_in_use"] as const;
+export type SetParticipantCodeResult = { ok: true } | Forbidden | { ok: false; reason: (typeof setCodeRefusals)[number] };
+
 const respondRefusals = ["not_found", "project_closed"] as const;
 export type RespondToInvitationResult =
   | { ok: true }
@@ -54,8 +57,13 @@ export async function listParticipants(db: Db, memberId: string, projectId: stri
       base_role: BaseRole;
       role_name: BilingualText;
       own: boolean;
+      code: string | null;
     }>`
-      select p.*, p.company_id = app.current_company_id() as own from app.project_participants(${projectId}::uuid) p
+      -- The code is read through the participant table's row-level security: a Member
+      -- gets the codes of the Participants they can see (V15), and the join adds no row.
+      select p.*, p.company_id = app.current_company_id() as own, pt.code
+      from app.project_participants(${projectId}::uuid) p
+      join participant pt on pt.id = p.participant_id
     `.execute(trx);
     return {
       hostCompany: { legalName: onProject.hostName },
@@ -63,6 +71,7 @@ export async function listParticipants(db: Db, memberId: string, projectId: stri
         id: r.participant_id,
         company: { id: r.company_id, legalName: r.legal_name },
         projectRole: { baseRole: r.base_role, name: r.role_name },
+        code: r.code,
         isOwnCompany: r.own,
       })),
     };
@@ -331,6 +340,27 @@ export function setMemberPositions(
         select app.set_project_member_positions(${participantId}::uuid, ${targetId}::uuid, ${positions}::text[]) as outcome
       `.execute(trx);
       return commandResult(rows[0]!.outcome, "set", projectMemberRefusals);
+    }),
+  );
+}
+
+/**
+ * A Project Admin sets a Participant's Participant Code. Not found for a
+ * Participant the Member can't see; forbidden for a Member who sees it but
+ * isn't a Project Admin.
+ */
+export function setParticipantCode(
+  db: Db,
+  memberId: string,
+  participantId: string,
+  code: string,
+): Promise<SetParticipantCodeResult> {
+  return refusedAsForbidden(() =>
+    withMember(db, memberId, async (trx): Promise<SetParticipantCodeResult> => {
+      const { rows } = await sql<{ outcome: string }>`
+        select app.set_participant_code(${participantId}::uuid, ${code}) as outcome
+      `.execute(trx);
+      return commandResult(rows[0]!.outcome, "set", setCodeRefusals);
     }),
   );
 }

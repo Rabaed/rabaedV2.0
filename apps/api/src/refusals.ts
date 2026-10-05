@@ -17,6 +17,9 @@ const answers = {
   project_closed: () => new HttpError(409, "project_closed"),
   already_participant: () => new HttpError(409, "already_participant"),
   duplicate_code: () => new HttpError(409, "duplicate_code"),
+  // Participant Codes (RP-314).
+  invalid_code: () => new HttpError(422, "invalid_code"),
+  code_in_use: () => new HttpError(409, "code_in_use"),
   parent_not_found: () => new HttpError(422, "parent_not_found"),
   parent_deactivated: () => new HttpError(409, "parent_deactivated"),
   trade_not_found: () => new HttpError(422, "trade_not_found"),
