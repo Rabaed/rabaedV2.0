@@ -83,8 +83,6 @@ for (const locale of locales) {
           // ("Could not capture a stable screenshot"). Give only such a root a minimum box (RP-340),
           // so no other story's screenshot changes. The check runs everywhere, not only on Linux.
           if (!overlay && canvasElement.getBoundingClientRect().height === 0) canvasElement.style.minHeight = "2rem";
-          // The story root always has a box to screenshot.
-          if (!overlay) expect(canvasElement.getBoundingClientRect().height).toBeGreaterThan(0);
 
           expect(document.documentElement.lang).toBe(locale);
           expect(document.documentElement.dir).toBe(directionOf(locale));
