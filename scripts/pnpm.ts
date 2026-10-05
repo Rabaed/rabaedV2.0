@@ -15,8 +15,12 @@ import { basename } from "node:path";
 const args = process.argv.slice(2);
 const entry = process.env.npm_execpath;
 
+// pnpm's entry is pnpm.cjs (pnpm.mjs or pnpm.js in some installs); npm and
+// yarn put their own entries here, which must not be rerun as pnpm.
+const isPnpmEntry = (file: string) => /^pnpm\.[cm]?js$/.test(basename(file));
+
 const result =
-  entry && basename(entry).startsWith("pnpm")
+  entry && isPnpmEntry(entry)
     ? spawnSync(process.execPath, [entry, ...args], { stdio: "inherit" })
     : // Not started by pnpm (e.g. run by hand): use pnpm from PATH.
       spawnSync("pnpm", args, { stdio: "inherit", shell: process.platform === "win32" });

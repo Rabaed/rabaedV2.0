@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -50,5 +50,16 @@ describe("root package.json scripts", () => {
       .filter(([, command]) => /(^|&&|\|\||;)\s*pnpm\s/.test(command))
       .map(([name]) => name);
     expect(direct).toEqual([]);
+  });
+
+  it("typecheck every workspace package: `pnpm -r run typecheck` skips a package without the script", () => {
+    const packages = ["apps", "packages"].flatMap((group) =>
+      readdirSync(join(root, group))
+        .map((name) => join(group, name, "package.json"))
+        .filter((file) => existsSync(join(root, file))),
+    );
+    const unchecked = packages.filter((file) => !(JSON.parse(readFileSync(join(root, file), "utf8")) as { scripts?: Record<string, string> }).scripts?.typecheck);
+    expect(packages.length).toBeGreaterThan(0);
+    expect(unchecked).toEqual([]);
   });
 });
