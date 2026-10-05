@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mergeFieldAnswers, type FieldStamps } from "./field-times.ts";
+import { changedByLabel, mergeFieldAnswers, savedLabel, type FieldStamps } from "./field-times.ts";
 
 const me = "member-me";
 const other = "member-other";
@@ -82,5 +82,17 @@ describe("mergeFieldAnswers", () => {
       memberId: me,
     });
     expect(out.merged).toEqual({ a: "theirs" });
+  });
+});
+
+describe("labels", () => {
+  it("shows the save time in Saudi time with Latin digits, in both languages", () => {
+    expect(savedLabel("2026-10-05T07:15:00.000Z", "en")).toMatch(/^Saved 10:15/);
+    expect(savedLabel("2026-10-05T07:15:00.000Z", "ar")).toMatch(/^تم الحفظ 10:15/);
+  });
+
+  it("says who changed a field, just now", () => {
+    expect(changedByLabel("Description", "Omar", "en")).toBe("Description changed by Omar just now");
+    expect(changedByLabel("الوصف", "عمر", "ar")).toBe("الوصف: غُيّر بواسطة عمر قبل لحظات");
   });
 });

@@ -138,14 +138,14 @@ export const workItemRoutes =
     // Save draft. A refusal changes nothing.
     app.put(
       "/v1/work-items/:workItemId/answers",
-      { schema: { params: workItemParams, body: saveAnswersRequest, response: { 200: savedAnswers } } },
+      { schema: { params: workItemParams, body: saveAnswersRequest, response: { 200: savedAnswers, 204: z.null().describe("saved; no `basedOn`, nothing to report") } } },
       async (request, reply) => {
         const memberId = ctx.requireMember(request);
         const id = idOrNotFound(request.params.workItemId);
         const result = await saveAnswers(ctx.db, memberId, id, request.body, ctx.now());
         if (!result.ok) throw refusal(result);
         // Without `basedOn` there is nothing to report: as it always was.
-        return result.saved ? reply.code(200).send(result.saved) : reply.code(204).send();
+        return result.saved ? reply.code(200).send(result.saved) : reply.code(204).send(null);
       },
     );
 

@@ -68,6 +68,8 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
       answers={item.answers}
       named={item.namedAnswers}
       editable={editable && !!mine && !!scopes}
+      fieldTimes={item.fieldTimes}
+      autosave={item.autosave}
     >
       <div className="max-w-3xl space-y-6">
         <div className="space-y-2">

@@ -1,3 +1,5 @@
+import { formatDate, type Locale } from "./locale.ts";
+
 /**
  * Per-field times for autosave (form-engine.md §8, part 3). Each field of a
  * Work Item's answers records when it last changed and who changed it. A save
@@ -58,4 +60,15 @@ export function mergeFieldAnswers(input: {
     }
   }
   return { merged, kept };
+}
+
+/** "Saved 10:15" in Saudi time: the Save button's note on when the item was last saved. */
+export function savedLabel(at: string, locale: Locale): string {
+  const time = formatDate(new Date(at), locale, { timeStyle: "short" });
+  return locale === "ar" ? `تم الحفظ ${time}` : `Saved ${time}`;
+}
+
+/** "Description changed by Omar just now": a field another Member changed, shown beside the Form. */
+export function changedByLabel(fieldLabel: string, name: string, locale: Locale): string {
+  return locale === "ar" ? `${fieldLabel}: غُيّر بواسطة ${name} قبل لحظات` : `${fieldLabel} changed by ${name} just now`;
 }
