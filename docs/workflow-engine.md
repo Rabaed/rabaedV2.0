@@ -19,7 +19,7 @@ A Workflow version is a directed graph.
   - `is_signing`.
 - **Transitions** are edges. Each has:
   - a `label` (i18n);
-  - a `kind`: `send` (within the Participant), `submit` (to another Participant), `return` (back within the Participant), `close` or `cancel`;
+  - a `kind`: `send` (within the Participant), `submit` (to another Participant), `return` (back within the Participant), `send_back` (back to the Participant that Submitted it, with no outcome; ADR 0014), `close` or `cancel`;
   - an optional `condition` (§4);
   - an optional `outcome` it sets (`A`, `B`, `C`, `D`, `passed`, `passed_with_comments`, `failed`, `closed`);
   - an `action_form`: the pop-up schema;
@@ -42,6 +42,8 @@ flowchart LR
   KM -- "Reject · D" --> RJ((Rejected))
 ```
 
+The MAR has no Send Back: the Consultant sends work back to the Contractor only with Code C, and the Contractor resubmits it as a Revision (§5.4). Send Back is for Workflows such as the Site Report's "Return for Comment" (ADR 0014).
+
 The Issued Code is the `outcome` of the Transition taken from the `issue_code` Step. The "Approve / B / C / D" buttons are four Transitions, each with its own Action Form. For example, B requires at least one comment row, and each row becomes a Comment Work Item.
 
 ### Publish-time validation
@@ -51,11 +53,11 @@ A draft Workflow version can't be published unless all of these hold:
 1. Exactly one Draft start Step. Every Step is reachable from it, and every non-terminal Step has an outgoing Transition.
 2. Every `stage_key` exists in the Module's Stage set, and terminal Steps sit in closed or cancelled Stages.
 3. The Work Item Type's `outcome_kind` matches: for `review_code`, exactly one path passes an `issue_code` Step, and every Transition into a terminal Step sets an outcome.
-4. A `return` goes only to an earlier Step held by the **same** Participant role. A `submit` always crosses to a different role.
+4. A `return` goes only to an earlier Step held by the **same** Participant role. A `submit` always crosses to a different role. A `send_back` goes from a Step of the role the item was Submitted to, back to a Step of the role that Submitted it, which the Workflow chooses; it sets no outcome.
 5. Every `submit` Transition and every Transition from an `issue_code` Step is signing.
 6. Conditions reference only fields that exist in the Form (checked against the Form's latest published version).
 7. Action Forms are valid Form schemas. As built (RP-300): `workflowActionFormProblems` in `packages/domain` (`action-form.ts`). Workflow Versions are published as data by migration until the builder (part 5), so a seam test runs it on every published Version.
-8. No cycle is possible without a `return`. There are no loops through Submit.
+8. No cycle is possible without a `return` or a `send_back`. A loop across Participants always goes through a `send_back`, never through Submit alone.
 
 Published versions never change. Publishing v2 leaves v1 items untouched. Items on v1 show a notice ("Workflow updated to v2"), and anyone can view v2.
 
