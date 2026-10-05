@@ -44,6 +44,9 @@ export const DEMO_ENGINEER_EMAIL = "engineer@rabaed.demo.rabaed.test";
 const SAMPLE_PHOTO_JPEG =
   "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDABALDA4MChAODQ4SERATGCgaGBYWGDEjJR0oOjM9PDkzODdASFxOQERXRTc4UG1RV19iZ2hnPk1xeXBkeFxlZ2P/2wBDARESEhgVGC8aGi9jQjhCY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2P/wAARCABAAGADASIAAhEBAxEB/8QAGQABAQEBAQEAAAAAAAAAAAAAAAUEAQMG/8QALxAAAQICBgkEAwEAAAAAAAAAAAEEAgMFERIUFdEhUlNUc5GTorETNUbBBiJB8f/EABcBAQEBAQAAAAAAAAAAAAAAAAABAgP/xAAXEQEBAQEAAAAAAAAAAAAAAAAAAQIR/9oADAMBAAIRAxEAPwD60AFQB4uHUltZ9aOzarq0Kvg8cUZ7btXIDYDHijPbdq5DFGe27VyA2Ax4oz23auQxRntu1cgNgMeKM9t2rkekh63cRrBJmWokSuqpU0AaAAAAAE6koUifMIYkRYVmVKipoXTCV7i03WR00JNIe4UfxfuEvE0sZ7i03WR00FxabrI6aGg6c7ris1wabrI6aC4tN1kdNDScUTXTjPcWm6yOmhIly4JX5A5glwQwQpLSqGFKkTRCXyF8jdcNPEJuJW8AGkAABPpD3Cj+L9wl4g0h7hR/F+4S8Z0sDpwVmLOq6cUVgScAhfI3XDTxCXSF8jdcNPEJvKVvABpAAAZnjKW8sepFGliuqyqf3/DNgrbXm80yKQAm4K215vNMhgrbXm80yKQKJuCttebzTIYK215vNMikAJuCttebzTI9mlHymk1ZkuKNVVLP7KmRsBAAAH//2Q==";
 
+/** The MAR the seed ends with Code C and Remarks, after the Consultant's verification (RP-306). */
+export const CODE_C_TITLE = "Cable tray risers – Tower 1";
+
 /** The Draft the seed creates last: whether a seed finished can be told from it. */
 export const DEMO_LAST_ITEM_TITLE = "Pump room ventilation";
 
@@ -359,6 +362,7 @@ export async function seedDemo(
     };
     const aliCaller = await signedIn(tmc, ali);
     const mohammedCaller = await signedIn(dcl, mohammed);
+    const ahmedCaller = await signedIn(dcl, ahmed);
     const take = (caller: Call, itemId: string, transition: string) =>
       caller("POST", `/v1/work-items/${itemId}/transitions`, { transition, idempotencyKey: randomUUID() });
     /**
@@ -388,6 +392,14 @@ export async function seedDemo(
         scopes: [lighting, emergencyLighting],
       },
     );
+    // The MAR Form Version 4's Consultant verification: filled in by the Consultant at
+    // its review Step (the Contractor reads it empty until the item leaves), then the Code.
+    // `answers` over what the Consultant reads, as the web form saves.
+    const verify = async (itemId: string, verification: Record<string, unknown>) => {
+      const { answers } = await ahmedCaller<{ answers: Record<string, unknown> }>("GET", `/v1/work-items/${itemId}`);
+      await ahmedCaller("PUT", `/v1/work-items/${itemId}/answers`, { answers: { ...answers, ...verification } });
+    };
+    await verify(exitSignage, { sample_checked: true, matches_specification: true });
     await mohammedCaller("POST", `/v1/work-items/${exitSignage}/claim`);
     await take(mohammedCaller, exitSignage, "approve_a");
     // In Tower 2, linking the approved exit signs it supervises twice: under
@@ -408,6 +420,40 @@ export async function seedDemo(
       },
       [exitSignage],
     );
+
+    // The part 3 flow (Form Version 4, MAR Workflow Version 2), ending with Code C and
+    // Remarks. The Consultant's verification sits empty for the Contractor, marked
+    // "Filled in by the Consultant", until the Code is issued; Ahmed fills it at the review
+    // Step, and Mohammed issues Code C with Remarks. No Revision follows: create_revision
+    // comes with RP-103.
+    const cableTray = await submitted(
+      CODE_C_TITLE,
+      ["Legrand Cablofil CF 54", "Wire mesh cable tray, hot dip galvanised.", "Demo datasheet: made up for the Rabaed demo."],
+      {
+        manufacturer: "Legrand",
+        model: "Cablofil CF 54",
+        specification_section: "26 05 36",
+        description: "Wire mesh cable trays for the Tower 1 electrical risers.",
+        items: [{ fixture_type: "Cable tray", description: "Wire mesh, 300 mm wide, 3 m lengths", quantity: 180, unit: "m" }],
+        trade: electrical,
+        location: tower1Floors[1],
+      },
+    );
+    await verify(cableTray, {
+      sample_checked: true,
+      matches_specification: false,
+      verification_note:
+        "The tray is electro-zinc plated, not hot dip galvanised as the specification requires. / اللوحة مجلفنة كهربائياً وليست مجلفنة بالغمس الساخن كما تشترط المواصفات.",
+    });
+    await mohammedCaller("POST", `/v1/work-items/${cableTray}/claim`);
+    await mohammedCaller("POST", `/v1/work-items/${cableTray}/transitions`, {
+      transition: "revise_c",
+      answers: {
+        remarks:
+          "Resubmit with hot dip galvanised trays (EN ISO 1461). / أعد التقديم بلوحات مجلفنة بالغمس الساخن (EN ISO 1461).",
+      },
+      idempotencyKey: randomUUID(),
+    });
   }
 
   // A second Project: Beta Build's own, with only its Authorized Person on it
