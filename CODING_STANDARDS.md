@@ -16,7 +16,7 @@ Visibility is the top requirement (`docs/visibility.md`). Check every read path 
 
 - **Row-level security on every Project table,** keyed by `project_id`, with a seam-2 test that Project B's rows never return to a Member of Project A.
 - **Grant the app role only what every Member who sees the row may read.** `work_item` is read through column grants, and a new column joins that list only when it passes that test. A whole-table grant (e.g. `work_item_scope`) states its reason in the migration.
-- **Every `security definer` function pins `set search_path = pg_catalog, public`,** re-checks the caller's access (e.g. `app.sees_work_item`), and is granted only to the role that needs it.
+- **Every `security definer` function pins `set search_path = pg_catalog, public`,** re-checks the caller's access (e.g. `app.sees_work_item`), and is granted only to the role that needs it (the seam-2 check `packages/db/test/function-grants.test.ts` fails on a function PUBLIC may execute or a role outside its allow-list, so reviewers need not check grants by hand).
 - **Migrations already on `main` stay byte-for-byte as they are.** A change is a new, timestamp-named migration.
 - **The audit trail is append-only:** `work_item_event` is insert-only with its hash chain, and every Rabaed Engineer action writes `admin_action` with a reason.
 
