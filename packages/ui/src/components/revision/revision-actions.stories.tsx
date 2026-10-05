@@ -99,6 +99,8 @@ export const DiscardRefused: Story = {
 
 /** Nothing offered (another Company, or a Member the Draft Step doesn't allow): nothing shown. */
 export const NothingOffered: Story = {
+  // It renders nothing; the box gives the screenshot something to capture.
+  decorators: [(Story) => <div className="min-h-8">{Story()}</div>],
   play: async (context) => {
     await expect(context.canvas.queryByRole("region", { name: storyText(context, copy.section) })).toBeNull();
     await expect(context.canvas.queryAllByRole("button")).toHaveLength(0);
