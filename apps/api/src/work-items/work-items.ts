@@ -219,14 +219,13 @@ async function pinnedForm(trx: Trx, workItemId: string): Promise<PinnedForm | nu
       project_id: string;
       data: Record<string, unknown>;
       data_sha256: Buffer | null;
-      can_save: boolean;
       work_item_type_id: string;
       workflow_version_id: string;
       step_key: string;
     }
   >`
     select v.id, v.version_no, v.schema, w.project_id, app.work_item_answers(w.id) as data,
-      app.answers_sha256(w.id) as data_sha256, app.can_save_answers(w.id) as can_save,
+      app.answers_sha256(w.id) as data_sha256,
       w.work_item_type_id, w.workflow_version_id, s.key as step_key
     from work_item w
     join form_version v on v.id = w.form_version_id
@@ -239,14 +238,16 @@ async function pinnedForm(trx: Trx, workItemId: string): Promise<PinnedForm | nu
   const r = rows[0];
   if (!r) return null;
   const form = toFormVersion(r);
+  // app.answers_sha256 is null exactly when app.can_save_answers is false: one permission check, not two.
+  const canSave = r.data_sha256 !== null;
   const steps = await workflowSteps(trx, r.work_item_type_id, r.workflow_version_id);
   return {
     form,
     projectId: r.project_id,
     data: answersFromDb(form.schema, r.data),
     dataSha256: r.data_sha256,
-    canSave: r.can_save,
-    toFill: formToFillAt(form, steps, { step: r.step_key, canSave: r.can_save }),
+    canSave,
+    toFill: formToFillAt(form, steps, { step: r.step_key, canSave }),
   };
 }
 
