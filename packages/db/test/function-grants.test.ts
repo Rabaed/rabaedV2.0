@@ -18,6 +18,13 @@ const allow: GrantAllowList = {
   "app.engineer_sign_in_candidate": ["rabaed_admin"],
   "app.lock_cr_number": ["rabaed_admin"],
   "app.work_item_chain_intact": ["rabaed_admin"],
+  // Rabaed Admin writes Numbering Patterns, Participant Codes and counters (RP-313, RP-317).
+  "app.is_numbering_pattern": ["rabaed_admin"],
+  "app.counts_by_participant": ["rabaed_admin"],
+  "app.apply_numbering_pattern": ["rabaed_admin"],
+  "app.assign_participant_code": ["rabaed_admin"],
+  "app.numbering_counter_for": ["rabaed_admin"],
+  "app.start_numbering_counter": ["rabaed_admin"],
   "app.current_member_id": both,
   "app.uuid_v7": both,
   "app.is_bilingual": both,
