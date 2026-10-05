@@ -19,7 +19,7 @@ if (!containers) {
   console.error("Docker is not running (or not installed); start it and re-run.");
   process.exit(1);
 }
-const currentProject = existsSync(".env") ? /^COMPOSE_PROJECT_NAME=(.*)$/m.exec(readFileSync(".env", "utf8"))?.[1]?.trim() : undefined;
+const currentProject = existsSync(".env") ? /^COMPOSE_PROJECT_NAME=(.*)$/m.exec(readFileSync(".env", "utf8"))?.[1]?.trim().replace(/^(["'])(.*)\1$/, "$2") : undefined;
 const stale = staleProjects({ containers, volumes: listVolumes(), cwd: process.cwd(), currentProject, exists: existsSync });
 
 if (stale.length === 0) {
@@ -37,7 +37,7 @@ if (!args.includes("--yes")) {
     process.exit(1);
   }
   const prompt = createInterface({ input: process.stdin, output: process.stdout });
-  const answer = await prompt.question("Remove them with their volumes (their databases are lost)? [y/N] ");
+  const answer = await prompt.question("Remove them with their volumes? Their databases are lost, including those of stopped worktrees that still exist. [y/N] ");
   prompt.close();
   if (!/^y(es)?$/i.test(answer.trim())) {
     console.log("Nothing removed.");
@@ -45,7 +45,14 @@ if (!args.includes("--yes")) {
   }
 }
 
+let failed = 0;
 for (const s of stale) {
-  removeProject(s);
-  console.log(`Removed ${s.project}.`);
+  try {
+    removeProject(s);
+    console.log(`Removed ${s.project}.`);
+  } catch (error) {
+    failed++;
+    console.error(`Could not remove ${s.project}: ${(error as { stderr?: string }).stderr?.trim() || String(error)}`);
+  }
 }
+if (failed > 0) process.exit(1);

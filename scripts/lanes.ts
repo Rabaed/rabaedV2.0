@@ -6,7 +6,8 @@ import { connect, createServer } from "node:net";
 // refuses a lane whose ports are taken, and lanes-prune.ts, which removes the
 // rabaed-* compose projects old worktrees left behind (RP-297).
 
-export const LANES = 9;
+/** Lanes 1..9 are for worktrees; lane 0 (the defaults) is the main folder's. */
+export const HIGHEST_LANE = 9;
 
 export type LanePorts = { postgres: number; api: number; admin: number; web: number; mailpit: number; files: number };
 
@@ -93,8 +94,8 @@ export function laneClashes(n: number, { containers, takenPorts, cwd, platform }
 
 /** The first lane from start (wrapping round, never lane 0, which is the main folder's) with no clash. */
 export function firstFreeLane(start: number, clashesOf: (n: number) => string[]): number | undefined {
-  for (let i = 0; i < LANES; i++) {
-    const n = ((start - 1 + i) % LANES) + 1;
+  for (let i = 0; i < HIGHEST_LANE; i++) {
+    const n = ((Math.max(start, 1) - 1 + i) % HIGHEST_LANE) + 1;
     if (clashesOf(n).length === 0) return n;
   }
   return undefined;
@@ -162,7 +163,7 @@ export async function isPortTaken(port: number): Promise<boolean> {
 
 /** Every lane port (lanes 0..9) that is taken right now. */
 export async function takenLanePorts(): Promise<Set<number>> {
-  const ports = Array.from({ length: LANES + 1 }, (_, n) => Object.values(lanePorts(n))).flat();
+  const ports = Array.from({ length: HIGHEST_LANE + 1 }, (_, n) => Object.values(lanePorts(n))).flat();
   const taken = await Promise.all(ports.map(isPortTaken));
   return new Set(ports.filter((_, i) => taken[i]));
 }

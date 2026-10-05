@@ -87,6 +87,12 @@ describe("firstFreeLane", () => {
     expect(firstFreeLane(8, (n) => (n === 1 ? [] : ["taken"]))).toBe(1);
     expect(firstFreeLane(1, () => ["taken"])).toBeUndefined();
   });
+
+  it("starts at lane 1 when asked from lane 0, and still reaches lane 9", () => {
+    const tried: number[] = [];
+    expect(firstFreeLane(0, (n) => (tried.push(n), n === 9 ? [] : ["taken"]))).toBe(9);
+    expect(tried).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9]);
+  });
 });
 
 describe("staleProjects", () => {
