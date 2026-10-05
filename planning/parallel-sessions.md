@@ -51,7 +51,7 @@ Use it when a spec's tickets form a chain that one lane would otherwise work thr
 3. Label every ticket of the spec with this lane, so no other lane starts one of them.
 4. The subagents share the lane's ports and database. If their tests collide, ask the session to run fewer subagents at once.
 5. Jira's automation closes only the ticket named in the branch, which is the spec. When the PR merges, close the spec's other tickets with `transitionJiraIssue` and a comment naming the PR.
-6. Run `/mattpocock-skills:retro`, then archive the session.
+6. Clean up the subagents' worktrees: `pnpm worktrees:clean --into RP-nnn-<spec-name> --yes` (`--into main` once the PR has merged). It unlocks and removes every `.claude/worktrees/agent-*` worktree whose commits are all in that branch, with its leftover folder (Windows keeps `node_modules` behind) and branch, and lists the ones it skipped for uncommitted changes or unmerged commits. Run it after the last subagent has finished, since a worktree that has no commits yet counts as merged. Then run `/mattpocock-skills:retro` and archive the session.
 
 ## Retro before archiving
 
