@@ -306,9 +306,11 @@ describe("a Revision onto a newer Form Version", () => {
     const revision = await revisionOf(closed);
     const d = await detail(engineer, revision);
     expect(d.versionsChanged).toBe(true);
+    // The notice lists the fields the newer Version no longer has (form-engine.md §7).
+    expect(d.droppedFields).toEqual([{ key: "related", label: bilingual("Related submittals") }]);
     expect(d.answers).toEqual({ model: "FD-21", trade: electrical, location: buildingA });
     const links: WorkItemLinks = (await ok(engineer.caller.get(`/v1/work-items/${revision}/links`), 200)).json();
     expect(links.links).toEqual([]);
-    expect((await detail(engineer, closed)).versionsChanged).toBe(false);
+    expect(await detail(engineer, closed)).toMatchObject({ versionsChanged: false, droppedFields: [] });
   });
 });

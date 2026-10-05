@@ -107,9 +107,19 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
           locale={locale}
         />
         {item.versionsChanged && (
-          <p role="note" className="rounded-md border border-border bg-surface p-3 text-sm text-muted">
-            {t("versionsChanged")}
-          </p>
+          <div role="note" className="flex flex-col gap-2 rounded-md border border-border bg-surface p-3 text-sm text-muted">
+            <p>{t("versionsChanged")}</p>
+            {item.droppedFields.length > 0 && (
+              <>
+                <p>{t("droppedFields")}</p>
+                <ul className="list-disc ps-5">
+                  {item.droppedFields.map((f) => (
+                    <li key={f.key}>{f.label[locale]}</li>
+                  ))}
+                </ul>
+              </>
+            )}
+          </div>
         )}
 
         {/* The System Fields above the Form, the same on every Work Item. */}

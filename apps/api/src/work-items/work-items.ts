@@ -591,12 +591,16 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
     `.execute(trx);
     const { named, unnamed } = await namedAnswers(trx, workItemId);
     const stamps = await fieldStamps(trx, workItemId, false);
+    const { rows: dropped } = await sql<{ field_key: string; label: BilingualText }>`
+      select field_key, label from app.revision_dropped_fields(${workItemId}::uuid)
+    `.execute(trx);
     const { rows: auto } = await sql<{ autosave: boolean }>`select app.answers_autosave(${workItemId}::uuid) as autosave`.execute(trx);
     return {
       ...toSummary(row, now),
       formVersionId: d.form_version_id,
       revisionNo: d.revision_no,
       versionsChanged: d.versions_changed,
+      droppedFields: dropped.map((f) => ({ key: f.field_key, label: f.label })),
       // Another Company's people, and a Company the viewer may not see, are never identified, not even by an id (V14, V15).
       answers: Object.fromEntries(Object.entries(answers).filter(([key]) => !unnamed.has(key))),
       namedAnswers: named,

@@ -275,6 +275,12 @@ export const workItemDetail = workItemSummary.extend({
   /** A Revision pinned to a newer Form or Workflow Version than the item it revises: the page says so. */
   versionsChanged: z.boolean(),
   /**
+   * With `versionsChanged`: the fields the revised item's Form Version has and
+   * this Revision's doesn't (dropped, or its key now another type), whose answers
+   * were not copied; the notice lists them (form-engine.md §7). Empty otherwise.
+   */
+  droppedFields: z.array(z.object({ key: z.string(), label: bilingualText })),
+  /**
    * The Form's answers by field key, exactly as typed. The Built-in Fields hold
    * ids: `trade` and `location` the item's `trade` and `location`, `scopes` its `scopes`.
    * A `member` answer naming another Company's Member, or a `participant` one
