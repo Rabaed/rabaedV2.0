@@ -64,15 +64,22 @@ export function samePath(a: string, b: string, platform: NodeJS.Platform = proce
   return a !== "" && b !== "" && norm(a) === norm(b);
 }
 
-type ClashInput = { containers: Container[]; takenPorts: ReadonlySet<number>; cwd: string; platform?: NodeJS.Platform };
+type ClashInput = {
+  containers: Container[];
+  takenPorts: ReadonlySet<number>;
+  cwd: string;
+  platform?: NodeJS.Platform;
+  /** The caller has its own database (lane:env --db), so other worktrees' containers of this lane's compose project are not a clash. */
+  sharedLane?: boolean;
+};
 
 /**
  * Why lane n cannot be used from the worktree at cwd: a lane port taken by
  * something other than this worktree's own containers, or its compose project
  * already used from another worktree (it would share that worktree's database).
  */
-export function laneClashes(n: number, { containers, takenPorts, cwd, platform }: ClashInput): string[] {
-  const own = (c: Container) => samePath(c.workingDir, cwd, platform);
+export function laneClashes(n: number, { containers, takenPorts, cwd, platform, sharedLane }: ClashInput): string[] {
+  const own = (c: Container) => samePath(c.workingDir, cwd, platform) || (sharedLane === true && c.project === laneProject(n));
   const clashes: string[] = [];
   for (const [key, port] of Object.entries(lanePorts(n)) as [keyof LanePorts, number][]) {
     if (!takenPorts.has(port)) continue;
@@ -189,4 +196,56 @@ export function removeProject(stale: StaleProject): void {
   if (stale.volumes.length > 0) docker(["volume", "rm", ...stale.volumes]);
   const networks = lines(docker(["network", "ls", "-q", "--filter", `label=com.docker.compose.project=${stale.project}`]));
   if (networks.length > 0) docker(["network", "rm", ...networks]);
+}
+
+/** A --db suffix: lowercase letters and digits, starting with a letter, and not "test" (rabaed_test is the shared test database). */
+export const isValidDbSuffix = (suffix: string | undefined): suffix is string => suffix !== undefined && /^[a-z][a-z0-9]*$/.test(suffix) && suffix !== "test";
+
+/**
+ * The .env text for lane n from .env.example: its ports and compose project, and with
+ * db the three database URLs naming rabaed_<db> (seam suites then use rabaed_<db>_test).
+ */
+export function laneEnv(example: string, lane: number, db?: string): string {
+  const { postgres: pg, api, admin, web, mailpit, files } = lanePorts(lane);
+  const env = example
+    .replace(/^COMPOSE_PROJECT_NAME=.*$/m, `COMPOSE_PROJECT_NAME=${laneProject(lane)}`)
+    .replace(/^POSTGRES_PORT=.*$/m, `POSTGRES_PORT=${pg}`)
+    .replace(/^PORT=.*$/m, `PORT=${web}`)
+    .replace(/^API_PORT=.*$/m, `API_PORT=${api}`)
+    .replace(/^ADMIN_PORT=.*$/m, `ADMIN_PORT=${admin}`)
+    .replace(/^WEB_URL=.*$/m, `WEB_URL=http://lane${lane}.localhost:${web}`)
+    .replace(/^MAILPIT_PORT=.*$/m, `MAILPIT_PORT=${mailpit}`)
+    .replace(/^FILE_STORE_PORT=.*$/m, `FILE_STORE_PORT=${files}`)
+    .replace(/^FILE_STORE_ENDPOINT=http:\/\/127\.0\.0\.1:9000$/m, `FILE_STORE_ENDPOINT=http://127.0.0.1:${files}`)
+    .replace(/^MAIL_CATCHER_URL=http:\/\/127\.0\.0\.1:8025$/m, `MAIL_CATCHER_URL=http://127.0.0.1:${mailpit}`)
+    .replace(/@localhost:5432\//g, `@localhost:${pg}/`)
+    .replace(/^API_URL=http:\/\/127\.0\.0\.1:4000$/m, `API_URL=http://127.0.0.1:${api}`);
+  return db === undefined ? env : env.replace(/^(DATABASE_(?:MIGRATOR|APP|ADMIN)_URL=.*\/)rabaed$/gm, `$1rabaed_${db}`);
+}
+
+const SUFFIXED_DB = /^rabaed_([a-z][a-z0-9]*)(_test)?$/;
+
+/**
+ * The per-worktree databases (rabaed_<suffix> and rabaed_<suffix>_test, as lane:env --db
+ * makes them) that no existing worktree names in its .env. Never rabaed, rabaed_test or any
+ * other name. inUse: the database names from the .env files of the worktrees that still exist.
+ */
+export function orphanDatabases(names: string[], inUse: ReadonlySet<string>): string[] {
+  return names
+    .filter((name) => {
+      const m = SUFFIXED_DB.exec(name);
+      return m !== null && m[1] !== "test" && !inUse.has(`rabaed_${m[1]}`);
+    })
+    .sort();
+}
+
+/** The database name in a Postgres URL, e.g. rabaed_rp322 for postgres://u:p@localhost:5832/rabaed_rp322. */
+export const databaseOfUrl = (url: string): string | undefined => /\/([^/?]+)(?:\?.*)?$/.exec(url)?.[1];
+
+/** The `db` service containers of the running rabaed-* compose projects. */
+export const dbContainers = (containers: Container[]): Container[] => containers.filter((c) => c.state === "running" && c.project.startsWith("rabaed") && /-db-\d+$/.test(c.name));
+
+/** Runs SQL as the superuser inside a db container and returns one value per line. */
+export function psql(container: string, sql: string): string[] {
+  return lines(docker(["exec", container, "psql", "-U", "postgres", "-d", "postgres", "-At", "-c", sql]));
 }
