@@ -64,15 +64,22 @@ export function samePath(a: string, b: string, platform: NodeJS.Platform = proce
   return a !== "" && b !== "" && norm(a) === norm(b);
 }
 
-type ClashInput = { containers: Container[]; takenPorts: ReadonlySet<number>; cwd: string; platform?: NodeJS.Platform };
+type ClashInput = {
+  containers: Container[];
+  takenPorts: ReadonlySet<number>;
+  cwd: string;
+  platform?: NodeJS.Platform;
+  /** --db: the lane's containers may run from another worktree; this one only adds a database on its Postgres. */
+  sharedLane?: boolean;
+};
 
 /**
  * Why lane n cannot be used from the worktree at cwd: a lane port taken by
  * something other than this worktree's own containers, or its compose project
  * already used from another worktree (it would share that worktree's database).
  */
-export function laneClashes(n: number, { containers, takenPorts, cwd, platform }: ClashInput): string[] {
-  const own = (c: Container) => samePath(c.workingDir, cwd, platform);
+export function laneClashes(n: number, { containers, takenPorts, cwd, platform, sharedLane }: ClashInput): string[] {
+  const own = (c: Container) => samePath(c.workingDir, cwd, platform) || (sharedLane === true && c.project === laneProject(n));
   const clashes: string[] = [];
   for (const [key, port] of Object.entries(lanePorts(n)) as [keyof LanePorts, number][]) {
     if (!takenPorts.has(port)) continue;
@@ -85,11 +92,34 @@ export function laneClashes(n: number, { containers, takenPorts, cwd, platform }
         : `${portNames[key]} port ${port} is held by another process (not a Docker container).`,
     );
   }
+  if (sharedLane) return clashes; // --db: the lane's project may belong to another worktree
   const others = [...new Set(containers.filter((c) => c.project === laneProject(n) && !own(c)).map((c) => c.workingDir))];
   if (others.length > 0) {
     clashes.push(`Compose project ${laneProject(n)} already belongs to ${others.join(", ")} (it would share that worktree's database).`);
   }
   return clashes;
+}
+
+const MAX_SUFFIX = 40;
+
+/** Why `--db <suffix>` is not usable, or undefined. The name becomes rabaed_<suffix> and rabaed_<suffix>_test. */
+export function databaseSuffixError(suffix: string): string | undefined {
+  if (!/^[a-z][a-z0-9_]*$/.test(suffix) || suffix.length > MAX_SUFFIX || suffix.endsWith("_test")) {
+    return `--db takes a lower-case name of letters, digits and underscores, starting with a letter, at most ${MAX_SUFFIX} characters, not ending in _test (got "${suffix}").`;
+  }
+  return undefined;
+}
+
+/** The .env text with the migrator, app and admin URLs on rabaed_<suffix>. The tests derive rabaed_<suffix>_test from the app URL. */
+export function withDatabase(env: string, suffix: string): string {
+  let out = env;
+  for (const role of ["MIGRATOR", "APP", "ADMIN"]) {
+    const key = `DATABASE_${role}_URL`;
+    const url = new RegExp(`^(${key}=.*)/rabaed(?=\r?$)`, "m");
+    if (!url.test(out)) throw new Error(`${key} in .env.example does not end in /rabaed, so --db cannot point it at rabaed_${suffix}.`);
+    out = out.replace(url, `$1/rabaed_${suffix}`);
+  }
+  return out;
 }
 
 /** The first lane from start (wrapping round, never lane 0, which is the main folder's) with no clash. */
