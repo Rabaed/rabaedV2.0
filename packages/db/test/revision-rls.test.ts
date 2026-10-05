@@ -353,6 +353,29 @@ describe("the Links between the items of a chain, for a reader who sees only som
   });
 });
 
+// Only Code C opens a Revision: Inspection Revisions (`failed`) are out of scope (RP-311 review).
+describe("an item closed otherwise than with Code C", () => {
+  it("can't be revised, with the one refusal", async () => {
+    const [draft] = await call<{ outcome: string; work_item_id: string }>(
+      c1.member,
+      sql`select outcome, work_item_id from app.create_work_item(
+        ${projectId}::uuid, ${TYPE}, 'Sprinklers', app.latest_form_version(${TYPE}), '{"model": "SP-1"}'::jsonb,
+        ${electrical}::uuid, ${buildingA}::uuid, now())`,
+    );
+    const id = draft!.work_item_id;
+    expect(await take(c1.member, id, "send_for_review")).toBe("applied");
+    expect(await claim(c1Pm, id)).toBe("claimed");
+    expect(await take(c1Pm, id, "submit")).toBe("applied");
+    expect(await claim(k1.member, id)).toBe("claimed");
+    expect(await take(k1.member, id, "revise_c")).toBe("applied");
+    expect(await call(c1.member, sql`select app.can_create_revision(${id}::uuid) as can`)).toEqual([{ can: true }]);
+    // As an Inspection that failed would close.
+    await migrator.query("update work_item set outcome = 'failed' where id = $1", [id]);
+    expect(await call(c1.member, sql`select app.can_create_revision(${id}::uuid) as can`)).toEqual([{ can: false }]);
+    expect(await createRevision(c1.member, id)).toEqual({ outcome: "revision_not_allowed", work_item_id: null });
+  });
+});
+
 describe("a discarded Revision (scenario 56)", () => {
   it("is gone for C1 too, and the next one is Rev 1 again", async () => {
     expect(await outcome(c1.member, sql`select app.discard_revision(${revision}::uuid, now()) as outcome`)).toBe("discarded");
