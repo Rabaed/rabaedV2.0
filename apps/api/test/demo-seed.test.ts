@@ -468,7 +468,6 @@ describe("the README walkthrough", () => {
       expect(history.events.at(-1)).toMatchObject({ type: "issue_code", remarks: "Replace with 110 lm/W luminaires. / استبدلها بوحدات 110 لومن/واط." });
     }
     await hidden(yousef, { countsZero: true });
-    // The whole review, from Draft to Code C, as several Members: over the default 5 s on CI.
   });
 
   it("14. Hafiz creates Rev 1 of it: his drop-down lists the original and the Draft; the Consultant and Al Waha see only the original", async () => {
