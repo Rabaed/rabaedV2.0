@@ -13,7 +13,9 @@ import type { Reporter, SerializedError, TestModule, TestRunEndReason, Vitest } 
 // Writes the Verdict as JSON to .vitest/new-screenshots.json under the Vitest
 // root (packages/ui).
 
-// The message @vitest/browser gives toMatchScreenshot when the reference file is missing.
+// A line of the message @vitest/browser gives toMatchScreenshot when the reference file is
+// missing. It is not the start of the message: vitest opens with "expect(element).toMatchScreenshot()"
+// and may end with "Caused by: Error: Matcher did not succeed in time." So look for it anywhere.
 const missingReference = "No existing reference screenshot found";
 
 export interface StoryRun {
@@ -33,7 +35,7 @@ export function onlyMissingReferences(run: StoryRun): Verdict {
     run.unhandledErrors === 0 &&
     run.hookErrors === 0 &&
     run.failedTests.length > 0 &&
-    run.failedTests.every((errors) => errors.length === 1 && errors[0]?.startsWith(missingReference));
+    run.failedTests.every((errors) => errors.length === 1 && errors[0]?.includes(missingReference));
   return only ? { onlyMissingReferences: true, newBaselines: run.failedTests.length } : { onlyMissingReferences: false };
 }
 
