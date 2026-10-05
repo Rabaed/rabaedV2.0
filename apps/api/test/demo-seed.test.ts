@@ -236,8 +236,8 @@ describe("the README walkthrough", () => {
     expect(list.items.map((i: { id: string }) => i.id)).not.toContain(mar);
     if (countsZero) expect(list.stages.every((s: { count: number }) => s.count === 0)).toBe(true);
   };
-  const take = async (who: Caller, transition: string, reason = "") => {
-    const r = await who.post(`/v1/work-items/${mar}/transitions`, { transition, answers: reason ? { reason } : {}, idempotencyKey: randomUUID() });
+  const take = async (who: Caller, transition: string, reason = "", extra: Record<string, string> = {}) => {
+    const r = await who.post(`/v1/work-items/${mar}/transitions`, { transition, answers: { ...(reason ? { reason } : {}), ...extra }, idempotencyKey: randomUUID() });
     expect(r.statusCode, r.body).toBe(204);
   };
   const claim = async (who: Caller) => expect((await who.post(`/v1/work-items/${mar}/claim`)).statusCode).toBe(204);
@@ -351,7 +351,7 @@ describe("the README walkthrough", () => {
     await claim(ali);
     await take(ali, "submit");
     await claim(mohammed);
-    await take(mohammed, "revise_c");
+    await take(mohammed, "revise_c", "", { remarks: "Submit the 2020 revision of the datasheet" });
     expect(await detail(hafiz)).toMatchObject({ stage: { key: "revise_resubmit" }, outcome: "C" });
   });
 

@@ -305,6 +305,8 @@ export const workItemHistory = z.object({
       fromStep: bilingualText.nullable(),
       toStep: bilingualText.nullable(),
       reason: z.string().nullable(),
+      /** The Remarks written with a Code (MAR Workflow Version 2): shared with everyone who sees the event. */
+      remarks: z.string().nullable(),
       /** Set on the event that assigned it. */
       documentNumber: z.string().nullable(),
       /** Set on the event that closed the item: the Issued Code. */

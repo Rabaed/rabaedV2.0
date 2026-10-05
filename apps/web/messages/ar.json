@@ -293,6 +293,7 @@
       "other": "تحديث",
       "numbered": "رقم المستند",
       "internalNote": "ملاحظة داخلية",
+      "remarks": "الملاحظات",
       "internalNoteWith": "ملاحظة داخلية · {transition}",
       "internal": "داخلي: لا يراه إلا شركتك.",
       "answersChanged": "تعديل النموذج",
