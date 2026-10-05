@@ -127,7 +127,11 @@ export interface AdminActionTable {
     | "add_option"
     | "rename_option"
     | "retire_option"
-    | "restore_option";
+    | "restore_option"
+    | "read_numbering"
+    | "set_numbering_pattern"
+    | "set_participant_code"
+    | "set_numbering_counter_start";
   target_kind: string;
   /** Null for a read of a list. */
   target_id: string | null;
