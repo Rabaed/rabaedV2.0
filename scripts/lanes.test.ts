@@ -1,6 +1,6 @@
 import { createServer, type Server } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
-import { firstFreeLane, isPortTaken, laneClashes, lanePorts, parseContainers, parseVolumes, staleProjects, type Container } from "./lanes.ts";
+import { databaseSuffixError, firstFreeLane, isPortTaken, laneClashes, lanePorts, parseContainers, parseVolumes, staleProjects, withDatabase, type Container } from "./lanes.ts";
 
 // `docker ps -a --format` lines as lanes.ts asks for them: name, state, compose project, working dir, ports.
 const psLine = (name: string, state: string, project: string, dir: string, ports: string) => [name, state, project, dir, ports].join("\t");
@@ -74,6 +74,64 @@ describe("laneClashes", () => {
       "file store port 9200 is held by container rabaed-lane2-files-1 (compose project rabaed-lane2, from G:\\rabaed-wt\\RP-193).",
       "Compose project rabaed-lane2 already belongs to G:\\rabaed-wt\\RP-193 (it would share that worktree's database).",
     ]);
+  });
+});
+
+describe("laneClashes with sharedLane (--db)", () => {
+  const here = "G:\\rabaed-wt\\RP-312-a";
+  const lane2 = (extra: Partial<Container> = {}) =>
+    container({ name: "rabaed-lane2-db-1", project: "rabaed-lane2", workingDir: "G:\\rabaed-wt\\RP-337", ports: [5632], ...extra });
+
+  it("shares the lane's ports and compose project with the worktree that runs it", () => {
+    const input = { containers: [lane2()], takenPorts: new Set([5632]), cwd: here };
+    expect(laneClashes(2, input)).not.toEqual([]);
+    expect(laneClashes(2, { ...input, sharedLane: true })).toEqual([]);
+  });
+
+  it("still refuses a lane port held by something outside the lane's compose project", () => {
+    const other = container({ name: "stray-db", project: "other", workingDir: "G:\\x", ports: [5632] });
+    expect(laneClashes(2, { containers: [other], takenPorts: new Set([5632]), cwd: here, sharedLane: true })).toEqual([
+      "Postgres port 5632 is held by container stray-db (compose project other, from G:\\x).",
+    ]);
+    expect(laneClashes(2, { containers: [], takenPorts: new Set([5632]), cwd: here, sharedLane: true })).toEqual([
+      "Postgres port 5632 is held by another process (not a Docker container).",
+    ]);
+  });
+});
+
+describe("databaseSuffixError", () => {
+  it("accepts short lower-case names", () => {
+    for (const ok of ["rp312", "x", "rp312_b"]) expect(databaseSuffixError(ok)).toBeUndefined();
+  });
+
+  it("rejects anything that is not a safe database name part", () => {
+    for (const bad of ["", "RP312", "rp-312", "1abc", "a b", "a/b", "a".repeat(41), "x_test"]) expect(databaseSuffixError(bad)).toMatch(/--db/);
+  });
+});
+
+describe("withDatabase", () => {
+  const env = [
+    "DATABASE_SUPERUSER_URL=postgres://postgres:pw@localhost:5632/postgres",
+    "DATABASE_MIGRATOR_URL=postgres://rabaed_migrator:pw@localhost:5632/rabaed",
+    "DATABASE_APP_URL=postgres://rabaed_app:pw@localhost:5632/rabaed",
+    "DATABASE_ADMIN_URL=postgres://rabaed_admin:pw@localhost:5632/rabaed",
+    "OTHER=postgres://x@localhost/rabaed",
+  ].join("\n");
+
+  it("points every role URL at rabaed_<suffix> and leaves the superuser's maintenance database and other lines alone", () => {
+    expect(withDatabase(env, "rp312")).toBe(
+      [
+        "DATABASE_SUPERUSER_URL=postgres://postgres:pw@localhost:5632/postgres",
+        "DATABASE_MIGRATOR_URL=postgres://rabaed_migrator:pw@localhost:5632/rabaed_rp312",
+        "DATABASE_APP_URL=postgres://rabaed_app:pw@localhost:5632/rabaed_rp312",
+        "DATABASE_ADMIN_URL=postgres://rabaed_admin:pw@localhost:5632/rabaed_rp312",
+        "OTHER=postgres://x@localhost/rabaed",
+      ].join("\n"),
+    );
+  });
+
+  it("throws when a role URL does not end in /rabaed, rather than silently sharing the database", () => {
+    expect(() => withDatabase(env.replace("rabaed_app:pw@localhost:5632/rabaed", "rabaed_app:pw@localhost:5632/custom"), "x")).toThrow(/DATABASE_APP_URL/);
   });
 });
 

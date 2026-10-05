@@ -28,7 +28,7 @@ A lane takes work in one of two ways: **one ticket per session** (below), or **a
    Lane N. Run `pnpm lane:env N --force`, then /mattpocock-skills:implement RP-nnn
    ```
    `lane:env` refuses a lane whose ports are taken, or whose compose project (`rabaed-laneN`) another worktree still uses, and names the container holding it. Add `--free` to take the next free lane instead, or run `pnpm lanes:prune` (below) first.
-4. When the PR opens, it appears in that session's PR bar: turn on **Auto-fix**. CI failures, merge conflicts and review comments will wake that session.
+4. When the PR opens, it appears in that session's PR bar: turn on **Auto-fix**. CI failures, merge conflicts and review comments will wake that session. To read a failed job's log without waiting for the rest of the run, see `docs/agents/ci-logs.md`.
 5. After the PR merges, run `/mattpocock-skills:retro` in that session (see below), then archive it. The next ticket gets a fresh session (this replaces `/clear`).
 
 ## Pruning old lanes
@@ -45,7 +45,7 @@ Use it when a spec's tickets form a chain that one lane would otherwise work thr
    Lane N. Run `pnpm lane:env N --force`, then /mattpocock-skills:implement-spec RP-nnn. Name the integration branch RP-nnn-<spec-name> and open its draft PR after the first merge.
    ```
 3. Label every ticket of the spec with this lane, so no other lane starts one of them.
-4. The subagents share the lane's ports and database. If their tests collide, ask the session to run fewer subagents at once.
+4. The subagents share the lane's ports and Postgres, but each gets its own database: in its worktree it runs `pnpm lane:env N --force --db rpNNN` (N is the session's lane, `rpNNN` the ticket), then `pnpm db:setup`. That writes a `.env` whose migrator, app and admin URLs end in `/rabaed_rpNNN`, with the tests on `rabaed_rpNNN_test`, and `--db` lets it share the lane's ports and compose project with the session's worktree. Subagents start no containers. Do not copy `.env` and edit it by hand.
 5. Jira's automation closes only the ticket named in the branch, which is the spec. When the PR merges, close the spec's other tickets with `transitionJiraIssue` and a comment naming the PR.
 6. Run `/mattpocock-skills:retro`, then archive the session.
 
