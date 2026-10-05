@@ -1,0 +1,50 @@
+# Job summary of a seam job's test time, beside the latest run on main (RP-321).
+# Needs the repository checked out, Node set up and the job's
+# `actions: read` permission. Timing is only a notice: no step here fails the job.
+name: Test timing
+description: Summarise a vitest JSON report and compare it with main's
+inputs:
+  title:
+    description: Heading in the job summary
+    required: true
+  report:
+    description: Path of the vitest JSON report
+    required: true
+  artifact:
+    description: Name of the artifact main uploads its report as
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Fetch the latest report from main
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        ARTIFACT: ${{ inputs.artifact }}
+      run: |
+        # The newest unexpired artifact of this name uploaded by a run on main.
+        run_id=$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=$ARTIFACT&per_page=30" \
+          --jq '[.artifacts[] | select(.expired | not) | select(.workflow_run.head_branch == "main")][0].workflow_run.id // empty' || true)
+        if [ -n "$run_id" ]; then
+          gh run download "$run_id" --repo "$GITHUB_REPOSITORY" --name "$ARTIFACT" --dir "$RUNNER_TEMP/main-timing" \
+            || echo "::warning::Could not download main's test timing."
+        else
+          echo "No test timing from main yet."
+        fi
+    - name: Summarise
+      shell: bash
+      env:
+        TITLE: ${{ inputs.title }}
+        REPORT: ${{ inputs.report }}
+        ARTIFACT: ${{ inputs.artifact }}
+      run: |
+        main_report="$RUNNER_TEMP/main-timing/$(basename "$REPORT")"
+        node scripts/test-timing.ts "$REPORT" --title "$TITLE" --main "$main_report"
+    - name: Keep this run's report for later runs to compare with
+      if: github.ref == 'refs/heads/main' && job.status == 'success'
+      uses: actions/upload-artifact@v7
+      with:
+        name: ${{ inputs.artifact }}
+        path: ${{ inputs.report }}
+        if-no-files-found: ignore
+        retention-days: 90
