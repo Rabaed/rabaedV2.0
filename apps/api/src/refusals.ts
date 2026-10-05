@@ -54,6 +54,10 @@ const answers = {
   // Links (RP-291): an item Link search couldn't have offered, whatever the reason, made-up ids included.
   target_not_found: () => new HttpError(422, "target_not_found"),
   already_linked: () => new HttpError(409, "already_linked"),
+  // Numbering Patterns (RP-313). The shape is checked by the request schema first, so
+  // invalid_pattern answers only what slipped past it.
+  invalid_pattern: () => new HttpError(422, "invalid_pattern"),
+  shared_counter_not_accepted: () => new HttpError(422, "shared_counter_not_accepted"),
 } satisfies Record<string, () => HttpError>;
 
 export type RefusalReason = keyof typeof answers;

@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { documentNumbering, rabaedDefaultNumberingPattern, type NumberingPattern } from "./numbering.ts";
+import {
+  countsByParticipant,
+  documentNumbering,
+  rabaedDefaultNumberingPattern,
+  saveNumberingPatternRequest,
+  type NumberingPattern,
+} from "./numbering.ts";
 
 /** A MAR raised by the Project's first Participant, on the Electrical Trade, at Floor F2 of Building B1 in Zone Z1. */
 const item = {
@@ -98,5 +104,56 @@ describe("a Numbering Pattern", () => {
     expect(mine.counterKey).toBe("TWR-MAR");
     expect(theirs.counterKey).toBe(mine.counterKey);
     expect(theirs.number(2)).toBe("TWR-MAR-ME-KCC-0002");
+  });
+});
+
+describe("a pattern to save (RP-313)", () => {
+  const segments = [{ kind: "project" }, { kind: "type" }, { kind: "participant" }];
+  const valid = (p: object) =>
+    saveNumberingPatternRequest.safeParse({
+      workItemTypeId: null,
+      sharedCounterAccepted: false,
+      pattern: { separator: "-", seqDigits: 4, segments, countedBy: [0, 1, 2], ...p },
+    }).success;
+
+  it("is up to 6 known segments, '-' or '/', and 3–7 digits", () => {
+    expect(valid({})).toBe(true);
+    expect(valid({ separator: "/", seqDigits: 3 })).toBe(true);
+    expect(valid({ seqDigits: 7 })).toBe(true);
+    expect(
+      valid({ segments: [...segments, { kind: "trade" }, { kind: "location", level: 2 }, { kind: "text", text: "SUB" }] }),
+    ).toBe(true);
+  });
+
+  it("is never more than 6 segments, an unknown segment, or digits outside 3–7", () => {
+    expect(valid({ segments: [...segments, ...segments, { kind: "trade" }] })).toBe(false);
+    expect(valid({ segments: [...segments, { kind: "building" }] })).toBe(false);
+    expect(valid({ seqDigits: 2 })).toBe(false);
+    expect(valid({ seqDigits: 8 })).toBe(false);
+    expect(valid({ separator: "." })).toBe(false);
+  });
+
+  it("never counts by a segment it doesn't have, or by one twice", () => {
+    expect(valid({ countedBy: [3] })).toBe(false);
+    expect(valid({ countedBy: [0, 0, 2] })).toBe(false);
+  });
+});
+
+describe("an item without a Trade", () => {
+  it("prints nothing for the Trade segment, as the database does", () => {
+    const n = documentNumbering(pattern({ segments: [{ kind: "project" }, { kind: "trade" }, { kind: "participant" }], countedBy: [0, 1, 2] }), {
+      ...item,
+      tradeCode: null,
+    });
+    expect(n.number(1)).toBe("TWR-01-0001");
+    expect(n.counterKey).toBe("TWR-01");
+  });
+});
+
+describe("countsByParticipant", () => {
+  it("is true only when the sequence counts separately for the Participant Code", () => {
+    expect(countsByParticipant(rabaedDefaultNumberingPattern)).toBe(true);
+    expect(countsByParticipant({ ...rabaedDefaultNumberingPattern, countedBy: [0, 1] })).toBe(false);
+    expect(countsByParticipant(pattern({ segments: [{ kind: "project" }, { kind: "type" }], countedBy: [0, 1] }))).toBe(false);
   });
 });

@@ -172,7 +172,7 @@ describe("numbering_pattern", () => {
     }
   });
 
-  it("is written by nobody through the app role yet", async () => {
+  it("is never written directly through the app role, only through app.set_numbering_pattern", async () => {
     const t = await tower("NPW");
     await expect(
       call(
@@ -199,6 +199,92 @@ describe("numbering_pattern", () => {
     const t = await tower("NPS");
     await expect(t.pattern({ segments: [project, type, participantCode], seqScope: [0, 1] })).rejects.toThrow(/check constraint/);
     await t.pattern({ segments: [project, type, participantCode], seqScope: [0, 1], accepted: true });
+  });
+});
+
+describe("app.set_numbering_pattern (RP-313)", () => {
+  type Saved = { work_item_type_id: string | null; set_by_member_id: string; shared_counter_accepted_at: Date | null; effective_from: Date };
+
+  const save = (
+    as: string,
+    projectId: string,
+    p: { type?: string | null; segments: object[]; separator?: string; seqDigits?: number; seqScope: number[]; accepted?: boolean },
+  ) =>
+    outcome(
+      as,
+      sql`select app.set_numbering_pattern(${projectId}::uuid, ${p.type ?? null}::uuid, ${JSON.stringify(p.segments)}::jsonb,
+        ${p.separator ?? "-"}, ${p.seqDigits ?? 4}, ${JSON.stringify(p.seqScope)}::jsonb, ${p.accepted ?? false}, now()) as outcome`,
+    );
+  const saved = async (projectId: string) =>
+    (
+      await migrator.query(
+        "select work_item_type_id, set_by_member_id, shared_counter_accepted_at, effective_from from numbering_pattern where project_id = $1 order by created_at",
+        [projectId],
+      )
+    ).rows as Saved[];
+  const mar = async () => (await migrator.query("select id from work_item_type where code = 'MAR' and project_id is null")).rows[0].id as string;
+
+  it("saves the Project Admin's Project pattern and a Type's override, recording who set them and from when", async () => {
+    const t = await tower("NSA");
+    expect(await save(t.c1.ap, t.projectId, { segments: [project, type, participantCode], seqScope: [0, 1, 2] })).toBe("saved");
+    expect(await save(t.c1.ap, t.projectId, { type: await mar(), segments: [type, participantCode], seqScope: [0, 1] })).toBe("saved");
+    const rows = await saved(t.projectId);
+    expect(rows.map((r) => [r.work_item_type_id, r.set_by_member_id, r.shared_counter_accepted_at])).toEqual([
+      [null, t.c1.ap, null],
+      [await mar(), t.c1.ap, null],
+    ]);
+    expect(rows.every((r) => r.effective_from instanceof Date)).toBe(true);
+    expect(await t.numbered(t.c1.member)).toBe("MAR-01-0001");
+  });
+
+  it("answers not_found to anyone but the Project's Project Admin, and for a made-up Project", async () => {
+    const t = await tower("NSN");
+    const other = await tower("NSO");
+    for (const [who, projectId] of [
+      [t.c1.member, t.projectId],
+      [t.c2.ap, t.projectId],
+      [t.c2.member, t.projectId],
+      [other.c1.ap, t.projectId],
+      [t.c1.ap, randomUUID()],
+    ] as const) {
+      expect(await save(who, projectId, { segments: [project, participantCode], seqScope: [0, 1] }), who).toBe("not_found");
+    }
+    expect(await saved(t.projectId)).toEqual([]);
+  });
+
+  it("refuses a sequence not counted by the Participant Code until the warning is accepted, then records who accepted it and when", async () => {
+    const t = await tower("NSW");
+    const shared = { segments: [project, type, participantCode], seqScope: [0, 1] };
+    expect(await save(t.c1.ap, t.projectId, shared)).toBe("shared_counter_not_accepted");
+    expect(await saved(t.projectId)).toEqual([]);
+    expect(await save(t.c1.ap, t.projectId, { ...shared, accepted: true })).toBe("saved");
+    const [row] = await saved(t.projectId);
+    expect(row!.set_by_member_id).toBe(t.c1.ap);
+    expect(row!.shared_counter_accepted_at).toBeInstanceOf(Date);
+  });
+
+  it("records no acceptance for a pattern that counts by the Participant Code", async () => {
+    const t = await tower("NSR");
+    expect(await save(t.c1.ap, t.projectId, { segments: [project, participantCode], seqScope: [0, 1], accepted: true })).toBe("saved");
+    expect((await saved(t.projectId))[0]!.shared_counter_accepted_at).toBeNull();
+  });
+
+  it("refuses an ill-formed pattern, and a Work Item Type the Project can't use", async () => {
+    const t = await tower("NSI");
+    for (const p of [
+      { segments: [project, type, trade, participantCode, project, type, trade], seqScope: [3] },
+      { segments: [project, { kind: "building" }, participantCode], seqScope: [2] },
+      { segments: [project, participantCode], seqScope: [1], seqDigits: 2 },
+      { segments: [project, participantCode], seqScope: [1], seqDigits: 8 },
+      { segments: [project, participantCode], seqScope: [1], separator: "." },
+      { segments: [project, participantCode], seqScope: [5] },
+    ]) {
+      expect(await save(t.c1.ap, t.projectId, p), JSON.stringify(p)).toBe("invalid_pattern");
+    }
+    expect(await save(t.c1.ap, t.projectId, { type: randomUUID(), segments: [project, participantCode], seqScope: [0, 1] })).toBe(
+      "type_not_found",
+    );
+    expect(await saved(t.projectId)).toEqual([]);
   });
 });
 
