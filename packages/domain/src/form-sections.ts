@@ -1,5 +1,5 @@
 import { isUnanswered } from "./condition.ts";
-import type { FormSection } from "./form.ts";
+import type { FieldError, FormSection } from "./form.ts";
 
 // Who fills which Form Section, and where (form-engine.md §4, "Settled
 // 2026-10-05 (part 3)"; RP-301). A section names the Workflow Steps where its
@@ -104,4 +104,19 @@ export function changedOutside(
   return schema.sections
     .filter((s) => !editable.has(s.key) && s.fields.some((f) => f.type !== "calculated" && !same(f.key)))
     .map((s) => s.key);
+}
+
+/**
+ * The errors, of `errors`, on the fields of the sections `sectionKeys`: a forward
+ * Transition out of a Step checks the required fields of the sections naming that
+ * Step only (form-engine.md §4, "Settled 2026-10-05 (part 3)"; RP-304), so a
+ * section another Participant fills later never holds up the one moving it now.
+ */
+export function errorsInSections(
+  schema: { sections: readonly FormSection[] },
+  sectionKeys: readonly string[],
+  errors: readonly FieldError[],
+): FieldError[] {
+  const fields = new Set(schema.sections.filter((s) => sectionKeys.includes(s.key)).flatMap((s) => s.fields.map((f) => f.key)));
+  return errors.filter((e) => fields.has(e.key));
 }

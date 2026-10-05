@@ -2,6 +2,7 @@ import { withMember, type Database, type Db } from "@rabaed/db";
 import {
   changedOutside,
   editableSections,
+  errorsInSections,
   formFields,
   mergeFieldAnswers,
   formSchema,
@@ -203,10 +204,8 @@ type PinnedForm = {
    * from what a Transition checks.
    */
   data: Record<string, unknown>;
-  /** The full answers' hash, as app.take_transition compares it; null unless the answers are open. */
+  /** The answers' hash, as app.take_transition compares it; null unless they may save now. */
   dataSha256: Buffer | null;
-  /** Its answers are open to the raiser: Draft and the raiser's internal Steps (app.answers_open). */
-  answersOpen: boolean;
   /** They may save its answers now (app.can_save_answers). */
   canSave: boolean;
   /** The Form as they may fill it now: the sections they may change, and who fills the others. */
@@ -220,7 +219,6 @@ async function pinnedForm(trx: Trx, workItemId: string): Promise<PinnedForm | nu
       project_id: string;
       data: Record<string, unknown>;
       data_sha256: Buffer | null;
-      answers_open: boolean;
       can_save: boolean;
       work_item_type_id: string;
       workflow_version_id: string;
@@ -228,7 +226,7 @@ async function pinnedForm(trx: Trx, workItemId: string): Promise<PinnedForm | nu
     }
   >`
     select v.id, v.version_no, v.schema, w.project_id, app.work_item_answers(w.id) as data,
-      app.answers_sha256(w.id) as data_sha256, app.answers_open(w.id) as answers_open, app.can_save_answers(w.id) as can_save,
+      app.answers_sha256(w.id) as data_sha256, app.can_save_answers(w.id) as can_save,
       w.work_item_type_id, w.workflow_version_id, s.key as step_key
     from work_item w
     join form_version v on v.id = w.form_version_id
@@ -247,7 +245,6 @@ async function pinnedForm(trx: Trx, workItemId: string): Promise<PinnedForm | nu
     projectId: r.project_id,
     data: answersFromDb(form.schema, r.data),
     dataSha256: r.data_sha256,
-    answersOpen: r.answers_open,
     canSave: r.can_save,
     toFill: formToFillAt(form, steps, { step: r.step_key, canSave: r.can_save }),
   };
@@ -723,10 +720,11 @@ async function fieldFileCounts(trx: Trx, workItemId: string): Promise<Record<str
  * transaction (workflow-engine.md §5.1), with their Internal Note if they wrote
  * one. Its Action Form's answers are checked against its schema in complete
  * mode (a Transition with none takes no answers) and stored in its event
- * (RP-300). The same idempotency key again applies nothing. Moving on while the
- * answers are open to the raiser (leaving Draft, and the Submit) needs a
- * complete Form, its `attachments` fields' files included: otherwise it is
- * refused with the per-field errors.
+ * (RP-300). The same idempotency key again applies nothing. Moving on (not a
+ * Return or a cancel) by a Member who may save the answers needs the sections
+ * naming the Step being left complete, their `attachments` fields' files
+ * included: otherwise it is refused with the per-field errors. Sections another
+ * Participant fills later are not checked (RP-304).
  */
 export function takeTransition(
   db: Db,
@@ -754,9 +752,10 @@ export function takeTransition(
         return { ok: false, reason: "invalid_action_form", errors: Object.keys(input.answers).map((key) => ({ key, code: "unknown_field" })) };
       }
     }
-    // Moving on while the answers are open (other than a cancel or a Return) needs a complete
-    // Form; the database refuses answers that weren't checked.
-    if (pinned.answersOpen) {
+    // Moving on by a Member who may save the answers now (other than a cancel or a Return)
+    // needs the required fields of the sections naming the Step being left (form-engine.md §4);
+    // the database refuses answers that weren't checked.
+    if (pinned.canSave) {
       const scopes = await projectScopes(trx, pinned.projectId);
       // What is saved is checked as it stands: a retired option it holds stays valid (held).
       const checked = validateAnswers(pinned.form.schema, pinned.data, "complete", {
@@ -765,8 +764,9 @@ export function takeTransition(
         held: pinned.data,
         files: await fieldFileCounts(trx, workItemId),
       });
-      if (taking && taking.transition_kind !== "cancel" && taking.transition_kind !== "return" && !checked.ok) {
-        return { ok: false, reason: "form_incomplete", errors: checked.errors };
+      const missing = checked.ok ? [] : errorsInSections(pinned.form.schema, pinned.toFill.editableSections, checked.errors);
+      if (taking && taking.transition_kind !== "cancel" && taking.transition_kind !== "return" && missing.length > 0) {
+        return { ok: false, reason: "form_incomplete", errors: missing };
       }
     }
     const { rows } = await sql<{ outcome: string }>`
@@ -794,9 +794,11 @@ export type SaveAnswersResult =
 
 /**
  * Save draft: the raiser's Participant saves the answers so far, in Draft or one
- * of its internal Steps, checked in draft mode against its pinned Form Version
- * (required fields may be empty). After Draft, the database records each change
- * as a field-level diff in the raiser's history.
+ * of its internal Steps, or, after Submit, the Participant holding a Step a Form
+ * Section names saves that section (RP-304), checked in draft mode against its
+ * pinned Form Version (required fields may be empty). After Draft, the database
+ * records each change as a field-level diff in the saver's own history, and
+ * everyone else reads the answers as they arrived until the item leaves it (V19).
  *
  * With `basedOn`, each field another Member changed since is kept as theirs
  * (mergeFieldAnswers) and reported, with every field's time, in `saved`.
