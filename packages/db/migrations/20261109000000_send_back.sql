@@ -20,8 +20,8 @@
 --   Member who sees the item may: nobody but the raiser sees an item before it
 --   (V1). The Creation Date is read only through app.work_item_creation_date, for
 --   the raiser's Participant.
--- * app.work_item_submitted: Submitted at least once, that is, it has a Submission
---   Date. A Draft its raiser cancelled has none, and a Sent Back item keeps its.
+-- * app.work_item_submitted (Link search, Links) is left as it is: whether a Sent
+--   Back item stays offered is RP-309's (visibility.md scenario 58).
 -- * app.take_transition: as the create_revision migration left it, except that
 --   - a Send Back, not a Return, is what discards the in-progress answers of the
 --     Participant it leaves (ADR 0013), and its event is shared;
@@ -79,15 +79,6 @@ create function app.work_item_creation_date(p_work_item_id uuid) returns timesta
     select w.numbered_at from work_item w
     where w.id = p_work_item_id and app.sees_work_item(w.id)
       and w.raised_by_participant_id in (select app.current_participant_ids())
-  $$;
-
-create or replace function app.work_item_submitted(p_work_item_id uuid) returns boolean
-  language sql stable security definer
-  set search_path = pg_catalog, public
-  as $$
-    select app.sees_work_item(p_work_item_id) and exists (
-      select 1 from work_item w where w.id = p_work_item_id and w.submitted_at is not null
-    )
   $$;
 
 -- Taking a Transition -----------------------------------------------------------------

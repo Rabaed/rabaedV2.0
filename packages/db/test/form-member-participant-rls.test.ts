@@ -277,7 +277,7 @@ describe("reading the answers as another Company on the item", () => {
       await call(
         k.ap,
         sql`select id, project_id, work_item_type_id, raised_by_participant_id, created_by_member_id, title, workflow_version_id,
-          form_version_id, document_number, outcome, closed_at, created_at from work_item where id = ${a.itemId}::uuid`,
+          form_version_id, document_number, outcome, closed_at, submitted_at from work_item where id = ${a.itemId}::uuid`,
       ),
       await call(k.ap, sql`select * from work_item_event where work_item_id = ${a.itemId}::uuid`),
       await call(k.ap, sql`select * from step_assignment where work_item_id = ${a.itemId}::uuid`),

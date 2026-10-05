@@ -532,7 +532,7 @@ export function searchLinkTargets(db: Db, memberId: string, projectId: string, q
       from work_item w
       where w.project_id = ${projectId} and app.work_item_submitted(w.id)
         and (w.document_number ilike ${pattern} or w.title ilike ${pattern})
-      order by w.submitted_at desc, w.id desc
+      order by w.submitted_at desc nulls last, w.id desc
       limit ${query.limit + 1} offset ${(query.page - 1) * query.limit}
     `.execute(trx);
     return {
