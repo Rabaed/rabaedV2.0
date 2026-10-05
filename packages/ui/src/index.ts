@@ -40,11 +40,30 @@ export { LinkedFromList, type LinkedFromListProps } from "./components/form-engi
 export { LinksSection, type LinksSectionProps } from "./components/form-engine/links-section.tsx";
 export type { LinkTargetNames } from "./components/form-engine/link-question-field.tsx";
 export { Input, type InputProps } from "./components/form/input.tsx";
+export {
+  NumberingPatternBuilder,
+  NumberingPatternView,
+  type NumberingPatternBuilderProps,
+  type NumberingPatternViewProps,
+} from "./components/numbering/numbering-pattern.tsx";
 export { RadioGroup, type RadioGroupProps } from "./components/form/radio-group.tsx";
 export { SegmentedControl, type SegmentedControlProps } from "./components/form/segmented-control.tsx";
 export { Select, type SelectProps } from "./components/form/select.tsx";
 export { Switch, type SwitchProps } from "./components/form/switch.tsx";
 export { Textarea, type TextareaProps } from "./components/form/textarea.tsx";
+export {
+  NumberingCounters,
+  type CounterCall,
+  type CounterRefusal,
+  type NumberingCountersProps,
+} from "./components/numbering/numbering-counters.tsx";
+export {
+  RevisionActions,
+  type RevisionActionsProps,
+  type RevisionCall,
+  type RevisionRefusal,
+} from "./components/revision/revision-actions.tsx";
+export { RevisionPicker, type RevisionPickerProps } from "./components/revision/revision-picker.tsx";
 export { Icon, directionalIconNames, iconNames, type IconName, type IconProps } from "./components/icon/icon.tsx";
 export { Tabs, TabsContent, TabsList, TabsTrigger, type TabsListProps, type TabsTriggerProps } from "./components/navigation/tabs.tsx";
 export { Dialog, DialogClose, DialogContent, DialogFooter, DialogTrigger, type DialogContentProps } from "./components/overlay/dialog.tsx";

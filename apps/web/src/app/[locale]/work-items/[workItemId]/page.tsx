@@ -8,6 +8,8 @@ import { WorkItemAnswers, WorkItemFormProvider } from "@/components/work-item-fo
 import { WorkItemHistory } from "@/components/work-item-history";
 import { WorkItemLinkedFrom } from "@/components/work-item-linked-from";
 import { WorkItemLinks } from "@/components/work-item-links";
+import { WorkItemRevision } from "@/components/work-item-revision";
+import { WorkItemRevisionPicker } from "@/components/work-item-revision-picker";
 import { Link, redirect } from "@/i18n/navigation";
 import { fillingChoices, readingChoices } from "@/lib/built-in-choices";
 import { linkTargetNames } from "@/lib/link-search";
@@ -17,6 +19,7 @@ import {
   getMyVisibility,
   getOptionLists,
   getProjectScopes,
+  getRevisionChain,
   getWorkItem,
   getWorkItemDocuments,
   getWorkItemForm,
@@ -35,7 +38,7 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
   const { locale, workItemId } = await params;
   setRequestLocale(locale);
   const t = await getTranslations("workItems");
-  const [me, item, form, people, documents, links, linkedFrom, history, optionLists] = await Promise.all([
+  const [me, item, form, people, documents, links, linkedFrom, history, optionLists, chain] = await Promise.all([
     getMe(),
     getWorkItem(workItemId),
     getWorkItemForm(workItemId),
@@ -45,6 +48,7 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
     getLinkedFrom(workItemId),
     getWorkItemHistory(workItemId),
     getOptionLists(),
+    getRevisionChain(workItemId),
   ]);
   if (!me) return redirect({ href: "/sign-in", locale });
   if (!item || !form || !people || !documents || !links || !linkedFrom) notFound();
@@ -95,6 +99,28 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
         </div>
 
         <WorkItemActions workItemId={item.id} actions={item.actions} locale={locale} />
+        <WorkItemRevision
+          workItemId={item.id}
+          projectId={item.projectId}
+          canCreate={item.actions.createRevision}
+          canDiscard={item.actions.discardRevision}
+          locale={locale}
+        />
+        {item.versionsChanged && (
+          <div role="note" className="flex flex-col gap-2 rounded-md border border-border bg-surface p-3 text-sm text-muted">
+            <p>{t("versionsChanged")}</p>
+            {item.droppedFields.length > 0 && (
+              <>
+                <p>{t("droppedFields")}</p>
+                <ul className="list-disc ps-5">
+                  {item.droppedFields.map((f) => (
+                    <li key={f.key}>{f.label[locale]}</li>
+                  ))}
+                </ul>
+              </>
+            )}
+          </div>
+        )}
 
         {/* The System Fields above the Form, the same on every Work Item. */}
         <dl className="grid grid-cols-[max-content_1fr] gap-x-6 gap-y-2 rounded-md border border-border p-4">
@@ -103,7 +129,20 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
             <bdi>{item.title}</bdi>
           </dd>
           <dt className="text-muted">{t("fields.documentNumber")}</dt>
-          <dd>{item.documentNumber ? <DocNo value={item.documentNumber} /> : t("noNumber")}</dd>
+          <dd className="flex flex-wrap items-center gap-x-6 gap-y-2">
+            {/* A Revision's number carries its " Rev n", and reads left to right whole. */}
+            <span>
+              {item.documentNumber ? (
+                <DocNo value={item.documentNumber} />
+              ) : item.revisionNo > 0 ? (
+                t("revisionNoNumber", { no: item.revisionNo })
+              ) : (
+                t("noNumber")
+              )}
+            </span>
+            {/* The Revision drop-down: only the Revisions of the chain the viewer may see (V1 each). */}
+            {chain && <WorkItemRevisionPicker chain={chain} workItemId={item.id} locale={locale} />}
+          </dd>
         </dl>
 
         <WorkItemAnswers locale={locale} workItemId={item.id} documents={documents} />

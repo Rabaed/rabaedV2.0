@@ -6,7 +6,10 @@ import { cn } from "../../lib/cn.ts";
 const revisionWord: Record<Locale, string> = { en: "Rev", ar: "مراجعة" };
 
 export type DocNoProps = Omit<ComponentProps<"bdi">, "children" | "dir" | "rev"> & {
-  /** The Document Number, e.g. `TWR-TMC-EL-MAR-041`. */
+  /**
+   * The Document Number, built from the Project's Numbering Pattern, e.g. `TWR-MAR-CCM-0001`;
+   * a Revision's is issued with its suffix, e.g. `TWR-MAR-CCM-0001 Rev 1`, and shown whole, left to right.
+   */
   value: string;
 } & (
     | { rev?: undefined; locale?: Locale }

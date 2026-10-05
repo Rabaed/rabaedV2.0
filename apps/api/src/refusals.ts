@@ -17,6 +17,9 @@ const answers = {
   project_closed: () => new HttpError(409, "project_closed"),
   already_participant: () => new HttpError(409, "already_participant"),
   duplicate_code: () => new HttpError(409, "duplicate_code"),
+  // Participant Codes (RP-314).
+  invalid_code: () => new HttpError(422, "invalid_code"),
+  code_in_use: () => new HttpError(409, "code_in_use"),
   parent_not_found: () => new HttpError(422, "parent_not_found"),
   parent_deactivated: () => new HttpError(409, "parent_deactivated"),
   trade_not_found: () => new HttpError(422, "trade_not_found"),
@@ -55,6 +58,20 @@ const answers = {
   // Links (RP-291): an item Link search couldn't have offered, whatever the reason, made-up ids included.
   target_not_found: () => new HttpError(422, "target_not_found"),
   already_linked: () => new HttpError(409, "already_linked"),
+  // Numbering Patterns (RP-313). The shape is checked by the request schema first, so
+  // invalid_pattern answers only what slipped past it.
+  invalid_pattern: () => new HttpError(422, "invalid_pattern"),
+  shared_counter_not_accepted: () => new HttpError(422, "shared_counter_not_accepted"),
+  // Starting numbers (RP-315): a value the pattern in effect counts by is missing,
+  // or the counter has issued a number, so its starting number is locked.
+  participant_required: () => new HttpError(422, "participant_required"),
+  location_required: () => new HttpError(422, "location_required"),
+  counter_used: () => new HttpError(409, "counter_used"),
+  // Revisions (RP-316): one answer whatever the reason (not Code C, not the latest,
+  // a Revision already open, a Member the Draft Step doesn't allow), so nobody
+  // outside the raiser learns whether a Draft Revision is open.
+  revision_not_allowed: () => new HttpError(409, "revision_not_allowed"),
+  not_discardable: () => new HttpError(409, "not_discardable"),
 } satisfies Record<string, () => HttpError>;
 
 export type RefusalReason = keyof typeof answers;

@@ -176,6 +176,25 @@ export const linkedFromItem = z.object({
 });
 export type LinkedFromItem = z.infer<typeof linkedFromItem>;
 
+/**
+ * The Revision drop-down (workflow-engine.md §5.4; visibility.md the Revisions
+ * channel): the Revisions of an item's chain the viewer may see, each by V1 on
+ * its own, the original first. A Draft Revision appears only within the
+ * raiser's Company, and a discarded one never.
+ */
+export const revisionChain = z.object({
+  revisions: z.array(
+    z.object({
+      id: z.uuid(),
+      /** Its Document Number, a Revision's with its " Rev n"; null until it first leaves Draft. */
+      documentNumber: z.string().nullable(),
+      /** 0 for the original, then 1, 2… */
+      revisionNo: z.number().int().nonnegative(),
+    }),
+  ),
+});
+export type RevisionChain = z.infer<typeof revisionChain>;
+
 /** "Linked from": every Submitted item linking to a Work Item, by Document Number. Never a Draft or internal item. */
 export const linkedFrom = z.object({ items: z.array(linkedFromItem) });
 export type LinkedFrom = z.infer<typeof linkedFrom>;
@@ -209,6 +228,13 @@ export const takeTransitionRequest = z.object({
 });
 export type TakeTransitionRequest = z.input<typeof takeTransitionRequest>;
 
+/**
+ * Create a Revision of a closed item (workflow-engine.md §5.4). The key makes a
+ * repeated request apply only once, answering with the same Revision.
+ */
+export const createRevisionRequest = z.object({ idempotencyKey: z.uuid() });
+export type CreateRevisionRequest = z.infer<typeof createRevisionRequest>;
+
 /** Exactly what the viewer may press on the item now. */
 export const workItemActions = z.object({
   /** Take the pooled Step. */
@@ -217,6 +243,14 @@ export const workItemActions = z.object({
   release: z.boolean(),
   /** Save draft: change the Form's answers (the raiser's Company, in Draft). */
   saveAnswers: z.boolean(),
+  /**
+   * Create a Revision (workflow-engine.md §5.4): the latest item of its chain,
+   * closed with Code C, no Revision of it open, for a Member of the raiser's
+   * Company whom the Workflow's Draft Step allows.
+   */
+  createRevision: z.boolean(),
+  /** Discard this Revision: still in Draft, never numbered, for the raiser's Company. */
+  discardRevision: z.boolean(),
   transitions: z.array(
     z.object({
       key: z.string(),
@@ -236,6 +270,16 @@ export type WorkItemActions = z.infer<typeof workItemActions>;
 export const workItemDetail = workItemSummary.extend({
   /** The Form Version the item is pinned to, for good (ADR 0006). */
   formVersionId: z.uuid(),
+  /** Its place in its chain of Revisions: 0 for the first submission, then 1, 2… (its number's " Rev n"). */
+  revisionNo: z.number().int().nonnegative(),
+  /** A Revision pinned to a newer Form or Workflow Version than the item it revises: the page says so. */
+  versionsChanged: z.boolean(),
+  /**
+   * With `versionsChanged`: the fields the revised item's Form Version has and
+   * this Revision's doesn't (dropped, or its key now another type), whose answers
+   * were not copied; the notice lists them (form-engine.md §7). Empty otherwise.
+   */
+  droppedFields: z.array(z.object({ key: z.string(), label: bilingualText })),
   /**
    * The Form's answers by field key, exactly as typed. The Built-in Fields hold
    * ids: `trade` and `location` the item's `trade` and `location`, `scopes` its `scopes`.
