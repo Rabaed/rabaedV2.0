@@ -298,7 +298,7 @@ describe("the chain, as the Revision drop-down reads it (scenario 51)", () => {
 // first Submit (RP-316) follows the drop-down: a reader who sees one item of the
 // chain but not another never reads the other through a Link or Linked from, not
 // even by its number and Subject.
-describe("the Links between the items of a chain, for a reader who sees only some of them (scenario 58)", () => {
+describe("the Links between the items of a chain, for a reader who sees only some of them (scenario 62)", () => {
   let original = "";
   let moved = ""; // Rev 1, moved to Building B.
   const links = (as: string, id: string) =>

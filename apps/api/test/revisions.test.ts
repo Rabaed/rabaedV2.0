@@ -350,7 +350,7 @@ describe("discarding a Draft Revision (scenario 56)", () => {
 // Representative covering only Building A sees the original but not Rev 1, one
 // covering only Building B sees Rev 1 but not the original. Neither reads the
 // other item through a Link, Linked from or a link answer, not even by its number.
-describe("the Links of a chain whose Revision moved Location (scenario 58)", () => {
+describe("the Links of a chain whose Revision moved Location (scenario 62)", () => {
   let closed = "";
   let base = "";
   let rev1 = "";

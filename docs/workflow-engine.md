@@ -19,7 +19,7 @@ A Workflow version is a directed graph.
   - `is_signing`.
 - **Transitions** are edges. Each has:
   - a `label` (i18n);
-  - a `kind`: `send` (within the Participant), `submit` (to another Participant), `return` (back within the Participant), `close` or `cancel`;
+  - a `kind`: `send` (within the Participant), `submit` (to another Participant), `return` (back within the Participant), `send_back` (back to the Participant that Submitted it, with no outcome; ADR 0014), `close` or `cancel`;
   - an optional `condition` (§4);
   - an optional `outcome` it sets (`A`, `B`, `C`, `D`, `passed`, `passed_with_comments`, `failed`, `closed`);
   - an `action_form`: the pop-up schema;
@@ -42,6 +42,8 @@ flowchart LR
   KM -- "Reject · D" --> RJ((Rejected))
 ```
 
+The MAR has no Send Back: the Consultant sends work back to the Contractor only with Code C, and the Contractor resubmits it as a Revision (§5.4). Send Back is for Workflows such as the Site Report's "Return for Comment" (ADR 0014).
+
 The Issued Code is the `outcome` of the Transition taken from the `issue_code` Step. The "Approve / B / C / D" buttons are four Transitions, each with its own Action Form. For example, B requires at least one comment row, and each row becomes a Comment Work Item.
 
 ### Publish-time validation
@@ -51,11 +53,11 @@ A draft Workflow version can't be published unless all of these hold:
 1. Exactly one Draft start Step. Every Step is reachable from it, and every non-terminal Step has an outgoing Transition.
 2. Every `stage_key` exists in the Module's Stage set, and terminal Steps sit in closed or cancelled Stages.
 3. The Work Item Type's `outcome_kind` matches: for `review_code`, exactly one path passes an `issue_code` Step, and every Transition into a terminal Step sets an outcome.
-4. A `return` goes only to an earlier Step held by the **same** Participant role. A `submit` always crosses to a different role.
+4. A `return` goes only to an earlier Step held by the **same** Participant role. A `submit` always crosses to a different role. A `send_back` goes from a Step of the role the item was Submitted to, back to a Step of the role that Submitted it, which the Workflow chooses; it sets no outcome.
 5. Every `submit` Transition and every Transition from an `issue_code` Step is signing.
 6. Conditions reference only fields that exist in the Form (checked against the Form's latest published version).
 7. Action Forms are valid Form schemas. As built (RP-300): `workflowActionFormProblems` in `packages/domain` (`action-form.ts`). Workflow Versions are published as data by migration until the builder (part 5), so a seam test runs it on every published Version.
-8. No cycle is possible without a `return`. There are no loops through Submit.
+8. No cycle is possible without a `return` or a `send_back`. A loop across Participants always goes through a `send_back`, never through Submit alone.
 
 Published versions never change. Publishing v2 leaves v1 items untouched. Items on v1 show a notice ("Workflow updated to v2"), and anyone can view v2.
 
@@ -192,7 +194,7 @@ Effects, in order:
   - `WorkItemDetail` has `revisionNo`, `versionsChanged`, `droppedFields` (form-engine.md §7, `app.revision_dropped_fields`), and `actions.createRevision` / `actions.discardRevision`.
   - Database functions: `app.latest_draft_step(type)` (the Draft Step of the latest published Workflow Version), `app.can_create_revision(item)`, `app.can_discard_revision(item)`, `app.revision_versions_changed(item)`, `app.revision_dropped_fields(item)`, `app.form_field_type(form_version, key)`, `app.create_revision(item, key, now)`, `app.fill_revision(revision, closed_item, now)` (only `app.create_revision` calls it), `app.revision_document_copies(item)` (the storage keys the api copies), `app.discard_revision(item, now)`, `app.revision_chain(item)` and `app.set_work_item_root()` (the trigger setting an original's `root_id`).
   - Error codes: `revision_not_allowed` (409, every reason alike), `not_discardable` (409), `project_closed` (409), `idempotency_key_reused` (409); a hidden or made-up item is the plain 404.
-  - **Links follow the drop-down** (RP-311 review, settled with the user): a reader who sees one item of the chain but not another never reads the other through the Links, Linked from or a link answer, not even by number and Subject (form-engine.md §2.8a, visibility.md scenario 58).
+  - **Links follow the drop-down** (RP-311 review, settled with the user): a reader who sees one item of the chain but not another never reads the other through the Links, Linked from or a link answer, not even by number and Subject (form-engine.md §2.8a, visibility.md scenario 62).
 - **The drop-down as built (RP-318, `20261106000000_revision_chain.sql`):** `app.revision_chain(item)` (security definer, the app role's only way to the chain) returns the Revisions of the item's chain the acting Member sees, `app.sees_work_item` checked on each, the original first, each with its id, Document Number (null until it first leaves Draft) and `revision_no`; never a discarded one, and nothing for an item the caller can't see. The api is `GET /v1/work-items/:id/revisions` (`RevisionChain`), a hidden item the plain 404. The item page shows `RevisionPicker` beside the Document Number only when the viewer sees more than one Revision. Each Document Number is shown whole, as issued, its " Rev n" included (stored in English), left to right in both languages, like every Document Number; a Draft Revision reads "Revision n: no number yet".
 
 ### 5.5 `replace_rejected(closed_item)` for Code D
