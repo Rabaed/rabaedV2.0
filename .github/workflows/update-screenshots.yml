@@ -1,28 +1,36 @@
-# Re-renders the story screenshot baselines on Linux and commits them to the
-# PR branch. Use it when a PR changes the UI on purpose: add the
+# Commits story screenshot baselines, rendered on Linux, to a PR branch.
+#
+# Changed baselines: when a PR changes the UI on purpose, add the
 # "update-screenshots" label to the PR (or, once this file is on main, run
 #   gh workflow run update-screenshots.yml --ref <your-branch>).
+# The render job re-renders every baseline and the commit job commits them.
 # Then review the changed PNGs in the PR like any other change.
 #
-# Baselines for new stories need neither: when the only story test failures
-# are missing references, CI commits the new PNGs itself (the "commit new
-# screenshot baselines" job in ci.yml, RP-296). A changed baseline still fails
-# CI until this workflow re-renders it.
+# New baselines need no step (RP-296). When CI fails on a push to a PR branch
+# and the stories job's only failures were missing references, that job
+# uploads the new PNGs ("new-screenshots"). This workflow then runs on
+# workflow_run, from main's copy of this file, and the commit job adds those
+# PNGs. It never overwrites a baseline that exists, so a changed look still
+# fails CI until the label is added, and any other failure uploads nothing.
+# Fork PRs run CI as pull_request only, so they never reach this path.
 #
-# The PR's code runs only in the render job, with a read-only token and no
-# persisted credentials. The commit job holds the write token and never runs
-# PR code: it only commits the baselines the render job uploaded (RP-248).
+# The PR's code runs only in a job with a read-only token and no persisted
+# credentials (render here, stories in ci.yml). The commit job holds the
+# write token and never runs PR code: it only commits uploaded PNGs (RP-248).
 name: Update screenshots
 on:
   workflow_dispatch:
   pull_request:
     types: [labeled]
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
 permissions: {}
 concurrency:
-  group: update-screenshots-${{ github.head_ref || github.ref_name }}
+  group: update-screenshots-${{ github.event.workflow_run.head_branch || github.head_ref || github.ref_name }}
 
 env:
-  BRANCH: ${{ github.head_ref || github.ref_name }}
+  BRANCH: ${{ github.event.workflow_run.head_branch || github.head_ref || github.ref_name }}
   SCREENSHOTS: packages/ui/test/__screenshots__
 
 jobs:
@@ -59,27 +67,107 @@ jobs:
           overwrite: true
           retention-days: 1
 
+  # A failed CI run on a push to an open PR's branch in this repository, never
+  # main, whose stories job uploaded the baselines of new stories.
+  find-new:
+    if: >-
+      github.event_name == 'workflow_run' &&
+      github.event.workflow_run.conclusion == 'failure' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch != 'main' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      pull-requests: read
+    outputs:
+      found: ${{ steps.find.outputs.found }}
+    steps:
+      - id: find
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+        run: |
+          artifacts=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID/artifacts" \
+            --jq '[.artifacts[] | select(.name == "new-screenshots" and (.expired | not))] | length')
+          prs=$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$BRANCH" --state open --json number --jq length)
+          if [ "$artifacts" -gt 0 ] && [ "$prs" -gt 0 ]; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No new baselines to commit ($artifacts artifacts, $prs open PRs)."
+          fi
+
   commit:
-    needs: render
+    needs: [render, find-new]
+    if: >-
+      !cancelled() &&
+      (needs.render.result == 'success' || needs.find-new.outputs.found == 'true')
     runs-on: ubuntu-latest
     permissions:
       contents: write
       actions: write
+    env:
+      # "all" replaces every baseline (the label); "new" only adds missing ones (CI).
+      MODE: ${{ github.event_name == 'workflow_run' && 'new' || 'all' }}
     steps:
-      # The commit the render job rendered: if the branch has moved since,
+      # The commit the PNGs were rendered from: if the branch has moved since,
       # the push below is rejected rather than overwriting the newer commit.
-      # Credentials stay persisted for that push. Nothing here installs or
-      # runs the app's code; the commit action, like this workflow file, comes
-      # from the branch.
+      # Credentials stay persisted for that push; nothing here runs PR code.
       - uses: actions/checkout@v7
         with:
-          ref: ${{ needs.render.outputs.sha }}
-      - uses: ./.github/actions/commit-screenshots
+          ref: ${{ github.event.workflow_run.head_sha || needs.render.outputs.sha }}
+      - if: env.MODE == 'all'
+        uses: actions/download-artifact@v8
         with:
-          artifact: screenshots
-          branch: ${{ env.BRANCH }}
-          mode: all
-          message: Update story screenshot baselines
+          name: screenshots
+          path: ${{ runner.temp }}/screenshots
+      - if: env.MODE == 'new'
+        uses: actions/download-artifact@v8
+        with:
+          name: new-screenshots
+          path: ${{ runner.temp }}/screenshots
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+      # The artifact came from a job that ran PR code: commit baselines only.
+      - name: Only PNGs in the artifact
+        run: |
+          others=$(find "$RUNNER_TEMP/screenshots" -type f ! -name '*.png')
+          if [ -n "$others" ]; then
+            echo "::error::The artifact holds files other than PNGs:"
+            echo "$others"
+            exit 1
+          fi
+      - name: Place the baselines
+        run: |
+          if [ "$MODE" = all ]; then
+            rm -rf "$SCREENSHOTS"
+          else
+            # A changed baseline must go through the label, so it gets reviewed.
+            existing=$(cd "$RUNNER_TEMP/screenshots" && find . -type f -exec test -e "$GITHUB_WORKSPACE/$SCREENSHOTS/{}" \; -print)
+            if [ -n "$existing" ]; then
+              echo "::error::These baselines already exist; change them with the update-screenshots label:"
+              echo "$existing"
+              exit 1
+            fi
+          fi
+          mkdir -p "$SCREENSHOTS"
+          cp -R "$RUNNER_TEMP/screenshots/." "$SCREENSHOTS/"
+      - name: Commit changed baselines
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MESSAGE: ${{ env.MODE == 'new' && 'Add screenshot baselines for new stories' || 'Update story screenshot baselines' }}
+        run: |
+          git add -A "$SCREENSHOTS"
+          if git diff --cached --quiet; then
+            echo "Screenshots are already up to date."
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git commit -m "$MESSAGE"
+            git push origin "HEAD:refs/heads/$BRANCH"
+            # Pushes made with the workflow token do not start CI; start it explicitly.
+            gh workflow run ci.yml --ref "$BRANCH" || echo "::warning::Could not start CI; push any commit to re-run it."
+          fi
 
   unlabel:
     name: Remove the label so it can be added again

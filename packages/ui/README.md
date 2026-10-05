@@ -211,7 +211,7 @@ The sidebar uses the light variant of the design (surface and brand tint); a dar
 - Stories with `parameters: overlay` (from `src/storybook/overlay.ts`) leave a dialog, sheet, popover, tooltip or toast open; the harness checks and screenshots the whole 1024 × 768 page, portals included. Motion is reduced in story tests, so animations never reach a screenshot.
 - Stories with `parameters: phone` (from `src/storybook/form.ts`) render 390px wide on an emulated touch screen, so they can check 44px touch targets with `expectTouchTarget`.
 - Screenshot baselines are Linux renders in `test/__screenshots__/`, compared on Linux only (CI).
-  - **A new story** needs no step from you. When the only story test failures are missing baselines, CI's **commit new screenshot baselines** job commits the new PNGs to your branch as one bot commit and runs CI again. It does this only for pushes to a branch of this repository, never for a fork or on `main`. Review the new PNGs in the PR.
+  - **A new story** needs no step from you. When the only story test failures are missing baselines, CI uploads the new PNGs, and once CI finishes, the **Update screenshots** workflow commits them to your branch as one bot commit and runs CI again. It does this only for pushes to an open PR's branch in this repository, never for a fork or on `main`. Review the new PNGs in the PR.
   - **A changed story** still fails CI. When you change the UI on purpose, add the `update-screenshots` label to your PR (or run `gh workflow run update-screenshots.yml --ref <branch>`); the **Update screenshots** workflow commits the re-rendered baselines to the PR for review.
   - Any other story test failure (behaviour, axe, direction, digits) blocks both: nothing is committed until it is fixed.
 

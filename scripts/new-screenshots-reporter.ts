@@ -5,13 +5,13 @@ import type { Reporter, SerializedError, TestModule, TestRunEndReason, Vitest } 
 // Tells CI whether a story test run failed only because new stories have no
 // screenshot baseline yet (RP-296). Run with `vitest run --update=new`, so each
 // missing reference is written to test/__screenshots__ and its test still fails.
-// When every failure is that, CI uploads the new PNGs and the "new screenshots"
-// job in ci.yml commits them to the branch. A changed baseline, or any
-// behaviour, axe or hook failure, means no: the run fails as usual and changed
-// baselines still need the "update-screenshots" label.
+// When every failure is that, CI uploads the new PNGs and
+// update-screenshots.yml commits them to the PR branch. A changed
+// baseline, or any behaviour, axe or hook failure, means no: the run fails as
+// usual and changed baselines still need the "update-screenshots" label.
 //
-// Writes { only: boolean, missing?: number } to .vitest/new-screenshots.json
-// under the Vitest root (packages/ui).
+// Writes the Verdict as JSON to .vitest/new-screenshots.json under the Vitest
+// root (packages/ui).
 
 // The message @vitest/browser gives toMatchScreenshot when the reference file is missing.
 const missingReference = "No existing reference screenshot found";
@@ -25,7 +25,7 @@ export interface StoryRun {
   failedTests: string[][];
 }
 
-export type Verdict = { only: true; missing: number } | { only: false };
+export type Verdict = { onlyMissingReferences: true; newBaselines: number } | { onlyMissingReferences: false };
 
 export function onlyMissingReferences(run: StoryRun): Verdict {
   const only =
@@ -34,7 +34,7 @@ export function onlyMissingReferences(run: StoryRun): Verdict {
     run.hookErrors === 0 &&
     run.failedTests.length > 0 &&
     run.failedTests.every((errors) => errors.length === 1 && errors[0]?.startsWith(missingReference));
-  return only ? { only, missing: run.failedTests.length } : { only };
+  return only ? { onlyMissingReferences: true, newBaselines: run.failedTests.length } : { onlyMissingReferences: false };
 }
 
 export default class NewScreenshotsReporter implements Reporter {
