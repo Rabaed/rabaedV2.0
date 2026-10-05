@@ -49,10 +49,18 @@ Use it when a spec's tickets form a chain that one lane would otherwise work thr
    Lane N. Run `pnpm lane:env N --force`, then /mattpocock-skills:implement-spec RP-nnn. Name the integration branch RP-nnn-<spec-name> and open its draft PR after the first merge.
    ```
 3. Label every ticket of the spec with this lane, so no other lane starts one of them.
-4. The subagents share the lane's Postgres, but each uses its own databases. In its worktree, each implementer subagent runs `pnpm lane:env N --force --db rp<n>` (`<n>` is its ticket number, e.g. `--db rp322`). The three database URLs then name `rabaed_rp<n>`, so its seam suites use `rabaed_rp<n>_test`, and parallel seam suites never migrate the same database. `lane:env` still refuses a lane whose ports are taken, but a `--db` run in a second worktree of the same lane is allowed. Drop a rerun's `rabaed_rp<n>_test` before seam 1, and when the spec is done run `pnpm lanes:drop-dbs` to list and drop the `rabaed_*` databases of worktrees that no longer exist (`--yes` skips the prompt).
-   Migration timestamps: each ticket gets its own day, in the order of the spec's tickets (the first ticket takes `<yyyymmdd>xxxxxx`, the next the following day, and so on), and its migrations use only that range, so parallel migrations never collide. Say the ranges in each subagent's brief. Migrations already on main stay unchanged.
+4. The subagents share the lane's Postgres, but each uses its own databases.
+   1. In its worktree, each implementer subagent runs `pnpm lane:env N --force --db rp<n>` (`<n>` is its ticket number, e.g. `--db rp322`). The three database URLs then name `rabaed_rp<n>`, so its seam suites use `rabaed_rp<n>_test`, and parallel seam suites never migrate the same database.
+   2. `lane:env` still refuses a lane whose ports are taken, but a `--db` run in a second worktree of the same lane is allowed.
+   3. Each seam run recreates its `_test` database itself. A second seam run on the same database while one is going refuses with a message; let the first finish.
+   4. When the spec is done, run `pnpm lanes:drop-dbs` to list and drop the `rabaed_*` databases of worktrees that no longer exist (`--yes` skips the prompt). It checks only this clone's worktrees, and keeps any database something is connected to.
+   5. Migration timestamps: each ticket gets its own day, in the order of the spec's tickets (the first ticket takes `<yyyymmdd>xxxxxx`, the next the following day, and so on), and its migrations use only that range, so parallel migrations never collide. Say the ranges in each subagent's brief. Migrations already on main stay unchanged.
 5. Jira's automation closes only the ticket named in the branch, which is the spec. When the PR merges, close the spec's other tickets with `transitionJiraIssue` and a comment naming the PR.
-6. Clean up the subagents' worktrees: `pnpm worktrees:clean --into RP-nnn-<spec-name> --yes` (`--into main` once the PR has merged). It unlocks and removes every `.claude/worktrees/agent-*` worktree whose commits are all in that branch, with its leftover folder (Windows keeps `node_modules` behind) and branch, and lists the ones it skipped for uncommitted changes or unmerged commits. Run it after the last subagent has finished, since a worktree that has no commits yet counts as merged. Then run `/mattpocock-skills:retro` and archive the session.
+6. Clean up the subagents' worktrees once the last subagent has finished.
+   1. Run `pnpm worktrees:clean --into RP-nnn-<spec-name> --yes` (`--into main` once the PR has merged).
+   2. It unlocks and removes every `.claude/worktrees/agent-*` worktree whose commits are all in that branch, with its leftover folder (Windows keeps `node_modules` behind). It deletes the branch with `git branch -d`; a branch git refuses is kept and named.
+   3. It skips, and lists, worktrees with uncommitted changes or unmerged commits, and worktrees with no commits yet, since their subagent may still be running (another lane's, too: all lanes share `.claude/worktrees/agent-*`). `--include-empty` removes those with no commits yet anyway.
+   4. Then run `/mattpocock-skills:retro` and archive the session.
 
 ## Retro before archiving
 
