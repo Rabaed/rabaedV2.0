@@ -4,7 +4,7 @@ import {
   createdWorkItem,
   createWorkItemRequest,
   formChoices,
-  formVersion,
+  formToFill,
   linkedFrom,
   linkSearchQuery,
   linkSearchResults,
@@ -94,7 +94,7 @@ export const workItemRoutes =
     // The Form to fill for a new item of a Type: its latest published Version.
     app.get(
       "/v1/projects/:projectId/work-item-types/:typeCode/form",
-      { schema: { params: typeFormParams, response: { 200: formVersion } } },
+      { schema: { params: typeFormParams, response: { 200: formToFill } } },
       async (request) => {
         const memberId = ctx.requireMember(request);
         const projectId = idOrNotFound(request.params.projectId);
@@ -107,7 +107,7 @@ export const workItemRoutes =
     // The Form Version an item is pinned to; its answers come with the item.
     app.get(
       "/v1/work-items/:workItemId/form",
-      { schema: { params: workItemParams, response: { 200: formVersion } } },
+      { schema: { params: workItemParams, response: { 200: formToFill } } },
       async (request) => {
         const memberId = ctx.requireMember(request);
         return visibleOrNotFound(getWorkItemForm(ctx.db, memberId, idOrNotFound(request.params.workItemId)));
