@@ -206,7 +206,7 @@ The key is the values of the pattern's counted segments joined by `-`, whatever 
 | `title`, `data jsonb` | Form answers, validated against `form_version.schema`. Read only through `app.work_item_answers` (§10) |
 | `form_version_id`, `workflow_version_id` | pinned forever |
 | `document_number` | null while Draft; set at first leaving Draft |
-| `revision_no` (0 = original), `revision_of_id`, `root_id` | Revision chain; display `MS-003 Rev 1`. `root_id` is an original's own id; unique `(root_id, revision_no)` among rows not discarded. The app role reads `revision_no` only (RP-316) |
+| `revision_no` (0 = original), `revision_of_id`, `root_id` | Revision chain; display `MS-003 Rev 1`. `root_id` is an original's own id; unique `(root_id, revision_no)` among rows not discarded. The app role reads `revision_no` only (RP-316); the chain through `app.revision_chain` (RP-318) |
 | `discarded_at` | a discarded Draft Revision: closed `cancelled`, its access rows removed, seen by nobody (RP-316) |
 | `parent_id` | Subtask; check: parent's `parent_id` is null |
 | `package_id` | nullable |
