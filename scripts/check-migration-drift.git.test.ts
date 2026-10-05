@@ -3,14 +3,14 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { takeTransition } from "./check-migration-drift.fixtures.ts";
 import { migrationProblems } from "./check-migration-drift.ts";
+import { migrationsDir as dir } from "./migrations.ts";
 
 // A throwaway repository replaying the RP-311 history: a branch redefines
 // app.take_transition, main redefines it later, the branch merges main.
 let repo: string;
 const git = (...args: string[]) => execFileSync("git", ["-c", "user.name=test", "-c", "user.email=test@example.com", ...args], { cwd: repo, encoding: "utf8" }).trim();
-const dir = "packages/db/migrations";
-const takeTransition = (comment: string) => `-- ${comment}\ncreate or replace function app.take_transition() returns void as $$ $$;\n`;
 
 function commit(files: Record<string, string>, message = "change") {
   for (const [path, content] of Object.entries(files)) {
@@ -29,7 +29,7 @@ beforeEach(() => {
   commit({ [`${dir}/20261026100000_numbering_pattern.sql`]: takeTransition("RP-312") });
   git("switch", "-q", "main");
   commit({ [`${dir}/20261030000100_take_transition_sections.sql`]: takeTransition("RP-299") }, "RP-299");
-  commit({ [`${dir}/20261104000000_function_grants.sql`]: "grant execute on function app.take_transition() to rabaed_app;\n" }, "RP-317");
+  commit({ [`${dir}/20261104000000_function_grants.sql`]: "grant execute on function app.take_transition(uuid, text) to rabaed_app;\n" }, "RP-317");
   git("switch", "-q", "branch");
   git("merge", "-q", "--no-edit", "main");
 });
@@ -40,6 +40,7 @@ describe("migrationProblems", () => {
   it("reports the drift main's merge caused, from the head and base commits", () => {
     expect(migrationProblems(repo, "main", "branch")).toEqual({
       drift: [{ object: "function app.take_transition", branch: ["20261026100000_numbering_pattern.sql"], main: ["20261030000100_take_transition_sections.sql"] }],
+      overloads: [],
       duplicates: [],
     });
   });
@@ -48,6 +49,7 @@ describe("migrationProblems", () => {
     commit({ [`${dir}/20261104000000_numbering_after_sections.sql`]: takeTransition("fix-up") });
     expect(migrationProblems(repo, "main", "branch")).toEqual({
       drift: [],
+      overloads: [],
       duplicates: [["20261104000000_function_grants.sql", "20261104000000_numbering_after_sections.sql"]],
     });
   });
@@ -63,5 +65,24 @@ describe("migrationProblems", () => {
         main: ["20261030000100_take_transition_sections.sql"],
       },
     ]);
+  });
+
+  it("fails the RP-312 overload: the branch re-creates the signature main replaced, even after a proper fix-up of main's", () => {
+    // Instead of RP-299, main replaces `p_transition text` with `p_answers jsonb` (RP-300) in a
+    // migration that sorts before the branch's, whose copy predates it.
+    git("reset", "-q", "--hard", "HEAD~1");
+    git("switch", "-q", "main");
+    git("reset", "-q", "--hard", "HEAD~2");
+    commit({
+      [`${dir}/20261026000000_action_forms.sql`]: `drop function app.take_transition(uuid, text);\n${takeTransition("RP-300", "p_work_item uuid, p_answers jsonb")}`,
+    });
+    git("switch", "-q", "branch");
+    git("merge", "-q", "--no-edit", "main");
+    commit({ [`${dir}/20261106000000_numbering_after_action_forms.sql`]: takeTransition("fix-up of main's", "p_work_item uuid, p_answers jsonb") });
+    expect(migrationProblems(repo, "main", "branch")).toEqual({
+      drift: [],
+      overloads: [{ signature: "app.take_transition(uuid, text)", branch: ["20261026100000_numbering_pattern.sql"], main: ["20261026000000_action_forms.sql"] }],
+      duplicates: [],
+    });
   });
 });

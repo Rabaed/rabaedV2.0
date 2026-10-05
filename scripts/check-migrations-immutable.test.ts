@@ -4,11 +4,11 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { alteredMigrations } from "./check-migrations-immutable.ts";
+import { migrationsDir as dir } from "./migrations.ts";
 
 // A throwaway repository: `main` with one migration, then a branch off it.
 let repo: string;
 const git = (...args: string[]) => execFileSync("git", ["-c", "user.name=test", "-c", "user.email=test@example.com", ...args], { cwd: repo });
-const dir = "packages/db/migrations";
 
 function commit(files: Record<string, string>, message = "change") {
   for (const [path, content] of Object.entries(files)) {

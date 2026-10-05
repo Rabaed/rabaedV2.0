@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { definedObjects, duplicateTimestamps, redefinitionDrift } from "./check-migration-drift.ts";
+import { takeTransition } from "./check-migration-drift.fixtures.ts";
+import { definedObjects, duplicateTimestamps, redefinitionDrift, staleOverloads } from "./check-migration-drift.ts";
 
 describe("duplicateTimestamps", () => {
   const files = [
@@ -59,8 +60,6 @@ describe("definedObjects", () => {
   });
 });
 
-const takeTransition = (comment: string) =>
-  `-- ${comment}\ncreate or replace function app.take_transition(p_work_item uuid, p_transition text)\nreturns void language plpgsql as $$ begin null; end $$;\n`;
 
 // The RP-311 case (PR #113): RP-312 redefined app.take_transition on the
 // branch; main then brought RP-299's migrations redefining it from their older
@@ -109,5 +108,68 @@ describe("redefinitionDrift", () => {
     expect(redefinitionDrift([mainBefore, ...mainLater], [oldTimestamp])).toEqual([
       { object: "function app.take_transition", branch: [oldTimestamp.name], main: [mainBefore.name, ...mainLater.map((m) => m.name)] },
     ]);
+  });
+});
+
+// The RP-312 case: main's RP-300 dropped app.take_transition's `p_reason text`
+// signature for `p_answers jsonb`; RP-312, written against the older copy,
+// `create or replace`d the `p_reason` one. A different signature is a second
+// function, so the stale one came back beside main's (main dropped it again in
+// 20261108000000_drop_stale_take_transition).
+const oldArgs = "p_work_item_id uuid, p_transition_key text, p_reason text, p_internal_note text, p_checked_data_sha256 bytea, p_idempotency_key uuid, p_now timestamptz";
+const newArgs = "p_work_item_id uuid, p_transition_key text, p_answers jsonb, p_internal_note text, p_checked_data_sha256 bytea, p_idempotency_key uuid, p_now timestamptz";
+const answersHistory = { name: "20261019000000_answers_history.sql", sql: takeTransition("main with p_reason", oldArgs) };
+const actionForms = {
+  name: "20261026000000_action_forms.sql",
+  sql: `drop function app.take_transition(uuid, text, text, text, bytea, uuid, timestamptz);\n${takeTransition("RP-300", newArgs).replace("or replace ", "")}`,
+};
+const stalePattern = { name: "20261026100000_numbering_pattern.sql", sql: takeTransition("RP-312 from the older copy", oldArgs), seen: [answersHistory.name] };
+
+describe("staleOverloads", () => {
+  it("fails the RP-312 case: the branch re-creates a signature main dropped", () => {
+    expect(staleOverloads([answersHistory, actionForms], [stalePattern])).toEqual([
+      {
+        signature: "app.take_transition(uuid, text, text, text, bytea, uuid, timestamptz)",
+        branch: [stalePattern.name],
+        main: [actionForms.name],
+      },
+    ]);
+  });
+
+  it("fails a new overload beside a function main redefined out of the branch's sight", () => {
+    const mainLater = { name: "20261030000000_sections.sql", sql: takeTransition("main moved on", newArgs) };
+    const newOverload = { name: "20261031000000_shortcut.sql", sql: takeTransition("branch", "p_work_item_id uuid"), seen: [answersHistory.name, actionForms.name] };
+    expect(staleOverloads([answersHistory, actionForms, mainLater], [newOverload])).toEqual([
+      { signature: "app.take_transition(uuid)", branch: [newOverload.name], main: [mainLater.name] },
+    ]);
+  });
+
+  it("passes a branch that changes the signature itself: it drops the old one", () => {
+    const changed = {
+      name: "20261031000000_change_signature.sql",
+      sql: `drop function app.take_transition(uuid, text, jsonb, text, bytea, uuid, timestamptz);\n${takeTransition("branch", "p_work_item_id uuid")}`,
+      seen: [answersHistory.name],
+    };
+    expect(staleOverloads([answersHistory, actionForms], [changed])).toEqual([]);
+  });
+
+  it("passes the branch's own overload of a function main has not touched since the branch saw it", () => {
+    const overload = { name: "20261031000000_overload.sql", sql: takeTransition("branch", "p_work_item_id uuid"), seen: [answersHistory.name, actionForms.name] };
+    expect(staleOverloads([answersHistory, actionForms], [overload])).toEqual([]);
+  });
+
+  it("matches a signature however its types are written: names, modes, defaults, aliases and OUT arguments don't count", () => {
+    const main = [{ name: "20261020000000_a.sql", sql: takeTransition("main", "p_n integer, p_at timestamp with time zone default now(), p_tag character varying(20) = 'x'") }];
+    const branch = [{ name: "20261021000000_b.sql", sql: takeTransition("branch", 'in "n" int4, timestamptz, varchar, out p_result text'), seen: [] }];
+    expect(staleOverloads(main, branch)).toEqual([]);
+  });
+
+  it("finds a stale overload with a function that has no arguments", () => {
+    const main = [
+      { name: "20261020000000_a.sql", sql: takeTransition("main", "") },
+      { name: "20261021000000_b.sql", sql: `drop function if exists app.take_transition();\n${takeTransition("main", "p_n integer")}` },
+    ];
+    const branch = [{ name: "20261022000000_c.sql", sql: takeTransition("branch from the old copy", ""), seen: [main[0]!.name] }];
+    expect(staleOverloads(main, branch)).toEqual([{ signature: "app.take_transition()", branch: [branch[0]!.name], main: [main[1]!.name] }]);
   });
 });
