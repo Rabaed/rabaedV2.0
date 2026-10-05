@@ -171,6 +171,12 @@ async function fillProject(projectId: string, creator: string) {
      values ('project', $1, 'submittals', 'OWN', $2, $3, 'none', $4)`,
     [projectId, name, definition, form],
   );
+  // Nothing writes Numbering Patterns yet (RP-313).
+  await migrator.query(
+    `insert into numbering_pattern (project_id, segments, separator, seq_digits, seq_scope, set_by_member_id)
+     values ($1, '[{"kind": "project"}, {"kind": "participant"}]', '/', 5, '[0, 1]', $2)`,
+    [projectId, creator],
+  );
 }
 
 afterAll(async () => {
