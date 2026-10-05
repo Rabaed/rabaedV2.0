@@ -237,7 +237,7 @@ describe("the README walkthrough", () => {
     if (countsZero) expect(list.stages.every((s: { count: number }) => s.count === 0)).toBe(true);
   };
   const take = async (who: Caller, transition: string, reason = "") => {
-    const r = await who.post(`/v1/work-items/${mar}/transitions`, { transition, reason, idempotencyKey: randomUUID() });
+    const r = await who.post(`/v1/work-items/${mar}/transitions`, { transition, answers: reason ? { reason } : {}, idempotencyKey: randomUUID() });
     expect(r.statusCode, r.body).toBe(204);
   };
   const claim = async (who: Caller) => expect((await who.post(`/v1/work-items/${mar}/claim`)).statusCode).toBe(204);
