@@ -81,6 +81,17 @@ export const StartingWithDigits: Story = {
   play: (context) => expectDocNoLeftToRight(context, "2026-RFI-0007"),
 };
 
+/**
+ * A Revision's number as Rabaed issues it (RP-316): the chain's number with
+ * " Rev 1". The whole number, suffix included, reads left to right in both
+ * languages, as on the paper register.
+ */
+export const IssuedToARevision: Story = {
+  args: { value: "TWR-MAR-CCM-0001 Rev 1" },
+  render: InASentence.render,
+  play: (context) => expectDocNoLeftToRight(context, "TWR-MAR-CCM-0001 Rev 1"),
+};
+
 /** On its own, e.g. in a table cell. */
 export const Alone: Story = {
   play: (context) => expectDocNoLeftToRight(context, "TWR-TMC-EL-MAR-041"),

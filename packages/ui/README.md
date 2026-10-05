@@ -41,7 +41,7 @@ All fonts are self-hosted: bundled from npm (`@fontsource…`) onto our own orig
 ## Digits, dates and direction
 
 - Numbers and dates: `formatNumber` and `formatDate` from `@rabaed/domain`. Latin digits in English and Arabic, the Gregorian calendar, Saudi time.
-- **DocNo**: `<DocNo value="TWR-TMC-EL-MAR-041" />`, or with its revision `<DocNo value="TWR-TMC-EL-MAR-041" rev={2} locale={locale} />` ("Rev 2" in English, "مراجعة 2" in Arabic; `locale` is required with `rev`). The number is left-to-right and isolated, so it never scrambles inside Arabic text; with a revision, number and revision form one unit in the locale's direction, so the revision follows the number in reading order (on its left in Arabic). Always use it for Document Numbers.
+- **DocNo**: `<DocNo value="TWR-MAR-CCM-0001" />`, or with its revision `<DocNo value="TWR-MAR-CCM-0001" rev={2} locale={locale} />` ("Rev 2" in English, "مراجعة 2" in Arabic; `locale` is required with `rev`). The number is left-to-right and isolated, so it never scrambles inside Arabic text; with a revision, number and revision form one unit in the locale's direction, so the revision follows the number in reading order (on its left in Arabic). Always use it for Document Numbers.
 - **Icon**: `<Icon name="chevron-right" />`, from the Tabler outline set, bundled as SVG (no icon font, no CDN). Decorative by default; pass `label` when the icon means something on its own. Arrows and chevrons that follow the reading direction flip in Arabic; override with `mirrorInRtl`. To add an icon, register it in `src/components/icon/icon.tsx`.
 
 ## Forms

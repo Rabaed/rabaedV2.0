@@ -65,6 +65,8 @@ export const projectParticipant = z.object({
   id: z.uuid(),
   company: z.object({ id: z.uuid(), legalName: bilingualText }),
   projectRole,
+  /** The Participant Code in the Project's Document Numbers; null until a Project Admin sets it. */
+  code: z.string().nullable(),
   /** The viewer's own Company: its Project Members list is theirs to see. */
   isOwnCompany: z.boolean(),
 });
@@ -121,3 +123,14 @@ export const setMemberPositionsRequest = z.object({
   positions: z.array(z.string().regex(/^[a-z][a-z0-9_]*$/)).max(10),
 });
 export type SetMemberPositionsRequest = z.infer<typeof setMemberPositionsRequest>;
+
+/**
+ * A Project Admin sets a Participant's Participant Code: 2 to 6 letters or digits
+ * with at least one letter, stored in capitals, unique in the Project and fixed
+ * once a Document Number uses it.
+ */
+export const setParticipantCodeRequest = z.object({ code: z.string().max(20) });
+export type SetParticipantCodeRequest = z.infer<typeof setParticipantCodeRequest>;
+
+/** The refusals of setting a Participant Code (app.set_participant_code, app.assign_participant_code). */
+export const participantCodeRefusals = ["not_found", "project_closed", "invalid_code", "duplicate_code", "code_in_use"] as const;

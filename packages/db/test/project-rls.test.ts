@@ -171,6 +171,12 @@ async function fillProject(projectId: string, creator: string) {
      values ('project', $1, 'submittals', 'OWN', $2, $3, 'none', $4)`,
     [projectId, name, definition, form],
   );
+  // Nothing writes Numbering Patterns yet (RP-313).
+  await migrator.query(
+    `insert into numbering_pattern (project_id, segments, separator, seq_digits, seq_scope, set_by_member_id)
+     values ($1, '[{"kind": "project"}, {"kind": "participant"}]', '/', 5, '[0, 1]', $2)`,
+    [projectId, creator],
+  );
 }
 
 afterAll(async () => {
@@ -202,7 +208,9 @@ async function projectsSeen(trx: Db, { table, column }: { table: string; column:
 // Written and read only through SECURITY DEFINER functions: with no read policy,
 // no Member sees any of their rows. Kept by hand on purpose: a new Project table
 // is expected readable by its own Project until it is added here.
-const unreadable = ["command_idempotency", "numbering_counter", "outbox"];
+// (numbering_counter is read by Project Admins only, as each creator here is;
+// numbering-counter-rls.test.ts shows no other Member reads it.)
+const unreadable = ["command_idempotency", "outbox"];
 
 describe("every Project table", () => {
   it("includes the tables this ticket adds", async () => {

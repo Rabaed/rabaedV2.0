@@ -6,7 +6,7 @@
 import { randomUUID } from "node:crypto";
 import { createDb } from "@rabaed/db";
 import { drainOutbox, testDatabaseUrls } from "@rabaed/db/test-support";
-import type { DocumentList, FormToFill, FormVersion, LinkedFrom, WorkItemDetail, WorkItemHistory, WorkItemLinks } from "@rabaed/domain";
+import type { DocumentList, FormToFill, FormVersion, LinkedFrom, RevisionChain, WorkItemDetail, WorkItemHistory, WorkItemLinks } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { CODE_C_TITLE, DEMO_ENGINEER_EMAIL } from "../src/demo/seed.ts";
@@ -155,6 +155,11 @@ const LINKING_TITLE = "Emergency lighting control panel – Tower 2";
 const titled = async (who: Caller, title: string) => {
   const items = (await who.get(`/v1/projects/${projectId}/work-items`)).json().items as { id: string; title: string }[];
   return items.find((i) => i.title === title)?.id;
+};
+/** The seeded Code C MAR's chain, as Hafiz sees it: the original, then its Rev 1. */
+const codeCChain = async () => {
+  const id = (await titled(hafiz, CODE_C_TITLE))!;
+  return ((await hafiz.get(`/v1/work-items/${id}/revisions`)).json() as RevisionChain).revisions;
 };
 const links = async (who: Caller, id: string): Promise<WorkItemLinks> => {
   const r = await who.get(`/v1/work-items/${id}/links`);
@@ -465,8 +470,26 @@ describe("the README walkthrough", () => {
     await hidden(yousef, { countsZero: true });
   });
 
-  it("14. The seeded Code C MAR shows both Companies the verification and its Remarks, in English and Arabic", async () => {
-    const id = (await titled(hafiz, CODE_C_TITLE))!;
+  it("14. Hafiz creates Rev 1 of it: his drop-down lists the original and the Draft; the Consultant and Al Waha see only the original", async () => {
+    const original = mar;
+    const base = (await detail(hafiz)).documentNumber!;
+    const created = await hafiz.post(`/v1/work-items/${original}/revisions`, { idempotencyKey: randomUUID() });
+    expect(created.statusCode, created.body).toBe(201);
+    const rev1 = created.json().id as string;
+    const chain = async (who: Caller, id: string) => ((await who.get(`/v1/work-items/${id}/revisions`)).json() as RevisionChain).revisions;
+    expect(await chain(hafiz, rev1)).toEqual([
+      { id: original, documentNumber: base, revisionNo: 0 },
+      { id: rev1, documentNumber: null, revisionNo: 1 },
+    ]);
+    for (const who of [mohammed, faisal]) {
+      expect(await chain(who, original)).toEqual([{ id: original, documentNumber: base, revisionNo: 0 }]);
+      expect((await links(who, original)).links).toEqual([]);
+      await expectHidden(who.get(`/v1/work-items/${rev1}`));
+    }
+  });
+
+  it("15. The seeded Code C MAR shows both Companies the verification and its Remarks, in English and Arabic", async () => {
+    const id = (await codeCChain())[0]!.id;
     for (const who of [hafiz, ali, faisal, ahmed, mohammed]) {
       const item: WorkItemDetail = (await who.get(`/v1/work-items/${id}`)).json();
       expect(item).toMatchObject({
@@ -478,6 +501,20 @@ describe("the README walkthrough", () => {
       expect(history.events.at(-1)).toMatchObject({ type: "issue_code", remarks: expect.stringMatching(/EN ISO 1461.*[\u0600-\u06FF]/s) });
     }
     await expectHidden(yousef.get(`/v1/work-items/${id}`));
+  });
+
+  it("15. Its Rev 1, Submitted by TMC, reaches the Consultant, whose Revision drop-down lists the original and Rev 1", async () => {
+    const [original, rev1] = await codeCChain();
+    const base = (await (await mohammed.get(`/v1/work-items/${original!.id}`)).json()).documentNumber as string;
+    expect(rev1).toEqual({ id: expect.any(String), documentNumber: `${base} Rev 1`, revisionNo: 1 });
+    for (const who of [hafiz, ali, ahmed, mohammed, faisal]) {
+      const chain = (await who.get(`/v1/work-items/${rev1!.id}/revisions`)).json() as RevisionChain;
+      expect(chain.revisions).toEqual([original, rev1]);
+    }
+    const revision: WorkItemDetail = (await mohammed.get(`/v1/work-items/${rev1!.id}`)).json();
+    expect(revision).toMatchObject({ stage: { key: "pending_approval" }, outcome: null, answers: { model: expect.stringMatching(/HDG/) } });
+    expect(revision.answers).not.toHaveProperty("verification_note");
+    await expectHidden(yousef.get(`/v1/work-items/${rev1!.id}/revisions`));
   });
 });
 
