@@ -175,6 +175,10 @@ export interface ParticipantTable {
   project_role_id: string;
   /** Its place on the Project (1, 2, 3…), set by a trigger when it becomes Active. */
   ordinal: Generated<number | null>;
+  /** The Participant Code (2–6 letters or digits, in capitals) set by a Project Admin; null until set. */
+  code: string | null;
+  /** When a number was first built with the code, fixing it. */
+  code_locked_at: Timestamp | null;
   /**
    * Invited until its Authorized Person accepts (Active) or declines, or a
    * Project Admin withdraws the invitation (ADR 0009).

@@ -42,12 +42,14 @@ describe("adding a Participant", () => {
         id: expect.any(String),
         company: { id: host.company.companyId, legalName: { en: "Test Constructions", ar: "إنشاءات الاختبار" } },
         projectRole: { baseRole: "contractor", name: { en: "Contractor", ar: "المقاول" } },
+        code: null,
         isOwnCompany: true,
       },
       {
         id: consultantParticipantId,
         company: { id: consultant.company.companyId, legalName: { en: "Test Constructions", ar: "إنشاءات الاختبار" } },
         projectRole: { baseRole: "consultant", name: { en: "Consultant", ar: "الاستشاري" } },
+        code: null,
         isOwnCompany: false,
       },
     ]);
@@ -306,6 +308,7 @@ describe("the Participants of a Project", () => {
           id: ids.c1,
           company: { id: c1.company.companyId, legalName: expect.any(Object) },
           projectRole: { baseRole: "contractor", name: { en: "Contractor", ar: "المقاول" } },
+          code: null,
           isOwnCompany: true,
         },
       ],
