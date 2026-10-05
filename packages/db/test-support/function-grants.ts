@@ -44,7 +44,7 @@ export async function readFunctionGrants(db: Db): Promise<FunctionGrant[]> {
  * `rabaed_admin` or anyone, is a visible decision made here.
  */
 export type GrantAllowList = Record<string, readonly string[]>;
-export const defaultGrantees: readonly string[] = ["rabaed_app"];
+const defaultGrantees: readonly string[] = ["rabaed_app"];
 
 /** One line per function that PUBLIC may execute, or that a role outside its allow-list may. */
 export function functionGrantProblems(grants: FunctionGrant[], allow: GrantAllowList): string[] {
