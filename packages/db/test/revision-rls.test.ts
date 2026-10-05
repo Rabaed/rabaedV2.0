@@ -246,10 +246,42 @@ describe("a Draft Revision (scenario 51)", () => {
   });
 });
 
+// The Revision drop-down (RP-318): app.revision_chain lists the Revisions of an
+// item's chain the caller sees, each by V1 on its own; nothing for an item the
+// caller can't see.
+const chain = (as: string, id: string) =>
+  call<{ work_item_id: string; document_number: string | null; revision_no: number }>(
+    as,
+    sql`select work_item_id, document_number, revision_no from app.revision_chain(${id}::uuid)`,
+  );
+
+describe("the chain, as the Revision drop-down reads it (scenario 51)", () => {
+  it("lists the Draft Revision to C1 after the original, with no number yet", async () => {
+    const number = (await call<{ document_number: string }>(c1.member, sql`select document_number from work_item where id = ${closed}`))[0]!
+      .document_number;
+    const expected = [
+      { work_item_id: closed, document_number: number, revision_no: 0 },
+      { work_item_id: revision, document_number: null, revision_no: 1 },
+    ];
+    expect(await chain(c1.member, closed)).toEqual(expected);
+    expect(await chain(c1Pm, revision)).toEqual(expected);
+  });
+
+  it("lists only the original to K1 and the Owner, and nothing from the Draft Revision's id", async () => {
+    for (const other of [k1.member, ow.member]) {
+      expect((await chain(other, closed)).map((r) => r.work_item_id)).toEqual([closed]);
+      expect(await chain(other, revision)).toEqual([]);
+      expect(await chain(other, randomUUID())).toEqual([]);
+    }
+  });
+});
+
 describe("a discarded Revision (scenario 56)", () => {
   it("is gone for C1 too, and the next one is Rev 1 again", async () => {
     expect(await outcome(c1.member, sql`select app.discard_revision(${revision}::uuid, now()) as outcome`)).toBe("discarded");
     for (const who of [c1.member, c1Pm, k1.member, ow.member]) expect(await everythingOf(who, revision)).toEqual(nothing);
+    expect((await chain(c1.member, closed)).map((r) => r.work_item_id)).toEqual([closed]);
+    expect(await chain(c1.member, revision)).toEqual([]);
     const again = await createRevision(c1.member, closed);
     expect(again.outcome).toBe("created");
     expect(await call(c1.member, sql`select revision_no from work_item where id = ${again.work_item_id}`)).toEqual([{ revision_no: 1 }]);

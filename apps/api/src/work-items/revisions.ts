@@ -1,4 +1,5 @@
 import { withMember, type Db } from "@rabaed/db";
+import type { RevisionChain } from "@rabaed/domain";
 import { sql } from "kysely";
 import type { FileStore } from "../documents/file-store.ts";
 import { checkedOutcome, commandResult } from "../outcomes.ts";
@@ -47,5 +48,21 @@ export function discardRevision(db: Db, memberId: string, workItemId: string, no
   return withMember(db, memberId, async (trx) => {
     const { rows } = await sql<{ outcome: string }>`select app.discard_revision(${workItemId}::uuid, ${now}) as outcome`.execute(trx);
     return commandResult(rows[0]!.outcome, "discarded", discardRevisionRefusals);
+  });
+}
+
+/**
+ * The Revision drop-down (RP-318): the Revisions of the item's chain the Member
+ * sees, the original first, each by V1 on its own (app.revision_chain); null when
+ * the Member can't see the item.
+ */
+export function getRevisionChain(db: Db, memberId: string, workItemId: string): Promise<RevisionChain | null> {
+  return withMember(db, memberId, async (trx) => {
+    const { rows } = await sql<{ work_item_id: string; document_number: string | null; revision_no: number }>`
+      select work_item_id, document_number, revision_no from app.revision_chain(${workItemId}::uuid)
+    `.execute(trx);
+    // The item itself is always in its own chain, so nothing back means it is hidden.
+    if (rows.length === 0) return null;
+    return { revisions: rows.map((r) => ({ id: r.work_item_id, documentNumber: r.document_number, revisionNo: r.revision_no })) };
   });
 }

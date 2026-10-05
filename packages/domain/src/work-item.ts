@@ -176,6 +176,25 @@ export const linkedFromItem = z.object({
 });
 export type LinkedFromItem = z.infer<typeof linkedFromItem>;
 
+/**
+ * The Revision drop-down (workflow-engine.md §5.4; visibility.md the Revisions
+ * channel): the Revisions of an item's chain the viewer may see, each by V1 on
+ * its own, the original first. A Draft Revision appears only within the
+ * raiser's Company, and a discarded one never.
+ */
+export const revisionChain = z.object({
+  revisions: z.array(
+    z.object({
+      id: z.uuid(),
+      /** Its Document Number, a Revision's with its " Rev n"; null until it first leaves Draft. */
+      documentNumber: z.string().nullable(),
+      /** 0 for the original, then 1, 2… */
+      revisionNo: z.number().int().nonnegative(),
+    }),
+  ),
+});
+export type RevisionChain = z.infer<typeof revisionChain>;
+
 /** "Linked from": every Submitted item linking to a Work Item, by Document Number. Never a Draft or internal item. */
 export const linkedFrom = z.object({ items: z.array(linkedFromItem) });
 export type LinkedFrom = z.infer<typeof linkedFrom>;
