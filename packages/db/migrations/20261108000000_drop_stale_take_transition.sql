@@ -1,0 +1,14 @@
+-- Drops the stale app.take_transition overload that took `p_reason text`.
+--
+-- 20261026000000_action_forms (RP-300) replaced `p_reason text` with
+-- `p_answers jsonb`: the Action Form answers, checked against the Transition's
+-- schema. 20261026100000_numbering_pattern (RP-312) was written against the
+-- older copy and re-created the `p_reason` signature with `create or replace`.
+-- A different signature makes a second function, so both stayed. Later
+-- migrations redefine only the `p_answers` one.
+--
+-- The stale overload is security definer and kept the default EXECUTE grant to
+-- PUBLIC. Any role could call it and take a Transition without the Action Form
+-- checks, e.g. Code C without Remarks. Nothing calls it: the API passes
+-- `p_answers`. The seam-2 grants tests (RP-319, RP-328) caught it.
+drop function app.take_transition(uuid, text, text, text, bytea, uuid, timestamptz);

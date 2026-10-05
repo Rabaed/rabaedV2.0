@@ -1,11 +1,12 @@
-import { bootstrap } from "../src/bootstrap.ts";
-import { migrate } from "../src/migrate.ts";
 import { testDatabaseUrls } from "./index.ts";
+import { prepareTestDatabase } from "./reset-test-database.ts";
 
-// Seam suites run against a real Postgres: create the test database and roles,
-// then apply every migration, exactly as `pnpm db:setup` does for dev.
-export default async function setup(): Promise<void> {
-  const urls = testDatabaseUrls();
-  await bootstrap(urls);
-  await migrate(urls.migrator);
+// Seam suites run against a real Postgres: drop and recreate the test database
+// (closing any other connection to it, and refusing a name that doesn't end in
+// _test), then create its roles and apply every migration, as CI does on a
+// fresh database. A rerun never meets what the last run left behind. Once per
+// Vitest process, under a lock another run of the same database refuses
+// (prepareTestDatabase says why).
+export default async function setup(): Promise<() => Promise<void>> {
+  return prepareTestDatabase(testDatabaseUrls());
 }
