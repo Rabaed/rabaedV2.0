@@ -98,6 +98,8 @@ export const DraftRevision: Story = {
 /** An item without Revisions the viewer may see (K1 on the original while Rev 1 is C1's Draft, scenario 51): no drop-down. */
 export const NoOtherRevision: Story = {
   args: { revisions: [original], currentId: original.id },
+  // It renders nothing; the box gives the screenshot something to capture.
+  decorators: [(Story) => <div className="min-h-8">{Story()}</div>],
   play: async (context) => {
     await expect(context.canvas.queryByRole("combobox")).toBeNull();
   },
