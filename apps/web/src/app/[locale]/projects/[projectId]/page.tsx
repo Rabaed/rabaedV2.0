@@ -100,6 +100,11 @@ export default async function ProjectPage({ params }: { params: Promise<{ locale
               {t("tradesLocations")}
             </Link>
           </li>
+          <li>
+            <Link href={`/projects/${project.id}/settings/numbering`} className="text-primary underline underline-offset-4">
+              {t("numbering")}
+            </Link>
+          </li>
           {project.isProjectAdmin && (
             <li>
               <Link href={`/projects/${project.id}/settings/visibility`} className="text-primary underline underline-offset-4">

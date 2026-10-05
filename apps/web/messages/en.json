@@ -109,6 +109,7 @@
     "projectMembers": "Project Members",
     "settings": "Project Settings",
     "tradesLocations": "Trades & Locations",
+    "numbering": "Numbering",
     "visibility": "Visibility",
     "membersVisibility": "Your Members' Visibility",
     "submittals": "Submittals",
@@ -164,6 +165,24 @@
     "duplicateCode": "That code is already used at this level.",
     "projectClosed": "This Project is closed.",
     "tooDeep": "Floors are the lowest level.",
+    "unavailable": "Something went wrong. Try again."
+  },
+  "numbering": {
+    "title": "Numbering",
+    "intro": "How this Project builds its Document Numbers. Every Project Member sees it; only the Project Admin changes it.",
+    "projectPattern": "Project pattern",
+    "rabaedDefault": "The Rabaed Default: Project, Work Item Type and Participant Code, 4 digits, counted separately for each.",
+    "types": "Overrides per Work Item Type",
+    "followsProject": "Follows the Project pattern.",
+    "override": "Override for {type}",
+    "addOverride": "Override for this Type",
+    "edit": "Change the pattern",
+    "cancel": "Cancel",
+    "saved": "Saved. Items numbered from now on follow it.",
+    "invalid": "Check the pattern: up to 6 segments, 3 to 7 digits.",
+    "sharedCounterNotAccepted": "Accept the shared-count warning to save this pattern.",
+    "notFound": "This is no longer available. Refresh the page.",
+    "projectClosed": "This Project is closed.",
     "unavailable": "Something went wrong. Try again."
   },
   "scopes": {

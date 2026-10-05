@@ -11,6 +11,7 @@ import type {
   MemberVisibility,
   MyProjects,
   NotificationList,
+  NumberingSettings,
   ParticipantMembers,
   ParticipantVisibility,
   ProjectInvitations,
@@ -96,6 +97,11 @@ export function getProjectDimensions(projectId: string): Promise<DimensionValues
 /** A Project's Scopes and Sub-scopes; null if it isn't one of the signed-in Member's Projects. */
 export function getProjectScopes(projectId: string): Promise<Scopes | null> {
   return apiGet<Scopes>(`/v1/projects/${encodeURIComponent(projectId)}/scopes`);
+}
+
+/** A Project's Numbering Pattern and per-Type overrides, for its Project Members; null otherwise. */
+export function getNumberingSettings(projectId: string): Promise<NumberingSettings | null> {
+  return apiGet<NumberingSettings>(`/v1/projects/${encodeURIComponent(projectId)}/numbering`);
 }
 
 /** A Participant's Visibility, for its own Company and the Project Admins; null otherwise. */
