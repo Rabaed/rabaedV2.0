@@ -62,7 +62,8 @@ Every one of these must apply the same layers. A new feature that adds a channel
 | Work Item history | The item's `work_item_event`s through layers 3 to 5. Another Company appears by name only; the one person of another Company named is the signer of the final Code (V14). Events are numbered 1, 2, 3… as the viewer sees them, never by the stored `seq`, whose gaps would count another Participant's internal events and Internal Notes (V5). |
 | Step Age reports | Each Participant's report covers items it has access to. The Owner-level report covers oversight items. |
 | Exports and handover | An export contains only what the exporter could see, plus their E2 records. |
-| Document Numbers | Numbering patterns that include a Company segment give each Company its own counter, so sequence gaps don't reveal a competitor's volume. |
+| Document Numbers | A Numbering Pattern whose sequence counts by the Participant Code gives each Company its own counter, so sequence gaps don't reveal a competitor's volume. A Project may choose a shared counter (settled 2026-10-05): saving that pattern needs the Project Admin or Rabaed Engineer to accept a warning that each Company can tell other Companies' volume from the gaps. The Rabaed Default counts by the Participant Code. Counter values are seen only by Project Admins and Rabaed Engineers. |
+| Revisions | Each Revision is its own Work Item under V1: a Revision in Draft or internal review stays inside the raiser's Participant. The Revision drop-down lists only the Revisions of the chain the viewer may see. |
 | Form answers | Read only through one database function, never from `work_item.data` directly. It strips every reference the reader may not see: another Company's Member (V14), a Participant they may not see, and a Work Item they may not see, which is replaced by its Document Number and Subject without its id (E1, ADR 0012). |
 | Errors and logs shown to users | Never include another item's title, number or Company. |
 | Refusals of a Transition | Never say why another Participant can't take the next Step (no Participant covers the item, several do, or nobody there holds the Position): one answer for all, so its Visibility and Positions stay its own (V14, V16). |
@@ -131,7 +132,13 @@ Setup, Project "Tower": Contractors **C1** (Electrical) and **C2** (Electrical, 
 | 48 | K1 issues Code C with Remarks after filling "Consultant verification" | C1 PM, OR | Both see the verification answers as issued and the Remarks; never an Internal Note written with the Code (V5, V19) |
 | 49 | C1 creates a Revision of the MAR that got Code C | C1 engineer; K1 | The Revision's "Consultant verification" is empty; the closed MAR still shows K1's answers (V19) |
 | 50 | A C1 Member saves answers into C1's own sections while the MAR is at `consultant_review` | C1 Member | Refused; after Submit, only the Participant holding the Step edits, and only the Form Sections that name its Steps |
-| 51 | K1 engineer saves a "No" and a note in its section, then Returns the item to C1 | C1 PM, OR, OW; K1 | C1 reads the section as it arrived (empty) after the Return; OR and OW too once C1 Submits again; none see K1's `answers_changed` events. K1 starts again from the section as it arrived, its earlier changes still in its own history (V19, ADR 0013) |
+| 51 | C1 creates Rev 1 of a MAR that got Code C and saves it as a Draft | K1, OR | The MAR's Revision drop-down still lists only the original; Rev 1's URL returns 404 (V1) |
+| 52 | C1 Submits Rev 1 | K1 | Sees `… Rev 1`, and the drop-down lists the original and Rev 1; choosing the original shows its own answers, Documents and history |
+| 53 | Project "Tower" counts MARs by Participant Code (the Rabaed Default) | C1 | C1's MAR numbers run 0001, 0002, 0003 with no gaps from C2's MARs |
+| 54 | The Project Admin saves a pattern whose sequence leaves out the Participant Code | Project Admin | Refused until the shared-counter warning is accepted; once accepted, C1 and C2 share one count |
+| 55 | A C1 member, or K1, asks for the Project's numbering counters | C1 member; K1 | 404, naming nothing; the Project Admin and a Rabaed Engineer can read them |
+| 56 | C1 discards a Draft Rev 1, then creates the Revision again | C1; K1 | The new one is Rev 1 again; K1 never sees the discarded one |
+| 57 | K1 engineer saves a "No" and a note in its section, then Returns the item to C1 | C1 PM, OR, OW; K1 | C1 reads the section as it arrived (empty) after the Return; OR and OW too once C1 Submits again; none see K1's `answers_changed` events. K1 starts again from the section as it arrived, its earlier changes still in its own history (V19, ADR 0013) |
 
 Every change to rules or channels must add or update rows here and in the test suite. A failing visibility test blocks release.
 

@@ -88,7 +88,7 @@ This table is versioned: every signing event points at the exact signature row t
 A custom role (Subcontractor, PMC…) must name a `base_role`. Permission checks cap at what the base role allows.
 
 **participant**
-`id`, `project_id`, `company_id`, `project_role_id`, `ordinal` (1, 2, 3… on the Project, set when it becomes Active; the Company segment of Document Numbers until numbering patterns), `status {invited, declined, invitation_withdrawn, active, withdrawn}`, `invited_by_member_id`, `invited_at`, `responded_at`, `withdrawn_at`, `withdrawn_by_member_id`.
+`id`, `project_id`, `company_id`, `project_role_id`, `ordinal` (1, 2, 3… on the Project, set when it becomes Active; the Company segment of Document Numbers until numbering patterns), `code` (the Participant Code: 2–6 letters or digits, unique in the Project, null until set, when the ordinal stands in; fixed once a number uses it), `status {invited, declined, invitation_withdrawn, active, withdrawn}`, `invited_by_member_id`, `invited_at`, `responded_at`, `withdrawn_at`, `withdrawn_by_member_id`.
 Unique `(project_id, company_id)`. A Project Admin's Participant Invitation creates it Invited; the Company's Authorized Person accepts (Active) or declines it (ADR 0009). Invited and Declined rows are seen by nobody but the invited Authorized Person (their own pending invitations) and, as a CR number only, the Project Admins, to whom a Declined one still looks pending. A Project Admin may withdraw an Invited or Declined row (`invitation_withdrawn`, kept for audit and shown to nobody), exactly as they withdraw a lead (scenario 38); inviting the CR number again reopens the same row. Withdrawal of an Active Participant cancels the participant's in-progress Work Items in one transaction (§5).
 
 **onboarding_lead**
@@ -184,13 +184,13 @@ New items use the latest *published* versions of the Form and Workflow at creati
 `id`, `kind` (notification, documental_record, email, package_recompute…), `project_id`, `payload jsonb` (ids only, never customer text), `created_at`, `available_at` (next due), `processed_at`, `attempts`, `last_error`, `dead_at` (dead-lettered after the last attempt). Written in the same transaction as the command that caused it; the worker takes one due row at a time (`FOR UPDATE SKIP LOCKED`).
 
 **numbering_pattern**
-`id`, `project_id`, `work_item_type_id` (null = Project default), `segments jsonb` (≤ 6 of: project code, type code, trade, company, location level, custom literal), `separator`, `seq_digits (3–7)`, `seq_scope jsonb` (which segments the counter counts separately for), `effective_from`.
-A pattern change creates a new row, and old numbers stay as issued.
+`id`, `project_id`, `work_item_type_id` (null = Project default), `segments jsonb` (≤ 6 of: project code, type code, trade, participant code, location level, custom literal), `separator` (`-` or `/`), `seq_digits (3–7)`, `seq_scope jsonb` (which segments the counter counts separately for), `shared_counter_accepted_by`, `shared_counter_accepted_at` (set when `seq_scope` leaves out the participant code), `set_by_member_id` or `admin_action_id`, `effective_from`.
+A pattern change creates a new row, and old numbers stay as issued. No row means the Rabaed Default: project code, type code, participant code, sequence of 4, counted by all three (settled 2026-10-05).
 
 **numbering_counter**
 `project_id`, `counter_key` (resolved prefix), `last_value`.
 Incremented with `INSERT … ON CONFLICT DO UPDATE … RETURNING` (the first number creates the row) in the same transaction as the first Send or Submit, so there are no gaps and no reuse.
-Until numbering patterns exist, the key is `<project code>-<type code>-<Participant ordinal>`, so each Participant counts on its own (e.g. `TWR-MAR-01-0001`).
+Until numbering patterns exist, the key is `<project code>-<type code>-<Participant ordinal>`, so each Participant counts on its own (e.g. `TWR-MAR-01-0001`). A counter can be created ahead with a starting `last_value` by a Project Admin or Rabaed Engineer, only while it has issued nothing. Only Project Admins and Rabaed Engineers read counters.
 
 **command_idempotency**
 `member_id`, `key`, `project_id`, `work_item_id`, `command`, `created_at`. Primary key `(member_id, key)`. Written in the same transaction as the command; the same key again applies nothing.

@@ -172,15 +172,17 @@ Effects, in order:
 
 ### 5.4 `create_revision(closed_item)`
 
-- **Allowed when:** the latest revision's outcome is `C` or `failed`, and the caller's Participant raised it.
+- **Allowed when:** the item is the **latest** Revision of its chain, its outcome is `C` or `failed`, no other Revision of the chain is open, and the caller may raise the item: an active Member of the raiser's Participant whom the Workflow's Draft Step actor rule allows (for the MAR, the Contractor's engineers). When the Workflow engine gains "assign to", the Workflow may name one person instead (settled 2026-10-05).
 - **Creates** a new item:
   - `revision_of_id` = the closed item, `root_id` kept, `revision_no + 1`;
-  - Form data copied, Documents copied as new unfrozen rows;
+  - Form data copied, except Form Sections filled by other Participants, which start empty (form-engine.md §4); Documents copied as new unfrozen rows;
   - pinned to the **latest published** Form and Workflow versions, with a notice if they changed;
-  - starts at Draft;
-  - keeps the same Document Number base with the `Rev n` suffix;
-  - Drawing Markups carried over as open items needing replies.
+  - starts at Draft, showing "No number yet" like any new item;
+  - gets the base Document Number with the revision suffix when it first leaves Draft (§8);
+  - Drawing Markups carried over as open items needing replies (with drawing submittals, later).
+- **Discard:** a Revision still in Draft can be discarded by the raiser's Participant. Nothing about it ever left that Participant, so the next Revision reuses its `revision_no`.
 - The closed item stays closed and gains a `related` Link to the new one.
+- **The item page shows the chain:** a drop-down lists every Revision of the chain the viewer may see (V1 applies to each Revision on its own), and choosing one shows that Revision's answers, Documents and history. Reviewers decide on the latest Revision they received.
 
 ### 5.5 `replace_rejected(closed_item)` for Code D
 
@@ -225,11 +227,20 @@ There is no admin path to `take_transition`, `recommend_code`, `issue_code`, or 
 ## 8. Document Numbers
 
 - The number is assigned inside `take_transition` at the first exit from Draft:
-  1. resolve the Project's numbering pattern for the Type;
-  2. build the counter key from the segments the sequence is scoped by;
-  3. run `UPDATE numbering_counter … RETURNING` in the same transaction.
+  1. resolve the Project's **Numbering Pattern** for the Type (the Type's override, else the Project default, else the Rabaed Default), as in effect at that moment;
+  2. build the counter key from the segments the sequence counts separately for;
+  3. increment `numbering_counter` in the same transaction.
 - A rollback releases nothing, because nothing was committed, so there are no gaps.
-- Revisions reuse the base number with the `Rev n` suffix.
+- **Revisions** reuse the base number of their chain with the revision suffix ` Rev n`, assigned when the Revision first leaves Draft. The first submission has no suffix.
+
+### Settled 2026-10-05 (Document numbering)
+
+- **Who sets the pattern:** the Project Admin in Project Settings, and Rabaed Engineers from Rabaed Admin (logged in `admin_action` with a reason). Every Project Member sees it read-only, with a live example. A change applies only to items numbered after it; issued numbers never change.
+- **Segments:** up to 6 of Project code, Work Item Type code, Trade code, Participant Code, Location level, fixed text; separator `-` or `/`; sequence of 3–7 digits.
+- **What the sequence counts by:** the setter ticks the segments. Without the Participant Code among them, every Company shares one counter, and each can tell from the gaps how many items the others numbered: saving such a pattern needs the setter to accept that warning (visibility.md, Document Numbers). The Rabaed Default pattern includes the Participant Code and counts by it.
+- **Participant Code:** 2–6 letters or digits per Participant on the Project, set by the Project Admin; until set, the Participant's position (`01`). Fixed once a number uses it.
+- **Location segment:** the code of the item's Location at the chosen level; an item whose Location sits above that level prints its own Location's code.
+- **Starting numbers:** a Project Admin or Rabaed Engineer may set a counter's starting number before it issues its first number (for Projects moving from a paper register). Locked after that. Counter values are seen only by Project Admins and Rabaed Engineers.
 
 ---
 

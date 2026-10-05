@@ -276,12 +276,20 @@ The shared text the Consultant writes with a Review Code, a field of the Code Tr
 _Avoid_: Comments (reserved for the Snag List), note
 
 **Revision**:
-A resubmission of a Work Item that ended with Code C, keeping the same number with a revision suffix (MS-003 → MS-003 Rev 1) and linked to the one before it. The earlier one stays closed at Code C.
+A resubmission of a Work Item that ended with Code C: a new Work Item, started as a Draft from the latest one, that keeps the same number with a revision suffix (MS-003 → MS-003 Rev 1) and is linked to the one before it. The first submission has no suffix. The earlier one stays closed at Code C, and anyone who sees a Revision can switch to the earlier ones they may see.
 _Avoid_: Version (reserved for Forms and Workflows), resubmittal
 
 **Document Number**:
-The identifier a Work Item gets when it first leaves Draft (e.g. WH-CCM-0000001); numbers are never reused, built from a numbering pattern each Project configures from segments such as project, Work Item Type, Trade, Company and Location codes, plus a sequence. A pattern change applies only to new Work Items.
+The identifier a Work Item gets when it first leaves Draft (e.g. TWR-MAR-CCM-0001); numbers are never reused, built from the Project's Numbering Pattern. A Revision keeps the number of the one before it, with its revision suffix.
 _Avoid_: ID, reference number
+
+**Numbering Pattern**:
+How a Project builds its Document Numbers: up to six segments (Project, Work Item Type, Trade, Participant Code, Location level, fixed text), a separator and a sequence, with the segments the sequence counts separately for. One per Project, optionally overridden per Work Item Type. Set by the Project Admin or a Rabaed Engineer; a change applies only to Work Items numbered after it.
+_Avoid_: Numbering scheme, format
+
+**Participant Code**:
+The short code (2–6 letters or digits) that stands for a Participant in that Project's Document Numbers, such as CCM; until it is set, the Participant's position on the Project (01, 02…). Set by the Project Admin, and fixed once a number uses it.
+_Avoid_: Company code, contractor code
 
 **Package**:
 A named group of submittals covering one piece of work (e.g. bathrooms), submitted together, with each submittal still getting its own Review Code. It is Open, In Progress or Closed, and closes by itself once every submittal in it ends at Code A or B, after any Revisions or replacements.
