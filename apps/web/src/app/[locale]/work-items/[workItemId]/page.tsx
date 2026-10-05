@@ -8,6 +8,7 @@ import { WorkItemAnswers, WorkItemFormProvider } from "@/components/work-item-fo
 import { WorkItemHistory } from "@/components/work-item-history";
 import { WorkItemLinkedFrom } from "@/components/work-item-linked-from";
 import { WorkItemLinks } from "@/components/work-item-links";
+import { WorkItemRevision } from "@/components/work-item-revision";
 import { Link, redirect } from "@/i18n/navigation";
 import { fillingChoices, readingChoices } from "@/lib/built-in-choices";
 import { linkTargetNames } from "@/lib/link-search";
@@ -95,6 +96,18 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
         </div>
 
         <WorkItemActions workItemId={item.id} actions={item.actions} locale={locale} />
+        <WorkItemRevision
+          workItemId={item.id}
+          projectId={item.projectId}
+          canCreate={item.actions.createRevision}
+          canDiscard={item.actions.discardRevision}
+          locale={locale}
+        />
+        {item.versionsChanged && (
+          <p role="note" className="rounded-md border border-border bg-surface p-3 text-sm text-muted">
+            {t("versionsChanged")}
+          </p>
+        )}
 
         {/* The System Fields above the Form, the same on every Work Item. */}
         <dl className="grid grid-cols-[max-content_1fr] gap-x-6 gap-y-2 rounded-md border border-border p-4">
@@ -103,7 +116,16 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
             <bdi>{item.title}</bdi>
           </dd>
           <dt className="text-muted">{t("fields.documentNumber")}</dt>
-          <dd>{item.documentNumber ? <DocNo value={item.documentNumber} /> : t("noNumber")}</dd>
+          <dd>
+            {/* A Revision's number carries its " Rev n", and reads left to right whole. */}
+            {item.documentNumber ? (
+              <DocNo value={item.documentNumber} />
+            ) : item.revisionNo > 0 ? (
+              t("revisionNoNumber", { no: item.revisionNo })
+            ) : (
+              t("noNumber")
+            )}
+          </dd>
         </dl>
 
         <WorkItemAnswers locale={locale} workItemId={item.id} documents={documents} />
