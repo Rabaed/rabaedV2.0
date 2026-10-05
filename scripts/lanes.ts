@@ -234,6 +234,46 @@ export function orphanDatabases(names: string[], inUse: ReadonlySet<string>): st
 /** The database name in a Postgres URL, e.g. rabaed_rp322 for postgres://u:p@localhost:5832/rabaed_rp322. */
 export const databaseOfUrl = (url: string): string | undefined => /\/([^/?]+)(?:\?.*)?$/.exec(url)?.[1];
 
+/** The databases an .env file's DATABASE_MIGRATOR_URL, DATABASE_APP_URL and DATABASE_ADMIN_URL name; a value may be quoted. */
+export function databasesOfEnv(env: string): string[] {
+  const names: string[] = [];
+  for (const [, value = ""] of env.matchAll(/^DATABASE_(?:MIGRATOR|APP|ADMIN)_URL=(.*)$/gm)) {
+    const name = databaseOfUrl(value.trim().replace(/^(["'])(.*)\1$/, "$2"));
+    if (name) names.push(name);
+  }
+  return names;
+}
+
+/**
+ * The databases some worktree still uses: those named in the .env of any of dirs
+ * (the existing worktrees of this clone). readEnv returns a folder's .env text,
+ * or undefined when it has none.
+ */
+export function databasesInUse(dirs: string[], readEnv: (dir: string) => string | undefined): Set<string> {
+  return new Set(dirs.flatMap((dir) => databasesOfEnv(readEnv(dir) ?? "")));
+}
+
+/**
+ * Splits orphan databases into those to drop and those to keep because something
+ * is connected to them right now (pg_stat_activity), such as a worktree of another
+ * clone or a test run. connections: the number of connections per database.
+ */
+export function dropOrKeep(orphans: string[], connections: ReadonlyMap<string, number>): { drop: string[]; busy: { name: string; connections: number }[] } {
+  const drop: string[] = [];
+  const busy: { name: string; connections: number }[] = [];
+  for (const name of orphans) {
+    const n = connections.get(name) ?? 0;
+    if (n > 0) busy.push({ name, connections: n });
+    else drop.push(name);
+  }
+  return { drop, busy };
+}
+
+/** Parses `datname|count` lines (psql -At) into connections per database. */
+export function parseConnections(lines: string[]): Map<string, number> {
+  return new Map(lines.map((line) => line.split("|")).map(([name = "", count = "0"]) => [name, Number(count)] as const));
+}
+
 /** The `db` service containers of the running rabaed-* compose projects. */
 export const dbContainers = (containers: Container[]): Container[] => containers.filter((c) => c.state === "running" && c.project.startsWith("rabaed") && /-db-\d+$/.test(c.name));
 

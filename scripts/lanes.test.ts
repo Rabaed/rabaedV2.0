@@ -3,6 +3,9 @@ import { createServer, type Server } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   databaseOfUrl,
+  databasesInUse,
+  databasesOfEnv,
+  dropOrKeep,
   firstFreeLane,
   isPortTaken,
   isValidDbSuffix,
@@ -10,6 +13,7 @@ import {
   laneEnv,
   lanePorts,
   orphanDatabases,
+  parseConnections,
   parseContainers,
   parseVolumes,
   staleProjects,
@@ -266,6 +270,43 @@ describe("orphanDatabases", () => {
 
   it("finds nothing when every worktree still exists", () => {
     expect(orphanDatabases(["rabaed_rp1", "rabaed_rp1_test"], new Set(["rabaed_rp1"]))).toEqual([]);
+  });
+});
+
+describe("databasesOfEnv", () => {
+  it("reads the migrator, app and admin URLs' databases, quoted or not, and nothing else", () => {
+    const env = [
+      "DATABASE_SUPERUSER_URL=postgres://postgres:x@localhost:5832/postgres",
+      "DATABASE_MIGRATOR_URL=postgres://rabaed_migrator:x@localhost:5832/rabaed_rp322",
+      `DATABASE_APP_URL="postgres://rabaed_app:x@localhost:5832/rabaed_rp322"`,
+      "DATABASE_ADMIN_URL='postgres://rabaed_admin:x@localhost:5832/rabaed_rp322?sslmode=disable'  ",
+      "# DATABASE_APP_URL=postgres://rabaed_app:x@localhost:5832/rabaed_old",
+      "DATABASE_APP_URL_EXTRA=postgres://u:p@h/rabaed_other",
+    ].join("\r\n");
+    expect(databasesOfEnv(env)).toEqual(["rabaed_rp322", "rabaed_rp322", "rabaed_rp322"]);
+  });
+});
+
+describe("databasesInUse", () => {
+  it("collects the databases of every worktree that has an .env", () => {
+    const envs: Record<string, string> = {
+      "G:/a": "DATABASE_APP_URL=postgres://u:p@h:5832/rabaed_rp1\n",
+      "G:/b": "DATABASE_MIGRATOR_URL=postgres://u:p@h:5832/rabaed\n",
+    };
+    expect(databasesInUse(["G:/a", "G:/b", "G:/no-env"], (dir) => envs[dir])).toEqual(new Set(["rabaed_rp1", "rabaed"]));
+  });
+});
+
+describe("dropOrKeep", () => {
+  it("keeps an orphan with an open connection (another clone's worktree, a test run) and drops the rest", () => {
+    const connections = parseConnections(["rabaed_rp9_test|2", "rabaed_rp7|1", ""].filter((l) => l !== ""));
+    expect(dropOrKeep(["rabaed_rp7", "rabaed_rp8", "rabaed_rp8_test", "rabaed_rp9_test"], connections)).toEqual({
+      drop: ["rabaed_rp8", "rabaed_rp8_test"],
+      busy: [
+        { name: "rabaed_rp7", connections: 1 },
+        { name: "rabaed_rp9_test", connections: 2 },
+      ],
+    });
   });
 });
 
