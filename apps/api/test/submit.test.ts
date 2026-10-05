@@ -99,8 +99,20 @@ async function createDraft(by: Caller, title: string): Promise<string> {
   return res.json().id;
 }
 
-const take = (by: Caller, id: string, transition: string, { reason, remarks, ...extra }: { reason?: string; remarks?: string; internalNote?: string } = {}) =>
-  by.post(`/v1/work-items/${id}/transitions`, { transition, idempotencyKey: randomUUID(), ...(reason === undefined && remarks === undefined ? {} : { answers: { ...(reason === undefined ? {} : { reason }), ...(remarks === undefined ? {} : { remarks }) } }), ...extra });
+/**
+ * Issuing a Code needs the MAR Form Version 4's Consultant verification (RP-306): the
+ * signer fills it first, as the Consultant does. Left alone by anyone who may not save
+ * (the save is then refused and ignored), so the refusals under test stay theirs.
+ */
+async function verified(by: Caller, id: string) {
+  const answers = (await by.get(`/v1/work-items/${id}`)).json().answers as Record<string, unknown> | undefined;
+  if (answers) await by.request("PUT", `/v1/work-items/${id}/answers`, { answers: { ...answers, sample_checked: true, matches_specification: true } });
+}
+
+const take = async (by: Caller, id: string, transition: string, { reason, remarks, ...extra }: { reason?: string; remarks?: string; internalNote?: string } = {}) => {
+  if (transition === "approve_a" || transition === "revise_c") await verified(by, id);
+  return by.post(`/v1/work-items/${id}/transitions`, { transition, idempotencyKey: randomUUID(), ...(reason === undefined && remarks === undefined ? {} : { answers: { ...(reason === undefined ? {} : { reason }), ...(remarks === undefined ? {} : { remarks }) } }), ...extra });
+};
 
 async function detail(by: Caller, id: string): Promise<WorkItemDetail> {
   const res = await by.get(`/v1/work-items/${id}`);
@@ -337,6 +349,8 @@ describe("Approve · A", () => {
     expect(events.map((e) => [e.type, e.by.companyName?.en])).toEqual([
       ["transition", "Test Constructions"],
       ["claimed", CONSULTANT],
+      // Its own verification, saved before the Code (MAR Form Version 4, RP-306).
+      ["answers_changed", CONSULTANT],
       ["issue_code", CONSULTANT],
     ]);
   });
