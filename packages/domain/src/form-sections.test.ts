@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { formSchema, type FormSchema } from "./form.ts";
 import { publishProblems } from "./form-publish.ts";
-import { changedOutside, editableSections, errorsInSections, sectionsFilledBy, type WorkflowStepHolder } from "./form-sections.ts";
+import { changedOutside, editableSections, errorsInSections, revisionAnswers, sectionsFilledBy, type WorkflowStepHolder } from "./form-sections.ts";
 
 // Seam 3: who fills which Form Section (form-engine.md §4, "Settled 2026-10-05
 // (part 3)"; RP-301). A Form Section names the Workflow Steps where it is edited
@@ -102,6 +102,23 @@ describe("sectionsFilledBy: sections another Participant fills", () => {
       section("verification", [text("note")], { editable_at: ["consultant_review"] }),
     );
     expect(sectionsFilledBy(schema, mar)).toEqual({ verification: "consultant" });
+  });
+});
+
+describe("revisionAnswers: what a Revision starts with (RP-305)", () => {
+  const schema = form(
+    section("material", [text("model")]),
+    section("verification", [text("note"), text("checked_by")], { editable_at: ["consultant_review"] }),
+  );
+
+  it("keeps the raiser's answers and drops those of sections another Participant fills", () => {
+    const answers = { model: "FD-90", trade: "t1", note: "Sample failed", checked_by: "K1 engineer" };
+    expect(revisionAnswers(schema, mar, answers)).toEqual({ model: "FD-90", trade: "t1" });
+  });
+
+  it("keeps answers to no section, and changes nothing without such a section", () => {
+    expect(revisionAnswers(schema, mar, { stray: 1 })).toEqual({ stray: 1 });
+    expect(revisionAnswers(form(section("material", [text("model")])), mar, { model: "x" })).toEqual({ model: "x" });
   });
 });
 

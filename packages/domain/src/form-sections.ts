@@ -71,6 +71,22 @@ export function sectionsFilledBy(schema: { sections: readonly FormSection[] }, s
   );
 }
 
+/**
+ * The answers a Revision starts with: those given, less every field of a
+ * section another Participant fills, so the Consultant's verdict on the
+ * previous Revision never arrives pre-filled (form-engine.md §4). The database
+ * does the same in app.revision_answers.
+ */
+export function revisionAnswers(
+  schema: { sections: readonly FormSection[] },
+  steps: readonly WorkflowStepHolder[],
+  answers: Record<string, unknown>,
+): Record<string, unknown> {
+  const others = sectionsFilledBy(schema, steps);
+  const dropped = new Set(schema.sections.filter((s) => s.key in others).flatMap((s) => s.fields.map((f) => f.key)));
+  return Object.fromEntries(Object.entries(answers).filter(([key]) => !dropped.has(key)));
+}
+
 /** An answer in a form two answers compare by: none when empty, a list of plain values in any order, an object's keys sorted. */
 function canonical(value: unknown): unknown {
   if (isUnanswered(value)) return undefined;
