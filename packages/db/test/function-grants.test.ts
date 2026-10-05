@@ -1,8 +1,9 @@
-// Seam 2: every function's EXECUTE grants are explicit (RP-319). Reads the
+// Seam 2: every function's EXECUTE grants are explicit (RP-319), and no
+// function has a stale second overload (RP-341). Reads the
 // catalog, as the same style of check as the search_path scan (RP-287).
 import { afterAll, describe, expect, it } from "vitest";
 import { createDb } from "../src/client.ts";
-import { functionGrantProblems, readFunctionGrants, type GrantAllowList } from "../test-support/function-grants.ts";
+import { functionGrantProblems, overloadProblems, readFunctionGrants, type GrantAllowList } from "../test-support/function-grants.ts";
 import { testDatabaseUrls } from "../test-support/index.ts";
 
 const urls = testDatabaseUrls();
@@ -30,6 +31,11 @@ const allow: GrantAllowList = {
   "app.is_bilingual": both,
 };
 
+// Function names with more than one overload on purpose. Empty: a second
+// overload is almost always a stale copy left by `create or replace` with a
+// changed signature (RP-341).
+const overloadsAllowed: readonly string[] = [];
+
 const grantOf = (fn: string, grantees: string[], owner = "rabaed_migrator") => ({
   fn: `${fn}()`,
   name: fn,
@@ -48,6 +54,10 @@ describe("function grants in the database", () => {
     const names = new Set((await readFunctionGrants(migrator)).map((g) => g.name));
     expect(Object.keys(allow).filter((name) => !names.has(name))).toEqual([]);
   });
+
+  it("have one overload per name: no stale copy left beside the current signature", async () => {
+    expect(overloadProblems(await readFunctionGrants(migrator), overloadsAllowed)).toEqual([]);
+  });
 });
 
 describe("the check", () => {
@@ -65,5 +75,17 @@ describe("the check", () => {
   it("passes a grant the allow-list names, and the owner's own", () => {
     const grants = [grantOf("app.shared", ["rabaed_app", "rabaed_admin", "rabaed_migrator"]), grantOf("app.mine", ["rabaed_app", "rabaed_migrator"])];
     expect(functionGrantProblems(grants, { "app.shared": ["rabaed_app", "rabaed_admin"] })).toEqual([]);
+  });
+
+  it("names a function with a second overload, with both signatures", () => {
+    const overload = (args: string) => ({ fn: `app.take(${args})`, name: "app.take", owner: "rabaed_migrator", grantees: ["rabaed_app"] });
+    expect(overloadProblems([overload("uuid, jsonb"), overload("uuid, text")], [])).toEqual([
+      "app.take has 2 overloads: app.take(uuid, jsonb), app.take(uuid, text) (drop the stale one in a new migration)",
+    ]);
+  });
+
+  it("passes an overload the allow-list names", () => {
+    const grants = [grantOf("app.both", ["rabaed_app"]), grantOf("app.both", ["rabaed_app"])];
+    expect(overloadProblems(grants, ["app.both"])).toEqual([]);
   });
 });
