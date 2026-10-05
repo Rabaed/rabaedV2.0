@@ -190,6 +190,17 @@ describe("numbers issued under the pattern in effect", () => {
     expect(items.find((i) => i.id === draftId)!.documentNumber).toBeNull();
   });
 
+  it("skip a number the Project already used, so a pattern change never refuses a Transition (RP-311 review)", async () => {
+    const t = await tower("NDP");
+    expect(await numbered(t, t.c1Engineer)).toBe("NDP-MAR-01-0001");
+    // The same segments, no longer counted by the Participant: a new counter, whose 1 is taken.
+    const shared = pattern({ segments: [project, type, participantCode], countedBy: [0, 1] });
+    await ok(save(c1.caller, t, { pattern: shared, sharedCounterAccepted: true }));
+    expect(await numbered(t, t.c1Engineer)).toBe("NDP-MAR-01-0002");
+    expect(await numbered(t, t.c2Engineer)).toBe("NDP-MAR-03-0003");
+    expect(await numbered(t, t.c1Engineer)).toBe("NDP-MAR-01-0004");
+  });
+
   it("use a Work Item Type's override over the Project's pattern", async () => {
     const t = await tower("NOV");
     const mar = ((await settingsOf(c1.caller, t)).json() as NumberingSettings).types.find((x) => x.code === "MAR")!.id;
