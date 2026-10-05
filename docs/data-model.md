@@ -206,7 +206,8 @@ The key is the values of the pattern's counted segments joined by `-`, whatever 
 | `title`, `data jsonb` | Form answers, validated against `form_version.schema`. Read only through `app.work_item_answers` (§10) |
 | `form_version_id`, `workflow_version_id` | pinned forever |
 | `document_number` | null while Draft; set at first leaving Draft |
-| `revision_no` (0 = original), `revision_of_id`, `root_id` | Revision chain; display `MS-003 Rev 1` |
+| `revision_no` (0 = original), `revision_of_id`, `root_id` | Revision chain; display `MS-003 Rev 1`. `root_id` is an original's own id; unique `(root_id, revision_no)` among rows not discarded. The app role reads `revision_no` only (RP-316) |
+| `discarded_at` | a discarded Draft Revision: closed `cancelled`, its access rows removed, seen by nobody (RP-316) |
 | `parent_id` | Subtask; check: parent's `parent_id` is null |
 | `package_id` | nullable |
 | `current_step_id`, `current_stage_key`, `step_entered_at` | `step_entered_at` feeds **Step Age** inside the holding Participant |
@@ -256,6 +257,7 @@ Status is recomputed on every member item's closure. The Package is Closed when 
 `id`, `project_id`, `work_item_id`, `file_name`, `size_bytes`, `content_type`, `storage_key` (`projects/<project>/work-items/<item>/documents/<id>`, ADR 0007), `uploaded_by_member_id`, `uploaded_by_participant_id`, `created_at`, `confirmed_at`, `removed_at`, `removed_by_member_id`, `frozen_at`, `field_key` (nullable), `item_key` (nullable, only with a `field_key`), `taken_at`, `taken_latitude`, `taken_longitude` (nullable).
 A file attached to a Work Item: in the Attachments System Field (RP-269), or, with a `field_key`, in one of the Form's `attachments` or `photos` fields (RP-281, RP-284), whose content types and maximum the upload functions check, or, with a `field_key` and an `item_key`, as the photo evidence of one item of a `checklist` field (RP-285: images only, at most 10 an item, only for an item that takes photos). An image keeps when and where it was taken (`taken_*`), which the api reads from the stored file's EXIF when it confirms the upload, never from the browser; null when the file records none. Read under the item's own RLS; written only through `app.*` functions. Upload is three steps: a pending row and a signed PUT URL for exactly the declared size and type, the browser's upload, then a confirm once the api finds the file in storage (`confirmed_at`). Until confirmed, and once removed, nobody sees the row. The raiser's Participant, with the Attach permission, adds and removes Documents while the item is in Draft; removal marks the row and keeps the file.
 Frozen at the first Send or Submit (a trigger when the item leaves Draft). After that the row can't change, even for its owner, and a change needs a Revision. A Document added after a Return to Draft is frozen at the next Send.
+A Revision's Documents are copied as new rows with their own storage keys; **document_copy** (`document_id`, `copied_from_id`) records each one's source so the api copies the file, and is never granted to the app role (RP-316).
 `stored_file` (with its `sha256`) comes with the Files Module and the Documental Record; until then the file's details live on the Document.
 
 **documental_record**
