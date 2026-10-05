@@ -158,3 +158,45 @@ describe("a Project Member of another Company", () => {
     await expectHidden(code(outsider, at.c1ParticipantId, "ZZZ"));
   });
 });
+
+// RP-311 review, settled with the user: a starting number set for a counter whose
+// key holds a Participant's printed value (its code, or its position until one is
+// set) fixes that Participant's code, as a number using it does. Otherwise the
+// counter set up ahead would never be used.
+describe("a starting number", () => {
+  const start = (projectId: string, body: object) =>
+    c1.caller.request("PUT", `/v1/projects/${projectId}/numbering/counters/start`, { workItemType: "MAR", startingNumber: 144, ...body });
+
+  it("fixes the code it was set under: changing it is refused, repeating it is not", async () => {
+    const at = await project("PC11");
+    await ok(code(c1.caller, at.k1ParticipantId, "KNS"));
+    await ok(start(at.projectId, { participantId: at.k1ParticipantId }), 200);
+    const changed = await code(c1.caller, at.k1ParticipantId, "KN2");
+    expect({ status: changed.statusCode, body: changed.json() }).toEqual({ status: 409, body: { error: "code_in_use" } });
+    await ok(code(c1.caller, at.k1ParticipantId, "KNS"));
+  });
+
+  it("set under the position fixes it too: no code can be set after", async () => {
+    const at = await project("PC12");
+    await ok(start(at.projectId, { participantId: at.c1ParticipantId }), 200);
+    const set = await code(c1.caller, at.c1ParticipantId, "CCM");
+    expect({ status: set.statusCode, body: set.json() }).toEqual({ status: 409, body: { error: "code_in_use" } });
+    expect((await codesOf(c1.caller, at.projectId))[at.c1ParticipantId]).toBeNull();
+    const id = await draft(at, at.c1Engineer, "Continues the register");
+    await sendForReview(at.c1Engineer, id);
+    expect(await numberOf(at.c1Engineer, id)).toBe("PC12-MAR-01-0144");
+  });
+
+  it("leaves the code free when the counter doesn't count by the Participant", async () => {
+    const at = await project("PC13");
+    const shared = {
+      workItemTypeId: null,
+      pattern: { segments: [{ kind: "project" }, { kind: "type" }, { kind: "participant" }], separator: "-", seqDigits: 4, countedBy: [0, 1] },
+      sharedCounterAccepted: true,
+    };
+    await ok(c1.caller.request("PUT", `/v1/projects/${at.projectId}/numbering`, shared));
+    await ok(start(at.projectId, { participantId: at.c1ParticipantId }), 200);
+    await ok(code(c1.caller, at.c1ParticipantId, "CCM"));
+    await ok(code(c1.caller, at.c1ParticipantId, "CC2"));
+  });
+});

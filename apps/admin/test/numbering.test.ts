@@ -261,6 +261,27 @@ describe("starting numbers from Rabaed Admin", () => {
     expect((await actionsOn(p.id)).filter((a) => a.action === "set_numbering_counter_start").map((a) => a.reason)).toEqual(["Start 10", "Start 20"]);
   });
 
+  it("fixes the Participant Code the counter's key holds, as a number using it does (RP-311 review)", async () => {
+    const { id: engineerId, browser } = await admin.signedInEngineer();
+    const p = await project(engineerId);
+    const setCode = (participant: string, code: string) => browser.post(`/v1/participants/${participant}/code`, { code, reason: "Set code" });
+    expect((await setCode(p.p2, "CCM")).statusCode).toBe(204);
+    const start = (participantId: string) =>
+      browser.post(`/v1/projects/${p.id}/numbering-counters/start`, { workItemType: "MAR", participantId, startingNumber: 7, reason: "From paper" });
+    expect((await start(p.p2)).statusCode).toBe(200);
+    expect((await start(p.p1)).statusCode).toBe(200);
+
+    const changed = await setCode(p.p2, "CC2");
+    expect([changed.statusCode, changed.json()]).toEqual([409, { error: "code_in_use" }]);
+    // Under its position: no code can be set after.
+    const first = await setCode(p.p1, "KNS");
+    expect([first.statusCode, first.json()]).toEqual([409, { error: "code_in_use" }]);
+    expect((await read(browser, p.id)).participants.map((x) => [x.code, x.codeLocked])).toEqual([
+      [null, true],
+      ["CCM", true],
+    ]);
+  });
+
   it("refuses values the pattern needs or the Project doesn't have; nothing is logged", async () => {
     const { id: engineerId, browser } = await admin.signedInEngineer();
     const p = await project(engineerId);
