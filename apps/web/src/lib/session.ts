@@ -18,6 +18,7 @@ import type {
   ProjectInvitations,
   ProjectParticipants,
   ProjectSummary,
+  RevisionChain,
   Scopes,
   SignedInMember,
   WorkItemDetail,
@@ -180,6 +181,11 @@ export function getWorkItemLinks(workItemId: string): Promise<WorkItemLinks | nu
 /** The Submitted items linking to a Work Item, hidden ones as number and Subject only (E3); null if the Member can't see the item. */
 export function getLinkedFrom(workItemId: string): Promise<LinkedFrom | null> {
   return apiGet<LinkedFrom>(`/v1/work-items/${encodeURIComponent(workItemId)}/linked-from`);
+}
+
+/** The Revisions of a Work Item's chain the signed-in Member may see (the Revision drop-down); null if they can't see the item. */
+export function getRevisionChain(workItemId: string): Promise<RevisionChain | null> {
+  return apiGet<RevisionChain>(`/v1/work-items/${encodeURIComponent(workItemId)}/revisions`);
 }
 
 /** A Work Item's history as the signed-in Member may see it; null if they can't see the item. */
