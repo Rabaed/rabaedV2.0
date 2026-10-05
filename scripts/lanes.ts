@@ -62,7 +62,7 @@ type ClashInput = {
   cwd: string;
   platform?: NodeJS.Platform;
   /** The caller has its own database (lane:env --db), so other worktrees' containers of this lane's compose project are not a clash. */
-  sharedLane?: boolean;
+  ownDatabase?: boolean;
 };
 
 /**
@@ -70,8 +70,8 @@ type ClashInput = {
  * something other than this worktree's own containers, or its compose project
  * already used from another worktree (it would share that worktree's database).
  */
-export function laneClashes(n: number, { containers, takenPorts, cwd, platform, sharedLane }: ClashInput): string[] {
-  const own = (c: Container) => samePath(c.workingDir, cwd, platform) || (sharedLane === true && c.project === laneProject(n));
+export function laneClashes(n: number, { containers, takenPorts, cwd, platform, ownDatabase }: ClashInput): string[] {
+  const own = (c: Container) => samePath(c.workingDir, cwd, platform) || (ownDatabase === true && c.project === laneProject(n));
   const clashes: string[] = [];
   for (const [key, port] of Object.entries(lanePorts(n)) as [keyof LanePorts, number][]) {
     if (!takenPorts.has(port)) continue;
