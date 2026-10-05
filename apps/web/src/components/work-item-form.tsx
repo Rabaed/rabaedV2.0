@@ -13,11 +13,13 @@ import {
   type Locale,
   type NamedAnswers,
   type DocumentList,
+  type FieldTime,
+  type SavedAnswers,
   type OptionList,
 } from "@rabaed/domain";
-import { Button, FormRenderer, type BuiltInChoices, type LinkTargetNames } from "@rabaed/ui";
-import { useTranslations } from "next-intl";
-import { createContext, useContext, useState, type ReactNode } from "react";
+import { Button, FormRenderer, SaveStatus, type BuiltInChoices, type LinkTargetNames } from "@rabaed/ui";
+import { useLocale, useTranslations } from "next-intl";
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useRouter } from "@/i18n/navigation";
 import { linkSearch } from "@/lib/link-search";
 import { useDocuments, useImageUrls } from "./use-documents";
@@ -49,14 +51,21 @@ type WorkItemFormState = {
   filledBy: Readonly<Record<string, BilingualText>>;
   /** Typed since the last save. */
   dirty: boolean;
+  /** When the item was last saved, if this page saved it or knows (ISO). */
+  savedAt: string | null;
+  /** Fields another Member changed that the last save kept as theirs, by field key, with their name. */
+  changedByOthers: Readonly<Record<string, string>>;
   pending: boolean;
   message: string | null;
   change(changes: Readonly<Record<string, FormValue | undefined>>): void;
   /** Saves the answers if they changed; false when the save was refused. */
-  save(): Promise<boolean>;
+  save(auto?: boolean): Promise<boolean>;
   /** Shows the API's per-field errors on the Form. */
   showErrors(errors: readonly FieldError[], message: string): void;
 };
+
+/** How long after the last change a Draft saves itself. */
+const AUTOSAVE_MS = 3000;
 
 const WorkItemFormContext = createContext<WorkItemFormState | null>(null);
 
@@ -78,6 +87,8 @@ export function WorkItemFormProvider({
   editable,
   editableSections,
   filledBy,
+  fieldTimes,
+  autosave,
   children,
 }: {
   workItemId: string;
@@ -93,22 +104,38 @@ export function WorkItemFormProvider({
   editable: boolean;
   editableSections: readonly string[];
   filledBy: Readonly<Record<string, BilingualText>>;
+  /** When each answer last changed (detail.fieldTimes); a save is based on these. */
+  fieldTimes: Readonly<Record<string, FieldTime>>;
+  /** The first Draft: answers save themselves every few seconds. After it only the button saves. */
+  autosave: boolean;
   children: ReactNode;
 }) {
   const t = useTranslations("workItems.form");
   const tItems = useTranslations("workItems");
   const router = useRouter();
   const [answers, setAnswers] = useState(saved);
+  const answersRef = useRef(answers);
+  answersRef.current = answers;
   const [errors, setErrors] = useState<readonly FieldError[]>([]);
   const [dirty, setDirty] = useState(false);
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const locale = useLocale() as Locale;
+  // The times the next save is based on: what the page loaded with, then what each save answered.
+  const based = useRef<Record<string, string>>(Object.fromEntries(Object.entries(fieldTimes).map(([k, v]) => [k, v.at])));
+  const [savedAt, setSavedAt] = useState<string | null>(
+    Object.values(fieldTimes).reduce<string | null>((latest, v) => (latest === null || v.at > latest ? v.at : latest), null),
+  );
+  const [changedByOthers, setChangedByOthers] = useState<Record<string, string>>({});
 
   function change(changes: Readonly<Record<string, FormValue | undefined>>) {
     const next = { ...answers, ...changes };
     setAnswers(next);
     setDirty(true);
     setMessage(null);
+    if (Object.keys(changes).some((key) => key in changedByOthers)) {
+      setChangedByOthers(Object.fromEntries(Object.entries(changedByOthers).filter(([key]) => !(key in changes))));
+    }
     // Instant feedback with the same checks the server runs (draft mode: types, and the Trade).
     const checked = validateAnswers(schema, next, "draft", {
       scopes: choices.scopes,
@@ -121,24 +148,41 @@ export function WorkItemFormProvider({
     setErrors(checked.ok ? [] : checked.errors);
   }
 
-  async function save(): Promise<boolean> {
+  /** `auto`: a quiet save that nobody pressed, in Draft: no page refresh, no "Draft saved". */
+  async function save(auto = false): Promise<boolean> {
     if (!dirty) return true;
     setPending(true);
-    setMessage(null);
+    if (!auto) setMessage(null);
     const shownAnswers = formVisibility(schema, answers).answers;
     try {
       const res = await fetch(`/api/v1/work-items/${workItemId}/answers`, {
         method: "PUT",
         headers: { "content-type": "application/json" },
         // Hidden fields' answers are cleared on save, here as on the server.
-        body: JSON.stringify({ answers: shownAnswers }),
+        body: JSON.stringify({ answers: shownAnswers, basedOn: based.current }),
       });
       if (res.ok) {
-        setAnswers(shownAnswers);
-        setDirty(false);
+        const saved = (await res.json()) as SavedAnswers;
+        based.current = Object.fromEntries(Object.entries(saved.fieldTimes).map(([k, v]) => [k, v.at]));
+        setSavedAt(Object.values(saved.fieldTimes).reduce<string | null>((l, v) => (l === null || v.at > l ? v.at : l), null));
+        // A field another Member changed since is kept as theirs: show their value and who.
+        const theirs = Object.fromEntries(saved.keptFromOthers.map((k) => [k.field, k.value]));
+        // Typed while this save was out stays as typed, and stays unsaved.
+        const sent = answers;
+        const typedMeanwhile = answersRef.current !== sent;
+        setAnswers((cur) => {
+          const merged = { ...(cur === sent ? shownAnswers : cur), ...theirs };
+          for (const k of saved.keptFromOthers) if (k.value === null) delete merged[k.field];
+          return merged;
+        });
+        setChangedByOthers(
+          Object.fromEntries(saved.keptFromOthers.map((k) => [k.field, k.memberName?.[locale] ?? t("anotherMember")])),
+        );
+        // Typed while this save was out? Then it is still unsaved; the next save carries it.
+        setDirty(typedMeanwhile);
         setErrors([]);
-        setMessage(t("saved"));
-        router.refresh();
+        setMessage(auto ? null : t("saved"));
+        if (!auto) router.refresh();
         return true;
       }
       const body = (await res.json().catch(() => ({}))) as { error?: string; fields?: FieldError[] };
@@ -162,6 +206,15 @@ export function WorkItemFormProvider({
     return false;
   }
 
+  // Autosave: a few seconds after the last change, in the first Draft only.
+  const saveRef = useRef(save);
+  saveRef.current = save;
+  useEffect(() => {
+    if (!autosave || !editable || !dirty || pending) return;
+    const timer = setTimeout(() => void saveRef.current(true), AUTOSAVE_MS);
+    return () => clearTimeout(timer);
+  }, [autosave, editable, dirty, pending, answers]);
+
   function showErrors(next: readonly FieldError[], text: string) {
     setErrors(next);
     setMessage(text);
@@ -183,6 +236,8 @@ export function WorkItemFormProvider({
         editableSections,
         filledBy,
         dirty,
+        savedAt,
+        changedByOthers,
         pending,
         message,
         change,
@@ -251,6 +306,14 @@ export function WorkItemAnswers({ locale, workItemId, documents }: { locale: Loc
           {form.message}
         </p>
       )}
+      <SaveStatus
+        locale={locale}
+        savedAt={form.editable ? form.savedAt : null}
+        changedByOthers={Object.entries(form.changedByOthers).flatMap(([key, memberName]) => {
+          const field = formFields(form.schema).find((f) => f.key === key);
+          return [{ fieldLabel: field && "label" in field ? field.label[locale] : key, memberName }];
+        })}
+      />
       {files.message && (
         <p role="status" className="text-sm text-muted">
           {files.message}
@@ -267,7 +330,7 @@ export function WorkItemAnswers({ locale, workItemId, documents }: { locale: Loc
         </div>
       )}
       {form.editable && (
-        <Button variant="secondary" disabled={form.pending || !form.dirty} onClick={() => void form.save()}>
+        <Button variant="secondary" disabled={form.pending || !form.dirty} onClick={() => void form.save(false)}>
           {tItems("saveDraft")}
         </Button>
       )}
