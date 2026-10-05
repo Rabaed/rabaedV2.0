@@ -1,5 +1,6 @@
 import { sql } from "kysely";
 import { withMember, type Db } from "../src/client.ts";
+import { processOutbox, type ProcessOutboxOptions } from "../src/outbox.ts";
 import { databaseNameOf, databaseUrlsFromEnv, withDatabaseName, type DatabaseUrls } from "../src/config.ts";
 
 /**
@@ -45,4 +46,16 @@ export async function joinProject(
     if (accepted.rows[0]!.outcome !== "accepted") throw new Error(`accept: ${accepted.rows[0]!.outcome}`);
     return id;
   });
+}
+
+/**
+ * Runs `processOutbox` until nothing is due. One run takes at most 100 rows,
+ * oldest first, so after busy test files a single call can leave the row a test
+ * waits for undelivered. `db` connects as the app role, with no Member set.
+ */
+export async function drainOutbox(db: Db, options: ProcessOutboxOptions = {}): Promise<void> {
+  for (;;) {
+    const run = await processOutbox(db, options);
+    if (run.processed + run.failed + run.dead === 0) return;
+  }
 }

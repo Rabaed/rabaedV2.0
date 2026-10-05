@@ -6,5 +6,6 @@ export * from "./local-database.ts";
 export * from "./migrate.ts";
 export * from "./outbox.ts";
 export * from "./reset-database.ts";
+export * from "./reset-test-database.ts";
 export * from "./rotating-password.ts";
 export * from "./schema.ts";
