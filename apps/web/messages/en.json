@@ -293,6 +293,7 @@
       "other": "Updated",
       "numbered": "Document Number",
       "internalNote": "Internal Note",
+      "remarks": "Remarks",
       "internalNoteWith": "Internal Note · {transition}",
       "internal": "Internal: only your Company sees this.",
       "answersChanged": "Form changed",

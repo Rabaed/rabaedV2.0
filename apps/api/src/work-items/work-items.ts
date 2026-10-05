@@ -900,6 +900,7 @@ export function getWorkItemHistory(db: Db, memberId: string, workItemId: string)
       from_step_name: BilingualText | null;
       to_step_name: BilingualText | null;
       reason: string | null;
+      remarks: string | null;
       document_number: string | null;
       outcome: WorkItemOutcome | null;
       internal_note: string | null;
@@ -916,6 +917,7 @@ export function getWorkItemHistory(db: Db, memberId: string, workItemId: string)
         fromStep: r.from_step_name,
         toStep: r.to_step_name,
         reason: r.reason,
+        remarks: r.remarks,
         documentNumber: r.document_number,
         outcome: r.outcome,
         internalNote: r.internal_note,
