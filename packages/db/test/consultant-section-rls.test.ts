@@ -119,7 +119,7 @@ async function addType() {
 }
 
 const take = (as: string, transition: string, hash = sql`app.answers_sha256(${item}::uuid)`) =>
-  outcome(as, sql`select app.take_transition(${item}::uuid, ${transition}, '', '', ${hash}, ${randomUUID()}::uuid, now()) as outcome`);
+  outcome(as, sql`select app.take_transition(${item}::uuid, ${transition}, '{}'::jsonb, '', ${hash}, ${randomUUID()}::uuid, now()) as outcome`);
 const save = (as: string, data: object) =>
   outcome(
     as,

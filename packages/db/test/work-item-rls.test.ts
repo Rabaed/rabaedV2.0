@@ -115,7 +115,7 @@ const saveAnswers = (as: string, item: string, data: object, builtIns: BuiltIns 
 const sendDraftForReview = (as: string, item: string, hash: RawBuilder<unknown>) =>
   call<{ outcome: string }>(
     as,
-    sql`select app.take_transition(${item}::uuid, 'send_for_review', '', '', ${hash}, ${randomUUID()}::uuid, now()) as outcome`,
+    sql`select app.take_transition(${item}::uuid, 'send_for_review', '{}', '', ${hash}, ${randomUUID()}::uuid, now()) as outcome`,
   ).then((rows) => rows[0]!.outcome);
 
 /** The ids `as` sees in `table` for the item, unfiltered but for RLS. */
@@ -372,7 +372,7 @@ describe("Send for Review and Return", () => {
   const take = (as: string, transition: string, reason = "") =>
     call<{ outcome: string }>(
       as,
-      sql`select app.take_transition(${item}::uuid, ${transition}, ${reason}, '', app.answers_sha256(${item}::uuid), ${randomUUID()}::uuid, now()) as outcome`,
+      sql`select app.take_transition(${item}::uuid, ${transition}, ${JSON.stringify(reason ? { reason } : {})}::jsonb, '', app.answers_sha256(${item}::uuid), ${randomUUID()}::uuid, now()) as outcome`,
     ).then((rows) => rows[0]!.outcome);
   const claim = (as: string) =>
     call<{ outcome: string }>(as, sql`select app.claim_step(${item}::uuid, now()) as outcome`).then((rows) => rows[0]!.outcome);
@@ -445,6 +445,22 @@ describe("Send for Review and Return", () => {
       expect(await seen(who, "project_member_position", "project_member_id")).toEqual([]);
     }
   });
+
+  // RP-300: the Action Form answers are checked by the API; the database still
+  // refuses what its schema can't hold, so the app role can't write them.
+  it("refuses a Return without its reason, or with answers its Action Form doesn't ask for, and writes nothing", async () => {
+    expect(await claim(pm)).toBe("claimed");
+    const before = await eventCount();
+    const takeWith = (answers: string) =>
+      call<{ outcome: string }>(
+        pm,
+        sql`select app.take_transition(${item}::uuid, 'return', ${answers}::jsonb, '', null, ${randomUUID()}::uuid, now()) as outcome`,
+      ).then((rows) => rows[0]!.outcome);
+    for (const answers of ['{}', '{"reason": "  "}', '{"reason": null}', '{"reason": "Fine", "remarks": "Not asked"}', '[]', 'null']) {
+      expect(await takeWith(answers), answers).toBe("invalid_action_form");
+    }
+    expect(await eventCount()).toBe(before);
+  });
 });
 
 // RP-194: Submit to the Consultant and Code A, called as the app role.
@@ -455,7 +471,7 @@ describe("Submit and Code A", () => {
   const take = (as: string, transition: string) =>
     call<{ outcome: string }>(
       as,
-      sql`select app.take_transition(${item}::uuid, ${transition}, '', '', app.answers_sha256(${item}::uuid), ${randomUUID()}::uuid, now()) as outcome`,
+      sql`select app.take_transition(${item}::uuid, ${transition}, '{}', '', app.answers_sha256(${item}::uuid), ${randomUUID()}::uuid, now()) as outcome`,
     ).then((rows) => rows[0]!.outcome);
   const claim = (as: string) =>
     call<{ outcome: string }>(as, sql`select app.claim_step(${item}::uuid, now()) as outcome`).then((rows) => rows[0]!.outcome);
@@ -589,7 +605,7 @@ describe("Internal Note", () => {
     call<{ outcome: string }>(
       as,
       sql`select app.take_transition(
-        ${item}::uuid, ${transition}, ${reason}, ${internalNote}, app.answers_sha256(${item}::uuid), ${randomUUID()}::uuid, now()) as outcome`,
+        ${item}::uuid, ${transition}, ${JSON.stringify(reason ? { reason } : {})}::jsonb, ${internalNote}, app.answers_sha256(${item}::uuid), ${randomUUID()}::uuid, now()) as outcome`,
     ).then((rows) => rows[0]!.outcome);
   const claim = (as: string) =>
     call<{ outcome: string }>(as, sql`select app.claim_step(${item}::uuid, now()) as outcome`).then((rows) => rows[0]!.outcome);
@@ -799,7 +815,7 @@ describe("a Draft's answers", () => {
       const take = (as: string, transition: string, reason = "") =>
         call<{ outcome: string }>(
           as,
-          sql`select app.take_transition(${item}::uuid, ${transition}, ${reason}, '', app.answers_sha256(${item}::uuid), ${randomUUID()}::uuid, now()) as outcome`,
+          sql`select app.take_transition(${item}::uuid, ${transition}, ${JSON.stringify(reason ? { reason } : {})}::jsonb, '', app.answers_sha256(${item}::uuid), ${randomUUID()}::uuid, now()) as outcome`,
         ).then((rows) => rows[0]!.outcome);
       expect(await take(pm, "return", "Check the model")).toBe("applied");
       expect(await save(c1.member, { description: "Later", model: "CT-301" })).toBe("saved");
@@ -815,7 +831,7 @@ describe("a Draft's answers", () => {
       const submit = (hash: RawBuilder<unknown>) =>
         call<{ outcome: string }>(
           pm,
-          sql`select app.take_transition(${item}::uuid, 'submit', '', '', ${hash}, ${randomUUID()}::uuid, now()) as outcome`,
+          sql`select app.take_transition(${item}::uuid, 'submit', '{}', '', ${hash}, ${randomUUID()}::uuid, now()) as outcome`,
         ).then((rows) => rows[0]!.outcome);
       expect(await submit(sql`null`)).toBe("form_not_checked");
       expect(await submit(sql`app.answers_sha256(${item}::uuid)`)).toBe("applied");

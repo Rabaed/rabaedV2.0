@@ -1,16 +1,78 @@
--- Required answers per Form Section, by the Step being left (RP-304, spec RP-299;
--- form-engine.md §4 "Settled 2026-10-05 (part 3)").
+-- Action Forms built from Form schemas (RP-300, spec RP-299; form-engine.md §4
+-- "Settled 2026-10-05 (part 3)"; workflow-engine.md §1 check 7, §5.1; visibility.md V5).
 --
--- * app.take_transition: any Transition onwards (not a cancel or a Return) by a
---   Member who may save the answers now (app.can_save_answers: the raiser while
---   its answers are open, as before, or the Participant holding a Step a Form
---   Section names) needs the hash of the answers the API found complete
---   (app.answers_sha256); the API checks the required fields of the sections
---   naming the Step being left. Before, only while the answers were open to the
---   raiser. Nothing else changes from the action_forms migration (RP-300).
+-- * workflow_transition.action_form: the Transition's Action Form, a Form schema
+--   ({sections: [...]}) the API validates and renders with the Form engine; null
+--   for none. The Internal Note is not one of its fields: it stays a fixed
+--   element under every Action Form, and its own internal event (V5). The
+--   publish checks (workflow-engine.md check 7, action-form.ts) can't run in SQL;
+--   action-forms.test.ts runs them on every published Workflow Version.
+-- * MAR Workflow Version 1's Transitions get schemas equal to today's fixed
+--   fields: the Return a required `reason` textarea (at most 2000 characters, as
+--   the request field took), the others none. Published Versions never change;
+--   this one is changed in place ONLY because dev has no real data yet, and
+--   nothing behaves differently. From now on a change is a new Workflow Version.
+-- * app.take_transition takes the Action Form answers (p_answers jsonb) in place
+--   of p_reason, and stores them in the Transition event's payload, beside the
+--   engine's document_number and outcome, as reason was. The fixed reason check
+--   ('reason_required') goes: app.action_form_fits refuses, as
+--   'invalid_action_form', answers to keys the schema doesn't have or missing an
+--   answer a field always requires (the API checks the rest with the validator).
+-- * app.work_item_history still reads `reason` from the payload, where the
+--   Return's answer is.
 
--- As in the action_forms migration, with the check above.
-create or replace function app.take_transition(
+alter table workflow_transition add column action_form jsonb
+  check (action_form is null or (jsonb_typeof(action_form) = 'object' and jsonb_typeof(action_form -> 'sections') = 'array'));
+
+update workflow_transition tr set action_form = $schema$
+  {
+    "sections": [
+      {
+        "key": "return",
+        "title": { "en": "Return", "ar": "إعادة" },
+        "fields": [
+          { "key": "reason", "type": "textarea", "required": true, "maxLength": 2000,
+            "label": { "en": "Reason", "ar": "السبب" },
+            "help": { "en": "Only your Company sees this.", "ar": "لا يراه إلا شركتك." } }
+        ]
+      }
+    ]
+  }
+$schema$::jsonb
+from workflow_version v
+join workflow_definition d on d.id = v.workflow_definition_id
+join work_item_type t on t.workflow_definition_id = d.id and t.owner_kind = 'rabaed' and t.code = 'MAR'
+where tr.workflow_version_id = v.id and v.version_no = 1 and tr.key = 'return';
+
+-- Whether Action Form answers fit the Transition's schema as far as the database
+-- checks them: an object, each key one of the schema's fields, and each field the
+-- schema always requires (not behind a `visible_if`) answered. No schema: no answers.
+create function app.action_form_fits(p_schema jsonb, p_answers jsonb) returns boolean
+  language sql immutable
+  set search_path = pg_catalog, public
+  as $$
+    with fields as (
+      select s, f from jsonb_array_elements(coalesce(p_schema -> 'sections', '[]')) s
+      cross join lateral jsonb_array_elements(s -> 'fields') f
+    )
+    select coalesce(jsonb_typeof(p_answers) = 'object', false)
+      and not exists (
+        select 1 from jsonb_object_keys(case when jsonb_typeof(p_answers) = 'object' then p_answers else '{}' end) k
+        where not exists (select 1 from fields where f ->> 'key' = k))
+      and not exists (
+        select 1 from fields
+        where f -> 'required' = 'true' and s -> 'visible_if' is null and f -> 'visible_if' is null
+          and (p_answers -> (f ->> 'key') is null
+            or p_answers -> (f ->> 'key') in ('null', '[]', '{}')
+            or (jsonb_typeof(p_answers -> (f ->> 'key')) = 'string' and btrim(p_answers ->> (f ->> 'key')) = '')))
+  $$;
+
+-- Taking a Transition ----------------------------------------------------------------
+
+drop function app.take_transition(uuid, text, text, text, bytea, uuid, timestamptz);
+
+-- As in the answers_history migration, with the Action Form answers in place of the reason.
+create function app.take_transition(
   p_work_item_id uuid, p_transition_key text, p_answers jsonb, p_internal_note text, p_checked_data_sha256 bytea,
   p_idempotency_key uuid, p_now timestamptz
 ) returns text
@@ -95,11 +157,10 @@ create or replace function app.take_transition(
       if not app.action_form_fits(v_transition.action_form, p_answers) then
         return 'invalid_action_form';
       end if;
-      -- Moving on by a Member who may save the answers now (the raiser while they
-      -- are open, Draft and its internal Steps, so a Submit too; or the Participant
-      -- holding a Step a Form Section names): only with the answers the API found
-      -- complete (the row is locked). A cancel or a Return needs no complete Form.
-      if app.can_save_answers(p_work_item_id) and v_transition.kind not in ('cancel', 'return')
+      -- Moving on while the answers are open to the raiser (Draft and its internal
+      -- Steps, so a Submit too): only with the answers the API found complete (the
+      -- row is locked). A cancel or a Return needs no complete Form.
+      if app.is_draft_step(v_item.participant_entered_step_id) and v_transition.kind not in ('cancel', 'return')
         and p_checked_data_sha256 is distinct from app.answers_sha256(p_work_item_id)
       then
         return 'form_not_checked';
@@ -218,3 +279,9 @@ create or replace function app.take_transition(
       return 'applied';
     end
   $$;
+
+revoke all on function
+  app.action_form_fits(jsonb, jsonb),
+  app.take_transition(uuid, text, jsonb, text, bytea, uuid, timestamptz)
+  from public;
+grant execute on function app.take_transition(uuid, text, jsonb, text, bytea, uuid, timestamptz) to rabaed_app;

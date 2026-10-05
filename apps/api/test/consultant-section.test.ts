@@ -152,8 +152,8 @@ async function otherParticipant(role: "consultant" | "owner" | "owner_representa
 }
 
 const builtIns = () => ({ trade: electrical, location: buildingA });
-const take = (by: Caller, id: string, transition: string, extra: { reason?: string } = {}) =>
-  by.post(`/v1/work-items/${id}/transitions`, { transition, idempotencyKey: randomUUID(), ...extra });
+const take = (by: Caller, id: string, transition: string) =>
+  by.post(`/v1/work-items/${id}/transitions`, { transition, idempotencyKey: randomUUID() });
 const detail = async (by: Caller, id: string): Promise<WorkItemDetail> => (await ok(by.get(`/v1/work-items/${id}`), 200)).json();
 /** The answers `by` reads, without the Built-in Fields. */
 const answersOf = async (by: Caller, id: string) => {
@@ -297,7 +297,7 @@ describe("required fields, per section, by the Step being left", () => {
 
   it("don't hold up a Return", async () => {
     const id = await atConsultantReview("FD-72");
-    await ok(take(k1Engineer, id, "return_to_contractor", { reason: "Wrong model" }));
+    await ok(take(k1Engineer, id, "return_to_contractor"));
   });
 });
 

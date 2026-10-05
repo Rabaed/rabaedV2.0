@@ -99,8 +99,8 @@ async function createDraft(by: Caller, title: string): Promise<string> {
   return res.json().id;
 }
 
-const take = (by: Caller, id: string, transition: string, extra: { reason?: string; internalNote?: string } = {}) =>
-  by.post(`/v1/work-items/${id}/transitions`, { transition, idempotencyKey: randomUUID(), ...extra });
+const take = (by: Caller, id: string, transition: string, { reason, ...extra }: { reason?: string; internalNote?: string } = {}) =>
+  by.post(`/v1/work-items/${id}/transitions`, { transition, idempotencyKey: randomUUID(), ...(reason === undefined ? {} : { answers: { reason } }), ...extra });
 
 async function detail(by: Caller, id: string): Promise<WorkItemDetail> {
   const res = await by.get(`/v1/work-items/${id}`);
@@ -197,7 +197,7 @@ describe("Submit", () => {
     expect(d.actions.transitions.find((t) => t.key === "submit")).toMatchObject({
       label: { en: "Submit" },
       kind: "submit",
-      needsReason: false,
+      actionForm: null,
     });
   });
 
@@ -503,7 +503,7 @@ describe("Internal Note (V5, scenarios 7 and 34)", () => {
     expect((await take(pm, other, "send_for_review", { internalNote: "Not mine to send" })).statusCode).not.toBe(204);
     await ok(take(engineer, other, "send_for_review"));
     await ok(pm.post(`/v1/work-items/${other}/claim`));
-    expect((await take(pm, other, "return", { internalNote: "No reason given" })).json()).toEqual({ error: "reason_required" });
+    expect((await take(pm, other, "return", { internalNote: "No reason given" })).json()).toEqual({ error: "invalid_action_form", fields: [{ key: "reason", code: "required" }] });
     const events = await history(pm, other);
     expect(events.some((e) => e.type === "internal_note")).toBe(false);
   });

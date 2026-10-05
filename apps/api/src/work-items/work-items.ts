@@ -9,6 +9,7 @@ import {
   sectionsFilledBy,
   isHiddenLinkChoice,
   offeredChoices,
+  parseActionForm,
   stepAgeWeeks,
   checklistItemFilesKey,
   validateAnswers,
@@ -638,14 +639,34 @@ async function namedAnswers(trx: Trx, workItemId: string): Promise<{ named: Name
   };
 }
 
-/** What the acting Member may press on a visible item now, as app.work_item_actions answers. */
+type ActionRow = {
+  action: "claim" | "release" | "transition";
+  transition_key: string | null;
+  label: BilingualText | null;
+  transition_kind: WorkItemActions["transitions"][number]["kind"] | null;
+  action_form: unknown;
+};
+
+/**
+ * What the acting Member may press on a visible item now, as app.work_item_actions
+ * answers, each Transition with its Action Form from the item's pinned Workflow
+ * Version. Only `transition_key` narrows them.
+ */
+async function actionRows(trx: Trx, workItemId: string, transitionKey?: string): Promise<ActionRow[]> {
+  const { rows } = await sql<ActionRow>`
+    select a.action, a.transition_key, a.label, a.transition_kind, tr.action_form
+    from app.work_item_actions(${workItemId}::uuid) with ordinality a (action, transition_key, label, transition_kind, n)
+    left join work_item w on w.id = ${workItemId}::uuid
+    left join workflow_transition tr on tr.workflow_version_id = w.workflow_version_id and tr.key = a.transition_key
+    where ${transitionKey === undefined ? sql`true` : sql`a.action = 'transition' and a.transition_key = ${transitionKey}`}
+    order by a.n
+  `.execute(trx);
+  return rows;
+}
+
+/** What the acting Member may press on a visible item now. */
 async function actions(trx: Trx, workItemId: string): Promise<Omit<WorkItemActions, "saveAnswers">> {
-  const { rows } = await sql<{
-    action: "claim" | "release" | "transition";
-    transition_key: string | null;
-    label: BilingualText | null;
-    transition_kind: WorkItemActions["transitions"][number]["kind"] | null;
-  }>`select * from app.work_item_actions(${workItemId}::uuid)`.execute(trx);
+  const rows = await actionRows(trx, workItemId);
   return {
     claim: rows.some((r) => r.action === "claim"),
     release: rows.some((r) => r.action === "release"),
@@ -655,7 +676,7 @@ async function actions(trx: Trx, workItemId: string): Promise<Omit<WorkItemActio
         key: r.transition_key!,
         label: r.label!,
         kind: r.transition_kind!,
-        needsReason: r.transition_kind === "return",
+        actionForm: parseActionForm(r.action_form),
       })),
   };
 }
@@ -667,13 +688,17 @@ const transitionRefusals = [
   "not_holder",
   "transition_not_available",
   "forbidden",
-  "reason_required",
+  "invalid_action_form",
   "next_step_unavailable",
   "no_step_pool",
   "idempotency_key_reused",
   "form_not_checked",
 ] as const;
-export type TakeTransitionResult = { ok: true } | AnswersRefused | { ok: false; reason: (typeof transitionRefusals)[number] };
+export type TakeTransitionResult =
+  | { ok: true }
+  | AnswersRefused
+  | { ok: false; reason: "invalid_action_form"; errors: FieldError[] }
+  | { ok: false; reason: (typeof transitionRefusals)[number] };
 
 /**
  * How many confirmed files each `attachments` or `photos` field of a visible
@@ -693,10 +718,12 @@ async function fieldFileCounts(trx: Trx, workItemId: string): Promise<Record<str
 /**
  * The holder of the item's current Step takes one of its Transitions, in one
  * transaction (workflow-engine.md §5.1), with their Internal Note if they wrote
- * one. The same idempotency key again applies nothing. Moving on (not a Return
- * or a cancel) by a Member who may save the answers needs the sections naming
- * the Step being left complete, their `attachments` fields' files included:
- * otherwise it is refused with the per-field errors. Sections another
+ * one. Its Action Form's answers are checked against its schema in complete
+ * mode (a Transition with none takes no answers) and stored in its event
+ * (RP-300). The same idempotency key again applies nothing. Moving on (not a
+ * Return or a cancel) by a Member who may save the answers needs the sections
+ * naming the Step being left complete, their `attachments` fields' files
+ * included: otherwise it is refused with the per-field errors. Sections another
  * Participant fills later are not checked (RP-304).
  */
 export function takeTransition(
@@ -709,15 +736,26 @@ export function takeTransition(
   return withMember(db, memberId, async (trx): Promise<TakeTransitionResult> => {
     const pinned = await pinnedForm(trx, workItemId);
     if (!pinned) return { ok: false, reason: "not_found" };
+    // Only a Transition the Member may take is checked here, so anyone else is told why
+    // they can't act (by the database), never what its Action Form or the Form lacks.
+    const [taking] = await actionRows(trx, workItemId, input.transition);
+    // Its Action Form's answers, as the Form's are checked when leaving Draft. The
+    // database takes only keys the schema has, with what it always requires.
+    let answers: Record<string, unknown> = input.answers;
+    if (taking) {
+      const actionForm = parseActionForm(taking.action_form);
+      if (actionForm) {
+        const checked = validateAnswers(actionForm, input.answers, "complete", { optionLists: await optionListsFor(trx, actionForm) });
+        if (!checked.ok) return { ok: false, reason: "invalid_action_form", errors: checked.errors };
+        answers = checked.answers;
+      } else if (Object.keys(input.answers).length > 0) {
+        return { ok: false, reason: "invalid_action_form", errors: Object.keys(input.answers).map((key) => ({ key, code: "unknown_field" })) };
+      }
+    }
     // Moving on by a Member who may save the answers now (other than a cancel or a Return)
     // needs the required fields of the sections naming the Step being left (form-engine.md §4);
-    // the database refuses answers that weren't checked. Only a Transition the Member may
-    // take is checked here, so anyone else is told why they can't act, not what the Form lacks.
+    // the database refuses answers that weren't checked.
     if (pinned.canSave) {
-      const { rows: takeable } = await sql<{ transition_kind: string }>`
-        select transition_kind from app.work_item_actions(${workItemId}::uuid)
-        where action = 'transition' and transition_key = ${input.transition}
-      `.execute(trx);
       const scopes = await projectScopes(trx, pinned.projectId);
       // What is saved is checked as it stands: a retired option it holds stays valid (held).
       const checked = validateAnswers(pinned.form.schema, pinned.data, "complete", {
@@ -727,13 +765,13 @@ export function takeTransition(
         files: await fieldFileCounts(trx, workItemId),
       });
       const missing = checked.ok ? [] : errorsInSections(pinned.form.schema, pinned.toFill.editableSections, checked.errors);
-      if (takeable.some((t) => t.transition_kind !== "cancel" && t.transition_kind !== "return") && missing.length > 0) {
+      if (taking && taking.transition_kind !== "cancel" && taking.transition_kind !== "return" && missing.length > 0) {
         return { ok: false, reason: "form_incomplete", errors: missing };
       }
     }
     const { rows } = await sql<{ outcome: string }>`
       select app.take_transition(
-        ${workItemId}::uuid, ${input.transition}, ${input.reason}, ${input.internalNote},
+        ${workItemId}::uuid, ${input.transition}, ${JSON.stringify(answers)}::jsonb, ${input.internalNote},
         ${pinned.dataSha256}::bytea, ${input.idempotencyKey}::uuid, ${now}) as outcome
     `.execute(trx);
     return commandResult(rows[0]!.outcome, "applied", transitionRefusals);
