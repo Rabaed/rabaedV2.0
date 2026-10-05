@@ -1,0 +1,12 @@
+-- Drops a stale overload of app.take_transition (found in RP-310; main's seam-2
+-- grants test failed on it after RP-311 merged).
+--
+-- The action_forms migration replaced app.take_transition(uuid, text, text, text,
+-- bytea, uuid, timestamptz) (third argument the reason) with the one taking the
+-- answers as jsonb. The numbering_pattern migration, written before action_forms
+-- and sorting after it, then ran `create or replace` on the old signature, which
+-- created it again as a second function: security definer, executable by PUBLIC
+-- (the default grant), and missing every later rule (Form Sections, Revisions,
+-- numbering after the answer-speed migration). The api calls only the jsonb one.
+-- `if exists`, so a separate fix for the same function can't make this fail.
+drop function if exists app.take_transition(uuid, text, text, text, bytea, uuid, timestamptz);
