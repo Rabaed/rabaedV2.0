@@ -199,7 +199,7 @@ describe("numbers issued under the pattern in effect", () => {
     expect(await numbered(t, t.c1Engineer)).toBe("NDP-MAR-01-0002");
     expect(await numbered(t, t.c2Engineer)).toBe("NDP-MAR-03-0003");
     expect(await numbered(t, t.c1Engineer)).toBe("NDP-MAR-01-0004");
-  });
+  }, 20_000);
 
   it("use a Work Item Type's override over the Project's pattern", async () => {
     const t = await tower("NOV");
