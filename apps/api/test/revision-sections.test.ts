@@ -179,6 +179,13 @@ async function closedAtCodeC(model: string): Promise<string> {
   return id;
 }
 
+/** The stored answers, their "as arrived" copy and field times: never granted to the app role, so read as the migrator. */
+const rowOf = (id: string) =>
+  sql<{ data: unknown; data_as_arrived: unknown; field_times: object }>`
+    select data, data_as_arrived, field_times from work_item where id = ${id}::uuid`
+    .execute(migrator)
+    .then((r) => r.rows[0]!);
+
 const newDraft = async (title: string) =>
   (await ok(engineer.caller.post(`/v1/projects/${projectId}/work-items`, { type: TYPE, title, answers: { ...builtIns(), model: "to be replaced" } }), 201)).json()
     .id as string;
@@ -236,18 +243,14 @@ describe("C1 creates a Revision of the item that got Code C (scenario 49)", () =
   it("keeps field times and the 'as arrived' copy to the answers it has", async () => {
     const times = (await detail(engineer, revision)).fieldTimes;
     expect(Object.keys(times).sort()).toEqual(["location", "model", "trade"]);
-    const row = await migrator
-      .selectFrom("work_item")
-      .select(["data", "data_as_arrived", "field_times"])
-      .where("id", "=", revision)
-      .executeTakeFirstOrThrow();
+    const row = await rowOf(revision);
     expect(row.data_as_arrived).toBeNull();
     expect(row.data).toEqual({ model: "FD-90" });
     expect(Object.keys(row.field_times as object).sort()).toEqual(["location", "model", "trade"]);
   });
 
   it("leaves the closed item as it was", async () => {
-    const row = await migrator.selectFrom("work_item").select(["data", "data_as_arrived"]).where("id", "=", closed).executeTakeFirstOrThrow();
+    const row = await rowOf(closed);
     expect(row.data_as_arrived).toBeNull();
     expect(row.data).toMatchObject({ sample_checked: false, verification_note: "Sample does not match" });
   });
