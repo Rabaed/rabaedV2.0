@@ -8,10 +8,10 @@
 // one takes its Rev number again. Until it is Submitted, nobody outside C1 sees
 // anything of it.
 import { randomUUID } from "node:crypto";
-import type { DocumentList, RevisionChain, WorkItemDetail, WorkItemLinks } from "@rabaed/domain";
+import type { DocumentList, LinkedFrom, RevisionChain, WorkItemDetail, WorkItemLinks } from "@rabaed/domain";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { attachDatasheet, createTestApi, expectHidden, type Caller } from "./support/harness.ts";
-import { all, bilingual, ok, projectMember, type Company } from "./support/tower.ts";
+import { all, bilingual, ok, only, projectMember, type Company } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
 afterAll(() => api.close());
@@ -43,6 +43,8 @@ const createRevision = (by: Caller, id: string, idempotencyKey: string = randomU
   by.post(`/v1/work-items/${id}/revisions`, { idempotencyKey });
 const revisionOf = async (id: string) => (await ok(createRevision(engineer, id), 201)).json().id as string;
 const discard = (by: Caller, id: string) => by.post(`/v1/work-items/${id}/discard`);
+const links = async (by: Caller, id: string): Promise<WorkItemLinks> => (await ok(by.get(`/v1/work-items/${id}/links`), 200)).json();
+const linkedFrom = async (by: Caller, id: string): Promise<LinkedFrom> => (await ok(by.get(`/v1/work-items/${id}/linked-from`), 200)).json();
 const counters = async () => (await ok(c1.caller.get(`/v1/projects/${projectId}/numbering/counters`), 200)).json().counters;
 
 /** Sends a Draft (a new MAR or a Revision) for review and Submits it to K1. */
@@ -340,5 +342,115 @@ describe("discarding a Draft Revision (scenario 56)", () => {
     await take(engineer, rev, "send_for_review");
     expect((await discard(engineer, rev)).statusCode).toBe(409);
     expect((await detail(engineer, rev)).actions.discardRevision).toBe(false);
+  });
+});
+
+// RP-311 review, settled with the user: the Link from the revised item to its
+// Revision follows the drop-down. Rev 1 moves to Building B: an Owner
+// Representative covering only Building A sees the original but not Rev 1, one
+// covering only Building B sees Rev 1 but not the original. Neither reads the
+// other item through a Link, Linked from or a link answer, not even by its number.
+describe("the Links of a chain whose Revision moved Location (scenario 58)", () => {
+  let closed = "";
+  let base = "";
+  let rev1 = "";
+  let orA: Caller;
+  let orB: Caller;
+  beforeAll(async () => {
+    const buildingB = (await c1.caller.post(`/v1/projects/${projectId}/locations`, { code: "BB", name: bilingual("Building B"), parentId: null }))
+      .json().id as string;
+    const representative = async (location: string) => {
+      const company = await api.authorizedPerson();
+      const participantId = await api.addParticipant(c1.caller, projectId, company.company, "owner_representative");
+      await ok(c1.caller.request("PUT", `/v1/participants/${participantId}/visibility`, { trade: all, location: only(location) }));
+      return projectMember(api, company, participantId, ["engineer"]);
+    };
+    orA = await representative(buildingA);
+    orB = await representative(buildingB);
+    closed = await closedAtCodeC("Busbar trunking");
+    base = (await detail(engineer, closed)).documentNumber!;
+    rev1 = await revisionOf(closed);
+    // Rev 1 moves to Building B, and its link question names the item it revises.
+    await saveOver(engineer, rev1, { location: buildingB, related_submittals: [closed] });
+    await submit(rev1);
+  });
+
+  it("gives whoever sees both the Link, Linked from and the link answer", async () => {
+    for (const who of [engineer, k1Manager]) {
+      expect((await links(who, closed)).links).toEqual([expect.objectContaining({ kind: "related", workItemId: rev1 })]);
+      expect((await linkedFrom(who, closed)).items).toEqual([expect.objectContaining({ workItemId: rev1 })]);
+      expect((await detail(who, rev1)).answers).toMatchObject({ related_submittals: [closed] });
+    }
+  });
+
+  it("never shows Rev 1 to a reader who sees only the original", async () => {
+    await expectHidden(orA.get(`/v1/work-items/${rev1}`));
+    expect((await ok(orA.get(`/v1/work-items/${closed}/revisions`), 200)).json()).toEqual({
+      revisions: [{ id: closed, documentNumber: base, revisionNo: 0 }],
+    });
+    expect((await links(orA, closed)).links).toEqual([]);
+    expect((await linkedFrom(orA, closed)).items).toEqual([]);
+    const body = (await orA.get(`/v1/work-items/${closed}/links`)).body + (await orA.get(`/v1/work-items/${closed}/linked-from`)).body;
+    expect(body).not.toContain(`${base} Rev 1`);
+  });
+
+  it("never shows the original to a reader who sees only Rev 1", async () => {
+    await expectHidden(orB.get(`/v1/work-items/${closed}`));
+    expect((await ok(orB.get(`/v1/work-items/${rev1}/revisions`), 200)).json()).toEqual({
+      revisions: [{ id: rev1, documentNumber: `${base} Rev 1`, revisionNo: 1 }],
+    });
+    expect((await linkedFrom(orB, rev1)).items).toEqual([]);
+    expect((await links(orB, rev1)).links).toEqual([]);
+    const d = await detail(orB, rev1);
+    expect(d.answers).toMatchObject({ related_submittals: [] });
+    expect(JSON.stringify(d)).not.toContain(`"${base}"`);
+  });
+
+  it("keeps the original in Rev 1's link answer for whoever sees it", async () => {
+    expect((await detail(engineer, rev1)).answers).toMatchObject({ related_submittals: [closed] });
+  });
+});
+
+// RP-311 review: a discarded Revision, its copied Documents and its link answers
+// reach nobody through a Link read (scenario 56).
+describe("the Links of a discarded Revision", () => {
+  let target = "";
+  let closed = "";
+  let discarded = "";
+  beforeAll(async () => {
+    target = await closedAtCodeC("Earthing");
+    const res = await ok(
+      engineer.post(`/v1/projects/${projectId}/work-items`, {
+        type: "MAR",
+        title: "Earthing pits",
+        answers: { ...complete, trade: electrical, location: buildingA, related_submittals: [target] },
+      }),
+      201,
+    );
+    closed = res.json().id as string;
+    await attachDatasheet(engineer, closed);
+    await submit(closed);
+    await codeC(closed);
+    discarded = await revisionOf(closed);
+    expect((await links(engineer, discarded)).links).toEqual([expect.objectContaining({ kind: "relies_on", workItemId: target })]);
+    expect((await ok(engineer.get(`/v1/work-items/${discarded}/documents`), 200)).json().documents).toHaveLength(1);
+    await ok(discard(engineer, discarded));
+  });
+
+  it("is left out of the Linked from of the item its answers named, and of the revised item's Links", async () => {
+    for (const who of [engineer, pm, k1Manager, orEngineer]) {
+      const from = (await linkedFrom(who, target)).items;
+      expect(from.map((i) => i.workItemId)).toEqual([closed]);
+      expect(JSON.stringify(from)).not.toContain(discarded);
+      expect((await links(who, closed)).links.map((l) => l.workItemId)).toEqual([target]);
+    }
+  });
+
+  it("answers its Links, Linked from and Documents with a 404 naming nothing", async () => {
+    for (const who of [engineer, k1Manager]) {
+      await expectHidden(who.get(`/v1/work-items/${discarded}/links`));
+      await expectHidden(who.get(`/v1/work-items/${discarded}/linked-from`));
+      await expectHidden(who.get(`/v1/work-items/${discarded}/documents`));
+    }
   });
 });

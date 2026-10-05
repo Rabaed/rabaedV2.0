@@ -25,10 +25,13 @@ type Company = { id: string; cr: string; ap: string; member: string };
 let c1: Company; // Contractor: raises the item and its Revision.
 let k1: Company; // Consultant: issues Code C.
 let ow: Company; // Owner (oversight).
+let orA: Company; // Owner Representative covering Building A only.
+let orB: Company; // Owner Representative covering Building B only.
 let c1Pm = "";
 let projectId = "";
 let electrical = "";
 let buildingA = "";
+let buildingB = "";
 let closed = "";
 let revision = "";
 
@@ -147,6 +150,8 @@ beforeAll(async () => {
   c1 = await company(engineer, "C1");
   k1 = await company(engineer, "K1");
   ow = await company(engineer, "OW");
+  orA = await company(engineer, "ORA");
+  orB = await company(engineer, "ORB");
   c1Pm = await member(c1.id, "pm");
 
   const [created] = await call<{ project_id: string }>(
@@ -158,6 +163,8 @@ beforeAll(async () => {
     c1: (await migrator.query("select id from participant where project_id = $1", [projectId])).rows[0].id as string,
     k1: await joinProject(app, projectId, { adminId: c1.ap, crNumber: k1.cr, role: "consultant" }, k1.ap),
     ow: await joinProject(app, projectId, { adminId: c1.ap, crNumber: ow.cr, role: "owner" }, ow.ap),
+    orA: await joinProject(app, projectId, { adminId: c1.ap, crNumber: orA.cr, role: "owner_representative" }, orA.ap),
+    orB: await joinProject(app, projectId, { adminId: c1.ap, crNumber: orB.cr, role: "owner_representative" }, orB.ap),
   };
   const value = async (kind: string, code: string) =>
     (
@@ -168,15 +175,26 @@ beforeAll(async () => {
     )[0]!.value_id;
   electrical = await value("trade", "EL");
   buildingA = await value("location", "BA");
+  buildingB = await value("location", "BB");
   const people: [Company, string, string, string[]][] = [
     [c1, participant.c1, c1.member, ["engineer"]],
     [c1, participant.c1, c1Pm, ["project_manager"]],
     [k1, participant.k1, k1.member, ["engineer"]],
     [ow, participant.ow, ow.member, ["representative"]],
+    [orA, participant.orA, orA.member, ["engineer"]],
+    [orB, participant.orB, orB.member, ["engineer"]],
   ];
-  for (const p of Object.values(participant)) {
+  // Each Owner Representative covers one Building only.
+  const covers: Record<string, string> = { orA: buildingA, orB: buildingB };
+  for (const [key, p] of Object.entries(participant)) {
     for (const kind of ["trade", "location"]) {
-      expect(await outcome(c1.ap, sql`select app.set_participant_visibility(${p}::uuid, ${kind}, true, '{}'::uuid[], now()) as outcome`)).toBe("set");
+      const only = kind === "location" ? covers[key] : undefined;
+      expect(
+        await outcome(
+          c1.ap,
+          sql`select app.set_participant_visibility(${p}::uuid, ${kind}, ${only === undefined}, ${only === undefined ? [] : [only]}::uuid[], now()) as outcome`,
+        ),
+      ).toBe("set");
     }
   }
   for (const [co, p, m, positions] of people) {
@@ -273,6 +291,65 @@ describe("the chain, as the Revision drop-down reads it (scenario 51)", () => {
       expect(await chain(other, revision)).toEqual([]);
       expect(await chain(other, randomUUID())).toEqual([]);
     }
+  });
+});
+
+// The Link the engine adds from the revised item to its Revision at the Revision's
+// first Submit (RP-316) follows the drop-down: a reader who sees one item of the
+// chain but not another never reads the other through a Link or Linked from, not
+// even by its number and Subject.
+describe("the Links between the items of a chain, for a reader who sees only some of them (scenario 58)", () => {
+  let original = "";
+  let moved = ""; // Rev 1, moved to Building B.
+  const links = (as: string, id: string) =>
+    call<{ kind: string; document_number: string | null }>(as, sql`select kind, document_number from app.work_item_links(${id}::uuid)`);
+  const linkedFrom = (as: string, id: string) =>
+    call<{ document_number: string }>(as, sql`select document_number from app.work_item_linked_from(${id}::uuid)`);
+
+  beforeAll(async () => {
+    const [draft] = await call<{ outcome: string; work_item_id: string }>(
+      c1.member,
+      sql`select outcome, work_item_id from app.create_work_item(
+        ${projectId}::uuid, ${TYPE}, 'Smoke dampers', app.latest_form_version(${TYPE}), '{"model": "SD-1"}'::jsonb,
+        ${electrical}::uuid, ${buildingA}::uuid, now())`,
+    );
+    original = draft!.work_item_id;
+    expect(await take(c1.member, original, "send_for_review")).toBe("applied");
+    expect(await claim(c1Pm, original)).toBe("claimed");
+    expect(await take(c1Pm, original, "submit")).toBe("applied");
+    expect(await claim(k1.member, original)).toBe("claimed");
+    expect(await take(k1.member, original, "revise_c")).toBe("applied");
+    moved = (await createRevision(c1.member, original)).work_item_id!;
+    expect(
+      await outcome(
+        c1.member,
+        sql`select app.save_work_item_answers(${moved}::uuid, '{"model": "SD-2"}'::jsonb, ${electrical}::uuid, ${buildingB}::uuid, '{}'::uuid[], now()) as outcome`,
+      ),
+    ).toBe("saved");
+    expect(await take(c1.member, moved, "send_for_review")).toBe("applied");
+    expect(await claim(c1Pm, moved)).toBe("claimed");
+    expect(await take(c1Pm, moved, "submit")).toBe("applied");
+  });
+
+  it("gives a reader of both the Link to the Revision, and its Linked from", async () => {
+    for (const who of [c1.member, k1.member, ow.member]) {
+      expect((await links(who, original)).map((l) => l.kind)).toEqual(["related"]);
+      expect(await linkedFrom(who, moved)).toHaveLength(1);
+    }
+  });
+
+  it("leaves the Revision out of the original's Links for a reader who sees only the original", async () => {
+    expect(await call(orA.member, sql`select id from work_item where id = ${original}`)).toEqual([{ id: original }]);
+    expect(await call(orA.member, sql`select id from work_item where id = ${moved}`)).toEqual([]);
+    expect(await links(orA.member, original)).toEqual([]);
+    expect((await chain(orA.member, original)).map((r) => r.work_item_id)).toEqual([original]);
+  });
+
+  it("leaves the original out of the Revision's Linked from for a reader who sees only the Revision", async () => {
+    expect(await call(orB.member, sql`select id from work_item where id = ${moved}`)).toEqual([{ id: moved }]);
+    expect(await call(orB.member, sql`select id from work_item where id = ${original}`)).toEqual([]);
+    expect(await linkedFrom(orB.member, moved)).toEqual([]);
+    expect((await chain(orB.member, moved)).map((r) => r.work_item_id)).toEqual([moved]);
   });
 });
 
