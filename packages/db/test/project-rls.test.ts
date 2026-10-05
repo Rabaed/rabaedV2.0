@@ -137,7 +137,7 @@ async function fillProject(projectId: string, creator: string) {
   );
   // Numbers the item, keeps the idempotency key and queues a notification to the Step Pool.
   await expectOutcome(
-    sql`select app.take_transition(${item}::uuid, 'send_for_review', '', '', app.answers_sha256(${item}::uuid), ${randomUUID()}::uuid, now()) as outcome`,
+    sql`select app.take_transition(${item}::uuid, 'send_for_review', '{}', '', app.answers_sha256(${item}::uuid), ${randomUUID()}::uuid, now()) as outcome`,
     "applied",
   );
 

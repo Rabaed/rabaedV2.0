@@ -148,9 +148,10 @@ describe("answers after Draft", () => {
       await ok(take(pm, id, "submit"));
     });
 
-    it("refuses every save, the Contractor's and the Consultant's alike, and changes nothing", async () => {
+    it("refuses every save of the Contractor's sections, the Contractor's and the Consultant's alike, and changes nothing", async () => {
       for (const who of [pm, engineer, signer]) {
-        expect((await detail(who, id)).actions.saveAnswers).toBe(false);
+        // The Consultant may save, but only its own section (MAR Form Version 4, RP-306).
+        expect((await detail(who, id)).actions.saveAnswers).toBe(who === signer);
         const res = await save(who, id, { ...complete, description: "Changed after Submit" });
         expect({ status: res.statusCode, body: res.json() }).toEqual({ status: 409, body: { error: "not_editable" } });
       }

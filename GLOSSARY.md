@@ -166,7 +166,7 @@ _Avoid_: Punch item, defect
 
 **Comment**:
 A Work Item in the Snag List created from a reviewer's comment on a Code B approval, linked to the reviewed Work Item.
-_Avoid_: Remark, note
+_Avoid_: Remark (the text written with a Code is Remarks), note
 
 **Cancelled**:
 The outcome of a Work Item stopped before it finished, such as when its Participant is withdrawn from the Project. It cannot be reopened.
@@ -271,6 +271,10 @@ _Avoid_: Draft code, proposed status
 The Review Code given at the Workflow's final review step, which is the one that counts and appears on the Documental Record. Which step is final depends on the Workflow (e.g. the Consultant manager, or an Owner Representative after them).
 _Avoid_: Final status
 
+**Remarks**:
+The shared text the Consultant writes with a Review Code, a field of the Code Transitions' Action Form: optional with A, required with C. Unlike an Internal Note, everyone who can see the Work Item reads it, in the item's history.
+_Avoid_: Comments (reserved for the Snag List), note
+
 **Revision**:
 A resubmission of a Work Item that ended with Code C: a new Work Item, started as a Draft from the latest one, that keeps the same number with a revision suffix (MS-003 → MS-003 Rev 1) and is linked to the one before it. The first submission has no suffix. The earlier one stays closed at Code C, and anyone who sees a Revision can switch to the earlier ones they may see.
 _Avoid_: Version (reserved for Forms and Workflows), resubmittal
@@ -305,7 +309,7 @@ _Avoid_: Private log
 
 **Internal Note**:
 Free text a Member writes in the Action Form when taking a Transition, recorded with it in Internal Communication. It is never posted on its own, and it stays inside the writer's Participant even when the Transition goes to another Participant.
-_Avoid_: Note, remark, comment
+_Avoid_: Note, remark (shared text written with a Code is Remarks), comment
 
 **Activity Feed**:
 The Project-level log of what happened across the Project, filtered by each viewer's Visibility and Internal Communication rules.

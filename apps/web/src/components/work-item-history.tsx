@@ -99,6 +99,11 @@ export async function WorkItemHistory({
               </p>
             )}
             {e.reason && <p className="whitespace-pre-wrap">{e.reason}</p>}
+            {e.remarks && (
+              <p className="whitespace-pre-wrap" data-testid="history-remarks">
+                <span className="font-medium">{t("remarks")}:</span> {e.remarks}
+              </p>
+            )}
             {e.internalNote && <p className="whitespace-pre-wrap">{e.internalNote}</p>}
             {e.changes && e.changes.length > 0 && (
               <ul className="space-y-0.5 text-sm" data-testid="answer-changes">

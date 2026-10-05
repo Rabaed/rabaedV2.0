@@ -36,7 +36,8 @@ const answers = {
   transition_not_available: () => new HttpError(409, "transition_not_available"),
   no_step_pool: () => new HttpError(409, "no_step_pool"),
   next_step_unavailable: () => new HttpError(409, "next_step_unavailable"),
-  reason_required: () => new HttpError(422, "reason_required"),
+  // A Transition's Action Form answers (RP-300): the body lists each field's error.
+  invalid_action_form: () => new HttpError(422, "invalid_action_form"),
   idempotency_key_reused: () => new HttpError(422, "idempotency_key_reused"),
   // Form answers (RP-262): the body lists each field's error (answersRefusal).
   invalid_answers: () => new HttpError(422, "invalid_answers"),

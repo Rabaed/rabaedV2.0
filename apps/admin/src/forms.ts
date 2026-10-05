@@ -1,5 +1,5 @@
 import type { Db } from "@rabaed/db";
-import { formSchema, publishProblems, type SchemaProblem } from "@rabaed/domain";
+import { formSchema, publishProblems, type SchemaProblem, type WorkflowStepHolder } from "@rabaed/domain";
 import { sql } from "kysely";
 
 export type PublishFormResult =
@@ -42,7 +42,10 @@ export async function publishFormVersion(migratorDb: Db, formDefinitionId: strin
       .execute();
     const earlier = versions.filter((v) => v.status === "published").map((v) => formSchema.parse(v.schema));
     const lists = await trx.selectFrom("option_list").select("id").execute();
-    const problems = publishProblems(parsed.data, earlier, { optionListIds: new Set(lists.map((l) => l.id)) });
+    const problems = publishProblems(parsed.data, earlier, {
+      optionListIds: new Set(lists.map((l) => l.id)),
+      workflows: await typeWorkflows(trx, formDefinitionId),
+    });
     if (problems.length > 0) return { ok: false, reason: "schema_problems", problems };
 
     const versionNo = Math.max(0, ...versions.map((v) => v.version_no)) + 1;
@@ -59,6 +62,28 @@ export async function publishFormVersion(migratorDb: Db, formDefinitionId: strin
       .executeTakeFirstOrThrow();
     return { ok: true, id: published.id, versionNo };
   });
+}
+
+/**
+ * The Workflows of the Work Item Types that use the Form, each as the Steps of
+ * its latest published Version (the one new items start on), which `editable_at`
+ * is checked against (form-engine.md §4).
+ */
+async function typeWorkflows(db: Db, formDefinitionId: string): Promise<WorkflowStepHolder[][]> {
+  const { rows } = await sql<{ type_id: string; key: string; role: string | null; draft: boolean }>`
+    select t.id as type_id, s.key, s.actor_rule ->> 'base_role' as role, app.is_draft_step(s.id) as draft
+    from work_item_type t
+    join workflow_version v on v.workflow_definition_id = t.workflow_definition_id and v.status = 'published'
+      and v.version_no = (
+        select max(o.version_no) from workflow_version o where o.workflow_definition_id = t.workflow_definition_id and o.status = 'published'
+      )
+    join workflow_step s on s.workflow_version_id = v.id
+    where t.form_definition_id = ${formDefinitionId}
+    order by t.id, s.key
+  `.execute(db);
+  const byType = new Map<string, WorkflowStepHolder[]>();
+  for (const { type_id, key, role, draft } of rows) byType.set(type_id, [...(byType.get(type_id) ?? []), { key, role, draft }]);
+  return [...byType.values()];
 }
 
 /** The Form of the Rabaed Default Work Item Type `typeCode`, if it has one. */

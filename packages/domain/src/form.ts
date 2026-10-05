@@ -403,7 +403,18 @@ export type ChecklistAnswers = Record<string, { answer?: string; comment?: strin
 /** One row of a table: its cells by column key. A cell is text, a number, Yes/No or an option value. */
 export type FormRow = Record<string, string | number | boolean>;
 
-export const formSection = z.object({ key: formKey, title: bilingualText, visible_if: visibleIf, fields: z.array(formField) });
+export const formSection = z.object({
+  key: formKey,
+  title: bilingualText,
+  /**
+   * The Workflow Steps, by key, where its fields can be changed, all held by one
+   * Participant role (form-engine.md §4). Left out: the raiser's Draft and
+   * internal Steps (sectionSteps).
+   */
+  editable_at: z.array(formKey).min(1).optional(),
+  visible_if: visibleIf,
+  fields: z.array(formField),
+});
 export type FormSection = z.infer<typeof formSection>;
 
 /** A Form Version's schema: its sections and their fields, in order. */
@@ -413,6 +424,15 @@ export type FormSchema = z.infer<typeof formSchema>;
 /** A published Form Version, which never changes (ADR 0006). */
 export const formVersion = z.object({ id: z.uuid(), versionNo: z.number().int().positive(), schema: formSchema });
 export type FormVersion = z.infer<typeof formVersion>;
+
+/** A Form Version as the viewer fills it in: which Form Sections they may change now, and who fills the others (form-engine.md §4). */
+export const formToFill = formVersion.extend({
+  /** The sections the viewer may change now, in Form order: none when they may not save at all. */
+  editableSections: z.array(formKey),
+  /** Each section filled in by a Participant other than the raiser, by that Participant's Project Role. */
+  filledBy: z.record(z.string(), bilingualText),
+});
+export type FormToFill = z.infer<typeof formToFill>;
 
 /** A Work Item's answers, by field key, as the API carries them. The validator checks them. */
 export const formAnswers = z.record(z.string(), z.unknown());

@@ -86,7 +86,7 @@ async function createDraft(title: string, by: Member = engineer): Promise<string
 }
 
 const take = (by: Member, id: string, transition: string, reason = "") =>
-  ok(by.caller.post(`/v1/work-items/${id}/transitions`, { transition, reason, idempotencyKey: randomUUID() }));
+  ok(by.caller.post(`/v1/work-items/${id}/transitions`, { transition, answers: reason ? { reason } : {}, idempotencyKey: randomUUID() }));
 
 async function notifications(by: Member): Promise<NotificationList> {
   const res = await by.caller.get("/v1/notifications");
@@ -232,7 +232,7 @@ describe("a rolled-back Transition", () => {
     await expect(
       withMember(worker, engineer.id, async (trx) => {
         const { rows } = await sql<{ outcome: string }>`
-          select app.take_transition(${id}::uuid, 'send_for_review', '', '', app.answers_sha256(${id}::uuid), ${randomUUID()}::uuid, now()) as outcome
+          select app.take_transition(${id}::uuid, 'send_for_review', '{}', '', app.answers_sha256(${id}::uuid), ${randomUUID()}::uuid, now()) as outcome
         `.execute(trx);
         expect(rows[0]!.outcome).toBe("applied");
         throw new Error("roll back");

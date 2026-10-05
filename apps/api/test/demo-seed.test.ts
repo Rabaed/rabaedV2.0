@@ -6,10 +6,10 @@
 import { randomUUID } from "node:crypto";
 import { createDb, processOutbox } from "@rabaed/db";
 import { testDatabaseUrls } from "@rabaed/db/test-support";
-import type { DocumentList, FormVersion, LinkedFrom, WorkItemDetail, WorkItemLinks } from "@rabaed/domain";
+import type { DocumentList, FormToFill, FormVersion, LinkedFrom, WorkItemDetail, WorkItemHistory, WorkItemLinks } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { DEMO_ENGINEER_EMAIL } from "../src/demo/seed.ts";
+import { CODE_C_TITLE, DEMO_ENGINEER_EMAIL } from "../src/demo/seed.ts";
 import { createTestApi, expectHidden, DEFAULT_PASSWORD, uploadDocument, type Caller } from "./support/harness.ts";
 
 const api = await createTestApi({ files: true });
@@ -89,10 +89,10 @@ describe("the demo seed", () => {
   });
 });
 
-describe("the MAR Form Version 3, as the demo uses it", () => {
-  it("lists every field of Version 3, labelled in English and Arabic", async () => {
+describe("the MAR Form Version 4, as the demo uses it", () => {
+  it("lists every field of Version 4, labelled in English and Arabic", async () => {
     const form: FormVersion = (await hafiz.get(`/v1/projects/${projectId}/work-item-types/MAR/form`)).json();
-    expect(form.versionNo).toBe(3);
+    expect(form.versionNo).toBe(4);
     const fields = form.schema.sections.flatMap((s) => s.fields).filter((f) => "label" in f);
     expect(fields.map((f) => [f.key, f.type])).toEqual([
       ["manufacturer", "text"],
@@ -104,6 +104,9 @@ describe("the MAR Form Version 3, as the demo uses it", () => {
       ["test_certificate", "attachments"],
       ["sample_photo", "photos"],
       ["related_submittals", "work_item_ref"],
+      ["sample_checked", "yes_no"],
+      ["matches_specification", "yes_no"],
+      ["verification_note", "textarea"],
       ["trade", "trade"],
       ["location", "location"],
       ["scopes", "scopes"],
@@ -144,7 +147,7 @@ describe("the MAR Form Version 3, as the demo uses it", () => {
 });
 
 // Links (RP-294, spec RP-289): the seed leaves an approved MAR in Tower 1, and a
-// MAR on Version 3 in Tower 2 that links it twice: under Related submittals and
+// MAR on Version 4 in Tower 2 that links it twice: under Related submittals and
 // as a free Link. Omar covers Tower 2 only, so he reads the approved MAR as its
 // number and Subject, and nothing more (E1).
 const APPROVED_TITLE = "Exit signage – Tower 1";
@@ -183,9 +186,9 @@ describe("the seeded Links", () => {
     });
   });
 
-  it("include a MAR on Version 3, sent to the Consultant, linking it under Related submittals and as a free Link", async () => {
+  it("include a MAR on Version 4, sent to the Consultant, linking it under Related submittals and as a free Link", async () => {
     const form: FormVersion = (await hafiz.get(`/v1/work-items/${linking}/form`)).json();
-    expect(form.versionNo).toBe(3);
+    expect(form.versionNo).toBe(4);
     const item: WorkItemDetail = (await hafiz.get(`/v1/work-items/${linking}`)).json();
     expect(item).toMatchObject({ stage: { key: "pending_approval" }, answers: { related_submittals: [approved] } });
     const { links: seen } = await links(hafiz, linking);
@@ -236,9 +239,14 @@ describe("the README walkthrough", () => {
     expect(list.items.map((i: { id: string }) => i.id)).not.toContain(mar);
     if (countsZero) expect(list.stages.every((s: { count: number }) => s.count === 0)).toBe(true);
   };
-  const take = async (who: Caller, transition: string, reason = "") => {
-    const r = await who.post(`/v1/work-items/${mar}/transitions`, { transition, reason, idempotencyKey: randomUUID() });
+  const take = async (who: Caller, transition: string, reason = "", extra: Record<string, string> = {}) => {
+    const r = await who.post(`/v1/work-items/${mar}/transitions`, { transition, answers: { ...(reason ? { reason } : {}), ...extra }, idempotencyKey: randomUUID() });
     expect(r.statusCode, r.body).toBe(204);
+  };
+  /** The Consultant's verification, saved over the answers `who` reads, as the web form does. */
+  const verify = async (who: Caller, verification: Record<string, unknown>) => {
+    const saved = await who.request("PUT", `/v1/work-items/${mar}/answers`, { answers: { ...(await detail(who)).answers, ...verification } });
+    expect(saved.statusCode, saved.body).toBe(204);
   };
   const claim = async (who: Caller) => expect((await who.post(`/v1/work-items/${mar}/claim`)).statusCode).toBe(204);
   // The Form of a complete MAR; a function, as the Trade and Location ids come from beforeAll.
@@ -295,7 +303,11 @@ describe("the README walkthrough", () => {
 
   it("3. Sent for Review, it reaches Ali, with a notification; still nobody outside TMC", async () => {
     await take(hafiz, "send_for_review");
-    await processOutbox(worker);
+    // Until nothing is due: files run before this one can leave more than one run's 100 rows waiting, older than this one.
+    for (;;) {
+      const run = await processOutbox(worker);
+      if (run.processed + run.failed + run.dead === 0) break;
+    }
     const notifications = (await ali.get("/v1/notifications")).json().notifications;
     expect(notifications.map((n: { workItemId: string }) => n.workItemId)).toContain(mar);
     expect((await detail(ali)).documentNumber).toMatch(/^TWR-MAR-01-\d{4}$/);
@@ -335,6 +347,7 @@ describe("the README walkthrough", () => {
 
   it("8. Mohammed claims it and issues Code A; TMC and Al Waha see the Code and its signer", async () => {
     await claim(mohammed);
+    await verify(mohammed, { sample_checked: true, matches_specification: true });
     await take(mohammed, "approve_a");
     expect(await detail(hafiz)).toMatchObject({ stage: { key: "approved" }, outcome: "A" });
     for (const who of [hafiz, faisal]) {
@@ -351,11 +364,12 @@ describe("the README walkthrough", () => {
     await claim(ali);
     await take(ali, "submit");
     await claim(mohammed);
-    await take(mohammed, "revise_c");
+    await verify(mohammed, { sample_checked: true, matches_specification: false, verification_note: "Wrong datasheet revision" });
+    await take(mohammed, "revise_c", "", { remarks: "Submit the 2020 revision of the datasheet" });
     expect(await detail(hafiz)).toMatchObject({ stage: { key: "revise_resubmit" }, outcome: "C" });
   });
 
-  it("10. Hafiz opens the seeded MAR on Version 3: its Links open the approved MAR, which lists it under Linked from", async () => {
+  it("10. Hafiz opens the seeded MAR on Version 4: its Links open the approved MAR, which lists it under Linked from", async () => {
     const linking = (await titled(hafiz, LINKING_TITLE))!;
     const approved = (await titled(hafiz, APPROVED_TITLE))!;
     const seen = await links(hafiz, linking);
@@ -394,6 +408,80 @@ describe("the README walkthrough", () => {
     expect((await linkedFrom(hafiz, linking)).items).toEqual([{ documentNumber, subject, workItemId: mar }]);
     expect((await linkedFrom(omar, linking)).items).toEqual([{ documentNumber, subject, workItemId: null }]);
     await expectHidden(omar.get(`/v1/work-items/${mar}`));
+  });
+
+  it("13. The Consultant verification: empty and marked for the Contractor, filled by the Consultant while the Contractor still sees it empty, then Code C with Remarks", async () => {
+    mar = await raise("Lighting control – Tower 2");
+    await attachDatasheet(hafiz, "lighting-control-datasheet.pdf", "%PDF-1.4 Lighting control datasheet (demo)");
+    // The raiser's Draft on Version 4 (scenario 46): the section is read-only and marked.
+    const draft: FormToFill = (await hafiz.get(`/v1/work-items/${mar}/form`)).json();
+    expect(draft.versionNo).toBe(4);
+    expect(draft.editableSections).not.toContain("consultant_verification");
+    expect(draft.filledBy.consultant_verification).toMatchObject({ en: "Consultant", ar: expect.any(String) });
+    const refused = await hafiz.request("PUT", `/v1/work-items/${mar}/answers`, { answers: { ...filled(), sample_checked: true } });
+    expect(refused.statusCode, refused.body).toBe(409);
+    await take(hafiz, "send_for_review");
+    await claim(ali);
+    // Leaving Draft and the Contractor's review never needed the Consultant's answers.
+    await take(ali, "submit");
+    for (const who of [hafiz, ali, faisal]) {
+      const form: FormToFill = (await who.get(`/v1/work-items/${mar}/form`)).json();
+      expect(form.filledBy.consultant_verification, "marked").toBeDefined();
+      expect(form.editableSections).toEqual([]);
+    }
+    // Ahmed fills it and saves (Sample checked, and Matches specification: No).
+    const consultantForm: FormToFill = (await ahmed.get(`/v1/work-items/${mar}/form`)).json();
+    expect(consultantForm.editableSections).toEqual(["consultant_verification"]);
+    await verify(ahmed, { sample_checked: true, matches_specification: false });
+    expect(await detail(ahmed)).toMatchObject({ answers: { sample_checked: true, matches_specification: false } });
+    // The Contractor and Al Waha still read it empty, and see no change.
+    for (const who of [hafiz, ali, faisal]) {
+      const seen = (await detail(who)).answers;
+      expect(seen).not.toHaveProperty("sample_checked");
+      expect(seen).not.toHaveProperty("matches_specification");
+      const history = (await who.get(`/v1/work-items/${mar}/history`)).json() as WorkItemHistory;
+      expect(history.events.filter((e) => e.type === "answers_changed")).toEqual([]);
+    }
+    // The Code is refused while the verification is incomplete (the note is required for No) ...
+    await claim(mohammed);
+    const incomplete = await mohammed.post(`/v1/work-items/${mar}/transitions`, {
+      transition: "revise_c",
+      answers: { remarks: "Fix the specification mismatch" },
+      idempotencyKey: randomUUID(),
+    });
+    expect(incomplete.statusCode, incomplete.body).toBe(422);
+    expect(incomplete.json()).toMatchObject({ error: "form_incomplete", fields: [{ key: "verification_note", code: "required" }] });
+    // ... and, once complete, Code C needs its Remarks.
+    await verify(mohammed, { verification_note: "Lamp efficacy is below the specified 110 lm/W" });
+    const noRemarks = await mohammed.post(`/v1/work-items/${mar}/transitions`, { transition: "revise_c", answers: {}, idempotencyKey: randomUUID() });
+    expect(noRemarks.statusCode, noRemarks.body).toBe(422);
+    await take(mohammed, "revise_c", "", { remarks: "Replace with 110 lm/W luminaires. / استبدلها بوحدات 110 لومن/واط." });
+    // Both Companies now read the answers and the Remarks (scenario 48).
+    for (const who of [hafiz, faisal]) {
+      expect(await detail(who)).toMatchObject({
+        stage: { key: "revise_resubmit" },
+        outcome: "C",
+        answers: { sample_checked: true, matches_specification: false, verification_note: "Lamp efficacy is below the specified 110 lm/W" },
+      });
+      const history = (await who.get(`/v1/work-items/${mar}/history`)).json() as WorkItemHistory;
+      expect(history.events.at(-1)).toMatchObject({ type: "issue_code", remarks: "Replace with 110 lm/W luminaires. / استبدلها بوحدات 110 لومن/واط." });
+    }
+    await hidden(yousef, { countsZero: true });
+  });
+
+  it("14. The seeded Code C MAR shows both Companies the verification and its Remarks, in English and Arabic", async () => {
+    const id = (await titled(hafiz, CODE_C_TITLE))!;
+    for (const who of [hafiz, ali, faisal, ahmed, mohammed]) {
+      const item: WorkItemDetail = (await who.get(`/v1/work-items/${id}`)).json();
+      expect(item).toMatchObject({
+        stage: { key: "revise_resubmit" },
+        outcome: "C",
+        answers: { sample_checked: true, matches_specification: false, verification_note: expect.stringMatching(/electro-zinc.*[\u0600-\u06FF]/s) },
+      });
+      const history = (await who.get(`/v1/work-items/${id}/history`)).json() as WorkItemHistory;
+      expect(history.events.at(-1)).toMatchObject({ type: "issue_code", remarks: expect.stringMatching(/EN ISO 1461.*[\u0600-\u06FF]/s) });
+    }
+    await expectHidden(yousef.get(`/v1/work-items/${id}`));
   });
 });
 

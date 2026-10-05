@@ -4,11 +4,12 @@ import {
   createdWorkItem,
   createWorkItemRequest,
   formChoices,
-  formVersion,
+  formToFill,
   linkedFrom,
   linkSearchQuery,
   linkSearchResults,
   saveAnswersRequest,
+  savedAnswers,
   takeTransitionRequest,
   workItemTypeCode,
   workItemDetail,
@@ -94,7 +95,7 @@ export const workItemRoutes =
     // The Form to fill for a new item of a Type: its latest published Version.
     app.get(
       "/v1/projects/:projectId/work-item-types/:typeCode/form",
-      { schema: { params: typeFormParams, response: { 200: formVersion } } },
+      { schema: { params: typeFormParams, response: { 200: formToFill } } },
       async (request) => {
         const memberId = ctx.requireMember(request);
         const projectId = idOrNotFound(request.params.projectId);
@@ -107,7 +108,7 @@ export const workItemRoutes =
     // The Form Version an item is pinned to; its answers come with the item.
     app.get(
       "/v1/work-items/:workItemId/form",
-      { schema: { params: workItemParams, response: { 200: formVersion } } },
+      { schema: { params: workItemParams, response: { 200: formToFill } } },
       async (request) => {
         const memberId = ctx.requireMember(request);
         return visibleOrNotFound(getWorkItemForm(ctx.db, memberId, idOrNotFound(request.params.workItemId)));
@@ -137,13 +138,14 @@ export const workItemRoutes =
     // Save draft. A refusal changes nothing.
     app.put(
       "/v1/work-items/:workItemId/answers",
-      { schema: { params: workItemParams, body: saveAnswersRequest } },
+      { schema: { params: workItemParams, body: saveAnswersRequest, response: { 200: savedAnswers, 204: z.null().describe("saved; no `basedOn`, nothing to report") } } },
       async (request, reply) => {
         const memberId = ctx.requireMember(request);
         const id = idOrNotFound(request.params.workItemId);
         const result = await saveAnswers(ctx.db, memberId, id, request.body, ctx.now());
         if (!result.ok) throw refusal(result);
-        return reply.code(204).send();
+        // Without `basedOn` there is nothing to report: as it always was.
+        return result.saved ? reply.code(200).send(result.saved) : reply.code(204).send(null);
       },
     );
 

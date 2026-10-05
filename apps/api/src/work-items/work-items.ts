@@ -1,23 +1,34 @@
 import { withMember, type Database, type Db } from "@rabaed/db";
 import {
+  changedOutside,
+  editableSections,
+  errorsInSections,
   formFields,
+  mergeFieldAnswers,
   formSchema,
+  sectionsFilledBy,
   isHiddenLinkChoice,
   offeredChoices,
+  parseActionForm,
   stepAgeWeeks,
   checklistItemFilesKey,
   validateAnswers,
   type BilingualText,
   type CreateWorkItemRequest,
   type FieldError,
+  type FieldStamps,
   type FormChoices,
   type FormSchema,
   type FormFieldType,
+  type FormToFill,
   type FormVersion,
+  type SectionEditContext,
+  type WorkflowStepHolder,
   type LinkSearchQuery,
   type LinkSearchResults,
   type NamedAnswers,
   type SaveAnswersRequest,
+  type SavedAnswers,
   type ScopeChoice,
   type TakeTransitionRequest,
   type WorkItemActions,
@@ -68,6 +79,7 @@ export type AnswersRefused = { ok: false; reason: "invalid_answers" | "form_inco
 
 const createWorkItemRefusals = [
   "not_found",
+  "not_editable",
   "project_closed",
   "type_not_found",
   "form_version_not_latest",
@@ -192,12 +204,12 @@ type PinnedForm = {
    * from what a Transition checks.
    */
   data: Record<string, unknown>;
-  /** The full answers' hash, as app.take_transition compares it; null unless the answers are open. */
+  /** The answers' hash, as app.take_transition compares it; null unless they may save now. */
   dataSha256: Buffer | null;
-  /** Its answers are open to the raiser: Draft and the raiser's internal Steps (app.answers_open). */
-  answersOpen: boolean;
   /** They may save its answers now (app.can_save_answers). */
   canSave: boolean;
+  /** The Form as they may fill it now: the sections they may change, and who fills the others. */
+  toFill: FormToFill;
 };
 
 /** A visible item's pinned Form Version and its answers; null when the Member can't see the item. */
@@ -207,39 +219,98 @@ async function pinnedForm(trx: Trx, workItemId: string): Promise<PinnedForm | nu
       project_id: string;
       data: Record<string, unknown>;
       data_sha256: Buffer | null;
-      answers_open: boolean;
-      can_save: boolean;
+      work_item_type_id: string;
+      workflow_version_id: string;
+      step_key: string;
     }
   >`
     select v.id, v.version_no, v.schema, w.project_id, app.work_item_answers(w.id) as data,
-      app.answers_sha256(w.id) as data_sha256, app.answers_open(w.id) as answers_open, app.can_save_answers(w.id) as can_save
+      app.answers_sha256(w.id) as data_sha256,
+      w.work_item_type_id, w.workflow_version_id, s.key as step_key
     from work_item w
     join form_version v on v.id = w.form_version_id
+    -- The Step as the Member sees it (V14): the current one whenever they may save,
+    -- since their Participant then holds the item.
+    cross join lateral app.step_as_seen(w.id) seen
+    join workflow_step s on s.id = seen.step_id
     where w.id = ${workItemId}
   `.execute(trx);
   const r = rows[0];
   if (!r) return null;
   const form = toFormVersion(r);
+  // app.answers_sha256 is null exactly when app.can_save_answers is false: one permission check, not two.
+  const canSave = r.data_sha256 !== null;
+  const steps = await workflowSteps(trx, r.work_item_type_id, r.workflow_version_id);
   return {
     form,
     projectId: r.project_id,
     data: answersFromDb(form.schema, r.data),
     dataSha256: r.data_sha256,
-    answersOpen: r.answers_open,
-    canSave: r.can_save,
+    canSave,
+    toFill: formToFillAt(form, steps, { step: r.step_key, canSave }),
   };
+}
+
+/** A Workflow Version's Steps as Form Sections are matched to them, and the name of each base role's Project Role. */
+type WorkflowSteps = { steps: WorkflowStepHolder[]; roleNames: ReadonlyMap<string, BilingualText> };
+
+/** The Steps of the Workflow Version `workflowVersionId` of the Type `typeId`. Definitions, which every Member reads. */
+async function workflowSteps(trx: Trx, typeId: string, workflowVersionId: string): Promise<WorkflowSteps> {
+  const { rows } = await sql<{ key: string; role: string | null; draft: boolean; role_name: BilingualText | null }>`
+    select s.key, s.actor_rule ->> 'base_role' as role, coalesce(st.category = 'draft', false) as draft, r.name as role_name
+    from workflow_step s
+    join work_item_type t on t.id = ${typeId}
+    left join stage st on st.owner_kind = 'rabaed' and st.module_key = t.module_key and st.key = s.stage_key
+    -- Projects use the Rabaed Default Project Roles for now.
+    left join project_role r on r.owner_kind = 'rabaed' and r.base_role = s.actor_rule ->> 'base_role'
+    where s.workflow_version_id = ${workflowVersionId}
+    order by s.key
+  `.execute(trx);
+  return {
+    steps: rows.map(({ key, role, draft }) => ({ key, role, draft })),
+    roleNames: new Map(rows.flatMap((r) => (r.role && r.role_name ? [[r.role, r.role_name] as const] : []))),
+  };
+}
+
+/** `form` as it is filled in at `step`: the sections editable there, and who fills the sections another Participant fills. */
+function formToFillAt(form: FormVersion, { steps, roleNames }: WorkflowSteps, at: SectionEditContext): FormToFill {
+  const filledBy = Object.entries(sectionsFilledBy(form.schema, steps)).flatMap(([key, role]) => {
+    const name = roleNames.get(role);
+    return name ? [[key, name] as const] : [];
+  });
+  return { ...form, editableSections: [...editableSections(form.schema, steps, at)], filledBy: Object.fromEntries(filledBy) };
 }
 
 /**
  * The Form for a new item of the Rabaed Default Type `typeCode` on one of the
- * Member's Projects: the latest published Version. Null when it isn't one of
+ * Member's Projects: the latest published Version, as it is filled in at the
+ * Draft of the latest published Workflow Version. Null when it isn't one of
  * their Projects, or there is no such Type.
  */
-export function getNewWorkItemForm(db: Db, memberId: string, projectId: string, typeCode: string): Promise<FormVersion | null> {
+export function getNewWorkItemForm(db: Db, memberId: string, projectId: string, typeCode: string): Promise<FormToFill | null> {
   return withMember(db, memberId, async (trx) => {
     const onProject = await trx.selectFrom("project").select("id").where("id", "=", projectId).executeTakeFirst();
-    return onProject ? latestForm(trx, typeCode) : null;
+    if (!onProject) return null;
+    const form = await latestForm(trx, typeCode);
+    return form && formToFillAt(form, ...(await draftOf(trx, typeCode)));
   });
+}
+
+/** The Steps of the Workflow a new item of `typeCode` starts on (its latest published Version), and its Draft. */
+async function draftOf(trx: Trx, typeCode: string): Promise<[WorkflowSteps, SectionEditContext]> {
+  const { rows } = await sql<{ type_id: string; workflow_version_id: string }>`
+    select t.id as type_id, v.id as workflow_version_id
+    from work_item_type t
+    join workflow_version v on v.workflow_definition_id = t.workflow_definition_id and v.status = 'published'
+    where t.owner_kind = 'rabaed' and t.code = ${typeCode}
+    order by v.version_no desc limit 1
+  `.execute(trx);
+  const r = rows[0];
+  if (!r) throw new Error(`Work Item Type ${typeCode} has no published Workflow Version`);
+  const workflow = await workflowSteps(trx, r.type_id, r.workflow_version_id);
+  const draft = workflow.steps.find((s) => s.draft);
+  if (!draft) throw new Error(`The Workflow of Work Item Type ${typeCode} has no Draft Step`);
+  return [workflow, { step: draft.key, canSave: true }];
 }
 
 /**
@@ -292,9 +363,12 @@ export function getWorkItemFormChoices(db: Db, memberId: string, workItemId: str
   });
 }
 
-/** The Form Version a visible item is pinned to; null when the Member can't see the item. */
-export function getWorkItemForm(db: Db, memberId: string, workItemId: string): Promise<FormVersion | null> {
-  return withMember(db, memberId, async (trx) => (await pinnedForm(trx, workItemId))?.form ?? null);
+/**
+ * The Form Version a visible item is pinned to, as the Member may fill it in
+ * now; null when they can't see the item.
+ */
+export function getWorkItemForm(db: Db, memberId: string, workItemId: string): Promise<FormToFill | null> {
+  return withMember(db, memberId, async (trx) => (await pinnedForm(trx, workItemId))?.toFill ?? null);
 }
 
 type SummaryRow = {
@@ -373,6 +447,11 @@ export function createWorkItem(
       if (!onProject) return { ok: false, reason: "not_found" };
       const form = await latestForm(trx, input.type);
       if (!form) return { ok: false, reason: "type_not_found" };
+      // Only the Form Sections editable at the Draft take answers (form-engine.md §4).
+      const atDraft = formToFillAt(form, ...(await draftOf(trx, input.type)));
+      if (changedOutside(form.schema, new Set(atDraft.editableSections), {}, input.answers).length > 0) {
+        return { ok: false, reason: "not_editable" };
+      }
       const checked = validateAnswers(form.schema, input.answers, "draft", {
         scopes: await projectScopes(trx, projectId),
         offered: await offeredFor(trx, form.schema, projectId, null),
@@ -401,6 +480,7 @@ export function createWorkItem(
         `.execute(trx);
         checkedOutcome(saved[0]!.outcome, ["saved"]);
       }
+      await recordFieldTimes(trx, work_item_id!, now);
       return { ok: true, id: work_item_id! };
     }),
   );
@@ -505,12 +585,16 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
       order by coalesce(parent.sort, s.sort), coalesce(s.parent_id, s.id), s.depth, s.sort
     `.execute(trx);
     const { named, unnamed } = await namedAnswers(trx, workItemId);
+    const stamps = await fieldStamps(trx, workItemId, false);
+    const { rows: auto } = await sql<{ autosave: boolean }>`select app.answers_autosave(${workItemId}::uuid) as autosave`.execute(trx);
     return {
       ...toSummary(row, now),
       formVersionId: d.form_version_id,
       // Another Company's people, and a Company the viewer may not see, are never identified, not even by an id (V14, V15).
       answers: Object.fromEntries(Object.entries(answers).filter(([key]) => !unnamed.has(key))),
       namedAnswers: named,
+      fieldTimes: fieldTimesFor(stamps, memberId),
+      autosave: auto[0]!.autosave,
       scopes: scopes.map((s) => ({ id: s.id, parentId: s.parent_id, name: s.name })),
       step: { key: d.step_key, name: d.step_name },
       raisedBy: { companyName: d.raised_by },
@@ -521,6 +605,26 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
       actions: { ...(await actions(trx, workItemId)), saveAnswers: d.can_save_answers },
     };
   });
+}
+
+/** An item's per-field times as the acting Member who may save it reads them; locks the item when `lock`. */
+async function fieldStamps(trx: Trx, workItemId: string, lock: boolean): Promise<FieldStamps> {
+  const { rows } = await sql<{ times: FieldStamps | null }>`
+    select app.work_item_field_times(${workItemId}::uuid, ${lock}) as times
+  `.execute(trx);
+  return rows[0]?.times ?? {};
+}
+
+/** The per-field times as `memberId` reads them: when, by whom (their own Company's people only), and whether by them. */
+function fieldTimesFor(stamps: FieldStamps, memberId: string): WorkItemDetail["fieldTimes"] {
+  return Object.fromEntries(Object.entries(stamps).map(([key, s]) => [key, { at: s.at, memberName: s.name, byMe: s.by === memberId }]));
+}
+
+/** Stamps the fields the last save changed (app.record_field_times). */
+async function recordFieldTimes(trx: Trx, workItemId: string, now: Date): Promise<void> {
+  const { rows } = await sql<{ outcome: string }>`select app.record_field_times(${workItemId}::uuid, ${now}) as outcome`.execute(trx);
+  // Called right after a save the same Member was allowed, so anything else is a bug.
+  if (rows[0]?.outcome !== "recorded") throw new Error(`record_field_times: ${rows[0]?.outcome}`);
 }
 
 /**
@@ -543,14 +647,34 @@ async function namedAnswers(trx: Trx, workItemId: string): Promise<{ named: Name
   };
 }
 
-/** What the acting Member may press on a visible item now, as app.work_item_actions answers. */
+type ActionRow = {
+  action: "claim" | "release" | "transition";
+  transition_key: string | null;
+  label: BilingualText | null;
+  transition_kind: WorkItemActions["transitions"][number]["kind"] | null;
+  action_form: unknown;
+};
+
+/**
+ * What the acting Member may press on a visible item now, as app.work_item_actions
+ * answers, each Transition with its Action Form from the item's pinned Workflow
+ * Version. Only `transition_key` narrows them.
+ */
+async function actionRows(trx: Trx, workItemId: string, transitionKey?: string): Promise<ActionRow[]> {
+  const { rows } = await sql<ActionRow>`
+    select a.action, a.transition_key, a.label, a.transition_kind, tr.action_form
+    from app.work_item_actions(${workItemId}::uuid) with ordinality a (action, transition_key, label, transition_kind, n)
+    left join work_item w on w.id = ${workItemId}::uuid
+    left join workflow_transition tr on tr.workflow_version_id = w.workflow_version_id and tr.key = a.transition_key
+    where ${transitionKey === undefined ? sql`true` : sql`a.action = 'transition' and a.transition_key = ${transitionKey}`}
+    order by a.n
+  `.execute(trx);
+  return rows;
+}
+
+/** What the acting Member may press on a visible item now. */
 async function actions(trx: Trx, workItemId: string): Promise<Omit<WorkItemActions, "saveAnswers">> {
-  const { rows } = await sql<{
-    action: "claim" | "release" | "transition";
-    transition_key: string | null;
-    label: BilingualText | null;
-    transition_kind: WorkItemActions["transitions"][number]["kind"] | null;
-  }>`select * from app.work_item_actions(${workItemId}::uuid)`.execute(trx);
+  const rows = await actionRows(trx, workItemId);
   return {
     claim: rows.some((r) => r.action === "claim"),
     release: rows.some((r) => r.action === "release"),
@@ -560,7 +684,7 @@ async function actions(trx: Trx, workItemId: string): Promise<Omit<WorkItemActio
         key: r.transition_key!,
         label: r.label!,
         kind: r.transition_kind!,
-        needsReason: r.transition_kind === "return",
+        actionForm: parseActionForm(r.action_form),
       })),
   };
 }
@@ -572,13 +696,17 @@ const transitionRefusals = [
   "not_holder",
   "transition_not_available",
   "forbidden",
-  "reason_required",
+  "invalid_action_form",
   "next_step_unavailable",
   "no_step_pool",
   "idempotency_key_reused",
   "form_not_checked",
 ] as const;
-export type TakeTransitionResult = { ok: true } | AnswersRefused | { ok: false; reason: (typeof transitionRefusals)[number] };
+export type TakeTransitionResult =
+  | { ok: true }
+  | AnswersRefused
+  | { ok: false; reason: "invalid_action_form"; errors: FieldError[] }
+  | { ok: false; reason: (typeof transitionRefusals)[number] };
 
 /**
  * How many confirmed files each `attachments` or `photos` field of a visible
@@ -598,10 +726,13 @@ async function fieldFileCounts(trx: Trx, workItemId: string): Promise<Record<str
 /**
  * The holder of the item's current Step takes one of its Transitions, in one
  * transaction (workflow-engine.md §5.1), with their Internal Note if they wrote
- * one. The same idempotency key again applies nothing. Moving on while the
- * answers are open to the raiser (leaving Draft, and the Submit) needs a
- * complete Form, its `attachments` fields' files included: otherwise it is
- * refused with the per-field errors.
+ * one. Its Action Form's answers are checked against its schema in complete
+ * mode (a Transition with none takes no answers) and stored in its event
+ * (RP-300). The same idempotency key again applies nothing. Moving on (not a
+ * Return or a cancel) by a Member who may save the answers needs the sections
+ * naming the Step being left complete, their `attachments` fields' files
+ * included: otherwise it is refused with the per-field errors. Sections another
+ * Participant fills later are not checked (RP-304).
  */
 export function takeTransition(
   db: Db,
@@ -613,14 +744,26 @@ export function takeTransition(
   return withMember(db, memberId, async (trx): Promise<TakeTransitionResult> => {
     const pinned = await pinnedForm(trx, workItemId);
     if (!pinned) return { ok: false, reason: "not_found" };
-    // Moving on while the answers are open (other than a cancel or a Return) needs a complete
-    // Form; the database refuses answers that weren't checked. Only a Transition the Member
-    // may take is checked here, so anyone else is told why they can't act, not what the Form lacks.
-    if (pinned.answersOpen) {
-      const { rows: takeable } = await sql<{ transition_kind: string }>`
-        select transition_kind from app.work_item_actions(${workItemId}::uuid)
-        where action = 'transition' and transition_key = ${input.transition}
-      `.execute(trx);
+    // Only a Transition the Member may take is checked here, so anyone else is told why
+    // they can't act (by the database), never what its Action Form or the Form lacks.
+    const [taking] = await actionRows(trx, workItemId, input.transition);
+    // Its Action Form's answers, as the Form's are checked when leaving Draft. The
+    // database takes only keys the schema has, with what it always requires.
+    let answers: Record<string, unknown> = input.answers;
+    if (taking) {
+      const actionForm = parseActionForm(taking.action_form);
+      if (actionForm) {
+        const checked = validateAnswers(actionForm, input.answers, "complete", { optionLists: await optionListsFor(trx, actionForm) });
+        if (!checked.ok) return { ok: false, reason: "invalid_action_form", errors: checked.errors };
+        answers = checked.answers;
+      } else if (Object.keys(input.answers).length > 0) {
+        return { ok: false, reason: "invalid_action_form", errors: Object.keys(input.answers).map((key) => ({ key, code: "unknown_field" })) };
+      }
+    }
+    // Moving on by a Member who may save the answers now (other than a cancel or a Return)
+    // needs the required fields of the sections naming the Step being left (form-engine.md §4);
+    // the database refuses answers that weren't checked.
+    if (pinned.canSave) {
       const scopes = await projectScopes(trx, pinned.projectId);
       // What is saved is checked as it stands: a retired option it holds stays valid (held).
       const checked = validateAnswers(pinned.form.schema, pinned.data, "complete", {
@@ -629,13 +772,14 @@ export function takeTransition(
         held: pinned.data,
         files: await fieldFileCounts(trx, workItemId),
       });
-      if (takeable.some((t) => t.transition_kind !== "cancel" && t.transition_kind !== "return") && !checked.ok) {
-        return { ok: false, reason: "form_incomplete", errors: checked.errors };
+      const missing = checked.ok ? [] : errorsInSections(pinned.form.schema, pinned.toFill.editableSections, checked.errors);
+      if (taking && taking.transition_kind !== "cancel" && taking.transition_kind !== "return" && missing.length > 0) {
+        return { ok: false, reason: "form_incomplete", errors: missing };
       }
     }
     const { rows } = await sql<{ outcome: string }>`
       select app.take_transition(
-        ${workItemId}::uuid, ${input.transition}, ${input.reason}, ${input.internalNote},
+        ${workItemId}::uuid, ${input.transition}, ${JSON.stringify(answers)}::jsonb, ${input.internalNote},
         ${pinned.dataSha256}::bytea, ${input.idempotencyKey}::uuid, ${now}) as outcome
     `.execute(trx);
     return commandResult(rows[0]!.outcome, "applied", transitionRefusals);
@@ -651,13 +795,21 @@ const saveAnswersRefusals = [
   "outside_visibility",
   "target_not_found",
 ] as const;
-export type SaveAnswersResult = { ok: true } | AnswersRefused | { ok: false; reason: (typeof saveAnswersRefusals)[number] };
+export type SaveAnswersResult =
+  | { ok: true; saved: SavedAnswers | null }
+  | AnswersRefused
+  | { ok: false; reason: (typeof saveAnswersRefusals)[number] };
 
 /**
  * Save draft: the raiser's Participant saves the answers so far, in Draft or one
- * of its internal Steps, checked in draft mode against its pinned Form Version
- * (required fields may be empty). After Draft, the database records each change
- * as a field-level diff in the raiser's history.
+ * of its internal Steps, or, after Submit, the Participant holding a Step a Form
+ * Section names saves that section (RP-304), checked in draft mode against its
+ * pinned Form Version (required fields may be empty). After Draft, the database
+ * records each change as a field-level diff in the saver's own history, and
+ * everyone else reads the answers as they arrived until the item leaves it (V19).
+ *
+ * With `basedOn`, each field another Member changed since is kept as theirs
+ * (mergeFieldAnswers) and reported, with every field's time, in `saved`.
  */
 export function saveAnswers(
   db: Db,
@@ -667,16 +819,26 @@ export function saveAnswers(
   now: Date,
 ): Promise<SaveAnswersResult> {
   return withMember(db, memberId, async (trx): Promise<SaveAnswersResult> => {
+    // Locked first, so the merge is against exactly what this save overwrites.
+    const before = await fieldStamps(trx, workItemId, true);
     const pinned = await pinnedForm(trx, workItemId);
     if (!pinned) return { ok: false, reason: "not_found" };
     // Who may save, and when, before what is wrong with the answers.
     if (!pinned.canSave) return { ok: false, reason: "not_editable" };
-    const checked = validateAnswers(pinned.form.schema, input.answers, "draft", {
+    const merge = input.basedOn
+      ? mergeFieldAnswers({ stored: pinned.data, stamps: before, basedOn: input.basedOn, submitted: input.answers, memberId })
+      : null;
+    const answers = merge ? merge.merged : input.answers;
+    // And into which Form Sections: one that isn't editable now must come back as it is (form-engine.md §4).
+    if (changedOutside(pinned.form.schema, new Set(pinned.toFill.editableSections), pinned.data, answers).length > 0) {
+      return { ok: false, reason: "not_editable" };
+    }
+    const checked = validateAnswers(pinned.form.schema, answers, "draft", {
       scopes: await projectScopes(trx, pinned.projectId),
       offered: await offeredFor(trx, pinned.form.schema, pinned.projectId, workItemId, pinned.data),
       optionLists: await optionListsFor(trx, pinned.form.schema),
       held: pinned.data,
-      linkable: await linkableIds(trx, pinned.form.schema, pinned.projectId, workItemId, input.answers, pinned.data),
+      linkable: await linkableIds(trx, pinned.form.schema, pinned.projectId, workItemId, answers, pinned.data),
     });
     if (!checked.ok) return { ok: false, reason: "invalid_answers", errors: checked.errors };
     const stored = storedAnswers(answersToDb(pinned.form.schema, checked.answers));
@@ -685,7 +847,18 @@ export function saveAnswers(
         ${workItemId}::uuid, ${stored.data}::jsonb, ${stored.tradeId}::uuid, ${stored.locationId}::uuid,
         ${stored.scopeIds}::uuid[], ${now}) as outcome
     `.execute(trx);
-    return commandResult(rows[0]!.outcome, "saved", saveAnswersRefusals);
+    const result = commandResult(rows[0]!.outcome, "saved", saveAnswersRefusals);
+    if (!result.ok) return result;
+    await recordFieldTimes(trx, workItemId, now);
+    if (!merge) return { ok: true, saved: null };
+    const after = await fieldStamps(trx, workItemId, false);
+    return {
+      ok: true,
+      saved: {
+        fieldTimes: fieldTimesFor(after, memberId),
+        keptFromOthers: merge.kept.map((k) => ({ field: k.field, value: k.value, at: k.at, memberName: k.name })),
+      },
+    };
   });
 }
 
@@ -733,6 +906,7 @@ export function getWorkItemHistory(db: Db, memberId: string, workItemId: string)
       from_step_name: BilingualText | null;
       to_step_name: BilingualText | null;
       reason: string | null;
+      remarks: string | null;
       document_number: string | null;
       outcome: WorkItemOutcome | null;
       internal_note: string | null;
@@ -749,6 +923,7 @@ export function getWorkItemHistory(db: Db, memberId: string, workItemId: string)
         fromStep: r.from_step_name,
         toStep: r.to_step_name,
         reason: r.reason,
+        remarks: r.remarks,
         documentNumber: r.document_number,
         outcome: r.outcome,
         internalNote: r.internal_note,

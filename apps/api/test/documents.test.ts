@@ -69,8 +69,8 @@ async function draft(answers: Record<string, unknown> = complete): Promise<strin
   return res.json().id;
 }
 
-const take = (by: Caller, id: string, transition: string, extra: { reason?: string } = {}) =>
-  by.post(`/v1/work-items/${id}/transitions`, { transition, idempotencyKey: randomUUID(), ...extra });
+const take = (by: Caller, id: string, transition: string, { reason, ...extra }: { reason?: string } = {}) =>
+  by.post(`/v1/work-items/${id}/transitions`, { transition, idempotencyKey: randomUUID(), ...(reason === undefined ? {} : { answers: { reason } }), ...extra });
 
 const documentsUrl = (itemId: string) => `/v1/work-items/${itemId}/documents`;
 const documentUrl = (itemId: string, documentId: string) => `${documentsUrl(itemId)}/${documentId}`;

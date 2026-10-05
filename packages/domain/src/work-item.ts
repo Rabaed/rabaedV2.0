@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { bilingualText } from "./company.ts";
-import { formAnswers, namedAnswers } from "./form.ts";
+import { formAnswers, formSchema, namedAnswers } from "./form.ts";
 
 /** A Work Item Type's short code, used in filters and Document Numbers (MAR, SAR…). */
 export const workItemTypeCode = z.string().regex(/^[A-Z]{2,6}$/);
@@ -21,8 +21,30 @@ export type CreateWorkItemRequest = z.input<typeof createWorkItemRequest>;
 export const createdWorkItem = z.object({ id: z.uuid() });
 
 /** Save draft: the Draft's answers so far, checked in draft mode (types, not required). */
-export const saveAnswersRequest = z.object({ answers: formAnswers });
+export const saveAnswersRequest = z.object({
+  answers: formAnswers,
+  /**
+   * The per-field times (`fieldTimes` of the item, or of the last save) these answers
+   * were based on. When given, a field another Member changed since is kept as theirs
+   * and the response says so (form-engine.md §8, part 3); without it the save simply replaces.
+   */
+  basedOn: z.record(z.string(), z.iso.datetime()).optional(),
+});
 export type SaveAnswersRequest = z.infer<typeof saveAnswersRequest>;
+
+/** When a field was last changed, and by whom: the name only within the viewer's own Company (V14). */
+export const fieldTime = z.object({ at: z.iso.datetime(), memberName: bilingualText.nullable(), byMe: z.boolean() });
+export type FieldTime = z.infer<typeof fieldTime>;
+
+/**
+ * The response to a save that sent `basedOn`: every field's time now, and the fields
+ * the save kept as another Member's, with their values.
+ */
+export const savedAnswers = z.object({
+  fieldTimes: z.record(z.string(), fieldTime),
+  keptFromOthers: z.array(z.object({ field: z.string(), value: z.unknown(), at: z.iso.datetime(), memberName: bilingualText.nullable() })),
+});
+export type SavedAnswers = z.infer<typeof savedAnswers>;
 
 // Answers that fail the Form's checks are refused with `{ error, fields }`:
 // `invalid_answers` on create and Save draft (draft mode), `form_incomplete` on
@@ -172,8 +194,12 @@ export const transitionKinds = ["send", "submit", "return", "close", "cancel"] a
  */
 export const takeTransitionRequest = z.object({
   transition: z.string().regex(/^[a-z][a-z0-9_]*$/),
-  /** Required for a Return. */
-  reason: z.string().trim().max(2000).default(""),
+  /**
+   * The answers to the Transition's Action Form, by field key, checked against
+   * its schema in complete mode (a Return's `reason` is one). Refused with
+   * `invalid_action_form` and one FieldError per field.
+   */
+  answers: formAnswers.default({}),
   /**
    * Optional on any Transition. Seen only by the writer's own Participant, even
    * when the Transition goes to another, such as Submit (visibility.md V5).
@@ -192,7 +218,16 @@ export const workItemActions = z.object({
   /** Save draft: change the Form's answers (the raiser's Company, in Draft). */
   saveAnswers: z.boolean(),
   transitions: z.array(
-    z.object({ key: z.string(), label: bilingualText, kind: z.enum(transitionKinds), needsReason: z.boolean() }),
+    z.object({
+      key: z.string(),
+      label: bilingualText,
+      kind: z.enum(transitionKinds),
+      /**
+       * Its Action Form, filled in its pop-up above the Internal Note, which
+       * every pop-up has; null when it asks nothing else.
+       */
+      actionForm: formSchema.nullable(),
+    }),
   ),
 });
 export type WorkItemActions = z.infer<typeof workItemActions>;
@@ -211,6 +246,10 @@ export const workItemDetail = workItemSummary.extend({
   answers: formAnswers,
   /** The `member` and `participant` answers as the viewer may read them, by field key. */
   namedAnswers,
+  /** When each answer last changed and by whom, by field key; only for a viewer who may save, else empty. */
+  fieldTimes: z.record(z.string(), fieldTime),
+  /** The web autosaves it: only the first Draft, where saves write no history. */
+  autosave: z.boolean(),
   /** The item's Scopes and Sub-scopes, each Scope before its Sub-scopes. */
   scopes: z.array(z.object({ id: z.uuid(), parentId: z.uuid().nullable(), name: bilingualText })),
   step: z.object({ key: z.string(), name: bilingualText }),
@@ -266,6 +305,8 @@ export const workItemHistory = z.object({
       fromStep: bilingualText.nullable(),
       toStep: bilingualText.nullable(),
       reason: z.string().nullable(),
+      /** The Remarks written with a Code (MAR Workflow Version 2): shared with everyone who sees the event. */
+      remarks: z.string().nullable(),
       /** Set on the event that assigned it. */
       documentNumber: z.string().nullable(),
       /** Set on the event that closed the item: the Issued Code. */

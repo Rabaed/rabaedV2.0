@@ -7,7 +7,7 @@
 import { randomUUID } from "node:crypto";
 import { createDb } from "@rabaed/db";
 import { testDatabaseUrls } from "@rabaed/db/test-support";
-import { formSchema, publishProblems, type FormVersion, type WorkItemDetail, type WorkItemLinks } from "@rabaed/domain";
+import { formSchema, publishProblems, type WorkItemDetail, type WorkItemLinks } from "@rabaed/domain";
 import { sql } from "kysely";
 import type { LightMyRequestResponse } from "fastify";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -114,15 +114,15 @@ beforeAll(async () => {
 describe("the MAR Form Version 3", () => {
   it("is the MAR's latest Version, and passes the part-1 publish checks against Versions 1 and 2", async () => {
     const versions = await marVersions();
-    expect(versions.map((v) => v.version_no)).toEqual([1, 2, 3]);
-    const [v1, v2, v3] = versions.map((v) => formSchema.parse(v.schema));
+    expect(versions.map((v) => v.version_no).slice(0, 3)).toEqual([1, 2, 3]);
+    const [v1, v2, v3] = versions.slice(0, 3).map((v) => formSchema.parse(v.schema));
     const { rows: lists } = await sql<{ id: string }>`select id from option_list`.execute(migrator);
     expect(publishProblems(v3!, [v1!, v2!], { optionListIds: new Set(lists.map((l) => l.id)) })).toEqual([]);
   });
 
   it("is Version 2 plus an optional Related submittals link question, labelled in English and Arabic", async () => {
-    const form: FormVersion = (await ok(engineer.get(`/v1/projects/${projectId}/work-item-types/MAR/form`), 200)).json();
-    expect(form.versionNo).toBe(3);
+    // Version 4 (RP-306) is the latest now: Version 3 is read as stored.
+    const form = { schema: formSchema.parse((await marVersions())[2]!.schema) };
     const fields = form.schema.sections.flatMap((s) => s.fields);
     expect(fields.map((f) => f.key)).toEqual([
       "manufacturer",
@@ -157,10 +157,10 @@ describe("a new MAR", () => {
     approved = await submitted("Cable trays, submitted");
   });
 
-  it("pins Version 3, and leaves Draft without Related submittals", async () => {
-    const [, , v3] = await marVersions();
+  it("pins the latest Version (4 since RP-306, Version 3 plus the Consultant verification), and leaves Draft without Related submittals", async () => {
+    const latest = (await marVersions()).at(-1)!;
     const id = await created("Lighting fixtures");
-    expect((await detail(id)).formVersionId).toBe(v3!.id);
+    expect((await detail(id)).formVersionId).toBe(latest.id);
     await attachDatasheet(engineer, id);
     await ok(take(engineer, id, "send_for_review"));
     expect((await detail(id)).stage.key).not.toBe("draft");

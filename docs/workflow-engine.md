@@ -54,7 +54,7 @@ A draft Workflow version can't be published unless all of these hold:
 4. A `return` goes only to an earlier Step held by the **same** Participant role. A `submit` always crosses to a different role.
 5. Every `submit` Transition and every Transition from an `issue_code` Step is signing.
 6. Conditions reference only fields that exist in the Form (checked against the Form's latest published version).
-7. Action Forms are valid Form schemas.
+7. Action Forms are valid Form schemas. As built (RP-300): `workflowActionFormProblems` in `packages/domain` (`action-form.ts`). Workflow Versions are published as data by migration until the builder (part 5), so a seam test runs it on every published Version.
 8. No cycle is possible without a `return`. There are no loops through Submit.
 
 Published versions never change. Publishing v2 leaves v1 items untouched. Items on v1 show a notice ("Workflow updated to v2"), and anyone can view v2.

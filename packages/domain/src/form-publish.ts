@@ -11,6 +11,7 @@ import {
   type FormSchema,
   type FormSection,
 } from "./form.ts";
+import { editableAtProblem, sectionsFilledBy, type WorkflowStepHolder } from "./form-sections.ts";
 
 // The publish-time checks (form-engine.md §7; RP-271). Publishing freezes a Form
 // Version for good, so a schema that would break Work Items is refused first:
@@ -31,6 +32,12 @@ export const schemaProblemCodes = [
   "built_in_hidden",
   "key_type_changed",
   "unknown_option_list",
+  "unknown_step",
+  "mixed_roles",
+  "not_for_other_participant",
+  // Action Forms only (action-form.ts).
+  "not_in_action_form",
+  "reserved_key",
 ] as const;
 export type SchemaProblemCode = (typeof schemaProblemCodes)[number];
 
@@ -41,6 +48,11 @@ export type SchemaProblem = { key: string; code: SchemaProblemCode };
 export type PublishContext = {
   /** The ids of the Option Lists that exist. Without them the lists a schema names aren't checked. */
   optionListIds?: ReadonlySet<string>;
+  /**
+   * The Workflows of the Work Item Types that use the Form, each as its Steps.
+   * Without them, `editable_at` isn't checked.
+   */
+  workflows?: readonly (readonly WorkflowStepHolder[])[];
 };
 
 /**
@@ -61,6 +73,7 @@ export function formSchemaProblems(schema: FormSchema, context: PublishContext =
     ...requiredNeverShown(schema).map((key) => problem(key, "required_never_shown")),
     ...builtIns,
     ...(context.optionListIds ? unknownOptionLists(schema, context.optionListIds).map((key) => problem(key, "unknown_option_list")) : []),
+    ...(context.workflows ? editableAtProblems(schema, context.workflows) : []),
   ];
 }
 
@@ -268,5 +281,32 @@ function builtInProblems(schema: FormSchema): SchemaProblem[] {
     if (section.visible_if) return [problem(type, "built_in_hidden")];
     if (type !== "scopes" && isBuiltInField(field) && !field.required) return [problem(type, "built_in_optional")];
     return [];
+  });
+}
+
+/**
+ * The field types a section another Participant fills can't hold: a link question
+ * creates Links on every save, seen by everyone at once, and files, photos and
+ * checklist evidence change in Draft only (form-engine.md §4).
+ */
+const notForOtherParticipant: ReadonlySet<FormField["type"]> = new Set(["work_item_ref", "attachments", "photos", "checklist"]);
+
+/**
+ * Sections whose `editable_at` names a Step one of the Workflows doesn't have,
+ * Steps held by two Participant roles, or, filled by a Participant other than
+ * the raiser, a field type only the raiser's sections take (form-engine.md §4):
+ * once each, the first problem found.
+ */
+function editableAtProblems(schema: FormSchema, workflows: readonly (readonly WorkflowStepHolder[])[]): SchemaProblem[] {
+  return schema.sections.flatMap((s) => {
+    const found = workflows
+      .map((steps) =>
+        editableAtProblem(s, steps) ??
+        (s.key in sectionsFilledBy({ sections: [s] }, steps) && s.fields.some((f) => notForOtherParticipant.has(f.type))
+          ? "not_for_other_participant"
+          : null),
+      )
+      .find((p) => p !== null);
+    return found ? [problem(s.key, found)] : [];
   });
 }
