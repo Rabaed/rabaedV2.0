@@ -133,6 +133,16 @@ describe("publishing a Form whose sections name Steps", () => {
     });
   });
 
+  it("refuses a link question in a section the Consultant fills, naming the section", async () => {
+    const held = verification(["consultant_review"]);
+    const links = { ...held, fields: [...held.fields, { key: "relies_on", type: "work_item_ref", label: bilingual("Relies on") }] };
+    expect(await publishFormVersion(migrator, formId, { sections: [material, links, classification] })).toEqual({
+      ok: false,
+      reason: "schema_problems",
+      problems: [{ key: "verification", code: "not_for_other_participant" }],
+    });
+  });
+
   it("publishes one consistent with the Workflow", async () => {
     expect(await publishFormVersion(migrator, formId, schema)).toMatchObject({ ok: true, versionNo: 1 });
   });

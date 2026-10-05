@@ -1,3 +1,4 @@
+import type { BilingualText } from "./company.ts";
 import { formatDate, type Locale } from "./locale.ts";
 
 /**
@@ -8,11 +9,11 @@ import { formatDate, type Locale } from "./locale.ts";
  */
 
 /** When a field was last changed (ISO, millisecond precision), by which Member, and their name when the saver may see it. */
-export type FieldStamp = { at: string; by: string | null; name: unknown };
+export type FieldStamp = { at: string; by: string | null; name: BilingualText | null };
 export type FieldStamps = Readonly<Record<string, FieldStamp>>;
 
 /** A field the save kept as another Member's, with their value as the saver may read it. */
-export type KeptField = { field: string; at: string; by: string | null; name: unknown; value: unknown };
+export type KeptField = { field: string; at: string; by: string | null; name: BilingualText | null; value: unknown };
 
 /** Equal by content: object key order doesn't matter. */
 function sameValue(a: unknown, b: unknown): boolean {

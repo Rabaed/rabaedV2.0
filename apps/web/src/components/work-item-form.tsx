@@ -28,6 +28,15 @@ import { useDocuments, useImageUrls } from "./use-documents";
 // Save draft. The Transition buttons share it, so leaving Draft first saves what
 // was typed, and a refusal for an incomplete Form marks the fields it lists.
 
+type FieldTimes = Readonly<Record<string, FieldTime>>;
+
+/** The times a save is based on: each field's `at`. */
+const basedOnOf = (times: FieldTimes): Record<string, string> => Object.fromEntries(Object.entries(times).map(([k, v]) => [k, v.at]));
+
+/** When the answers last changed: the latest field time, or null when none has one. */
+const latestTime = (times: FieldTimes): string | null =>
+  Object.values(times).reduce<string | null>((latest, v) => (latest === null || v.at > latest ? v.at : latest), null);
+
 type WorkItemFormState = {
   schema: FormSchema;
   /** What the Built-in Fields offer, or name in the read view. */
@@ -105,7 +114,7 @@ export function WorkItemFormProvider({
   editableSections: readonly string[];
   filledBy: Readonly<Record<string, BilingualText>>;
   /** When each answer last changed (detail.fieldTimes); a save is based on these. */
-  fieldTimes: Readonly<Record<string, FieldTime>>;
+  fieldTimes: FieldTimes;
   /** The first Draft: answers save themselves every few seconds. After it only the button saves. */
   autosave: boolean;
   children: ReactNode;
@@ -122,10 +131,8 @@ export function WorkItemFormProvider({
   const [message, setMessage] = useState<string | null>(null);
   const locale = useLocale() as Locale;
   // The times the next save is based on: what the page loaded with, then what each save answered.
-  const based = useRef<Record<string, string>>(Object.fromEntries(Object.entries(fieldTimes).map(([k, v]) => [k, v.at])));
-  const [savedAt, setSavedAt] = useState<string | null>(
-    Object.values(fieldTimes).reduce<string | null>((latest, v) => (latest === null || v.at > latest ? v.at : latest), null),
-  );
+  const based = useRef<Record<string, string>>(basedOnOf(fieldTimes));
+  const [savedAt, setSavedAt] = useState<string | null>(latestTime(fieldTimes));
   const [changedByOthers, setChangedByOthers] = useState<Record<string, string>>({});
 
   function change(changes: Readonly<Record<string, FormValue | undefined>>) {
@@ -163,8 +170,8 @@ export function WorkItemFormProvider({
       });
       if (res.ok) {
         const saved = (await res.json()) as SavedAnswers;
-        based.current = Object.fromEntries(Object.entries(saved.fieldTimes).map(([k, v]) => [k, v.at]));
-        setSavedAt(Object.values(saved.fieldTimes).reduce<string | null>((l, v) => (l === null || v.at > l ? v.at : l), null));
+        based.current = basedOnOf(saved.fieldTimes);
+        setSavedAt(latestTime(saved.fieldTimes));
         // A field another Member changed since is kept as theirs: show their value and who.
         const theirs = Object.fromEntries(saved.keptFromOthers.map((k) => [k.field, k.value]));
         // Typed while this save was out stays as typed, and stays unsaved.

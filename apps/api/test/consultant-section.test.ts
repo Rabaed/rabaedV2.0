@@ -5,7 +5,9 @@
 // the item is with that Participant, everyone else reads the answers as they
 // arrived, and none of its `answers_changed` events. When it leaves, they are
 // everyone's. Required fields are checked per section, on a forward Transition out
-// of a Step the section names, never on a Return.
+// of a Step the section names, never on a Return. A Return out of the
+// Consultant's Step discards what it wrote there: its section goes back to how
+// it arrived (RP-299 review).
 //
 // The Type is test-only (3-07 brings the MAR Form Version 4): Draft → Contractor
 // review → Consultant review ⇄ (Return) Contractor review; Consultant review →
@@ -42,7 +44,6 @@ const schema = {
       fields: [
         { key: "sample_checked", type: "yes_no", label: bilingual("Sample checked"), required: true },
         { key: "verification_note", type: "textarea", label: bilingual("Verification note") },
-        { key: "evidence", type: "attachments", label: bilingual("Evidence") },
       ],
     },
     {
@@ -301,16 +302,43 @@ describe("required fields, per section, by the Step being left", () => {
   });
 });
 
-describe("a file into a field of a section not editable now", () => {
-  it("is refused to the raiser in Draft", async () => {
-    const res = await ok(engineer.post(`/v1/projects/${projectId}/work-items`, { type: TYPE, title: "FD-80", answers: builtIns() }), 201);
-    const started = await engineer.post(`/v1/work-items/${res.json().id}/documents`, {
-      fieldKey: "evidence",
-      fileName: "evidence.pdf",
-      contentType: "application/pdf",
-      sizeBytes: 10,
-    });
-    expect(started.statusCode).toBe(409);
-    expect(started.json()).toMatchObject({ error: "not_editable" });
+describe("K1 fills in part of its section, then Returns the item to C1 (scenario 51)", () => {
+  let id = "";
+  beforeAll(async () => {
+    id = await atConsultantReview("FD-50");
+    await ok(saveOver(k1Engineer, id, { sample_checked: false, verification_note: "Wrong fire rating" }));
+    await ok(take(k1Engineer, id, "return_to_contractor"));
+  });
+
+  const unseen = async (other: Caller) => {
+    expect(await answersOf(other, id)).toEqual({ model: "FD-50" });
+    expect(await diffs(other, id)).toEqual([]);
+    const body = (await other.get(`/v1/work-items/${id}`)).body + (await other.get(`/v1/work-items/${id}/history`)).body;
+    expect(body).not.toContain("Wrong fire rating");
+  };
+
+  it("shows C1, holding it again, the section as it arrived: empty, and none of K1's changes", async () => {
+    for (const c1Member of [engineer, pm]) await unseen(c1Member);
+  });
+
+  // OR and OW see the item again once it is Submitted (V2).
+  it("shows OR and OW the section as it arrived once C1 Submits again", async () => {
+    await ok(pm.post(`/v1/work-items/${id}/claim`));
+    await ok(take(pm, id, "submit"));
+    for (const other of [orEngineer, owner, engineer]) await unseen(other);
+  });
+
+  it("starts K1 from the section as it arrived, with no field times for it, its earlier changes still in K1's history", async () => {
+    await ok(k1Engineer.post(`/v1/work-items/${id}/claim`));
+    expect(await answersOf(k1Engineer, id)).toEqual({ model: "FD-50" });
+    const times = (await detail(k1Engineer, id)).fieldTimes;
+    expect(Object.keys(times)).not.toContain("sample_checked");
+    expect(Object.keys(times)).not.toContain("verification_note");
+    expect((await diffs(k1Engineer, id)).map((e) => e.changes)).toEqual([
+      [
+        { field: "sample_checked", old: null, new: false },
+        { field: "verification_note", old: null, new: "Wrong fire rating" },
+      ],
+    ]);
   });
 });

@@ -58,18 +58,19 @@ async function marVersions() {
   return rows;
 }
 
-/** The Steps of the MAR Workflow's latest published Version, as the admin publish check reads them. */
-async function marSteps(): Promise<WorkflowStepHolder[]> {
-  const { rows } = await sql<WorkflowStepHolder>`
-    select s.key, s.actor_rule ->> 'base_role' as role, app.is_draft_step(s.id) as draft
+/** The Steps of every published Version of the MAR Workflow, oldest first: an item keeps the Version it pinned. */
+async function marWorkflows(): Promise<WorkflowStepHolder[][]> {
+  const { rows } = await sql<WorkflowStepHolder & { version_no: number }>`
+    select v.version_no, s.key, s.actor_rule ->> 'base_role' as role, app.is_draft_step(s.id) as draft
     from work_item_type t
     join workflow_version v on v.workflow_definition_id = t.workflow_definition_id and v.status = 'published'
-      and v.version_no = (select max(o.version_no) from workflow_version o where o.workflow_definition_id = t.workflow_definition_id and o.status = 'published')
     join workflow_step s on s.workflow_version_id = v.id
     where t.owner_kind = 'rabaed' and t.code = 'MAR'
-    order by s.key
+    order by v.version_no, s.key
   `.execute(migrator);
-  return rows;
+  const byVersion = new Map<number, WorkflowStepHolder[]>();
+  for (const { version_no, key, role, draft } of rows) byVersion.set(version_no, [...(byVersion.get(version_no) ?? []), { key, role, draft }]);
+  return [...byVersion.values()];
 }
 
 const complete = {
@@ -131,14 +132,15 @@ beforeAll(async () => {
 });
 
 describe("the MAR Form Version 4", () => {
-  it("is the MAR's latest Version, and passes the publish checks against Versions 1 to 3 and the MAR's Workflow", async () => {
+  it("is the MAR's latest Version, and passes the publish checks against Versions 1 to 3 and every MAR Workflow Version", async () => {
     const versions = await marVersions();
     expect(versions.map((v) => v.version_no)).toEqual([1, 2, 3, 4]);
     const [v1, v2, v3, v4] = versions.map((v) => formSchema.parse(v.schema));
     const { rows: lists } = await sql<{ id: string }>`select id from option_list`.execute(migrator);
-    const steps = await marSteps();
-    expect(steps.map((s) => s.key)).toContain("consultant_review");
-    expect(publishProblems(v4!, [v1!, v2!, v3!], { optionListIds: new Set(lists.map((l) => l.id)), workflows: [steps] })).toEqual([]);
+    const workflows = await marWorkflows();
+    expect(workflows.length).toBeGreaterThanOrEqual(2);
+    for (const steps of workflows) expect(steps.map((s) => s.key)).toContain("consultant_review");
+    expect(publishProblems(v4!, [v1!, v2!, v3!], { optionListIds: new Set(lists.map((l) => l.id)), workflows })).toEqual([]);
   });
 
   it("is Version 3 plus the Consultant verification, labelled in English and Arabic, editable at the Consultant review Step", async () => {

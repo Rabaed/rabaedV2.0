@@ -3,7 +3,8 @@ import { changedByLabel, mergeFieldAnswers, savedLabel, type FieldStamps } from 
 
 const me = "member-me";
 const other = "member-other";
-const stamp = (at: string, by: string | null = other, name: string | null = "Omar") => ({ at, by, name });
+const omar = { en: "Omar", ar: "عمر" };
+const stamp = (at: string, by: string | null = other, name: { en: string; ar: string } | null = omar) => ({ at, by, name });
 
 describe("mergeFieldAnswers", () => {
   it("takes every submitted field when nobody else changed anything since", () => {
@@ -28,7 +29,7 @@ describe("mergeFieldAnswers", () => {
       memberId: me,
     });
     expect(out.merged).toEqual({ a: "theirs", b: "mine too" });
-    expect(out.kept).toEqual([{ field: "a", at: "2026-10-05T10:00:05.000Z", by: other, name: "Omar", value: "theirs" }]);
+    expect(out.kept).toEqual([{ field: "a", at: "2026-10-05T10:00:05.000Z", by: other, name: omar, value: "theirs" }]);
   });
 
   it("is no conflict when the newer change left the same value", () => {

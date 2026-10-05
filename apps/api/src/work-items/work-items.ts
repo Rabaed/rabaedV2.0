@@ -304,9 +304,11 @@ async function draftOf(trx: Trx, typeCode: string): Promise<[WorkflowSteps, Sect
     where t.owner_kind = 'rabaed' and t.code = ${typeCode}
     order by v.version_no desc limit 1
   `.execute(trx);
-  const r = rows[0]!;
+  const r = rows[0];
+  if (!r) throw new Error(`Work Item Type ${typeCode} has no published Workflow Version`);
   const workflow = await workflowSteps(trx, r.type_id, r.workflow_version_id);
-  const draft = workflow.steps.find((s) => s.draft)!;
+  const draft = workflow.steps.find((s) => s.draft);
+  if (!draft) throw new Error(`The Workflow of Work Item Type ${typeCode} has no Draft Step`);
   return [workflow, { step: draft.key, canSave: true }];
 }
 
@@ -590,9 +592,7 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
       // Another Company's people, and a Company the viewer may not see, are never identified, not even by an id (V14, V15).
       answers: Object.fromEntries(Object.entries(answers).filter(([key]) => !unnamed.has(key))),
       namedAnswers: named,
-      fieldTimes: Object.fromEntries(
-        Object.entries(stamps).map(([key, s]) => [key, { at: s.at, memberName: (s.name as BilingualText | null) ?? null, byMe: s.by === memberId }]),
-      ),
+      fieldTimes: fieldTimesFor(stamps, memberId),
       autosave: auto[0]!.autosave,
       scopes: scopes.map((s) => ({ id: s.id, parentId: s.parent_id, name: s.name })),
       step: { key: d.step_key, name: d.step_name },
@@ -614,9 +614,16 @@ async function fieldStamps(trx: Trx, workItemId: string, lock: boolean): Promise
   return rows[0]?.times ?? {};
 }
 
+/** The per-field times as `memberId` reads them: when, by whom (their own Company's people only), and whether by them. */
+function fieldTimesFor(stamps: FieldStamps, memberId: string): WorkItemDetail["fieldTimes"] {
+  return Object.fromEntries(Object.entries(stamps).map(([key, s]) => [key, { at: s.at, memberName: s.name, byMe: s.by === memberId }]));
+}
+
 /** Stamps the fields the last save changed (app.record_field_times). */
 async function recordFieldTimes(trx: Trx, workItemId: string, now: Date): Promise<void> {
-  await sql`select app.record_field_times(${workItemId}::uuid, ${now})`.execute(trx);
+  const { rows } = await sql<{ outcome: string }>`select app.record_field_times(${workItemId}::uuid, ${now}) as outcome`.execute(trx);
+  // Called right after a save the same Member was allowed, so anything else is a bug.
+  if (rows[0]?.outcome !== "recorded") throw new Error(`record_field_times: ${rows[0]?.outcome}`);
 }
 
 /**
@@ -847,10 +854,8 @@ export function saveAnswers(
     return {
       ok: true,
       saved: {
-        fieldTimes: Object.fromEntries(
-          Object.entries(after).map(([key, s]) => [key, { at: s.at, memberName: (s.name as BilingualText | null) ?? null, byMe: s.by === memberId }]),
-        ),
-        keptFromOthers: merge.kept.map((k) => ({ field: k.field, value: k.value, at: k.at, memberName: (k.name as BilingualText | null) ?? null })),
+        fieldTimes: fieldTimesFor(after, memberId),
+        keptFromOthers: merge.kept.map((k) => ({ field: k.field, value: k.value, at: k.at, memberName: k.name })),
       },
     };
   });

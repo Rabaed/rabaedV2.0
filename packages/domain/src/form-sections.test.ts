@@ -69,6 +69,24 @@ describe("publishProblems: editable_at against the Type's Workflow", () => {
     expect(publishProblems(schema, [], { workflows: [mar, shorter, shorter] })).toEqual([{ key: "material", code: "unknown_step" }]);
   });
 
+  it("refuses a link question, a file field or a checklist in a section another Participant fills, naming the section", () => {
+    const held = (field: unknown) => form(section("verification", [text("note"), field], { editable_at: ["consultant_review"] }));
+    for (const field of [
+      { key: "relies_on", type: "work_item_ref", label: label("Relies on") },
+      { key: "evidence", type: "attachments", label: label("Evidence") },
+      { key: "site_photos", type: "photos", label: label("Site photos") },
+      { key: "checks", type: "checklist", label: label("Checks"), items: [{ key: "a", text: label("A") }] },
+    ]) {
+      expect(publishProblems(held(field), [], { workflows: [mar] })).toEqual([{ key: "verification", code: "not_for_other_participant" }]);
+    }
+  });
+
+  it("accepts those fields in a section the raiser fills, at its Draft or internal Steps", () => {
+    const links = { key: "relies_on", type: "work_item_ref", label: label("Relies on") };
+    const schema = form(section("material", [links], { editable_at: ["draft", "internal_review"] }), section("other", [links]));
+    expect(publishProblems(schema, [], { workflows: [mar] }).filter((p) => p.code === "not_for_other_participant")).toEqual([]);
+  });
+
   it("isn't checked without the Workflows", () => {
     const schema = form(section("verification", [text("note")], { editable_at: ["site_visit"] }));
     expect(publishProblems(schema)).toEqual([]);

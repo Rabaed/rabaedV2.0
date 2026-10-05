@@ -13,7 +13,7 @@ import { randomUUID } from "node:crypto";
 import { publishFormVersion } from "@rabaed/admin/services";
 import { createDb, withMember } from "@rabaed/db";
 import { testDatabaseUrls } from "@rabaed/db/test-support";
-import type { WorkItemDetail } from "@rabaed/domain";
+import type { WorkItemDetail, WorkItemLinks } from "@rabaed/domain";
 import { sql } from "kysely";
 import type { LightMyRequestResponse } from "fastify";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -37,7 +37,14 @@ type Person = { id: string; caller: Caller };
 
 const schema = {
   sections: [
-    { key: "material", title: bilingual("Material"), fields: [{ key: "model", type: "text", label: bilingual("Model") }] },
+    {
+      key: "material",
+      title: bilingual("Material"),
+      fields: [
+        { key: "model", type: "text", label: bilingual("Model") },
+        { key: "related", type: "work_item_ref", label: bilingual("Related submittals") },
+      ],
+    },
     {
       key: "verification",
       title: bilingual("Consultant verification"),
@@ -165,8 +172,11 @@ const fill = (by: Person, revision: string, closed: string) =>
   );
 
 /** An item of the test Type, closed at Code C after K1 filled its section. */
-async function closedAtCodeC(model: string): Promise<string> {
-  const res = await ok(engineer.caller.post(`/v1/projects/${projectId}/work-items`, { type: TYPE, title: model, answers: { ...builtIns(), model } }), 201);
+async function closedAtCodeC(model: string, answers: Record<string, unknown> = {}): Promise<string> {
+  const res = await ok(
+    engineer.caller.post(`/v1/projects/${projectId}/work-items`, { type: TYPE, title: model, answers: { ...builtIns(), model, ...answers } }),
+    201,
+  );
   const id = res.json().id as string;
   await ok(take(engineer, id, "send_for_review"));
   await ok(pm.caller.post(`/v1/work-items/${id}/claim`));
@@ -259,6 +269,18 @@ describe("C1 creates a Revision of the item that got Code C (scenario 49)", () =
     await ok(saveOver(engineer, revision, { model: "FD-91" }));
     expect(await answersOf(engineer, revision)).toEqual({ model: "FD-91" });
     expect((await saveOver(engineer, revision, { sample_checked: true })).statusCode).toBe(409);
+  });
+});
+
+describe("a Revision of an item whose answers name other items", () => {
+  it("has the Links those answers stand for, as the item it revises had", async () => {
+    const target = await closedAtCodeC("FD-10");
+    const closed = await closedAtCodeC("FD-11", { related: [target] });
+    const revision = await newDraft("FD-11 Rev 1");
+    expect(await fill(engineer, revision, closed)).toBe("filled");
+    expect((await detail(engineer, revision)).answers).toMatchObject({ related: [target] });
+    const links: WorkItemLinks = (await ok(engineer.caller.get(`/v1/work-items/${revision}/links`), 200)).json();
+    expect(links.links.filter((l) => l.kind === "relies_on").map((l) => [l.fieldKey, l.workItemId])).toEqual([["related", target]]);
   });
 });
 
