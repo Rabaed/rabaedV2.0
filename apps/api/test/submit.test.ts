@@ -99,8 +99,8 @@ async function createDraft(by: Caller, title: string): Promise<string> {
   return res.json().id;
 }
 
-const take = (by: Caller, id: string, transition: string, { reason, ...extra }: { reason?: string; internalNote?: string } = {}) =>
-  by.post(`/v1/work-items/${id}/transitions`, { transition, idempotencyKey: randomUUID(), ...(reason === undefined ? {} : { answers: { reason } }), ...extra });
+const take = (by: Caller, id: string, transition: string, { reason, remarks, ...extra }: { reason?: string; remarks?: string; internalNote?: string } = {}) =>
+  by.post(`/v1/work-items/${id}/transitions`, { transition, idempotencyKey: randomUUID(), ...(reason === undefined && remarks === undefined ? {} : { answers: { ...(reason === undefined ? {} : { reason }), ...(remarks === undefined ? {} : { remarks }) } }), ...extra });
 
 async function detail(by: Caller, id: string): Promise<WorkItemDetail> {
   const res = await by.get(`/v1/work-items/${id}`);
@@ -372,7 +372,7 @@ describe("Revise & Resubmit · C", () => {
 
   it("closes the item Revise & Resubmit with Code C", async () => {
     await ok(otherManager.post(`/v1/work-items/${id}/claim`));
-    await ok(take(otherManager, id, "revise_c"));
+    await ok(take(otherManager, id, "revise_c", { remarks: "Resubmit with the type test certificate" }));
     const d = await detail(engineer, id);
     expect(d).toMatchObject({ stage: { key: "revise_resubmit", category: "closed_negative" }, outcome: "C", heldBy: null });
     expect((await history(engineer, id)).at(-1)).toMatchObject({
@@ -381,6 +381,69 @@ describe("Revise & Resubmit · C", () => {
       by: { memberName: bilingual(OTHER_MANAGER) },
     });
     expect(await everything(engineer, id)).not.toContain(SIGNER);
+  });
+});
+
+// RP-303: MAR Workflow Version 2 gives the Code Transitions a Remarks field, shared with
+// everyone who sees the item; an Internal Note written with the Code stays the Consultant's (V5).
+describe("Remarks with the Code (MAR Workflow Version 2)", () => {
+  const REMARKS_C = "Resubmit with the type test certificate";
+  const REMARKS_A = "Approved for the first floor only";
+  const NOTE = "Their last batch failed too, keep this to ourselves";
+
+  async function submitted(title: string) {
+    const id = await readyToSubmit(title);
+    await ok(take(pm, id, "submit"));
+    await ok(signer.post(`/v1/work-items/${id}/claim`));
+    return id;
+  }
+  const code = (d: WorkItemDetail, key: string) => d.actions.transitions.find((t) => t.key === key);
+
+  it("offers a required Remarks field with C and an optional one with A", async () => {
+    const id = await submitted("Remarks form");
+    const d = await detail(signer, id);
+    const field = (key: string) => code(d, key)!.actionForm!.sections.flatMap((s) => s.fields).find((f) => f.key === "remarks");
+    expect(field("revise_c")).toMatchObject({ type: "textarea", required: true });
+    expect(field("approve_a")).toMatchObject({ type: "textarea" });
+    expect(field("approve_a")!.required).toBeFalsy();
+    // Version 2 is on new MARs; the Return keeps its reason.
+    expect(code(await detail(pm, await readyToSubmit("Return form")), "return")!.actionForm).not.toBeNull();
+  });
+
+  it("refuses C without Remarks and leaves the item where it was", async () => {
+    const id = await submitted("C without remarks");
+    for (const remarks of [undefined, "   "]) {
+      const res = await take(signer, id, "revise_c", remarks === undefined ? {} : { remarks });
+      expect(res.statusCode, res.body).toBe(422);
+      expect(res.json()).toEqual({ error: "invalid_action_form", fields: [{ key: "remarks", code: "required" }] });
+    }
+    expect(await detail(signer, id)).toMatchObject({ stage: { key: "pending_approval" }, outcome: null });
+    expect((await history(pm, id)).some((e) => e.type === "issue_code")).toBe(false);
+  });
+
+  it("accepts A without Remarks, and with them", async () => {
+    const plain = await submitted("A without remarks");
+    await ok(take(signer, plain, "approve_a"));
+    expect((await history(pm, plain)).at(-1)).toMatchObject({ type: "issue_code", outcome: "A", remarks: null });
+    const worded = await submitted("A with remarks");
+    await ok(take(signer, worded, "approve_a", { remarks: REMARKS_A }));
+    expect((await history(pm, worded)).at(-1)).toMatchObject({ type: "issue_code", outcome: "A", remarks: REMARKS_A });
+  });
+
+  it("shows C's Remarks beside the Code to the Contractor, Owner Representative and Owner, the Internal Note to no one but the Consultant", async () => {
+    const id = await submitted("Remarks with a note");
+    await ok(take(signer, id, "revise_c", { remarks: REMARKS_C, internalNote: NOTE }));
+    for (const caller of [engineer, pm, orEngineer, owner, signer, otherManager]) {
+      const events = await history(caller, id);
+      expect(events.at(-1), "the Code event").toMatchObject({ type: "issue_code", outcome: "C", audience: "shared", remarks: REMARKS_C });
+      expect(events.filter((e) => e.remarks !== null)).toHaveLength(1);
+    }
+    for (const caller of [engineer, pm, orEngineer, owner]) {
+      expect(await everything(caller, id)).not.toContain(NOTE);
+    }
+    expect((await history(signer, id)).find((e) => e.type === "internal_note")).toMatchObject({ internalNote: NOTE, audience: "internal" });
+    // Not seen by a Company that doesn't see the item at all.
+    await expectHidden(c2Engineer.get(`/v1/work-items/${id}/history`));
   });
 });
 
