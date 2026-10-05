@@ -1,4 +1,4 @@
-import { resetTestDatabase } from "../src/reset-test-database.ts";
+import { resetTestDatabase } from "./reset-test-database.ts";
 import { testDatabaseUrls } from "./index.ts";
 
 // Seam suites run against a real Postgres: drop and recreate the test database

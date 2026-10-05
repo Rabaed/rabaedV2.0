@@ -1,5 +1,5 @@
-import { databaseNameOf, type DatabaseUrls } from "./config.ts";
-import { resetDatabase } from "./reset-database.ts";
+import { databaseNameOf, type DatabaseUrls } from "../src/config.ts";
+import { resetDatabase } from "../src/reset-database.ts";
 
 /** Throws unless the database is a test database: its name ends in `_test`. */
 export function assertTestDatabase(urls: DatabaseUrls): void {

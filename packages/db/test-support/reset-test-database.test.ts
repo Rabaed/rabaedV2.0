@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { assertTestDatabase, resetTestDatabase } from "./reset-test-database.ts";
-import type { DatabaseUrls } from "./config.ts";
+import type { DatabaseUrls } from "../src/config.ts";
 
 const urlsFor = (name: string): DatabaseUrls => ({
   superuser: "postgres://postgres:pw@localhost:5432/postgres",
