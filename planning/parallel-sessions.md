@@ -45,7 +45,8 @@ Use it when a spec's tickets form a chain that one lane would otherwise work thr
    Lane N. Run `pnpm lane:env N --force`, then /mattpocock-skills:implement-spec RP-nnn. Name the integration branch RP-nnn-<spec-name> and open its draft PR after the first merge.
    ```
 3. Label every ticket of the spec with this lane, so no other lane starts one of them.
-4. The subagents share the lane's ports and database. If their tests collide, ask the session to run fewer subagents at once.
+4. The subagents share the lane's Postgres, but each uses its own databases. In its worktree, each implementer subagent runs `pnpm lane:env N --force --db rp<n>` (`<n>` is its ticket number, e.g. `--db rp322`). The three database URLs then name `rabaed_rp<n>`, so its seam suites use `rabaed_rp<n>_test`, and parallel seam suites never migrate the same database. `lane:env` still refuses a lane whose ports are taken, but a `--db` run in a second worktree of the same lane is allowed. Drop a rerun's `rabaed_rp<n>_test` before seam 1, and when the spec is done run `pnpm lanes:drop-dbs` to list and drop the `rabaed_*` databases of worktrees that no longer exist (`--yes` skips the prompt).
+   Migration timestamps: each ticket gets its own day, in the order of the spec's tickets (the first ticket takes `<yyyymmdd>xxxxxx`, the next the following day, and so on), and its migrations use only that range, so parallel migrations never collide. Say the ranges in each subagent's brief. Migrations already on main stay unchanged.
 5. Jira's automation closes only the ticket named in the branch, which is the spec. When the PR merges, close the spec's other tickets with `transitionJiraIssue` and a comment naming the PR.
 6. Run `/mattpocock-skills:retro`, then archive the session.
 
