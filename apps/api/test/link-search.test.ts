@@ -106,6 +106,15 @@ describe("Link search (scenario 29)", () => {
     expect(ids(r).toSorted()).toEqual([item.c1Submitted, item.c1Approved, item.c1Mechanical, item.c2Submitted].toSorted());
   });
 
+  it("puts the latest Submitted first: by the Submission Date, which every caller reads, never when a Draft was started (RP-334)", async () => {
+    const { c1Engineer, c1Pm, k1Manager } = tower;
+    const startedFirst = await inInternalReview(tower, c1Engineer, "Ordering, started first");
+    const submittedFirst = await submitted(tower, c1Engineer, c1Pm, "Ordering, submitted first");
+    await ok(c1Pm.post(`/v1/work-items/${startedFirst}/claim`));
+    await take(c1Pm, startedFirst, "submit");
+    for (const by of [c1Engineer, k1Manager]) expect(ids(await search(by, "ordering"))).toEqual([startedFirst, submittedFirst]);
+  });
+
   it("offers C2 only its own Submitted item", async () => {
     expect(ids(await search(c2Engineer, "cable trays"))).toEqual([item.c2Submitted]);
   });

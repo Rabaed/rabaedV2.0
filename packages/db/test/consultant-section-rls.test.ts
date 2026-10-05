@@ -330,3 +330,56 @@ describe("a Send Back out of K1's Step", () => {
     expect(rows[0]).toEqual({ data: { model: "FD-40" }, data_as_arrived: null, times: ["location", "model", "trade"], same_hash: true });
   });
 });
+
+// RP-334: the Submission Date and the Creation Date (visibility.md "Creation
+// Date", scenario 61; ADR 0014), as the app role.
+describe("the Creation Date and the Submission Date (scenario 61)", () => {
+  let id = "";
+  let recorded: { numbered_at: Date; submitted_at: Date };
+  beforeAll(async () => {
+    id = await atConsultantReview("SC-61");
+    recorded = (await migrator.query("select numbered_at, submitted_at from work_item where id = $1", [id])).rows[0];
+    expect(recorded.numbered_at).toBeInstanceOf(Date);
+    expect(recorded.submitted_at).toBeInstanceOf(Date);
+  });
+  const creationDate = (as: string) =>
+    call<{ at: Date | null }>(as, sql`select app.work_item_creation_date(${id}::uuid) as at`).then((rows) => rows[0]!.at);
+
+  it("gives the Creation Date to C1's Members only", async () => {
+    for (const who of [c1.member, c1Pm]) expect(await creationDate(who)).toEqual(recorded.numbered_at);
+    for (const who of [k1.member, k1Other, ow.member]) expect(await creationDate(who)).toBeNull();
+  });
+
+  it("lets everyone who sees the item read the Submission Date", async () => {
+    for (const who of [c1.member, c1Pm, k1.member, k1Other, ow.member]) {
+      expect(await call(who, sql`select submitted_at from work_item where id = ${id}`)).toEqual([{ submitted_at: recorded.submitted_at }]);
+    }
+  });
+
+  it("never lets anyone read when the Draft was started, nor the Creation Date, from the table or the history", async () => {
+    for (const who of [c1.member, c1Pm, k1.member, ow.member]) {
+      for (const column of ["created_at", "numbered_at"]) {
+        await expect(call(who, sql`select ${sql.ref(column)} from work_item where id = ${id}`)).rejects.toThrow(/permission denied/);
+      }
+      expect(await call(who, sql`select seq from work_item_event where work_item_id = ${id} and type = 'created'`)).toEqual([]);
+      expect(await call(who, sql`select seq from app.work_item_history(${id}::uuid) where type = 'created'`)).toEqual([]);
+    }
+  });
+
+  it("keeps the Submission Date after a Send Back and a second Submit", async () => {
+    expect(await take(k1.member, "send_back", sql`null`, id)).toBe("applied");
+    expect(await take(c1Pm, "submit", sql`app.answers_sha256(${id}::uuid)`, id)).toBe("applied");
+    const { rows } = await migrator.query("select submitted_at from work_item where id = $1", [id]);
+    expect(rows[0].submitted_at).toEqual(recorded.submitted_at);
+  });
+});
+
+describe("a Draft", () => {
+  it("is never deleted: the app role can't, and no function in app deletes one", async () => {
+    const { rows } = await migrator.query(`
+      select has_table_privilege('rabaed_app', 'work_item', 'DELETE') as app_deletes,
+        array(select p.oid::regprocedure::text from pg_proc p
+              where p.pronamespace = 'app'::regnamespace and p.prosrc ~* 'delete\\s+from\\s+(public\\.)?work_item\\M') as deleting`);
+    expect(rows[0]).toEqual({ app_deletes: false, deleting: [] });
+  });
+});

@@ -15,7 +15,8 @@
 --   the item's events: the first that carries a Document Number, and the first
 --   Submit taken by the raiser's Participant.
 -- * work_item.created_at is when the Draft was started: kept for audit, shown to
---   nobody, so the app role no longer reads it. It reads submitted_at, which every
+--   nobody, so the app role no longer reads it, nor the item's `created` event
+--   (the same time, in its history). It reads submitted_at, which every
 --   Member who sees the item may: nobody but the raiser sees an item before it
 --   (V1). The Creation Date is read only through app.work_item_creation_date, for
 --   the raiser's Participant.
@@ -59,6 +60,15 @@ update work_item w set submitted_at = (
 
 revoke select (created_at) on work_item from rabaed_app;
 grant select (submitted_at) on work_item to rabaed_app;
+
+-- The `created` event is when the Draft was started too: kept in the chain, read
+-- by nobody through the app role, so the history starts at the item's first move.
+alter policy member_reads_visible_work_item_events on work_item_event
+  using (
+    type <> 'created'
+    and work_item_id in (select id from work_item)
+    and (audience = 'shared' or audience_participant_id in (select app.current_participant_ids()))
+  );
 
 -- The Creation Date of an item the acting Member sees, for a Member of its
 -- raiser's Participant only: null for anyone else, and while it has no number.
