@@ -1,6 +1,7 @@
 import { withMember, type Database, type Db } from "@rabaed/db";
 import {
   formFields,
+  mergeFieldAnswers,
   formSchema,
   isHiddenLinkChoice,
   offeredChoices,
@@ -10,6 +11,7 @@ import {
   type BilingualText,
   type CreateWorkItemRequest,
   type FieldError,
+  type FieldStamps,
   type FormChoices,
   type FormSchema,
   type FormFieldType,
@@ -18,6 +20,7 @@ import {
   type LinkSearchResults,
   type NamedAnswers,
   type SaveAnswersRequest,
+  type SavedAnswers,
   type ScopeChoice,
   type TakeTransitionRequest,
   type WorkItemActions,
@@ -401,6 +404,7 @@ export function createWorkItem(
         `.execute(trx);
         checkedOutcome(saved[0]!.outcome, ["saved"]);
       }
+      await recordFieldTimes(trx, work_item_id!, now);
       return { ok: true, id: work_item_id! };
     }),
   );
@@ -505,12 +509,18 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
       order by coalesce(parent.sort, s.sort), coalesce(s.parent_id, s.id), s.depth, s.sort
     `.execute(trx);
     const { named, unnamed } = await namedAnswers(trx, workItemId);
+    const stamps = await fieldStamps(trx, workItemId, false);
+    const { rows: auto } = await sql<{ autosave: boolean }>`select app.answers_autosave(${workItemId}::uuid) as autosave`.execute(trx);
     return {
       ...toSummary(row, now),
       formVersionId: d.form_version_id,
       // Another Company's people, and a Company the viewer may not see, are never identified, not even by an id (V14, V15).
       answers: Object.fromEntries(Object.entries(answers).filter(([key]) => !unnamed.has(key))),
       namedAnswers: named,
+      fieldTimes: Object.fromEntries(
+        Object.entries(stamps).map(([key, s]) => [key, { at: s.at, memberName: (s.name as BilingualText | null) ?? null, byMe: s.by === memberId }]),
+      ),
+      autosave: auto[0]!.autosave,
       scopes: scopes.map((s) => ({ id: s.id, parentId: s.parent_id, name: s.name })),
       step: { key: d.step_key, name: d.step_name },
       raisedBy: { companyName: d.raised_by },
@@ -521,6 +531,19 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
       actions: { ...(await actions(trx, workItemId)), saveAnswers: d.can_save_answers },
     };
   });
+}
+
+/** An item's per-field times as the acting Member who may save it reads them; locks the item when `lock`. */
+async function fieldStamps(trx: Trx, workItemId: string, lock: boolean): Promise<FieldStamps> {
+  const { rows } = await sql<{ times: FieldStamps | null }>`
+    select app.work_item_field_times(${workItemId}::uuid, ${lock}) as times
+  `.execute(trx);
+  return rows[0]?.times ?? {};
+}
+
+/** Stamps the fields the last save changed (app.record_field_times). */
+async function recordFieldTimes(trx: Trx, workItemId: string, now: Date): Promise<void> {
+  await sql`select app.record_field_times(${workItemId}::uuid, ${now})`.execute(trx);
 }
 
 /**
@@ -651,13 +674,19 @@ const saveAnswersRefusals = [
   "outside_visibility",
   "target_not_found",
 ] as const;
-export type SaveAnswersResult = { ok: true } | AnswersRefused | { ok: false; reason: (typeof saveAnswersRefusals)[number] };
+export type SaveAnswersResult =
+  | { ok: true; saved: SavedAnswers | null }
+  | AnswersRefused
+  | { ok: false; reason: (typeof saveAnswersRefusals)[number] };
 
 /**
  * Save draft: the raiser's Participant saves the answers so far, in Draft or one
  * of its internal Steps, checked in draft mode against its pinned Form Version
  * (required fields may be empty). After Draft, the database records each change
  * as a field-level diff in the raiser's history.
+ *
+ * With `basedOn`, each field another Member changed since is kept as theirs
+ * (mergeFieldAnswers) and reported, with every field's time, in `saved`.
  */
 export function saveAnswers(
   db: Db,
@@ -667,16 +696,22 @@ export function saveAnswers(
   now: Date,
 ): Promise<SaveAnswersResult> {
   return withMember(db, memberId, async (trx): Promise<SaveAnswersResult> => {
+    // Locked first, so the merge is against exactly what this save overwrites.
+    const before = await fieldStamps(trx, workItemId, true);
     const pinned = await pinnedForm(trx, workItemId);
     if (!pinned) return { ok: false, reason: "not_found" };
     // Who may save, and when, before what is wrong with the answers.
     if (!pinned.canSave) return { ok: false, reason: "not_editable" };
-    const checked = validateAnswers(pinned.form.schema, input.answers, "draft", {
+    const merge = input.basedOn
+      ? mergeFieldAnswers({ stored: pinned.data, stamps: before, basedOn: input.basedOn, submitted: input.answers, memberId })
+      : null;
+    const answers = merge ? merge.merged : input.answers;
+    const checked = validateAnswers(pinned.form.schema, answers, "draft", {
       scopes: await projectScopes(trx, pinned.projectId),
       offered: await offeredFor(trx, pinned.form.schema, pinned.projectId, workItemId, pinned.data),
       optionLists: await optionListsFor(trx, pinned.form.schema),
       held: pinned.data,
-      linkable: await linkableIds(trx, pinned.form.schema, pinned.projectId, workItemId, input.answers, pinned.data),
+      linkable: await linkableIds(trx, pinned.form.schema, pinned.projectId, workItemId, answers, pinned.data),
     });
     if (!checked.ok) return { ok: false, reason: "invalid_answers", errors: checked.errors };
     const stored = storedAnswers(answersToDb(pinned.form.schema, checked.answers));
@@ -685,7 +720,20 @@ export function saveAnswers(
         ${workItemId}::uuid, ${stored.data}::jsonb, ${stored.tradeId}::uuid, ${stored.locationId}::uuid,
         ${stored.scopeIds}::uuid[], ${now}) as outcome
     `.execute(trx);
-    return commandResult(rows[0]!.outcome, "saved", saveAnswersRefusals);
+    const result = commandResult(rows[0]!.outcome, "saved", saveAnswersRefusals);
+    if (!result.ok) return result;
+    await recordFieldTimes(trx, workItemId, now);
+    if (!merge) return { ok: true, saved: null };
+    const after = await fieldStamps(trx, workItemId, false);
+    return {
+      ok: true,
+      saved: {
+        fieldTimes: Object.fromEntries(
+          Object.entries(after).map(([key, s]) => [key, { at: s.at, memberName: (s.name as BilingualText | null) ?? null, byMe: s.by === memberId }]),
+        ),
+        keptFromOthers: merge.kept.map((k) => ({ field: k.field, value: k.value, at: k.at, memberName: (k.name as BilingualText | null) ?? null })),
+      },
+    };
   });
 }
 

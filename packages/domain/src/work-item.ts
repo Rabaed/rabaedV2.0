@@ -21,8 +21,30 @@ export type CreateWorkItemRequest = z.input<typeof createWorkItemRequest>;
 export const createdWorkItem = z.object({ id: z.uuid() });
 
 /** Save draft: the Draft's answers so far, checked in draft mode (types, not required). */
-export const saveAnswersRequest = z.object({ answers: formAnswers });
+export const saveAnswersRequest = z.object({
+  answers: formAnswers,
+  /**
+   * The per-field times (`fieldTimes` of the item, or of the last save) these answers
+   * were based on. When given, a field another Member changed since is kept as theirs
+   * and the response says so (form-engine.md §8, part 3); without it the save simply replaces.
+   */
+  basedOn: z.record(z.string(), z.iso.datetime()).optional(),
+});
 export type SaveAnswersRequest = z.infer<typeof saveAnswersRequest>;
+
+/** When a field was last changed, and by whom: the name only within the viewer's own Company (V14). */
+export const fieldTime = z.object({ at: z.iso.datetime(), memberName: bilingualText.nullable(), byMe: z.boolean() });
+export type FieldTime = z.infer<typeof fieldTime>;
+
+/**
+ * The response to a save that sent `basedOn`: every field's time now, and the fields
+ * the save kept as another Member's, with their values.
+ */
+export const savedAnswers = z.object({
+  fieldTimes: z.record(z.string(), fieldTime),
+  keptFromOthers: z.array(z.object({ field: z.string(), value: z.unknown(), at: z.iso.datetime(), memberName: bilingualText.nullable() })),
+});
+export type SavedAnswers = z.infer<typeof savedAnswers>;
 
 // Answers that fail the Form's checks are refused with `{ error, fields }`:
 // `invalid_answers` on create and Save draft (draft mode), `form_incomplete` on
@@ -211,6 +233,10 @@ export const workItemDetail = workItemSummary.extend({
   answers: formAnswers,
   /** The `member` and `participant` answers as the viewer may read them, by field key. */
   namedAnswers,
+  /** When each answer last changed and by whom, by field key; only for a viewer who may save, else empty. */
+  fieldTimes: z.record(z.string(), fieldTime),
+  /** The web autosaves it: only the first Draft, where saves write no history. */
+  autosave: z.boolean(),
   /** The item's Scopes and Sub-scopes, each Scope before its Sub-scopes. */
   scopes: z.array(z.object({ id: z.uuid(), parentId: z.uuid().nullable(), name: bilingualText })),
   step: z.object({ key: z.string(), name: bilingualText }),
