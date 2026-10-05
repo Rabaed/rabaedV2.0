@@ -2,7 +2,7 @@
 // V19 and scenario 47; ADR 0013), as the app role: while K1 holds the item, a
 // Contractor Member and the Owner read the answers as they arrived and none of
 // K1's answers_changed events, whatever they query; K1 saves only its section;
-// and K1 moves on only with the answers the API checked. A Return out of K1's
+// and K1 moves on only with the answers the API checked. A Send Back out of K1's
 // Step discards what K1 wrote (RP-299 review). The field-times functions run
 // only as the app role, and stamp only for a Member who may save.
 import { randomInt, randomUUID } from "node:crypto";
@@ -10,7 +10,7 @@ import { sql } from "kysely";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb, withMember, type Db } from "../src/index.ts";
-import { joinProject, testDatabaseUrls } from "../test-support/index.ts";
+import { addSendBackWorkflow, joinProject, testDatabaseUrls } from "../test-support/index.ts";
 
 const urls = testDatabaseUrls();
 const digits = (n: number) => Array.from({ length: n }, () => randomInt(10)).join("");
@@ -58,7 +58,7 @@ const call = <T extends object>(as: string, query: ReturnType<typeof sql<T>>) =>
   withMember(app, as, (trx) => query.execute(trx).then((r) => r.rows));
 const outcome = (as: string, query: ReturnType<typeof sql<{ outcome: string }>>) => call(as, query).then((rows) => rows[0]!.outcome);
 
-/** A test-only Type: Draft → Contractor review → Consultant review → Consultant approval → Approved, its Form with a Consultant section. */
+/** A test-only Type on the test Workflow with a Send Back (addSendBackWorkflow), its Form with a Consultant section. */
 async function addType() {
   const schema = {
     sections: [
@@ -84,44 +84,19 @@ async function addType() {
       },
     ],
   };
+  const workflowId = await addSendBackWorkflow((text) => migrator.query(text));
   await migrator.query(`
     do $$
       declare
         v_form uuid;
-        v_definition uuid;
-        v_version uuid;
       begin
         if exists (select 1 from work_item_type where owner_kind = 'rabaed' and code = '${TYPE}') then return; end if;
         insert into form_definition (owner_kind, name) values ('rabaed', '{"en": "Consultant section", "ar": "قسم الاستشاري"}')
         returning id into v_form;
         insert into form_version (form_definition_id, version_no, status, published_at, schema)
         values (v_form, 1, 'published', now(), '${JSON.stringify(schema)}'::jsonb);
-        insert into workflow_definition (owner_kind, name) values ('rabaed', '{"en": "Consultant section", "ar": "قسم الاستشاري"}')
-        returning id into v_definition;
-        insert into workflow_version (workflow_definition_id, version_no, status, published_at)
-        values (v_definition, 1, 'published', now()) returning id into v_version;
-        insert into workflow_step (workflow_version_id, key, name, stage_key, actor_rule, outcome_mode) values
-          (v_version, 'draft', '{"en": "Draft", "ar": "مسودة"}', 'draft', '{"base_role": "contractor", "permission": "create"}', 'none'),
-          (v_version, 'internal_review', '{"en": "Contractor review", "ar": "مراجعة المقاول"}', 'internal_review',
-            '{"base_role": "contractor", "permission": "review"}', 'none'),
-          (v_version, 'consultant_review', '{"en": "Consultant review", "ar": "مراجعة الاستشاري"}', 'pending_approval',
-            '{"base_role": "consultant", "permission": "review"}', 'none'),
-          (v_version, 'consultant_approval', '{"en": "Consultant approval", "ar": "اعتماد الاستشاري"}', 'internal_review',
-            '{"base_role": "consultant", "permission": "approve"}', 'issue_code'),
-          (v_version, 'approved', '{"en": "Approved", "ar": "معتمد"}', 'approved', '{}', 'none');
-        insert into workflow_transition (workflow_version_id, key, from_step_id, to_step_id, label, kind, outcome, permission, sort)
-        select v_version, t.key, f.id, s.id, t.label::jsonb, t.kind, t.outcome, t.permission, t.sort
-        from (values
-          ('send_for_review', 'draft', 'internal_review', '{"en": "Send", "ar": "إرسال"}', 'send', null, 'create', 1),
-          ('submit', 'internal_review', 'consultant_review', '{"en": "Submit", "ar": "تقديم"}', 'submit', null, 'submit', 2),
-          ('send_to_manager', 'consultant_review', 'consultant_approval', '{"en": "Send", "ar": "إرسال"}', 'send', null, 'review', 3),
-          ('approve_a', 'consultant_approval', 'approved', '{"en": "A", "ar": "A"}', 'close', 'A', 'approve', 4),
-          ('return_to_contractor', 'consultant_review', 'internal_review', '{"en": "Return", "ar": "إعادة"}', 'return', null, 'review', 5)
-        ) as t (key, from_key, to_key, label, kind, outcome, permission, sort)
-        join workflow_step f on f.workflow_version_id = v_version and f.key = t.from_key
-        join workflow_step s on s.workflow_version_id = v_version and s.key = t.to_key;
         insert into work_item_type (owner_kind, module_key, code, name, workflow_definition_id, outcome_kind, form_definition_id)
-        values ('rabaed', 'submittals', '${TYPE}', '{"en": "Consultant section", "ar": "قسم الاستشاري"}', v_definition, 'review_code', v_form);
+        values ('rabaed', 'submittals', '${TYPE}', '{"en": "Consultant section", "ar": "قسم الاستشاري"}', '${workflowId}', 'review_code', v_form);
       end
     $$`);
 }
@@ -326,13 +301,13 @@ describe("a file into a field of a section not editable now", () => {
   });
 });
 
-describe("a Return out of K1's Step", () => {
+describe("a Send Back out of K1's Step", () => {
   let id = "";
   beforeAll(async () => {
     id = await atConsultantReview("FD-40");
     expect(await save(k1.member, { model: "FD-40", sample_checked: true }, id)).toBe("saved");
     expect(await recordTimes(k1.member, id)).toBe("recorded");
-    expect(await take(k1.member, "return_to_contractor", sql`null`, id)).toBe("applied");
+    expect(await take(k1.member, "send_back", sql`null`, id)).toBe("applied");
   });
 
   it("discards K1's answers: C1, holding it again, reads K1's section as it arrived", async () => {

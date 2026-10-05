@@ -5,17 +5,18 @@
 // the item is with that Participant, everyone else reads the answers as they
 // arrived, and none of its `answers_changed` events. When it leaves, they are
 // everyone's. Required fields are checked per section, on a forward Transition out
-// of a Step the section names, never on a Return. A Return out of the
+// of a Step the section names, never on a Send Back. A Send Back out of the
 // Consultant's Step discards what it wrote there: its section goes back to how
-// it arrived (RP-299 review).
+// it arrived (RP-299 review; ADR 0014).
 //
-// The Type is test-only (3-07 brings the MAR Form Version 4): Draft → Contractor
-// review → Consultant review ⇄ (Return) Contractor review; Consultant review →
+// The Type is test-only (3-07 brings the MAR Form Version 4), on the test
+// Workflow with a Send Back (addSendBackWorkflow): Draft → Contractor review →
+// Consultant review ⇄ (Send Back) Contractor review; Consultant review →
 // Consultant approval → Approved or Revise & Resubmit.
 import { randomUUID } from "node:crypto";
 import { publishFormVersion } from "@rabaed/admin/services";
 import { createDb } from "@rabaed/db";
-import { testDatabaseUrls } from "@rabaed/db/test-support";
+import { addSendBackWorkflow, testDatabaseUrls } from "@rabaed/db/test-support";
 import type { FormToFill, WorkItemDetail, WorkItemHistory } from "@rabaed/domain";
 import { sql } from "kysely";
 import type { LightMyRequestResponse } from "fastify";
@@ -77,55 +78,27 @@ async function addConsultantSectionType(): Promise<string> {
     .values({ owner_kind: "rabaed", name: JSON.stringify(bilingual("Consultant section (test)")) })
     .returning("id")
     .executeTakeFirstOrThrow();
-  await sql`
-    do $$
-      declare
-        v_definition uuid;
-        v_version uuid;
-      begin
-        if exists (select 1 from work_item_type where owner_kind = 'rabaed' and code = ${sql.lit(TYPE)}) then
-          return;
-        end if;
-        insert into workflow_definition (owner_kind, name)
-        values ('rabaed', '{"en": "Consultant section (test)", "ar": "قسم الاستشاري (اختبار)"}')
-        returning id into v_definition;
-        insert into workflow_version (workflow_definition_id, version_no, status, published_at)
-        values (v_definition, 1, 'published', now())
-        returning id into v_version;
-
-        insert into workflow_step (workflow_version_id, key, name, stage_key, actor_rule, outcome_mode) values
-          (v_version, 'draft', '{"en": "Draft", "ar": "مسودة"}', 'draft',
-            '{"base_role": "contractor", "permission": "create"}', 'none'),
-          (v_version, 'internal_review', '{"en": "Contractor review", "ar": "مراجعة المقاول"}', 'internal_review',
-            '{"base_role": "contractor", "permission": "review"}', 'none'),
-          (v_version, 'consultant_review', '{"en": "Consultant review", "ar": "مراجعة الاستشاري"}', 'pending_approval',
-            '{"base_role": "consultant", "permission": "review"}', 'none'),
-          (v_version, 'consultant_approval', '{"en": "Consultant approval", "ar": "اعتماد الاستشاري"}', 'internal_review',
-            '{"base_role": "consultant", "permission": "approve"}', 'issue_code'),
-          (v_version, 'approved', '{"en": "Approved", "ar": "معتمد"}', 'approved', '{}', 'none'),
-          (v_version, 'revise_resubmit', '{"en": "Revise & Resubmit", "ar": "مراجعة وإعادة تقديم"}', 'revise_resubmit', '{}', 'none');
-
-        insert into workflow_transition (workflow_version_id, key, from_step_id, to_step_id, label, kind, outcome, permission, sort)
-        select v_version, t.key, f.id, s.id, t.label::jsonb, t.kind, t.outcome, t.permission, t.sort
-        from (values
-          ('send_for_review', 'draft', 'internal_review', '{"en": "Send for Review", "ar": "إرسال للمراجعة"}', 'send', null, 'create', 1),
-          ('submit', 'internal_review', 'consultant_review', '{"en": "Submit", "ar": "تقديم"}', 'submit', null, 'submit', 2),
-          ('return_to_contractor', 'consultant_review', 'internal_review', '{"en": "Return", "ar": "إعادة"}',
-            'return', null, 'review', 3),
-          ('send_to_manager', 'consultant_review', 'consultant_approval', '{"en": "Send to Manager", "ar": "إرسال للمدير"}',
-            'send', null, 'review', 4),
-          ('approve_a', 'consultant_approval', 'approved', '{"en": "Approve · A", "ar": "اعتماد · A"}', 'close', 'A', 'approve', 5),
-          ('revise_c', 'consultant_approval', 'revise_resubmit', '{"en": "Revise · C", "ar": "مراجعة · C"}', 'close', 'C', 'approve', 6)
-        ) as t (key, from_key, to_key, label, kind, outcome, permission, sort)
-        join workflow_step f on f.workflow_version_id = v_version and f.key = t.from_key
-        join workflow_step s on s.workflow_version_id = v_version and s.key = t.to_key;
-
-        insert into work_item_type (owner_kind, module_key, code, name, workflow_definition_id, outcome_kind, form_definition_id)
-        values ('rabaed', 'submittals', ${sql.lit(TYPE)}, '{"en": "Consultant section submittal", "ar": "اعتماد قسم الاستشاري"}',
-          v_definition, 'review_code', ${sql.lit(formId)}::uuid);
-      end
-    $$
-  `.execute(migrator);
+  const existing = await migrator
+    .selectFrom("work_item_type")
+    .select("id")
+    .where("owner_kind", "=", "rabaed")
+    .where("code", "=", TYPE)
+    .executeTakeFirst();
+  if (!existing) {
+    const workflowId = await addSendBackWorkflow((text) => sql.raw(text).execute(migrator));
+    await migrator
+      .insertInto("work_item_type")
+      .values({
+        owner_kind: "rabaed",
+        module_key: "submittals",
+        code: TYPE,
+        name: JSON.stringify({ en: "Consultant section submittal", ar: "اعتماد قسم الاستشاري" }),
+        workflow_definition_id: workflowId,
+        outcome_kind: "review_code",
+        form_definition_id: formId,
+      })
+      .execute();
+  }
   // A new Form on every run, so its Versions start from 1.
   await migrator.updateTable("work_item_type").set({ form_definition_id: formId }).where("owner_kind", "=", "rabaed").where("code", "=", TYPE).execute();
   return formId;
@@ -296,18 +269,18 @@ describe("required fields, per section, by the Step being left", () => {
     await ok(take(k1Engineer, id, "send_to_manager"));
   });
 
-  it("don't hold up a Return", async () => {
+  it("don't hold up a Send Back", async () => {
     const id = await atConsultantReview("FD-72");
-    await ok(take(k1Engineer, id, "return_to_contractor"));
+    await ok(take(k1Engineer, id, "send_back"));
   });
 });
 
-describe("K1 fills in part of its section, then Returns the item to C1 (scenario 57)", () => {
+describe("K1 fills in part of its section, then Sends the item Back to C1 (scenario 57)", () => {
   let id = "";
   beforeAll(async () => {
     id = await atConsultantReview("FD-50");
     await ok(saveOver(k1Engineer, id, { sample_checked: false, verification_note: "Wrong fire rating" }));
-    await ok(take(k1Engineer, id, "return_to_contractor"));
+    await ok(take(k1Engineer, id, "send_back"));
   });
 
   const unseen = async (other: Caller) => {
@@ -316,6 +289,20 @@ describe("K1 fills in part of its section, then Returns the item to C1 (scenario
     const body = (await other.get(`/v1/work-items/${id}`)).body + (await other.get(`/v1/work-items/${id}/history`)).body;
     expect(body).not.toContain("Wrong fire rating");
   };
+
+  const sendBackEvents = async (viewer: Caller) =>
+    ((await ok(viewer.get(`/v1/work-items/${id}/history`), 200)).json() as WorkItemHistory).events.filter(
+      (e) => e.transition?.en === "Send Back",
+    );
+
+  it("moves the item to the Contractor review, the same item with its Document Number, by a shared Transition", async () => {
+    const back = await detail(pm, id);
+    expect(back.step.key).toBe("internal_review");
+    expect(back.documentNumber).not.toBeNull();
+    for (const c1Member of [engineer, pm]) {
+      expect(await sendBackEvents(c1Member)).toMatchObject([{ type: "transition", audience: "shared" }]);
+    }
+  });
 
   it("shows C1, holding it again, the section as it arrived: empty, and none of K1's changes", async () => {
     for (const c1Member of [engineer, pm]) await unseen(c1Member);
@@ -326,6 +313,12 @@ describe("K1 fills in part of its section, then Returns the item to C1 (scenario
     await ok(pm.post(`/v1/work-items/${id}/claim`));
     await ok(take(pm, id, "submit"));
     for (const other of [orEngineer, owner, engineer]) await unseen(other);
+  });
+
+  it("shows K1, OR and OW the Send Back in the history once C1 Submits again", async () => {
+    for (const other of [k1Pm, orEngineer, owner]) {
+      expect(await sendBackEvents(other)).toMatchObject([{ type: "transition", audience: "shared" }]);
+    }
   });
 
   it("starts K1 from the section as it arrived, with no field times for it, its earlier changes still in K1's history", async () => {

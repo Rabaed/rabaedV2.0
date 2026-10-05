@@ -307,7 +307,14 @@ export const workItemDetail = workItemSummary.extend({
   /** Set once closed: the Issued Code (A, C…). */
   outcome: workItemOutcome.nullable(),
   closedAt: z.iso.datetime().nullable(),
-  createdAt: z.iso.datetime(),
+  /**
+   * The Creation Date: when it got its Document Number, first leaving Draft. Only
+   * for the raiser's Participant; null for everyone else and while in Draft. When
+   * the Draft was started is never shown (visibility.md "Creation Date").
+   */
+  creationDate: z.iso.datetime().nullable(),
+  /** The Submission Date: its first Submit out of the raiser's Participant, kept after a Send Back. Null until then. */
+  submissionDate: z.iso.datetime().nullable(),
   /** What the viewer may press now. */
   actions: workItemActions,
 });

@@ -3,6 +3,8 @@ import { withMember, type Db } from "../src/client.ts";
 import { processOutbox } from "../src/outbox.ts";
 import { databaseNameOf, databaseUrlsFromEnv, withDatabaseName, type DatabaseUrls } from "../src/config.ts";
 
+export { addSendBackWorkflow } from "./send-back-workflow.ts";
+
 /**
  * The URLs from the environment, pointed at `<database>_test` so the suites
  * never touch the dev database.
