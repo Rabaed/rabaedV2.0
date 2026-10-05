@@ -1,5 +1,9 @@
-import { describe, expect, it } from "vitest";
-import { chooseWorktrees, isAgentWorktree, parseWorktrees, type WorktreeFacts } from "./worktrees.ts";
+import { execFileSync } from "node:child_process";
+import { existsSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { chooseWorktrees, gatherFacts, hasOwnCommit, isAgentWorktree, listWorktrees, parseWorktrees, refExists, removeWorktree, type WorktreeFacts } from "./worktrees.ts";
 
 const main = "G:/Rabaed Contech";
 const here = `${main}/.claude/worktrees/agent-current`;
@@ -11,6 +15,7 @@ const wt = (name: string, w: Partial<WorktreeFacts> = {}): WorktreeFacts => ({
   locked: undefined,
   ahead: 0,
   dirty: false,
+  noCommitsYet: false,
   ...w,
 });
 
@@ -94,7 +99,116 @@ describe("chooseWorktrees", () => {
     expect(remove).toEqual([]);
   });
 
+  it("skips a worktree with no commits yet, whose subagent may still be running, even when the app locked it", () => {
+    const { remove, skipped } = choose([wt("agent-a", { noCommitsYet: true, locked: "claude agent agent-a (pid 31260)" })]);
+    expect(remove).toEqual([]);
+    expect(skipped[0]?.reason).toBe("no commits yet, may still be running (--include-empty removes it)");
+  });
+
+  it("removes a worktree with no commits yet when asked to (--include-empty)", () => {
+    const { remove } = chooseWorktrees({ worktrees: [wt("agent-a", { noCommitsYet: true })], currentPath: here, includeEmpty: true, platform: "linux" });
+    expect(remove.map((w) => w.path)).toEqual([`${main}/.claude/worktrees/agent-a`]);
+  });
+
+  it("still keeps uncommitted changes and unmerged commits with --include-empty", () => {
+    const { remove } = chooseWorktrees({
+      worktrees: [wt("agent-a", { noCommitsYet: true, dirty: true }), wt("agent-b", { noCommitsYet: true, ahead: 1 })],
+      currentPath: here,
+      includeEmpty: true,
+      platform: "linux",
+    });
+    expect(remove).toEqual([]);
+  });
+
   it("returns the worktrees without the facts used to choose", () => {
     expect(choose([wt("agent-a")]).remove[0]).toEqual({ path: `${main}/.claude/worktrees/agent-a`, head: "abc123", branch: "worktree-agent-a", locked: undefined });
+  });
+});
+
+describe("hasOwnCommit", () => {
+  it("is false while the branch was only created, renamed, reset or fast-forwarded", () => {
+    expect(hasOwnCommit([])).toBe(false);
+    expect(hasOwnCommit(["branch: Created from HEAD"])).toBe(false);
+    expect(
+      hasOwnCommit([
+        "merge RP-319-retro-environment: Fast-forward",
+        "Branch: renamed refs/heads/worktree-agent-a to refs/heads/RP-319-review-fixes",
+        "reset: moving to RP-319-retro-environment",
+        "branch: Created from origin/main",
+      ]),
+    ).toBe(false);
+  });
+
+  it("is true once a commit was made on the branch, even if it was reset away later", () => {
+    expect(hasOwnCommit(["commit: RP-320 Screenshot verdict", "branch: Created from HEAD"])).toBe(true);
+    expect(hasOwnCommit(["reset: moving to HEAD~1", "commit (amend): RP-320 x", "branch: Created from HEAD"])).toBe(true);
+    expect(hasOwnCommit(["commit (merge): Merge main"])).toBe(true);
+    expect(hasOwnCommit(["merge main: Merge made by the 'ort' strategy."])).toBe(true);
+    expect(hasOwnCommit(["cherry-pick: RP-1 x"])).toBe(true);
+    expect(hasOwnCommit(["pull: Merge made by the 'ort' strategy."])).toBe(true);
+  });
+
+  it("counts a subject it does not know as no commit, so the worktree is kept", () => {
+    expect(hasOwnCommit(["something new: moved"])).toBe(false);
+  });
+});
+
+// The git side, in a throwaway repository under the system temp folder.
+describe("gatherFacts and removeWorktree in a throwaway repository", () => {
+  let root = "";
+  const run = (args: string[], cwd = root) =>
+    execFileSync("git", ["-c", "user.name=Test", "-c", "user.email=test@example.com", ...args], { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+  const agent = (name: string) => join(root, ".claude", "worktrees", name);
+  const listed = (name: string) => listWorktrees(root).find((w) => w.path.endsWith(`/${name}`) || w.path.endsWith(`\\${name}`))!;
+
+  beforeEach(() => {
+    root = realpathSync(mkdtempSync(join(tmpdir(), "rabaed-worktrees-")));
+    run(["init", "-b", "main"]);
+    writeFileSync(join(root, "a.txt"), "a");
+    run(["add", "a.txt"]);
+    run(["commit", "-m", "first"]);
+  });
+
+  afterEach(() => rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }));
+
+  it("marks a new worktree, and one only reset onto another branch, as having no commits yet", () => {
+    run(["worktree", "add", "-b", "worktree-agent-new", agent("agent-new")]);
+    run(["branch", "integration"]);
+    run(["worktree", "add", "-b", "worktree-agent-reset", agent("agent-reset")]);
+    run(["reset", "--hard", "integration"], agent("agent-reset"));
+    run(["branch", "-m", "RP-1-reset"], agent("agent-reset"));
+    const facts = gatherFacts([listed("agent-new"), listed("agent-reset")], "main", root);
+    expect(facts.map((f) => [f.ahead, f.dirty, f.noCommitsYet])).toEqual([
+      [0, false, true],
+      [0, false, true],
+    ]);
+  });
+
+  it("sees a commit, and keeps it seen once merged", () => {
+    run(["worktree", "add", "-b", "worktree-agent-done", agent("agent-done")]);
+    writeFileSync(join(agent("agent-done"), "b.txt"), "b");
+    run(["add", "b.txt"], agent("agent-done"));
+    run(["commit", "-m", "work"], agent("agent-done"));
+    expect(gatherFacts([listed("agent-done")], "main", root)[0]).toMatchObject({ ahead: 1, noCommitsYet: false });
+    run(["merge", "--no-ff", "-m", "merge", "worktree-agent-done"]);
+    expect(gatherFacts([listed("agent-done")], "main", root)[0]).toMatchObject({ ahead: 0, noCommitsYet: false });
+  });
+
+  it("deletes a merged branch with the worktree, and keeps one git says is not merged", () => {
+    for (const name of ["agent-merged", "agent-unmerged"]) {
+      run(["worktree", "add", "-b", `worktree-${name}`, agent(name)]);
+      writeFileSync(join(agent(name), `${name}.txt`), name);
+      run(["add", `${name}.txt`], agent(name));
+      run(["commit", "-m", name], agent(name));
+    }
+    run(["merge", "--no-ff", "-m", "merge", "worktree-agent-merged"]);
+
+    expect(removeWorktree(listed("agent-merged"), root)).toEqual({});
+    expect(refExists("worktree-agent-merged", root)).toBe(false);
+
+    const { branchKept } = removeWorktree(listed("agent-unmerged"), root);
+    expect(branchKept).toMatch(/not fully merged/);
+    expect(refExists("worktree-agent-unmerged", root)).toBe(true);
+    expect(existsSync(agent("agent-unmerged"))).toBe(false);
   });
 });

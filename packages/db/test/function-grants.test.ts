@@ -23,7 +23,7 @@ const allow: GrantAllowList = {
   "app.is_bilingual": both,
 };
 
-const function_ = (fn: string, grantees: string[], owner = "rabaed_migrator") => ({
+const grantOf = (fn: string, grantees: string[], owner = "rabaed_migrator") => ({
   fn: `${fn}()`,
   name: fn,
   owner,
@@ -45,18 +45,18 @@ describe("function grants in the database", () => {
 
 describe("the check", () => {
   it("names a function nobody revoked from PUBLIC (a null proacl is that default)", () => {
-    const problems = functionGrantProblems([function_("app.forgot", ["PUBLIC", "rabaed_migrator"])], {});
+    const problems = functionGrantProblems([grantOf("app.forgot", ["PUBLIC", "rabaed_migrator"])], {});
     expect(problems).toHaveLength(1);
     expect(problems[0]).toMatch(/^app\.forgot\(\): PUBLIC may execute it/);
   });
 
   it("names a grant to a role outside the allow-list", () => {
-    const problems = functionGrantProblems([function_("app.stray", ["rabaed_app", "rabaed_admin", "rabaed_migrator"])], {});
+    const problems = functionGrantProblems([grantOf("app.stray", ["rabaed_app", "rabaed_admin", "rabaed_migrator"])], {});
     expect(problems).toEqual(["app.stray(): rabaed_admin may execute it, not in its allow-list"]);
   });
 
   it("passes a grant the allow-list names, and the owner's own", () => {
-    const grants = [function_("app.shared", ["rabaed_app", "rabaed_admin", "rabaed_migrator"]), function_("app.mine", ["rabaed_app", "rabaed_migrator"])];
+    const grants = [grantOf("app.shared", ["rabaed_app", "rabaed_admin", "rabaed_migrator"]), grantOf("app.mine", ["rabaed_app", "rabaed_migrator"])];
     expect(functionGrantProblems(grants, { "app.shared": ["rabaed_app", "rabaed_admin"] })).toEqual([]);
   });
 });

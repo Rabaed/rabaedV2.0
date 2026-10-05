@@ -42,7 +42,7 @@ if (existsSync(".env") && !force) {
 
 const containers = listContainers();
 if (!containers) console.warn("Docker is not running, so only the ports were checked, not the compose projects.");
-const check = { containers: containers ?? [], takenPorts: await takenLanePorts(), cwd: process.cwd(), sharedLane: db !== undefined };
+const check = { containers: containers ?? [], takenPorts: await takenLanePorts(), cwd: process.cwd(), ownDatabase: db !== undefined };
 const clashesOf = (lane: number) => laneClashes(lane, check);
 
 let lane = n;
