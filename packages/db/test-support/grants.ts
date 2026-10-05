@@ -25,12 +25,13 @@ export async function appFunctionsExecutableByPublic(db: Db): Promise<string[]> 
 /**
  * The table-level privileges the app role holds on `work_item`, directly, via
  * PUBLIC or via a role it belongs to. The app role reads `work_item` through
- * column grants only.
+ * column grants only. TRUNCATE is included because row-level security does
+ * not apply to it.
  */
 export async function wholeTableGrantsOnWorkItem(db: Db): Promise<string[]> {
   const { rows } = await sql<{ privilege: string }>`
     select privilege
-    from unnest(array['SELECT', 'INSERT', 'UPDATE', 'DELETE']) as privilege
+    from unnest(array['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'TRUNCATE']) as privilege
     where pg_catalog.has_table_privilege(${APP_ROLE}, 'public.work_item', privilege)
     order by privilege
   `.execute(db);

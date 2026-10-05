@@ -38,15 +38,18 @@ describe("functions in the app schema", () => {
 
   it("are caught when a new one keeps the default grant to public", async () => {
     await rolledBack(async (trx) => {
-      await sql.raw("create function app.rp328_probe(int) returns int language sql as $$ select 1 $$").execute(trx);
-      expect(await appFunctionsExecutableByPublic(trx)).toContain("app.rp328_probe(integer)");
+      await sql.raw("create function app.grants_probe(int) returns int language sql as $$ select 1 $$").execute(trx);
+      expect(await appFunctionsExecutableByPublic(trx)).toContain("app.grants_probe(integer)");
     });
   });
 
   it("are caught when one is granted to public explicitly", async () => {
     await rolledBack(async (trx) => {
-      await sql.raw("grant execute on function app.current_project_ids() to public").execute(trx);
-      expect(await appFunctionsExecutableByPublic(trx)).toContain("app.current_project_ids()");
+      await sql.raw("create function app.grants_probe(int) returns int language sql as $$ select 1 $$").execute(trx);
+      await sql.raw("revoke all on function app.grants_probe(int) from public").execute(trx);
+      expect(await appFunctionsExecutableByPublic(trx)).not.toContain("app.grants_probe(integer)");
+      await sql.raw("grant execute on function app.grants_probe(int) to public").execute(trx);
+      expect(await appFunctionsExecutableByPublic(trx)).toContain("app.grants_probe(integer)");
     });
   });
 });
@@ -65,8 +68,8 @@ describe("work_item", () => {
 
   it("is caught when the grant reaches the app role through public", async () => {
     await rolledBack(async (trx) => {
-      await sql.raw("grant delete on work_item to public").execute(trx);
-      expect(await wholeTableGrantsOnWorkItem(trx)).toEqual(["DELETE"]);
+      await sql.raw("grant delete, truncate on work_item to public").execute(trx);
+      expect(await wholeTableGrantsOnWorkItem(trx)).toEqual(["DELETE", "TRUNCATE"]);
     });
   });
 });

@@ -15,7 +15,7 @@ Visibility is the top requirement (`docs/visibility.md`). Check every read path 
 ## Database
 
 - **Row-level security on every Project table,** keyed by `project_id`, with a seam-2 test that Project B's rows never return to a Member of Project A.
-- **Grant the app role only what every Member who sees the row may read.** `work_item` is read through column grants, and a new column joins that list only when it passes that test. A whole-table grant (e.g. `work_item_scope`) states its reason in the migration. (Checked for `work_item`: seam-2 `grants.test.ts` fails on any table-level grant to the app role.)
+- **Grant the app role only what every Member who sees the row may read.** `work_item` is read through column grants, and a new column joins that list only when it passes that test. A whole-table grant (e.g. `work_item_scope`) states its reason in the migration. (Checked for `work_item`: seam-2 `grants.test.ts` fails on a table-level SELECT, INSERT, UPDATE, DELETE or TRUNCATE grant to the app role.)
 - **Every `security definer` function pins `set search_path = pg_catalog, public`,** re-checks the caller's access (e.g. `app.sees_work_item`), and is granted only to the role that needs it. (Checked for `search_path` by seam-2 `definer-search-path.test.ts`.)
 - **No function in `app` is executable by PUBLIC.** A new function revokes the default grant and grants EXECUTE to the roles that call it. (Checked by seam-2 `grants.test.ts`, which has a commented allow-list.)
 - **Migrations already on `main` stay byte-for-byte as they are.** A change is a new, timestamp-named migration.
