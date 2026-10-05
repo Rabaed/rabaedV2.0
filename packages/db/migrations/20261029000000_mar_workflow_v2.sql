@@ -33,13 +33,13 @@ do $$
     select v_v2, t.key, f2.id, s2.id, t.label, t.kind, t.outcome, t.permission, t.sort,
       case t.key
         when 'approve_a' then $schema$
-          { "sections": [ { "key": "remarks", "title": { "en": "Remarks", "ar": "الملاحظات" }, "fields": [
+          { "sections": [ { "key": "code_remarks", "title": { "en": "Remarks", "ar": "الملاحظات" }, "fields": [
             { "key": "remarks", "type": "textarea", "required": false, "maxLength": 4000,
               "label": { "en": "Remarks", "ar": "الملاحظات" },
               "help": { "en": "Shared with everyone who sees this item.", "ar": "يراها كل من يرى هذا العنصر." } } ] } ] }
         $schema$::jsonb
         when 'revise_c' then $schema$
-          { "sections": [ { "key": "remarks", "title": { "en": "Remarks", "ar": "الملاحظات" }, "fields": [
+          { "sections": [ { "key": "code_remarks", "title": { "en": "Remarks", "ar": "الملاحظات" }, "fields": [
             { "key": "remarks", "type": "textarea", "required": true, "maxLength": 4000,
               "label": { "en": "Remarks", "ar": "الملاحظات" },
               "help": { "en": "Shared with everyone who sees this item.", "ar": "يراها كل من يرى هذا العنصر." } } ] } ] }

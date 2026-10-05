@@ -405,7 +405,7 @@ describe("Remarks with the Code (MAR Workflow Version 2)", () => {
     const field = (key: string) => code(d, key)!.actionForm!.sections.flatMap((s) => s.fields).find((f) => f.key === "remarks");
     expect(field("revise_c")).toMatchObject({ type: "textarea", required: true });
     expect(field("approve_a")).toMatchObject({ type: "textarea" });
-    expect(field("approve_a")!.required).toBeFalsy();
+    expect((field("approve_a") as { required?: unknown }).required).toBeFalsy();
     // Version 2 is on new MARs; the Return keeps its reason.
     expect(code(await detail(pm, await readyToSubmit("Return form")), "return")!.actionForm).not.toBeNull();
   });
