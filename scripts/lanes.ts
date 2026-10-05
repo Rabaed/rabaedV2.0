@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { connect, createServer } from "node:net";
+import { samePath } from "./paths.ts";
 
 // Lanes: each worktree's own ports and Docker Compose project (README "Several
 // worktrees at once", planning/parallel-sessions.md). Used by lane-env.ts, which
@@ -54,15 +55,6 @@ export function parseVolumes(out: string): Volume[] {
 }
 
 const lines = (out: string) => out.split(/\r?\n/).filter((line) => line.trim() !== "");
-
-/** Whether two paths name the same folder (Docker reports Windows paths as it was given them). */
-export function samePath(a: string, b: string, platform: NodeJS.Platform = process.platform): boolean {
-  const norm = (p: string) => {
-    const slashed = p.replace(/\\/g, "/").replace(/\/+$/, "");
-    return platform === "win32" ? slashed.toLowerCase() : slashed;
-  };
-  return a !== "" && b !== "" && norm(a) === norm(b);
-}
 
 type ClashInput = {
   containers: Container[];
