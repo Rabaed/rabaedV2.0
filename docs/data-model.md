@@ -188,7 +188,7 @@ New items use the latest *published* versions of the Form and Workflow at creati
 A pattern change creates a new row, and old numbers stay as issued. No row means the Rabaed Default: project code, type code, participant code, sequence of 4, counted by all three (settled 2026-10-05). The number is built by `app.document_numbering`, the database's copy of `documentNumbering` in `@rabaed/domain` (the web's live example); the two must agree.
 
 **numbering_counter**
-`project_id`, `counter_key` (resolved prefix), `last_value`.
+`project_id`, `counter_key` (resolved prefix), `last_value`, `starting_value` (set when created ahead; it has issued nothing while `last_value = starting_value - 1`).
 Incremented with `INSERT … ON CONFLICT DO UPDATE … RETURNING` (the first number creates the row) in the same transaction as the first Send or Submit, so there are no gaps and no reuse.
 The key is the values of the pattern's counted segments joined by `-`, whatever the separator; under the Rabaed Default `<project code>-<type code>-<Participant Code or ordinal>`, so each Participant counts on its own (e.g. `TWR-MAR-01-0001`). A new pattern counting by the same values continues the same counter. A counter can be created ahead with a starting `last_value` by a Project Admin or Rabaed Engineer, only while it has issued nothing. Only Project Admins and Rabaed Engineers read counters.
 

@@ -54,6 +54,11 @@ const answers = {
   // Links (RP-291): an item Link search couldn't have offered, whatever the reason, made-up ids included.
   target_not_found: () => new HttpError(422, "target_not_found"),
   already_linked: () => new HttpError(409, "already_linked"),
+  // Starting numbers (RP-315): a value the pattern in effect counts by is missing,
+  // or the counter has issued a number, so its starting number is locked.
+  participant_required: () => new HttpError(422, "participant_required"),
+  location_required: () => new HttpError(422, "location_required"),
+  counter_used: () => new HttpError(409, "counter_used"),
 } satisfies Record<string, () => HttpError>;
 
 export type RefusalReason = keyof typeof answers;
