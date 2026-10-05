@@ -5,6 +5,7 @@ import {
   formVisibility,
   offeredChoices,
   validateAnswers,
+  type BilingualText,
   type FieldError,
   type FormChoices,
   type FormSchema,
@@ -42,6 +43,10 @@ type WorkItemFormState = {
   linkTargets: LinkTargetNames;
   errors: readonly FieldError[];
   editable: boolean;
+  /** The Form Sections the viewer may change now; the others read (form-engine.md §4). */
+  editableSections: readonly string[];
+  /** The Form Sections another Participant fills, by its Project Role. */
+  filledBy: Readonly<Record<string, BilingualText>>;
   /** Typed since the last save. */
   dirty: boolean;
   pending: boolean;
@@ -71,6 +76,8 @@ export function WorkItemFormProvider({
   people,
   optionLists,
   editable,
+  editableSections,
+  filledBy,
   children,
 }: {
   workItemId: string;
@@ -84,6 +91,8 @@ export function WorkItemFormProvider({
   optionLists: readonly OptionList[];
   /** Save draft is offered (actions.saveAnswers). */
   editable: boolean;
+  editableSections: readonly string[];
+  filledBy: Readonly<Record<string, BilingualText>>;
   children: ReactNode;
 }) {
   const t = useTranslations("workItems.form");
@@ -171,6 +180,8 @@ export function WorkItemFormProvider({
         named,
         errors,
         editable,
+        editableSections,
+        filledBy,
         dirty,
         pending,
         message,
@@ -213,6 +224,8 @@ export function WorkItemAnswers({ locale, workItemId, documents }: { locale: Loc
         optionLists={form.optionLists}
         errors={form.errors}
         mode={form.editable ? "edit" : "read"}
+        editableSections={form.editableSections}
+        filledBy={form.filledBy}
         locale={locale}
         onChange={form.change}
         idPrefix="answer"

@@ -68,6 +68,8 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
       answers={item.answers}
       named={item.namedAnswers}
       editable={editable && !!mine && !!scopes}
+      editableSections={form.editableSections}
+      filledBy={form.filledBy}
     >
       <div className="max-w-3xl space-y-6">
         <div className="space-y-2">
