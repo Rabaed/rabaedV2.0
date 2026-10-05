@@ -73,3 +73,4 @@ Every ticket already gets a `/code-review` inside `/implement`. When all of a sp
 4. Migrations are timestamp-named (and follow `CODING_STANDARDS.md`).
 5. Merge only through a PR with green CI (both visibility suites must pass). Merge `main` into your branch when it moves, and resolve any conflicts in that session.
 6. Parallel sessions multiply usage — close finished sessions.
+7. A ticket whose spec is being built by `/implement-spec` (its lane label is set and its spec has an open integration PR) stays under that spec. If it must move, the planning session comments on the integration PR.

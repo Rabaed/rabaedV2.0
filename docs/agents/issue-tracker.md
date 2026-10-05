@@ -25,6 +25,13 @@ Create a Jira issue in RP as above.
 
 `getJiraIssue` with the RP key (e.g. `RP-42`), `view: "evidence"`, plus its comments.
 
+## Checks before publishing a spec or tickets
+
+Run these in `/to-spec` and `/to-tickets`, before the issue is created.
+
+- **Spec: glossary.** Check every domain term against the _Avoid_ lists in `GLOSSARY.md`. A clash gets a glossary entry or a different word before the spec is published (RP-299 used "Remarks", which is Avoid for Comment and Internal Note).
+- **Ticket: existing code.** Find every function, table or endpoint the ticket calls "existing" or "as today" on `main` with grep. Each one not found gets a "Blocks" link from the ticket that builds it (RP-305 assumed `create_revision`, which RP-103 and RP-316 build).
+
 ## Wayfinding operations
 
 Used by `/wayfinder`.
