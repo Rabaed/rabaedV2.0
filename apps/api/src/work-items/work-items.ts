@@ -1,8 +1,11 @@
 import { withMember, type Database, type Db } from "@rabaed/db";
 import {
+  changedOutside,
+  editableSections,
   formFields,
   mergeFieldAnswers,
   formSchema,
+  sectionsFilledBy,
   isHiddenLinkChoice,
   offeredChoices,
   stepAgeWeeks,
@@ -15,7 +18,10 @@ import {
   type FormChoices,
   type FormSchema,
   type FormFieldType,
+  type FormToFill,
   type FormVersion,
+  type SectionEditContext,
+  type WorkflowStepHolder,
   type LinkSearchQuery,
   type LinkSearchResults,
   type NamedAnswers,
@@ -71,6 +77,7 @@ export type AnswersRefused = { ok: false; reason: "invalid_answers" | "form_inco
 
 const createWorkItemRefusals = [
   "not_found",
+  "not_editable",
   "project_closed",
   "type_not_found",
   "form_version_not_latest",
@@ -201,6 +208,8 @@ type PinnedForm = {
   answersOpen: boolean;
   /** They may save its answers now (app.can_save_answers). */
   canSave: boolean;
+  /** The Form as they may fill it now: the sections they may change, and who fills the others. */
+  toFill: FormToFill;
 };
 
 /** A visible item's pinned Form Version and its answers; null when the Member can't see the item. */
@@ -212,17 +221,26 @@ async function pinnedForm(trx: Trx, workItemId: string): Promise<PinnedForm | nu
       data_sha256: Buffer | null;
       answers_open: boolean;
       can_save: boolean;
+      work_item_type_id: string;
+      workflow_version_id: string;
+      step_key: string;
     }
   >`
     select v.id, v.version_no, v.schema, w.project_id, app.work_item_answers(w.id) as data,
-      app.answers_sha256(w.id) as data_sha256, app.answers_open(w.id) as answers_open, app.can_save_answers(w.id) as can_save
+      app.answers_sha256(w.id) as data_sha256, app.answers_open(w.id) as answers_open, app.can_save_answers(w.id) as can_save,
+      w.work_item_type_id, w.workflow_version_id, s.key as step_key
     from work_item w
     join form_version v on v.id = w.form_version_id
+    -- The Step as the Member sees it (V14): the current one whenever they may save,
+    -- since their Participant then holds the item.
+    cross join lateral app.step_as_seen(w.id) seen
+    join workflow_step s on s.id = seen.step_id
     where w.id = ${workItemId}
   `.execute(trx);
   const r = rows[0];
   if (!r) return null;
   const form = toFormVersion(r);
+  const steps = await workflowSteps(trx, r.work_item_type_id, r.workflow_version_id);
   return {
     form,
     projectId: r.project_id,
@@ -230,19 +248,68 @@ async function pinnedForm(trx: Trx, workItemId: string): Promise<PinnedForm | nu
     dataSha256: r.data_sha256,
     answersOpen: r.answers_open,
     canSave: r.can_save,
+    toFill: formToFillAt(form, steps, { step: r.step_key, canSave: r.can_save }),
   };
+}
+
+/** A Workflow Version's Steps as Form Sections are matched to them, and the name of each base role's Project Role. */
+type WorkflowSteps = { steps: WorkflowStepHolder[]; roleNames: ReadonlyMap<string, BilingualText> };
+
+/** The Steps of the Workflow Version `workflowVersionId` of the Type `typeId`. Definitions, which every Member reads. */
+async function workflowSteps(trx: Trx, typeId: string, workflowVersionId: string): Promise<WorkflowSteps> {
+  const { rows } = await sql<{ key: string; role: string | null; draft: boolean; role_name: BilingualText | null }>`
+    select s.key, s.actor_rule ->> 'base_role' as role, coalesce(st.category = 'draft', false) as draft, r.name as role_name
+    from workflow_step s
+    join work_item_type t on t.id = ${typeId}
+    left join stage st on st.owner_kind = 'rabaed' and st.module_key = t.module_key and st.key = s.stage_key
+    -- Projects use the Rabaed Default Project Roles for now.
+    left join project_role r on r.owner_kind = 'rabaed' and r.base_role = s.actor_rule ->> 'base_role'
+    where s.workflow_version_id = ${workflowVersionId}
+    order by s.key
+  `.execute(trx);
+  return {
+    steps: rows.map(({ key, role, draft }) => ({ key, role, draft })),
+    roleNames: new Map(rows.flatMap((r) => (r.role && r.role_name ? [[r.role, r.role_name] as const] : []))),
+  };
+}
+
+/** `form` as it is filled in at `step`: the sections editable there, and who fills the sections another Participant fills. */
+function formToFillAt(form: FormVersion, { steps, roleNames }: WorkflowSteps, at: SectionEditContext): FormToFill {
+  const filledBy = Object.entries(sectionsFilledBy(form.schema, steps)).flatMap(([key, role]) => {
+    const name = roleNames.get(role);
+    return name ? [[key, name] as const] : [];
+  });
+  return { ...form, editableSections: [...editableSections(form.schema, steps, at)], filledBy: Object.fromEntries(filledBy) };
 }
 
 /**
  * The Form for a new item of the Rabaed Default Type `typeCode` on one of the
- * Member's Projects: the latest published Version. Null when it isn't one of
+ * Member's Projects: the latest published Version, as it is filled in at the
+ * Draft of the latest published Workflow Version. Null when it isn't one of
  * their Projects, or there is no such Type.
  */
-export function getNewWorkItemForm(db: Db, memberId: string, projectId: string, typeCode: string): Promise<FormVersion | null> {
+export function getNewWorkItemForm(db: Db, memberId: string, projectId: string, typeCode: string): Promise<FormToFill | null> {
   return withMember(db, memberId, async (trx) => {
     const onProject = await trx.selectFrom("project").select("id").where("id", "=", projectId).executeTakeFirst();
-    return onProject ? latestForm(trx, typeCode) : null;
+    if (!onProject) return null;
+    const form = await latestForm(trx, typeCode);
+    return form && formToFillAt(form, ...(await draftOf(trx, typeCode)));
   });
+}
+
+/** The Steps of the Workflow a new item of `typeCode` starts on (its latest published Version), and its Draft. */
+async function draftOf(trx: Trx, typeCode: string): Promise<[WorkflowSteps, SectionEditContext]> {
+  const { rows } = await sql<{ type_id: string; workflow_version_id: string }>`
+    select t.id as type_id, v.id as workflow_version_id
+    from work_item_type t
+    join workflow_version v on v.workflow_definition_id = t.workflow_definition_id and v.status = 'published'
+    where t.owner_kind = 'rabaed' and t.code = ${typeCode}
+    order by v.version_no desc limit 1
+  `.execute(trx);
+  const r = rows[0]!;
+  const workflow = await workflowSteps(trx, r.type_id, r.workflow_version_id);
+  const draft = workflow.steps.find((s) => s.draft)!;
+  return [workflow, { step: draft.key, canSave: true }];
 }
 
 /**
@@ -295,9 +362,12 @@ export function getWorkItemFormChoices(db: Db, memberId: string, workItemId: str
   });
 }
 
-/** The Form Version a visible item is pinned to; null when the Member can't see the item. */
-export function getWorkItemForm(db: Db, memberId: string, workItemId: string): Promise<FormVersion | null> {
-  return withMember(db, memberId, async (trx) => (await pinnedForm(trx, workItemId))?.form ?? null);
+/**
+ * The Form Version a visible item is pinned to, as the Member may fill it in
+ * now; null when they can't see the item.
+ */
+export function getWorkItemForm(db: Db, memberId: string, workItemId: string): Promise<FormToFill | null> {
+  return withMember(db, memberId, async (trx) => (await pinnedForm(trx, workItemId))?.toFill ?? null);
 }
 
 type SummaryRow = {
@@ -376,6 +446,11 @@ export function createWorkItem(
       if (!onProject) return { ok: false, reason: "not_found" };
       const form = await latestForm(trx, input.type);
       if (!form) return { ok: false, reason: "type_not_found" };
+      // Only the Form Sections editable at the Draft take answers (form-engine.md §4).
+      const atDraft = formToFillAt(form, ...(await draftOf(trx, input.type)));
+      if (changedOutside(form.schema, new Set(atDraft.editableSections), {}, input.answers).length > 0) {
+        return { ok: false, reason: "not_editable" };
+      }
       const checked = validateAnswers(form.schema, input.answers, "draft", {
         scopes: await projectScopes(trx, projectId),
         offered: await offeredFor(trx, form.schema, projectId, null),
@@ -706,6 +781,10 @@ export function saveAnswers(
       ? mergeFieldAnswers({ stored: pinned.data, stamps: before, basedOn: input.basedOn, submitted: input.answers, memberId })
       : null;
     const answers = merge ? merge.merged : input.answers;
+    // And into which Form Sections: one that isn't editable now must come back as it is (form-engine.md §4).
+    if (changedOutside(pinned.form.schema, new Set(pinned.toFill.editableSections), pinned.data, answers).length > 0) {
+      return { ok: false, reason: "not_editable" };
+    }
     const checked = validateAnswers(pinned.form.schema, answers, "draft", {
       scopes: await projectScopes(trx, pinned.projectId),
       offered: await offeredFor(trx, pinned.form.schema, pinned.projectId, workItemId, pinned.data),

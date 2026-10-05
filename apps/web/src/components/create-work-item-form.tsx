@@ -7,7 +7,7 @@ import {
   type FieldError,
   type FormChoices,
   type FormValue,
-  type FormVersion,
+  type FormToFill,
   type Locale,
   type OptionList,
 } from "@rabaed/domain";
@@ -32,7 +32,7 @@ export function CreateWorkItemForm({
   locale,
 }: {
   projectId: string;
-  form: FormVersion;
+  form: FormToFill;
   choices: BuiltInChoices;
   /** Who and which Companies its `member` and `participant` fields offer. */
   people: FormChoices;
@@ -93,6 +93,8 @@ export function CreateWorkItemForm({
         value_not_found: t("form.valueNotFound"),
         project_closed: t("projectClosed"),
         form_version_not_latest: t("form.newVersion"),
+        // An answer in a Form Section another Participant fills.
+        not_editable: t("form.notEditable"),
       };
       setError(errors[body.error ?? ""] ?? t("unavailable"));
       // A newer Form Version, or other choices, arrived meanwhile: show them.
@@ -114,6 +116,8 @@ export function CreateWorkItemForm({
         answers={answers}
         errors={fieldErrors}
         mode="edit"
+        editableSections={form.editableSections}
+        filledBy={form.filledBy}
         locale={locale}
         choices={choices}
         people={people}

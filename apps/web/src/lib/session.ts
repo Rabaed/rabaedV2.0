@@ -6,7 +6,7 @@ import type {
   DimensionValues,
   DocumentList,
   FormChoices,
-  FormVersion,
+  FormToFill,
   LinkedFrom,
   MemberVisibility,
   MyProjects,
@@ -126,13 +126,13 @@ export function getWorkItem(workItemId: string): Promise<WorkItemDetail | null> 
 }
 
 /** The Form Version a Work Item is pinned to; null if the signed-in Member can't see the item. */
-export function getWorkItemForm(workItemId: string): Promise<FormVersion | null> {
-  return apiGet<FormVersion>(`/v1/work-items/${encodeURIComponent(workItemId)}/form`);
+export function getWorkItemForm(workItemId: string): Promise<FormToFill | null> {
+  return apiGet<FormToFill>(`/v1/work-items/${encodeURIComponent(workItemId)}/form`);
 }
 
 /** The Form for a new item of a Type on one of the signed-in Member's Projects: its latest published Version. */
-export function getNewWorkItemForm(projectId: string, typeCode: string): Promise<FormVersion | null> {
-  return apiGet<FormVersion>(
+export function getNewWorkItemForm(projectId: string, typeCode: string): Promise<FormToFill | null> {
+  return apiGet<FormToFill>(
     `/v1/projects/${encodeURIComponent(projectId)}/work-item-types/${encodeURIComponent(typeCode)}/form`,
   );
 }

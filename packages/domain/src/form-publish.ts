@@ -11,6 +11,7 @@ import {
   type FormSchema,
   type FormSection,
 } from "./form.ts";
+import { editableAtProblem, type WorkflowStepHolder } from "./form-sections.ts";
 
 // The publish-time checks (form-engine.md §7; RP-271). Publishing freezes a Form
 // Version for good, so a schema that would break Work Items is refused first:
@@ -31,6 +32,8 @@ export const schemaProblemCodes = [
   "built_in_hidden",
   "key_type_changed",
   "unknown_option_list",
+  "unknown_step",
+  "mixed_roles",
 ] as const;
 export type SchemaProblemCode = (typeof schemaProblemCodes)[number];
 
@@ -41,6 +44,11 @@ export type SchemaProblem = { key: string; code: SchemaProblemCode };
 export type PublishContext = {
   /** The ids of the Option Lists that exist. Without them the lists a schema names aren't checked. */
   optionListIds?: ReadonlySet<string>;
+  /**
+   * The Workflows of the Work Item Types that use the Form, each as its Steps.
+   * Without them, `editable_at` isn't checked.
+   */
+  workflows?: readonly (readonly WorkflowStepHolder[])[];
 };
 
 /**
@@ -61,6 +69,7 @@ export function formSchemaProblems(schema: FormSchema, context: PublishContext =
     ...requiredNeverShown(schema).map((key) => problem(key, "required_never_shown")),
     ...builtIns,
     ...(context.optionListIds ? unknownOptionLists(schema, context.optionListIds).map((key) => problem(key, "unknown_option_list")) : []),
+    ...(context.workflows ? editableAtProblems(schema, context.workflows) : []),
   ];
 }
 
@@ -268,5 +277,17 @@ function builtInProblems(schema: FormSchema): SchemaProblem[] {
     if (section.visible_if) return [problem(type, "built_in_hidden")];
     if (type !== "scopes" && isBuiltInField(field) && !field.required) return [problem(type, "built_in_optional")];
     return [];
+  });
+}
+
+/**
+ * Sections whose `editable_at` names a Step one of the Workflows doesn't have, or
+ * Steps held by two Participant roles (form-engine.md §4): once each, the first
+ * problem found.
+ */
+function editableAtProblems(schema: FormSchema, workflows: readonly (readonly WorkflowStepHolder[])[]): SchemaProblem[] {
+  return schema.sections.flatMap((s) => {
+    const found = workflows.map((steps) => editableAtProblem(s, steps)).find((p) => p !== null);
+    return found ? [problem(s.key, found)] : [];
   });
 }
