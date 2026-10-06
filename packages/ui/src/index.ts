@@ -102,3 +102,5 @@ export {
   type ReviewCode,
   type Tone,
 } from "./tokens/themes.ts";
+export { stageColour } from "./components/status/stage-colour.ts";
+export { WorkItemList, type WorkItemListProps } from "./components/views/work-item-list.tsx";

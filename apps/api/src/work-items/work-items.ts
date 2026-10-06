@@ -35,7 +35,6 @@ import {
   type WorkItemActions,
   type WorkItemDetail,
   type WorkItemHistory,
-  type WorkItemList,
   type WorkItemOutcome,
   type WorkItemSummary,
 } from "@rabaed/domain";
@@ -485,29 +484,6 @@ export function createWorkItem(
       return { ok: true, id: work_item_id! };
     }),
   );
-}
-
-/**
- * The Submittals of one of the Member's Projects that they can see, with every
- * Stage and how many of those items are in it; null when it isn't one of their Projects.
- */
-export function listWorkItems(db: Db, memberId: string, projectId: string, now: Date): Promise<WorkItemList | null> {
-  return withMember(db, memberId, async (trx) => {
-    const onProject = await trx.selectFrom("project").select("id").where("id", "=", projectId).executeTakeFirst();
-    if (!onProject) return null;
-    const items = (await visibleItems(trx, sql`w.project_id = ${projectId}`)).map((r) => toSummary(r, now));
-    const stages = await trx
-      .selectFrom("stage")
-      .select(["key", "name", "category"])
-      .where("module_key", "=", "submittals")
-      .where("project_id", "is", null)
-      .orderBy("sort")
-      .execute();
-    return {
-      stages: stages.map((s) => ({ ...s, count: items.filter((i) => i.stage.key === s.key).length })),
-      items,
-    };
-  });
 }
 
 /** `text` as a LIKE pattern that matches it anywhere, with its own %, _ and \ taken literally. */
