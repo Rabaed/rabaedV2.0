@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  formatDate,
   formatNumber,
   isFilteredWorkItemQuery,
   isOpenStageCategory,
@@ -21,6 +22,7 @@ import { Badge } from "../data/badge.tsx";
 import { Table, TableBody, TableCell, TableEmpty, TableHead, TableHeader, TableRow } from "../data/table.tsx";
 import { DocNo } from "../doc-no/doc-no.tsx";
 import { Field } from "../form/field.tsx";
+import { Input } from "../form/input.tsx";
 import { Select } from "../form/select.tsx";
 import { Switch } from "../form/switch.tsx";
 import { AgeDots } from "../status/age-dots.tsx";
@@ -46,6 +48,11 @@ const copy = {
   sort: { en: "Sort by", ar: "الترتيب حسب" },
   sortStepAge: { en: "Step Age, oldest first", ar: "عمر الخطوة، الأقدم أولًا" },
   sortDocumentNumber: { en: "Document Number", ar: "رقم المستند" },
+  sortSubmissionDate: { en: "Submission Date, latest first", ar: "تاريخ التقديم، الأحدث أولًا" },
+  submissionDate: { en: "Submission Date", ar: "تاريخ التقديم" },
+  creationDate: { en: "Creation Date", ar: "تاريخ الإنشاء" },
+  submittedFrom: { en: "Submitted from", ar: "قُدِّم من" },
+  submittedTo: { en: "Submitted to", ar: "قُدِّم حتى" },
   allRevisions: { en: "Show all Revisions", ar: "عرض كل المراجعات" },
   clear: { en: "Clear filters", ar: "مسح التصفية" },
   stageCounts: { en: "Items in each Stage", ar: "العناصر في كل مرحلة" },
@@ -71,6 +78,8 @@ const outcomes: Record<WorkItemOutcome, { label: Record<Locale, string>; tone: T
   cancelled: { label: { en: "Cancelled", ar: "ملغى" }, tone: "neutral" },
   closed: { label: { en: "Closed", ar: "مغلق" }, tone: "neutral" },
 };
+
+const sortLabels = { stepAge: "sortStepAge", documentNumber: "sortDocumentNumber", submissionDate: "sortSubmissionDate" } as const satisfies Record<WorkItemQuery["sort"], keyof typeof copy>;
 
 const reviewCodes = { A: "a", B: "b", C: "c", D: "d" } as const;
 
@@ -106,6 +115,10 @@ export function WorkItemList({ list, query, locale, hrefFor, itemHref, onQueryCh
     onQueryChange({ ...rest, ...next });
   };
   const filtered = isFilteredWorkItemQuery(query);
+  // The Creation Date is the raiser's Company's alone: the API sends it to no one else, so without one in the rows the column is left out.
+  const showCreationDate = list.items.some((i) => i.creationDate !== null);
+  const columns = showCreationDate ? 11 : 10;
+  const date = (iso: string | null) => (iso === null ? null : formatDate(new Date(iso), locale));
 
   return (
     <div className="space-y-4">
@@ -165,10 +178,16 @@ export function WorkItemList({ list, query, locale, hrefFor, itemHref, onQueryCh
             options={stepAgeMinimums.map((n) => ({ value: String(n), label: t("weeksOrMore").replace("#", formatNumber(n, locale)) }))}
             onChange={(v) => change({ stepAgeMin: v ? (Number(v) as WorkItemQuery["stepAgeMin"]) : undefined })}
           />
+          <Field label={t("submittedFrom")}>
+            <Input type="date" value={query.submittedFrom ?? ""} max={query.submittedTo} onChange={(e) => change({ submittedFrom: e.target.value || undefined })} />
+          </Field>
+          <Field label={t("submittedTo")}>
+            <Input type="date" value={query.submittedTo ?? ""} min={query.submittedFrom} onChange={(e) => change({ submittedTo: e.target.value || undefined })} />
+          </Field>
           <Field label={t("sort")}>
             <Select
               value={query.sort}
-              options={workItemSorts.map((s) => ({ value: s, label: t(s === "stepAge" ? "sortStepAge" : "sortDocumentNumber") }))}
+              options={workItemSorts.map((s) => ({ value: s, label: t(sortLabels[s]) }))}
               onValueChange={(v) => change({ sort: v as WorkItemQuery["sort"] })}
             />
           </Field>
@@ -205,11 +224,13 @@ export function WorkItemList({ list, query, locale, hrefFor, itemHref, onQueryCh
             <TableHead>{t("trade")}</TableHead>
             <TableHead>{t("location")}</TableHead>
             <TableHead>{t("outcome")}</TableHead>
+            <TableHead>{t("submissionDate")}</TableHead>
+            {showCreationDate && <TableHead>{t("creationDate")}</TableHead>}
           </TableRow>
         </TableHeader>
         <TableBody>
           {list.items.length === 0 ? (
-            <TableEmpty colSpan={9}>{t("empty")}</TableEmpty>
+            <TableEmpty colSpan={columns}>{t("empty")}</TableEmpty>
           ) : (
             list.items.map((item) => (
               <TableRow key={item.id}>
@@ -242,6 +263,8 @@ export function WorkItemList({ list, query, locale, hrefFor, itemHref, onQueryCh
                 <TableCell className="whitespace-nowrap">{item.trade.name[locale]}</TableCell>
                 <TableCell className="whitespace-nowrap">{item.location?.name[locale]}</TableCell>
                 <TableCell>{item.outcome ? <Outcome outcome={item.outcome} locale={locale} /> : null}</TableCell>
+                <TableCell className="whitespace-nowrap">{date(item.submissionDate)}</TableCell>
+                {showCreationDate && <TableCell className="whitespace-nowrap">{date(item.creationDate)}</TableCell>}
               </TableRow>
             ))
           )}

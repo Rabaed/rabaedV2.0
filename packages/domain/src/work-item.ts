@@ -107,6 +107,10 @@ export const workItemRow = workItemSummary.extend({
   outcome: workItemOutcome.nullable(),
   /** Null once closed: nobody holds it. */
   with: workItemWith.nullable(),
+  /** When it was first Submitted: for everyone who sees it. Null while it has not been. */
+  submissionDate: z.iso.datetime().nullable(),
+  /** Only for a Member of the raiser's Participant (visibility.md "Creation Date"); null for everyone else. Never the time the Draft was started. */
+  creationDate: z.iso.datetime().nullable(),
 });
 export type WorkItemRow = z.infer<typeof workItemRow>;
 

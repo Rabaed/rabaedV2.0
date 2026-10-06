@@ -16,8 +16,8 @@ import { workItemOutcome, workItemTypeCode } from "./work-item.ts";
 /** The List's page size. */
 export const workItemPageSize = 50;
 
-/** Sort by Step Age, the oldest first and closed items (which don't age) last, or by Document Number, items with no number yet last. */
-export const workItemSorts = ["stepAge", "documentNumber"] as const;
+/** Sort by Step Age, the oldest first and closed items (which don't age) last, or by Document Number, items with no number yet last, or by Submission Date, the latest first and items not yet Submitted last. */
+export const workItemSorts = ["stepAge", "documentNumber", "submissionDate"] as const;
 export type WorkItemSort = (typeof workItemSorts)[number];
 
 /** The Step Age filter: open items in at least their 2nd, 3rd or 4th week at their Step. */
@@ -51,6 +51,15 @@ const list = <T extends z.ZodType>(item: T) =>
     )
     .transform((values) => [...new Set(values)]);
 
+/** A calendar day in Saudi time, as `YYYY-MM-DD`; a day that does not exist is refused. */
+const day = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/)
+  .refine((v) => {
+    const d = new Date(`${v}T00:00:00Z`);
+    return !Number.isNaN(d.getTime()) && d.toISOString().startsWith(v);
+  }, "Not a day");
+
 const flag = z.preprocess((v) => v === true || v === "true" || v === "1", z.boolean());
 
 const queryFields = {
@@ -66,6 +75,9 @@ const queryFields = {
     .number()
     .pipe(z.union(stepAgeMinimums.map((n) => z.literal(n))))
     .optional(),
+  /** The Submission Date range, both days included: an item not yet Submitted has no Submission Date and is left out. */
+  submittedFrom: day.optional(),
+  submittedTo: day.optional(),
   /** Every visible Revision, not only the latest of each chain. */
   allRevisions: flag,
   sort: z.enum(workItemSorts).default("stepAge"),
@@ -76,7 +88,7 @@ const queryFields = {
 /** The filters that take a list of values; every other key takes one. */
 const listKeys = ["type", "stage", "with", "trade", "location", "outcome"] as const satisfies readonly (keyof typeof queryFields)[];
 /** The keys that narrow the rows, as opposed to how they are shown (sort, Revisions, page). */
-const filterKeys = [...listKeys, "stepAgeMin"] as const;
+const filterKeys = [...listKeys, "stepAgeMin", "submittedFrom", "submittedTo"] as const;
 
 /** The query as the API takes it; a cursor must be one made for its sort. */
 export const workItemQuery = z.object(queryFields).superRefine((q, ctx) => {
@@ -127,6 +139,8 @@ export function workItemSearchParams(query: Partial<WorkItemQuery>): URLSearchPa
     if (values && values.length > 0) params.set(key, values.join(","));
   }
   if (query.stepAgeMin !== undefined) params.set("stepAgeMin", String(query.stepAgeMin));
+  if (query.submittedFrom) params.set("submittedFrom", query.submittedFrom);
+  if (query.submittedTo) params.set("submittedTo", query.submittedTo);
   if (query.allRevisions) params.set("allRevisions", "true");
   if (query.sort && query.sort !== "stepAge") params.set("sort", query.sort);
   if (query.cursor) params.set("cursor", query.cursor);
@@ -135,7 +149,7 @@ export function workItemSearchParams(query: Partial<WorkItemQuery>): URLSearchPa
 
 /** Whether `query` narrows the rows by any filter. */
 export function isFilteredWorkItemQuery(query: WorkItemQuery): boolean {
-  return filterKeys.some((key) => (key === "stepAgeMin" ? query[key] !== undefined : query[key].length > 0));
+  return filterKeys.some((key) => (Array.isArray(query[key]) ? (query[key] as unknown[]).length > 0 : query[key] !== undefined));
 }
 
 /** `query` with no filters, from the first page: its sort and "Show all Revisions" kept. */
@@ -160,6 +174,8 @@ const isFlag = (v: string | undefined) => v === "true" || v === "false";
 const cursorKeyValid: Record<WorkItemSort, (key: string[]) => boolean> = {
   stepAge: ([last, at, id]) => isFlag(last) && enteredAt.test(at ?? "") && uuid.safeParse(id).success,
   documentNumber: ([last, , id]) => isFlag(last) && uuid.safeParse(id).success,
+  // Not yet Submitted sorts last: its flag is "true" and its time is empty.
+  submissionDate: ([last, at, id]) => isFlag(last) && (last === "true" ? at === "" : enteredAt.test(at ?? "")) && uuid.safeParse(id).success,
 };
 
 /** The sort key a cursor holds, or null when it isn't a cursor made for `sort`. */

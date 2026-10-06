@@ -134,3 +134,37 @@ describe("filters", () => {
     expect(withoutFilters(query)).toEqual({ ...defaults, sort: "documentNumber", allRevisions: true });
   });
 });
+
+describe("the Submission Date range and sort (RP-348)", () => {
+  const rangeQuery: WorkItemQuery = { ...defaults, submittedFrom: "2026-03-01", submittedTo: "2026-03-31", sort: "submissionDate" };
+
+  it("takes days, refusing one that does not exist", () => {
+    expect(workItemQuery.parse({ submittedFrom: "2026-03-01", submittedTo: "2026-03-31" })).toMatchObject({ submittedFrom: "2026-03-01", submittedTo: "2026-03-31" });
+    for (const bad of ["2026-02-30", "2026-3-1", "yesterday", "2026-03-01T00:00:00Z"]) {
+      expect(workItemQuery.safeParse({ submittedFrom: bad }).success, bad).toBe(false);
+    }
+  });
+
+  it("reproduces the view from the URL, and leaves an unset range out", () => {
+    const params = workItemSearchParams(rangeQuery);
+    expect(params.toString()).toBe("submittedFrom=2026-03-01&submittedTo=2026-03-31&sort=submissionDate");
+    expect(workItemQueryFromSearchParams(new URLSearchParams(params.toString()))).toEqual(rangeQuery);
+    expect(workItemQueryFromSearchParams({ submittedFrom: "not-a-day", stage: "draft" })).toEqual({ ...defaults, stage: ["draft"] });
+  });
+
+  it("counts the range as a filter, which clearing removes, keeping the sort", () => {
+    expect(isFilteredWorkItemQuery({ ...defaults, submittedTo: "2026-03-31" })).toBe(true);
+    expect(isFilteredWorkItemQuery({ ...defaults, sort: "submissionDate" })).toBe(false);
+    expect(withoutFilters(rangeQuery)).toEqual({ ...defaults, sort: "submissionDate" });
+  });
+
+  it("has a cursor holding the last row's Submission Date, or that it has none", () => {
+    const at = "2026-03-01T09:00:00.123456Z";
+    for (const key of [["false", at, row], ["true", "", row]]) {
+      expect(decodeWorkItemCursor(encodeWorkItemCursor("submissionDate", key), "submissionDate")).toEqual(key);
+    }
+    for (const key of [["false", "", row], ["true", at, row], ["false", "yesterday", row], ["maybe", at, row], ["false", at, "not-an-id"]]) {
+      expect(decodeWorkItemCursor(encodeWorkItemCursor("submissionDate", key), "submissionDate"), JSON.stringify(key)).toBeNull();
+    }
+  });
+});

@@ -61,6 +61,12 @@ type Row = {
   /** step_entered_at to the microsecond, for the cursor. */
   entered_key: string;
   closed: boolean;
+  /** The first Submit: for everyone who sees the item. */
+  submitted_at: Date | null;
+  /** submitted_at to the microsecond, for the cursor. */
+  submitted_key: string | null;
+  /** Null unless the viewer is a Member of the raiser's Participant. */
+  creation_date: Date | null;
   holder_participant_id: string | null;
   assignee_member_id: string | null;
   held_by_own: boolean;
@@ -87,6 +93,10 @@ function visibleRows({ projectId, moduleKey }: QueryScope, allRevisions: boolean
       -- Closed (or cancelled): it no longer ages, nor is it with anyone. The SQL side of isOpenStageCategory.
       st.category not in ('draft', 'in_progress') as closed,
       to_char(seen.entered_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as entered_key,
+      -- Never created_at (when the Draft was started: audit only, V-Creation Date). The Creation Date is
+      -- numbered_at, which app.work_item_creation_date gives to the raiser's own Participant only.
+      w.submitted_at, to_char(w.submitted_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as submitted_key,
+      app.work_item_creation_date(w.id) as creation_date,
       h.participant_id as holder_participant_id, h.assignee_member_id,
       coalesce(h.participant_id in (select app.current_participant_ids()), false) as held_by_own,
       s.key as step_key, s.name as step_name
@@ -130,6 +140,9 @@ function matching(q: WorkItemQuery, now: Date): RawBuilder<boolean> {
     // A closed item doesn't age.
     conditions.push(sql`not r.closed and r.step_entered_at <= ${enteredStepBy(q.stepAgeMin, now)}::timestamptz`);
   }
+  // The Submission Date range, in Saudi days, both days included; an item not yet Submitted has none and is left out.
+  if (q.submittedFrom !== undefined) conditions.push(sql`(r.submitted_at at time zone 'Asia/Riyadh')::date >= ${q.submittedFrom}::date`);
+  if (q.submittedTo !== undefined) conditions.push(sql`(r.submitted_at at time zone 'Asia/Riyadh')::date <= ${q.submittedTo}::date`);
   if (q.with.length > 0) {
     const steps = q.with.flatMap((v) => (v.startsWith("step:") ? [v.slice(5)] : []));
     const companies = q.with.flatMap((v) => (v.startsWith("company:") ? [v.slice(8)] : []));
@@ -155,6 +168,17 @@ function ordering(q: WorkItemQuery): { orderBy: RawBuilder<unknown>; after: RawB
         : noFilter,
     };
   }
+  if (q.sort === "submissionDate") {
+    // The latest Submission Date first; items not yet Submitted last, by id.
+    return {
+      orderBy: sql`r.submitted_at is null, r.submitted_at desc, r.id`,
+      after: key
+        ? key[0] === "true"
+          ? sql`(r.submitted_at is null and r.id > ${key[2]}::uuid)`
+          : sql`(r.submitted_at is null or r.submitted_at < ${key[1]}::timestamptz or (r.submitted_at = ${key[1]}::timestamptz and r.id > ${key[2]}::uuid))`
+        : noFilter,
+    };
+  }
   // The oldest Step Age first; closed items, which don't age, last.
   return {
     orderBy: sql`r.closed, r.step_entered_at, r.id`,
@@ -163,6 +187,7 @@ function ordering(q: WorkItemQuery): { orderBy: RawBuilder<unknown>; after: RawB
 }
 
 function cursorAfter(q: WorkItemQuery, last: Row): string {
+  if (q.sort === "submissionDate") return encodeWorkItemCursor(q.sort, [String(last.submitted_key === null), last.submitted_key ?? "", last.id]);
   return q.sort === "documentNumber"
     ? encodeWorkItemCursor(q.sort, [String(last.document_number === null), last.document_number ?? "", last.id])
     : encodeWorkItemCursor(q.sort, [String(last.closed), last.entered_key, last.id]);
@@ -183,6 +208,8 @@ function toRow(r: Row, now: Date): WorkItemRow {
     stepEnteredAt: r.step_entered_at.toISOString(),
     stepAgeWeeks: stepAgeWeeks(r.step_entered_at, now),
     outcome: r.outcome,
+    submissionDate: r.submitted_at?.toISOString() ?? null,
+    creationDate: r.creation_date?.toISOString() ?? null,
     with:
       !open || r.holder_name === null
         ? null

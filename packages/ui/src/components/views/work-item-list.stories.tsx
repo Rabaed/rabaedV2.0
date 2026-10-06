@@ -19,6 +19,11 @@ const copy = {
   clear: b("Clear filters", "مسح التصفية"),
   empty: b("No items you can see match these filters.", "لا توجد عناصر يمكنك رؤيتها تطابق هذه التصفية."),
   table: b("Submittals", "الاعتمادات"),
+  submissionDate: b("Submission Date", "تاريخ التقديم"),
+  creationDate: b("Creation Date", "تاريخ الإنشاء"),
+  submittedFrom: b("Submitted from", "قُدِّم من"),
+  sort: b("Sort by", "الترتيب حسب"),
+  sortSubmissionDate: b("Submission Date, latest first", "تاريخ التقديم، الأحدث أولًا"),
 };
 
 const stages = {
@@ -50,6 +55,9 @@ const row = (n: number, rest: Partial<WorkItemRow>): WorkItemRow => ({
   stepAgeWeeks: 1,
   outcome: null,
   with: null,
+  // Tamkeen raised these: its Members read the Creation Date too (RP-348).
+  submissionDate: "2026-09-14T08:30:00.000Z",
+  creationDate: "2026-09-02T07:00:00.000Z",
   ...rest,
 });
 
@@ -82,6 +90,9 @@ const items: WorkItemRow[] = [
   row(6, {
     title: "Fire alarm cables",
     documentNumber: null,
+    // A Draft: no number, not Submitted.
+    submissionDate: null,
+    creationDate: null,
     stage: stages.draft,
     with: {
       kind: "own",
@@ -165,7 +176,7 @@ const cellsOf = (context: PlayContext, title: string) => {
 export const Wide: Story = {
   play: async (context) => {
     const table = context.canvas.getByRole("table", { name: storyText(context, copy.table) });
-    await expect(within(table).getAllByRole("columnheader")).toHaveLength(9);
+    await expect(within(table).getAllByRole("columnheader")).toHaveLength(11);
     await expect(within(table).getAllByRole("row")).toHaveLength(items.length + 1);
     const withColumn = 4;
     const locale = storyLocale(context);
@@ -178,6 +189,51 @@ export const Wide: Story = {
     const number = within(table).getByText("TWR-TMC-EL-MAR-0003 Rev 1");
     await expect(getComputedStyle(number).direction).toBe("ltr");
     await expectLaidOutLeftToRight(number);
+  },
+};
+
+/**
+ * The raiser's Company reads both dates; a Draft with no number has neither.
+ * Dates read in Latin digits in Arabic too.
+ */
+export const DatesForTheRaisersCompany: Story = {
+  play: async (context) => {
+    const table = context.canvas.getByRole("table", { name: storyText(context, copy.table) });
+    const headers = within(table).getAllByRole("columnheader").map((h) => h.textContent);
+    await expect(headers.slice(-2)).toEqual([storyText(context, copy.submissionDate), storyText(context, copy.creationDate)]);
+    const cells = cellsOf(context, "Main LV switchboard");
+    await expect(cells.at(-2)).toHaveTextContent("14");
+    await expect(cells.at(-2)).toHaveTextContent("2026");
+    await expect(cells.at(-1)).toHaveTextContent("2");
+    await expect(cells.at(-1)).not.toHaveTextContent("14");
+    const draft = cellsOf(context, "Fire alarm cables");
+    await expect(draft.at(-2)).toBeEmptyDOMElement();
+    await expect(draft.at(-1)).toBeEmptyDOMElement();
+  },
+};
+
+/** Another Company reads the Submission Date only: the API sends no Creation Date, so there is no such column. */
+export const DatesForAnotherCompany: Story = {
+  args: { list: { ...list, items: items.map((i) => ({ ...i, creationDate: null })) } },
+  play: async (context) => {
+    const table = context.canvas.getByRole("table", { name: storyText(context, copy.table) });
+    await expect(within(table).getAllByRole("columnheader")).toHaveLength(10);
+    await expect(within(table).queryByRole("columnheader", { name: storyText(context, copy.creationDate) })).toBeNull();
+    await expect(within(table).getByRole("columnheader", { name: storyText(context, copy.submissionDate) })).toBeVisible();
+    await expect(cellsOf(context, "Main LV switchboard").at(-1)).toHaveTextContent("2026");
+  },
+};
+
+/** Choosing a Submission Date range, or sorting by it, asks for the same query with it, from the first page. */
+export const SubmissionDateRange: Story = {
+  args: { query: { ...defaults, cursor: "abc" } },
+  play: async (context) => {
+    const from = context.canvas.getByLabelText(storyText(context, copy.submittedFrom));
+    await userEvent.type(from, "2026-09-01");
+    await expect(context.args.onQueryChange).toHaveBeenLastCalledWith({ ...defaults, submittedFrom: "2026-09-01" });
+    await userEvent.click(context.canvas.getByRole("combobox", { name: storyText(context, copy.sort) }));
+    await userEvent.click(await screen.findByRole("option", { name: storyText(context, copy.sortSubmissionDate) }));
+    await expect(context.args.onQueryChange).toHaveBeenLastCalledWith({ ...defaults, sort: "submissionDate" });
   },
 };
 
