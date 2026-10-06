@@ -35,7 +35,9 @@ create or replace function app.activity_feed(
             and (not coalesce(p_mine, false)
               or w.created_by_member_id = app.current_member_id()
               or exists (select 1 from step_assignment a where a.work_item_id = w.id and a.assignee_member_id = app.current_member_id())
-              or exists (select 1 from work_item_event mine where mine.work_item_id = w.id and mine.actor_member_id = app.current_member_id()))
+              or exists (select 1 from work_item_event mine where mine.work_item_id = w.id and mine.actor_member_id = app.current_member_id())
+              -- Watched (RP-354): the caller's own Watch on the item's chain.
+              or app.watching_work_item(w.id))
             and (p_after_event_id is null or (e.created_at, e.work_item_id, e.seq) < (
               select a.created_at, a.work_item_id, a.seq from work_item_event a where a.id = p_after_event_id))
           order by e.created_at desc, e.work_item_id desc, e.seq desc

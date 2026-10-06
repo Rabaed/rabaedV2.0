@@ -29,7 +29,7 @@ const activityFeedFields = {
   module: moduleKeySchema.optional(),
   /** These Work Item Types' items only. */
   type: list(workItemTypeCode),
-  /** "Items I'm on": ones I raised, held, or acted on. */
+  /** "Items I'm on": ones I raised, held, acted on, or watch. */
   mine: z.preprocess((v) => v === true || v === "true" || v === "1", z.boolean()),
   /** Where the page starts: the `nextCursor` of the page before. */
   cursor: z

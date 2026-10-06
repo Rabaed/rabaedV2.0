@@ -352,6 +352,15 @@ describe("paging and filters", () => {
     expect((await feed(owner, { mine: true })).entries).toEqual([]);
   });
 
+  it("takes in the items I watch (RP-354), and lets them go when I stop watching", async () => {
+    await ok(owner.request("PUT", `/v1/work-items/${marId}/watch`));
+    const watched = (await feed(owner, { mine: true })).entries;
+    expect(new Set(watched.map((e) => e.workItem.id))).toEqual(new Set([marId]));
+    expect(watched).toEqual((await feed(owner, { type: ["MAR"] })).entries);
+    await ok(owner.delete(`/v1/work-items/${marId}/watch`));
+    expect((await feed(owner, { mine: true })).entries).toEqual([]);
+  });
+
   it("refuses a tampered cursor or a filter that isn't one", async () => {
     const next = (await page(tower.c1Pm, { limit: 1 })).nextCursor!;
     const tampered = Buffer.from(JSON.stringify(["activity", "2026-10-01T00:00:00Z"])).toString("base64url");
