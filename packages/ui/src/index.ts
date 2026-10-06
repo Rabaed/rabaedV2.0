@@ -104,3 +104,9 @@ export {
 } from "./tokens/themes.ts";
 export { stageColour } from "./components/status/stage-colour.ts";
 export { WorkItemList, type WorkItemListProps } from "./components/views/work-item-list.tsx";
+export {
+  WorkItemBoard,
+  WorkItemViewSwitch,
+  type WorkItemBoardProps,
+  type WorkItemViewSwitchProps,
+} from "./components/views/work-item-board.tsx";

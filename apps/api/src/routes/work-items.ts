@@ -14,6 +14,7 @@ import {
   savedAnswers,
   takeTransitionRequest,
   workItemTypeCode,
+  workItemBoard,
   workItemDetail,
   workItemHistory,
   workItemLinks,
@@ -27,7 +28,7 @@ import { idOrNotFound, notFound, visibleOrNotFound } from "../http-error.ts";
 import { refusal } from "../refusals.ts";
 import { getLinkedFrom } from "../work-items/linked-from.ts";
 import { addWorkItemLink, getWorkItemLinks, removeWorkItemLink } from "../work-items/links.ts";
-import { listWorkItems } from "../work-items/query.ts";
+import { boardWorkItems, listWorkItems } from "../work-items/query.ts";
 import { createRevision, discardRevision, getRevisionChain } from "../work-items/revisions.ts";
 import {
   claimStep,
@@ -75,6 +76,17 @@ export const workItemRoutes =
       async (request) => {
         const memberId = ctx.requireMember(request);
         return visibleOrNotFound(listWorkItems(ctx.db, memberId, idOrNotFound(request.params.projectId), request.query, ctx.now()));
+      },
+    );
+
+    // The Kanban (RP-349): the same query as a board, Stages as columns and V14
+    // swimlanes; a closed column holds the last 30 days. The cursor is not used.
+    app.get(
+      "/v1/projects/:projectId/work-items/kanban",
+      { schema: { params: projectParams, querystring: workItemQuery, response: { 200: workItemBoard } } },
+      async (request) => {
+        const memberId = ctx.requireMember(request);
+        return visibleOrNotFound(boardWorkItems(ctx.db, memberId, idOrNotFound(request.params.projectId), request.query, ctx.now()));
       },
     );
 
