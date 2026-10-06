@@ -41,9 +41,13 @@ export const testConfig: ApiConfig = {
 
 type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
-/** A file to upload to a Work Item: to a named file field with `fieldKey`, else to the Attachments System Field. */
+/**
+ * A file to upload to a Work Item: to a named file field with `fieldKey` (a
+ * checklist item's photo with `itemKey` too), else to the Attachments System Field.
+ */
 export interface TestFile {
   fieldKey?: string;
+  itemKey?: string;
   fileName: string;
   contentType: string;
   body: string | Uint8Array;
