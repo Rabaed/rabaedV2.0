@@ -56,7 +56,7 @@ describe("ci.yml", () => {
   const ci = workflow("ci.yml");
 
   it("gives each queue entry its own concurrency group", () => {
-    expect(ci.concurrency.group).toContain("github.ref");
+    expect(ci.concurrency.group).toContain("${{ github.ref }}");
   });
 
   it("never collects or uploads the baselines of new stories on a queue run", () => {

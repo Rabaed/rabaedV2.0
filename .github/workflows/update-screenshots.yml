@@ -136,6 +136,7 @@ jobs:
 
   commit:
     needs: [render, find-new]
+    # The BRANCH expression again: env is not available in a job's if.
     if: >-
       !cancelled() &&
       !startsWith(github.event.workflow_run.head_branch || github.head_ref || github.ref_name, 'gh-readonly-queue/') &&
