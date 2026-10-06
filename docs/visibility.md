@@ -166,6 +166,8 @@ Rows 1–81 keep their numbers; a new row takes an ID from the key of the ticket
 | 79 | C1 searches for an item to link | C1 | Only items in this Project that C1 can see and that have been Submitted: no Drafts, no items in internal review, nothing from another Project, nothing of C2's |
 | 80 | A C1 caller saves a link to a C2 item id, or to an item in another Project | C1 | Refused like a made-up id |
 | 81 | K1 reads the answers of an item whose link question points at an item K1 can't see | K1 (app database role) | The answer holds that item's Document Number and Subject, never its id (ADR 0012) |
+| RP-392-1 | C1 engineer saves a Draft on day 1; it is numbered on day 3, and later sent back (to its Draft, or to Internal Review) | C1 PM at Internal Review; C1 engineer after the Send Back | No answer time, in the API or in "Saved <time>", is earlier than day 3: an earlier stored time reads as the Creation Date, and stays in the audit trail. While it is still a Draft, co-editors see real times. The app role can't read `work_item.field_times` |
+| RP-392-2 | C1 creates a Revision on day 5 and sends it for review on day 7 | C1 PM at Internal Review | No answer time or "Saved" earlier than day 7, the Revision's own Creation Date, whatever the original item's times |
 
 Every change to rules or channels must add or update rows here and in the test suite. A failing visibility test blocks release.
 

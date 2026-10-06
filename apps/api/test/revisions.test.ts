@@ -245,6 +245,24 @@ describe("the Revision's Document Number", () => {
   });
 });
 
+describe("a Revision's answer times (RP-392-2)", () => {
+  it("are never earlier than the Revision's own Creation Date once it is numbered, though its Draft was started earlier", async () => {
+    const closed = await closedAtCodeC("Panelboards");
+    const rev = await revisionOf(closed);
+    const times = async (by: Caller) => Object.values((await detail(by, rev)).fieldTimes).map((t) => Date.parse(t.at));
+    const started = Math.min(...(await times(engineer)));
+    expect(started).toBeGreaterThan(0);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    await take(engineer, rev, "send_for_review");
+    const creationDate = Date.parse((await detail(engineer, rev)).creationDate!);
+    expect(creationDate).toBeGreaterThan(started);
+    await ok(pm.post(`/v1/work-items/${rev}/claim`));
+    const seen = await times(pm);
+    expect(seen.length).toBeGreaterThan(0);
+    for (const t of seen) expect(t).toBeGreaterThanOrEqual(creationDate);
+  });
+});
+
 describe("the Revision drop-down (RP-318; scenarios 51 and 52)", () => {
   let closed = "";
   let base = "";
