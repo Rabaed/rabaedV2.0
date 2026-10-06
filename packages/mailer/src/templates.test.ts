@@ -16,6 +16,41 @@ const k1 = { en: "Khatib Consultants", ar: "الخطيب للاستشارات" }
 const khalid = { en: "Khalid Signer", ar: "خالد الموقّع" };
 const codeB = { type: "issue_code", transition: { en: "Issue Code B", ar: "إصدار الرمز B" }, outcome: "B", companyName: k1, signerName: khalid } as const;
 
+const LIST = "https://rabaed.test/en/projects/0190a1b2-0000-7000-8000-00000000000a/work-items?stage=draft%2Cpending_approval";
+const OLDEST = `${LIST}&stepAgeMin=4`;
+/** A weekly Step Age report: one item 4+ weeks with K1, one 2 weeks at the reader's own Step, one Draft with no number yet. */
+const report: EmailTemplateValues["step-age-report"] = {
+  projectName: { en: "Tower <A>", ar: "البرج أ" },
+  link: LIST,
+  oldestLink: OLDEST,
+  items: [
+    {
+      workItemId: "0190a1b2-0000-7000-8000-000000000001",
+      documentNumber: DOC,
+      subject: "Cable trays <Level 2>",
+      stage: { en: "Pending approval", ar: "بانتظار الاعتماد" },
+      with: { kind: "company", companyName: k1 },
+      stepAgeWeeks: 6,
+    },
+    {
+      workItemId: "0190a1b2-0000-7000-8000-000000000002",
+      documentNumber: "TWR-MAR-01-0002",
+      subject: "Pumps",
+      stage: { en: "Internal review", ar: "المراجعة الداخلية" },
+      with: { kind: "own", step: { en: "Contractor review", ar: "مراجعة المقاول" } },
+      stepAgeWeeks: 2,
+    },
+    {
+      workItemId: "0190a1b2-0000-7000-8000-000000000003",
+      documentNumber: null,
+      subject: "Valves",
+      stage: { en: "Draft", ar: "مسودة" },
+      with: { kind: "own", step: { en: "Draft", ar: "مسودة" } },
+      stepAgeWeeks: 1,
+    },
+  ],
+};
+
 const examples: EmailTemplateValues = {
   "sign-in-code": { code: "482913", validMinutes: 10 },
   invitation: { companyName: "Al Bina <Contracting> & Sons", link: "https://rabaed.test/ar/accept-invitation#token=abc" },
@@ -28,6 +63,7 @@ const examples: EmailTemplateValues = {
     event: { type: "transition", transition: { en: "Send Back", ar: "إرجاع" }, outcome: null, companyName: k1, signerName: null },
   },
   "notification-vacancy": { ...item, step: { en: "Internal review", ar: "المراجعة الداخلية" } },
+  "step-age-report": report,
 };
 
 const notificationTemplates = emailTemplates.filter((t) => t.startsWith("notification-"));
@@ -184,5 +220,60 @@ describe("notification emails", () => {
 describe("sign-in locked", () => {
   it("says for how many minutes, in Latin digits in both languages", () => {
     for (const locale of locales) expect(renderEmail("sign-in-locked", locale, examples["sign-in-locked"]).text).toContain("15");
+  });
+});
+
+describe("weekly Step Age report", () => {
+  const en = () => renderEmail("step-age-report", "en", report);
+  const ar = () => renderEmail("step-age-report", "ar", report);
+
+  it("has a subject of the report's name and the Project only: nothing of any item", () => {
+    expect(en().subject).toBe("Weekly Step Age report · Tower <A>");
+    expect(ar().subject).toBe("تقرير عمر الخطوة الأسبوعي · البرج أ");
+    for (const { subject } of [en(), ar()]) {
+      for (const secret of [DOC, "Cable trays", k1.en, k1.ar, "Pumps"]) expect(subject).not.toContain(secret);
+    }
+  });
+
+  it("groups the items by Step Age, 4+ weeks first, leaving out an empty group", () => {
+    const { text } = en();
+    const at = (s: string) => text.indexOf(s);
+    expect(at("4+ weeks (1)")).toBeGreaterThan(-1);
+    expect(at("2 weeks (1)")).toBeGreaterThan(at("4+ weeks (1)"));
+    expect(at("1 week (1)")).toBeGreaterThan(at("2 weeks (1)"));
+    expect(text).not.toContain("3 weeks");
+    expect(at("Cable trays")).toBeGreaterThan(at("4+ weeks"));
+    expect(at("Cable trays")).toBeLessThan(at("2 weeks"));
+    expect(at("Valves")).toBeGreaterThan(at("1 week"));
+    expect(ar().text).toContain("4+ أسابيع (1)");
+  });
+
+  it("shows each item's Document Number left to right, its Subject and Stage, and another Company by name only", () => {
+    for (const locale of locales) {
+      const { text, html } = renderEmail("step-age-report", locale, report);
+      expect(text).toContain(`⁦${DOC}⁩ · Cable trays <Level 2>`);
+      expect(html).toContain(`<bdi dir="ltr">${DOC}</bdi>`);
+      expect(html).toContain("Cable trays &lt;Level 2&gt;");
+      expect(html).not.toContain("<Level 2>");
+      expect(text).toContain(k1[locale]);
+      expect(text).toContain(locale === "en" ? "Contractor review" : "مراجعة المقاول");
+      expect(text).toContain(locale === "en" ? "Pending approval" : "بانتظار الاعتماد");
+    }
+    expect(en().text).toContain("With Khatib Consultants");
+  });
+
+  it("links to the List of the report's items, and of those 4 weeks or more", () => {
+    for (const locale of locales) {
+      const { text, html } = renderEmail("step-age-report", locale, report);
+      expect(text).toContain(LIST);
+      expect(text).toContain(OLDEST);
+      expect(html).toContain(`href="${LIST.replaceAll("&", "&amp;")}"`);
+      expect(html).toContain(`href="${OLDEST.replaceAll("&", "&amp;")}"`);
+    }
+  });
+
+  it("leaves out the 4+ weeks link when no item is that old", () => {
+    const young = { ...report, items: report.items.slice(1) };
+    expect(renderEmail("step-age-report", "en", young).text).not.toContain(OLDEST);
   });
 });

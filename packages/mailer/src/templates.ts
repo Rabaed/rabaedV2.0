@@ -1,10 +1,13 @@
 import {
   directionOf,
   formatNumber,
+  stepAgeReportGroups,
   type BilingualText,
   type Locale,
   type NotificationEmailContent,
   type NotificationEmailKind,
+  type StepAgeReportItem,
+  type StepAgeReportWeeks,
 } from "@rabaed/domain";
 
 /** A notification email's values: what the recipient may see of the item at send time, and the link to it on the web. */
@@ -30,6 +33,18 @@ export interface EmailTemplateValues {
   "notification-sent-back": NotificationEmailValues;
   /** A Step in the Member's Company has nobody to hold it (RP-356). */
   "notification-vacancy": NotificationEmailValues;
+  /** The weekly Step Age report (RP-359). */
+  "step-age-report": StepAgeReportValues;
+}
+
+/** A weekly Step Age report's values: its items as the recipient sees them, oldest first, and the links to the List of them. */
+export interface StepAgeReportValues {
+  projectName: BilingualText;
+  items: readonly StepAgeReportItem[];
+  /** The List showing the report's items. */
+  link: string;
+  /** The List showing those 4 weeks or more at their Step. */
+  oldestLink: string;
 }
 
 export type EmailTemplate = keyof EmailTemplateValues;
@@ -246,7 +261,63 @@ const notificationTemplates: { [K in NotificationEmailKind as (typeof notificati
     notificationEmail(locale, values, notificationCopy[locale].vacancy(stepName(locale, values.step)), [[notificationCopy[locale].vacancyHelp]]),
 };
 
-const templates: { [T in EmailTemplate]: Template<EmailTemplateValues[T]> } = { ...accountTemplates, ...notificationTemplates };
+// The weekly Step Age report (RP-359; visibility.md the Step Age reports row).
+// The subject names the report and the recipient's Project only. Each item
+// shows its Document Number, Subject, Stage and who holds it: the recipient's
+// own Step, or another Company by name only (V14). Ages are only ever weeks at
+// a Step, never measured against a date.
+
+const reportCopy = {
+  en: {
+    subject: (project: string) => `Weekly Step Age report · ${project}`,
+    intro: (project: string) => `Your open items on ${project}, by how long each has been at its Step:`,
+    group: (weeks: StepAgeReportWeeks, count: number) =>
+      `${weeks === 4 ? "4+ weeks" : weeks === 1 ? "1 week" : `${weeks} weeks`} (${formatNumber(count, "en")})`,
+    with: (holder: string) => `With ${holder}`,
+    oldest: "Open the items 4 weeks or more at their Step:",
+    all: "Open all of them on Rabaed:",
+    settings: "You can stop this report in your notification settings on Rabaed.",
+  },
+  ar: {
+    subject: (project: string) => `تقرير عمر الخطوة الأسبوعي · ${project}`,
+    intro: (project: string) => `بنودك المفتوحة في ${project}، حسب مدة بقاء كل منها في خطوته:`,
+    // Arabic counts 3 to 10 with the plural, and 1, 2 apart.
+    group: (weeks: StepAgeReportWeeks, count: number) =>
+      `${weeks === 4 ? `${formatNumber(4, "ar")}+ أسابيع` : weeks === 3 ? `${formatNumber(3, "ar")} أسابيع` : weeks === 2 ? "أسبوعان" : "أسبوع واحد"} (${formatNumber(count, "ar")})`,
+    with: (holder: string) => `لدى ${holder}`,
+    oldest: "افتح البنود التي مضى عليها 4 أسابيع أو أكثر في خطوتها:",
+    all: "افتحها كلها على ربائد:",
+    settings: "يمكنك إيقاف هذا التقرير من إعدادات الإشعارات على ربائد.",
+  },
+} satisfies Record<Locale, unknown>;
+
+function reportItem(locale: Locale, item: StepAgeReportItem): Paragraph {
+  const holder = item.with ? (item.with.kind === "own" ? item.with.step[locale] : item.with.companyName[locale]) : null;
+  const rest = [item.subject, item.stage[locale], ...(holder ? [reportCopy[locale].with(holder)] : [])].join(" · ");
+  return item.documentNumber ? [{ ltr: item.documentNumber, inline: true }, ` · ${rest}`] : [rest];
+}
+
+const reportTemplates: { "step-age-report": Template<StepAgeReportValues> } = {
+  "step-age-report": (locale, { projectName, items, link, oldestLink }) => {
+    const copy = reportCopy[locale];
+    const groups = stepAgeReportGroups(items);
+    const hasOldest = groups.some((g) => g.weeks === 4);
+    return {
+      subject: copy.subject(projectName[locale]),
+      paragraphs: [
+        [copy.intro(projectName[locale])],
+        ...groups.flatMap((g) => [[copy.group(g.weeks, g.items.length)], ...g.items.map((i) => reportItem(locale, i))]),
+        ...(hasOldest ? [[copy.oldest], [{ ltr: webLink(oldestLink), link: true }]] : []),
+        [copy.all],
+        [{ ltr: webLink(link), link: true }],
+        [copy.settings],
+      ],
+      signOff: signOff[locale],
+    };
+  },
+};
+
+const templates: { [T in EmailTemplate]: Template<EmailTemplateValues[T]> } = { ...accountTemplates, ...notificationTemplates, ...reportTemplates };
 
 /** Every template, from the templates themselves, so none can be left out of the tests. */
 export const emailTemplates = Object.keys(templates) as EmailTemplate[];

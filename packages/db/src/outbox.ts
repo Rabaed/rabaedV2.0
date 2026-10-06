@@ -98,7 +98,7 @@ export interface OutboxRun {
  * What a failure is recorded as: a database error by its code only (its text
  * can quote row values), anything else by its message, without NUL bytes.
  */
-function failureOf(error: unknown): string {
+export function failureOf(error: unknown): string {
   const code = typeof error === "object" && error !== null && "code" in error ? String(error.code) : undefined;
   if (code && /^[0-9A-Z]{5}$/.test(code)) return `database error ${code}`;
   const message = error instanceof Error ? error.message : String(error);

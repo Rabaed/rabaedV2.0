@@ -1,4 +1,4 @@
-import type { Locale, NotificationEmail } from "@rabaed/domain";
+import { stepAgeReportQuery, workItemSearchParams, type Locale, type NotificationEmail, type StepAgeReport } from "@rabaed/domain";
 import { z } from "zod";
 import { notificationEmailTemplate, renderEmail, type RenderedEmail, type EmailTemplate, type EmailTemplateValues } from "./templates.ts";
 
@@ -37,6 +37,30 @@ const oneAddress = z.email();
 export function notificationMessage({ to, language, kind, content }: NotificationEmail, webUrl: string): MailMessage {
   const link = new URL(`/${language}/work-items/${encodeURIComponent(content.workItemId)}`, webUrl).href;
   return { to, template: notificationEmailTemplate[kind], locale: language, values: { ...content, link } };
+}
+
+/**
+ * A weekly Step Age report as the mailer sends it, in the recipient's language,
+ * linking to the List of the Project's open items, and of those 4 weeks or more
+ * at their Step (stepAgeReportQuery): the same items the report lists.
+ */
+export function stepAgeReportMessage({ to, language, projectId, projectName, openStageKeys, items }: StepAgeReport, webUrl: string): MailMessage<"step-age-report"> {
+  const list = (query: URLSearchParams) => {
+    const url = new URL(`/${language}/projects/${encodeURIComponent(projectId)}/work-items`, webUrl);
+    url.search = query.toString();
+    return url.href;
+  };
+  return {
+    to,
+    template: "step-age-report",
+    locale: language,
+    values: {
+      projectName,
+      items,
+      link: list(workItemSearchParams(stepAgeReportQuery(openStageKeys))),
+      oldestLink: list(workItemSearchParams(stepAgeReportQuery(openStageKeys, 4))),
+    },
+  };
 }
 
 export function createMailer({ from, transport }: { from: string; transport: MailTransport }): Mailer {

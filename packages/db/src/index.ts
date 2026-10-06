@@ -9,3 +9,4 @@ export * from "./outbox.ts";
 export * from "./reset-database.ts";
 export * from "./rotating-password.ts";
 export * from "./schema.ts";
+export * from "./step-age-report.ts";
