@@ -210,6 +210,16 @@ describe("a Member who may not act on a card", () => {
   });
 });
 
+describe("under a search", () => {
+  it("has moves only for the cards the search shows", async () => {
+    const res = await ok(k1ManagerA.get(`/v1/projects/${projectId}/work-items/kanban?${workItemSearchParams({ q: "Busbars" })}`), 200);
+    const b: WorkItemBoard = res.json();
+    const ids = b.columns.flatMap((c) => c.lanes.flatMap((l) => l.cards.map((card) => card.id)));
+    expect(ids).toEqual([twoApprovalsAtK1]);
+    expect(Object.keys(b.moves)).toEqual([twoApprovalsAtK1]);
+  });
+});
+
 describe("dropping", () => {
   it("takes the Transition, and the card is in its new Stage on the next read", async () => {
     const before = await board(k1ManagerA);
