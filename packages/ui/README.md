@@ -237,7 +237,7 @@ A Module's Work Items and the Member's Projects, as the API returns them. Presen
 - Stories with `parameters: phone` (from `src/storybook/form.ts`) render 390px wide on an emulated touch screen, so they can check 44px touch targets with `expectTouchTarget`.
 - Screenshot baselines are Linux renders in `test/__screenshots__/`, compared on Linux only (CI).
   - **A new story** needs no step from you. When the only story test failures are missing baselines, CI uploads the new PNGs, and once CI finishes, the **Update screenshots** workflow commits them to your branch as one bot commit and runs CI again. It does this only for pushes to an open PR's branch in this repository, never for a fork or on `main`. Review the new PNGs in the PR.
-  - **A changed story** still fails CI. When you change the UI on purpose, add the `update-screenshots` label to your PR (or run `gh workflow run update-screenshots.yml --ref <branch>`); the **Update screenshots** workflow commits the re-rendered baselines to the PR for review.
+  - **A changed story** still fails CI. When your PR touches a story or `packages/ui/src`, the **Update screenshots** workflow re-renders every baseline on each push and commits the changed ones to the PR for review. For any other PR, add the `update-screenshots` label (or run `gh workflow run update-screenshots.yml --ref <branch>`).
   - Any other story test failure (behaviour, axe, direction, digits) blocks both: nothing is committed until it is fixed.
 
 ## Lint guard rails
