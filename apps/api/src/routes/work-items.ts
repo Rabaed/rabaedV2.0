@@ -12,16 +12,19 @@ import {
   linkedFrom,
   linkSearchQuery,
   linkSearchResults,
+  moduleKeys,
   revisionChain,
   saveAnswersRequest,
   savedAnswers,
   takeTransitionRequest,
   workItemTypeCode,
+  workItemBoard,
   workItemDetail,
   workItemHistory,
   workItemLinks,
   workItemList,
   workItemQuery,
+  type WorkItemQuery,
 } from "@rabaed/domain";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
@@ -32,7 +35,7 @@ import { getActivityFeed } from "../work-items/activity-feed.ts";
 import { getDashboard } from "../work-items/dashboard.ts";
 import { getLinkedFrom } from "../work-items/linked-from.ts";
 import { addWorkItemLink, getWorkItemLinks, removeWorkItemLink } from "../work-items/links.ts";
-import { listWorkItems } from "../work-items/query.ts";
+import { boardWorkItems, listWorkItems, type QueryScope } from "../work-items/query.ts";
 import { createRevision, discardRevision, getRevisionChain } from "../work-items/revisions.ts";
 import {
   claimStep,
@@ -72,16 +75,36 @@ export const workItemRoutes =
       },
     );
 
-    // The List: one page of the work item query (spec RP-344), its filters in the
-    // query string as the web's URL holds them.
-    app.get(
-      "/v1/projects/:projectId/work-items",
-      { schema: { params: projectParams, querystring: workItemQuery, response: { 200: workItemList } } },
-      async (request) => {
+    // A Module's items (RP-346): `/modules/:module/work-items` names the Module in
+    // its path (a Module tab's), and `/work-items` in its query's `module`, the
+    // Submittals unless a link names another (a Dashboard number, RP-351). Either
+    // way a Module the Project has no Work Item Type in, or that doesn't exist, is
+    // not found. The query then names the Module it reads, so its own links agree.
+    const scoped = (params: { projectId: string; module?: string }, q: WorkItemQuery): [QueryScope, WorkItemQuery] => {
+      const moduleKey = params.module === undefined ? q.module : moduleKeys.find((m) => m === params.module);
+      if (!moduleKey) throw notFound();
+      return [{ projectId: idOrNotFound(params.projectId), moduleKey }, { ...q, module: moduleKey }];
+    };
+    const moduleParams = projectParams.extend({ module: z.string() });
+
+    for (const [path, params] of [
+      ["/v1/projects/:projectId/work-items", projectParams],
+      ["/v1/projects/:projectId/modules/:module/work-items", moduleParams],
+    ] as const) {
+      // The List: one page of the work item query (spec RP-344), its filters in the
+      // query string as the web's URL holds them.
+      app.get(path, { schema: { params, querystring: workItemQuery, response: { 200: workItemList } } }, async (request) => {
         const memberId = ctx.requireMember(request);
-        return visibleOrNotFound(listWorkItems(ctx.db, memberId, idOrNotFound(request.params.projectId), request.query, ctx.now()));
-      },
-    );
+        return visibleOrNotFound(listWorkItems(ctx.db, memberId, ...scoped(request.params, request.query), ctx.now()));
+      });
+
+      // The Kanban (RP-349): the same query as a board, Stages as columns and V14
+      // swimlanes; a closed column holds the last 30 days. The cursor is not used.
+      app.get(`${path}/kanban`, { schema: { params, querystring: workItemQuery, response: { 200: workItemBoard } } }, async (request) => {
+        const memberId = ctx.requireMember(request);
+        return visibleOrNotFound(boardWorkItems(ctx.db, memberId, ...scoped(request.params, request.query), ctx.now()));
+      });
+    }
 
     // The Dashboard: Type cards per Module, counted per Revision chain over the
     // items the Member sees, every number with the List filter behind it (RP-351).

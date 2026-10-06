@@ -96,6 +96,7 @@ export default tseslint.config(
       "**/*.stories.tsx", // mock construction data (concrete grades, electrical panels); the copy they show is the component's, which is checked
       "packages/ui/src/storybook/**", // the stories' mock shell (its Files and Schedule tabs are Module names) and harness
       "packages/infra/**", // AWS's own vocabulary: account, region, environment, subscriber
+      "scripts/check-workflows.ts", // GitHub Actions' own vocabulary: pull_request, a git tag, a CI check
       "packages/eslint-plugin/**", // it names the terms it bans
       "packages/ui/src/components/icon/icon.tsx", // Tabler's icon names: user, users
       "packages/ui/src/tokens/scales.ts", // the `notes` step of the type scale

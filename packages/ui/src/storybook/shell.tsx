@@ -1,3 +1,4 @@
+import type { ModuleKey } from "@rabaed/domain";
 import { Button, IconButton } from "../components/button/button.tsx";
 import { Icon } from "../components/icon/icon.tsx";
 import { PageHeader } from "../components/shell/page-header.tsx";
@@ -13,27 +14,23 @@ export const projectTabLabels: Record<ProjectTabKey, { en: string; ar: string }>
   dashboard: { en: "Dashboard", ar: "لوحة المعلومات" },
   submittals: { en: "Submittals", ar: "التقديمات" },
   inspections: { en: "Inspections", ar: "الفحوصات" },
-  "snag-list": { en: "Snag List", ar: "قائمة الملاحظات" },
-  "site-reports": { en: "Site Reports", ar: "تقارير الموقع" },
+  snag_list: { en: "Snag List", ar: "قائمة الملاحظات" },
+  site_reports: { en: "Site Reports", ar: "تقارير الموقع" },
   drawings: { en: "Drawings", ar: "المخططات" },
-  files: { en: "Files", ar: "الملفات" },
-  views: { en: "Views", ar: "العروض" },
-  schedule: { en: "Schedule", ar: "الجدول الزمني" },
   settings: { en: "Settings", ar: "الإعدادات" },
 };
 export const projectTabsLabel = { en: "Project", ar: "المشروع" };
-export const comingSoon = { en: "Coming soon", ar: "قريبًا" };
 
 type Context = { globals: Record<string, unknown> };
 
-export function storyProjectTabs(context: Context, current: ProjectTabKey = "submittals") {
+export function storyProjectTabs(context: Context, current: ProjectTabKey = "submittals", modules: readonly ModuleKey[] = ["submittals"]) {
   return (
     <ProjectTabs
       label={storyText(context, projectTabsLabel)}
       labels={Object.fromEntries(projectTabKeys.map((key) => [key, storyText(context, projectTabLabels[key])])) as Record<ProjectTabKey, string>}
+      modules={modules}
       href={(key) => `#/projects/twr/${key}`}
       current={current}
-      comingSoonLabel={storyText(context, comingSoon)}
     />
   );
 }
@@ -142,7 +139,7 @@ export function storyPageHeader(context: Context) {
           {t(shellCopy.newSubmittal)}
         </Button>
       }
-      tabs={storyProjectTabs(context)}
+      tabs={storyProjectTabs(context, "submittals", ["submittals", "inspections", "snag_list", "site_reports", "drawings"])}
     />
   );
 }

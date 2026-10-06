@@ -85,7 +85,7 @@ export { WithChip, type WithChipHolder, type WithChipProps } from "./components/
 export { WorkItemCard, type WorkItemCardProps, type WorkItemState } from "./components/status/work-item-card.tsx";
 export { AppShell, TopBar, type AppShellProps, type TopBarProps } from "./components/shell/app-shell.tsx";
 export { PageHeader, type PageHeaderProps } from "./components/shell/page-header.tsx";
-export { ProjectTabs, projectTabKeys, type ProjectTabKey, type ProjectTabsProps } from "./components/shell/project-tabs.tsx";
+export { ProjectTabs, projectTabKeys, visibleProjectTabs, type ProjectTabKey, type ProjectTabsProps } from "./components/shell/project-tabs.tsx";
 export {
   Sidebar,
   SidebarNav,
@@ -109,7 +109,16 @@ export {
   type Tone,
 } from "./tokens/themes.ts";
 export { stageColour } from "./components/status/stage-colour.ts";
-export { WorkItemList, type WorkItemListProps } from "./components/views/work-item-list.tsx";
+export { WorkItemList, type WorkItemListLabels, type WorkItemListProps } from "./components/views/work-item-list.tsx";
+export {
+  WorkItemBoard,
+  WorkItemViewSwitch,
+  type WorkItemBoardLabels,
+  type WorkItemBoardProps,
+  type WorkItemViewSwitchLabels,
+  type WorkItemViewSwitchProps,
+} from "./components/views/work-item-board.tsx";
+export { ProjectCards, type ProjectCardsLabels, type ProjectCardsProps } from "./components/views/project-cards.tsx";
 export { ProjectDashboard, chainBucketLabel, type ProjectDashboardProps } from "./components/views/project-dashboard.tsx";
 export { moduleName } from "./lib/module-name.ts";
 export { ActivityFeedPanel, type ActivityFeedFilters, type ActivityFeedPanelProps } from "./components/views/activity-feed-panel.tsx";

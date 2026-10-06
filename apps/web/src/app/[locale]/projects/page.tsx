@@ -1,7 +1,8 @@
 import type { Locale } from "@rabaed/domain";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { CreateProjectForm } from "@/components/create-project-form";
-import { Link, redirect } from "@/i18n/navigation";
+import { ProjectCardsView } from "@/components/project-cards-view";
+import { redirect } from "@/i18n/navigation";
 import { getMe, getMyProjects } from "@/lib/session";
 
 export default async function ProjectsPage({ params }: { params: Promise<{ locale: Locale }> }) {
@@ -24,24 +25,7 @@ export default async function ProjectsPage({ params }: { params: Promise<{ local
       ) : list.projects.length === 0 ? (
         <p className="text-muted">{me.member.canCreateProjects ? t("emptyCreator") : t("empty")}</p>
       ) : (
-        <ul className="divide-y divide-border border-y border-border" data-testid="my-projects">
-          {list.projects.map((p) => (
-            <li key={p.id}>
-              <Link href={`/projects/${p.id}`} className="flex items-baseline justify-between gap-4 py-3 hover:bg-hover">
-                <span>
-                  <span className="font-medium">{p.name[locale]}</span>{" "}
-                  <bdi dir="ltr" className="text-muted">
-                    {p.code}
-                  </bdi>
-                </span>
-                <span className="text-sm text-muted">
-                  {p.projectRole.name[locale]}
-                  {p.isProjectAdmin && ` · ${t("projectAdmin")}`}
-                </span>
-              </Link>
-            </li>
-          ))}
-        </ul>
+        <ProjectCardsView projects={list.projects} locale={locale} />
       )}
     </div>
   );

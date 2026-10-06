@@ -2,6 +2,7 @@ import { z } from "zod";
 import { chainBucketSchema } from "./chain-bucket.ts";
 import { codeCFilterSchema } from "./code-c.ts";
 import { moduleKeySchema } from "./module.ts";
+import { moduleTabPaths } from "./project.ts";
 import { workItemOutcome, workItemTypeCode } from "./work-item.ts";
 
 /**
@@ -11,7 +12,7 @@ import { workItemOutcome, workItemTypeCode } from "./work-item.ts";
  * filter is a query parameter, a list of values joined by commas. A value left
  * at its default is left out of the URL.
  *
- * Later filters (`needMyAction`, `q`, `submittedFrom`/`submittedTo`)
+ * Later filters (`needMyAction`, `q`, `submittedFrom`/`submittedTo`, `bucket`, `codeC`)
  * are new keys of the same object, so nothing that builds or reads a query
  * changes when they come.
  */
@@ -19,9 +20,12 @@ import { workItemOutcome, workItemTypeCode } from "./work-item.ts";
 /** The List's page size. */
 export const workItemPageSize = 50;
 
-/** Sort by Step Age, the oldest first and closed items (which don't age) last, or by Document Number, items with no number yet last. */
-export const workItemSorts = ["stepAge", "documentNumber"] as const;
+/** Sort by Step Age, the oldest first and closed items (which don't age) last, or by Document Number, items with no number yet last, or by Submission Date, the latest first and items not yet Submitted last. */
+export const workItemSorts = ["stepAge", "documentNumber", "submissionDate"] as const;
 export type WorkItemSort = (typeof workItemSorts)[number];
+
+/** The longest search the List takes. */
+export const searchMaxLength = 200;
 
 /** The Step Age filter: open items in at least their 2nd, 3rd or 4th week at their Step. */
 export const stepAgeMinimums = [2, 3, 4] as const;
@@ -54,6 +58,15 @@ const list = <T extends z.ZodType>(item: T) =>
     )
     .transform((values) => [...new Set(values)]);
 
+/** A calendar day in Saudi time, as `YYYY-MM-DD`; a day that does not exist is refused. */
+const day = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/)
+  .refine((v) => {
+    const d = new Date(`${v}T00:00:00Z`);
+    return !Number.isNaN(d.getTime()) && d.toISOString().startsWith(v);
+  }, "Not a day");
+
 const flag = z.preprocess((v) => v === true || v === "true" || v === "1", z.boolean());
 
 const queryFields = {
@@ -75,6 +88,24 @@ const queryFields = {
     .number()
     .pipe(z.union(stepAgeMinimums.map((n) => z.literal(n))))
     .optional(),
+  /** The Submission Date range, both days included: an item not yet Submitted has no Submission Date and is left out. */
+  submittedFrom: day.optional(),
+  submittedTo: day.optional(),
+  /**
+   * Search (RP-347): words to find in the Document Number, Subject, Type,
+   * Trade, Location or the raiser's Company name; never in answers or
+   * Documents (visibility.md "Search and filters", V19). Nothing but spaces is
+   * no search.
+   */
+  q: z.preprocess(
+    (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
+    z.string().trim().max(searchMaxLength).optional(),
+  ),
+  /**
+   * Need My Action: only the items waiting on me, Steps I hold and unclaimed
+   * Steps in my Step Pool, plus my own Drafts (which are never counted).
+   */
+  needMyAction: flag,
   /** Every visible Revision, not only the latest of each chain. */
   allRevisions: flag,
   sort: z.enum(workItemSorts).default("stepAge"),
@@ -85,7 +116,7 @@ const queryFields = {
 /** The filters that take a list of values; every other key takes one. */
 const listKeys = ["type", "stage", "with", "trade", "location", "outcome", "bucket", "codeC"] as const satisfies readonly (keyof typeof queryFields)[];
 /** The keys that narrow the rows, as opposed to how they are shown (sort, Revisions, page). */
-const filterKeys = [...listKeys, "stepAgeMin"] as const;
+const filterKeys = [...listKeys, "stepAgeMin", "q", "needMyAction", "submittedFrom", "submittedTo"] as const;
 
 /** The query as the API takes it; a cursor must be one made for its sort. */
 export const workItemQuery = z.object(queryFields).superRefine((q, ctx) => {
@@ -137,15 +168,33 @@ export function workItemSearchParams(query: Partial<WorkItemQuery>): URLSearchPa
     if (values && values.length > 0) params.set(key, values.join(","));
   }
   if (query.stepAgeMin !== undefined) params.set("stepAgeMin", String(query.stepAgeMin));
+  if (query.q) params.set("q", query.q);
+  if (query.submittedFrom) params.set("submittedFrom", query.submittedFrom);
+  if (query.submittedTo) params.set("submittedTo", query.submittedTo);
+  if (query.needMyAction) params.set("needMyAction", "true");
   if (query.allRevisions) params.set("allRevisions", "true");
   if (query.sort && query.sort !== "stepAge") params.set("sort", query.sort);
   if (query.cursor) params.set("cursor", query.cursor);
   return params;
 }
 
+/**
+ * Where the web shows `query` on a Project: its Module's tab (`moduleTabPaths`),
+ * whose path names the Module, with the query's other parameters. A Dashboard
+ * number links here.
+ */
+export function workItemListHref(projectId: string, query: Partial<WorkItemQuery>): string {
+  const path = `/projects/${projectId}/${moduleTabPaths[query.module ?? "submittals"]}`;
+  const params = workItemSearchParams({ ...query, module: undefined }).toString();
+  return params ? `${path}?${params}` : path;
+}
+
 /** Whether `query` narrows the rows by any filter. */
 export function isFilteredWorkItemQuery(query: WorkItemQuery): boolean {
-  return filterKeys.some((key) => (key === "stepAgeMin" ? query[key] !== undefined : query[key].length > 0));
+  return filterKeys.some((key) => {
+    const v = query[key];
+    return Array.isArray(v) ? v.length > 0 : typeof v === "boolean" ? v : v !== undefined;
+  });
 }
 
 /** `query` with no filters, from the first page: its Module, sort and "Show all Revisions" kept. */
@@ -164,12 +213,16 @@ export function encodeWorkItemCursor(sort: WorkItemSort, key: readonly string[])
 // The last row's sort key, by sort, before its id: whether it sorts last (closed, or
 // no number yet) as "true" or "false", then when it entered its Step (UTC, to the
 // microsecond) or its Document Number. Checked here, so a tampered cursor is refused
-// before it reaches a query.
+// before it reaches a query. The API makes each key, and pages after it, in its one
+// definition per sort (`sorts`, apps/api/src/work-items/query.ts).
 const enteredAt = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/;
 const isFlag = (v: string | undefined) => v === "true" || v === "false";
 const cursorKeyValid: Record<WorkItemSort, (key: string[]) => boolean> = {
-  stepAge: ([last, at, id]) => isFlag(last) && enteredAt.test(at ?? "") && uuid.safeParse(id).success,
+  // An empty time: the item has no Step Age (a Draft with no number) and sorts last.
+  stepAge: ([last, at, id]) => isFlag(last) && (at === "" || enteredAt.test(at ?? "")) && uuid.safeParse(id).success,
   documentNumber: ([last, , id]) => isFlag(last) && uuid.safeParse(id).success,
+  // Not yet Submitted sorts last: its flag is "true" and its time is empty.
+  submissionDate: ([last, at, id]) => isFlag(last) && (last === "true" ? at === "" : enteredAt.test(at ?? "")) && uuid.safeParse(id).success,
 };
 
 /** The sort key a cursor holds, or null when it isn't a cursor made for `sort`. */
