@@ -171,3 +171,26 @@ tsx.run("no-raw-error-logging", rules["no-raw-error-logging"], {
     { code: `log.error({ cause: dbError }, "failed");`, errors: [{ messageId: "wholeError", data: { key: "cause" } }] },
   ],
 });
+
+tsx.run("use-client-directive", rules["use-client-directive"], {
+  valid: [
+    `"use client";\nexport function A() { const [x] = useState(0); return <button onClick={() => x}>a</button>; }`,
+    `"use strict";\n"use client";\nexport function A() { useEffect(() => {}); return null; }`,
+    `export async function Page() { const t = await getTranslations("home"); return <h1>{t("title")}</h1>; }`,
+    `export function Card() { const id = useId(); return <p id={id} />; }`,
+    `export function Card() { const data = use(promise); return <p>{data}</p>; }`,
+    `export function Card() { return <Link href="/a" onboarding="x">a</Link>; }`,
+    `export function useThing() { return 1; }`,
+    `const users = await user.used();`,
+  ],
+  invalid: [
+    { code: `export function A() { const [x] = useState(0); return x; }`, errors: [{ messageId: "hook", data: { name: "useState" } }] },
+    { code: `export function A() { React.useEffect(() => {}); return null; }`, errors: [{ messageId: "hook", data: { name: "useEffect" } }] },
+    { code: `export function A() { const t = useTranslations("home"); return t("x"); }`, errors: [{ messageId: "hook", data: { name: "useTranslations" } }] },
+    { code: `export function A() { return useBoardQuery(); }`, errors: [{ messageId: "hook", data: { name: "useBoardQuery" } }] },
+    { code: `export function A() { return <button onClick={() => {}}>a</button>; }`, errors: [{ messageId: "handler", data: { name: "onClick" } }] },
+    { code: `export function A({ f }) { return <Board onQueryChange={f} />; }`, errors: [{ messageId: "handler", data: { name: "onQueryChange" } }] },
+    { code: `import "x";\n"use client";\nexport function A() { useState(); return null; }`, errors: [{ messageId: "hook" }] },
+    { code: `export function A() { useState(); useEffect(); return <i onFocus={f} />; }`, errors: [{ messageId: "hook", data: { name: "useState" } }] },
+  ],
+});

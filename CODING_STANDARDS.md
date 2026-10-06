@@ -38,6 +38,7 @@ Visibility is the top requirement (`docs/visibility.md`). Check every read path 
 - **Use the shared piece, not a copy:** `@rabaed/ui` components (`AgeDots`, `StagePill`, `WithChip`, form controls inside `Field`, …), its `focusRing` and tone helpers, and the shared test fixtures under each package's `test/support/` (RP-237, RP-289).
 - **Landmarks and labels:** every page has its landmarks, and every group of controls has a visible or accessible label.
 - Design tokens and logical CSS (checked: `rabaed/no-hardcoded-colour`, `rabaed/no-physical-direction`).
+- **A component that uses hooks or event handlers starts with `"use client"`** (checked: `rabaed/use-client-directive`; RP-362).
 
 ## Domain language
 

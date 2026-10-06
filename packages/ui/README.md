@@ -252,6 +252,7 @@ A Module's Work Items and the Member's Projects, as the API returns them. Presen
 | `rabaed/css-no-physical-direction` | `margin-left`, `padding-right`, `left`, `border-left…`, `border-top-left-radius`, `text-align: left`, `float: right` and physical `@apply` classes in `.css` | `margin-inline-start`, `padding-inline-end`, `inset-inline-start`, `border-inline-start…`, `border-start-start-radius`, `text-align: start`, `float: inline-end` |
 | `rabaed/no-deadline-words` | Props, variables, fields and `t("…")` / `t.rich("…")` keys named with overdue / due date / deadline / SLA (tests are exempt) | Rabaed shows Step Age only: name it for weeks at step, e.g. `weeksAtStep` |
 | `rabaed/json-no-deadline-words` | The same words (English and Arabic) in `apps/web/messages/*.json` keys and text | Step Age wording, e.g. "4+ weeks at this step" |
+| `rabaed/use-client-directive` | A `.tsx` file in `packages/ui/src` or `apps/web/src` that calls a hook (`useState`, `useTranslations`, a custom `use…`; `useId` and `use` also run on the server) or passes an `on…={…}` handler, without `"use client"` at the top (stories are exempt). Only `next build` would catch it otherwise (RP-362) | Start the file with `"use client";` |
 
 Raw colours may appear only in the token sources: `src/tokens/palette.ts`, `src/tokens/scales.ts`, their tests, and the generated `src/styles/tokens.css`. Vertical properties (`top`, `margin-top`, `height`) are fine: they don't change with direction.
 

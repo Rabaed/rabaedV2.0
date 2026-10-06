@@ -229,3 +229,62 @@ export const noRawErrorLogging: Rule.RuleModule = {
     };
   },
 };
+
+// Hooks React also runs in Server Components, so calling one doesn't make a file client-only.
+const serverSafeHooks = new Set(["useId"]);
+const hookName = /^use[A-Z]/;
+const handlerName = /^on[A-Z]/;
+
+/** `"use client"` among the file's leading directives. */
+function hasUseClient(program: { body: Node[] }): boolean {
+  for (const statement of program.body) {
+    const directive = (statement as { directive?: string }).directive;
+    if (directive === undefined) return false;
+    if (directive === "use client") return true;
+  }
+  return false;
+}
+
+export const useClientDirective: Rule.RuleModule = {
+  meta: {
+    type: "problem",
+    docs: {
+      description:
+        'A component file that calls a React hook or passes an on… event handler starts with "use client". Next.js fails the build otherwise, and only `next build` checks it (RP-362).',
+    },
+    messages: {
+      hook: "'{{name}}' runs only in a Client Component. Start the file with \"use client\".",
+      handler: "An '{{name}}' handler needs a Client Component. Start the file with \"use client\".",
+    },
+    schema: [],
+  },
+  create(context) {
+    if (hasUseClient(context.sourceCode.ast as unknown as { body: Node[] })) return {};
+    // One finding per file: the fix is one line at the top.
+    let reported = false;
+    const report = (node: Node, messageId: "hook" | "handler", name: string) => {
+      if (reported) return;
+      reported = true;
+      context.report({ node, messageId, data: { name } });
+    };
+    return {
+      CallExpression(node) {
+        const { callee } = node;
+        const name =
+          callee.type === "Identifier"
+            ? callee.name
+            : callee.type === "MemberExpression" && !callee.computed && callee.property.type === "Identifier"
+              ? callee.property.name
+              : null;
+        if (name && hookName.test(name) && !serverSafeHooks.has(name)) report(node, "hook", name);
+      },
+      JSXAttribute(node: Rule.Node) {
+        const attribute = node as unknown as { name: { name: unknown }; value: { type: string } | null };
+        const name = attribute.name.name;
+        if (typeof name === "string" && handlerName.test(name) && attribute.value?.type === "JSXExpressionContainer") {
+          report(node, "handler", name);
+        }
+      },
+    };
+  },
+};
