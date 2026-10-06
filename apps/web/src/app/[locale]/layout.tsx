@@ -44,6 +44,11 @@ export default async function LocaleLayout({
               </Link>
               <div className="flex items-center gap-2">
                 {notifications && <NotificationBell unread={notifications.unread} />}
+                {me && (
+                  <Link href="/profile" className="px-2 text-sm font-medium text-primary underline-offset-4 hover:underline">
+                    {t("profile")}
+                  </Link>
+                )}
                 {me && <SignOutButton />}
                 <LanguageSwitch />
               </div>

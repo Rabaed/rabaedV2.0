@@ -41,7 +41,14 @@ export default async function NotificationsPage({ params }: { params: Promise<{ 
                       {" · "}
                     </>
                   )}
-                  {t("reached", { step: n.step.name[locale] })}
+                  {n.kind === "step_reached" && n.step && t("reached", { step: n.step.name[locale] })}
+                  {n.kind === "vacancy" && n.step && t("vacancy", { step: n.step.name[locale] })}
+                  {n.kind === "sent_back" && n.event && t("sentBack", { company: n.event.companyName?.[locale] ?? "" })}
+                  {n.kind === "watched_event" &&
+                    n.event &&
+                    (n.event.type === "revision_created"
+                      ? t("revisionCreated")
+                      : [n.event.companyName?.[locale], n.event.transition?.[locale] ?? t("cancelled")].filter(Boolean).join(" · "))}
                 </p>
               </div>
               <div className="shrink-0 text-end text-sm text-muted">

@@ -64,6 +64,12 @@ export {
   type RevisionRefusal,
 } from "./components/revision/revision-actions.tsx";
 export { RevisionPicker, type RevisionPickerProps } from "./components/revision/revision-picker.tsx";
+export {
+  NotificationSettingsForm,
+  type NotificationSettingsFormProps,
+  type SettingsCall,
+} from "./components/notifications/notification-settings.tsx";
+export { WatchButton, type WatchButtonProps, type WatchCall } from "./components/watch/watch-button.tsx";
 export { Icon, directionalIconNames, iconNames, type IconName, type IconProps } from "./components/icon/icon.tsx";
 export { Tabs, TabsContent, TabsList, TabsTrigger, type TabsListProps, type TabsTriggerProps } from "./components/navigation/tabs.tsx";
 export { Dialog, DialogClose, DialogContent, DialogFooter, DialogTrigger, type DialogContentProps } from "./components/overlay/dialog.tsx";

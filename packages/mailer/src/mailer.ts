@@ -1,6 +1,13 @@
-import type { Locale } from "@rabaed/domain";
+import {
+  stepAgeReportQuery,
+  workItemSearchParams,
+  type Locale,
+  type NotificationDigest,
+  type NotificationEmail,
+  type StepAgeReport,
+} from "@rabaed/domain";
 import { z } from "zod";
-import { renderEmail, type RenderedEmail, type EmailTemplate, type EmailTemplateValues } from "./templates.ts";
+import { notificationEmailTemplate, renderEmail, type RenderedEmail, type EmailTemplate, type EmailTemplateValues } from "./templates.ts";
 
 /** What a caller asks to send: a template, in the recipient's locale, with its values. */
 export interface MailMessage<T extends EmailTemplate = EmailTemplate> {
@@ -29,6 +36,61 @@ export interface Mailer {
 export const SENDER_NAME = "Rabaed";
 
 const oneAddress = z.email();
+
+/**
+ * A notification email as the mailer sends it: its kind's template, in the
+ * recipient's language, linking to the item on the customer web (`webUrl`).
+ */
+export function notificationMessage({ to, language, kind, content }: NotificationEmail, webUrl: string): MailMessage {
+  return { to, template: notificationEmailTemplate[kind], locale: language, values: { ...content, link: itemLink(content.workItemId, language, webUrl) } };
+}
+
+/** An item's page on the customer web (`webUrl`), in `language`. */
+function itemLink(workItemId: string, language: Locale, webUrl: string): string {
+  return new URL(`/${language}/work-items/${encodeURIComponent(workItemId)}`, webUrl).href;
+}
+
+/**
+ * A weekly Step Age report as the mailer sends it, in the recipient's language,
+ * linking to the List of the Project's open items, and of those 4 weeks or more
+ * at their Step (stepAgeReportQuery): the same items the report lists.
+ */
+export function stepAgeReportMessage({ to, language, projectId, projectName, openStageKeys, items }: StepAgeReport, webUrl: string): MailMessage<"step-age-report"> {
+  const list = (query: URLSearchParams) => {
+    const url = new URL(`/${language}/projects/${encodeURIComponent(projectId)}/work-items`, webUrl);
+    url.search = query.toString();
+    return url.href;
+  };
+  return {
+    to,
+    template: "step-age-report",
+    locale: language,
+    values: {
+      projectName,
+      items,
+      link: list(workItemSearchParams(stepAgeReportQuery(openStageKeys))),
+      oldestLink: list(workItemSearchParams(stepAgeReportQuery(openStageKeys, 4))),
+    },
+  };
+}
+
+/**
+ * The daily digest as the mailer sends it (RP-358): in the recipient's
+ * language, each item linking to itself on the customer web (`webUrl`).
+ */
+export function notificationDigestMessage({ to, language, projects }: NotificationDigest, webUrl: string): MailMessage<"daily-digest"> {
+  return {
+    to,
+    template: "daily-digest",
+    locale: language,
+    values: {
+      projects: projects.map(({ name, items }) => ({
+        name,
+        items: items.map((item) => ({ ...item, link: itemLink(item.workItemId, language, webUrl) })),
+      })),
+    },
+  };
+}
 
 export function createMailer({ from, transport }: { from: string; transport: MailTransport }): Mailer {
   return {

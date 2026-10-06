@@ -5,6 +5,7 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import type { AppContext } from "../app.ts";
 import { HttpError } from "../http-error.ts";
 import { endSession, signIn, startSession, type Session } from "../identity/sessions.ts";
+import { rememberBrowserLanguage } from "../notifications/settings.ts";
 
 /** Sets the new session cookie, ending whatever session the browser had before. */
 async function replaceSession(ctx: AppContext, request: FastifyRequest, reply: FastifyReply, session: Session) {
@@ -17,10 +18,11 @@ export const sessionRoutes =
   async (app) => {
     // Sign-in for Members.
     app.post("/v1/session", { schema: { body: signInRequest } }, async (request, reply) => {
-      const { email, password } = request.body;
+      const { email, password, locale } = request.body;
       const session = await signIn(ctx.db, email, password, ctx.now(), ctx.config.sessionTtlMs);
       // Every failure is the same 401, so registered emails can't be discovered.
       if (!session) throw new HttpError(401, "invalid_credentials");
+      if (locale) await rememberBrowserLanguage(ctx.db, session.memberId, locale, ctx.now());
       await replaceSession(ctx, request, reply, session);
       return reply.code(204).send();
     });
@@ -37,6 +39,7 @@ export const sessionRoutes =
       const now = ctx.now();
       const memberId = await acceptInvitation(ctx.db, request.body.token, request.body.password, now);
       if (!memberId) throw new HttpError(400, "invalid_invitation");
+      if (request.body.locale) await rememberBrowserLanguage(ctx.db, memberId, request.body.locale, now);
       const session = await startSession(ctx.db, { kind: "member", memberId }, now, ctx.config.sessionTtlMs);
       await replaceSession(ctx, request, reply, session);
       return reply.code(204).send();

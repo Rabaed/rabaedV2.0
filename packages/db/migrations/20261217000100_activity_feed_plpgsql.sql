@@ -3,7 +3,7 @@
 -- It was `language sql` with `set search_path`, which PostgreSQL never inlines, so it
 -- gained nothing from sql and was planned again on every call. Plain sql stays for small
 -- invoker helpers that can be inlined; this one is plpgsql, keeping its plans for the
--- session. Same arguments, result, body and rules as 20261209000000_activity_feed.sql:
+-- session. Same arguments, result, body and rules as 20261217000000_activity_feed.sql:
 -- security invoker, read through RLS (layers 3 to 5, V5), another Company named by its
 -- name only (V14), `answers_changed` left out (V19). `#variable_conflict use_column`
 -- makes a name that is both a column and an output column mean the column, as in sql.

@@ -2,7 +2,8 @@
   "shell": {
     "appName": "ربائد",
     "switchLanguage": "English",
-    "signOut": "تسجيل الخروج"
+    "signOut": "تسجيل الخروج",
+    "profile": "الملف الشخصي"
   },
   "home": {
     "title": "ربائد",
@@ -338,6 +339,15 @@
     "reached": "وصلك في {step}",
     "unread": "غير مقروء",
     "markAllRead": "تعليم الكل كمقروء",
+    "unavailable": "حدث خطأ. حاول مرة أخرى.",
+    "revisionCreated": "مراجعة جديدة",
+    "cancelled": "ملغى",
+    "sentBack": "أرجعته إليكم {company}",
+    "vacancy": "شاغر في {step}: عيّن بديلًا"
+  },
+  "profile": {
+    "title": "الملف الشخصي",
+    "notificationSettings": "إعدادات الإشعارات",
     "unavailable": "حدث خطأ. حاول مرة أخرى."
   }
 }

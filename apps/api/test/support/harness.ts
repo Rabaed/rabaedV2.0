@@ -143,7 +143,8 @@ export interface TestApi {
   addParticipant(by: Caller, projectId: string, company: OnboardedCompany, role: BaseRole): Promise<string>;
   /** The Participant's Authorized Person (`by`) adds a Member of their Company to the Project. */
   addProjectMember(by: Caller, participantId: string, memberId: string): Promise<void>;
-  signIn(email: string, password: string): Promise<Caller>;
+  /** Signs in; `locale` is the browser's language, as the web app sends it. */
+  signIn(email: string, password: string, locale?: string): Promise<Caller>;
   /** Moves the API's clock forward. */
   advanceClock(ms: number): void;
   close(): Promise<void>;
@@ -319,9 +320,9 @@ export async function createTestApi(options: { databaseUrl?: string; files?: boo
       expectStatus(await by.post(`/v1/participants/${participantId}/members`, { memberId }), 204, "add project member");
     },
 
-    async signIn(email, password) {
+    async signIn(email, password, locale) {
       const caller = callerFor(app);
-      expectStatus(await caller.post("/v1/session", { email, password }), 204, "sign in");
+      expectStatus(await caller.post("/v1/session", { email, password, ...(locale ? { locale } : {}) }), 204, "sign in");
       return caller;
     },
 
