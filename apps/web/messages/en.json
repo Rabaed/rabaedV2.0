@@ -431,7 +431,7 @@
   },
   "notifications": {
     "title": "Notifications",
-    "bellUnread": "Notifications, {shown} unread",
+    "bellUnread": "{count, plural, other {Notifications, {shown} unread}}",
     "empty": "No notifications yet.",
     "reached": "Reached you at {step}",
     "unread": "Unread",
