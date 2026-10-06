@@ -27,6 +27,22 @@ export function alteredMigrations(repo: string, base: string): string[] {
     .map(({ status, path }) => `${path} (${status === "D" ? "deleted or renamed" : "edited"})`);
 }
 
+/**
+ * The migrations the change adds that sort before the base branch's latest
+ * migration, each with that latest one. Migrations run in name order, so such a
+ * file runs before migrations it was never written against, and a function it
+ * re-defines can bring back an outdated copy (RP-311's take_transition, RP-342).
+ */
+export function misorderedMigrations(repo: string, base: string): { path: string; latest: string }[] {
+  const names = git(repo, "ls-tree", "--name-only", `${base}:${migrationsDir}`)
+    .split("\n")
+    .filter((name) => name.endsWith(".sql"));
+  const latest = names.reduce((a, b) => (a > b ? a : b), "");
+  return changedMigrations(repo, base)
+    .filter(({ status, path }) => status === "A" && path.slice(path.lastIndexOf("/") + 1) < latest)
+    .map(({ path }) => ({ path, latest }));
+}
+
 if (import.meta.filename && resolve(process.argv[1] ?? "") === import.meta.filename) {
   const base = process.argv[2];
   if (!base) {
@@ -34,10 +50,15 @@ if (import.meta.filename && resolve(process.argv[1] ?? "") === import.meta.filen
     process.exit(2);
   }
   const altered = alteredMigrations(process.cwd(), base);
+  const misordered = misorderedMigrations(process.cwd(), base);
   if (altered.length > 0) {
     console.error("Migrations that already exist on the base branch must not change. Put the change in a new migration:");
     for (const entry of altered) console.error(`  ${entry}`);
-    process.exit(1);
   }
-  console.log("No existing migration was changed.");
+  for (const { path, latest } of misordered) {
+    console.error(`${path} sorts before ${latest}, the latest migration on the base branch.`);
+    console.error("  Merge the base branch, then rename the file to sort after that migration, and re-check every function it re-defines against the base's latest definition: a copy made before the base moved on brings back an outdated body or a stale overload.");
+  }
+  if (altered.length > 0 || misordered.length > 0) process.exit(1);
+  console.log("No existing migration was changed, and every new migration sorts after the base's latest.");
 }

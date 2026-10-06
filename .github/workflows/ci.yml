@@ -252,7 +252,8 @@ jobs:
       - run: pnpm test:infra
 
   # A migration already on the base branch must stay byte-identical; only new
-  # files are allowed (RP-287). Pull requests only: a push has no base.
+  # files are allowed (RP-287), and each must sort after every migration on the
+  # base branch (RP-342). Pull requests only: a push has no base.
   migrations-immutable:
     name: migrations immutable
     if: github.event_name == 'pull_request'
