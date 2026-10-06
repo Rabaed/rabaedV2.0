@@ -62,16 +62,20 @@ const card = (n: number, rest: Partial<WorkItemRow>): WorkItemRow => ({
   stepEnteredAt: "2026-09-01T00:00:00.000Z",
   stepAgeWeeks: 1,
   outcome: null,
+  submissionDate: null,
+  creationDate: null,
   with: null,
   ...rest,
 });
 
 const withConsultant = { kind: "company", companyName: consultant } as const;
 const cards = {
-  draft: card(1, { title: "Fire alarm cables", documentNumber: null, stage: stages.draft, with: { kind: "own", companyName: ownCompany, step: draftStep, claimer: { name: sara, isMe: true } } }),
+  draft: card(1, { title: "Fire alarm cables", documentNumber: null, stepEnteredAt: null, stepAgeWeeks: null, stage: stages.draft, with: { kind: "own", companyName: ownCompany, step: draftStep, claimer: { name: sara, isMe: true } } }),
   revisionDraft: card(2, {
     title: "Earthing rods, galvanised",
     documentNumber: null,
+    stepEnteredAt: null,
+    stepAgeWeeks: null,
     revisionNo: 1,
     stage: stages.draft,
     with: { kind: "own", companyName: ownCompany, step: draftStep, claimer: { name: sara, isMe: true } },
