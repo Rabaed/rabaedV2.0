@@ -132,7 +132,7 @@ describe("free Links", () => {
     expect(itself.json()).toEqual({ error: "target_not_found" });
   });
 
-  it("refuse a hidden, Draft, internal, other-Project or made-up item with one identical answer (scenario 30)", async () => {
+  it("refuse a hidden, Draft, internal, other-Project or made-up item with one identical answer (scenario 80)", async () => {
     const refusals = await Promise.all(
       [item.c2Submitted, item.c1Draft, item.c1Internal, item.elsewhere, randomUUID()].map((to) => addLink(tower.c1Engineer, mar, to)),
     );

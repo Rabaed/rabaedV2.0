@@ -125,7 +125,7 @@ export const workItemRoutes =
     );
 
     // Link search: the Project's Submitted items the Member sees whose Document
-    // Number or Subject contains `q`, a page at a time (visibility.md scenario 29).
+    // Number or Subject contains `q`, a page at a time (visibility.md scenario 79).
     app.get(
       "/v1/projects/:projectId/work-items/link-search",
       { schema: { params: projectParams, querystring: linkSearchQuery, response: { 200: linkSearchResults } } },

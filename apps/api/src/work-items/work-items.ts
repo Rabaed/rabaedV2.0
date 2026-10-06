@@ -491,7 +491,7 @@ export function createWorkItem(
 const containsPattern = (text: string) => `%${text.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
 
 /**
- * Link search (visibility.md "Link search", scenario 29): the Project's items
+ * Link search (visibility.md "Link search", scenario 79): the Project's items
  * whose Document Number or Subject contains `q`, whatever the case, the latest
  * Submitted first (the Submission Date, which every caller who sees an item may
  * read; never when its Draft was started), one page at a time. Only items the Member sees (RLS, the list's own

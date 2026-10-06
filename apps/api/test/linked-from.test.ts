@@ -1,5 +1,5 @@
 // Seam 1: "Linked from" (RP-292, spec RP-289; form-engine.md part 2b;
-// visibility.md E3, the Linked from row, scenarios 27 and 28). Any Member who
+// visibility.md E3, the Linked from row, scenarios 77 and 78). Any Member who
 // sees a Work Item reads the Submitted items that link to it. A linking item
 // they can see comes with its id; one they can't comes as its Document Number
 // and Subject only, and everything else about it stays 404. A Draft or an item
@@ -7,7 +7,7 @@
 //
 // The Tower setup: C1 (Contractor, created the Project) and K1 (the Consultant,
 // covering the whole Project, with a second manager covering Mechanical only).
-// Only Contractors raise items today, so scenario 27's "item K1 can't see"
+// Only Contractors raise items today, so scenario 77's "item K1 can't see"
 // is an Electrical C1 item linking a Mechanical one, read by K1's Mechanical
 // manager: the same E3 rule, one viewer who sees the target and not the linker.
 import { randomUUID } from "node:crypto";
@@ -99,7 +99,7 @@ describe("Linked from", () => {
     await link(busbars, chillers);
   });
 
-  it("never lists a Draft or an item in internal review, whoever asks; it appears once Submitted (scenario 28)", async () => {
+  it("never lists a Draft or an item in internal review, whoever asks; it appears once Submitted (scenario 78)", async () => {
     for (const who of [c1Engineer, k1Manager, k1Mechanical]) expect(await linkedFrom(who, chillers), "Draft").toEqual({ items: [] });
     await sendForReview(busbars);
     for (const who of [c1Engineer, k1Manager, k1Mechanical]) expect(await linkedFrom(who, chillers), "internal").toEqual({ items: [] });
@@ -109,7 +109,7 @@ describe("Linked from", () => {
     expect(await linkedFrom(k1Manager, chillers)).toEqual(listed);
   });
 
-  it("shows a linking item the reader can't see as its number and Subject only; everything else about it is 404 (E3, scenario 27)", async () => {
+  it("shows a linking item the reader can't see as its number and Subject only; everything else about it is 404 (E3, scenario 77)", async () => {
     const res = await ok(k1Mechanical.get(linkedFromUrl(chillers)), 200);
     expect(res.json()).toEqual({ items: [{ documentNumber: await number(busbars), subject: "Busbars", workItemId: null }] });
     expect(res.body).not.toContain(busbars);

@@ -50,7 +50,7 @@ export type AddLinkResult = { ok: true; id: string } | { ok: false; reason: (typ
 
 /**
  * The raiser's Company adds a free Link, until Submit, to an item Link search
- * could have offered them; anything else is refused alike (scenarios 11, 30).
+ * could have offered them; anything else is refused alike (scenarios 11, 80).
  */
 export function addWorkItemLink(db: Db, memberId: string, workItemId: string, targetId: string, now: Date): Promise<AddLinkResult> {
   return withMember(db, memberId, async (trx): Promise<AddLinkResult> => {

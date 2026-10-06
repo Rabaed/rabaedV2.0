@@ -1,5 +1,5 @@
 // Seam 1: Link search (RP-290, spec RP-289; visibility.md "Link search" row and
-// scenario 29). A Member looking for an item to link types part of a Document
+// scenario 79). A Member looking for an item to link types part of a Document
 // Number or Subject, and gets the matching items of that Project that they can
 // see and that have been Submitted: never a Draft, never an item in internal
 // review, never another Project's item, never another Participant's they can't
@@ -78,7 +78,7 @@ beforeAll(async () => {
   c1SubmittedNumber = (await c1Engineer.get(`/v1/work-items/${item.c1Submitted}`)).json().documentNumber;
 });
 
-describe("Link search (scenario 29)", () => {
+describe("Link search (scenario 79)", () => {
   it("offers C1 only its Submitted items of this Project: no Draft, no internal review, nothing of C2's or another Project", async () => {
     const r = await search(tower.c1Engineer, "cable trays");
     expect(ids(r).toSorted()).toEqual([item.c1Submitted, item.c1Approved, item.c1Mechanical].toSorted());
