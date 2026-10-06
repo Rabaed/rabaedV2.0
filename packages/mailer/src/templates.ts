@@ -92,9 +92,9 @@ interface Content {
 const signOff: Record<Locale, string> = { en: "Rabaed", ar: "ربائد" };
 
 type Template<V> = (locale: Locale, values: V) => Content;
-type AccountTemplate = "sign-in-code" | "invitation" | "new-device-sign-in" | "sign-in-locked";
+type AdminTemplate = "sign-in-code" | "invitation" | "new-device-sign-in" | "sign-in-locked";
 
-const accountTemplates: { [T in AccountTemplate]: Template<EmailTemplateValues[T]> } = {
+const adminTemplates: { [T in AdminTemplate]: Template<EmailTemplateValues[T]> } = {
   "sign-in-code": (locale, { code, validMinutes }) => {
     const minutes = formatNumber(validMinutes, locale);
     return locale === "ar"
@@ -155,7 +155,7 @@ const accountTemplates: { [T in AccountTemplate]: Template<EmailTemplateValues[T
       : {
           subject: "Rabaed Admin sign-in locked for now",
           paragraphs: [
-            [`After several failed sign-ins to your Rabaed Admin account, sign-in is locked for ${count} minutes.`],
+            [`After several failed sign-ins to Rabaed Admin, sign-in is locked for ${count} minutes.`],
             ["If it wasn't you, tell the Rabaed team at once."],
           ],
           signOff: signOff.en,
@@ -373,7 +373,7 @@ const digestTemplates: { "daily-digest": Template<DailyDigestValues> } = {
 };
 
 const templates: { [T in EmailTemplate]: Template<EmailTemplateValues[T]> } = {
-  ...accountTemplates,
+  ...adminTemplates,
   ...notificationTemplates,
   ...digestTemplates,
   ...reportTemplates,

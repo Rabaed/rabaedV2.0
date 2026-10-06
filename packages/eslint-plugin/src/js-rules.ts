@@ -12,10 +12,10 @@ import {
   physicalClasses,
 } from "./matchers.ts";
 
-type StringNode = Extract<Node, { type: "Literal" | "TemplateElement" }>;
-type ParentedNode = Node & { parent?: ParentedNode };
+export type StringNode = Extract<Node, { type: "Literal" | "TemplateElement" }>;
+export type ParentedNode = Node & { parent?: ParentedNode };
 
-function stringValue(node: StringNode): string | null {
+export function stringValue(node: StringNode): string | null {
   if (node.type === "TemplateElement") return node.value.cooked ?? node.value.raw;
   return typeof node.value === "string" ? node.value : null;
 }
@@ -113,7 +113,7 @@ export const noPhysicalDirection: Rule.RuleModule = {
 };
 
 // Names that declare something (a prop, variable, field or type), rather than just use it.
-const declaringParents = new Set([
+export const declaringParents = new Set([
   "VariableDeclarator",
   "FunctionDeclaration",
   "Property",

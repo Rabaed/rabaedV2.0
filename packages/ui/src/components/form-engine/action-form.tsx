@@ -37,7 +37,7 @@ export type ActionFormProps = {
   internalNote: string;
   locale: Locale;
   onChange: (changes: Readonly<Record<string, FormValue | undefined>>) => void;
-  onInternalNoteChange: (note: string) => void;
+  onInternalNoteChange: (internalNote: string) => void;
   /** Prefix for the fields' ids, unique on the page. */
   idPrefix?: string;
 };

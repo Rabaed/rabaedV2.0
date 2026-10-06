@@ -66,6 +66,27 @@ export default tseslint.config(
     rules: { "rabaed/no-deadline-words": "error" },
   },
   {
+    // Glossary Avoid terms (RP-327) in identifiers and strings. The list comes from GLOSSARY.md; the allowed
+    // technical words are in the rule. Not checked: tests and stories (they quote terms and carry mock data),
+    // the demo seed (construction prose), infra (AWS vocabulary: account, subscriber), this plugin (it names the
+    // terms), icon and type-scale names, and anything outside apps/ packages/ scripts/.
+    files: ["apps/**/*.{ts,tsx,js}", "packages/**/*.{ts,tsx,js}", "scripts/**/*.ts"],
+    ignores: [
+      "**/*.test.{ts,tsx}",
+      "**/*.stories.tsx",
+      "**/test/**",
+      "**/test-support/**",
+      "apps/api/src/demo/**",
+      "packages/infra/**",
+      "packages/eslint-plugin/**",
+      "packages/ui/src/storybook/**",
+      "packages/ui/src/components/icon/icon.tsx", // icon names: user, users
+      "packages/ui/src/tokens/scales.ts", // the `notes` type-scale step
+    ],
+    plugins: { rabaed },
+    rules: { "rabaed/no-avoid-terms": "error" },
+  },
+  {
     files: ["packages/ui/**/*.css", "apps/web/**/*.css"],
     // The generated token file is where the palette's raw colours live.
     ignores: ["packages/ui/src/styles/tokens.css"],
@@ -81,6 +102,6 @@ export default tseslint.config(
     files: ["apps/web/messages/*.json"],
     plugins: { json, rabaed },
     language: "json/json",
-    rules: { "rabaed/json-no-deadline-words": "error" },
+    rules: { "rabaed/json-no-deadline-words": "error", "rabaed/json-no-avoid-terms": "error" },
   },
 );

@@ -171,3 +171,42 @@ tsx.run("no-raw-error-logging", rules["no-raw-error-logging"], {
     { code: `log.error({ cause: dbError }, "failed");`, errors: [{ messageId: "wholeError", data: { key: "cause" } }] },
   ],
 });
+
+tsx.run("no-avoid-terms", rules["no-avoid-terms"], {
+  valid: [
+    `const companyId = "abc";`,
+    `const memberName = member.name;`,
+    `const template = "invitation";`, // a name; only the label "Template" is flagged
+    `function OptionListInput({ list }) {}`,
+    `<Tabs aria-label="Project modules" />`,
+    `<div role="note" />`,
+    `import { tenant } from "tenant-lib";`,
+    `"use client";`,
+    "const mine = 1; /* a comment may say tenant */",
+    `const label = { en: "Activity Feed" };`,
+    "const sql = `select * from member where id = ${id}`;",
+    `const s = "Every Project {company} takes part in";`,
+  ],
+  invalid: [
+    { code: `const tenantId = "abc";`, errors: [{ messageId: "term", data: { found: "Tenant", words: "tenant" } }] },
+    { code: `function getCustomer() {}`, errors: [{ messageId: "term" }] },
+    { code: `type OrganizationRow = { id: string };`, errors: [{ messageId: "term" }] },
+    { code: `const x = { subscriber_count: 1 };`, errors: [{ messageId: "term" }] },
+    { code: `<Panel employeeName="x" />`, errors: [{ messageId: "term" }] },
+    { code: `const label = "Template";`, errors: [{ messageId: "term", data: { found: "Template", words: "template" } }] },
+    { code: `const label = "Your tenant";`, errors: [{ messageId: "term" }] },
+    { code: "const label = `Add a ${what} to the organization`;", errors: [{ messageId: "term" }] },
+    { code: `const coverage = 1;`, errors: [{ messageId: "term" }] },
+    { code: `<Foo project_manager="x" />`, errors: [{ messageId: "term" }] },
+  ],
+});
+
+jsonTester.run("json-no-avoid-terms", rules["json-no-avoid-terms"], {
+  valid: [`{ "members": { "title": "Members", "intro": "People of your Company" } }`, `{ "form": { "template": "Pick a Form" } }`],
+  invalid: [
+    { code: `{ "tenant": { "title": "Companies" } }`, errors: [{ messageId: "key" }] },
+    { code: `{ "home": { "intro": "Welcome, tenant" } }`, errors: [{ messageId: "value" }] },
+    { code: `{ "members": { "title": "Users" } }`, errors: [{ messageId: "value" }] },
+    { code: `{ "form": { "label": "Template" } }`, errors: [{ messageId: "value" }] },
+  ],
+});

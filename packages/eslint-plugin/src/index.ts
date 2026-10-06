@@ -1,4 +1,5 @@
 import { cssNoHardcodedColour, cssNoPhysicalDirection } from "./css-rules.ts";
+import { jsonNoAvoidTerms, noAvoidTerms } from "./avoid-rules.ts";
 import { noDeadlineWords, noHardcodedColour, noPhysicalDirection, noRawErrorLogging } from "./js-rules.ts";
 import { jsonNoDeadlineWords } from "./json-rules.ts";
 
@@ -13,9 +14,11 @@ const plugin = {
     "no-physical-direction": noPhysicalDirection,
     "no-deadline-words": noDeadlineWords,
     "no-raw-error-logging": noRawErrorLogging,
+    "no-avoid-terms": noAvoidTerms,
     "css-no-hardcoded-colour": cssNoHardcodedColour,
     "css-no-physical-direction": cssNoPhysicalDirection,
     "json-no-deadline-words": jsonNoDeadlineWords,
+    "json-no-avoid-terms": jsonNoAvoidTerms,
   },
 };
 

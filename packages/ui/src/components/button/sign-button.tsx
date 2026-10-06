@@ -12,7 +12,7 @@ export function SignButton({ children, variant = "primary", ...props }: SignButt
   return (
     <Button variant={variant} data-signing="" {...props}>
       {children}
-      <span aria-hidden="true" data-sign-marker="">
+      <span aria-hidden="true" data-sign-mark="">
         ✍
       </span>
     </Button>

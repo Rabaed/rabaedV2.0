@@ -86,7 +86,7 @@ export function WorkItemActions({
     return false;
   }
 
-  async function take(transition: Transition, checkedAnswers: Record<string, unknown>, note: string) {
+  async function take(transition: Transition, checkedAnswers: Record<string, unknown>, internalNote: string) {
     // What was typed in the Form goes with it: save it first.
     if (itemForm?.dirty && !(await itemForm.save())) {
       setError(t("saveFirst"));
@@ -97,7 +97,7 @@ export function WorkItemActions({
       idempotencyKey = crypto.randomUUID();
       keys.current.set(transition.key, idempotencyKey);
     }
-    const done = await send("transitions", { transition: transition.key, answers: checkedAnswers, internalNote: note.trim(), idempotencyKey });
+    const done = await send("transitions", { transition: transition.key, answers: checkedAnswers, internalNote: internalNote.trim(), idempotencyKey });
     if (done) keys.current.delete(transition.key);
     return done;
   }
