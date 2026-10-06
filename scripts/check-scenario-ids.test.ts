@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { citedScenarioIds, matrixScenarioIds, repoCitations, scenarioIdProblems } from "./check-scenario-ids.ts";
+import { citedScenarioIds, lastPlainNumber, matrixScenarioIds, repoCitations, scenarioIdProblems } from "./check-scenario-ids.ts";
 
 // The fixtures spell "scenario" in pieces, so this file never cites a scenario itself.
 const s = "scen" + "ario";
@@ -68,9 +68,10 @@ describe("scenarioIdProblems", () => {
     ]);
   });
 
-  it("refuses a plain number above 81: new rows take an RP-nnn-n ID", () => {
-    expect(scenarioIdProblems(visibility(["81", "82"]), [])).toEqual([
-      "docs/visibility.md:14: scenario 82 is a plain number above 81; new rows use RP-nnn-n (the Jira key)",
+  it("refuses a plain number above the last one: new rows take an RP-nnn-n ID", () => {
+    const next = lastPlainNumber + 1;
+    expect(scenarioIdProblems(visibility([String(lastPlainNumber), String(next)]), [])).toEqual([
+      `docs/visibility.md:14: scenario ${next} is a plain number above ${lastPlainNumber}; new rows use RP-nnn-n (the Jira key)`,
     ]);
   });
 

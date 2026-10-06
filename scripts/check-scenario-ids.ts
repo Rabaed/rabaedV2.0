@@ -8,7 +8,9 @@ import { join } from "node:path";
 // RP-nnn-1, RP-nnn-2, …, so two branches never take the same next number
 // (RP-397). A second 27–31 went unnoticed on main until then.
 //
-// Checked by scripts/check-scenario-ids.test.ts, in the unit project.
+// Checked by scripts/check-scenario-ids.test.ts, in the unit project. Only tests
+// and stories are read for citations: migration comments can't be corrected
+// once merged (check-migrations-immutable), so they keep the numbers they had.
 
 /** The last plain number a matrix row may use; every later row is RP-nnn-n. */
 export const lastPlainNumber = 81;
@@ -45,28 +47,32 @@ export function matrixScenarioIds(markdown: string): MatrixRow[] {
 
 // "scenario 28", "scenarios 27 and 28", "scenarios 11, 30 and 31", "scenarios 27-28",
 // "scenario RP-397-1", and a list that wraps onto the next comment line.
-const id = String.raw`(?:RP-\d+-\d+|\d+)\b`;
+const idPattern = String.raw`(?:RP-\d+-\d+|\d+)\b`;
+const dashPattern = "[-–]";
+const dash = new RegExp(`^${dashPattern}$`);
 const gap = String.raw`(?:[ \t]*\r?\n[ \t]*(?:\/\/|\*|--)?)?[ \t]*`;
-const joiner = String.raw`${gap}(?:,${gap}(?:and\b)?|and\b|[-–])${gap}`;
-const citation = new RegExp(String.raw`\bscenarios?[ \t]+(${id}(?:${joiner}${id})*)`, "gi");
+const joiner = String.raw`${gap}(?:,${gap}(?:and\b)?|and\b|${dashPattern})${gap}`;
+const citation = new RegExp(String.raw`\bscenarios?[ \t]+(${idPattern}(?:${joiner}${idPattern})*)`, "gi");
+
+type CitedId = { id: string; index: number };
 
 /** Every scenario ID a text cites, in order, with numeric ranges ("27–29") spelled out. */
 export function citedScenarioIds(text: string): string[] {
-  return citations(text).map((c) => c.id);
+  return citedIdsWithOffsets(text).map((c) => c.id);
 }
 
-function citations(text: string): { id: string; index: number }[] {
-  const found: { id: string; index: number }[] = [];
+function citedIdsWithOffsets(text: string): CitedId[] {
+  const found: CitedId[] = [];
   for (const match of text.matchAll(citation)) {
     const list = match[1]!;
     const start = match.index + match[0].length - list.length;
-    const tokens = [...list.matchAll(new RegExp(String.raw`${id}|[-–]`, "g"))];
+    const tokens = [...list.matchAll(new RegExp(`${idPattern}|${dashPattern}`, "g"))];
     for (let t = 0; t < tokens.length; t++) {
       const token = tokens[t]!;
-      if (token[0] === "-" || token[0] === "–") continue;
+      if (dash.test(token[0])) continue;
       const previous = tokens[t - 1]?.[0];
       const from = tokens[t - 2]?.[0];
-      if ((previous === "-" || previous === "–") && from && plainNumber.test(from) && plainNumber.test(token[0])) {
+      if (previous && dash.test(previous) && from && plainNumber.test(from) && plainNumber.test(token[0])) {
         for (let n = Number(from) + 1; n < Number(token[0]); n++) found.push({ id: String(n), index: start + token.index });
       }
       found.push({ id: token[0], index: start + token.index });
@@ -99,10 +105,10 @@ export function scenarioIdProblems(markdown: string, cited: Citation[]): string[
   }
 
   for (const { file, text } of cited) {
-    for (const { id: scenario, index } of citations(text)) {
-      if (linesById.has(scenario)) continue;
+    for (const { id, index } of citedIdsWithOffsets(text)) {
+      if (linesById.has(id)) continue;
       const line = text.slice(0, index).split("\n").length;
-      problems.push(`${file}:${line} cites scenario ${scenario}, which is not in ${matrixFile}`);
+      problems.push(`${file}:${line} cites scenario ${id}, which is not in ${matrixFile}`);
     }
   }
   return problems;
