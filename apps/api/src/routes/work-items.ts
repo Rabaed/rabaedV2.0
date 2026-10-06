@@ -1,9 +1,12 @@
 import {
+  activityFeed,
+  activityFeedQuery,
   addedLink,
   addLinkRequest,
   createdWorkItem,
   createRevisionRequest,
   createWorkItemRequest,
+  dashboard,
   formChoices,
   formToFill,
   linkedFrom,
@@ -21,12 +24,15 @@ import {
   workItemLinks,
   workItemList,
   workItemQuery,
+  type WorkItemQuery,
 } from "@rabaed/domain";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import type { AppContext } from "../app.ts";
 import { idOrNotFound, notFound, visibleOrNotFound } from "../http-error.ts";
 import { refusal } from "../refusals.ts";
+import { getActivityFeed } from "../work-items/activity-feed.ts";
+import { getDashboard } from "../work-items/dashboard.ts";
 import { getLinkedFrom } from "../work-items/linked-from.ts";
 import { addWorkItemLink, getWorkItemLinks, removeWorkItemLink } from "../work-items/links.ts";
 import { boardWorkItems, listWorkItems, type QueryScope } from "../work-items/query.ts";
@@ -69,13 +75,15 @@ export const workItemRoutes =
       },
     );
 
-    // A Module tab's items (RP-346): `/work-items` is the Submittals tab's, and
-    // `/modules/:module/work-items` any Module's the Project has a Work Item Type
-    // in. A Module it has none in, or that doesn't exist, is not found.
-    const scopeOf = (params: { projectId: string; module?: string }): QueryScope => {
-      const moduleKey = moduleKeys.find((m) => m === (params.module ?? "submittals"));
+    // A Module's items (RP-346): `/modules/:module/work-items` names the Module in
+    // its path (a Module tab's), and `/work-items` in its query's `module`, the
+    // Submittals unless a link names another (a Dashboard number, RP-351). Either
+    // way a Module the Project has no Work Item Type in, or that doesn't exist, is
+    // not found. The query then names the Module it reads, so its own links agree.
+    const scoped = (params: { projectId: string; module?: string }, q: WorkItemQuery): [QueryScope, WorkItemQuery] => {
+      const moduleKey = params.module === undefined ? q.module : moduleKeys.find((m) => m === params.module);
       if (!moduleKey) throw notFound();
-      return { projectId: idOrNotFound(params.projectId), moduleKey };
+      return [{ projectId: idOrNotFound(params.projectId), moduleKey }, { ...q, module: moduleKey }];
     };
     const moduleParams = projectParams.extend({ module: z.string() });
 
@@ -87,16 +95,34 @@ export const workItemRoutes =
       // query string as the web's URL holds them.
       app.get(path, { schema: { params, querystring: workItemQuery, response: { 200: workItemList } } }, async (request) => {
         const memberId = ctx.requireMember(request);
-        return visibleOrNotFound(listWorkItems(ctx.db, memberId, scopeOf(request.params), request.query, ctx.now()));
+        return visibleOrNotFound(listWorkItems(ctx.db, memberId, ...scoped(request.params, request.query), ctx.now()));
       });
 
       // The Kanban (RP-349): the same query as a board, Stages as columns and V14
       // swimlanes; a closed column holds the last 30 days. The cursor is not used.
       app.get(`${path}/kanban`, { schema: { params, querystring: workItemQuery, response: { 200: workItemBoard } } }, async (request) => {
         const memberId = ctx.requireMember(request);
-        return visibleOrNotFound(boardWorkItems(ctx.db, memberId, scopeOf(request.params), request.query, ctx.now()));
+        return visibleOrNotFound(boardWorkItems(ctx.db, memberId, ...scoped(request.params, request.query), ctx.now()));
       });
     }
+
+    // The Dashboard: Type cards per Module, counted per Revision chain over the
+    // items the Member sees, every number with the List filter behind it (RP-351).
+    app.get("/v1/projects/:projectId/dashboard", { schema: { params: projectParams, response: { 200: dashboard } } }, async (request) => {
+      const memberId = ctx.requireMember(request);
+      return visibleOrNotFound(getDashboard(ctx.db, memberId, idOrNotFound(request.params.projectId), ctx.now()));
+    });
+
+    // The Activity Feed: the Project's Work Item events as the Member may see them,
+    // newest first, a page at a time (RP-353; visibility.md "Activity Feed").
+    app.get(
+      "/v1/projects/:projectId/activity",
+      { schema: { params: projectParams, querystring: activityFeedQuery, response: { 200: activityFeed } } },
+      async (request) => {
+        const memberId = ctx.requireMember(request);
+        return visibleOrNotFound(getActivityFeed(ctx.db, memberId, idOrNotFound(request.params.projectId), request.query));
+      },
+    );
 
     // Link search: the Project's Submitted items the Member sees whose Document
     // Number or Subject contains `q`, a page at a time (visibility.md scenario 29).

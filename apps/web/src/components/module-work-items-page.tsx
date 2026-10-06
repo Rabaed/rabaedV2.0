@@ -27,7 +27,8 @@ export async function ModuleWorkItemsPage({
   const t = await getTranslations("workItems");
   const tabs = await getTranslations("projectTabs");
   // A filter the URL holds that isn't valid is left out, so an old or edited link still opens.
-  const query = workItemQueryFromSearchParams(searchParams);
+  // The tab's path names the Module, whatever the query string says.
+  const query = { ...workItemQueryFromSearchParams(searchParams), module };
   // List or Kanban, kept in the URL as `view`.
   const view = workItemViewFromSearchParams(searchParams);
   const [me, project, list, board] = await Promise.all([

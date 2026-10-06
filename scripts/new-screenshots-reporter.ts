@@ -1,5 +1,6 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
+import { stripVTControlCharacters } from "node:util";
 import type { Reporter, SerializedError, TestModule, TestRunEndReason, Vitest } from "vitest/node";
 
 // Tells CI whether a story test run failed only because new stories have no
@@ -14,12 +15,13 @@ import type { Reporter, SerializedError, TestModule, TestRunEndReason, Vitest } 
 // root (packages/ui).
 
 // The message @vitest/browser gives toMatchScreenshot when the reference file is missing.
-// It comes after an "expect(element).toMatchScreenshot()" header line.
+// It comes after an "expect(element).toMatchScreenshot()" header line, which
+// matcherHint colours with ANSI codes inside the message itself (RP-379).
 const missingReference = "No existing reference screenshot found";
 const matcherHeader = /^expect\(.*\)\.toMatchScreenshot\(\)$/;
 
 function isMissingReference(message: string): boolean {
-  const lines = message.split("\n").map((line) => line.trim()).filter(Boolean);
+  const lines = stripVTControlCharacters(message).split("\n").map((line) => line.trim()).filter(Boolean);
   const body = matcherHeader.test(lines[0] ?? "") ? lines[1] : lines[0];
   return body?.startsWith(missingReference) ?? false;
 }

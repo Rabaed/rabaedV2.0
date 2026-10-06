@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { bilingualText } from "./company.ts";
+import { moduleKeySchema, type ModuleKey } from "./module.ts";
 
 /** The four Project Roles every Project starts with; custom roles are based on one of them. */
 export const baseRoles = ["contractor", "consultant", "owner", "owner_representative"] as const;
@@ -22,9 +23,8 @@ export type CreateProjectRequest = z.infer<typeof createProjectRequest>;
 
 export const createdProject = z.object({ projectId: z.uuid(), projectNumber: z.number().int().positive() });
 
-/** Rabaed's Modules, in the order of the Project's tabs. */
-export const moduleKeys = ["submittals", "inspections", "snag_list", "site_reports", "drawings"] as const;
-export type ModuleKey = (typeof moduleKeys)[number];
+/** Rabaed's Modules (`moduleKeys`), in the order of the Project's tabs. */
+export const moduleTabOrder = ["submittals", "inspections", "snag_list", "site_reports", "drawings"] as const satisfies readonly ModuleKey[];
 
 /**
  * Each Module tab's path under its Project, `/projects/{id}/{path}`: the one
@@ -40,7 +40,7 @@ export const moduleTabPaths = {
 
 /** The Module whose tab is at `path` under its Project, or null. */
 export function moduleOfTabPath(path: string): ModuleKey | null {
-  return moduleKeys.find((m) => moduleTabPaths[m] === path) ?? null;
+  return moduleTabOrder.find((m) => moduleTabPaths[m] === path) ?? null;
 }
 
 /** A Project as one of its Members sees it. */
@@ -61,7 +61,7 @@ export const projectSummary = z.object({
    */
   needMyAction: z.number().int().nonnegative(),
   /** The Modules the Project has a Work Item Type in, in tab order: each gets a tab. */
-  modules: z.array(z.enum(moduleKeys)),
+  modules: z.array(moduleKeySchema),
 });
 export type ProjectSummary = z.infer<typeof projectSummary>;
 

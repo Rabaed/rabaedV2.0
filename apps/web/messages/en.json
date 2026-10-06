@@ -64,7 +64,29 @@
       "noResults": "No items you can see match this search.",
       "pages": "Pages",
       "firstPage": "First page",
-      "nextPage": "Next page"
+      "nextPage": "Next page",
+      "dashboardFigure": "From the Dashboard"
+    },
+    "buckets": {
+      "pending": "Pending",
+      "in_preparation": "In preparation",
+      "A": "Approved (A)",
+      "B": "Approved (B)",
+      "C": "Revise (C)",
+      "D": "Rejected (D)",
+      "passed": "Passed",
+      "passed_with_comments": "Passed with Comments",
+      "failed": "Failed",
+      "approved": "Approved",
+      "rejected": "Rejected",
+      "cancelled": "Cancelled"
+    },
+    "codeCStates": {
+      "approvedOnRevision": "approved on revision",
+      "awaitingRevision": "awaiting revision",
+      "noRevisionYet": "no Revision yet",
+      "revisionInProgress": "Revision in progress",
+      "rejectedAfterC": "rejected after C"
     },
     "board": {
       "board": "Kanban",
@@ -158,6 +180,7 @@
   },
   "projects": {
     "title": "Projects",
+    "dashboard": "Dashboard",
     "empty": "You are not on any Project yet.",
     "emptyCreator": "You are not on any Project yet. Create one below.",
     "projectAdmin": "Project Admin",

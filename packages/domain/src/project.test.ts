@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { moduleKeys, moduleOfTabPath, moduleTabPaths, projectCode } from "./project.ts";
+import { moduleKeys } from "./module.ts";
+import { moduleOfTabPath, moduleTabOrder, moduleTabPaths, projectCode } from "./project.ts";
 
 describe("Project code", () => {
   it("is 2 to 10 letters or digits", () => {
@@ -14,7 +15,11 @@ describe("Project code", () => {
 
 describe("Module tab paths", () => {
   it("keep the URLs as they are: Submittals at work-items, the others by their name", () => {
-    expect(moduleKeys.map((m) => moduleTabPaths[m])).toEqual(["work-items", "inspections", "snag-list", "site-reports", "drawings"]);
+    expect(moduleTabOrder.map((m) => moduleTabPaths[m])).toEqual(["work-items", "inspections", "snag-list", "site-reports", "drawings"]);
+  });
+
+  it("cover every Module once", () => {
+    expect([...moduleTabOrder].sort()).toEqual([...moduleKeys].sort());
   });
 
   it("read back to their Module, and nothing else does", () => {

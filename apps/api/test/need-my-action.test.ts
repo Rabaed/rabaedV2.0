@@ -247,6 +247,8 @@ describe("Module tabs", () => {
     await expectHidden(c1Engineer.get(path("inspections")));
     await expectHidden(c1Engineer.get(path("inspections", "/kanban")));
     await expectHidden(c1Engineer.get(path("rfis")));
+    // The same when the query names the Module (a Dashboard number's link).
+    await expectHidden(c1Engineer.get(`/v1/projects/${projectId}/work-items?module=inspections`));
     const submittals: WorkItemList = (await ok(c1Engineer.get(path("submittals")), 200)).json();
     expect(submittals.items.length).toBeGreaterThan(0);
     expect(submittals.filters.types.map((t) => t.code)).toContain("MAR");

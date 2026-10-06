@@ -64,7 +64,29 @@
       "noResults": "لا توجد عناصر يمكنك رؤيتها تطابق هذا البحث.",
       "pages": "الصفحات",
       "firstPage": "الصفحة الأولى",
-      "nextPage": "الصفحة التالية"
+      "nextPage": "الصفحة التالية",
+      "dashboardFigure": "من لوحة المعلومات"
+    },
+    "buckets": {
+      "pending": "قيد الانتظار",
+      "in_preparation": "قيد الإعداد",
+      "A": "معتمد (A)",
+      "B": "معتمد (B)",
+      "C": "للتعديل (C)",
+      "D": "مرفوض (D)",
+      "passed": "ناجح",
+      "passed_with_comments": "ناجح مع ملاحظات",
+      "failed": "راسب",
+      "approved": "معتمد",
+      "rejected": "مرفوض",
+      "cancelled": "ملغى"
+    },
+    "codeCStates": {
+      "approvedOnRevision": "معتمد بعد التعديل",
+      "awaitingRevision": "بانتظار التعديل",
+      "noRevisionYet": "لا تعديل بعد",
+      "revisionInProgress": "التعديل جارٍ",
+      "rejectedAfterC": "مرفوض بعد C"
     },
     "board": {
       "board": "كانبان",
@@ -158,6 +180,7 @@
   },
   "projects": {
     "title": "المشاريع",
+    "dashboard": "لوحة المعلومات",
     "empty": "لست عضوًا في أي مشروع بعد.",
     "emptyCreator": "لست عضوًا في أي مشروع بعد. أنشئ مشروعًا أدناه.",
     "projectAdmin": "مسؤول المشروع",

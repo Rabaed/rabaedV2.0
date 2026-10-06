@@ -119,3 +119,6 @@ export {
   type WorkItemViewSwitchProps,
 } from "./components/views/work-item-board.tsx";
 export { ProjectCards, type ProjectCardsLabels, type ProjectCardsProps } from "./components/views/project-cards.tsx";
+export { ProjectDashboard, chainBucketLabel, type ProjectDashboardProps } from "./components/views/project-dashboard.tsx";
+export { moduleName } from "./lib/module-name.ts";
+export { ActivityFeedPanel, type ActivityFeedFilters, type ActivityFeedPanelProps } from "./components/views/activity-feed-panel.tsx";

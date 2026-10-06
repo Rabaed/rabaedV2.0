@@ -10,6 +10,8 @@ import {
   stepAgeMinimums,
   workItemSorts,
   type BilingualText,
+  type ChainBucket,
+  type CodeCFilter,
   type Locale,
   type WorkItemList as WorkItemListData,
   type WorkItemOutcome,
@@ -81,6 +83,12 @@ export type WorkItemListLabels = {
   nextPage: string;
   /** Each Review Code and Inspection Result, as its filter choice and its badge. */
   outcomes: Record<WorkItemOutcome, string>;
+  /** Before a Dashboard number's filter (its buckets and Code C sub-states), which the toolbar has no control for. */
+  dashboardFigure: string;
+  /** Each Dashboard bucket (chainBucket), as the Dashboard names it. */
+  buckets: Record<ChainBucket, string>;
+  /** Each sub-state of the Dashboard's Code C line (codeCState). */
+  codeCStates: Record<CodeCFilter, string>;
 };
 
 /** The labels that take no value, for `t`. */
@@ -230,6 +238,13 @@ export function WorkItemList({ list, query, locale, labels, hrefFor, itemHref, o
             <Field label={t("allRevisions")} layout="inline">
               <Switch checked={query.allRevisions} onCheckedChange={(on) => change({ allRevisions: on })} />
             </Field>
+            {/* A Dashboard number's filter, which the toolbar has no control for: its buckets and Code C sub-states. */}
+            {query.bucket.length + query.codeC.length > 0 && (
+              <Badge tone="info" data-testid="bucket-filter">
+                {t("dashboardFigure")}:{" "}
+                {[...query.bucket.map((bucket) => labels.buckets[bucket]), ...query.codeC.map((codeC) => labels.codeCStates[codeC])].join(", ")}
+              </Badge>
+            )}
           </div>
           {filtered && (
             <a href={hrefFor(withoutFilters(query))} className={buttonVariants({ variant: "ghost", size: "sm" })}>

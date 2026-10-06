@@ -1,9 +1,13 @@
 "use client";
 
 import {
+  chainBuckets,
+  codeCStates,
   watchOutcomeNames,
   workItemOutcomes,
   workItemSearchParams,
+  type ChainBucket,
+  type CodeCState,
   type Locale,
   type WorkItemBoard as WorkItemBoardData,
   type WorkItemList as WorkItemListData,
@@ -57,6 +61,9 @@ function useViewLabels(tableLabel: string): { list: WorkItemListLabels; board: W
       ...shared,
       table: tableLabel,
       weeksOrMore: (weeks) => t("list.weeksOrMore", { weeks }),
+      dashboardFigure: l("dashboardFigure"),
+      buckets: Object.fromEntries(chainBuckets.map((b) => [b, t(`buckets.${b}`)])) as Record<ChainBucket, string>,
+      codeCStates: Object.fromEntries(codeCStates.map((s) => [s, t(`codeCStates.${s}`)])) as Record<CodeCState, string>,
     },
     board: {
       ...shared,
@@ -93,7 +100,8 @@ export function WorkItemListOrKanban(
   // The path with its locale, as the browser shows it.
   const pathname = usePathname();
   const hrefIn = (v: WorkItemView, q: WorkItemQuery) => {
-    const params = workItemSearchParams(q);
+    // The tab's path names the Module, so the query string doesn't.
+    const params = workItemSearchParams({ ...q, module: undefined });
     if (v === "kanban") params.set("view", "kanban");
     const search = params.toString();
     return search ? `${pathname}?${search}` : pathname;

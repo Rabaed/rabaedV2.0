@@ -76,6 +76,9 @@ export const workItemListLabels: Record<Locale, WorkItemListLabels> = {
     firstPage: "First page",
     nextPage: "Next page",
     outcomes: outcomes.en,
+    dashboardFigure: "From the Dashboard",
+    buckets: { pending: "Pending", in_preparation: "In preparation", A: "Approved (A)", B: "Approved (B)", C: "Revise (C)", D: "Rejected (D)", passed: "Passed", passed_with_comments: "Passed with Comments", failed: "Failed", approved: "Approved", rejected: "Rejected", cancelled: "Cancelled" },
+    codeCStates: { approvedOnRevision: "approved on revision", awaitingRevision: "awaiting revision", noRevisionYet: "no Revision yet", revisionInProgress: "Revision in progress", rejectedAfterC: "rejected after C" },
   },
   ar: {
     toolbar: "التصفية والترتيب",
@@ -116,6 +119,9 @@ export const workItemListLabels: Record<Locale, WorkItemListLabels> = {
     firstPage: "الصفحة الأولى",
     nextPage: "الصفحة التالية",
     outcomes: outcomes.ar,
+    dashboardFigure: "من لوحة المعلومات",
+    buckets: { pending: "قيد الانتظار", in_preparation: "قيد الإعداد", A: "معتمد (A)", B: "معتمد (B)", C: "للتعديل (C)", D: "مرفوض (D)", passed: "ناجح", passed_with_comments: "ناجح مع ملاحظات", failed: "راسب", approved: "معتمد", rejected: "مرفوض", cancelled: "ملغى" },
+    codeCStates: { approvedOnRevision: "معتمد بعد التعديل", awaitingRevision: "بانتظار التعديل", noRevisionYet: "لا تعديل بعد", revisionInProgress: "التعديل جارٍ", rejectedAfterC: "مرفوض بعد C" },
   },
 };
 

@@ -1,8 +1,11 @@
 import "server-only";
 import type {
+  ActivityFeed,
+  ActivityFeedQuery,
   CompanyInvitations,
   CompanyMembers,
   CompanyParticipations,
+  Dashboard,
   DimensionValues,
   DocumentList,
   FormChoices,
@@ -32,7 +35,7 @@ import type {
   WorkItemQuery,
   OptionList,
 } from "@rabaed/domain";
-import { workItemSearchParams } from "@rabaed/domain";
+import { activityFeedSearchParams, workItemSearchParams } from "@rabaed/domain";
 import { cookies } from "next/headers";
 import { apiUrl } from "./api-url.ts";
 
@@ -136,7 +139,8 @@ export function getMyVisibility(projectId: string): Promise<DimensionValues | nu
 
 /** The API path of a Module's items on a Project, with `query`'s parameters. */
 function moduleWorkItemsPath(projectId: string, module: ModuleKey, view: "" | "/kanban", query: WorkItemQuery): string {
-  const params = workItemSearchParams(query).toString();
+  // The path names the Module.
+  const params = workItemSearchParams({ ...query, module: undefined }).toString();
   return `/v1/projects/${encodeURIComponent(projectId)}/modules/${module}/work-items${view}${params ? `?${params}` : ""}`;
 }
 
@@ -152,6 +156,17 @@ export function getWorkItems(projectId: string, module: ModuleKey, query: WorkIt
 /** The Kanban of a Module of a Project for `query`; null as for the List. */
 export function getWorkItemBoard(projectId: string, module: ModuleKey, query: WorkItemQuery): Promise<WorkItemBoard | null> {
   return apiGet<WorkItemBoard>(moduleWorkItemsPath(projectId, module, "/kanban", query));
+}
+
+/** A Project's Dashboard: Type cards over the items the signed-in Member can see; null if it isn't one of theirs. */
+export function getDashboard(projectId: string): Promise<Dashboard | null> {
+  return apiGet<Dashboard>(`/v1/projects/${encodeURIComponent(projectId)}/dashboard`);
+}
+
+/** A page of a Project's Activity Feed, as the signed-in Member may see it; null if the Project isn't one of theirs. */
+export function getActivityFeed(projectId: string, query: Partial<ActivityFeedQuery> = {}): Promise<ActivityFeed | null> {
+  const params = activityFeedSearchParams(query).toString();
+  return apiGet<ActivityFeed>(`/v1/projects/${encodeURIComponent(projectId)}/activity${params ? `?${params}` : ""}`);
 }
 
 /** One Work Item; null if the signed-in Member can't see it (exactly as if it didn't exist). */

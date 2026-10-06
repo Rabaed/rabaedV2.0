@@ -1,16 +1,23 @@
 import { withMember, type Database, type Db, type ModuleKey } from "@rabaed/db";
 import {
   boardLanes,
+  chainBucketRules,
   closedColumnDays,
+  codeCFilterStates,
+  codeCRules,
   decodeWorkItemCursor,
   encodeWorkItemCursor,
   enteredStepBy,
   isOpenStageCategory,
   parseActionForm,
+  stageCategories,
   stepAgeWeeks,
   workItemPageSize,
   type BilingualText,
   type BoardCardInput,
+  type ChainBucket,
+  type CodeCCondition,
+  type CodeCState,
   type WorkItemBoard,
   type WorkItemMove,
   type WorkItemList,
@@ -43,7 +50,7 @@ import { sql, type RawBuilder, type Transaction } from "kysely";
 
 type Trx = Transaction<Database>;
 
-/** What the query reads: one Module of one Project, the Module tab's. */
+/** What the query reads: one Module of one Project (a Module tab's, or the query's `module`). */
 export type QueryScope = { projectId: string; moduleKey: ModuleKey };
 
 type Row = {
@@ -93,13 +100,22 @@ type Row = {
 function visibleRows({ projectId, moduleKey }: QueryScope, allRevisions: boolean): RawBuilder<unknown> {
   return sql`
     select w.id, w.project_id, t.code as type_code, t.name as type_name, w.title, w.document_number,
-      w.revision_no, w.outcome,
+      w.revision_no, w.outcome, t.outcome_kind,
+      -- For the Dashboard's buckets (chainBucket): Submitted, and raised by the viewer's own Participant.
+      w.submitted_at is not null as submitted,
+      coalesce(w.raised_by_participant_id in (select app.current_participant_ids()), false) as raised_by_own,
+      -- For the Code C line (codeCState): a Revision of the chain the viewer sees got Code C, this one
+      -- included. The chain is read only through app.revision_chain, which gives the Revisions the
+      -- viewer sees (V1 per Revision); their outcome is read through RLS like any item's.
+      t.outcome_kind = 'review_code' and exists (
+        select 1 from app.revision_chain(w.id) rc join work_item o on o.id = rc.work_item_id where o.outcome = 'C'
+      ) as had_code_c,
       st.key as stage_key, st.name as stage_name, st.category as stage_category,
       tv.id as trade_id, tv.code as trade_code, tv.name as trade_name,
       lv.id as location_id, lv.code as location_code, lv.name as location_name,
       e.step_entered_at,
-      -- Closed (or cancelled): it no longer ages, nor is it with anyone. The SQL side of isOpenStageCategory.
-      st.category not in ('draft', 'in_progress') as closed,
+      -- Closed (or cancelled): it no longer ages, nor is it with anyone (isOpenStageCategory).
+      ${closedStageCategory(sql.ref("st.category"))} as closed,
       to_char(e.step_entered_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as entered_key,
       -- Never created_at (when the Draft was started: audit only, V-Creation Date). The Creation Date is
       -- numbered_at, which app.work_item_creation_date gives to the raiser's own Participant only.
@@ -132,9 +148,65 @@ function visibleRows({ projectId, moduleKey }: QueryScope, allRevisions: boolean
 
 const noFilter = sql<boolean>`true`;
 
+/** The Stage categories an item still moves through (isOpenStageCategory), from the domain's own list. */
+const openStageCategories = stageCategories.filter(isOpenStageCategory);
+
+/** Whether a Stage category is closed (or cancelled): the SQL side of isOpenStageCategory. */
+export function closedStageCategory(category: RawBuilder<unknown>): RawBuilder<boolean> {
+  return sql<boolean>`(${category} <> all(${openStageCategories}::text[]))`;
+}
+
+/**
+ * How each key of a bucket or Code C condition holds over a row of
+ * `visibleRows` (as `r`): the SQL side of holdsChainCondition. One entry per
+ * key, so a new key can't be left out.
+ */
+const holdsSql: { [K in keyof CodeCCondition]-?: (value: NonNullable<CodeCCondition[K]>) => RawBuilder<boolean> } = {
+  hadCodeC: (had) => sql`r.had_code_c = ${had}`,
+  open: (open) => (open ? sql`not r.closed` : sql`r.closed`),
+  submitted: (submitted) => sql`r.submitted = ${submitted}`,
+  raisedByViewer: (raised) => sql`r.raised_by_own = ${raised}`,
+  outcomeKind: (kind) => sql`r.outcome_kind = ${kind}`,
+  // An open item has no outcome: false, not null, as in the domain.
+  outcome: (outcome) => sql`r.outcome is not distinct from ${outcome}`,
+  stageCategory: (category) => sql`r.stage_category = ${category}`,
+};
+
+/** One condition of the bucket or Code C rule, over a row of `visibleRows` (as `r`). */
+export function chainConditionSql(when: CodeCCondition): RawBuilder<boolean> {
+  const parts = Object.entries(when).flatMap(([key, value]) => {
+    const holdsKey = holdsSql[key as keyof CodeCCondition] as ((value: unknown) => RawBuilder<boolean>) | undefined;
+    if (!holdsKey) throw new Error(`Not a chain condition key: ${key}`);
+    return value === undefined ? [] : [holdsKey(value)];
+  });
+  return parts.length > 0 ? sql`(${sql.join(parts, sql` and `)})` : noFilter;
+}
+
+/**
+ * The Dashboard bucket of a row of `visibleRows` (as `r`), or null: the domain's
+ * chainBucketRules in order, as one SQL case, so the `bucket` filter and the
+ * Dashboard's counts follow chainBucket's own rule.
+ */
+export const bucketOfRow: RawBuilder<ChainBucket | null> = sql`(case ${sql.join(
+  chainBucketRules.map((rule) => sql`when ${chainConditionSql(rule.when)} then ${rule.bucket}::text`),
+  sql` `,
+)} end)`;
+
+/**
+ * The Code C state of a row of `visibleRows` (as `r`), or null: the domain's
+ * codeCRules in order, as one SQL case, so the `codeC` filter and the
+ * Dashboard's Code C line follow codeCState's own rule.
+ */
+export const codeCOfRow: RawBuilder<CodeCState | null> = sql`(case ${sql.join(
+  codeCRules.map((rule) => sql`when ${chainConditionSql(rule.when)} then ${rule.state}::text`),
+  sql` `,
+)} end)`;
+
 /** The rows of `visibleRows` (as `r`) that match the query's filters; the cursor aside. */
 function matching(q: WorkItemQuery, now: Date, scope: QueryScope): RawBuilder<boolean> {
-  const conditions: RawBuilder<boolean>[] = [];
+  // A chain in no bucket is one nobody but its raiser should see (V1): listed and counted nowhere,
+  // so a Dashboard total (every bucket) and the List of its Type agree.
+  const conditions: RawBuilder<boolean>[] = [sql`${bucketOfRow} is not null`];
   if (q.q !== undefined) {
     // Search (RP-347): the Document Number, Subject, Type, Trade, Location and the
     // raiser's Company name, never answers or Documents (V19). The function answers
@@ -154,6 +226,8 @@ function matching(q: WorkItemQuery, now: Date, scope: QueryScope): RawBuilder<bo
       ) select id from under)`);
   }
   if (q.outcome.length > 0) conditions.push(sql`r.outcome = any(${q.outcome}::text[])`);
+  if (q.bucket.length > 0) conditions.push(sql`${bucketOfRow} = any(${q.bucket}::text[])`);
+  if (q.codeC.length > 0) conditions.push(sql`${codeCOfRow} = any(${codeCFilterStates(q.codeC)}::text[])`);
   if (q.stepAgeMin !== undefined) {
     // A closed item doesn't age.
     conditions.push(sql`not r.closed and r.step_entered_at <= ${enteredStepBy(q.stepAgeMin, now)}::timestamptz`);
@@ -173,7 +247,7 @@ function matching(q: WorkItemQuery, now: Date, scope: QueryScope): RawBuilder<bo
     if (companies.length > 0) any.push(sql`(not r.held_by_own and r.holder_participant_id = any(${companies}::uuid[]))`);
     conditions.push(sql`(${sql.join(any, sql` or `)})`);
   }
-  return conditions.length > 0 ? sql`(${sql.join(conditions, sql` and `)})` : noFilter;
+  return sql`(${sql.join(conditions, sql` and `)})`;
 }
 
 /**
@@ -356,6 +430,27 @@ async function boardMoves(trx: Trx, cards: readonly WorkItemRow[]): Promise<Reco
     (moves[r.id] ??= []).push({ transition: r.key, label: r.label, kind: r.kind, stageKey: r.stage_key, actionForm: parseActionForm(r.action_form) });
   }
   return moves;
+}
+
+/**
+ * How many of the scope's visible items matching `q` are in each Type,
+ * Dashboard bucket (chainBucket) and Code C state (codeCState), null for none:
+ * the same rows, filters, bucket and state as the List, so a count and the
+ * List behind it can't disagree.
+ */
+export async function countWorkItemBuckets(
+  trx: Trx,
+  scope: QueryScope,
+  q: WorkItemQuery,
+  now: Date,
+): Promise<{ typeCode: string; bucket: ChainBucket | null; codeC: CodeCState | null; count: number }[]> {
+  const { rows } = await sql<{ type_code: string; bucket: ChainBucket | null; code_c: CodeCState | null; count: number }>`
+    with r as (${visibleRows(scope, q.allRevisions)})
+    select r.type_code, ${bucketOfRow} as bucket, ${codeCOfRow} as code_c, count(*)::int as count
+    from r where ${matching(q, now, scope)}
+    group by 1, 2, 3
+  `.execute(trx);
+  return rows.map((r) => ({ typeCode: r.type_code, bucket: r.bucket, codeC: r.code_c, count: r.count }));
 }
 
 /**

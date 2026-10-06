@@ -1,5 +1,5 @@
 import { withMember, type Database, type Db } from "@rabaed/db";
-import { moduleKeys, type CreateProjectRequest, type ModuleKey, type ProjectSummary } from "@rabaed/domain";
+import { moduleTabOrder, type CreateProjectRequest, type ModuleKey, type ProjectSummary } from "@rabaed/domain";
 import { sql, type Transaction } from "kysely";
 import { refusedAsForbidden, type Forbidden } from "../db-error.ts";
 
@@ -81,7 +81,7 @@ async function summaries(trx: Transaction<Database>, rows: ProjectRow[]): Promis
     ...row,
     projectRole: { baseRole, name: roleName },
     needMyAction: counts.find((c) => c.project_id === row.id)?.count ?? 0,
-    modules: moduleKeys.filter((key) => modules.some((m) => m.project_id === row.id && m.module_key === key)),
+    modules: moduleTabOrder.filter((key) => modules.some((m) => m.project_id === row.id && m.module_key === key)),
   }));
 }
 

@@ -1,12 +1,12 @@
 "use client";
 
-import { moduleKeys, type ModuleKey } from "@rabaed/domain";
+import { moduleTabOrder, type ModuleKey } from "@rabaed/domain";
 import { useEffect, useRef, type ElementType } from "react";
 import { cn } from "../../lib/cn.ts";
 import { focusRing } from "../form/control-styles.ts";
 
 /** The Project tabs in the agreed order (design change requests, 2026-09-27): a Module's tab is its Module key. */
-export const projectTabKeys = ["dashboard", ...moduleKeys, "settings"] as const;
+export const projectTabKeys = ["dashboard", ...moduleTabOrder, "settings"] as const;
 export type ProjectTabKey = (typeof projectTabKeys)[number];
 
 /**
