@@ -57,8 +57,15 @@ describe("security definer functions in the app schema that take a work-item id"
       await grant("checked_probe");
       await definer("internal_probe", "true");
       await sql.raw("revoke all on function app.internal_probe(uuid, timestamptz) from public").execute(trx);
+      // A call only in a comment is no check.
+      await definer("line_comment_probe", "-- app.sees_work_item(p_work_item_id)\n true");
+      await grant("line_comment_probe");
+      await definer("block_comment_probe", "/* app.sees_work_item(p_work_item_id)\n */ true");
+      await grant("block_comment_probe");
       const found = await appDefinerFunctionsWithoutAccessCheck(trx);
       expect(found).toContain("app.unchecked_probe(uuid,timestamp with time zone)");
+      expect(found).toContain("app.line_comment_probe(uuid,timestamp with time zone)");
+      expect(found).toContain("app.block_comment_probe(uuid,timestamp with time zone)");
       expect(found).not.toContain("app.checked_probe(uuid,timestamp with time zone)");
       expect(found).not.toContain("app.internal_probe(uuid,timestamp with time zone)");
     });

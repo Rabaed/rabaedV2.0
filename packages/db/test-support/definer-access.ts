@@ -10,7 +10,8 @@ import { APP_ROLE } from "../src/config.ts";
  * past row-level security, so unless it checks, a direct call tells the caller
  * about an item they can't see (RP-334: `app.item_row_seen`; RP-367).
  * A function the app role can't execute is reached only through one it can,
- * which this checks instead.
+ * which this checks instead. A call only in a comment (`--` to the end of the
+ * line, or `/* … *\/`) is no check: comments are taken out first.
  */
 export async function appDefinerFunctionsWithoutAccessCheck(db: Db): Promise<string[]> {
   const { rows } = await sql<{ fn: string }>`
@@ -19,7 +20,8 @@ export async function appDefinerFunctionsWithoutAccessCheck(db: Db): Promise<str
     join pg_catalog.pg_namespace n on n.oid = p.pronamespace
     where n.nspname = 'app' and p.prosecdef
       and pg_catalog.has_function_privilege(${APP_ROLE}, p.oid, 'EXECUTE')
-      and p.prosrc !~ 'app\\.sees_work_item\\s*\\('
+      and pg_catalog.regexp_replace(pg_catalog.regexp_replace(p.prosrc, '--[^\\n]*', '', 'g'), '/\\*.*?\\*/', '', 'g')
+        !~ 'app\\.sees_work_item\\s*\\('
       and exists (
         select 1
         from unnest(

@@ -18,6 +18,10 @@ const VIEWER = String.raw`app\.current_(member_id|company_id|authorized_company_
  * Every column the app role reads there goes to every Participant who sees the
  * item (RP-309: `step_assignment` gave away another Participant's internal
  * Steps; `work_item_access.since` the Draft's start time; RP-367).
+ *
+ * Known limit: the policy text is matched, not parsed, so a caller condition
+ * anywhere in it exempts the table, even in an OR branch that item visibility
+ * alone still satisfies (`sees_work_item(...) or current_member_id() = ...`).
  */
 export async function tablesReadableThroughItemVisibility(db: Db): Promise<string[]> {
   const { rows } = await sql<{ t: string }>`
