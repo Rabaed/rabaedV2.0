@@ -2,6 +2,7 @@
 
 import type { Locale, RevisionChain } from "@rabaed/domain";
 import { RevisionPicker } from "@rabaed/ui";
+import { useTranslations } from "next-intl";
 import { useRouter } from "@/i18n/navigation";
 
 /**
@@ -11,7 +12,14 @@ import { useRouter } from "@/i18n/navigation";
  */
 export function WorkItemRevisionPicker({ chain, workItemId, locale }: { chain: RevisionChain; workItemId: string; locale: Locale }) {
   const router = useRouter();
+  const t = useTranslations("workItemViews");
   return (
-    <RevisionPicker locale={locale} revisions={chain.revisions} currentId={workItemId} onOpen={(id) => router.push(`/work-items/${id}`)} />
+    <RevisionPicker
+      locale={locale}
+      revisions={chain.revisions}
+      currentId={workItemId}
+      revisionNoNumber={(revision) => t("list.revisionNoNumber", { revision })}
+      onOpen={(id) => router.push(`/work-items/${id}`)}
+    />
   );
 }

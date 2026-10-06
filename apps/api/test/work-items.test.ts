@@ -133,7 +133,9 @@ describe("a Contractor engineer's Draft MAR", () => {
       stage: { key: "draft", name: { en: "Drafts" }, category: "draft" },
       trade: { id: trade.electrical, code: "EL" },
       location: { id: loc.buildingA, code: "BA" },
-      stepAgeWeeks: 1,
+      // A Draft with no number: its Step began when it was started, which nobody sees.
+      stepEnteredAt: null,
+      stepAgeWeeks: null,
     });
     expect(counts(l)).toEqual({ draft: 1, internal_review: 0, pending_approval: 0, approved: 0, revise_resubmit: 0 });
   });
@@ -153,7 +155,9 @@ describe("a Contractor engineer's Draft MAR", () => {
       location: { code: "BA" },
       raisedBy: { companyName: { en: "Test Constructions" } },
       heldBy: { companyName: { en: "Test Constructions" }, memberName: { en: "Test Member" } },
-      stepAgeWeeks: 1,
+      // A Draft with no number: its Step began when it was started, which nobody sees.
+      stepEnteredAt: null,
+      stepAgeWeeks: null,
     });
   });
 
@@ -243,8 +247,8 @@ describe("Step Age", () => {
     api.advanceClock(8 * DAY);
     const again = await api.signIn(c1EngineerEmail, DEFAULT_PASSWORD);
     const detail = (await again.get(`/v1/work-items/${id}`)).json();
-    expect(detail.stepAgeWeeks).toBe(2);
-    expect((await list(again)).items.find((i) => i.id === id)?.stepAgeWeeks).toBe(2);
+    expect(detail.stepAgeWeeks).toBeNull();
+    expect((await list(again)).items.find((i) => i.id === id)).toMatchObject({ stepEnteredAt: null, stepAgeWeeks: null });
     expect(JSON.stringify(detail)).not.toMatch(/due|overdue|deadline/i);
   });
 });

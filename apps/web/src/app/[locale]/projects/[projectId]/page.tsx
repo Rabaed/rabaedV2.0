@@ -1,4 +1,4 @@
-import { workItemSearchParams, type Locale } from "@rabaed/domain";
+import { workItemListHref, type Locale } from "@rabaed/domain";
 import { ProjectDashboard } from "@rabaed/ui";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
@@ -24,8 +24,6 @@ export default async function ProjectPage({ params }: { params: Promise<{ locale
   if (!me) return redirect({ href: "/sign-in", locale });
   if (!project) notFound();
   const invitations = project.isProjectAdmin ? await getProjectInvitations(project.id) : null;
-  // The Authorized Person narrows Visibility for their own Company's Project Members.
-  const ownParticipant = me.member.isAuthorizedPerson ? participants?.participants.find((p) => p.isOwnCompany) : undefined;
 
   return (
     <div className="space-y-6">
@@ -39,7 +37,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ locale
               dashboard={dashboard}
               locale={locale}
               linkAs={Link}
-              hrefFor={(query) => `/projects/${project.id}/work-items?${workItemSearchParams(query)}`}
+              hrefFor={(query) => workItemListHref(project.id, query)}
             />
           </section>
           {/* The Activity Feed beside the cards: the Project's events as the Member may see them (RP-353). */}
@@ -65,10 +63,6 @@ export default async function ProjectPage({ params }: { params: Promise<{ locale
           {project.isProjectAdmin && ` · ${t("projectAdmin")}`}
         </dd>
       </dl>
-
-      <Link href={`/projects/${project.id}/work-items`} className="inline-block text-primary underline underline-offset-4">
-        {t("submittals")}
-      </Link>
 
       <section className="space-y-4">
         <h2 className="text-h6 font-semibold">{t("participants")}</h2>
@@ -121,36 +115,6 @@ export default async function ProjectPage({ params }: { params: Promise<{ locale
           </div>
         )}
         {project.isProjectAdmin && <AddParticipantForm projectId={project.id} />}
-      </section>
-
-      <section className="space-y-2">
-        <h2 className="text-h6 font-semibold">{t("settings")}</h2>
-        <ul className="flex flex-wrap gap-x-6 gap-y-2">
-          <li>
-            <Link href={`/projects/${project.id}/settings/trades-locations`} className="text-primary underline underline-offset-4">
-              {t("tradesLocations")}
-            </Link>
-          </li>
-          <li>
-            <Link href={`/projects/${project.id}/settings/numbering`} className="text-primary underline underline-offset-4">
-              {t("numbering")}
-            </Link>
-          </li>
-          {project.isProjectAdmin && (
-            <li>
-              <Link href={`/projects/${project.id}/settings/visibility`} className="text-primary underline underline-offset-4">
-                {t("visibility")}
-              </Link>
-            </li>
-          )}
-          {ownParticipant && (
-            <li>
-              <Link href={`/participants/${ownParticipant.id}`} className="text-primary underline underline-offset-4">
-                {t("membersVisibility")}
-              </Link>
-            </li>
-          )}
-        </ul>
       </section>
     </div>
   );

@@ -3,6 +3,7 @@ import { expect, fn, screen, userEvent, waitFor, within } from "storybook/test";
 import { expectLaidOutLeftToRight } from "../../storybook/bidi.ts";
 import { expectTouchTarget, phone } from "../../storybook/form.ts";
 import { storyLocale, storyText } from "../../storybook/locale.ts";
+import { workItemListLabels } from "../../storybook/views.ts";
 import { RevisionPicker, type RevisionPickerProps } from "./revision-picker.tsx";
 
 // The Revision drop-down on the item page (RP-318, spec RP-311): the Revisions
@@ -19,8 +20,16 @@ const draftRev2 = { id: "00000000-0000-4000-8000-000000000002", documentNumber: 
 const meta = {
   title: "Work Items/RevisionPicker",
   component: RevisionPicker,
-  args: { locale: "en", revisions: [original, rev1], currentId: rev1.id, onOpen: fn<RevisionPickerProps["onOpen"]>() },
-  render: (args, context) => <RevisionPicker {...args} locale={storyLocale(context)} />,
+  args: {
+    locale: "en",
+    revisions: [original, rev1],
+    currentId: rev1.id,
+    revisionNoNumber: workItemListLabels.en.revisionNoNumber,
+    onOpen: fn<RevisionPickerProps["onOpen"]>(),
+  },
+  render: (args, context) => (
+    <RevisionPicker {...args} locale={storyLocale(context)} revisionNoNumber={workItemListLabels[storyLocale(context)].revisionNoNumber} />
+  ),
   decorators: [(Story) => <div className="max-w-sm">{Story()}</div>],
 } satisfies Meta<typeof RevisionPicker>;
 

@@ -412,6 +412,11 @@ describe("a Type of another Module: the Snag List", () => {
     await submitted(tower, tower.c1Engineer, tower.c1Pm, "A MAR beside the Snags");
   });
 
+  // The test-only Type then stays on this Project only, so no other Project gains a Snag List tab (RP-346).
+  afterAll(async () => {
+    await sql`update work_item_type set owner_kind = 'project', project_id = ${tower.projectId}::uuid where owner_kind = 'rabaed' and code = ${SNAG}`.execute(migrator);
+  });
+
   function snagCard(d: Dashboard) {
     const c = card(d, SNAG);
     if (c.kind !== "open_closed") throw new Error("expected an open/closed card");

@@ -1,5 +1,5 @@
-import { answerFields, isOpenStageCategory, stepAgeLabel, type Locale } from "@rabaed/domain";
-import { AgeDots, DocNo, RevisionNoNumber, StagePill, stageColour } from "@rabaed/ui";
+import { answerFields, formatNumber, isOpenStageCategory, stepAgeLabel, type Locale } from "@rabaed/domain";
+import { AgeDots, DocNo, StagePill, stageColour } from "@rabaed/ui";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
 import { WorkItemActions } from "@/components/work-item-actions";
@@ -39,6 +39,7 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
   const { locale, workItemId } = await params;
   setRequestLocale(locale);
   const t = await getTranslations("workItems");
+  const tViews = await getTranslations("workItemViews");
   const [me, item, form, people, documents, links, linkedFrom, history, optionLists, chain, watch] = await Promise.all([
     getMe(),
     getWorkItem(workItemId),
@@ -92,7 +93,7 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
           <div className="flex flex-wrap items-center gap-3">
             <StagePill stage={stageColour(item.stage)} label={item.stage.name[locale]} />
             {/* Step Age only while it waits at a Step; a closed item doesn't age. */}
-            {isOpenStageCategory(item.stage.category) && (
+            {isOpenStageCategory(item.stage.category) && item.stepAgeWeeks !== null && (
               <>
                 {/* The dots already carry the label for screen readers; the text repeats it for sighted readers. */}
                 <AgeDots weeks={item.stepAgeWeeks} locale={locale} />
@@ -141,7 +142,7 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
               {item.documentNumber ? (
                 <DocNo value={item.documentNumber} />
               ) : item.revisionNo > 0 ? (
-                <RevisionNoNumber locale={locale} revisionNo={item.revisionNo} />
+                tViews("list.revisionNoNumber", { revision: formatNumber(item.revisionNo, locale) })
               ) : (
                 t("noNumber")
               )}

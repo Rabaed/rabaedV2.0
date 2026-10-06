@@ -157,7 +157,7 @@ The components that carry Rabaed's product rules, so every module shows status t
 | `CodeBadge` | A Review Code: `code` (`a`–`d`), `locale`, `size` (`sm`, `md`), `variant` (`full`, or `letter` with the meaning for screen readers only) | Icon + colour + text, never colour alone. B always has the comment icon. |
 | `AgeDots` | Step Age: `weeks` (the week at the current Step, from 1), `locale` | 1–4 dots (4+), grey turning red, named "N weeks at this step". Age only: it takes nothing but weeks. |
 | `WithChip` | Who holds the Step, a `WithChipHolder`: `kind` (`person`, `company`), `inViewerCompany`, `companyName`, `logoSrc`, and only for a person in the viewer's Company, `name` and `photoSrc` | Visibility V14: the props are a union, so another company's holder carries its company only; passing their person's name or photo fails the typecheck. A name forced through with a cast is still dropped, so it shows the company name only. |
-| `WorkItemCard` | A Work Item on a Kanban board: `number`, `rev`, `title`, `trade`, `location`, then `state`: `{ open: true, holder, stepAgeWeeks }` or `{ open: false, code }` (a closed item shows its Issued Code, never a holder or Step Age), optional `photoSrc`; `density` (`comfortable`, `compact`); `href` (a link, with `linkAs={Link}` for Next.js) or `onClick` (a button) | One card on every board. Closed items with an Inspection Result, or Cancelled ones, will need their own outcome here when those Modules come. One focus target, named by its number and title only; the rest is its description. The holder goes through `WithChip`, so another company shows as its name only. |
+| `WorkItemCard` | A Work Item on a Kanban board: `number` (null for a Draft, which has none yet, shown as `noNumberLabel`, e.g. "No number yet"), `rev`, `title`, `trade`, `location`, then `state`: `{ open: true, holder, stepAgeWeeks }` (`stepAgeWeeks` null for a Draft with no number: nobody sees when it was started, so no dots), `{ open: false, code }` (the Issued Code) or `{ open: false, badge }` (any other outcome, e.g. an Inspection Result or Cancelled, as a `Badge`); a closed item never shows a holder or Step Age; optional `photoSrc`; `density` (`comfortable`, `compact`); `href` (a link, with `linkAs={Link}` for Next.js) or `onClick` (a button) | One card on every board. One focus target, named by its number (or `noNumberLabel`) and title only; the rest is its description. The holder goes through `WithChip`, so another company shows as its name only. |
 
 ```tsx
 <StagePill stage="internal" label={stage.name[locale]} count={12} locale={locale} />
@@ -185,7 +185,7 @@ Every page sits in the same layout, in English and Arabic, on desktop and phone.
 | `TopBar` | The banner landmark, with slots for `search`, `notifications` and `member`. |
 | `MemberMenu` | The signed-in Member's avatar and name, opening a menu with the language switch (each language named in itself, the current one pressed) and any extra items, e.g. Sign out. |
 | `PageHeader` | A page's one `h1`, with an optional `eyebrow`, `description`, `actions` and `tabs`. |
-| `ProjectTabs` | A Project's tabs, always in the agreed order (`projectTabKeys`): Dashboard · Submittals · Inspections · Snag List · Site Reports · Drawings · Files · Views · Schedule · Settings. Page navigation, so links in a named `nav` (not ARIA tabs). Schedule isn't built yet: greyed out, `aria-disabled`, described by `comingSoonLabel`. They scroll sideways on a phone. |
+| `ProjectTabs` | A Project's tabs, always in the agreed order (`projectTabKeys`): Dashboard · Submittals · Inspections · Snag List · Site Reports · Drawings · Settings; a Module's tab key is its Module key (`snag_list`). Dashboard, Submittals and Settings always; another Module's tab only when the Project has a Work Item Type in it (`modules`, from the Project's summary; `visibleProjectTabs`). No empty tab and no placeholder for what isn't built. Page navigation, so links in a named `nav` (not ARIA tabs); `current` is optional. They scroll sideways on a phone. |
 
 ```tsx
 <AppShell
@@ -196,13 +196,38 @@ Every page sits in the same layout, in English and Arabic, on desktop and phone.
 >
   <PageHeader
     title={project.name}
-    tabs={<ProjectTabs label={t("project")} labels={tabLabels} href={(key) => `/projects/${project.id}/${key}`} current="submittals" comingSoonLabel={t("comingSoon")} linkAs={Link} />}
+    tabs={<ProjectTabs label={t("project")} labels={tabLabels} modules={project.modules} href={(key) => pathOf(project.id, key)} current="submittals" linkAs={Link} />}
   />
   …
 </AppShell>
 ```
 
 The sidebar uses the light variant of the design (surface and brand tint); a dark sidebar would need its own theme roles first.
+
+## Views
+
+A Module's Work Items and the Member's Projects, as the API returns them. Presentational: the app passes the data, the URLs and every word (`labels`, from its messages; a label that takes a value is a function given the value already formatted for the locale). Each takes `linkAs` (e.g. Next.js `Link`) so navigation stays client-side.
+
+| Component | Use for |
+|---|---|
+| `ProjectCards` | The Projects page (the home page): one card per Project, a link with its code (left to right), name, the viewer's Project Role, "Project Admin", a Closed badge, and its Need My Action count. `labels`: `list`, `needMyAction`, `closed`, `projectAdmin`. The cards stack on a phone. |
+| `WorkItemList` | The List: the toolbar (search, filters, sort, the Need My Action and "Show all Revisions" switches), the Stage counts, one page of rows and the page links. Every choice is a new query (`onQueryChange`); `hrefFor` gives a query's URL. `labels`: `WorkItemListLabels` (`table` is the Module's name). Pass `board` to show the Kanban under the toolbar instead of the counts, table and pages. |
+| `WorkItemBoard` | The Kanban: a column per Stage in the reading direction, inside each a swimlane per Step of the viewer's own Company and one per other Company by name only (V14), in the viewer's alphabetical order (`lanesInLocale`). A closed column holds the last 30 days with its total (none under a search, which counts only what it shows) and "Show all" (`listHrefFor`). With `onMove`, a card the viewer may act on can be dragged onto a Stage one of its Transitions alone leads to, or moved from its Move menu. `labels`: `WorkItemBoardLabels`. |
+| `WorkItemViewSwitch` | List / Kanban, two links (`hrefFor`), the current one `aria-current="page"`. `labels`: `view`, `list`, `kanban`. |
+
+```tsx
+<WorkItemViewSwitch view={view} labels={switchLabels} hrefFor={(v) => hrefIn(v, query)} linkAs={Link} />
+<WorkItemList
+  list={list}
+  query={query}
+  locale={locale}
+  labels={listLabels}
+  hrefFor={hrefFor}
+  itemHref={itemHref}
+  onQueryChange={(q) => router.push(hrefFor(q))}
+  board={view === "kanban" ? <WorkItemBoard board={board} query={query} locale={locale} labels={boardLabels} listHrefFor={listHrefFor} itemHref={itemHref} linkAs={Link} onMove={openActionForm} /> : undefined}
+/>
+```
 
 ## Storybook and story tests
 
