@@ -245,7 +245,7 @@ describe("the Revision's Document Number", () => {
   });
 });
 
-describe("a Revision's answer times (RP-392-2, scenario 75)", () => {
+describe("a Revision's answer times (RP-392-2)", () => {
   it("are never earlier than the Revision's own Creation Date once it is numbered, though its Draft was started earlier", async () => {
     const closed = await closedAtCodeC("Panelboards");
     const rev = await revisionOf(closed);
