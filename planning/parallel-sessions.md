@@ -72,7 +72,7 @@ Every ticket already gets a `/code-review` inside `/implement`. When all of a sp
 
 - Before the spec's first ticket, tag `main` as `epic-start/<name>`. When running `/to-tickets`, add a review ticket blocked by the spec's last tickets.
 - The review runs in a fresh session with no worktree (it only reads): `/mattpocock-skills:code-review since tag epic-start/<name>, only <folders>, against spec RP-nnn`.
-- Every confirmed finding becomes a `ready-for-agent` Task under the same Epic, linked to the review ticket. Visibility and security findings are Highest.
+- Before filing, list the Epic's open tickets: `/implement-spec`'s own review files follow-ups there too (RP-383 repeated RP-336). A finding already filed gets a comment on that ticket; every other confirmed finding becomes a `ready-for-agent` Task under the same Epic, linked to the review ticket. Visibility and security findings are Highest.
 
 ## Rules that keep lanes from colliding
 

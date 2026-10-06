@@ -1,0 +1,3 @@
+# Rabaed has no formatter: ESLint only (`pnpm lint`), lines written by hand.
+# This keeps a stray `npx prettier --write` from rewriting files at its defaults (RP-336 retro).
+*
