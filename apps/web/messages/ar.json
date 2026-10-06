@@ -2,19 +2,29 @@
   "shell": {
     "appName": "ربائد",
     "switchLanguage": "English",
-    "signOut": "تسجيل الخروج"
+    "signOut": "تسجيل الخروج",
+    "nav": "الرئيسية",
+    "projects": "مشاريعي",
+    "members": "الأعضاء",
+    "participations": "مشاريع الشركة",
+    "signedInAs": "مسجّل الدخول باسم {name}، {company}"
   },
   "home": {
     "title": "ربائد",
     "tagline": "مشاريع البناء في مكان واحد، وكل شركة ترى عملها فقط.",
     "healthLink": "حالة النظام",
     "documentNumberLabel": "أرقام المستندات تُقرأ من اليسار إلى اليمين في كل لغة:",
-    "signIn": "تسجيل الدخول",
-    "signedInAs": "مسجّل الدخول باسم {name}، {company}",
-    "authorizedPerson": "المفوَّض",
-    "membersLink": "الأعضاء",
-    "projectsLink": "مشاريعي",
-    "participationsLink": "مشاريع الشركة"
+    "signIn": "تسجيل الدخول"
+  },
+  "projectTabs": {
+    "label": "المشروع",
+    "dashboard": "لوحة المعلومات",
+    "submittals": "التقديمات",
+    "inspections": "الفحوصات",
+    "snag-list": "قائمة الملاحظات",
+    "site-reports": "تقارير الموقع",
+    "drawings": "المخططات",
+    "settings": "الإعدادات"
   },
   "health": {
     "title": "حالة النظام",

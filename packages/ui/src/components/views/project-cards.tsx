@@ -1,3 +1,5 @@
+"use client";
+
 import { formatNumber, type Locale, type ProjectSummary } from "@rabaed/domain";
 import { useId, type ElementType } from "react";
 import { cn } from "../../lib/cn.ts";

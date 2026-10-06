@@ -38,11 +38,42 @@ export default async function LocaleLayout({
       <body className="min-h-dvh antialiased">
         <NextIntlClientProvider>
           <DirectionProvider dir={directionOf(locale)}>
-            <header className="flex items-center justify-between border-b border-border px-6 py-3">
-              <Link href="/" className="text-lg font-semibold">
-                {t("appName")}
-              </Link>
+            <header className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 border-b border-border px-4 py-3 sm:px-6">
+              <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+                <Link href="/" className="text-lg font-semibold">
+                  {t("appName")}
+                </Link>
+                {/* The signed-in Member's places; the Projects page is also home. */}
+                {me && (
+                  <nav aria-label={t("nav")}>
+                    <ul className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
+                      <li>
+                        <Link href="/projects" className="text-primary underline-offset-4 hover:underline">
+                          {t("projects")}
+                        </Link>
+                      </li>
+                      <li>
+                        <Link href="/members" className="text-primary underline-offset-4 hover:underline">
+                          {t("members")}
+                        </Link>
+                      </li>
+                      {me.member.isAuthorizedPerson && (
+                        <li>
+                          <Link href="/participants" className="text-primary underline-offset-4 hover:underline">
+                            {t("participations")}
+                          </Link>
+                        </li>
+                      )}
+                    </ul>
+                  </nav>
+                )}
+              </div>
               <div className="flex items-center gap-2">
+                {me && (
+                  <span data-testid="signed-in-as" className="hidden text-sm text-muted md:inline">
+                    {t("signedInAs", { name: me.member.fullName[locale], company: me.company.legalName[locale] })}
+                  </span>
+                )}
                 {notifications && <NotificationBell unread={notifications.unread} />}
                 {me && <SignOutButton />}
                 <LanguageSwitch />
