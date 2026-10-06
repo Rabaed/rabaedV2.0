@@ -47,6 +47,7 @@ const copy = {
   sortStepAge: { en: "Step Age, oldest first", ar: "عمر الخطوة، الأقدم أولًا" },
   sortDocumentNumber: { en: "Document Number", ar: "رقم المستند" },
   allRevisions: { en: "Show all Revisions", ar: "عرض كل المراجعات" },
+  needMyAction: { en: "Need My Action", ar: "بحاجة لإجرائي" },
   clear: { en: "Clear filters", ar: "مسح التصفية" },
   stageCounts: { en: "Items in each Stage", ar: "العناصر في كل مرحلة" },
   table: { en: "Submittals", ar: "الاعتمادات" },
@@ -93,7 +94,7 @@ export type WorkItemListProps = {
 
 /**
  * The List of a Module's Work Items (spec RP-344): a toolbar of filters and
- * sort with the "Show all Revisions" switch, the Stage counts of the matching
+ * sort with the Need My Action and "Show all Revisions" switches, the Stage counts of the matching
  * items, and one page of them, 50 rows. Every choice is a new query, which the
  * page keeps in its URL. "With" follows V14: the Step and who claimed it in the
  * viewer's own Company, another Company's name only, as the API sends it.
@@ -174,9 +175,14 @@ export function WorkItemList({ list, query, locale, hrefFor, itemHref, onQueryCh
           </Field>
         </div>
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <Field label={t("allRevisions")} layout="inline">
-            <Switch checked={query.allRevisions} onCheckedChange={(on) => change({ allRevisions: on })} />
-          </Field>
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
+            <Field label={t("needMyAction")} layout="inline">
+              <Switch checked={query.needMyAction} onCheckedChange={(on) => change({ needMyAction: on })} />
+            </Field>
+            <Field label={t("allRevisions")} layout="inline">
+              <Switch checked={query.allRevisions} onCheckedChange={(on) => change({ allRevisions: on })} />
+            </Field>
+          </div>
           {filtered && (
             <a href={hrefFor(withoutFilters(query))} className={buttonVariants({ variant: "ghost", size: "sm" })}>
               {t("clear")}
