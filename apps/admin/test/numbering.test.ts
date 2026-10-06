@@ -4,6 +4,7 @@
 // a refused edit logs nothing; a pattern with a shared counter records the Engineer
 // as accepting it; Rabaed Admin reads the Project's counters.
 import { randomInt, randomUUID } from "node:crypto";
+import { runInNewContext } from "node:vm";
 import { createDb, withMember } from "@rabaed/db";
 import { joinProject, testDatabaseUrls } from "@rabaed/db/test-support";
 import type { AdminNumbering, NumberingPattern } from "@rabaed/domain";
@@ -379,12 +380,18 @@ describe("the Numbering screens", () => {
 
   it("describe a pattern in the page's language, with Latin digits", async () => {
     const script = (await admin.browser().get("/assets/admin.js")).body;
-    const [english, arabic] = script.split(/\n {2}ar: \{/);
-    for (const key of ["digitsSummary", "countedBySummary"]) {
-      expect(english, `en.${key}`).toMatch(new RegExp(`\n    ${key}:`));
-      expect(arabic, `ar.${key}`).toMatch(new RegExp(`\n    ${key}:`));
-    }
-    expect(arabic).toMatch(/digitsSummary: \(n\) => `\$\{n\} [^`]*[؀-ۿ]/);
+    // The page's message table, run as it is served. The rest of admin.js wires the
+    // DOM at load, and the repo has no DOM to run it in, so describePattern itself
+    // is checked below by what it calls.
+    const table = script.slice(script.indexOf("const text = {") + "const text = ".length, script.indexOf("\n};\n") + 2);
+    const text = runInNewContext(`(${table})`) as Record<
+      "en" | "ar",
+      { digitsSummary: (n: number) => string; countedBySummary: (segments: number[]) => string }
+    >;
+    expect(text.en.digitsSummary(4)).toBe("4 digits");
+    expect(text.ar.digitsSummary(4)).toBe("4 أرقام");
+    expect(text.en.countedBySummary([1, 2, 3])).toBe("counted by: 1, 2, 3");
+    expect(text.ar.countedBySummary([1, 2, 3])).toBe("العدّ حسب: 1، 2، 3");
     // The summary goes through the message table: no English literal is built in.
     const describePattern = script.slice(script.indexOf("function describePattern"), script.indexOf("function heading"));
     expect(describePattern).toContain("t().digitsSummary(");
