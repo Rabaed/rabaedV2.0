@@ -79,7 +79,8 @@ Every ticket already gets a `/code-review` inside `/implement`. When all of a sp
 1. One ticket = one app-made worktree session = one branch named with the key (`RP-191-...`) = one PR. With `/implement-spec`, one spec = one session = one integration branch named with the spec's key = one PR.
 2. Start only tickets whose blockers are Done.
 3. When another lane's open ticket touches the same files (the ticket names them), keep your changes to those files in their own commits, and merge `main` right before opening the PR. Shared root files (root `package.json`, lockfile, CI workflows) change in small PRs of their own.
-4. Migrations are timestamp-named (and follow `CODING_STANDARDS.md`).
-5. Merge only through a PR with green CI (both visibility suites must pass). Merge `main` into your branch when it moves, and resolve any conflicts in that session.
-6. Parallel sessions multiply usage — close finished sessions.
-7. A ticket whose spec is being built by `/implement-spec` (its lane label is set and its spec has an open integration PR) stays under that spec. If it must move, the planning session comments on the integration PR.
+4. Two lanes never run specs that change the same shared module at the same time, such as the work item query (`apps/api/src/work-items/query.ts`). Queue one spec behind the other, or give one of them only the UI. `/to-tickets` names the shared files each ticket touches, so the planning session can see the overlap before it assigns lanes. (RP-362 and RP-363 both reworked the query in parallel, and their merge had 10 conflicted files.)
+5. Migrations are timestamp-named (and follow `CODING_STANDARDS.md`).
+6. Merge only through a PR with green CI (both visibility suites must pass). Merge `main` into your branch when it moves, and resolve any conflicts in that session.
+7. Parallel sessions multiply usage — close finished sessions.
+8. A ticket whose spec is being built by `/implement-spec` (its lane label is set and its spec has an open integration PR) stays under that spec. If it must move, the planning session comments on the integration PR.
