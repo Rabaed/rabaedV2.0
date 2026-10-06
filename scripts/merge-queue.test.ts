@@ -79,6 +79,15 @@ describe("ci.yml", () => {
     expect(ci.concurrency.group).toContain("${{ github.ref }}");
   });
 
+  it.each(["migrations-immutable", "migration-drift"])("runs %s in the queue too, against the queue's base (RP-398)", (id) => {
+    // Skipped, a required check counts as passing: two PRs whose migrations
+    // clash would then merge together.
+    const condition = job(ci, id).if ?? "";
+    expect(condition).toMatch(/github\.event_name\s*==\s*'pull_request'/);
+    expect(condition).toMatch(/github\.event_name\s*==\s*'merge_group'/);
+    expect(JSON.stringify(job(ci, id).steps)).toContain("github.event.merge_group.base_sha");
+  });
+
   it("never collects or uploads the baselines of new stories on a queue run", () => {
     for (const name of ["Collect the baselines of new stories", "Upload the baselines of new stories"]) {
       expect(step(job(ci, "stories"), name).if, name).toMatch(notMergeGroup);

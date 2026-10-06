@@ -24,6 +24,9 @@ import { git, migrationsDir } from "./migrations.ts";
 //   branch's migration to a new, later timestamp.
 //
 // Usage: node scripts/check-migration-drift.ts <base> <head>   (CI: the PR's base and head SHAs; needs their history)
+//        node scripts/check-migration-drift.ts --merge-group <group base> <group head>
+//          (the merge queue, RP-398: the group's base is main plus the entries
+//          ahead; its head merges the PR's head into it, see mergeGroupSides)
 
 export interface Migration {
   name: string;
@@ -233,12 +236,31 @@ export function migrationProblems(repo: string, base: string, head: string): { d
   };
 }
 
+/**
+ * The base and head to check for a merge queue entry (GitHub's merge_group
+ * event). The merge group's head is a merge commit (merge method: merge
+ * commit) whose first parent is the group's base (main plus the entries ahead)
+ * and whose second is the PR's head; the PR's migrations are checked from that
+ * head, as on its pull request. Anything else throws rather than check the
+ * wrong commits.
+ */
+export function mergeGroupSides(repo: string, groupBase: string, groupHead: string): { base: string; head: string } {
+  const [commit, ...parents] = git(repo, "rev-list", "--parents", "-n", "1", groupHead).trim().split(" ");
+  if (parents.length !== 2) throw new Error(`The merge group's head ${commit} is not a merge of two parents (it has ${parents.length}); is the merge method still "merge commit"?`);
+  const base = git(repo, "rev-parse", "--verify", `${groupBase}^{commit}`).trim();
+  if (parents[0] !== base) throw new Error(`The merge group's head ${commit} has first parent ${parents[0]}, not the group's base ${base}.`);
+  return { base, head: parents[1] as string };
+}
+
 if (import.meta.filename && resolve(process.argv[1] ?? "") === import.meta.filename) {
-  const [base, head] = process.argv.slice(2);
-  if (!base || !head) {
-    console.error("Usage: node scripts/check-migration-drift.ts <base> <head>");
+  const args = process.argv.slice(2);
+  const mergeGroup = args[0] === "--merge-group";
+  const [first, second] = mergeGroup ? args.slice(1) : args;
+  if (!first || !second) {
+    console.error("Usage: node scripts/check-migration-drift.ts <base> <head>\n       node scripts/check-migration-drift.ts --merge-group <group base> <group head>");
     process.exit(2);
   }
+  const { base, head } = mergeGroup ? mergeGroupSides(process.cwd(), first, second) : { base: first, head: second };
   const { drift, overloads, duplicates } = migrationProblems(process.cwd(), base, head);
   for (const { object, branch, main } of drift) {
     console.error(`${object} is redefined on this branch (${branch.join(", ")}) and on main (${main.join(", ")}).`);
