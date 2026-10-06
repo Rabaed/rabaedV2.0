@@ -29,7 +29,9 @@ import type {
   WorkItemDetail,
   WorkItemLinks,
   WorkItemHistory,
+  WorkItemBoard,
   WorkItemList,
+  ModuleKey,
   WorkItemQuery,
   OptionList,
 } from "@rabaed/domain";
@@ -135,13 +137,25 @@ export function getMyVisibility(projectId: string): Promise<DimensionValues | nu
   return apiGet<DimensionValues>(`/v1/projects/${encodeURIComponent(projectId)}/visibility`);
 }
 
+/** The API path of a Module's items on a Project, with `query`'s parameters. */
+function moduleWorkItemsPath(projectId: string, module: ModuleKey, view: "" | "/kanban", query: WorkItemQuery): string {
+  // The path names the Module.
+  const params = workItemSearchParams({ ...query, module: undefined }).toString();
+  return `/v1/projects/${encodeURIComponent(projectId)}/modules/${module}/work-items${view}${params ? `?${params}` : ""}`;
+}
+
 /**
- * One page of the work item query on a Project: the items the signed-in Member
- * can see that match `query`, with Stage counts; null if it isn't one of theirs.
+ * One page of the work item query on a Module of a Project: the items the
+ * signed-in Member can see that match `query`, with Stage counts; null if it
+ * isn't one of their Projects or the Project has no Type in the Module.
  */
-export function getWorkItems(projectId: string, query: WorkItemQuery): Promise<WorkItemList | null> {
-  const params = workItemSearchParams(query).toString();
-  return apiGet<WorkItemList>(`/v1/projects/${encodeURIComponent(projectId)}/work-items${params ? `?${params}` : ""}`);
+export function getWorkItems(projectId: string, module: ModuleKey, query: WorkItemQuery): Promise<WorkItemList | null> {
+  return apiGet<WorkItemList>(moduleWorkItemsPath(projectId, module, "", query));
+}
+
+/** The Kanban of a Module of a Project for `query`; null as for the List. */
+export function getWorkItemBoard(projectId: string, module: ModuleKey, query: WorkItemQuery): Promise<WorkItemBoard | null> {
+  return apiGet<WorkItemBoard>(moduleWorkItemsPath(projectId, module, "/kanban", query));
 }
 
 /** A Project's Dashboard: Type cards over the items the signed-in Member can see; null if it isn't one of theirs. */

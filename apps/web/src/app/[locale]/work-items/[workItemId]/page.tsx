@@ -92,7 +92,7 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
           <div className="flex flex-wrap items-center gap-3">
             <StagePill stage={stageColour(item.stage)} label={item.stage.name[locale]} />
             {/* Step Age only while it waits at a Step; a closed item doesn't age. */}
-            {isOpenStageCategory(item.stage.category) && (
+            {isOpenStageCategory(item.stage.category) && item.stepAgeWeeks !== null && (
               <>
                 {/* The dots already carry the label for screen readers; the text repeats it for sighted readers. */}
                 <AgeDots weeks={item.stepAgeWeeks} locale={locale} />

@@ -387,7 +387,8 @@ type SummaryRow = {
   location_id: string | null;
   location_code: string | null;
   location_name: BilingualText | null;
-  step_entered_at: Date;
+  /** Null for a Draft with no number: its Step began when it was started, which nobody sees. */
+  step_entered_at: Date | null;
 };
 
 /** The visible Work Items matching `where`, as list rows. */
@@ -397,7 +398,7 @@ function visibleItems(trx: Trx, where: RawBuilder<unknown>) {
       st.key as stage_key, st.name as stage_name, st.category as stage_category,
       tv.id as trade_id, tv.code as trade_code, tv.name as trade_name,
       lv.id as location_id, lv.code as location_code, lv.name as location_name,
-      seen.entered_at as step_entered_at
+      case when w.document_number is null then null else seen.entered_at end as step_entered_at
     from work_item w
     cross join lateral app.step_as_seen(w.id) seen
     join work_item_type t on t.id = w.work_item_type_id
@@ -425,8 +426,8 @@ function toSummary(r: SummaryRow, now: Date): WorkItemSummary {
     stage: { key: r.stage_key, name: r.stage_name, category: r.stage_category },
     trade: { id: r.trade_id, code: r.trade_code, name: r.trade_name },
     location: r.location_id ? { id: r.location_id, code: r.location_code!, name: r.location_name! } : null,
-    stepEnteredAt: r.step_entered_at.toISOString(),
-    stepAgeWeeks: stepAgeWeeks(r.step_entered_at, now),
+    stepEnteredAt: r.step_entered_at?.toISOString() ?? null,
+    stepAgeWeeks: r.step_entered_at ? stepAgeWeeks(r.step_entered_at, now) : null,
   };
 }
 

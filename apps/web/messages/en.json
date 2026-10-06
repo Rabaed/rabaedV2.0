@@ -3,6 +3,11 @@
     "appName": "Rabaed",
     "switchLanguage": "العربية",
     "signOut": "Sign out",
+    "nav": "Main",
+    "projects": "Projects",
+    "members": "Members",
+    "participations": "Company Projects",
+    "signedInAs": "Signed in as {name}, {company}",
     "profile": "Profile"
   },
   "home": {
@@ -10,12 +15,103 @@
     "tagline": "Construction projects, one place, each company sees only its own work.",
     "healthLink": "System health",
     "documentNumberLabel": "Document Numbers read left to right in every language:",
-    "signIn": "Sign in",
-    "signedInAs": "Signed in as {name}, {company}",
-    "authorizedPerson": "Authorized Person",
-    "membersLink": "Members",
-    "projectsLink": "My Projects",
-    "participationsLink": "Company Projects"
+    "signIn": "Sign in"
+  },
+  "projectTabs": {
+    "label": "Project",
+    "dashboard": "Dashboard",
+    "submittals": "Submittals",
+    "inspections": "Inspections",
+    "snag_list": "Snag List",
+    "site_reports": "Site Reports",
+    "drawings": "Drawings",
+    "settings": "Settings"
+  },
+  "workItemViews": {
+    "list": {
+      "toolbar": "Filters and sort",
+      "all": "All",
+      "type": "Type",
+      "stage": "Stage",
+      "with": "With",
+      "withMe": "Me",
+      "unclaimed": "unclaimed",
+      "anyUnclaimed": "Unclaimed",
+      "trade": "Trade",
+      "location": "Location",
+      "outcome": "Review Code / Result",
+      "stepAge": "Step Age",
+      "weeksOrMore": "{weeks} weeks or more",
+      "sort": "Sort by",
+      "sortStepAge": "Step Age, oldest first",
+      "sortDocumentNumber": "Document Number",
+      "sortSubmissionDate": "Submission Date, latest first",
+      "submissionDate": "Submission Date",
+      "creationDate": "Creation Date",
+      "submittedFrom": "Submitted from",
+      "submittedTo": "Submitted to",
+      "allRevisions": "Show all Revisions",
+      "needMyAction": "Need My Action",
+      "clear": "Clear filters",
+      "stageCounts": "Items in each Stage",
+      "documentNumber": "Document Number",
+      "subject": "Subject",
+      "noNumber": "No number yet",
+      "revisionNoNumber": "Revision {revision}: no number yet",
+      "empty": "No items you can see match these filters.",
+      "search": "Search",
+      "searchHelp": "Document Number, Subject, Type, Trade, Location or Company",
+      "noResults": "No items you can see match this search.",
+      "pages": "Pages",
+      "firstPage": "First page",
+      "nextPage": "Next page",
+      "dashboardFigure": "From the Dashboard"
+    },
+    "buckets": {
+      "pending": "Pending",
+      "in_preparation": "In preparation",
+      "A": "Approved (A)",
+      "B": "Approved (B)",
+      "C": "Revise (C)",
+      "D": "Rejected (D)",
+      "passed": "Passed",
+      "passed_with_comments": "Passed with Comments",
+      "failed": "Failed",
+      "approved": "Approved",
+      "rejected": "Rejected",
+      "cancelled": "Cancelled"
+    },
+    "codeCStates": {
+      "approvedOnRevision": "approved on revision",
+      "awaitingRevision": "awaiting revision",
+      "noRevisionYet": "no Revision yet",
+      "revisionInProgress": "Revision in progress",
+      "rejectedAfterC": "rejected after C"
+    },
+    "board": {
+      "board": "Kanban",
+      "noItems": "No items",
+      "closedSince": "Closed in the last {days} days",
+      "total": "{count} in total",
+      "showAll": "Show all",
+      "showAllIn": "Show all in {stage}",
+      "move": "Move",
+      "moveItem": "Move {subject}",
+      "moveTo": "To {stage}",
+      "dragging": "Drop on a highlighted column to move the item."
+    },
+    "viewSwitch": {
+      "view": "View",
+      "list": "List",
+      "kanban": "Kanban"
+    },
+    "outcomes": {
+      "A": "Code A",
+      "B": "Code B",
+      "C": "Code C",
+      "D": "Code D",
+      "closed": "Closed"
+    }
   },
   "health": {
     "title": "System health",
@@ -83,7 +179,7 @@
     "confirmReactivate": "Reactivate {name}? They keep their Signature and records."
   },
   "projects": {
-    "title": "My Projects",
+    "title": "Projects",
     "dashboard": "Dashboard",
     "empty": "You are not on any Project yet.",
     "emptyCreator": "You are not on any Project yet. Create one below.",
@@ -120,7 +216,9 @@
     "crNumber": "CR",
     "awaitingAnswer": "Awaiting an answer",
     "withdraw": "Withdraw",
-    "confirmWithdraw": "Withdraw this invitation? You can invite the same CR number again later."
+    "confirmWithdraw": "Withdraw this invitation? You can invite the same CR number again later.",
+    "needMyAction": "Need My Action",
+    "closed": "Closed"
   },
   "participants": {
     "title": "Company Projects",

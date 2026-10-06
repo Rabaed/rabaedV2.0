@@ -34,6 +34,8 @@ describe("creating a Project", () => {
       status: "active",
       projectRole: { baseRole: "contractor", name: { en: "Contractor", ar: "المقاول" } },
       isProjectAdmin: true,
+      needMyAction: 0,
+      modules: ["submittals"],
     });
     expect(projectIds(await a.caller.get("/v1/projects"))).toContain(projectId);
   });
@@ -137,7 +139,7 @@ describe("a Project is invisible to anyone not on it", () => {
   });
 });
 
-describe("My Projects", () => {
+describe("the Projects page", () => {
   it("lists the Member's Projects, newest first", async () => {
     const b = await api.projectCreator();
     const first = await api.createProject(b.caller, { code: "ONE" });

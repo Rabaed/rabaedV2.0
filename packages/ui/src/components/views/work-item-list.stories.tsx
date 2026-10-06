@@ -4,6 +4,7 @@ import { expect, fn, screen, userEvent, within } from "storybook/test";
 import { expectLaidOutLeftToRight } from "../../storybook/bidi.ts";
 import { phone } from "../../storybook/form.ts";
 import { storyLocale, storyText } from "../../storybook/locale.ts";
+import { workItemListLabels } from "../../storybook/views.ts";
 import { WorkItemList, type WorkItemListProps } from "./work-item-list.tsx";
 
 // The Submittals List (RP-345, spec RP-344) as a Contractor engineer of
@@ -14,11 +15,17 @@ const copy = {
   with: b("With", "لدى"),
   unclaimed: b("unclaimed", "لم تُستلَم"),
   allRevisions: b("Show all Revisions", "عرض كل المراجعات"),
+  needMyAction: b("Need My Action", "بحاجة لإجرائي"),
   nextPage: b("Next page", "الصفحة التالية"),
   firstPage: b("First page", "الصفحة الأولى"),
   clear: b("Clear filters", "مسح التصفية"),
   empty: b("No items you can see match these filters.", "لا توجد عناصر يمكنك رؤيتها تطابق هذه التصفية."),
   table: b("Submittals", "الاعتمادات"),
+  submissionDate: b("Submission Date", "تاريخ التقديم"),
+  creationDate: b("Creation Date", "تاريخ الإنشاء"),
+  submittedFrom: b("Submitted from", "قُدِّم من"),
+  sort: b("Sort by", "الترتيب حسب"),
+  sortSubmissionDate: b("Submission Date, latest first", "تاريخ التقديم، الأحدث أولًا"),
 };
 
 const stages = {
@@ -50,6 +57,9 @@ const row = (n: number, rest: Partial<WorkItemRow>): WorkItemRow => ({
   stepAgeWeeks: 1,
   outcome: null,
   with: null,
+  // Tamkeen raised these: its Members read the Creation Date too (RP-348).
+  submissionDate: "2026-09-14T08:30:00.000Z",
+  creationDate: "2026-09-02T07:00:00.000Z",
   ...rest,
 });
 
@@ -82,6 +92,11 @@ const items: WorkItemRow[] = [
   row(6, {
     title: "Fire alarm cables",
     documentNumber: null,
+    // A Draft: no number, not Submitted, and no Step Age: nobody sees when it was started.
+    submissionDate: null,
+    creationDate: null,
+    stepEnteredAt: null,
+    stepAgeWeeks: null,
     stage: stages.draft,
     with: {
       kind: "own",
@@ -94,6 +109,10 @@ const items: WorkItemRow[] = [
     title: "Earthing rods, galvanised",
     documentNumber: null,
     revisionNo: 1,
+    submissionDate: null,
+    creationDate: null,
+    stepEnteredAt: null,
+    stepAgeWeeks: null,
     stage: stages.draft,
     with: {
       kind: "own",
@@ -141,11 +160,12 @@ const meta = {
     list,
     query: defaults,
     locale: "en",
+    labels: workItemListLabels.en,
     hrefFor,
     itemHref: (id: string) => `#${id}`,
     onQueryChange: fn<WorkItemListProps["onQueryChange"]>(),
   },
-  render: (args, context) => <WorkItemList {...args} locale={storyLocale(context)} />,
+  render: (args, context) => <WorkItemList {...args} locale={storyLocale(context)} labels={workItemListLabels[storyLocale(context)]} />,
 } satisfies Meta<typeof WorkItemList>;
 
 export default meta;
@@ -165,7 +185,7 @@ const cellsOf = (context: PlayContext, title: string) => {
 export const Wide: Story = {
   play: async (context) => {
     const table = context.canvas.getByRole("table", { name: storyText(context, copy.table) });
-    await expect(within(table).getAllByRole("columnheader")).toHaveLength(9);
+    await expect(within(table).getAllByRole("columnheader")).toHaveLength(11);
     await expect(within(table).getAllByRole("row")).toHaveLength(items.length + 1);
     const withColumn = 4;
     const locale = storyLocale(context);
@@ -178,6 +198,53 @@ export const Wide: Story = {
     const number = within(table).getByText("TWR-TMC-EL-MAR-0003 Rev 1");
     await expect(getComputedStyle(number).direction).toBe("ltr");
     await expectLaidOutLeftToRight(number);
+  },
+};
+
+/**
+ * The raiser's Company reads both dates; a Draft with no number has neither.
+ * Dates read in Latin digits in Arabic too.
+ */
+export const DatesForTheRaisersCompany: Story = {
+  play: async (context) => {
+    const table = context.canvas.getByRole("table", { name: storyText(context, copy.table) });
+    const headers = within(table).getAllByRole("columnheader").map((h) => h.textContent);
+    await expect(headers.slice(-2)).toEqual([storyText(context, copy.submissionDate), storyText(context, copy.creationDate)]);
+    const cells = cellsOf(context, "Main LV switchboard");
+    await expect(cells.at(-2)).toHaveTextContent("14");
+    await expect(cells.at(-2)).toHaveTextContent("2026");
+    await expect(cells.at(-1)).toHaveTextContent("2");
+    await expect(cells.at(-1)).not.toHaveTextContent("14");
+    const draft = cellsOf(context, "Fire alarm cables");
+    await expect(draft.at(-2)).toBeEmptyDOMElement();
+    await expect(draft.at(-1)).toBeEmptyDOMElement();
+    // No Step Age either (the Step Age column is the 6th): a Draft's start is seen by nobody.
+    await expect(draft[5]).toBeEmptyDOMElement();
+  },
+};
+
+/** Another Company reads the Submission Date only: the API sends no Creation Date, so there is no such column. */
+export const DatesForAnotherCompany: Story = {
+  args: { list: { ...list, items: items.map((i) => ({ ...i, creationDate: null })) } },
+  play: async (context) => {
+    const table = context.canvas.getByRole("table", { name: storyText(context, copy.table) });
+    await expect(within(table).getAllByRole("columnheader")).toHaveLength(10);
+    await expect(within(table).queryByRole("columnheader", { name: storyText(context, copy.creationDate) })).toBeNull();
+    await expect(within(table).getByRole("columnheader", { name: storyText(context, copy.submissionDate) })).toBeVisible();
+    await expect(cellsOf(context, "Main LV switchboard").at(-1)).toHaveTextContent("2026");
+  },
+};
+
+/** Choosing a Submission Date range, or sorting by it, asks for the same query with it, from the first page. */
+export const SubmissionDateRange: Story = {
+  args: { query: { ...defaults, cursor: "abc" } },
+  play: async (context) => {
+    const from = context.canvas.getByLabelText(storyText(context, copy.submittedFrom));
+    await userEvent.type(from, "2026-09-01");
+    await expect(context.args.onQueryChange).toHaveBeenLastCalledWith({ ...defaults, submittedFrom: "2026-09-01" });
+    await userEvent.click(context.canvas.getByRole("combobox", { name: storyText(context, copy.sort) }));
+    await userEvent.click(await screen.findByRole("option", { name: storyText(context, copy.sortSubmissionDate) }));
+    await expect(context.args.onQueryChange).toHaveBeenLastCalledWith({ ...defaults, sort: "submissionDate" });
   },
 };
 
@@ -219,6 +286,48 @@ export const ShowAllRevisions: Story = {
   },
 };
 
+/** Need My Action is off by default; turning it on asks for the items waiting on me, from the first page. */
+export const NeedMyActionOff: Story = {
+  args: { query: { ...defaults, cursor: "abc" } },
+  play: async (context) => {
+    const toggle = context.canvas.getByRole("switch", { name: storyText(context, copy.needMyAction) });
+    await expect(toggle).not.toBeChecked();
+    await userEvent.click(toggle);
+    await expect(context.args.onQueryChange).toHaveBeenCalledWith({ ...defaults, needMyAction: true });
+  },
+};
+
+/**
+ * Need My Action on: the Steps I hold, the unclaimed Steps of my pool, and my
+ * own Drafts. Turning it off shows every item again; clearing the filters does too.
+ */
+export const NeedMyActionOn: Story = {
+  args: {
+    query: { ...defaults, needMyAction: true },
+    list: { ...list, items: items.filter((i) => i.with?.kind === "own"), stages: list.stages.map((s) => ({ ...s, count: s.key === "approved" || s.key === "revise_resubmit" ? 0 : s.count })) },
+  },
+  play: async (context) => {
+    const toggle = context.canvas.getByRole("switch", { name: storyText(context, copy.needMyAction) });
+    await expect(toggle).toBeChecked();
+    await expect(context.canvas.getByRole("link", { name: storyText(context, copy.clear) })).toHaveAttribute("href", "?");
+    await userEvent.click(toggle);
+    await expect(context.args.onQueryChange).toHaveBeenCalledWith(defaults);
+  },
+};
+
+/** Need My Action on a phone: the toggle stays on screen above the table. */
+export const NeedMyActionNarrow: Story = {
+  ...NeedMyActionOn,
+  parameters: phone,
+  play: async (context) => {
+    const toggle = context.canvas.getByRole("switch", { name: storyText(context, copy.needMyAction) });
+    await expect(toggle).toBeChecked();
+    const box = toggle.getBoundingClientRect();
+    await expect(box.left).toBeGreaterThanOrEqual(0);
+    await expect(box.right).toBeLessThanOrEqual(innerWidth);
+  },
+};
+
 /** A later page links back to the first and on to the next, its filters kept. */
 export const Paged: Story = {
   args: { query: { ...defaults, stage: ["internal_review"], cursor: "page2" }, list: { ...list, nextCursor: "page3" } },
@@ -240,6 +349,67 @@ export const NothingMatches: Story = {
   play: async (context) => {
     await expect(context.canvas.getByText(storyText(context, copy.empty))).toBeVisible();
     await expect(context.canvas.getByRole("link", { name: storyText(context, copy.clear) })).toHaveAttribute("href", "?allRevisions=true");
+  },
+};
+
+// Search (RP-347): in the toolbar, scoped to the Project, kept in the URL.
+const search = {
+  box: b("Search", "بحث"),
+  button: b("Search", "بحث"),
+  none: b("No items you can see match this search.", "لا توجد عناصر يمكنك رؤيتها تطابق هذا البحث."),
+};
+
+/** Searching asks for the same query with the words, from the first page; an emptied box asks for no search. */
+export const Searching: Story = {
+  args: { query: { ...defaults, stage: ["pending_approval"], cursor: "abc" } },
+  play: async (context) => {
+    const box = context.canvas.getByRole("searchbox", { name: storyText(context, search.box) });
+    const words = storyText(context, b("LED downlights", "إنارة الممرات"));
+    await userEvent.type(box, `  ${words} {enter}`);
+    await expect(context.args.onQueryChange).toHaveBeenLastCalledWith({ ...defaults, stage: ["pending_approval"], q: words });
+    await userEvent.clear(box);
+    await userEvent.click(context.canvas.getByRole("button", { name: storyText(context, search.button) }));
+    await expect(context.args.onQueryChange).toHaveBeenLastCalledWith({ ...defaults, stage: ["pending_approval"], q: undefined });
+  },
+};
+
+/** A search with results: the box holds the words, the rows are the matches, and clearing the filters clears it too. */
+export const SearchWithResults: Story = {
+  args: {
+    query: { ...defaults, q: "LED" },
+    list: {
+      ...list,
+      items: items.filter((i) => i.title.includes("LED")),
+      stages: list.stages.map((s) => ({ ...s, count: s.key === stages.internal.key ? 1 : 0 })),
+    },
+  },
+  play: async (context) => {
+    await expect(context.canvas.getByRole("searchbox", { name: storyText(context, search.box) })).toHaveValue("LED");
+    const table = context.canvas.getByRole("table", { name: storyText(context, copy.table) });
+    await expect(within(table).getAllByRole("row")).toHaveLength(2);
+    await expect(context.canvas.getByRole("link", { name: storyText(context, copy.clear) })).toHaveAttribute("href", "?");
+  },
+};
+
+/** A search with no results says so, and nothing counts what the viewer can't see. */
+export const SearchWithNone: Story = {
+  args: {
+    query: { ...defaults, q: "Xylophonic" },
+    list: { ...list, items: [], stages: list.stages.map((s) => ({ ...s, count: 0 })) },
+  },
+  play: async (context) => {
+    await expect(context.canvas.getByText(storyText(context, search.none))).toBeVisible();
+    await expect(context.canvas.queryByText(storyText(context, copy.empty))).toBeNull();
+  },
+};
+
+/** Narrow: the search box takes the whole width above the filters. */
+export const SearchNarrow: Story = {
+  parameters: phone,
+  args: { query: { ...defaults, q: "LED" } },
+  play: async (context) => {
+    const box = context.canvas.getByRole("searchbox", { name: storyText(context, search.box) });
+    await expect(box.getBoundingClientRect().width).toBeGreaterThan(200);
   },
 };
 

@@ -29,6 +29,7 @@ export * from "./numbering-counter.ts";
 export * from "./numbering-admin.ts";
 export * from "./notification-routing.ts";
 export * from "./work-item-query.ts";
+export * from "./work-item-board.ts";
 export * from "./chain-bucket.ts";
 export * from "./code-c.ts";
 export * from "./dashboard.ts";
