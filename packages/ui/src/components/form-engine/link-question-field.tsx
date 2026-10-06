@@ -13,6 +13,7 @@ import { LinkedItemRow } from "./linked-item-row.tsx";
 // API. Presentational: the page passes the Link search API and the names of the
 // chosen items the viewer sees.
 
+/* eslint-disable rabaed/no-ui-translations -- existing labels, still to move to the app's messages (RP-362 retro) */
 const copy = {
   en: {
     remove: (number: string) => `Remove ${number}`,
@@ -22,6 +23,7 @@ const copy = {
     remove: (number: string) => `إزالة \u2066${number}\u2069`,
   },
 } satisfies Record<Locale, unknown>;
+/* eslint-enable rabaed/no-ui-translations */
 
 /** A chosen item's number and Subject, by its id. */
 export type LinkTargetNames = Readonly<Record<string, Omit<LinkTarget, "id">>>;

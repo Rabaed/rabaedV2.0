@@ -3,6 +3,7 @@ import type { ComponentProps } from "react";
 import { cn } from "../../lib/cn.ts";
 
 // The revision suffix (GLOSSARY.md, Revision) is fixed product wording, so every Module words it the same.
+// eslint-disable-next-line rabaed/no-ui-translations -- a documented exception in packages/ui/README.md (DocNo's revision word)
 const revisionWord: Record<Locale, string> = { en: "Rev", ar: "مراجعة" };
 
 export type DocNoProps = Omit<ComponentProps<"bdi">, "children" | "dir" | "rev"> & {

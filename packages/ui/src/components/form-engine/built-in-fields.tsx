@@ -25,10 +25,12 @@ export type BuiltInChoices = {
 
 export const noChoices: BuiltInChoices = { trades: [], locations: [], scopes: [] };
 
+/* eslint-disable rabaed/no-ui-translations -- existing labels, still to move to the app's messages (RP-362 retro) */
 const copy = {
   en: { choose: "Choose…", chooseTradeFirst: "Choose a Trade first.", noScopes: "This Trade has no Scopes." },
   ar: { choose: "اختر…", chooseTradeFirst: "اختر التخصص أولًا.", noScopes: "لا توجد نطاقات لهذا التخصص." },
 } satisfies Record<Locale, unknown>;
+/* eslint-enable rabaed/no-ui-translations */
 
 /** Trade or Location: one of the values offered. */
 export function BuiltInSelect({

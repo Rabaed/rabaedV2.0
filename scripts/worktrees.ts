@@ -129,6 +129,21 @@ export function refExists(ref: string, cwd: string): boolean {
   }
 }
 
+/**
+ * Whether the branch has had a commit of its own and all its commits are in target
+ * (e.g. origin/main): its PR has merged. A new branch with nothing of its own yet is
+ * not merged; its session may be just starting.
+ */
+export function branchMerged(branch: string, target: string, cwd: string): boolean {
+  if (!hasOwnCommit(reflogSubjects(`refs/heads/${branch}`, cwd))) return false;
+  try {
+    git(["merge-base", "--is-ancestor", `refs/heads/${branch}`, target], cwd);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** The subjects of a ref's reflog, newest first; none when it has no reflog. */
 function reflogSubjects(ref: string, cwd: string): string[] {
   try {

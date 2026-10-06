@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { createServer, type Server } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  composeProjectOfEnv,
   databaseOfUrl,
   databasesInUse,
   databasesOfEnv,
@@ -11,13 +12,16 @@ import {
   isValidDbSuffix,
   laneClashes,
   laneEnv,
+  laneHolders,
   lanePorts,
+  mergedProjects,
   orphanDatabases,
   parseConnections,
   parseContainers,
   parseVolumes,
   staleProjects,
   type Container,
+  type WorktreeLane,
 } from "./lanes.ts";
 
 // `docker ps -a --format` lines as lanes.ts asks for them: name, state, compose project, working dir, ports.
@@ -307,6 +311,72 @@ describe("dropOrKeep", () => {
         { name: "rabaed_rp9_test", connections: 2 },
       ],
     });
+  });
+});
+
+describe("mergedProjects (lanes:prune --merged)", () => {
+  const cwd = "G:\\rabaed-wt\\current";
+  const wt = (path: string, branch: string, merged: boolean, project?: string): WorktreeLane => ({ path: path.replace(/\\/g, "/"), branch, merged, project });
+  const worktrees = [
+    wt("G:\\rabaed-wt\\current", "RP-400-now", false, "rabaed-lane1"),
+    wt("G:\\rabaed-wt\\RP-362", "RP-362-views", true, "rabaed-lane3"),
+    wt("G:\\rabaed-wt\\RP-363", "RP-363-dashboard", false, "rabaed-lane4"),
+    wt("G:\\rabaed-wt\\RP-322", "RP-322-spec", true, "rabaed-lane5"),
+    wt("G:\\rabaed-wt\\agent-1", "worktree-agent-1", false, "rabaed-lane5"),
+  ];
+  const containers = [
+    container({ name: "rabaed-lane1-db-1", project: "rabaed-lane1", workingDir: "G:\\rabaed-wt\\current" }),
+    container({ name: "rabaed-lane3-db-1", project: "rabaed-lane3", workingDir: "G:\\rabaed-wt\\RP-362" }),
+    container({ name: "rabaed-lane4-db-1", project: "rabaed-lane4", workingDir: "G:\\rabaed-wt\\RP-363" }),
+    container({ name: "rabaed-lane5-db-1", project: "rabaed-lane5", workingDir: "G:\\rabaed-wt\\RP-322" }),
+  ];
+  const volumes = [{ name: "rabaed-lane3_db-data", project: "rabaed-lane3" }];
+
+  it("picks a project whose worktrees are all merged, and keeps one that an unmerged worktree's .env names", () => {
+    expect(mergedProjects({ containers, volumes, worktrees, cwd, currentProject: "rabaed-lane1", platform: "win32" })).toEqual([
+      {
+        project: "rabaed-lane3",
+        reason: "branch merged into origin/main (RP-362-views at G:/rabaed-wt/RP-362)",
+        containers: ["rabaed-lane3-db-1"],
+        volumes: ["rabaed-lane3_db-data"],
+      },
+    ]);
+  });
+
+  it("never picks the current worktree's project, even when its branch is merged", () => {
+    const merged = worktrees.map((w) => ({ ...w, merged: true }));
+    const picked = mergedProjects({ containers, volumes, worktrees: merged, cwd, currentProject: "rabaed-lane1", platform: "win32" }).map((p) => p.project);
+    expect(picked).toEqual(["rabaed-lane3", "rabaed-lane4", "rabaed-lane5"]);
+  });
+
+  it("keeps a project with a container from a folder that is not a worktree of this clone", () => {
+    const other = [container({ name: "rabaed-lane6-db-1", project: "rabaed-lane6", workingDir: "D:\\other-clone\\wt" })];
+    expect(mergedProjects({ containers: other, volumes: [], worktrees, cwd, currentProject: undefined, platform: "win32" })).toEqual([]);
+  });
+});
+
+describe("laneHolders", () => {
+  const cwd = "G:\\rabaed-wt\\current";
+  const containers = [
+    container({ name: "rabaed-lane5-db-1", project: "rabaed-lane5", workingDir: "G:\\rabaed-wt\\RP-322", ports: [5932] }),
+    container({ name: "rabaed-rp1-web", project: "rabaed-rp1", workingDir: "G:\\rabaed-wt\\RP-1", ports: [3500] }),
+    container({ name: "rabaed-lane5-files-1", project: "rabaed-lane5", workingDir: "G:\\rabaed-wt\\current", ports: [9500] }),
+  ];
+
+  it("names the other worktrees holding the lane's compose project or ports", () => {
+    expect(laneHolders(5, { containers, cwd, platform: "win32" })).toEqual(["G:\\rabaed-wt\\RP-322", "G:\\rabaed-wt\\RP-1"]);
+  });
+
+  it("does not count the lane's own compose project for lane:env --db, which shares it", () => {
+    expect(laneHolders(5, { containers, cwd, platform: "win32", ownDatabase: true })).toEqual(["G:\\rabaed-wt\\RP-1"]);
+  });
+});
+
+describe("composeProjectOfEnv", () => {
+  it("reads COMPOSE_PROJECT_NAME, quoted or not", () => {
+    expect(composeProjectOfEnv("A=1\nCOMPOSE_PROJECT_NAME=rabaed-lane5\n")).toBe("rabaed-lane5");
+    expect(composeProjectOfEnv('COMPOSE_PROJECT_NAME="rabaed-lane2"')).toBe("rabaed-lane2");
+    expect(composeProjectOfEnv("A=1")).toBeUndefined();
   });
 });
 

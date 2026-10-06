@@ -10,6 +10,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "../overlay/popover.tsx"
 
 // Each language named in itself (its endonym), as language pickers do, so a reader of either can find theirs.
 // Not a translation: the same in every locale, so it lives here rather than in the app's messages.
+// eslint-disable-next-line rabaed/no-ui-translations -- a documented exception in packages/ui/README.md (language names, each in its own language)
 const languageNames: Record<Locale, string> = { en: "English", ar: "العربية" };
 
 export type MemberMenuProps = {

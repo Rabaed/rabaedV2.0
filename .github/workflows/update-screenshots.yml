@@ -1,10 +1,14 @@
 # Commits story screenshot baselines, rendered on Linux, to a PR branch.
 #
-# Changed baselines: when a PR changes the UI on purpose, add the
-# "update-screenshots" label to the PR (or, once this file is on main, run
+# Changed baselines: a PR whose changes touch a story (*.stories.tsx) or
+# packages/ui/src gets them on every push to it (opened, synchronize, reopened;
+# RP-362 retro). Any other PR: add the "update-screenshots" label (or, once
+# this file is on main, run
 #   gh workflow run update-screenshots.yml --ref <your-branch>).
 # The render job re-renders every baseline and the commit job commits them.
-# Then review the changed PNGs in the PR like any other change.
+# Then review the changed PNGs in the PR like any other change. The bot's own
+# commit starts no new run: a push made with the workflow token triggers no
+# pull_request event, and ui-changed skips github-actions[bot] as well.
 #
 # New baselines need no step (RP-296). When CI fails on a push to a PR branch
 # and the stories job's only failures were missing references, that job
@@ -21,7 +25,8 @@ name: Update screenshots
 on:
   workflow_dispatch:
   pull_request:
-    types: [labeled]
+    # No paths filter here: it would also apply to the label. ui-changed checks the files.
+    types: [labeled, opened, synchronize, reopened]
   workflow_run:
     workflows: [CI]
     types: [completed]
@@ -34,11 +39,39 @@ env:
   SCREENSHOTS: packages/ui/test/__screenshots__
 
 jobs:
-  render:
+  # A push to a PR in this repository (never a fork's, never the bot's) whose
+  # changes touch a story or packages/ui/src.
+  ui-changed:
     if: >-
+      github.event_name == 'pull_request' &&
+      github.event.action != 'labeled' &&
+      github.actor != 'github-actions[bot]' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+    outputs:
+      ui: ${{ steps.files.outputs.ui }}
+    steps:
+      - id: files
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          if gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/files" --jq '.[].filename' \
+              | grep -qE '(\.stories\.tsx$|^packages/ui/src/)'; then
+            echo "ui=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No story or packages/ui/src change: nothing to render."
+          fi
+
+  render:
+    needs: [ui-changed]
+    if: >-
+      !cancelled() &&
       github.ref != 'refs/heads/main' &&
       (github.event_name == 'workflow_dispatch' ||
-        (github.event.label.name == 'update-screenshots' &&
+        ((github.event.label.name == 'update-screenshots' || needs.ui-changed.outputs.ui == 'true') &&
           github.event.pull_request.head.repo.full_name == github.repository))
     # Must match the stories job in ci.yml.
     runs-on: ubuntu-24.04

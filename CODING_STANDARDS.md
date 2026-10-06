@@ -13,6 +13,7 @@ Visibility is the top requirement (`docs/visibility.md`). Check every read path 
 - **Another Company appears by name only,** as the leak-channel rows for history and Form answers require. The display, the API payload and the database read all show that Company's name, never its people.
 - **Answers are read through the stripping function** (ADR 0012). The app role never reads `work_item.data` directly. A new field type that stores an id adds its strip rule to that function, plus a seam-2 test showing another Company can't read the id.
 - **Side channels follow the same rule.** Check visibility before taking a lock, giving validation detail, or returning anything derived from hidden rows: a stored sequence number, a hash, a count, list membership, or a state that differs by whether a Company is on Rabaed. Number and count only what the viewer sees (RP-193, RP-239, RP-224, RP-275).
+- **A hidden value stays out of everything derived from it.** When a viewer may not see a value, it is also absent from the filters, sort keys and cursors that use it, and from its other reads (the item detail, the Kanban, exports). Hiding a List column is not enough: in RP-348 a Draft's start time still reached another Company through `stepEnteredAt`, the `stepAgeMin` filter, the Step Age cursor and the item detail.
 - **Every channel applies the same layers:** lists, counts, search, history, notifications, file links, logs, exports. A new channel adds a row to the leak-channel table and a scenario to the matrix.
 
 ## Database
@@ -37,6 +38,7 @@ Visibility is the top requirement (`docs/visibility.md`). Check every read path 
 - **Use the shared piece, not a copy:** `@rabaed/ui` components (`AgeDots`, `StagePill`, `WithChip`, form controls inside `Field`, …), its `focusRing` and tone helpers, and the shared test fixtures under each package's `test/support/` (RP-237, RP-289).
 - **Landmarks and labels:** every page has its landmarks, and every group of controls has a visible or accessible label.
 - Design tokens and logical CSS (checked: `rabaed/no-hardcoded-colour`, `rabaed/no-physical-direction`).
+- **A component that uses hooks or event handlers starts with `"use client"`** (checked: `rabaed/use-client-directive`; RP-362).
 
 ## Domain language
 

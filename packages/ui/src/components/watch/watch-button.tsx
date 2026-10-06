@@ -11,6 +11,7 @@ import { Icon } from "../icon/icon.tsx";
 // the Watch row). A toggle: pressed while watching. Presentational: the page
 // does the calls; a refusal leaves the state as it was and says so.
 
+/* eslint-disable rabaed/no-ui-translations -- existing labels, still to move to the app's messages (RP-362 retro) */
 const copy = {
   en: {
     watch: "Watch",
@@ -29,6 +30,7 @@ const copy = {
     },
   },
 } satisfies Record<Locale, unknown>;
+/* eslint-enable rabaed/no-ui-translations */
 
 type WatchRefusal = keyof (typeof copy)["en"]["refusals"];
 /** Watch or Unwatch as the page calls it: a refusal by the API's error code. */

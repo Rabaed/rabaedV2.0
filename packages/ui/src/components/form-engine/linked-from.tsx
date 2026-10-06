@@ -12,6 +12,7 @@ import { LinkedItemRow } from "./linked-item-row.tsx";
 // details, and asks nothing of the API. Read only: a Link is changed on the item
 // it is on. Presentational: the page passes what the API returns.
 
+/* eslint-disable rabaed/no-ui-translations -- existing labels, still to move to the app's messages (RP-362 retro) */
 const copy = {
   en: {
     title: "Linked from",
@@ -22,6 +23,7 @@ const copy = {
     none: "لا يرتبط بهذا البند أي بند مُقدَّم بعد.",
   },
 } satisfies Record<Locale, unknown>;
+/* eslint-enable rabaed/no-ui-translations */
 
 export type LinkedFromListProps = {
   locale: Locale;

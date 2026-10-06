@@ -13,6 +13,7 @@ import { Dialog, DialogClose, DialogContent, DialogFooter, DialogTrigger } from 
 // shows what it offers. Presentational: the page does the calls, and moves to
 // the new Revision once it is created.
 
+/* eslint-disable rabaed/no-ui-translations -- existing labels, still to move to the app's messages (RP-362 retro) */
 const copy = {
   en: {
     section: "Revision",
@@ -49,6 +50,7 @@ const copy = {
     },
   },
 } satisfies Record<Locale, unknown>;
+/* eslint-enable rabaed/no-ui-translations */
 
 export type RevisionRefusal = keyof (typeof copy)["en"]["refusals"];
 /** A Revision command as the page calls it: a refusal by the API's error code. */
