@@ -1,3 +1,13 @@
+import type {
+  BilingualText,
+  Locale,
+  NotificationDigest,
+  NotificationDigestItem,
+  NotificationDigestProject,
+  NotificationEmail,
+  NotificationEmailContent,
+  NotificationEmailKind,
+} from "@rabaed/domain";
 import { sql, type Transaction } from "kysely";
 import type { Db } from "./client.ts";
 import type { Database } from "./schema.ts";
@@ -22,6 +32,101 @@ export const deliverNotification: OutboxHandler = async (trx, row) => {
   await sql`select app.deliver_notification(${row.id}::uuid)`.execute(trx);
 };
 
+type NotificationEvent = NonNullable<NotificationEmailContent["event"]>;
+
+/**
+ * One notification's email content as its recipient may see it now
+ * (app.notification_email_content): a row of app.take_notification_email, and,
+ * with its Project, of app.take_notification_digest.
+ */
+interface NotificationRow {
+  to_address: string;
+  language: Locale;
+  kind: NotificationEmailKind;
+  work_item_id: string;
+  document_number: string | null;
+  subject: string;
+  step_name: BilingualText | null;
+  event_type: NotificationEvent["type"] | null;
+  transition_label: BilingualText | null;
+  outcome: string | null;
+  company_name: BilingualText | null;
+  signer_name: BilingualText | null;
+}
+
+/** What happened, for a notification about an event; null for one about a Step. */
+function eventOf(row: NotificationRow): NotificationEvent | null {
+  return row.event_type
+    ? { type: row.event_type, transition: row.transition_label, outcome: row.outcome, companyName: row.company_name, signerName: row.signer_name }
+    : null;
+}
+
+/** Sends one notification email: the worker's mailer. Throws when it could not. */
+export type SendNotificationEmail = (email: NotificationEmail) => Promise<void>;
+
+/**
+ * Emails one notification routed "immediately" (RP-357), as its recipient may
+ * see it now: nothing when they no longer see the item or may not read the
+ * event, when email is paused, the Project muted or closed, or the notification
+ * withdrawn (app.take_notification_email). A failed send throws, so the row is
+ * retried, then dead-lettered.
+ */
+export function notificationEmailHandler(send: SendNotificationEmail): OutboxHandler {
+  return async (trx, row) => {
+    const { rows } = await sql<NotificationRow>`select * from app.take_notification_email(${row.id}::uuid)`.execute(trx);
+    const email = rows[0];
+    if (!email) return;
+    await send({
+      to: email.to_address,
+      language: email.language,
+      kind: email.kind,
+      content: {
+        workItemId: email.work_item_id,
+        documentNumber: email.document_number,
+        subject: email.subject,
+        step: email.step_name,
+        event: eventOf(email),
+      },
+    });
+  };
+}
+
+/** Sends one daily digest: the worker's mailer. Throws when it could not. */
+export type SendNotificationDigest = (digest: NotificationDigest) => Promise<void>;
+
+/**
+ * Sends a Member their daily digest (RP-358) for an outbox row of kind
+ * 'digest': every notification waiting for it, grouped by Project, then item,
+ * each as its recipient may see it now (app.take_notification_digest, the same
+ * checks as an immediate email). Nothing when none is left. A failed send
+ * throws, so the row is retried with the same entries, then dead-lettered.
+ */
+export function notificationDigestHandler(send: SendNotificationDigest): OutboxHandler {
+  return async (trx, row) => {
+    const { rows } = await sql<NotificationRow & { project_id: string; project_name: BilingualText }>`
+      select * from app.take_notification_digest(${row.id}::uuid)
+    `.execute(trx);
+    const first = rows[0];
+    if (!first) return;
+    // Rows come oldest first: Projects, then items, in the order their first entry came.
+    const projects = new Map<string, NotificationDigestProject>();
+    const items = new Map<string, NotificationDigestItem>();
+    for (const r of rows) {
+      let project = projects.get(r.project_id);
+      if (!project) projects.set(r.project_id, (project = { projectId: r.project_id, name: r.project_name, items: [] }));
+      let item = items.get(r.work_item_id);
+      if (!item) {
+        item = { workItemId: r.work_item_id, documentNumber: r.document_number, subject: r.subject, entries: [] };
+        items.set(r.work_item_id, item);
+        project.items.push(item);
+      }
+      item.entries.push({ kind: r.kind, step: r.step_name, event: eventOf(r) });
+    }
+    await send({ to: first.to_address, language: first.language, projects: [...projects.values()] });
+  };
+}
+
+/** No email handler by default: the worker passes one with its mailer. */
 const defaultHandlers: Record<string, OutboxHandler> = { notification: deliverNotification };
 
 export interface ProcessOutboxOptions {

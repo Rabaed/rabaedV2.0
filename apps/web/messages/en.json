@@ -7,7 +7,8 @@
     "projects": "Projects",
     "members": "Members",
     "participations": "Company Projects",
-    "signedInAs": "Signed in as {name}, {company}"
+    "signedInAs": "Signed in as {name}, {company}",
+    "profile": "Profile"
   },
   "home": {
     "title": "Rabaed",
@@ -87,10 +88,6 @@
       "B": "Code B",
       "C": "Code C",
       "D": "Code D",
-      "passed": "Passed",
-      "passed_with_comments": "Passed with Comments",
-      "failed": "Failed",
-      "cancelled": "Cancelled",
       "closed": "Closed"
     }
   },
@@ -417,6 +414,15 @@
     "reached": "Reached you at {step}",
     "unread": "Unread",
     "markAllRead": "Mark all as read",
+    "unavailable": "Something went wrong. Try again.",
+    "revisionCreated": "New Revision",
+    "cancelled": "Cancelled",
+    "sentBack": "Sent Back to you by {company}",
+    "vacancy": "Vacancy at {step}: name a replacement"
+  },
+  "profile": {
+    "title": "Profile",
+    "notificationSettings": "Notification settings",
     "unavailable": "Something went wrong. Try again."
   }
 }

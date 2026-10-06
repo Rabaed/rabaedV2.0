@@ -10,12 +10,16 @@ export const newPassword = z.string().min(PASSWORD_MIN_LENGTH).max(256);
 export const signInRequest = z.object({
   email,
   password: z.string().min(1).max(256),
+  /** The browser's language: at the first sign-in that tells it, the language of the Member's emails. */
+  locale: z.enum(locales).optional(),
 });
 export type SignInRequest = z.infer<typeof signInRequest>;
 
 export const acceptInvitationRequest = z.object({
   token: z.string().min(1).max(200),
   password: newPassword,
+  /** The browser's language, as at sign-in. */
+  locale: z.enum(locales).optional(),
 });
 export type AcceptInvitationRequest = z.infer<typeof acceptInvitationRequest>;
 

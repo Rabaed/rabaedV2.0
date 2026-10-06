@@ -7,7 +7,8 @@
     "projects": "المشاريع",
     "members": "الأعضاء",
     "participations": "مشاريع الشركة",
-    "signedInAs": "مسجّل الدخول باسم {name}، {company}"
+    "signedInAs": "مسجّل الدخول باسم {name}، {company}",
+    "profile": "الملف الشخصي"
   },
   "home": {
     "title": "ربائد",
@@ -87,10 +88,6 @@
       "B": "الرمز B",
       "C": "الرمز C",
       "D": "الرمز D",
-      "passed": "ناجح",
-      "passed_with_comments": "ناجح مع ملاحظات",
-      "failed": "راسب",
-      "cancelled": "ملغى",
       "closed": "مغلق"
     }
   },
@@ -417,6 +414,15 @@
     "reached": "وصلك في {step}",
     "unread": "غير مقروء",
     "markAllRead": "تعليم الكل كمقروء",
+    "unavailable": "حدث خطأ. حاول مرة أخرى.",
+    "revisionCreated": "مراجعة جديدة",
+    "cancelled": "ملغى",
+    "sentBack": "أرجعته إليكم {company}",
+    "vacancy": "شاغر في {step}: عيّن بديلًا"
+  },
+  "profile": {
+    "title": "الملف الشخصي",
+    "notificationSettings": "إعدادات الإشعارات",
     "unavailable": "حدث خطأ. حاول مرة أخرى."
   }
 }

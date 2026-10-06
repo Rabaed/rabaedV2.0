@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  watchOutcomeNames,
   workItemOutcomes,
   workItemSearchParams,
   type Locale,
@@ -13,7 +14,7 @@ import {
   type WorkItemView,
 } from "@rabaed/domain";
 import { WorkItemBoard, WorkItemList, WorkItemViewSwitch, type WorkItemBoardLabels, type WorkItemListLabels } from "@rabaed/ui";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 // The hrefs here already carry their locale (the browser's own path, getPathname): next/link keeps navigation
@@ -22,11 +23,22 @@ import NextLink from "next/link";
 import { WorkItemBoardMove } from "@/components/work-item-board-move";
 import { getPathname } from "@/i18n/navigation";
 
+const sharedOutcomeNames = {
+  passed: watchOutcomeNames.passed,
+  passed_with_comments: watchOutcomeNames.passed_with_comments,
+  failed: watchOutcomeNames.failed,
+  cancelled: watchOutcomeNames.cancelled,
+} satisfies Partial<Record<WorkItemOutcome, Record<Locale, string>>>;
+
 /** The List's and the Kanban's words, from the app's messages. */
 function useViewLabels(tableLabel: string): { list: WorkItemListLabels; board: WorkItemBoardLabels } {
   const t = useTranslations("workItemViews");
   const l = (key: string) => t(`list.${key}`);
-  const outcomes = Object.fromEntries(workItemOutcomes.map((o) => [o, t(`outcomes.${o}`)])) as Record<WorkItemOutcome, string>;
+  const locale = useLocale() as Locale;
+  // Inspection Results and Cancelled are named once, with the notifications (watchOutcomeNames); a Review Code shows its letter.
+  const outcomes = Object.fromEntries(
+    workItemOutcomes.map((o) => [o, o in sharedOutcomeNames ? sharedOutcomeNames[o as keyof typeof sharedOutcomeNames][locale] : t(`outcomes.${o}`)]),
+  ) as Record<WorkItemOutcome, string>;
   const shared = {
     noNumber: l("noNumber"),
     revisionNoNumber: (revision: string) => t("list.revisionNoNumber", { revision }),
