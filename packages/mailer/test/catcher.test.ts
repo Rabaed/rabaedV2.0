@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { mailerFromEnv, renderEmail, stepAgeReportMessage } from "../src/index.ts";
+import { mailerFromEnv, notificationDigestMessage, renderEmail, stepAgeReportMessage } from "../src/index.ts";
 
 // Sends through the real mailer, as the services will, to the local Mailpit
 // (docker-compose.yml; a service in CI), and reads it back through
@@ -54,6 +54,47 @@ describe("the mailer, against the local catcher", () => {
     });
     expect(message!.Text.trim()).toBe(expected.text.trim());
     expect(message!.HTML).toContain("482913");
+  });
+
+  it.each(["en", "ar"] as const)("delivers the daily digest in %s intact, its Document Numbers left to right (RP-358)", async (language) => {
+    const to = recipient();
+    const message = notificationDigestMessage(
+      {
+        to,
+        language,
+        projects: [
+          {
+            projectId: randomUUID(),
+            name: { en: "Tower", ar: "البرج" },
+            items: [
+              {
+                workItemId: randomUUID(),
+                documentNumber: "TWR-MAR-01-0001",
+                subject: "Cable trays",
+                entries: [
+                  { kind: "step_reached", step: { en: "Contractor review", ar: "مراجعة المقاول" }, event: null },
+                  { kind: "sent_back", step: null, event: { type: "transition", transition: null, outcome: null, companyName: { en: "Khatib", ar: "الخطيب" }, signerName: null } },
+                ],
+              },
+              { workItemId: randomUUID(), documentNumber: "TWR-MAR-01-0002", subject: "Pumps", entries: [{ kind: "vacancy", step: { en: "Review", ar: "المراجعة" }, event: null }] },
+            ],
+          },
+        ],
+      },
+      "http://127.0.0.1:3000",
+    );
+    await mailer.send(message);
+
+    const [caughtMessage, ...more] = await caught(to);
+    const expected = renderEmail("daily-digest", language, message.values as never);
+    expect(more).toEqual([]);
+    expect(caughtMessage).toMatchObject({ Subject: expected.subject, Tags: ["daily-digest"] });
+    expect(caughtMessage!.HTML).toContain(`<html lang="${language}" dir="${language === "ar" ? "rtl" : "ltr"}">`);
+    for (const number of ["TWR-MAR-01-0001", "TWR-MAR-01-0002"]) {
+      expect(caughtMessage!.HTML).toContain(`<bdi dir="ltr">${number}</bdi>`);
+      expect(caughtMessage!.Text).toContain(`⁦${number}⁩`);
+    }
+    expect(caughtMessage!.Text).toContain(language === "ar" ? "الخطيب" : "Khatib");
   });
 
   it("delivers an Arabic invitation intact: Arabic subject, right-to-left body, the link", async () => {

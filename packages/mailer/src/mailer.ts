@@ -1,4 +1,11 @@
-import { stepAgeReportQuery, workItemSearchParams, type Locale, type NotificationEmail, type StepAgeReport } from "@rabaed/domain";
+import {
+  stepAgeReportQuery,
+  workItemSearchParams,
+  type Locale,
+  type NotificationDigest,
+  type NotificationEmail,
+  type StepAgeReport,
+} from "@rabaed/domain";
 import { z } from "zod";
 import { notificationEmailTemplate, renderEmail, type RenderedEmail, type EmailTemplate, type EmailTemplateValues } from "./templates.ts";
 
@@ -59,6 +66,24 @@ export function stepAgeReportMessage({ to, language, projectId, projectName, ope
       items,
       link: list(workItemSearchParams(stepAgeReportQuery(openStageKeys))),
       oldestLink: list(workItemSearchParams(stepAgeReportQuery(openStageKeys, 4))),
+    },
+  };
+}
+
+/**
+ * The daily digest as the mailer sends it (RP-358): in the recipient's
+ * language, each item linking to itself on the customer web (`webUrl`).
+ */
+export function notificationDigestMessage({ to, language, projects }: NotificationDigest, webUrl: string): MailMessage<"daily-digest"> {
+  return {
+    to,
+    template: "daily-digest",
+    locale: language,
+    values: {
+      projects: projects.map(({ name, items }) => ({
+        name,
+        items: items.map((item) => ({ ...item, link: new URL(`/${language}/work-items/${encodeURIComponent(item.workItemId)}`, webUrl).href })),
+      })),
     },
   };
 }

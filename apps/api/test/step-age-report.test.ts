@@ -1,16 +1,17 @@
 // Seam 1 for the weekly Step Age report (RP-359, spec RP-344; visibility.md the
 // Step Age reports row and scenario 21; workflow-engine.md §10). Each Sunday at
-// 07:00 Riyadh time the worker plans a report for every Member holding the
-// Assign permission on an active Project, then sends each one, as its recipient
-// may see the items when it is sent: the open items they see there, aged
-// through app.step_as_seen (another Company's ages count from when the item
-// reached it, V14), with a link to the List showing the same items. An empty
-// report, an opted-out recipient and a closed Project get nothing.
+// 07:00 Riyadh time the worker's scheduled job queues a report for every Member
+// holding the Assign permission on an active Project, and the outbox sends each
+// one, as its recipient may see the items when it is sent: the open items they
+// see there, aged through app.step_as_seen (another Company's ages count from
+// when the item reached it, V14), with a link to the List showing the same
+// items. An empty report, an opted-out recipient and a closed Project get nothing.
 //
-// No seeded Position holds `assign`, so this file adds a test-only one.
+// No seeded Position holds `assign`, so this file adds a test-only one, and
+// removes it again at the end (Positions are shared by every Project).
 import { randomUUID } from "node:crypto";
-import { createDb, planStepAgeReports, sendStepAgeReports, withMember } from "@rabaed/db";
-import { testDatabaseUrls } from "@rabaed/db/test-support";
+import { createDb, processOutbox, runScheduledJobs, stepAgeReportHandler, weeklyStepAgeReportJob, withMember } from "@rabaed/db";
+import { drainOutbox, testDatabaseUrls } from "@rabaed/db/test-support";
 import type { NotificationSettings, NotificationSettingsView, StepAgeReport, VisibilityGrant, WorkItemRow } from "@rabaed/domain";
 import { stepAgeReportMessage } from "@rabaed/mailer";
 import { sql } from "kysely";
@@ -25,6 +26,9 @@ const urls = testDatabaseUrls();
 const worker = createDb(urls.app, { max: 2 });
 const migrator = createDb(urls.migrator, { max: 1 });
 afterAll(async () => {
+  await sql`delete from project_member_position where position_id in (select id from position where key = ${LEAD})`.execute(migrator);
+  await sql`delete from position_permission where position_id in (select id from position where key = ${LEAD})`.execute(migrator);
+  await sql`delete from position where key = ${LEAD}`.execute(migrator);
   await api.close();
   await Promise.all([worker.destroy(), migrator.destroy()]);
 });
@@ -87,15 +91,22 @@ async function item(projectId: string, raiser: Person, title: string, trade: str
 
 /** Every report the worker sent since the last reset. */
 let sent: StepAgeReport[] = [];
-let week = 0;
-/** Plans this week's reports (a new due time each call) and sends every one due, as the worker does on Sunday morning. */
+/** The worker's handler, its Step Ages counted to the API's clock. */
+const capture = stepAgeReportHandler(async (report) => void sent.push(report), now);
+/** A Sunday, 08:00 Riyadh time: the report is due. */
+const SUNDAY = new Date("2026-10-04T05:00:00Z");
+/** The worker's poll on Sunday morning, the job's queueing only (as if it had not run yet this week). */
+async function queueWeek() {
+  await sql`delete from scheduled_job_run where job = ${weeklyStepAgeReportJob.name}`.execute(migrator);
+  const runs = await runScheduledJobs(worker, [weeklyStepAgeReportJob], SUNDAY);
+  expect(runs.map((r) => r.outcome)).toEqual(["ran"]);
+}
+/** Sends every report queued. */
+const drain = () => drainOutbox(worker, { step_age_report: capture });
+/** The worker on Sunday morning: queues this week's reports and sends them. */
 async function sendWeek() {
-  week++;
-  await planStepAgeReports(worker, new Date(Date.UTC(2000, 0, 2) + week * 7 * DAY));
-  for (;;) {
-    const run = await sendStepAgeReports(worker, async (report) => void sent.push(report), { now: now() });
-    if (run.sent + run.skipped + run.failed + run.dead === 0) return;
-  }
+  await queueWeek();
+  await drain();
 }
 const reportsTo = (p: Person, projectId = at.projectId) => sent.filter((r) => r.to === p.email && r.projectId === projectId);
 const reportTo = (p: Person) => {
@@ -264,12 +275,11 @@ describe("one week's reports", () => {
     expect(report.items.map((i) => i.workItemId)).not.toContain(valves);
   });
 
-  it("sends each report once, however often the worker runs", async () => {
+  it("sends each report once: the job queues once per Sunday, and a sent report is not sent again", async () => {
     const before = sent.length;
-    for (;;) {
-      const run = await sendStepAgeReports(worker, async (report) => void sent.push(report), { now: now() });
-      if (run.sent + run.skipped + run.failed + run.dead === 0) break;
-    }
+    const again = await runScheduledJobs(worker, [weeklyStepAgeReportJob], new Date(SUNDAY.getTime() + 3_600_000));
+    expect(again.map((r) => r.outcome)).toEqual(["already_ran"]);
+    await drain();
     expect(sent.length).toBe(before);
   });
 });
@@ -307,28 +317,27 @@ describe("who gets no report", () => {
     }
   });
 
-  it("sends nothing for a closed Project", async () => {
+  it("sends nothing for a closed Project, nor for one closed between queueing and sending", async () => {
     await sql`update project set status = 'closed', closed_at = now() where id = ${at.projectId}`.execute(migrator);
     try {
       sent = [];
       await sendWeek();
+      await sql`update project set status = 'active', closed_at = null where id = ${at.projectId}`.execute(migrator);
+      await queueWeek();
+      await sql`update project set status = 'closed', closed_at = now() where id = ${at.projectId}`.execute(migrator);
+      await drain();
       expect(sent.filter((r) => r.projectId === at.projectId)).toEqual([]);
     } finally {
       await sql`update project set status = 'active', closed_at = null where id = ${at.projectId}`.execute(migrator);
     }
   });
 
-  it("sends nothing to a Member removed from the Project after the report was planned", async () => {
-    // Planned, not yet sent: the C2 lead leaves the Project in between.
-    week++;
-    await planStepAgeReports(worker, new Date(Date.UTC(2000, 0, 2) + week * 7 * DAY));
+  it("sends nothing to a Member removed from the Project after the report was queued", async () => {
+    await queueWeek();
     await sql`update project_member set status = 'removed' where member_id = ${c2Lead.id} and project_id = ${at.projectId}`.execute(migrator);
     try {
       sent = [];
-      for (;;) {
-        const run = await sendStepAgeReports(worker, async (report) => void sent.push(report), { now: now() });
-        if (run.sent + run.skipped + run.failed + run.dead === 0) break;
-      }
+      await drain();
       expect(reportsTo(c2Lead)).toEqual([]);
       expect(reportsTo(c1Lead)).toHaveLength(1);
     } finally {
@@ -339,29 +348,27 @@ describe("who gets no report", () => {
 
 describe("a failed send", () => {
   it("is retried later, and the report is sent once it goes through", async () => {
-    week++;
-    await planStepAgeReports(worker, new Date(Date.UTC(2000, 0, 2) + week * 7 * DAY));
-    const failing = await sendStepAgeReports(
-      worker,
-      async () => {
-        throw new Error("mail down");
+    await queueWeek();
+    const failing = await processOutbox(worker, {
+      handlers: {
+        step_age_report: stepAgeReportHandler(async () => {
+          throw new Error("mail down");
+        }, now),
       },
-      { now: now() },
-    );
+      retryDelayMs: () => 3_600_000,
+    });
     expect(failing.failed).toBeGreaterThan(0);
-    expect(failing.sent).toBe(0);
-    // Not retried at once: only after its retry delay.
-    expect(await sendStepAgeReports(worker, async (report) => void sent.push(report), { now: now() })).toMatchObject({ sent: 0 });
-    await sql`update step_age_report set available_at = now() where sent_at is null and dead_at is null`.execute(migrator);
     sent = [];
-    for (;;) {
-      const run = await sendStepAgeReports(worker, async (report) => void sent.push(report), { now: now() });
-      if (run.sent + run.skipped + run.failed + run.dead === 0) break;
-    }
+    // Not retried at once: only after its retry delay.
+    await drain();
+    expect(sent).toEqual([]);
+    await sql`update outbox set available_at = now() where kind = 'step_age_report' and processed_at is null and dead_at is null`.execute(migrator);
+    await drain();
     expect(reportsTo(c1Lead)).toHaveLength(1);
   });
 
-  it("is never readable by the app role with a Member set", async () => {
-    await expect(withMember(worker, c1Lead.id, (trx) => sql`select * from app.take_step_age_report()`.execute(trx))).rejects.toThrow();
+  it("can't be queued or taken by the app role with a Member set", async () => {
+    await expect(withMember(worker, c1Lead.id, (trx) => sql`select * from app.take_step_age_report(${randomUUID()}::uuid)`.execute(trx))).rejects.toThrow();
+    await expect(withMember(worker, c1Lead.id, (trx) => sql`select app.enqueue_step_age_reports()`.execute(trx))).rejects.toThrow();
   });
 });

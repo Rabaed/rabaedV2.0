@@ -1,35 +1,35 @@
 import { describe, expect, it } from "vitest";
-import { stepAgeReportDueAt, stepAgeReportGroups, stepAgeReportQuery } from "./step-age-report.ts";
+import { dueRun, weeklyStepAgeReportSchedule } from "./schedule.ts";
+import { stepAgeReportGroups, stepAgeReportQuery } from "./step-age-report.ts";
 import { workItemQuery, workItemSearchParams, workItemQueryFromSearchParams } from "./work-item-query.ts";
 
 // 2026-10-04 is a Sunday; Riyadh is UTC+3 all year.
 const SUNDAY_7_RIYADH = new Date("2026-10-04T04:00:00Z");
+const due = (at: string) => dueRun(weeklyStepAgeReportSchedule, new Date(at));
 
-describe("stepAgeReportDueAt", () => {
-  it("is Sunday 07:00 Riyadh time from that moment until the end of Sunday in Riyadh", () => {
-    for (const at of ["2026-10-04T04:00:00Z", "2026-10-04T09:30:00Z", "2026-10-04T20:59:59Z"]) {
-      expect(stepAgeReportDueAt(new Date(at))).toEqual(SUNDAY_7_RIYADH);
+describe("the weekly report's schedule: Sunday 07:00 Riyadh", () => {
+  it("is due from Sunday 07:00 Riyadh time, and still later that Sunday", () => {
+    for (const at of ["2026-10-04T04:00:00Z", "2026-10-04T09:30:00Z", "2026-10-04T15:59:59Z"]) {
+      expect(due(at)).toEqual(SUNDAY_7_RIYADH);
     }
   });
 
   it("is not due before 07:00 on Sunday in Riyadh", () => {
-    expect(stepAgeReportDueAt(new Date("2026-10-04T03:59:59Z"))).toBeNull();
-    // Saturday 23:30 in Riyadh, already Sunday nowhere near.
-    expect(stepAgeReportDueAt(new Date("2026-10-03T20:30:00Z"))).toBeNull();
+    expect(due("2026-10-04T03:59:59Z")).toBeNull();
+    // Saturday 23:30 in Riyadh.
+    expect(due("2026-10-03T20:30:00Z")).toBeNull();
   });
 
-  it("is not due on any other day of the week, at any hour", () => {
-    // Monday 00:00 Riyadh, and every day Monday to Saturday at 07:00 and 12:00 Riyadh.
-    expect(stepAgeReportDueAt(new Date("2026-10-04T21:00:00Z"))).toBeNull();
+  it("is never due Monday to Saturday: a missed Sunday is not made up later in the week", () => {
     for (let day = 5; day <= 10; day++) {
       for (const hourUtc of ["04", "09"]) {
-        expect(stepAgeReportDueAt(new Date(`2026-10-${String(day).padStart(2, "0")}T${hourUtc}:00:00Z`))).toBeNull();
+        expect(due(`2026-10-${String(day).padStart(2, "0")}T${hourUtc}:00:00Z`)).toBeNull();
       }
     }
   });
 
   it("is the next Sunday's 07:00 a week later", () => {
-    expect(stepAgeReportDueAt(new Date("2026-10-11T05:00:00Z"))).toEqual(new Date("2026-10-11T04:00:00Z"));
+    expect(due("2026-10-11T05:00:00Z")).toEqual(new Date("2026-10-11T04:00:00Z"));
   });
 });
 
