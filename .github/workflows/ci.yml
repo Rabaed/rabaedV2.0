@@ -287,10 +287,13 @@ jobs:
 
   # A migration already on the base branch must stay byte-identical; only new
   # files are allowed (RP-287), and each must sort after every migration on the
-  # base branch (RP-342). Pull requests only: a push has no base.
+  # base branch (RP-342). Pull requests and the merge queue only: a push has no
+  # base. In the queue the base is main plus the entries ahead, so two PRs whose
+  # migrations clash cannot merge together; skipped, this required check would
+  # count as passing (RP-398).
   migrations-immutable:
     name: migrations immutable
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -299,17 +302,19 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@v7
         with: { node-version: 24 }
-      - run: node scripts/check-migrations-immutable.ts "origin/$BASE_REF"
+      - run: node scripts/check-migrations-immutable.ts "$BASE"
         env:
-          BASE_REF: ${{ github.base_ref }}
+          BASE: ${{ github.event.merge_group.base_sha || format('origin/{0}', github.base_ref) }}
 
   # A function, view or policy redefined both on the branch and on main must end
   # with a branch definition written after merging main's; no two migrations
   # share a timestamp (RP-337). A pull request checks out its merge ref, so the
-  # branch and main sides come from the PR's head and base commits.
+  # branch and main sides come from the PR's head and base commits. In the merge
+  # queue the main side is the queue's base (main plus the entries ahead) and
+  # the branch side the PR's head, taken from the queue's merge commit (RP-398).
   migration-drift:
     name: migration drift and timestamps
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -318,7 +323,13 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@v7
         with: { node-version: 24 }
-      - run: node scripts/check-migration-drift.ts "$BASE_SHA" "$HEAD_SHA"
+      - if: github.event_name == 'pull_request'
+        run: node scripts/check-migration-drift.ts "$BASE_SHA" "$HEAD_SHA"
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      - if: github.event_name == 'merge_group'
+        run: node scripts/check-migration-drift.ts --merge-group "$BASE_SHA" "$HEAD_SHA"
+        env:
+          BASE_SHA: ${{ github.event.merge_group.base_sha }}
+          HEAD_SHA: ${{ github.event.merge_group.head_sha }}

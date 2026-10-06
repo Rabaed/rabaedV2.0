@@ -206,6 +206,68 @@ describe("the Submission Date", () => {
   });
 });
 
+/** Every answer time `by` is given for the item, as a number. */
+const answerTimes = async (by: Caller, id: string) => Object.values((await detail(by, id)).fieldTimes).map((t) => Date.parse(t.at));
+
+describe("answer times never earlier than the Creation Date once numbered (RP-392-1)", () => {
+  let id = "";
+  let draftSaved = 0;
+  beforeAll(async () => {
+    id = await newDraft("RP-392");
+    draftSaved = Math.min(...(await answerTimes(engineer, id)));
+    await later(2 * DAY);
+    await take(engineer, id, "send_for_review");
+  });
+
+  it("gives co-editors the real times while it is still a Draft", async () => {
+    const draft = await newDraft("RP-392 draft");
+    const started = Math.min(...(await answerTimes(engineer, draft)));
+    await later(DAY);
+    // Not numbered: the times are as stamped, not raised to anything.
+    expect(await recorded(draft)).toMatchObject({ numberedAt: null });
+    expect(await answerTimes(engineer, draft)).toContain(started);
+  });
+
+  it("reads no time earlier than the Creation Date for the PM at Internal Review", async () => {
+    const { numberedAt } = await recorded(id);
+    expect(Date.parse(numberedAt!) - draftSaved).toBeGreaterThanOrEqual(2 * DAY);
+    const times = await answerTimes(pm, id);
+    expect(times.length).toBeGreaterThan(0);
+    for (const t of times) expect(t).toBeGreaterThanOrEqual(Date.parse(numberedAt!));
+  });
+
+  it("reads none for the raiser after a Send Back either", async () => {
+    await later(DAY);
+    await submit(id);
+    await ok(k1Engineer.post(`/v1/work-items/${id}/claim`));
+    await take(k1Engineer, id, "send_back_to_draft");
+    const { numberedAt } = await recorded(id);
+    expect(await detail(engineer, id)).toMatchObject({ step: { key: "draft" } });
+    const times = await answerTimes(engineer, id);
+    expect(times.length).toBeGreaterThan(0);
+    for (const t of times) expect(t).toBeGreaterThanOrEqual(Date.parse(numberedAt!));
+  });
+
+  it("still autosaves after the Send Back, on the times it read", async () => {
+    const before = (await detail(engineer, id)).fieldTimes;
+    const basedOn = Object.fromEntries(Object.entries(before).map(([key, t]) => [key, t.at]));
+    const res = await ok(
+      engineer.request("PUT", `/v1/work-items/${id}/answers`, { answers: { model: "RP-392 edited", trade: electrical, location: buildingA }, basedOn }),
+      200,
+    );
+    expect(res.json().keptFromOthers).toEqual([]);
+    expect((await detail(engineer, id)).answers).toMatchObject({ model: "RP-392 edited" });
+    const { numberedAt } = await recorded(id);
+    for (const t of await answerTimes(engineer, id)) expect(t).toBeGreaterThanOrEqual(Date.parse(numberedAt!));
+  });
+
+  it("keeps the stored times for audit", async () => {
+    const { rows } = await sql<{ field_times: Record<string, { at: string }> }>`select field_times from work_item where id = ${id}::uuid`.execute(migrator);
+    const { numberedAt } = await recorded(id);
+    expect(Math.min(...Object.values(rows[0]!.field_times).map((t) => Date.parse(t.at)))).toBeLessThan(Date.parse(numberedAt!));
+  });
+});
+
 describe("C1 starts a Draft, sends it for review two days later, and Submits it 17 days after that (scenario 61)", () => {
   let id = "";
   beforeAll(async () => {
