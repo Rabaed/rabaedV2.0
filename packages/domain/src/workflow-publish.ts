@@ -1,4 +1,4 @@
-import type { TransitionKind } from "./work-item.ts";
+import { backwardKinds, type TransitionKind } from "./work-item.ts";
 
 // Publish checks 4 and 8 (workflow-engine.md §1; ADR 0014; RP-334). Workflow
 // Versions are published as data by migration until the builder (part 5), so a
@@ -10,15 +10,16 @@ export type PublishedStep = { key: string; role: string | null };
 /** A Transition of a Workflow Version, by its Steps' keys. */
 export type PublishedTransition = { key: string; from: string; to: string; kind: TransitionKind; outcome: string | null };
 
-export const workflowKindProblemCodes = [
-  "return_crosses_participants",
-  "submit_stays_inside",
-  "send_back_not_to_submitter",
-  "send_back_sets_outcome",
-  "cycle_without_return",
-  "loop_across_participants",
-] as const;
-export type WorkflowKindProblem = { transition: string; code: (typeof workflowKindProblemCodes)[number] };
+export type WorkflowKindProblem = {
+  transition: string;
+  code:
+    | "return_crosses_participants"
+    | "submit_stays_inside"
+    | "send_back_not_to_submitter"
+    | "send_back_sets_outcome"
+    | "cycle_without_way_back"
+    | "loop_across_participants";
+};
 
 /**
  * What stops a Workflow Version's Transitions from being published, by checks 4
@@ -28,7 +29,7 @@ export type WorkflowKindProblem = { transition: string; code: (typeof workflowKi
  * - a `send_back` goes from a Step of a role some `submit` hands the item to,
  *   back to a Step of a role that `submit` comes from (`send_back_not_to_submitter`),
  *   and sets no outcome (`send_back_sets_outcome`);
- * - no cycle goes without a `return` or a `send_back` (`cycle_without_return`), and
+ * - no cycle goes without a `return` or a `send_back` (`cycle_without_way_back`), and
  *   none crosses roles without a `send_back` (`loop_across_participants`, on each
  *   Transition crossing roles inside such a loop).
  * Empty when there is nothing.
@@ -43,7 +44,7 @@ export function workflowKindProblems(steps: readonly PublishedStep[], transition
     if (tr.kind !== "submit" || from === null || to === null || from === to) continue;
     submittedFrom.set(to, (submittedFrom.get(to) ?? new Set()).add(from));
   }
-  const forward = transitions.filter((tr) => tr.kind !== "return" && tr.kind !== "send_back");
+  const forward = transitions.filter((tr) => !backwardKinds.includes(tr.kind));
   const withReturns = transitions.filter((tr) => tr.kind !== "send_back");
 
   return transitions.flatMap((tr): WorkflowKindProblem[] => {
@@ -55,7 +56,7 @@ export function workflowKindProblems(steps: readonly PublishedStep[], transition
       if (from === null || to === null || !submittedFrom.get(from)?.has(to)) problems.push("send_back_not_to_submitter");
       if (tr.outcome !== null) problems.push("send_back_sets_outcome");
     }
-    if (forward.includes(tr) && reaches(forward, tr.to, tr.from)) problems.push("cycle_without_return");
+    if (forward.includes(tr) && reaches(forward, tr.to, tr.from)) problems.push("cycle_without_way_back");
     if (withReturns.includes(tr) && from !== to && reaches(withReturns, tr.to, tr.from)) problems.push("loop_across_participants");
     return problems.map((code) => ({ transition: tr.key, code }));
   });

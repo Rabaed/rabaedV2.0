@@ -207,6 +207,8 @@ export type WorkItemOutcome = z.infer<typeof workItemOutcome>;
 /** A Transition's kind (workflow-engine.md §1; `send_back` ADR 0014). */
 export const transitionKinds = ["send", "submit", "return", "send_back", "close", "cancel"] as const;
 export type TransitionKind = (typeof transitionKinds)[number];
+/** The kinds that take an item back, within its Participant (`return`) or to the one that Submitted it (`send_back`). */
+export const backwardKinds: readonly TransitionKind[] = ["return", "send_back"];
 
 /**
  * The holder of the current Step takes one of its Transitions. The key makes a

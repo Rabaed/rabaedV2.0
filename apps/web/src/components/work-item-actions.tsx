@@ -1,6 +1,6 @@
 "use client";
 
-import { validateAnswers, type FieldError, type Locale, type WorkItemActions as Actions } from "@rabaed/domain";
+import { backwardKinds, validateAnswers, type FieldError, type Locale, type WorkItemActions as Actions } from "@rabaed/domain";
 import { ActionForm, Button } from "@rabaed/ui";
 import { useTranslations } from "next-intl";
 import { useRef, useState, type FormEvent } from "react";
@@ -134,7 +134,7 @@ export function WorkItemActions({
         {actions.transitions.map((tr) => (
           <Button
             key={tr.key}
-            variant={tr.kind === "return" || tr.kind === "send_back" ? "secondary" : "primary"}
+            variant={backwardKinds.includes(tr.kind) ? "secondary" : "primary"}
             disabled={pending}
             onClick={() => press(tr)}
           >

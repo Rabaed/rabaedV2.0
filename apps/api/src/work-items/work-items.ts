@@ -1,5 +1,6 @@
 import { withMember, type Database, type Db } from "@rabaed/db";
 import {
+  backwardKinds,
   changedOutside,
   editableSections,
   errorsInSections,
@@ -795,8 +796,9 @@ export function takeTransition(
       });
       const missing = checked.ok ? [] : errorsInSections(pinned.form.schema, pinned.toFill.editableSections, checked.errors);
       // A cancel, a Return or a Send Back takes the item back: nothing has to be complete.
-      const back: readonly string[] = ["cancel", "return", "send_back"];
-      if (taking && !back.includes(taking.transition_kind ?? "") && missing.length > 0) {
+      const kind = taking?.transition_kind;
+      const back = kind === "cancel" || (kind != null && backwardKinds.includes(kind));
+      if (taking && !back && missing.length > 0) {
         return { ok: false, reason: "form_incomplete", errors: missing };
       }
     }

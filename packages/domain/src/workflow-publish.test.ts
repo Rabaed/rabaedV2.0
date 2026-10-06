@@ -81,9 +81,9 @@ describe("workflowKindProblems", () => {
   it("refuses a loop across Participants through Submit alone", () => {
     const problems = workflowKindProblems(steps, [...mar, t("submit_back", "consultant_review", "internal_review", "submit")]);
     expect(problems).toEqual([
-      { transition: "submit", code: "cycle_without_return" },
+      { transition: "submit", code: "cycle_without_way_back" },
       { transition: "submit", code: "loop_across_participants" },
-      { transition: "submit_back", code: "cycle_without_return" },
+      { transition: "submit_back", code: "cycle_without_way_back" },
       { transition: "submit_back", code: "loop_across_participants" },
     ]);
   });
@@ -104,8 +104,8 @@ describe("workflowKindProblems", () => {
 
   it("refuses a cycle inside one role without a Return", () => {
     expect(workflowKindProblems(steps, [...mar, t("back_to_draft", "internal_review", "draft", "send")])).toEqual([
-      { transition: "send_for_review", code: "cycle_without_return" },
-      { transition: "back_to_draft", code: "cycle_without_return" },
+      { transition: "send_for_review", code: "cycle_without_way_back" },
+      { transition: "back_to_draft", code: "cycle_without_way_back" },
     ]);
   });
 });
