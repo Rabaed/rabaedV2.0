@@ -109,6 +109,21 @@ for (const locale of locales) {
             violations.map((v) => `${v.id}: ${v.help} (${v.nodes.map((n) => n.target.join(" ")).join(", ")})`),
           ).toEqual([]);
 
+          // Before the screenshot: taking one resets the emulated touch screen on CI (Linux), after
+          // which `pointer: coarse` no longer matches and every coarse-pointer hit area falls away.
+          // Probing scrolls the page and the gutter changes the layout, so both are undone after.
+          if (Story.parameters.phone === true) {
+            const exempt = (Story.parameters.touchTargets?.exempt ?? []) as TouchTargetExemption[];
+            const { scrollX, scrollY } = window;
+            // The app lays pages out inside a 24px gutter (`main`'s px-6), so a story's content is measured
+            // inside it too; what sits on the real screen edge (fixed bars, sheets) is measured there.
+            canvasElement.style.paddingInline = "1.5rem";
+            const offenders = touchTargetOffenders(document.body, exempt);
+            canvasElement.style.paddingInline = "";
+            window.scrollTo(scrollX, scrollY);
+            expect(offenders).toEqual([]);
+          }
+
           if (inject("compareScreenshots")) {
             if (overlay) {
               // The whole viewport, overlays included: a transparent box over it to screenshot
@@ -126,18 +141,6 @@ for (const locale of locales) {
             } else {
               await expect.element(page.getByTestId("story")).toMatchScreenshot(`${Story.id}--${locale}`);
             }
-          }
-
-          // Last, because probing a hit area scrolls the page: restore the scroll afterwards.
-          if (Story.parameters.phone === true) {
-            const exempt = (Story.parameters.touchTargets?.exempt ?? []) as TouchTargetExemption[];
-            const { scrollX, scrollY } = window;
-            // The app lays pages out inside a 24px gutter (`main`'s px-6), so a story's content is measured
-            // inside it too; what sits on the real screen edge (fixed bars, sheets) is measured there.
-            canvasElement.style.paddingInline = "1.5rem";
-            const offenders = touchTargetOffenders(document.body, exempt);
-            window.scrollTo(scrollX, scrollY);
-            expect(offenders).toEqual([]);
           }
         });
       });
