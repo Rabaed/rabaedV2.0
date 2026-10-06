@@ -66,6 +66,8 @@ Use it when a spec's tickets form a chain that one lane would otherwise work thr
 
 `/mattpocock-skills:retro` looks back at the session and suggests changes to the agents' environment, not the code. A mistake that a rule could catch becomes a check (a lint rule, a pre-commit hook or a CI job). A judgement call becomes a line in `CODING_STANDARDS.md`. Each accepted suggestion becomes a `ready-for-agent` Task, as RP-287 did. A new required CI check also has to be added to the `main` ruleset.
 
+Only the planning session edits `CODING_STANDARDS.md` (rule 9 below). A Task that brings a standards line quotes the line; the lane builds only the check, and the planning session adds the line, with its "(checked: …)" mark, in a docs-only PR once the check is on `main`.
+
 ## Epic review when a spec is finished
 
 Every ticket already gets a `/code-review` inside `/implement`. When all of a spec's tickets are merged, one more review looks at the whole spec:
@@ -84,3 +86,8 @@ Every ticket already gets a `/code-review` inside `/implement`. When all of a sp
 6. Merge only through a PR with green CI (both visibility suites must pass). Merge `main` into your branch when it moves, and resolve any conflicts in that session.
 7. Parallel sessions multiply usage — close finished sessions.
 8. A ticket whose spec is being built by `/implement-spec` (its lane label is set and its spec has an open integration PR) stays under that spec. If it must move, the planning session comments on the integration PR.
+9. Docs have owners. Replaying the last 60 merges (2026-10-06), 9 of the 24 conflicted files were docs; the translation catalogues and the packages' `index.ts` files, though changed by nearly every PR, conflicted once or never.
+   1. `CODING_STANDARDS.md`: only the planning session edits it (see "Retro before archiving").
+   2. `docs/data-model.md`, `docs/workflow-engine.md`, `docs/form-engine.md`, `docs/visibility.md`: the lane writes them for what it builds, in the same PR. A grilling session records its decisions in a new ADR and in tickets, never in these files directly; a decision that builds nothing gets a small docs-only ticket.
+   3. A new scenario in the `docs/visibility.md` matrix takes its ID from the ticket key (`RP-412-1`), never the next number (RP-397). When two branches add rows at the end of the table, keep both.
+   4. Add a new rule at the end of a numbered list; never renumber, since tickets cite rules by number.

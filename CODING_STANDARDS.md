@@ -15,6 +15,7 @@ Visibility is the top requirement (`docs/visibility.md`). Check every read path 
 - **Side channels follow the same rule.** Check visibility before taking a lock, giving validation detail, or returning anything derived from hidden rows: a stored sequence number, a hash, a count, list membership, or a state that differs by whether a Company is on Rabaed. Number and count only what the viewer sees (RP-193, RP-239, RP-224, RP-275).
 - **A hidden value stays out of everything derived from it.** When a viewer may not see a value, it is also absent from the filters, sort keys and cursors that use it, and from its other reads (the item detail, the Kanban, exports). Hiding a List column is not enough: in RP-348 a Draft's start time still reached another Company through `stepEnteredAt`, the `stepAgeMin` filter, the Step Age cursor and the item detail.
 - **Every channel applies the same layers:** lists, counts, search, history, notifications, file links, logs, exports. A new channel adds a row to the leak-channel table and a scenario to the matrix.
+- **A new scenario's ID comes from its ticket key** (`RP-412-1`, `RP-412-2`), never "the next number": two branches both took 51, and 57/58, and `main` holds two rows 27–31 cited by different tests (RP-397).
 
 ## Database
 
@@ -57,3 +58,5 @@ Visibility is the top requirement (`docs/visibility.md`). Check every read path 
 ## Docs
 
 - **A change to a table, a database function or an error code updates its design doc in the same PR:** `docs/data-model.md`, `docs/workflow-engine.md` or `docs/form-engine.md`.
+- **A design decision reaches the design docs through the PR that builds it.** A grilling or planning session records the decision in a new ADR and in the tickets, and never edits `docs/data-model.md`, `docs/workflow-engine.md`, `docs/form-engine.md` or `docs/visibility.md` directly; a decision that builds nothing gets a small docs-only ticket. Direct edits collided with lanes changing the same rows, and inserted a second scenario 27–31.
+- **Only the planning session edits this file.** A lane's PR that changes `CODING_STANDARDS.md` is a finding: the ticket names the line, and the planning session adds it, and its "(checked: …)" mark once the check is on `main`. Four of the last 60 merges conflicted here, all retro work from parallel lanes.
