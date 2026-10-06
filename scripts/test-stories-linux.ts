@@ -21,7 +21,8 @@ import { parseDocument } from "yaml";
 // packages/ui/test/__screenshots__ on the host. Linux's node_modules live in
 // Docker volumes laid over the host's node_modules folders (one per workspace
 // package), so the Windows binaries are never touched. Volumes are per worktree
-// and stay between runs, so only the first run installs from the network;
+// and stay between runs, so only the first run downloads the packages (every run
+// still needs the network for the DejaVu font CI's runner has);
 // `docker volume rm $(docker volume ls -q -f name=rabaed-stories-)` clears them.
 //
 // Usage: pnpm test:stories:linux [vitest arguments]
