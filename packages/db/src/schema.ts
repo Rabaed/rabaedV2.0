@@ -448,6 +448,8 @@ export interface DocumentTable {
   taken_at: Timestamp | null;
   taken_latitude: number | null;
   taken_longitude: number | null;
+  /** The item's `arrivals` when it was added (a trigger sets it): until the item leaves, only its holder sees it (RP-309). */
+  arrival: Generated<number>;
 }
 
 export interface WorkItemTable {
@@ -466,6 +468,8 @@ export interface WorkItemTable {
   numbered_at: Timestamp | null;
   /** The Submission Date: the first Submit out of the raiser's Participant, never changed (ADR 0014). */
   submitted_at: Timestamp | null;
+  /** How many times it has arrived at a Participant or closed (RP-309); never granted to the app role. */
+  arrivals: Generated<number>;
   current_step_id: string;
   current_stage_key: string;
   /** When it entered its current Step: Step Age inside the holding Participant only; read it through app.step_as_seen. */
@@ -560,6 +564,10 @@ export interface WorkItemLinkTable {
   field_key: string | null;
   created_by_member_id: string;
   created_at: Generated<Timestamp>;
+  /** The from item's `arrivals` when it was added (a trigger sets it); never granted to the app role (RP-309). */
+  arrival: Generated<number>;
+  /** Removed by the item's holder, still seen by everyone else until the item leaves; never granted to the app role (RP-309). */
+  removed_at: Timestamp | null;
 }
 
 /** A Rabaed Default Position of one base role. */
