@@ -97,14 +97,14 @@ create or replace function app.take_step_age_report(p_outbox_id uuid)
 -- revision_created ---------------------------------------------------------------
 
 -- As in 20261211000000_notification_settings.sql, but a new Revision's `created`
--- event no longer goes out here: app.outbox_revision_numbered sends it.
+-- event no longer goes out here (its trigger no longer fires for `created`):
+-- app.outbox_revision_numbered sends it when the Revision is numbered.
 create or replace function app.outbox_watched_event() returns trigger
   language plpgsql security definer
   set search_path = pg_catalog, public
   as $$
     begin
-      if new.type <> 'created'
-        and exists (
+      if exists (
           select 1 from work_item_watch ww join work_item w on w.root_id = ww.root_id
           where w.id = new.work_item_id and ww.member_id is distinct from new.actor_member_id
         )
@@ -118,6 +118,10 @@ create or replace function app.outbox_watched_event() returns trigger
       return null;
     end
   $$;
+drop trigger work_item_event_outbox_watched on work_item_event;
+create trigger work_item_event_outbox_watched after insert on work_item_event
+  for each row when (new.type in ('transition', 'issue_code', 'cancelled'))
+  execute function app.outbox_watched_event();
 
 -- A Revision got its Document Number: its `created` event goes out to the
 -- chain's watchers other than its raiser (the event's actor, as before), dated
@@ -150,7 +154,7 @@ create trigger work_item_revision_numbered after update of numbered_at on work_i
 
 -- Every revision_created notification is dated its Revision's Creation Date, in
 -- the bell and the email digest alike, and none is written while it has none.
-create function app.date_revision_created() returns trigger
+create function app.revision_created_once_numbered() returns trigger
   language plpgsql security definer
   set search_path = pg_catalog, public
   as $$
@@ -167,9 +171,9 @@ create function app.date_revision_created() returns trigger
   $$;
 create trigger notification_revision_created before insert on notification
   for each row when (new.event_type = 'revision_created')
-  execute function app.date_revision_created();
+  execute function app.revision_created_once_numbered();
 
-revoke all on function app.outbox_revision_numbered(), app.date_revision_created() from public;
+revoke all on function app.outbox_revision_numbered(), app.revision_created_once_numbered() from public;
 
 -- Copied Documents ---------------------------------------------------------------
 
@@ -304,7 +308,10 @@ create or replace function app.create_revision(p_work_item_id uuid, p_idempotenc
 -- Rows written before this migration ----------------------------------------------
 
 -- Copies made so far: the times of the Document first uploaded, through any
--- copy of a copy.
+-- copy of a copy. A Submitted Revision's copies are frozen, and a frozen
+-- Document never changes: the trigger is off for this one correction, which
+-- touches only these two times of copies, never a file, name or owner.
+alter table document disable trigger document_frozen;
 with recursive origin as (
   select c.document_id, c.copied_from_id as source_id from document_copy c
   union all
@@ -315,6 +322,7 @@ from origin o
 join document s on s.id = o.source_id
 where d.id = o.document_id
   and not exists (select 1 from document_copy c where c.document_id = o.source_id);
+alter table document enable trigger document_frozen;
 
 -- revision_created sent so far: dated the Creation Date, or withdrawn while the
 -- Revision has none (it is sent again when it gets its number).

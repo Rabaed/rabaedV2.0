@@ -52,8 +52,9 @@ function itemLink(workItemId: string, language: Locale, webUrl: string): string 
 
 /**
  * A weekly Step Age report as the mailer sends it, in the recipient's language,
- * linking to the List of the Project's open items, and of those 4 weeks or more
- * at their Step (stepAgeReportQuery): the same items the report lists.
+ * linking to the List of the Project's open items with a Step Age (no un-numbered
+ * Draft), and of those 4 weeks or more at their Step (stepAgeReportQuery): the
+ * same items the report lists.
  */
 export function stepAgeReportMessage({ to, language, projectId, projectName, openStageKeys, items }: StepAgeReport, webUrl: string): MailMessage<"step-age-report"> {
   const list = (query: URLSearchParams) => {
