@@ -167,6 +167,11 @@ describe("the Submission Date range and sort (RP-348)", () => {
     expect(withoutFilters(rangeQuery)).toEqual({ ...defaults, sort: "submissionDate" });
   });
 
+  it("has a Step Age cursor with no time for an item with no Step Age (a Draft with no number)", () => {
+    const key = ["false", "", row];
+    expect(decodeWorkItemCursor(encodeWorkItemCursor("stepAge", key), "stepAge")).toEqual(key);
+  });
+
   it("has a cursor holding the last row's Submission Date, or that it has none", () => {
     const at = "2026-03-01T09:00:00.123456Z";
     for (const key of [["false", at, row], ["true", "", row]]) {

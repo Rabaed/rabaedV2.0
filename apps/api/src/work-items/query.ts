@@ -61,9 +61,10 @@ type Row = {
   location_id: string | null;
   location_code: string | null;
   location_name: BilingualText | null;
-  step_entered_at: Date;
-  /** step_entered_at to the microsecond, for the cursor. */
-  entered_key: string;
+  /** Null for a Draft with no number: its Step began when it was started, which nobody sees (scenario 61). */
+  step_entered_at: Date | null;
+  /** step_entered_at to the microsecond, for the cursor; null with it. */
+  entered_key: string | null;
   closed: boolean;
   /** The first Submit: for everyone who sees the item. */
   submitted_at: Date | null;
@@ -93,10 +94,13 @@ function visibleRows({ projectId, moduleKey }: QueryScope, allRevisions: boolean
       st.key as stage_key, st.name as stage_name, st.category as stage_category,
       tv.id as trade_id, tv.code as trade_code, tv.name as trade_name,
       lv.id as location_id, lv.code as location_code, lv.name as location_name,
-      seen.entered_at as step_entered_at,
+      -- A Draft with no number has never moved, so its Step began when it was started: nobody sees that (visibility.md
+      -- "Creation Date", scenario 61). It has no Step Age, matches no Step Age filter and sorts last, so no row,
+      -- count, cursor or card carries the time. numbered_at is set with the Document Number.
+      case when w.document_number is null then null else seen.entered_at end as step_entered_at,
       -- Closed (or cancelled): it no longer ages, nor is it with anyone. The SQL side of isOpenStageCategory.
       st.category not in ('draft', 'in_progress') as closed,
-      to_char(seen.entered_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as entered_key,
+      to_char(case when w.document_number is null then null else seen.entered_at end at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as entered_key,
       -- Never created_at (when the Draft was started: audit only, V-Creation Date). The Creation Date is
       -- numbered_at, which app.work_item_creation_date gives to the raiser's own Participant only.
       w.submitted_at, to_char(w.submitted_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as submitted_key,
@@ -185,10 +189,14 @@ function ordering(q: WorkItemQuery): { orderBy: RawBuilder<unknown>; after: RawB
         : noFilter,
     };
   }
-  // The oldest Step Age first; closed items, which don't age, last.
+  // The oldest Step Age first; closed items, which don't age, last, and within each the items with no Step Age (a Draft with no number) last, by id.
   return {
-    orderBy: sql`r.closed, r.step_entered_at, r.id`,
-    after: key ? sql`(r.closed, r.step_entered_at, r.id) > (${key[0]}::boolean, ${key[1]}::timestamptz, ${key[2]}::uuid)` : noFilter,
+    orderBy: sql`r.closed, r.step_entered_at nulls last, r.id`,
+    after: key
+      ? key[1] === ""
+        ? sql`(r.closed > ${key[0]}::boolean or (r.closed = ${key[0]}::boolean and r.step_entered_at is null and r.id > ${key[2]}::uuid))`
+        : sql`(r.closed > ${key[0]}::boolean or (r.closed = ${key[0]}::boolean and (r.step_entered_at is null or r.step_entered_at > ${key[1]}::timestamptz or (r.step_entered_at = ${key[1]}::timestamptz and r.id > ${key[2]}::uuid))))`
+      : noFilter,
   };
 }
 
@@ -196,13 +204,11 @@ function cursorAfter(q: WorkItemQuery, last: Row): string {
   if (q.sort === "submissionDate") return encodeWorkItemCursor(q.sort, [String(last.submitted_key === null), last.submitted_key ?? "", last.id]);
   return q.sort === "documentNumber"
     ? encodeWorkItemCursor(q.sort, [String(last.document_number === null), last.document_number ?? "", last.id])
-    : encodeWorkItemCursor(q.sort, [String(last.closed), last.entered_key, last.id]);
+    : encodeWorkItemCursor(q.sort, [String(last.closed), last.entered_key ?? "", last.id]);
 }
 
 function toRow(r: Row, now: Date): WorkItemRow {
   const open = isOpenStageCategory(r.stage_category);
-  // numbered_at is set with the Document Number.
-  const neverNumbered = r.document_number === null;
   return {
     id: r.id,
     projectId: r.project_id,
@@ -213,9 +219,8 @@ function toRow(r: Row, now: Date): WorkItemRow {
     stage: { key: r.stage_key, name: r.stage_name, category: r.stage_category },
     trade: { id: r.trade_id, code: r.trade_code, name: r.trade_name },
     location: r.location_id ? { id: r.location_id, code: r.location_code!, name: r.location_name! } : null,
-    // A Draft with no number has never moved: its Step began when it was started, which nobody sees.
-    stepEnteredAt: neverNumbered ? null : r.step_entered_at.toISOString(),
-    stepAgeWeeks: neverNumbered ? null : stepAgeWeeks(r.step_entered_at, now),
+    stepEnteredAt: r.step_entered_at?.toISOString() ?? null,
+    stepAgeWeeks: r.step_entered_at ? stepAgeWeeks(r.step_entered_at, now) : null,
     outcome: r.outcome,
     submissionDate: r.submitted_at?.toISOString() ?? null,
     creationDate: r.creation_date?.toISOString() ?? null,

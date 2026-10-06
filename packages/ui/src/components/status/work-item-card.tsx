@@ -21,8 +21,8 @@ export type WorkItemState =
       open: true;
       /** Who holds the current Step. Another Company's holder shows as its name only (visibility V14). */
       holder?: WithChipHolder;
-      /** Step Age: the week at the current Step, from 1. */
-      stepAgeWeeks: number;
+      /** Step Age: the week at the current Step, from 1. Null for a Draft with no number: nobody sees when it was started. */
+      stepAgeWeeks: number | null;
     }
   | {
       open: false;
@@ -121,7 +121,7 @@ export function WorkItemCard({
         {state?.open === true && (
           <span className="flex min-w-0 items-center justify-between gap-2">
             {state.holder !== undefined && <WithChip {...state.holder} className="min-w-0" />}
-            <AgeDots weeks={state.stepAgeWeeks} locale={locale} className="ms-auto shrink-0" />
+            {state.stepAgeWeeks !== null && <AgeDots weeks={state.stepAgeWeeks} locale={locale} className="ms-auto shrink-0" />}
           </span>
         )}
         {state?.open === false &&

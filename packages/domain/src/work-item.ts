@@ -72,9 +72,10 @@ export const workItemSummary = z.object({
   stage,
   trade: dimensionValueRef,
   location: dimensionValueRef.nullable(),
-  stepEnteredAt: z.iso.datetime(),
-  /** Step Age: the week it is in at its current Step, 1, 2, 3… (never a due date). */
-  stepAgeWeeks: z.number().int().positive(),
+  /** Null for a Draft with no number yet: its Step began when it was started, which nobody sees (visibility.md "Creation Date", scenario 61). */
+  stepEnteredAt: z.iso.datetime().nullable(),
+  /** Step Age: the week it is in at its current Step, 1, 2, 3… (never a due date). Null with `stepEnteredAt`: none until the item has a number. */
+  stepAgeWeeks: z.number().int().positive().nullable(),
 });
 export type WorkItemSummary = z.infer<typeof workItemSummary>;
 
@@ -107,10 +108,6 @@ export const workItemRow = workItemSummary.extend({
   outcome: workItemOutcome.nullable(),
   /** Null once closed: nobody holds it. */
   with: workItemWith.nullable(),
-  /** Null for a Draft with no number yet: its Step began when it was started, which nobody sees (visibility.md "Creation Date", scenario 61). */
-  stepEnteredAt: z.iso.datetime().nullable(),
-  /** Null with `stepEnteredAt`: no Step Age is shown until the item has a number. */
-  stepAgeWeeks: z.number().int().positive().nullable(),
   /** When it was first Submitted: for everyone who sees it. Null while it has not been. */
   submissionDate: z.iso.datetime().nullable(),
   /** Only for a Member of the raiser's Participant (visibility.md "Creation Date"); null for everyone else. Never the time the Draft was started. */

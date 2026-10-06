@@ -314,7 +314,10 @@ describe("filters and sorts, combined", () => {
 
   it("filters by Step Age: open items only, at least that many weeks at their Step", async () => {
     const aged = await list(c1Engineer, { stepAgeMin: 3 });
-    expect(ids(aged)).toEqual(expect.arrayContaining([mechanicalInB, electricalInA, submittedOld]));
+    // A Draft with no number has no Step Age, so no Step Age filter matches it (nobody sees when it was started).
+    expect(ids(aged)).toContain(submittedOld);
+    expect(ids(aged)).not.toContain(mechanicalInB);
+    expect(ids(aged)).not.toContain(electricalInA);
     expect(aged.items.every((i) => (i.stepAgeWeeks === null || i.stepAgeWeeks >= 3) && ["draft", "in_progress"].includes(i.stage.category))).toBe(true);
     // A new Draft, without its datasheet: the moved clock spoils an upload's signature.
     const fresh = (
@@ -324,7 +327,7 @@ describe("filters and sorts, combined", () => {
       )
     ).json().id;
     expect(ids(await list(c1Engineer, { stepAgeMin: 2 }))).not.toContain(fresh);
-    expect(ids(await list(c1Engineer, { stepAgeMin: 2, trade: [trade.mechanical] }))).toEqual([mechanicalInB]);
+    expect(ids(await list(c1Engineer, { stepAgeMin: 2, trade: [trade.mechanical] }))).toEqual([]);
   });
 
   it("sorts by Step Age, the oldest first, closed items (which don't age) last", async () => {
@@ -336,6 +339,10 @@ describe("filters and sorts, combined", () => {
     // A Draft with no number shows no Step Age (nor when it was started), so it has none to compare.
     const ages = open.flatMap((i) => (i.stepEnteredAt === null ? [] : [i.stepEnteredAt]));
     expect(ages).toEqual([...ages].sort());
+    // Those with no Step Age come last of the open ones.
+    const firstWithout = open.findIndex((i) => i.stepEnteredAt === null);
+    expect(firstWithout).toBeGreaterThanOrEqual(0);
+    expect(open.slice(firstWithout).every((i) => i.stepEnteredAt === null)).toBe(true);
   });
 
   it("sorts by Document Number, items with no number yet last", async () => {

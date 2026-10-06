@@ -25,6 +25,8 @@ function card(w: WorkItemRow["with"], holderParticipantId: string | null = null)
       stepEnteredAt: "2026-09-01T00:00:00.000Z",
       stepAgeWeeks: 1,
       outcome: null,
+      submissionDate: null,
+      creationDate: null,
       with: w,
     },
   };

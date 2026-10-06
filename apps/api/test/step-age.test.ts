@@ -214,7 +214,7 @@ describe("K1 moves the Submitted item internally (scenario 35)", () => {
     await ok(pm.post(`/v1/work-items/${id}/claim`));
     await ok(take(pm, id, "submit"));
     atSubmit = { pm: await seenBy(pm, id), owner: await seenBy(owner, id) };
-    submittedAt = atSubmit.pm.detail.stepEnteredAt;
+    submittedAt = atSubmit.pm.detail.stepEnteredAt!;
 
     // Two weeks later the K1 Engineer sends it to the K1 Manager…
     await later(15 * DAY);
@@ -254,7 +254,7 @@ describe("K1 moves the Submitted item internally (scenario 35)", () => {
       const { row, detail } = await seenBy(caller, id);
       expect(row.stepAgeWeeks).toBe(1);
       expect(detail).toMatchObject({ step: { key: "consultant_engineer" }, stage: { key: "pending_approval" }, stepAgeWeeks: 1 });
-      expect(Date.parse(detail.stepEnteredAt)).toBeGreaterThan(Date.parse(submittedAt) + 22 * DAY);
+      expect(Date.parse(detail.stepEnteredAt!)).toBeGreaterThan(Date.parse(submittedAt) + 22 * DAY);
     }
   });
 
@@ -270,7 +270,7 @@ describe("K1 moves the Submitted item internally (scenario 35)", () => {
     for (const caller of [pm, owner, k1Engineer, k1Manager]) {
       const { detail } = await seenBy(caller, id);
       expect(detail).toMatchObject({ outcome: "A", stepAgeWeeks: 1 });
-      expect(Date.parse(detail.stepEnteredAt)).toBeGreaterThan(Date.parse(submittedAt) + 22 * DAY);
+      expect(Date.parse(detail.stepEnteredAt!)).toBeGreaterThan(Date.parse(submittedAt) + 22 * DAY);
     }
   });
 });

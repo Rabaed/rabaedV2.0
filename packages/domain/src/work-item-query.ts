@@ -181,7 +181,8 @@ export function encodeWorkItemCursor(sort: WorkItemSort, key: readonly string[])
 const enteredAt = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/;
 const isFlag = (v: string | undefined) => v === "true" || v === "false";
 const cursorKeyValid: Record<WorkItemSort, (key: string[]) => boolean> = {
-  stepAge: ([last, at, id]) => isFlag(last) && enteredAt.test(at ?? "") && uuid.safeParse(id).success,
+  // An empty time: the item has no Step Age (a Draft with no number) and sorts last.
+  stepAge: ([last, at, id]) => isFlag(last) && (at === "" || enteredAt.test(at ?? "")) && uuid.safeParse(id).success,
   documentNumber: ([last, , id]) => isFlag(last) && uuid.safeParse(id).success,
   // Not yet Submitted sorts last: its flag is "true" and its time is empty.
   submissionDate: ([last, at, id]) => isFlag(last) && (last === "true" ? at === "" : enteredAt.test(at ?? "")) && uuid.safeParse(id).success,

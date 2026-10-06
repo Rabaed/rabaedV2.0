@@ -7,7 +7,7 @@
 import { randomUUID } from "node:crypto";
 import { createDb } from "@rabaed/db";
 import { testDatabaseUrls } from "@rabaed/db/test-support";
-import { workItemSearchParams, type WorkItemList, type WorkItemQueryInput, type WorkItemRow } from "@rabaed/domain";
+import { decodeWorkItemCursor, workItemSearchParams, type WorkItemBoard, type WorkItemList, type WorkItemQueryInput, type WorkItemRow } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { attachDatasheet, createTestApi, DEFAULT_PASSWORD, type Caller } from "./support/harness.ts";
@@ -155,6 +155,29 @@ describe("Submission Date and Creation Date in the List (scenario 61)", () => {
     }
   });
 
+  it("shows no Step or Step Age for a Draft with no number, in the List, the Kanban or the item's page", async () => {
+    const detailOf = async (by: Caller, id: string) => (await ok(by.get(`/v1/work-items/${id}`), 200)).json();
+    expect(row(await list(c1Engineer), started)).toMatchObject({ stepEnteredAt: null, stepAgeWeeks: null });
+    expect(await detailOf(c1Engineer, started)).toMatchObject({ stepEnteredAt: null, stepAgeWeeks: null });
+    const cards = ((await ok(c1Engineer.get(`/v1/projects/${projectId}/work-items/kanban`), 200)).json() as WorkItemBoard).columns.flatMap((c) =>
+      c.lanes.flatMap((l) => l.cards),
+    );
+    expect(cards.find((c) => c.id === started)).toMatchObject({ stepEnteredAt: null, stepAgeWeeks: null });
+    // Once numbered, it has its Step Age as before.
+    expect(row(await list(c1Engineer), numbered).stepAgeWeeks).toBeGreaterThan(0);
+    expect(cards.find((c) => c.id === numbered)!.stepEnteredAt).not.toBeNull();
+    expect((await detailOf(c1Engineer, numbered)).stepAgeWeeks).toBeGreaterThan(0);
+    // Nowhere on the board is the time it was started. (The item's page lists when its own answers were saved, the Member's
+    // per-field times, which is a separate feature, so only its Step fields are checked there.)
+    expect(JSON.stringify(cards)).not.toContain((await recorded(started)).createdAt);
+  });
+
+  it("never matches a Step Age filter for a Draft with no number", async () => {
+    // Three weeks on, the numbered item is in its 3rd week at its Step; the Draft has no Step Age to match.
+    expect(ids(await list(c1Engineer, { stepAgeMin: 2 }))).toContain(numbered);
+    for (const stepAgeMin of [2, 3, 4] as const) expect(ids(await list(c1Engineer, { stepAgeMin }))).not.toContain(started);
+  });
+
   it("filters by Submission Date, both days included, and leaves out an item not yet Submitted", async () => {
     const [from, to] = [saudiDay(firstSubmitted), saudiDay(secondSubmitted)];
     expect(from).not.toBe(to);
@@ -226,6 +249,17 @@ describe("cursor paging by Submission Date", () => {
     const times = seen.slice(0, 49).map((id) => created.indexOf(id)).map((n) => Math.floor(n / 7));
     expect(times).toEqual([...times].sort((a, b) => b - a));
     expect(seen.slice(49).sort()).toEqual(created.slice(49).sort());
+    // Under the Step Age sort, a Draft with no number sorts last, by id, and its cursor holds no time (scenario 61).
+    const stepAgeSeen: string[] = [];
+    let stepAgeCursor: string | undefined;
+    do {
+      const page = await list(engineer, { ...(stepAgeCursor ? { cursor: stepAgeCursor } : {}) }, project);
+      stepAgeSeen.push(...ids(page));
+      stepAgeCursor = page.nextCursor ?? undefined;
+      if (stepAgeCursor) expect(decodeWorkItemCursor(stepAgeCursor, "stepAge")![1]).toBe("");
+    } while (stepAgeCursor);
+    expect(new Set(stepAgeSeen).size).toBe(53);
+    expect(stepAgeSeen).toEqual([...created].sort());
     // A date range pages the same way.
     const ranged = await list(engineer, { sort: "submissionDate", submittedFrom: "2026-06-01" }, project);
     expect(ranged.items.length).toBe(49);
