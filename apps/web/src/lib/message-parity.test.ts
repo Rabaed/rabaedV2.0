@@ -1,12 +1,13 @@
 import { readFileSync } from "node:fs";
+import { locales } from "@rabaed/domain";
 import { describe, expect, it } from "vitest";
 import { messageArguments, messageParityProblems } from "./message-parity.ts";
 
 const messages = (locale: string) => JSON.parse(readFileSync(new URL(`../../messages/${locale}.json`, import.meta.url), "utf8"));
 
-describe("the English and Arabic message files", () => {
-  it("hold the same keys, each a non-empty string with the same arguments", () => {
-    expect(messageParityProblems({ en: messages("en"), ar: messages("ar") })).toEqual([]);
+describe("each locale's message file", () => {
+  it("holds the same keys, each a non-empty string with the same arguments", () => {
+    expect(messageParityProblems(Object.fromEntries(locales.map((locale) => [locale, messages(locale)])))).toEqual([]);
   });
 });
 
@@ -26,6 +27,7 @@ describe("a gap between two message files", () => {
   });
 
   it("is an empty value", () => {
+    expect(messageParityProblems({ en: { title: "" }, ar: { title: "رباعد" } })).toEqual(["title: empty in en"]);
     expect(messageParityProblems({ en: { title: "Rabaed" }, ar: { title: " " } })).toEqual(["title: empty in ar"]);
   });
 
@@ -55,7 +57,7 @@ describe("the arguments in an ICU message", () => {
   it("include a formatted argument and those inside plural or select options", () => {
     expect(args("{size, number} MB")).toEqual(["size"]);
     expect(args("{count, plural, =0 {none} one {# Step by {name}} other {# Steps}}")).toEqual(["count", "name"]);
-    expect(args("{role, select, admin {Admin of {company}} other {Member}}")).toEqual(["company", "role"]);
+    expect(args("{role, select, owner {Owner at {company}} other {Member}}")).toEqual(["company", "role"]);
   });
 
   it("skip quoted braces", () => {
