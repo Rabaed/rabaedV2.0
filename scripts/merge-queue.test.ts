@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { parse } from "yaml";
@@ -9,10 +9,10 @@ import { parse } from "yaml";
 // baselines on a queue run, and update-screenshots.yml never pushes to a queue
 // branch. These tests fail if either guard is removed.
 //
-// One CI run per push to a PR branch (RP-395): ci.yml and secret-scan.yml run
-// push only on main, so a PR branch gets its pull_request run alone. New story
-// baselines therefore come from that run, and only for a PR from a branch of
-// this repository: a fork's run never uploads them and never reaches the commit job.
+// One CI run per push to a PR branch (RP-395): a workflow on both push and
+// pull_request runs push only on main, so a PR branch gets its pull_request run
+// alone. New story baselines therefore come from that run, and only for a PR
+// from a branch of this repository: find-new keeps a fork's run off the commit job.
 
 interface Step {
   name?: string;
@@ -26,7 +26,7 @@ interface Job {
   steps: Step[];
 }
 interface Workflow {
-  on: Record<string, { branches?: string[]; "branches-ignore"?: string[] } | null>;
+  on: Record<string, { branches?: string[] } | null>;
   concurrency: { group: string };
   jobs: Record<string, Job>;
 }
@@ -47,18 +47,28 @@ const notQueueBranch = /!\s*startsWith\([^)]*,\s*'gh-readonly-queue\/'\)/;
 const sameRepoRun = /github\.event\.workflow_run\.head_repository\.full_name\s*==\s*github\.repository/;
 const sameRepoPullRequest = /github\.event\.pull_request\.head\.repo\.full_name\s*==\s*github\.repository/;
 
-describe.each(["ci.yml", "secret-scan.yml"])("%s", (name) => {
-  const { on } = workflow(name);
-
+describe.each(["ci.yml", "secret-scan.yml"])("%s in the merge queue", (name) => {
   it("runs on merge_group, so the queue gets its required checks", () => {
-    expect(on).toHaveProperty("merge_group");
+    expect(workflow(name).on).toHaveProperty("merge_group");
+  });
+});
+
+describe("a workflow that runs on both push and pull_request", () => {
+  const both = readdirSync(join(repo, ".github", "workflows"))
+    .filter((file) => /\.ya?ml$/.test(file))
+    .filter((file) => {
+      const { on } = workflow(file);
+      return typeof on === "object" && "push" in on && "pull_request" in on;
+    });
+
+  it("includes CI and the secret scan", () => {
+    expect(both).toEqual(expect.arrayContaining(["ci.yml", "secret-scan.yml"]));
   });
 
-  it("runs on push only for main: a PR branch gets one run, its pull_request run", () => {
+  it.each(both)("%s runs on push only for main: a PR branch gets one run per push, its pull_request run", (file) => {
     // main keeps its push run, which deploy-dev.yml follows. A push run on a
     // queue branch would also share ci.yml's concurrency group and cancel the queue's run.
-    expect(on.push).toEqual({ branches: ["main"] });
-    expect(on).toHaveProperty("pull_request");
+    expect(workflow(file).on.push).toEqual({ branches: ["main"] });
   });
 });
 
@@ -87,14 +97,13 @@ describe("update-screenshots.yml", () => {
 
   it("takes new baselines only from a CI run started by a pull request, never a queue run", () => {
     expect(job(wf, "find-new").if).toMatch(/github\.event\.workflow_run\.event\s*==\s*'pull_request'/);
-    expect(job(wf, "find-new").if).not.toMatch(/'push'/);
     expect(job(wf, "find-new").if).toMatch(notQueueBranch);
   });
 
   it("never reaches the commit job from a fork's CI run", () => {
     // A fork's pull_request run has the fork as its head repository.
     expect(job(wf, "find-new").if).toMatch(sameRepoRun);
-    expect(job(wf, "commit").needs).toEqual(["render", "find-new"]);
+    expect(job(wf, "commit").needs).toEqual(expect.arrayContaining(["render", "find-new"]));
     expect(job(wf, "render").if).toMatch(sameRepoPullRequest);
   });
 

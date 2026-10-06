@@ -18,9 +18,13 @@
 # changed look still fails CI until the label is added, and any other failure
 # uploads nothing. (CI runs on push only for main, so a PR branch's one CI run
 # per push is its pull_request run; RP-395.)
-# A fork PR's run never reaches this path: its stories job uploads nothing, and
-# find-new requires the run's head repository to be this repository (a fork's
-# pull_request run has the fork as its head repository). Nor does the merge
+# A fork PR's run never reaches this path: find-new, which runs from main's
+# copy of this file, requires the run's head repository to be this repository
+# (a fork's pull_request run has the fork as its head repository). That is the
+# guard; the stories job's own condition is not, since a fork's run uses the
+# fork's ci.yml. The pull_request run renders the PR merged with its base, and
+# the PNGs are committed onto the PR's head; if those differ in look, the CI
+# run started after the commit fails and the label re-renders. Nor does the merge
 # queue: its CI runs are merge_group, and nothing here ever pushes to a
 # gh-readonly-queue/* branch (RP-394).
 #
