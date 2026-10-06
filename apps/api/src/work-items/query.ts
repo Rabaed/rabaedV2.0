@@ -61,10 +61,17 @@ type Row = {
   location_id: string | null;
   location_code: string | null;
   location_name: BilingualText | null;
-  step_entered_at: Date;
-  /** step_entered_at to the microsecond, for the cursor. */
-  entered_key: string;
+  /** Null for a Draft with no number: its Step began when it was started, which nobody sees (scenario 61). */
+  step_entered_at: Date | null;
+  /** step_entered_at to the microsecond, for the cursor; null with it. */
+  entered_key: string | null;
   closed: boolean;
+  /** The first Submit: for everyone who sees the item. */
+  submitted_at: Date | null;
+  /** submitted_at to the microsecond, for the cursor. */
+  submitted_key: string | null;
+  /** Null unless the viewer is a Member of the raiser's Participant. */
+  creation_date: Date | null;
   holder_participant_id: string | null;
   assignee_member_id: string | null;
   held_by_own: boolean;
@@ -87,10 +94,17 @@ function visibleRows({ projectId, moduleKey }: QueryScope, allRevisions: boolean
       st.key as stage_key, st.name as stage_name, st.category as stage_category,
       tv.id as trade_id, tv.code as trade_code, tv.name as trade_name,
       lv.id as location_id, lv.code as location_code, lv.name as location_name,
-      seen.entered_at as step_entered_at,
+      -- A Draft with no number has never moved, so its Step began when it was started: nobody sees that (visibility.md
+      -- "Creation Date", scenario 61). It has no Step Age, matches no Step Age filter and sorts last, so no row,
+      -- count, cursor or card carries the time. numbered_at is set with the Document Number.
+      case when w.document_number is null then null else seen.entered_at end as step_entered_at,
       -- Closed (or cancelled): it no longer ages, nor is it with anyone. The SQL side of isOpenStageCategory.
       st.category not in ('draft', 'in_progress') as closed,
-      to_char(seen.entered_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as entered_key,
+      to_char(case when w.document_number is null then null else seen.entered_at end at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as entered_key,
+      -- Never created_at (when the Draft was started: audit only, V-Creation Date). The Creation Date is
+      -- numbered_at, which app.work_item_creation_date gives to the raiser's own Participant only.
+      w.submitted_at, to_char(w.submitted_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as submitted_key,
+      app.work_item_creation_date(w.id) as creation_date,
       h.participant_id as holder_participant_id, h.assignee_member_id,
       coalesce(h.participant_id in (select app.current_participant_ids()), false) as held_by_own,
       s.key as step_key, s.name as step_name
@@ -140,6 +154,9 @@ function matching(q: WorkItemQuery, now: Date, scope: QueryScope): RawBuilder<bo
     // A closed item doesn't age.
     conditions.push(sql`not r.closed and r.step_entered_at <= ${enteredStepBy(q.stepAgeMin, now)}::timestamptz`);
   }
+  // The Submission Date range, in Saudi days, both days included; an item not yet Submitted has none and is left out.
+  if (q.submittedFrom !== undefined) conditions.push(sql`(r.submitted_at at time zone 'Asia/Riyadh')::date >= ${q.submittedFrom}::date`);
+  if (q.submittedTo !== undefined) conditions.push(sql`(r.submitted_at at time zone 'Asia/Riyadh')::date <= ${q.submittedTo}::date`);
   // Steps I hold, unclaimed Steps of my pool, and my own Drafts (app.need_my_action).
   if (q.needMyAction) conditions.push(sql`app.need_my_action(r.id) is not null`);
   if (q.with.length > 0) {
@@ -167,17 +184,33 @@ function ordering(q: WorkItemQuery): { orderBy: RawBuilder<unknown>; after: RawB
         : noFilter,
     };
   }
-  // The oldest Step Age first; closed items, which don't age, last.
+  if (q.sort === "submissionDate") {
+    // The latest Submission Date first; items not yet Submitted last, by id.
+    return {
+      orderBy: sql`r.submitted_at is null, r.submitted_at desc, r.id`,
+      after: key
+        ? key[0] === "true"
+          ? sql`(r.submitted_at is null and r.id > ${key[2]}::uuid)`
+          : sql`(r.submitted_at is null or r.submitted_at < ${key[1]}::timestamptz or (r.submitted_at = ${key[1]}::timestamptz and r.id > ${key[2]}::uuid))`
+        : noFilter,
+    };
+  }
+  // The oldest Step Age first; closed items, which don't age, last, and within each the items with no Step Age (a Draft with no number) last, by id.
   return {
-    orderBy: sql`r.closed, r.step_entered_at, r.id`,
-    after: key ? sql`(r.closed, r.step_entered_at, r.id) > (${key[0]}::boolean, ${key[1]}::timestamptz, ${key[2]}::uuid)` : noFilter,
+    orderBy: sql`r.closed, r.step_entered_at nulls last, r.id`,
+    after: key
+      ? key[1] === ""
+        ? sql`(r.closed > ${key[0]}::boolean or (r.closed = ${key[0]}::boolean and r.step_entered_at is null and r.id > ${key[2]}::uuid))`
+        : sql`(r.closed > ${key[0]}::boolean or (r.closed = ${key[0]}::boolean and (r.step_entered_at is null or r.step_entered_at > ${key[1]}::timestamptz or (r.step_entered_at = ${key[1]}::timestamptz and r.id > ${key[2]}::uuid))))`
+      : noFilter,
   };
 }
 
 function cursorAfter(q: WorkItemQuery, last: Row): string {
+  if (q.sort === "submissionDate") return encodeWorkItemCursor(q.sort, [String(last.submitted_key === null), last.submitted_key ?? "", last.id]);
   return q.sort === "documentNumber"
     ? encodeWorkItemCursor(q.sort, [String(last.document_number === null), last.document_number ?? "", last.id])
-    : encodeWorkItemCursor(q.sort, [String(last.closed), last.entered_key, last.id]);
+    : encodeWorkItemCursor(q.sort, [String(last.closed), last.entered_key ?? "", last.id]);
 }
 
 function toRow(r: Row, now: Date): WorkItemRow {
@@ -192,9 +225,11 @@ function toRow(r: Row, now: Date): WorkItemRow {
     stage: { key: r.stage_key, name: r.stage_name, category: r.stage_category },
     trade: { id: r.trade_id, code: r.trade_code, name: r.trade_name },
     location: r.location_id ? { id: r.location_id, code: r.location_code!, name: r.location_name! } : null,
-    stepEnteredAt: r.step_entered_at.toISOString(),
-    stepAgeWeeks: stepAgeWeeks(r.step_entered_at, now),
+    stepEnteredAt: r.step_entered_at?.toISOString() ?? null,
+    stepAgeWeeks: r.step_entered_at ? stepAgeWeeks(r.step_entered_at, now) : null,
     outcome: r.outcome,
+    submissionDate: r.submitted_at?.toISOString() ?? null,
+    creationDate: r.creation_date?.toISOString() ?? null,
     with:
       !open || r.holder_name === null
         ? null
