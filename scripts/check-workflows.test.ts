@@ -33,8 +33,15 @@ describe("lintWorkflow", () => {
     });
 
     it("accepts a comment above the step that gives the reason", () => {
-      const source = "on: push\njobs:\n  a:\n    steps:\n      - run: echo\n      # Credentials stay: the push below needs them.\n      - uses: actions/checkout@v7\n";
+      const source = "on: push\njobs:\n  a:\n    steps:\n      - run: echo\n      # keeps credentials: the push below needs them.\n      - uses: actions/checkout@v7\n";
       expect(messages(source)).toEqual([]);
+    });
+
+    it("rejects a vague comment, or a marker with no reason", () => {
+      for (const comment of ["# TODO credentials", "# keeps credentials:", "# keeps credentials:   "]) {
+        const source = `on: push\njobs:\n  a:\n    steps:\n      ${comment}\n      - uses: actions/checkout@v7\n`;
+        expect(messages(source)).toHaveLength(1);
+      }
     });
 
     it("does not take another step's comment as the reason", () => {
@@ -116,6 +123,28 @@ describe("lintWorkflow", () => {
     it("flags untrusted text written into a run script", () => {
       expect(messages(safe("      - run: echo ${{ github.head_ref }}\n"))).toHaveLength(1);
       expect(messages(safe("      - run: echo '${{ github.event.workflow_run.head_branch }}'\n"))).toHaveLength(1);
+    });
+
+    it("flags inputs, commit author and message, and head repository fields", () => {
+      const exprs = [
+        "inputs.name",
+        "github.event.inputs.name",
+        "github.event.head_commit.author.name",
+        "github.event.head_commit.author.email",
+        "github.event.head_commit.message",
+        "github.event.pull_request.head.repo.full_name",
+        "github.event.pull_request.head.repo.name",
+        "github.event.workflow_run.head_commit.author.email",
+        "github.event.workflow_run.head_repository.full_name",
+        "github.event.workflow_run.pull_requests[0].head.ref",
+      ];
+      for (const expr of exprs) {
+        expect(messages(safe("      - run: echo ${{ " + expr + " }}\n")), expr).toHaveLength(1);
+      }
+    });
+
+    it("accepts inputs passed through env", () => {
+      expect(messages(safe('      - run: echo "$NAME"\n        env: { NAME: "${{ inputs.name }}" }\n'))).toEqual([]);
     });
 
     it("accepts it passed through env", () => {

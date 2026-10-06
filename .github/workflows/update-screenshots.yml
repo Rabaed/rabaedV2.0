@@ -112,8 +112,7 @@ jobs:
     steps:
       # The commit the PNGs were rendered from: if the branch has moved since,
       # the push below is rejected rather than overwriting the newer commit.
-      # persist-credentials stays on (the default): the credentials are needed
-      # for that push; nothing here runs PR code.
+      # keeps credentials: the push below needs them, and nothing here runs PR code.
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.workflow_run.head_sha || needs.render.outputs.sha }}

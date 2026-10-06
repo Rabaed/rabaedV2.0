@@ -6,17 +6,24 @@ import { parseDocument } from "yaml";
 // (RP-248, fork pull requests, workflow_run), and the repository is public:
 //
 //  1. Every actions/checkout sets persist-credentials: false, unless a comment
-//     above or inside the step says why credentials stay (it names "credentials").
+//     above or inside the step reads "# keeps credentials: <reason>" (the
+//     reason is required).
 //  2. No pull_request_target: it hands a write token to a fork's pull request.
 //  3. A job with a write token (or an OIDC token) that checks out code, in a
 //     workflow started by a pull request or by workflow_run, runs only for this
 //     repository's own branches: its `if`, or the `if` of a job it needs,
 //     compares the head repository with github.repository. Fork code never
-//     meets a write token.
+//     meets a write token. workflow_run is the preferred home for such jobs.
+//     A pull_request job with the same guard is also accepted (infra-diff.yml
+//     needs an OIDC token and pull-requests: write): GitHub gives a fork's
+//     pull_request run a read-only token and no OIDC token anyway, and the
+//     guard stops the job running for forks at all, so fork code never meets
+//     a write token there either. Only pull_request_target is banned.
 //  4. Actions outside actions/ and github/ are pinned to a full commit SHA
 //     (a tag can be moved); docker:// images to a digest. Keep the tag in a
 //     trailing comment.
-//  5. Untrusted text (branch names, titles, commit messages) is never written
+//  5. Untrusted text (branch names, titles, commit messages and authors,
+//     workflow inputs, fork repository names) is never written
 //     into a run: script, only passed through env.
 //
 // Usage: node scripts/check-workflows.ts   (from the repository root)
@@ -31,8 +38,23 @@ type Obj = Record<string, unknown>;
 const isObj = (value: unknown): value is Obj => typeof value === "object" && value !== null && !Array.isArray(value);
 
 const sameRepoGuard = /head[._]repo[a-z_.]*\.full_name\s*==\s*github\.repository/;
-const untrustedInScript =
-  /\$\{\{\s*(github\.head_ref|github\.event\.pull_request\.(title|body|head\.ref|head\.label)|github\.event\.workflow_run\.(head_branch|display_title|head_commit\.message)|github\.event\.head_commit\.message|github\.event\.(issue|comment)\.(title|body)|github\.event\.review\.body)\s*\}\}/;
+const untrustedInScript = new RegExp(
+  String.raw`\$\{\{\s*(` +
+    [
+      String.raw`github\.head_ref`,
+      String.raw`inputs\.[\w-]+`,
+      String.raw`github\.event\.inputs\.[\w-]+`,
+      String.raw`github\.event\.pull_request\.(title|body|head\.(ref|label|repo\.[\w.]+))`,
+      String.raw`github\.event\.workflow_run\.(head_branch|display_title|head_repository\.[\w.]+|pull_requests\[\d+\]\.head\.ref|head_commit\.(message|author\.[\w.]+))`,
+      String.raw`github\.event\.head_commit\.(message|author\.[\w.]+)`,
+      String.raw`github\.event\.(issue|comment)\.(title|body)`,
+      String.raw`github\.event\.review\.body`,
+    ].join("|") +
+    String.raw`)\s*\}\}`,
+);
+// The only accepted reason to leave credentials persisted: a comment such as
+// "# keeps credentials: the push below needs them".
+const keepsCredentials = /#\s*keeps credentials:[ \t]*\S/i;
 
 function triggers(on: unknown): string[] {
   if (typeof on === "string") return [on];
@@ -102,8 +124,8 @@ export function lintWorkflow(file: string, source: string): Finding[] {
       if (action === "actions/checkout") {
         checksOut.add(where);
         const persist = (isObj(step.with) ? step.with : {})["persist-credentials"];
-        if (persist !== false && persist !== "false" && !/#[^\n]*credentials/i.test(stepText(nodes[index]))) {
-          add(label, "actions/checkout does not set persist-credentials: false (or a comment naming the reason credentials stay)");
+        if (persist !== false && persist !== "false" && !keepsCredentials.test(stepText(nodes[index]))) {
+          add(label, 'actions/checkout does not set persist-credentials: false (or carry a "# keeps credentials: <reason>" comment)');
         }
       }
     });
