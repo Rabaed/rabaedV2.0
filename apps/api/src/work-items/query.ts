@@ -1,5 +1,6 @@
 import { withMember, type Database, type Db, type ModuleKey } from "@rabaed/db";
 import {
+  chainBucketRules,
   decodeWorkItemCursor,
   encodeWorkItemCursor,
   enteredStepBy,
@@ -7,6 +8,8 @@ import {
   stepAgeWeeks,
   workItemPageSize,
   type BilingualText,
+  type ChainBucket,
+  type ChainBucketCondition,
   type WorkItemList,
   type WorkItemOutcome,
   type WorkItemQuery,
@@ -79,7 +82,10 @@ type Row = {
 function visibleRows({ projectId, moduleKey }: QueryScope, allRevisions: boolean): RawBuilder<unknown> {
   return sql`
     select w.id, w.project_id, t.code as type_code, t.name as type_name, w.title, w.document_number,
-      w.revision_no, w.outcome,
+      w.revision_no, w.outcome, t.outcome_kind,
+      -- For the Dashboard's buckets (chainBucket): Submitted, and raised by the viewer's own Participant.
+      w.submitted_at is not null as submitted,
+      coalesce(w.raised_by_participant_id in (select app.current_participant_ids()), false) as raised_by_own,
       st.key as stage_key, st.name as stage_name, st.category as stage_category,
       tv.id as trade_id, tv.code as trade_code, tv.name as trade_name,
       lv.id as location_id, lv.code as location_code, lv.name as location_name,
@@ -110,6 +116,28 @@ function visibleRows({ projectId, moduleKey }: QueryScope, allRevisions: boolean
 
 const noFilter = sql<boolean>`true`;
 
+/** One condition of the bucket rule, over a row of `visibleRows` (as `r`). */
+function bucketCondition(when: ChainBucketCondition): RawBuilder<boolean> {
+  const parts: RawBuilder<boolean>[] = [];
+  if (when.open !== undefined) parts.push(when.open ? sql`not r.closed` : sql`r.closed`);
+  if (when.submitted !== undefined) parts.push(sql`r.submitted = ${when.submitted}`);
+  if (when.raisedByViewer !== undefined) parts.push(sql`r.raised_by_own = ${when.raisedByViewer}`);
+  if (when.outcomeKind !== undefined) parts.push(sql`r.outcome_kind = ${when.outcomeKind}`);
+  if (when.outcome !== undefined) parts.push(sql`r.outcome = ${when.outcome}`);
+  if (when.stageCategory !== undefined) parts.push(sql`r.stage_category = ${when.stageCategory}`);
+  return parts.length > 0 ? sql`(${sql.join(parts, sql` and `)})` : noFilter;
+}
+
+/**
+ * The Dashboard bucket of a row of `visibleRows` (as `r`), or null: the domain's
+ * chainBucketRules in order, as one SQL case, so the `bucket` filter and the
+ * Dashboard's counts follow chainBucket's own rule.
+ */
+const bucketOfRow: RawBuilder<ChainBucket | null> = sql`(case ${sql.join(
+  chainBucketRules.map((rule) => sql`when ${bucketCondition(rule.when)} then ${rule.bucket}::text`),
+  sql` `,
+)} end)`;
+
 /** The rows of `visibleRows` (as `r`) that match the query's filters; the cursor aside. */
 function matching(q: WorkItemQuery, now: Date): RawBuilder<boolean> {
   const conditions: RawBuilder<boolean>[] = [];
@@ -126,6 +154,7 @@ function matching(q: WorkItemQuery, now: Date): RawBuilder<boolean> {
       ) select id from under)`);
   }
   if (q.outcome.length > 0) conditions.push(sql`r.outcome = any(${q.outcome}::text[])`);
+  if (q.bucket.length > 0) conditions.push(sql`${bucketOfRow} = any(${q.bucket}::text[])`);
   if (q.stepAgeMin !== undefined) {
     // A closed item doesn't age.
     conditions.push(sql`not r.closed and r.step_entered_at <= ${enteredStepBy(q.stepAgeMin, now)}::timestamptz`);
@@ -230,6 +259,26 @@ export async function queryWorkItems(
     nextCursor: page.length > workItemPageSize ? cursorAfter(q, shown.at(-1)!) : null,
     stageCounts: new Map(counts.map((c) => [c.stage_key, c.count])),
   };
+}
+
+/**
+ * How many of the scope's visible items matching `q` are in each Type and
+ * Dashboard bucket (chainBucket; null for none): the same rows, filters and
+ * bucket as the List, so a count and the List behind it can't disagree.
+ */
+export async function countWorkItemBuckets(
+  trx: Trx,
+  scope: QueryScope,
+  q: WorkItemQuery,
+  now: Date,
+): Promise<{ typeCode: string; bucket: ChainBucket | null; count: number }[]> {
+  const { rows } = await sql<{ type_code: string; bucket: ChainBucket | null; count: number }>`
+    with r as (${visibleRows(scope, q.allRevisions)})
+    select r.type_code, ${bucketOfRow} as bucket, count(*)::int as count
+    from r where ${matching(q, now)}
+    group by 1, 2
+  `.execute(trx);
+  return rows.map((r) => ({ typeCode: r.type_code, bucket: r.bucket, count: r.count }));
 }
 
 /**

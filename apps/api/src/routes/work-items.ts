@@ -4,6 +4,7 @@ import {
   createdWorkItem,
   createRevisionRequest,
   createWorkItemRequest,
+  dashboard,
   formChoices,
   formToFill,
   linkedFrom,
@@ -25,6 +26,7 @@ import { z } from "zod";
 import type { AppContext } from "../app.ts";
 import { idOrNotFound, notFound, visibleOrNotFound } from "../http-error.ts";
 import { refusal } from "../refusals.ts";
+import { getDashboard } from "../work-items/dashboard.ts";
 import { getLinkedFrom } from "../work-items/linked-from.ts";
 import { addWorkItemLink, getWorkItemLinks, removeWorkItemLink } from "../work-items/links.ts";
 import { listWorkItems } from "../work-items/query.ts";
@@ -77,6 +79,13 @@ export const workItemRoutes =
         return visibleOrNotFound(listWorkItems(ctx.db, memberId, idOrNotFound(request.params.projectId), request.query, ctx.now()));
       },
     );
+
+    // The Dashboard: Type cards per Module, counted per Revision chain over the
+    // items the Member sees, every number with the List filter behind it (RP-351).
+    app.get("/v1/projects/:projectId/dashboard", { schema: { params: projectParams, response: { 200: dashboard } } }, async (request) => {
+      const memberId = ctx.requireMember(request);
+      return visibleOrNotFound(getDashboard(ctx.db, memberId, idOrNotFound(request.params.projectId), ctx.now()));
+    });
 
     // Link search: the Project's Submitted items the Member sees whose Document
     // Number or Subject contains `q`, a page at a time (visibility.md scenario 29).

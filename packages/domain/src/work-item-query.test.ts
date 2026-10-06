@@ -22,6 +22,7 @@ const defaults: WorkItemQuery = {
   trade: [],
   location: [],
   outcome: [],
+  bucket: [],
   stepAgeMin: undefined,
   allRevisions: false,
   sort: "stepAge",
@@ -48,6 +49,11 @@ describe("workItemQuery", () => {
     }
   });
 
+  it("takes the Dashboard's buckets, and nothing else", () => {
+    expect(workItemQuery.parse({ bucket: "A,B" }).bucket).toEqual(["A", "B"]);
+    expect(workItemQuery.safeParse({ bucket: "late" }).success).toBe(false);
+  });
+
   it("takes a Step Age filter of 2, 3 or 4 weeks only", () => {
     expect(workItemQuery.parse({ stepAgeMin: "3" }).stepAgeMin).toBe(3);
     for (const bad of ["1", "5", "two"]) expect(workItemQuery.safeParse({ stepAgeMin: bad }).success, bad).toBe(false);
@@ -69,6 +75,7 @@ describe("the query in the URL", () => {
     trade: [trade],
     location: [location],
     outcome: ["C", "passed_with_comments"],
+    bucket: ["pending", "in_preparation"],
     stepAgeMin: 2,
     allRevisions: true,
     sort: "documentNumber",
@@ -127,6 +134,7 @@ describe("filters", () => {
     expect(isFilteredWorkItemQuery({ ...defaults, sort: "documentNumber", allRevisions: true, cursor: "x" })).toBe(false);
     expect(isFilteredWorkItemQuery({ ...defaults, stepAgeMin: 2 })).toBe(true);
     expect(isFilteredWorkItemQuery({ ...defaults, location: [location] })).toBe(true);
+    expect(isFilteredWorkItemQuery({ ...defaults, bucket: ["pending"] })).toBe(true);
   });
 
   it("clear to the first page, keeping the sort and Revisions", () => {

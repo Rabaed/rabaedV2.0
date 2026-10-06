@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { chainBucketSchema } from "./chain-bucket.ts";
 import { workItemOutcome, workItemTypeCode } from "./work-item.ts";
 
 /**
@@ -62,6 +63,8 @@ const queryFields = {
   location: list(uuid),
   /** The Review Code or Inspection Result. */
   outcome: list(workItemOutcome),
+  /** The Dashboard's buckets (chainBucket): what a Dashboard number counts, so its link lists exactly those chains. */
+  bucket: list(chainBucketSchema),
   stepAgeMin: z.coerce
     .number()
     .pipe(z.union(stepAgeMinimums.map((n) => z.literal(n))))
@@ -74,7 +77,7 @@ const queryFields = {
 };
 
 /** The filters that take a list of values; every other key takes one. */
-const listKeys = ["type", "stage", "with", "trade", "location", "outcome"] as const satisfies readonly (keyof typeof queryFields)[];
+const listKeys = ["type", "stage", "with", "trade", "location", "outcome", "bucket"] as const satisfies readonly (keyof typeof queryFields)[];
 /** The keys that narrow the rows, as opposed to how they are shown (sort, Revisions, page). */
 const filterKeys = [...listKeys, "stepAgeMin"] as const;
 
