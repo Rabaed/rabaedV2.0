@@ -27,7 +27,7 @@ export interface CloseResult {
   failed: { key: string; reason: string }[];
 }
 
-export async function closeTickets(keys: string[], pullRequest: number, jira: Jira): Promise<CloseResult> {
+export async function closeIssues(keys: string[], pullRequest: number, jira: Jira): Promise<CloseResult> {
   const result: CloseResult = { closed: [], alreadyDone: [], failed: [] };
   for (const key of keys) {
     try {
@@ -119,14 +119,14 @@ async function main(mode: string) {
   let failures = 0;
   for (const pull of pulls) {
     const keys = keysToClose({ branch: pull.branch, body: pull.body });
-    const result = await closeTickets(keys, pull.number, jira);
+    const result = await closeIssues(keys, pull.number, jira);
     failures += result.failed.length;
     if (mode === "event" || result.closed.length > 0 || result.failed.length > 0) {
       lines.push(`- PR #${pull.number}: closed ${result.closed.join(", ") || "none"}; already Done ${result.alreadyDone.join(", ") || "none"}`);
       for (const failure of result.failed) lines.push(`  - FAILED ${failure.key}: ${failure.reason}`);
     }
   }
-  if (lines.length === 2) lines.push(`Checked ${pulls.length} merged PRs: every ticket they name is Done.`);
+  if (lines.length === 2) lines.push(`Checked ${pulls.length} merged PRs: all their Jira keys are Done.`);
   summary(lines.join("\n"));
   if (failures > 0) process.exit(1);
 }
