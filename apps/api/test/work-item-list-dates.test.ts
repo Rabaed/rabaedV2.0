@@ -148,8 +148,8 @@ describe("Submission Date and Creation Date in the List (scenario 61)", () => {
   it("returns no row the time the Draft was started, to anyone", async () => {
     for (const by of [c1Engineer, c1Pm, k1Engineer]) {
       for (const query of [{}, { allRevisions: true }, { sort: "submissionDate" } as const]) {
-        // Step Age (stepEnteredAt) of a Draft that has never moved is when it was started: RP-345's Step Age value, shown as weeks, not a date column.
-        const json = JSON.stringify(await list(by, query), (key, v) => (key === "stepEnteredAt" ? undefined : v));
+        // Every field, stepEnteredAt too: a Draft with no number shows no Step.
+        const json = JSON.stringify(await list(by, query));
         for (const id of [first, second, numbered, started]) expect(json, id).not.toContain((await recorded(id)).createdAt);
       }
     }

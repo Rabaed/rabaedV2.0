@@ -90,9 +90,11 @@ const items: WorkItemRow[] = [
   row(6, {
     title: "Fire alarm cables",
     documentNumber: null,
-    // A Draft: no number, not Submitted.
+    // A Draft: no number, not Submitted, and no Step Age: nobody sees when it was started.
     submissionDate: null,
     creationDate: null,
+    stepEnteredAt: null,
+    stepAgeWeeks: null,
     stage: stages.draft,
     with: {
       kind: "own",
@@ -105,6 +107,10 @@ const items: WorkItemRow[] = [
     title: "Earthing rods, galvanised",
     documentNumber: null,
     revisionNo: 1,
+    submissionDate: null,
+    creationDate: null,
+    stepEnteredAt: null,
+    stepAgeWeeks: null,
     stage: stages.draft,
     with: {
       kind: "own",
@@ -209,6 +215,8 @@ export const DatesForTheRaisersCompany: Story = {
     const draft = cellsOf(context, "Fire alarm cables");
     await expect(draft.at(-2)).toBeEmptyDOMElement();
     await expect(draft.at(-1)).toBeEmptyDOMElement();
+    // No Step Age either (the Step Age column is the 6th): a Draft's start is seen by nobody.
+    await expect(draft[5]).toBeEmptyDOMElement();
   },
 };
 

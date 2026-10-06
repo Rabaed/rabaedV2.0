@@ -195,6 +195,8 @@ function cursorAfter(q: WorkItemQuery, last: Row): string {
 
 function toRow(r: Row, now: Date): WorkItemRow {
   const open = isOpenStageCategory(r.stage_category);
+  // numbered_at is set with the Document Number.
+  const neverNumbered = r.document_number === null;
   return {
     id: r.id,
     projectId: r.project_id,
@@ -205,8 +207,9 @@ function toRow(r: Row, now: Date): WorkItemRow {
     stage: { key: r.stage_key, name: r.stage_name, category: r.stage_category },
     trade: { id: r.trade_id, code: r.trade_code, name: r.trade_name },
     location: r.location_id ? { id: r.location_id, code: r.location_code!, name: r.location_name! } : null,
-    stepEnteredAt: r.step_entered_at.toISOString(),
-    stepAgeWeeks: stepAgeWeeks(r.step_entered_at, now),
+    // A Draft with no number has never moved: its Step began when it was started, which nobody sees.
+    stepEnteredAt: neverNumbered ? null : r.step_entered_at.toISOString(),
+    stepAgeWeeks: neverNumbered ? null : stepAgeWeeks(r.step_entered_at, now),
     outcome: r.outcome,
     submissionDate: r.submitted_at?.toISOString() ?? null,
     creationDate: r.creation_date?.toISOString() ?? null,

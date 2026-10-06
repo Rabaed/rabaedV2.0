@@ -258,7 +258,7 @@ export function WorkItemList({ list, query, locale, hrefFor, itemHref, onQueryCh
                 </TableCell>
                 <TableCell>
                   {/* A closed item doesn't age. */}
-                  {isOpenStageCategory(item.stage.category) ? <AgeDots weeks={item.stepAgeWeeks} locale={locale} /> : null}
+                  {isOpenStageCategory(item.stage.category) && item.stepAgeWeeks !== null ? <AgeDots weeks={item.stepAgeWeeks} locale={locale} /> : null}
                 </TableCell>
                 <TableCell className="whitespace-nowrap">{item.trade.name[locale]}</TableCell>
                 <TableCell className="whitespace-nowrap">{item.location?.name[locale]}</TableCell>

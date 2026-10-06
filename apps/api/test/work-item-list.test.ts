@@ -315,7 +315,7 @@ describe("filters and sorts, combined", () => {
   it("filters by Step Age: open items only, at least that many weeks at their Step", async () => {
     const aged = await list(c1Engineer, { stepAgeMin: 3 });
     expect(ids(aged)).toEqual(expect.arrayContaining([mechanicalInB, electricalInA, submittedOld]));
-    expect(aged.items.every((i) => i.stepAgeWeeks >= 3 && ["draft", "in_progress"].includes(i.stage.category))).toBe(true);
+    expect(aged.items.every((i) => (i.stepAgeWeeks === null || i.stepAgeWeeks >= 3) && ["draft", "in_progress"].includes(i.stage.category))).toBe(true);
     // A new Draft, without its datasheet: the moved clock spoils an upload's signature.
     const fresh = (
       await ok(
@@ -333,7 +333,8 @@ describe("filters and sorts, combined", () => {
     expect(open.length).toBeGreaterThan(0);
     expect(open.length).toBeLessThan(items.length);
     expect(items.slice(0, open.length)).toEqual(open);
-    const ages = open.map((i) => i.stepEnteredAt);
+    // A Draft with no number shows no Step Age (nor when it was started), so it has none to compare.
+    const ages = open.flatMap((i) => (i.stepEnteredAt === null ? [] : [i.stepEnteredAt]));
     expect(ages).toEqual([...ages].sort());
   });
 

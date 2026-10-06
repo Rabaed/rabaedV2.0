@@ -107,6 +107,10 @@ export const workItemRow = workItemSummary.extend({
   outcome: workItemOutcome.nullable(),
   /** Null once closed: nobody holds it. */
   with: workItemWith.nullable(),
+  /** Null for a Draft with no number yet: its Step began when it was started, which nobody sees (visibility.md "Creation Date", scenario 61). */
+  stepEnteredAt: z.iso.datetime().nullable(),
+  /** Null with `stepEnteredAt`: no Step Age is shown until the item has a number. */
+  stepAgeWeeks: z.number().int().positive().nullable(),
   /** When it was first Submitted: for everyone who sees it. Null while it has not been. */
   submissionDate: z.iso.datetime().nullable(),
   /** Only for a Member of the raiser's Participant (visibility.md "Creation Date"); null for everyone else. Never the time the Draft was started. */
