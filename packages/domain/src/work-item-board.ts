@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { bilingualText } from "./company.ts";
-import { workItemList, workItemRow, type WorkItemRow } from "./work-item.ts";
+import { formSchema } from "./form.ts";
+import { transitionKinds, workItemList, workItemRow, type WorkItemRow } from "./work-item.ts";
 
 /**
  * The Kanban (spec RP-344, RP-349): the work item query's items as a board.
@@ -39,6 +40,31 @@ export const workItemBoardLane = z.discriminatedUnion("kind", [
 ]);
 export type WorkItemBoardLane = z.infer<typeof workItemBoardLane>;
 
+/** A Transition the viewer may take on a card now, with the Stage it leads to and its Action Form. */
+export const workItemMove = z.object({
+  transition: z.string(),
+  label: bilingualText,
+  kind: z.enum(transitionKinds),
+  /** The Stage of the Step it leads to. */
+  stageKey: z.string(),
+  actionForm: formSchema.nullable(),
+});
+export type WorkItemMove = z.infer<typeof workItemMove>;
+
+/**
+ * Where a card may be dropped (RP-350): a Stage reached by exactly one of the
+ * Transitions the viewer may take on it now, other than the Stage it is in.
+ * A Stage two Transitions lead to is no target, as dropping there would not say
+ * which one to take; those are taken from the item's page.
+ */
+export function dropTargets(moves: readonly WorkItemMove[], currentStageKey: string): Map<string, WorkItemMove> {
+  const byStage = new Map<string, WorkItemMove[]>();
+  for (const m of moves) byStage.set(m.stageKey, [...(byStage.get(m.stageKey) ?? []), m]);
+  const targets = new Map<string, WorkItemMove>();
+  for (const [stageKey, reaching] of byStage) if (reaching.length === 1 && stageKey !== currentStageKey) targets.set(stageKey, reaching[0]!);
+  return targets;
+}
+
 /**
  * The board of a Module's Work Items the viewer can see that match the work
  * item query. `stages` and `filters` are the List's: each Stage's count is of
@@ -49,6 +75,13 @@ export type WorkItemBoardLane = z.infer<typeof workItemBoardLane>;
  */
 export const workItemBoard = workItemList.pick({ stages: true, filters: true }).extend({
   columns: z.array(z.object({ stageKey: z.string(), shown: z.number().int().nonnegative(), lanes: z.array(workItemBoardLane) })),
+  /**
+   * What the viewer may do with a card now (RP-350), by item id: only the
+   * Transitions they may take on it at this moment, as the item page's buttons
+   * are, so a card they may not act on has no entry. Nothing says why another
+   * Transition is not here (the "Refusals of a Transition" channel).
+   */
+  moves: z.record(z.uuid(), z.array(workItemMove)),
 });
 export type WorkItemBoard = z.infer<typeof workItemBoard>;
 
