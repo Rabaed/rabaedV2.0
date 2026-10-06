@@ -162,12 +162,16 @@ Effects, in order:
    - the Package status is recomputed;
    - the parent is re-checked (a parent can't close while Subtasks are open, so that check is also a precondition when the parent itself closes).
 7. Notifications for the Transition go to the outbox. Recipients are re-checked against visibility at send time.
+   - **Step reached** (RP-195): a trigger on the new open `step_assignment`; delivered to its holder or Step Pool, never the actor.
+   - **Watched items** (RP-355): a trigger on `work_item_event` (a Transition, a Code or Inspection Result, a new Revision, a cancel; never `answers_changed`, Documents, claims, Recommended Codes or Internal Notes) writes a row when someone other than the actor watches the chain. `app.deliver_notification` delivers it to the chain's watchers who still see the item (`app.work_item_watchers`) and may read the event (V5: an internal move reaches only its own Participant), except the actor and the Members the event made it wait on (they get "Step reached").
+   - **Routing** (RP-355): every recipient's notification passes the routing rule (`app.notification_route`, the same as `@rabaed/domain`'s `routeNotification`) with their settings, Project mute and email pause: in-app yes/no and email none/immediate/digest, stored on the notification for the email jobs. A notification for neither is not written. Need My Action never passes through it.
 
 ### 5.2 `claim(item)` / `release(item)`
 
 - Claim takes a pooled assignment. It uses a conditional update, so only one claimer wins.
 - Release returns it to the pool.
 - Both append internal events.
+- A claim withdraws the other pool Members' unread "Step reached" notification for that Step (RP-355, scenario 70: `app.withdraw_step_reached`, a trigger). A release doesn't bring it back.
 
 ### 5.3 `recommend_code(item, code, note)`
 

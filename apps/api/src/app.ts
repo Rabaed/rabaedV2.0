@@ -17,6 +17,7 @@ import { companyRoutes } from "./routes/companies.ts";
 import { documentRoutes } from "./routes/documents.ts";
 import { healthRoutes } from "./routes/health.ts";
 import { memberRoutes } from "./routes/members.ts";
+import { notificationSettingsRoutes } from "./routes/notification-settings.ts";
 import { notificationRoutes } from "./routes/notifications.ts";
 import { numberingRoutes } from "./routes/numbering.ts";
 import { numberingCounterRoutes } from "./routes/numbering-counters.ts";
@@ -129,6 +130,7 @@ export async function buildApp({
   await app.register(workItemRoutes(context));
   await app.register(documentRoutes(context));
   await app.register(notificationRoutes(context));
+  await app.register(notificationSettingsRoutes(context));
   await app.register(watchRoutes(context));
   await app.register(optionListRoutes(context));
   await app.register(numberingRoutes(context));

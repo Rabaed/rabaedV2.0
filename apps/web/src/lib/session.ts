@@ -11,6 +11,7 @@ import type {
   MemberVisibility,
   MyProjects,
   NotificationList,
+  NotificationSettingsView,
   NumberingSettings,
   NumberingCounters,
   ParticipantMembers,
@@ -197,6 +198,11 @@ export function getWatchState(workItemId: string): Promise<WatchState | null> {
 /** A Work Item's history as the signed-in Member may see it; null if they can't see the item. */
 export function getWorkItemHistory(workItemId: string): Promise<WorkItemHistory | null> {
   return apiGet<WorkItemHistory>(`/v1/work-items/${encodeURIComponent(workItemId)}/history`);
+}
+
+/** The signed-in Member's notification settings and Project mutes; null if signed out. */
+export function getNotificationSettings(): Promise<NotificationSettingsView | null> {
+  return apiGet<NotificationSettingsView>("/v1/notification-settings");
 }
 
 /** The signed-in Member's notifications and unread count; null if signed out. */

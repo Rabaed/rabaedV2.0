@@ -21,6 +21,7 @@
     "zod": "^4.6.5"
   },
   "devDependencies": {
+    "@rabaed/domain": "workspace:*",
     "@types/pg": "^8.23.1",
     "tsx": "^4.23.15"
   }
