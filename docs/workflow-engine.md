@@ -294,7 +294,8 @@ Error codes, api (`/v1/projects/:id/numbering`, `/numbering/counters…`, `/v1/p
 
 - **Step Age** = weeks since `step_entered_at`, shown as up to 4 dots, for the holding Participant's own Members. Every other Company counts it from `participant_entered_at` and sees the Step it arrived at, so internal moves never reset or reveal anything (visibility.md V14). `app.step_as_seen` is the one place that chooses.
 - A weekly job builds each Participant's ageing report from the items it can see, through `app.step_as_seen` too.
-- **"Need My Action"** = open assignments where the viewer is the assignee, or is in the pool and nobody has claimed it.
+- **"Need My Action"** = open assignments where the viewer is the assignee, or is in the pool and nobody has claimed it. It is a toggle on a Project's views (List, Kanban, later Plan, Floor and the Snag List), and each Project card shows its count. The viewer's own Drafts stay in view with the toggle on but are never counted (settled 2026-10-06).
+- **Weekly Step Age report:** Sunday 07:00 Riyadh time, by email, to Members holding the Assign permission (their Participant's open items) and to the Owner's and Owner Representative's Members holding Assign (oversight items). It stops when the Project closes.
 
 ---
 
