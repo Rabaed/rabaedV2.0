@@ -232,6 +232,7 @@ The key is the values of the pattern's counted segments joined by `-`, whatever 
 `id`, `work_item_id`, `step_id`, `participant_id`, `assignee_member_id` (null = in the Step Pool), `status {pooled, claimed, done, vacant, reassigned}`, `claimed_at`, `done_at`.
 When an assignee is removed from the Project, the row becomes `vacant`, and the Company's Authorized Person is notified.
 The app role reads only its own Participant's rows, so never another Company's internal Steps or who holds them (V5, V14), and never `claimed_at`, `created_at` or `updated_at` (the Draft Step's are when the Draft was started, RP-334). Who holds an item now comes from `app.work_item_holder`: the Participant, and the Member only for that Participant's own Members (RP-309).
+Need My Action reads these rows through `app.need_my_action(item)` (RP-346): `waiting` when the caller holds the open Step (`claimed` by them) or is in the Step Pool (`app.step_pool`) of a `pooled` one, `own_draft` for a Draft they raised (listed, never counted), and null otherwise, for an item they don't see, a closed item, or anything on a closed Project. The List's `needMyAction` filter and the Projects page's count both use it.
 
 **work_item_access** (materialized, maintained by the engine)
 `work_item_id`, `participant_id`, `since`, `reason {raised, handling, oversight}`.
