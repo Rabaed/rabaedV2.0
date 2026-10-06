@@ -238,6 +238,11 @@ describe("one week's reports", () => {
     expect(report.items.find((i) => i.workItemId === pumps)).toMatchObject({ stepAgeWeeks: 2 });
   });
 
+  it("scenario 76: lists no un-numbered Draft, which has no Step Age, though the C1 lead sees it", async () => {
+    expect(reportTo(c1Lead).items.map((i) => i.workItemId)).not.toContain(valves);
+    expect((await ok(c1Lead.caller.get(`/v1/work-items/${valves}`), 200)).json()).toMatchObject({ documentNumber: null });
+  });
+
   it("links to the List showing the C1 lead exactly the report's items, in the same order, and its 4+ weeks to the List of those", async () => {
     const report = reportTo(c1Lead);
     const { values } = stepAgeReportMessage(report, WEB_URL);

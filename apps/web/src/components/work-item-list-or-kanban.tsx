@@ -60,7 +60,7 @@ function useViewLabels(tableLabel: string): { list: WorkItemListLabels; board: W
       ...(Object.fromEntries(keys.map((key) => [key, l(key)])) as Record<(typeof keys)[number], string>),
       ...shared,
       table: tableLabel,
-      weeksOrMore: (weeks) => t("list.weeksOrMore", { weeks }),
+      weeksOrMore: (weeks, count) => t("list.weeksOrMore", { weeks, count }),
       dashboardFigure: l("dashboardFigure"),
       buckets: Object.fromEntries(chainBuckets.map((b) => [b, t(`buckets.${b}`)])) as Record<ChainBucket, string>,
       codeCStates: Object.fromEntries(codeCStates.map((s) => [s, t(`codeCStates.${s}`)])) as Record<CodeCState, string>,

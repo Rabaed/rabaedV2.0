@@ -70,9 +70,11 @@ describe("workItemQuery", () => {
     expect(workItemQuery.safeParse({ module: "tendering" }).success).toBe(false);
   });
 
-  it("takes a Step Age filter of 2, 3 or 4 weeks only", () => {
+  it("takes a Step Age filter of 1, 2, 3 or 4 weeks only", () => {
     expect(workItemQuery.parse({ stepAgeMin: "3" }).stepAgeMin).toBe(3);
-    for (const bad of ["1", "5", "two"]) expect(workItemQuery.safeParse({ stepAgeMin: bad }).success, bad).toBe(false);
+    // 1: any Step Age at all, so never an un-numbered Draft (scenario 76).
+    expect(workItemQuery.parse({ stepAgeMin: "1" }).stepAgeMin).toBe(1);
+    for (const bad of ["0", "5", "two"]) expect(workItemQuery.safeParse({ stepAgeMin: bad }).success, bad).toBe(false);
   });
 
   it("refuses a cursor made for the other sort, or that isn't one", () => {

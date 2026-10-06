@@ -137,6 +137,8 @@ describe("C1 creates a Revision of a MAR that got Code C", () => {
     ]);
     expect(copied.documents.map((d) => d.id)).not.toEqual(expect.arrayContaining(original.documents.map((d) => d.id)));
     expect(copied.canChange).toBe(true);
+    // Scenario 75: each copy keeps its original upload time, never the Revision's start.
+    expect(copied.documents.map((d) => d.uploadedAt)).toEqual(original.documents.map((d) => d.uploadedAt));
     const url = async (item: string, id: string) => (await ok(engineer.get(`/v1/work-items/${item}/documents/${id}/download`), 200)).json().url as string;
     const copy = await fetch(await url(revision, copied.documents[0]!.id));
     expect(copy.status).toBe(200);
@@ -235,6 +237,10 @@ describe("the Revision's Document Number", () => {
     await ok(pm.post(`/v1/work-items/${rev1}/claim`));
     await take(pm, rev1, "submit");
     expect(await detail(k1Manager, rev1)).toMatchObject({ documentNumber: `${base} Rev 1`, revisionNo: 1 });
+    // Scenario 75: K1 sees the copied Documents with their original upload times.
+    const uploaded = async (id: string) =>
+      ((await ok(k1Manager.get(`/v1/work-items/${id}/documents`), 200)).json() as DocumentList).documents.map((d) => d.uploadedAt);
+    expect(await uploaded(rev1)).toEqual(await uploaded(closed));
     for (const who of [engineer, k1Manager]) {
       const links: WorkItemLinks = (await ok(who.get(`/v1/work-items/${closed}/links`), 200)).json();
       expect(links.links).toEqual([expect.objectContaining({ kind: "related", documentNumber: `${base} Rev 1`, workItemId: rev1 })]);

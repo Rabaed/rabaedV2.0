@@ -55,8 +55,8 @@ describe("stepAgeReportGroups", () => {
 describe("stepAgeReportQuery", () => {
   const open = ["draft", "internal_review", "pending_approval"];
 
-  it("is the List of the open Stages, sorted by Step Age", () => {
-    expect(stepAgeReportQuery(open)).toEqual(workItemQuery.parse({ stage: open }));
+  it("is the List of the open Stages with a Step Age, sorted by it: no un-numbered Draft, as in the report (scenario 76)", () => {
+    expect(stepAgeReportQuery(open)).toEqual(workItemQuery.parse({ stage: open, stepAgeMin: 1 }));
   });
 
   it("narrows to a Step Age when given one", () => {

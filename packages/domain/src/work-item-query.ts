@@ -27,8 +27,12 @@ export type WorkItemSort = (typeof workItemSorts)[number];
 /** The longest search the List takes. */
 export const searchMaxLength = 200;
 
-/** The Step Age filter: open items in at least their 2nd, 3rd or 4th week at their Step. */
-export const stepAgeMinimums = [2, 3, 4] as const;
+/**
+ * The Step Age filter: open items in at least their 1st, 2nd, 3rd or 4th week at
+ * their Step. 1 is every open item with a Step Age, so never an un-numbered Draft
+ * (scenario 76): the weekly report's link uses it.
+ */
+export const stepAgeMinimums = [1, 2, 3, 4] as const;
 
 const uuid = z.uuid();
 const stageKey = z.string().regex(/^[a-z][a-z0-9_]{0,62}$/);

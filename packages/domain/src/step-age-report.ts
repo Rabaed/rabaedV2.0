@@ -1,6 +1,6 @@
 import type { BilingualText } from "./company.ts";
 import type { Locale } from "./locale.ts";
-import { workItemQuery, type WorkItemQuery } from "./work-item-query.ts";
+import { stepAgeMinimums, workItemQuery, type WorkItemQuery } from "./work-item-query.ts";
 
 // The weekly Step Age report (RP-359; workflow-engine.md §10, visibility.md the
 // Step Age reports row and scenario 21). Every Sunday at 07:00 Riyadh time
@@ -24,12 +24,13 @@ export function stepAgeReportGroups<T extends { stepAgeWeeks: number }>(items: r
 
 /**
  * The List query showing the report's items: the open Stages (`openStageKeys`,
- * the Module's Draft and in-progress Stages), oldest first, and with `stepAgeMin`
- * only those at least that many weeks at their Step. The work item query reads
- * through the same visibility and app.step_as_seen as the report.
+ * the Module's Draft and in-progress Stages) with a Step Age, so no un-numbered
+ * Draft (scenario 76), oldest first; with `stepAgeMin`, only those at least that
+ * many weeks at their Step. The work item query reads through the same
+ * visibility and app.step_as_seen as the report.
  */
-export function stepAgeReportQuery(openStageKeys: readonly string[], stepAgeMin?: 2 | 3 | 4): WorkItemQuery {
-  return workItemQuery.parse({ stage: [...openStageKeys], ...(stepAgeMin === undefined ? {} : { stepAgeMin }) });
+export function stepAgeReportQuery(openStageKeys: readonly string[], stepAgeMin: (typeof stepAgeMinimums)[number] = 1): WorkItemQuery {
+  return workItemQuery.parse({ stage: [...openStageKeys], stepAgeMin });
 }
 
 /** One item of a report, as its recipient may see it. */
