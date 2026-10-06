@@ -1,7 +1,9 @@
 import {
   directionOf,
   formatNumber,
+  isWatchOutcome,
   stepAgeReportGroups,
+  watchOutcomeNames,
   type BilingualText,
   type Locale,
   type NotificationDigestItem,
@@ -56,14 +58,6 @@ export interface StepAgeReportValues {
 }
 
 export type EmailTemplate = keyof EmailTemplateValues;
-
-/** The template each kind of notification is emailed with. */
-export const notificationEmailTemplate = {
-  step_reached: "notification-step-reached",
-  watched_event: "notification-watched-event",
-  sent_back: "notification-sent-back",
-  vacancy: "notification-vacancy",
-} as const satisfies Record<NotificationEmailKind, EmailTemplate>;
 
 export interface RenderedEmail {
   subject: string;
@@ -182,15 +176,7 @@ const notificationCopy = {
     vacancyHelp: "Whoever held it has left the Project. Name someone to hold it.",
     revision: "New Revision",
     code: (code: string) => `Code ${code}`,
-    outcome: {
-      passed: "Passed",
-      passed_with_comments: "Passed with Comments",
-      failed: "Failed",
-      approved: "Approved",
-      rejected: "Rejected",
-      cancelled: "Cancelled",
-      closed: "Closed",
-    } as Record<string, string>,
+    closed: "Closed",
     updated: "Updated",
     by: (company: string) => `By ${company}.`,
     signedBy: (name: string) => `Signed by ${name}.`,
@@ -206,15 +192,7 @@ const notificationCopy = {
     vacancyHelp: "غادر المشروعَ من كان يتولاها. سمِّ من يتولاها.",
     revision: "مراجعة جديدة",
     code: (code: string) => `الرمز ${code}`,
-    outcome: {
-      passed: "ناجح",
-      passed_with_comments: "ناجح مع ملاحظات",
-      failed: "راسب",
-      approved: "معتمد",
-      rejected: "مرفوض",
-      cancelled: "ملغى",
-      closed: "مغلق",
-    } as Record<string, string>,
+    closed: "مغلق",
     updated: "حُدّث",
     by: (company: string) => `من ${company}.`,
     signedBy: (name: string) => `وقّعه ${name}.`,
@@ -230,9 +208,10 @@ function watchedHappened(locale: Locale, event: NonNullable<NotificationEmailCon
   const copy = notificationCopy[locale];
   if (event.type === "revision_created") return copy.revision;
   if (event.outcome && /^[A-D]$/.test(event.outcome)) return copy.code(event.outcome);
-  if (event.outcome && copy.outcome[event.outcome]) return copy.outcome[event.outcome]!;
+  if (isWatchOutcome(event.outcome)) return watchOutcomeNames[event.outcome][locale];
+  if (event.outcome === "closed") return copy.closed;
   if (event.transition) return event.transition[locale];
-  return event.type === "cancelled" ? copy.outcome.cancelled! : copy.updated;
+  return event.type === "cancelled" ? watchOutcomeNames.cancelled[locale] : copy.updated;
 }
 
 /** Who did it: the Company by name, and the signer of a final Code (V14). */
@@ -252,7 +231,7 @@ function notificationEmail(locale: Locale, values: NotificationEmailValues, happ
   return {
     subject: [documentNumber && isolate(documentNumber), subject, happened].filter(Boolean).join(" · "),
     paragraphs: [
-      documentNumber ? [{ ltr: documentNumber, inline: true }, ` · ${subject}`] : [subject],
+      itemLine(documentNumber, subject),
       [happened],
       ...details,
       [copy.open],
@@ -263,29 +242,52 @@ function notificationEmail(locale: Locale, values: NotificationEmailValues, happ
   };
 }
 
-/** What happened, in a few words, for a notification of `kind`: the subject's last part, and a digest entry. */
-function happened(locale: Locale, kind: NotificationEmailKind, { step, event }: Pick<NotificationEmailContent, "step" | "event">): string {
-  const copy = notificationCopy[locale];
-  switch (kind) {
-    case "step_reached":
-      return copy.reached(stepName(locale, step));
-    case "watched_event":
-      return event ? watchedHappened(locale, event) : copy.updated;
-    case "sent_back":
-      return copy.sentBack;
-    case "vacancy":
-      return copy.vacancy(stepName(locale, step));
-  }
-}
+type Happening = Pick<NotificationEmailContent, "step" | "event">;
 
-const notificationTemplates: { [K in NotificationEmailKind as (typeof notificationEmailTemplate)[K]]: Template<NotificationEmailValues> } = {
-  "notification-step-reached": (locale, values) => notificationEmail(locale, values, happened(locale, "step_reached", values), []),
-  "notification-watched-event": (locale, values) =>
-    notificationEmail(locale, values, happened(locale, "watched_event", values), actedBy(locale, values.event)),
-  "notification-sent-back": (locale, values) => notificationEmail(locale, values, happened(locale, "sent_back", values), actedBy(locale, values.event)),
-  "notification-vacancy": (locale, values) =>
-    notificationEmail(locale, values, happened(locale, "vacancy", values), [[notificationCopy[locale].vacancyHelp]]),
-};
+/**
+ * Each kind of notification: the template it is emailed with; what happened, in
+ * a few words (the subject's last part, and a digest entry); and what its email
+ * adds below that.
+ */
+const notificationKinds = {
+  step_reached: {
+    template: "notification-step-reached",
+    happened: (locale: Locale, { step }: Happening) => notificationCopy[locale].reached(stepName(locale, step)),
+    details: (): Paragraph[] => [],
+  },
+  watched_event: {
+    template: "notification-watched-event",
+    happened: (locale: Locale, { event }: Happening) => (event ? watchedHappened(locale, event) : notificationCopy[locale].updated),
+    details: (locale: Locale, { event }: Happening) => actedBy(locale, event),
+  },
+  sent_back: {
+    template: "notification-sent-back",
+    happened: (locale: Locale) => notificationCopy[locale].sentBack,
+    details: (locale: Locale, { event }: Happening) => actedBy(locale, event),
+  },
+  vacancy: {
+    template: "notification-vacancy",
+    happened: (locale: Locale, { step }: Happening) => notificationCopy[locale].vacancy(stepName(locale, step)),
+    details: (locale: Locale): Paragraph[] => [[notificationCopy[locale].vacancyHelp]],
+  },
+} as const satisfies Record<
+  NotificationEmailKind,
+  { template: EmailTemplate; happened: (locale: Locale, values: Happening) => string; details: (locale: Locale, values: Happening) => Paragraph[] }
+>;
+
+type NotificationTemplate = (typeof notificationKinds)[NotificationEmailKind]["template"];
+
+/** The template each kind of notification is emailed with. */
+export const notificationEmailTemplate = Object.fromEntries(
+  Object.entries(notificationKinds).map(([kind, { template }]) => [kind, template]),
+) as { [K in NotificationEmailKind]: (typeof notificationKinds)[K]["template"] };
+
+const notificationTemplates = Object.fromEntries(
+  Object.values(notificationKinds).map(({ template, happened, details }) => [
+    template,
+    (locale: Locale, values: NotificationEmailValues) => notificationEmail(locale, values, happened(locale, values), details(locale, values)),
+  ]),
+) as { [T in NotificationTemplate]: Template<NotificationEmailValues> };
 
 // The weekly Step Age report (RP-359; visibility.md the Step Age reports row).
 // The subject names the report and the recipient's Project only. Each item
@@ -319,8 +321,7 @@ const reportCopy = {
 
 function reportItem(locale: Locale, item: StepAgeReportItem): Paragraph {
   const holder = item.with ? (item.with.kind === "own" ? item.with.step[locale] : item.with.companyName[locale]) : null;
-  const rest = [item.subject, item.stage[locale], ...(holder ? [reportCopy[locale].with(holder)] : [])].join(" · ");
-  return item.documentNumber ? [{ ltr: item.documentNumber, inline: true }, ` · ${rest}`] : [rest];
+  return itemLine(item.documentNumber, [item.subject, item.stage[locale], ...(holder ? [reportCopy[locale].with(holder)] : [])].join(" · "));
 }
 
 const reportTemplates: { "step-age-report": Template<StepAgeReportValues> } = {
@@ -350,7 +351,7 @@ const digestTemplates: { "daily-digest": Template<DailyDigestValues> } = {
   "daily-digest": (locale, { projects }) => {
     const copy = notificationCopy[locale];
     const entryLine = (entry: NotificationDigestItem["entries"][number]): Paragraph => [
-      [`– ${happened(locale, entry.kind, entry)}`, ...actedBy(locale, entry.event).map((p) => ` ${p.join("")}`)].join(""),
+      [`– ${notificationKinds[entry.kind].happened(locale, entry)}`, ...actedBy(locale, entry.event).map((p) => ` ${p.join("")}`)].join(""),
     ];
     return {
       subject: copy.digestSubject,
@@ -359,7 +360,7 @@ const digestTemplates: { "daily-digest": Template<DailyDigestValues> } = {
         ...projects.flatMap((project) => [
           [project.name[locale]],
           ...project.items.flatMap((item): Paragraph[] => [
-            item.documentNumber ? [{ ltr: item.documentNumber, inline: true }, ` · ${item.subject}`] : [item.subject],
+            itemLine(item.documentNumber, item.subject),
             ...item.entries.map(entryLine),
             [{ ltr: webLink(item.link), link: true }],
           ]),
@@ -391,6 +392,11 @@ function webLink(link: string): string {
   const url = new URL(link);
   if (url.protocol !== "https:" && url.protocol !== "http:") throw new Error(`Not a web link: ${url.protocol}`);
   return url.href;
+}
+
+/** An item's line: its Document Number (left to right), when it has one, then `rest` (its Subject, and more). */
+function itemLine(documentNumber: string | null, rest: string): Paragraph {
+  return documentNumber ? [{ ltr: documentNumber, inline: true }, ` · ${rest}`] : [rest];
 }
 
 /** Keeps a value left to right inside plain text (a subject, the text body): a Unicode left-to-right isolate. */

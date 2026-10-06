@@ -42,8 +42,12 @@ const oneAddress = z.email();
  * recipient's language, linking to the item on the customer web (`webUrl`).
  */
 export function notificationMessage({ to, language, kind, content }: NotificationEmail, webUrl: string): MailMessage {
-  const link = new URL(`/${language}/work-items/${encodeURIComponent(content.workItemId)}`, webUrl).href;
-  return { to, template: notificationEmailTemplate[kind], locale: language, values: { ...content, link } };
+  return { to, template: notificationEmailTemplate[kind], locale: language, values: { ...content, link: itemLink(content.workItemId, language, webUrl) } };
+}
+
+/** An item's page on the customer web (`webUrl`), in `language`. */
+function itemLink(workItemId: string, language: Locale, webUrl: string): string {
+  return new URL(`/${language}/work-items/${encodeURIComponent(workItemId)}`, webUrl).href;
 }
 
 /**
@@ -82,7 +86,7 @@ export function notificationDigestMessage({ to, language, projects }: Notificati
     values: {
       projects: projects.map(({ name, items }) => ({
         name,
-        items: items.map((item) => ({ ...item, link: new URL(`/${language}/work-items/${encodeURIComponent(item.workItemId)}`, webUrl).href })),
+        items: items.map((item) => ({ ...item, link: itemLink(item.workItemId, language, webUrl) })),
       })),
     },
   };

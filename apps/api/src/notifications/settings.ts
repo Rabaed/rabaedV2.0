@@ -9,6 +9,7 @@ import {
   type NotificationSettings,
   type NotificationSettingsView,
   type UpdateNotificationSettingsRequest,
+  weeklyReportSettingOf,
 } from "@rabaed/domain";
 import { sql } from "kysely";
 import { commandResult } from "../outcomes.ts";
@@ -28,6 +29,7 @@ export function getNotificationSettings(db: Db, memberId: string): Promise<Notif
     const settings: NotificationSettings = structuredClone(defaultNotificationSettings);
     for (const g of groups) {
       if (g.notification_group === "watched") settings.watched = { inApp: g.in_app, email: g.email, outcomes: g.outcomes ?? [] };
+      else if (g.notification_group === "weekly_report") settings.weekly_report = weeklyReportSettingOf(g.email);
       else settings[g.notification_group] = { inApp: g.in_app, email: g.email };
     }
     const { rows: me } = await sql<{ email_paused: boolean | null; language: Locale; holds_assign: boolean }>`
@@ -56,7 +58,7 @@ export function getNotificationSettings(db: Db, memberId: string): Promise<Notif
 export function updateNotificationSettings(db: Db, memberId: string, body: UpdateNotificationSettingsRequest, now: Date): Promise<void> {
   return withMember(db, memberId, async (trx) => {
     for (const group of notificationGroups) {
-      const setting = body.settings[group];
+      const setting: NotificationGroupSetting = body.settings[group];
       const outcomes = group === "watched" ? (setting.outcomes ?? []) : null;
       await sql`
         insert into notification_setting (member_id, notification_group, in_app, email, outcomes, updated_at)

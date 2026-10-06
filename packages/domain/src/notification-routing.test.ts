@@ -30,13 +30,13 @@ const input = (over: Partial<RouteNotificationInput> & Pick<RouteNotificationInp
 });
 
 describe("the defaults", () => {
-  it("are in-app on, email immediately for Step reached and Sent Back, a digest for the rest, and every outcome ticked", () => {
+  it("are in-app on, email immediately for Step reached and Sent Back, a digest for the rest, every outcome ticked, and the weekly report emailed", () => {
     expect(defaultNotificationSettings).toEqual({
       step_reached: { inApp: true, email: "immediate" },
       watched: { inApp: true, email: "digest", outcomes: ["A", "B", "C", "D", "passed", "passed_with_comments", "failed", "approved", "rejected", "cancelled"] },
       sent_back: { inApp: true, email: "immediate" },
       vacancy: { inApp: true, email: "digest" },
-      weekly_report: { inApp: true, email: "digest" },
+      weekly_report: { inApp: false, email: "immediate" },
     });
   });
 
@@ -46,7 +46,7 @@ describe("the defaults", () => {
       ["watched_event", { inApp: true, email: "digest" }],
       ["sent_back", { inApp: true, email: "immediate" }],
       ["vacancy", { inApp: true, email: "digest" }],
-      ["weekly_report", { inApp: true, email: "digest" }],
+      ["weekly_report", { inApp: false, email: "immediate" }],
     ]);
   });
 });
@@ -71,6 +71,22 @@ describe("a group's own setting", () => {
     const settings = withGroup("sent_back", { inApp: false, email: "off" });
     expect(routeNotification(input({ kind: "step_reached", settings }))).toEqual({ inApp: true, email: "immediate" });
     expect(routeNotification(input({ kind: "sent_back", settings }))).toEqual({ inApp: false, email: "none" });
+  });
+});
+
+describe("the weekly report", () => {
+  const weekly = (email: NotificationGroupSetting["email"], inApp = true) =>
+    routeNotification(input({ kind: "weekly_report", settings: withGroup("weekly_report", { inApp, email }) }));
+
+  it("is an email only: never the bell, whatever is stored", () => {
+    expect(weekly("immediate").inApp).toBe(false);
+    expect(weekly("immediate", false).inApp).toBe(false);
+  });
+
+  it("is emailed when its email is on, on its own schedule (a stored digest counts as on), and not when off", () => {
+    expect(weekly("immediate").email).toBe("immediate");
+    expect(weekly("digest").email).toBe("immediate");
+    expect(weekly("off").email).toBe("none");
   });
 });
 
@@ -108,7 +124,8 @@ describe("mute and pause", () => {
   });
 
   it("pausing all email stops every email and leaves the bell", () => {
-    for (const kind of notificationKinds) expect(routeNotification(input({ kind, emailPaused: true })), kind).toEqual({ inApp: true, email: "none" });
+    for (const kind of notificationKinds)
+      expect(routeNotification(input({ kind, emailPaused: true })), kind).toEqual({ inApp: kind !== "weekly_report", email: "none" });
   });
 });
 
@@ -147,8 +164,11 @@ describe("every combination", () => {
     const heldBack = c.kind === "watched_event" && c.outcome !== null && c.outcome !== "closed" && !c.ticks.includes(c.outcome);
     // Nothing when muted or when the watcher didn't tick the outcome.
     if (c.muted || heldBack) return expect(route).toEqual({ inApp: false, email: "none" });
+    const emailed = !c.emailPaused && c.email !== "off";
+    // The weekly report: never the bell; emailed on its schedule while on.
+    if (c.kind === "weekly_report") return expect(route).toEqual({ inApp: false, email: emailed ? "immediate" : "none" });
     // Otherwise the bell follows the switch, and email the choice unless paused.
     expect(route.inApp).toBe(c.inApp);
-    expect(route.email).toBe(c.emailPaused || c.email === "off" ? "none" : c.email);
+    expect(route.email).toBe(emailed ? c.email : "none");
   });
 });

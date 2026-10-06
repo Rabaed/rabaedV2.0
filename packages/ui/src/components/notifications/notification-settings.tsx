@@ -8,6 +8,7 @@ import {
   type NotificationSettingsView,
   type UpdateNotificationSettingsRequest,
   type WatchOutcome,
+  watchOutcomeNames,
   watchOutcomes,
 } from "@rabaed/domain";
 import { useState } from "react";
@@ -21,7 +22,8 @@ import { Switch } from "../form/switch.tsx";
 // At the top: Pause all email, the language of emails, and a mute per Project.
 // Then one row per group with an In-app switch and an Email choice; "Items I
 // watch" also ticks the outcomes that notify. The Weekly Step Age report row is
-// shown only to its recipients. Every change applies at once; a refused one is
+// shown only to its recipients, with an Email switch only: it is an email on its
+// own schedule, never in the bell. Every change applies at once; a refused one is
 // undone and says so. Presentational: the page does the calls.
 
 const copy = {
@@ -44,20 +46,9 @@ const copy = {
       vacancy: "Vacancy in my Company",
       weekly_report: "Weekly Step Age report",
     },
+    weeklyHelp: "Emailed on Sunday mornings.",
     outcomes: "Outcomes that notify me",
     outcomeGroups: { review_code: "Review Codes", inspection_result: "Inspection Results", other: "Other outcomes" },
-    outcome: {
-      A: "A · Approved",
-      B: "B · Approved with Comments",
-      C: "C · Revise and Resubmit",
-      D: "D · Rejected",
-      passed: "Passed",
-      passed_with_comments: "Passed with Comments",
-      failed: "Failed",
-      approved: "Approved",
-      rejected: "Rejected",
-      cancelled: "Cancelled",
-    },
     refusals: { not_found: "That Project is no longer available to you.", unavailable: "That didn't save. Try again." },
   },
   ar: {
@@ -79,20 +70,9 @@ const copy = {
       vacancy: "شاغر في شركتي",
       weekly_report: "تقرير عمر الخطوة الأسبوعي",
     },
+    weeklyHelp: "يُرسل بالبريد صباح كل أحد.",
     outcomes: "النتائج التي تُشعرني",
     outcomeGroups: { review_code: "رموز المراجعة", inspection_result: "نتائج الفحص", other: "نتائج أخرى" },
-    outcome: {
-      A: "A · معتمد",
-      B: "B · معتمد مع ملاحظات",
-      C: "C · يُراجع ويُعاد تقديمه",
-      D: "D · مرفوض",
-      passed: "ناجح",
-      passed_with_comments: "ناجح مع ملاحظات",
-      failed: "راسب",
-      approved: "معتمد",
-      rejected: "مرفوض",
-      cancelled: "ملغى",
-    },
     refusals: { not_found: "لم يعد هذا المشروع متاحًا لك.", unavailable: "لم يُحفظ ذلك. حاول مرة أخرى." },
   },
 } satisfies Record<Locale, unknown>;
@@ -105,6 +85,14 @@ const outcomeGroups: Record<keyof (typeof copy)["en"]["outcomeGroups"], readonly
   inspection_result: ["passed", "passed_with_comments", "failed"],
   other: ["approved", "rejected", "cancelled"],
 };
+
+const reviewCodes: readonly WatchOutcome[] = outcomeGroups.review_code;
+
+/** A tickable outcome's name; a Review Code beside its letter ("A · Approved"). */
+function outcomeLabel(outcome: WatchOutcome, locale: Locale): string {
+  const name = watchOutcomeNames[outcome][locale];
+  return reviewCodes.includes(outcome) ? `${outcome} · ${name}` : name;
+}
 
 type Refusal = keyof (typeof copy)["en"]["refusals"];
 /** A save as the page calls it: a refusal by the API's error code. */
@@ -207,23 +195,34 @@ export function NotificationSettingsForm({ locale, value, onSave, onMute }: Noti
             return (
               <li key={group} className="space-y-3 py-4" data-group={group}>
                 <h3 className="font-medium">{t.group[group]}</h3>
-                <div className="flex flex-wrap items-center gap-x-8 gap-y-3">
-                  <Field label={t.inApp} layout="inline">
+                {group === "weekly_report" ? (
+                  // An email only, on its own schedule: on or off.
+                  <Field label={t.email} help={t.weeklyHelp} layout="inline">
                     <Switch
-                      checked={setting.inApp}
+                      checked={setting.email !== "off"}
                       aria-describedby={`group-${group}`}
-                      onCheckedChange={(inApp) => void setGroup(group, { inApp })}
+                      onCheckedChange={(on) => void setGroup(group, { inApp: false, email: on ? "immediate" : "off" })}
                     />
                   </Field>
-                  <Field label={t.email} group>
-                    <SegmentedControl
-                      value={setting.email}
-                      aria-describedby={`group-${group}`}
-                      onValueChange={(email) => void setGroup(group, { email: email as NotificationEmailChoice })}
-                      options={emailOptions}
-                    />
-                  </Field>
-                </div>
+                ) : (
+                  <div className="flex flex-wrap items-center gap-x-8 gap-y-3">
+                    <Field label={t.inApp} layout="inline">
+                      <Switch
+                        checked={setting.inApp}
+                        aria-describedby={`group-${group}`}
+                        onCheckedChange={(inApp) => void setGroup(group, { inApp })}
+                      />
+                    </Field>
+                    <Field label={t.email} group>
+                      <SegmentedControl
+                        value={setting.email}
+                        aria-describedby={`group-${group}`}
+                        onValueChange={(email) => void setGroup(group, { email: email as NotificationEmailChoice })}
+                        options={emailOptions}
+                      />
+                    </Field>
+                  </div>
+                )}
                 {/* Names the row's controls for a screen reader: "In-app" alone doesn't say which group. */}
                 <span id={`group-${group}`} hidden>
                   {t.group[group]}
@@ -235,10 +234,10 @@ export function NotificationSettingsForm({ locale, value, onSave, onMute }: Noti
                       {Object.entries(outcomeGroups).map(([key, outcomes]) => (
                         <Field key={key} label={t.outcomeGroups[key as keyof typeof outcomeGroups]} group>
                           <CheckboxGroup
-                            options={outcomes.map((o) => ({ value: o, label: t.outcome[o] }))}
-                            value={(setting.outcomes ?? []).filter((o) => outcomes.includes(o))}
+                            options={outcomes.map((o) => ({ value: o, label: outcomeLabel(o, locale) }))}
+                            value={saved.settings.watched.outcomes.filter((o) => outcomes.includes(o))}
                             onValueChange={(ticked) => {
-                              const kept = new Set([...(setting.outcomes ?? []).filter((o) => !outcomes.includes(o)), ...ticked]);
+                              const kept = new Set([...saved.settings.watched.outcomes.filter((o) => !outcomes.includes(o)), ...ticked]);
                               void setGroup(group, { outcomes: watchOutcomes.filter((o) => kept.has(o)) });
                             }}
                           />

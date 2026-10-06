@@ -13,6 +13,7 @@ const copy = {
   codeC: { en: "C · Revise and Resubmit", ar: "C · يُراجع ويُعاد تقديمه" },
   weekly: { en: "Weekly Step Age report", ar: "تقرير عمر الخطوة الأسبوعي" },
   inApp: { en: "In-app", ar: "داخل التطبيق" },
+  email: { en: "Email", ar: "البريد الإلكتروني" },
   mute: { en: "Mute", ar: "كتم" },
   digest: { en: "Daily digest", ar: "ملخص يومي" },
   off: { en: "Off", ar: "إيقاف" },
@@ -89,6 +90,24 @@ export const EmailAndMutes: Story = {
     await userEvent.click(mutes[0]!);
     await expect(args.onMute).toHaveBeenCalledWith(value.projects[0]!.id, true);
     await expect(mutes[0]).toBeChecked();
+  },
+};
+
+/** The weekly report is an email on its own schedule: its row has one Email switch, no In-app switch and no digest choice. */
+export const WeeklyReport: Story = {
+  args: { value: { ...value, receivesWeeklyReport: true } },
+  play: async (context) => {
+    const { canvas, args } = context;
+    const weekly = within(canvas.getByRole("heading", { name: storyText(context, copy.weekly) }).closest("li")!);
+    await expect(weekly.queryByRole("switch", { name: storyText(context, copy.inApp) })).toBeNull();
+    await expect(weekly.queryByRole("radio")).toBeNull();
+    const email = weekly.getByRole("switch", { name: storyText(context, copy.email) });
+    await expect(email).toBeChecked();
+    await userEvent.click(email);
+    await expect(args.onSave).toHaveBeenCalledWith(
+      expect.objectContaining({ settings: expect.objectContaining({ weekly_report: { inApp: false, email: "off" } }) }),
+    );
+    await expect(email).not.toBeChecked();
   },
 };
 

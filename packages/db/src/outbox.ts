@@ -5,6 +5,7 @@ import type {
   NotificationDigestItem,
   NotificationDigestProject,
   NotificationEmail,
+  NotificationEmailContent,
   NotificationEmailKind,
 } from "@rabaed/domain";
 import { sql, type Transaction } from "kysely";
@@ -31,6 +32,35 @@ export const deliverNotification: OutboxHandler = async (trx, row) => {
   await sql`select app.deliver_notification(${row.id}::uuid)`.execute(trx);
 };
 
+type NotificationEvent = NonNullable<NotificationEmailContent["event"]>;
+
+/**
+ * One notification's email content as its recipient may see it now
+ * (app.notification_email_content): a row of app.take_notification_email, and,
+ * with its Project, of app.take_notification_digest.
+ */
+interface NotificationRow {
+  to_address: string;
+  language: Locale;
+  kind: NotificationEmailKind;
+  work_item_id: string;
+  document_number: string | null;
+  subject: string;
+  step_name: BilingualText | null;
+  event_type: NotificationEvent["type"] | null;
+  transition_label: BilingualText | null;
+  outcome: string | null;
+  company_name: BilingualText | null;
+  signer_name: BilingualText | null;
+}
+
+/** What happened, for a notification about an event; null for one about a Step. */
+function eventOf(row: NotificationRow): NotificationEvent | null {
+  return row.event_type
+    ? { type: row.event_type, transition: row.transition_label, outcome: row.outcome, companyName: row.company_name, signerName: row.signer_name }
+    : null;
+}
+
 /** Sends one notification email: the worker's mailer. Throws when it could not. */
 export type SendNotificationEmail = (email: NotificationEmail) => Promise<void>;
 
@@ -43,20 +73,7 @@ export type SendNotificationEmail = (email: NotificationEmail) => Promise<void>;
  */
 export function notificationEmailHandler(send: SendNotificationEmail): OutboxHandler {
   return async (trx, row) => {
-    const { rows } = await sql<{
-      to_address: string;
-      language: Locale;
-      kind: NotificationEmailKind;
-      work_item_id: string;
-      document_number: string | null;
-      subject: string;
-      step_name: BilingualText | null;
-      event_type: NonNullable<NotificationEmail["content"]["event"]>["type"] | null;
-      transition_label: BilingualText | null;
-      outcome: string | null;
-      company_name: BilingualText | null;
-      signer_name: BilingualText | null;
-    }>`select * from app.take_notification_email(${row.id}::uuid)`.execute(trx);
+    const { rows } = await sql<NotificationRow>`select * from app.take_notification_email(${row.id}::uuid)`.execute(trx);
     const email = rows[0];
     if (!email) return;
     await send({
@@ -68,15 +85,7 @@ export function notificationEmailHandler(send: SendNotificationEmail): OutboxHan
         documentNumber: email.document_number,
         subject: email.subject,
         step: email.step_name,
-        event: email.event_type
-          ? {
-              type: email.event_type,
-              transition: email.transition_label,
-              outcome: email.outcome,
-              companyName: email.company_name,
-              signerName: email.signer_name,
-            }
-          : null,
+        event: eventOf(email),
       },
     });
   };
@@ -94,22 +103,9 @@ export type SendNotificationDigest = (digest: NotificationDigest) => Promise<voi
  */
 export function notificationDigestHandler(send: SendNotificationDigest): OutboxHandler {
   return async (trx, row) => {
-    const { rows } = await sql<{
-      to_address: string;
-      language: Locale;
-      kind: NotificationEmailKind;
-      project_id: string;
-      project_name: BilingualText;
-      work_item_id: string;
-      document_number: string | null;
-      subject: string;
-      step_name: BilingualText | null;
-      event_type: NonNullable<NotificationEmail["content"]["event"]>["type"] | null;
-      transition_label: BilingualText | null;
-      outcome: string | null;
-      company_name: BilingualText | null;
-      signer_name: BilingualText | null;
-    }>`select * from app.take_notification_digest(${row.id}::uuid)`.execute(trx);
+    const { rows } = await sql<NotificationRow & { project_id: string; project_name: BilingualText }>`
+      select * from app.take_notification_digest(${row.id}::uuid)
+    `.execute(trx);
     const first = rows[0];
     if (!first) return;
     // Rows come oldest first: Projects, then items, in the order their first entry came.
@@ -124,13 +120,7 @@ export function notificationDigestHandler(send: SendNotificationDigest): OutboxH
         items.set(r.work_item_id, item);
         project.items.push(item);
       }
-      item.entries.push({
-        kind: r.kind,
-        step: r.step_name,
-        event: r.event_type
-          ? { type: r.event_type, transition: r.transition_label, outcome: r.outcome, companyName: r.company_name, signerName: r.signer_name }
-          : null,
-      });
+      item.entries.push({ kind: r.kind, step: r.step_name, event: eventOf(r) });
     }
     await send({ to: first.to_address, language: first.language, projects: [...projects.values()] });
   };

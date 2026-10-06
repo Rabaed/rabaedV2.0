@@ -146,6 +146,17 @@ describe("notification settings", () => {
     expect((await settingsOf(at.c1Engineer)).settings).toEqual(defaultNotificationSettings);
   });
 
+  it("keep the Weekly Step Age report an email turned on or off: never in-app, never a digest", async () => {
+    const member = await projectMember(api, c1, at.c1ParticipantId, ["engineer"]);
+    const { settings } = await settingsOf(member);
+    expect(settings.weekly_report).toEqual({ inApp: false, email: "immediate" });
+    for (const weekly of [{ inApp: true, email: "immediate" }, { inApp: false, email: "digest" }]) {
+      await ok(putSettings(member, { settings: { ...settings, weekly_report: weekly }, emailPaused: false, preferredLanguage: "en" }), 400);
+    }
+    await saveSettings(member, { settings: { ...settings, weekly_report: { inApp: false, email: "off" } }, emailPaused: false, preferredLanguage: "en" });
+    expect((await settingsOf(member)).settings.weekly_report).toEqual({ inApp: false, email: "off" });
+  });
+
   it("take the language of emails from the browser at the first sign-in that tells it, and only then", async () => {
     const { email } = await memberOnProject(api, c1, at.c1ParticipantId, ["engineer"]);
     const first = await api.signIn(email, DEFAULT_PASSWORD, "ar");
