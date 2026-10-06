@@ -6,7 +6,10 @@
  *   2. lay out in the locale's direction, with Latin digits and no deadline words,
  *   3. load nothing from another origin (fonts and icons are self-hosted, no CDN),
  *   4. have no axe violations under WCAG 2.2 AA,
- *   5. match its committed screenshot (Linux only; see vitest.config.ts).
+ *   5. in a phone story, give every interactive element a 44 x 44px hit area (inline text
+ *      links are exempt; anything else needs `parameters.touchTargets.exempt` with a reason,
+ *      see src/storybook/touch-target.ts),
+ *   6. match its committed screenshot (Linux only; see vitest.config.ts).
  * Stories with `parameters.phone` render 390px wide on a touch screen
  * (pointer: coarse), so they can check 44px touch targets. Stories with
  * `parameters.overlay` (dialogs, sheets, toasts) leave their overlay open and
@@ -22,6 +25,7 @@ import axe, { type RunOptions } from "axe-core";
 import { beforeAll, describe, expect, inject, test } from "vitest";
 import { cdp, page } from "vitest/browser";
 import preview from "../.storybook/preview.tsx";
+import { type TouchTargetExemption, touchTargetOffenders } from "../src/storybook/touch-target.ts";
 
 declare module "vitest" {
   export interface ProvidedContext {
@@ -122,6 +126,15 @@ for (const locale of locales) {
             } else {
               await expect.element(page.getByTestId("story")).toMatchScreenshot(`${Story.id}--${locale}`);
             }
+          }
+
+          // Last, because probing a hit area scrolls the page: restore the scroll afterwards.
+          if (Story.parameters.phone === true) {
+            const exempt = (Story.parameters.touchTargets?.exempt ?? []) as TouchTargetExemption[];
+            const { scrollX, scrollY } = window;
+            const offenders = touchTargetOffenders(document.body, exempt);
+            window.scrollTo(scrollX, scrollY);
+            expect(offenders).toEqual([]);
           }
         });
       });

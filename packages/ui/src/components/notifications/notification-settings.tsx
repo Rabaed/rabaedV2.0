@@ -229,7 +229,7 @@ export function NotificationSettingsForm({ locale, value, onSave, onMute }: Noti
                 </span>
                 {group === "watched" && (
                   <details className="group/outcomes">
-                    <summary className="cursor-pointer text-sm font-medium text-primary pointer-coarse:py-3">{t.outcomes}</summary>
+                    <summary className="cursor-pointer text-sm font-medium text-primary pointer-coarse:min-h-11 pointer-coarse:py-3">{t.outcomes}</summary>
                     <div className="mt-3 grid gap-6 sm:grid-cols-3">
                       {Object.entries(outcomeGroups).map(([key, outcomes]) => (
                         <Field key={key} label={t.outcomeGroups[key as keyof typeof outcomeGroups]} group>

@@ -173,7 +173,7 @@ function PhotoInputs({
         aria-label={label}
         disabled={pending}
         onChange={() => picked(choose.current)}
-        className="block w-full text-sm text-text file:me-3 file:rounded-md file:border file:border-border file:bg-surface file:px-3 file:py-1.5 file:text-sm"
+        className="block w-full text-sm text-text pointer-coarse:min-h-11 file:me-3 file:rounded-md file:border file:border-border file:bg-surface file:px-3 file:py-1.5 file:text-sm"
       />
       {/* On a phone, straight to the back camera; elsewhere it chooses a file, as the input above. */}
       <OutsideField>
