@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "no
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { chooseWorktrees, gatherFacts, hasOwnCommit, isAgentWorktree, listWorktrees, parseWorktrees, refExists, removeWorktree, type WorktreeFacts } from "./worktrees.ts";
+import { branchMerged, chooseWorktrees, gatherFacts, hasOwnCommit, isAgentWorktree, listWorktrees, parseWorktrees, refExists, removeWorktree, type WorktreeFacts } from "./worktrees.ts";
 
 const main = "G:/Rabaed Contech";
 const here = `${main}/.claude/worktrees/agent-current`;
@@ -210,5 +210,17 @@ describe("gatherFacts and removeWorktree in a throwaway repository", () => {
     expect(branchKept).toMatch(/not fully merged/);
     expect(refExists("worktree-agent-unmerged", root)).toBe(true);
     expect(existsSync(agent("agent-unmerged"))).toBe(false);
+  });
+
+  it("calls a branch merged only once it has a commit of its own that the target has", () => {
+    run(["worktree", "add", "-b", "RP-2-fresh", agent("agent-fresh")]);
+    run(["worktree", "add", "-b", "RP-3-done", agent("agent-done")]);
+    expect(branchMerged("RP-2-fresh", "main", root)).toBe(false);
+    writeFileSync(join(agent("agent-done"), "c.txt"), "c");
+    run(["add", "c.txt"], agent("agent-done"));
+    run(["commit", "-m", "work"], agent("agent-done"));
+    expect(branchMerged("RP-3-done", "main", root)).toBe(false);
+    run(["merge", "--no-ff", "-m", "merge", "RP-3-done"]);
+    expect(branchMerged("RP-3-done", "main", root)).toBe(true);
   });
 });

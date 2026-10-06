@@ -7,7 +7,8 @@
 // Mailpit 8025+100n, the file store 9000+100n and its own Docker Compose project (container + volume). Lane 0 keeps the defaults.
 //
 // It refuses a lane whose ports are taken, or whose compose project another worktree
-// already uses, and names the holder. --free takes the next lane that is free instead.
+// already uses, and names the holder, saying whether that worktree's branch is already merged
+// into origin/main (then `pnpm lanes:prune --merged` frees it). --free takes the next lane that is free instead.
 // --db <suffix> (e.g. rp322) names the three database URLs rabaed_<suffix>, so the seam suites
 // use rabaed_<suffix>_test: several worktrees of one lane (e.g. /implement-spec's implementer
 // subagents) can share its Postgres without migrating the same database. A --db run may share
@@ -15,7 +16,9 @@
 // `pnpm lanes:prune` removes the compose projects old worktrees left behind;
 // `pnpm lanes:drop-dbs` drops the --db databases of worktrees that are gone.
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { firstFreeLane, isValidDbSuffix, laneClashes, laneEnv, lanePorts, laneProject, listContainers, takenLanePorts } from "./lanes.ts";
+import { firstFreeLane, isValidDbSuffix, laneClashes, laneEnv, laneHolders, lanePorts, laneProject, listContainers, takenLanePorts } from "./lanes.ts";
+import { samePath } from "./paths.ts";
+import { branchMerged, listWorktrees, refExists, type Worktree } from "./worktrees.ts";
 
 const args = process.argv.slice(2);
 const force = args.includes("--force");
@@ -45,6 +48,29 @@ if (!containers) console.warn("Docker is not running, so only the ports were che
 const check = { containers: containers ?? [], takenPorts: await takenLanePorts(), cwd: process.cwd(), ownDatabase: db !== undefined };
 const clashesOf = (lane: number) => laneClashes(lane, check);
 
+/** For each worktree holding lane n: whether its branch is merged into origin/main, and how to free the lane. */
+function holderStatus(lane: number): string[] {
+  const holders = laneHolders(lane, check);
+  if (holders.length === 0) return [];
+  let worktrees: Worktree[] = [];
+  try {
+    worktrees = listWorktrees();
+  } catch {
+    return [];
+  }
+  const mainRoot = worktrees[0]?.path ?? ".";
+  const hasOriginMain = refExists("origin/main", mainRoot);
+  return holders.map((dir) => {
+    const w = worktrees.find((x) => samePath(x.path, dir));
+    if (!w) return `  ${dir} is not a worktree of this clone (or is gone): \`pnpm lanes:prune\` frees the lane.`;
+    if (!w.branch) return `  ${dir} has a detached HEAD.`;
+    if (!hasOriginMain) return `  ${dir} is on ${w.branch}; run \`git fetch origin main\` to see whether it is merged.`;
+    return branchMerged(w.branch, "origin/main", mainRoot)
+      ? `  ${dir} is on ${w.branch}, already merged into origin/main: free the lane with \`pnpm lanes:prune --merged\`, then re-run.`
+      : `  ${dir} is on ${w.branch}, not merged into origin/main yet: its session may still need the lane.`;
+  });
+}
+
 let lane = n;
 const clashes = clashesOf(n);
 if (clashes.length > 0) {
@@ -53,6 +79,7 @@ if (clashes.length > 0) {
   const why = `Lane ${n} is not free:\n${clashes.map((c) => `  - ${c}`).join("\n")}`;
   if (!free || next === undefined) {
     console.error(why);
+    for (const line of holderStatus(n)) console.error(line);
     console.error(next === undefined ? `No lane is free. ${prune}` : `Lane ${next} is free: pnpm lane:env ${next}${force ? " --force" : ""} (or add --free). ${prune}`);
     process.exit(1);
   }
