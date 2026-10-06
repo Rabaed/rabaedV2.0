@@ -1,9 +1,20 @@
 import { describe, expect, it } from "vitest";
-import { stepAgeDots, stepAgeLabel, stepAgeWeeks } from "./step-age.ts";
+import { enteredStepBy, stepAgeDots, stepAgeLabel, stepAgeWeeks } from "./step-age.ts";
 
 const DAY = 86_400_000;
 const entered = new Date("2026-09-01T10:00:00Z");
 const after = (ms: number) => new Date(entered.getTime() + ms);
+
+describe("enteredStepBy", () => {
+  it("is the Step Age filter's bound: entered by it, the item is at least that many weeks in; a millisecond later, it isn't", () => {
+    const now = after(30 * DAY);
+    for (const weeks of [2, 3, 4]) {
+      const bound = enteredStepBy(weeks, now);
+      expect(stepAgeWeeks(bound, now)).toBe(weeks);
+      expect(stepAgeWeeks(new Date(bound.getTime() + 1), now)).toBe(weeks - 1);
+    }
+  });
+});
 
 describe("stepAgeWeeks", () => {
   it("is 1 in the first week at the Step, 2 in the second, and so on", () => {

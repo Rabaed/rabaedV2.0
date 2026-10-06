@@ -1,5 +1,5 @@
 import type { stageCategories } from "@rabaed/domain";
-import type { StageKey } from "@rabaed/ui";
+import type { StageKey } from "../../tokens/themes.ts";
 
 type Stage = { key: string; category: (typeof stageCategories)[number] };
 

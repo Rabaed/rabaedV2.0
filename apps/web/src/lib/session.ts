@@ -27,8 +27,10 @@ import type {
   WorkItemLinks,
   WorkItemHistory,
   WorkItemList,
+  WorkItemQuery,
   OptionList,
 } from "@rabaed/domain";
+import { workItemSearchParams } from "@rabaed/domain";
 import { cookies } from "next/headers";
 import { apiUrl } from "./api-url.ts";
 
@@ -130,9 +132,13 @@ export function getMyVisibility(projectId: string): Promise<DimensionValues | nu
   return apiGet<DimensionValues>(`/v1/projects/${encodeURIComponent(projectId)}/visibility`);
 }
 
-/** The Work Items of a Project the signed-in Member can see, with Stage counts; null if it isn't one of theirs. */
-export function getWorkItems(projectId: string): Promise<WorkItemList | null> {
-  return apiGet<WorkItemList>(`/v1/projects/${encodeURIComponent(projectId)}/work-items`);
+/**
+ * One page of the work item query on a Project: the items the signed-in Member
+ * can see that match `query`, with Stage counts; null if it isn't one of theirs.
+ */
+export function getWorkItems(projectId: string, query: WorkItemQuery): Promise<WorkItemList | null> {
+  const params = workItemSearchParams(query).toString();
+  return apiGet<WorkItemList>(`/v1/projects/${encodeURIComponent(projectId)}/work-items${params ? `?${params}` : ""}`);
 }
 
 /** One Work Item; null if the signed-in Member can't see it (exactly as if it didn't exist). */

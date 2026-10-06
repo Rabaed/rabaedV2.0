@@ -78,13 +78,59 @@ export const workItemSummary = z.object({
 });
 export type WorkItemSummary = z.infer<typeof workItemSummary>;
 
+/** How a closed Work Item ended: its Issued Code, Inspection result, or cancelled (workflow-engine.md §1). */
+export const workItemOutcomes = ["A", "B", "C", "D", "passed", "passed_with_comments", "failed", "cancelled", "closed"] as const;
+export const workItemOutcome = z.enum(workItemOutcomes);
+export type WorkItemOutcome = z.infer<typeof workItemOutcome>;
+
 /**
- * A Project's Work Items the viewer can see, and every Stage with how many of
- * them are in it. Counts come from the same visible items, never from all.
+ * Who an open item is with, as the viewer may read it (V14): `own` when the
+ * viewer's own Participant holds it, with the Step and who claimed it (null
+ * while unclaimed); `company` when another Company holds it, by its name only.
+ */
+export const workItemWith = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("own"),
+    companyName: bilingualText,
+    step: z.object({ key: z.string(), name: bilingualText }),
+    claimer: z.object({ name: bilingualText, isMe: z.boolean() }).nullable(),
+  }),
+  z.object({ kind: z.literal("company"), companyName: bilingualText }),
+]);
+export type WorkItemWith = z.infer<typeof workItemWith>;
+
+/** A List row: one Revision the viewer sees, by default the latest of its chain. */
+export const workItemRow = workItemSummary.extend({
+  /** 0 for the first submission, then 1, 2… */
+  revisionNo: z.number().int().nonnegative(),
+  /** The Review Code or Inspection Result, once closed. */
+  outcome: workItemOutcome.nullable(),
+  /** Null once closed: nobody holds it. */
+  with: workItemWith.nullable(),
+});
+export type WorkItemRow = z.infer<typeof workItemRow>;
+
+/**
+ * One page of a Project's Work Items the viewer can see, matching the work item
+ * query, and every Stage with how many of the matching items are in it. Counts
+ * come from the same filtered, visible items, never from all, so they add up
+ * to every page's rows together. `nextCursor` is null on the last page.
+ * `filters` are what the toolbar offers: the Module's Types, the Project's
+ * Trades and Locations, and the "With" values of the viewer's visible items.
  */
 export const workItemList = z.object({
   stages: z.array(stage.extend({ count: z.number().int().nonnegative() })),
-  items: z.array(workItemSummary),
+  items: z.array(workItemRow),
+  nextCursor: z.string().nullable(),
+  filters: z.object({
+    types: z.array(z.object({ code: z.string(), name: bilingualText })),
+    trades: z.array(dimensionValueRef),
+    locations: z.array(dimensionValueRef.extend({ parentId: z.uuid().nullable() })),
+    with: z.object({
+      steps: z.array(z.object({ key: z.string(), name: bilingualText })),
+      companies: z.array(z.object({ participantId: z.uuid(), name: bilingualText })),
+    }),
+  }),
 });
 export type WorkItemList = z.infer<typeof workItemList>;
 
@@ -199,10 +245,6 @@ export type RevisionChain = z.infer<typeof revisionChain>;
 export const linkedFrom = z.object({ items: z.array(linkedFromItem) });
 export type LinkedFrom = z.infer<typeof linkedFrom>;
 
-/** How a closed Work Item ended: its Issued Code, Inspection result, or cancelled (workflow-engine.md §1). */
-export const workItemOutcomes = ["A", "B", "C", "D", "passed", "passed_with_comments", "failed", "cancelled", "closed"] as const;
-export const workItemOutcome = z.enum(workItemOutcomes);
-export type WorkItemOutcome = z.infer<typeof workItemOutcome>;
 
 /** A Transition's kind (workflow-engine.md §1; `send_back` ADR 0014). */
 export const transitionKinds = ["send", "submit", "return", "send_back", "close", "cancel"] as const;

@@ -18,6 +18,7 @@ import {
   workItemHistory,
   workItemLinks,
   workItemList,
+  workItemQuery,
 } from "@rabaed/domain";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
@@ -26,6 +27,7 @@ import { idOrNotFound, notFound, visibleOrNotFound } from "../http-error.ts";
 import { refusal } from "../refusals.ts";
 import { getLinkedFrom } from "../work-items/linked-from.ts";
 import { addWorkItemLink, getWorkItemLinks, removeWorkItemLink } from "../work-items/links.ts";
+import { listWorkItems } from "../work-items/query.ts";
 import { createRevision, discardRevision, getRevisionChain } from "../work-items/revisions.ts";
 import {
   claimStep,
@@ -36,7 +38,6 @@ import {
   getWorkItemForm,
   getWorkItemFormChoices,
   getWorkItemHistory,
-  listWorkItems,
   releaseStep,
   saveAnswers,
   searchLinkTargets,
@@ -66,12 +67,14 @@ export const workItemRoutes =
       },
     );
 
+    // The List: one page of the work item query (spec RP-344), its filters in the
+    // query string as the web's URL holds them.
     app.get(
       "/v1/projects/:projectId/work-items",
-      { schema: { params: projectParams, response: { 200: workItemList } } },
+      { schema: { params: projectParams, querystring: workItemQuery, response: { 200: workItemList } } },
       async (request) => {
         const memberId = ctx.requireMember(request);
-        return visibleOrNotFound(listWorkItems(ctx.db, memberId, idOrNotFound(request.params.projectId), ctx.now()));
+        return visibleOrNotFound(listWorkItems(ctx.db, memberId, idOrNotFound(request.params.projectId), request.query, ctx.now()));
       },
     );
 
