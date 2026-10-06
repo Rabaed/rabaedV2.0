@@ -24,6 +24,7 @@ const defaults: WorkItemQuery = {
   outcome: [],
   stepAgeMin: undefined,
   q: undefined,
+  needMyAction: false,
   allRevisions: false,
   sort: "stepAge",
   cursor: undefined,
@@ -71,6 +72,7 @@ describe("the query in the URL", () => {
     location: [location],
     outcome: ["C", "passed_with_comments"],
     stepAgeMin: 2,
+    needMyAction: true,
     allRevisions: true,
     sort: "documentNumber",
     cursor: encodeWorkItemCursor("documentNumber", ["false", "TWR-C1-EL-MAR-0001", row]),
@@ -92,6 +94,12 @@ describe("the query in the URL", () => {
       ...defaults,
       stage: ["draft"],
     });
+  });
+
+  it("keeps Need My Action as needMyAction=true, and reads it back", () => {
+    expect(workItemSearchParams({ ...defaults, needMyAction: true }).toString()).toBe("needMyAction=true");
+    expect(workItemQueryFromSearchParams({ needMyAction: "true" }).needMyAction).toBe(true);
+    expect(workItemQueryFromSearchParams({ needMyAction: "nonsense" }).needMyAction).toBe(false);
   });
 
   it("drops a cursor made for the other sort", () => {
@@ -128,10 +136,11 @@ describe("filters", () => {
     expect(isFilteredWorkItemQuery({ ...defaults, sort: "documentNumber", allRevisions: true, cursor: "x" })).toBe(false);
     expect(isFilteredWorkItemQuery({ ...defaults, stepAgeMin: 2 })).toBe(true);
     expect(isFilteredWorkItemQuery({ ...defaults, location: [location] })).toBe(true);
+    expect(isFilteredWorkItemQuery({ ...defaults, needMyAction: true })).toBe(true);
   });
 
   it("clear to the first page, keeping the sort and Revisions", () => {
-    const query: WorkItemQuery = { ...defaults, stage: ["draft"], stepAgeMin: 3, sort: "documentNumber", allRevisions: true, cursor: "x" };
+    const query: WorkItemQuery = { ...defaults, stage: ["draft"], stepAgeMin: 3, needMyAction: true, sort: "documentNumber", allRevisions: true, cursor: "x" };
     expect(withoutFilters(query)).toEqual({ ...defaults, sort: "documentNumber", allRevisions: true });
   });
 });

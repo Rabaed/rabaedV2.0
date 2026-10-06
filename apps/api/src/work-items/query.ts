@@ -136,6 +136,8 @@ function matching(q: WorkItemQuery, now: Date, scope: QueryScope): RawBuilder<bo
     // A closed item doesn't age.
     conditions.push(sql`not r.closed and r.step_entered_at <= ${enteredStepBy(q.stepAgeMin, now)}::timestamptz`);
   }
+  // Steps I hold, unclaimed Steps of my pool, and my own Drafts (app.need_my_action).
+  if (q.needMyAction) conditions.push(sql`app.need_my_action(r.id) is not null`);
   if (q.with.length > 0) {
     const steps = q.with.flatMap((v) => (v.startsWith("step:") ? [v.slice(5)] : []));
     const companies = q.with.flatMap((v) => (v.startsWith("company:") ? [v.slice(8)] : []));

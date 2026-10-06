@@ -8,7 +8,7 @@ import { workItemOutcome, workItemTypeCode } from "./work-item.ts";
  * filter is a query parameter, a list of values joined by commas. A value left
  * at its default is left out of the URL.
  *
- * Later filters (`needMyAction`, `q`, `submittedFrom`/`submittedTo`, `codeC`)
+ * Later filters (`q`, `submittedFrom`/`submittedTo`, `codeC`)
  * are new keys of the same object, so nothing that builds or reads a query
  * changes when they come.
  */
@@ -79,6 +79,11 @@ const queryFields = {
     (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
     z.string().trim().max(searchMaxLength).optional(),
   ),
+  /**
+   * Need My Action: only the items waiting on me, Steps I hold and unclaimed
+   * Steps in my Step Pool, plus my own Drafts (which are never counted).
+   */
+  needMyAction: flag,
   /** Every visible Revision, not only the latest of each chain. */
   allRevisions: flag,
   sort: z.enum(workItemSorts).default("stepAge"),
@@ -89,7 +94,7 @@ const queryFields = {
 /** The filters that take a list of values; every other key takes one. */
 const listKeys = ["type", "stage", "with", "trade", "location", "outcome"] as const satisfies readonly (keyof typeof queryFields)[];
 /** The keys that narrow the rows, as opposed to how they are shown (sort, Revisions, page). */
-const filterKeys = [...listKeys, "stepAgeMin", "q"] as const;
+const filterKeys = [...listKeys, "stepAgeMin", "q", "needMyAction"] as const;
 
 /** The query as the API takes it; a cursor must be one made for its sort. */
 export const workItemQuery = z.object(queryFields).superRefine((q, ctx) => {
@@ -141,6 +146,7 @@ export function workItemSearchParams(query: Partial<WorkItemQuery>): URLSearchPa
   }
   if (query.stepAgeMin !== undefined) params.set("stepAgeMin", String(query.stepAgeMin));
   if (query.q) params.set("q", query.q);
+  if (query.needMyAction) params.set("needMyAction", "true");
   if (query.allRevisions) params.set("allRevisions", "true");
   if (query.sort && query.sort !== "stepAge") params.set("sort", query.sort);
   if (query.cursor) params.set("cursor", query.cursor);
@@ -149,7 +155,9 @@ export function workItemSearchParams(query: Partial<WorkItemQuery>): URLSearchPa
 
 /** Whether `query` narrows the rows by any filter. */
 export function isFilteredWorkItemQuery(query: WorkItemQuery): boolean {
-  return filterKeys.some((key) => (key === "stepAgeMin" || key === "q" ? query[key] !== undefined : query[key].length > 0));
+  return filterKeys.some((key) =>
+    key === "stepAgeMin" || key === "q" ? query[key] !== undefined : key === "needMyAction" ? query[key] : query[key].length > 0,
+  );
 }
 
 /** `query` with no filters, from the first page: its sort and "Show all Revisions" kept. */

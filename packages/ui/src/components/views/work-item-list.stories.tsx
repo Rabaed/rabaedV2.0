@@ -14,6 +14,7 @@ const copy = {
   with: b("With", "لدى"),
   unclaimed: b("unclaimed", "لم تُستلَم"),
   allRevisions: b("Show all Revisions", "عرض كل المراجعات"),
+  needMyAction: b("Need My Action", "بحاجة لإجرائي"),
   nextPage: b("Next page", "الصفحة التالية"),
   firstPage: b("First page", "الصفحة الأولى"),
   clear: b("Clear filters", "مسح التصفية"),
@@ -216,6 +217,48 @@ export const ShowAllRevisions: Story = {
   play: async (context) => {
     await userEvent.click(context.canvas.getByRole("switch", { name: storyText(context, copy.allRevisions) }));
     await expect(context.args.onQueryChange).toHaveBeenCalledWith({ ...defaults, allRevisions: true });
+  },
+};
+
+/** Need My Action is off by default; turning it on asks for the items waiting on me, from the first page. */
+export const NeedMyActionOff: Story = {
+  args: { query: { ...defaults, cursor: "abc" } },
+  play: async (context) => {
+    const toggle = context.canvas.getByRole("switch", { name: storyText(context, copy.needMyAction) });
+    await expect(toggle).not.toBeChecked();
+    await userEvent.click(toggle);
+    await expect(context.args.onQueryChange).toHaveBeenCalledWith({ ...defaults, needMyAction: true });
+  },
+};
+
+/**
+ * Need My Action on: the Steps I hold, the unclaimed Steps of my pool, and my
+ * own Drafts. Turning it off shows every item again; clearing the filters does too.
+ */
+export const NeedMyActionOn: Story = {
+  args: {
+    query: { ...defaults, needMyAction: true },
+    list: { ...list, items: items.filter((i) => i.with?.kind === "own"), stages: list.stages.map((s) => ({ ...s, count: s.key === "approved" || s.key === "revise_resubmit" ? 0 : s.count })) },
+  },
+  play: async (context) => {
+    const toggle = context.canvas.getByRole("switch", { name: storyText(context, copy.needMyAction) });
+    await expect(toggle).toBeChecked();
+    await expect(context.canvas.getByRole("link", { name: storyText(context, copy.clear) })).toHaveAttribute("href", "?");
+    await userEvent.click(toggle);
+    await expect(context.args.onQueryChange).toHaveBeenCalledWith(defaults);
+  },
+};
+
+/** Need My Action on a phone: the toggle stays on screen above the table. */
+export const NeedMyActionNarrow: Story = {
+  ...NeedMyActionOn,
+  parameters: phone,
+  play: async (context) => {
+    const toggle = context.canvas.getByRole("switch", { name: storyText(context, copy.needMyAction) });
+    await expect(toggle).toBeChecked();
+    const box = toggle.getBoundingClientRect();
+    await expect(box.left).toBeGreaterThanOrEqual(0);
+    await expect(box.right).toBeLessThanOrEqual(innerWidth);
   },
 };
 

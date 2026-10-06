@@ -34,6 +34,8 @@ describe("creating a Project", () => {
       status: "active",
       projectRole: { baseRole: "contractor", name: { en: "Contractor", ar: "المقاول" } },
       isProjectAdmin: true,
+      needMyAction: 0,
+      modules: ["submittals"],
     });
     expect(projectIds(await a.caller.get("/v1/projects"))).toContain(projectId);
   });

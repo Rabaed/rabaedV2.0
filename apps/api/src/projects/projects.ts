@@ -1,5 +1,5 @@
 import { withMember, type Database, type Db } from "@rabaed/db";
-import type { CreateProjectRequest, ProjectSummary } from "@rabaed/domain";
+import { moduleKeys, type CreateProjectRequest, type ModuleKey, type ProjectSummary } from "@rabaed/domain";
 import { sql, type Transaction } from "kysely";
 import { refusedAsForbidden, type Forbidden } from "../db-error.ts";
 
@@ -49,22 +49,51 @@ function selectProjects(trx: Transaction<Database>, memberId: string) {
 
 type ProjectRow = Awaited<ReturnType<ReturnType<typeof selectProjects>["executeTakeFirstOrThrow"]>>;
 
-function toSummary({ baseRole, roleName, ...row }: ProjectRow): ProjectSummary {
-  return { ...row, projectRole: { baseRole, name: roleName } };
+/**
+ * Per Project, what its card and shell show besides its row: the Need My Action
+ * count and the Modules it has a Work Item Type in.
+ *
+ * The count is of the items app.need_my_action says are waiting on the Member
+ * (never their own Drafts), the function behind the List's toggle too, so the
+ * two can't disagree. Only open assignments of the Member's own Participants are
+ * candidates (RLS on step_assignment), and RLS on work_item keeps it to items
+ * they see. A closed Project counts 0.
+ */
+async function summaries(trx: Transaction<Database>, rows: ProjectRow[]): Promise<ProjectSummary[]> {
+  if (rows.length === 0) return [];
+  const projectIds = rows.map((r) => r.id);
+  const { rows: counts } = await sql<{ project_id: string; count: number }>`
+    select w.project_id, count(distinct w.id)::int as count
+    from work_item w
+    join step_assignment a on a.work_item_id = w.id and a.status in ('pooled', 'claimed')
+    where w.project_id = any(${projectIds}::uuid[]) and app.need_my_action(w.id) = 'waiting'
+    group by w.project_id
+  `.execute(trx);
+  const { rows: modules } = await sql<{ project_id: string; module_key: ModuleKey }>`
+    select distinct p.id as project_id, t.module_key
+    from project p
+    join work_item_type t on t.project_id is null or t.project_id = p.id
+    where p.id = any(${projectIds}::uuid[])
+  `.execute(trx);
+  return rows.map(({ baseRole, roleName, ...row }) => ({
+    ...row,
+    projectRole: { baseRole, name: roleName },
+    needMyAction: counts.find((c) => c.project_id === row.id)?.count ?? 0,
+    modules: moduleKeys.filter((key) => modules.some((m) => m.project_id === row.id && m.module_key === key)),
+  }));
 }
 
 /** My Projects, newest first. */
-export async function listMyProjects(db: Db, memberId: string): Promise<ProjectSummary[]> {
-  const rows = await withMember(db, memberId, (trx) =>
-    selectProjects(trx, memberId).orderBy("p.created_at", "desc").orderBy("p.id", "desc").execute(),
+export function listMyProjects(db: Db, memberId: string): Promise<ProjectSummary[]> {
+  return withMember(db, memberId, async (trx) =>
+    summaries(trx, await selectProjects(trx, memberId).orderBy("p.created_at", "desc").orderBy("p.id", "desc").execute()),
   );
-  return rows.map(toSummary);
 }
 
 /** One of my Projects, or null: a Project the Member is not on is indistinguishable from one that doesn't exist. */
-export async function getProject(db: Db, memberId: string, projectId: string): Promise<ProjectSummary | null> {
-  const row = await withMember(db, memberId, (trx) =>
-    selectProjects(trx, memberId).where("p.id", "=", projectId).executeTakeFirst(),
-  );
-  return row ? toSummary(row) : null;
+export function getProject(db: Db, memberId: string, projectId: string): Promise<ProjectSummary | null> {
+  return withMember(db, memberId, async (trx) => {
+    const row = await selectProjects(trx, memberId).where("p.id", "=", projectId).executeTakeFirst();
+    return row ? (await summaries(trx, [row]))[0]! : null;
+  });
 }
