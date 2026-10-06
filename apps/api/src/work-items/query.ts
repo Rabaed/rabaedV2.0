@@ -143,6 +143,8 @@ function matching(q: WorkItemQuery, now: Date): RawBuilder<boolean> {
   // The Submission Date range, in Saudi days, both days included; an item not yet Submitted has none and is left out.
   if (q.submittedFrom !== undefined) conditions.push(sql`(r.submitted_at at time zone 'Asia/Riyadh')::date >= ${q.submittedFrom}::date`);
   if (q.submittedTo !== undefined) conditions.push(sql`(r.submitted_at at time zone 'Asia/Riyadh')::date <= ${q.submittedTo}::date`);
+  // Steps I hold, unclaimed Steps of my pool, and my own Drafts (app.need_my_action).
+  if (q.needMyAction) conditions.push(sql`app.need_my_action(r.id) is not null`);
   if (q.with.length > 0) {
     const steps = q.with.flatMap((v) => (v.startsWith("step:") ? [v.slice(5)] : []));
     const companies = q.with.flatMap((v) => (v.startsWith("company:") ? [v.slice(8)] : []));
