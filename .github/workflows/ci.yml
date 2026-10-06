@@ -1,7 +1,11 @@
 name: CI
 on:
   push:
+    # Merge queue branches run on merge_group below. A push run there would
+    # share the queue run's concurrency group and cancel it (RP-394).
+    branches-ignore: ["gh-readonly-queue/**"]
   pull_request:
+  merge_group: # each queue entry, on its own gh-readonly-queue/main/... ref
   workflow_dispatch: # started by update-screenshots.yml after it commits new baselines
 permissions:
   contents: read
@@ -109,9 +113,10 @@ jobs:
       - run: pnpm --filter @rabaed/ui build-storybook
       # The job still fails. On a push to a branch, it uploads the new PNGs;
       # after CI, update-screenshots.yml commits them to the PR and re-runs CI.
+      # Never in the merge queue: nothing there commits screenshots (RP-394).
       - name: Collect the baselines of new stories
         id: new-baselines
-        if: failure() && steps.stories.outcome == 'failure'
+        if: failure() && steps.stories.outcome == 'failure' && github.event_name != 'merge_group'
         env:
           SCREENSHOTS: packages/ui/test/__screenshots__
           VERDICT: packages/ui/.vitest/new-screenshots.json
@@ -136,7 +141,7 @@ jobs:
             echo "staged=true" >> "$GITHUB_OUTPUT"
           fi
       - name: Upload the baselines of new stories
-        if: failure() && steps.new-baselines.outputs.staged == 'true'
+        if: failure() && steps.new-baselines.outputs.staged == 'true' && github.event_name != 'merge_group'
         uses: actions/upload-artifact@v7
         with:
           name: new-screenshots
