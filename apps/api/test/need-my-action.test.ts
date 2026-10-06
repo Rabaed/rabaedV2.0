@@ -165,6 +165,22 @@ describe("Need My Action", () => {
     expect((await card(c1Pm)).needMyAction).toBe(2);
   });
 
+  it("counts one per Revision chain, as the toggle lists it: never a Revision that isn't the latest I see", async () => {
+    // Two items waiting in the PM's pool, made one chain: the second is the first's next Revision. The API never
+    // leaves an earlier Revision open, so the chain is made by hand, to prove the count follows the List's rule.
+    const earlier = await draft(c1Engineer, "Lighting, Rev 0");
+    await sendForReview(earlier);
+    const later = await draft(c1Engineer, "Lighting, Rev 1");
+    await sendForReview(later);
+    const before = (await card(c1Pm)).needMyAction;
+    await sql`update work_item set root_id = ${earlier}::uuid, revision_of_id = ${earlier}::uuid, revision_no = 1 where id = ${later}::uuid`.execute(migrator);
+    const rows = ids(await list(c1Pm));
+    expect(rows).toContain(later);
+    expect(rows).not.toContain(earlier);
+    expect((await card(c1Pm)).needMyAction).toBe(rows.length);
+    expect((await card(c1Pm)).needMyAction).toBe(before - 1);
+  });
+
   it("combines with the other filters", async () => {
     expect(ids(await list(c1Pm, { stage: ["draft"] }))).toEqual([]);
     expect(ids(await list(c1Pm, { with: ["me"] }))).toEqual([inReview]);
