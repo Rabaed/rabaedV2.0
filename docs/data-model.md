@@ -348,6 +348,8 @@ Each created Draft carries `import_id` for traceability.
 
 **notification** / **notification_preference**: in-app inbox and per-Member channel settings (email now, WhatsApp later). `notification`: `id`, `member_id`, `project_id`, `work_item_id`, `outbox_id` (unique with `member_id`: one per Member per row), `kind`, `step_id`, `created_at`, `read_at`. It holds ids only; the item's number and title are read through RLS when shown, and a Member sees only their own notifications of items they still see.
 
+**work_item_watch** (RP-354): a Member's Watch on a Revision chain: `member_id`, `project_id`, `root_id` (the chain's original, so one Watch covers every Revision; primary key with `member_id`), `created_at`. Written by triggers when a Member raises an item (a Revision too) and when a Member takes a Submit out of the raiser's Participant, and through `app.watch_work_item` / `app.unwatch_work_item` (any Revision acts on the chain; `not_found` for an item the caller doesn't see). A Member reads only their own rows, and never `root_id` (it would name a Revision they may not see); `app.watching_work_item` answers whether they watch an item. No read gives who else watches, nor how many. `app.work_item_watchers(item)` lists the watchers who still see the item (`app.sees_work_item`), for notification delivery only: the app role can't run it.
+
 **rabaed_engineer**: separate identity table. Engineers are never Members. `failed_sign_ins` and `locked_until` hold Rabaed Admin's lockout.
 
 Rabaed Admin's own sign-in (ADR 0010), used by the admin service only, never the app role:

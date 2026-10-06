@@ -21,6 +21,7 @@ import type {
   RevisionChain,
   Scopes,
   SignedInMember,
+  WatchState,
   WorkItemDetail,
   WorkItemLinks,
   WorkItemHistory,
@@ -186,6 +187,11 @@ export function getLinkedFrom(workItemId: string): Promise<LinkedFrom | null> {
 /** The Revisions of a Work Item's chain the signed-in Member may see (the Revision drop-down); null if they can't see the item. */
 export function getRevisionChain(workItemId: string): Promise<RevisionChain | null> {
   return apiGet<RevisionChain>(`/v1/work-items/${encodeURIComponent(workItemId)}/revisions`);
+}
+
+/** Whether the signed-in Member watches a Work Item (their own Watch only); null if they can't see it. */
+export function getWatchState(workItemId: string): Promise<WatchState | null> {
+  return apiGet<WatchState>(`/v1/work-items/${encodeURIComponent(workItemId)}/watch`);
 }
 
 /** A Work Item's history as the signed-in Member may see it; null if they can't see the item. */

@@ -26,6 +26,7 @@ import { projectRoutes } from "./routes/projects.ts";
 import { scopeRoutes } from "./routes/scopes.ts";
 import { sessionRoutes } from "./routes/session.ts";
 import { visibilityRoutes } from "./routes/visibility.ts";
+import { watchRoutes } from "./routes/watch.ts";
 import { workItemRoutes } from "./routes/work-items.ts";
 
 export const SESSION_COOKIE = "rabaed_session";
@@ -128,6 +129,7 @@ export async function buildApp({
   await app.register(workItemRoutes(context));
   await app.register(documentRoutes(context));
   await app.register(notificationRoutes(context));
+  await app.register(watchRoutes(context));
   await app.register(optionListRoutes(context));
   await app.register(numberingRoutes(context));
   await app.register(numberingCounterRoutes(context));
