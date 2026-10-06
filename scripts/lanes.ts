@@ -138,6 +138,69 @@ export function staleProjects({ containers, volumes, cwd, currentProject, exists
   return stale;
 }
 
+/** COMPOSE_PROJECT_NAME in an .env file's text; the value may be quoted. */
+export const composeProjectOfEnv = (env: string): string | undefined =>
+  /^COMPOSE_PROJECT_NAME=(.*)$/m.exec(env)?.[1]?.trim().replace(/^(["'])(.*)\1$/, "$2") || undefined;
+
+/** A worktree of this clone, as lanes:prune --merged sees it. */
+export type WorktreeLane = {
+  path: string;
+  branch: string | undefined;
+  /** Its branch is merged into origin/main (worktrees.ts branchMerged). */
+  merged: boolean;
+  /** COMPOSE_PROJECT_NAME from its .env, if any. */
+  project: string | undefined;
+};
+
+type MergedInput = {
+  containers: Container[];
+  volumes: Volume[];
+  worktrees: WorktreeLane[];
+  cwd: string;
+  currentProject: string | undefined;
+  platform?: NodeJS.Platform;
+};
+
+/**
+ * The rabaed-* compose projects (lanes:prune --merged) whose containers all come from
+ * worktrees whose branch is merged into origin/main. A project stays while any worktree
+ * that is not merged names it in its .env (it shares the lane, e.g. lane:env --db), and the
+ * current worktree's project always stays. Projects whose worktree is gone are staleProjects'.
+ */
+export function mergedProjects({ containers, volumes, worktrees, cwd, currentProject, platform }: MergedInput): StaleProject[] {
+  const worktreeAt = (dir: string) => worktrees.find((w) => samePath(w.path, dir, platform));
+  const projects = [...new Set(containers.map((c) => c.project).filter((p) => p.startsWith("rabaed-")))].sort();
+  const merged: StaleProject[] = [];
+  for (const project of projects) {
+    const mine = containers.filter((c) => c.project === project);
+    if (project === currentProject || mine.some((c) => samePath(c.workingDir, cwd, platform))) continue;
+    if (worktrees.some((w) => !w.merged && w.project === project)) continue;
+    const holders = [...new Set(mine.map((c) => c.workingDir))].map(worktreeAt);
+    if (holders.some((w) => !w?.merged)) continue;
+    const named = holders.map((w) => `${w!.branch} at ${w!.path}`).join(", ");
+    merged.push({
+      project,
+      reason: `branch merged into origin/main (${named})`,
+      containers: mine.map((c) => c.name),
+      volumes: volumes.filter((v) => v.project === project).map((v) => v.name),
+    });
+  }
+  return merged;
+}
+
+/**
+ * The worktrees (other than cwd) holding lane n, as laneClashes counts them: its compose
+ * project's containers, or a running container on one of its ports. With ownDatabase
+ * (lane:env --db), the lane's own compose project is shared, not held.
+ */
+export function laneHolders(n: number, { containers, cwd, platform, ownDatabase }: Omit<ClashInput, "takenPorts">): string[] {
+  const ports = new Set(Object.values(lanePorts(n)));
+  const holding = containers.filter((c) =>
+    ownDatabase === true && c.project === laneProject(n) ? false : c.project === laneProject(n) || (c.state === "running" && c.ports.some((p) => ports.has(p))),
+  );
+  return [...new Set(holding.map((c) => c.workingDir).filter((dir) => dir !== "" && !samePath(dir, cwd, platform)))];
+}
+
 /** Whether something holds the port on 127.0.0.1: it cannot be bound there, or something answers on it. */
 export async function isPortTaken(port: number): Promise<boolean> {
   const bindable = await new Promise<boolean>((resolve) => {

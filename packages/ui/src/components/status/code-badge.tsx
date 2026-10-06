@@ -5,6 +5,7 @@ import { Icon, type IconName } from "../icon/icon.tsx";
 
 // Each code has its own icon, colour and meaning; B always carries the comment icon,
 // because its Comments continue in the Snag List. Full class names, so Tailwind finds them.
+/* eslint-disable rabaed/no-ui-translations -- a documented exception in packages/ui/README.md (the Review Code meanings) */
 const codes: Record<ReviewCode, { icon: IconName; colour: string; meaning: Record<Locale, string> }> = {
   a: { icon: "circle-check", colour: "bg-code-a-bg text-code-a-fg", meaning: { en: "Approved", ar: "معتمد" } },
   b: {
@@ -19,6 +20,7 @@ const codes: Record<ReviewCode, { icon: IconName; colour: string; meaning: Recor
   },
   d: { icon: "circle-x", colour: "bg-code-d-bg text-code-d-fg", meaning: { en: "Rejected", ar: "مرفوض" } },
 };
+/* eslint-enable rabaed/no-ui-translations */
 
 const sizes = {
   sm: { box: "h-5 gap-1 px-1.5 text-notes", icon: 14 },

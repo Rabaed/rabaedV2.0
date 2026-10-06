@@ -15,6 +15,7 @@ import { cn } from "../../lib/cn.ts";
 import { moduleName } from "../../lib/module-name.ts";
 import { focusRing } from "../form/control-styles.ts";
 
+/* eslint-disable rabaed/no-ui-translations -- existing labels, still to move to the app's messages (RP-362 retro) */
 const copy = {
   items: { en: "# items", ar: "عدد العناصر: #" },
   inPreparation: { en: "In preparation", ar: "قيد الإعداد" },
@@ -23,8 +24,10 @@ const copy = {
   empty: { en: "No Work Item Types on this Project yet.", ar: "لا توجد أنواع عناصر عمل في هذا المشروع بعد." },
   codeC: { en: "Code C", ar: "الرمز C" },
 } satisfies Record<string, Record<Locale, string>>;
+/* eslint-enable rabaed/no-ui-translations */
 
 /** The Code C line's sub-states (codeCState), as the line and a List filtered from it name them. */
+/* eslint-disable rabaed/no-ui-translations -- existing labels, still to move to the app's messages (RP-362 retro) */
 const codeCLabels: Record<CodeCFilter, Record<Locale, string>> = {
   approvedOnRevision: { en: "approved on revision", ar: "معتمد بعد التعديل" },
   awaitingRevision: { en: "awaiting revision", ar: "بانتظار التعديل" },
@@ -32,6 +35,7 @@ const codeCLabels: Record<CodeCFilter, Record<Locale, string>> = {
   revisionInProgress: { en: "Revision in progress", ar: "التعديل جارٍ" },
   rejectedAfterC: { en: "rejected after C", ar: "مرفوض بعد C" },
 };
+/* eslint-enable rabaed/no-ui-translations */
 
 /** A Code C sub-state's name (e.g. for a List filtered from the Code C line), in the viewer's language. */
 export function codeCLabel(filter: CodeCFilter, locale: Locale): string {
@@ -39,6 +43,7 @@ export function codeCLabel(filter: CodeCFilter, locale: Locale): string {
 }
 
 /** Each bucket's name on a bar, and its colour: the Stage colour it ends in. Full class names, so Tailwind finds them. */
+/* eslint-disable rabaed/no-ui-translations -- existing labels, still to move to the app's messages (RP-362 retro) */
 const buckets: Record<ChainBucket, { label: Record<Locale, string>; bar: string }> = {
   pending: { label: { en: "Pending", ar: "قيد الانتظار" }, bar: "bg-stage-pending-dot" },
   in_preparation: { label: copy.inPreparation, bar: "bg-stage-internal-dot" },
@@ -53,13 +58,16 @@ const buckets: Record<ChainBucket, { label: Record<Locale, string>; bar: string 
   rejected: { label: { en: "Rejected", ar: "مرفوض" }, bar: "bg-stage-rejected-dot" },
   cancelled: { label: { en: "Cancelled", ar: "ملغى" }, bar: "bg-stage-cancelled-dot" },
 };
+/* eslint-enable rabaed/no-ui-translations */
 
 /** The footer's name for the approved share, by outcome kind. */
+/* eslint-disable rabaed/no-ui-translations -- existing labels, still to move to the app's messages (RP-362 retro) */
 const approvedLabel: Record<OutcomeKind, Record<Locale, string>> = {
   review_code: { en: "Approved (A+B)", ar: "المعتمد (A+B)" },
   inspection_result: { en: "Passed, with or without Comments", ar: "الناجح، مع ملاحظات أو بدونها" },
   none: { en: "Approved", ar: "المعتمد" },
 };
+/* eslint-enable rabaed/no-ui-translations */
 
 /** The bucket names (e.g. for a List filtered from a Dashboard number), in the viewer's language. */
 export function chainBucketLabel(bucket: ChainBucket, locale: Locale): string {

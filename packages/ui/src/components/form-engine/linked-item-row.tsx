@@ -14,10 +14,12 @@ import { Icon, type IconName } from "../icon/icon.tsx";
 // may not see its details, and asks nothing of the API. Shared by the Links
 // section, Linked from and the link question.
 
+/* eslint-disable rabaed/no-ui-translations -- existing labels, still to move to the app's messages (RP-362 retro) */
 const copy = {
   en: { hidden: "You are not allowed to see the details of this item." },
   ar: { hidden: "غير مسموح لك برؤية تفاصيل هذا البند." },
 } satisfies Record<Locale, unknown>;
+/* eslint-enable rabaed/no-ui-translations */
 
 export type LinkedItemRowProps = {
   locale: Locale;

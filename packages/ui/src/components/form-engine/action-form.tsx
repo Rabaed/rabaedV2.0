@@ -15,6 +15,7 @@ import { FormRenderer } from "./form-renderer.tsx";
 /** The longest Internal Note the API takes. */
 export const internalNoteMaxLength = 4000;
 
+/* eslint-disable rabaed/no-ui-translations -- existing labels, still to move to the app's messages (RP-362 retro) */
 const copy = {
   en: {
     internalNote: "Internal Note",
@@ -26,6 +27,7 @@ const copy = {
     internalNoteHelp: "اختيارية. لا يراها إلا شركتك، حتى عندما ينتقل العنصر إلى شركة أخرى. ما يخصهم يُكتب في المحادثة أو النموذج.",
   },
 } satisfies Record<Locale, unknown>;
+/* eslint-enable rabaed/no-ui-translations */
 
 export type ActionFormProps = {
   /** The Transition's Action Form; null when it asks nothing but the Internal Note. */

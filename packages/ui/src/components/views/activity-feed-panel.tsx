@@ -11,6 +11,7 @@ import { Select } from "../form/select.tsx";
 import { Switch } from "../form/switch.tsx";
 import { moduleName } from "../../lib/module-name.ts";
 
+/* eslint-disable rabaed/no-ui-translations -- existing labels, still to move to the app's messages (RP-362 retro) */
 const copy = {
   title: { en: "Activity", ar: "النشاط" },
   module: { en: "Module", ar: "الوحدة" },
@@ -32,6 +33,7 @@ const copy = {
   cancelled: { en: "cancelled", ar: "ألغى" },
   updated: { en: "updated", ar: "حدّث" },
 } satisfies Record<string, Record<Locale, string>>;
+/* eslint-enable rabaed/no-ui-translations */
 
 /** A Select's value for "no filter": Radix Select takes no empty value. */
 const ALL = "all";

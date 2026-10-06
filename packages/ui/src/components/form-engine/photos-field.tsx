@@ -23,6 +23,7 @@ import type { AttachmentsFieldFiles } from "./attachments-field.tsx";
 // the phone's camera or choose, several at once, and to remove. Presentational:
 // the page uploads and passes the field's Documents, and their image URLs, back in.
 
+/* eslint-disable rabaed/no-ui-translations -- existing labels, still to move to the app's messages (RP-362 retro) */
 const copy = {
   en: {
     none: "No photos yet.",
@@ -70,6 +71,7 @@ const copy = {
             : `يقبل هذا الحقل ${formatNumber(n, "ar")} صورة على الأكثر.`,
   },
 } satisfies Record<Locale, unknown>;
+/* eslint-enable rabaed/no-ui-translations */
 
 /** What a photos field's files are, what may be done with them now, and their images to show. */
 export type PhotosFieldFiles = AttachmentsFieldFiles & {

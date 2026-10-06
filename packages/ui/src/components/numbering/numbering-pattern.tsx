@@ -35,6 +35,7 @@ const kinds: Kind[] = ["project", "type", "trade", "participant", "location", "t
 const maxSegments = 6;
 const digitChoices = [3, 4, 5, 6, 7];
 
+/* eslint-disable rabaed/no-ui-translations -- existing labels, still to move to the app's messages (RP-362 retro) */
 const copy = {
   en: {
     kinds: {
@@ -109,6 +110,7 @@ const copy = {
     countedBadge: "يُعدّ",
   },
 } satisfies Record<Locale, unknown>;
+/* eslint-enable rabaed/no-ui-translations */
 
 type Text = (typeof copy)[Locale];
 

@@ -32,6 +32,7 @@ import { PhotosField, type PhotosFieldFiles } from "./photos-field.tsx";
 // negative, and says what is missing when the item leaves Draft. Presentational:
 // the page uploads photos and passes the field's Documents back in.
 
+/* eslint-disable rabaed/no-ui-translations -- existing labels, still to move to the app's messages (RP-362 retro) */
 const copy = {
   en: {
     comment: "Comment",
@@ -64,6 +65,7 @@ const copy = {
     itemNumber: (n: number, of: number) => `${formatNumber(n, "ar")} من ${formatNumber(of, "ar")}`,
   },
 } satisfies Record<Locale, unknown>;
+/* eslint-enable rabaed/no-ui-translations */
 
 /** What a checklist's photos are, and what may be done with them now: the field's Documents, whichever items they are evidence for. */
 export type ChecklistFiles = Omit<PhotosFieldFiles, "documents" | "pending"> & {

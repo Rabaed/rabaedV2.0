@@ -66,6 +66,20 @@ export default tseslint.config(
     rules: { "rabaed/no-deadline-words": "error" },
   },
   {
+    // Only `next build` checks for "use client" (RP-362). Stories and the Storybook shell never run as Server Components.
+    files: ["packages/ui/src/**/*.tsx", "apps/web/src/**/*.tsx"],
+    ignores: ["**/*.stories.tsx", "**/*.test.tsx", "packages/ui/src/storybook/**"],
+    plugins: { rabaed },
+    rules: { "rabaed/use-client-directive": "error" },
+  },
+  {
+    // The package has no translations of its own (packages/ui/README.md). Stories may word their own examples.
+    files: ["packages/ui/src/components/**/*.{ts,tsx}"],
+    ignores: ["**/*.stories.tsx"],
+    plugins: { rabaed },
+    rules: { "rabaed/no-ui-translations": "error" },
+  },
+  {
     files: ["packages/ui/**/*.css", "apps/web/**/*.css"],
     // The generated token file is where the palette's raw colours live.
     ignores: ["packages/ui/src/styles/tokens.css"],
