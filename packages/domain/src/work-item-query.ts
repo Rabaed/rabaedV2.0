@@ -20,6 +20,9 @@ export const workItemPageSize = 50;
 export const workItemSorts = ["stepAge", "documentNumber"] as const;
 export type WorkItemSort = (typeof workItemSorts)[number];
 
+/** The longest search the List takes. */
+export const searchMaxLength = 200;
+
 /** The Step Age filter: open items in at least their 2nd, 3rd or 4th week at their Step. */
 export const stepAgeMinimums = [2, 3, 4] as const;
 
@@ -66,6 +69,16 @@ const queryFields = {
     .number()
     .pipe(z.union(stepAgeMinimums.map((n) => z.literal(n))))
     .optional(),
+  /**
+   * Search (RP-347): words to find in the Document Number, Subject, Type,
+   * Trade, Location or the raiser's Company name; never in answers or
+   * Documents (visibility.md "Search and filters", V19). Nothing but spaces is
+   * no search.
+   */
+  q: z.preprocess(
+    (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
+    z.string().trim().max(searchMaxLength).optional(),
+  ),
   /** Every visible Revision, not only the latest of each chain. */
   allRevisions: flag,
   sort: z.enum(workItemSorts).default("stepAge"),
@@ -76,7 +89,7 @@ const queryFields = {
 /** The filters that take a list of values; every other key takes one. */
 const listKeys = ["type", "stage", "with", "trade", "location", "outcome"] as const satisfies readonly (keyof typeof queryFields)[];
 /** The keys that narrow the rows, as opposed to how they are shown (sort, Revisions, page). */
-const filterKeys = [...listKeys, "stepAgeMin"] as const;
+const filterKeys = [...listKeys, "stepAgeMin", "q"] as const;
 
 /** The query as the API takes it; a cursor must be one made for its sort. */
 export const workItemQuery = z.object(queryFields).superRefine((q, ctx) => {
@@ -127,6 +140,7 @@ export function workItemSearchParams(query: Partial<WorkItemQuery>): URLSearchPa
     if (values && values.length > 0) params.set(key, values.join(","));
   }
   if (query.stepAgeMin !== undefined) params.set("stepAgeMin", String(query.stepAgeMin));
+  if (query.q) params.set("q", query.q);
   if (query.allRevisions) params.set("allRevisions", "true");
   if (query.sort && query.sort !== "stepAge") params.set("sort", query.sort);
   if (query.cursor) params.set("cursor", query.cursor);
@@ -135,7 +149,7 @@ export function workItemSearchParams(query: Partial<WorkItemQuery>): URLSearchPa
 
 /** Whether `query` narrows the rows by any filter. */
 export function isFilteredWorkItemQuery(query: WorkItemQuery): boolean {
-  return filterKeys.some((key) => (key === "stepAgeMin" ? query[key] !== undefined : query[key].length > 0));
+  return filterKeys.some((key) => (key === "stepAgeMin" || key === "q" ? query[key] !== undefined : query[key].length > 0));
 }
 
 /** `query` with no filters, from the first page: its sort and "Show all Revisions" kept. */

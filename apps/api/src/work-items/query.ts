@@ -111,8 +111,14 @@ function visibleRows({ projectId, moduleKey }: QueryScope, allRevisions: boolean
 const noFilter = sql<boolean>`true`;
 
 /** The rows of `visibleRows` (as `r`) that match the query's filters; the cursor aside. */
-function matching(q: WorkItemQuery, now: Date): RawBuilder<boolean> {
+function matching(q: WorkItemQuery, now: Date, scope: QueryScope): RawBuilder<boolean> {
   const conditions: RawBuilder<boolean>[] = [];
+  if (q.q !== undefined) {
+    // Search (RP-347): the Document Number, Subject, Type, Trade, Location and the
+    // raiser's Company name, never answers or Documents (V19). The function answers
+    // only with items the caller sees; the rows here are those already.
+    conditions.push(sql`r.id in (select app.search_work_items(${scope.projectId}::uuid, ${q.q}::text))`);
+  }
   if (q.type.length > 0) conditions.push(sql`r.type_code = any(${q.type}::text[])`);
   if (q.stage.length > 0) conditions.push(sql`r.stage_key = any(${q.stage}::text[])`);
   if (q.trade.length > 0) conditions.push(sql`r.trade_id = any(${q.trade}::uuid[])`);
@@ -205,7 +211,7 @@ export async function queryWorkItems(
   now: Date,
 ): Promise<{ rows: WorkItemRow[]; nextCursor: string | null; stageCounts: Map<string, number> }> {
   const rows = visibleRows(scope, q.allRevisions);
-  const where = matching(q, now);
+  const where = matching(q, now, scope);
   const { orderBy, after } = ordering(q);
   const { rows: page } = await sql<Row>`
     with r as (${rows})
@@ -228,8 +234,15 @@ export async function queryWorkItems(
   return {
     rows: shown.map((r) => toRow(r, now)),
     nextCursor: page.length > workItemPageSize ? cursorAfter(q, shown.at(-1)!) : null,
-    stageCounts: new Map(counts.map((c) => [c.stage_key, c.count])),
+    // A search counts no more than its page shows ("Search and filters": no totals beyond the page).
+    stageCounts: q.q === undefined ? new Map(counts.map((c) => [c.stage_key, c.count])) : pageCounts(shown),
   };
+}
+
+function pageCounts(rows: Row[]): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const r of rows) counts.set(r.stage_key, (counts.get(r.stage_key) ?? 0) + 1);
+  return counts;
 }
 
 /**
