@@ -27,8 +27,9 @@ export const interactiveSelector = [
 
 /**
  * Exemptions from the harness check, with a reason each. Keep this short.
- * - An inline text link (an `a` whose parent also holds text of its own) is exempt
- *   automatically: WCAG 2.5.8 exempts targets inline in a sentence.
+ * - An inline text link (an `a` in a run of text: text of its own beside it, in its parent
+ *   or in the inline elements around it up to the text block) is exempt automatically:
+ *   WCAG 2.5.8 exempts targets inline in a sentence. A link beside a badge or an icon is not.
  * - Anything else: a story lists `parameters.touchTargets.exempt`, each entry a CSS
  *   `selector` and the `reason` it cannot reach 44px.
  */
@@ -38,6 +39,8 @@ export type TouchTargetExemption = { selector: string; reason: string };
  * Null when the element's touch target is at least 44px across both ways: its own box, or for
  * a smaller control a hit area that reaches 22px from its centre in all four directions
  * (e.g. a pseudo-element). Edge midpoints, not corners, so rounded corners don't count against it.
+ * Where a probe would fall off the screen (a control at its edge), the control's own box must
+ * reach that far instead: a hit area past the edge can't be tapped.
  * Otherwise a short description of the shortfall.
  */
 export function touchTargetShortfall(control: Element): string | null {
@@ -50,8 +53,11 @@ export function touchTargetShortfall(control: Element): string | null {
   const reach = 21.5;
   const misses: string[] = [];
   for (const [dx, dy, side] of [[-reach, 0, "start"], [reach, 0, "end"], [0, -reach, "top"], [0, reach, "bottom"]] as const) {
-    // Past the screen edge there is nothing to tap: a control at the edge can't be missed that way.
-    if (x + dx < 0 || y + dy < 0 || x + dx >= innerWidth || y + dy >= innerHeight) continue;
+    if (x + dx < 0 || y + dy < 0 || x + dx >= innerWidth || y + dy >= innerHeight) {
+      const own = dx !== 0 ? box.width / 2 : box.height / 2;
+      if (own < reach) misses.push(`${side}: at the screen edge, its own box reaches ${Math.round(own)}px`);
+      continue;
+    }
     const hit = document.elementFromPoint(x + dx, y + dy);
     if (!hit || !(control.contains(hit) || labelledBy(control, hit))) misses.push(`${side}: ${hit ? describe(hit) : "nothing"}`);
   }
@@ -69,11 +75,18 @@ function describe(element: Element) {
   return `<${element.tagName.toLowerCase()} ${element.getAttribute("role") ?? ""} ${name}> ${element.textContent?.slice(0, 30) ?? ""}`;
 }
 
-/** An `a` in running text: its parent holds text beyond the link itself. */
+/**
+ * An `a` in a run of text: a text node of its own beside it, in its parent or in an inline
+ * element around it (`<p>Read the <strong><a>terms</a></strong> first</p>`), up to the first
+ * block. Elements beside it (a badge, an icon) don't count: that is a row, not a sentence.
+ */
 function isInlineTextLink(element: Element) {
   if (element.tagName !== "A") return false;
-  const parent = element.parentElement;
-  return !!parent && (parent.textContent ?? "").trim() !== (element.textContent ?? "").trim();
+  for (let parent = element.parentElement; parent; parent = parent.parentElement) {
+    if (Array.from(parent.childNodes).some((node) => node.nodeType === Node.TEXT_NODE && node.textContent!.trim() !== "")) return true;
+    if (getComputedStyle(parent).display !== "inline") return false;
+  }
+  return false;
 }
 
 function visible(element: Element) {

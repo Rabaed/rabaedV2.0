@@ -132,6 +132,9 @@ for (const locale of locales) {
           if (Story.parameters.phone === true) {
             const exempt = (Story.parameters.touchTargets?.exempt ?? []) as TouchTargetExemption[];
             const { scrollX, scrollY } = window;
+            // The app lays pages out inside a 24px gutter (`main`'s px-6), so a story's content is measured
+            // inside it too; what sits on the real screen edge (fixed bars, sheets) is measured there.
+            canvasElement.style.paddingInline = "1.5rem";
             const offenders = touchTargetOffenders(document.body, exempt);
             window.scrollTo(scrollX, scrollY);
             expect(offenders).toEqual([]);

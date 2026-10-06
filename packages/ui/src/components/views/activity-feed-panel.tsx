@@ -5,7 +5,7 @@ import { useEffect, useId, useRef, type ElementType } from "react";
 import { cn } from "../../lib/cn.ts";
 import { Button } from "../button/button.tsx";
 import { DocNo } from "../doc-no/doc-no.tsx";
-import { focusRing } from "../form/control-styles.ts";
+import { focusRing, touchBox } from "../form/control-styles.ts";
 import { Field } from "../form/field.tsx";
 import { Select } from "../form/select.tsx";
 import { Switch } from "../form/switch.tsx";
@@ -115,7 +115,7 @@ export function ActivityFeedPanel({
           {t("title")}
         </h2>
         {viewAllHref && !fullHeight && (
-          <Link href={viewAllHref} className={cn("rounded-sm text-sm text-primary underline underline-offset-4", focusRing)}>
+          <Link href={viewAllHref} className={cn("rounded-sm text-sm text-primary underline underline-offset-4", focusRing, touchBox)}>
             {t("viewAll")}
           </Link>
         )}

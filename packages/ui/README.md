@@ -77,7 +77,7 @@ Every control sits in a `Field`, which gives it a label, optional help text, the
 | `Switch` | On/off that takes effect at once | `layout="inline"` |
 
 - **Read-only** keeps the value, stays focusable and is announced read-only (for every control, not only text boxes).
-- **Touch**: on a touch screen (`pointer: coarse`) every control and option is at least 44 × 44px. Small controls (checkbox, radio, switch) keep their size and get a larger hit area.
+- **Touch**: on a touch screen (`pointer: coarse`) every control and option is at least 44 × 44px. Small controls (checkbox, radio, switch) keep their size and get a larger hit area (`touchArea`); links and other inline controls grow to 44px (`touchBox`), both in `control-styles.ts`.
 - **Direction**: wrap the app once in `<DirectionProvider dir={directionOf(locale)}>` so arrow keys and the Select menu follow Arabic (`apps/web` does this in its layout).
 - Form control borders use `control-border` (3:1 against the background, WCAG 1.4.11); `border` is for decorative lines only.
 
@@ -209,7 +209,7 @@ The sidebar uses the light variant of the design (surface and brand tint); a dar
 - `pnpm storybook` opens Storybook; the **Language** toolbar switches EN (LTR) / AR (RTL).
 - `pnpm test:stories` runs every story in Chromium, once per language: its play function (behaviour), direction, Latin digits, no deadline words, no requests to another origin, axe (WCAG 2.2 AA) and a screenshot comparison.
 - Stories with `parameters: overlay` (from `src/storybook/overlay.ts`) leave a dialog, sheet, popover, tooltip or toast open; the harness checks and screenshots the whole 1024 × 768 page, portals included. Motion is reduced in story tests, so animations never reach a screenshot.
-- Stories with `parameters: phone` (from `src/storybook/form.ts`) render 390px wide on an emulated touch screen, so they can check 44px touch targets with `expectTouchTarget`. The harness also checks every interactive element of a phone story for a 44 x 44px hit area and names each offender; inline text links are exempt, anything else needs `parameters: { touchTargets: { exempt: [{ selector, reason }] } }` (see `src/storybook/touch-target.ts`).
+- Stories with `parameters: phone` (from `src/storybook/form.ts`) render 390px wide on an emulated touch screen, so they can check 44px touch targets with `expectTouchTarget`. The harness also checks every interactive element of a phone story for a 44 x 44px hit area and names each offender; links inside a run of text are exempt (a link beside a badge or icon is not), content is measured inside the app's 24px page gutter, a control on the screen edge by its own box, anything else needs `parameters: { touchTargets: { exempt: [{ selector, reason }] } }` (see `src/storybook/touch-target.ts`).
 - Screenshot baselines are Linux renders in `test/__screenshots__/`, compared on Linux only (CI).
   - **A new story** needs no step from you. When the only story test failures are missing baselines, CI uploads the new PNGs, and once CI finishes, the **Update screenshots** workflow commits them to your branch as one bot commit and runs CI again. It does this only for pushes to an open PR's branch in this repository, never for a fork or on `main`. Review the new PNGs in the PR.
   - **A changed story** still fails CI. When you change the UI on purpose, add the `update-screenshots` label to your PR (or run `gh workflow run update-screenshots.yml --ref <branch>`); the **Update screenshots** workflow commits the re-rendered baselines to the PR for review.

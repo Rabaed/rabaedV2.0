@@ -13,7 +13,7 @@ import {
 import type { ElementType, ReactNode } from "react";
 import { cn } from "../../lib/cn.ts";
 import { moduleName } from "../../lib/module-name.ts";
-import { focusRing } from "../form/control-styles.ts";
+import { focusRing, touchBox } from "../form/control-styles.ts";
 
 const copy = {
   items: { en: "# items", ar: "عدد العناصر: #" },
@@ -106,7 +106,8 @@ export function ProjectDashboard({ dashboard, locale, hrefFor, linkAs: Link = "a
 
 type Ctx = { locale: Locale; hrefFor: (query: DashboardFigureQuery) => string; Link: ElementType };
 
-const linkClass = cn("rounded-sm hover:underline underline-offset-4", focusRing, "pointer-coarse:inline-flex pointer-coarse:min-h-11 pointer-coarse:min-w-11 pointer-coarse:items-center");
+const linkLook = cn("rounded-sm hover:underline underline-offset-4", focusRing);
+const linkClass = cn(linkLook, touchBox);
 
 function TypeCard({ card, ...ctx }: { card: DashboardCard } & Ctx) {
   const { locale } = ctx;
@@ -216,13 +217,14 @@ function Figure({ figure, hrefFor, Link, className, children }: { figure: Dashbo
 function Bar({ label, colour, figure, total, ...ctx }: { label: string; colour: string; figure: DashboardFigure; total: number } & Ctx) {
   const share = total === 0 ? 0 : Math.round((figure.count / total) * 100);
   return (
-    <Figure figure={figure} {...ctx} className="grid min-h-8 grid-cols-[minmax(0,9rem)_1fr_auto] items-center gap-3 text-caption pointer-coarse:grid pointer-coarse:min-h-11">
+    // A whole-width grid row, so it takes the link's look but not touchBox: it only needs the height.
+    <ctx.Link href={ctx.hrefFor(figure.query)} className={cn(linkLook, "grid min-h-8 grid-cols-[minmax(0,9rem)_1fr_auto] items-center gap-3 text-caption pointer-coarse:min-h-11")}>
       <span className="truncate">{label}</span>
       <span aria-hidden="true" className="h-2 overflow-hidden rounded-full bg-neutral-tint">
         <span className={cn("block h-full rounded-full", colour)} style={{ inlineSize: `${share}%` }} />
       </span>
       <span className="font-semibold tabular-nums">{formatNumber(figure.count, ctx.locale)}</span>
-    </Figure>
+    </ctx.Link>
   );
 }
 
