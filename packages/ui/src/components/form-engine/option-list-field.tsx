@@ -21,6 +21,7 @@ import { Select } from "../form/select.tsx";
 // on an answer that holds it, marked, but is never offered for a new choice.
 // Presentational only, like the renderer around it.
 
+/* eslint-disable rabaed/no-ui-translations -- existing labels, still to move to the app's messages (RP-362 retro) */
 const copy = {
   en: {
     level: (n: number) => `Level ${formatNumber(n, "en")}`,
@@ -35,6 +36,7 @@ const copy = {
     unavailable: "هذه القائمة غير متاحة.",
   },
 } satisfies Record<Locale, unknown>;
+/* eslint-enable rabaed/no-ui-translations */
 
 // A select's "no choice" item: option values never are "-" alone, so it never clashes with one.
 const noChoice = "-";

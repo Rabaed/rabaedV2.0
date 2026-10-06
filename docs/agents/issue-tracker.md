@@ -31,6 +31,7 @@ Run these in `/to-spec` and `/to-tickets`, before the issue is created.
 
 - **Spec: glossary.** Check every domain term against the _Avoid_ lists in `GLOSSARY.md`. A clash gets a glossary entry or a different word before the spec is published (RP-299 used "Remarks", which is Avoid for Comment and Internal Note).
 - **Ticket: existing code.** Find every function, table or endpoint the ticket calls "existing" or "as today" on `main` with grep. Each one not found gets a "Blocks" link from the ticket that builds it (RP-305 assumed `create_revision`, which RP-103 and RP-316 build).
+- **Ticket: shared files.** Name the shared modules the ticket changes, e.g. the work item query (`apps/api/src/work-items/query.ts`), so the planning session can keep two lanes off the same module (`planning/parallel-sessions.md`, rule 4).
 
 ## Wayfinding operations
 

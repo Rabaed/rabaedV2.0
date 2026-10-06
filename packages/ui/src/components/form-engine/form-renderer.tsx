@@ -76,6 +76,7 @@ import { TableInput, TableRead } from "./table-field.tsx";
 
 export type { FormLinks } from "./link-question-field.tsx";
 
+/* eslint-disable rabaed/no-ui-translations -- existing labels, still to move to the app's messages (RP-362 retro) */
 const copy = {
   en: {
     summary: (n: number) => (n === 1 ? "1 field needs your attention:" : `${formatNumber(n, "en")} fields need your attention:`),
@@ -170,6 +171,7 @@ const copy = {
     filledBy: (role: string) => `يعبّئه ${role}`,
   },
 } satisfies Record<Locale, unknown>;
+/* eslint-enable rabaed/no-ui-translations */
 
 export type FormRendererProps = {
   /** The pinned Form Version's schema. */

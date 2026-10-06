@@ -15,6 +15,7 @@ import { LinkedItemRow } from "./linked-item-row.tsx";
 // listed under the question's label, and removed by changing its answer.
 // Presentational: the page passes the API's Links and does the adding and removing.
 
+/* eslint-disable rabaed/no-ui-translations -- existing labels, still to move to the app's messages (RP-362 retro) */
 const copy = {
   en: {
     title: "Links",
@@ -28,6 +29,7 @@ const copy = {
     remove: (number: string) => `إزالة الربط مع \u2066${number}\u2069`,
   },
 } satisfies Record<Locale, unknown>;
+/* eslint-enable rabaed/no-ui-translations */
 
 export type LinksSectionProps = {
   locale: Locale;

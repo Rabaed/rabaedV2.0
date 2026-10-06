@@ -16,6 +16,7 @@ import { Icon } from "../icon/icon.tsx";
 // Link search API; the API alone decides what may be offered (Submitted items
 // the Member sees, in the same Project), and says nothing of anything else.
 
+/* eslint-disable rabaed/no-ui-translations -- existing labels, still to move to the app's messages (RP-362 retro) */
 const copy = {
   en: {
     label: "Find an item to link",
@@ -44,6 +45,7 @@ const copy = {
       }${more ? "، والمزيد أدناه" : ""}`,
   },
 } satisfies Record<Locale, unknown>;
+/* eslint-enable rabaed/no-ui-translations */
 
 export type LinkSearchProps = {
   locale: Locale;

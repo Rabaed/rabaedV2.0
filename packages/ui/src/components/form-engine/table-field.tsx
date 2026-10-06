@@ -29,6 +29,7 @@ import { Icon } from "../icon/icon.tsx";
 // one. Presentational only, like the renderer around it: the cell controls come
 // from the renderer, and errors from the shared validator.
 
+/* eslint-disable rabaed/no-ui-translations -- existing labels, still to move to the app's messages (RP-362 retro) */
 const copy = {
   en: {
     addRow: "Add row",
@@ -49,6 +50,7 @@ const copy = {
     wrongType: "هذا الصف غير صالح هنا.",
   },
 } satisfies Record<Locale, unknown>;
+/* eslint-enable rabaed/no-ui-translations */
 
 const isRowObject = (value: unknown): value is FormRow => typeof value === "object" && value !== null && !Array.isArray(value);
 

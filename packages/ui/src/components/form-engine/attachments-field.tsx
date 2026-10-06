@@ -12,6 +12,7 @@ import { Icon } from "../icon/icon.tsx";
 // field's Documents back in.
 
 // Words as the Attachments System Field's (the web app's messages): a Document, never a "file" (GLOSSARY.md).
+/* eslint-disable rabaed/no-ui-translations -- existing labels, still to move to the app's messages (RP-362 retro) */
 const copy = {
   en: {
     none: "No Documents yet.",
@@ -56,6 +57,7 @@ const copy = {
             : `يقبل هذا الحقل ${formatNumber(n, "ar")} مستندًا على الأكثر.`,
   },
 } satisfies Record<Locale, unknown>;
+/* eslint-enable rabaed/no-ui-translations */
 
 /** A file's size in the viewer's language, with Latin digits: KB below a megabyte, else MB to one decimal. */
 function fileSize(bytes: number, locale: Locale): string {
