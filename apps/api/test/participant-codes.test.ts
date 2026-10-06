@@ -104,22 +104,30 @@ describe("who sees a code (V15)", () => {
     expect(engineerSees.map((p: { id: string; code: string }) => [p.id, p.code])).toEqual([[at.c1ParticipantId, "CCM"]]);
   });
 
-  // RP-381: the Numbering page shows a Participant without a code by its position,
-  // as its Document Numbers print it. Each Member gets the positions of the
-  // Participants they can see, and of no other.
-  it("lists each Participant's position with its code, to those who can see the Participant", async () => {
+  // RP-381: the Numbering page shows a Project Admin each Participant without a
+  // code by its order on the Project (01), as its Document Numbers print it.
+  it("lists each Participant's order on the Project to a Project Admin", async () => {
     const at = await project("PC14");
-    const positions = (list: { id: string; ordinal: number }[]) => list.map((p) => [p.id, p.ordinal]);
+    const orders = (list: { id: string; ordinal: number | null }[]) => list.map((p) => [p.id, p.ordinal]);
     const adminSees = (await c1.caller.get(`/v1/projects/${at.projectId}/participants`)).json().participants;
-    expect(positions(adminSees)).toEqual(
+    expect(orders(adminSees)).toEqual(
       expect.arrayContaining([
         [at.c1ParticipantId, 1],
         [at.k1ParticipantId, 2],
         [at.c2ParticipantId, 3],
       ]),
     );
+  });
+
+  // visibility.md RP-381-1: orders are max+1, so a non-admin seeing order 5 would
+  // learn that 4 other Participants exist (V15, side channels).
+  it("gives no Participant's order on the Project to anyone but a Project Admin (RP-381-1)", async () => {
+    const at = await project("PC15");
+    const orders = (list: { id: string; ordinal: number | null }[]) => list.map((p) => [p.id, p.ordinal]);
     const k1Sees = (await at.k1Manager.get(`/v1/projects/${at.projectId}/participants`)).json().participants;
-    expect(positions(k1Sees)).toEqual([[at.k1ParticipantId, 2]]);
+    expect(orders(k1Sees)).toEqual([[at.k1ParticipantId, null]]);
+    const engineerSees = (await at.c1Engineer.get(`/v1/projects/${at.projectId}/participants`)).json().participants;
+    expect(orders(engineerSees)).toEqual([[at.c1ParticipantId, null]]);
   });
 });
 

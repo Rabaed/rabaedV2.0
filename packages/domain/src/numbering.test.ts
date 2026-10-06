@@ -76,7 +76,7 @@ describe("countsByParticipant", () => {
 
 // RP-381: the Numbering page shows each Participant as its Document Numbers print it.
 describe("participantSegment", () => {
-  it("is the Participant Code once set, otherwise the position padded to two digits", () => {
+  it("is the Participant Code once set, otherwise the order on the Project padded to two digits", () => {
     expect(participantSegment({ code: "CCM", ordinal: 3 })).toBe("CCM");
     expect(participantSegment({ code: null, ordinal: 2 })).toBe("02");
     expect(participantSegment({ code: null, ordinal: 123 })).toBe("123");

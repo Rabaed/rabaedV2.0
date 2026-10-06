@@ -113,7 +113,7 @@ const text = {
     counterAhead: "not yet used",
     sharedAccepted: "shared counter accepted",
     digitsSummary: (n) => `${n} digits`,
-    countedBySummary: (positions) => `counted by: ${positions}`,
+    countedBySummary: (segments) => `counted by: ${segments.join(", ")}`,
     patternSavedNotice: "Numbering Pattern saved.",
     codeSavedNotice: "Participant Code saved.",
     startSavedNotice: (next) => `Starting number set. The next number is ${next}.`,
@@ -256,7 +256,7 @@ const text = {
     counterAhead: "لم يُستخدم بعد",
     sharedAccepted: "قُبل العدّاد المشترك",
     digitsSummary: (n) => `${n} أرقام`,
-    countedBySummary: (positions) => `العدّ حسب: ${positions}`,
+    countedBySummary: (segments) => `العدّ حسب: ${segments.join("، ")}`,
     patternSavedNotice: "حُفظ نمط الترقيم.",
     codeSavedNotice: "حُفظ رمز المشارك.",
     startSavedNotice: (next) => `ضُبط رقم البداية. الرقم التالي هو ${next}.`,
@@ -671,7 +671,8 @@ function describePattern(saved) {
   const parts = [
     pattern.segments.map(describeSegment).join(` ${pattern.separator} `),
     t().digitsSummary(pattern.seqDigits),
-    t().countedBySummary(pattern.countedBy.map((i) => i + 1).join(", ")),
+    // The segments' numbers, 1-based, joined in the page's language.
+    t().countedBySummary(pattern.countedBy.map((i) => i + 1)),
   ];
   if (saved.sharedCounterAcceptedAt) parts.push(t().sharedAccepted);
   return parts.join(" · ");

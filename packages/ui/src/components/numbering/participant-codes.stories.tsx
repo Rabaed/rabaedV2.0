@@ -8,7 +8,8 @@ import { ParticipantCodes, type ParticipantCodesProps } from "./participant-code
 
 // Participant Codes on Project Settings → Numbering (RP-381, spec RP-311). A
 // Project Admin sets them; every other Project Member reads the Participants the
-// API lists for them (their own Company's, V15). Story data only.
+// API lists for them (their own Company's, V15), without their order on the
+// Project (RP-381-1). Story data only.
 const b = (en: string, ar: string) => ({ en, ar });
 const pCcm = "00000000-0000-4000-8000-000000000301";
 const pElectro = "00000000-0000-4000-8000-000000000302";
@@ -43,9 +44,9 @@ export const SetCode: Story = {
     const { canvas, args } = context;
     const text = labels(context);
     const row = within(canvas.getByRole("form", { name: storyLocale(context) === "en" ? "Electro Works" : "الأعمال الكهربائية" }));
-    // Without a code, its numbers print its position.
+    // Without a code, its numbers print its order on the Project.
     await expect(row.getByText("02")).toHaveAttribute("dir", "ltr");
-    await expect(row.getByText(text.position)).toBeVisible();
+    await expect(row.getByText(text.order)).toBeVisible();
     const input = row.getByRole("textbox", { name: text.code });
     await expect(input).toHaveAttribute("dir", "ltr");
     await userEvent.type(input, "ELW");
@@ -73,7 +74,7 @@ export const CodeInUse: Story = {
 
 /** Another Project Member reads the codes of the Participants listed for them: no box, no button. */
 export const ReadOnly: Story = {
-  args: { canEdit: false, participants: [all[0]!] },
+  args: { canEdit: false, participants: [{ ...all[0]!, ordinal: null }] },
   play: async (context) => {
     const { canvas } = context;
     const text = labels(context);
@@ -87,13 +88,19 @@ export const ReadOnly: Story = {
   },
 };
 
-/** Read-only, for a Participant without a code: its position, as its numbers print it. */
-export const ReadOnlyPosition: Story = {
-  args: { canEdit: false, participants: [all[1]!] },
+/**
+ * Read-only, for a Participant without a code: a plain "no code yet". The API gives
+ * its order on the Project only to Project Admins, since the order would count the
+ * other Participants (visibility.md RP-381-1).
+ */
+export const ReadOnlyNoCode: Story = {
+  args: { canEdit: false, participants: [{ ...all[1]!, ordinal: null }] },
   play: async (context) => {
     const { canvas } = context;
-    await expect(canvas.getByText("02")).toHaveAttribute("dir", "ltr");
-    await expect(canvas.getByText(labels(context).position)).toBeVisible();
+    const text = labels(context);
+    await expect(canvas.getByText(text.noCode)).toBeVisible();
+    await expect(canvas.queryByText(text.order)).toBeNull();
+    await expect(canvas.getByRole("list", { name: text.participants })).not.toHaveTextContent(/\d/);
   },
 };
 

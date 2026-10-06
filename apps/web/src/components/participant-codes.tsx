@@ -54,7 +54,8 @@ export function ParticipantCodesSection({ participants, canEdit }: { participant
         intro: t("intro"),
         participants: t("participants"),
         code: t("code"),
-        position: t("position"),
+        order: t("order"),
+        noCode: t("noCode"),
         save: t("save"),
         saved: t("saved"),
         refusals: {
