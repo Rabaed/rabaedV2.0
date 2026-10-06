@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { readCounterWorkItemTypes, readNumberingCounters, readNumberingPatterns, readNumberingWorkItemTypes, type Db } from "@rabaed/db";
+import { readNumberingCounters, readNumberingPatterns, readNumberingWorkItemTypes, type Db } from "@rabaed/db";
 import {
   counterStartRefusals,
   counterWorkItemTypes,
@@ -16,6 +16,7 @@ import {
 } from "@rabaed/domain";
 import { sql, type NotNull } from "kysely";
 import { asEngineer } from "./admin-action.ts";
+import { expectOutcome, refusable, type Refusable } from "./refusals.ts";
 
 // Numbering from Rabaed Admin (RP-317; workflow-engine.md §8 "Who sets the pattern").
 // A Rabaed Engineer does what the Project Admin does on the Numbering page, with the
@@ -27,29 +28,7 @@ import { asEngineer } from "./admin-action.ts";
 // row names the admin_action, whose Engineer accepted it and whose `after` says so.
 
 export type NumberingRefusal = (typeof numberingPatternRefusals | typeof participantCodeRefusals | typeof counterStartRefusals)[number];
-export type NumberingEditResult<T> = { ok: true; value: T } | { ok: false; reason: NumberingRefusal };
-
-class Refused extends Error {
-  constructor(readonly reason: NumberingRefusal) {
-    super(reason);
-  }
-}
-
-async function refusable<T>(run: () => Promise<T>): Promise<NumberingEditResult<T>> {
-  try {
-    return { ok: true, value: await run() };
-  } catch (error) {
-    if (error instanceof Refused) return { ok: false, reason: error.reason };
-    throw error;
-  }
-}
-
-/** An outcome the database returned: the success word, or a refusal that rolls the edit back. */
-function expectOutcome(outcome: string, success: string, refusals: readonly NumberingRefusal[]): void {
-  if (outcome === success) return;
-  if ((refusals as readonly string[]).includes(outcome)) throw new Refused(outcome as NumberingRefusal);
-  throw new Error(`unexpected numbering outcome: ${outcome}`);
-}
+export type NumberingEditResult<T> = Refusable<T, NumberingRefusal>;
 
 /**
  * A Project's numbering: the patterns in effect, the Participants with their codes, and
@@ -92,7 +71,7 @@ export function readProjectNumbering(
       })),
       counters: {
         counters: counters.map(toNumberingCounter),
-        workItemTypes: counterWorkItemTypes(await readCounterWorkItemTypes(trx, projectId)),
+        workItemTypes: counterWorkItemTypes(await readNumberingWorkItemTypes(trx, projectId)),
       },
     };
     return { target: { kind: "project", id: projectId }, after: { counterKeys: counters.map((c) => c.counter_key) }, result };

@@ -7,6 +7,7 @@ import {
 } from "@rabaed/domain";
 import { sql } from "kysely";
 import { commandResult } from "../outcomes.ts";
+import { isProjectAdmin } from "./project-admin.ts";
 
 // The Numbering page (RP-313; workflow-engine.md §8 "Settled 2026-10-05 (Document
 // numbering)"): every Project Member reads the Project's Numbering Pattern and
@@ -18,9 +19,8 @@ export type SaveNumberingPatternResult = { ok: true } | { ok: false; reason: (ty
 /** A Project's numbering for the Numbering page, for its Project Members; null for anyone else. */
 export function getNumberingSettings(db: Db, memberId: string, projectId: string, now: Date): Promise<NumberingSettings | null> {
   return withMember(db, memberId, async (trx) => {
-    const { rows: projects } = await sql<{ code: string; is_admin: boolean; participant_code: string | null; ordinal: number }>`
+    const { rows: projects } = await sql<{ code: string; participant_code: string | null; ordinal: number }>`
       select pr.code,
-        exists (select 1 from app.current_admin_project_ids() a where a = pr.id) as is_admin,
         -- The reader's own Participant: its Participant Code, or its position until set.
         p.code as participant_code, p.ordinal
       from project pr
@@ -54,7 +54,7 @@ export function getNumberingSettings(db: Db, memberId: string, projectId: string
     `.execute(trx);
 
     return {
-      canEdit: project.is_admin,
+      canEdit: await isProjectAdmin(trx, projectId),
       ...numberingPatternsInEffect(patterns, types),
       example: {
         projectCode: project.code,

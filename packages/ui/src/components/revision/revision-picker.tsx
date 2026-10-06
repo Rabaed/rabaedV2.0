@@ -4,6 +4,7 @@ import type { Locale } from "@rabaed/domain";
 import { DocNo } from "../doc-no/doc-no.tsx";
 import { Field } from "../form/field.tsx";
 import { Select } from "../form/select.tsx";
+import { RevisionNoNumber } from "./revision-no-number.tsx";
 
 // The Revision drop-down on the item page (RP-318; workflow-engine.md §5.4 "The
 // item page shows the chain", visibility.md the Revisions channel). It lists
@@ -13,8 +14,8 @@ import { Select } from "../form/select.tsx";
 // as on the paper register. Presentational: the page opens the chosen one.
 
 const copy = {
-  en: { label: "Revision", noNumber: (no: number) => `Revision ${no}: no number yet` },
-  ar: { label: "المراجعة", noNumber: (no: number) => `المراجعة ${no}: بلا رقم بعد` },
+  en: { label: "Revision" },
+  ar: { label: "المراجعة" },
 } satisfies Record<Locale, unknown>;
 
 export type RevisionPickerProps = {
@@ -40,7 +41,7 @@ export function RevisionPicker({ locale, revisions, currentId, onOpen }: Revisio
         }}
         options={revisions.map((r) => ({
           value: r.id,
-          label: r.documentNumber ? <DocNo value={r.documentNumber} /> : t.noNumber(r.revisionNo),
+          label: r.documentNumber ? <DocNo value={r.documentNumber} /> : <RevisionNoNumber locale={locale} revisionNo={r.revisionNo} />,
         }))}
       />
     </Field>

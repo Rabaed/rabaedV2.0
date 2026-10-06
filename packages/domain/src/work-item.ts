@@ -241,6 +241,15 @@ export const revisionChain = z.object({
 });
 export type RevisionChain = z.infer<typeof revisionChain>;
 
+/** The refusals of creating a Revision (app.create_revision). One word for every reason it isn't allowed, so it names nothing. */
+export const createRevisionRefusals = ["not_found", "project_closed", "idempotency_key_reused", "revision_not_allowed"] as const;
+
+/** The refusals of discarding a Draft Revision (app.discard_revision). */
+export const discardRevisionRefusals = ["not_found", "project_closed", "not_discardable"] as const;
+
+/** Why a Revision command was refused. */
+export type RevisionRefusal = (typeof createRevisionRefusals | typeof discardRevisionRefusals)[number];
+
 /** "Linked from": every Submitted item linking to a Work Item, by Document Number. Never a Draft or internal item. */
 export const linkedFrom = z.object({ items: z.array(linkedFromItem) });
 export type LinkedFrom = z.infer<typeof linkedFrom>;

@@ -1,5 +1,5 @@
 import { answerFields, isOpenStageCategory, stepAgeLabel, type Locale } from "@rabaed/domain";
-import { AgeDots, DocNo, StagePill, stageColour } from "@rabaed/ui";
+import { AgeDots, DocNo, RevisionNoNumber, StagePill, stageColour } from "@rabaed/ui";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
 import { WorkItemActions } from "@/components/work-item-actions";
@@ -141,7 +141,7 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
               {item.documentNumber ? (
                 <DocNo value={item.documentNumber} />
               ) : item.revisionNo > 0 ? (
-                t("revisionNoNumber", { no: item.revisionNo })
+                <RevisionNoNumber locale={locale} revisionNo={item.revisionNo} />
               ) : (
                 t("noNumber")
               )}

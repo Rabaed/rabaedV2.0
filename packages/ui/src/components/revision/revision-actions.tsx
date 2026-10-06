@@ -1,6 +1,6 @@
 "use client";
 
-import type { Locale } from "@rabaed/domain";
+import type { Locale, RevisionRefusal } from "@rabaed/domain";
 import { useState } from "react";
 import { Button } from "../button/button.tsx";
 import { Dialog, DialogClose, DialogContent, DialogFooter, DialogTrigger } from "../overlay/dialog.tsx";
@@ -16,7 +16,7 @@ import { Dialog, DialogClose, DialogContent, DialogFooter, DialogTrigger } from 
 const copy = {
   en: {
     section: "Revision",
-    createIntro: "Resubmit this item under the same number: the Revision starts as a Draft with your answers and Documents.",
+    createIntro: "Create a Revision of this item under the same number: it starts as a Draft with your answers and Documents.",
     create: "Create Revision",
     discard: "Discard Revision",
     discardTitle: "Discard this Revision?",
@@ -28,12 +28,13 @@ const copy = {
       not_discardable: "This Revision has left Draft, so it can no longer be discarded.",
       project_closed: "The Project is closed.",
       not_found: "This item is no longer available to you.",
+      idempotency_key_reused: "That didn't work. Try again.",
       unavailable: "That didn't work. Try again.",
     },
   },
   ar: {
     section: "المراجعة",
-    createIntro: "أعد تقديم هذا البند بالرقم نفسه: تبدأ المراجعة مسودةً فيها إجاباتك ومستنداتك.",
+    createIntro: "أنشئ مراجعة لهذا البند بالرقم نفسه: تبدأ مسودةً فيها إجاباتك ومستنداتك.",
     create: "إنشاء مراجعة",
     discard: "حذف مسودة المراجعة",
     discardTitle: "حذف مسودة هذه المراجعة؟",
@@ -45,12 +46,13 @@ const copy = {
       not_discardable: "غادرت هذه المراجعة مرحلة المسودة، فلم يعد حذفها ممكنًا.",
       project_closed: "المشروع مغلق.",
       not_found: "لم يعد هذا البند متاحًا لك.",
+      idempotency_key_reused: "لم ينجح ذلك. حاول مرة أخرى.",
       unavailable: "لم ينجح ذلك. حاول مرة أخرى.",
     },
   },
-} satisfies Record<Locale, unknown>;
+} satisfies Record<Locale, { refusals: Record<RevisionRefusal | "unavailable", string>; [text: string]: unknown }>;
 
-export type RevisionRefusal = keyof (typeof copy)["en"]["refusals"];
+export type { RevisionRefusal };
 /** A Revision command as the page calls it: a refusal by the API's error code. */
 export type RevisionCall = () => Promise<{ ok: true } | { ok: false; reason: string }>;
 

@@ -63,6 +63,7 @@ export {
   type RevisionCall,
   type RevisionRefusal,
 } from "./components/revision/revision-actions.tsx";
+export { RevisionNoNumber, type RevisionNoNumberProps } from "./components/revision/revision-no-number.tsx";
 export { RevisionPicker, type RevisionPickerProps } from "./components/revision/revision-picker.tsx";
 export {
   NotificationSettingsForm,

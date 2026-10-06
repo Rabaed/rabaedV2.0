@@ -1,5 +1,5 @@
 import { withMember, type Db } from "@rabaed/db";
-import type { RevisionChain } from "@rabaed/domain";
+import { createRevisionRefusals, discardRevisionRefusals, type RevisionChain } from "@rabaed/domain";
 import { sql } from "kysely";
 import type { FileStore } from "../documents/file-store.ts";
 import { checkedOutcome, commandResult } from "../outcomes.ts";
@@ -11,7 +11,6 @@ import { checkedOutcome, commandResult } from "../outcomes.ts";
 // whose files are copied here, in the same transaction: if a copy fails,
 // nothing is created.
 
-const createRevisionRefusals = ["not_found", "project_closed", "idempotency_key_reused", "revision_not_allowed"] as const;
 export type CreateRevisionResult = { ok: true; id: string } | { ok: false; reason: (typeof createRevisionRefusals)[number] };
 
 /** The acting Member creates a Revision of a closed item; the same key again answers with the same Revision. */
@@ -40,7 +39,6 @@ export function createRevision(
   });
 }
 
-const discardRevisionRefusals = ["not_found", "project_closed", "not_discardable"] as const;
 export type DiscardRevisionResult = { ok: true } | { ok: false; reason: (typeof discardRevisionRefusals)[number] };
 
 /** The acting Member discards a Revision still in Draft: nobody sees it again, and its Rev number is free. */
