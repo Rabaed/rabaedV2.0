@@ -283,6 +283,9 @@ function isConsoleCall(node: Node): boolean {
   );
 }
 
+/** `Error`, `TypeError`, `SecretError`…: a name ending in Error. */
+const isErrorConstructor = (callee: Node) => callee.type === "Identifier" && /Error$/.test(callee.name);
+
 export const noAwsIdsInErrors: Rule.RuleModule = {
   meta: {
     type: "problem",
@@ -312,11 +315,12 @@ export const noAwsIdsInErrors: Rule.RuleModule = {
     };
     return {
       ThrowStatement: (node) => scan(node.argument as unknown as AnyNode),
+      // new Error(…), new SecretError(…), and the same called without `new`, which builds the same error.
       NewExpression(node) {
-        if (node.callee.type === "Identifier" && /Error$/.test(node.callee.name)) for (const argument of node.arguments) scan(argument as unknown as AnyNode);
+        if (isErrorConstructor(node.callee)) for (const argument of node.arguments) scan(argument as unknown as AnyNode);
       },
       CallExpression(node) {
-        if (isLogCall(node) || isConsoleCall(node)) for (const argument of node.arguments) scan(argument as unknown as AnyNode);
+        if (isLogCall(node) || isConsoleCall(node) || isErrorConstructor(node.callee)) for (const argument of node.arguments) scan(argument as unknown as AnyNode);
       },
     };
   },

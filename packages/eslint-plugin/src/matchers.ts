@@ -216,8 +216,9 @@ export function bidiControls(text: string): { index: number; escape: string; nam
   }));
 }
 
-// An ARN, or a 12-digit AWS account id. Not the tail of a UUID or part of a longer number.
-const awsIdentifier = /arn:aws[\w-]*:|(?<![\w.-])\d{12}(?![\w.-])/;
+// An ARN, or a 12-digit AWS account id. Not the tail of a UUID or part of a longer number, and not a
+// phone number: a KSA mobile in E.164 (+966 5…), a tel: link or a wa.me link is 12 digits too.
+const awsIdentifier = /arn:aws[\w-]*:|(?<![\w.+-])(?<!tel:)(?<!wa\.me\/)\d{12}(?![\w.-])/;
 
 /** The ARN prefix or account id in text, if any: errors and logs name a resource, never its ARN or account (RP-329). */
 export function awsIdentifierIn(text: string): string | null {

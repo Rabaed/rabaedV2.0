@@ -32,7 +32,7 @@ Visibility is the top requirement (`docs/visibility.md`). Check every read path 
 
 - **Log database errors by class and code only** (checked: `rabaed/no-raw-error-logging`), following `failureOf` (outbox) and the worker's logger. Database messages can quote row values such as titles and names (RP-238).
 - **User-facing errors and logs never include another item's title, number or Company.**
-- **An error or log line names a resource, never its AWS ARN or account id:** "the secret", not its ARN (checked: `rabaed/no-aws-ids-in-errors`, on string and template literals in thrown errors and log or console calls, not tests).
+- **An error or log line names a resource, never its AWS ARN or account id:** "the secret", not its ARN (checked: `rabaed/no-aws-ids-in-errors`, on string and template literals in thrown errors, `Error(…)` or `XxxError(…)` with or without `new`, and log or console calls, not tests; a phone number such as `+9665…` is not an account id).
 
 ## UI (`packages/ui/README.md`)
 

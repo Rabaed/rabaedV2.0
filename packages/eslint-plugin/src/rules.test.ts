@@ -248,6 +248,11 @@ tsx.run("no-aws-ids-in-errors", rules["no-aws-ids-in-errors"], {
     `throw new Error("Missing id 0199a3b0-0000-7000-8000-000000000001");`,
     `console.log("took 1234567890123 ms");`,
     `expect(f).toThrow("arn:aws:s3:::bucket");`,
+    // A KSA phone number in E.164 or as a link is 12 digits too, but not an account id.
+    `throw new Error("Call +966512345678 to confirm");`,
+    `log.warn("sms to +966512345678 failed");`,
+    `console.error("no answer at tel:966512345678");`,
+    `throw new Error("open https://wa.me/966512345678");`,
   ],
   invalid: [
     { code: `throw new Error("no access to arn:aws:secretsmanager:eu-central-1:1:secret:app");`, errors: [{ messageId: "aws", data: { found: "arn:aws:" } }] },
@@ -257,6 +262,10 @@ tsx.run("no-aws-ids-in-errors", rules["no-aws-ids-in-errors"], {
     { code: `request.log.warn("deploying to 123456789012");`, errors: [{ messageId: "aws" }] },
     { code: `console.error("Bootstrap failed in account 123456789012");`, errors: [{ messageId: "aws" }] },
     { code: `throw "arn:aws:iam::1:role/x";`, errors: [{ messageId: "aws" }] },
+    // Error(…) without `new` builds the same error.
+    { code: `throw Error("account 123456789012 refused");`, errors: [{ messageId: "aws", data: { found: "123456789012" } }] },
+    { code: `const e = SecretError("no access to arn:aws:kms:me-central-1:1:key/x");`, errors: [{ messageId: "aws" }] },
+    { code: `reject(TypeError(\`bad \${x} in 123456789012\`));`, errors: [{ messageId: "aws" }] },
   ],
 });
 
