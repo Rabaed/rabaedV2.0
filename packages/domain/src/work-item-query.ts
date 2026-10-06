@@ -20,6 +20,9 @@ export const workItemPageSize = 50;
 export const workItemSorts = ["stepAge", "documentNumber", "submissionDate"] as const;
 export type WorkItemSort = (typeof workItemSorts)[number];
 
+/** The longest search the List takes. */
+export const searchMaxLength = 200;
+
 /** The Step Age filter: open items in at least their 2nd, 3rd or 4th week at their Step. */
 export const stepAgeMinimums = [2, 3, 4] as const;
 
@@ -79,6 +82,16 @@ const queryFields = {
   submittedFrom: day.optional(),
   submittedTo: day.optional(),
   /**
+   * Search (RP-347): words to find in the Document Number, Subject, Type,
+   * Trade, Location or the raiser's Company name; never in answers or
+   * Documents (visibility.md "Search and filters", V19). Nothing but spaces is
+   * no search.
+   */
+  q: z.preprocess(
+    (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
+    z.string().trim().max(searchMaxLength).optional(),
+  ),
+  /**
    * Need My Action: only the items waiting on me, Steps I hold and unclaimed
    * Steps in my Step Pool, plus my own Drafts (which are never counted).
    */
@@ -93,7 +106,7 @@ const queryFields = {
 /** The filters that take a list of values; every other key takes one. */
 const listKeys = ["type", "stage", "with", "trade", "location", "outcome"] as const satisfies readonly (keyof typeof queryFields)[];
 /** The keys that narrow the rows, as opposed to how they are shown (sort, Revisions, page). */
-const filterKeys = [...listKeys, "stepAgeMin", "needMyAction", "submittedFrom", "submittedTo"] as const;
+const filterKeys = [...listKeys, "stepAgeMin", "q", "needMyAction", "submittedFrom", "submittedTo"] as const;
 
 /** The query as the API takes it; a cursor must be one made for its sort. */
 export const workItemQuery = z.object(queryFields).superRefine((q, ctx) => {
@@ -144,6 +157,7 @@ export function workItemSearchParams(query: Partial<WorkItemQuery>): URLSearchPa
     if (values && values.length > 0) params.set(key, values.join(","));
   }
   if (query.stepAgeMin !== undefined) params.set("stepAgeMin", String(query.stepAgeMin));
+  if (query.q) params.set("q", query.q);
   if (query.submittedFrom) params.set("submittedFrom", query.submittedFrom);
   if (query.submittedTo) params.set("submittedTo", query.submittedTo);
   if (query.needMyAction) params.set("needMyAction", "true");

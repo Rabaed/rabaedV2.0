@@ -349,3 +349,64 @@ export const NothingMatches: Story = {
     await expect(context.canvas.getByRole("link", { name: storyText(context, copy.clear) })).toHaveAttribute("href", "?allRevisions=true");
   },
 };
+
+// Search (RP-347): in the toolbar, scoped to the Project, kept in the URL.
+const search = {
+  box: b("Search", "بحث"),
+  button: b("Search", "بحث"),
+  none: b("No items you can see match this search.", "لا توجد عناصر يمكنك رؤيتها تطابق هذا البحث."),
+};
+
+/** Searching asks for the same query with the words, from the first page; an emptied box asks for no search. */
+export const Searching: Story = {
+  args: { query: { ...defaults, stage: ["pending_approval"], cursor: "abc" } },
+  play: async (context) => {
+    const box = context.canvas.getByRole("searchbox", { name: storyText(context, search.box) });
+    const words = storyText(context, b("LED downlights", "إنارة الممرات"));
+    await userEvent.type(box, `  ${words} {enter}`);
+    await expect(context.args.onQueryChange).toHaveBeenLastCalledWith({ ...defaults, stage: ["pending_approval"], q: words });
+    await userEvent.clear(box);
+    await userEvent.click(context.canvas.getByRole("button", { name: storyText(context, search.button) }));
+    await expect(context.args.onQueryChange).toHaveBeenLastCalledWith({ ...defaults, stage: ["pending_approval"], q: undefined });
+  },
+};
+
+/** A search with results: the box holds the words, the rows are the matches, and clearing the filters clears it too. */
+export const SearchWithResults: Story = {
+  args: {
+    query: { ...defaults, q: "LED" },
+    list: {
+      ...list,
+      items: items.filter((i) => i.title.includes("LED")),
+      stages: list.stages.map((s) => ({ ...s, count: s.key === stages.internal.key ? 1 : 0 })),
+    },
+  },
+  play: async (context) => {
+    await expect(context.canvas.getByRole("searchbox", { name: storyText(context, search.box) })).toHaveValue("LED");
+    const table = context.canvas.getByRole("table", { name: storyText(context, copy.table) });
+    await expect(within(table).getAllByRole("row")).toHaveLength(2);
+    await expect(context.canvas.getByRole("link", { name: storyText(context, copy.clear) })).toHaveAttribute("href", "?");
+  },
+};
+
+/** A search with no results says so, and nothing counts what the viewer can't see. */
+export const SearchWithNone: Story = {
+  args: {
+    query: { ...defaults, q: "Xylophonic" },
+    list: { ...list, items: [], stages: list.stages.map((s) => ({ ...s, count: 0 })) },
+  },
+  play: async (context) => {
+    await expect(context.canvas.getByText(storyText(context, search.none))).toBeVisible();
+    await expect(context.canvas.queryByText(storyText(context, copy.empty))).toBeNull();
+  },
+};
+
+/** Narrow: the search box takes the whole width above the filters. */
+export const SearchNarrow: Story = {
+  parameters: phone,
+  args: { query: { ...defaults, q: "LED" } },
+  play: async (context) => {
+    const box = context.canvas.getByRole("searchbox", { name: storyText(context, search.box) });
+    await expect(box.getBoundingClientRect().width).toBeGreaterThan(200);
+  },
+};

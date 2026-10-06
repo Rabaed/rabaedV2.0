@@ -5,6 +5,7 @@ import {
   formatNumber,
   isFilteredWorkItemQuery,
   isOpenStageCategory,
+  searchMaxLength,
   withoutFilters,
   stepAgeMinimums,
   workItemSorts,
@@ -17,7 +18,7 @@ import {
 } from "@rabaed/domain";
 import type { ReactNode } from "react";
 import type { Tone } from "../../tokens/themes.ts";
-import { buttonVariants } from "../button/button.tsx";
+import { Button, buttonVariants } from "../button/button.tsx";
 import { Badge } from "../data/badge.tsx";
 import { Table, TableBody, TableCell, TableEmpty, TableHead, TableHeader, TableRow } from "../data/table.tsx";
 import { DocNo } from "../doc-no/doc-no.tsx";
@@ -63,6 +64,12 @@ const copy = {
   noNumber: { en: "No number yet", ar: "بلا رقم بعد" },
   revisionNoNumber: { en: "Revision #: no number yet", ar: "المراجعة #: بلا رقم بعد" },
   empty: { en: "No items you can see match these filters.", ar: "لا توجد عناصر يمكنك رؤيتها تطابق هذه التصفية." },
+  search: { en: "Search", ar: "بحث" },
+  searchHelp: {
+    en: "Document Number, Subject, Type, Trade, Location or Company",
+    ar: "رقم المستند أو الموضوع أو النوع أو التخصص أو الموقع أو الشركة",
+  },
+  noResults: { en: "No items you can see match this search.", ar: "لا توجد عناصر يمكنك رؤيتها تطابق هذا البحث." },
   pages: { en: "Pages", ar: "الصفحات" },
   firstPage: { en: "First page", ar: "الصفحة الأولى" },
   nextPage: { en: "Next page", ar: "الصفحة التالية" },
@@ -126,6 +133,14 @@ export function WorkItemList({ list, query, locale, hrefFor, itemHref, onQueryCh
   return (
     <div className="space-y-4">
       <section aria-label={t("toolbar")} className="space-y-3">
+        <SearchBox
+          // A new query (back button, a cleared filter) shows its own words.
+          key={query.q ?? ""}
+          value={query.q}
+          label={t("search")}
+          placeholder={t("searchHelp")}
+          onSearch={(q) => change({ q })}
+        />
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           <FilterSelect
             label={t("type")}
@@ -239,7 +254,7 @@ export function WorkItemList({ list, query, locale, hrefFor, itemHref, onQueryCh
         </TableHeader>
         <TableBody>
           {list.items.length === 0 ? (
-            <TableEmpty colSpan={columns}>{t("empty")}</TableEmpty>
+            <TableEmpty colSpan={columns}>{t(query.q === undefined ? "empty" : "noResults")}</TableEmpty>
           ) : (
             list.items.map((item) => (
               <TableRow key={item.id}>
@@ -296,6 +311,43 @@ export function WorkItemList({ list, query, locale, hrefFor, itemHref, onQueryCh
       )}
       </>}
     </div>
+  );
+}
+
+/**
+ * Search (RP-347): words to find in the Project's items the viewer sees, by
+ * Document Number, Subject, Type, Trade, Location or the raiser's Company,
+ * never in answers or Documents. Asked for on Enter or the button; an empty
+ * box asks for no search.
+ */
+function SearchBox({
+  value,
+  label,
+  placeholder,
+  onSearch,
+}: {
+  value: string | undefined;
+  label: string;
+  placeholder: string;
+  onSearch: (q: string | undefined) => void;
+}) {
+  return (
+    <form
+      role="search"
+      className="flex items-end gap-2"
+      onSubmit={(event) => {
+        event.preventDefault();
+        const words = String(new FormData(event.currentTarget).get("q") ?? "").trim();
+        onSearch(words === "" ? undefined : words);
+      }}
+    >
+      <Field label={label} className="min-w-0 flex-1">
+        <Input type="search" name="q" defaultValue={value ?? ""} placeholder={placeholder} maxLength={searchMaxLength} />
+      </Field>
+      <Button type="submit" variant="secondary">
+        {label}
+      </Button>
+    </form>
   );
 }
 

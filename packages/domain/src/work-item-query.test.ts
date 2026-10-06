@@ -23,6 +23,7 @@ const defaults: WorkItemQuery = {
   location: [],
   outcome: [],
   stepAgeMin: undefined,
+  q: undefined,
   needMyAction: false,
   allRevisions: false,
   sort: "stepAge",
@@ -180,5 +181,27 @@ describe("the Submission Date range and sort (RP-348)", () => {
     for (const key of [["false", "", row], ["true", at, row], ["false", "yesterday", row], ["maybe", at, row], ["false", at, "not-an-id"]]) {
       expect(decodeWorkItemCursor(encodeWorkItemCursor("submissionDate", key), "submissionDate"), JSON.stringify(key)).toBeNull();
     }
+  });
+});
+
+describe("search (q)", () => {
+  it("is the words given, trimmed; nothing but spaces is no search", () => {
+    expect(workItemQuery.parse({ q: "  MAR-00 " }).q).toBe("MAR-00");
+    expect(workItemQuery.parse({ q: "   " }).q).toBeUndefined();
+    expect(workItemQuery.parse({ q: "" }).q).toBeUndefined();
+    expect(workItemQuery.safeParse({ q: "x".repeat(201) }).success).toBe(false);
+  });
+
+  it("is kept in the URL, Arabic included, and read back the same", () => {
+    const query: WorkItemQuery = { ...defaults, q: "إنارة LED" };
+    const params = workItemSearchParams(query);
+    expect(params.get("q")).toBe("إنارة LED");
+    expect(workItemQueryFromSearchParams(new URLSearchParams(params.toString()))).toEqual(query);
+    expect(workItemSearchParams({ ...defaults, q: undefined }).toString()).toBe("");
+  });
+
+  it("narrows the rows, so clearing the filters clears it", () => {
+    expect(isFilteredWorkItemQuery({ ...defaults, q: "lighting" })).toBe(true);
+    expect(withoutFilters({ ...defaults, q: "lighting" }).q).toBeUndefined();
   });
 });
