@@ -16,11 +16,45 @@ Screenshot does not match the stored reference.
 Reference screenshot:
   /home/runner/work/rabaedV2.0/rabaedV2.0/packages/ui/test/__screenshots__/button-en-chromium-linux.png`;
 
+// The same two messages exactly as @vitest/browser 5.0.2 reports them to a reporter
+// (captured from a real run): matcherHint colours the header and paths with ANSI codes.
+const esc = "";
+const colouredHeader = `${esc}[2mexpect(${esc}[22m${esc}[31melement${esc}[39m${esc}[2m).${esc}[22mtoMatchScreenshot${esc}[2m()${esc}[22m`;
+const realMissingReference = `${colouredHeader}
+
+No existing reference screenshot found; a new one was created. Review it before running tests again.
+
+Reference screenshot:
+  ${esc}[32m/home/runner/work/rabaedV2.0/rabaedV2.0/packages/ui/test/__screenshots__/stories.test.tsx/views-activityfeedpanel-empty-en-chromium-linux.png${esc}[39m
+`;
+const realMismatch = `${colouredHeader}
+
+Screenshot does not match the stored reference.
+2500 pixels (ratio 1.00) differ.
+
+Reference screenshot:
+  ${esc}[32m/home/runner/work/rabaedV2.0/rabaedV2.0/packages/ui/test/__screenshots__/stories.test.tsx/button-primary-en-chromium-linux.png${esc}[39m
+
+Actual screenshot:
+  ${esc}[31m/home/runner/work/rabaedV2.0/rabaedV2.0/packages/ui/.vitest/attachments/test/stories.test.tsx/button-primary-actual-chromium-linux.png${esc}[39m
+${esc}[2m
+Diff image:
+  /home/runner/work/rabaedV2.0/rabaedV2.0/packages/ui/.vitest/attachments/test/stories.test.tsx/button-primary-diff-chromium-linux.png${esc}[22m
+`;
+
 const run = (overrides: Partial<StoryRun>): StoryRun => ({ reason: "failed", unhandledErrors: 0, hookErrors: 0, failedTests: [], ...overrides });
 
 describe("onlyMissingReferences", () => {
   it("counts the new baselines when every failure is a missing reference", () => {
     expect(onlyMissingReferences(run({ failedTests: [[missingReference], [missingReference], [missingReference]] }))).toEqual({ onlyMissingReferences: true, newBaselines: 3 });
+  });
+
+  it("counts the new baselines from the real, colour-coded messages", () => {
+    expect(onlyMissingReferences(run({ failedTests: [[realMissingReference], [realMissingReference]] }))).toEqual({ onlyMissingReferences: true, newBaselines: 2 });
+  });
+
+  it("is not only missing references when a real, colour-coded screenshot changed", () => {
+    expect(onlyMissingReferences(run({ failedTests: [[realMissingReference], [realMismatch]] }))).toEqual({ onlyMissingReferences: false });
   });
 
   it("counts a missing reference whose message ends with the matcher's cause", () => {
