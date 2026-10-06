@@ -1,0 +1,48 @@
+name: Jira close
+# Closes every Jira ticket a merged pull request names (RP-307); replaces the Jira
+# Automation rule. The script reads PR metadata only. It is checked out from the
+# default branch, never from the pull request, so no PR code meets the Jira token.
+on:
+  pull_request:
+    types: [closed]
+  # Backstop: PRs merged in the last 7 days whose tickets are still open.
+  schedule:
+    - cron: "17 2 * * *"
+  workflow_dispatch:
+permissions: {}
+jobs:
+  on-merge:
+    if: github.event_name == 'pull_request' && github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with: { node-version: 24 }
+      - name: Close the tickets this PR names
+        run: node scripts/jira-close.ts event
+        env:
+          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+  nightly-backstop:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with: { node-version: 24 }
+      - name: Close merged-but-open tickets
+        run: node scripts/jira-close.ts sweep
+        env:
+          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
