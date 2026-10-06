@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { takeTransition } from "./check-migration-drift.fixtures.ts";
-import { migrationProblems } from "./check-migration-drift.ts";
+import { mergeGroupSides, migrationProblems } from "./check-migration-drift.ts";
 import { migrationsDir as dir } from "./migrations.ts";
 
 // A throwaway repository replaying the RP-311 history: a branch redefines
@@ -84,5 +84,35 @@ describe("migrationProblems", () => {
       overloads: [{ signature: "app.take_transition(uuid, text)", branch: ["20261026100000_numbering_pattern.sql"], main: ["20261026000000_action_forms.sql"] }],
       duplicates: [],
     });
+  });
+});
+
+// The merge queue (RP-398) tests a commit that merges the PR's head into the
+// queue's base: main plus the entries ahead of it.
+describe("mergeGroupSides", () => {
+  const sha = (ref: string) => git("rev-parse", ref);
+  const groupHead = () => {
+    git("switch", "-q", "-c", "queue", "main");
+    git("merge", "-q", "--no-ff", "--no-edit", "branch");
+    return sha("queue");
+  };
+
+  it("takes the PR's head from the queue commit's second parent", () => {
+    const head = groupHead();
+    expect(mergeGroupSides(repo, sha("main"), head)).toEqual({ base: sha("main"), head: sha("branch") });
+  });
+
+  it("checks the PR's head against the queue's base, as on its pull request", () => {
+    const { base, head } = mergeGroupSides(repo, sha("main"), groupHead());
+    expect(migrationProblems(repo, base, head)).toEqual(migrationProblems(repo, "main", "branch"));
+  });
+
+  it("refuses a queue commit that is not a merge", () => {
+    expect(() => mergeGroupSides(repo, sha("main~1"), sha("main"))).toThrow(/not a merge/);
+  });
+
+  it("refuses a queue commit whose first parent is not the queue's base", () => {
+    const head = groupHead();
+    expect(() => mergeGroupSides(repo, sha("main~1"), head)).toThrow(/first parent/);
   });
 });

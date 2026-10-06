@@ -6,7 +6,8 @@ import { git, migrationsDir } from "./migrations.ts";
 // in a new migration; only new files are allowed (RP-287). Nothing is
 // exempt: ADR 0006's exception is a new migration, not an edit of an old one.
 //
-// Usage: node scripts/check-migrations-immutable.ts <base-ref>   (CI: origin/<base branch>; needs its history)
+// Usage: node scripts/check-migrations-immutable.ts <base-ref>   (CI: origin/<base branch> on a pull request,
+//        the merge group's base SHA in the merge queue (RP-398); needs its history)
 
 /** Changed files under the migrations directory since the merge base, as "<status>\t<path>". A rename counts as a delete plus an add. */
 export function changedMigrations(repo: string, base: string): { status: string; path: string }[] {
