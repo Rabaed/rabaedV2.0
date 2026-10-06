@@ -220,7 +220,9 @@ describe("participant (scenarios 28 and 29)", () => {
 describe("a Draft Work Item", () => {
   it("is seen, with its history, by its raiser's Members whose Visibility covers it (V1)", async () => {
     expect(await seen(c1.member, "work_item", "id")).toEqual([draft]);
-    for (const table of itemTables) expect(await seen(c1.member, table), table).toEqual([draft]);
+    for (const table of itemTables.filter((t) => t !== "work_item_event")) expect(await seen(c1.member, table), table).toEqual([draft]);
+    // Its only event so far is `created`, which nobody reads: when a Draft was started is audit only (scenario 61).
+    expect(await seen(c1.member, "work_item_event")).toEqual([]);
   });
 
   it("is seen by nobody else, in any of its tables (V1, V3)", async () => {
@@ -274,18 +276,19 @@ describe("a Draft Work Item", () => {
     }
   });
 
-  it("starts at the Draft Step, held by its creator, with one internal 'created' event", async () => {
+  it("starts at the Draft Step, held by its creator, with one internal 'created' event that the app role never reads", async () => {
     const [item] = await call<{ stage: string; holder: string; status: string }>(
       c1.member,
       sql`select seen.stage_key as stage, a.assignee_member_id as holder, a.status
           from app.step_as_seen(${draft}::uuid) seen join step_assignment a on a.work_item_id = ${draft}`,
     );
     expect(item).toEqual({ stage: "draft", holder: c1.member, status: "claimed" });
-    const events = await call<{ seq: number; type: string; audience: string; audience_participant_id: string }>(
-      c1.member,
-      sql`select seq, type, audience, audience_participant_id from work_item_event where work_item_id = ${draft}`,
-    );
-    expect(events).toEqual([{ seq: 1, type: "created", audience: "internal", audience_participant_id: participant.c1 }]);
+    const { rows } = await migrator.query("select seq, type, audience, audience_participant_id from work_item_event where work_item_id = $1", [
+      draft,
+    ]);
+    expect(rows).toEqual([{ seq: 1, type: "created", audience: "internal", audience_participant_id: participant.c1 }]);
+    // When the Draft was started is audit only, shown to nobody (scenario 61).
+    expect(await call(c1.member, sql<{ seq: number }>`select seq from work_item_event where work_item_id = ${draft}`)).toEqual([]);
   });
 });
 
@@ -319,6 +322,18 @@ describe("the app role", () => {
         table,
       ).rejects.toThrow(/permission denied/);
     }
+  });
+
+  it("has no path that deletes a Work Item, so a cancelled or discarded Draft keeps its row and created_at (RP-334)", async () => {
+    // Directly it is refused (above); and no function, trigger included, deletes one.
+    const { rows } = await migrator.query(
+      String.raw`select p.oid::regprocedure::text as fn from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+        where n.nspname not in ('pg_catalog', 'information_schema')
+          and p.prosrc ~* '\mdelete\s+from\s+(only\s+)?(public\.)?work_item\M'`,
+    );
+    expect(rows).toEqual([]);
+    const { rows: can } = await migrator.query("select has_table_privilege('rabaed_app', 'work_item', 'DELETE') as can");
+    expect(can).toEqual([{ can: false }]);
   });
 
   it("cannot UPDATE, DELETE or INSERT work_item_event", async () => {

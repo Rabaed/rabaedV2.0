@@ -2,7 +2,7 @@
 // V19 and scenario 47; ADR 0013), as the app role: while K1 holds the item, a
 // Contractor Member and the Owner read the answers as they arrived and none of
 // K1's answers_changed events, whatever they query; K1 saves only its section;
-// and K1 moves on only with the answers the API checked. A Return out of K1's
+// and K1 moves on only with the answers the API checked. A Send Back out of K1's
 // Step discards what K1 wrote (RP-299 review). The field-times functions run
 // only as the app role, and stamp only for a Member who may save.
 import { randomInt, randomUUID } from "node:crypto";
@@ -10,7 +10,7 @@ import { sql } from "kysely";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb, withMember, type Db } from "../src/index.ts";
-import { joinProject, testDatabaseUrls } from "../test-support/index.ts";
+import { addSendBackWorkflow, joinProject, testDatabaseUrls } from "../test-support/index.ts";
 
 const urls = testDatabaseUrls();
 const digits = (n: number) => Array.from({ length: n }, () => randomInt(10)).join("");
@@ -58,7 +58,7 @@ const call = <T extends object>(as: string, query: ReturnType<typeof sql<T>>) =>
   withMember(app, as, (trx) => query.execute(trx).then((r) => r.rows));
 const outcome = (as: string, query: ReturnType<typeof sql<{ outcome: string }>>) => call(as, query).then((rows) => rows[0]!.outcome);
 
-/** A test-only Type: Draft → Contractor review → Consultant review → Consultant approval → Approved, its Form with a Consultant section. */
+/** A test-only Type on the test Workflow with a Send Back (addSendBackWorkflow), its Form with a Consultant section. */
 async function addType() {
   const schema = {
     sections: [
@@ -84,44 +84,19 @@ async function addType() {
       },
     ],
   };
+  const workflowId = await addSendBackWorkflow((text) => migrator.query(text));
   await migrator.query(`
     do $$
       declare
         v_form uuid;
-        v_definition uuid;
-        v_version uuid;
       begin
         if exists (select 1 from work_item_type where owner_kind = 'rabaed' and code = '${TYPE}') then return; end if;
         insert into form_definition (owner_kind, name) values ('rabaed', '{"en": "Consultant section", "ar": "قسم الاستشاري"}')
         returning id into v_form;
         insert into form_version (form_definition_id, version_no, status, published_at, schema)
         values (v_form, 1, 'published', now(), '${JSON.stringify(schema)}'::jsonb);
-        insert into workflow_definition (owner_kind, name) values ('rabaed', '{"en": "Consultant section", "ar": "قسم الاستشاري"}')
-        returning id into v_definition;
-        insert into workflow_version (workflow_definition_id, version_no, status, published_at)
-        values (v_definition, 1, 'published', now()) returning id into v_version;
-        insert into workflow_step (workflow_version_id, key, name, stage_key, actor_rule, outcome_mode) values
-          (v_version, 'draft', '{"en": "Draft", "ar": "مسودة"}', 'draft', '{"base_role": "contractor", "permission": "create"}', 'none'),
-          (v_version, 'internal_review', '{"en": "Contractor review", "ar": "مراجعة المقاول"}', 'internal_review',
-            '{"base_role": "contractor", "permission": "review"}', 'none'),
-          (v_version, 'consultant_review', '{"en": "Consultant review", "ar": "مراجعة الاستشاري"}', 'pending_approval',
-            '{"base_role": "consultant", "permission": "review"}', 'none'),
-          (v_version, 'consultant_approval', '{"en": "Consultant approval", "ar": "اعتماد الاستشاري"}', 'internal_review',
-            '{"base_role": "consultant", "permission": "approve"}', 'issue_code'),
-          (v_version, 'approved', '{"en": "Approved", "ar": "معتمد"}', 'approved', '{}', 'none');
-        insert into workflow_transition (workflow_version_id, key, from_step_id, to_step_id, label, kind, outcome, permission, sort)
-        select v_version, t.key, f.id, s.id, t.label::jsonb, t.kind, t.outcome, t.permission, t.sort
-        from (values
-          ('send_for_review', 'draft', 'internal_review', '{"en": "Send", "ar": "إرسال"}', 'send', null, 'create', 1),
-          ('submit', 'internal_review', 'consultant_review', '{"en": "Submit", "ar": "تقديم"}', 'submit', null, 'submit', 2),
-          ('send_to_manager', 'consultant_review', 'consultant_approval', '{"en": "Send", "ar": "إرسال"}', 'send', null, 'review', 3),
-          ('approve_a', 'consultant_approval', 'approved', '{"en": "A", "ar": "A"}', 'close', 'A', 'approve', 4),
-          ('return_to_contractor', 'consultant_review', 'internal_review', '{"en": "Return", "ar": "إعادة"}', 'return', null, 'review', 5)
-        ) as t (key, from_key, to_key, label, kind, outcome, permission, sort)
-        join workflow_step f on f.workflow_version_id = v_version and f.key = t.from_key
-        join workflow_step s on s.workflow_version_id = v_version and s.key = t.to_key;
         insert into work_item_type (owner_kind, module_key, code, name, workflow_definition_id, outcome_kind, form_definition_id)
-        values ('rabaed', 'submittals', '${TYPE}', '{"en": "Consultant section", "ar": "قسم الاستشاري"}', v_definition, 'review_code', v_form);
+        values ('rabaed', 'submittals', '${TYPE}', '{"en": "Consultant section", "ar": "قسم الاستشاري"}', '${workflowId}', 'review_code', v_form);
       end
     $$`);
 }
@@ -326,13 +301,13 @@ describe("a file into a field of a section not editable now", () => {
   });
 });
 
-describe("a Return out of K1's Step", () => {
+describe("a Send Back out of K1's Step", () => {
   let id = "";
   beforeAll(async () => {
     id = await atConsultantReview("FD-40");
     expect(await save(k1.member, { model: "FD-40", sample_checked: true }, id)).toBe("saved");
     expect(await recordTimes(k1.member, id)).toBe("recorded");
-    expect(await take(k1.member, "return_to_contractor", sql`null`, id)).toBe("applied");
+    expect(await take(k1.member, "send_back", sql`null`, id)).toBe("applied");
   });
 
   it("discards K1's answers: C1, holding it again, reads K1's section as it arrived", async () => {
@@ -353,5 +328,58 @@ describe("a Return out of K1's Step", () => {
       [id],
     );
     expect(rows[0]).toEqual({ data: { model: "FD-40" }, data_as_arrived: null, times: ["location", "model", "trade"], same_hash: true });
+  });
+});
+
+// RP-334: the Submission Date and the Creation Date (visibility.md "Creation
+// Date", scenario 61; ADR 0014), as the app role.
+describe("the Creation Date and the Submission Date (scenario 61)", () => {
+  let id = "";
+  let recorded: { numbered_at: Date; submitted_at: Date };
+  beforeAll(async () => {
+    id = await atConsultantReview("SC-61");
+    recorded = (await migrator.query("select numbered_at, submitted_at from work_item where id = $1", [id])).rows[0];
+    expect(recorded.numbered_at).toBeInstanceOf(Date);
+    expect(recorded.submitted_at).toBeInstanceOf(Date);
+  });
+  const creationDate = (as: string) =>
+    call<{ at: Date | null }>(as, sql`select app.work_item_creation_date(${id}::uuid) as at`).then((rows) => rows[0]!.at);
+
+  it("gives the Creation Date to C1's Members only", async () => {
+    for (const who of [c1.member, c1Pm]) expect(await creationDate(who)).toEqual(recorded.numbered_at);
+    for (const who of [k1.member, k1Other, ow.member]) expect(await creationDate(who)).toBeNull();
+  });
+
+  it("lets everyone who sees the item read the Submission Date", async () => {
+    for (const who of [c1.member, c1Pm, k1.member, k1Other, ow.member]) {
+      expect(await call(who, sql<{ submitted_at: Date }>`select submitted_at from work_item where id = ${id}`)).toEqual([{ submitted_at: recorded.submitted_at }]);
+    }
+  });
+
+  it("never lets anyone read when the Draft was started, nor the Creation Date, from the table or the history", async () => {
+    for (const who of [c1.member, c1Pm, k1.member, ow.member]) {
+      for (const column of ["created_at", "numbered_at"]) {
+        await expect(call(who, sql<{ at: Date }>`select ${sql.ref(column)} as at from work_item where id = ${id}`)).rejects.toThrow(/permission denied/);
+      }
+      expect(await call(who, sql<{ seq: number }>`select seq from work_item_event where work_item_id = ${id} and type = 'created'`)).toEqual([]);
+      expect(await call(who, sql<{ seq: number }>`select seq from app.work_item_history(${id}::uuid) where type = 'created'`)).toEqual([]);
+    }
+  });
+
+  it("keeps the Submission Date after a Send Back and a second Submit", async () => {
+    expect(await take(k1.member, "send_back", sql`null`, id)).toBe("applied");
+    expect(await take(c1Pm, "submit", sql`app.answers_sha256(${id}::uuid)`, id)).toBe("applied");
+    const { rows } = await migrator.query("select submitted_at from work_item where id = $1", [id]);
+    expect(rows[0].submitted_at).toEqual(recorded.submitted_at);
+  });
+});
+
+describe("a Draft", () => {
+  it("is never deleted: the app role can't, and no function in app deletes one", async () => {
+    const { rows } = await migrator.query(`
+      select has_table_privilege('rabaed_app', 'work_item', 'DELETE') as app_deletes,
+        array(select p.oid::regprocedure::text from pg_proc p
+              where p.pronamespace = 'app'::regnamespace and p.prosrc ~* 'delete\\s+from\\s+(public\\.)?work_item\\M') as deleting`);
+    expect(rows[0]).toEqual({ app_deletes: false, deleting: [] });
   });
 });

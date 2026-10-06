@@ -59,6 +59,8 @@ A draft Workflow version can't be published unless all of these hold:
 7. Action Forms are valid Form schemas. As built (RP-300): `workflowActionFormProblems` in `packages/domain` (`action-form.ts`). Workflow Versions are published as data by migration until the builder (part 5), so a seam test runs it on every published Version.
 8. No cycle is possible without a `return` or a `send_back`. A loop across Participants always goes through a `send_back`, never through Submit alone.
 
+As built (RP-334): checks 4 and 8 are `workflowKindProblems` in `packages/domain` (`workflow-publish.ts`), run like check 7 on every published Version by a seam test. A Step's role is its actor rule's `base_role`; a `send_back` is valid from a Step of role A to a Step of role B when some `submit` goes from a Step of B to a Step of A. The database also refuses a `send_back` with an outcome (`workflow_transition_send_back_no_outcome`), and `take_transition` raises on a `return` that would cross Participants. The seam suites' test Workflow with a Send Back is `addSendBackWorkflow` (`packages/db/test-support`).
+
 Published versions never change. Publishing v2 leaves v1 items untouched. Items on v1 show a notice ("Workflow updated to v2"), and anyone can view v2.
 
 ---
@@ -92,7 +94,7 @@ When an item enters a Step, the engine resolves the holder in three stages.
 - have Visibility covering the item.
 
 **3.3 Default assignee.** The first rule that yields a pool member wins:
-1. The person who held this Step before, when coming back by `return`.
+1. The person who held this Step before, when coming back by `return` or `send_back`.
 2. A person the previous actor picked in the Action Form, if the Transition offers "Assign to".
 3. The Participant's **default holder** for this Step, set in Project Settings by that Participant (e.g. "Contractor PM: Ali").
 4. Otherwise the item stays **pooled**. Everyone in the pool sees it under "Need My Action", and one of them **claims** it.
@@ -138,12 +140,12 @@ Checks, in order. Any failure aborts with nothing written.
 Effects, in order:
 
 1. **First exit from Draft:**
-   - the Document Number is assigned (§8);
+   - the Document Number is assigned (§8), and `numbered_at` (the Creation Date) set with it;
    - all Documents are frozen (`frozen_at`, content hashed).
 2. The event is appended. It records:
    - type `transition` (or `recommend_code` / `issue_code`);
    - the Action Form payload;
-   - `audience`: `shared` if the Transition is `submit`, closes the item, or comes from an `issue_code` Step; otherwise `internal` to the actor's Participant;
+   - `audience`: `shared` if the Transition is `submit` or `send_back`, closes the item, or comes from an `issue_code` Step; otherwise `internal` to the actor's Participant;
    - `signature_id` if signing;
    - a `content_sha256` of the item data plus its frozen Documents;
    - the hash chain.
@@ -151,7 +153,8 @@ Effects, in order:
    An Internal Note written in the Action Form is its own `internal_note` event, appended just before the Transition's, carrying the Transition's id. It is always `internal` to the actor's Participant, even with a Submit or a Code (visibility.md V5).
 3. The current assignment is closed (`done`).
 4. The item moves: `current_step_id`, `current_stage_key` and `step_entered_at` are set. If it leaves the acting Participant (handed to another, or closed), `participant_entered_at` and `participant_entered_step_id` are set too. The event is `shared` when the item leaves the acting Participant (a Submit or a close always does); a move inside one Participant is `internal`, even from a Step that issues Codes.
-5. **If the new Step is non-terminal:** a new assignment is created (§3), and `work_item_access` is granted to the holder's Participant (`handling`). On the first `submit`, oversight access is granted to Owner and Owner Representative Participants whose Visibility covers the item.
+5. **If the new Step is non-terminal:** a new assignment is created (§3), and `work_item_access` is granted to the holder's Participant (`handling`). On the first `submit`, oversight access is granted to Owner and Owner Representative Participants whose Visibility covers the item, and `submitted_at` (the Submission Date) is set when the raiser's Participant takes it; a later Submit, after a Send Back, leaves it. While a Sent Back item is at its raiser's Steps, everyone with access still sees it, as it was at the Send Back (visibility.md V1, V19; RP-309). Every move to another Participant, and every close, adds one to `work_item.arrivals`, which marks what the next holder adds as its own until the item leaves it.
+   A `send_back` out of a Step of a Participant other than the raiser first puts the Form Sections other Participants fill back as they arrived (ADR 0013), and needs no complete Form.
 6. **If the new Step is terminal:**
    - `outcome` and `closed_at` are set;
    - outcome hooks run (§6);

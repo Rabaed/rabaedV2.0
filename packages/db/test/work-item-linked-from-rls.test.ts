@@ -49,7 +49,8 @@ async function moveTo(item: string, state: "internal" | "submitted") {
   const transition = state === "internal" ? "send_for_review" : "submit";
   const { rowCount } = await migrator.query(
     `update work_item w set current_step_id = t.to_step_id,
-       participant_entered_step_id = case when $2 = 'submitted' then t.to_step_id else w.participant_entered_step_id end
+       participant_entered_step_id = case when $2 = 'submitted' then t.to_step_id else w.participant_entered_step_id end,
+       submitted_at = case when $2 = 'submitted' then coalesce(w.submitted_at, now()) else w.submitted_at end
      from workflow_transition t
      where w.id = $1 and t.workflow_version_id = w.workflow_version_id and t.key = $3`,
     [item, state, transition],

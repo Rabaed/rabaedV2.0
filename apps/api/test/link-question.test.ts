@@ -248,14 +248,14 @@ describe("a link question", () => {
   });
 });
 
-describe("an item already chosen that goes back to Draft", () => {
+describe("an item already chosen that goes back to its raiser's Draft (Sent Back)", () => {
   let target = "";
   let lq = "";
 
   beforeAll(async () => {
     target = await submitted(tower, tower.c1Engineer, tower.c1Pm, "Cable trays, taken back");
     lq = (await ok(createLq(tower.c1Engineer, { relies: true, related: [target] }), 201)).json().id;
-    // As the owner: back with its raiser, in Draft, as a Return to Draft would leave it.
+    // As the owner: back with its raiser, in Draft, as a Send Back to Draft would leave it.
     await sql`
       update work_item w set participant_entered_step_id = (
         select s.id from workflow_step s where s.workflow_version_id = w.workflow_version_id and app.is_draft_step(s.id)
@@ -270,11 +270,13 @@ describe("an item already chosen that goes back to Draft", () => {
     expect(await questionLinks(tower.c1Engineer, lq)).toEqual([["related", target]]);
   });
 
-  it("can't be chosen anew, refused like any item Link search couldn't offer", async () => {
-    expect(refusal(await createLq(tower.c1Engineer, { relies: true, related: [target] }))).toEqual(unknownRelated);
+  // Submitted at least once, it stays in Link search (RP-295, scenario 58).
+  it("can still be chosen anew, as Link search still offers it", async () => {
+    await ok(createLq(tower.c1Engineer, { relies: true, related: [target] }), 201);
     await ok(save(tower.c1Engineer, lq, { relies: true, related: [] }));
-    expect(refusal(await save(tower.c1Engineer, lq, { relies: true, related: [target] }))).toEqual(unknownRelated);
     expect(await questionLinks(tower.c1Engineer, lq)).toEqual([]);
+    await ok(save(tower.c1Engineer, lq, { relies: true, related: [target] }));
+    expect(await questionLinks(tower.c1Engineer, lq)).toEqual([["related", target]]);
   });
 
   it("is refused by its id to a saver who can't see it, even while chosen", async () => {

@@ -3,6 +3,8 @@ import { withMember, type Db } from "../src/client.ts";
 import { processOutbox } from "../src/outbox.ts";
 import { databaseNameOf, databaseUrlsFromEnv, withDatabaseName, type DatabaseUrls } from "../src/config.ts";
 
+export { addSendBackWorkflow } from "./send-back-workflow.ts";
+
 class Rollback extends Error {}
 
 /** Runs `fn` in a transaction on `db` that is always rolled back. */

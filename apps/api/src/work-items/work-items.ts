@@ -1,5 +1,6 @@
 import { withMember, type Database, type Db } from "@rabaed/db";
 import {
+  backwardKinds,
   changedOutside,
   editableSections,
   errorsInSections,
@@ -514,8 +515,9 @@ const containsPattern = (text: string) => `%${text.replace(/[\\%_]/g, (c) => `\\
 
 /**
  * Link search (visibility.md "Link search", scenario 29): the Project's items
- * whose Document Number or Subject contains `q`, whatever the case, newest
- * first, one page at a time. Only items the Member sees (RLS, the list's own
+ * whose Document Number or Subject contains `q`, whatever the case, the latest
+ * Submitted first (the Submission Date, which every caller who sees an item may
+ * read; never when its Draft was started), one page at a time. Only items the Member sees (RLS, the list's own
  * path) that have been Submitted (app.work_item_submitted): never a Draft or an
  * item in internal review. One row more than the page is read only to tell
  * whether there is a next page; there is no total, so nothing counts hidden
@@ -531,7 +533,7 @@ export function searchLinkTargets(db: Db, memberId: string, projectId: string, q
       from work_item w
       where w.project_id = ${projectId} and app.work_item_submitted(w.id)
         and (w.document_number ilike ${pattern} or w.title ilike ${pattern})
-      order by w.created_at desc, w.id desc
+      order by w.submitted_at desc nulls last, w.id desc
       limit ${query.limit + 1} offset ${(query.page - 1) * query.limit}
     `.execute(trx);
     return {
@@ -549,7 +551,8 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
     const { rows } = await sql<{
       data: Record<string, unknown>;
       form_version_id: string;
-      created_at: Date;
+      creation_date: Date | null;
+      submitted_at: Date | null;
       step_key: string;
       step_name: BilingualText;
       raised_by: BilingualText;
@@ -563,7 +566,8 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
       can_create_revision: boolean;
       can_discard_revision: boolean;
     }>`
-      select app.work_item_answers(w.id) as data, w.form_version_id, w.created_at, w.outcome, w.closed_at, s.key as step_key, s.name as step_name,
+      select app.work_item_answers(w.id) as data, w.form_version_id, app.work_item_creation_date(w.id) as creation_date,
+        w.submitted_at, w.outcome, w.closed_at, s.key as step_key, s.name as step_name,
         raiser.legal_name as raised_by, holder.legal_name as held_by, m.full_name as holder_name,
         app.can_save_answers(w.id) as can_save_answers, w.revision_no, app.revision_versions_changed(w.id) as versions_changed,
         app.can_create_revision(w.id) as can_create_revision, app.can_discard_revision(w.id) as can_discard_revision
@@ -571,9 +575,9 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
       cross join lateral app.step_as_seen(w.id) seen
       join workflow_step s on s.id = seen.step_id
       join app.work_item_companies(w.id) raiser on raiser.participant_id = w.raised_by_participant_id
-      left join step_assignment a on a.work_item_id = w.id and a.status in ('pooled', 'claimed', 'vacant')
+      left join app.work_item_holder(w.id) a on true
       left join app.work_item_companies(w.id) holder on holder.participant_id = a.participant_id
-      -- member's own RLS shows only the viewer's own Company's people (V14).
+      -- Only the viewer's own Participant's holder is named, and member's own RLS shows only their own Company's people (V14).
       left join member m on m.id = a.assignee_member_id
       where w.id = ${workItemId}
     `.execute(trx);
@@ -612,7 +616,9 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
       heldBy: d.held_by ? { companyName: d.held_by, memberName: d.holder_name } : null,
       outcome: d.outcome,
       closedAt: d.closed_at?.toISOString() ?? null,
-      createdAt: d.created_at.toISOString(),
+      // When the Draft was started is audit only, shown to nobody (visibility.md "Creation Date", scenario 61).
+      creationDate: d.creation_date?.toISOString() ?? null,
+      submissionDate: d.submitted_at?.toISOString() ?? null,
       actions: {
         ...(await actions(trx, workItemId)),
         saveAnswers: d.can_save_answers,
@@ -789,7 +795,10 @@ export function takeTransition(
         files: await fieldFileCounts(trx, workItemId),
       });
       const missing = checked.ok ? [] : errorsInSections(pinned.form.schema, pinned.toFill.editableSections, checked.errors);
-      if (taking && taking.transition_kind !== "cancel" && taking.transition_kind !== "return" && missing.length > 0) {
+      // A cancel, a Return or a Send Back takes the item back: nothing has to be complete.
+      const kind = taking?.transition_kind;
+      const back = kind === "cancel" || (kind != null && backwardKinds.includes(kind));
+      if (taking && !back && missing.length > 0) {
         return { ok: false, reason: "form_incomplete", errors: missing };
       }
     }

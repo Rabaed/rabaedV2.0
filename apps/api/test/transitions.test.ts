@@ -230,21 +230,21 @@ describe("Claim, Return and re-send", () => {
 
   it("shows the Contractor's Members each move, with the Return reason (V5)", async () => {
     const events = await history(pm2, id);
+    // Not the Draft's `created` event: when it was started is shown to nobody (scenario 61).
     expect(events.map((e) => [e.type, e.transition?.en ?? null, e.audience])).toEqual([
-      ["created", null, "internal"],
       ["transition", "Send for Review", "internal"],
       ["claimed", null, "internal"],
       ["transition", "Return", "internal"],
       ["transition", "Send for Review", "internal"],
     ]);
-    expect(events[1]).toMatchObject({
+    expect(events[0]).toMatchObject({
       fromStep: { en: "Draft" },
       toStep: { en: "Contractor review" },
       documentNumber: expect.stringMatching(/^TWR-MAR-01-/),
       by: { companyName: { en: "Test Constructions" }, memberName: { en: "Test Member" } },
     });
-    expect(events[3]!.reason).toBe("Wrong tray size");
-    expect(events.map((e) => e.seq)).toEqual([1, 2, 3, 4, 5]);
+    expect(events[2]!.reason).toBe("Wrong tray size");
+    expect(events.map((e) => e.seq)).toEqual([1, 2, 3, 4]);
   });
 
   it("keeps the Return reason from everyone outside the Contractor (V5)", async () => {
@@ -317,7 +317,7 @@ describe("a Transition", () => {
     const res = await take(noPosition, id, "send_for_review");
     expect(res.statusCode).toBe(403);
     expect(res.json()).toEqual({ error: "forbidden" });
-    expect(await history(noPosition, id)).toHaveLength(1);
+    expect(await history(noPosition, id)).toEqual([]);
     expect((await detail(noPosition, id)).stage.key).toBe("draft");
   });
 

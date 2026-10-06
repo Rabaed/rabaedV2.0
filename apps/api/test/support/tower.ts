@@ -2,7 +2,7 @@
 // (Contractor, its creator) with K1 as its Consultant, and the MARs those tests
 // link to, from Draft to Submitted.
 import { randomUUID } from "node:crypto";
-import type { VisibilityGrant } from "@rabaed/domain";
+import type { VisibilityGrant, WorkItemDetail } from "@rabaed/domain";
 import type { LightMyRequestResponse } from "fastify";
 import { expect } from "vitest";
 import { attachDatasheet, type Caller, type OnboardedCompany, type TestApi } from "./harness.ts";
@@ -23,14 +23,26 @@ export async function ok(res: Promise<LightMyRequestResponse>, status = 204) {
   return r;
 }
 
-/** A signed-in Member of `company`, on the Project through `participantId`, with `positions` and that Trade Visibility. */
-export async function projectMember(api: TestApi, company: Company, participantId: string, positions: string[], trade: VisibilityGrant = all) {
+/** A signed-in Member of `company`, on the Project through `participantId`, with `positions` and that Trade Visibility, and their email. */
+export async function memberOnProject(api: TestApi, company: Company, participantId: string, positions: string[], trade: VisibilityGrant = all) {
   const { member, caller } = await api.member(company.caller);
   await api.addProjectMember(company.caller, participantId, member.id);
   await ok(company.caller.request("PUT", `/v1/participants/${participantId}/members/${member.id}/visibility`, { trade, location: all }));
   await ok(company.caller.request("PUT", `/v1/participants/${participantId}/members/${member.id}/positions`, { positions }));
-  return caller;
+  return { caller, email: member.email };
 }
+
+/** A signed-in Member of `company`, on the Project through `participantId`, with `positions` and that Trade Visibility. */
+export async function projectMember(api: TestApi, company: Company, participantId: string, positions: string[], trade: VisibilityGrant = all) {
+  return (await memberOnProject(api, company, participantId, positions, trade)).caller;
+}
+
+/** `by` takes Transition `transition` on item `id`. */
+export const take = (by: Caller, id: string, transition: string) =>
+  ok(by.post(`/v1/work-items/${id}/transitions`, { transition, idempotencyKey: randomUUID() }));
+
+/** Item `id` as `by` reads it. */
+export const detail = async (by: Caller, id: string): Promise<WorkItemDetail> => (await ok(by.get(`/v1/work-items/${id}`), 200)).json();
 
 /** One Project as buildTower builds it, with the people who work on it. */
 export type Tower = {
@@ -68,9 +80,6 @@ export async function buildTower(api: TestApi, { c1, k1 }: { c1: Company; k1: Co
     k1Manager: await projectMember(api, k1, k1ParticipantId, ["manager"]),
   };
 }
-
-const take = (by: Caller, id: string, transition: string) =>
-  ok(by.post(`/v1/work-items/${id}/transitions`, { transition, idempotencyKey: randomUUID() }));
 
 /** A Draft MAR with the Subject `title`, on `at`'s Project, in Building A. */
 export async function draft(at: Tower, engineer: Caller, title: string, trade = at.electrical): Promise<string> {

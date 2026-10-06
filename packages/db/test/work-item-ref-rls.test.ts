@@ -72,7 +72,7 @@ async function addLinkType() {
 /** As the owner: the item has left its raiser (Submitted), as a Submit would leave it, and is numbered. */
 async function submit(item: string, number: string) {
   await migrator.query(
-    `update work_item w set document_number = $2, participant_entered_step_id = (
+    `update work_item w set document_number = $2, submitted_at = coalesce(submitted_at, now()), participant_entered_step_id = (
        select s.id from workflow_step s where s.workflow_version_id = w.workflow_version_id and not app.is_draft_step(s.id)
        order by s.id limit 1)
      where w.id = $1`,
@@ -80,7 +80,7 @@ async function submit(item: string, number: string) {
   );
 }
 
-/** As the owner: the item is back with its raiser, in Draft, as a Return to Draft would leave it. */
+/** As the owner: the item is back with its raiser, in Draft, as a Send Back to Draft would leave it (still Submitted once). */
 async function unsubmit(item: string) {
   await migrator.query(
     `update work_item w set participant_entered_step_id = (
@@ -266,7 +266,8 @@ describe("saving a link question's answer", () => {
     expect(await reliesOn(a)).toEqual([["relies_on", "related", a.seen]]);
   });
 
-  it("keeps an item already chosen that has gone back to Draft, while the saver sees it, but never takes it as a new choice", async () => {
+  // Submitted at least once, it stays in Link search (RP-295, scenario 58).
+  it("keeps an item already chosen that has been Sent Back to its raiser's Draft, and takes it as a new choice too", async () => {
     expect(await save(a.ap, a, [a.seen])).toBe("saved");
     await unsubmit(a.seen);
     try {
@@ -274,8 +275,9 @@ describe("saving a link question's answer", () => {
       expect(await answers(a.ap, a.from)).toMatchObject({ related: [a.seen] });
       expect(await reliesOn(a)).toEqual([["relies_on", "related", a.seen]]);
       expect(await save(a.narrow, a, [])).toBe("saved");
-      expect(await save(a.narrow, a, [a.seen])).toBe("target_not_found");
       expect(await reliesOn(a)).toEqual([]);
+      expect(await save(a.narrow, a, [a.seen])).toBe("saved");
+      expect(await reliesOn(a)).toEqual([["relies_on", "related", a.seen]]);
     } finally {
       await submit(a.seen, "AAA-MAR-01-0001");
     }

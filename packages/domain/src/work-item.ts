@@ -204,8 +204,11 @@ export const workItemOutcomes = ["A", "B", "C", "D", "passed", "passed_with_comm
 export const workItemOutcome = z.enum(workItemOutcomes);
 export type WorkItemOutcome = z.infer<typeof workItemOutcome>;
 
-/** A Transition's kind (workflow-engine.md §1). */
-export const transitionKinds = ["send", "submit", "return", "close", "cancel"] as const;
+/** A Transition's kind (workflow-engine.md §1; `send_back` ADR 0014). */
+export const transitionKinds = ["send", "submit", "return", "send_back", "close", "cancel"] as const;
+export type TransitionKind = (typeof transitionKinds)[number];
+/** The kinds that take an item back, within its Participant (`return`) or to the one that Submitted it (`send_back`). */
+export const backwardKinds: readonly TransitionKind[] = ["return", "send_back"];
 
 /**
  * The holder of the current Step takes one of its Transitions. The key makes a
@@ -306,7 +309,14 @@ export const workItemDetail = workItemSummary.extend({
   /** Set once closed: the Issued Code (A, C…). */
   outcome: workItemOutcome.nullable(),
   closedAt: z.iso.datetime().nullable(),
-  createdAt: z.iso.datetime(),
+  /**
+   * The Creation Date: when it got its Document Number, first leaving Draft. Only
+   * for the raiser's Participant; null for everyone else and while in Draft. When
+   * the Draft was started is never shown (visibility.md "Creation Date").
+   */
+  creationDate: z.iso.datetime().nullable(),
+  /** The Submission Date: its first Submit out of the raiser's Participant, kept after a Send Back. Null until then. */
+  submissionDate: z.iso.datetime().nullable(),
   /** What the viewer may press now. */
   actions: workItemActions,
 });
