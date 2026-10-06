@@ -9,17 +9,15 @@
 // Links) stays inside C1's Participant until C1 Submits it again; then it is
 // everyone's. C2, another Contractor, is never offered C1's item.
 //
-// The Type is test-only, on the test Workflow with a Send Back (addSendBackWorkflow).
-import { randomUUID } from "node:crypto";
-import { publishFormVersion } from "@rabaed/admin/services";
+// The Type is test-only, on the test Workflow with a Send Back (addSendBackType).
 import { createDb } from "@rabaed/db";
-import { addSendBackWorkflow, drainOutbox, testDatabaseUrls } from "@rabaed/db/test-support";
-import type { DocumentList, LinkedFrom, LinkSearchResults, NotificationList, WorkItemDetail, WorkItemHistory, WorkItemLinks } from "@rabaed/domain";
-import { sql } from "kysely";
+import { drainOutbox, testDatabaseUrls } from "@rabaed/db/test-support";
+import type { DocumentList, LinkedFrom, LinkSearchResults, NotificationList, WorkItemHistory, WorkItemLinks } from "@rabaed/domain";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { jpegWithExif } from "../src/demo/exif-jpeg.ts";
 import { createTestApi, expectHidden, uploadDocument, type Caller, type TestFile } from "./support/harness.ts";
-import { all, bilingual, ok, type Company } from "./support/tower.ts";
+import { addSendBackType } from "./support/send-back.ts";
+import { all, bilingual, detail, ok, projectMember, take, type Company } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
 const urls = testDatabaseUrls();
@@ -74,36 +72,6 @@ let projectId = "";
 let electrical = "";
 let buildingA = "";
 
-async function addType() {
-  const { id: formId } = await migrator
-    .insertInto("form_definition")
-    .values({ owner_kind: "rabaed", name: JSON.stringify(bilingual("Sent Back rows (test)")) })
-    .returning("id")
-    .executeTakeFirstOrThrow();
-  const workflowId = await addSendBackWorkflow((text) => sql.raw(text).execute(migrator));
-  await migrator
-    .insertInto("work_item_type")
-    .values({
-      owner_kind: "rabaed",
-      module_key: "submittals",
-      code: TYPE,
-      name: JSON.stringify({ en: "Sent Back rows submittal", ar: "اعتماد مُرجَع" }),
-      workflow_definition_id: workflowId,
-      outcome_kind: "review_code",
-      form_definition_id: formId,
-    })
-    .execute();
-  expect(await publishFormVersion(migrator, formId, schema)).toMatchObject({ ok: true });
-}
-
-async function projectMember(company: Company, participantId: string, positions: string[]): Promise<Caller> {
-  const { member, caller } = await api.member(company.caller);
-  await api.addProjectMember(company.caller, participantId, member.id);
-  await ok(company.caller.request("PUT", `/v1/participants/${participantId}/members/${member.id}/visibility`, { trade: all, location: all }));
-  await ok(company.caller.request("PUT", `/v1/participants/${participantId}/members/${member.id}/positions`, { positions }));
-  return caller;
-}
-
 async function otherParticipant(role: "contractor" | "consultant" | "owner" | "owner_representative") {
   const company = await api.authorizedPerson();
   const participantId = await api.addParticipant(c1.caller, projectId, company.company, role);
@@ -111,9 +79,6 @@ async function otherParticipant(role: "contractor" | "consultant" | "owner" | "o
   return { company, participantId };
 }
 
-const take = (by: Caller, id: string, transition: string) =>
-  ok(by.post(`/v1/work-items/${id}/transitions`, { transition, idempotencyKey: randomUUID() }));
-const detail = async (by: Caller, id: string): Promise<WorkItemDetail> => (await ok(by.get(`/v1/work-items/${id}`), 200)).json();
 const save = async (id: string, changes: Record<string, unknown>) =>
   ok(engineer.request("PUT", `/v1/work-items/${id}/answers`, { answers: { ...(await detail(engineer, id)).answers, ...changes } }));
 const documentIds = async (by: Caller, id: string) =>
@@ -163,7 +128,7 @@ async function submitted(model: string): Promise<string> {
 }
 
 beforeAll(async () => {
-  await addType();
+  await addSendBackType(migrator, TYPE, { en: "Sent Back rows submittal", ar: "اعتماد مُرجَع" }, schema);
   c1 = await api.projectCreator();
   projectId = (await api.createProject(c1.caller)).id;
   electrical = (await c1.caller.post(`/v1/projects/${projectId}/trades`, { code: "EL", name: bilingual("Electrical") })).json().id;
@@ -173,17 +138,17 @@ beforeAll(async () => {
     .json()
     .participants.find((p: { isOwnCompany: boolean }) => p.isOwnCompany).id;
   await ok(c1.caller.request("PUT", `/v1/participants/${own}/visibility`, { trade: all, location: all }));
-  engineer = await projectMember(c1, own, ["engineer"]);
-  pm = await projectMember(c1, own, ["project_manager"]);
+  engineer = await projectMember(api, c1, own, ["engineer"]);
+  pm = await projectMember(api, c1, own, ["project_manager"]);
   const k1 = await otherParticipant("consultant");
-  k1Engineer = await projectMember(k1.company, k1.participantId, ["engineer"]);
-  k1Pm = await projectMember(k1.company, k1.participantId, ["engineer"]);
+  k1Engineer = await projectMember(api, k1.company, k1.participantId, ["engineer"]);
+  k1Pm = await projectMember(api, k1.company, k1.participantId, ["engineer"]);
   const or = await otherParticipant("owner_representative");
-  orEngineer = await projectMember(or.company, or.participantId, ["engineer"]);
+  orEngineer = await projectMember(api, or.company, or.participantId, ["engineer"]);
   const ow = await otherParticipant("owner");
-  owner = await projectMember(ow.company, ow.participantId, ["representative"]);
+  owner = await projectMember(api, ow.company, ow.participantId, ["representative"]);
   const c2 = await otherParticipant("contractor");
-  c2Engineer = await projectMember(c2.company, c2.participantId, ["engineer"]);
+  c2Engineer = await projectMember(api, c2.company, c2.participantId, ["engineer"]);
 });
 
 describe("C1 changes an item Sent Back to its Draft (scenarios 58, 59 and 71)", () => {

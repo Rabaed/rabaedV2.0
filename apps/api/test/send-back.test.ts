@@ -6,16 +6,15 @@
 // a Send Back; the Creation Date (when it got its number) is the raiser's only;
 // when the Draft was started reaches nobody.
 //
-// The Type is test-only, on the test Workflow with a Send Back (addSendBackWorkflow).
-import { randomUUID } from "node:crypto";
-import { publishFormVersion } from "@rabaed/admin/services";
+// The Type is test-only, on the test Workflow with a Send Back (addSendBackType).
 import { createDb } from "@rabaed/db";
-import { addSendBackWorkflow, testDatabaseUrls } from "@rabaed/db/test-support";
-import { workflowKindProblems, type PublishedTransition, type WorkItemDetail } from "@rabaed/domain";
+import { testDatabaseUrls } from "@rabaed/db/test-support";
+import { workflowKindProblems, type PublishedTransition } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestApi, DEFAULT_PASSWORD, type Caller } from "./support/harness.ts";
-import { all, bilingual, ok, type Company } from "./support/tower.ts";
+import { addSendBackType } from "./support/send-back.ts";
+import { all, bilingual, detail, memberOnProject, ok, take, type Company } from "./support/tower.ts";
 
 const api = await createTestApi();
 const migrator = createDb(testDatabaseUrls().migrator, { max: 1 });
@@ -50,31 +49,6 @@ let projectId = "";
 let electrical = "";
 let buildingA = "";
 
-async function addType() {
-  const { id: formId } = await migrator
-    .insertInto("form_definition")
-    .values({ owner_kind: "rabaed", name: JSON.stringify(bilingual("Send Back (test)")) })
-    .returning("id")
-    .executeTakeFirstOrThrow();
-  const workflowId = await addSendBackWorkflow((text) => sql.raw(text).execute(migrator));
-  await migrator
-    .insertInto("work_item_type")
-    .values({
-      owner_kind: "rabaed",
-      module_key: "submittals",
-      code: TYPE,
-      name: JSON.stringify({ en: "Send Back submittal", ar: "اعتماد بالإرجاع" }),
-      workflow_definition_id: workflowId,
-      outcome_kind: "review_code",
-      form_definition_id: formId,
-    })
-    .execute();
-  expect(await publishFormVersion(migrator, formId, schema)).toMatchObject({ ok: true });
-}
-
-const take = (by: Caller, id: string, transition: string) =>
-  ok(by.post(`/v1/work-items/${id}/transitions`, { transition, idempotencyKey: randomUUID() }));
-const detail = async (by: Caller, id: string): Promise<WorkItemDetail> => (await ok(by.get(`/v1/work-items/${id}`), 200)).json();
 const dates = async (by: Caller, id: string) => {
   const d = await detail(by, id);
   return { creationDate: d.creationDate, submissionDate: d.submissionDate };
@@ -94,13 +68,10 @@ const recorded = async (id: string) => {
 
 const emails = new Map<Caller, string>();
 
-/** A signed-in Member of `company` on the Project, with `positions` and all of its Visibility. */
+/** A signed-in Member of `company` on the Project, with `positions` and all of its Visibility, signed in again by later(). */
 async function projectMember(company: Company, participantId: string, positions: string[]): Promise<Caller> {
-  const { member, caller } = await api.member(company.caller);
-  await api.addProjectMember(company.caller, participantId, member.id);
-  await ok(company.caller.request("PUT", `/v1/participants/${participantId}/members/${member.id}/visibility`, { trade: all, location: all }));
-  await ok(company.caller.request("PUT", `/v1/participants/${participantId}/members/${member.id}/positions`, { positions }));
-  emails.set(caller, member.email);
+  const { caller, email } = await memberOnProject(api, company, participantId, positions);
+  emails.set(caller, email);
   return caller;
 }
 
@@ -124,7 +95,7 @@ async function submit(id: string) {
 }
 
 beforeAll(async () => {
-  await addType();
+  await addSendBackType(migrator, TYPE, { en: "Send Back submittal", ar: "اعتماد بالإرجاع" }, schema);
   c1 = await api.projectCreator();
   projectId = (await api.createProject(c1.caller)).id;
   electrical = (await c1.caller.post(`/v1/projects/${projectId}/trades`, { code: "EL", name: bilingual("Electrical") })).json().id;
