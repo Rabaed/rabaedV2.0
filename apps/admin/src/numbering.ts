@@ -131,10 +131,12 @@ export function setParticipantCode(
         select app.assign_participant_code(${participantId}::uuid, ${input.code}) as outcome
       `.execute(trx);
       expectOutcome(rows[0]!.outcome, "set", participantCodeRefusals);
+      // The log keeps what was stored, not a guess at how the function normalised the input.
+      const stored = await trx.selectFrom("participant").select("code").where("id", "=", participantId).executeTakeFirst();
       return {
         target: { kind: "participant", id: participantId },
         before: { code: before?.code ?? null },
-        after: { projectId: before?.project_id, code: input.code.trim().toUpperCase() },
+        after: { projectId: before?.project_id, code: stored?.code ?? null },
         result: undefined,
       };
     }),
