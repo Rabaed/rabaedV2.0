@@ -185,7 +185,7 @@ describe("a starting number", () => {
     const id = await draft(at, at.c1Engineer, "Continues the register");
     await sendForReview(at.c1Engineer, id);
     expect(await numberOf(at.c1Engineer, id)).toBe("PC12-MAR-01-0144");
-  }, 20_000);
+  });
 
   it("leaves the code free when the counter doesn't count by the Participant", async () => {
     const at = await project("PC13");

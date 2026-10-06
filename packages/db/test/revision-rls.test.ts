@@ -329,7 +329,7 @@ describe("the Links between the items of a chain, for a reader who sees only som
     expect(await take(c1.member, moved, "send_for_review")).toBe("applied");
     expect(await claim(c1Pm, moved)).toBe("claimed");
     expect(await take(c1Pm, moved, "submit")).toBe("applied");
-  }, 20_000);
+  });
 
   it("gives a reader of both the Link to the Revision, and its Linked from", async () => {
     for (const who of [c1.member, k1.member, ow.member]) {

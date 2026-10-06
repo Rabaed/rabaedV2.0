@@ -5,6 +5,21 @@ import { databaseNameOf, databaseUrlsFromEnv, withDatabaseName, type DatabaseUrl
 
 export { addSendBackWorkflow } from "./send-back-workflow.ts";
 
+class Rollback extends Error {}
+
+/** Runs `fn` in a transaction on `db` that is always rolled back. */
+export async function rolledBack(db: Db, fn: (trx: Db) => Promise<void>): Promise<void> {
+  await db
+    .transaction()
+    .execute(async (trx) => {
+      await fn(trx);
+      throw new Rollback();
+    })
+    .catch((error: unknown) => {
+      if (!(error instanceof Rollback)) throw error;
+    });
+}
+
 /**
  * The URLs from the environment, pointed at `<database>_test` so the suites
  * never touch the dev database.

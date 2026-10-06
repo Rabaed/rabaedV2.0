@@ -73,12 +73,16 @@ alter policy member_reads_visible_work_item_events on work_item_event
 -- The Creation Date of an item the acting Member sees, for a Member of its
 -- raiser's Participant only: null for anyone else, and while it has no number.
 create function app.work_item_creation_date(p_work_item_id uuid) returns timestamptz
-  language sql stable security definer
+  language plpgsql stable security definer
   set search_path = pg_catalog, public
   as $$
-    select w.numbered_at from work_item w
-    where w.id = p_work_item_id and app.sees_work_item(w.id)
-      and w.raised_by_participant_id in (select app.current_participant_ids())
+    begin
+      return (
+        select w.numbered_at from work_item w
+        where w.id = p_work_item_id and app.sees_work_item(w.id)
+          and w.raised_by_participant_id in (select app.current_participant_ids())
+      );
+    end
   $$;
 
 -- Taking a Transition -----------------------------------------------------------------

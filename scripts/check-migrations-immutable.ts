@@ -1,5 +1,5 @@
-import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
+import { git, migrationsDir } from "./migrations.ts";
 
 // A migration that already exists on the base branch is never edited, renamed
 // or deleted: databases that ran it would differ from a fresh one. A change goes
@@ -8,11 +8,9 @@ import { resolve } from "node:path";
 //
 // Usage: node scripts/check-migrations-immutable.ts <base-ref>   (CI: origin/<base branch>; needs its history)
 
-const migrationsDir = "packages/db/migrations/";
-
 /** Changed files under the migrations directory since the merge base, as "<status>\t<path>". A rename counts as a delete plus an add. */
 export function changedMigrations(repo: string, base: string): { status: string; path: string }[] {
-  const diff = execFileSync("git", ["diff", "--name-status", "--no-renames", `${base}...HEAD`, "--", migrationsDir], { cwd: repo, encoding: "utf8" });
+  const diff = git(repo, "diff", "--name-status", "--no-renames", `${base}...HEAD`, "--", `${migrationsDir}/`);
   return diff
     .split("\n")
     .filter(Boolean)

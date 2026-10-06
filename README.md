@@ -122,6 +122,8 @@ Lane `n` gets its own Docker Compose project (`rabaed-laneN`, with its own conta
 
 Open each lane's web app at `http://laneN.localhost:<web port>/en`. Browsers keep cookies per host name, not per port, so a separate `laneN.localhost` host stops one lane's sign-in from replacing another's. Tests read the same `.env`, so each lane's test runs use its own database.
 
+Several worktrees in one lane (a spec's implementer subagents) share its Postgres with `pnpm lane:env N --force --db <suffix>` (e.g. `--db rp322`): `--force` overwrites an existing `.env`, and `--db` names the databases `rabaed_<suffix>` and `rabaed_<suffix>_test`, so their seam suites never migrate the same database. `pnpm lanes:drop-dbs` drops those of worktrees that are gone. See `planning/parallel-sessions.md`, step 4 of `/implement-spec`.
+
 ## Layout
 
 | Package | What it holds |
