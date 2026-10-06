@@ -4,10 +4,10 @@ import { useLocale, useTranslations } from "next-intl";
 import { useState, type FormEvent } from "react";
 import { Button, Field, Input } from "@rabaed/ui";
 import { useRouter } from "@/i18n/navigation";
+import { browserLanguage } from "@/lib/browser-locale";
 
 export function SignInForm() {
   const t = useTranslations("signIn");
-  // The language the browser asked for: that of the Member's emails, at their first sign-in.
   const locale = useLocale();
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
@@ -22,7 +22,7 @@ export function SignInForm() {
       const res = await fetch("/api/v1/session", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ email: form.get("email"), password: form.get("password"), locale }),
+        body: JSON.stringify({ email: form.get("email"), password: form.get("password"), locale: browserLanguage(locale) }),
       });
       if (res.ok) {
         router.replace("/");
