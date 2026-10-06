@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   decodeWorkItemCursor,
   encodeWorkItemCursor,
+  isFilteredWorkItemQuery,
+  withoutFilters,
   workItemQuery,
   workItemQueryFromSearchParams,
   workItemSearchParams,
@@ -52,7 +54,7 @@ describe("workItemQuery", () => {
   });
 
   it("refuses a cursor made for the other sort, or that isn't one", () => {
-    const cursor = encodeWorkItemCursor("stepAge", ["2026-10-01T00:00:00.000000Z", row]);
+    const cursor = encodeWorkItemCursor("stepAge", ["false", "2026-10-01T00:00:00.000000Z", row]);
     expect(workItemQuery.parse({ cursor }).cursor).toBe(cursor);
     expect(workItemQuery.safeParse({ cursor, sort: "documentNumber" }).success).toBe(false);
     expect(workItemQuery.safeParse({ cursor: "garbage" }).success).toBe(false);
@@ -70,7 +72,7 @@ describe("the query in the URL", () => {
     stepAgeMin: 2,
     allRevisions: true,
     sort: "documentNumber",
-    cursor: encodeWorkItemCursor("documentNumber", ["0", "TWR-C1-EL-MAR-0001", row]),
+    cursor: encodeWorkItemCursor("documentNumber", ["false", "TWR-C1-EL-MAR-0001", row]),
   };
 
   it("reproduces the view: what a URL holds reads back the same", () => {
@@ -92,19 +94,43 @@ describe("the query in the URL", () => {
   });
 
   it("drops a cursor made for the other sort", () => {
-    const cursor = encodeWorkItemCursor("stepAge", ["2026-10-01T00:00:00.000000Z", row]);
+    const cursor = encodeWorkItemCursor("stepAge", ["false", "2026-10-01T00:00:00.000000Z", row]);
     expect(workItemQueryFromSearchParams({ sort: "documentNumber", cursor }).cursor).toBeUndefined();
   });
 });
 
 describe("the cursor", () => {
   it("round-trips its sort key, Arabic text included", () => {
-    const key = ["1", "رقم", row];
+    const key = ["false", "رقم", row];
     expect(decodeWorkItemCursor(encodeWorkItemCursor("documentNumber", key), "documentNumber")).toEqual(key);
   });
 
-  it("must end with a row id and have its sort's key length", () => {
-    expect(decodeWorkItemCursor(encodeWorkItemCursor("stepAge", ["x", "not-an-id"]), "stepAge")).toBeNull();
-    expect(decodeWorkItemCursor(encodeWorkItemCursor("stepAge", ["x", "y", row]), "stepAge")).toBeNull();
+  it("is refused when tampered with: every part must be what its sort puts there", () => {
+    const at = "2026-10-01T00:00:00.000000Z";
+    for (const [sort, key] of [
+      ["stepAge", ["false", at, "not-an-id"]],
+      ["stepAge", ["false", at]],
+      ["stepAge", ["false", "yesterday", row]],
+      ["stepAge", ["maybe", at, row]],
+      ["stepAge", ["false", "2026-10-01T00:00:00Z", row]],
+      ["documentNumber", ["0", "TWR-0001", row]],
+      ["documentNumber", ["false", "TWR-0001", row, row]],
+    ] as const) {
+      expect(decodeWorkItemCursor(encodeWorkItemCursor(sort, key), sort), JSON.stringify(key)).toBeNull();
+    }
+  });
+});
+
+describe("filters", () => {
+  it("are any of the narrowing keys, not the sort, Revisions or page", () => {
+    expect(isFilteredWorkItemQuery(defaults)).toBe(false);
+    expect(isFilteredWorkItemQuery({ ...defaults, sort: "documentNumber", allRevisions: true, cursor: "x" })).toBe(false);
+    expect(isFilteredWorkItemQuery({ ...defaults, stepAgeMin: 2 })).toBe(true);
+    expect(isFilteredWorkItemQuery({ ...defaults, location: [location] })).toBe(true);
+  });
+
+  it("clear to the first page, keeping the sort and Revisions", () => {
+    const query: WorkItemQuery = { ...defaults, stage: ["draft"], stepAgeMin: 3, sort: "documentNumber", allRevisions: true, cursor: "x" };
+    expect(withoutFilters(query)).toEqual({ ...defaults, sort: "documentNumber", allRevisions: true });
   });
 });

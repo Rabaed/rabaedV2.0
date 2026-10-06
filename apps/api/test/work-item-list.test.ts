@@ -6,7 +6,7 @@
 // has it: the Step and who claimed it inside the holding Company, its name only
 // for everyone else.
 import { randomUUID } from "node:crypto";
-import { workItemSearchParams, type WorkItemList, type WorkItemQueryInput, type WorkItemRow } from "@rabaed/domain";
+import { encodeWorkItemCursor, isOpenStageCategory, workItemSearchParams, type WorkItemList, type WorkItemQueryInput, type WorkItemRow } from "@rabaed/domain";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { attachDatasheet, createTestApi, DEFAULT_PASSWORD, expectHidden, type Caller } from "./support/harness.ts";
 import { all, bilingual, memberOnProject, ok, type Company } from "./support/tower.ts";
@@ -327,8 +327,13 @@ describe("filters and sorts, combined", () => {
     expect(ids(await list(c1Engineer, { stepAgeMin: 2, trade: [trade.mechanical] }))).toEqual([mechanicalInB]);
   });
 
-  it("sorts by Step Age, the oldest first", async () => {
-    const ages = (await list(c1Engineer)).items.map((i) => i.stepEnteredAt);
+  it("sorts by Step Age, the oldest first, closed items (which don't age) last", async () => {
+    const { items } = await list(c1Engineer, { allRevisions: true });
+    const open = items.filter((i) => isOpenStageCategory(i.stage.category));
+    expect(open.length).toBeGreaterThan(0);
+    expect(open.length).toBeLessThan(items.length);
+    expect(items.slice(0, open.length)).toEqual(open);
+    const ages = open.map((i) => i.stepEnteredAt);
     expect(ages).toEqual([...ages].sort());
   });
 
@@ -390,7 +395,8 @@ describe("refusals", () => {
   });
 
   it("refuses a filter or cursor that isn't one", async () => {
-    for (const bad of ["stepAgeMin=9", "with=someone", "sort=title", "cursor=garbage", "trade=not-an-id"]) {
+    const tampered = encodeWorkItemCursor("stepAge", ["false", "not a time", randomUUID()]);
+    for (const bad of ["stepAgeMin=9", "with=someone", "sort=title", "cursor=garbage", `cursor=${tampered}`, "trade=not-an-id"]) {
       expect((await c1Engineer.get(`/v1/projects/${projectId}/work-items?${bad}`)).statusCode, bad).toBe(400);
     }
   });

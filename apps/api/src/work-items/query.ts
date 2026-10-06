@@ -2,6 +2,8 @@ import { withMember, type Database, type Db, type ModuleKey } from "@rabaed/db";
 import {
   decodeWorkItemCursor,
   encodeWorkItemCursor,
+  enteredStepBy,
+  isOpenStageCategory,
   stepAgeWeeks,
   workItemPageSize,
   type BilingualText,
@@ -58,6 +60,9 @@ type Row = {
   step_entered_at: Date;
   /** step_entered_at to the microsecond, for the cursor. */
   entered_key: string;
+  closed: boolean;
+  holder_participant_id: string | null;
+  assignee_member_id: string | null;
   held_by_own: boolean;
   step_key: string;
   step_name: BilingualText;
@@ -79,6 +84,8 @@ function visibleRows({ projectId, moduleKey }: QueryScope, allRevisions: boolean
       tv.id as trade_id, tv.code as trade_code, tv.name as trade_name,
       lv.id as location_id, lv.code as location_code, lv.name as location_name,
       seen.entered_at as step_entered_at,
+      -- Closed (or cancelled): it no longer ages, nor is it with anyone. The SQL side of isOpenStageCategory.
+      st.category not in ('draft', 'in_progress') as closed,
       to_char(seen.entered_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as entered_key,
       h.participant_id as holder_participant_id, h.assignee_member_id,
       coalesce(h.participant_id in (select app.current_participant_ids()), false) as held_by_own,
@@ -121,8 +128,7 @@ function matching(q: WorkItemQuery, now: Date): RawBuilder<boolean> {
   if (q.outcome.length > 0) conditions.push(sql`r.outcome = any(${q.outcome}::text[])`);
   if (q.stepAgeMin !== undefined) {
     // A closed item doesn't age.
-    conditions.push(sql`r.stage_category in ('draft', 'in_progress')
-      and r.step_entered_at <= ${now}::timestamptz - make_interval(days => ${(q.stepAgeMin - 1) * 7})`);
+    conditions.push(sql`not r.closed and r.step_entered_at <= ${enteredStepBy(q.stepAgeMin, now)}::timestamptz`);
   }
   if (q.with.length > 0) {
     const steps = q.with.flatMap((v) => (v.startsWith("step:") ? [v.slice(5)] : []));
@@ -149,21 +155,21 @@ function ordering(q: WorkItemQuery): { orderBy: RawBuilder<unknown>; after: RawB
         : noFilter,
     };
   }
-  // The oldest Step Age first.
+  // The oldest Step Age first; closed items, which don't age, last.
   return {
-    orderBy: sql`r.step_entered_at, r.id`,
-    after: key ? sql`(r.step_entered_at, r.id) > (${key[0]}::timestamptz, ${key[1]}::uuid)` : noFilter,
+    orderBy: sql`r.closed, r.step_entered_at, r.id`,
+    after: key ? sql`(r.closed, r.step_entered_at, r.id) > (${key[0]}::boolean, ${key[1]}::timestamptz, ${key[2]}::uuid)` : noFilter,
   };
 }
 
 function cursorAfter(q: WorkItemQuery, last: Row): string {
   return q.sort === "documentNumber"
     ? encodeWorkItemCursor(q.sort, [String(last.document_number === null), last.document_number ?? "", last.id])
-    : encodeWorkItemCursor(q.sort, [last.entered_key, last.id]);
+    : encodeWorkItemCursor(q.sort, [String(last.closed), last.entered_key, last.id]);
 }
 
 function toRow(r: Row, now: Date): WorkItemRow {
-  const open = r.stage_category === "draft" || r.stage_category === "in_progress";
+  const open = isOpenStageCategory(r.stage_category);
   return {
     id: r.id,
     projectId: r.project_id,
@@ -237,7 +243,7 @@ async function withChoices(trx: Trx, scope: QueryScope): Promise<WorkItemList["f
     select distinct r.held_by_own, r.step_key, r.step_name, r.holder_participant_id as participant_id, hc.legal_name as name
     from r
     join lateral app.work_item_companies(r.id) hc on hc.participant_id = r.holder_participant_id
-    where r.stage_category in ('draft', 'in_progress')
+    where not r.closed
   `.execute(trx);
   const steps = new Map<string, BilingualText>();
   const companies = new Map<string, BilingualText>();

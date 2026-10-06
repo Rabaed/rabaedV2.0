@@ -2,7 +2,9 @@
 
 import {
   formatNumber,
+  isFilteredWorkItemQuery,
   isOpenStageCategory,
+  withoutFilters,
   stepAgeMinimums,
   workItemSorts,
   type BilingualText,
@@ -51,6 +53,7 @@ const copy = {
   documentNumber: { en: "Document Number", ar: "رقم المستند" },
   subject: { en: "Subject", ar: "الموضوع" },
   noNumber: { en: "No number yet", ar: "بلا رقم بعد" },
+  revisionNoNumber: { en: "Revision #: no number yet", ar: "المراجعة #: بلا رقم بعد" },
   empty: { en: "No items you can see match these filters.", ar: "لا توجد عناصر يمكنك رؤيتها تطابق هذه التصفية." },
   pages: { en: "Pages", ar: "الصفحات" },
   firstPage: { en: "First page", ar: "الصفحة الأولى" },
@@ -102,9 +105,7 @@ export function WorkItemList({ list, query, locale, hrefFor, itemHref, onQueryCh
     const { cursor: _cursor, ...rest } = query;
     onQueryChange({ ...rest, ...next });
   };
-  const filtered =
-    query.type.length + query.stage.length + query.with.length + query.trade.length + query.location.length + query.outcome.length > 0 ||
-    query.stepAgeMin !== undefined;
+  const filtered = isFilteredWorkItemQuery(query);
 
   return (
     <div className="space-y-4">
@@ -177,7 +178,7 @@ export function WorkItemList({ list, query, locale, hrefFor, itemHref, onQueryCh
             <Switch checked={query.allRevisions} onCheckedChange={(on) => change({ allRevisions: on })} />
           </Field>
           {filtered && (
-            <a href={hrefFor(cleared(query))} className={buttonVariants({ variant: "ghost", size: "sm" })}>
+            <a href={hrefFor(withoutFilters(query))} className={buttonVariants({ variant: "ghost", size: "sm" })}>
               {t("clear")}
             </a>
           )}
@@ -213,7 +214,14 @@ export function WorkItemList({ list, query, locale, hrefFor, itemHref, onQueryCh
             list.items.map((item) => (
               <TableRow key={item.id}>
                 <TableCell className="whitespace-nowrap">
-                  {item.documentNumber ? <DocNo value={item.documentNumber} locale={locale} /> : <span className="text-muted">{t("noNumber")}</span>}
+                  {/* A Revision's number carries its " Rev n"; one with no number yet says which Revision it is. */}
+                  {item.documentNumber ? (
+                    <DocNo value={item.documentNumber} locale={locale} />
+                  ) : (
+                    <span className="text-muted">
+                      {item.revisionNo > 0 ? t("revisionNoNumber").replace("#", formatNumber(item.revisionNo, locale)) : t("noNumber")}
+                    </span>
+                  )}
                 </TableCell>
                 <TableCell className="min-w-48">
                   <a href={itemHref(item.id)} className="font-medium text-primary underline underline-offset-4">
@@ -256,11 +264,6 @@ export function WorkItemList({ list, query, locale, hrefFor, itemHref, onQueryCh
       )}
     </div>
   );
-}
-
-/** `query` with no filters: its sort and "Show all Revisions" kept. */
-function cleared(query: WorkItemQuery): WorkItemQuery {
-  return { type: [], stage: [], with: [], trade: [], location: [], outcome: [], allRevisions: query.allRevisions, sort: query.sort };
 }
 
 function FilterSelect({
@@ -307,11 +310,7 @@ function WithCell({ row, locale, unclaimed }: { row: WorkItemRow; locale: Locale
   if (!w) return null;
   if (w.kind === "company") return <WithChip kind="company" inViewerCompany={false} companyName={w.companyName[locale]} />;
   if (!w.claimer) {
-    return (
-      <span>
-        {w.step.name[locale]} <span className="text-muted">· {unclaimed}</span>
-      </span>
-    );
+    return <WithChip kind="pool" inViewerCompany companyName={w.companyName[locale]} stepName={w.step.name[locale]} unclaimedLabel={unclaimed} />;
   }
   return <WithChip kind="person" inViewerCompany name={w.claimer.name[locale]} companyName={w.companyName[locale]} />;
 }

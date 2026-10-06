@@ -90,6 +90,18 @@ const items: WorkItemRow[] = [
       claimer: { name: b("Sara Al Qahtani", "سارة القحطاني"), isMe: true },
     },
   }),
+  row(7, {
+    title: "Earthing rods, galvanised",
+    documentNumber: null,
+    revisionNo: 1,
+    stage: stages.draft,
+    with: {
+      kind: "own",
+      companyName: ownCompany,
+      step: { key: "draft", name: b("Draft", "مسودة") },
+      claimer: { name: b("Sara Al Qahtani", "سارة القحطاني"), isMe: true },
+    },
+  }),
 ];
 
 const list: WorkItemListData = {
@@ -160,6 +172,9 @@ export const Wide: Story = {
     await expect(cellsOf(context, "Cable tray support brackets")[withColumn]).toHaveTextContent(consultant[locale]);
     await expect(cellsOf(context, "Main LV switchboard")[withColumn]).toHaveTextContent(storyText(context, copy.unclaimed));
     await expect(cellsOf(context, "LED downlights")[withColumn]).toHaveTextContent(b("Faisal Al Harbi", "فيصل الحربي")[locale]);
+    await expect(cellsOf(context, "Earthing rods, galvanised")[0]).toHaveTextContent(
+      storyText(context, b("Revision 1: no number yet", "المراجعة 1: بلا رقم بعد")),
+    );
     const number = within(table).getByText("TWR-TMC-EL-MAR-0003 Rev 1");
     await expect(getComputedStyle(number).direction).toBe("ltr");
     await expectLaidOutLeftToRight(number);

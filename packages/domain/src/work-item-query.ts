@@ -16,7 +16,7 @@ import { workItemOutcome, workItemTypeCode } from "./work-item.ts";
 /** The List's page size. */
 export const workItemPageSize = 50;
 
-/** Sort by Step Age, the oldest first, or by Document Number, items with no number yet last. */
+/** Sort by Step Age, the oldest first and closed items (which don't age) last, or by Document Number, items with no number yet last. */
 export const workItemSorts = ["stepAge", "documentNumber"] as const;
 export type WorkItemSort = (typeof workItemSorts)[number];
 
@@ -73,6 +73,11 @@ const queryFields = {
   cursor: z.string().max(1000).optional(),
 };
 
+/** The filters that take a list of values; every other key takes one. */
+const listKeys = ["type", "stage", "with", "trade", "location", "outcome"] as const satisfies readonly (keyof typeof queryFields)[];
+/** The keys that narrow the rows, as opposed to how they are shown (sort, Revisions, page). */
+const filterKeys = [...listKeys, "stepAgeMin"] as const;
+
 /** The query as the API takes it; a cursor must be one made for its sort. */
 export const workItemQuery = z.object(queryFields).superRefine((q, ctx) => {
   if (q.cursor !== undefined && decodeWorkItemCursor(q.cursor, q.sort) === null) {
@@ -105,7 +110,7 @@ export function workItemQueryFromSearchParams(params: SearchParamsLike): WorkIte
   const raw = rawParams(params);
   const entries = Object.entries(queryFields).map(([key, schema]) => {
     const values = raw[key];
-    const given = values === undefined ? undefined : key === "allRevisions" || key === "sort" || key === "stepAgeMin" || key === "cursor" ? values[0] : values;
+    const given = values === undefined || (listKeys as readonly string[]).includes(key) ? values : values[0];
     const parsed = schema.safeParse(given);
     return [key, parsed.success ? parsed.data : schema.parse(undefined)] as const;
   });
@@ -117,7 +122,7 @@ export function workItemQueryFromSearchParams(params: SearchParamsLike): WorkIte
 /** The URL query parameters of `query`, its defaults left out, in a stable order. */
 export function workItemSearchParams(query: Partial<WorkItemQuery>): URLSearchParams {
   const params = new URLSearchParams();
-  for (const key of ["type", "stage", "with", "trade", "location", "outcome"] as const) {
+  for (const key of listKeys) {
     const values = query[key];
     if (values && values.length > 0) params.set(key, values.join(","));
   }
@@ -128,6 +133,16 @@ export function workItemSearchParams(query: Partial<WorkItemQuery>): URLSearchPa
   return params;
 }
 
+/** Whether `query` narrows the rows by any filter. */
+export function isFilteredWorkItemQuery(query: WorkItemQuery): boolean {
+  return filterKeys.some((key) => (key === "stepAgeMin" ? query[key] !== undefined : query[key].length > 0));
+}
+
+/** `query` with no filters, from the first page: its sort and "Show all Revisions" kept. */
+export function withoutFilters(query: WorkItemQuery): WorkItemQuery {
+  return { ...workItemQuery.parse({}), allRevisions: query.allRevisions, sort: query.sort };
+}
+
 /**
  * A cursor: the sort it was made for and the last row's sort key, opaque to the
  * client. The key is what the API sorts by, as text, ending with the row's id.
@@ -136,7 +151,16 @@ export function encodeWorkItemCursor(sort: WorkItemSort, key: readonly string[])
   return toBase64Url(JSON.stringify([sort, ...key]));
 }
 
-const cursorKeyLength: Record<WorkItemSort, number> = { stepAge: 2, documentNumber: 3 };
+// The last row's sort key, by sort, before its id: whether it sorts last (closed, or
+// no number yet) as "true" or "false", then when it entered its Step (UTC, to the
+// microsecond) or its Document Number. Checked here, so a tampered cursor is refused
+// before it reaches a query.
+const enteredAt = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/;
+const isFlag = (v: string | undefined) => v === "true" || v === "false";
+const cursorKeyValid: Record<WorkItemSort, (key: string[]) => boolean> = {
+  stepAge: ([last, at, id]) => isFlag(last) && enteredAt.test(at ?? "") && uuid.safeParse(id).success,
+  documentNumber: ([last, , id]) => isFlag(last) && uuid.safeParse(id).success,
+};
 
 /** The sort key a cursor holds, or null when it isn't a cursor made for `sort`. */
 export function decodeWorkItemCursor(cursor: string, sort: WorkItemSort): string[] | null {
@@ -148,7 +172,7 @@ export function decodeWorkItemCursor(cursor: string, sort: WorkItemSort): string
   }
   if (!Array.isArray(decoded) || decoded[0] !== sort || !decoded.every((v) => typeof v === "string")) return null;
   const key = decoded.slice(1) as string[];
-  if (key.length !== cursorKeyLength[sort] || !uuid.safeParse(key.at(-1)).success) return null;
+  if (key.length !== 3 || !cursorKeyValid[sort](key)) return null;
   return key;
 }
 
