@@ -29,6 +29,7 @@ import { CodeBadge } from "../status/code-badge.tsx";
 import { stageColour } from "../status/stage-colour.ts";
 import { StagePill } from "../status/stage-pill.tsx";
 import { WithChip } from "../status/with-chip.tsx";
+import { RevisionNoNumber } from "../revision/revision-no-number.tsx";
 import { chainBucketLabel, codeCLabel } from "./project-dashboard.tsx";
 
 const copy = {
@@ -56,7 +57,6 @@ const copy = {
   documentNumber: { en: "Document Number", ar: "رقم المستند" },
   subject: { en: "Subject", ar: "الموضوع" },
   noNumber: { en: "No number yet", ar: "بلا رقم بعد" },
-  revisionNoNumber: { en: "Revision #: no number yet", ar: "المراجعة #: بلا رقم بعد" },
   empty: { en: "No items you can see match these filters.", ar: "لا توجد عناصر يمكنك رؤيتها تطابق هذه التصفية." },
   pages: { en: "Pages", ar: "الصفحات" },
   firstPage: { en: "First page", ar: "الصفحة الأولى" },
@@ -229,7 +229,7 @@ export function WorkItemList({ list, query, locale, hrefFor, itemHref, onQueryCh
                     <DocNo value={item.documentNumber} locale={locale} />
                   ) : (
                     <span className="text-muted">
-                      {item.revisionNo > 0 ? t("revisionNoNumber").replace("#", formatNumber(item.revisionNo, locale)) : t("noNumber")}
+                      {item.revisionNo > 0 ? <RevisionNoNumber locale={locale} revisionNo={item.revisionNo} /> : t("noNumber")}
                     </span>
                   )}
                 </TableCell>
