@@ -369,7 +369,7 @@ export type WorkItemRefField = Extract<FormField, { type: "work_item_ref" }>;
 
 /**
  * A chosen item of a link question that the reader can't see, as the answers
- * reach them (ADR 0012, visibility.md scenario 31): its Document Number and
+ * reach them (ADR 0012, visibility.md scenario 81): its Document Number and
  * Subject in place of its id. Saved back as it came, it keeps that choice.
  */
 export const hiddenLinkChoice = z.strictObject({ documentNumber: z.string(), subject: z.string() });

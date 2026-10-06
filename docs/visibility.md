@@ -81,6 +81,8 @@ Every one of these must apply the same layers. A new feature that adds a channel
 
 Setup, Project "Tower": Contractors **C1** (Electrical) and **C2** (Electrical, Building B only). Consultant **K1** (Electrical + Mechanical, members split by Trade). **OR** Owner Representative (Electrical only). **OW** Owner (all).
 
+Rows 1–81 keep their numbers; a new row takes an ID from the key of the ticket that adds it, `RP-nnn-1`, `RP-nnn-2`, …, and is added at the end. Plain numbers stop at 81 (RP-397; checked by `scripts/check-scenario-ids.test.ts`).
+
 | # | Scenario | Who | Expected |
 |---|---|---|---|
 | 1 | C1 engineer saves a Draft MAR | C2, K1, OR | Hidden, including from counts and search |
@@ -109,11 +111,6 @@ Setup, Project "Tower": Contractors **C1** (Electrical) and **C2** (Electrical, 
 | 24 | Project Admin narrows K1 from Tower 1 to Building A | K1 engineer who had Tower 1 | Now covers Building A only; widening K1 again doesn't widen them (V4) |
 | 25 | C1 member opens K1's Visibility, or a K1 engineer's | C1 member | 404 (V16) |
 | 26 | Project Admin (C1 Company) opens a K1 engineer's Visibility | Project Admin | 404; K1's own Participant grant is visible to them (V16) |
-| 27 | K1 submits a Work Item linking C1's MAR | C1 | The MAR's Linked from shows K1's item number and title only; opening it says C1 may not see its details. Its answers, history and Documents stay hidden, and its URL returns 404 (E3) |
-| 28 | C1 links its Draft MAR-2 to its submitted MAR-1 | K1, who sees MAR-1 | MAR-1's Linked from doesn't list MAR-2 while it is in Draft or internal review; it appears once MAR-2 is Submitted |
-| 29 | C1 searches for an item to link | C1 | Only items in this Project that C1 can see and that have been Submitted: no Drafts, no items in internal review, nothing from another Project, nothing of C2's |
-| 30 | A C1 caller saves a link to a C2 item id, or to an item in another Project | C1 | Refused like a made-up id |
-| 31 | K1 reads the answers of an item whose link question points at an item K1 can't see | K1 (app database role) | The answer holds that item's number and title, never its id (ADR 0012) |
 | 27 | K1's Authorized Person, not a Project Member, narrows a K1 engineer | K1 Authorized Person | Sees only the Trades and Locations K1 covers, with the names of the Locations above them, and the Scopes and Sub-scopes under those Trades; nothing else of the Project (V15, V16) |
 | 28 | C1 member opens the Project's Participants | C1 member (not a Project Admin) | Sees C1's own Participant, its Project Role and Project Members, and the Host Company's name. C2, K1 and OR are not listed (V15) |
 | 29 | Project Admin opens the Project's Participants | Project Admin | Every Participant is listed (V15) |
@@ -164,6 +161,11 @@ Setup, Project "Tower": Contractors **C1** (Electrical) and **C2** (Electrical, 
 | 74 | As in 61; the C1 engineer saved answers on 10 and 11 Feb. The C1 PM opens it on 13 Feb; K1 opens it after the Submit; K1 later Sends it Back and C1 saves again | C1 PM; K1; C1 | Every answer time and "Saved" reads 12 Feb or later, for the C1 PM, for K1, and after the Send Back; saves after 12 Feb show their real times. The stored times stay for audit. Before 12 Feb, the C1 Members working on the Draft saw each other's real save times |
 | 75 | C1 raises Rev 1 of a MAR that got Code C on 3 Mar, works on it, and sends it for review on 6 Mar | C1; K1 after the Submit | Rev 1 follows 74 with its own Creation Date: no answer time or "Saved" earlier than 6 Mar. Its `revision_created` notification is dated 6 Mar, when it got its number, and is not sent before. The Documents copied from the original keep their original upload times, never 3 Mar |
 | 76 | Weekly Step Age report while C1 has an un-numbered Draft and a MAR in internal review | C1 PM (holding Assign) | The MAR in internal review is listed; the Draft isn't, since it has no Step Age |
+| 77 | K1 submits a Work Item linking C1's MAR | C1 | The MAR's Linked from shows K1's item number and title only; opening it says C1 may not see its details. Its answers, history and Documents stay hidden, and its URL returns 404 (E3) |
+| 78 | C1 links its Draft MAR-2 to its submitted MAR-1 | K1, who sees MAR-1 | MAR-1's Linked from doesn't list MAR-2 while it is in Draft or internal review; it appears once MAR-2 is Submitted |
+| 79 | C1 searches for an item to link | C1 | Only items in this Project that C1 can see and that have been Submitted: no Drafts, no items in internal review, nothing from another Project, nothing of C2's |
+| 80 | A C1 caller saves a link to a C2 item id, or to an item in another Project | C1 | Refused like a made-up id |
+| 81 | K1 reads the answers of an item whose link question points at an item K1 can't see | K1 (app database role) | The answer holds that item's number and title, never its id (ADR 0012) |
 
 Every change to rules or channels must add or update rows here and in the test suite. A failing visibility test blocks release.
 

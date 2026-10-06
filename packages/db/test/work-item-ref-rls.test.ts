@@ -1,5 +1,5 @@
 // Seam 2 for the link question, `work_item_ref` (RP-293, spec RP-289; ADR 0012 as
-// amended 2026-10-05; visibility.md E1 and scenario 31). The answers function
+// amended 2026-10-05; visibility.md E1 and scenario 81). The answers function
 // gives a chosen item the reader sees as its id, and one they can't see as its
 // Document Number and Subject, never its id. Saving the answers keeps the
 // field's `relies_on` Links equal to them, in the same transaction, and refuses
@@ -194,7 +194,7 @@ afterAll(async () => {
   await migrator?.end();
 });
 
-describe("reading a link question's answer (scenario 31)", () => {
+describe("reading a link question's answer (scenario 81)", () => {
   beforeAll(() => write(a.from, { related: [a.seen, a.hidden] }));
 
   it("gives a reader who sees every chosen item their ids, in the order chosen", async () => {

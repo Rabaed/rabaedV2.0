@@ -1,6 +1,6 @@
 // Seam 1: the link question, `work_item_ref` (RP-293, spec RP-289; form-engine.md
-// part 2b; ADR 0012 as amended 2026-10-05; visibility.md E1, scenarios 11, 30
-// and 31). The filler picks items with Link search; each is a `relies_on` Link
+// part 2b; ADR 0012 as amended 2026-10-05; visibility.md E1, scenarios 11, 80
+// and 81). The filler picks items with Link search; each is a `relies_on` Link
 // under the field's key, kept equal to the answer on every save, and frozen
 // with the answers from Submit. An item Link search couldn't have offered is
 // refused like an unknown option. A reader who can't see a chosen item gets it
@@ -178,7 +178,7 @@ describe("a link question", () => {
     expect(await questionLinks(tower.c1Engineer, lq)).toEqual([]);
   });
 
-  it("refuses a hidden, Draft, internal, other-Project or made-up item, or the item itself, like an unknown option (scenarios 11, 30)", async () => {
+  it("refuses a hidden, Draft, internal, other-Project or made-up item, or the item itself, like an unknown option (scenarios 11, 80)", async () => {
     await ok(save(tower.c1Engineer, lq, { relies: true, related: [item.c1Submitted] }));
     for (const refused of [item.c2Submitted, item.c1Draft, item.c1Internal, item.elsewhere, randomUUID(), lq]) {
       expect(refusal(await save(tower.c1Engineer, lq, { relies: true, related: [refused] })), refused).toEqual(unknownRelated);
@@ -232,7 +232,7 @@ describe("a link question", () => {
     expect((await detail(tower.c1Engineer, lq)).answers).toMatchObject({ related: [item.c1Submitted, item.c1Approved] });
   });
 
-  it("gives a reader who can't see a chosen item its number and Subject, never its id (scenario 31)", async () => {
+  it("gives a reader who can't see a chosen item its number and Subject, never its id (scenario 81)", async () => {
     const res = await ok(k1Mechanical.get(`/v1/work-items/${lq}`), 200);
     expect(res.json().answers.related).toEqual([
       { documentNumber: numbers.c1Submitted, subject: "Cable trays, submitted" },

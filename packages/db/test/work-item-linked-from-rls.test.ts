@@ -1,5 +1,5 @@
 // Seam 2 for "Linked from" (RP-292, spec RP-289; visibility.md E3, the Linked
-// from row and scenarios 27-28): app.work_item_linked_from lists, for an item
+// from row and scenarios 77-78): app.work_item_linked_from lists, for an item
 // the caller sees, every Submitted item that links to it. Each comes back as its
 // Document Number and Subject, with its id only for a caller who sees it, and
 // nothing else (no Stage, Code or Company). A Draft or an item in its raiser's
@@ -160,14 +160,14 @@ describe("Linked from", () => {
     ]);
   });
 
-  it("gives a linking item the caller can't see as its Document Number and Subject only, never its id (E3, scenario 27)", async () => {
+  it("gives a linking item the caller can't see as its Document Number and Subject only, never its id (E3, scenario 77)", async () => {
     expect(await linkedFrom(a.narrow, a.target)).toEqual([
       { document_number: `${a.code}-MAR-01-0002`, subject: "Busbar risers", work_item_id: null },
       { document_number: `${a.code}-MAR-01-0003`, subject: "Cable trays", work_item_id: a.visibleLinker },
     ]);
   });
 
-  it("never lists a Draft or an item in internal review, whoever asks (scenario 28)", async () => {
+  it("never lists a Draft or an item in internal review, whoever asks (scenario 78)", async () => {
     for (const who of [a.ap, a.narrow]) {
       const listed = JSON.stringify(await linkedFrom(who, a.target));
       for (const unsent of [a.draftLinker, a.internalLinker]) expect(listed).not.toContain(unsent);
