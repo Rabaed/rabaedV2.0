@@ -7,7 +7,7 @@
 --   worker sends through the mailer: the outbox's attempts and dead letters apply.
 -- * At send time, app.take_notification_email checks everything again and
 --   returns nothing when the email must not go: the notification was withdrawn
---   (a colleague claimed the Step) or its Step no longer waits; the Project is
+--   (a colleague claimed the Step), its Step no longer waits, or a Vacancy was filled; the Project is
 --   closed; the recipient's settings no longer email it at once (email paused,
 --   the Project muted, the group's email changed, the outcome unticked); or, as
 --   the recipient, the item is no longer visible (app.sees_work_item) or its
@@ -79,6 +79,12 @@ create function app.take_notification_email(p_outbox_id uuid)
       -- A Step reached them: only while it still waits.
       if v_n.kind = 'step_reached' and not exists (
         select 1 from step_assignment a where a.id = v_n.step_assignment_id and a.status in ('pooled', 'claimed')
+      ) then
+        return;
+      end if;
+      -- A Vacancy (RP-356): only while the Step is still vacant.
+      if v_n.kind = 'vacancy' and not exists (
+        select 1 from step_assignment a where a.id = v_n.step_assignment_id and a.status = 'vacant'
       ) then
         return;
       end if;
