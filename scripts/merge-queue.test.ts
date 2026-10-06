@@ -82,10 +82,17 @@ describe("ci.yml", () => {
   it.each(["migrations-immutable", "migration-drift"])("runs %s in the queue too, against the queue's base (RP-398)", (id) => {
     // Skipped, a required check counts as passing: two PRs whose migrations
     // clash would then merge together.
-    const condition = job(ci, id).if ?? "";
-    expect(condition).toMatch(/github\.event_name\s*==\s*'pull_request'/);
-    expect(condition).toMatch(/github\.event_name\s*==\s*'merge_group'/);
-    expect(JSON.stringify(job(ci, id).steps)).toContain("github.event.merge_group.base_sha");
+    expect(job(ci, id).if).toBe("github.event_name == 'pull_request' || github.event_name == 'merge_group'");
+    // The step that checks must itself run on a queue run, with the queue's base.
+    const checks = job(ci, id).steps.filter((s) => s.run?.startsWith("node scripts/check-migration"));
+    const inQueue = checks.filter((s) => s.if === undefined || /github\.event_name\s*==\s*'merge_group'/.test(s.if));
+    expect(inQueue).toHaveLength(1);
+    expect(JSON.stringify(inQueue[0]?.env)).toContain("github.event.merge_group.base_sha");
+  });
+
+  it("checks migration drift in the queue from the PR's head, not the queue's merge commit", () => {
+    const inQueue = job(ci, "migration-drift").steps.find((s) => s.if === "github.event_name == 'merge_group'");
+    expect(inQueue?.run).toContain("--merge-group");
   });
 
   it("never collects or uploads the baselines of new stories on a queue run", () => {
