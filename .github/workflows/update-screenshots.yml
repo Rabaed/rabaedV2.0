@@ -16,7 +16,9 @@
 # workflow_run, from main's copy of this file, and the commit job adds those
 # PNGs. It never overwrites a baseline that exists, so a changed look still
 # fails CI until the label is added, and any other failure uploads nothing.
-# Fork PRs run CI as pull_request only, so they never reach this path.
+# Fork PRs run CI as pull_request only, so they never reach this path. Nor
+# does the merge queue: its CI runs are merge_group, and nothing here ever
+# pushes to a gh-readonly-queue/* branch (RP-394).
 #
 # The PR's code runs only in a job with a read-only token and no persisted
 # credentials (render here, stories in ci.yml). The commit job holds the
@@ -101,13 +103,15 @@ jobs:
           retention-days: 1
 
   # A failed CI run on a push to an open PR's branch in this repository, never
-  # main, whose stories job uploaded the baselines of new stories.
+  # main or a merge queue branch, whose stories job uploaded the baselines of
+  # new stories.
   find-new:
     if: >-
       github.event_name == 'workflow_run' &&
       github.event.workflow_run.conclusion == 'failure' &&
       github.event.workflow_run.event == 'push' &&
       github.event.workflow_run.head_branch != 'main' &&
+      !startsWith(github.event.workflow_run.head_branch, 'gh-readonly-queue/') &&
       github.event.workflow_run.head_repository.full_name == github.repository
     runs-on: ubuntu-latest
     permissions:
@@ -132,8 +136,10 @@ jobs:
 
   commit:
     needs: [render, find-new]
+    # The BRANCH expression again: env is not available in a job's if.
     if: >-
       !cancelled() &&
+      !startsWith(github.event.workflow_run.head_branch || github.head_ref || github.ref_name, 'gh-readonly-queue/') &&
       (needs.render.result == 'success' || needs.find-new.outputs.found == 'true')
     runs-on: ubuntu-latest
     permissions:
@@ -190,6 +196,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           MESSAGE: ${{ env.MODE == 'new' && 'Add screenshot baselines for new stories' || 'Update story screenshot baselines' }}
         run: |
+          case "$BRANCH" in
+            gh-readonly-queue/*) echo "::error::$BRANCH is a merge queue branch; never commit to it."; exit 1 ;;
+          esac
           git add -A "$SCREENSHOTS"
           if git diff --cached --quiet; then
             echo "Screenshots are already up to date."

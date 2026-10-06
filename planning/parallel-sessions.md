@@ -33,7 +33,8 @@ A lane takes work in one of two ways: **one ticket per session** (below), or **a
    ```
    `lane:env` refuses a lane whose ports are taken, or whose compose project (`rabaed-laneN`) another worktree still uses, and names the container holding it. Add `--free` to take the next free lane instead, or run `pnpm lanes:prune` (below) first.
 4. When the PR opens, it appears in that session's PR bar: turn on **Auto-fix**. CI failures, merge conflicts and review comments will wake that session. To read a failed job's log without waiting for the rest of the run, see `docs/agents/ci-logs.md`.
-5. After the PR merges, run `/mattpocock-skills:retro` in that session (see below), then archive it. The next ticket gets a fresh session (this replaces `/clear`).
+   Once CI is green and `/code-review` is done, the session queues its own PR with `gh pr merge --merge`; nobody merges by hand. The merge queue tests the PR on top of the PRs queued ahead of it and merges it only when that run is green, so two PRs that are green alone cannot break `main` together. The queue does not resolve text conflicts: a PR that conflicts with one ahead of it leaves the queue, Auto-fix wakes the session, and it merges `main`, pushes and queues the PR again.
+5. After the queue merges the PR, run `/mattpocock-skills:retro` in that session (see below), then archive it. The next ticket gets a fresh session (this replaces `/clear`).
 
 ## Pruning old lanes
 
@@ -55,7 +56,7 @@ Use it when a spec's tickets form a chain that one lane would otherwise work thr
    3. Each seam run recreates its `_test` database itself. A second seam run on the same database while one is going refuses with a message; let the first finish.
    4. When the spec is done, run `pnpm lanes:drop-dbs` to list and drop the `rabaed_*` databases of worktrees that no longer exist (`--yes` skips the prompt). It checks only this clone's worktrees, and keeps any database something is connected to.
    5. Migration timestamps: each ticket gets its own day, in the order of the spec's tickets (the first ticket takes `<yyyymmdd>xxxxxx`, the next the following day, and so on), and its migrations use only that range, so parallel migrations never collide. Say the ranges in each subagent's brief. Migrations already on main stay unchanged.
-5. Jira's automation closes only the ticket named in the branch, which is the spec. When the PR merges, close the spec's other tickets with `transitionJiraIssue` and a comment naming the PR.
+5. When the last ticket is merged in and the whole-branch `/code-review` is done, mark the draft integration PR ready (`gh pr ready`) and queue it with `gh pr merge --merge`, as in step 4 of "How to start every implementing ticket": the whole spec goes through the queue as one entry. Jira's automation closes only the ticket named in the branch, which is the spec. When the PR merges, close the spec's other tickets with `transitionJiraIssue` and a comment naming the PR.
 6. Clean up the subagents' worktrees once the last subagent has finished.
    1. Run `pnpm worktrees:clean --into RP-nnn-<spec-name> --yes` (`--into main` once the PR has merged).
    2. It unlocks and removes every `.claude/worktrees/agent-*` worktree whose commits are all in that branch, with its leftover folder (Windows keeps `node_modules` behind). It deletes the branch with `git branch -d`; a branch git refuses is kept and named.
@@ -83,7 +84,7 @@ Every ticket already gets a `/code-review` inside `/implement`. When all of a sp
 3. When another lane's open ticket touches the same files (the ticket names them), keep your changes to those files in their own commits, and merge `main` right before opening the PR. Shared root files (root `package.json`, lockfile, CI workflows) change in small PRs of their own.
 4. Two lanes never run specs that change the same shared module at the same time, such as the work item query (`apps/api/src/work-items/query.ts`). Queue one spec behind the other, or give one of them only the UI. `/to-tickets` names the shared files each ticket touches, so the planning session can see the overlap before it assigns lanes. (RP-362 and RP-363 both reworked the query in parallel, and their merge had 10 conflicted files.)
 5. Migrations are timestamp-named (and follow `CODING_STANDARDS.md`).
-6. Merge only through a PR with green CI (both visibility suites must pass). Merge `main` into your branch when it moves, and resolve any conflicts in that session.
+6. Merge only through the merge queue: queue a PR with green CI (both visibility suites must pass) and a finished `/code-review` with `gh pr merge --merge`. Merge `main` into your branch when it moves, and resolve any conflicts in that session.
 7. Parallel sessions multiply usage — close finished sessions.
 8. A ticket whose spec is being built by `/implement-spec` (its lane label is set and its spec has an open integration PR) stays under that spec. If it must move, the planning session comments on the integration PR.
 9. Docs have owners. Replaying the last 60 merges (2026-10-06), 9 of the 24 conflicted files were docs; the translation catalogues and the packages' `index.ts` files, though changed by nearly every PR, conflicted once or never.
