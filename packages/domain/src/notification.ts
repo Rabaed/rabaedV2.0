@@ -3,8 +3,13 @@ import { bilingualText, type BilingualText } from "./company.ts";
 import type { Locale } from "./locale.ts";
 import { workItemOutcome } from "./work-item.ts";
 
-/** What an in-app notification is about: a Step reached the Member or their pool, or something happened on an item they watch. */
-export const inAppNotificationKinds = ["step_reached", "watched_event"] as const;
+/**
+ * What an in-app notification is about: a Step reached the Member or their
+ * pool, something happened on an item they watch, an item was Sent Back to
+ * their Participant, or a Step of their Company became vacant (they are its
+ * Authorized Person).
+ */
+export const inAppNotificationKinds = ["step_reached", "watched_event", "sent_back", "vacancy"] as const;
 
 /** What happened on a watched item. */
 export const watchedEventTypes = ["transition", "issue_code", "revision_created", "cancelled"] as const;
@@ -21,10 +26,11 @@ export const notification = z.object({
   /** Null while the item has none (a Revision still in Draft). */
   documentNumber: z.string().nullable(),
   title: z.string(),
-  /** A Step reached them: the Step, their own Company's. */
+  /** A Step reached them, or became vacant: the Step, their own Company's. */
   step: z.object({ name: bilingualText }).nullable(),
   /**
-   * Something happened on an item they watch: what, the Transition's label,
+   * Something happened on an item they watch, or it was Sent Back to them
+   * (a `transition`, with no outcome): what, the Transition's label,
    * the outcome it closed the item with, and the Company that did it, by
    * name only (V14). A new Revision has no label or Company.
    */

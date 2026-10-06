@@ -13,6 +13,15 @@ export function stepAgeWeeks(enteredAt: Date, now: Date): number {
   return Math.max(0, Math.floor((now.getTime() - enteredAt.getTime()) / WEEK)) + 1;
 }
 
+/**
+ * The latest time an item can have entered its Step and be at least `weeks`
+ * into it at `now`: the Step Age filter's bound, so the query filters by the
+ * same rule `stepAgeWeeks` shows.
+ */
+export function enteredStepBy(weeks: number, now: Date): Date {
+  return new Date(now.getTime() - (weeks - 1) * WEEK);
+}
+
 /** A Step Age as a whole week from 1: part weeks round down, anything below 1 or bad input is the first week. */
 function wholeWeeks(weeks: number): number {
   return Number.isFinite(weeks) ? Math.max(Math.floor(weeks), 1) : 1;
