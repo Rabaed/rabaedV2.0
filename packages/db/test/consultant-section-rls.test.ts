@@ -380,6 +380,12 @@ describe("the Creation Date and the Submission Date (scenario 61)", () => {
     }
   });
 
+  it("never lets anyone read the raw answer times, which still hold the Draft-started time (RP-392-1)", async () => {
+    for (const who of [c1.member, c1Pm, k1.member, ow.member]) {
+      await expect(call(who, sql<{ at: object }>`select field_times as at from work_item where id = ${id}`)).rejects.toThrow(/permission denied/);
+    }
+  });
+
   it("keeps the Submission Date after a Send Back and a second Submit", async () => {
     expect(await take(k1.member, "send_back", sql`null`, id)).toBe("applied");
     expect(await take(c1Pm, "submit", sql`app.answers_sha256(${id}::uuid)`, id)).toBe("applied");
