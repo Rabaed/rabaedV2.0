@@ -164,6 +164,7 @@ Effects, in order:
 7. Notifications for the Transition go to the outbox. Recipients are re-checked against visibility at send time.
    - **Step reached** (RP-195): a trigger on the new open `step_assignment`; delivered to its holder or Step Pool, never the actor.
    - **Watched items** (RP-355): a trigger on `work_item_event` (a Transition, a Code or Inspection Result, a new Revision, a cancel; never `answers_changed`, Documents, claims, Recommended Codes or Internal Notes) writes a row when someone other than the actor watches the chain. `app.deliver_notification` delivers it to the chain's watchers who still see the item (`app.work_item_watchers`) and may read the event (V5: an internal move reaches only its own Participant), except the actor and the Members the event made it wait on (they get "Step reached").
+   - **Sent Back** (RP-356): a trigger on a `send_back` Transition's event writes a row; it is delivered to the active Project Members of the Participant it was sent back to (the Participant of the Step it gave back) who still see the item, never the actor, routed by their "Sent Back" settings. For them it is the one notification of that move: no "Step reached" for that Step and no watched-item notification of it. Nothing for a closed Project.
    - **Routing** (RP-355): every recipient's notification passes the routing rule (`app.notification_route`, the same as `@rabaed/domain`'s `routeNotification`) with their settings, Project mute and email pause: in-app yes/no and email none/immediate/digest, stored on the notification for the email jobs. A notification for neither is not written. Need My Action never passes through it.
 
 ### 5.2 `claim(item)` / `release(item)`
@@ -291,7 +292,7 @@ Error codes, api (`/v1/projects/:id/numbering`, `/numbering/counters…`, `/v1/p
 - **Member removed from the Project:**
   - their claimed or default assignments become `vacant`;
   - the item waits at the same Step;
-  - their Company's Authorized Person is notified to name a replacement.
+  - their Company's Authorized Person is notified to name a replacement. As built (RP-356): a trigger on `step_assignment` becoming `vacant` writes an outbox row; `app.deliver_notification` delivers a `vacancy` notification to the Authorized Person of the assignment's Participant's Company, if the assignment is still vacant, the Project isn't closed and they see the item, routed by their "Vacancy" settings. Nothing makes an assignment vacant yet (RP-108).
   - `assign_vacancy(item, member)` (Authorized Person or Rabaed Admin) fills it with a pool member.
 - **Participant withdrawn:** every open item it raised gets a `cancelled` event, outcome `cancelled`, and a Documental Record. Its open assignments on other companies' items become Participant-level Vacancies. They pass to the replacement Participant's pool once one covering the item is added.
 

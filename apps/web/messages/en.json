@@ -341,7 +341,9 @@
     "markAllRead": "Mark all as read",
     "unavailable": "Something went wrong. Try again.",
     "revisionCreated": "New Revision",
-    "cancelled": "Cancelled"
+    "cancelled": "Cancelled",
+    "sentBack": "Sent Back to you by {company}",
+    "vacancy": "Vacancy at {step}: name a replacement"
   },
   "profile": {
     "title": "Profile",
