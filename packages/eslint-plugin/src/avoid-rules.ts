@@ -70,6 +70,7 @@ const allowed: string[] = [
   "activity", // the Activity Feed, written short in its route (/activity) and panel title. The Schedule Module has none yet.
   "follow", // the verb, in "follows the Project" (a numbering pattern that inherits). A Watch button is still caught by review.
   "current user", // PostgreSQL current_user.
+  "third party", // an outside library or action, not a Project party.
   "built in", // Built-in Field, written short in code (`builtInProblems`, `built_in_missing`).
   "panel", // a UI panel, such as the Activity Feed panel.
   "phase", // Next.js's `phase`, and "Phase 2" in a demo Project's own name.
