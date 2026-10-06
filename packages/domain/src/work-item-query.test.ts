@@ -16,12 +16,15 @@ const participant = "0192e0a0-0000-7000-8000-000000000003";
 const row = "0192e0a0-0000-7000-8000-000000000004";
 
 const defaults: WorkItemQuery = {
+  module: "submittals",
   type: [],
   stage: [],
   with: [],
   trade: [],
   location: [],
   outcome: [],
+  bucket: [],
+  codeC: [],
   stepAgeMin: undefined,
   allRevisions: false,
   sort: "stepAge",
@@ -48,6 +51,22 @@ describe("workItemQuery", () => {
     }
   });
 
+  it("takes the Dashboard's buckets, and nothing else", () => {
+    expect(workItemQuery.parse({ bucket: "A,B" }).bucket).toEqual(["A", "B"]);
+    expect(workItemQuery.safeParse({ bucket: "late" }).success).toBe(false);
+  });
+
+  it("takes the Code C line's sub-states, and nothing else", () => {
+    expect(workItemQuery.parse({ codeC: "approvedOnRevision,awaitingRevision" }).codeC).toEqual(["approvedOnRevision", "awaitingRevision"]);
+    expect(workItemQuery.parse({ codeC: "noRevisionYet" }).codeC).toEqual(["noRevisionYet"]);
+    expect(workItemQuery.safeParse({ codeC: "C" }).success).toBe(false);
+  });
+
+  it("reads one Module, the Submittals by default, and nothing else", () => {
+    expect(workItemQuery.parse({ module: "snag_list" }).module).toBe("snag_list");
+    expect(workItemQuery.safeParse({ module: "tendering" }).success).toBe(false);
+  });
+
   it("takes a Step Age filter of 2, 3 or 4 weeks only", () => {
     expect(workItemQuery.parse({ stepAgeMin: "3" }).stepAgeMin).toBe(3);
     for (const bad of ["1", "5", "two"]) expect(workItemQuery.safeParse({ stepAgeMin: bad }).success, bad).toBe(false);
@@ -63,12 +82,15 @@ describe("workItemQuery", () => {
 
 describe("the query in the URL", () => {
   const query: WorkItemQuery = {
+    module: "inspections",
     type: ["MAR"],
     stage: ["submitted", "under_review"],
     with: ["unclaimed", `company:${participant}`],
     trade: [trade],
     location: [location],
     outcome: ["C", "passed_with_comments"],
+    bucket: ["pending", "in_preparation"],
+    codeC: ["rejectedAfterC"],
     stepAgeMin: 2,
     allRevisions: true,
     sort: "documentNumber",
@@ -84,6 +106,7 @@ describe("the query in the URL", () => {
   it("leaves the defaults out", () => {
     expect(workItemSearchParams(defaults).toString()).toBe("");
     expect(workItemSearchParams({ ...defaults, stage: ["draft"] }).toString()).toBe("stage=draft");
+    expect(workItemSearchParams({ ...defaults, module: "snag_list" }).toString()).toBe("module=snag_list");
   });
 
   it("keeps a page's own filters when a parameter is bad, rather than failing", () => {
@@ -125,12 +148,15 @@ describe("filters", () => {
   it("are any of the narrowing keys, not the sort, Revisions or page", () => {
     expect(isFilteredWorkItemQuery(defaults)).toBe(false);
     expect(isFilteredWorkItemQuery({ ...defaults, sort: "documentNumber", allRevisions: true, cursor: "x" })).toBe(false);
+    expect(isFilteredWorkItemQuery({ ...defaults, module: "snag_list" })).toBe(false);
     expect(isFilteredWorkItemQuery({ ...defaults, stepAgeMin: 2 })).toBe(true);
     expect(isFilteredWorkItemQuery({ ...defaults, location: [location] })).toBe(true);
+    expect(isFilteredWorkItemQuery({ ...defaults, bucket: ["pending"] })).toBe(true);
+    expect(isFilteredWorkItemQuery({ ...defaults, codeC: ["awaitingRevision"] })).toBe(true);
   });
 
-  it("clear to the first page, keeping the sort and Revisions", () => {
-    const query: WorkItemQuery = { ...defaults, stage: ["draft"], stepAgeMin: 3, sort: "documentNumber", allRevisions: true, cursor: "x" };
-    expect(withoutFilters(query)).toEqual({ ...defaults, sort: "documentNumber", allRevisions: true });
+  it("clear to the first page, keeping the Module, the sort and Revisions", () => {
+    const query: WorkItemQuery = { ...defaults, module: "snag_list", stage: ["draft"], stepAgeMin: 3, sort: "documentNumber", allRevisions: true, cursor: "x" };
+    expect(withoutFilters(query)).toEqual({ ...defaults, module: "snag_list", sort: "documentNumber", allRevisions: true });
   });
 });

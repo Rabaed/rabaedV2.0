@@ -1,5 +1,5 @@
 import { workItemQueryFromSearchParams, type Locale } from "@rabaed/domain";
-import { buttonVariants } from "@rabaed/ui";
+import { buttonVariants, moduleName } from "@rabaed/ui";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
 import { WorkItemListView } from "@/components/work-item-list-view";
@@ -7,7 +7,8 @@ import { Link, redirect } from "@/i18n/navigation";
 import { getMe, getProject, getWorkItems } from "@/lib/session";
 
 /**
- * A Project's Submittals List: one page of the work item query, its filters,
+ * A Project's List of one Module (the Submittals unless the URL names another,
+ * e.g. from a Dashboard number): one page of the work item query, its filters,
  * sort and page in the URL. Only the items the Member can see are listed, and
  * each Stage's count is of those items only.
  */
@@ -34,10 +35,10 @@ export default async function WorkItemsPage({
           <Link href={`/projects/${project.id}`} className="text-sm text-primary underline underline-offset-4">
             {project.name[locale]}
           </Link>
-          <h1 className="text-h4 font-semibold">{t("title")}</h1>
+          <h1 className="text-h4 font-semibold">{query.module === "submittals" ? t("title") : moduleName(query.module, locale)}</h1>
         </div>
         {/* The MAR's Draft Step is held by Contractors; the API refuses anyone else too. */}
-        {project.projectRole.baseRole === "contractor" && (
+        {query.module === "submittals" && project.projectRole.baseRole === "contractor" && (
           <Link href={`/projects/${project.id}/work-items/new`} className={buttonVariants()}>
             {t("newMar")}
           </Link>

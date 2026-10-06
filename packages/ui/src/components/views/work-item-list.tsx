@@ -29,6 +29,7 @@ import { CodeBadge } from "../status/code-badge.tsx";
 import { stageColour } from "../status/stage-colour.ts";
 import { StagePill } from "../status/stage-pill.tsx";
 import { WithChip } from "../status/with-chip.tsx";
+import { chainBucketLabel, codeCLabel } from "./project-dashboard.tsx";
 
 const copy = {
   toolbar: { en: "Filters and sort", ar: "التصفية والترتيب" },
@@ -49,6 +50,7 @@ const copy = {
   sortDocumentNumber: { en: "Document Number", ar: "رقم المستند" },
   allRevisions: { en: "Show all Revisions", ar: "عرض كل المراجعات" },
   clear: { en: "Clear filters", ar: "مسح التصفية" },
+  dashboardFigure: { en: "From the Dashboard", ar: "من لوحة المعلومات" },
   stageCounts: { en: "Items in each Stage", ar: "العناصر في كل مرحلة" },
   table: { en: "Submittals", ar: "الاعتمادات" },
   documentNumber: { en: "Document Number", ar: "رقم المستند" },
@@ -178,6 +180,13 @@ export function WorkItemList({ list, query, locale, hrefFor, itemHref, onQueryCh
           <Field label={t("allRevisions")} layout="inline">
             <Switch checked={query.allRevisions} onCheckedChange={(on) => change({ allRevisions: on })} />
           </Field>
+          {/* A Dashboard number's filter, which the toolbar has no control for: its buckets and Code C sub-states. */}
+          {query.bucket.length + query.codeC.length > 0 && (
+            <Badge tone="info" data-testid="bucket-filter">
+              {t("dashboardFigure")}:{" "}
+              {[...query.bucket.map((bucket) => chainBucketLabel(bucket, locale)), ...query.codeC.map((codeC) => codeCLabel(codeC, locale))].join(", ")}
+            </Badge>
+          )}
           {filtered && (
             <a href={hrefFor(withoutFilters(query))} className={buttonVariants({ variant: "ghost", size: "sm" })}>
               {t("clear")}

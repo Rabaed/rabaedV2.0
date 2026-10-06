@@ -1,4 +1,7 @@
 import { z } from "zod";
+import { chainBucketSchema } from "./chain-bucket.ts";
+import { codeCFilterSchema } from "./code-c.ts";
+import { moduleKeySchema } from "./module.ts";
 import { workItemOutcome, workItemTypeCode } from "./work-item.ts";
 
 /**
@@ -8,7 +11,7 @@ import { workItemOutcome, workItemTypeCode } from "./work-item.ts";
  * filter is a query parameter, a list of values joined by commas. A value left
  * at its default is left out of the URL.
  *
- * Later filters (`needMyAction`, `q`, `submittedFrom`/`submittedTo`, `codeC`)
+ * Later filters (`needMyAction`, `q`, `submittedFrom`/`submittedTo`)
  * are new keys of the same object, so nothing that builds or reads a query
  * changes when they come.
  */
@@ -54,6 +57,8 @@ const list = <T extends z.ZodType>(item: T) =>
 const flag = z.preprocess((v) => v === true || v === "true" || v === "1", z.boolean());
 
 const queryFields = {
+  /** The Module whose items are listed: the Submittals unless a link (e.g. a Dashboard number) names another. Not a filter: it is the List itself. */
+  module: moduleKeySchema.default("submittals"),
   type: list(workItemTypeCode),
   stage: list(stageKey),
   with: list(withFilterValue),
@@ -62,6 +67,10 @@ const queryFields = {
   location: list(uuid),
   /** The Review Code or Inspection Result. */
   outcome: list(workItemOutcome),
+  /** The Dashboard's buckets (chainBucket): what a Dashboard number counts, so its link lists exactly those chains. */
+  bucket: list(chainBucketSchema),
+  /** The Dashboard's Code C line (codeCState): a sub-state of a chain that has had a Code C. */
+  codeC: list(codeCFilterSchema),
   stepAgeMin: z.coerce
     .number()
     .pipe(z.union(stepAgeMinimums.map((n) => z.literal(n))))
@@ -74,7 +83,7 @@ const queryFields = {
 };
 
 /** The filters that take a list of values; every other key takes one. */
-const listKeys = ["type", "stage", "with", "trade", "location", "outcome"] as const satisfies readonly (keyof typeof queryFields)[];
+const listKeys = ["type", "stage", "with", "trade", "location", "outcome", "bucket", "codeC"] as const satisfies readonly (keyof typeof queryFields)[];
 /** The keys that narrow the rows, as opposed to how they are shown (sort, Revisions, page). */
 const filterKeys = [...listKeys, "stepAgeMin"] as const;
 
@@ -122,6 +131,7 @@ export function workItemQueryFromSearchParams(params: SearchParamsLike): WorkIte
 /** The URL query parameters of `query`, its defaults left out, in a stable order. */
 export function workItemSearchParams(query: Partial<WorkItemQuery>): URLSearchParams {
   const params = new URLSearchParams();
+  if (query.module && query.module !== "submittals") params.set("module", query.module);
   for (const key of listKeys) {
     const values = query[key];
     if (values && values.length > 0) params.set(key, values.join(","));
@@ -138,9 +148,9 @@ export function isFilteredWorkItemQuery(query: WorkItemQuery): boolean {
   return filterKeys.some((key) => (key === "stepAgeMin" ? query[key] !== undefined : query[key].length > 0));
 }
 
-/** `query` with no filters, from the first page: its sort and "Show all Revisions" kept. */
+/** `query` with no filters, from the first page: its Module, sort and "Show all Revisions" kept. */
 export function withoutFilters(query: WorkItemQuery): WorkItemQuery {
-  return { ...workItemQuery.parse({}), allRevisions: query.allRevisions, sort: query.sort };
+  return { ...workItemQuery.parse({}), module: query.module, allRevisions: query.allRevisions, sort: query.sort };
 }
 
 /**
@@ -176,13 +186,13 @@ export function decodeWorkItemCursor(cursor: string, sort: WorkItemSort): string
   return key;
 }
 
-// Base64url of UTF-8 text, in the browser as on the server.
-function toBase64Url(text: string): string {
+/** Base64url of UTF-8 text, in the browser as on the server (opaque cursors). */
+export function toBase64Url(text: string): string {
   const binary = String.fromCodePoint(...new TextEncoder().encode(text));
   return btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
 }
 
-function fromBase64Url(encoded: string): string {
+export function fromBase64Url(encoded: string): string {
   const binary = atob(encoded.replaceAll("-", "+").replaceAll("_", "/"));
   return new TextDecoder("utf-8", { fatal: true }).decode(Uint8Array.from(binary, (c) => c.codePointAt(0)!));
 }
