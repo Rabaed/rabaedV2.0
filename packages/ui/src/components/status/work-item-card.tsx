@@ -28,11 +28,18 @@ export type WorkItemState =
       open: false;
       /** The Issued Code. */
       code: ReviewCode;
+    }
+  | {
+      open: false;
+      /** How it closed, as a badge: an Inspection Result, Cancelled… */
+      badge: ReactNode;
     };
 
 export type WorkItemCardProps = {
-  /** The Document Number, e.g. `TWR-TMC-EL-MAR-041`. */
-  number: string;
+  /** The Document Number, e.g. `TWR-TMC-EL-MAR-041`; null for a Draft, which has none yet. */
+  number: string | null;
+  /** What a card with no number says instead, e.g. "No number yet". */
+  noNumberLabel?: string;
   /** The revision, shown after the number in the card's language (`Rev n`, `مراجعة n`). */
   rev?: DocNoProps["rev"];
   title: string;
@@ -63,6 +70,7 @@ export type WorkItemCardProps = {
  */
 export function WorkItemCard({
   number,
+  noNumberLabel,
   rev,
   title,
   trade,
@@ -83,7 +91,13 @@ export function WorkItemCard({
     <>
       <span className="flex items-start gap-3">
         <span className="flex min-w-0 flex-1 flex-col gap-1">
-          <DocNo id={`${id}-number`} value={number} rev={rev} locale={locale} className="text-caption text-muted" />
+          {number === null ? (
+            <span id={`${id}-number`} className="text-caption text-muted">
+              {noNumberLabel}
+            </span>
+          ) : (
+            <DocNo id={`${id}-number`} value={number} rev={rev} locale={locale} className="text-caption text-muted" />
+          )}
           <span id={`${id}-title`} data-title="" className={cn("text-body font-semibold text-text", densities[density].title)}>
             {title}
           </span>
@@ -110,7 +124,8 @@ export function WorkItemCard({
             <AgeDots weeks={state.stepAgeWeeks} locale={locale} className="ms-auto shrink-0" />
           </span>
         )}
-        {state?.open === false && <CodeBadge code={state.code} locale={locale} size="sm" className="self-start" />}
+        {state?.open === false &&
+          ("code" in state ? <CodeBadge code={state.code} locale={locale} size="sm" className="self-start" /> : <span className="self-start">{state.badge}</span>)}
       </span>
     </>
   );

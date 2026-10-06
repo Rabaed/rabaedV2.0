@@ -24,6 +24,7 @@ import type {
   WorkItemDetail,
   WorkItemLinks,
   WorkItemHistory,
+  WorkItemBoard,
   WorkItemList,
   WorkItemQuery,
   OptionList,
@@ -137,6 +138,12 @@ export function getMyVisibility(projectId: string): Promise<DimensionValues | nu
 export function getWorkItems(projectId: string, query: WorkItemQuery): Promise<WorkItemList | null> {
   const params = workItemSearchParams(query).toString();
   return apiGet<WorkItemList>(`/v1/projects/${encodeURIComponent(projectId)}/work-items${params ? `?${params}` : ""}`);
+}
+
+/** The Kanban of a Project's Submittals for `query`; null if the signed-in Member isn't on the Project. */
+export function getWorkItemBoard(projectId: string, query: WorkItemQuery): Promise<WorkItemBoard | null> {
+  const params = workItemSearchParams(query).toString();
+  return apiGet<WorkItemBoard>(`/v1/projects/${encodeURIComponent(projectId)}/work-items/kanban${params ? `?${params}` : ""}`);
 }
 
 /** One Work Item; null if the signed-in Member can't see it (exactly as if it didn't exist). */
