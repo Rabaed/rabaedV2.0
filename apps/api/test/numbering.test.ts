@@ -199,7 +199,7 @@ describe("numbers issued under the pattern in effect", () => {
     expect(await numbered(t, t.c1Engineer)).toBe("NDP-MAR-01-0002");
     expect(await numbered(t, t.c2Engineer)).toBe("NDP-MAR-03-0003");
     expect(await numbered(t, t.c1Engineer)).toBe("NDP-MAR-01-0004");
-  }, 20_000);
+  });
 
   it("use a Work Item Type's override over the Project's pattern", async () => {
     const t = await tower("NOV");
@@ -217,7 +217,7 @@ describe("visibility.md, Document Numbers", () => {
     await numbered(t, t.c2Engineer);
     mine.push(await numbered(t, t.c1Engineer));
     expect(mine).toEqual(["NFT-MAR-01-0001", "NFT-MAR-03-0001", "NFT-MAR-01-0002", "NFT-MAR-01-0003"]);
-  }, 20_000);
+  });
 
   it("54: a pattern leaving out the Participant Code is refused until the warning is accepted; then C1 and C2 share one count", async () => {
     const t = await tower("NFF");

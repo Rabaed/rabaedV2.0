@@ -266,3 +266,22 @@ jobs:
       - run: node scripts/check-migrations-immutable.ts "origin/$BASE_REF"
         env:
           BASE_REF: ${{ github.base_ref }}
+
+  # A function, view or policy redefined both on the branch and on main must end
+  # with a branch definition written after merging main's; no two migrations
+  # share a timestamp (RP-337). A pull request checks out its merge ref, so the
+  # branch and main sides come from the PR's head and base commits.
+  migration-drift:
+    name: migration drift and timestamps
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with: { node-version: 24 }
+      - run: node scripts/check-migration-drift.ts "$BASE_SHA" "$HEAD_SHA"
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}

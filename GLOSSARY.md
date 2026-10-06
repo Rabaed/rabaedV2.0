@@ -265,6 +265,14 @@ _Avoid_: Bulk upload, migration
 The group of Members who can pick up a Workflow step, such as all Consultant engineers on the Work Item's Trade. One of them claims it, unless the step already has a default assignee.
 _Avoid_: Queue, group inbox
 
+**Need My Action**:
+A toggle on a Project's views that keeps only the Work Items waiting on the viewer: Steps they hold, and Steps in their Step Pool that nobody has claimed yet. Their own Drafts stay in view but are never counted, since nobody is waiting on them. Each Project card shows the count.
+_Avoid_: Assigned to me, My tasks, Inbox
+
+**Watch**:
+A Member's choice to be told what happens on one Work Item they can see, and on its later Revisions. Its raiser and the Member who Submitted it watch it from the start; anyone can stop. Nobody sees who else watches an item.
+_Avoid_: Follow, Subscribe
+
 **Rabaed Default**:
 The Forms, Workflows and Work Item Types that Rabaed supplies ready-made, which Companies can use or copy into their own.
 _Avoid_: System template, built-in
