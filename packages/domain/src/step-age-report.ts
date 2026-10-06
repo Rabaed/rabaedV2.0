@@ -24,12 +24,13 @@ export function stepAgeReportGroups<T extends { stepAgeWeeks: number }>(items: r
 
 /**
  * The List query showing the report's items: the open Stages (`openStageKeys`,
- * the Module's Draft and in-progress Stages), oldest first, and with `stepAgeMin`
- * only those at least that many weeks at their Step. The work item query reads
- * through the same visibility and app.step_as_seen as the report.
+ * the Module's Draft and in-progress Stages) with a Step Age, so no un-numbered
+ * Draft (scenario 76), oldest first; with `stepAgeMin`, only those at least that
+ * many weeks at their Step. The work item query reads through the same
+ * visibility and app.step_as_seen as the report.
  */
-export function stepAgeReportQuery(openStageKeys: readonly string[], stepAgeMin?: 2 | 3 | 4): WorkItemQuery {
-  return workItemQuery.parse({ stage: [...openStageKeys], ...(stepAgeMin === undefined ? {} : { stepAgeMin }) });
+export function stepAgeReportQuery(openStageKeys: readonly string[], stepAgeMin: 1 | 2 | 3 | 4 = 1): WorkItemQuery {
+  return workItemQuery.parse({ stage: [...openStageKeys], stepAgeMin });
 }
 
 /** One item of a report, as its recipient may see it. */

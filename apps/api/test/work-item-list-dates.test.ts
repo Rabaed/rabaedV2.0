@@ -175,7 +175,7 @@ describe("Submission Date and Creation Date in the List (scenario 61)", () => {
   it("never matches a Step Age filter for a Draft with no number", async () => {
     // Three weeks on, the numbered item is in its 3rd week at its Step; the Draft has no Step Age to match.
     expect(ids(await list(c1Engineer, { stepAgeMin: 2 }))).toContain(numbered);
-    for (const stepAgeMin of [2, 3, 4] as const) expect(ids(await list(c1Engineer, { stepAgeMin }))).not.toContain(started);
+    for (const stepAgeMin of [1, 2, 3, 4] as const) expect(ids(await list(c1Engineer, { stepAgeMin }))).not.toContain(started);
   });
 
   it("filters by Submission Date, both days included, and leaves out an item not yet Submitted", async () => {

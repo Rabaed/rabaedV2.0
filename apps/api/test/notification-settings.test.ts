@@ -266,9 +266,16 @@ describe("watched items", () => {
     await drainOutbox(worker);
     const rev = (await ok(at.c1Engineer.post(`/v1/work-items/${id}/revisions`, { idempotencyKey: randomUUID() }), 201)).json().id as string;
     await drainOutbox(worker);
-    expect((await about(at.c1Pm, rev)).map((n) => n.event?.type)).toEqual(["revision_created"]);
-    expect(await about(at.c1Engineer, rev)).toEqual([]);
-    expect((await routed(rev)).map((r) => r.member_id)).toEqual([await meOf(at.c1Pm)]);
+    // Scenario 75: nothing while it is a Draft with no number, so its start reaches nobody.
+    expect(await routed(rev)).toEqual([]);
+    await ok(at.c1Engineer.post(`/v1/work-items/${rev}/transitions`, { transition: "send_for_review", answers: {}, idempotencyKey: randomUUID() }));
+    await drainOutbox(worker);
+    const creationDate = (await detail(at.c1Pm, rev)).creationDate;
+    expect(creationDate).not.toBeNull();
+    // Sent when it got its number, and dated then: its Creation Date.
+    expect((await about(at.c1Pm, rev)).filter((n) => n.event?.type === "revision_created").map((n) => n.createdAt)).toEqual([creationDate]);
+    expect((await about(at.c1Engineer, rev)).filter((n) => n.event?.type === "revision_created")).toEqual([]);
+    expect((await routed(rev)).filter((r) => r.kind === "watched_event").map((r) => r.member_id)).toEqual([await meOf(at.c1Pm)]);
   });
 });
 

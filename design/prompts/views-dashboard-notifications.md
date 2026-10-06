@@ -23,7 +23,7 @@ These prototypes show UI intent only. Terms follow `GLOSSARY.md`. Every screen o
 - One row per Revision chain, showing its latest Revision, with a "Show all Revisions" switch.
 - Columns: Document Number (always left-to-right), Subject, Type, Stage, **With**, Step Age dots, Trade, Location, Review Code or Inspection Result, Submission Date. Only my own Company's items show a Creation Date column.
 - "With" in my own Company: "<Step> · unclaimed" or the claimer's name. Another Company: its name only.
-- Filters: Need My Action, Type, Stage, With, Trade, Location, Review Code / Result, Step Age (2+, 3+, 4+ weeks), Submission Date range. A search box (Document Number, Subject, Type, Trade, Location, Company). Sort by Step Age, Submission Date or Document Number. 50 rows per page.
+- Filters: Need My Action, Type, Stage, With, Trade, Location, Review Code / Result, Step Age (1+, 2+, 3+, 4+ weeks), Submission Date range. A search box (Document Number, Subject, Type, Trade, Location, Company). Sort by Step Age, Submission Date or Document Number. 50 rows per page.
 
 ## 4. Kanban
 
