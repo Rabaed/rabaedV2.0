@@ -90,6 +90,8 @@ export type WorkItemListProps = {
   itemHref: (id: string) => string;
   /** Shows the List for `query` (the web navigates to `hrefFor(query)`). */
   onQueryChange: (query: WorkItemQuery) => void;
+  /** The Kanban (`WorkItemBoard`), shown under the toolbar in place of the Stage counts, table and pages. */
+  board?: ReactNode;
 };
 
 /**
@@ -100,7 +102,7 @@ export type WorkItemListProps = {
  * viewer's own Company, another Company's name only, as the API sends it.
  * The table scrolls sideways on a narrow screen.
  */
-export function WorkItemList({ list, query, locale, hrefFor, itemHref, onQueryChange }: WorkItemListProps) {
+export function WorkItemList({ list, query, locale, hrefFor, itemHref, onQueryChange, board }: WorkItemListProps) {
   const t = (key: keyof typeof copy) => copy[key][locale];
   const change = (next: Partial<WorkItemQuery>) => {
     const { cursor: _cursor, ...rest } = query;
@@ -191,6 +193,7 @@ export function WorkItemList({ list, query, locale, hrefFor, itemHref, onQueryCh
         </div>
       </section>
 
+      {board ?? <>
       <ul aria-label={t("stageCounts")} className="flex flex-wrap gap-2" data-testid="stage-counts">
         {list.stages.map((s) => (
           <li key={s.key}>
@@ -268,6 +271,7 @@ export function WorkItemList({ list, query, locale, hrefFor, itemHref, onQueryCh
           )}
         </nav>
       )}
+      </>}
     </div>
   );
 }
@@ -321,7 +325,8 @@ function WithCell({ row, locale, unclaimed }: { row: WorkItemRow; locale: Locale
   return <WithChip kind="person" inViewerCompany name={w.claimer.name[locale]} companyName={w.companyName[locale]} />;
 }
 
-function Outcome({ outcome, locale }: { outcome: WorkItemOutcome; locale: Locale }) {
+/** The Review Code or Inspection Result badge, the same on the List and the Kanban. */
+export function Outcome({ outcome, locale }: { outcome: WorkItemOutcome; locale: Locale }) {
   if (outcome in reviewCodes) {
     return <CodeBadge code={reviewCodes[outcome as keyof typeof reviewCodes]} locale={locale} size="sm" variant="letter" />;
   }

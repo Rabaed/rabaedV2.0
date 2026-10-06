@@ -1,15 +1,16 @@
-import { workItemQueryFromSearchParams, type Locale } from "@rabaed/domain";
+import { workItemQueryFromSearchParams, workItemViewFromSearchParams, type Locale } from "@rabaed/domain";
 import { buttonVariants } from "@rabaed/ui";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
 import { WorkItemListView } from "@/components/work-item-list-view";
 import { Link, redirect } from "@/i18n/navigation";
-import { getMe, getProject, getWorkItems } from "@/lib/session";
+import { getMe, getProject, getWorkItemBoard, getWorkItems } from "@/lib/session";
 
 /**
  * A Project's Submittals List: one page of the work item query, its filters,
  * sort and page in the URL. Only the items the Member can see are listed, and
- * each Stage's count is of those items only.
+ * each Stage's count is of those items only. With `view=kanban`, the same
+ * query as a Kanban (RP-349).
  */
 export default async function WorkItemsPage({
   params,
@@ -22,10 +23,18 @@ export default async function WorkItemsPage({
   setRequestLocale(locale);
   const t = await getTranslations("workItems");
   // A filter the URL holds that isn't valid is left out, so an old or edited link still opens.
-  const query = workItemQueryFromSearchParams(await searchParams);
-  const [me, project, list] = await Promise.all([getMe(), getProject(projectId), getWorkItems(projectId, query)]);
+  const search = await searchParams;
+  const query = workItemQueryFromSearchParams(search);
+  // List or Kanban, kept in the URL as `view`.
+  const view = workItemViewFromSearchParams(search);
+  const [me, project, list, board] = await Promise.all([
+    getMe(),
+    getProject(projectId),
+    view === "list" ? getWorkItems(projectId, query) : null,
+    view === "kanban" ? getWorkItemBoard(projectId, query) : null,
+  ]);
   if (!me) return redirect({ href: "/sign-in", locale });
-  if (!project || !list) notFound();
+  if (!project || !(list ?? board)) notFound();
 
   return (
     <div className="space-y-6">
@@ -44,7 +53,11 @@ export default async function WorkItemsPage({
         )}
       </div>
 
-      <WorkItemListView list={list} query={query} locale={locale} />
+      {board ? (
+        <WorkItemListView view="kanban" board={board} query={query} locale={locale} />
+      ) : (
+        list && <WorkItemListView view="list" list={list} query={query} locale={locale} />
+      )}
     </div>
   );
 }

@@ -217,7 +217,7 @@ The key is the values of the pattern's counted segments joined by `-`, whatever 
 | `participant_entered_at`, `participant_entered_step_id` | when, and at which Step, the item reached the holding Participant (or closed): what every other Company sees (V14) |
 | `outcome` | `A, B, C, D, passed, passed_with_comments, failed, cancelled, closed`; null while open |
 | `recommended_code` | latest recommendation, informational |
-| `closed_at` | |
+| `closed_at` | set with `outcome`. The Kanban's closed columns hold the items closed in the last 30 days (RP-349) |
 
 **work_item_dimension_value**
 `work_item_id`, `dimension_id`, `dimension_value_id`. Exactly one value per dimension, and Trade is required.
