@@ -383,4 +383,4 @@ Allowed actions are an explicit list: onboard Company, invite its Authorized Per
 
 - **Oversight:** Owner and Owner Representative get access at first Submit, within their Visibility (`reason = oversight`). See docs/visibility.md V2.
 - **Snags assigned to a Contractor:** the Contractor sees the shared history only, never the raiser's internal events (V5).
-- **Search:** Postgres full-text search first, always filtered through RLS.
+- **Search:** Postgres full-text search first, always filtered through RLS. As built (RP-347): `work_item_search`, one row per Work Item kept by triggers, holds the Document Number, Subject, Type name, Trade and Location names and the raiser's Company name (English and Arabic), never answers or Documents, with a trigram and a full-text index. The app role can't read it; the List's `q` finds items through `app.search_work_items(project, q)`, which returns only the ids of matching items the caller sees. Every word must match: one of three letters or more as a part of a word, a shorter one as a whole word. A search's Stage counts are of the List's page, or the Kanban's shown cards, only.
