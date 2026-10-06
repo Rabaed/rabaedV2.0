@@ -1,11 +1,11 @@
 import { cssNoHardcodedColour, cssNoPhysicalDirection } from "./css-rules.ts";
-import { noDeadlineWords, noHardcodedColour, noPhysicalDirection, noRawErrorLogging, useClientDirective } from "./js-rules.ts";
+import { noDeadlineWords, noHardcodedColour, noPhysicalDirection, noRawErrorLogging, noUiTranslations, useClientDirective } from "./js-rules.ts";
 import { jsonNoDeadlineWords } from "./json-rules.ts";
 
 /**
  * Rabaed design guard rails (RP-199): design tokens only, logical (RTL-safe)
  * CSS only, and Step Age only (no deadline words), and no raw error messages in logs (RP-287).
- * Also "use client" on every component file that needs it (RP-362). Wired up in eslint.config.js.
+ * Also "use client" on every component file that needs it, and no translations in @rabaed/ui (RP-362). Wired up in eslint.config.js.
  */
 const plugin = {
   meta: { name: "@rabaed/eslint-plugin" },
@@ -15,6 +15,7 @@ const plugin = {
     "no-deadline-words": noDeadlineWords,
     "no-raw-error-logging": noRawErrorLogging,
     "use-client-directive": useClientDirective,
+    "no-ui-translations": noUiTranslations,
     "css-no-hardcoded-colour": cssNoHardcodedColour,
     "css-no-physical-direction": cssNoPhysicalDirection,
     "json-no-deadline-words": jsonNoDeadlineWords,

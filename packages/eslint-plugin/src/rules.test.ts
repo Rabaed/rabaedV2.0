@@ -194,3 +194,22 @@ tsx.run("use-client-directive", rules["use-client-directive"], {
     { code: `export function A() { useState(); useEffect(); return <i onFocus={f} />; }`, errors: [{ messageId: "hook", data: { name: "useState" } }] },
   ],
 });
+
+tsx.run("no-ui-translations", rules["no-ui-translations"], {
+  valid: [
+    `export function Close({ closeLabel }: { closeLabel: string }) { return <button aria-label={closeLabel} />; }`,
+    `const labels = { en: "English" };`,
+    `const sizes = { en: 1, ar: 2, fr: 3 };`,
+    `const pair = { [en]: "Close", ar: "إغلاق" };`,
+    `const copy = { ...base, ar: "إغلاق" };`,
+  ],
+  invalid: [
+    { code: `const close = { en: "Close", ar: "إغلاق" };`, errors: [{ messageId: "translation" }] },
+    { code: `const copy = { ar: { close: "إغلاق" }, en: { close: "Close" } };`, errors: [{ messageId: "translation" }] },
+    { code: `const copy = { "en": "Close", "ar": "إغلاق" };`, errors: [{ messageId: "translation" }] },
+    {
+      code: `const meanings = { a: { en: "Approved", ar: "معتمد" }, d: { en: "Rejected", ar: "مرفوض" } };`,
+      errors: [{ messageId: "translation" }, { messageId: "translation" }],
+    },
+  ],
+});

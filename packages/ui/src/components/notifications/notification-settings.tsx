@@ -26,6 +26,7 @@ import { Switch } from "../form/switch.tsx";
 // own schedule, never in the bell. Every change applies at once; a refused one is
 // undone and says so. Presentational: the page does the calls.
 
+/* eslint-disable rabaed/no-ui-translations -- existing labels, still to move to the app's messages (RP-362 retro) */
 const copy = {
   en: {
     email: "Email",
@@ -76,8 +77,10 @@ const copy = {
     refusals: { not_found: "لم يعد هذا المشروع متاحًا لك.", unavailable: "لم يُحفظ ذلك. حاول مرة أخرى." },
   },
 } satisfies Record<Locale, unknown>;
+/* eslint-enable rabaed/no-ui-translations */
 
 // Each language named in itself, as language pickers do.
+// eslint-disable-next-line rabaed/no-ui-translations -- a documented exception in packages/ui/README.md (language names, each in its own language, as in MemberMenu)
 const languageNames: Record<Locale, string> = { en: "English", ar: "العربية" };
 
 const outcomeGroups: Record<keyof (typeof copy)["en"]["outcomeGroups"], readonly WatchOutcome[]> = {

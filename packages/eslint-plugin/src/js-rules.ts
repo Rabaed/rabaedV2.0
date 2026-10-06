@@ -230,6 +230,34 @@ export const noRawErrorLogging: Rule.RuleModule = {
   },
 };
 
+const propertyKey = (property: Node): string | null => {
+  if (property.type !== "Property" || property.computed) return null;
+  if (property.key.type === "Identifier") return property.key.name;
+  return property.key.type === "Literal" && typeof property.key.value === "string" ? property.key.value : null;
+};
+
+export const noUiTranslations: Rule.RuleModule = {
+  meta: {
+    type: "problem",
+    docs: {
+      description:
+        "@rabaed/ui has no translations of its own (packages/ui/README.md): no `{ en, ar }` wording in its components; the app passes every label from its messages.",
+    },
+    messages: {
+      translation:
+        "An `{ en, ar }` translation in @rabaed/ui. The package has no translations of its own (packages/ui/README.md): take the label as a prop and pass it from the app's messages.",
+    },
+    schema: [],
+  },
+  create: (context) => ({
+    ObjectExpression(node) {
+      if (node.properties.length !== 2) return;
+      const keys = node.properties.map(propertyKey).sort();
+      if (keys[0] === "ar" && keys[1] === "en") context.report({ node, messageId: "translation" });
+    },
+  }),
+};
+
 // Hooks React also runs in Server Components, so calling one doesn't make a file client-only.
 const serverSafeHooks = new Set(["useId"]);
 const hookName = /^use[A-Z]/;

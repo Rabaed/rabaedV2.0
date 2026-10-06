@@ -73,6 +73,13 @@ export default tseslint.config(
     rules: { "rabaed/use-client-directive": "error" },
   },
   {
+    // The package has no translations of its own (packages/ui/README.md). Stories may word their own examples.
+    files: ["packages/ui/src/components/**/*.{ts,tsx}"],
+    ignores: ["**/*.stories.tsx"],
+    plugins: { rabaed },
+    rules: { "rabaed/no-ui-translations": "error" },
+  },
+  {
     files: ["packages/ui/**/*.css", "apps/web/**/*.css"],
     // The generated token file is where the palette's raw colours live.
     ignores: ["packages/ui/src/styles/tokens.css"],

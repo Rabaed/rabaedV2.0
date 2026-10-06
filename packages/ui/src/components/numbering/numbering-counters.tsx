@@ -31,6 +31,7 @@ import { Select } from "../form/select.tsx";
 // number while it has issued nothing. Presentational: the page passes what the
 // API returns and does the calls.
 
+/* eslint-disable rabaed/no-ui-translations -- existing labels, still to move to the app's messages (RP-362 retro) */
 const copy = {
   en: {
     title: "Counters",
@@ -102,6 +103,7 @@ const copy = {
     },
   },
 } satisfies Record<Locale, unknown>;
+/* eslint-enable rabaed/no-ui-translations */
 
 export type CounterRefusal = keyof (typeof copy)["en"]["refusals"];
 
