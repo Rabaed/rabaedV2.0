@@ -83,6 +83,8 @@ const currencyCode = z
 
 /** How many decimal places a currency's amounts take (2 for SAR: halalas). */
 export function currencyDecimals(currency: string): number {
+  // Asks the platform for the currency's decimals: nothing is formatted or shown.
+  // eslint-disable-next-line rabaed/locale-through-helpers
   return new Intl.NumberFormat("en", { style: "currency", currency }).resolvedOptions().maximumFractionDigits ?? 2;
 }
 

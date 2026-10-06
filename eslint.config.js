@@ -54,6 +54,13 @@ export default tseslint.config(
     rules: { "rabaed/no-aws-ids-in-errors": "error" },
   },
   {
+    // Dates and numbers go through the domain's locale helpers, which keep Latin digits in Arabic (RP-330).
+    files: ["apps/**/*.{ts,tsx,js}", "packages/**/*.{ts,tsx,js}", "scripts/**/*.ts"],
+    ignores: ["**/*.test.{ts,tsx}", "**/test/**", "**/test-support/**", "packages/domain/src/locale.ts"],
+    plugins: { rabaed },
+    rules: { "rabaed/locale-through-helpers": "error" },
+  },
+  {
     files: ["apps/web/**/*.{ts,tsx}"],
     plugins: { "@next/next": nextPlugin },
     languageOptions: { globals: { ...globals.browser } },

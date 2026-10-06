@@ -38,6 +38,7 @@ Visibility is the top requirement (`docs/visibility.md`). Check every read path 
 - **Use the shared piece, not a copy:** `@rabaed/ui` components (`AgeDots`, `StagePill`, `WithChip`, form controls inside `Field`, …), its `focusRing` and tone helpers, and the shared test fixtures under each package's `test/support/` (RP-237, RP-289).
 - **Landmarks and labels:** every page has its landmarks, and every group of controls has a visible or accessible label.
 - Design tokens and logical CSS (checked: `rabaed/no-hardcoded-colour`, `rabaed/no-physical-direction`).
+- **Dates and numbers are formatted through `formatDate` and `formatNumber`** (`@rabaed/domain` locale module), so Arabic shows Latin digits and Saudi time. No `new Intl.*(…)` or `toLocale*String` elsewhere unless its locale is `intlLocaleOf(…)` (checked: `rabaed/locale-through-helpers`; a place that only parses or reads the clock says so in a commented `eslint-disable`).
 - **Bidi isolates and marks (U+2066 to U+2069, U+200E, U+200F, U+202A to U+202E) are written as `\u` escapes,** never pasted in as invisible characters (checked: `rabaed/no-raw-bidi` in TS, TSX and message files; `eslint --fix` rewrites them).
 
 ## Domain language

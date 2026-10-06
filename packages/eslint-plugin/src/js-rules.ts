@@ -231,6 +231,44 @@ export const noRawErrorLogging: Rule.RuleModule = {
   },
 };
 
+const localeMethods = new Set(["toLocaleString", "toLocaleDateString", "toLocaleTimeString"]);
+
+/** `intlLocaleOf(locale)`: the one place that says Latin digits, the Gregorian calendar and Saudi regional formats. */
+function isIntlLocaleOfCall(node: Node | undefined): boolean {
+  if (node?.type !== "CallExpression") return false;
+  const { callee } = node;
+  if (callee.type === "Identifier") return callee.name === "intlLocaleOf";
+  return callee.type === "MemberExpression" && !callee.computed && callee.property.type === "Identifier" && callee.property.name === "intlLocaleOf";
+}
+
+export const localeThroughHelpers: Rule.RuleModule = {
+  meta: {
+    type: "problem",
+    docs: { description: "Format dates and numbers through the domain locale helpers: Latin digits in Arabic only come from intlLocaleOf (RP-330)." },
+    messages: {
+      intl: "Intl.{{name}} outside the locale module: use formatDate or formatNumber from @rabaed/domain, or pass intlLocaleOf(locale) as its locale, so Arabic keeps Latin digits.",
+      method: "{{name}} outside the locale module: use formatDate or formatNumber from @rabaed/domain, or pass intlLocaleOf(locale) as its locale, so Arabic keeps Latin digits.",
+    },
+    schema: [],
+  },
+  create(context) {
+    return {
+      // new Intl.NumberFormat(…), Intl.DateTimeFormat(…)
+      "NewExpression, CallExpression"(node: Rule.Node) {
+        if (node.type !== "NewExpression" && node.type !== "CallExpression") return;
+        const { callee } = node;
+        if (callee.type === "MemberExpression" && !callee.computed && callee.object.type === "Identifier" && callee.object.name === "Intl" && callee.property.type === "Identifier" && /^[A-Z]/.test(callee.property.name)) {
+          if (!isIntlLocaleOfCall(node.arguments[0] as Node | undefined)) context.report({ node, messageId: "intl", data: { name: callee.property.name } });
+          return;
+        }
+        if (node.type === "CallExpression" && callee.type === "MemberExpression" && !callee.computed && callee.property.type === "Identifier" && localeMethods.has(callee.property.name)) {
+          if (!isIntlLocaleOfCall(node.arguments[0] as Node | undefined)) context.report({ node, messageId: "method", data: { name: callee.property.name } });
+        }
+      },
+    };
+  },
+};
+
 const consoleLevels = new Set(["log", "info", "warn", "error", "debug", "trace"]);
 
 /** `console.error(…)`, which the local CLIs and scripts use. */

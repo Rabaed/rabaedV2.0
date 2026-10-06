@@ -1,7 +1,7 @@
 import { cssNoHardcodedColour, cssNoPhysicalDirection } from "./css-rules.ts";
 import { jsonNoAvoidTerms, noAvoidTerms } from "./avoid-rules.ts";
 import { jsonNoRawBidi, noRawBidi } from "./bidi-rules.ts";
-import { noAwsIdsInErrors, noDeadlineWords, noHardcodedColour, noPhysicalDirection, noRawErrorLogging } from "./js-rules.ts";
+import { localeThroughHelpers, noAwsIdsInErrors, noDeadlineWords, noHardcodedColour, noPhysicalDirection, noRawErrorLogging } from "./js-rules.ts";
 import { jsonNoDeadlineWords } from "./json-rules.ts";
 
 /**
@@ -17,6 +17,7 @@ const plugin = {
     "no-raw-error-logging": noRawErrorLogging,
     "no-avoid-terms": noAvoidTerms,
     "no-raw-bidi": noRawBidi,
+    "locale-through-helpers": localeThroughHelpers,
     "no-aws-ids-in-errors": noAwsIdsInErrors,
     "css-no-hardcoded-colour": cssNoHardcodedColour,
     "css-no-physical-direction": cssNoPhysicalDirection,

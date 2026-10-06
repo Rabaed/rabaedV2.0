@@ -260,7 +260,32 @@ tsx.run("no-aws-ids-in-errors", rules["no-aws-ids-in-errors"], {
   ],
 });
 
-jsonTester.run("json-no-avoid-terms",rules["json-no-avoid-terms"], {
+tsx.run("locale-through-helpers", rules["locale-through-helpers"], {
+  valid: [
+    `formatDate(value, locale);`,
+    `formatNumber(1234, locale);`,
+    `new Intl.NumberFormat(intlLocaleOf(locale), { style: "currency", currency }).format(1);`,
+    `new Intl.PluralRules(intlLocaleOf(locale)).select(n);`,
+    `date.toLocaleDateString(intlLocaleOf(locale), { dateStyle: "medium" });`,
+    `Intl.DateTimeFormat(domain.intlLocaleOf(locale)).format(d);`,
+    `const options: Intl.NumberFormatOptions = {};`,
+    `Intl.supportedValuesOf("currency");`,
+    `const toLocaleString = 1;`,
+  ],
+  invalid: [
+    { code: `new Intl.NumberFormat(locale).format(1);`, errors: [{ messageId: "intl", data: { name: "NumberFormat" } }] },
+    { code: `new Intl.PluralRules(locale).select(age);`, errors: [{ messageId: "intl", data: { name: "PluralRules" } }] },
+    { code: `new Intl.DateTimeFormat("en-US", { dateStyle: "short" });`, errors: [{ messageId: "intl" }] },
+    { code: `Intl.DateTimeFormat().format(d);`, errors: [{ messageId: "intl" }] },
+    { code: `new Intl.NumberFormat(locale === "ar" ? intlLocaleOf(locale) : "en");`, errors: [{ messageId: "intl" }] },
+    { code: `new Intl.Collator(locale);`, errors: [{ messageId: "intl" }] },
+    { code: `n.toLocaleString();`, errors: [{ messageId: "method", data: { name: "toLocaleString" } }] },
+    { code: `d.toLocaleDateString("ar-SA");`, errors: [{ messageId: "method" }] },
+    { code: `d.toLocaleTimeString(locale, { hour: "2-digit" });`, errors: [{ messageId: "method", data: { name: "toLocaleTimeString" } }] },
+  ],
+});
+
+jsonTester.run("json-no-avoid-terms", rules["json-no-avoid-terms"], {
   valid: [`{ "members": { "title": "Members", "intro": "People of your Company" } }`, `{ "form": { "template": "Pick a Form" } }`],
   invalid: [
     { code: `{ "tenant": { "title": "Companies" } }`, errors: [{ messageId: "key" }] },

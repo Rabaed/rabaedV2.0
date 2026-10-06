@@ -40,6 +40,8 @@ export const MAX_LATE_MS = 12 * 3_600_000;
 /** The wall-clock date and the offset from UTC (ms) in `timeZone` at `instant`. */
 function localParts(instant: Date, timeZone: string): { year: number; month: number; day: number; offsetMs: number } {
   const parts = Object.fromEntries(
+    // Reads the clock in a time zone to find its offset: nothing shown, so no locale helper.
+    // eslint-disable-next-line rabaed/locale-through-helpers
     new Intl.DateTimeFormat("en-US", {
       timeZone,
       hourCycle: "h23",
