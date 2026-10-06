@@ -5,8 +5,12 @@ import { type AllowListed, type Kind, latestKinds, leakChannelProblems, repoMigr
 // Kinds that are not channels of their own, with the leak-channel row (its
 // Channel cell, exactly) that covers them. A notification kind is what
 // happened, shown in the bell and sent by email: the one channel
-// "Notifications and emails".
+// "Notifications and emails". The outbox's `notification` and `email` kinds
+// deliver that same channel, so they are listed here with it rather than
+// passing because their names happen to appear in the row's words.
 const allowList: readonly AllowListed[] = [
+  { table: "outbox", kind: "notification", row: "Notifications and emails" },
+  { table: "outbox", kind: "email", row: "Notifications and emails" },
   { table: "notification", kind: "step_reached", row: "Notifications and emails" },
   { table: "notification", kind: "watched_event", row: "Notifications and emails" },
   { table: "notification", kind: "sent_back", row: "Notifications and emails" },

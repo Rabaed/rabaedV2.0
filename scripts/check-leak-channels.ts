@@ -28,10 +28,13 @@ const inlineCheck = new RegExp(String.raw`^\s*kind\s+text\b[^\n]*?${kindList}`, 
 
 const kindsIn = (list: string) => [...list.matchAll(/'([^']*)'/g)].map((m) => m[1]!);
 
+/** Text in code-unit order, as migrations run (by file name), not by locale. */
+const byCodeUnits = (a: string, b: string) => Number(a > b) - Number(a < b);
+
 /** The kinds each channel table allows, as the newest migration (by file name) that defines its `kind` check says. */
 export function latestKinds(migrations: Migration[]): Kind[] {
   const latest = new Map<ChannelTable, Kind[]>();
-  const sorted = migrations.toSorted((a, b) => (a.file < b.file ? -1 : a.file > b.file ? 1 : 0));
+  const sorted = migrations.toSorted((a, b) => byCodeUnits(a.file, b.file));
   for (const { file, text } of sorted) {
     const found: { index: number; table: string; list: string }[] = [];
     for (const m of text.matchAll(createdTable)) {
