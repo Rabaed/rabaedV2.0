@@ -1,6 +1,6 @@
-import type { Locale } from "@rabaed/domain";
+import type { Locale, NotificationEmail } from "@rabaed/domain";
 import { z } from "zod";
-import { renderEmail, type RenderedEmail, type EmailTemplate, type EmailTemplateValues } from "./templates.ts";
+import { notificationEmailTemplate, renderEmail, type RenderedEmail, type EmailTemplate, type EmailTemplateValues } from "./templates.ts";
 
 /** What a caller asks to send: a template, in the recipient's locale, with its values. */
 export interface MailMessage<T extends EmailTemplate = EmailTemplate> {
@@ -29,6 +29,15 @@ export interface Mailer {
 export const SENDER_NAME = "Rabaed";
 
 const oneAddress = z.email();
+
+/**
+ * A notification email as the mailer sends it: its kind's template, in the
+ * recipient's language, linking to the item on the customer web (`webUrl`).
+ */
+export function notificationMessage({ to, language, kind, content }: NotificationEmail, webUrl: string): MailMessage {
+  const link = new URL(`/${language}/work-items/${encodeURIComponent(content.workItemId)}`, webUrl).href;
+  return { to, template: notificationEmailTemplate[kind], locale: language, values: { ...content, link } };
+}
 
 export function createMailer({ from, transport }: { from: string; transport: MailTransport }): Mailer {
   return {

@@ -1,3 +1,4 @@
+import type { BilingualText, Locale, NotificationEmail, NotificationEmailKind } from "@rabaed/domain";
 import { sql, type Transaction } from "kysely";
 import type { Db } from "./client.ts";
 import type { Database } from "./schema.ts";
@@ -22,6 +23,58 @@ export const deliverNotification: OutboxHandler = async (trx, row) => {
   await sql`select app.deliver_notification(${row.id}::uuid)`.execute(trx);
 };
 
+/** Sends one notification email: the worker's mailer. Throws when it could not. */
+export type SendNotificationEmail = (email: NotificationEmail) => Promise<void>;
+
+/**
+ * Emails one notification routed "immediately" (RP-357), as its recipient may
+ * see it now: nothing when they no longer see the item or may not read the
+ * event, when email is paused, the Project muted or closed, or the notification
+ * withdrawn (app.take_notification_email). A failed send throws, so the row is
+ * retried, then dead-lettered.
+ */
+export function notificationEmailHandler(send: SendNotificationEmail): OutboxHandler {
+  return async (trx, row) => {
+    const { rows } = await sql<{
+      to_address: string;
+      language: Locale;
+      kind: NotificationEmailKind;
+      work_item_id: string;
+      document_number: string | null;
+      subject: string;
+      step_name: BilingualText | null;
+      event_type: NonNullable<NotificationEmail["content"]["event"]>["type"] | null;
+      transition_label: BilingualText | null;
+      outcome: string | null;
+      company_name: BilingualText | null;
+      signer_name: BilingualText | null;
+    }>`select * from app.take_notification_email(${row.id}::uuid)`.execute(trx);
+    const email = rows[0];
+    if (!email) return;
+    await send({
+      to: email.to_address,
+      language: email.language,
+      kind: email.kind,
+      content: {
+        workItemId: email.work_item_id,
+        documentNumber: email.document_number,
+        subject: email.subject,
+        step: email.step_name,
+        event: email.event_type
+          ? {
+              type: email.event_type,
+              transition: email.transition_label,
+              outcome: email.outcome,
+              companyName: email.company_name,
+              signerName: email.signer_name,
+            }
+          : null,
+      },
+    });
+  };
+}
+
+/** No email handler by default: the worker passes one with its mailer. */
 const defaultHandlers: Record<string, OutboxHandler> = { notification: deliverNotification };
 
 export interface ProcessOutboxOptions {

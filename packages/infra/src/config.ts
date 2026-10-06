@@ -290,6 +290,8 @@ export function resourceNames(config: EnvironmentConfig) {
     apiTaskRole: `${prefix}-api-task`,
     /** Rabaed Admin's task role: the only one that may read the rabaed_admin secret. */
     adminTaskRole: `${prefix}-admin-task`,
+    /** The worker's task role: it sends the notification emails. */
+    workerTaskRole: `${prefix}-worker-task`,
     /** The demo people's sign-in password (demo environments only). */
     demoPasswordSecret: `rabaed/${config.name}/demo/password`,
     /** Every Secrets Manager secret of the environment starts with this. */

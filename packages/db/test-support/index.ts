@@ -1,6 +1,6 @@
 import { sql } from "kysely";
 import { withMember, type Db } from "../src/client.ts";
-import { processOutbox } from "../src/outbox.ts";
+import { notificationEmailHandler, processOutbox, type OutboxHandler } from "../src/outbox.ts";
 import { databaseNameOf, databaseUrlsFromEnv, withDatabaseName, type DatabaseUrls } from "../src/config.ts";
 
 export { addSendBackWorkflow } from "./send-back-workflow.ts";
@@ -65,14 +65,18 @@ export async function joinProject(
   });
 }
 
+/** Takes each notification email as the worker would, and sends it nowhere. */
+const discardEmails = notificationEmailHandler(async () => {});
+
 /**
  * Runs `processOutbox` until nothing is due. One run takes at most 100 rows,
  * oldest first, so after busy test files a single call can leave the row a test
  * waits for undelivered. `db` connects as the app role, with no Member set.
+ * Notification emails go nowhere unless `handlers` has an `email` handler.
  */
-export async function drainOutbox(db: Db): Promise<void> {
+export async function drainOutbox(db: Db, handlers: Record<string, OutboxHandler> = {}): Promise<void> {
   for (;;) {
-    const run = await processOutbox(db);
+    const run = await processOutbox(db, { handlers: { email: discardEmails, ...handlers } });
     if (run.processed + run.failed + run.dead === 0) return;
   }
 }

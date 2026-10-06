@@ -1,14 +1,36 @@
-import { locales } from "@rabaed/domain";
+import { locales, notificationEmailKinds } from "@rabaed/domain";
 import { deadlineWordInCopy } from "@rabaed/eslint-plugin/matchers";
 import { describe, expect, it } from "vitest";
-import { renderEmail, emailTemplates, type EmailTemplateValues } from "./templates.ts";
+import { renderEmail, emailTemplates, notificationEmailTemplate, type EmailTemplateValues } from "./templates.ts";
+
+const DOC = "TWR-MAR-01-0001";
+const item = {
+  link: "https://rabaed.test/ar/work-items/0190a1b2-0000-7000-8000-000000000001",
+  workItemId: "0190a1b2-0000-7000-8000-000000000001",
+  documentNumber: DOC,
+  subject: "Cable trays <Level 2>",
+  step: null,
+  event: null,
+};
+const k1 = { en: "Khatib Consultants", ar: "الخطيب للاستشارات" };
+const khalid = { en: "Khalid Signer", ar: "خالد الموقّع" };
+const codeB = { type: "issue_code", transition: { en: "Issue Code B", ar: "إصدار الرمز B" }, outcome: "B", companyName: k1, signerName: khalid } as const;
 
 const examples: EmailTemplateValues = {
   "sign-in-code": { code: "482913", validMinutes: 10 },
   invitation: { companyName: "Al Bina <Contracting> & Sons", link: "https://rabaed.test/ar/accept-invitation#token=abc" },
   "new-device-sign-in": { when: "2026-10-02 09:15 UTC", ip: "203.0.113.7" },
   "sign-in-locked": { minutes: 15 },
+  "notification-step-reached": { ...item, step: { en: "Contractor review", ar: "مراجعة المقاول" } },
+  "notification-watched-event": { ...item, event: codeB },
+  "notification-sent-back": {
+    ...item,
+    event: { type: "transition", transition: { en: "Send Back", ar: "إرجاع" }, outcome: null, companyName: k1, signerName: null },
+  },
+  "notification-vacancy": { ...item, step: { en: "Internal review", ar: "المراجعة الداخلية" } },
 };
+
+const notificationTemplates = emailTemplates.filter((t) => t.startsWith("notification-"));
 
 describe("every template", () => {
   it.each(emailTemplates.flatMap((template) => locales.map((locale) => [template, locale] as const)))(
@@ -88,6 +110,74 @@ describe("new-device sign-in alert", () => {
       expect(email.text).toContain("203.0.113.7");
     }
     expect(renderEmail("new-device-sign-in", "ar", examples["new-device-sign-in"]).html).toContain('<bdi dir="ltr">203.0.113.7</bdi>');
+  });
+});
+
+describe("notification emails", () => {
+  it("there is one for every kind of notification that can be emailed", () => {
+    expect(notificationEmailKinds.map((kind) => notificationEmailTemplate[kind]).sort()).toEqual([...notificationTemplates].sort());
+  });
+
+  it.each(notificationTemplates.flatMap((template) => locales.map((locale) => [template, locale] as const)))(
+    "%s in %s: the subject is the Document Number, kept left to right, the Subject and what happened, nothing else",
+    (template, locale) => {
+      const { subject } = renderEmail(template, locale, examples[template]);
+      const parts = subject.split(" · ");
+      expect(parts).toHaveLength(3);
+      expect(parts[0]).toBe(`⁦${DOC}⁩`);
+      expect(parts[1]).toBe("Cable trays <Level 2>");
+    },
+  );
+
+  it.each(notificationTemplates.flatMap((template) => locales.map((locale) => [template, locale] as const)))(
+    "%s in %s: the body shows the Document Number left to right and links to the item",
+    (template, locale) => {
+      const { text, html } = renderEmail(template, locale, examples[template]);
+      expect(html).toContain(`<bdi dir="ltr">${DOC}</bdi>`);
+      expect(text).toContain(`⁦${DOC}⁩`);
+      expect(text).toContain(item.link);
+      expect(html).toContain(`href="${item.link}"`);
+      expect(html).toContain("Cable trays &lt;Level 2&gt;");
+      expect(html).not.toContain("<Level 2>");
+    },
+  );
+
+  it("leaves the Document Number out while the item has none", () => {
+    const email = renderEmail("notification-step-reached", "en", { ...examples["notification-step-reached"], documentNumber: null });
+    expect(email.subject).toBe("Cable trays <Level 2> · Reached you at Contractor review");
+  });
+
+  it("a Step reached: names the recipient's own Step", () => {
+    expect(renderEmail("notification-step-reached", "en", examples["notification-step-reached"]).subject).toBe(
+      `⁦${DOC}⁩ · Cable trays <Level 2> · Reached you at Contractor review`,
+    );
+    expect(renderEmail("notification-step-reached", "ar", examples["notification-step-reached"]).subject).toBe(
+      `⁦${DOC}⁩ · Cable trays <Level 2> · وصلك في مراجعة المقاول`,
+    );
+  });
+
+  it("a Code on a watched item (scenario 69): the subject says only the Code; the body names the Company and the Code's signer", () => {
+    for (const locale of locales) {
+      const email = renderEmail("notification-watched-event", locale, examples["notification-watched-event"]);
+      expect(email.subject.split(" · ")[2]).toBe(locale === "en" ? "Code B" : "الرمز B");
+      expect(email.subject).not.toContain(k1[locale]);
+      expect(email.text).toContain(k1[locale]);
+      expect(email.text).toContain(khalid[locale]);
+    }
+  });
+
+  it("a watched item's other events: an Inspection Result, a Transition, a new Revision, a cancel", () => {
+    const watched = (event: Partial<typeof codeB> | Record<string, unknown>) =>
+      renderEmail("notification-watched-event", "en", { ...item, event: { ...codeB, signerName: null, ...event } as never }).subject.split(" · ")[2];
+    expect(watched({ outcome: "passed_with_comments" })).toBe("Passed with Comments");
+    expect(watched({ type: "transition", outcome: null, transition: { en: "Submit", ar: "تقديم" } })).toBe("Submit");
+    expect(watched({ type: "revision_created", outcome: null, transition: null, companyName: null })).toBe("New Revision");
+    expect(watched({ type: "cancelled", outcome: "cancelled", transition: null })).toBe("Cancelled");
+  });
+
+  it("Sent Back and a Vacancy say what happened", () => {
+    expect(renderEmail("notification-sent-back", "en", examples["notification-sent-back"]).subject.split(" · ")[2]).toBe("Sent Back to you");
+    expect(renderEmail("notification-vacancy", "en", examples["notification-vacancy"]).subject.split(" · ")[2]).toBe("Vacancy at Internal review");
   });
 });
 

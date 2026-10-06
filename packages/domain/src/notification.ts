@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { bilingualText } from "./company.ts";
+import { bilingualText, type BilingualText } from "./company.ts";
+import type { Locale } from "./locale.ts";
 import { workItemOutcome } from "./work-item.ts";
 
 /** What an in-app notification is about: a Step reached the Member or their pool, or something happened on an item they watch. */
@@ -39,6 +40,49 @@ export const notification = z.object({
   readAt: z.iso.datetime().nullable(),
 });
 export type Notification = z.infer<typeof notification>;
+
+/**
+ * The kinds of notification that can be emailed one by one ("immediately"):
+ * the in-app kinds, and Sent Back and Vacancy (RP-356). The weekly report is
+ * an email of its own, never a notification row.
+ */
+export const notificationEmailKinds = ["step_reached", "watched_event", "sent_back", "vacancy"] as const;
+export type NotificationEmailKind = (typeof notificationEmailKinds)[number];
+
+/**
+ * What one notification email says, read when it is sent as its recipient may
+ * see the item then (visibility.md, "Notifications and emails"): the item's
+ * Document Number and Subject, the recipient's own Step it reached them at, and
+ * what happened, with another Company by name only and no person of it but the
+ * signer of a final Code (V14).
+ */
+export interface NotificationEmailContent {
+  workItemId: string;
+  /** Null while the item has none. */
+  documentNumber: string | null;
+  subject: string;
+  /** A Step reached them, or is vacant: the Step, their own Company's. */
+  step: BilingualText | null;
+  event: {
+    type: (typeof watchedEventTypes)[number];
+    transition: BilingualText | null;
+    /** The outcome it closed the item with, such as a Review Code. */
+    outcome: string | null;
+    /** The Company that did it, by name only. */
+    companyName: BilingualText | null;
+    /** The person who issued a final Code; null for anything else. */
+    signerName: BilingualText | null;
+  } | null;
+}
+
+/** One notification email on its way out: to whom, in which language, about what. */
+export interface NotificationEmail {
+  to: string;
+  /** The recipient's preferred language for email, else their locale. */
+  language: Locale;
+  kind: NotificationEmailKind;
+  content: NotificationEmailContent;
+}
 
 /** The signed-in Member's notifications, newest first, and how many are unread (the bell). */
 export const notificationList = z.object({

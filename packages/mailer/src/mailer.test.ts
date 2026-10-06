@@ -2,7 +2,7 @@ import type { SendEmailCommand } from "@aws-sdk/client-sesv2";
 import { describe, expect, it, vi } from "vitest";
 import { catcherTransport } from "./catcher.ts";
 import { mailerFromEnv } from "./config.ts";
-import { createMailer, type OutgoingEmail } from "./mailer.ts";
+import { createMailer, notificationMessage, type OutgoingEmail } from "./mailer.ts";
 import { sesTransport } from "./ses.ts";
 import { renderEmail } from "./templates.ts";
 
@@ -24,6 +24,18 @@ describe("createMailer", () => {
     await expect(mailer.send({ ...signInCode, to: "a@rabaed.test, b@rabaed.test" })).rejects.toThrow();
     await expect(mailer.send({ ...signInCode, to: "not an email" })).rejects.toThrow();
     expect(transport).not.toHaveBeenCalled();
+  });
+});
+
+describe("notificationMessage", () => {
+  it("emails a notification with its kind's template, in the recipient's language, linking to the item on the web", () => {
+    const content = { workItemId: "0190a1b2-0000-7000-8000-000000000001", documentNumber: "TWR-MAR-01-0001", subject: "Cable trays", step: null, event: null };
+    expect(notificationMessage({ to: "pm@rabaed.test", language: "ar", kind: "watched_event", content }, "https://rabaed.test")).toEqual({
+      to: "pm@rabaed.test",
+      template: "notification-watched-event",
+      locale: "ar",
+      values: { ...content, link: "https://rabaed.test/ar/work-items/0190a1b2-0000-7000-8000-000000000001" },
+    });
   });
 });
 

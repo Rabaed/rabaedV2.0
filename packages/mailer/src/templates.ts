@@ -1,4 +1,16 @@
-import { directionOf, formatNumber, type Locale } from "@rabaed/domain";
+import {
+  directionOf,
+  formatNumber,
+  type BilingualText,
+  type Locale,
+  type NotificationEmailContent,
+  type NotificationEmailKind,
+} from "@rabaed/domain";
+
+/** A notification email's values: what the recipient may see of the item at send time, and the link to it on the web. */
+export interface NotificationEmailValues extends NotificationEmailContent {
+  link: string;
+}
 
 /** The values each email template needs. */
 export interface EmailTemplateValues {
@@ -10,9 +22,25 @@ export interface EmailTemplateValues {
   "new-device-sign-in": { when: string; ip: string };
   /** Rabaed Admin: too many failed sign-ins; sign-in is refused for a while. */
   "sign-in-locked": { minutes: number };
+  /** A Step reached the Member or their Step Pool. */
+  "notification-step-reached": NotificationEmailValues;
+  /** Something happened on an item the Member watches. */
+  "notification-watched-event": NotificationEmailValues;
+  /** An item was Sent Back to the Member's Participant (RP-356). */
+  "notification-sent-back": NotificationEmailValues;
+  /** A Step in the Member's Company has nobody to hold it (RP-356). */
+  "notification-vacancy": NotificationEmailValues;
 }
 
 export type EmailTemplate = keyof EmailTemplateValues;
+
+/** The template each kind of notification is emailed with. */
+export const notificationEmailTemplate = {
+  step_reached: "notification-step-reached",
+  watched_event: "notification-watched-event",
+  sent_back: "notification-sent-back",
+  vacancy: "notification-vacancy",
+} as const satisfies Record<NotificationEmailKind, EmailTemplate>;
 
 export interface RenderedEmail {
   subject: string;
@@ -46,7 +74,10 @@ interface Content {
 
 const signOff: Record<Locale, string> = { en: "Rabaed", ar: "ربائد" };
 
-const templates: { [T in EmailTemplate]: (locale: Locale, values: EmailTemplateValues[T]) => Content } = {
+type Template<V> = (locale: Locale, values: V) => Content;
+type AccountTemplate = "sign-in-code" | "invitation" | "new-device-sign-in" | "sign-in-locked";
+
+const accountTemplates: { [T in AccountTemplate]: Template<EmailTemplateValues[T]> } = {
   "sign-in-code": (locale, { code, validMinutes }) => {
     const minutes = formatNumber(validMinutes, locale);
     return locale === "ar"
@@ -115,6 +146,108 @@ const templates: { [T in EmailTemplate]: (locale: Locale, values: EmailTemplateV
   },
 };
 
+// Notification emails (RP-357; visibility.md "Notifications and emails", V14).
+// The subject is the Document Number, the Subject and what happened, nothing
+// else. The body names another Company by name only, and of its people only the
+// signer of a final Code; it links to the item.
+
+const notificationCopy = {
+  en: {
+    reached: (step: string) => `Reached you at ${step}`,
+    sentBack: "Sent Back to you",
+    vacancy: (step: string) => `Vacancy at ${step}`,
+    vacancyHelp: "Whoever held it has left the Project. Name someone to hold it.",
+    revision: "New Revision",
+    code: (code: string) => `Code ${code}`,
+    outcome: {
+      passed: "Passed",
+      passed_with_comments: "Passed with Comments",
+      failed: "Failed",
+      approved: "Approved",
+      rejected: "Rejected",
+      cancelled: "Cancelled",
+      closed: "Closed",
+    } as Record<string, string>,
+    updated: "Updated",
+    by: (company: string) => `By ${company}.`,
+    signedBy: (name: string) => `Signed by ${name}.`,
+    open: "Open it on Rabaed:",
+    settings: "You choose which emails you get in your notification settings on Rabaed.",
+  },
+  ar: {
+    reached: (step: string) => `وصلك في ${step}`,
+    sentBack: "أُرجع إليكم",
+    vacancy: (step: string) => `شاغر في ${step}`,
+    vacancyHelp: "غادر المشروعَ من كان يتولاها. سمِّ من يتولاها.",
+    revision: "مراجعة جديدة",
+    code: (code: string) => `الرمز ${code}`,
+    outcome: {
+      passed: "ناجح",
+      passed_with_comments: "ناجح مع ملاحظات",
+      failed: "راسب",
+      approved: "معتمد",
+      rejected: "مرفوض",
+      cancelled: "ملغى",
+      closed: "مغلق",
+    } as Record<string, string>,
+    updated: "حُدّث",
+    by: (company: string) => `من ${company}.`,
+    signedBy: (name: string) => `وقّعه ${name}.`,
+    open: "افتحه على ربائد:",
+    settings: "تختار الرسائل التي تصلك من إعدادات الإشعارات على ربائد.",
+  },
+} satisfies Record<Locale, unknown>;
+
+/** What happened on a watched item, in a few words: a Code, a Result, a Transition, a new Revision. */
+function watchedHappened(locale: Locale, event: NonNullable<NotificationEmailContent["event"]>): string {
+  const copy = notificationCopy[locale];
+  if (event.type === "revision_created") return copy.revision;
+  if (event.outcome && /^[A-D]$/.test(event.outcome)) return copy.code(event.outcome);
+  if (event.outcome && copy.outcome[event.outcome]) return copy.outcome[event.outcome]!;
+  if (event.transition) return event.transition[locale];
+  return event.type === "cancelled" ? copy.outcome.cancelled! : copy.updated;
+}
+
+/** Who did it: the Company by name, and the signer of a final Code (V14). */
+function actedBy(locale: Locale, event: NotificationEmailContent["event"]): Paragraph[] {
+  const copy = notificationCopy[locale];
+  return [
+    ...(event?.companyName ? [[copy.by(event.companyName[locale])]] : []),
+    ...(event?.signerName ? [[copy.signedBy(event.signerName[locale])]] : []),
+  ];
+}
+
+const stepName = (locale: Locale, step: BilingualText | null) => step?.[locale] ?? "";
+
+function notificationEmail(locale: Locale, values: NotificationEmailValues, happened: string, details: Paragraph[]): Content {
+  const copy = notificationCopy[locale];
+  const { documentNumber, subject } = values;
+  return {
+    subject: [documentNumber && isolate(documentNumber), subject, happened].filter(Boolean).join(" · "),
+    paragraphs: [
+      documentNumber ? [{ ltr: documentNumber, inline: true }, ` · ${subject}`] : [subject],
+      [happened],
+      ...details,
+      [copy.open],
+      [{ ltr: webLink(values.link), link: true }],
+      [copy.settings],
+    ],
+    signOff: signOff[locale],
+  };
+}
+
+const notificationTemplates: { [K in NotificationEmailKind as (typeof notificationEmailTemplate)[K]]: Template<NotificationEmailValues> } = {
+  "notification-step-reached": (locale, values) =>
+    notificationEmail(locale, values, notificationCopy[locale].reached(stepName(locale, values.step)), []),
+  "notification-watched-event": (locale, values) =>
+    notificationEmail(locale, values, values.event ? watchedHappened(locale, values.event) : notificationCopy[locale].updated, actedBy(locale, values.event)),
+  "notification-sent-back": (locale, values) => notificationEmail(locale, values, notificationCopy[locale].sentBack, actedBy(locale, values.event)),
+  "notification-vacancy": (locale, values) =>
+    notificationEmail(locale, values, notificationCopy[locale].vacancy(stepName(locale, values.step)), [[notificationCopy[locale].vacancyHelp]]),
+};
+
+const templates: { [T in EmailTemplate]: Template<EmailTemplateValues[T]> } = { ...accountTemplates, ...notificationTemplates };
+
 /** Every template, from the templates themselves, so none can be left out of the tests. */
 export const emailTemplates = Object.keys(templates) as EmailTemplate[];
 
@@ -130,8 +263,13 @@ function webLink(link: string): string {
   return url.href;
 }
 
+/** Keeps a value left to right inside plain text (a subject, the text body): a Unicode left-to-right isolate. */
+function isolate(value: string): string {
+  return `⁦${value}⁩`;
+}
+
 function plain(paragraph: Paragraph): string {
-  return paragraph.map((part) => (typeof part === "string" ? part : part.ltr)).join("");
+  return paragraph.map((part) => (typeof part === "string" ? part : part.inline ? isolate(part.ltr) : part.ltr)).join("");
 }
 
 function escape(text: string): string {
