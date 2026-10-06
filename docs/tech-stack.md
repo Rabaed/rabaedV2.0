@@ -55,7 +55,7 @@ One TypeScript **pnpm monorepo**: four apps and shared packages, all on Node 24.
 | Schema | Plain SQL migrations | RLS policies, functions and grants are first-class |
 | Form answers | One JSONB document per Work Item, against a pinned, unchangeable Form Version ([ADR 0006](adr/0006-form-data-as-jsonb-against-versioned-schemas.md)), read only through a function that strips references the reader may not see ([ADR 0012](adr/0012-answers-read-only-through-a-stripping-function.md)) | Customer-built Forms without runtime schema changes |
 | Engines | One generic Form engine and one in-house Workflow engine on Postgres ([ADR 0002](adr/0002-generic-form-and-workflow-engines.md), [ADR 0008](adr/0008-in-house-workflow-engine-on-postgres.md)) | Every module is configuration, not new code |
-| IDs | UUIDv7 | Time-ordered; nothing to guess |
+| IDs | Random UUIDv4 | Carry no time, so safe to expose; nothing to guess ([ADR 0015](adr/0015-random-ids-not-uuidv7.md)) |
 | Audit | Append-only `work_item_event` with a hash chain; `admin_action` for every Rabaed Engineer action | Evidence that can't be quietly changed ([ADR 0001](adr/0001-compliance-ready-from-day-one.md)) |
 | Background work | Outbox table written in the same transaction, delivered by the worker | No lost or premature notifications |
 | Auth | In-house: argon2id passwords, server-side sessions in HttpOnly, SameSite, Secure cookies, one-time expiring invitation tokens. Rabaed Engineers sign in with a password plus an email code | Our own Postgres, under our own rules |

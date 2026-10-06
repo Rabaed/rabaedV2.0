@@ -244,7 +244,7 @@ A Transition that hands a Work Item back to the Participant that Submitted it, w
 _Avoid_: Return (which stays inside one Participant), RFI, Reject
 
 **Creation Date**:
-The date a Work Item got its Document Number, when it first left Draft (for a MAR, when the engineer sends it to their PM). Only the raiser's Participant sees it; other Companies see the Submission Date. When a Draft was first started is kept for audit, even if the Draft is cancelled or discarded, and shown to nobody.
+The date a Work Item got its Document Number, when it first left Draft (for a MAR, when the engineer sends it to their PM). Only the raiser's Participant sees it; other Companies see the Submission Date. When a Draft was first started is kept for audit, even if the Draft is cancelled or discarded. Once the item has its Document Number, that time is shown to nobody, in any form; while it is still a Draft, the Members working on it see each other's saves as they happen.
 
 **Submission Date**:
 The date a Work Item was first Submitted out of its raiser's Participant, such as from the Contractor to the Consultant. It is empty until then, a later Submit doesn't change it, and each Revision has its own. Other Companies see a Work Item from its Submission Date: before it, the item is the raiser's own work.
