@@ -46,7 +46,7 @@ function isLinkAttribute(node: ParentedNode): boolean {
 const styleProperty = "JSXAttribute[name.name='style'] > JSXExpressionContainer > ObjectExpression > Property";
 
 /** True when the string is (part of) a Tailwind class list: a `className` value or an argument of cn(), cva()… */
-function isClassString(node: ParentedNode): boolean {
+export function isClassString(node: ParentedNode): boolean {
   type AnyNode = { type: string; parent?: AnyNode; name?: { name?: unknown }; callee?: { type: string; name?: string } };
   for (let n = (node as unknown as AnyNode).parent; n; n = n.parent) {
     if (n.type === "JSXAttribute") return n.name?.name === "className" || n.name?.name === "class";
@@ -145,23 +145,31 @@ export const noDeadlineWords: Rule.RuleModule = {
       reported.add(key);
       context.report({ node, messageId: "word", data: { word } });
     };
-    return {
-      Identifier(node) {
-        const parent = (node as ParentedNode).parent;
-        const isParam = parent && "params" in parent && (parent.params as Node[]).includes(node);
-        if (parent && (declaringParents.has(parent.type) || isParam)) report(node, node.name);
-      },
-      JSXAttribute(node: Rule.Node) {
-        const attribute = node as unknown as { name: Node & { type: string; name: unknown } };
-        if (typeof attribute.name.name === "string") report(attribute.name, attribute.name.name);
-      },
-      // Message keys passed to next-intl's t("…"), t.rich("…"), t.markup("…")…
-      "CallExpression:matches([callee.name='t'], [callee.object.name='t']) > Literal"(node: Rule.Node) {
-        if (node.type === "Literal" && typeof node.value === "string") report(node, node.value);
-      },
-    };
+    return onDeclaredNames(report);
   },
 };
+
+/**
+ * Visits the names code declares: variables, functions, props, fields, types, parameters, JSX attribute
+ * names, and the message keys passed to next-intl's t("…"), t.rich("…"), t.markup("…")… Shared by
+ * no-deadline-words and no-avoid-terms, so both rules read the same names.
+ */
+export function onDeclaredNames(report: (node: Node, name: string) => void): Rule.RuleListener {
+  return {
+    Identifier(node) {
+      const parent = (node as ParentedNode).parent;
+      const isParam = parent && "params" in parent && (parent.params as Node[]).includes(node);
+      if (parent && (declaringParents.has(parent.type) || isParam)) report(node, node.name);
+    },
+    JSXAttribute(node: Rule.Node) {
+      const attribute = node as unknown as { name: Node & { type: string; name: unknown } };
+      if (typeof attribute.name.name === "string") report(attribute.name, attribute.name.name);
+    },
+    "CallExpression:matches([callee.name='t'], [callee.object.name='t']) > Literal"(node: Rule.Node) {
+      if (node.type === "Literal" && typeof node.value === "string") report(node, node.value);
+    },
+  };
+}
 
 const logLevels = new Set(["trace", "debug", "info", "warn", "error", "fatal"]);
 const errorName = /^(e|err|error|\w+Error)$/;
@@ -272,7 +280,7 @@ export const localeThroughHelpers: Rule.RuleModule = {
 const consoleLevels = new Set(["log", "info", "warn", "error", "debug", "trace"]);
 
 /** `console.error(…)`, which the local CLIs and scripts use. */
-function isConsoleCall(node: Node): boolean {
+export function isConsoleCall(node: Node): boolean {
   return (
     node.type === "CallExpression" &&
     node.callee.type === "MemberExpression" &&
@@ -284,7 +292,7 @@ function isConsoleCall(node: Node): boolean {
 }
 
 /** `Error`, `TypeError`, `SecretError`…: a name ending in Error. */
-const isErrorConstructor = (callee: Node) => callee.type === "Identifier" && /Error$/.test(callee.name);
+export const isErrorConstructor = (callee: Node) => callee.type === "Identifier" && /Error$/.test(callee.name);
 
 export const noAwsIdsInErrors: Rule.RuleModule = {
   meta: {

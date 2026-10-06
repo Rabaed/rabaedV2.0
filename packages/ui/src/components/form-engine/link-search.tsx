@@ -86,13 +86,13 @@ export function LinkSearch({ locale, search, onPick, exclude = [], debounceMs = 
   const latest = useRef(0);
 
   const run = async (q: string, page: number, before: LinkTarget[]) => {
-    const ticket = ++latest.current;
+    const searchNo = ++latest.current;
     setFound({ state: "searching", links: before });
     try {
       const results = await search(q, page);
-      if (ticket === latest.current) setFound({ state: "found", links: [...before, ...results.links], nextPage: results.nextPage });
+      if (searchNo === latest.current) setFound({ state: "found", links: [...before, ...results.links], nextPage: results.nextPage });
     } catch {
-      if (ticket === latest.current) setFound({ state: "failed" });
+      if (searchNo === latest.current) setFound({ state: "failed" });
     }
   };
 

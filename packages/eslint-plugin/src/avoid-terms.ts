@@ -78,3 +78,47 @@ export function avoidTermIn(text: string, { terms, exempt }: AvoidList, kind: "n
   }
   return null;
 }
+
+// A plain word of copy: letters, maybe an apostrophe ("aren't"), maybe a bracket or punctuation around it.
+const plainWord = /^\(?\p{L}+(?:['’]\p{L}+)*[.,:;!?)]*$/u;
+// A code name quoted in copy: camelCase, snake_case, a dotted or slashed path, `a:b`, brackets, `=`, a tag, a placeholder.
+const codeToken = /\p{Ll}\p{Lu}|_|\.\p{L}|\/|\p{L}:\p{L}|[[\]=<>{}]/u;
+// SQL in a plain string starts with a statement keyword, in lower or upper case (never "Delete the…").
+const sqlStatement = /^\s*(?:(?:select|insert|update|delete|with|create|alter|drop|grant|revoke|set)\s|(?:SELECT|INSERT|UPDATE|DELETE|WITH)\s)/;
+// A Kysely column alias: "m.full_name as fullName".
+const columnAlias = /^\s*[\w.]+ as \w+\s*$/;
+
+/**
+ * True when a string is copy people read: two plain words side by side ("Edit the title"), or a capitalised
+ * word ("Status"). One token ("status", "work_item.title", "text-notes"), a Tailwind class list, SQL or a
+ * column alias is code, checked as a name.
+ */
+export function readsAsCopy(text: string): boolean {
+  if (sqlStatement.test(text) || columnAlias.test(text)) return false;
+  if (/^\s*\p{Lu}\p{Ll}/u.test(text)) return true;
+  const tokens = text.trim().split(/\s+/);
+  return tokens.some((token, i) => plainWord.test(token) && plainWord.test(tokens[i + 1] ?? ""));
+}
+
+/**
+ * The Avoid term in copy, if any. A code name quoted in it (`memberId`, `FILE_STORE_ENDPOINT`, a path) is
+ * checked as a name; the words between code names are checked as text, each run on its own.
+ */
+export function avoidTermInCopy(text: string, inText: AvoidList, inNames: AvoidList): AvoidTerm | null {
+  const runs: string[][] = [[]];
+  for (const token of text.trim().split(/\s+/)) {
+    if (!codeToken.test(token)) runs.at(-1)!.push(token);
+    else {
+      const hit = avoidTermIn(token, inNames, "name");
+      if (hit) return hit;
+      runs.push([]);
+    }
+  }
+  // A lone run keeps the text as written, so a bare label ("Template") is still seen as one.
+  if (runs.length === 1) return avoidTermIn(text, inText, "text");
+  for (const run of runs) {
+    const hit = run.length > 0 ? avoidTermIn(run.join(" "), inText, "text") : null;
+    if (hit) return hit;
+  }
+  return null;
+}

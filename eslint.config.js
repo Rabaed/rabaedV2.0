@@ -86,22 +86,19 @@ export default tseslint.config(
     rules: { "rabaed/no-deadline-words": "error" },
   },
   {
-    // Glossary Avoid terms (RP-327) in identifiers and strings. The list comes from GLOSSARY.md; the allowed
-    // technical words are in the rule. Not checked: tests and stories (they quote terms and carry mock data),
-    // the demo seed (construction prose), infra (AWS vocabulary: account, subscriber), this plugin (it names the
-    // terms), icon and type-scale names, and anything outside apps/ packages/ scripts/.
+    // Glossary Avoid terms (RP-327) in names (strict but for established code names) and in copy (strict but for
+    // narrow phrases); both lists, and why each entry is there, are in packages/eslint-plugin/src/avoid-rules.ts.
     files: ["apps/**/*.{ts,tsx,js}", "packages/**/*.{ts,tsx,js}", "scripts/**/*.ts"],
     ignores: [
-      "**/*.test.{ts,tsx}",
-      "**/*.stories.tsx",
+      "**/*.test.{ts,tsx}", // tests quote the terms they check, and SQL roles and fixtures by their own names
       "**/test/**",
       "**/test-support/**",
-      "apps/api/src/demo/**",
-      "packages/infra/**",
-      "packages/eslint-plugin/**",
-      "packages/ui/src/storybook/**",
-      "packages/ui/src/components/icon/icon.tsx", // icon names: user, users
-      "packages/ui/src/tokens/scales.ts", // the `notes` type-scale step
+      "**/*.stories.tsx", // mock construction data (concrete grades, electrical panels); the copy they show is the component's, which is checked
+      "packages/ui/src/storybook/**", // the stories' mock shell (its Files and Schedule tabs are Module names) and harness
+      "packages/infra/**", // AWS's own vocabulary: account, region, environment, subscriber
+      "packages/eslint-plugin/**", // it names the terms it bans
+      "packages/ui/src/components/icon/icon.tsx", // Tabler's icon names: user, users
+      "packages/ui/src/tokens/scales.ts", // the `notes` step of the type scale
     ],
     plugins: { rabaed },
     rules: { "rabaed/no-avoid-terms": "error" },

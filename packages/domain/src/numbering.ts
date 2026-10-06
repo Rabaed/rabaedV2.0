@@ -35,7 +35,7 @@ export const numberingPattern = z
     countedBy: z.array(z.number().int().min(0).max(5)),
   })
   .refine((p) => p.countedBy.every((i) => i < p.segments.length) && new Set(p.countedBy).size === p.countedBy.length, {
-    message: "countedBy names each of the pattern's segments at most once",
+    message: "countedBy lists each of the pattern's segments at most once",
     path: ["countedBy"],
   });
 export type NumberingPattern = z.infer<typeof numberingPattern>;

@@ -12,7 +12,7 @@ import { Switch } from "../form/switch.tsx";
 import { moduleName } from "../../lib/module-name.ts";
 
 const copy = {
-  title: { en: "Activity", ar: "النشاط" },
+  title: { en: "Activity Feed", ar: "النشاط" },
   module: { en: "Module", ar: "الوحدة" },
   type: { en: "Type", ar: "النوع" },
   all: { en: "All", ar: "الكل" },

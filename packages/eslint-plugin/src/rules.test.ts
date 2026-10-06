@@ -186,6 +186,25 @@ tsx.run("no-avoid-terms", rules["no-avoid-terms"], {
     `const label = { en: "Activity Feed" };`,
     "const sql = `select * from member where id = ${id}`;",
     `const s = "Every Project {company} takes part in";`,
+    // Code names keep the exceptions an established code name gives: the Subject is `title` in code.
+    `const title = row.title;`,
+    `const key = "title";`,
+    `const [state, setState] = useState(0);`,
+    "const rows = await sql`select title, name from work_item where status = ${s}`;",
+    `await client.query("select title from work_item");`,
+    `const label = t("members.title");`,
+    `<p>Every Member of your Company</p>`,
+    // Errors, logs and API docs are read by developers: checked as code names.
+    `throw new Error("Migration file name must look like this");`,
+    `console.error("app role check failed");`,
+    `log.warn({ err: error }, "outbox report failed");`,
+    `const s = z.null().describe("saved; no report");`,
+    // Code names quoted in copy are checked as names.
+    `const label = "Set FILE_STORE_ENDPOINT before you upload";`,
+    `const label = "Remove {name} from this Project?";`,
+    // A string used as a key is a code name.
+    `type C = Pool["Client"];`,
+    `const x = { "Status": 1 };`,
   ],
   invalid: [
     { code: `const tenantId = "abc";`, errors: [{ messageId: "term", data: { found: "Tenant", words: "tenant" } }] },
@@ -198,6 +217,19 @@ tsx.run("no-avoid-terms", rules["no-avoid-terms"], {
     { code: "const label = `Add a ${what} to the organization`;", errors: [{ messageId: "term" }] },
     { code: `const coverage = 1;`, errors: [{ messageId: "term" }] },
     { code: `<Foo project_manager="x" />`, errors: [{ messageId: "term" }] },
+    // What people read is strict: a code name's exception does not reach copy.
+    { code: `const label = "Edit the title";`, errors: [{ messageId: "term", data: { found: "Title", words: "title" } }] },
+    { code: `const label = "Status";`, errors: [{ messageId: "term" }] },
+    { code: `<p>Follow this item</p>`, errors: [{ messageId: "term", data: { found: "Follow", words: "follow" } }] },
+    { code: `<Button aria-label="Open the tab" />`, errors: [{ messageId: "term" }] },
+    { code: "const s = `Delete the ${what} task`;", errors: [{ messageId: "term" }] },
+    // A name without an established code name is flagged as a name too.
+    { code: `const followButton = 1;`, errors: [{ messageId: "term" }] },
+    { code: `function deletedItems() {}`, errors: [{ messageId: "term" }] },
+    { code: `const key = t("item.follow");`, errors: [{ messageId: "term" }] },
+    // Copy outside an error or log is strict however it is built.
+    { code: `const copy = { title: { en: "Activity", ar: "x" } };`, errors: [{ messageId: "term" }] },
+    { code: `setMessage("This file is too large");`, errors: [{ messageId: "term" }] },
   ],
 });
 
@@ -295,11 +327,21 @@ tsx.run("locale-through-helpers", rules["locale-through-helpers"], {
 });
 
 jsonTester.run("json-no-avoid-terms", rules["json-no-avoid-terms"], {
-  valid: [`{ "members": { "title": "Members", "intro": "People of your Company" } }`, `{ "form": { "template": "Pick a Form" } }`],
+  valid: [
+    `{ "members": { "title": "Members", "intro": "People of your Company" } }`,
+    `{ "form": { "template": "Pick a Form" } }`,
+    `{ "members": { "status": "Status" } }`, // a Member's active or deactivated column, allowed by its path
+  ],
   invalid: [
     { code: `{ "tenant": { "title": "Companies" } }`, errors: [{ messageId: "key" }] },
     { code: `{ "home": { "intro": "Welcome, tenant" } }`, errors: [{ messageId: "value" }] },
     { code: `{ "members": { "title": "Users" } }`, errors: [{ messageId: "value" }] },
     { code: `{ "form": { "label": "Template" } }`, errors: [{ messageId: "value" }] },
+    // A key may use a code name (title); the text may not.
+    { code: `{ "item": { "title": "Edit the title" } }`, errors: [{ messageId: "value", data: { found: "Title" } }] },
+    { code: `{ "item": { "watch": "Follow" } }`, errors: [{ messageId: "value" }] },
+    { code: `{ "item": { "follow": "Watch" } }`, errors: [{ messageId: "key" }] },
+    // A message allowed by its path (members.status) is allowed there only.
+    { code: `{ "projects": { "status": "Status" } }`, errors: [{ messageId: "value" }] },
   ],
 });

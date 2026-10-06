@@ -37,6 +37,7 @@ const copy = {
     intro: "Each counter issues the sequence of the numbers it counts. Only Project Admins see counters.",
     counter: "Counter",
     lastNumber: "Last number",
+    // eslint-disable-next-line rabaed/no-avoid-terms -- a counter's state (In use, Starts at …), not a Stage or Step.
     state: "State",
     none: "No counters yet. A counter starts with the first number it issues.",
     inUse: "In use",

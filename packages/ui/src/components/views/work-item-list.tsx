@@ -42,7 +42,7 @@ const copy = {
   anyUnclaimed: { en: "Unclaimed", ar: "لم تُستلَم" },
   trade: { en: "Trade", ar: "التخصص" },
   location: { en: "Location", ar: "الموقع" },
-  outcome: { en: "Review Code / Result", ar: "رمز المراجعة / النتيجة" },
+  outcome: { en: "Review Code / Inspection Result", ar: "رمز المراجعة / النتيجة" },
   stepAge: { en: "Step Age", ar: "عمر الخطوة" },
   weeksOrMore: { en: "# weeks or more", ar: "# أسابيع أو أكثر" },
   sort: { en: "Sort by", ar: "الترتيب حسب" },

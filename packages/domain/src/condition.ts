@@ -28,7 +28,7 @@ const comparison = z
     value: z.union([scalar, z.array(scalar)]).optional(),
   })
   .superRefine((c, ctx) => {
-    if ((c.field === undefined) === (c.attr === undefined)) ctx.addIssue({ code: "custom", message: "Name one field or one attr" });
+    if ((c.field === undefined) === (c.attr === undefined)) ctx.addIssue({ code: "custom", message: "Give exactly one of field and attr" });
     const valueFits =
       c.op === "empty" || c.op === "not_empty"
         ? c.value === undefined

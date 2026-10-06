@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { avoidTermIn, parseAvoidTerms } from "./avoid-terms.ts";
+import { avoidTermIn, avoidTermInCopy, parseAvoidTerms, readsAsCopy } from "./avoid-terms.ts";
 
 const glossary = `
 **Company**:
@@ -87,5 +87,41 @@ describe("avoidTermIn", () => {
     const withPhrase = parseAvoidTerms(glossary, ["note book"]);
     expect(avoidTermIn("noteBook", withPhrase)).toBeNull();
     expect(avoidTermIn("note", withPhrase)?.term).toBe("Note");
+  });
+});
+
+describe("readsAsCopy", () => {
+  it.each(["Edit the title", "Status", "Remove {name} from this Project?", "Check the email and both names."])("reads %s as copy", (text) => {
+    expect(readsAsCopy(text)).toBe(true);
+  });
+
+  it.each([
+    "status",
+    "work_item.title",
+    "size-6 text-notes",
+    "data-[state=checked]:border-primary data-[state=checked]:bg-primary",
+    "select title from work_item",
+    "m.full_name as fullName",
+  ])("reads %s as code", (text) => {
+    expect(readsAsCopy(text)).toBe(false);
+  });
+});
+
+describe("avoidTermInCopy", () => {
+  const names = parseAvoidTerms(glossary, ["name", "title"]);
+  const copy = (text: string) => avoidTermInCopy(text, parseAvoidTerms(glossary), names)?.term ?? null;
+
+  it("checks the words as text and a quoted code name as a name", () => {
+    expect(copy("Edit the name")).toBe("name");
+    expect(copy("Set displayName first")).toBeNull();
+    expect(copy("Set tenantId first")).toBe("Tenant");
+  });
+
+  it("never joins the words either side of a code name into a phrase", () => {
+    expect(copy("Every Project {company} takes part")).toBeNull();
+  });
+
+  it("still sees a bare label", () => {
+    expect(copy("Template")).toBe("Template");
   });
 });

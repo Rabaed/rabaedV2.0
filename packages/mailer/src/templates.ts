@@ -173,7 +173,7 @@ const notificationCopy = {
     reached: (step: string) => `Reached you at ${step}`,
     sentBack: "Sent Back to you",
     vacancy: (step: string) => `Vacancy at ${step}`,
-    vacancyHelp: "Whoever held it has left the Project. Name someone to hold it.",
+    vacancyHelp: "Whoever held it has left the Project. Assign someone to hold it.",
     revision: "New Revision",
     code: (code: string) => `Code ${code}`,
     closed: "Closed",
@@ -304,7 +304,7 @@ const reportCopy = {
     with: (holder: string) => `With ${holder}`,
     oldest: "Open the items 4 weeks or more at their Step:",
     all: "Open all of them on Rabaed:",
-    settings: "You can stop this report in your notification settings on Rabaed.",
+    settings: "You can stop the Weekly report in your notification settings on Rabaed.",
   },
   ar: {
     subject: (project: string) => `تقرير عمر الخطوة الأسبوعي · ${project}`,

@@ -44,7 +44,7 @@ Visibility is the top requirement (`docs/visibility.md`). Check every read path 
 
 ## Domain language
 
-- **Use `GLOSSARY.md` terms** in identifiers, UI strings and docs, e.g. Subject (not title), Participant, Visibility, Internal Note. A term on a glossary entry's _Avoid_ list is a finding (e.g. `Coverage` for Visibility, RP-240). (checked for identifiers, strings and message files: `rabaed/no-avoid-terms`, which reads the _Avoid_ lines of `GLOSSARY.md`; comments and docs stay with the reviewer)
+- **Use `GLOSSARY.md` terms** in identifiers, UI strings and docs, e.g. Subject (not title), Participant, Visibility, Internal Note. A term on a glossary entry's _Avoid_ list is a finding (e.g. `Coverage` for Visibility, RP-240). (checked: `rabaed/no-avoid-terms` and `json-no-avoid-terms` read the _Avoid_ lines of `GLOSSARY.md`. **Names** — identifiers, JSX attribute names, message keys, and code strings such as SQL, class lists and error, log or console text — may keep a word only where an established code name exists, such as `title` for the Subject. **Copy** — other strings that read as words, JSX text and `messages/*.json` values — allows a word only inside a narrow phrase, such as "user agent", or a message allowed by its key; each exception says why, in `avoid-rules.ts`. Tests, stories, infra and the other paths `eslint.config.js` lists are not checked, and comments and docs stay with the reviewer)
 
 ## Tests
 
