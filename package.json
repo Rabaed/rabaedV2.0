@@ -24,6 +24,7 @@
     "test:seam1": "vitest run --project seam1",
     "test:seam2": "vitest run --project seam2",
     "test:stories": "node scripts/pnpm.ts --filter @rabaed/ui test:stories",
+    "test:stories:linux": "node scripts/test-stories-linux.ts",
     "storybook": "node scripts/pnpm.ts --filter @rabaed/ui storybook",
     "test:infra": "vitest run --project infra",
     "test:mail": "vitest run --project mail",
