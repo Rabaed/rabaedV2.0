@@ -79,6 +79,11 @@ for (const locale of locales) {
           await Story.run({ canvasElement });
           for (const stale of document.querySelectorAll("[data-testid=story]")) if (stale !== canvasElement) stale.remove();
 
+          // A story that renders nothing leaves a zero-height root, which cannot be screenshotted
+          // ("Could not capture a stable screenshot"). Give only such a root a minimum box (RP-340),
+          // so no other story's screenshot changes. The check runs everywhere, not only on Linux.
+          if (!overlay && canvasElement.getBoundingClientRect().height === 0) canvasElement.style.minHeight = "2rem";
+
           expect(document.documentElement.lang).toBe(locale);
           expect(document.documentElement.dir).toBe(directionOf(locale));
           // The whole page, so overlays rendered in portals are checked too.

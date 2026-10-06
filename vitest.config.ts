@@ -12,6 +12,9 @@ if (existsSync(".env")) process.loadEnvFile(".env");
 // into the test database first (RP-196).
 // - infra: assertions on the synthesised AWS CloudFormation templates.
 // - mail:  the mailer against the local mail catcher (Mailpit).
+// Seam tests drive whole Workflows through the API or the database; 5 s is too tight on CI.
+const seamTimeout = 20_000;
+
 export default defineConfig({
   test: {
     projects: [
@@ -24,6 +27,7 @@ export default defineConfig({
       {
         test: {
           name: "seam1",
+          testTimeout: seamTimeout,
           include: ["apps/api/test/**/*.test.ts", "apps/admin/test/**/*.test.ts"],
           globalSetup: ["packages/db/test-support/global-setup.ts", "apps/api/test/support/seed-demo.ts"],
           fileParallelism: false,
@@ -32,6 +36,7 @@ export default defineConfig({
       {
         test: {
           name: "seam2",
+          testTimeout: seamTimeout,
           include: ["packages/db/test/**/*.test.ts"],
           globalSetup: ["packages/db/test-support/global-setup.ts", "apps/api/test/support/seed-demo.ts"],
           fileParallelism: false,

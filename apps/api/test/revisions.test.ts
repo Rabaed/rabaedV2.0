@@ -373,7 +373,7 @@ describe("the Links of a chain whose Revision moved Location (scenario 62)", () 
     // Rev 1 moves to Building B, and its link question names the item it revises.
     await saveOver(engineer, rev1, { location: buildingB, related_submittals: [closed] });
     await submit(rev1);
-  }, 20_000);
+  });
 
   it("gives whoever sees both the Link, Linked from and the link answer", async () => {
     for (const who of [engineer, k1Manager]) {
@@ -435,7 +435,7 @@ describe("the Links of a discarded Revision", () => {
     expect((await links(engineer, discarded)).links).toEqual([expect.objectContaining({ kind: "relies_on", workItemId: target })]);
     expect((await ok(engineer.get(`/v1/work-items/${discarded}/documents`), 200)).json().documents).toHaveLength(1);
     await ok(discard(engineer, discarded));
-  }, 20_000);
+  });
 
   it("is left out of the Linked from of the item its answers named, and of the revised item's Links", async () => {
     for (const who of [engineer, pm, k1Manager, orEngineer]) {
