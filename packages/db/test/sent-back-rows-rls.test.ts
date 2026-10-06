@@ -254,7 +254,7 @@ describe("C1 changes an item K1 Sent Back to its Draft", () => {
 
   it("is still the item K1 and the Owner see, and still offered to link", async () => {
     for (const other of [k1.member, ow.member]) {
-      expect(await call(other, sql`select id from work_item where id = ${id}`)).toHaveLength(1);
+      expect(await call(other, sql<{ id: string }>`select id from work_item where id = ${id}`)).toHaveLength(1);
       expect(await offered(other, id)).toBe(true);
     }
   });
@@ -263,7 +263,7 @@ describe("C1 changes an item K1 Sent Back to its Draft", () => {
     for (const other of [k1.member, ow.member]) {
       expect(await reads(other, id)).toEqual(atSendBack);
       for (const document of added) {
-        expect(await call(other, sql`select id from document where id = ${document}`)).toEqual([]);
+        expect(await call(other, sql<{ id: string }>`select id from document where id = ${document}`)).toEqual([]);
       }
     }
   });
@@ -286,9 +286,9 @@ describe("C1 changes an item K1 Sent Back to its Draft", () => {
 
   it("never lets the app role read a Link's removal or the item's arrivals", async () => {
     for (const query of [
-      sql`select removed_at from work_item_link where from_id = ${id}`,
-      sql`select arrival from work_item_link where from_id = ${id}`,
-      sql`select arrivals from work_item where id = ${id}`,
+      sql<object>`select removed_at from work_item_link where from_id = ${id}`,
+      sql<object>`select arrival from work_item_link where from_id = ${id}`,
+      sql<object>`select arrivals from work_item where id = ${id}`,
     ]) {
       await expect(call(k1.member, query)).rejects.toThrow(/permission denied/);
     }
