@@ -376,4 +376,19 @@ describe("the Numbering screens", () => {
       expect(arabic, `ar.errors.${code}`).toMatch(new RegExp(`\n      ${code}:`));
     }
   });
+
+  it("describe a pattern in the page's language, with Latin digits", async () => {
+    const script = (await admin.browser().get("/assets/admin.js")).body;
+    const [english, arabic] = script.split(/\n {2}ar: \{/);
+    for (const key of ["digitsSummary", "countedBySummary"]) {
+      expect(english, `en.${key}`).toMatch(new RegExp(`\n    ${key}:`));
+      expect(arabic, `ar.${key}`).toMatch(new RegExp(`\n    ${key}:`));
+    }
+    expect(arabic).toMatch(/digitsSummary: \(n\) => `\$\{n\} [^`]*[؀-ۿ]/);
+    // The summary goes through the message table: no English literal is built in.
+    const describePattern = script.slice(script.indexOf("function describePattern"), script.indexOf("function heading"));
+    expect(describePattern).toContain("t().digitsSummary(");
+    expect(describePattern).toContain("t().countedBySummary(");
+    expect(describePattern).not.toMatch(/\bdigits\b|#:/);
+  });
 });
