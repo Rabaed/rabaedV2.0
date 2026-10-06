@@ -112,6 +112,8 @@ const text = {
     counterUsed: "issued",
     counterAhead: "not yet used",
     sharedAccepted: "shared counter accepted",
+    digitsSummary: (n) => `${n} digits`,
+    countedBySummary: (positions) => `counted by: ${positions}`,
     patternSavedNotice: "Numbering Pattern saved.",
     codeSavedNotice: "Participant Code saved.",
     startSavedNotice: (next) => `Starting number set. The next number is ${next}.`,
@@ -253,6 +255,8 @@ const text = {
     counterUsed: "أصدر أرقاماً",
     counterAhead: "لم يُستخدم بعد",
     sharedAccepted: "قُبل العدّاد المشترك",
+    digitsSummary: (n) => `${n} أرقام`,
+    countedBySummary: (positions) => `العدّ حسب: ${positions}`,
     patternSavedNotice: "حُفظ نمط الترقيم.",
     codeSavedNotice: "حُفظ رمز المشارك.",
     startSavedNotice: (next) => `ضُبط رقم البداية. الرقم التالي هو ${next}.`,
@@ -666,8 +670,8 @@ function describePattern(saved) {
   const { pattern } = saved;
   const parts = [
     pattern.segments.map(describeSegment).join(` ${pattern.separator} `),
-    `${pattern.seqDigits} digits`,
-    `#: ${pattern.countedBy.map((i) => i + 1).join(", ")}`,
+    t().digitsSummary(pattern.seqDigits),
+    t().countedBySummary(pattern.countedBy.map((i) => i + 1).join(", ")),
   ];
   if (saved.sharedCounterAcceptedAt) parts.push(t().sharedAccepted);
   return parts.join(" · ");
