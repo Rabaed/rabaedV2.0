@@ -859,7 +859,7 @@ export function FormRenderer({
           <ul className="flex flex-col gap-1 ps-7">
             {shownErrors.map((e) => (
               <li key={e.key}>
-                <a href={`#${fieldId(e.key)}`} className={cn("font-medium text-text underline underline-offset-4", focusRing)}>
+                <a href={`#${fieldId(e.key)}`} className={cn("font-medium text-text underline underline-offset-4", focusRing, "pointer-coarse:inline-flex pointer-coarse:min-h-11 pointer-coarse:min-w-11 pointer-coarse:items-center")}>
                   {byKey.get(e.key)!.label[locale]}
                 </a>
               </li>

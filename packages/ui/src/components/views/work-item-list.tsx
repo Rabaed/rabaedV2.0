@@ -234,7 +234,7 @@ export function WorkItemList({ list, query, locale, hrefFor, itemHref, onQueryCh
                   )}
                 </TableCell>
                 <TableCell className="min-w-48">
-                  <a href={itemHref(item.id)} className="font-medium text-primary underline underline-offset-4">
+                  <a href={itemHref(item.id)} className="font-medium text-primary underline underline-offset-4 pointer-coarse:inline-flex pointer-coarse:min-h-11 pointer-coarse:min-w-11 pointer-coarse:items-center">
                     {item.title}
                   </a>
                 </TableCell>
