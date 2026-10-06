@@ -156,7 +156,7 @@ The part-1 MAR is a Rabaed Default written as data (migration `mar_quantity` com
 ### 2.8 Linked from (as built, RP-292)
 
 - In the Links System Field, below the item's Links. `GET /v1/work-items/:id/linked-from` returns `{items}`: every item that has been Submitted and links to it, free Links and link questions alike, once each, by Document Number. Each is its Document Number and Subject, with its id only when the viewer sees it (E3); nothing else.
-- An item that has never left its raiser (Draft or internal review) is never listed, whoever asks; it appears at its first Submit. From then on it stays listed, also while it is Sent Back to its raiser, with its Links as they were at the Send Back until it is Submitted again (settled 2026-10-06, RP-295; as built, RP-309: `app.work_item_linked_from` reads each linking item's Links through `app.item_row_seen`). An item the viewer can't see is 404, like its other reads.
+- An item that has never left its raiser (Draft or internal review) is never listed, whoever asks; it appears at its first Submit. From then on it stays listed, also while it is Sent Back to its raiser, with its Links as they were at the Send Back until it is Submitted again (settled 2026-10-06, RP-295; as built, RP-309: `app.work_item_linked_from` reads each linking item's Links by the same rule, `app.item_row_as_arrived`, since it names linking items the viewer can't see (E3); `app.item_row_seen` adds the viewer's own access check). An item the viewer can't see is 404, like its other reads.
 - Served by `app.work_item_linked_from` (security definer), never the table: the app role can't read a Link's target.
 
 ### 2.8a Links within a Revision chain (RP-311 review, `20261107000000_revision_links_follow_chain.sql`)

@@ -25,8 +25,11 @@ type Company = { id: string; cr: string; ap: string; member: string };
 let c1: Company; // Contractor: raises the items.
 let k1: Company; // Consultant: Sends the item Back.
 let ow: Company; // Owner (oversight).
+let stranger: Company; // On the Instance, not on the Project.
 let c1Pm = "";
+let k1Manager = "";
 let projectId = "";
+let participant: { c1: string; k1: string; ow: string };
 let electrical = "";
 let buildingA = "";
 
@@ -171,14 +174,16 @@ beforeAll(async () => {
   c1 = await company(engineer, "C1");
   k1 = await company(engineer, "K1");
   ow = await company(engineer, "OW");
+  stranger = await company(engineer, "ST");
   c1Pm = await member(c1.id, "pm");
+  k1Manager = await member(k1.id, "manager");
 
   const [created] = await call<{ project_id: string }>(
     c1.ap,
     sql`select project_id from app.create_project('{"en": "Tower", "ar": "برج"}'::jsonb, 'TWR', 'contractor')`,
   );
   projectId = created!.project_id;
-  const participant = {
+  participant = {
     c1: (await migrator.query("select id from participant where project_id = $1", [projectId])).rows[0].id as string,
     k1: await joinProject(app, projectId, { adminId: c1.ap, crNumber: k1.cr, role: "consultant" }, k1.ap),
     ow: await joinProject(app, projectId, { adminId: c1.ap, crNumber: ow.cr, role: "owner" }, ow.ap),
@@ -196,6 +201,7 @@ beforeAll(async () => {
     [c1, participant.c1, c1.member, ["engineer"]],
     [c1, participant.c1, c1Pm, ["project_manager"]],
     [k1, participant.k1, k1.member, ["engineer"]],
+    [k1, participant.k1, k1Manager, ["manager"]],
     [ow, participant.ow, ow.member, ["representative"]],
   ];
   for (const p of Object.values(participant)) {
@@ -336,5 +342,93 @@ describe("a Link C1 adds and removes again while it holds the Sent Back item", (
     expect((await reads(c1.member, id)).linkRows).toEqual([toX]);
     const { rows } = await migrator.query("select count(*)::int as n from work_item_link where from_id = $1", [id]);
     expect(rows[0].n).toBe(1);
+  });
+});
+
+describe("an item the caller can't see, through app.item_row_seen (RP-309 review)", () => {
+  it("answers false whatever is asked, so it tells neither that the item exists nor how often it arrived, nor that it is closed", async () => {
+    const hidden = await draft("H"); // C1's own: K1 can't see it (V1).
+    const shared = await draft("S");
+    await submit(shared); // The stranger is not on the Project.
+    for (const [as, id] of [
+      [k1.member, hidden],
+      [stranger.member, shared],
+      [stranger.ap, shared],
+    ] as const) {
+      for (const arrival of [-1, 0, 1, 2]) {
+        for (const removed of [false, true]) {
+          expect(
+            await call<{ seen: boolean }>(as, sql`select app.item_row_seen(${id}::uuid, ${arrival}::integer, ${removed}) as seen`),
+            `${arrival} ${removed}`,
+          ).toEqual([{ seen: false }]);
+        }
+      }
+    }
+  });
+});
+
+describe("the Steps of an item, as the app role reads them (V5, V14; RP-309 review)", () => {
+  /** The Participants whose step_assignment rows `as` reads for item `id`, and the steps. */
+  const assignments = (as: string, id: string) =>
+    call<{ participant_id: string; step_id: string; assignee_member_id: string | null; status: string }>(
+      as,
+      sql`select participant_id, step_id, assignee_member_id, status from step_assignment where work_item_id = ${id}`,
+    );
+
+  it("never shows K1 or the Owner the raiser's internal Steps of an item Sent Back to it, nor who holds them", async () => {
+    const id = await draft("SB");
+    await submit(id);
+    expect(await claim(k1.member, id)).toBe("claimed");
+    expect(await take(k1.member, id, "send_back_to_draft")).toBe("applied");
+    for (const [as, own] of [
+      [k1.member, participant.k1],
+      [ow.member, participant.ow],
+    ] as const) {
+      expect(await call(as, sql<{ id: string }>`select id from work_item where id = ${id}`)).toHaveLength(1);
+      for (const row of await assignments(as, id)) expect(row.participant_id, as).toBe(own);
+    }
+    expect(await assignments(ow.member, id)).toEqual([]);
+    // C1 reads its own, the open Draft Step its engineer holds again included.
+    const mine = await assignments(c1.member, id);
+    expect(mine.filter((r) => r.status === "claimed")).toEqual([
+      expect.objectContaining({ participant_id: participant.c1, assignee_member_id: c1.member }),
+    ]);
+  });
+
+  it("never shows C1 or the Owner K1's internal Steps, nor who holds them", async () => {
+    const id = await draft("KI");
+    await submit(id);
+    expect(await claim(k1.member, id)).toBe("claimed");
+    expect(await take(k1.member, id, "send_to_manager")).toBe("applied");
+    for (const [as, own] of [
+      [c1.member, participant.c1],
+      [c1Pm, participant.c1],
+      [ow.member, participant.ow],
+    ] as const) {
+      expect(await call(as, sql<{ id: string }>`select id from work_item where id = ${id}`)).toHaveLength(1);
+      for (const row of await assignments(as, id)) expect(row.participant_id, as).toBe(own);
+    }
+    expect((await assignments(k1.member, id)).map((r) => r.status).sort()).toEqual(["done", "pooled"]);
+    expect(await claim(k1Manager, id)).toBe("claimed");
+    for (const as of [c1.member, ow.member]) {
+      for (const row of await assignments(as, id)) expect(row.assignee_member_id, as).not.toBe(k1Manager);
+    }
+  });
+});
+
+describe("when a Draft was started, through the app role (scenario 61; RP-334 review)", () => {
+  it("is in no column anyone reads: not a Step's claim or creation, nor the raiser's access", async () => {
+    const id = await draft("DS");
+    await submit(id);
+    for (const as of [c1.member, c1Pm, k1.member, ow.member]) {
+      for (const query of [
+        sql<object>`select claimed_at from step_assignment where work_item_id = ${id}`,
+        sql<object>`select created_at from step_assignment where work_item_id = ${id}`,
+        sql<object>`select updated_at from step_assignment where work_item_id = ${id}`,
+        sql<object>`select since from work_item_access where work_item_id = ${id}`,
+      ]) {
+        await expect(call(as, query)).rejects.toThrow(/permission denied/);
+      }
+    }
   });
 });

@@ -231,10 +231,12 @@ The key is the values of the pattern's counted segments joined by `-`, whatever 
 **step_assignment**
 `id`, `work_item_id`, `step_id`, `participant_id`, `assignee_member_id` (null = in the Step Pool), `status {pooled, claimed, done, vacant, reassigned}`, `claimed_at`, `done_at`.
 When an assignee is removed from the Project, the row becomes `vacant`, and the Company's Authorized Person is notified.
+The app role reads only its own Participant's rows, so never another Company's internal Steps or who holds them (V5, V14), and never `claimed_at`, `created_at` or `updated_at` (the Draft Step's are when the Draft was started, RP-334). Who holds an item now comes from `app.work_item_holder`: the Participant, and the Member only for that Participant's own Members (RP-309).
 
 **work_item_access** (materialized, maintained by the engine)
 `work_item_id`, `participant_id`, `since`, `reason {raised, handling, oversight}`.
 - A Participant gets a row when it raises the item, when a Step is first assigned to it, or (Owner / Owner Representative) on first Submit if the item is within their Visibility.
+- `since` is never granted to the app role: the raiser's is when the Draft was started (RP-334).
 - Row-level security joins this table with the Member's own Visibility grant. This keeps "Contractor B never sees Contractor A's submittals" a cheap, indexable check instead of a runtime rule walk.
 
 **work_item_link**

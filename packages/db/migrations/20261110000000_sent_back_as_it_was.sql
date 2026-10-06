@@ -39,7 +39,17 @@
 --   - app.item_row_seen(item, arrival, removed) is the one rule: the RLS
 --     policies on document and work_item_link, app.work_item_links and
 --     app.work_item_linked_from all apply it, so the api, a direct read of the
---     tables and Linked from agree.
+--     tables and Linked from agree. Of an item the acting Member can't see it
+--     answers false, so called directly it tells nothing; Linked from, which
+--     names linking items the caller can't see (E3), applies the same rule
+--     through app.item_row_as_arrived, which the app role can't call.
+-- * The Steps of an item (V5, V14): the app role reads only its own
+--   Participant's step_assignment rows. Before, everyone who saw an item read all
+--   of them, so another Company read the internal Step a Participant holding the
+--   item had reached, and who held it; with the item now visible at its raiser's
+--   own Steps after a Send Back, also those of the raiser. Who holds the item now
+--   is read through app.work_item_holder: the Participant, and the Member only
+--   for that Participant's own Members.
 -- * Notifications and the Activity Feed: nothing new. Changes to Documents write
 --   no event, and changes to Links and answers write `answers_changed` events
 --   internal to the Participant making them (V5, V19); a Transition inside the
@@ -116,8 +126,8 @@ create trigger work_item_link_stamps_arrival before insert on work_item_link
 -- `p_arrival` and, for a Link, removed since or not: the Participant holding the
 -- item reads it as it is now (nothing removed); everyone else reads the rows the
 -- item had when it arrived there (a removed one included, an added one not), and
--- all of a closed item's.
-create function app.item_row_seen(p_work_item_id uuid, p_arrival integer, p_removed boolean) returns boolean
+-- all of a closed item's. Whether they see the item is the caller's to check.
+create function app.item_row_as_arrived(p_work_item_id uuid, p_arrival integer, p_removed boolean) returns boolean
   language plpgsql stable security definer
   set search_path = pg_catalog, public
   as $$
@@ -129,6 +139,17 @@ create function app.item_row_seen(p_work_item_id uuid, p_arrival integer, p_remo
         select 1 from work_item w
         where w.id = p_work_item_id and (p_arrival < w.arrivals or w.closed_at is not null)
       );
+    end
+  $$;
+
+-- The same, for an item the acting Member sees; false for any other, so it
+-- tells nothing of an item they can't see.
+create function app.item_row_seen(p_work_item_id uuid, p_arrival integer, p_removed boolean) returns boolean
+  language plpgsql stable security definer
+  set search_path = pg_catalog, public
+  as $$
+    begin
+      return app.sees_work_item(p_work_item_id) and app.item_row_as_arrived(p_work_item_id, p_arrival, p_removed);
     end
   $$;
 
@@ -145,6 +166,30 @@ alter policy member_reads_work_item_links on work_item_link
     project_id in (select app.current_project_ids()) and from_id in (select id from work_item)
     and app.item_row_seen(from_id, arrival, removed_at is not null)
   );
+
+-- The Steps of an item ------------------------------------------------------------------
+
+alter policy member_reads_visible_step_assignments on step_assignment
+  using (participant_id in (select app.current_participant_ids()) and work_item_id in (select id from work_item));
+
+-- Who holds an item the acting Member sees, now: the Participant (null once it is
+-- closed), and the Member holding the Step only for that Participant's own
+-- Members (V14); null while it is in the Step Pool.
+create function app.work_item_holder(p_work_item_id uuid)
+  returns table (participant_id uuid, assignee_member_id uuid)
+  language plpgsql stable security definer
+  set search_path = pg_catalog, public
+  as $$
+    #variable_conflict use_column
+    begin
+      return query
+        select a.participant_id,
+          case when a.participant_id in (select app.current_participant_ids()) then a.assignee_member_id end
+        from step_assignment a
+        where a.work_item_id = p_work_item_id and a.status in ('pooled', 'claimed', 'vacant')
+          and app.sees_work_item(p_work_item_id);
+    end
+  $$;
 
 -- V1 and Submitted at least once ------------------------------------------------------
 
@@ -220,7 +265,8 @@ create or replace function app.work_item_links(p_work_item_id uuid)
   $$;
 
 -- As in the plpgsql_definer_helpers migration: items Submitted at least once,
--- each through its Links as the acting Member reads them (app.item_row_seen).
+-- each through its Links as the acting Member reads them (app.item_row_as_arrived:
+-- a linking item they can't see too, by number and title only, E3).
 create or replace function app.work_item_linked_from(p_work_item_id uuid)
   returns table(document_number text, subject text, work_item_id uuid)
   language plpgsql stable security definer
@@ -233,7 +279,7 @@ create or replace function app.work_item_linked_from(p_work_item_id uuid)
         from work_item f
         where f.id in (
             select l.from_id from work_item_link l
-            where l.to_id = p_work_item_id and app.item_row_seen(l.from_id, l.arrival, l.removed_at is not null))
+            where l.to_id = p_work_item_id and app.item_row_as_arrived(l.from_id, l.arrival, l.removed_at is not null))
           and f.submitted_at is not null
           and f.discarded_at is null
           and app.sees_work_item(p_work_item_id)
@@ -412,8 +458,11 @@ create or replace function app.sync_link_answers(
 revoke all on function
   app.drop_removed_links_on_leaving(),
   app.stamp_arrival(),
+  app.item_row_as_arrived(uuid, integer, boolean),
   app.item_row_seen(uuid, integer, boolean),
-  app.take_away_link(uuid, uuid, timestamptz)
+  app.take_away_link(uuid, uuid, timestamptz),
+  app.work_item_holder(uuid)
   from public;
+grant execute on function app.work_item_holder(uuid) to rabaed_app;
 -- The RLS policies on document and work_item_link call it as the app role.
 grant execute on function app.item_row_seen(uuid, integer, boolean) to rabaed_app;
