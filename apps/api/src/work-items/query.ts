@@ -1,6 +1,8 @@
 import { withMember, type Database, type Db, type ModuleKey } from "@rabaed/db";
 import {
   chainBucketRules,
+  codeCFilterStates,
+  codeCRules,
   decodeWorkItemCursor,
   encodeWorkItemCursor,
   enteredStepBy,
@@ -9,7 +11,8 @@ import {
   workItemPageSize,
   type BilingualText,
   type ChainBucket,
-  type ChainBucketCondition,
+  type CodeCCondition,
+  type CodeCState,
   type WorkItemList,
   type WorkItemOutcome,
   type WorkItemQuery,
@@ -86,6 +89,12 @@ function visibleRows({ projectId, moduleKey }: QueryScope, allRevisions: boolean
       -- For the Dashboard's buckets (chainBucket): Submitted, and raised by the viewer's own Participant.
       w.submitted_at is not null as submitted,
       coalesce(w.raised_by_participant_id in (select app.current_participant_ids()), false) as raised_by_own,
+      -- For the Code C line (codeCState): a Revision of the chain the viewer sees got Code C, this one
+      -- included. The chain is read only through app.revision_chain, which gives the Revisions the
+      -- viewer sees (V1 per Revision); their outcome is read through RLS like any item's.
+      t.outcome_kind = 'review_code' and exists (
+        select 1 from app.revision_chain(w.id) rc join work_item o on o.id = rc.work_item_id where o.outcome = 'C'
+      ) as had_code_c,
       st.key as stage_key, st.name as stage_name, st.category as stage_category,
       tv.id as trade_id, tv.code as trade_code, tv.name as trade_name,
       lv.id as location_id, lv.code as location_code, lv.name as location_name,
@@ -116,9 +125,10 @@ function visibleRows({ projectId, moduleKey }: QueryScope, allRevisions: boolean
 
 const noFilter = sql<boolean>`true`;
 
-/** One condition of the bucket rule, over a row of `visibleRows` (as `r`). */
-function bucketCondition(when: ChainBucketCondition): RawBuilder<boolean> {
+/** One condition of the bucket or Code C rule, over a row of `visibleRows` (as `r`). */
+function bucketCondition(when: CodeCCondition): RawBuilder<boolean> {
   const parts: RawBuilder<boolean>[] = [];
+  if (when.hadCodeC !== undefined) parts.push(sql`r.had_code_c = ${when.hadCodeC}`);
   if (when.open !== undefined) parts.push(when.open ? sql`not r.closed` : sql`r.closed`);
   if (when.submitted !== undefined) parts.push(sql`r.submitted = ${when.submitted}`);
   if (when.raisedByViewer !== undefined) parts.push(sql`r.raised_by_own = ${when.raisedByViewer}`);
@@ -135,6 +145,16 @@ function bucketCondition(when: ChainBucketCondition): RawBuilder<boolean> {
  */
 const bucketOfRow: RawBuilder<ChainBucket | null> = sql`(case ${sql.join(
   chainBucketRules.map((rule) => sql`when ${bucketCondition(rule.when)} then ${rule.bucket}::text`),
+  sql` `,
+)} end)`;
+
+/**
+ * The Code C state of a row of `visibleRows` (as `r`), or null: the domain's
+ * codeCRules in order, as one SQL case, so the `codeC` filter and the
+ * Dashboard's Code C line follow codeCState's own rule.
+ */
+const codeCOfRow: RawBuilder<CodeCState | null> = sql`(case ${sql.join(
+  codeCRules.map((rule) => sql`when ${bucketCondition(rule.when)} then ${rule.state}::text`),
   sql` `,
 )} end)`;
 
@@ -155,6 +175,7 @@ function matching(q: WorkItemQuery, now: Date): RawBuilder<boolean> {
   }
   if (q.outcome.length > 0) conditions.push(sql`r.outcome = any(${q.outcome}::text[])`);
   if (q.bucket.length > 0) conditions.push(sql`${bucketOfRow} = any(${q.bucket}::text[])`);
+  if (q.codeC.length > 0) conditions.push(sql`${codeCOfRow} = any(${codeCFilterStates(q.codeC)}::text[])`);
   if (q.stepAgeMin !== undefined) {
     // A closed item doesn't age.
     conditions.push(sql`not r.closed and r.step_entered_at <= ${enteredStepBy(q.stepAgeMin, now)}::timestamptz`);
@@ -262,23 +283,24 @@ export async function queryWorkItems(
 }
 
 /**
- * How many of the scope's visible items matching `q` are in each Type and
- * Dashboard bucket (chainBucket; null for none): the same rows, filters and
- * bucket as the List, so a count and the List behind it can't disagree.
+ * How many of the scope's visible items matching `q` are in each Type,
+ * Dashboard bucket (chainBucket) and Code C state (codeCState), null for none:
+ * the same rows, filters, bucket and state as the List, so a count and the
+ * List behind it can't disagree.
  */
 export async function countWorkItemBuckets(
   trx: Trx,
   scope: QueryScope,
   q: WorkItemQuery,
   now: Date,
-): Promise<{ typeCode: string; bucket: ChainBucket | null; count: number }[]> {
-  const { rows } = await sql<{ type_code: string; bucket: ChainBucket | null; count: number }>`
+): Promise<{ typeCode: string; bucket: ChainBucket | null; codeC: CodeCState | null; count: number }[]> {
+  const { rows } = await sql<{ type_code: string; bucket: ChainBucket | null; code_c: CodeCState | null; count: number }>`
     with r as (${visibleRows(scope, q.allRevisions)})
-    select r.type_code, ${bucketOfRow} as bucket, count(*)::int as count
+    select r.type_code, ${bucketOfRow} as bucket, ${codeCOfRow} as code_c, count(*)::int as count
     from r where ${matching(q, now)}
-    group by 1, 2
+    group by 1, 2, 3
   `.execute(trx);
-  return rows.map((r) => ({ typeCode: r.type_code, bucket: r.bucket, count: r.count }));
+  return rows.map((r) => ({ typeCode: r.type_code, bucket: r.bucket, codeC: r.code_c, count: r.count }));
 }
 
 /**

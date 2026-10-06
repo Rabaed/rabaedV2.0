@@ -4,6 +4,8 @@
 // Pending is Submitted and open, In preparation only for the raiser's own
 // Participant, then the latest closed Revision's outcome. Every number opens the
 // List of exactly the chains it counts: both come from the work item query.
+// The Code C line (RP-352, scenario 64) counts each chain that has had a Code C
+// once, by the latest Revision the viewer sees.
 import { randomUUID } from "node:crypto";
 import { workItemSearchParams, type Dashboard, type DashboardCard, type DashboardFigure, type WorkItemList } from "@rabaed/domain";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -63,6 +65,16 @@ function figures(d: Dashboard): [string, DashboardFigure][] {
             ...c.bars.flatMap((b) => named(b.bucket, b)),
             ...named("in preparation", c.inPreparation),
             ...named("approved", c.approved),
+            ...(c.codeC
+              ? [
+                  ...named("Code C", c.codeC.total),
+                  ...named("approved on revision", c.codeC.approvedOnRevision),
+                  ...named("awaiting revision", c.codeC.awaitingRevision),
+                  ...named("no Revision yet", c.codeC.split?.noRevisionYet ?? null),
+                  ...named("Revision in progress", c.codeC.split?.revisionInProgress ?? null),
+                  ...named("rejected after C", c.codeC.rejectedAfterC),
+                ]
+              : []),
           ]
         : [...named("total", c.total), ...named("open", c.open), ...named("closed", c.closed)];
     }),
@@ -80,6 +92,15 @@ async function listed(by: Caller, projectId: string, query: DashboardFigure["que
     cursor = page.nextCursor ?? undefined;
   } while (cursor);
   return ids;
+}
+
+/** C1 raises a Revision of `id` (after its Code C), Submits it, and returns it. */
+async function submittedRevision(at: Tower, id: string): Promise<string> {
+  const revision = (await ok(at.c1Engineer.post(`/v1/work-items/${id}/revisions`, { idempotencyKey: randomUUID() }), 201)).json().id;
+  await take(at.c1Engineer, revision, "send_for_review");
+  await ok(at.c1Pm.post(`/v1/work-items/${revision}/claim`));
+  await take(at.c1Pm, revision, "submit");
+  return revision;
 }
 
 /** K1 verifies item `id` and issues a Review Code. */
@@ -193,6 +214,7 @@ describe("scenario 65 and every number equals its List", () => {
     expect(mar.inPreparation?.count).toBe(1);
     expect(mar.bars.every((b) => b.count === 0)).toBe(true);
     expect(mar.approved.count).toBe(0);
+    expect(mar.codeC).toBeNull();
     expect(await listed(c2Engineer, tower.projectId, mar.total.query)).toEqual([c2Item]);
   });
 
@@ -214,6 +236,84 @@ describe("scenario 65 and every number equals its List", () => {
         expect(ids.length, name).toBe(f.count);
         expect(new Set(ids).size, name).toBe(ids.length);
       }
+    }
+  });
+});
+
+describe("scenario 64: the Code C line while C1's Revision is a Draft", () => {
+  let tower: Tower;
+  let unrevised = "";
+  let original = "";
+  let revision = "";
+  beforeAll(async () => {
+    tower = await buildTower(api, { c1, k1 }, "S64");
+    const { c1Engineer, c1Pm, k1Manager } = tower;
+    unrevised = await submitted(tower, c1Engineer, c1Pm, "Luminaires, not revised yet");
+    await code(k1Manager, unrevised, "revise_c");
+    original = await submitted(tower, c1Engineer, c1Pm, "Luminaires, revised");
+    await code(k1Manager, original, "revise_c");
+    revision = (await ok(c1Engineer.post(`/v1/work-items/${original}/revisions`, { idempotencyKey: randomUUID() }), 201)).json().id;
+  });
+
+  it("shows K1 both chains as awaiting revision, one figure, without the Draft (V1)", async () => {
+    const line = marCard(await dashboard(tower.k1Manager, tower.projectId)).codeC!;
+    expect(line.total.count).toBe(2);
+    expect(line.awaitingRevision.count).toBe(2);
+    expect(line.split).toBeNull();
+    expect(line.approvedOnRevision).toMatchObject({ count: 0, percent: 0 });
+    expect(line.rejectedAfterC).toBeNull();
+    expect((await listed(tower.k1Manager, tower.projectId, line.awaitingRevision.query)).sort()).toEqual([unrevised, original].sort());
+    for (const codeC of ["noRevisionYet", "revisionInProgress"] as const) {
+      expect(await listed(tower.k1Manager, tower.projectId, { type: ["MAR"], bucket: [], codeC: [codeC] })).toEqual([]);
+    }
+  });
+
+  it("shows C1 \"no Revision yet\" and \"Revision in progress\"", async () => {
+    const line = marCard(await dashboard(tower.c1Pm, tower.projectId)).codeC!;
+    expect(line.total.count).toBe(2);
+    expect(line.awaitingRevision.count).toBe(2);
+    expect(line.split?.noRevisionYet.count).toBe(1);
+    expect(line.split?.revisionInProgress.count).toBe(1);
+    expect(await listed(tower.c1Pm, tower.projectId, line.split!.noRevisionYet.query)).toEqual([unrevised]);
+    expect(await listed(tower.c1Pm, tower.projectId, line.split!.revisionInProgress.query)).toEqual([revision]);
+  });
+
+  it("keeps the split once C1 Submits the Revision, and K1 still sees one figure", async () => {
+    await take(tower.c1Engineer, revision, "send_for_review");
+    await ok(tower.c1Pm.post(`/v1/work-items/${revision}/claim`));
+    await take(tower.c1Pm, revision, "submit");
+    const c1Line = marCard(await dashboard(tower.c1Pm, tower.projectId)).codeC!;
+    expect(c1Line.split?.revisionInProgress.count).toBe(1);
+    const k1Line = marCard(await dashboard(tower.k1Manager, tower.projectId)).codeC!;
+    expect(k1Line.awaitingRevision.count).toBe(2);
+    expect(k1Line.split).toBeNull();
+    expect((await listed(tower.k1Manager, tower.projectId, k1Line.awaitingRevision.query)).sort()).toEqual([unrevised, revision].sort());
+  });
+});
+
+describe("a chain with two Code Cs and an approved Rev 2", () => {
+  let tower: Tower;
+  let rev2 = "";
+  beforeAll(async () => {
+    tower = await buildTower(api, { c1, k1 }, "TWC");
+    const { c1Engineer, c1Pm, k1Manager } = tower;
+    const original = await submitted(tower, c1Engineer, c1Pm, "Chillers");
+    await code(k1Manager, original, "revise_c");
+    const rev1 = await submittedRevision(tower, original);
+    await code(k1Manager, rev1, "revise_c");
+    rev2 = await submittedRevision(tower, rev1);
+    await code(k1Manager, rev2, "approve_a");
+  });
+
+  it("counts it once, as approved on revision, for both Companies", async () => {
+    for (const by of [tower.c1Pm, tower.k1Manager]) {
+      const line = marCard(await dashboard(by, tower.projectId)).codeC!;
+      expect(line.total.count).toBe(1);
+      expect(line.approvedOnRevision).toMatchObject({ count: 1, percent: 100 });
+      expect(line.awaitingRevision.count).toBe(0);
+      expect(line.split).toBeNull();
+      expect(await listed(by, tower.projectId, line.approvedOnRevision.query)).toEqual([rev2]);
+      expect(await listed(by, tower.projectId, line.total.query)).toEqual([rev2]);
     }
   });
 });

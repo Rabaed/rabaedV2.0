@@ -26,5 +26,6 @@ export * from "./numbering-counter.ts";
 export * from "./numbering-admin.ts";
 export * from "./work-item-query.ts";
 export * from "./chain-bucket.ts";
+export * from "./code-c.ts";
 export * from "./dashboard.ts";
 export * from "./activity-feed.ts";

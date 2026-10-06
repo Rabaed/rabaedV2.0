@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ChainBucket } from "./chain-bucket.ts";
+import type { CodeCState } from "./code-c.ts";
 import { dashboardCard, type DashboardCard } from "./dashboard.ts";
 
 const mar = { code: "MAR", name: { en: "Material Submittal", ar: "اعتماد المواد" } };
@@ -103,5 +104,45 @@ describe("dashboardCard", () => {
     const card = outcomes(dashboardCard({ type: mar, moduleKey: "submittals", outcomeKind: "review_code", counts: counts([[null, 1], ["pending", 1]]) }));
     expect(card.total.count).toBe(2);
     expect(card.bars.reduce((sum, b) => sum + b.count, 0)).toBe(1);
+  });
+
+  describe("the Code C line", () => {
+    const codeC = (entries: [CodeCState | null, number][]) => new Map(entries);
+    const line = (entries: [CodeCState | null, number][], outcomeKind: "review_code" | "inspection_result" = "review_code") =>
+      outcomes(dashboardCard({ type: mar, moduleKey: "submittals", outcomeKind, counts: counts([["A", 1]]), codeCCounts: codeC(entries) })).codeC;
+
+    it("reads Code C 5 · approved on revision 3 (60%) · awaiting revision 2", () => {
+      const c = line([["approvedOnRevision", 3], ["awaitingRevision", 2], [null, 7]])!;
+      expect(c.total).toEqual({ count: 5, query: { type: ["MAR"], bucket: [], codeC: ["approvedOnRevision", "awaitingRevision", "rejectedAfterC"] } });
+      expect(c.approvedOnRevision).toEqual({ count: 3, percent: 60, query: { type: ["MAR"], bucket: [], codeC: ["approvedOnRevision"] } });
+      expect(c.awaitingRevision).toEqual({ count: 2, query: { type: ["MAR"], bucket: [], codeC: ["awaitingRevision"] } });
+      expect(c.rejectedAfterC).toBeNull();
+      expect(c.split).toBeNull();
+    });
+
+    it("adds rejected after C when there is any", () => {
+      const c = line([["approvedOnRevision", 1], ["rejectedAfterC", 1]])!;
+      expect(c.total.count).toBe(2);
+      expect(c.approvedOnRevision.percent).toBe(50);
+      expect(c.rejectedAfterC).toEqual({ count: 1, query: { type: ["MAR"], bucket: [], codeC: ["rejectedAfterC"] } });
+    });
+
+    it("splits awaiting revision for the raiser's Participant, and counts it whole", () => {
+      const c = line([["noRevisionYet", 1], ["revisionInProgress", 2], ["awaitingRevision", 1]])!;
+      expect(c.total.count).toBe(4);
+      expect(c.awaitingRevision.count).toBe(4);
+      expect(c.split).toEqual({
+        noRevisionYet: { count: 1, query: { type: ["MAR"], bucket: [], codeC: ["noRevisionYet"] } },
+        revisionInProgress: { count: 2, query: { type: ["MAR"], bucket: [], codeC: ["revisionInProgress"] } },
+      });
+      expect(line([["revisionInProgress", 1]])!.split?.noRevisionYet.count).toBe(0);
+    });
+
+    it("is left out when no chain has had a Code C, and on a Type without Review Codes", () => {
+      expect(line([])).toBeNull();
+      expect(line([[null, 3]])).toBeNull();
+      expect(line([["awaitingRevision", 1]], "inspection_result")).toBeNull();
+      expect(outcomes(dashboardCard({ type: mar, moduleKey: "submittals", outcomeKind: "review_code", counts: counts([]) })).codeC).toBeNull();
+    });
   });
 });

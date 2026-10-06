@@ -80,7 +80,8 @@ export const chainBucketRules: readonly ChainBucketRule[] = [
   { when: { stageCategory: "closed_negative" }, bucket: "rejected" },
 ];
 
-function holds(when: ChainBucketCondition, input: ChainBucketInput): boolean {
+/** Whether every key of `when` holds for `input` (shared with the Code C rule). */
+export function holdsChainCondition(when: ChainBucketCondition, input: ChainBucketInput): boolean {
   return (
     (when.open === undefined || when.open === isOpenStageCategory(input.stageCategory)) &&
     (when.submitted === undefined || when.submitted === input.submitted) &&
@@ -93,5 +94,5 @@ function holds(when: ChainBucketCondition, input: ChainBucketInput): boolean {
 
 /** The bucket a chain counts in, or null when it counts in none. */
 export function chainBucket(input: ChainBucketInput): ChainBucket | null {
-  return chainBucketRules.find((rule) => holds(rule.when, input))?.bucket ?? null;
+  return chainBucketRules.find((rule) => holdsChainCondition(rule.when, input))?.bucket ?? null;
 }

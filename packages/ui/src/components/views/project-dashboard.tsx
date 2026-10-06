@@ -1,8 +1,10 @@
 import {
   formatNumber,
   type ChainBucket,
+  type CodeCFilter,
   type Dashboard,
   type DashboardCard,
+  type DashboardCodeCLine,
   type DashboardFigure,
   type DashboardFigureQuery,
   type Locale,
@@ -19,7 +21,22 @@ const copy = {
   open: { en: "Open", ar: "مفتوحة" },
   closed: { en: "Closed", ar: "مغلقة" },
   empty: { en: "No Work Item Types on this Project yet.", ar: "لا توجد أنواع عناصر عمل في هذا المشروع بعد." },
+  codeC: { en: "Code C", ar: "الرمز C" },
 } satisfies Record<string, Record<Locale, string>>;
+
+/** The Code C line's sub-states (codeCState), as the line and a List filtered from it name them. */
+const codeCLabels: Record<CodeCFilter, Record<Locale, string>> = {
+  approvedOnRevision: { en: "approved on revision", ar: "معتمد بعد التعديل" },
+  awaitingRevision: { en: "awaiting revision", ar: "بانتظار التعديل" },
+  noRevisionYet: { en: "no Revision yet", ar: "لا تعديل بعد" },
+  revisionInProgress: { en: "Revision in progress", ar: "التعديل جارٍ" },
+  rejectedAfterC: { en: "rejected after C", ar: "مرفوض بعد C" },
+};
+
+/** A Code C sub-state's name (e.g. for a List filtered from the Code C line), in the viewer's language. */
+export function codeCLabel(filter: CodeCFilter, locale: Locale): string {
+  return codeCLabels[filter][locale];
+}
 
 const moduleNames: Record<ModuleKey, Record<Locale, string>> = {
   snag_list: { en: "Snag List", ar: "قائمة الملاحظات" },
@@ -142,9 +159,55 @@ function TypeCard({ card, ...ctx }: { card: DashboardCard } & Ctx) {
               {formatNumber(card.approved.percent / 100, locale, { style: "percent" })}
             </Figure>
           </p>
+          {card.codeC && <CodeCLine typeCode={card.type.code} line={card.codeC} {...ctx} />}
         </>
       )}
     </article>
+  );
+}
+
+/**
+ * "Code C 5 · approved on revision 3 (60%) · awaiting revision 2", awaiting
+ * revision split for the raiser's own Company, and "rejected after C" when
+ * there is any (RP-352). Each figure links to its List.
+ */
+function CodeCLine({ typeCode, line, ...ctx }: { typeCode: string; line: DashboardCodeCLine } & Ctx) {
+  const { locale } = ctx;
+  const n = (count: number) => formatNumber(count, locale);
+  // Each figure at least 24px tall (44px on a touch screen), so the links on one line are easy to hit.
+  const target = "inline-flex min-h-6 items-center pointer-coarse:min-h-11";
+  const part = (filter: CodeCFilter, figure: DashboardFigure, suffix = "") => (
+    <Figure figure={figure} {...ctx} className={target}>
+      {codeCLabels[filter][locale]} {n(figure.count)}
+      {suffix}
+    </Figure>
+  );
+  const separator = (
+    <span aria-hidden="true" className="text-muted">
+      ·
+    </span>
+  );
+  return (
+    <p data-testid={`code-c-${typeCode}`} className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-caption">
+      <Figure figure={line.total} {...ctx} className={cn(target, "font-semibold")}>
+        {copy.codeC[locale]} {n(line.total.count)}
+      </Figure>
+      {separator}
+      {part("approvedOnRevision", line.approvedOnRevision, ` (${formatNumber(line.approvedOnRevision.percent / 100, locale, { style: "percent" })})`)}
+      {separator}
+      {part("awaitingRevision", line.awaitingRevision)}
+      {line.split && (
+        <span className="inline-flex flex-wrap items-center gap-x-1 text-muted">
+          ({part("noRevisionYet", line.split.noRevisionYet)} · {part("revisionInProgress", line.split.revisionInProgress)})
+        </span>
+      )}
+      {line.rejectedAfterC && (
+        <>
+          {separator}
+          {part("rejectedAfterC", line.rejectedAfterC)}
+        </>
+      )}
+    </p>
   );
 }
 
