@@ -9,10 +9,12 @@ import { Input } from "../form/input.tsx";
 
 // Participant Codes on Project Settings → Numbering (RP-381, spec RP-311). Each
 // Participant with what its Document Numbers print: its Participant Code, or its
-// position (01) until one is set. A Project Admin sets the codes here; every other
-// Project Member reads them. The page passes only the Participants the API lists
-// for the viewer (V15: a Project Admin gets every one, anyone else only their own
-// Company's), so this shows nothing beyond that. Presentational: the page does
+// order on the Project (01) until one is set. A Project Admin sets the codes here;
+// every other Project Member reads them. The page passes only the Participants the
+// API lists for the viewer (V15: a Project Admin gets every one, anyone else only
+// their own Company's), so this shows nothing beyond that; and the API gives the
+// order on the Project only to Project Admins (RP-381-1), so anyone else reads a
+// plain "no code yet" in its place. Presentational: the page does
 // the calls, and the API keeps its refusals (2-6 letters or digits with at least
 // one letter, unique in the Project, fixed once used).
 
@@ -22,8 +24,10 @@ export type ParticipantCodesLabels = {
   /** The list's name. */
   participants: string;
   code: string;
-  /** Beside a position shown in place of a code. */
-  position: string;
+  /** Beside the order on the Project, shown to a Project Admin in place of a code. */
+  order: string;
+  /** In place of a code, for a viewer the order on the Project isn't given to. */
+  noCode: string;
   save: string;
   saved: string;
   refusals: Record<ParticipantCodeRefusal, string>;
@@ -33,12 +37,12 @@ export type ParticipantCodeRefusal = "invalid" | "duplicate_code" | "code_in_use
 
 export type ParticipantCodesProps = {
   locale: Locale;
-  participants: readonly { id: string; company: { legalName: BilingualText }; code: string | null; ordinal: number }[];
+  participants: readonly { id: string; company: { legalName: BilingualText }; code: string | null; ordinal: number | null }[];
   /** A Project Admin: each row is a form. */
   canEdit: boolean;
   labels: ParticipantCodesLabels;
   /** Sets the code (PUT /v1/participants/:id/code); the page refreshes on success. */
-  onSave: (participantId: string, code: string) => Promise<{ ok: true } | { ok: false; reason: string }>;
+  onSave: (participantId: string, code: string) => Promise<{ ok: true } | { ok: false; reason: ParticipantCodeRefusal }>;
   className?: string;
 };
 
@@ -69,17 +73,28 @@ export function ParticipantCodes({ locale, participants, canEdit, labels, onSave
   );
 }
 
-/** What the Participant's numbers print, always left to right; a position says so. */
-function Printed({ participant, labels }: { participant: { code: string | null; ordinal: number }; labels: ParticipantCodesLabels }) {
+/**
+ * What the Participant's numbers print, always left to right; the order on the
+ * Project says so. Without a code or an order, a plain "no code yet".
+ */
+function Printed({
+  participant: { code, ordinal },
+  labels,
+}: {
+  participant: { code: string | null; ordinal: number | null };
+  labels: ParticipantCodesLabels;
+}) {
+  const printed = ordinal === null ? code : participantSegment({ code, ordinal });
+  if (printed === null) return <span className="text-sm text-muted">{labels.noCode}</span>;
   return (
     <span className="text-sm">
       <bdi dir="ltr" translate="no" className="font-medium tabular-nums">
-        {participantSegment(participant)}
+        {printed}
       </bdi>
-      {participant.code === null && (
+      {code === null && (
         <span className="text-muted">
           {" · "}
-          <span>{labels.position}</span>
+          <span>{labels.order}</span>
         </span>
       )}
     </span>
@@ -111,7 +126,7 @@ function CodeForm({
     try {
       const result = await onSave(participant.id, value.trim());
       if (result.ok) setSaved(true);
-      else setError(labels.refusals[result.reason as ParticipantCodeRefusal] ?? labels.refusals.unavailable);
+      else setError(labels.refusals[result.reason]);
     } catch {
       setError(labels.refusals.unavailable);
     } finally {

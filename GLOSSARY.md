@@ -306,7 +306,7 @@ How a Project builds its Document Numbers: up to six segments (Project, Work Ite
 _Avoid_: Numbering scheme, format
 
 **Participant Code**:
-The short code (2–6 letters or digits) that stands for a Participant in that Project's Document Numbers, such as CCM; until it is set, the Participant's position on the Project (01, 02…). Set by the Project Admin, and fixed once a number uses it.
+The short code (2–6 letters or digits) that stands for a Participant in that Project's Document Numbers, such as CCM; until it is set, the Participant's order on the Project (01, 02…). Set by the Project Admin, and fixed once a number uses it.
 _Avoid_: Company code, contractor code
 
 **Package**:

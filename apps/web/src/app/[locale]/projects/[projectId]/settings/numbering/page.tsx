@@ -61,10 +61,11 @@ export default async function NumberingPage({ params }: { params: Promise<{ loca
           projectId={project.id}
           counters={counters.counters}
           workItemTypes={counters.workItemTypes}
-          participants={participants.participants.map((p) => ({
-            value: p.id,
-            label: `${p.company.legalName[locale]}${code(participantSegment(p))}`,
-          }))}
+          participants={participants.participants.map(({ id, company, code: participantCode, ordinal }) => {
+            // Shown to Project Admins only, who get every Participant's order on the Project (RP-381-1).
+            const printed = ordinal === null ? participantCode : participantSegment({ code: participantCode, ordinal });
+            return { value: id, label: `${company.legalName[locale]}${printed === null ? "" : code(printed)}` };
+          })}
           trades={dimensions.trade.map((v) => ({ value: v.id, label: `${v.name[locale]}${code(v.code)}` }))}
           locations={treeOrder(dimensions.location).map((v) => ({
             value: v.id,

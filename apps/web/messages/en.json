@@ -287,10 +287,11 @@
     "unavailable": "Something went wrong. Try again.",
     "participantCodes": {
       "title": "Participant Codes",
-      "intro": "Each Participant's code in Document Numbers: 2 to 6 letters or digits, at least one a letter. Until a code is set, numbers show the Participant's position. A code is fixed once a number uses it.",
+      "intro": "Each Participant's code in Document Numbers: 2 to 6 letters or digits, at least one a letter. Until a code is set, numbers show the Participant's order on the Project. A code is fixed once a number uses it.",
       "participants": "Participants",
       "code": "Participant Code",
-      "position": "Position, until a code is set",
+      "order": "Order on the Project, until a code is set",
+      "noCode": "No code yet",
       "save": "Save code",
       "saved": "Participant Code saved.",
       "invalid": "Use 2 to 6 letters or digits, with at least one letter.",

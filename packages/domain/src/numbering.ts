@@ -164,7 +164,7 @@ export function sequencedNumber(prefix: string, separator: string, seqDigits: nu
   return prefix + separator + padded(seq, seqDigits);
 }
 
-/** What the Participant segment prints: the Participant Code, or the Participant's position (01) until one is set. */
+/** What the Participant segment prints: the Participant Code, or the Participant's order on the Project (01) until one is set. */
 export function participantSegment(participant: { code: string | null; ordinal: number }): string {
   return participant.code ?? padded(participant.ordinal, 2);
 }

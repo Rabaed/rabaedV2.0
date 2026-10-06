@@ -8,10 +8,11 @@ export const participantCodesLabels: Record<Locale, ParticipantCodesLabels> = {
   en: {
     title: "Participant Codes",
     intro:
-      "Each Participant's code in Document Numbers: 2 to 6 letters or digits, at least one a letter. Until a code is set, numbers show the Participant's position. A code is fixed once a number uses it.",
+      "Each Participant's code in Document Numbers: 2 to 6 letters or digits, at least one a letter. Until a code is set, numbers show the Participant's order on the Project. A code is fixed once a number uses it.",
     participants: "Participants",
     code: "Participant Code",
-    position: "Position, until a code is set",
+    order: "Order on the Project, until a code is set",
+    noCode: "No code yet",
     save: "Save code",
     saved: "Participant Code saved.",
     refusals: {
@@ -25,10 +26,11 @@ export const participantCodesLabels: Record<Locale, ParticipantCodesLabels> = {
   ar: {
     title: "رموز المشاركين",
     intro:
-      "رمز كل مشارك في أرقام المستندات: من حرفين إلى 6 أحرف أو أرقام، على أن يكون بينها حرف واحد على الأقل. ما لم يُحدَّد الرمز، تعرض الأرقام ترتيب المشارك. ويُثبَّت الرمز بمجرد أن يستخدمه رقم.",
+      "رمز كل مشارك في أرقام المستندات: من حرفين إلى 6 أحرف أو أرقام، على أن يكون بينها حرف واحد على الأقل. ما لم يُحدَّد الرمز، تعرض الأرقام ترتيب المشارك في المشروع. ويُثبَّت الرمز بمجرد أن يستخدمه رقم.",
     participants: "المشاركون",
     code: "رمز المشارك",
-    position: "الترتيب، إلى أن يُحدَّد رمز",
+    order: "الترتيب في المشروع، إلى أن يُحدَّد رمز",
+    noCode: "لا رمز بعد",
     save: "حفظ الرمز",
     saved: "تم حفظ رمز المشارك.",
     refusals: {

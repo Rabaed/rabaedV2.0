@@ -311,8 +311,8 @@ describe("the Participants of a Project", () => {
           company: { id: c1.company.companyId, legalName: expect.any(Object) },
           projectRole: { baseRole: "contractor", name: { en: "Contractor", ar: "المقاول" } },
           code: null,
-          // Its own position only, which its own Document Numbers already print.
-          ordinal: 2,
+          // Not even its own order on the Project, which would count the others (RP-381-1).
+          ordinal: null,
           isOwnCompany: true,
         },
       ],
