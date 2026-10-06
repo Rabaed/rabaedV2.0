@@ -58,10 +58,11 @@ export async function listParticipants(db: Db, memberId: string, projectId: stri
       role_name: BilingualText;
       own: boolean;
       code: string | null;
+      ordinal: number;
     }>`
-      -- The code is read through the participant table's row-level security: a Member
-      -- gets the codes of the Participants they can see (V15), and the join adds no row.
-      select p.*, p.company_id = app.current_company_id() as own, pt.code
+      -- The code and position are read through the participant table's row-level security:
+      -- a Member gets those of the Participants they can see (V15), and the join adds no row.
+      select p.*, p.company_id = app.current_company_id() as own, pt.code, pt.ordinal
       from app.project_participants(${projectId}::uuid) p
       join participant pt on pt.id = p.participant_id
     `.execute(trx);
@@ -72,6 +73,7 @@ export async function listParticipants(db: Db, memberId: string, projectId: stri
         company: { id: r.company_id, legalName: r.legal_name },
         projectRole: { baseRole: r.base_role, name: r.role_name },
         code: r.code,
+        ordinal: r.ordinal,
         isOwnCompany: r.own,
       })),
     };
