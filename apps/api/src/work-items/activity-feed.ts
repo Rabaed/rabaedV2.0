@@ -2,6 +2,7 @@ import { withMember, type Db } from "@rabaed/db";
 import {
   decodeActivityCursor,
   encodeActivityCursor,
+  moduleKeys,
   type ActivityFeed,
   type ActivityFeedEntry,
   type ActivityFeedQuery,
@@ -45,6 +46,13 @@ export function getActivityFeed(db: Db, memberId: string, projectId: string, q: 
         ${after?.id ?? null}::uuid, ${q.limit + 1}::integer
       )
     `.execute(trx);
+    // The Project's Types, for the Module and Type filters: names only, no counts.
+    const types = await trx
+      .selectFrom("work_item_type")
+      .select(["module_key", "code", "name"])
+      .where((eb) => eb.or([eb("project_id", "is", null), eb("project_id", "=", projectId)]))
+      .orderBy("code")
+      .execute();
     const page = rows.slice(0, q.limit);
     const last = page.at(-1);
     return {
@@ -59,6 +67,9 @@ export function getActivityFeed(db: Db, memberId: string, projectId: string, q: 
         workItem: { id: r.work_item_id, documentNumber: r.document_number, title: r.title, type: { code: r.type_code, name: r.type_name } },
       })),
       nextCursor: rows.length > q.limit && last ? encodeActivityCursor(last.id) : null,
+      types: moduleKeys.flatMap((moduleKey) =>
+        types.filter((t) => t.module_key === moduleKey).map((t) => ({ code: t.code, name: t.name as BilingualText, moduleKey })),
+      ),
     };
   });
 }

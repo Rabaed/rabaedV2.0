@@ -8,11 +8,11 @@ import {
   type DashboardFigure,
   type DashboardFigureQuery,
   type Locale,
-  type ModuleKey,
   type OutcomeKind,
 } from "@rabaed/domain";
 import type { ElementType, ReactNode } from "react";
 import { cn } from "../../lib/cn.ts";
+import { moduleName } from "../../lib/module-name.ts";
 import { focusRing } from "../form/control-styles.ts";
 
 const copy = {
@@ -37,14 +37,6 @@ const codeCLabels: Record<CodeCFilter, Record<Locale, string>> = {
 export function codeCLabel(filter: CodeCFilter, locale: Locale): string {
   return codeCLabels[filter][locale];
 }
-
-const moduleNames: Record<ModuleKey, Record<Locale, string>> = {
-  snag_list: { en: "Snag List", ar: "قائمة الملاحظات" },
-  submittals: { en: "Submittals", ar: "الاعتمادات" },
-  inspections: { en: "Inspections", ar: "الفحوصات" },
-  site_reports: { en: "Site Reports", ar: "التقارير الموقعية" },
-  drawings: { en: "Drawings", ar: "المخططات" },
-};
 
 /** Each bucket's name on a bar, and its colour: the Stage colour it ends in. Full class names, so Tailwind finds them. */
 const buckets: Record<ChainBucket, { label: Record<Locale, string>; bar: string }> = {
@@ -97,7 +89,7 @@ export function ProjectDashboard({ dashboard, locale, hrefFor, linkAs: Link = "a
       {dashboard.modules.map((m) => (
         <section key={m.key} aria-labelledby={`dashboard-${m.key}`} className="space-y-3">
           <h2 id={`dashboard-${m.key}`} className="text-h6 font-semibold">
-            {moduleNames[m.key][locale]}
+            {moduleName(m.key, locale)}
           </h2>
           <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {m.cards.map((card) => (
@@ -246,9 +238,4 @@ function BigNumber({ label, figure, ...ctx }: { label: string; figure: Dashboard
       </dd>
     </div>
   );
-}
-
-/** A Module's name, in the viewer's language (e.g. for the Activity Feed's Module filter). */
-export function moduleName(key: ModuleKey, locale: Locale): string {
-  return moduleNames[key][locale];
 }

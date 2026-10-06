@@ -46,7 +46,7 @@ describe("dashboardCard", () => {
     ]);
   });
 
-  it("counts every chain in the total, Cancelled and In preparation too, and the Approved % over it", () => {
+  it("counts every chain in the total, Cancelled and In preparation too, and the Approved % over the Submitted ones", () => {
     const card = outcomes(
       dashboardCard({
         type: mar,
@@ -56,13 +56,23 @@ describe("dashboardCard", () => {
       }),
     );
     expect(card.total.count).toBe(8);
-    expect(card.approved).toMatchObject({ count: 4, percent: 50 });
+    expect(card.approved).toMatchObject({ count: 4, percent: 57 });
     const inspection = outcomes(
       dashboardCard({ type: mar, moduleKey: "inspections", outcomeKind: "inspection_result", counts: counts([["passed", 1], ["passed_with_comments", 1], ["failed", 1]]) }),
     );
     expect(inspection.approved).toMatchObject({ count: 2, percent: 67 });
     const none = outcomes(dashboardCard({ type: mar, moduleKey: "site_reports", outcomeKind: "none", counts: counts([["approved", 1], ["rejected", 3]]) }));
     expect(none.approved).toMatchObject({ count: 1, percent: 25 });
+  });
+
+  it("gives the raiser's Participant and every other Company the same Approved % for the same Submitted chains", () => {
+    const submitted: [ChainBucket, number][] = [["pending", 1], ["A", 2], ["C", 1]];
+    const raiser = outcomes(
+      dashboardCard({ type: mar, moduleKey: "submittals", outcomeKind: "review_code", counts: counts([...submitted, ["in_preparation", 3]]) }),
+    );
+    const other = outcomes(dashboardCard({ type: mar, moduleKey: "submittals", outcomeKind: "review_code", counts: counts(submitted) }));
+    expect(raiser.approved).toMatchObject({ count: 2, percent: 50 });
+    expect(other.approved).toMatchObject({ count: 2, percent: 50 });
   });
 
   it("shows 0% for a Type with no chains", () => {
@@ -73,16 +83,16 @@ describe("dashboardCard", () => {
 
   it("shows In preparation only when the viewer's Participant has some", () => {
     const own = outcomes(dashboardCard({ type: mar, moduleKey: "submittals", outcomeKind: "review_code", counts: counts([["in_preparation", 3]]) }));
-    expect(own.inPreparation).toEqual({ count: 3, query: { type: ["MAR"], bucket: ["in_preparation"] } });
+    expect(own.inPreparation).toEqual({ count: 3, query: { module: "submittals", type: ["MAR"], bucket: ["in_preparation"] } });
     const theirs = outcomes(dashboardCard({ type: mar, moduleKey: "submittals", outcomeKind: "review_code", counts: counts([["pending", 4]]) }));
     expect(theirs.inPreparation).toBeNull();
   });
 
   it("gives every number the List filter that reproduces it", () => {
     const card = outcomes(dashboardCard({ type: mar, moduleKey: "submittals", outcomeKind: "review_code", counts: counts([["A", 1]]) }));
-    expect(card.total.query).toEqual({ type: ["MAR"], bucket: [] });
-    expect(card.bars.find((b) => b.bucket === "C")!.query).toEqual({ type: ["MAR"], bucket: ["C"] });
-    expect(card.approved.query).toEqual({ type: ["MAR"], bucket: ["A", "B"] });
+    expect(card.total.query).toEqual({ module: "submittals", type: ["MAR"], bucket: [] });
+    expect(card.bars.find((b) => b.bucket === "C")!.query).toEqual({ module: "submittals", type: ["MAR"], bucket: ["C"] });
+    expect(card.approved.query).toEqual({ module: "submittals", type: ["MAR"], bucket: ["A", "B"] });
   });
 
   it("shows the Snag List's Types as open and closed, Cancelled among the closed", () => {
@@ -90,20 +100,26 @@ describe("dashboardCard", () => {
       type: { code: "SNG", name: { en: "Snags", ar: "الملاحظات" } },
       moduleKey: "snag_list",
       outcomeKind: "none",
-      counts: counts([["pending", 2], ["in_preparation", 1], ["approved", 4], ["rejected", 1], ["cancelled", 1]]),
+      counts: counts([["pending", 2], ["in_preparation", 1], ["approved", 4], ["rejected", 1], ["cancelled", 1], [null, 2]]),
     });
     if (card.kind !== "open_closed") throw new Error("expected an open/closed card");
-    expect(card.open).toEqual({ count: 3, query: { type: ["SNG"], bucket: ["pending", "in_preparation"] } });
+    expect(card.open).toEqual({ count: 3, query: { module: "snag_list", type: ["SNG"], bucket: ["pending", "in_preparation"] } });
     expect(card.closed.count).toBe(6);
     expect(card.closed.query.bucket).toEqual(expect.arrayContaining(["approved", "rejected", "cancelled", "A", "passed"]));
     expect(card.closed.query.bucket).not.toContain("pending");
     expect(card.total.count).toBe(9);
+    expect(card.open.count + card.closed.count).toBe(card.total.count);
   });
 
-  it("counts a chain in no bucket in the total only", () => {
+  it("counts a chain in no bucket nowhere, not even in the total", () => {
     const card = outcomes(dashboardCard({ type: mar, moduleKey: "submittals", outcomeKind: "review_code", counts: counts([[null, 1], ["pending", 1]]) }));
-    expect(card.total.count).toBe(2);
+    expect(card.total.count).toBe(1);
     expect(card.bars.reduce((sum, b) => sum + b.count, 0)).toBe(1);
+  });
+
+  it("names the card's Module in every number's query", () => {
+    const card = outcomes(dashboardCard({ type: mar, moduleKey: "inspections", outcomeKind: "inspection_result", counts: counts([["passed", 1]]) }));
+    expect([card.total, card.approved, ...card.bars].map((f) => f.query.module)).toEqual(Array(6).fill("inspections"));
   });
 
   describe("the Code C line", () => {
@@ -113,9 +129,9 @@ describe("dashboardCard", () => {
 
     it("reads Code C 5 · approved on revision 3 (60%) · awaiting revision 2", () => {
       const c = line([["approvedOnRevision", 3], ["awaitingRevision", 2], [null, 7]])!;
-      expect(c.total).toEqual({ count: 5, query: { type: ["MAR"], bucket: [], codeC: ["approvedOnRevision", "awaitingRevision", "rejectedAfterC"] } });
-      expect(c.approvedOnRevision).toEqual({ count: 3, percent: 60, query: { type: ["MAR"], bucket: [], codeC: ["approvedOnRevision"] } });
-      expect(c.awaitingRevision).toEqual({ count: 2, query: { type: ["MAR"], bucket: [], codeC: ["awaitingRevision"] } });
+      expect(c.total).toEqual({ count: 5, query: { module: "submittals", type: ["MAR"], bucket: [], codeC: ["approvedOnRevision", "awaitingRevision", "rejectedAfterC"] } });
+      expect(c.approvedOnRevision).toEqual({ count: 3, percent: 60, query: { module: "submittals", type: ["MAR"], bucket: [], codeC: ["approvedOnRevision"] } });
+      expect(c.awaitingRevision).toEqual({ count: 2, query: { module: "submittals", type: ["MAR"], bucket: [], codeC: ["awaitingRevision"] } });
       expect(c.rejectedAfterC).toBeNull();
       expect(c.split).toBeNull();
     });
@@ -124,7 +140,7 @@ describe("dashboardCard", () => {
       const c = line([["approvedOnRevision", 1], ["rejectedAfterC", 1]])!;
       expect(c.total.count).toBe(2);
       expect(c.approvedOnRevision.percent).toBe(50);
-      expect(c.rejectedAfterC).toEqual({ count: 1, query: { type: ["MAR"], bucket: [], codeC: ["rejectedAfterC"] } });
+      expect(c.rejectedAfterC).toEqual({ count: 1, query: { module: "submittals", type: ["MAR"], bucket: [], codeC: ["rejectedAfterC"] } });
     });
 
     it("splits awaiting revision for the raiser's Participant, and counts it whole", () => {
@@ -132,8 +148,8 @@ describe("dashboardCard", () => {
       expect(c.total.count).toBe(4);
       expect(c.awaitingRevision.count).toBe(4);
       expect(c.split).toEqual({
-        noRevisionYet: { count: 1, query: { type: ["MAR"], bucket: [], codeC: ["noRevisionYet"] } },
-        revisionInProgress: { count: 2, query: { type: ["MAR"], bucket: [], codeC: ["revisionInProgress"] } },
+        noRevisionYet: { count: 1, query: { module: "submittals", type: ["MAR"], bucket: [], codeC: ["noRevisionYet"] } },
+        revisionInProgress: { count: 2, query: { module: "submittals", type: ["MAR"], bucket: [], codeC: ["revisionInProgress"] } },
       });
       expect(line([["revisionInProgress", 1]])!.split?.noRevisionYet.count).toBe(0);
     });

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { bilingualText } from "./company.ts";
-import { moduleKeys } from "./dashboard.ts";
+import { moduleKeySchema } from "./module.ts";
 import { fromBase64Url, toBase64Url } from "./work-item-query.ts";
 import { workItemEventTypes, workItemOutcome, workItemTypeCode } from "./work-item.ts";
 
@@ -26,7 +26,7 @@ const list = <T extends z.ZodType>(item: T) =>
 
 const activityFeedFields = {
   /** One Module's items only. */
-  module: z.enum(moduleKeys).optional(),
+  module: moduleKeySchema.optional(),
   /** These Work Item Types' items only. */
   type: list(workItemTypeCode),
   /** "Items I'm on": ones I raised, held, or acted on. */
@@ -104,6 +104,8 @@ export const activityFeed = z.object({
     }),
   ),
   nextCursor: z.string().nullable(),
+  /** The Project's Work Item Types by Module, for the Module and Type filters (no counts). */
+  types: z.array(z.object({ code: z.string(), name: bilingualText, moduleKey: moduleKeySchema })),
 });
 export type ActivityFeed = z.infer<typeof activityFeed>;
 export type ActivityFeedEntry = ActivityFeed["entries"][number];

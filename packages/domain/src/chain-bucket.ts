@@ -63,15 +63,37 @@ export type ChainBucketCondition = {
 
 export type ChainBucketRule = { readonly when: ChainBucketCondition; readonly bucket: ChainBucket | null };
 
+/**
+ * How each key of a condition holds. One entry per key, so a new key can't be
+ * added without saying how it holds; the work item query's SQL builder is typed
+ * the same way, so it must say it too.
+ */
+const holds: { [K in keyof ChainBucketCondition]-?: (value: NonNullable<ChainBucketCondition[K]>, input: ChainBucketInput) => boolean } = {
+  open: (open, input) => open === isOpenStageCategory(input.stageCategory),
+  submitted: (submitted, input) => submitted === input.submitted,
+  raisedByViewer: (raised, input) => raised === input.raisedByViewer,
+  outcomeKind: (kind, input) => kind === input.outcomeKind,
+  outcome: (outcome, input) => outcome === input.outcome,
+  stageCategory: (category, input) => category === input.stageCategory,
+};
+
+/** Every key a condition may give, each handled by `holdsChainCondition`. */
+export const chainConditionKeys = Object.keys(holds) as (keyof ChainBucketCondition)[];
+
+/**
+ * V1: nobody but its raiser sees a Revision before it is Submitted. Should
+ * anyone else see one, it counts nowhere: in no bucket, nor on the Code C line.
+ */
+export const unseenBeforeSubmit = { open: true, submitted: false, raisedByViewer: false } as const satisfies ChainBucketCondition;
+
 const codeRules = (outcomeKind: OutcomeKind, outcomes: readonly (WorkItemOutcome & ChainBucket)[]): ChainBucketRule[] =>
   outcomes.map((outcome) => ({ when: { outcomeKind, outcome }, bucket: outcome }));
 
 /** The rule, in order: the first condition that holds gives the bucket. */
 export const chainBucketRules: readonly ChainBucketRule[] = [
+  { when: unseenBeforeSubmit, bucket: null },
   { when: { open: true, submitted: true }, bucket: "pending" },
   { when: { open: true, raisedByViewer: true }, bucket: "in_preparation" },
-  // Nobody but its raiser sees an item before it is Submitted (V1); should anyone else, it counts nowhere.
-  { when: { open: true }, bucket: null },
   { when: { outcome: "cancelled" }, bucket: "cancelled" },
   { when: { stageCategory: "cancelled" }, bucket: "cancelled" },
   ...codeRules("review_code", ["A", "B", "C", "D"]),
@@ -82,17 +104,17 @@ export const chainBucketRules: readonly ChainBucketRule[] = [
 
 /** Whether every key of `when` holds for `input` (shared with the Code C rule). */
 export function holdsChainCondition(when: ChainBucketCondition, input: ChainBucketInput): boolean {
-  return (
-    (when.open === undefined || when.open === isOpenStageCategory(input.stageCategory)) &&
-    (when.submitted === undefined || when.submitted === input.submitted) &&
-    (when.raisedByViewer === undefined || when.raisedByViewer === input.raisedByViewer) &&
-    (when.outcomeKind === undefined || when.outcomeKind === input.outcomeKind) &&
-    (when.outcome === undefined || when.outcome === input.outcome) &&
-    (when.stageCategory === undefined || when.stageCategory === input.stageCategory)
-  );
+  return Object.entries(when).every(([key, value]) => {
+    const holdsKey = holds[key as keyof ChainBucketCondition] as ((value: unknown, input: ChainBucketInput) => boolean) | undefined;
+    if (!holdsKey) throw new Error(`Not a chain condition key: ${key}`);
+    return value === undefined || holdsKey(value, input);
+  });
 }
 
 /** The bucket a chain counts in, or null when it counts in none. */
 export function chainBucket(input: ChainBucketInput): ChainBucket | null {
   return chainBucketRules.find((rule) => holdsChainCondition(rule.when, input))?.bucket ?? null;
 }
+
+/** The buckets of a chain that has been Submitted: every bucket but In preparation (the Approved %'s denominator). */
+export const submittedBuckets: readonly ChainBucket[] = chainBuckets.filter((b) => b !== "in_preparation");

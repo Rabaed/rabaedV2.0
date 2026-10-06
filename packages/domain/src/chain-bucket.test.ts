@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { chainBucket, type ChainBucketInput } from "./chain-bucket.ts";
+import { chainBucket, chainConditionKeys, holdsChainCondition, type ChainBucketCondition, type ChainBucketInput } from "./chain-bucket.ts";
 
 const open = (over: Partial<ChainBucketInput> = {}): ChainBucketInput => ({
   outcomeKind: "review_code",
@@ -80,5 +80,28 @@ describe("chainBucket", () => {
       expect(chainBucket(closed({ outcome: "passed", stageCategory: "closed_positive" }))).toBe("approved");
       expect(chainBucket(closed({ outcomeKind: "inspection_result", outcome: "C", stageCategory: "closed_negative" }))).toBe("rejected");
     });
+  });
+});
+
+describe("holdsChainCondition", () => {
+  it("reads every condition key: each one alone rules some chain out", () => {
+    // Per key: a condition of that key alone, a chain it holds for, and one it doesn't.
+    const cases: Record<keyof ChainBucketCondition, [ChainBucketCondition, ChainBucketInput, ChainBucketInput]> = {
+      open: [{ open: true }, open(), closed({ outcome: "A" })],
+      submitted: [{ submitted: true }, open({ submitted: true }), open()],
+      raisedByViewer: [{ raisedByViewer: true }, open({ raisedByViewer: true }), open()],
+      outcomeKind: [{ outcomeKind: "none" }, open({ outcomeKind: "none" }), open()],
+      outcome: [{ outcome: "A" }, closed({ outcome: "A" }), open()],
+      stageCategory: [{ stageCategory: "draft" }, open({ stageCategory: "draft" }), open()],
+    };
+    expect(chainConditionKeys.toSorted()).toEqual(Object.keys(cases).toSorted());
+    for (const [key, [when, holding, notHolding]] of Object.entries(cases)) {
+      expect(holdsChainCondition(when, holding), key).toBe(true);
+      expect(holdsChainCondition(when, notHolding), key).toBe(false);
+    }
+  });
+
+  it("refuses a key it doesn't read, rather than letting it hold", () => {
+    expect(() => holdsChainCondition({ late: true } as ChainBucketCondition, open())).toThrow(/late/);
   });
 });

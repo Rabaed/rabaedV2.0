@@ -153,7 +153,7 @@ export const WithInPreparation: Story = {
       "?type=MAR&bucket=in_preparation",
     );
     await expect(mar.getByRole("link", { name: new RegExp(`^${storyText(context, copy.pending)}`) })).toHaveAttribute("href", "?type=MAR&bucket=pending");
-    const approved = `${storyText(context, copy.approvedAB)}${formatNumber(0.53, storyLocale(context), { style: "percent" })}`;
+    const approved = `${storyText(context, copy.approvedAB)}${formatNumber(0.63, storyLocale(context), { style: "percent" })}`;
     await expect(mar.getByRole("link", { name: approved })).toHaveAttribute("href", "?type=MAR&bucket=A%2CB");
     await expect(mar.getAllByRole("listitem")).toHaveLength(5);
     await expect(within(cardOf(context, copy.wir)).getAllByRole("listitem")).toHaveLength(4);
@@ -161,7 +161,7 @@ export const WithInPreparation: Story = {
     const snag = within(cardOf(context, copy.cmt));
     await expect(snag.getByRole("link", { name: new RegExp(storyText(context, copy.open)) })).toHaveAttribute(
       "href",
-      "?type=CMT&bucket=pending%2Cin_preparation",
+      "?module=snag_list&type=CMT&bucket=pending%2Cin_preparation",
     );
   },
 };
@@ -173,6 +173,9 @@ export const WithoutInPreparation: Story = {
     await expect(context.canvas.queryByText(new RegExp(storyText(context, copy.inPreparation)))).toBeNull();
     const mar = within(cardOf(context, copy.mar));
     await expect(mar.getByRole("link", { name: new RegExp(`^${storyText(context, copy.pending)}`) })).toBeVisible();
+    // The same Approved % as the raiser's Company: In preparation is not in it.
+    const approved = `${storyText(context, copy.approvedAB)}${formatNumber(0.63, storyLocale(context), { style: "percent" })}`;
+    await expect(mar.getByRole("link", { name: approved })).toBeVisible();
     await expect(mar.getByRole("link", { name: `${storyText(context, copy.awaitingRevision)} 2` })).toHaveAttribute("href", "?type=MAR&codeC=awaitingRevision");
     await expect(mar.queryByText(new RegExp(storyText(context, copy.noRevisionYet)))).toBeNull();
     await expect(mar.queryByText(new RegExp(storyText(context, copy.revisionInProgress)))).toBeNull();

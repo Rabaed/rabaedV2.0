@@ -43,7 +43,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ locale
             />
           </section>
           {/* The Activity Feed beside the cards: the Project's events as the Member may see them (RP-353). */}
-          {activity && <ActivityFeedView projectId={project.id} initial={activity} dashboard={dashboard} locale={locale} />}
+          {activity && <ActivityFeedView projectId={project.id} initial={activity} locale={locale} />}
         </div>
       )}
       <dl className="grid grid-cols-[max-content_1fr] gap-x-6 gap-y-2">

@@ -1,7 +1,7 @@
 "use client";
 
 import { formatDate, moduleKeys, type ActivityFeedEntry, type ActivityFeedQuery, type BilingualText, type Locale, type ModuleKey } from "@rabaed/domain";
-import { useEffect, useRef, type ElementType } from "react";
+import { useEffect, useId, useRef, type ElementType } from "react";
 import { cn } from "../../lib/cn.ts";
 import { Button } from "../button/button.tsx";
 import { DocNo } from "../doc-no/doc-no.tsx";
@@ -9,7 +9,7 @@ import { focusRing } from "../form/control-styles.ts";
 import { Field } from "../form/field.tsx";
 import { Select } from "../form/select.tsx";
 import { Switch } from "../form/switch.tsx";
-import { moduleName } from "./project-dashboard.tsx";
+import { moduleName } from "../../lib/module-name.ts";
 
 const copy = {
   title: { en: "Activity", ar: "النشاط" },
@@ -87,6 +87,7 @@ export function ActivityFeedPanel({
   linkAs: Link = "a",
 }: ActivityFeedPanelProps) {
   const t = (key: keyof typeof copy) => copy[key][locale];
+  const titleId = useId();
   const scroller = useRef<HTMLDivElement>(null);
   const end = useRef<HTMLDivElement>(null);
   const loadMore = useRef(onLoadMore);
@@ -108,9 +109,9 @@ export function ActivityFeedPanel({
   const typeOptions = types.filter((type) => !query.module || type.moduleKey === query.module);
 
   return (
-    <section aria-labelledby="activity-feed-title" className="flex min-w-0 flex-col gap-3 rounded-lg border border-border bg-surface p-4">
+    <section aria-labelledby={titleId} className="flex min-w-0 flex-col gap-3 rounded-lg border border-border bg-surface p-4">
       <header className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 id="activity-feed-title" className="text-h6 font-semibold">
+        <h2 id={titleId} className="text-h6 font-semibold">
           {t("title")}
         </h2>
         {viewAllHref && !fullHeight && (

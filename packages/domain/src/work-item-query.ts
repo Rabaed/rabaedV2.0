@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { chainBucketSchema } from "./chain-bucket.ts";
 import { codeCFilterSchema } from "./code-c.ts";
+import { moduleKeySchema } from "./module.ts";
 import { workItemOutcome, workItemTypeCode } from "./work-item.ts";
 
 /**
@@ -56,6 +57,8 @@ const list = <T extends z.ZodType>(item: T) =>
 const flag = z.preprocess((v) => v === true || v === "true" || v === "1", z.boolean());
 
 const queryFields = {
+  /** The Module whose items are listed: the Submittals unless a link (e.g. a Dashboard number) names another. Not a filter: it is the List itself. */
+  module: moduleKeySchema.default("submittals"),
   type: list(workItemTypeCode),
   stage: list(stageKey),
   with: list(withFilterValue),
@@ -128,6 +131,7 @@ export function workItemQueryFromSearchParams(params: SearchParamsLike): WorkIte
 /** The URL query parameters of `query`, its defaults left out, in a stable order. */
 export function workItemSearchParams(query: Partial<WorkItemQuery>): URLSearchParams {
   const params = new URLSearchParams();
+  if (query.module && query.module !== "submittals") params.set("module", query.module);
   for (const key of listKeys) {
     const values = query[key];
     if (values && values.length > 0) params.set(key, values.join(","));
@@ -144,9 +148,9 @@ export function isFilteredWorkItemQuery(query: WorkItemQuery): boolean {
   return filterKeys.some((key) => (key === "stepAgeMin" ? query[key] !== undefined : query[key].length > 0));
 }
 
-/** `query` with no filters, from the first page: its sort and "Show all Revisions" kept. */
+/** `query` with no filters, from the first page: its Module, sort and "Show all Revisions" kept. */
 export function withoutFilters(query: WorkItemQuery): WorkItemQuery {
-  return { ...workItemQuery.parse({}), allRevisions: query.allRevisions, sort: query.sort };
+  return { ...workItemQuery.parse({}), module: query.module, allRevisions: query.allRevisions, sort: query.sort };
 }
 
 /**

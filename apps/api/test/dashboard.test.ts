@@ -7,13 +7,20 @@
 // The Code C line (RP-352, scenario 64) counts each chain that has had a Code C
 // once, by the latest Revision the viewer sees.
 import { randomUUID } from "node:crypto";
-import { workItemSearchParams, type Dashboard, type DashboardCard, type DashboardFigure, type WorkItemList } from "@rabaed/domain";
+import { createDb } from "@rabaed/db";
+import { testDatabaseUrls } from "@rabaed/db/test-support";
+import { moduleKeys, workItemSearchParams, type Dashboard, type DashboardCard, type DashboardFigure, type WorkItemList } from "@rabaed/domain";
+import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createTestApi, expectHidden, type Caller } from "./support/harness.ts";
+import { attachDatasheet, createTestApi, expectHidden, type Caller } from "./support/harness.ts";
 import { all, bilingual, buildTower, draft, inInternalReview, ok, projectMember, submitted, take, type Company, type Tower } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
-afterAll(() => api.close());
+const migrator = createDb(testDatabaseUrls().migrator, { max: 1 });
+afterAll(async () => {
+  await api.close();
+  await migrator.destroy();
+});
 
 let c1: Company;
 let k1: Company;
@@ -156,7 +163,10 @@ describe("scenario 63: Pending and In preparation", () => {
 
   it("groups cards under their Module, with no time axis", async () => {
     const d = await dashboard(tower.c1Pm, tower.projectId);
-    expect(d.modules.map((m) => m.key)).toEqual(["submittals"]);
+    // In the Dashboard's order; other test files add test-only Types (e.g. the Snag List one below).
+    const keys = d.modules.map((m) => m.key);
+    expect(keys).toContain("submittals");
+    expect(keys).toEqual(moduleKeys.filter((k) => keys.includes(k)));
     expect(marCard(d).bars.map((b) => b.bucket)).toEqual(["pending", "C", "A", "B", "D"]);
     expect(JSON.stringify(d)).not.toMatch(/time|date|due/i);
   });
@@ -264,7 +274,7 @@ describe("scenario 64: the Code C line while C1's Revision is a Draft", () => {
     expect(line.rejectedAfterC).toBeNull();
     expect((await listed(tower.k1Manager, tower.projectId, line.awaitingRevision.query)).sort()).toEqual([unrevised, original].sort());
     for (const codeC of ["noRevisionYet", "revisionInProgress"] as const) {
-      expect(await listed(tower.k1Manager, tower.projectId, { type: ["MAR"], bucket: [], codeC: [codeC] })).toEqual([]);
+      expect(await listed(tower.k1Manager, tower.projectId, { module: "submittals", type: ["MAR"], bucket: [], codeC: [codeC] })).toEqual([]);
     }
   });
 
@@ -315,6 +325,126 @@ describe("a chain with two Code Cs and an approved Rev 2", () => {
       expect(await listed(by, tower.projectId, line.approvedOnRevision.query)).toEqual([rev2]);
       expect(await listed(by, tower.projectId, line.total.query)).toEqual([rev2]);
     }
+  });
+});
+
+describe("the Approved %", () => {
+  let tower: Tower;
+  beforeAll(async () => {
+    tower = await buildTower(api, { c1, k1 }, "PCT");
+    const { c1Engineer, c1Pm, k1Manager } = tower;
+    await draft(tower, c1Engineer, "Valves, draft");
+    await inInternalReview(tower, c1Engineer, "Valves, in internal review");
+    await submitted(tower, c1Engineer, c1Pm, "Valves, submitted");
+    await code(k1Manager, await submitted(tower, c1Engineer, c1Pm, "Valves, approved"), "approve_a");
+    await code(k1Manager, await submitted(tower, c1Engineer, c1Pm, "Valves, revise"), "revise_c");
+  });
+
+  it("is the same for C1 and K1 over the same Submitted chains: C1's In preparation is left out", async () => {
+    const c1View = marCard(await dashboard(tower.c1Pm, tower.projectId));
+    const k1View = marCard(await dashboard(tower.k1Manager, tower.projectId));
+    expect(c1View.inPreparation?.count).toBe(2);
+    expect(c1View.total.count).toBe(5);
+    expect(k1View.total.count).toBe(3);
+    expect(c1View.approved).toMatchObject({ count: 1, percent: 33 });
+    expect(k1View.approved).toMatchObject({ count: 1, percent: 33 });
+  });
+});
+
+describe("a Type of another Module: the Snag List", () => {
+  // No Rabaed Default lives outside the Submittals yet (the MAR is the only one), so a
+  // test-only Rabaed Type in the Snag List runs on the MAR's Workflow and Form, its
+  // Stages the Submittals' under the Snag List.
+  const SNAG = "SNT";
+  let tower: Tower;
+  let c1Items: string[] = [];
+
+  async function addSnagType() {
+    await sql`
+      insert into stage (owner_kind, module_key, key, name, category, sort)
+      select s.owner_kind, 'snag_list', s.key, s.name, s.category, s.sort from stage s
+      where s.owner_kind = 'rabaed' and s.module_key = 'submittals'
+        and not exists (select 1 from stage x where x.owner_kind = 'rabaed' and x.module_key = 'snag_list' and x.key = s.key)
+    `.execute(migrator);
+    await sql`
+      insert into work_item_type (owner_kind, module_key, code, name, workflow_definition_id, outcome_kind, form_definition_id)
+      select t.owner_kind, 'snag_list', ${SNAG}, ${JSON.stringify(bilingual("Snag (test)"))}::jsonb, t.workflow_definition_id, t.outcome_kind, t.form_definition_id
+      from work_item_type t
+      where t.owner_kind = 'rabaed' and t.code = 'MAR'
+        and not exists (select 1 from work_item_type x where x.owner_kind = 'rabaed' and x.code = ${SNAG})
+    `.execute(migrator);
+  }
+
+  /** A Draft Snag on `at`'s Project, as `draft` raises a MAR. */
+  async function snag(at: Tower, title: string): Promise<string> {
+    const res = await at.c1Engineer.post(`/v1/projects/${at.projectId}/work-items`, {
+      type: SNAG,
+      title,
+      answers: { manufacturer: "ACME Cables", description: "Cracked tile", trade: at.electrical, location: at.buildingA },
+    });
+    expect(res.statusCode, res.body).toBe(201);
+    await attachDatasheet(at.c1Engineer, res.json().id);
+    return res.json().id;
+  }
+
+  async function submittedSnag(at: Tower, title: string): Promise<string> {
+    const id = await snag(at, title);
+    await take(at.c1Engineer, id, "send_for_review");
+    await ok(at.c1Pm.post(`/v1/work-items/${id}/claim`));
+    await take(at.c1Pm, id, "submit");
+    return id;
+  }
+
+  beforeAll(async () => {
+    await addSnagType();
+    tower = await buildTower(api, { c1, k1 }, "SNL");
+    // Each Position's Submittals permissions, in the Snag List too.
+    await sql`
+      insert into position_permission (position_id, module_key, permission)
+      select position_id, 'snag_list', permission from position_permission where module_key = 'submittals'
+      on conflict do nothing
+    `.execute(migrator);
+    const draftSnag = await snag(tower, "Tile, draft");
+    const pendingSnag = await submittedSnag(tower, "Tile, submitted");
+    const closedSnag = await submittedSnag(tower, "Tile, approved");
+    await code(tower.k1Manager, closedSnag, "approve_a");
+    c1Items = [draftSnag, pendingSnag, closedSnag];
+    await submitted(tower, tower.c1Engineer, tower.c1Pm, "A MAR beside the Snags");
+  });
+
+  function snagCard(d: Dashboard) {
+    const c = card(d, SNAG);
+    if (c.kind !== "open_closed") throw new Error("expected an open/closed card");
+    return c;
+  }
+
+  it("shows open and closed that add up to the total, for C1 and K1", async () => {
+    const c1Card = snagCard(await dashboard(tower.c1Pm, tower.projectId));
+    expect([c1Card.total.count, c1Card.open.count, c1Card.closed.count]).toEqual([3, 2, 1]);
+    const k1Card = snagCard(await dashboard(tower.k1Manager, tower.projectId));
+    expect([k1Card.total.count, k1Card.open.count, k1Card.closed.count]).toEqual([2, 1, 1]);
+  });
+
+  it("opens, from each of its numbers, the Snag List of exactly those chains", async () => {
+    for (const by of [tower.c1Pm, tower.k1Manager]) {
+      const c = snagCard(await dashboard(by, tower.projectId));
+      for (const f of [c.total, c.open, c.closed]) {
+        expect(f.query.module).toBe("snag_list");
+        expect((await listed(by, tower.projectId, f.query)).length).toBe(f.count);
+      }
+    }
+    expect((await listed(tower.c1Pm, tower.projectId, snagCard(await dashboard(tower.c1Pm, tower.projectId)).total.query)).sort()).toEqual(
+      [...c1Items].sort(),
+    );
+  });
+
+  it("keeps the Submittals List to the Submittals, and the Snag List to its Stages and Types", async () => {
+    const submittals: WorkItemList = (await ok(tower.c1Pm.get(`/v1/projects/${tower.projectId}/work-items`), 200)).json();
+    expect(submittals.items.map((i) => i.type.code)).toEqual(["MAR"]);
+    const snags: WorkItemList = (await ok(tower.c1Pm.get(`/v1/projects/${tower.projectId}/work-items?module=snag_list`), 200)).json();
+    expect(snags.items.map((i) => i.type.code)).toEqual([SNAG, SNAG, SNAG]);
+    expect(snags.filters.types.map((t) => t.code)).toEqual([SNAG]);
+    expect(snags.stages.reduce((sum, s) => sum + s.count, 0)).toBe(3);
   });
 });
 

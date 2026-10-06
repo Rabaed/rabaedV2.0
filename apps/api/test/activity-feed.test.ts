@@ -320,6 +320,13 @@ describe("paging and filters", () => {
     }
   });
 
+  it("names the Project's Types by Module for its filters, with no counts", async () => {
+    const { types } = await page(tower.c1Pm, {});
+    expect(types).toEqual(expect.arrayContaining([{ code: "MAR", name: expect.objectContaining({ en: "Material Submittal" }), moduleKey: "submittals" }]));
+    expect(types.map((t) => t.code)).toContain(TYPE);
+    for (const t of types) expect(Object.keys(t).toSorted()).toEqual(["code", "moduleKey", "name"]);
+  });
+
   it("filters by Module and by Type, and combines them", async () => {
     const everything = (await feed(tower.c1Pm)).entries;
     expect((await feed(tower.c1Pm, { module: "submittals" })).entries).toEqual(everything);

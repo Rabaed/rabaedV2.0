@@ -1,6 +1,6 @@
 "use client";
 
-import { activityFeedSearchParams, type ActivityFeed, type Dashboard, type Locale } from "@rabaed/domain";
+import { activityFeedSearchParams, type ActivityFeed, type Locale } from "@rabaed/domain";
 import { ActivityFeedPanel, type ActivityFeedFilters } from "@rabaed/ui";
 import { useRef, useState } from "react";
 import { Link } from "@/i18n/navigation";
@@ -13,14 +13,12 @@ import { Link } from "@/i18n/navigation";
 export function ActivityFeedView({
   projectId,
   initial,
-  dashboard,
   locale,
   fullHeight = false,
 }: {
   projectId: string;
+  /** The first page; its `types` name the Project's Modules and Types, for the filters. */
   initial: ActivityFeed;
-  /** The Dashboard: its Type cards name the Project's Modules and Types, for the filters. */
-  dashboard: Dashboard;
   locale: Locale;
   fullHeight?: boolean;
 }) {
@@ -61,7 +59,7 @@ export function ActivityFeedView({
         setQuery(next);
         void load(next, null);
       }}
-      types={dashboard.modules.flatMap((m) => m.cards.map((c) => ({ code: c.type.code, name: c.type.name, moduleKey: m.key })))}
+      types={initial.types}
       locale={locale}
       // Link adds the locale.
       itemHref={(id) => `/work-items/${id}`}

@@ -12,6 +12,7 @@ export * from "./formula.ts";
 export * from "./health.ts";
 export * from "./locale.ts";
 export * from "./member.ts";
+export * from "./module.ts";
 export * from "./notification.ts";
 export * from "./option-list.ts";
 export * from "./participant.ts";

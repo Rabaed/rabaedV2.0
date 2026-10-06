@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { holdsChainCondition, type ChainBucketCondition, type ChainBucketInput } from "./chain-bucket.ts";
+import { chainConditionKeys, holdsChainCondition, unseenBeforeSubmit, type ChainBucketCondition, type ChainBucketInput } from "./chain-bucket.ts";
 
 /**
  * The Dashboard's Code C line (RP-352, spec RP-344; visibility.md "Dashboard
@@ -33,6 +33,9 @@ export type CodeCInput = ChainBucketInput & { hadCodeC: boolean };
 export type CodeCCondition = ChainBucketCondition & { hadCodeC?: boolean };
 export type CodeCRule = { readonly when: CodeCCondition; readonly state: CodeCState | null };
 
+/** Every key a Code C condition may give: chainBucket's, and `hadCodeC`. */
+export const codeCConditionKeys: readonly (keyof CodeCCondition)[] = [...chainConditionKeys, "hadCodeC"];
+
 const onChain = { outcomeKind: "review_code", hadCodeC: true } as const;
 
 /** The rule, in order: the first condition that holds gives the state. */
@@ -43,7 +46,7 @@ export const codeCRules: readonly CodeCRule[] = [
   { when: { ...onChain, outcome: "B" }, state: "approvedOnRevision" },
   { when: { ...onChain, outcome: "D" }, state: "rejectedAfterC" },
   // Nobody but its raiser sees a Revision before it is Submitted (V1), as in chainBucket.
-  { when: { open: true, submitted: false, raisedByViewer: false }, state: null },
+  { when: unseenBeforeSubmit, state: null },
   { when: { ...onChain, open: true, raisedByViewer: true }, state: "revisionInProgress" },
   { when: { ...onChain, open: true }, state: "awaitingRevision" },
   { when: { ...onChain, outcome: "C", raisedByViewer: true }, state: "noRevisionYet" },
@@ -52,10 +55,12 @@ export const codeCRules: readonly CodeCRule[] = [
 
 /** The Code C state of a chain, or null when it isn't on the Code C line. */
 export function codeCState(input: CodeCInput): CodeCState | null {
-  return (
-    codeCRules.find(({ when: { hadCodeC, ...rest } }) => (hadCodeC === undefined || hadCodeC === input.hadCodeC) && holdsChainCondition(rest, input))
-      ?.state ?? null
-  );
+  return codeCRules.find(({ when }) => holdsCodeCCondition(when, input))?.state ?? null;
+}
+
+/** Whether every key of `when` holds for `input`: chainBucket's keys, and `hadCodeC`. */
+export function holdsCodeCCondition({ hadCodeC, ...rest }: CodeCCondition, input: CodeCInput): boolean {
+  return (hadCodeC === undefined || hadCodeC === input.hadCodeC) && holdsChainCondition(rest, input);
 }
 
 /** The states a `codeC` filter takes in: awaiting revision is also both halves of the raiser's split. */
