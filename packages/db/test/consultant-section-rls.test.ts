@@ -137,6 +137,13 @@ const changes = async (as: string) => ({
   events: await call<{ seq: number }>(as, sql`select seq from work_item_event where work_item_id = ${item} and type = 'answers_changed'`),
   history: await call<{ seq: number }>(as, sql`select seq from app.work_item_history(${item}::uuid) where type = 'answers_changed'`),
 });
+/** The item's entries in the Activity Feed `as` reads (RP-353): its type, audience and the acting Company. */
+const feed = (as: string) =>
+  call<{ type: string; audience: string; company: string | null }>(
+    as,
+    sql`select type, audience, company_name ->> 'en' as company
+      from app.activity_feed(${projectId}::uuid, null, null, false, null, 100) where work_item_id = ${item}`,
+  );
 
 beforeAll(async () => {
   migrator = new pg.Client({ connectionString: urls.migrator });
@@ -230,6 +237,10 @@ describe("K1 at the Step its section names", () => {
     for (const k of [k1.member, k1Other]) {
       expect(await answers(k)).toEqual({ model: "FD-90", sample_checked: false });
       expect(await changes(k)).toMatchObject({ events: [{}, {}], history: [{}, {}] });
+      // The feed leaves answer changes out, even for K1; K1's own claim is there.
+      const entries = await feed(k);
+      expect(entries.map((e) => e.type)).not.toContain("answers_changed");
+      expect(entries).toContainEqual({ type: "claimed", audience: "internal", company: "K1" });
     }
   });
 
@@ -237,6 +248,9 @@ describe("K1 at the Step its section names", () => {
     for (const other of [c1.member, c1Pm, ow.member]) {
       expect(await answers(other)).toEqual({ model: "FD-90" });
       expect(await changes(other)).toEqual({ events: [], history: [] });
+      // The Activity Feed: none of K1's events, internal or answers (V5, V19).
+      expect((await feed(other)).filter((e) => e.company !== "C1")).toEqual([]);
+      expect((await feed(other)).map((e) => e.type)).not.toContain("answers_changed");
       expect(await call(other, sql<{ sha256: Buffer }>`select sha256 from (select app.answers_sha256(${item}::uuid) as sha256) h where sha256 is not null`)).toEqual([]);
     }
   });

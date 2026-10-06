@@ -2,22 +2,24 @@ import { workItemSearchParams, type Locale } from "@rabaed/domain";
 import { ProjectDashboard } from "@rabaed/ui";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
+import { ActivityFeedView } from "@/components/activity-feed-view";
 import { AddParticipantForm } from "@/components/add-participant-form";
 import { ParticipantCodeForm } from "@/components/participant-code-form";
 import { WithdrawInvitationButton } from "@/components/withdraw-invitation-button";
 import { Link, redirect } from "@/i18n/navigation";
-import { getDashboard, getMe, getProject, getProjectInvitations, getProjectParticipants } from "@/lib/session";
+import { getActivityFeed, getDashboard, getMe, getProject, getProjectInvitations, getProjectParticipants } from "@/lib/session";
 
 export default async function ProjectPage({ params }: { params: Promise<{ locale: Locale; projectId: string }> }) {
   const { locale, projectId } = await params;
   setRequestLocale(locale);
   const t = await getTranslations("projects");
   // A Project the Member is not on is not found, exactly like one that doesn't exist.
-  const [me, project, participants, dashboard] = await Promise.all([
+  const [me, project, participants, dashboard, activity] = await Promise.all([
     getMe(),
     getProject(projectId),
     getProjectParticipants(projectId),
     getDashboard(projectId),
+    getActivityFeed(projectId),
   ]);
   if (!me) return redirect({ href: "/sign-in", locale });
   if (!project) notFound();
@@ -31,14 +33,18 @@ export default async function ProjectPage({ params }: { params: Promise<{ locale
 
       {/* The Dashboard comes first: Type cards over the items the Member can see, each number a link to the List behind it. */}
       {dashboard && (
-        <section aria-label={t("dashboard")} data-testid="dashboard">
-          <ProjectDashboard
-            dashboard={dashboard}
-            locale={locale}
-            linkAs={Link}
-            hrefFor={(query) => `/projects/${project.id}/work-items?${workItemSearchParams(query)}`}
-          />
-        </section>
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_24rem]">
+          <section aria-label={t("dashboard")} data-testid="dashboard" className="min-w-0">
+            <ProjectDashboard
+              dashboard={dashboard}
+              locale={locale}
+              linkAs={Link}
+              hrefFor={(query) => `/projects/${project.id}/work-items?${workItemSearchParams(query)}`}
+            />
+          </section>
+          {/* The Activity Feed beside the cards: the Project's events as the Member may see them (RP-353). */}
+          {activity && <ActivityFeedView projectId={project.id} initial={activity} dashboard={dashboard} locale={locale} />}
+        </div>
       )}
       <dl className="grid grid-cols-[max-content_1fr] gap-x-6 gap-y-2">
         <dt className="text-muted">{t("code")}</dt>

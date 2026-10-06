@@ -1,5 +1,7 @@
 import "server-only";
 import type {
+  ActivityFeed,
+  ActivityFeedQuery,
   CompanyInvitations,
   CompanyMembers,
   CompanyParticipations,
@@ -29,7 +31,7 @@ import type {
   WorkItemQuery,
   OptionList,
 } from "@rabaed/domain";
-import { workItemSearchParams } from "@rabaed/domain";
+import { activityFeedSearchParams, workItemSearchParams } from "@rabaed/domain";
 import { cookies } from "next/headers";
 import { apiUrl } from "./api-url.ts";
 
@@ -143,6 +145,12 @@ export function getWorkItems(projectId: string, query: WorkItemQuery): Promise<W
 /** A Project's Dashboard: Type cards over the items the signed-in Member can see; null if it isn't one of theirs. */
 export function getDashboard(projectId: string): Promise<Dashboard | null> {
   return apiGet<Dashboard>(`/v1/projects/${encodeURIComponent(projectId)}/dashboard`);
+}
+
+/** A page of a Project's Activity Feed, as the signed-in Member may see it; null if the Project isn't one of theirs. */
+export function getActivityFeed(projectId: string, query: Partial<ActivityFeedQuery> = {}): Promise<ActivityFeed | null> {
+  const params = activityFeedSearchParams(query).toString();
+  return apiGet<ActivityFeed>(`/v1/projects/${encodeURIComponent(projectId)}/activity${params ? `?${params}` : ""}`);
 }
 
 /** One Work Item; null if the signed-in Member can't see it (exactly as if it didn't exist). */

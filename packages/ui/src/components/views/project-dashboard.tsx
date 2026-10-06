@@ -184,3 +184,8 @@ function BigNumber({ label, figure, ...ctx }: { label: string; figure: Dashboard
     </div>
   );
 }
+
+/** A Module's name, in the viewer's language (e.g. for the Activity Feed's Module filter). */
+export function moduleName(key: ModuleKey, locale: Locale): string {
+  return moduleNames[key][locale];
+}

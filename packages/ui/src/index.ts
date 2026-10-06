@@ -104,4 +104,5 @@ export {
 } from "./tokens/themes.ts";
 export { stageColour } from "./components/status/stage-colour.ts";
 export { WorkItemList, type WorkItemListProps } from "./components/views/work-item-list.tsx";
-export { ProjectDashboard, chainBucketLabel, type ProjectDashboardProps } from "./components/views/project-dashboard.tsx";
+export { ProjectDashboard, chainBucketLabel, moduleName, type ProjectDashboardProps } from "./components/views/project-dashboard.tsx";
+export { ActivityFeedPanel, type ActivityFeedFilters, type ActivityFeedPanelProps } from "./components/views/activity-feed-panel.tsx";

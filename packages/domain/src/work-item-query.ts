@@ -179,13 +179,13 @@ export function decodeWorkItemCursor(cursor: string, sort: WorkItemSort): string
   return key;
 }
 
-// Base64url of UTF-8 text, in the browser as on the server.
-function toBase64Url(text: string): string {
+/** Base64url of UTF-8 text, in the browser as on the server (opaque cursors). */
+export function toBase64Url(text: string): string {
   const binary = String.fromCodePoint(...new TextEncoder().encode(text));
   return btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
 }
 
-function fromBase64Url(encoded: string): string {
+export function fromBase64Url(encoded: string): string {
   const binary = atob(encoded.replaceAll("-", "+").replaceAll("_", "/"));
   return new TextDecoder("utf-8", { fatal: true }).decode(Uint8Array.from(binary, (c) => c.codePointAt(0)!));
 }

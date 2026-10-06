@@ -1,4 +1,6 @@
 import {
+  activityFeed,
+  activityFeedQuery,
   addedLink,
   addLinkRequest,
   createdWorkItem,
@@ -26,6 +28,7 @@ import { z } from "zod";
 import type { AppContext } from "../app.ts";
 import { idOrNotFound, notFound, visibleOrNotFound } from "../http-error.ts";
 import { refusal } from "../refusals.ts";
+import { getActivityFeed } from "../work-items/activity-feed.ts";
 import { getDashboard } from "../work-items/dashboard.ts";
 import { getLinkedFrom } from "../work-items/linked-from.ts";
 import { addWorkItemLink, getWorkItemLinks, removeWorkItemLink } from "../work-items/links.ts";
@@ -86,6 +89,17 @@ export const workItemRoutes =
       const memberId = ctx.requireMember(request);
       return visibleOrNotFound(getDashboard(ctx.db, memberId, idOrNotFound(request.params.projectId), ctx.now()));
     });
+
+    // The Activity Feed: the Project's Work Item events as the Member may see them,
+    // newest first, a page at a time (RP-353; visibility.md "Activity Feed").
+    app.get(
+      "/v1/projects/:projectId/activity",
+      { schema: { params: projectParams, querystring: activityFeedQuery, response: { 200: activityFeed } } },
+      async (request) => {
+        const memberId = ctx.requireMember(request);
+        return visibleOrNotFound(getActivityFeed(ctx.db, memberId, idOrNotFound(request.params.projectId), request.query));
+      },
+    );
 
     // Link search: the Project's Submitted items the Member sees whose Document
     // Number or Subject contains `q`, a page at a time (visibility.md scenario 29).

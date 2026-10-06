@@ -344,7 +344,9 @@ Each created Draft carries `import_id` for traceability.
 - Internal Communication = `audience = internal`, shown only to that Participant's Members.
 - Rabaed Engineers' events are always `shared` and always carry a reason.
 
-**project_event**: append-only project-level events (participant added or withdrawn, settings changed, Workflow version published). Together with `work_item_event` it forms the **Activity Feed**, filtered by access and Visibility.
+**project_event**: append-only project-level events (participant added or withdrawn, settings changed, Workflow version published). It is not built yet, and stays out of the **Activity Feed** until its audience rules are settled.
+
+**Activity Feed** (as built, RP-353): `app.activity_feed`, a security invoker read of `work_item_event` in the family of `app.work_item_history`, so the same RLS applies (visible items, shared events and the Member's own Participant's internal ones, never `created`). Another Company is named through `app.work_item_companies`, by name only; `member`'s own RLS names people of the Member's own Company only, and the feed never names another Company's Code signer. `answers_changed` is left out; Documents write no event. Newest first (one moment's events by item, the later first); the cursor is the last entry's event id, whose place the function reads itself, so `seq` never leaves the database (V5). Indexed on (`project_id`, `created_at desc`, `work_item_id desc`, `seq desc`). Filters: Module, Types, and "items I'm on" (raised: `created_by_member_id`; held: a `step_assignment` assigned to the Member; acted on: an event of theirs).
 
 **notification** / **notification_preference**: in-app inbox and per-Member channel settings (email now, WhatsApp later). `notification`: `id`, `member_id`, `project_id`, `work_item_id`, `outbox_id` (unique with `member_id`: one per Member per row), `kind`, `step_id`, `created_at`, `read_at`. It holds ids only; the item's number and title are read through RLS when shown, and a Member sees only their own notifications of items they still see.
 
