@@ -162,12 +162,20 @@ Effects, in order:
    - the Package status is recomputed;
    - the parent is re-checked (a parent can't close while Subtasks are open, so that check is also a precondition when the parent itself closes).
 7. Notifications for the Transition go to the outbox. Recipients are re-checked against visibility at send time.
+   - **Step reached** (RP-195): a trigger on the new open `step_assignment`; delivered to its holder or Step Pool, never the actor.
+   - **Watched items** (RP-355): a trigger on `work_item_event` (a Transition, a Code or Inspection Result, a new Revision, a cancel; never `answers_changed`, Documents, claims, Recommended Codes or Internal Notes) writes a row when someone other than the actor watches the chain. `app.deliver_notification` delivers it to the chain's watchers who still see the item (`app.work_item_watchers`) and may read the event (V5: an internal move reaches only its own Participant), except the actor and the Members the event made it wait on (they get "Step reached").
+   - **Sent Back** (RP-356): a trigger on a `send_back` Transition's event writes a row; it is delivered to the active Project Members of the Participant it was sent back to (the Participant of the Step it gave back) who still see the item, never the actor, routed by their "Sent Back" settings. For them it is the one notification of that move: no "Step reached" for that Step and no watched-item notification of it. Nothing for a closed Project.
+   - **Routing** (RP-355): every recipient's notification passes the routing rule (`app.notification_route`, the same as `@rabaed/domain`'s `routeNotification`) with their settings, Project mute and email pause: in-app yes/no and email none/immediate/digest, stored on the notification for the email jobs. A notification for neither is not written. Need My Action never passes through it. The weekly Step Age report is an email only: its route has no bell and, while its email is on, `immediate` (sent on its schedule).
+   - **Immediate email** (RP-357): a notification routed `immediate` writes an `email` outbox row; the worker sends it in the recipient's preferred language (else their locale), with one template per kind (`notificationEmailTemplate` in `@rabaed/mailer`), only if `app.take_notification_email` finds it may still go (see data-model.md, notification). A failed send is retried and dead-lettered like any outbox row.
+   - **Daily digest** (RP-358): a notification routed `digest` waits. The worker's scheduled job `daily_digest` (07:00 Asia/Riyadh, Sunday to Thursday: `dailyDigestSchedule` in `@rabaed/domain`; a run missed while the worker was down is made up within 12 hours, never the next day) writes one `digest` outbox row per Member with notifications waiting, and the worker sends each Member one email, grouped by Project, then item, in their language (template `daily-digest`). Each entry passes the immediate email's send-time checks; one that fails is dropped. Friday's and Saturday's wait for Sunday's; an empty digest is not sent.
+   - **Closed Project** (RP-360, visibility.md scenario 15): a Project that is no longer active goes quiet. `app.deliver_notification` delivers nothing of it (events still in the outbox when it closed reach nobody), no digest is queued for what waits on it, and immediate emails, digest entries and weekly reports check it again at send time. Notifications already delivered stay in the bell.
 
 ### 5.2 `claim(item)` / `release(item)`
 
 - Claim takes a pooled assignment. It uses a conditional update, so only one claimer wins.
 - Release returns it to the pool.
 - Both append internal events.
+- A claim withdraws the other pool Members' unread "Step reached" notification for that Step (RP-355, scenario 70: `app.withdraw_step_reached`, a trigger). A release doesn't bring it back.
 
 ### 5.3 `recommend_code(item, code, note)`
 
@@ -287,7 +295,7 @@ Error codes, api (`/v1/projects/:id/numbering`, `/numbering/counters…`, `/v1/p
 - **Member removed from the Project:**
   - their claimed or default assignments become `vacant`;
   - the item waits at the same Step;
-  - their Company's Authorized Person is notified to name a replacement.
+  - their Company's Authorized Person is notified to name a replacement. As built (RP-356): a trigger on `step_assignment` becoming `vacant` writes an outbox row; `app.deliver_notification` delivers a `vacancy` notification to the Authorized Person of the assignment's Participant's Company, if the assignment is still vacant, the Project isn't closed and they see the item, routed by their "Vacancy" settings. Nothing makes an assignment vacant yet (RP-108).
   - `assign_vacancy(item, member)` (Authorized Person or Rabaed Admin) fills it with a pool member.
 - **Participant withdrawn:** every open item it raised gets a `cancelled` event, outcome `cancelled`, and a Documental Record. Its open assignments on other companies' items become Participant-level Vacancies. They pass to the replacement Participant's pool once one covering the item is added.
 
@@ -299,6 +307,7 @@ Error codes, api (`/v1/projects/:id/numbering`, `/numbering/counters…`, `/v1/p
 - A weekly job builds each Participant's ageing report from the items it can see, through `app.step_as_seen` too.
 - **"Need My Action"** = open assignments where the viewer is the assignee, or is in the pool and nobody has claimed it. It is a toggle on a Project's views (List, Kanban, later Plan, Floor and the Snag List), and each Project card shows its count. The viewer's own Drafts stay in view with the toggle on but are never counted (settled 2026-10-06).
 - **Weekly Step Age report:** Sunday 07:00 Riyadh time, by email, to Members holding the Assign permission (their Participant's open items) and to the Owner's and Owner Representative's Members holding Assign (oversight items). It stops when the Project closes.
+  As built (RP-359): the worker's scheduled job (`weeklyStepAgeReportSchedule`, RP-358's mechanism: a worker that was down makes it up within 12 hours, never a week late) queues one outbox row per active Project and Member holding `assign` there (any Module), and the outbox sends each one, checked again at send time: the Project still active, the Member still on it holding Assign, the "Weekly report" group's email not off, email not paused, the Project not muted. Its items are what the List shows the recipient with the open Stages filter: their visible open items, the latest Revision of each chain they see, aged through `app.step_as_seen`. For an Owner or Owner Representative, whose only access is oversight, that is their oversight items. Grouped 4+, 3, 2 and 1 weeks; the email links to the List with that filter, and to the items 4 weeks or more (`stepAgeMin=4`). An empty report is not sent. Submittals only for now, as the List; a "Need My Action" link waits for that filter.
 
 ---
 

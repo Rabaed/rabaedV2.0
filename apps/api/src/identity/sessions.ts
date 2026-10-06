@@ -6,6 +6,7 @@ import { sql } from "kysely";
 export type Principal = { kind: "member"; memberId: string };
 
 export interface Session {
+  memberId: string;
   token: string;
   expiresAt: Date;
 }
@@ -14,7 +15,7 @@ export async function startSession(db: Db, principal: Principal, now: Date, ttlM
   const { token, hash } = newToken();
   const expiresAt = new Date(now.getTime() + ttlMs);
   await sql`select app.create_session(${hash}, ${principal.memberId}::uuid, null::uuid, ${expiresAt})`.execute(db);
-  return { token, expiresAt };
+  return { memberId: principal.memberId, token, expiresAt };
 }
 
 /**

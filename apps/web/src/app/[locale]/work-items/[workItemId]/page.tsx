@@ -10,6 +10,7 @@ import { WorkItemLinkedFrom } from "@/components/work-item-linked-from";
 import { WorkItemLinks } from "@/components/work-item-links";
 import { WorkItemRevision } from "@/components/work-item-revision";
 import { WorkItemRevisionPicker } from "@/components/work-item-revision-picker";
+import { WorkItemWatch } from "@/components/work-item-watch";
 import { Link, redirect } from "@/i18n/navigation";
 import { fillingChoices, readingChoices } from "@/lib/built-in-choices";
 import { linkTargetNames } from "@/lib/link-search";
@@ -20,6 +21,7 @@ import {
   getOptionLists,
   getProjectScopes,
   getRevisionChain,
+  getWatchState,
   getWorkItem,
   getWorkItemDocuments,
   getWorkItemForm,
@@ -37,7 +39,7 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
   const { locale, workItemId } = await params;
   setRequestLocale(locale);
   const t = await getTranslations("workItems");
-  const [me, item, form, people, documents, links, linkedFrom, history, optionLists, chain] = await Promise.all([
+  const [me, item, form, people, documents, links, linkedFrom, history, optionLists, chain, watch] = await Promise.all([
     getMe(),
     getWorkItem(workItemId),
     getWorkItemForm(workItemId),
@@ -48,6 +50,7 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
     getWorkItemHistory(workItemId),
     getOptionLists(),
     getRevisionChain(workItemId),
+    getWatchState(workItemId),
   ]);
   if (!me) return redirect({ href: "/sign-in", locale });
   if (!item || !form || !people || !documents || !links || !linkedFrom) notFound();
@@ -81,7 +84,11 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
           <Link href={`/projects/${item.projectId}/work-items`} className="text-sm text-primary underline underline-offset-4">
             {t("title")}
           </Link>
-          <h1 className="text-h4 font-semibold">{item.title}</h1>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <h1 className="text-h4 font-semibold">{item.title}</h1>
+            {/* The viewer's own Watch only: no list or count of watchers anywhere. */}
+            {watch && <WorkItemWatch workItemId={item.id} watching={watch.watching} locale={locale} />}
+          </div>
           <div className="flex flex-wrap items-center gap-3">
             <StagePill stage={stageColour(item.stage)} label={item.stage.name[locale]} />
             {/* Step Age only while it waits at a Step; a closed item doesn't age. */}

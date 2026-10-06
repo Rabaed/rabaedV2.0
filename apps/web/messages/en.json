@@ -2,7 +2,8 @@
   "shell": {
     "appName": "Rabaed",
     "switchLanguage": "العربية",
-    "signOut": "Sign out"
+    "signOut": "Sign out",
+    "profile": "Profile"
   },
   "home": {
     "title": "Rabaed",
@@ -337,6 +338,15 @@
     "reached": "Reached you at {step}",
     "unread": "Unread",
     "markAllRead": "Mark all as read",
+    "unavailable": "Something went wrong. Try again.",
+    "revisionCreated": "New Revision",
+    "cancelled": "Cancelled",
+    "sentBack": "Sent Back to you by {company}",
+    "vacancy": "Vacancy at {step}: name a replacement"
+  },
+  "profile": {
+    "title": "Profile",
+    "notificationSettings": "Notification settings",
     "unavailable": "Something went wrong. Try again."
   }
 }

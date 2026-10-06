@@ -112,11 +112,19 @@ export class AppStack extends Stack {
     const adminDatabase = databaseConnection(data, "rabaed_admin");
     adminDatabase.grantRead(adminTaskRole);
 
+    // Named, like the others, so the email grants can be checked by name.
+    const workerTaskRole = new iam.Role(this, "WorkerTaskRole", {
+      roleName: names.workerTaskRole,
+      assumedBy: new iam.ServicePrincipal("ecs-tasks.amazonaws.com"),
+    });
+
     // Email through Amazon SES. Only the services that send email (the api,
-    // and Rabaed Admin for its sign-in codes and invitations) may.
+    // Rabaed Admin for its sign-in codes and invitations, and the worker for
+    // notification emails) may.
     const mail = new MailSending(this, config);
     mail.grantSend(apiTaskRole);
     mail.grantSend(adminTaskRole);
+    mail.grantSend(workerTaskRole);
 
     const api = service(
       "api",
@@ -149,10 +157,6 @@ export class AppStack extends Stack {
       { healthCheckGracePeriod: Duration.seconds(60) },
     );
     web.node.addDependency(api);
-
-    const workerTask = task("worker", { environment: appDatabase.environment });
-    appDatabase.grantRead(workerTask.taskRole);
-    const worker = service("worker", workerTask, network.securityGroups.worker);
 
     const loadBalancer = (this.loadBalancer = new elbv2.ApplicationLoadBalancer(this, "LoadBalancer", {
       vpc: network.vpc,
@@ -189,6 +193,18 @@ export class AppStack extends Stack {
 
     // The customer web's address: the domain once there is one.
     const webUrl = `https://${config.domain ?? loadBalancer.loadBalancerDnsName}`;
+
+    const workerTask = task("worker", {
+      environment: {
+        ...appDatabase.environment,
+        // Notification emails link to the item on the customer web.
+        WEB_URL: webUrl,
+        ...mail.environment,
+      },
+      taskRole: workerTaskRole,
+    });
+    appDatabase.grantRead(workerTaskRole);
+    const worker = service("worker", workerTask, network.securityGroups.worker);
 
     const admin = service(
       "admin",

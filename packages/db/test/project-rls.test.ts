@@ -148,6 +148,7 @@ async function fillProject(projectId: string, creator: string) {
      limit 1`,
     [creator, item],
   );
+  await expectOutcome(sql`select app.set_project_mute(${projectId}::uuid, true) as outcome`, "set");
   const name = JSON.stringify({ en: "Own", ar: "خاص" });
   await migrator.query(
     "insert into project_role (owner_kind, project_id, base_role, name, code) values ('project', $1, 'contractor', $2, 'OWNC')",

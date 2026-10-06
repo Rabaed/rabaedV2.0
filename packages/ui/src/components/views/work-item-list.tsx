@@ -4,6 +4,7 @@ import {
   formatNumber,
   isFilteredWorkItemQuery,
   isOpenStageCategory,
+  watchOutcomeNames,
   withoutFilters,
   stepAgeMinimums,
   workItemSorts,
@@ -65,10 +66,10 @@ const outcomes: Record<WorkItemOutcome, { label: Record<Locale, string>; tone: T
   B: { label: { en: "Code B", ar: "الرمز B" }, tone: "success" },
   C: { label: { en: "Code C", ar: "الرمز C" }, tone: "warning" },
   D: { label: { en: "Code D", ar: "الرمز D" }, tone: "danger" },
-  passed: { label: { en: "Passed", ar: "ناجح" }, tone: "success" },
-  passed_with_comments: { label: { en: "Passed with Comments", ar: "ناجح مع ملاحظات" }, tone: "success" },
-  failed: { label: { en: "Failed", ar: "راسب" }, tone: "danger" },
-  cancelled: { label: { en: "Cancelled", ar: "ملغى" }, tone: "neutral" },
+  passed: { label: watchOutcomeNames.passed, tone: "success" },
+  passed_with_comments: { label: watchOutcomeNames.passed_with_comments, tone: "success" },
+  failed: { label: watchOutcomeNames.failed, tone: "danger" },
+  cancelled: { label: watchOutcomeNames.cancelled, tone: "neutral" },
   closed: { label: { en: "Closed", ar: "مغلق" }, tone: "neutral" },
 };
 

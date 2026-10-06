@@ -1,10 +1,11 @@
 "use client";
 
 import { PASSWORD_MIN_LENGTH as MIN_PASSWORD } from "@rabaed/domain";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useState, type FormEvent } from "react";
 import { Button, Field, Input } from "@rabaed/ui";
 import { useRouter } from "@/i18n/navigation";
+import { browserLanguage } from "@/lib/browser-locale";
 
 /**
  * The invitation link carries its token in the URL fragment (#token=…), which
@@ -16,6 +17,7 @@ function tokenFromHash(): string | null {
 
 export function AcceptInvitationForm() {
   const t = useTranslations("acceptInvitation");
+  const locale = useLocale();
   const router = useRouter();
   const [token, setToken] = useState<string | null | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
@@ -36,7 +38,7 @@ export function AcceptInvitationForm() {
       const res = await fetch("/api/v1/invitations/accept", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ token, password }),
+        body: JSON.stringify({ token, password, locale: browserLanguage(locale) }),
       });
       if (res.ok) {
         router.replace("/");

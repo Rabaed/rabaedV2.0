@@ -72,8 +72,8 @@ describe("email (Amazon SES)", () => {
     expect(JSON.stringify(app.toJSON())).not.toMatch(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/);
   });
 
-  it("only the api and Rabaed Admin task roles may send email", () => {
-    expect(sesGrants().flatMap((g) => g.roles).sort()).toEqual(["rabaed-dev-admin-task", "rabaed-dev-api-task"]);
+  it("only the api, Rabaed Admin and worker task roles may send email", () => {
+    expect(sesGrants().flatMap((g) => g.roles).sort()).toEqual(["rabaed-dev-admin-task", "rabaed-dev-api-task", "rabaed-dev-worker-task"]);
   });
 
   it("may send only ses:SendEmail, only from the configured From address, only through the configuration set", () => {
@@ -90,14 +90,17 @@ describe("email (Amazon SES)", () => {
     }
   });
 
-  it("tells the api and Rabaed Admin their From address and configuration set, and no task the local catcher", () => {
-    for (const family of ["rabaed-dev-api", "rabaed-dev-admin"]) {
+  it("tells the api, Rabaed Admin and the worker their From address and configuration set, and no task the local catcher", () => {
+    for (const family of ["rabaed-dev-api", "rabaed-dev-admin", "rabaed-dev-worker"]) {
       expect(environmentOf(family), family).toMatchObject({ MAIL_FROM: "${MailFromAddress}", MAIL_SES_CONFIGURATION_SET: "rabaed-dev" });
     }
     for (const family of ["rabaed-dev-api", "rabaed-dev-admin", "rabaed-dev-web", "rabaed-dev-worker"]) {
       expect(environmentOf(family)).not.toHaveProperty("MAIL_CATCHER_URL");
     }
     expect(environmentOf("rabaed-dev-web")).not.toHaveProperty("MAIL_FROM");
-    expect(environmentOf("rabaed-dev-worker")).not.toHaveProperty("MAIL_FROM");
+  });
+
+  it("tells the worker the customer web's address, for the links in notification emails", () => {
+    expect(environmentOf("rabaed-dev-worker")).toMatchObject({ WEB_URL: expect.stringMatching(/^https:\/\//) });
   });
 });

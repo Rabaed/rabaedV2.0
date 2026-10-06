@@ -6,6 +6,20 @@ export function isLocale(value: string): value is Locale {
   return (locales as readonly string[]).includes(value);
 }
 
+/**
+ * The browser's language, as Rabaed has it: the first of `languages` (the
+ * browser's, most wanted first, such as `navigator.languages`) that is Arabic
+ * or English, region or not; `fallback` when it asks for neither. Sets the
+ * language of a Member's emails at their first sign-in (RP-355).
+ */
+export function browserLocale(languages: readonly string[], fallback: Locale): Locale {
+  for (const language of languages) {
+    const primary = language.split("-")[0]!.toLowerCase();
+    if (isLocale(primary)) return primary;
+  }
+  return fallback;
+}
+
 export function directionOf(locale: Locale): "ltr" | "rtl" {
   return locale === "ar" ? "rtl" : "ltr";
 }
