@@ -314,4 +314,18 @@ create or replace function app.work_item_links(p_work_item_id uuid)
     end
   $$;
 
+-- As in the sent_back_as_it_was migration; in app.work_item_links' order, so
+-- Links made at the same time go by the linked item's Document Number, then id.
+create or replace function app.free_links_record(p_work_item_id uuid) returns jsonb
+  language sql stable
+  set search_path = pg_catalog, public
+  as $$
+    select coalesce(jsonb_agg(
+      jsonb_build_object('documentNumber', t.document_number, 'subject', t.title)
+      order by l.created_at, t.document_number collate "C", l.id), '[]')
+    from work_item_link l
+    join work_item t on t.id = l.to_id
+    where l.from_id = p_work_item_id and l.kind = 'related' and l.removed_at is null
+  $$;
+
 drop function app.uuid_v7();

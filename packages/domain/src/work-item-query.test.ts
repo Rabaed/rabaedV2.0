@@ -98,7 +98,7 @@ describe("the query in the URL", () => {
     needMyAction: true,
     allRevisions: true,
     sort: "documentNumber",
-    cursor: encodeWorkItemCursor("documentNumber", ["false", "TWR-C1-EL-MAR-0001", row]),
+    cursor: encodeWorkItemCursor("documentNumber", ["false", "TWR-C1-EL-MAR-0001", "", row]),
   };
 
   it("reproduces the view: what a URL holds reads back the same", () => {
@@ -134,8 +134,9 @@ describe("the query in the URL", () => {
 
 describe("the cursor", () => {
   it("round-trips its sort key, Arabic text included", () => {
-    const key = ["false", "رقم", row];
-    expect(decodeWorkItemCursor(encodeWorkItemCursor("documentNumber", key), "documentNumber")).toEqual(key);
+    for (const key of [["false", "رقم", "", row], ["true", "", "كابلات", row]]) {
+      expect(decodeWorkItemCursor(encodeWorkItemCursor("documentNumber", key), "documentNumber")).toEqual(key);
+    }
   });
 
   it("is refused when tampered with: every part must be what its sort puts there", () => {
@@ -148,8 +149,18 @@ describe("the cursor", () => {
       ["stepAge", ["false", "2026-10-01T00:00:00Z", "", row]],
       // A Subject only for an item with no Step Age.
       ["stepAge", ["false", at, "Cables", row]],
-      ["documentNumber", ["0", "TWR-0001", row]],
-      ["documentNumber", ["false", "TWR-0001", row, row]],
+      ["documentNumber", ["0", "TWR-0001", "", row]],
+      ["documentNumber", ["false", "TWR-0001", "", row, row]],
+      ["documentNumber", ["false", "TWR-0001", row]],
+      // A Subject only for an item with no number, and then no number.
+      ["documentNumber", ["false", "TWR-0001", "Cables", row]],
+      ["documentNumber", ["true", "TWR-0001", "Cables", row]],
+      ["documentNumber", ["false", "", "", row]],
+      ["submissionDate", ["false", at, row]],
+      ["submissionDate", ["false", at, "Cables", row]],
+      // Not yet Submitted: no time, whatever the Subject.
+      ["submissionDate", ["true", at, "Cables", row]],
+      ["submissionDate", ["true", "yesterday", "", row]],
     ] as const) {
       expect(decodeWorkItemCursor(encodeWorkItemCursor(sort, key), sort), JSON.stringify(key)).toBeNull();
     }
@@ -204,10 +215,10 @@ describe("the Submission Date range and sort (RP-348)", () => {
 
   it("has a cursor holding the last row's Submission Date, or its Subject when it has none", () => {
     const at = "2026-03-01T09:00:00.123456Z";
-    for (const key of [["false", at, row], ["true", "Cables", row], ["true", "", row]]) {
+    for (const key of [["false", at, "", row], ["true", "", "Cables", row], ["true", "", "", row]]) {
       expect(decodeWorkItemCursor(encodeWorkItemCursor("submissionDate", key), "submissionDate")).toEqual(key);
     }
-    for (const key of [["false", "", row], ["false", "Cables", row], ["false", "yesterday", row], ["maybe", at, row], ["false", at, "not-an-id"]]) {
+    for (const key of [["false", "", "", row], ["false", "", "Cables", row], ["false", "yesterday", "", row], ["maybe", at, "", row], ["false", at, "", "not-an-id"]]) {
       expect(decodeWorkItemCursor(encodeWorkItemCursor("submissionDate", key), "submissionDate"), JSON.stringify(key)).toBeNull();
     }
   });

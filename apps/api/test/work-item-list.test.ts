@@ -403,7 +403,7 @@ describe("refusals", () => {
   });
 
   it("refuses a filter or cursor that isn't one", async () => {
-    const tampered = encodeWorkItemCursor("stepAge", ["false", "not a time", randomUUID()]);
+    const tampered = encodeWorkItemCursor("stepAge", ["false", "not a time", "", randomUUID()]);
     for (const bad of ["stepAgeMin=9", "with=someone", "sort=title", "cursor=garbage", `cursor=${tampered}`, "trade=not-an-id"]) {
       expect((await c1Engineer.get(`/v1/projects/${projectId}/work-items?${bad}`)).statusCode, bad).toBe(400);
     }

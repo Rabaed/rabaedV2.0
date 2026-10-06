@@ -232,7 +232,9 @@ describe("cursor paging by Submission Date", () => {
       subjects.set(res.json().id, title);
     }
     // Un-numbered Drafts and items not yet Submitted: by Subject, then id, never by when they were made (ADR 0015).
-    const bySubject = (a: string, b: string) => (subjects.get(a)! < subjects.get(b)! ? -1 : subjects.get(a)! > subjects.get(b)! ? 1 : a < b ? -1 : a > b ? 1 : 0);
+    // Code-unit order is `collate "C"`'s byte order for these ASCII Subjects and the ids' lowercase hex.
+    const byCodeUnits = (a: string, b: string) => Number(a > b) - Number(a < b);
+    const bySubject = (a: string, b: string) => byCodeUnits(subjects.get(a)!, subjects.get(b)!) || byCodeUnits(a, b);
     // 49 carry a Submission Date, in groups that share one (the id breaks the tie); 4 have none.
     const submitted = created.slice(0, 49);
     for (const [i, id] of submitted.entries()) {

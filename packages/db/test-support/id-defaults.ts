@@ -16,7 +16,7 @@ export async function idColumnsNotRandom(db: Db): Promise<string[]> {
     join pg_catalog.pg_attribute a on a.attrelid = c.oid and a.attnum > 0 and not a.attisdropped
     left join pg_catalog.pg_attrdef d on d.adrelid = c.oid and d.adnum = a.attnum
     where c.relkind in ('r', 'p')
-      and n.nspname not in ('pg_catalog', 'information_schema') and n.nspname not like 'pg\_%'
+      and n.nspname not in ('pg_catalog', 'information_schema') and n.nspname !~ '^pg_'
       and (a.attname = 'id' or (a.atttypid = 'uuid'::regtype and d.adbin is not null))
       and pg_get_expr(d.adbin, d.adrelid) is distinct from 'gen_random_uuid()'
     order by found
