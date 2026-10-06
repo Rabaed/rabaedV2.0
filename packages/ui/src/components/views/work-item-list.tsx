@@ -57,7 +57,8 @@ export type WorkItemListLabels = {
   location: string;
   outcome: string;
   stepAge: string;
-  weeksOrMore: (weeks: string) => string;
+  /** `weeks` is `count` written in the reader's digits; `count` chooses the plural. */
+  weeksOrMore: (weeks: string, count: number) => string;
   sort: string;
   sortStepAge: string;
   sortDocumentNumber: string;
@@ -215,7 +216,7 @@ export function WorkItemList({ list, query, locale, labels, hrefFor, itemHref, o
             label={t("stepAge")}
             allLabel={t("all")}
             value={query.stepAgeMin === undefined ? undefined : String(query.stepAgeMin)}
-            options={stepAgeMinimums.map((n) => ({ value: String(n), label: labels.weeksOrMore(formatNumber(n, locale)) }))}
+            options={stepAgeMinimums.map((n) => ({ value: String(n), label: labels.weeksOrMore(formatNumber(n, locale), n) }))}
             onChange={(v) => change({ stepAgeMin: v ? (Number(v) as WorkItemQuery["stepAgeMin"]) : undefined })}
           />
           <Field label={t("submittedFrom")}>

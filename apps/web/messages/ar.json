@@ -41,7 +41,7 @@
       "location": "الموقع",
       "outcome": "رمز المراجعة / النتيجة",
       "stepAge": "عمر الخطوة",
-      "weeksOrMore": "{weeks} أسابيع أو أكثر",
+      "weeksOrMore": "{count, plural, one {{weeks} أسبوع أو أكثر} other {{weeks} أسابيع أو أكثر}}",
       "sort": "الترتيب حسب",
       "sortStepAge": "عمر الخطوة، الأقدم أولًا",
       "sortDocumentNumber": "رقم المستند",

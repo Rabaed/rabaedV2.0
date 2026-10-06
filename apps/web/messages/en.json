@@ -41,7 +41,7 @@
       "location": "Location",
       "outcome": "Review Code / Inspection Result",
       "stepAge": "Step Age",
-      "weeksOrMore": "{weeks} weeks or more",
+      "weeksOrMore": "{count, plural, one {{weeks} week or more} other {{weeks} weeks or more}}",
       "sort": "Sort by",
       "sortStepAge": "Step Age, oldest first",
       "sortDocumentNumber": "Document Number",
