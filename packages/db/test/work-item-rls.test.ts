@@ -324,6 +324,18 @@ describe("the app role", () => {
     }
   });
 
+  it("has no path that deletes a Work Item, so a cancelled or discarded Draft keeps its row and created_at (RP-334)", async () => {
+    // Directly it is refused (above); and no function, trigger included, deletes one.
+    const { rows } = await migrator.query(
+      String.raw`select p.oid::regprocedure::text as fn from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+        where n.nspname not in ('pg_catalog', 'information_schema')
+          and p.prosrc ~* '\mdelete\s+from\s+(only\s+)?(public\.)?work_item\M'`,
+    );
+    expect(rows).toEqual([]);
+    const { rows: can } = await migrator.query("select has_table_privilege('rabaed_app', 'work_item', 'DELETE') as can");
+    expect(can).toEqual([{ can: false }]);
+  });
+
   it("cannot UPDATE, DELETE or INSERT work_item_event", async () => {
     for (const statement of [
       sql`update work_item_event set payload = '{}'`,

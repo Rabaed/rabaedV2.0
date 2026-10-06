@@ -19,7 +19,10 @@
 --   (the same time, in its history). It reads submitted_at, which every
 --   Member who sees the item may: nobody but the raiser sees an item before it
 --   (V1). The Creation Date is read only through app.work_item_creation_date, for
---   the raiser's Participant.
+--   the raiser's Participant. The same time is the Draft Step's step_assignment
+--   claimed_at, created_at and updated_at, and the raiser's work_item_access
+--   `since` (reason 'raised'): the app role reads none of those columns either,
+--   for any item (it needs none of them).
 -- * app.work_item_submitted (Link search, Links) is left as it is: whether a Sent
 --   Back item stays offered is RP-309's (visibility.md scenario 58).
 -- * app.take_transition: as the create_revision migration left it, except that
@@ -60,6 +63,10 @@ update work_item w set submitted_at = (
 
 revoke select (created_at) on work_item from rabaed_app;
 grant select (submitted_at) on work_item to rabaed_app;
+revoke select on step_assignment, work_item_access from rabaed_app;
+grant select (id, project_id, work_item_id, step_id, participant_id, assignee_member_id, status, done_at)
+  on step_assignment to rabaed_app;
+grant select (work_item_id, project_id, participant_id, reason) on work_item_access to rabaed_app;
 
 -- The `created` event is when the Draft was started too: kept in the chain, read
 -- by nobody through the app role, so the history starts at the item's first move.
