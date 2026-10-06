@@ -164,6 +164,11 @@ export function sequencedNumber(prefix: string, separator: string, seqDigits: nu
   return prefix + separator + padded(seq, seqDigits);
 }
 
+/** What the Participant segment prints: the Participant Code, or the Participant's position (01) until one is set. */
+export function participantSegment(participant: { code: string | null; ordinal: number }): string {
+  return participant.code ?? padded(participant.ordinal, 2);
+}
+
 function segmentValue(segment: NumberingSegment, item: NumberingAttributes): string | null {
   switch (segment.kind) {
     case "project":
@@ -173,7 +178,7 @@ function segmentValue(segment: NumberingSegment, item: NumberingAttributes): str
     case "trade":
       return item.tradeCode;
     case "participant":
-      return item.participant.code ?? padded(item.participant.ordinal, 2);
+      return participantSegment(item.participant);
     case "location":
       // An item whose Location sits above the level prints its own Location's code.
       return item.locationPath[segment.level - 1] ?? item.locationPath.at(-1) ?? null;
