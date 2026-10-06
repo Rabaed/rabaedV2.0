@@ -21,6 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with: { persist-credentials: false }
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
       - uses: actions/setup-node@v7
         with: { node-version: 24, cache: pnpm }
@@ -31,6 +32,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with: { persist-credentials: false }
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
       - uses: actions/setup-node@v7
         with: { node-version: 24, cache: pnpm }
@@ -41,6 +43,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with: { persist-credentials: false }
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
       - uses: actions/setup-node@v7
         with: { node-version: 24, cache: pnpm }
@@ -51,6 +54,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with: { persist-credentials: false }
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
       - uses: actions/setup-node@v7
         with: { node-version: 24, cache: pnpm }
@@ -71,6 +75,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with: { persist-credentials: false }
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - run: docker buildx build . --target web --load --tag rabaed-web:ci
       - name: Starts and answers the load balancer's health check
@@ -174,6 +179,7 @@ jobs:
       FILE_STORE_SECRET_ACCESS_KEY: ci-only-secret
     steps:
       - uses: actions/checkout@v7
+        with: { persist-credentials: false }
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
       - uses: actions/setup-node@v7
         with: { node-version: 24, cache: pnpm }
@@ -211,6 +217,7 @@ jobs:
       FILE_STORE_SECRET_ACCESS_KEY: ci-only-secret
     steps:
       - uses: actions/checkout@v7
+        with: { persist-credentials: false }
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
       - uses: actions/setup-node@v7
         with: { node-version: 24, cache: pnpm }
@@ -234,6 +241,7 @@ jobs:
       MAIL_CATCHER_URL: http://127.0.0.1:8025
     steps:
       - uses: actions/checkout@v7
+        with: { persist-credentials: false }
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
       - uses: actions/setup-node@v7
         with: { node-version: 24, cache: pnpm }
@@ -245,14 +253,33 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with: { persist-credentials: false }
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
       - uses: actions/setup-node@v7
         with: { node-version: 24, cache: pnpm }
       - run: pnpm install --frozen-lockfile
       - run: pnpm test:infra
 
+  # Workflows keep the hardening rules review keeps finding: no persisted
+  # credentials, no pull_request_target, no write token near fork code, third
+  # party actions pinned to a SHA (RP-331). Only needs the repository files, so
+  # it runs on every push and pull request, not only when workflows change:
+  # a required check must always report.
+  workflows-hardened:
+    name: workflows hardened
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with: { persist-credentials: false }
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@v7
+        with: { node-version: 24, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: node scripts/check-workflows.ts
+
   # A migration already on the base branch must stay byte-identical; only new
-  # files are allowed (RP-287). Pull requests only: a push has no base.
+  # files are allowed (RP-287), and each must sort after every migration on the
+  # base branch (RP-342). Pull requests only: a push has no base.
   migrations-immutable:
     name: migrations immutable
     if: github.event_name == 'pull_request'
@@ -261,6 +288,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
+          persist-credentials: false
       - uses: actions/setup-node@v7
         with: { node-version: 24 }
       - run: node scripts/check-migrations-immutable.ts "origin/$BASE_REF"
@@ -279,6 +307,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
+          persist-credentials: false
       - uses: actions/setup-node@v7
         with: { node-version: 24 }
       - run: node scripts/check-migration-drift.ts "$BASE_SHA" "$HEAD_SHA"

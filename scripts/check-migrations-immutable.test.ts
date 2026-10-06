@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { alteredMigrations } from "./check-migrations-immutable.ts";
+import { alteredMigrations, misorderedMigrations } from "./check-migrations-immutable.ts";
 import { migrationsDir as dir } from "./migrations.ts";
 
 // A throwaway repository: `main` with one migration, then a branch off it.
@@ -64,5 +64,38 @@ describe("alteredMigrations", () => {
     git("switch", "-q", "change");
     commit({ [`${dir}/20260929000000_b.sql`]: "create table b ();\n" });
     expect(alteredMigrations(repo, "main")).toEqual([]);
+  });
+});
+
+describe("misorderedMigrations", () => {
+  it("passes a new migration that sorts after the base's latest", () => {
+    commit({ [`${dir}/20260929000000_b.sql`]: "create table b ();\n" });
+    expect(misorderedMigrations(repo, "main")).toEqual([]);
+  });
+
+  it("fails a new migration that sorts before a migration main gained after the branch was made", () => {
+    git("switch", "-q", "main");
+    commit({ [`${dir}/20260930000000_c.sql`]: "create table c ();\n" }, "another merge");
+    git("switch", "-q", "change");
+    commit({ [`${dir}/20260929000000_b.sql`]: "create table b ();\n" });
+    expect(misorderedMigrations(repo, "main")).toEqual([{ path: `${dir}/20260929000000_b.sql`, latest: "20260930000000_c.sql" }]);
+  });
+
+  it("passes once the new migration is renamed to sort after the base's latest", () => {
+    git("switch", "-q", "main");
+    commit({ [`${dir}/20260930000000_c.sql`]: "create table c ();\n" }, "another merge");
+    git("switch", "-q", "change");
+    commit({ [`${dir}/20261001000000_b.sql`]: "create table b ();\n" });
+    expect(misorderedMigrations(repo, "main")).toEqual([]);
+  });
+
+  it("fails a new migration that sorts before the base's latest", () => {
+    commit({ [`${dir}/20260927000000_b.sql`]: "create table b ();\n" });
+    expect(misorderedMigrations(repo, "main")).toEqual([{ path: `${dir}/20260927000000_b.sql`, latest: "20260928150000_a.sql" }]);
+  });
+
+  it("ignores changes outside migrations", () => {
+    commit({ "README.md": "x" });
+    expect(misorderedMigrations(repo, "main")).toEqual([]);
   });
 });
