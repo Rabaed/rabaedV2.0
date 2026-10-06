@@ -79,7 +79,7 @@ export { WithChip, type WithChipHolder, type WithChipProps } from "./components/
 export { WorkItemCard, type WorkItemCardProps, type WorkItemState } from "./components/status/work-item-card.tsx";
 export { AppShell, TopBar, type AppShellProps, type TopBarProps } from "./components/shell/app-shell.tsx";
 export { PageHeader, type PageHeaderProps } from "./components/shell/page-header.tsx";
-export { ProjectTabs, projectTabKeys, type ProjectTabKey, type ProjectTabsProps } from "./components/shell/project-tabs.tsx";
+export { ProjectTabs, projectTabKeys, visibleProjectTabs, type ProjectTabKey, type ProjectTabsProps } from "./components/shell/project-tabs.tsx";
 export {
   Sidebar,
   SidebarNav,
@@ -110,3 +110,4 @@ export {
   type WorkItemBoardProps,
   type WorkItemViewSwitchProps,
 } from "./components/views/work-item-board.tsx";
+export { ProjectCards, type ProjectCardsProps } from "./components/views/project-cards.tsx";

@@ -277,6 +277,8 @@ describe("filters apply to the board as to the List", () => {
     { outcome: ["C"], allRevisions: true },
     { with: ["unclaimed"] },
     { with: ["step:draft"] },
+    { needMyAction: true },
+    { needMyAction: true, stage: ["pending_approval"] },
     { sort: "documentNumber" },
   ];
 

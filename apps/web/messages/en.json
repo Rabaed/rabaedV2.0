@@ -2,19 +2,29 @@
   "shell": {
     "appName": "Rabaed",
     "switchLanguage": "العربية",
-    "signOut": "Sign out"
+    "signOut": "Sign out",
+    "nav": "Main",
+    "projects": "My Projects",
+    "members": "Members",
+    "participations": "Company Projects",
+    "signedInAs": "Signed in as {name}, {company}"
   },
   "home": {
     "title": "Rabaed",
     "tagline": "Construction projects, one place, each company sees only its own work.",
     "healthLink": "System health",
     "documentNumberLabel": "Document Numbers read left to right in every language:",
-    "signIn": "Sign in",
-    "signedInAs": "Signed in as {name}, {company}",
-    "authorizedPerson": "Authorized Person",
-    "membersLink": "Members",
-    "projectsLink": "My Projects",
-    "participationsLink": "Company Projects"
+    "signIn": "Sign in"
+  },
+  "projectTabs": {
+    "label": "Project",
+    "dashboard": "Dashboard",
+    "submittals": "Submittals",
+    "inspections": "Inspections",
+    "snag-list": "Snag List",
+    "site-reports": "Site Reports",
+    "drawings": "Drawings",
+    "settings": "Settings"
   },
   "health": {
     "title": "System health",
