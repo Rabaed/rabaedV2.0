@@ -253,40 +253,48 @@ function matching(q: WorkItemQuery, now: Date, scope: QueryScope): RawBuilder<bo
 /**
  * One sort, all in one place: its order, the sort key a cursor keeps of a page's
  * last row, and where the next page starts after that key. The key is
- * [sorts last, value, id], as text; `cursorKeyValid` (work-item-query.ts in @rabaed/domain)
- * checks a cursor's key has this sort's shape before it reaches `after`.
+ * [sorts last, value, id] as text, with the Subject before the id for the Step Age
+ * sort; `cursorKeyValid` (work-item-query.ts in @rabaed/domain) checks a cursor's
+ * key has this sort's shape before it reaches `after`.
+ *
+ * Rows with no value to sort by (no number, no Step Age, not yet Submitted) go by
+ * Subject, then id: ids are random and say nothing of when an item was made, so
+ * they only break ties (ADR 0015, scenario 73). Subjects and numbers are compared
+ * byte by byte, the same in every locale.
  */
 type SortDefinition = {
   orderBy: RawBuilder<unknown>;
-  keyOf: (row: Row) => [last: string, value: string, id: string];
+  keyOf: (row: Row) => string[];
   after: (key: string[]) => RawBuilder<boolean>;
 };
 
 const sorts: Record<WorkItemSort, SortDefinition> = {
-  // The oldest Step Age first; closed items, which don't age, last, and within each the items with no Step Age (a Draft with no number) last, by id.
+  // The oldest Step Age first; closed items, which don't age, last, and within each the items with no Step Age
+  // (a Draft with no number) last, by Subject.
   stepAge: {
-    orderBy: sql`r.closed, r.step_entered_at nulls last, r.id`,
-    keyOf: (r) => [String(r.closed), r.entered_key ?? "", r.id],
-    after: ([closed, at, id]) =>
+    orderBy: sql`r.closed, r.step_entered_at nulls last, case when r.step_entered_at is null then r.title end collate "C", r.id`,
+    keyOf: (r) => [String(r.closed), r.entered_key ?? "", r.entered_key === null ? r.title : "", r.id],
+    after: ([closed, at, subject, id]) =>
       at === ""
-        ? sql`(r.closed > ${closed}::boolean or (r.closed = ${closed}::boolean and r.step_entered_at is null and r.id > ${id}::uuid))`
+        ? sql`(r.closed > ${closed}::boolean or (r.closed = ${closed}::boolean and r.step_entered_at is null
+            and (r.title collate "C", r.id) > (${subject}::text collate "C", ${id}::uuid)))`
         : sql`(r.closed > ${closed}::boolean or (r.closed = ${closed}::boolean and (r.step_entered_at is null or r.step_entered_at > ${at}::timestamptz or (r.step_entered_at = ${at}::timestamptz and r.id > ${id}::uuid))))`,
   },
-  // Items with no number yet (Drafts) last; numbers compared byte by byte, the same in every locale.
+  // Items with no number yet (Drafts) last, by Subject.
   documentNumber: {
-    orderBy: sql`r.document_number is null, coalesce(r.document_number, '') collate "C", r.id`,
-    keyOf: (r) => [String(r.document_number === null), r.document_number ?? "", r.id],
-    after: ([none, number, id]) =>
-      sql`(r.document_number is null, coalesce(r.document_number, '') collate "C", r.id) > (${none}::boolean, ${number}::text collate "C", ${id}::uuid)`,
+    orderBy: sql`r.document_number is null, coalesce(r.document_number, r.title) collate "C", r.id`,
+    keyOf: (r) => [String(r.document_number === null), r.document_number ?? r.title, r.id],
+    after: ([none, value, id]) =>
+      sql`(r.document_number is null, coalesce(r.document_number, r.title) collate "C", r.id) > (${none}::boolean, ${value}::text collate "C", ${id}::uuid)`,
   },
-  // The latest Submission Date first; items not yet Submitted last, by id.
+  // The latest Submission Date first; items not yet Submitted last, by Subject.
   submissionDate: {
-    orderBy: sql`r.submitted_at is null, r.submitted_at desc, r.id`,
-    keyOf: (r) => [String(r.submitted_key === null), r.submitted_key ?? "", r.id],
-    after: ([none, at, id]) =>
+    orderBy: sql`r.submitted_at is null, r.submitted_at desc, case when r.submitted_at is null then r.title end collate "C", r.id`,
+    keyOf: (r) => [String(r.submitted_key === null), r.submitted_key ?? r.title, r.id],
+    after: ([none, value, id]) =>
       none === "true"
-        ? sql`(r.submitted_at is null and r.id > ${id}::uuid)`
-        : sql`(r.submitted_at is null or r.submitted_at < ${at}::timestamptz or (r.submitted_at = ${at}::timestamptz and r.id > ${id}::uuid))`,
+        ? sql`(r.submitted_at is null and (r.title collate "C", r.id) > (${value}::text collate "C", ${id}::uuid))`
+        : sql`(r.submitted_at is null or r.submitted_at < ${value}::timestamptz or (r.submitted_at = ${value}::timestamptz and r.id > ${id}::uuid))`,
   },
 };
 

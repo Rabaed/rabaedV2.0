@@ -212,18 +212,24 @@ export function encodeWorkItemCursor(sort: WorkItemSort, key: readonly string[])
 
 // The last row's sort key, by sort, before its id: whether it sorts last (closed, or
 // no number yet) as "true" or "false", then when it entered its Step (UTC, to the
-// microsecond) or its Document Number. Checked here, so a tampered cursor is refused
-// before it reaches a query. The API makes each key, and pages after it, in its one
-// definition per sort (`sorts`, apps/api/src/work-items/query.ts).
+// microsecond) or its Document Number. A row with no such value sorts by its Subject
+// instead, never by its id alone, which says nothing of when it was made (ADR 0015).
+// Checked here, so a tampered cursor is refused before it reaches a query. The API
+// makes each key, and pages after it, in its one definition per sort (`sorts`,
+// apps/api/src/work-items/query.ts).
 const enteredAt = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/;
 const isFlag = (v: string | undefined) => v === "true" || v === "false";
 const cursorKeyValid: Record<WorkItemSort, (key: string[]) => boolean> = {
-  // An empty time: the item has no Step Age (a Draft with no number) and sorts last.
-  stepAge: ([last, at, id]) => isFlag(last) && (at === "" || enteredAt.test(at ?? "")) && uuid.safeParse(id).success,
+  // [closed, entered, Subject, id]. An empty time: the item has no Step Age (a Draft with no number),
+  // sorts last, by its Subject; otherwise the Subject is empty.
+  stepAge: ([last, at, subject, id]) =>
+    isFlag(last) && (at === "" || (enteredAt.test(at ?? "") && subject === "")) && uuid.safeParse(id).success,
+  // [no number, number, id]: with no number, its Subject in the number's place.
   documentNumber: ([last, , id]) => isFlag(last) && uuid.safeParse(id).success,
-  // Not yet Submitted sorts last: its flag is "true" and its time is empty.
-  submissionDate: ([last, at, id]) => isFlag(last) && (last === "true" ? at === "" : enteredAt.test(at ?? "")) && uuid.safeParse(id).success,
+  // [not yet Submitted, Submission Date, id]: not yet Submitted sorts last, its Subject in the time's place.
+  submissionDate: ([last, at, id]) => isFlag(last) && (last === "true" || enteredAt.test(at ?? "")) && uuid.safeParse(id).success,
 };
+const cursorKeyLength: Record<WorkItemSort, number> = { stepAge: 4, documentNumber: 3, submissionDate: 3 };
 
 /** The sort key a cursor holds, or null when it isn't a cursor made for `sort`. */
 export function decodeWorkItemCursor(cursor: string, sort: WorkItemSort): string[] | null {
@@ -235,7 +241,7 @@ export function decodeWorkItemCursor(cursor: string, sort: WorkItemSort): string
   }
   if (!Array.isArray(decoded) || decoded[0] !== sort || !decoded.every((v) => typeof v === "string")) return null;
   const key = decoded.slice(1) as string[];
-  if (key.length !== 3 || !cursorKeyValid[sort](key)) return null;
+  if (key.length !== cursorKeyLength[sort] || !cursorKeyValid[sort](key)) return null;
   return key;
 }
 

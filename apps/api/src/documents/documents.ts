@@ -50,7 +50,9 @@ export function listDocuments(db: Db, memberId: string, workItemId: string, limi
       -- member's own RLS shows only the viewer's own Company's people (V14).
       left join member m on m.id = d.uploaded_by_member_id
       where d.work_item_id = ${workItemId}
-      order by d.confirmed_at, d.id
+      -- Documents uploaded together (those copied into a Revision) by file name: ids are random
+      -- and say nothing of the order they were made in (ADR 0015).
+      order by d.confirmed_at, d.file_name, d.id
     `.execute(trx);
     const { rows: can } = await sql<{ can: boolean }>`select app.can_change_documents(${workItemId}::uuid) as can`.execute(trx);
     return {
