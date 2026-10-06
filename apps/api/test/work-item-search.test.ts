@@ -5,7 +5,7 @@
 // through the same visibility as the List, and no count reaches beyond the
 // page, so a word that matches only another Company's item says nothing at all.
 import { randomUUID } from "node:crypto";
-import { workItemSearchParams, type WorkItemList, type WorkItemQueryInput } from "@rabaed/domain";
+import { workItemSearchParams, type WorkItemBoard, type WorkItemList, type WorkItemQueryInput } from "@rabaed/domain";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { attachDatasheet, createTestApi, type Caller } from "./support/harness.ts";
 import { all, bilingual, buildTower, draft, ok, projectMember, submitted, take, type Company, type Tower } from "./support/tower.ts";
@@ -171,5 +171,31 @@ describe("what Search never finds (V1, V3, V19)", () => {
   it("refuses a search that is too long", async () => {
     const res = await tower.c1Engineer.get(`/v1/projects/${tower.projectId}/work-items?q=${"x".repeat(201)}&r=${randomUUID()}`);
     expect(res.statusCode).toBe(400);
+  });
+});
+
+describe("Search on the Kanban (RP-349)", () => {
+  async function board(by: Caller, q: string): Promise<WorkItemBoard> {
+    return (await ok(by.get(`/v1/projects/${tower.projectId}/work-items/kanban?${workItemSearchParams({ q })}`), 200)).json();
+  }
+  const cardIds = (b: WorkItemBoard) => b.columns.flatMap((c) => c.lanes.flatMap((l) => l.cards.map((card) => card.id))).sort();
+
+  it("finds what the List finds", async () => {
+    expect(cardIds(await board(tower.c1Engineer, "lighting"))).toEqual([item.lighting]);
+    expect(cardIds(await board(k1Engineer, "Sahara"))).toEqual([item.c2]);
+  });
+
+  it("a word matching only another Company's hidden item gives an empty board with zero counts", async () => {
+    const result = await board(tower.c1Engineer, "Xylophonic");
+    expect(cardIds(result)).toEqual([]);
+    expect(result.stages.every((s) => s.count === 0)).toBe(true);
+    expect(result.columns.every((c) => c.shown === 0 && c.lanes.every((l) => l.count === 0))).toBe(true);
+    expect(cardIds(await board(k1Engineer, "Xylophonic"))).toEqual([item.c2]);
+  });
+
+  it("counts no more than the cards it shows", async () => {
+    const result = await board(tower.c1Engineer, "Submittal");
+    expect(cardIds(result).length).toBeGreaterThan(0);
+    for (const s of result.stages) expect(s.count, s.key).toBe(result.columns.find((c) => c.stageKey === s.key)!.shown);
   });
 });

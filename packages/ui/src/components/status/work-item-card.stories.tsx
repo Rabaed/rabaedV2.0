@@ -4,6 +4,7 @@ import photo from "../../storybook/fixtures/site-photo.svg";
 import { expectTouchTarget, phone } from "../../storybook/form.ts";
 import { storyLocale, storyText } from "../../storybook/locale.ts";
 import { reviewCodes } from "../../tokens/themes.ts";
+import { Badge } from "../data/badge.tsx";
 import { WorkItemCard, type WorkItemCardProps } from "./work-item-card.tsx";
 
 const text = {
@@ -120,6 +121,21 @@ export const Closed: Story = {
       await expect(cards[i]!.querySelector(`[data-code=${code}]`)).not.toBeNull();
       await expect(cards[i]!.querySelector("[role=img]")).toBeNull();
     }
+  },
+};
+
+/** A Draft has no number yet, and says so; a closed item can show any badge, e.g. an Inspection Result. */
+export const NoNumberAndResult: Story = {
+  render: (args, context) => (
+    <div className="flex flex-col gap-3">
+      <WorkItemCard {...args} {...openItem(context)} number={null} rev={undefined} noNumberLabel={storyText(context, { en: "No number yet", ar: "بلا رقم بعد" })} />
+      <WorkItemCard {...args} {...openItem(context)} state={{ open: false, badge: <Badge tone="success">{storyText(context, { en: "Passed", ar: "ناجح" })}</Badge> }} />
+    </div>
+  ),
+  play: async (context) => {
+    const [draft, closed] = context.canvas.getAllByRole("link");
+    await expect(draft).toHaveAccessibleName(`${storyText(context, { en: "No number yet", ar: "بلا رقم بعد" })} ${storyText(context, text.title)}`);
+    await expect(closed).toHaveTextContent(storyText(context, { en: "Passed", ar: "ناجح" }));
   },
 };
 

@@ -1,5 +1,7 @@
 import { withMember, type Database, type Db, type ModuleKey } from "@rabaed/db";
 import {
+  boardLanes,
+  closedColumnDays,
   decodeWorkItemCursor,
   encodeWorkItemCursor,
   enteredStepBy,
@@ -7,6 +9,8 @@ import {
   stepAgeWeeks,
   workItemPageSize,
   type BilingualText,
+  type BoardCardInput,
+  type WorkItemBoard,
   type WorkItemList,
   type WorkItemOutcome,
   type WorkItemQuery,
@@ -205,6 +209,14 @@ function toRow(r: Row, now: Date): WorkItemRow {
   };
 }
 
+// Who holds a row of `visibleRows` (as `r`), by name: only the viewer's own
+// Participant's holder is named (app.work_item_holder), and member's own RLS
+// shows only their own Company's people (V14).
+const holderColumns = sql`hc.legal_name as holder_name,
+  m.full_name as claimer_name, coalesce(r.assignee_member_id = app.current_member_id(), false) as claimed_by_me`;
+const holderJoins = sql`left join lateral app.work_item_companies(r.id) hc on hc.participant_id = r.holder_participant_id
+  left join member m on m.id = r.assignee_member_id`;
+
 /** One page of the scope's visible items matching `q`, and how many match in each Stage. */
 export async function queryWorkItems(
   trx: Trx,
@@ -217,27 +229,19 @@ export async function queryWorkItems(
   const { orderBy, after } = ordering(q);
   const { rows: page } = await sql<Row>`
     with r as (${rows})
-    select r.*, hc.legal_name as holder_name,
-      -- Only the viewer's own Participant's holder is named (app.work_item_holder), and
-      -- member's own RLS shows only their own Company's people (V14).
-      m.full_name as claimer_name, coalesce(r.assignee_member_id = app.current_member_id(), false) as claimed_by_me
+    select r.*, ${holderColumns}
     from r
-    left join lateral app.work_item_companies(r.id) hc on hc.participant_id = r.holder_participant_id
-    left join member m on m.id = r.assignee_member_id
+    ${holderJoins}
     where ${where} and ${after}
     order by ${orderBy}
     limit ${workItemPageSize + 1}
-  `.execute(trx);
-  const { rows: counts } = await sql<{ stage_key: string; count: number }>`
-    with r as (${rows})
-    select r.stage_key, count(*)::int as count from r where ${where} group by r.stage_key
   `.execute(trx);
   const shown = page.slice(0, workItemPageSize);
   return {
     rows: shown.map((r) => toRow(r, now)),
     nextCursor: page.length > workItemPageSize ? cursorAfter(q, shown.at(-1)!) : null,
     // A search counts no more than its page shows ("Search and filters": no totals beyond the page).
-    stageCounts: q.q === undefined ? new Map(counts.map((c) => [c.stage_key, c.count])) : pageCounts(shown),
+    stageCounts: q.q === undefined ? await countByStage(trx, scope, q, now) : pageCounts(shown),
   };
 }
 
@@ -245,6 +249,40 @@ function pageCounts(rows: Row[]): Map<string, number> {
   const counts = new Map<string, number>();
   for (const r of rows) counts.set(r.stage_key, (counts.get(r.stage_key) ?? 0) + 1);
   return counts;
+}
+
+/** How many of the scope's visible items match `q` in each Stage, by Stage key. */
+async function countByStage(trx: Trx, scope: QueryScope, q: WorkItemQuery, now: Date): Promise<Map<string, number>> {
+  const { rows: counts } = await sql<{ stage_key: string; count: number }>`
+    with r as (${visibleRows(scope, q.allRevisions)})
+    select r.stage_key, count(*)::int as count from r where ${matching(q, now, scope)} group by r.stage_key
+  `.execute(trx);
+  return new Map(counts.map((c) => [c.stage_key, c.count]));
+}
+
+/**
+ * The Kanban's cards: every visible item of the scope matching `q`, in the
+ * sort's order, but of a closed Stage only those closed in the last
+ * `closedColumnDays` days. Grouped by Stage, each card with its holder's Participant.
+ */
+async function boardCards(trx: Trx, scope: QueryScope, q: WorkItemQuery, now: Date): Promise<Map<string, BoardCardInput[]>> {
+  const closedSince = new Date(now.getTime() - closedColumnDays * 86_400_000);
+  const { rows } = await sql<Row>`
+    with r as (${visibleRows(scope, q.allRevisions)})
+    select r.*, ${holderColumns}
+    from r
+    ${holderJoins}
+    left join work_item cw on cw.id = r.id and r.closed
+    where ${matching(q, now, scope)} and (not r.closed or coalesce(cw.closed_at, r.step_entered_at) >= ${closedSince}::timestamptz)
+    order by ${ordering(q).orderBy}
+  `.execute(trx);
+  const byStage = new Map<string, BoardCardInput[]>();
+  for (const r of rows) {
+    const cards = byStage.get(r.stage_key) ?? [];
+    cards.push({ card: toRow(r, now), holderParticipantId: r.holder_participant_id });
+    byStage.set(r.stage_key, cards);
+  }
+  return byStage;
 }
 
 /**
@@ -284,37 +322,67 @@ export function listWorkItems(db: Db, memberId: string, projectId: string, q: Wo
     if (!onProject) return null;
     const scope: QueryScope = { projectId, moduleKey: "submittals" };
     const { rows, nextCursor, stageCounts } = await queryWorkItems(trx, scope, q, now);
-    const stages = await trx
-      .selectFrom("stage")
-      .select(["key", "name", "category"])
-      .where("module_key", "=", scope.moduleKey)
-      .where("project_id", "is", null)
-      .orderBy("sort")
-      .execute();
-    const types = await trx
-      .selectFrom("work_item_type")
-      .select(["code", "name"])
-      .where("module_key", "=", scope.moduleKey)
-      .where((eb) => eb.or([eb("project_id", "is", null), eb("project_id", "=", projectId)]))
-      .orderBy("code")
-      .execute();
-    const { rows: values } = await sql<{ kind: "trade" | "location"; id: string; code: string; name: BilingualText; parent_id: string | null }>`
-      select d.kind, v.id, v.code, v.name, v.parent_id
-      from dimension_value v
-      join visibility_dimension d on d.id = v.dimension_id
-      where v.project_id = ${projectId} and d.kind in ('trade', 'location')
-      order by v.depth, v.sort, v.code
-    `.execute(trx);
-    return {
-      stages: stages.map((s) => ({ ...s, count: stageCounts.get(s.key) ?? 0 })),
-      items: rows,
-      nextCursor,
-      filters: {
-        types,
-        trades: values.filter((v) => v.kind === "trade").map(({ id, code, name }) => ({ id, code, name })),
-        locations: values.filter((v) => v.kind === "location").map(({ id, code, name, parent_id }) => ({ id, code, name, parentId: parent_id })),
-        with: await withChoices(trx, scope),
-      },
-    };
+    return { ...(await stagesAndFilters(trx, scope, stageCounts)), items: rows, nextCursor };
   });
+}
+
+/**
+ * The Kanban of one of the Member's Projects (RP-349): the List's Stages,
+ * counts and filters, and a column per Stage with its swimlanes (V14). Null
+ * when it isn't one of their Projects.
+ */
+export function boardWorkItems(db: Db, memberId: string, projectId: string, q: WorkItemQuery, now: Date): Promise<WorkItemBoard | null> {
+  return withMember(db, memberId, async (trx) => {
+    const onProject = await trx.selectFrom("project").select("id").where("id", "=", projectId).executeTakeFirst();
+    if (!onProject) return null;
+    const scope: QueryScope = { projectId, moduleKey: "submittals" };
+    const cards = await boardCards(trx, scope, q, now);
+    // A search counts no more than the cards it shows ("Search and filters": no totals beyond what is shown).
+    const counts = q.q === undefined ? await countByStage(trx, scope, q, now) : new Map([...cards].map(([key, c]) => [key, c.length]));
+    const { stages, filters } = await stagesAndFilters(trx, scope, counts);
+    const columns = stages.map((s) => {
+      const lanes = boardLanes(cards.get(s.key) ?? []);
+      return { stageKey: s.key, shown: lanes.reduce((sum, l) => sum + l.count, 0), lanes };
+    });
+    return { stages, filters, columns };
+  });
+}
+
+/**
+ * What the List and the Kanban show around their items: every Stage of the
+ * Module with how many matching items are in it, and what the toolbar's
+ * filters offer.
+ */
+async function stagesAndFilters(trx: Trx, scope: QueryScope, stageCounts: Map<string, number>): Promise<Pick<WorkItemList, "stages" | "filters">> {
+  const { projectId } = scope;
+  const stages = await trx
+    .selectFrom("stage")
+    .select(["key", "name", "category"])
+    .where("module_key", "=", scope.moduleKey)
+    .where("project_id", "is", null)
+    .orderBy("sort")
+    .execute();
+  const types = await trx
+    .selectFrom("work_item_type")
+    .select(["code", "name"])
+    .where("module_key", "=", scope.moduleKey)
+    .where((eb) => eb.or([eb("project_id", "is", null), eb("project_id", "=", projectId)]))
+    .orderBy("code")
+    .execute();
+  const { rows: values } = await sql<{ kind: "trade" | "location"; id: string; code: string; name: BilingualText; parent_id: string | null }>`
+    select d.kind, v.id, v.code, v.name, v.parent_id
+    from dimension_value v
+    join visibility_dimension d on d.id = v.dimension_id
+    where v.project_id = ${projectId} and d.kind in ('trade', 'location')
+    order by v.depth, v.sort, v.code
+  `.execute(trx);
+  return {
+    stages: stages.map((s) => ({ ...s, count: stageCounts.get(s.key) ?? 0 })),
+    filters: {
+      types,
+      trades: values.filter((v) => v.kind === "trade").map(({ id, code, name }) => ({ id, code, name })),
+      locations: values.filter((v) => v.kind === "location").map(({ id, code, name, parent_id }) => ({ id, code, name, parentId: parent_id })),
+      with: await withChoices(trx, scope),
+    },
+  };
 }

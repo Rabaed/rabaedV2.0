@@ -25,3 +25,4 @@ export * from "./numbering.ts";
 export * from "./numbering-counter.ts";
 export * from "./numbering-admin.ts";
 export * from "./work-item-query.ts";
+export * from "./work-item-board.ts";

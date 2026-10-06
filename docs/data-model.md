@@ -217,7 +217,7 @@ The key is the values of the pattern's counted segments joined by `-`, whatever 
 | `participant_entered_at`, `participant_entered_step_id` | when, and at which Step, the item reached the holding Participant (or closed): what every other Company sees (V14) |
 | `outcome` | `A, B, C, D, passed, passed_with_comments, failed, cancelled, closed`; null while open |
 | `recommended_code` | latest recommendation, informational |
-| `closed_at` | |
+| `closed_at` | set with `outcome`. The Kanban's closed columns hold the items closed in the last 30 days (RP-349) |
 
 **work_item_dimension_value**
 `work_item_id`, `dimension_id`, `dimension_value_id`. Exactly one value per dimension, and Trade is required.
@@ -383,4 +383,4 @@ Allowed actions are an explicit list: onboard Company, invite its Authorized Per
 
 - **Oversight:** Owner and Owner Representative get access at first Submit, within their Visibility (`reason = oversight`). See docs/visibility.md V2.
 - **Snags assigned to a Contractor:** the Contractor sees the shared history only, never the raiser's internal events (V5).
-- **Search:** Postgres full-text search first, always filtered through RLS. As built (RP-347): `work_item_search`, one row per Work Item kept by triggers, holds the Document Number, Subject, Type name, Trade and Location names and the raiser's Company name (English and Arabic), never answers or Documents, with a trigram and a full-text index. The app role can't read it; the List's `q` finds items through `app.search_work_items(project, q)`, which returns only the ids of matching items the caller sees. Every word must match: one of three letters or more as a part of a word, a shorter one as a whole word. A search's Stage counts are of its page only.
+- **Search:** Postgres full-text search first, always filtered through RLS. As built (RP-347): `work_item_search`, one row per Work Item kept by triggers, holds the Document Number, Subject, Type name, Trade and Location names and the raiser's Company name (English and Arabic), never answers or Documents, with a trigram and a full-text index. The app role can't read it; the List's `q` finds items through `app.search_work_items(project, q)`, which returns only the ids of matching items the caller sees. Every word must match: one of three letters or more as a part of a word, a shorter one as a whole word. A search's Stage counts are of the List's page, or the Kanban's shown cards, only.
