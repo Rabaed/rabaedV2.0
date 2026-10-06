@@ -28,6 +28,44 @@ const examples: EmailTemplateValues = {
     event: { type: "transition", transition: { en: "Send Back", ar: "إرجاع" }, outcome: null, companyName: k1, signerName: null },
   },
   "notification-vacancy": { ...item, step: { en: "Internal review", ar: "المراجعة الداخلية" } },
+  "daily-digest": {
+    projects: [
+      {
+        name: { en: "Tower <A>", ar: "البرج أ" },
+        items: [
+          {
+            workItemId: item.workItemId,
+            documentNumber: DOC,
+            subject: "Cable trays <Level 2>",
+            link: item.link,
+            entries: [
+              { kind: "step_reached", step: { en: "Contractor review", ar: "مراجعة المقاول" }, event: null },
+              { kind: "watched_event", step: null, event: codeB },
+            ],
+          },
+          {
+            workItemId: "0190a1b2-0000-7000-8000-000000000002",
+            documentNumber: null,
+            subject: "Pumps (Revision in Draft)",
+            link: "https://rabaed.test/ar/work-items/0190a1b2-0000-7000-8000-000000000002",
+            entries: [{ kind: "watched_event", step: null, event: { type: "revision_created", transition: null, outcome: null, companyName: null, signerName: null } }],
+          },
+        ],
+      },
+      {
+        name: { en: "Clinic", ar: "العيادة" },
+        items: [
+          {
+            workItemId: "0190a1b2-0000-7000-8000-000000000003",
+            documentNumber: "CLN-SUB-02-0007",
+            subject: "Doors",
+            link: "https://rabaed.test/ar/work-items/0190a1b2-0000-7000-8000-000000000003",
+            entries: [{ kind: "vacancy", step: { en: "Internal review", ar: "المراجعة الداخلية" }, event: null }],
+          },
+        ],
+      },
+    ],
+  },
 };
 
 const notificationTemplates = emailTemplates.filter((t) => t.startsWith("notification-"));
@@ -178,6 +216,62 @@ describe("notification emails", () => {
   it("Sent Back and a Vacancy say what happened", () => {
     expect(renderEmail("notification-sent-back", "en", examples["notification-sent-back"]).subject.split(" · ")[2]).toBe("Sent Back to you");
     expect(renderEmail("notification-vacancy", "en", examples["notification-vacancy"]).subject.split(" · ")[2]).toBe("Vacancy at Internal review");
+  });
+});
+
+describe("the daily digest (RP-358)", () => {
+  const digest = examples["daily-digest"];
+
+  it("has a subject that names nothing: no Document Number, Subject, Project or Company", () => {
+    expect(renderEmail("daily-digest", "en", digest).subject).toBe("Your Rabaed daily digest");
+    expect(renderEmail("daily-digest", "ar", digest).subject).toBe("ملخصك اليومي من ربائد");
+  });
+
+  it.each(locales)("in %s: groups by Project, then item, in order, with what happened to each", (locale) => {
+    const { text } = renderEmail("daily-digest", locale, digest);
+    const order = [
+      locale === "en" ? "Tower <A>" : "البرج أ",
+      DOC,
+      locale === "en" ? "Reached you at Contractor review" : "وصلك في مراجعة المقاول",
+      locale === "en" ? "Code B" : "الرمز B",
+      "Pumps (Revision in Draft)",
+      locale === "en" ? "New Revision" : "مراجعة جديدة",
+      locale === "en" ? "Clinic" : "العيادة",
+      "CLN-SUB-02-0007",
+      locale === "en" ? "Vacancy at Internal review" : "شاغر في المراجعة الداخلية",
+    ];
+    const positions = order.map((part) => text.indexOf(part));
+    expect(positions.every((p) => p >= 0)).toBe(true);
+    expect([...positions].sort((a, b) => a - b)).toEqual(positions);
+  });
+
+  it.each(locales)("in %s: every Document Number is left to right, and every item links to itself", (locale) => {
+    const { text, html } = renderEmail("daily-digest", locale, digest);
+    for (const number of [DOC, "CLN-SUB-02-0007"]) {
+      expect(text).toContain(`⁦${number}⁩`);
+      expect(html).toContain(`<bdi dir="ltr">${number}</bdi>`);
+    }
+    for (const project of digest.projects) {
+      for (const { link } of project.items) {
+        expect(text).toContain(link);
+        expect(html).toContain(`href="${link}"`);
+      }
+    }
+  });
+
+  it("names another Company only by name, with the signer of a final Code (V14)", () => {
+    for (const locale of locales) {
+      const { text } = renderEmail("daily-digest", locale, digest);
+      expect(text).toContain(k1[locale]);
+      expect(text).toContain(khalid[locale]);
+    }
+  });
+
+  it("escapes values in the HTML body", () => {
+    const { html } = renderEmail("daily-digest", "en", digest);
+    expect(html).toContain("Tower &lt;A&gt;");
+    expect(html).toContain("Cable trays &lt;Level 2&gt;");
+    expect(html).not.toContain("<Level 2>");
   });
 });
 

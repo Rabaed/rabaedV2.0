@@ -90,6 +90,41 @@ export interface NotificationEmail {
   content: NotificationEmailContent;
 }
 
+/**
+ * The daily email digest (RP-358): one email per Member of the notifications
+ * routed "daily digest" since their last one, grouped by Project, then item,
+ * each entry read when it is sent as its recipient may see it then (the same
+ * checks as an immediate email). Never sent empty.
+ */
+export interface NotificationDigest {
+  to: string;
+  /** The recipient's preferred language for email, else their locale. */
+  language: Locale;
+  projects: NotificationDigestProject[];
+}
+
+export interface NotificationDigestProject {
+  projectId: string;
+  name: BilingualText;
+  items: NotificationDigestItem[];
+}
+
+export interface NotificationDigestItem {
+  workItemId: string;
+  /** Null while the item has none. */
+  documentNumber: string | null;
+  subject: string;
+  /** What happened on it, oldest first. */
+  entries: NotificationDigestEntry[];
+}
+
+/** One notification in a digest: what one immediate email would say of it. */
+export interface NotificationDigestEntry {
+  kind: NotificationEmailKind;
+  step: NotificationEmailContent["step"];
+  event: NotificationEmailContent["event"];
+}
+
 /** The signed-in Member's notifications, newest first, and how many are unread (the bell). */
 export const notificationList = z.object({
   unread: z.number().int().nonnegative(),

@@ -1,4 +1,4 @@
-import type { Locale, NotificationEmail } from "@rabaed/domain";
+import type { Locale, NotificationDigest, NotificationEmail } from "@rabaed/domain";
 import { z } from "zod";
 import { notificationEmailTemplate, renderEmail, type RenderedEmail, type EmailTemplate, type EmailTemplateValues } from "./templates.ts";
 
@@ -37,6 +37,24 @@ const oneAddress = z.email();
 export function notificationMessage({ to, language, kind, content }: NotificationEmail, webUrl: string): MailMessage {
   const link = new URL(`/${language}/work-items/${encodeURIComponent(content.workItemId)}`, webUrl).href;
   return { to, template: notificationEmailTemplate[kind], locale: language, values: { ...content, link } };
+}
+
+/**
+ * The daily digest as the mailer sends it (RP-358): in the recipient's
+ * language, each item linking to itself on the customer web (`webUrl`).
+ */
+export function notificationDigestMessage({ to, language, projects }: NotificationDigest, webUrl: string): MailMessage<"daily-digest"> {
+  return {
+    to,
+    template: "daily-digest",
+    locale: language,
+    values: {
+      projects: projects.map(({ name, items }) => ({
+        name,
+        items: items.map((item) => ({ ...item, link: new URL(`/${language}/work-items/${encodeURIComponent(item.workItemId)}`, webUrl).href })),
+      })),
+    },
+  };
 }
 
 export function createMailer({ from, transport }: { from: string; transport: MailTransport }): Mailer {

@@ -2,7 +2,7 @@ import type { SendEmailCommand } from "@aws-sdk/client-sesv2";
 import { describe, expect, it, vi } from "vitest";
 import { catcherTransport } from "./catcher.ts";
 import { mailerFromEnv } from "./config.ts";
-import { createMailer, notificationMessage, type OutgoingEmail } from "./mailer.ts";
+import { createMailer, notificationDigestMessage, notificationMessage, type OutgoingEmail } from "./mailer.ts";
 import { sesTransport } from "./ses.ts";
 import { renderEmail } from "./templates.ts";
 
@@ -35,6 +35,19 @@ describe("notificationMessage", () => {
       template: "notification-watched-event",
       locale: "ar",
       values: { ...content, link: "https://rabaed.test/ar/work-items/0190a1b2-0000-7000-8000-000000000001" },
+    });
+  });
+});
+
+describe("notificationDigestMessage", () => {
+  it("emails the digest in the recipient's language, each item linking to itself on the web", () => {
+    const item = { workItemId: "0190a1b2-0000-7000-8000-000000000001", documentNumber: "TWR-MAR-01-0001", subject: "Cable trays", entries: [] };
+    const project = { projectId: "0190a1b2-0000-7000-8000-0000000000aa", name: { en: "Tower", ar: "البرج" }, items: [item] };
+    expect(notificationDigestMessage({ to: "pm@rabaed.test", language: "ar", projects: [project] }, "https://rabaed.test")).toEqual({
+      to: "pm@rabaed.test",
+      template: "daily-digest",
+      locale: "ar",
+      values: { projects: [{ name: project.name, items: [{ ...item, link: "https://rabaed.test/ar/work-items/0190a1b2-0000-7000-8000-000000000001" }] }] },
     });
   });
 });

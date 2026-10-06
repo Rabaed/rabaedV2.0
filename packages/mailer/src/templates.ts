@@ -3,6 +3,7 @@ import {
   formatNumber,
   type BilingualText,
   type Locale,
+  type NotificationDigestItem,
   type NotificationEmailContent,
   type NotificationEmailKind,
 } from "@rabaed/domain";
@@ -10,6 +11,11 @@ import {
 /** A notification email's values: what the recipient may see of the item at send time, and the link to it on the web. */
 export interface NotificationEmailValues extends NotificationEmailContent {
   link: string;
+}
+
+/** The daily digest's values: per Project, the items and what happened to each, with the link to each item on the web. */
+export interface DailyDigestValues {
+  projects: { name: BilingualText; items: (NotificationDigestItem & { link: string })[] }[];
 }
 
 /** The values each email template needs. */
@@ -30,6 +36,8 @@ export interface EmailTemplateValues {
   "notification-sent-back": NotificationEmailValues;
   /** A Step in the Member's Company has nobody to hold it (RP-356). */
   "notification-vacancy": NotificationEmailValues;
+  /** The daily digest of the notifications routed to it (RP-358). */
+  "daily-digest": DailyDigestValues;
 }
 
 export type EmailTemplate = keyof EmailTemplateValues;
@@ -173,6 +181,8 @@ const notificationCopy = {
     signedBy: (name: string) => `Signed by ${name}.`,
     open: "Open it on Rabaed:",
     settings: "You choose which emails you get in your notification settings on Rabaed.",
+    digestSubject: "Your Rabaed daily digest",
+    digestIntro: "What happened on your items on Rabaed since your last digest:",
   },
   ar: {
     reached: (step: string) => `وصلك في ${step}`,
@@ -195,6 +205,8 @@ const notificationCopy = {
     signedBy: (name: string) => `وقّعه ${name}.`,
     open: "افتحه على ربائد:",
     settings: "تختار الرسائل التي تصلك من إعدادات الإشعارات على ربائد.",
+    digestSubject: "ملخصك اليومي من ربائد",
+    digestIntro: "ما جرى على عناصرك في ربائد منذ آخر ملخص:",
   },
 } satisfies Record<Locale, unknown>;
 
@@ -236,17 +248,59 @@ function notificationEmail(locale: Locale, values: NotificationEmailValues, happ
   };
 }
 
+/** What happened, in a few words, for a notification of `kind`: the subject's last part, and a digest entry. */
+function happened(locale: Locale, kind: NotificationEmailKind, { step, event }: Pick<NotificationEmailContent, "step" | "event">): string {
+  const copy = notificationCopy[locale];
+  switch (kind) {
+    case "step_reached":
+      return copy.reached(stepName(locale, step));
+    case "watched_event":
+      return event ? watchedHappened(locale, event) : copy.updated;
+    case "sent_back":
+      return copy.sentBack;
+    case "vacancy":
+      return copy.vacancy(stepName(locale, step));
+  }
+}
+
 const notificationTemplates: { [K in NotificationEmailKind as (typeof notificationEmailTemplate)[K]]: Template<NotificationEmailValues> } = {
-  "notification-step-reached": (locale, values) =>
-    notificationEmail(locale, values, notificationCopy[locale].reached(stepName(locale, values.step)), []),
+  "notification-step-reached": (locale, values) => notificationEmail(locale, values, happened(locale, "step_reached", values), []),
   "notification-watched-event": (locale, values) =>
-    notificationEmail(locale, values, values.event ? watchedHappened(locale, values.event) : notificationCopy[locale].updated, actedBy(locale, values.event)),
-  "notification-sent-back": (locale, values) => notificationEmail(locale, values, notificationCopy[locale].sentBack, actedBy(locale, values.event)),
+    notificationEmail(locale, values, happened(locale, "watched_event", values), actedBy(locale, values.event)),
+  "notification-sent-back": (locale, values) => notificationEmail(locale, values, happened(locale, "sent_back", values), actedBy(locale, values.event)),
   "notification-vacancy": (locale, values) =>
-    notificationEmail(locale, values, notificationCopy[locale].vacancy(stepName(locale, values.step)), [[notificationCopy[locale].vacancyHelp]]),
+    notificationEmail(locale, values, happened(locale, "vacancy", values), [[notificationCopy[locale].vacancyHelp]]),
 };
 
-const templates: { [T in EmailTemplate]: Template<EmailTemplateValues[T]> } = { ...accountTemplates, ...notificationTemplates };
+// The daily digest (RP-358): one email of the notifications routed to it,
+// grouped by Project, then item, each entry as its immediate email would say it
+// (V14: another Company by name only). The subject names nothing.
+const digestTemplates: { "daily-digest": Template<DailyDigestValues> } = {
+  "daily-digest": (locale, { projects }) => {
+    const copy = notificationCopy[locale];
+    const entryLine = (entry: NotificationDigestItem["entries"][number]): Paragraph => [
+      [`– ${happened(locale, entry.kind, entry)}`, ...actedBy(locale, entry.event).map((p) => ` ${p.join("")}`)].join(""),
+    ];
+    return {
+      subject: copy.digestSubject,
+      paragraphs: [
+        [copy.digestIntro],
+        ...projects.flatMap((project) => [
+          [project.name[locale]],
+          ...project.items.flatMap((item): Paragraph[] => [
+            item.documentNumber ? [{ ltr: item.documentNumber, inline: true }, ` · ${item.subject}`] : [item.subject],
+            ...item.entries.map(entryLine),
+            [{ ltr: webLink(item.link), link: true }],
+          ]),
+        ]),
+        [copy.settings],
+      ],
+      signOff: signOff[locale],
+    };
+  },
+};
+
+const templates: { [T in EmailTemplate]: Template<EmailTemplateValues[T]> } = { ...accountTemplates, ...notificationTemplates, ...digestTemplates };
 
 /** Every template, from the templates themselves, so none can be left out of the tests. */
 export const emailTemplates = Object.keys(templates) as EmailTemplate[];

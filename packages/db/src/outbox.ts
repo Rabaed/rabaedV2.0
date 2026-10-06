@@ -1,4 +1,12 @@
-import type { BilingualText, Locale, NotificationEmail, NotificationEmailKind } from "@rabaed/domain";
+import type {
+  BilingualText,
+  Locale,
+  NotificationDigest,
+  NotificationDigestItem,
+  NotificationDigestProject,
+  NotificationEmail,
+  NotificationEmailKind,
+} from "@rabaed/domain";
 import { sql, type Transaction } from "kysely";
 import type { Db } from "./client.ts";
 import type { Database } from "./schema.ts";
@@ -71,6 +79,60 @@ export function notificationEmailHandler(send: SendNotificationEmail): OutboxHan
           : null,
       },
     });
+  };
+}
+
+/** Sends one daily digest: the worker's mailer. Throws when it could not. */
+export type SendNotificationDigest = (digest: NotificationDigest) => Promise<void>;
+
+/**
+ * Sends a Member their daily digest (RP-358) for an outbox row of kind
+ * 'digest': every notification waiting for it, grouped by Project, then item,
+ * each as its recipient may see it now (app.take_notification_digest, the same
+ * checks as an immediate email). Nothing when none is left. A failed send
+ * throws, so the row is retried with the same entries, then dead-lettered.
+ */
+export function notificationDigestHandler(send: SendNotificationDigest): OutboxHandler {
+  return async (trx, row) => {
+    const { rows } = await sql<{
+      to_address: string;
+      language: Locale;
+      kind: NotificationEmailKind;
+      project_id: string;
+      project_name: BilingualText;
+      work_item_id: string;
+      document_number: string | null;
+      subject: string;
+      step_name: BilingualText | null;
+      event_type: NonNullable<NotificationEmail["content"]["event"]>["type"] | null;
+      transition_label: BilingualText | null;
+      outcome: string | null;
+      company_name: BilingualText | null;
+      signer_name: BilingualText | null;
+    }>`select * from app.take_notification_digest(${row.id}::uuid)`.execute(trx);
+    const first = rows[0];
+    if (!first) return;
+    // Rows come oldest first: Projects, then items, in the order their first entry came.
+    const projects = new Map<string, NotificationDigestProject>();
+    const items = new Map<string, NotificationDigestItem>();
+    for (const r of rows) {
+      let project = projects.get(r.project_id);
+      if (!project) projects.set(r.project_id, (project = { projectId: r.project_id, name: r.project_name, items: [] }));
+      let item = items.get(r.work_item_id);
+      if (!item) {
+        item = { workItemId: r.work_item_id, documentNumber: r.document_number, subject: r.subject, entries: [] };
+        items.set(r.work_item_id, item);
+        project.items.push(item);
+      }
+      item.entries.push({
+        kind: r.kind,
+        step: r.step_name,
+        event: r.event_type
+          ? { type: r.event_type, transition: r.transition_label, outcome: r.outcome, companyName: r.company_name, signerName: r.signer_name }
+          : null,
+      });
+    }
+    await send({ to: first.to_address, language: first.language, projects: [...projects.values()] });
   };
 }
 

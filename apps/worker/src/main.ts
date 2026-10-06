@@ -1,11 +1,13 @@
 import { setTimeout as sleep } from "node:timers/promises";
-import { createDbFromEnv, notificationEmailHandler, pingDatabase, processOutbox } from "@rabaed/db";
-import { mailerFromEnv, notificationMessage, type Mailer } from "@rabaed/mailer";
+import { createDbFromEnv, pingDatabase, processOutbox, runScheduledJobs } from "@rabaed/db";
+import { mailerFromEnv, type Mailer } from "@rabaed/mailer";
 import { z } from "zod";
+import { outboxHandlers, scheduledJobs } from "./jobs.ts";
 import { createLogger } from "./log.ts";
 
-// The outbox processor: each poll delivers the due outbox rows (in-app
-// notifications) and sends the notification emails routed "immediately", in
+// The outbox processor: each poll runs the scheduled jobs that are due (the
+// daily digest, jobs.ts), then delivers the due outbox rows (in-app
+// notifications) and sends the notification emails and digests, in
 // the recipient's language, linking to the item on the customer web (WEB_URL). The api reports the backlog for the outbox alarms, so they
 // see a stopped worker (apps/api/src/outbox-report.ts). It connects as the app
 // role with no Member set, which the outbox functions require.
@@ -22,12 +24,7 @@ process.once("SIGTERM", () => stop.abort());
 // Built at the first email, not at start-up: an environment without a verified
 // sender yet still starts, and its emails are retried, then dead-lettered.
 let mailer: Mailer | undefined;
-const handlers = {
-  email: notificationEmailHandler(async (email) => {
-    mailer ??= mailerFromEnv();
-    await mailer.send(notificationMessage(email, env.WEB_URL));
-  }),
-};
+const handlers = outboxHandlers(() => (mailer ??= mailerFromEnv()), env.WEB_URL);
 
 let lastOk: boolean | undefined;
 log.info("worker started");
@@ -39,6 +36,13 @@ while (!stop.signal.aborted) {
   }
   lastOk = ok;
   if (ok) {
+    // The scheduled jobs due now (the daily digest...), each once per run time; they queue outbox rows.
+    for (const run of await runScheduledJobs(db, scheduledJobs)) {
+      if (run.outcome === "ran") log.info({ job: run.job, runAt: run.runAt }, "scheduled job ran");
+      if (run.outcome === "failed") {
+        log.error({ job: run.job, err: run.error instanceof Error ? run.error : new Error(String(run.error)) }, "scheduled job failed");
+      }
+    }
     try {
       // Counts only: never a row's payload.
       const run = await processOutbox(db, { handlers });
