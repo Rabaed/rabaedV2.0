@@ -242,3 +242,14 @@ export const NothingMatches: Story = {
     await expect(context.canvas.getByRole("link", { name: storyText(context, copy.clear) })).toHaveAttribute("href", "?allRevisions=true");
   },
 };
+
+/** Opened from a Dashboard number: its buckets are named, and clear with the other filters. */
+export const FromTheDashboard: Story = {
+  args: { query: { ...defaults, type: ["MAR"], bucket: ["pending"] } },
+  play: async (context) => {
+    await expect(context.canvas.getByTestId("bucket-filter")).toHaveTextContent(
+      storyText(context, b("From the Dashboard: Pending", "من لوحة المعلومات: قيد الانتظار")),
+    );
+    await expect(context.canvas.getByRole("link", { name: storyText(context, copy.clear) })).toHaveAttribute("href", "?");
+  },
+};

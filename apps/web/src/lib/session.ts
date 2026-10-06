@@ -3,6 +3,7 @@ import type {
   CompanyInvitations,
   CompanyMembers,
   CompanyParticipations,
+  Dashboard,
   DimensionValues,
   DocumentList,
   FormChoices,
@@ -137,6 +138,11 @@ export function getMyVisibility(projectId: string): Promise<DimensionValues | nu
 export function getWorkItems(projectId: string, query: WorkItemQuery): Promise<WorkItemList | null> {
   const params = workItemSearchParams(query).toString();
   return apiGet<WorkItemList>(`/v1/projects/${encodeURIComponent(projectId)}/work-items${params ? `?${params}` : ""}`);
+}
+
+/** A Project's Dashboard: Type cards over the items the signed-in Member can see; null if it isn't one of theirs. */
+export function getDashboard(projectId: string): Promise<Dashboard | null> {
+  return apiGet<Dashboard>(`/v1/projects/${encodeURIComponent(projectId)}/dashboard`);
 }
 
 /** One Work Item; null if the signed-in Member can't see it (exactly as if it didn't exist). */

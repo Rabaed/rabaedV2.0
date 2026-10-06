@@ -83,6 +83,7 @@
   },
   "projects": {
     "title": "My Projects",
+    "dashboard": "Dashboard",
     "empty": "You are not on any Project yet.",
     "emptyCreator": "You are not on any Project yet. Create one below.",
     "projectAdmin": "Project Admin",
