@@ -4,6 +4,7 @@ import { expect, fn, screen, userEvent, within } from "storybook/test";
 import { expectLaidOutLeftToRight } from "../../storybook/bidi.ts";
 import { phone } from "../../storybook/form.ts";
 import { storyLocale, storyText } from "../../storybook/locale.ts";
+import { workItemListLabels } from "../../storybook/views.ts";
 import { WorkItemList, type WorkItemListProps } from "./work-item-list.tsx";
 
 // The Submittals List (RP-345, spec RP-344) as a Contractor engineer of
@@ -159,11 +160,12 @@ const meta = {
     list,
     query: defaults,
     locale: "en",
+    labels: workItemListLabels.en,
     hrefFor,
     itemHref: (id: string) => `#${id}`,
     onQueryChange: fn<WorkItemListProps["onQueryChange"]>(),
   },
-  render: (args, context) => <WorkItemList {...args} locale={storyLocale(context)} />,
+  render: (args, context) => <WorkItemList {...args} locale={storyLocale(context)} labels={workItemListLabels[storyLocale(context)]} />,
 } satisfies Meta<typeof WorkItemList>;
 
 export default meta;

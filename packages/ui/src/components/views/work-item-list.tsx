@@ -32,62 +32,73 @@ import { stageColour } from "../status/stage-colour.ts";
 import { StagePill } from "../status/stage-pill.tsx";
 import { WithChip } from "../status/with-chip.tsx";
 
-const copy = {
-  toolbar: { en: "Filters and sort", ar: "التصفية والترتيب" },
-  all: { en: "All", ar: "الكل" },
-  type: { en: "Type", ar: "النوع" },
-  stage: { en: "Stage", ar: "المرحلة" },
-  with: { en: "With", ar: "لدى" },
-  withMe: { en: "Me", ar: "أنا" },
-  unclaimed: { en: "unclaimed", ar: "لم تُستلَم" },
-  anyUnclaimed: { en: "Unclaimed", ar: "لم تُستلَم" },
-  trade: { en: "Trade", ar: "التخصص" },
-  location: { en: "Location", ar: "الموقع" },
-  outcome: { en: "Review Code / Result", ar: "رمز المراجعة / النتيجة" },
-  stepAge: { en: "Step Age", ar: "عمر الخطوة" },
-  weeksOrMore: { en: "# weeks or more", ar: "# أسابيع أو أكثر" },
-  sort: { en: "Sort by", ar: "الترتيب حسب" },
-  sortStepAge: { en: "Step Age, oldest first", ar: "عمر الخطوة، الأقدم أولًا" },
-  sortDocumentNumber: { en: "Document Number", ar: "رقم المستند" },
-  sortSubmissionDate: { en: "Submission Date, latest first", ar: "تاريخ التقديم، الأحدث أولًا" },
-  submissionDate: { en: "Submission Date", ar: "تاريخ التقديم" },
-  creationDate: { en: "Creation Date", ar: "تاريخ الإنشاء" },
-  submittedFrom: { en: "Submitted from", ar: "قُدِّم من" },
-  submittedTo: { en: "Submitted to", ar: "قُدِّم حتى" },
-  allRevisions: { en: "Show all Revisions", ar: "عرض كل المراجعات" },
-  needMyAction: { en: "Need My Action", ar: "بحاجة لإجرائي" },
-  clear: { en: "Clear filters", ar: "مسح التصفية" },
-  stageCounts: { en: "Items in each Stage", ar: "العناصر في كل مرحلة" },
-  table: { en: "Submittals", ar: "الاعتمادات" },
-  documentNumber: { en: "Document Number", ar: "رقم المستند" },
-  subject: { en: "Subject", ar: "الموضوع" },
-  noNumber: { en: "No number yet", ar: "بلا رقم بعد" },
-  revisionNoNumber: { en: "Revision #: no number yet", ar: "المراجعة #: بلا رقم بعد" },
-  empty: { en: "No items you can see match these filters.", ar: "لا توجد عناصر يمكنك رؤيتها تطابق هذه التصفية." },
-  search: { en: "Search", ar: "بحث" },
-  searchHelp: {
-    en: "Document Number, Subject, Type, Trade, Location or Company",
-    ar: "رقم المستند أو الموضوع أو النوع أو التخصص أو الموقع أو الشركة",
-  },
-  noResults: { en: "No items you can see match this search.", ar: "لا توجد عناصر يمكنك رؤيتها تطابق هذا البحث." },
-  pages: { en: "Pages", ar: "الصفحات" },
-  firstPage: { en: "First page", ar: "الصفحة الأولى" },
-  nextPage: { en: "Next page", ar: "الصفحة التالية" },
-} satisfies Record<string, Record<Locale, string>>;
-
-const outcomes: Record<WorkItemOutcome, { label: Record<Locale, string>; tone: Tone }> = {
-  A: { label: { en: "Code A", ar: "الرمز A" }, tone: "success" },
-  B: { label: { en: "Code B", ar: "الرمز B" }, tone: "success" },
-  C: { label: { en: "Code C", ar: "الرمز C" }, tone: "warning" },
-  D: { label: { en: "Code D", ar: "الرمز D" }, tone: "danger" },
-  passed: { label: { en: "Passed", ar: "ناجح" }, tone: "success" },
-  passed_with_comments: { label: { en: "Passed with Comments", ar: "ناجح مع ملاحظات" }, tone: "success" },
-  failed: { label: { en: "Failed", ar: "راسب" }, tone: "danger" },
-  cancelled: { label: { en: "Cancelled", ar: "ملغى" }, tone: "neutral" },
-  closed: { label: { en: "Closed", ar: "مغلق" }, tone: "neutral" },
+/**
+ * The List's words, in the viewer's language, from the app's messages: the
+ * package has no translations of its own. A function takes a value already
+ * formatted for the viewer's locale.
+ */
+export type WorkItemListLabels = {
+  toolbar: string;
+  /** A filter's "no filter" choice. */
+  all: string;
+  type: string;
+  stage: string;
+  with: string;
+  withMe: string;
+  /** After a Step's name, when nobody in the viewer's Company has claimed it. */
+  unclaimed: string;
+  /** The "With" filter's choice of every unclaimed Step. */
+  anyUnclaimed: string;
+  trade: string;
+  location: string;
+  outcome: string;
+  stepAge: string;
+  weeksOrMore: (weeks: string) => string;
+  sort: string;
+  sortStepAge: string;
+  sortDocumentNumber: string;
+  sortSubmissionDate: string;
+  submissionDate: string;
+  creationDate: string;
+  submittedFrom: string;
+  submittedTo: string;
+  allRevisions: string;
+  needMyAction: string;
+  clear: string;
+  stageCounts: string;
+  /** The table's name: the Module's, e.g. "Submittals". */
+  table: string;
+  documentNumber: string;
+  subject: string;
+  noNumber: string;
+  revisionNoNumber: (revision: string) => string;
+  empty: string;
+  search: string;
+  searchHelp: string;
+  noResults: string;
+  pages: string;
+  firstPage: string;
+  nextPage: string;
+  /** Each Review Code and Inspection Result, as its filter choice and its badge. */
+  outcomes: Record<WorkItemOutcome, string>;
 };
 
-const sortLabels = { stepAge: "sortStepAge", documentNumber: "sortDocumentNumber", submissionDate: "sortSubmissionDate" } as const satisfies Record<WorkItemQuery["sort"], keyof typeof copy>;
+/** The labels that take no value, for `t`. */
+type TextLabel = { [K in keyof WorkItemListLabels]: WorkItemListLabels[K] extends string ? K : never }[keyof WorkItemListLabels];
+
+const outcomeTones: Record<WorkItemOutcome, Tone> = {
+  A: "success",
+  B: "success",
+  C: "warning",
+  D: "danger",
+  passed: "success",
+  passed_with_comments: "success",
+  failed: "danger",
+  cancelled: "neutral",
+  closed: "neutral",
+};
+
+const sortLabels = { stepAge: "sortStepAge", documentNumber: "sortDocumentNumber", submissionDate: "sortSubmissionDate" } as const satisfies Record<WorkItemQuery["sort"], TextLabel>;
 
 const reviewCodes = { A: "a", B: "b", C: "c", D: "d" } as const;
 
@@ -100,6 +111,7 @@ export type WorkItemListProps = {
   /** The query the page shows. */
   query: WorkItemQuery;
   locale: Locale;
+  labels: WorkItemListLabels;
   /** The List's URL for `query`: a filter link, the next page. */
   hrefFor: (query: WorkItemQuery) => string;
   /** An item's page. */
@@ -118,8 +130,8 @@ export type WorkItemListProps = {
  * viewer's own Company, another Company's name only, as the API sends it.
  * The table scrolls sideways on a narrow screen.
  */
-export function WorkItemList({ list, query, locale, hrefFor, itemHref, onQueryChange, board }: WorkItemListProps) {
-  const t = (key: keyof typeof copy) => copy[key][locale];
+export function WorkItemList({ list, query, locale, labels, hrefFor, itemHref, onQueryChange, board }: WorkItemListProps) {
+  const t = (key: TextLabel) => labels[key];
   const change = (next: Partial<WorkItemQuery>) => {
     const { cursor: _cursor, ...rest } = query;
     onQueryChange({ ...rest, ...next });
@@ -186,14 +198,14 @@ export function WorkItemList({ list, query, locale, hrefFor, itemHref, onQueryCh
             label={t("outcome")}
             allLabel={t("all")}
             value={query.outcome[0]}
-            options={Object.entries(outcomes).map(([value, o]) => ({ value, label: o.label[locale] }))}
+            options={Object.entries(labels.outcomes).map(([value, label]) => ({ value, label }))}
             onChange={(v) => change({ outcome: v ? [v as WorkItemOutcome] : [] })}
           />
           <FilterSelect
             label={t("stepAge")}
             allLabel={t("all")}
             value={query.stepAgeMin === undefined ? undefined : String(query.stepAgeMin)}
-            options={stepAgeMinimums.map((n) => ({ value: String(n), label: t("weeksOrMore").replace("#", formatNumber(n, locale)) }))}
+            options={stepAgeMinimums.map((n) => ({ value: String(n), label: labels.weeksOrMore(formatNumber(n, locale)) }))}
             onChange={(v) => change({ stepAgeMin: v ? (Number(v) as WorkItemQuery["stepAgeMin"]) : undefined })}
           />
           <Field label={t("submittedFrom")}>
@@ -264,7 +276,7 @@ export function WorkItemList({ list, query, locale, hrefFor, itemHref, onQueryCh
                     <DocNo value={item.documentNumber} locale={locale} />
                   ) : (
                     <span className="text-muted">
-                      {item.revisionNo > 0 ? t("revisionNoNumber").replace("#", formatNumber(item.revisionNo, locale)) : t("noNumber")}
+                      {item.revisionNo > 0 ? labels.revisionNoNumber(formatNumber(item.revisionNo, locale)) : t("noNumber")}
                     </span>
                   )}
                 </TableCell>
@@ -286,7 +298,7 @@ export function WorkItemList({ list, query, locale, hrefFor, itemHref, onQueryCh
                 </TableCell>
                 <TableCell className="whitespace-nowrap">{item.trade.name[locale]}</TableCell>
                 <TableCell className="whitespace-nowrap">{item.location?.name[locale]}</TableCell>
-                <TableCell>{item.outcome ? <Outcome outcome={item.outcome} locale={locale} /> : null}</TableCell>
+                <TableCell>{item.outcome ? <Outcome outcome={item.outcome} locale={locale} labels={labels.outcomes} /> : null}</TableCell>
                 <TableCell className="whitespace-nowrap">{date(item.submissionDate)}</TableCell>
                 {showCreationDate && <TableCell className="whitespace-nowrap">{date(item.creationDate)}</TableCell>}
               </TableRow>
@@ -400,11 +412,14 @@ function WithCell({ row, locale, unclaimed }: { row: WorkItemRow; locale: Locale
   return <WithChip kind="person" inViewerCompany name={w.claimer.name[locale]} companyName={w.companyName[locale]} />;
 }
 
-/** The Review Code or Inspection Result badge, the same on the List and the Kanban. */
-export function Outcome({ outcome, locale }: { outcome: WorkItemOutcome; locale: Locale }) {
+/**
+ * The Review Code or Inspection Result badge, the same on the List and the
+ * Kanban. A Review Code says its meaning in the fixed product wording of
+ * `CodeBadge`; anything else says its label.
+ */
+export function Outcome({ outcome, locale, labels }: { outcome: WorkItemOutcome; locale: Locale; labels: Record<WorkItemOutcome, string> }) {
   if (outcome in reviewCodes) {
     return <CodeBadge code={reviewCodes[outcome as keyof typeof reviewCodes]} locale={locale} size="sm" variant="letter" />;
   }
-  const o = outcomes[outcome];
-  return <Badge tone={o.tone}>{o.label[locale]}</Badge>;
+  return <Badge tone={outcomeTones[outcome]}>{labels[outcome]}</Badge>;
 }

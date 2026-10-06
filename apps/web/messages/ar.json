@@ -4,7 +4,7 @@
     "switchLanguage": "English",
     "signOut": "تسجيل الخروج",
     "nav": "الرئيسية",
-    "projects": "مشاريعي",
+    "projects": "المشاريع",
     "members": "الأعضاء",
     "participations": "مشاريع الشركة",
     "signedInAs": "مسجّل الدخول باسم {name}، {company}"
@@ -21,10 +21,78 @@
     "dashboard": "لوحة المعلومات",
     "submittals": "التقديمات",
     "inspections": "الفحوصات",
-    "snag-list": "قائمة الملاحظات",
-    "site-reports": "تقارير الموقع",
+    "snag_list": "قائمة الملاحظات",
+    "site_reports": "تقارير الموقع",
     "drawings": "المخططات",
     "settings": "الإعدادات"
+  },
+  "workItemViews": {
+    "list": {
+      "toolbar": "التصفية والترتيب",
+      "all": "الكل",
+      "type": "النوع",
+      "stage": "المرحلة",
+      "with": "لدى",
+      "withMe": "أنا",
+      "unclaimed": "لم تُستلَم",
+      "anyUnclaimed": "لم تُستلَم",
+      "trade": "التخصص",
+      "location": "الموقع",
+      "outcome": "رمز المراجعة / النتيجة",
+      "stepAge": "عمر الخطوة",
+      "weeksOrMore": "{weeks} أسابيع أو أكثر",
+      "sort": "الترتيب حسب",
+      "sortStepAge": "عمر الخطوة، الأقدم أولًا",
+      "sortDocumentNumber": "رقم المستند",
+      "sortSubmissionDate": "تاريخ التقديم، الأحدث أولًا",
+      "submissionDate": "تاريخ التقديم",
+      "creationDate": "تاريخ الإنشاء",
+      "submittedFrom": "قُدِّم من",
+      "submittedTo": "قُدِّم حتى",
+      "allRevisions": "عرض كل المراجعات",
+      "needMyAction": "بحاجة لإجرائي",
+      "clear": "مسح التصفية",
+      "stageCounts": "العناصر في كل مرحلة",
+      "documentNumber": "رقم المستند",
+      "subject": "الموضوع",
+      "noNumber": "بلا رقم بعد",
+      "revisionNoNumber": "المراجعة {revision}: بلا رقم بعد",
+      "empty": "لا توجد عناصر يمكنك رؤيتها تطابق هذه التصفية.",
+      "search": "بحث",
+      "searchHelp": "رقم المستند أو الموضوع أو النوع أو التخصص أو الموقع أو الشركة",
+      "noResults": "لا توجد عناصر يمكنك رؤيتها تطابق هذا البحث.",
+      "pages": "الصفحات",
+      "firstPage": "الصفحة الأولى",
+      "nextPage": "الصفحة التالية"
+    },
+    "board": {
+      "board": "كانبان",
+      "noItems": "لا توجد عناصر",
+      "closedSince": "أُغلقت خلال آخر {days} يومًا",
+      "total": "{count} إجمالًا",
+      "showAll": "عرض الكل",
+      "showAllIn": "عرض الكل في {stage}",
+      "move": "نقل",
+      "moveItem": "نقل {subject}",
+      "moveTo": "إلى {stage}",
+      "dragging": "أفلت العنصر على عمود مظلَّل لنقله."
+    },
+    "viewSwitch": {
+      "view": "طريقة العرض",
+      "list": "قائمة",
+      "kanban": "كانبان"
+    },
+    "outcomes": {
+      "A": "الرمز A",
+      "B": "الرمز B",
+      "C": "الرمز C",
+      "D": "الرمز D",
+      "passed": "ناجح",
+      "passed_with_comments": "ناجح مع ملاحظات",
+      "failed": "راسب",
+      "cancelled": "ملغى",
+      "closed": "مغلق"
+    }
   },
   "health": {
     "title": "حالة النظام",
@@ -92,7 +160,7 @@
     "confirmReactivate": "إعادة تفعيل {name}؟ سيحتفظ بتوقيعه وسجلاته."
   },
   "projects": {
-    "title": "مشاريعي",
+    "title": "المشاريع",
     "empty": "لست عضوًا في أي مشروع بعد.",
     "emptyCreator": "لست عضوًا في أي مشروع بعد. أنشئ مشروعًا أدناه.",
     "projectAdmin": "مسؤول المشروع",
@@ -128,7 +196,9 @@
     "crNumber": "السجل التجاري",
     "awaitingAnswer": "بانتظار الرد",
     "withdraw": "سحب الدعوة",
-    "confirmWithdraw": "سحب هذه الدعوة؟ يمكنك دعوة السجل التجاري نفسه لاحقاً."
+    "confirmWithdraw": "سحب هذه الدعوة؟ يمكنك دعوة السجل التجاري نفسه لاحقاً.",
+    "needMyAction": "بحاجة لإجرائي",
+    "closed": "مغلق"
   },
   "participants": {
     "title": "مشاريع الشركة",

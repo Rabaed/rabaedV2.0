@@ -9,6 +9,7 @@ import {
   linkedFrom,
   linkSearchQuery,
   linkSearchResults,
+  moduleKeys,
   revisionChain,
   saveAnswersRequest,
   savedAnswers,
@@ -28,7 +29,7 @@ import { idOrNotFound, notFound, visibleOrNotFound } from "../http-error.ts";
 import { refusal } from "../refusals.ts";
 import { getLinkedFrom } from "../work-items/linked-from.ts";
 import { addWorkItemLink, getWorkItemLinks, removeWorkItemLink } from "../work-items/links.ts";
-import { boardWorkItems, listWorkItems } from "../work-items/query.ts";
+import { boardWorkItems, listWorkItems, type QueryScope } from "../work-items/query.ts";
 import { createRevision, discardRevision, getRevisionChain } from "../work-items/revisions.ts";
 import {
   claimStep,
@@ -68,27 +69,34 @@ export const workItemRoutes =
       },
     );
 
-    // The List: one page of the work item query (spec RP-344), its filters in the
-    // query string as the web's URL holds them.
-    app.get(
-      "/v1/projects/:projectId/work-items",
-      { schema: { params: projectParams, querystring: workItemQuery, response: { 200: workItemList } } },
-      async (request) => {
-        const memberId = ctx.requireMember(request);
-        return visibleOrNotFound(listWorkItems(ctx.db, memberId, idOrNotFound(request.params.projectId), request.query, ctx.now()));
-      },
-    );
+    // A Module tab's items (RP-346): `/work-items` is the Submittals tab's, and
+    // `/modules/:module/work-items` any Module's the Project has a Work Item Type
+    // in. A Module it has none in, or that doesn't exist, is not found.
+    const scopeOf = (params: { projectId: string; module?: string }): QueryScope => {
+      const moduleKey = moduleKeys.find((m) => m === (params.module ?? "submittals"));
+      if (!moduleKey) throw notFound();
+      return { projectId: idOrNotFound(params.projectId), moduleKey };
+    };
+    const moduleParams = projectParams.extend({ module: z.string() });
 
-    // The Kanban (RP-349): the same query as a board, Stages as columns and V14
-    // swimlanes; a closed column holds the last 30 days. The cursor is not used.
-    app.get(
-      "/v1/projects/:projectId/work-items/kanban",
-      { schema: { params: projectParams, querystring: workItemQuery, response: { 200: workItemBoard } } },
-      async (request) => {
+    for (const [path, params] of [
+      ["/v1/projects/:projectId/work-items", projectParams],
+      ["/v1/projects/:projectId/modules/:module/work-items", moduleParams],
+    ] as const) {
+      // The List: one page of the work item query (spec RP-344), its filters in the
+      // query string as the web's URL holds them.
+      app.get(path, { schema: { params, querystring: workItemQuery, response: { 200: workItemList } } }, async (request) => {
         const memberId = ctx.requireMember(request);
-        return visibleOrNotFound(boardWorkItems(ctx.db, memberId, idOrNotFound(request.params.projectId), request.query, ctx.now()));
-      },
-    );
+        return visibleOrNotFound(listWorkItems(ctx.db, memberId, scopeOf(request.params), request.query, ctx.now()));
+      });
+
+      // The Kanban (RP-349): the same query as a board, Stages as columns and V14
+      // swimlanes; a closed column holds the last 30 days. The cursor is not used.
+      app.get(`${path}/kanban`, { schema: { params, querystring: workItemQuery, response: { 200: workItemBoard } } }, async (request) => {
+        const memberId = ctx.requireMember(request);
+        return visibleOrNotFound(boardWorkItems(ctx.db, memberId, scopeOf(request.params), request.query, ctx.now()));
+      });
+    }
 
     // Link search: the Project's Submitted items the Member sees whose Document
     // Number or Subject contains `q`, a page at a time (visibility.md scenario 29).

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { boardLanes, dropTargets, workItemViewFromSearchParams, type BoardCardInput, type WorkItemMove } from "./work-item-board.ts";
+import { boardLanes, dropTargets, lanesInLocale, workItemViewFromSearchParams, type BoardCardInput, type WorkItemMove } from "./work-item-board.ts";
 import type { WorkItemRow } from "./work-item.ts";
 
 const b = (en: string) => ({ en, ar: en });
@@ -57,6 +57,20 @@ describe("boardLanes", () => {
     // Each lane keeps the order the cards came in.
     expect(lanes[1]!.cards.map((c) => c.id)).toEqual([cards[1]!.card.id, cards[5]!.card.id]);
     expect(lanes[2]).toMatchObject({ kind: "company", companyName: b("Al Waha PMC") });
+  });
+
+  it("orders the lanes by name in the viewer's language", () => {
+    const named = (en: string, ar: string) => ({ en, ar });
+    const cards = [
+      card({ kind: "own", companyName: own, step: { key: "review", name: named("Review", "أ مراجعة") }, claimer: null }),
+      card({ kind: "own", companyName: own, step: { key: "draft", name: named("Draft", "ب مسودة") }, claimer: null }),
+      card({ kind: "company", companyName: named("Al Waha PMC", "ي الواحة") }, k1),
+      card({ kind: "company", companyName: named("Zeta PMC", "أ زيتا") }, k2),
+      card(null),
+    ];
+    const keys = (lanes: ReturnType<typeof boardLanes>) => lanes.map((l) => (l.kind === "step" ? l.step.key : l.kind === "company" ? l.participantId : "closed"));
+    expect(keys(lanesInLocale(boardLanes(cards), "en"))).toEqual(["draft", "review", k1, k2, "closed"]);
+    expect(keys(lanesInLocale(boardLanes(cards), "ar"))).toEqual(["review", "draft", k2, k1, "closed"]);
   });
 
   it("keeps another Company's lane to its name: no Step or person", () => {

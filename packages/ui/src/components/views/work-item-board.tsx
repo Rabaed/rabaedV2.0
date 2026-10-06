@@ -3,15 +3,18 @@ import {
   dropTargets,
   formatNumber,
   isOpenStageCategory,
+  lanesInLocale,
+  type BilingualText,
   type Locale,
   type WorkItemBoard as WorkItemBoardData,
   type WorkItemBoardLane,
   type WorkItemMove,
+  type WorkItemOutcome,
   type WorkItemQuery,
   type WorkItemRow,
   type WorkItemView,
 } from "@rabaed/domain";
-import { useState } from "react";
+import { useState, type ElementType } from "react";
 import { cn } from "../../lib/cn.ts";
 import { buttonVariants } from "../button/button.tsx";
 import { focusRing } from "../form/control-styles.ts";
@@ -22,24 +25,32 @@ import { WithChip } from "../status/with-chip.tsx";
 import { WorkItemCard, type WorkItemState } from "../status/work-item-card.tsx";
 import { Outcome } from "./work-item-list.tsx";
 
-const copy = {
-  board: { en: "Kanban", ar: "كانبان" },
-  noNumber: { en: "No number yet", ar: "بلا رقم بعد" },
-  revisionNoNumber: { en: "Revision #: no number yet", ar: "المراجعة #: بلا رقم بعد" },
-  unclaimed: { en: "unclaimed", ar: "لم تُستلَم" },
-  empty: { en: "No items", ar: "لا توجد عناصر" },
-  closedSince: { en: "Closed in the last # days", ar: "أُغلقت خلال آخر # يومًا" },
-  total: { en: "# in total", ar: "# إجمالًا" },
-  showAll: { en: "Show all", ar: "عرض الكل" },
-  showAllIn: { en: "Show all in #", ar: "عرض الكل في #" },
-  view: { en: "View", ar: "طريقة العرض" },
-  list: { en: "List", ar: "قائمة" },
-  kanban: { en: "Kanban", ar: "كانبان" },
-  move: { en: "Move", ar: "نقل" },
-  moveItem: { en: "Move #", ar: "نقل #" },
-  moveTo: { en: "To #", ar: "إلى #" },
-  dragging: { en: "Drop on a highlighted column to move the item.", ar: "أفلت العنصر على عمود مظلَّل لنقله." },
-} satisfies Record<string, Record<Locale, string>>;
+/**
+ * The board's words, in the viewer's language, from the app's messages: the
+ * package has no translations of its own. A function takes a value already
+ * formatted for the viewer's locale.
+ */
+export type WorkItemBoardLabels = {
+  /** The board region's name, e.g. "Kanban". */
+  board: string;
+  noNumber: string;
+  revisionNoNumber: (revision: string) => string;
+  /** After a Step's name, when nobody in the viewer's Company has claimed it. */
+  unclaimed: string;
+  /** A column with no cards. */
+  noItems: string;
+  closedSince: (days: string) => string;
+  total: (count: string) => string;
+  showAll: string;
+  showAllIn: (stage: string) => string;
+  move: string;
+  moveItem: (subject: string) => string;
+  moveTo: (stage: string) => string;
+  /** Announced while a card is dragged. */
+  dragging: string;
+  /** Each Review Code and Inspection Result, as its badge. */
+  outcomes: Record<WorkItemOutcome, string>;
+};
 
 export type WorkItemBoardProps = {
   /** The board, as the API returns it. */
@@ -47,10 +58,13 @@ export type WorkItemBoardProps = {
   /** The query the board shows. */
   query: WorkItemQuery;
   locale: Locale;
+  labels: WorkItemBoardLabels;
   /** The List's URL for `query`: where a closed column's "Show all" leads. */
   listHrefFor: (query: WorkItemQuery) => string;
   /** An item's page. */
   itemHref: (id: string) => string;
+  /** The link component, e.g. Next.js `Link`, so navigation stays client-side. Defaults to `<a>`. */
+  linkAs?: ElementType;
   /**
    * The viewer chose to move a card by one of its Transitions (RP-350), by
    * dropping it on a column or from the card's Move menu: open that
@@ -65,31 +79,32 @@ type Dragging = { card: WorkItemRow; targets: Map<string, WorkItemMove> };
  * The Kanban of a Module's Work Items (spec RP-344, RP-349): a column per
  * Stage, running in the reading direction (right to left in Arabic). Inside
  * a column, a swimlane per Step of the viewer's own Company and one per other
- * Company, by its name only (V14). A closed column shows the items closed in
- * the last 30 days, with its total and "Show all", which opens the List with
- * the same filters. The board scrolls sideways in its own region.
+ * Company, by its name only (V14), each in the viewer's alphabetical order. A
+ * closed column shows the items closed in the last 30 days, with its total and
+ * "Show all", which opens the List with the same filters. Under a search the
+ * total is left out: a search counts only what it shows. The board scrolls
+ * sideways in its own region.
  *
  * A card the viewer may act on can be dragged (RP-350): only the Stages that
  * one of its Transitions alone leads to are highlighted and take a drop, which
  * opens that Transition's Action Form; a drop anywhere else does nothing. The
  * card's Move menu offers the same moves to the keyboard, screen readers and touch.
  */
-export function WorkItemBoard({ board, query, locale, listHrefFor, itemHref, onMove }: WorkItemBoardProps) {
-  const t = (key: keyof typeof copy) => copy[key][locale];
+export function WorkItemBoard({ board, query, locale, labels, listHrefFor, itemHref, linkAs: Link = "a", onMove }: WorkItemBoardProps) {
   const columns = new Map(board.columns.map((c) => [c.stageKey, c]));
   const stageNames = new Map(board.stages.map((s) => [s.key, s.name]));
   // The card being dragged, with the Stages it may be dropped on.
   const [dragging, setDragging] = useState<Dragging | null>(null);
   return (
     <section
-      aria-label={t("board")}
+      aria-label={labels.board}
       // Focusable, so the board can be scrolled with the keyboard.
       tabIndex={0}
       className={cn("overflow-x-auto rounded-md pb-2", focusRing)}
     >
       {dragging && (
         <p role="status" className="sr-only">
-          {t("dragging")}
+          {labels.dragging}
         </p>
       )}
       <ol className="flex items-start gap-3">
@@ -133,28 +148,31 @@ export function WorkItemBoard({ board, query, locale, listHrefFor, itemHref, onM
               </h2>
               {closed && (
                 <div className="flex flex-col gap-1 px-1 text-caption text-muted">
-                  <span>{t("closedSince").replace("#", formatNumber(closedColumnDays, locale))}</span>
+                  <span>{labels.closedSince(formatNumber(closedColumnDays, locale))}</span>
                   <span className="flex flex-wrap items-center justify-between gap-2">
-                    <span data-testid="column-total">{t("total").replace("#", formatNumber(stage.count, locale))}</span>
-                    <a
+                    {/* A search counts only what it shows, so it has no total to give. */}
+                    {query.q === undefined && <span data-testid="column-total">{labels.total(formatNumber(stage.count, locale))}</span>}
+                    <Link
                       href={listHrefFor({ ...query, stage: [stage.key], cursor: undefined })}
-                      aria-label={t("showAllIn").replace("#", stage.name[locale])}
-                      className={buttonVariants({ variant: "ghost", size: "sm" })}
+                      aria-label={labels.showAllIn(stage.name[locale])}
+                      className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "ms-auto")}
                     >
-                      {t("showAll")}
-                    </a>
+                      {labels.showAll}
+                    </Link>
                   </span>
                 </div>
               )}
               {shown === 0 ? (
-                <p className="px-1 pb-1 text-caption text-muted">{t("empty")}</p>
+                <p className="px-1 pb-1 text-caption text-muted">{labels.noItems}</p>
               ) : (
-                column!.lanes.map((lane) => (
+                lanesInLocale(column!.lanes, locale).map((lane) => (
                   <Lane
                     key={laneKey(lane)}
                     lane={lane}
                     locale={locale}
+                    labels={labels}
                     itemHref={itemHref}
+                    linkAs={Link}
                     moves={onMove ? board.moves : {}}
                     stageNames={stageNames}
                     onMove={onMove}
@@ -179,7 +197,9 @@ function laneKey(lane: WorkItemBoardLane): string {
 function Lane({
   lane,
   locale,
+  labels,
   itemHref,
+  linkAs,
   moves,
   stageNames,
   onMove,
@@ -188,15 +208,16 @@ function Lane({
 }: {
   lane: WorkItemBoardLane;
   locale: Locale;
+  labels: WorkItemBoardLabels;
   itemHref: (id: string) => string;
+  linkAs: ElementType;
   moves: Record<string, WorkItemMove[]>;
-  stageNames: Map<string, { en: string; ar: string }>;
+  stageNames: Map<string, BilingualText>;
   onMove?: (card: WorkItemRow, move: WorkItemMove) => void;
   /** The id of the card being dragged. */
   dragging: string | null;
   onDragChange: (dragging: Dragging | null) => void;
 }) {
-  const t = (key: keyof typeof copy) => copy[key][locale];
   const name = lane.kind === "step" ? lane.step.name[locale] : lane.kind === "company" ? lane.companyName[locale] : null;
   return (
     <section aria-label={name ?? undefined} data-lane={lane.kind} className="flex flex-col gap-2">
@@ -211,33 +232,34 @@ function Lane({
           const targets = dropTargets(moves[card.id] ?? [], card.stage.key);
           const movable = onMove !== undefined && targets.size > 0;
           return (
-          <li
-            key={card.id}
-            data-movable={movable ? "" : undefined}
-            className={cn("flex flex-col gap-1", dragging === card.id && "rounded-md outline-2 outline-dashed outline-border-strong")}
-            draggable={movable || undefined}
-            onDragStart={
-              movable
-                ? (event) => {
-                    event.dataTransfer.effectAllowed = "move";
-                    event.dataTransfer.setData("text/plain", card.id);
-                    onDragChange({ card, targets });
-                  }
-                : undefined
-            }
-            onDragEnd={movable ? () => onDragChange(null) : undefined}
-          >
-            <WorkItemCard
-              number={card.documentNumber}
-              noNumberLabel={card.revisionNo > 0 ? t("revisionNoNumber").replace("#", formatNumber(card.revisionNo, locale)) : t("noNumber")}
-              title={card.title}
-              state={cardState(card, locale, t("unclaimed"))}
-              locale={locale}
-              density="compact"
-              href={itemHref(card.id)}
-            />
-            {movable && <MoveMenu card={card} targets={targets} stageNames={stageNames} locale={locale} onMove={onMove} />}
-          </li>
+            <li
+              key={card.id}
+              data-movable={movable ? "" : undefined}
+              className={cn("flex flex-col gap-1", dragging === card.id && "rounded-md outline-2 outline-dashed outline-border-strong")}
+              draggable={movable || undefined}
+              onDragStart={
+                movable
+                  ? (event) => {
+                      event.dataTransfer.effectAllowed = "move";
+                      event.dataTransfer.setData("text/plain", card.id);
+                      onDragChange({ card, targets });
+                    }
+                  : undefined
+              }
+              onDragEnd={movable ? () => onDragChange(null) : undefined}
+            >
+              <WorkItemCard
+                number={card.documentNumber}
+                noNumberLabel={card.revisionNo > 0 ? labels.revisionNoNumber(formatNumber(card.revisionNo, locale)) : labels.noNumber}
+                title={card.title}
+                state={cardState(card, locale, labels)}
+                locale={locale}
+                density="compact"
+                href={itemHref(card.id)}
+                linkAs={linkAs}
+              />
+              {movable && <MoveMenu card={card} targets={targets} stageNames={stageNames} locale={locale} labels={labels} onMove={onMove} />}
+            </li>
           );
         })}
       </ul>
@@ -255,27 +277,28 @@ function MoveMenu({
   targets,
   stageNames,
   locale,
+  labels,
   onMove,
 }: {
   card: WorkItemRow;
   targets: Map<string, WorkItemMove>;
-  stageNames: Map<string, { en: string; ar: string }>;
+  stageNames: Map<string, BilingualText>;
   locale: Locale;
+  labels: WorkItemBoardLabels;
   onMove: (card: WorkItemRow, move: WorkItemMove) => void;
 }) {
-  const t = (key: keyof typeof copy) => copy[key][locale];
   return (
     <Popover>
       <PopoverTrigger asChild>
         <button
           type="button"
-          aria-label={t("moveItem").replace("#", card.title)}
+          aria-label={labels.moveItem(card.title)}
           className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "self-end pointer-coarse:min-h-11")}
         >
-          {t("move")}
+          {labels.move}
         </button>
       </PopoverTrigger>
-      <PopoverContent aria-label={t("moveItem").replace("#", card.title)} className="flex w-64 flex-col gap-1 p-2">
+      <PopoverContent aria-label={labels.moveItem(card.title)} className="flex w-64 flex-col gap-1 p-2">
         {[...targets].map(([stageKey, move]) => (
           <PopoverClose asChild key={stageKey}>
             <button
@@ -284,7 +307,7 @@ function MoveMenu({
               className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "h-auto flex-col items-start gap-0 py-1.5 text-start pointer-coarse:min-h-11")}
             >
               <span>{move.label[locale]}</span>
-              <span className="text-caption font-normal text-muted">{t("moveTo").replace("#", (stageNames.get(stageKey) ?? { en: stageKey, ar: stageKey })[locale])}</span>
+              <span className="text-caption font-normal text-muted">{labels.moveTo(stageNames.get(stageKey)?.[locale] ?? stageKey)}</span>
             </button>
           </PopoverClose>
         ))}
@@ -294,41 +317,50 @@ function MoveMenu({
 }
 
 /** Open: its Step Age, and who in my own Company has claimed it (V14); closed: its Review Code or Inspection Result. */
-function cardState(card: WorkItemRow, locale: Locale, unclaimed: string): WorkItemState | undefined {
+function cardState(card: WorkItemRow, locale: Locale, labels: WorkItemBoardLabels): WorkItemState | undefined {
   if (isOpenStageCategory(card.stage.category)) {
     const w = card.with;
     const holder =
       w?.kind === "own"
         ? w.claimer
           ? ({ kind: "person", inViewerCompany: true, name: w.claimer.name[locale], companyName: w.companyName[locale] } as const)
-          : ({ kind: "pool", inViewerCompany: true, stepName: w.step.name[locale], unclaimedLabel: unclaimed, companyName: w.companyName[locale] } as const)
+          : ({ kind: "pool", inViewerCompany: true, stepName: w.step.name[locale], unclaimedLabel: labels.unclaimed, companyName: w.companyName[locale] } as const)
         : undefined;
     return { open: true, stepAgeWeeks: card.stepAgeWeeks, ...(holder ? { holder } : {}) };
   }
-  return card.outcome ? { open: false, badge: <Outcome outcome={card.outcome} locale={locale} /> } : undefined;
+  return card.outcome ? { open: false, badge: <Outcome outcome={card.outcome} locale={locale} labels={labels.outcomes} /> } : undefined;
 }
+
+/** The View switch's words, from the app's messages. */
+export type WorkItemViewSwitchLabels = {
+  /** The switch's name, e.g. "View". */
+  view: string;
+  list: string;
+  kanban: string;
+};
 
 export type WorkItemViewSwitchProps = {
   view: WorkItemView;
-  locale: Locale;
+  labels: WorkItemViewSwitchLabels;
   /** The URL of each View, its filters kept. */
   hrefFor: (view: WorkItemView) => string;
+  /** The link component, e.g. Next.js `Link`, so navigation stays client-side. Defaults to `<a>`. */
+  linkAs?: ElementType;
 };
 
 /** List / Kanban, as two links: the View is part of the URL. */
-export function WorkItemViewSwitch({ view, locale, hrefFor }: WorkItemViewSwitchProps) {
-  const t = (key: keyof typeof copy) => copy[key][locale];
+export function WorkItemViewSwitch({ view, labels, hrefFor, linkAs: Link = "a" }: WorkItemViewSwitchProps) {
   return (
-    <nav aria-label={t("view")} className="inline-flex rounded-md border border-border p-0.5">
+    <nav aria-label={labels.view} className="inline-flex rounded-md border border-border p-0.5">
       {(["list", "kanban"] as const).map((v) => (
-        <a
+        <Link
           key={v}
           href={hrefFor(v)}
           aria-current={v === view ? "page" : undefined}
           className={cn(buttonVariants({ variant: v === view ? "secondary" : "ghost", size: "sm" }), "pointer-coarse:min-h-11")}
         >
-          {t(v)}
-        </a>
+          {labels[v]}
+        </Link>
       ))}
     </nav>
   );

@@ -11,6 +11,7 @@ import { expect, fireEvent, fn, screen, userEvent, waitFor, within } from "story
 import { expectLaidOutLeftToRight } from "../../storybook/bidi.ts";
 import { expectTouchTarget, phone } from "../../storybook/form.ts";
 import { storyLocale, storyText } from "../../storybook/locale.ts";
+import { viewSwitchLabels, workItemBoardLabels, workItemListLabels } from "../../storybook/views.ts";
 import { WorkItemBoard, WorkItemViewSwitch } from "./work-item-board.tsx";
 import { WorkItemList } from "./work-item-list.tsx";
 
@@ -156,8 +157,8 @@ const listHrefFor = (q: WorkItemQuery) => `?${workItemSearchParams(q)}`;
 const meta = {
   title: "Views/WorkItemBoard",
   component: WorkItemBoard,
-  args: { board, query: defaults, locale: "en", listHrefFor, itemHref: (id: string) => `#${id}` },
-  render: (args, context) => <WorkItemBoard {...args} locale={storyLocale(context)} />,
+  args: { board, query: defaults, locale: "en", labels: workItemBoardLabels.en, listHrefFor, itemHref: (id: string) => `#${id}` },
+  render: (args, context) => <WorkItemBoard {...args} locale={storyLocale(context)} labels={workItemBoardLabels[storyLocale(context)]} />,
 } satisfies Meta<typeof WorkItemBoard>;
 
 export default meta;
@@ -182,8 +183,12 @@ export const Wide: Story = {
 
     const pending = columnOf(context, stages.pending);
     const lanes = within(pending).getAllByRole("region");
-    await expect(lanes.map((l) => l.getAttribute("aria-label"))).toEqual([consultant[locale], otherConsultant[locale]]);
-    await expect(within(lanes[0]!).getAllByRole("link")).toHaveLength(2);
+    // In the viewer's alphabetical order: Al Waha before Saudi Design Group in English, المجموعة before الواحة in Arabic.
+    const alWahaFirst = locale === "en";
+    await expect(lanes.map((l) => l.getAttribute("aria-label"))).toEqual(
+      alWahaFirst ? [consultant.en, otherConsultant.en] : [otherConsultant.ar, consultant.ar],
+    );
+    await expect(within(lanes[alWahaFirst ? 0 : 1]!).getAllByRole("link")).toHaveLength(2);
     // Another Company's lane: its name only, no Step and no person.
     await expect(within(pending).queryByText(storyText(context, copy.unclaimed))).toBeNull();
 
@@ -225,6 +230,25 @@ export const ClosedColumns: Story = {
     const revise = columnOf(context, stages.revise);
     await expect(within(revise).getByText(storyText(context, copy.empty))).toBeVisible();
     await expect(within(revise).getByTestId("column-total")).toHaveTextContent("3");
+  },
+};
+
+/**
+ * Under a search, a closed column gives no total: a search counts only what it
+ * shows. "Show all" still opens the List with the same search and that Stage.
+ */
+export const ClosedColumnsUnderSearch: Story = {
+  args: { query: { ...defaults, q: "busbar" } },
+  play: async (context) => {
+    for (const stage of [stages.approved, stages.revise]) {
+      const column = columnOf(context, stage);
+      await expect(within(column).queryByTestId("column-total")).toBeNull();
+      await expect(within(column).queryByText(/in total|إجمالًا/)).toBeNull();
+      await expect(within(column).getByRole("link", { name: new RegExp(storyText(context, stage.name)) })).toHaveAttribute(
+        "href",
+        `?stage=${stage.key}&q=busbar`,
+      );
+    }
   },
 };
 
@@ -318,15 +342,16 @@ export const WithToolbar: Story = {
     const locale = storyLocale(context);
     return (
       <div className="space-y-4">
-        <WorkItemViewSwitch view="kanban" locale={locale} hrefFor={(v) => (v === "kanban" ? "?view=kanban" : "?")} />
+        <WorkItemViewSwitch view="kanban" labels={viewSwitchLabels[locale]} hrefFor={(v) => (v === "kanban" ? "?view=kanban" : "?")} />
         <WorkItemList
           list={{ ...board, items: [], nextCursor: null }}
           query={args.query}
           locale={locale}
+          labels={workItemListLabels[locale]}
           hrefFor={listHrefFor}
           itemHref={args.itemHref}
           onQueryChange={fn()}
-          board={<WorkItemBoard {...args} locale={locale} />}
+          board={<WorkItemBoard {...args} locale={locale} labels={workItemBoardLabels[locale]} />}
         />
       </div>
     );

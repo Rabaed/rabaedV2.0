@@ -39,7 +39,7 @@ export const EveryModule: Story = {
   render: (_args, context) => storyProjectTabs(context, "submittals", ["submittals", "inspections", "snag_list", "site_reports", "drawings"]),
   play: async (context) => {
     await expect(tabNames(context)).toEqual(
-      labelsOf(context, ["dashboard", "submittals", "inspections", "snag-list", "site-reports", "drawings", "settings"]),
+      labelsOf(context, ["dashboard", "submittals", "inspections", "snag_list", "site_reports", "drawings", "settings"]),
     );
   },
 };

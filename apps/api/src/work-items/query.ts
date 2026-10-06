@@ -17,6 +17,7 @@ import {
   type WorkItemOutcome,
   type WorkItemQuery,
   type WorkItemRow,
+  type WorkItemSort,
   type WorkItemSummary,
 } from "@rabaed/domain";
 import { sql, type RawBuilder, type Transaction } from "kysely";
@@ -42,7 +43,7 @@ import { sql, type RawBuilder, type Transaction } from "kysely";
 
 type Trx = Transaction<Database>;
 
-/** The Module the query reads: the Submittals tab's for now; Module tabs come with RP-346. */
+/** What the query reads: one Module of one Project, the Module tab's. */
 export type QueryScope = { projectId: string; moduleKey: ModuleKey };
 
 type Row = {
@@ -96,13 +97,10 @@ function visibleRows({ projectId, moduleKey }: QueryScope, allRevisions: boolean
       st.key as stage_key, st.name as stage_name, st.category as stage_category,
       tv.id as trade_id, tv.code as trade_code, tv.name as trade_name,
       lv.id as location_id, lv.code as location_code, lv.name as location_name,
-      -- A Draft with no number has never moved, so its Step began when it was started: nobody sees that (visibility.md
-      -- "Creation Date", scenario 61). It has no Step Age, matches no Step Age filter and sorts last, so no row,
-      -- count, cursor or card carries the time. numbered_at is set with the Document Number.
-      case when w.document_number is null then null else seen.entered_at end as step_entered_at,
+      e.step_entered_at,
       -- Closed (or cancelled): it no longer ages, nor is it with anyone. The SQL side of isOpenStageCategory.
       st.category not in ('draft', 'in_progress') as closed,
-      to_char(case when w.document_number is null then null else seen.entered_at end at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as entered_key,
+      to_char(e.step_entered_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as entered_key,
       -- Never created_at (when the Draft was started: audit only, V-Creation Date). The Creation Date is
       -- numbered_at, which app.work_item_creation_date gives to the raiser's own Participant only.
       w.submitted_at, to_char(w.submitted_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as submitted_key,
@@ -112,6 +110,10 @@ function visibleRows({ projectId, moduleKey }: QueryScope, allRevisions: boolean
       s.key as step_key, s.name as step_name
     from work_item w
     cross join lateral app.step_as_seen(w.id) seen
+    -- A Draft with no number has never moved, so its Step began when it was started: nobody sees that (visibility.md
+    -- "Creation Date", scenario 61). It has no Step Age, matches no Step Age filter and sorts last, so no row,
+    -- count, cursor or card carries the time. numbered_at is set with the Document Number.
+    cross join lateral (select case when w.document_number is null then null else seen.entered_at end as step_entered_at) e
     join workflow_step s on s.id = seen.step_id
     join work_item_type t on t.id = w.work_item_type_id
     join stage st on st.module_key = t.module_key and st.key = seen.stage_key and st.project_id is null
@@ -174,45 +176,50 @@ function matching(q: WorkItemQuery, now: Date, scope: QueryScope): RawBuilder<bo
   return conditions.length > 0 ? sql`(${sql.join(conditions, sql` and `)})` : noFilter;
 }
 
-/** The sort's order and, after a cursor, where the page starts. */
-function ordering(q: WorkItemQuery): { orderBy: RawBuilder<unknown>; after: RawBuilder<boolean> } {
-  const key = q.cursor === undefined ? null : decodeWorkItemCursor(q.cursor, q.sort);
-  if (q.sort === "documentNumber") {
-    // Items with no number yet (Drafts) last; numbers compared byte by byte, the same in every locale.
-    return {
-      orderBy: sql`r.document_number is null, coalesce(r.document_number, '') collate "C", r.id`,
-      after: key
-        ? sql`(r.document_number is null, coalesce(r.document_number, '') collate "C", r.id) > (${key[0]}::boolean, ${key[1]}::text collate "C", ${key[2]}::uuid)`
-        : noFilter,
-    };
-  }
-  if (q.sort === "submissionDate") {
-    // The latest Submission Date first; items not yet Submitted last, by id.
-    return {
-      orderBy: sql`r.submitted_at is null, r.submitted_at desc, r.id`,
-      after: key
-        ? key[0] === "true"
-          ? sql`(r.submitted_at is null and r.id > ${key[2]}::uuid)`
-          : sql`(r.submitted_at is null or r.submitted_at < ${key[1]}::timestamptz or (r.submitted_at = ${key[1]}::timestamptz and r.id > ${key[2]}::uuid))`
-        : noFilter,
-    };
-  }
-  // The oldest Step Age first; closed items, which don't age, last, and within each the items with no Step Age (a Draft with no number) last, by id.
-  return {
-    orderBy: sql`r.closed, r.step_entered_at nulls last, r.id`,
-    after: key
-      ? key[1] === ""
-        ? sql`(r.closed > ${key[0]}::boolean or (r.closed = ${key[0]}::boolean and r.step_entered_at is null and r.id > ${key[2]}::uuid))`
-        : sql`(r.closed > ${key[0]}::boolean or (r.closed = ${key[0]}::boolean and (r.step_entered_at is null or r.step_entered_at > ${key[1]}::timestamptz or (r.step_entered_at = ${key[1]}::timestamptz and r.id > ${key[2]}::uuid))))`
-      : noFilter,
-  };
-}
+/**
+ * One sort, all in one place: its order, the sort key a cursor keeps of a page's
+ * last row, and where the next page starts after that key. The key is
+ * [sorts last, value, id], as text; `cursorKeyValid` (work-item-query.ts in @rabaed/domain)
+ * checks a cursor's key has this sort's shape before it reaches `after`.
+ */
+type SortDefinition = {
+  orderBy: RawBuilder<unknown>;
+  keyOf: (row: Row) => [last: string, value: string, id: string];
+  after: (key: string[]) => RawBuilder<boolean>;
+};
 
-function cursorAfter(q: WorkItemQuery, last: Row): string {
-  if (q.sort === "submissionDate") return encodeWorkItemCursor(q.sort, [String(last.submitted_key === null), last.submitted_key ?? "", last.id]);
-  return q.sort === "documentNumber"
-    ? encodeWorkItemCursor(q.sort, [String(last.document_number === null), last.document_number ?? "", last.id])
-    : encodeWorkItemCursor(q.sort, [String(last.closed), last.entered_key ?? "", last.id]);
+const sorts: Record<WorkItemSort, SortDefinition> = {
+  // The oldest Step Age first; closed items, which don't age, last, and within each the items with no Step Age (a Draft with no number) last, by id.
+  stepAge: {
+    orderBy: sql`r.closed, r.step_entered_at nulls last, r.id`,
+    keyOf: (r) => [String(r.closed), r.entered_key ?? "", r.id],
+    after: ([closed, at, id]) =>
+      at === ""
+        ? sql`(r.closed > ${closed}::boolean or (r.closed = ${closed}::boolean and r.step_entered_at is null and r.id > ${id}::uuid))`
+        : sql`(r.closed > ${closed}::boolean or (r.closed = ${closed}::boolean and (r.step_entered_at is null or r.step_entered_at > ${at}::timestamptz or (r.step_entered_at = ${at}::timestamptz and r.id > ${id}::uuid))))`,
+  },
+  // Items with no number yet (Drafts) last; numbers compared byte by byte, the same in every locale.
+  documentNumber: {
+    orderBy: sql`r.document_number is null, coalesce(r.document_number, '') collate "C", r.id`,
+    keyOf: (r) => [String(r.document_number === null), r.document_number ?? "", r.id],
+    after: ([none, number, id]) =>
+      sql`(r.document_number is null, coalesce(r.document_number, '') collate "C", r.id) > (${none}::boolean, ${number}::text collate "C", ${id}::uuid)`,
+  },
+  // The latest Submission Date first; items not yet Submitted last, by id.
+  submissionDate: {
+    orderBy: sql`r.submitted_at is null, r.submitted_at desc, r.id`,
+    keyOf: (r) => [String(r.submitted_key === null), r.submitted_key ?? "", r.id],
+    after: ([none, at, id]) =>
+      none === "true"
+        ? sql`(r.submitted_at is null and r.id > ${id}::uuid)`
+        : sql`(r.submitted_at is null or r.submitted_at < ${at}::timestamptz or (r.submitted_at = ${at}::timestamptz and r.id > ${id}::uuid))`,
+  },
+};
+
+/** Where the query's page starts: after its cursor's key, or at the start. */
+function afterCursor(q: WorkItemQuery): RawBuilder<boolean> {
+  const key = q.cursor === undefined ? null : decodeWorkItemCursor(q.cursor, q.sort);
+  return key ? sorts[q.sort].after(key) : noFilter;
 }
 
 function toRow(r: Row, now: Date): WorkItemRow {
@@ -263,7 +270,8 @@ export async function queryWorkItems(
 ): Promise<{ rows: WorkItemRow[]; nextCursor: string | null; stageCounts: Map<string, number> }> {
   const rows = visibleRows(scope, q.allRevisions);
   const where = matching(q, now, scope);
-  const { orderBy, after } = ordering(q);
+  const { orderBy } = sorts[q.sort];
+  const after = afterCursor(q);
   const { rows: page } = await sql<Row>`
     with r as (${rows})
     select r.*, ${holderColumns}
@@ -276,7 +284,7 @@ export async function queryWorkItems(
   const shown = page.slice(0, workItemPageSize);
   return {
     rows: shown.map((r) => toRow(r, now)),
-    nextCursor: page.length > workItemPageSize ? cursorAfter(q, shown.at(-1)!) : null,
+    nextCursor: page.length > workItemPageSize ? encodeWorkItemCursor(q.sort, sorts[q.sort].keyOf(shown.at(-1)!)) : null,
     // A search counts no more than its page shows ("Search and filters": no totals beyond the page).
     stageCounts: q.q === undefined ? await countByStage(trx, scope, q, now) : pageCounts(shown),
   };
@@ -311,7 +319,7 @@ async function boardCards(trx: Trx, scope: QueryScope, q: WorkItemQuery, now: Da
     ${holderJoins}
     left join work_item cw on cw.id = r.id and r.closed
     where ${matching(q, now, scope)} and (not r.closed or coalesce(cw.closed_at, r.step_entered_at) >= ${closedSince}::timestamptz)
-    order by ${ordering(q).orderBy}
+    order by ${sorts[q.sort].orderBy}
   `.execute(trx);
   const byStage = new Map<string, BoardCardInput[]>();
   for (const r of rows) {
@@ -377,30 +385,42 @@ async function withChoices(trx: Trx, scope: QueryScope): Promise<WorkItemList["f
 }
 
 /**
- * The List of one of the Member's Projects: a page of the items they can see
- * that match `q`, every Stage of the Module with how many of them are in it,
- * and what the toolbar's filters offer. Null when it isn't one of their Projects.
+ * Whether the Member is on the scope's Project (RLS on project) and it has a
+ * Work Item Type in the scope's Module, so the Module has a tab there (RP-346).
  */
-export function listWorkItems(db: Db, memberId: string, projectId: string, q: WorkItemQuery, now: Date): Promise<WorkItemList | null> {
+async function hasModuleTab(trx: Trx, { projectId, moduleKey }: QueryScope): Promise<boolean> {
+  const found = await trx
+    .selectFrom("project as p")
+    .innerJoin("work_item_type as t", (join) => join.on((eb) => eb.or([eb("t.project_id", "is", null), eb("t.project_id", "=", eb.ref("p.id"))])))
+    .select("p.id")
+    .where("p.id", "=", projectId)
+    .where("t.module_key", "=", moduleKey)
+    .executeTakeFirst();
+  return found !== undefined;
+}
+
+/**
+ * The List of one Module of one of the Member's Projects: a page of the items they can see
+ * that match `q`, every Stage of the Module with how many of them are in it,
+ * and what the toolbar's filters offer. Null when it isn't one of their Projects,
+ * or the Project has no Work Item Type in the Module.
+ */
+export function listWorkItems(db: Db, memberId: string, scope: QueryScope, q: WorkItemQuery, now: Date): Promise<WorkItemList | null> {
   return withMember(db, memberId, async (trx) => {
-    const onProject = await trx.selectFrom("project").select("id").where("id", "=", projectId).executeTakeFirst();
-    if (!onProject) return null;
-    const scope: QueryScope = { projectId, moduleKey: "submittals" };
+    if (!(await hasModuleTab(trx, scope))) return null;
     const { rows, nextCursor, stageCounts } = await queryWorkItems(trx, scope, q, now);
     return { ...(await stagesAndFilters(trx, scope, stageCounts)), items: rows, nextCursor };
   });
 }
 
 /**
- * The Kanban of one of the Member's Projects (RP-349): the List's Stages,
- * counts and filters, and a column per Stage with its swimlanes (V14). Null
- * when it isn't one of their Projects.
+ * The Kanban of one Module of one of the Member's Projects (RP-349): the List's
+ * Stages, counts and filters, and a column per Stage with its swimlanes (V14).
+ * Null as for the List.
  */
-export function boardWorkItems(db: Db, memberId: string, projectId: string, q: WorkItemQuery, now: Date): Promise<WorkItemBoard | null> {
+export function boardWorkItems(db: Db, memberId: string, scope: QueryScope, q: WorkItemQuery, now: Date): Promise<WorkItemBoard | null> {
   return withMember(db, memberId, async (trx) => {
-    const onProject = await trx.selectFrom("project").select("id").where("id", "=", projectId).executeTakeFirst();
-    if (!onProject) return null;
-    const scope: QueryScope = { projectId, moduleKey: "submittals" };
+    if (!(await hasModuleTab(trx, scope))) return null;
     const cards = await boardCards(trx, scope, q, now);
     // A search counts no more than the cards it shows ("Search and filters": no totals beyond what is shown).
     const counts = q.q === undefined ? await countByStage(trx, scope, q, now) : new Map([...cards].map(([key, c]) => [key, c.length]));

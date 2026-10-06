@@ -53,9 +53,10 @@ type ProjectRow = Awaited<ReturnType<ReturnType<typeof selectProjects>["executeT
  * Per Project, what its card and shell show besides its row: the Need My Action
  * count and the Modules it has a Work Item Type in.
  *
- * The count is of the items app.need_my_action says are waiting on the Member
- * (never their own Drafts), the function behind the List's toggle too, so the
- * two can't disagree. Only open assignments of the Member's own Participants are
+ * The count follows the List's toggle row for row, minus the Member's own
+ * Drafts: the items app.need_my_action says are waiting on them, one per
+ * Revision chain, the latest Revision they see (app.latest_visible_revision), as
+ * the List shows by default. Same functions, so the two can't disagree. Only open assignments of the Member's own Participants are
  * candidates (RLS on step_assignment), and RLS on work_item keeps it to items
  * they see. A closed Project counts 0.
  */
@@ -67,6 +68,7 @@ async function summaries(trx: Transaction<Database>, rows: ProjectRow[]): Promis
     from work_item w
     join step_assignment a on a.work_item_id = w.id and a.status in ('pooled', 'claimed')
     where w.project_id = any(${projectIds}::uuid[]) and app.need_my_action(w.id) = 'waiting'
+      and app.latest_visible_revision(w.id)
     group by w.project_id
   `.execute(trx);
   const { rows: modules } = await sql<{ project_id: string; module_key: ModuleKey }>`
@@ -83,7 +85,7 @@ async function summaries(trx: Transaction<Database>, rows: ProjectRow[]): Promis
   }));
 }
 
-/** My Projects, newest first. */
+/** The Member's Projects, as the Projects page lists them, newest first. */
 export function listMyProjects(db: Db, memberId: string): Promise<ProjectSummary[]> {
   return withMember(db, memberId, async (trx) =>
     summaries(trx, await selectProjects(trx, memberId).orderBy("p.created_at", "desc").orderBy("p.id", "desc").execute()),
