@@ -1,4 +1,4 @@
-import { formatNumber, type Locale } from "./locale.ts";
+import { formatNumber, intlLocaleOf, type Locale } from "./locale.ts";
 
 /**
  * Step Age (GLOSSARY.md): the week a Work Item is in at its current Step,
@@ -47,6 +47,6 @@ const labels: Record<Locale, Partial<Record<Intl.LDMLPluralRule, string>> & { ot
 /** Step Age in words, e.g. "2 weeks at this step". */
 export function stepAgeLabel(weeks: number, locale: Locale): string {
   const age = wholeWeeks(weeks);
-  const form = new Intl.PluralRules(locale).select(age);
+  const form = new Intl.PluralRules(intlLocaleOf(locale)).select(age);
   return (labels[locale][form] ?? labels[locale].other).replace("#", formatNumber(age, locale));
 }

@@ -10,7 +10,7 @@ import { ActivityFeedPanel } from "./activity-feed-panel.tsx";
 // viewer's own Company. Story data only, as a Contractor sees its Project.
 const b = (en: string, ar: string) => ({ en, ar });
 const copy = {
-  title: b("Activity", "النشاط"),
+  title: b("Activity Feed", "النشاط"),
   module: b("Module", "الوحدة"),
   type: b("Type", "النوع"),
   mine: b("Only items I'm on", "العناصر التي أشارك فيها فقط"),

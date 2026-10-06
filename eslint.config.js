@@ -41,6 +41,26 @@ export default tseslint.config(
     rules: { "rabaed/no-raw-error-logging": "error" },
   },
   {
+    // Bidi isolates and marks are invisible in review: write them as \u escapes (RP-329). Autofixable.
+    files: jsTsFiles,
+    plugins: { rabaed },
+    rules: { "rabaed/no-raw-bidi": "error" },
+  },
+  {
+    // An ARN or account id in an error or log line reaches CloudWatch and the user (RP-329).
+    files: ["apps/**/*.{ts,tsx,js}", "packages/**/*.{ts,tsx,js}", "scripts/**/*.ts"],
+    ignores: ["**/*.test.{ts,tsx}", "**/test/**", "**/test-support/**"],
+    plugins: { rabaed },
+    rules: { "rabaed/no-aws-ids-in-errors": "error" },
+  },
+  {
+    // Dates and numbers go through the domain's locale helpers, which keep Latin digits in Arabic (RP-330).
+    files: ["apps/**/*.{ts,tsx,js}", "packages/**/*.{ts,tsx,js}", "scripts/**/*.ts"],
+    ignores: ["**/*.test.{ts,tsx}", "**/test/**", "**/test-support/**", "packages/domain/src/locale.ts"],
+    plugins: { rabaed },
+    rules: { "rabaed/locale-through-helpers": "error" },
+  },
+  {
     files: ["apps/web/**/*.{ts,tsx}"],
     plugins: { "@next/next": nextPlugin },
     languageOptions: { globals: { ...globals.browser } },
@@ -64,6 +84,25 @@ export default tseslint.config(
     ignores: ["**/*.test.{ts,tsx}"],
     plugins: { rabaed },
     rules: { "rabaed/no-deadline-words": "error" },
+  },
+  {
+    // Glossary Avoid terms (RP-327) in names (strict but for established code names) and in copy (strict but for
+    // narrow phrases); both lists, and why each entry is there, are in packages/eslint-plugin/src/avoid-rules.ts.
+    files: ["apps/**/*.{ts,tsx,js}", "packages/**/*.{ts,tsx,js}", "scripts/**/*.ts"],
+    ignores: [
+      "**/*.test.{ts,tsx}", // tests quote the terms they check, and SQL roles and fixtures by their own names
+      "**/test/**",
+      "**/test-support/**",
+      "**/*.stories.tsx", // mock construction data (concrete grades, electrical panels); the copy they show is the component's, which is checked
+      "packages/ui/src/storybook/**", // the stories' mock shell (its Files and Schedule tabs are Module names) and harness
+      "packages/infra/**", // AWS's own vocabulary: account, region, environment, subscriber
+      "scripts/check-workflows.ts", // GitHub Actions' own vocabulary: pull_request, a git tag, a CI check
+      "packages/eslint-plugin/**", // it names the terms it bans
+      "packages/ui/src/components/icon/icon.tsx", // Tabler's icon names: user, users
+      "packages/ui/src/tokens/scales.ts", // the `notes` step of the type scale
+    ],
+    plugins: { rabaed },
+    rules: { "rabaed/no-avoid-terms": "error" },
   },
   {
     // Only `next build` checks for "use client" (RP-362). Stories and the Storybook shell never run as Server Components.
@@ -95,6 +134,6 @@ export default tseslint.config(
     files: ["apps/web/messages/*.json"],
     plugins: { json, rabaed },
     language: "json/json",
-    rules: { "rabaed/json-no-deadline-words": "error" },
+    rules: { "rabaed/json-no-deadline-words": "error", "rabaed/json-no-avoid-terms": "error", "rabaed/json-no-raw-bidi": "error" },
   },
 );

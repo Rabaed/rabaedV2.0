@@ -42,7 +42,7 @@ import {
 import { useState, type ReactNode } from "react";
 import { cn } from "../../lib/cn.ts";
 import { CheckboxGroup } from "../form/checkbox-group.tsx";
-import { focusRing } from "../form/control-styles.ts";
+import { focusRing, touchBox } from "../form/control-styles.ts";
 import { Field, useFieldControl } from "../form/field.tsx";
 import { Input } from "../form/input.tsx";
 import { RadioGroup } from "../form/radio-group.tsx";
@@ -861,7 +861,7 @@ export function FormRenderer({
           <ul className="flex flex-col gap-1 ps-7">
             {shownErrors.map((e) => (
               <li key={e.key}>
-                <a href={`#${fieldId(e.key)}`} className={cn("font-medium text-text underline underline-offset-4", focusRing)}>
+                <a href={`#${fieldId(e.key)}`} className={cn("font-medium text-text underline underline-offset-4", focusRing, touchBox)}>
                   {byKey.get(e.key)!.label[locale]}
                 </a>
               </li>

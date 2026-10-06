@@ -190,3 +190,37 @@ export function deadlineWord(text: string): string | null {
 export function deadlineWordInCopy(text: string): string | null {
   return deadlineWord(text) ?? dueLateOrSla.exec(text)?.[0] ?? null;
 }
+
+// ---- Raw bidi characters, AWS identifiers ----------------------------------
+
+const bidiNames: Record<string, string> = {
+  "\u2066": "left-to-right isolate",
+  "\u2067": "right-to-left isolate",
+  "\u2068": "first-strong isolate",
+  "\u2069": "pop directional isolate",
+  "\u200E": "left-to-right mark",
+  "\u200F": "right-to-left mark",
+  "\u202A": "left-to-right embedding",
+  "\u202B": "right-to-left embedding",
+  "\u202C": "pop directional formatting",
+  "\u202D": "left-to-right override",
+  "\u202E": "right-to-left override",
+};
+
+/** Every raw bidi control character in the text, with the \uXXXX escape that stands for it (RP-329). */
+export function bidiControls(text: string): { index: number; escape: string; name: string }[] {
+  return [...text.matchAll(/[\u2066-\u2069\u200E\u200F\u202A-\u202E]/g)].map((match) => ({
+    index: match.index,
+    escape: `\\u${match[0].codePointAt(0)!.toString(16).toUpperCase().padStart(4, "0")}`,
+    name: bidiNames[match[0]]!,
+  }));
+}
+
+// An ARN, or a 12-digit AWS account id. Not the tail of a UUID or part of a longer number, and not a
+// phone number: a KSA mobile in E.164 (+966 5…), a tel: link or a wa.me link is 12 digits too.
+const awsIdentifier = /arn:aws[\w-]*:|(?<![\w.+-])(?<!tel:)(?<!wa\.me\/)\d{12}(?![\w.-])/;
+
+/** The ARN prefix or account id in text, if any: errors and logs name a resource, never its ARN or account (RP-329). */
+export function awsIdentifierIn(text: string): string | null {
+  return awsIdentifier.exec(text)?.[0] ?? null;
+}

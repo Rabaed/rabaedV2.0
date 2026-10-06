@@ -160,7 +160,7 @@ export function Field({
     <FieldContext.Provider value={context}>
       <div className={cn("flex flex-col gap-1.5", className)}>
         {layout === "inline" ? (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 pointer-coarse:min-h-11">
             {children}
             {labelElement}
           </div>

@@ -329,6 +329,14 @@ pnpm typecheck
 
 Seam 1 is the primary suite: scenarios call the API through `createTestApi()` (`apps/api/test/support/harness.ts`) with real sign-in: `api.authorizedPerson()` onboards a Company and signs its Authorized Person in, `api.engineer()` gives a signed-in Rabaed Engineer, and `api.advanceClock()` moves time to test expiry.
 
+Per-function timing: the local `db` service runs with `track_functions=pl` (`show track_functions`), so after a seam run you can see where the time went in the lane's `<db>_test` database:
+
+```sql
+select funcname, calls, total_time, self_time from pg_stat_user_functions where schemaname = 'app' order by total_time desc;
+```
+
+The test database is recreated on every run (`prepareTestDatabase`), so the stats cover the last run only. An existing lane database picks the setting up after `docker compose up -d db` (the container is recreated; the data volume stays). CI's service containers are left as they are.
+
 CI (`.github/workflows/ci.yml`) runs lint, typecheck, unit, web build, seam 1 and seam 2 against Postgres 16, the mailer against Mailpit, and the infra assertions, on every push and pull request; `secret-scan.yml` runs gitleaks (default rules plus `.gitleaks.toml`) and `scripts/check-no-fonts.ts` over the full history; `infra-diff.yml` posts `cdk diff` on pull requests once the AWS account is set up; `deploy-dev.yml` deploys `main` to dev after CI passes. For a failure to block merging, `main`'s branch protection must list these jobs as required status checks.
 
 ## Secrets

@@ -92,7 +92,7 @@ describe("the mailer, against the local catcher", () => {
     expect(caughtMessage!.HTML).toContain(`<html lang="${language}" dir="${language === "ar" ? "rtl" : "ltr"}">`);
     for (const number of ["TWR-MAR-01-0001", "TWR-MAR-01-0002"]) {
       expect(caughtMessage!.HTML).toContain(`<bdi dir="ltr">${number}</bdi>`);
-      expect(caughtMessage!.Text).toContain(`⁦${number}⁩`);
+      expect(caughtMessage!.Text).toContain(`\u2066${number}\u2069`);
     }
     expect(caughtMessage!.Text).toContain(language === "ar" ? "الخطيب" : "Khatib");
   });

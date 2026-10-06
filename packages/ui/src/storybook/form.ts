@@ -1,4 +1,5 @@
 import { expect, userEvent } from "storybook/test";
+import { touchTargetShortfall } from "./touch-target.ts";
 
 /** Tab reaches `control` and shows a solid focus ring at least 2px wide. */
 export async function expectTabFocusRing(control: Element) {
@@ -17,22 +18,7 @@ export async function expectTabFocusRing(control: Element) {
  */
 export async function expectTouchTarget(control: Element) {
   await expect(matchMedia("(pointer: coarse)").matches).toBe(true);
-  const box = control.getBoundingClientRect();
-  if (box.width >= 44 && box.height >= 44) return;
-  // A smaller control must extend its hit area (e.g. a pseudo-element); probe where it should reach.
-  const [x, y] = [box.left + box.width / 2, box.top + box.height / 2];
-  const reach = 21.5;
-  for (const [dx, dy] of [[-reach, 0], [reach, 0], [0, -reach], [0, reach]] as const) {
-    const hit = document.elementFromPoint(x + dx, y + dy);
-    const at = { control: describe(control), dx, dy };
-    await expect({ ...at, hit: hit && control.contains(hit) ? describe(control) : describe(hit) }).toEqual({ ...at, hit: describe(control) });
-  }
-}
-
-function describe(element: Element | null) {
-  if (!element) return "nothing";
-  const name = element.getAttribute("aria-label") ?? element.id ?? "";
-  return `<${element.tagName.toLowerCase()} ${element.getAttribute("role") ?? ""} ${name}> ${element.textContent?.slice(0, 30) ?? ""}`;
+  await expect(touchTargetShortfall(control)).toBeNull();
 }
 
 /** Holds `key` down briefly, as a person does: some components act on focus only while the key is held. */

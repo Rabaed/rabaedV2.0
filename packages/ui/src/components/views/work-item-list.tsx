@@ -24,6 +24,8 @@ import { Button, buttonVariants } from "../button/button.tsx";
 import { Badge } from "../data/badge.tsx";
 import { Table, TableBody, TableCell, TableEmpty, TableHead, TableHeader, TableRow } from "../data/table.tsx";
 import { DocNo } from "../doc-no/doc-no.tsx";
+import { cn } from "../../lib/cn.ts";
+import { touchBox } from "../form/control-styles.ts";
 import { Field } from "../form/field.tsx";
 import { Input } from "../form/input.tsx";
 import { Select } from "../form/select.tsx";
@@ -296,7 +298,7 @@ export function WorkItemList({ list, query, locale, labels, hrefFor, itemHref, o
                   )}
                 </TableCell>
                 <TableCell className="min-w-48">
-                  <a href={itemHref(item.id)} className="font-medium text-primary underline underline-offset-4">
+                  <a href={itemHref(item.id)} className={cn("font-medium text-primary underline underline-offset-4", touchBox)}>
                     {item.title}
                   </a>
                 </TableCell>

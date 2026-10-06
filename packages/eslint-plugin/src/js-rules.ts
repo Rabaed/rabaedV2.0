@@ -4,6 +4,7 @@ import {
   arbitraryColourClasses,
   camelCase,
   colourLiterals,
+  awsIdentifierIn,
   deadlineWord,
   kebabCase,
   logicalProperty,
@@ -12,10 +13,10 @@ import {
   physicalClasses,
 } from "./matchers.ts";
 
-type StringNode = Extract<Node, { type: "Literal" | "TemplateElement" }>;
-type ParentedNode = Node & { parent?: ParentedNode };
+export type StringNode = Extract<Node, { type: "Literal" | "TemplateElement" }>;
+export type ParentedNode = Node & { parent?: ParentedNode };
 
-function stringValue(node: StringNode): string | null {
+export function stringValue(node: StringNode): string | null {
   if (node.type === "TemplateElement") return node.value.cooked ?? node.value.raw;
   return typeof node.value === "string" ? node.value : null;
 }
@@ -45,7 +46,7 @@ function isLinkAttribute(node: ParentedNode): boolean {
 const styleProperty = "JSXAttribute[name.name='style'] > JSXExpressionContainer > ObjectExpression > Property";
 
 /** True when the string is (part of) a Tailwind class list: a `className` value or an argument of cn(), cva()… */
-function isClassString(node: ParentedNode): boolean {
+export function isClassString(node: ParentedNode): boolean {
   type AnyNode = { type: string; parent?: AnyNode; name?: { name?: unknown }; callee?: { type: string; name?: string } };
   for (let n = (node as unknown as AnyNode).parent; n; n = n.parent) {
     if (n.type === "JSXAttribute") return n.name?.name === "className" || n.name?.name === "class";
@@ -113,7 +114,7 @@ export const noPhysicalDirection: Rule.RuleModule = {
 };
 
 // Names that declare something (a prop, variable, field or type), rather than just use it.
-const declaringParents = new Set([
+export const declaringParents = new Set([
   "VariableDeclarator",
   "FunctionDeclaration",
   "Property",
@@ -144,23 +145,31 @@ export const noDeadlineWords: Rule.RuleModule = {
       reported.add(key);
       context.report({ node, messageId: "word", data: { word } });
     };
-    return {
-      Identifier(node) {
-        const parent = (node as ParentedNode).parent;
-        const isParam = parent && "params" in parent && (parent.params as Node[]).includes(node);
-        if (parent && (declaringParents.has(parent.type) || isParam)) report(node, node.name);
-      },
-      JSXAttribute(node: Rule.Node) {
-        const attribute = node as unknown as { name: Node & { type: string; name: unknown } };
-        if (typeof attribute.name.name === "string") report(attribute.name, attribute.name.name);
-      },
-      // Message keys passed to next-intl's t("…"), t.rich("…"), t.markup("…")…
-      "CallExpression:matches([callee.name='t'], [callee.object.name='t']) > Literal"(node: Rule.Node) {
-        if (node.type === "Literal" && typeof node.value === "string") report(node, node.value);
-      },
-    };
+    return onDeclaredNames(report);
   },
 };
+
+/**
+ * Visits the names code declares: variables, functions, props, fields, types, parameters, JSX attribute
+ * names, and the message keys passed to next-intl's t("…"), t.rich("…"), t.markup("…")… Shared by
+ * no-deadline-words and no-avoid-terms, so both rules read the same names.
+ */
+export function onDeclaredNames(report: (node: Node, name: string) => void): Rule.RuleListener {
+  return {
+    Identifier(node) {
+      const parent = (node as ParentedNode).parent;
+      const isParam = parent && "params" in parent && (parent.params as Node[]).includes(node);
+      if (parent && (declaringParents.has(parent.type) || isParam)) report(node, node.name);
+    },
+    JSXAttribute(node: Rule.Node) {
+      const attribute = node as unknown as { name: Node & { type: string; name: unknown } };
+      if (typeof attribute.name.name === "string") report(attribute.name, attribute.name.name);
+    },
+    "CallExpression:matches([callee.name='t'], [callee.object.name='t']) > Literal"(node: Rule.Node) {
+      if (node.type === "Literal" && typeof node.value === "string") report(node, node.value);
+    },
+  };
+}
 
 const logLevels = new Set(["trace", "debug", "info", "warn", "error", "fatal"]);
 const errorName = /^(e|err|error|\w+Error)$/;
@@ -168,7 +177,7 @@ const errorName = /^(e|err|error|\w+Error)$/;
 type AnyNode = { type: string; [key: string]: unknown };
 
 /** `log.error(…)`, `logger.warn(…)`, `request.log.info(…)`, `app.log.…`. Not `console`, which only the local CLIs use. */
-function isLogCall(node: Node): boolean {
+export function isLogCall(node: Node): boolean {
   if (node.type !== "CallExpression" || node.callee.type !== "MemberExpression") return false;
   const { property } = node.callee;
   let object = node.callee.object;
@@ -225,6 +234,101 @@ export const noRawErrorLogging: Rule.RuleModule = {
     return {
       CallExpression(node) {
         if (isLogCall(node)) for (const argument of node.arguments) scan(argument as unknown as AnyNode);
+      },
+    };
+  },
+};
+
+const localeMethods = new Set(["toLocaleString", "toLocaleDateString", "toLocaleTimeString"]);
+
+/** `intlLocaleOf(locale)`: the one place that says Latin digits, the Gregorian calendar and Saudi regional formats. */
+function isIntlLocaleOfCall(node: Node | undefined): boolean {
+  if (node?.type !== "CallExpression") return false;
+  const { callee } = node;
+  if (callee.type === "Identifier") return callee.name === "intlLocaleOf";
+  return callee.type === "MemberExpression" && !callee.computed && callee.property.type === "Identifier" && callee.property.name === "intlLocaleOf";
+}
+
+export const localeThroughHelpers: Rule.RuleModule = {
+  meta: {
+    type: "problem",
+    docs: { description: "Format dates and numbers through the domain locale helpers: Latin digits in Arabic only come from intlLocaleOf (RP-330)." },
+    messages: {
+      intl: "Intl.{{name}} outside the locale module: use formatDate or formatNumber from @rabaed/domain, or pass intlLocaleOf(locale) as its locale, so Arabic keeps Latin digits.",
+      method: "{{name}} outside the locale module: use formatDate or formatNumber from @rabaed/domain, or pass intlLocaleOf(locale) as its locale, so Arabic keeps Latin digits.",
+    },
+    schema: [],
+  },
+  create(context) {
+    return {
+      // new Intl.NumberFormat(…), Intl.DateTimeFormat(…)
+      "NewExpression, CallExpression"(node: Rule.Node) {
+        if (node.type !== "NewExpression" && node.type !== "CallExpression") return;
+        const { callee } = node;
+        if (callee.type === "MemberExpression" && !callee.computed && callee.object.type === "Identifier" && callee.object.name === "Intl" && callee.property.type === "Identifier" && /^[A-Z]/.test(callee.property.name)) {
+          if (!isIntlLocaleOfCall(node.arguments[0] as Node | undefined)) context.report({ node, messageId: "intl", data: { name: callee.property.name } });
+          return;
+        }
+        if (node.type === "CallExpression" && callee.type === "MemberExpression" && !callee.computed && callee.property.type === "Identifier" && localeMethods.has(callee.property.name)) {
+          if (!isIntlLocaleOfCall(node.arguments[0] as Node | undefined)) context.report({ node, messageId: "method", data: { name: callee.property.name } });
+        }
+      },
+    };
+  },
+};
+
+const consoleLevels = new Set(["log", "info", "warn", "error", "debug", "trace"]);
+
+/** `console.error(…)`, which the local CLIs and scripts use. */
+export function isConsoleCall(node: Node): boolean {
+  return (
+    node.type === "CallExpression" &&
+    node.callee.type === "MemberExpression" &&
+    node.callee.object.type === "Identifier" &&
+    node.callee.object.name === "console" &&
+    node.callee.property.type === "Identifier" &&
+    consoleLevels.has(node.callee.property.name)
+  );
+}
+
+/** `Error`, `TypeError`, `SecretError`…: a name ending in Error. */
+export const isErrorConstructor = (callee: Node) => callee.type === "Identifier" && /Error$/.test(callee.name);
+
+export const noAwsIdsInErrors: Rule.RuleModule = {
+  meta: {
+    type: "problem",
+    docs: { description: "Errors and logs name a resource, never its AWS ARN or account id (RP-329)." },
+    messages: {
+      aws: "'{{found}}': an AWS ARN or account id must not appear in an error or log message. Name the resource (the secret, the bucket), not its ARN or account.",
+    },
+    schema: [],
+  },
+  create(context) {
+    const keys = context.sourceCode.visitorKeys;
+    const reported = new Set<string>();
+    const scan = (node: AnyNode): void => {
+      if (node.type === "Literal" || node.type === "TemplateElement") {
+        const text = stringValue(node as unknown as StringNode);
+        const found = text && awsIdentifierIn(text);
+        const key = String((node as unknown as Node).range);
+        if (found && !reported.has(key)) {
+          reported.add(key);
+          context.report({ node: node as unknown as Node, messageId: "aws", data: { found } });
+        }
+      }
+      for (const key of keys[node.type] ?? []) {
+        const child = node[key] as AnyNode | AnyNode[] | null | undefined;
+        for (const item of Array.isArray(child) ? child : [child]) if (item) scan(item);
+      }
+    };
+    return {
+      ThrowStatement: (node) => scan(node.argument as unknown as AnyNode),
+      // new Error(…), new SecretError(…), and the same called without `new`, which builds the same error.
+      NewExpression(node) {
+        if (isErrorConstructor(node.callee)) for (const argument of node.arguments) scan(argument as unknown as AnyNode);
+      },
+      CallExpression(node) {
+        if (isLogCall(node) || isConsoleCall(node) || isErrorConstructor(node.callee)) for (const argument of node.arguments) scan(argument as unknown as AnyNode);
       },
     };
   },

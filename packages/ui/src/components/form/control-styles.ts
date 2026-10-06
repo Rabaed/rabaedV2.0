@@ -18,6 +18,12 @@ export const textBox = [
  * Stretches a small control's hit area to at least 44 × 44px on touch screens
  * without changing its size in the layout.
  */
+/**
+ * Grows a link or other inline control to at least 44 × 44px on touch screens, its content centred
+ * across. For a control whose layout must not grow, use `touchArea`.
+ */
+export const touchBox = "pointer-coarse:inline-flex pointer-coarse:min-h-11 pointer-coarse:min-w-11 pointer-coarse:items-center";
+
 // The inset is the same on every side (half of the size gap, negative), so it is centred in both directions.
 export const touchArea =
   "relative pointer-coarse:after:absolute pointer-coarse:after:inset-[calc(50%-1.375rem)] pointer-coarse:after:content-['']";

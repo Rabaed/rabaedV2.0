@@ -38,6 +38,7 @@ const text = {
     project: "Project",
     host: "Host Company",
     requested: "Requested",
+    // eslint-disable-next-line rabaed/no-avoid-terms -- an onboarding lead's state (Waiting, Onboarded), not a Stage or Step.
     state: "State",
     waiting: "Waiting",
     onboarded: "Onboarded",
@@ -50,7 +51,7 @@ const text = {
     closedNotice: "Lead closed.",
     listsTitle: "Option Lists",
     listsHint:
-      "Choices for Form fields, in up to three levels. Every edit needs a reason. An option is never deleted: retire it and it stops being offered, but stays where it was chosen.",
+      "Choices for Form fields, in up to three levels. Every edit needs a reason. An option is never removed: retire it and it stops being offered, but stays where it was chosen.",
     showLists: "Show Option Lists",
     noLists: "No Option Lists yet.",
     newList: "New Option List",

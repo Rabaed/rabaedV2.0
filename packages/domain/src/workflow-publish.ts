@@ -65,13 +65,13 @@ export function workflowKindProblems(steps: readonly PublishedStep[], transition
 /** Whether Step `target` can be reached from Step `start` along `edges` (a Step reaches itself). */
 function reaches(edges: readonly PublishedTransition[], start: string, target: string): boolean {
   const seen = new Set([start]);
-  const queue = [start];
-  for (let step = queue.shift(); step !== undefined; step = queue.shift()) {
+  const toVisit = [start];
+  for (let step = toVisit.shift(); step !== undefined; step = toVisit.shift()) {
     if (step === target) return true;
     for (const e of edges) {
       if (e.from === step && !seen.has(e.to)) {
         seen.add(e.to);
-        queue.push(e.to);
+        toVisit.push(e.to);
       }
     }
   }

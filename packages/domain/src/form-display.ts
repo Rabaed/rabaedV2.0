@@ -25,6 +25,8 @@ const levelSeparator = { en: " › ", ar: " ‹ " } satisfies Record<Locale, str
 /** The mark beside a retired option, as the admin shows it. */
 export const retiredMark = { en: "retired", ar: "موقوف" } satisfies Record<Locale, string>;
 
+// Reads the clock in a time zone to parse and build wall times: nothing shown, so no locale helper.
+// eslint-disable-next-line rabaed/locale-through-helpers
 const wallTimeParts = new Intl.DateTimeFormat("en-US", {
   timeZone,
   hourCycle: "h23",

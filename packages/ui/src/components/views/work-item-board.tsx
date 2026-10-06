@@ -19,7 +19,7 @@ import {
 import { useState, type ElementType } from "react";
 import { cn } from "../../lib/cn.ts";
 import { buttonVariants } from "../button/button.tsx";
-import { focusRing } from "../form/control-styles.ts";
+import { focusRing, touchBox } from "../form/control-styles.ts";
 import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "../overlay/popover.tsx";
 import { stageColour } from "../status/stage-colour.ts";
 import { StagePill } from "../status/stage-pill.tsx";
@@ -295,7 +295,7 @@ function MoveMenu({
         <button
           type="button"
           aria-label={labels.moveItem(card.title)}
-          className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "self-end pointer-coarse:min-h-11")}
+          className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "self-end", touchBox)}
         >
           {labels.move}
         </button>

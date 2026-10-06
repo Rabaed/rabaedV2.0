@@ -1,5 +1,16 @@
 import { cssNoHardcodedColour, cssNoPhysicalDirection } from "./css-rules.ts";
-import { noDeadlineWords, noHardcodedColour, noPhysicalDirection, noRawErrorLogging, noUiTranslations, useClientDirective } from "./js-rules.ts";
+import { jsonNoAvoidTerms, noAvoidTerms } from "./avoid-rules.ts";
+import { jsonNoRawBidi, noRawBidi } from "./bidi-rules.ts";
+import {
+  localeThroughHelpers,
+  noAwsIdsInErrors,
+  noDeadlineWords,
+  noHardcodedColour,
+  noPhysicalDirection,
+  noRawErrorLogging,
+  noUiTranslations,
+  useClientDirective,
+} from "./js-rules.ts";
 import { jsonNoDeadlineWords } from "./json-rules.ts";
 
 /**
@@ -14,11 +25,17 @@ const plugin = {
     "no-physical-direction": noPhysicalDirection,
     "no-deadline-words": noDeadlineWords,
     "no-raw-error-logging": noRawErrorLogging,
+    "no-avoid-terms": noAvoidTerms,
+    "no-raw-bidi": noRawBidi,
+    "locale-through-helpers": localeThroughHelpers,
+    "no-aws-ids-in-errors": noAwsIdsInErrors,
     "use-client-directive": useClientDirective,
     "no-ui-translations": noUiTranslations,
     "css-no-hardcoded-colour": cssNoHardcodedColour,
     "css-no-physical-direction": cssNoPhysicalDirection,
     "json-no-deadline-words": jsonNoDeadlineWords,
+    "json-no-avoid-terms": jsonNoAvoidTerms,
+    "json-no-raw-bidi": jsonNoRawBidi,
   },
 };
 

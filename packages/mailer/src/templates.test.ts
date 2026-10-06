@@ -198,7 +198,7 @@ describe("notification emails", () => {
       const { subject } = renderEmail(template, locale, examples[template]);
       const parts = subject.split(" · ");
       expect(parts).toHaveLength(3);
-      expect(parts[0]).toBe(`⁦${DOC}⁩`);
+      expect(parts[0]).toBe(`\u2066${DOC}\u2069`);
       expect(parts[1]).toBe("Cable trays <Level 2>");
     },
   );
@@ -208,7 +208,7 @@ describe("notification emails", () => {
     (template, locale) => {
       const { text, html } = renderEmail(template, locale, examples[template]);
       expect(html).toContain(`<bdi dir="ltr">${DOC}</bdi>`);
-      expect(text).toContain(`⁦${DOC}⁩`);
+      expect(text).toContain(`\u2066${DOC}\u2069`);
       expect(text).toContain(item.link);
       expect(html).toContain(`href="${item.link}"`);
       expect(html).toContain("Cable trays &lt;Level 2&gt;");
@@ -223,10 +223,10 @@ describe("notification emails", () => {
 
   it("a Step reached: names the recipient's own Step", () => {
     expect(renderEmail("notification-step-reached", "en", examples["notification-step-reached"]).subject).toBe(
-      `⁦${DOC}⁩ · Cable trays <Level 2> · Reached you at Contractor review`,
+      `\u2066${DOC}\u2069 · Cable trays <Level 2> · Reached you at Contractor review`,
     );
     expect(renderEmail("notification-step-reached", "ar", examples["notification-step-reached"]).subject).toBe(
-      `⁦${DOC}⁩ · Cable trays <Level 2> · وصلك في مراجعة المقاول`,
+      `\u2066${DOC}\u2069 · Cable trays <Level 2> · وصلك في مراجعة المقاول`,
     );
   });
 
@@ -284,7 +284,7 @@ describe("the daily digest (RP-358)", () => {
   it.each(locales)("in %s: every Document Number is left to right, and every item links to itself", (locale) => {
     const { text, html } = renderEmail("daily-digest", locale, digest);
     for (const number of [DOC, "CLN-SUB-02-0007"]) {
-      expect(text).toContain(`⁦${number}⁩`);
+      expect(text).toContain(`\u2066${number}\u2069`);
       expect(html).toContain(`<bdi dir="ltr">${number}</bdi>`);
     }
     for (const project of digest.projects) {
@@ -345,7 +345,7 @@ describe("weekly Step Age report", () => {
   it("shows each item's Document Number left to right, its Subject and Stage, and another Company by name only", () => {
     for (const locale of locales) {
       const { text, html } = renderEmail("step-age-report", locale, report);
-      expect(text).toContain(`⁦${DOC}⁩ · Cable trays <Level 2>`);
+      expect(text).toContain(`\u2066${DOC}\u2069 · Cable trays <Level 2>`);
       expect(html).toContain(`<bdi dir="ltr">${DOC}</bdi>`);
       expect(html).toContain("Cable trays &lt;Level 2&gt;");
       expect(html).not.toContain("<Level 2>");

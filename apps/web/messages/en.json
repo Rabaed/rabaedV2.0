@@ -39,7 +39,7 @@
       "anyUnclaimed": "Unclaimed",
       "trade": "Trade",
       "location": "Location",
-      "outcome": "Review Code / Result",
+      "outcome": "Review Code / Inspection Result",
       "stepAge": "Step Age",
       "weeksOrMore": "{weeks} weeks or more",
       "sort": "Sort by",
@@ -191,8 +191,8 @@
     "codeHint": "2 to 10 letters or digits, used in Document Numbers.",
     "projectNumber": "Project Number",
     "hostCompany": "Host Company",
-    "role": "Your Company's role",
-    "yourRole": "Your Company's role",
+    "role": "Your Company's Project Role",
+    "yourRole": "Your Company's Project Role",
     "create": "Create Project",
     "roles": {
       "contractor": "Contractor",
@@ -387,14 +387,14 @@
       "title": "Attachments",
       "none": "No Documents attached.",
       "add": "Attach a Document",
-      "limits": "PDF, images, Office files, drawings, text or zip, up to {size}. Once sent, Documents can't be changed.",
+      "limits": "PDF, images, Office documents, drawings, text or zip, up to {size}. Once sent, Documents can't be changed.",
       "open": "Open",
       "remove": "Remove",
       "frozenLabel": "Sent: can't be changed",
       "uploaded": "Document attached.",
       "removed": "Document removed.",
-      "tooLarge": "This file is too large. The limit is {size}.",
-      "wrongType": "This type of file can't be attached.",
+      "tooLarge": "This Document is too large. The limit is {size}.",
+      "wrongType": "This type of Document can't be attached.",
       "notEditable": "Documents can't be changed any more.",
       "frozen": "This Document was sent, so it can't be removed.",
       "forbidden": "Your Position doesn't allow attaching Documents.",
@@ -402,7 +402,7 @@
       "kb": "{size} KB",
       "mb": "{size} MB",
       "projectClosed": "This Project is closed.",
-      "notUploaded": "The file didn't finish uploading. Attach it again.",
+      "notUploaded": "The Document didn't finish uploading. Attach it again.",
       "tooManyFiles": "This field has all the Documents it takes. Remove one to add another."
     },
     "links": {
@@ -440,7 +440,7 @@
     "revisionCreated": "New Revision",
     "cancelled": "Cancelled",
     "sentBack": "Sent Back to you by {company}",
-    "vacancy": "Vacancy at {step}: name a replacement"
+    "vacancy": "Vacancy at {step}: assign a replacement"
   },
   "profile": {
     "title": "Profile",

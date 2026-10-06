@@ -78,6 +78,7 @@ export function summarise(title: string, current: Timing, main?: Timing, top = 1
     lines.push("", `> **Slower than main:** ${notice}`);
   }
 
+  // eslint-disable-next-line rabaed/no-avoid-terms -- test files, in the CI job summary.
   lines.push("", `The ${slowest.length} slowest files:`, "", "| File | Time | Main |", "| --- | ---: | ---: |");
   for (const { file, ms } of slowest) {
     const before = mainFiles.get(file);

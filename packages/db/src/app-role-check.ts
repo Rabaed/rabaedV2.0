@@ -20,6 +20,7 @@ export async function checkAppRole(db: Db): Promise<string[]> {
   const { rows: [role] } = await sql<{ name: string; superuser: boolean; bypass: boolean }>`
     select rolname as name, rolsuper as superuser, rolbypassrls as bypass from pg_roles where rolname = current_user
   `.execute(db);
+  // eslint-disable-next-line rabaed/no-avoid-terms -- the PostgreSQL role, in a failure the app role check logs.
   if (!role) return ["cannot read its own role"];
   if (role.name !== APP_ROLE) failures.push(`connected as ${role.name}; ${role.name} is not ${APP_ROLE}`);
   if (role.superuser) failures.push(`${role.name} is a superuser`);

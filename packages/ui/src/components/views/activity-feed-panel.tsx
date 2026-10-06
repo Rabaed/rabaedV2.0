@@ -5,7 +5,7 @@ import { useEffect, useId, useRef, type ElementType } from "react";
 import { cn } from "../../lib/cn.ts";
 import { Button } from "../button/button.tsx";
 import { DocNo } from "../doc-no/doc-no.tsx";
-import { focusRing } from "../form/control-styles.ts";
+import { focusRing, touchBox } from "../form/control-styles.ts";
 import { Field } from "../form/field.tsx";
 import { Select } from "../form/select.tsx";
 import { Switch } from "../form/switch.tsx";
@@ -13,7 +13,7 @@ import { moduleName } from "../../lib/module-name.ts";
 
 /* eslint-disable rabaed/no-ui-translations -- existing labels, still to move to the app's messages (RP-362 retro) */
 const copy = {
-  title: { en: "Activity", ar: "النشاط" },
+  title: { en: "Activity Feed", ar: "النشاط" },
   module: { en: "Module", ar: "الوحدة" },
   type: { en: "Type", ar: "النوع" },
   all: { en: "All", ar: "الكل" },
@@ -117,7 +117,7 @@ export function ActivityFeedPanel({
           {t("title")}
         </h2>
         {viewAllHref && !fullHeight && (
-          <Link href={viewAllHref} className={cn("rounded-sm text-sm text-primary underline underline-offset-4", focusRing)}>
+          <Link href={viewAllHref} className={cn("rounded-sm text-sm text-primary underline underline-offset-4", focusRing, touchBox)}>
             {t("viewAll")}
           </Link>
         )}

@@ -45,8 +45,8 @@ const copy = {
     notYet: "يمكن إضافة الصور بعد حفظ المسودة.",
     uploading: "جارٍ الرفع…",
     takePhoto: "التقط صورة",
-    open: (name: string) => `فتح ⁨${name}⁩ بالحجم الكامل`,
-    remove: (name: string) => `إزالة ⁨${name}⁩`,
+    open: (name: string) => `فتح \u2068${name}\u2069 بالحجم الكامل`,
+    remove: (name: string) => `إزالة \u2068${name}\u2069`,
     frozen: "مُرسَل: لا يمكن تغييره",
     taken: (when: string) => `التُقطت ${when}`,
     nothingRecorded: "لم يُسجَّل وقت أو موقع",
@@ -175,7 +175,7 @@ function PhotoInputs({
         aria-label={label}
         disabled={pending}
         onChange={() => picked(choose.current)}
-        className="block w-full text-sm text-text file:me-3 file:rounded-md file:border file:border-border file:bg-surface file:px-3 file:py-1.5 file:text-sm"
+        className="block w-full text-sm text-text pointer-coarse:min-h-11 file:me-3 file:rounded-md file:border file:border-border file:bg-surface file:px-3 file:py-1.5 file:text-sm"
       />
       {/* On a phone, straight to the back camera; elsewhere it chooses a file, as the input above. */}
       <OutsideField>

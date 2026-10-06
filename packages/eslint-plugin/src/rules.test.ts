@@ -172,6 +172,180 @@ tsx.run("no-raw-error-logging", rules["no-raw-error-logging"], {
   ],
 });
 
+tsx.run("no-avoid-terms", rules["no-avoid-terms"], {
+  valid: [
+    `const companyId = "abc";`,
+    `const memberName = member.name;`,
+    `const template = "invitation";`, // a name; only the label "Template" is flagged
+    `function OptionListInput({ list }) {}`,
+    `<Tabs aria-label="Project modules" />`,
+    `<div role="note" />`,
+    `import { tenant } from "tenant-lib";`,
+    `"use client";`,
+    "const mine = 1; /* a comment may say tenant */",
+    `const label = { en: "Activity Feed" };`,
+    "const sql = `select * from member where id = ${id}`;",
+    `const s = "Every Project {company} takes part in";`,
+    // Code names keep the exceptions an established code name gives: the Subject is `title` in code.
+    `const title = row.title;`,
+    `const key = "title";`,
+    `const [state, setState] = useState(0);`,
+    "const rows = await sql`select title, name from work_item where status = ${s}`;",
+    `await client.query("select title from work_item");`,
+    `const label = t("members.title");`,
+    `<p>Every Member of your Company</p>`,
+    // Errors, logs and API docs are read by developers: checked as code names.
+    `throw new Error("Migration file name must look like this");`,
+    `console.error("app role check failed");`,
+    `log.warn({ err: error }, "outbox report failed");`,
+    `const s = z.null().describe("saved; no report");`,
+    // Code names quoted in copy are checked as names.
+    `const label = "Set FILE_STORE_ENDPOINT before you upload";`,
+    `const label = "Remove {name} from this Project?";`,
+    // A string used as a key is a code name.
+    `type C = Pool["Client"];`,
+    `const x = { "Status": 1 };`,
+  ],
+  invalid: [
+    { code: `const tenantId = "abc";`, errors: [{ messageId: "term", data: { found: "Tenant", words: "tenant" } }] },
+    { code: `function getCustomer() {}`, errors: [{ messageId: "term" }] },
+    { code: `type OrganizationRow = { id: string };`, errors: [{ messageId: "term" }] },
+    { code: `const x = { subscriber_count: 1 };`, errors: [{ messageId: "term" }] },
+    { code: `<Panel employeeName="x" />`, errors: [{ messageId: "term" }] },
+    { code: `const label = "Template";`, errors: [{ messageId: "term", data: { found: "Template", words: "template" } }] },
+    { code: `const label = "Your tenant";`, errors: [{ messageId: "term" }] },
+    { code: "const label = `Add a ${what} to the organization`;", errors: [{ messageId: "term" }] },
+    { code: `const coverage = 1;`, errors: [{ messageId: "term" }] },
+    { code: `<Foo project_manager="x" />`, errors: [{ messageId: "term" }] },
+    // What people read is strict: a code name's exception does not reach copy.
+    { code: `const label = "Edit the title";`, errors: [{ messageId: "term", data: { found: "Title", words: "title" } }] },
+    { code: `const label = "Status";`, errors: [{ messageId: "term" }] },
+    { code: `<p>Follow this item</p>`, errors: [{ messageId: "term", data: { found: "Follow", words: "follow" } }] },
+    { code: `<Button aria-label="Open the tab" />`, errors: [{ messageId: "term" }] },
+    { code: "const s = `Delete the ${what} task`;", errors: [{ messageId: "term" }] },
+    // A name without an established code name is flagged as a name too.
+    { code: `const followButton = 1;`, errors: [{ messageId: "term" }] },
+    { code: `function deletedItems() {}`, errors: [{ messageId: "term" }] },
+    { code: `const key = t("item.follow");`, errors: [{ messageId: "term" }] },
+    // Copy outside an error or log is strict however it is built.
+    { code: `const copy = { title: { en: "Activity", ar: "x" } };`, errors: [{ messageId: "term" }] },
+    { code: `setMessage("This file is too large");`, errors: [{ messageId: "term" }] },
+  ],
+});
+
+// The characters are built here from escapes: this file must not hold a raw one itself.
+const LRI = "\u2066";
+const PDI = "\u2069";
+const LRM = "\u200E";
+const RLO = "\u202E";
+
+tsx.run("no-raw-bidi", rules["no-raw-bidi"], {
+  valid: [
+    `const isolate = "\\u2066" + id + "\\u2069";`,
+    "const s = `\\u2066${id}\\u2069`;",
+    `const arabic = "مرحبا";`,
+    `<p>{"\\u200E"}</p>`,
+  ],
+  invalid: [
+    {
+      code: `const s = "${LRI}" + id + "${PDI}";`,
+      output: `const s = "\\u2066" + id + "\\u2069";`,
+      errors: [{ messageId: "raw", data: { escape: "\\u2066", name: "left-to-right isolate" } }, { messageId: "raw" }],
+    },
+    { code: "const s = `" + LRI + "${id}" + PDI + "`;", output: "const s = `\\u2066${id}\\u2069`;", errors: [{ messageId: "raw" }, { messageId: "raw" }] },
+    { code: `const mark = "${LRM}";`, output: `const mark = "\\u200E";`, errors: [{ messageId: "raw", data: { escape: "\\u200E", name: "left-to-right mark" } }] },
+    { code: `const x = "${RLO}";`, output: `const x = "\\u202E";`, errors: [{ messageId: "raw" }] },
+    { code: `const re = /${LRI}/;`, output: `const re = /\\u2066/;`, errors: [{ messageId: "raw" }] },
+    { code: `// ${LRI} hidden`, output: `// \\u2066 hidden`, errors: [{ messageId: "raw" }] },
+    // Not fixed: an escape is not valid in JSX text or in a JSX attribute string.
+    { code: `<p>${LRI}x</p>`, output: null, errors: [{ messageId: "raw" }] },
+    { code: `<p title="${LRI}x" />`, output: null, errors: [{ messageId: "raw" }] },
+  ],
+});
+
+jsonTester.run("json-no-raw-bidi", rules["json-no-raw-bidi"], {
+  valid: [`{ "a": "\\u2066{id}\\u2069", "b": "مرحبا" }`],
+  invalid: [
+    { code: `{ "a": "${LRM}{email}${LRM}" }`, output: `{ "a": "\\u200E{email}\\u200E" }`, errors: [{ messageId: "raw" }, { messageId: "raw" }] },
+    { code: `{ "a": "${LRI}{id}${PDI}" }`, output: `{ "a": "\\u2066{id}\\u2069" }`, errors: [{ messageId: "raw" }, { messageId: "raw" }] },
+  ],
+});
+
+tsx.run("no-aws-ids-in-errors", rules["no-aws-ids-in-errors"], {
+  valid: [
+    `throw new Error(\`Secret \${name} is not readable\`);`,
+    `throw new Error("Expected role app");`,
+    `log.error({ err: error }, "secret read failed");`,
+    `const arn = "arn:aws:secretsmanager:eu-central-1:123456789012:secret:app";`,
+    `throw new Error("Missing id 0199a3b0-0000-7000-8000-000000000001");`,
+    `console.log("took 1234567890123 ms");`,
+    `expect(f).toThrow("arn:aws:s3:::bucket");`,
+    // A KSA phone number in E.164 or as a link is 12 digits too, but not an account id.
+    `throw new Error("Call +966512345678 to confirm");`,
+    `log.warn("sms to +966512345678 failed");`,
+    `console.error("no answer at tel:966512345678");`,
+    `throw new Error("open https://wa.me/966512345678");`,
+  ],
+  invalid: [
+    { code: `throw new Error("no access to arn:aws:secretsmanager:eu-central-1:1:secret:app");`, errors: [{ messageId: "aws", data: { found: "arn:aws:" } }] },
+    { code: "throw new Error(`cannot read ${arn}: arn:aws:s3:::bucket`);", errors: [{ messageId: "aws" }] },
+    { code: `throw new SecretError("account 123456789012 refused");`, errors: [{ messageId: "aws", data: { found: "123456789012" } }] },
+    { code: `log.error({ secret: "arn:aws-cn:kms:cn-north-1:1:key/x" }, "failed");`, errors: [{ messageId: "aws" }] },
+    { code: `request.log.warn("deploying to 123456789012");`, errors: [{ messageId: "aws" }] },
+    { code: `console.error("Bootstrap failed in account 123456789012");`, errors: [{ messageId: "aws" }] },
+    { code: `throw "arn:aws:iam::1:role/x";`, errors: [{ messageId: "aws" }] },
+    // Error(…) without `new` builds the same error.
+    { code: `throw Error("account 123456789012 refused");`, errors: [{ messageId: "aws", data: { found: "123456789012" } }] },
+    { code: `const e = SecretError("no access to arn:aws:kms:me-central-1:1:key/x");`, errors: [{ messageId: "aws" }] },
+    { code: `reject(TypeError(\`bad \${x} in 123456789012\`));`, errors: [{ messageId: "aws" }] },
+  ],
+});
+
+tsx.run("locale-through-helpers", rules["locale-through-helpers"], {
+  valid: [
+    `formatDate(value, locale);`,
+    `formatNumber(1234, locale);`,
+    `new Intl.NumberFormat(intlLocaleOf(locale), { style: "currency", currency }).format(1);`,
+    `new Intl.PluralRules(intlLocaleOf(locale)).select(n);`,
+    `date.toLocaleDateString(intlLocaleOf(locale), { dateStyle: "medium" });`,
+    `Intl.DateTimeFormat(domain.intlLocaleOf(locale)).format(d);`,
+    `const options: Intl.NumberFormatOptions = {};`,
+    `Intl.supportedValuesOf("currency");`,
+    `const toLocaleString = 1;`,
+  ],
+  invalid: [
+    { code: `new Intl.NumberFormat(locale).format(1);`, errors: [{ messageId: "intl", data: { name: "NumberFormat" } }] },
+    { code: `new Intl.PluralRules(locale).select(age);`, errors: [{ messageId: "intl", data: { name: "PluralRules" } }] },
+    { code: `new Intl.DateTimeFormat("en-US", { dateStyle: "short" });`, errors: [{ messageId: "intl" }] },
+    { code: `Intl.DateTimeFormat().format(d);`, errors: [{ messageId: "intl" }] },
+    { code: `new Intl.NumberFormat(locale === "ar" ? intlLocaleOf(locale) : "en");`, errors: [{ messageId: "intl" }] },
+    { code: `new Intl.Collator(locale);`, errors: [{ messageId: "intl" }] },
+    { code: `n.toLocaleString();`, errors: [{ messageId: "method", data: { name: "toLocaleString" } }] },
+    { code: `d.toLocaleDateString("ar-SA");`, errors: [{ messageId: "method" }] },
+    { code: `d.toLocaleTimeString(locale, { hour: "2-digit" });`, errors: [{ messageId: "method", data: { name: "toLocaleTimeString" } }] },
+  ],
+});
+
+jsonTester.run("json-no-avoid-terms", rules["json-no-avoid-terms"], {
+  valid: [
+    `{ "members": { "title": "Members", "intro": "People of your Company" } }`,
+    `{ "form": { "template": "Pick a Form" } }`,
+    `{ "members": { "status": "Status" } }`, // a Member's active or deactivated column, allowed by its path
+  ],
+  invalid: [
+    { code: `{ "tenant": { "title": "Companies" } }`, errors: [{ messageId: "key" }] },
+    { code: `{ "home": { "intro": "Welcome, tenant" } }`, errors: [{ messageId: "value" }] },
+    { code: `{ "members": { "title": "Users" } }`, errors: [{ messageId: "value" }] },
+    { code: `{ "form": { "label": "Template" } }`, errors: [{ messageId: "value" }] },
+    // A key may use a code name (title); the text may not.
+    { code: `{ "item": { "title": "Edit the title" } }`, errors: [{ messageId: "value", data: { found: "Title" } }] },
+    { code: `{ "item": { "watch": "Follow" } }`, errors: [{ messageId: "value" }] },
+    { code: `{ "item": { "follow": "Watch" } }`, errors: [{ messageId: "key" }] },
+    // A message allowed by its path (members.status) is allowed there only.
+    { code: `{ "projects": { "status": "Status" } }`, errors: [{ messageId: "value" }] },
+  ],
+});
+
 tsx.run("use-client-directive", rules["use-client-directive"], {
   valid: [
     `"use client";\nexport function A() { const [x] = useState(0); return <button onClick={() => x}>a</button>; }`,

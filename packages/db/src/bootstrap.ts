@@ -14,9 +14,9 @@ function checkIdentifier(name: string): string {
 
 function credentialsOf(url: string, expectedRole: string): string {
   const u = new URL(url);
-  const user = decodeURIComponent(u.username);
-  if (user !== expectedRole) {
-    throw new Error(`Expected the connection URL to use role ${expectedRole}, got ${user || "(none)"}`);
+  const login = decodeURIComponent(u.username);
+  if (login !== expectedRole) {
+    throw new Error(`Expected the connection URL to use role ${expectedRole}, got ${login || "(none)"}`);
   }
   return decodeURIComponent(u.password);
 }

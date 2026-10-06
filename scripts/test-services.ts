@@ -6,6 +6,7 @@ import { connect } from "node:net";
 // seam1 and seam2 need Postgres and the file store (the demo seed uploads files), mail
 // needs Mailpit, which is waited for briefly since it answers a moment after starting.
 
+// eslint-disable-next-line rabaed/no-avoid-terms -- `files` is the Docker Compose service's name, not a Document
 const fix = "run `docker compose up -d --wait db mailpit files`";
 
 /** The message for a service that doesn't answer. */
@@ -49,7 +50,7 @@ export async function checkReachable(services: Service[], reachable = tcpReachab
 
 /** Waits up to timeoutMs for Mailpit's /readyz to answer 200; throws the unreachable message if it never does. */
 export async function waitForMailpit(url: string, { timeoutMs = 10_000, intervalMs = 250, get = fetch } = {}): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
+  const giveUpAt = Date.now() + timeoutMs;
   for (;;) {
     try {
       const response = await get(new URL("/readyz", url), { signal: AbortSignal.timeout(1000) });
@@ -57,7 +58,7 @@ export async function waitForMailpit(url: string, { timeoutMs = 10_000, interval
     } catch {
       // Not listening yet.
     }
-    if (Date.now() >= deadline) throw new Error(unreachable("Mailpit", hostAndPort(url).port));
+    if (Date.now() >= giveUpAt) throw new Error(unreachable("Mailpit", hostAndPort(url).port));
     await new Promise((resolve) => setTimeout(resolve, intervalMs));
   }
 }

@@ -92,9 +92,9 @@ interface Content {
 const signOff: Record<Locale, string> = { en: "Rabaed", ar: "ربائد" };
 
 type Template<V> = (locale: Locale, values: V) => Content;
-type AccountTemplate = "sign-in-code" | "invitation" | "new-device-sign-in" | "sign-in-locked";
+type AdminTemplate = "sign-in-code" | "invitation" | "new-device-sign-in" | "sign-in-locked";
 
-const accountTemplates: { [T in AccountTemplate]: Template<EmailTemplateValues[T]> } = {
+const adminTemplates: { [T in AdminTemplate]: Template<EmailTemplateValues[T]> } = {
   "sign-in-code": (locale, { code, validMinutes }) => {
     const minutes = formatNumber(validMinutes, locale);
     return locale === "ar"
@@ -155,7 +155,7 @@ const accountTemplates: { [T in AccountTemplate]: Template<EmailTemplateValues[T
       : {
           subject: "Rabaed Admin sign-in locked for now",
           paragraphs: [
-            [`After several failed sign-ins to your Rabaed Admin account, sign-in is locked for ${count} minutes.`],
+            [`After several failed sign-ins to Rabaed Admin, sign-in is locked for ${count} minutes.`],
             ["If it wasn't you, tell the Rabaed team at once."],
           ],
           signOff: signOff.en,
@@ -173,7 +173,7 @@ const notificationCopy = {
     reached: (step: string) => `Reached you at ${step}`,
     sentBack: "Sent Back to you",
     vacancy: (step: string) => `Vacancy at ${step}`,
-    vacancyHelp: "Whoever held it has left the Project. Name someone to hold it.",
+    vacancyHelp: "Whoever held it has left the Project. Assign someone to hold it.",
     revision: "New Revision",
     code: (code: string) => `Code ${code}`,
     closed: "Closed",
@@ -304,7 +304,7 @@ const reportCopy = {
     with: (holder: string) => `With ${holder}`,
     oldest: "Open the items 4 weeks or more at their Step:",
     all: "Open all of them on Rabaed:",
-    settings: "You can stop this report in your notification settings on Rabaed.",
+    settings: "You can stop the Weekly report in your notification settings on Rabaed.",
   },
   ar: {
     subject: (project: string) => `تقرير عمر الخطوة الأسبوعي · ${project}`,
@@ -373,7 +373,7 @@ const digestTemplates: { "daily-digest": Template<DailyDigestValues> } = {
 };
 
 const templates: { [T in EmailTemplate]: Template<EmailTemplateValues[T]> } = {
-  ...accountTemplates,
+  ...adminTemplates,
   ...notificationTemplates,
   ...digestTemplates,
   ...reportTemplates,
@@ -401,7 +401,7 @@ function itemLine(documentNumber: string | null, rest: string): Paragraph {
 
 /** Keeps a value left to right inside plain text (a subject, the text body): a Unicode left-to-right isolate. */
 function isolate(value: string): string {
-  return `⁦${value}⁩`;
+  return `\u2066${value}\u2069`;
 }
 
 function plain(paragraph: Paragraph): string {

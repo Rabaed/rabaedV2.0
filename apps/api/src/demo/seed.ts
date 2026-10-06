@@ -266,7 +266,9 @@ export async function seedDemo(
 
   const hafiz = { key: "tmc-engineer", local: "hafiz.hamdan", name: bi("Hafiz Hamdan", "حافظ حمدان"), label: "Contractor Engineer" };
   await member(tmc, participant.tmc, hafiz, ["engineer"]);
+  // eslint-disable-next-line rabaed/no-avoid-terms -- the Project Manager Position, as GLOSSARY.md's Position entry names it.
   const ali = { key: "tmc-pm", local: "ali.sonour", name: bi("Ali Sonour", "علي سنور"), label: "Contractor Project Manager" };
+  // eslint-disable-next-line rabaed/no-avoid-terms -- the same Position's key.
   await member(tmc, participant.tmc, ali, ["project_manager"]);
   const yousef = { key: "beta-engineer", local: "yousef.karim", name: bi("Yousef Karim", "يوسف كريم"), label: "Second Contractor Engineer" };
   await member(beta, participant.beta, yousef, ["engineer"]);
@@ -335,6 +337,7 @@ export async function seedDemo(
       contentType: "application/pdf",
       body: demoPdf([
         "Zumtobel RESCLITE PRO",
+        // eslint-disable-next-line rabaed/no-avoid-terms -- a datasheet's own words: an anti-panic area is a lighting zone in EN 1838.
         "LED emergency luminaire for escape routes and anti-panic areas.",
         "Duration: 3 hours. Self-test. IP 65.",
         "Demo datasheet: made up for the Rabaed demo.",
@@ -404,6 +407,7 @@ export async function seedDemo(
     await take(mohammedCaller, exitSignage, "approve_a");
     // In Tower 2, linking the approved exit signs it supervises twice: under
     // Related submittals (the Form Version 3's link question) and as a free Link.
+    /* eslint-disable rabaed/no-avoid-terms -- an electrical panel, the equipment this submittal is for, not a Form Section. */
     await submitted(
       "Emergency lighting control panel – Tower 2",
       ["Zumtobel ONLITE CPS", "Central battery panel for emergency luminaires and exit signs.", "Demo datasheet: made up for the Rabaed demo."],
@@ -420,6 +424,7 @@ export async function seedDemo(
       },
       [exitSignage],
     );
+    /* eslint-enable rabaed/no-avoid-terms */
 
     // The part 3 flow (Form Version 4, MAR Workflow Version 2), ending with Code C and
     // Remarks. The Consultant's verification sits empty for the Contractor, marked
@@ -441,6 +446,7 @@ export async function seedDemo(
     await verify(cableTray, {
       sample_checked: true,
       matches_specification: false,
+      // eslint-disable-next-line rabaed/no-avoid-terms -- the demo Form's field key, kept as published in its Form Version.
       verification_note:
         "The tray is electro-zinc plated, not hot dip galvanised as the specification requires. / اللوحة مجلفنة كهربائياً وليست مجلفنة بالغمس الساخن كما تشترط المواصفات.",
     });

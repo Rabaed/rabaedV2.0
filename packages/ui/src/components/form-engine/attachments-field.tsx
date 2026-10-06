@@ -113,7 +113,7 @@ function FileInput({ field, pending, locale, onUpload }: { field: AttachmentsFie
           if (file) onUpload?.(file);
           if (input.current) input.current.value = "";
         }}
-        className="block w-full text-sm text-text file:me-3 file:rounded-md file:border file:border-border file:bg-surface file:px-3 file:py-1.5 file:text-sm"
+        className="block w-full text-sm text-text pointer-coarse:min-h-11 file:me-3 file:rounded-md file:border file:border-border file:bg-surface file:px-3 file:py-1.5 file:text-sm"
       />
       {pending && (
         <p role="status" className="text-sm text-muted">

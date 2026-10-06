@@ -7,6 +7,8 @@ name: ${COMPOSE_PROJECT_NAME:-rabaed}
 services:
   db:
     image: postgres:16
+    # Per-function timing for plpgsql (pg_stat_user_functions); see "Tests" in README.md.
+    command: postgres -c track_functions=pl
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-local-dev-only}
