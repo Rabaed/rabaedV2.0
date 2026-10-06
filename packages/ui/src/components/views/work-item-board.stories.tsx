@@ -1,6 +1,13 @@
-import { workItemQuery, workItemSearchParams, type WorkItemBoard as WorkItemBoardData, type WorkItemQuery, type WorkItemRow } from "@rabaed/domain";
+import {
+  workItemQuery,
+  workItemSearchParams,
+  type WorkItemBoard as WorkItemBoardData,
+  type WorkItemMove,
+  type WorkItemQuery,
+  type WorkItemRow,
+} from "@rabaed/domain";
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { expect, fn, within } from "storybook/test";
+import { expect, fireEvent, fn, screen, userEvent, waitFor, within } from "storybook/test";
 import { expectLaidOutLeftToRight } from "../../storybook/bidi.ts";
 import { expectTouchTarget, phone } from "../../storybook/form.ts";
 import { storyLocale, storyText } from "../../storybook/locale.ts";
@@ -20,6 +27,8 @@ const copy = {
   kanban: b("Kanban", "كانبان"),
   stage: b("Stage", "المرحلة"),
   unclaimed: b("unclaimed", "لم تُستلَم"),
+  moveItem: b("Move #", "نقل #"),
+  moveTo: b("To #", "إلى #"),
 };
 
 const stages = {
@@ -114,6 +123,31 @@ const board: WorkItemBoardData = {
     // Three Code C items, all closed more than 30 days ago.
     { stageKey: "revise_resubmit", shown: 0, lanes: [] },
   ],
+  moves: {},
+};
+
+// What Sara may do with her Draft "Fire alarm cables" now (RP-350): two
+// Transitions lead to Pending Approval, so that Stage is no drop target. Her
+// Revision Draft has none, and nobody she may not act for has a card here.
+const move = (transition: string, label: { en: string; ar: string }, kind: WorkItemMove["kind"], stageKey: string): WorkItemMove => ({
+  transition,
+  label,
+  kind,
+  stageKey,
+  actionForm: null,
+});
+const sendForReview = move("send_for_review", b("Send for Review", "إرسال للمراجعة"), "send", "internal_review");
+const cancel = move("cancel", b("Cancel", "إلغاء"), "cancel", "revise_resubmit");
+const boardWithMoves: WorkItemBoardData = {
+  ...board,
+  moves: {
+    [cards.draft.id]: [
+      sendForReview,
+      move("submit_standard", b("Submit as standard", "تقديم عادي"), "submit", "pending_approval"),
+      move("submit_fast", b("Submit fast track", "تقديم مستعجل"), "submit", "pending_approval"),
+      cancel,
+    ],
+  },
 };
 
 const defaults: WorkItemQuery = workItemQuery.parse({});
@@ -201,6 +235,80 @@ export const Narrow: Story = {
     const region = context.canvas.getByRole("region", { name: storyText(context, copy.board) });
     await expect(region.scrollWidth).toBeGreaterThan(region.clientWidth);
     for (const link of within(columnOf(context, stages.pending)).getAllByRole("link")) await expectTouchTarget(link);
+  },
+};
+
+const draftCard = (context: PlayContext) => columnOf(context, stages.draft).querySelector<HTMLElement>(`li[data-movable]`)!;
+const dragData = () => ({ dataTransfer: new DataTransfer() });
+const targetColumns = (context: PlayContext) =>
+  context.canvas.getAllByRole("listitem").filter((li) => li.dataset.stage && li.hasAttribute("data-drop-target")).map((li) => li.dataset.stage);
+
+/**
+ * Dragging a card Sara may act on highlights only the Stages one of its
+ * Transitions alone leads to: Pending Approval, which two lead to, is not one,
+ * nor is the Stage the card is in. Dropping on a target opens that
+ * Transition's Action Form (here, `onMove`); dropping elsewhere does nothing.
+ * A card she may not act on can't be dragged. Left mid-drag for the screenshot.
+ */
+export const DraggingWithTargets: Story = {
+  args: { board: boardWithMoves, onMove: fn() },
+  play: async (context) => {
+    const onMove = context.args.onMove as ReturnType<typeof fn>;
+    const card = draftCard(context);
+    await expect(card).toHaveAttribute("draggable", "true");
+    // The other Draft, the Consultant's cards and the closed ones have nothing to take.
+    await expect(context.canvas.getAllByRole("listitem").filter((li) => li.hasAttribute("data-movable"))).toHaveLength(1);
+    await expect(targetColumns(context)).toEqual([]);
+
+    fireEvent.dragStart(card, dragData());
+    await waitFor(() => expect(targetColumns(context)).toEqual(["internal_review", "revise_resubmit"]));
+
+    // Dropping on a Stage that is no target does nothing.
+    fireEvent.drop(columnOf(context, stages.pending), dragData());
+    fireEvent.drop(columnOf(context, stages.draft), dragData());
+    await expect(onMove).not.toHaveBeenCalled();
+
+    fireEvent.drop(columnOf(context, stages.internal), dragData());
+    await expect(onMove).toHaveBeenCalledWith(cards.draft, sendForReview);
+    await waitFor(() => expect(targetColumns(context)).toEqual([]));
+
+    // Left dragging again, so the highlighted columns are what the screenshot shows.
+    fireEvent.dragStart(card, dragData());
+    await waitFor(() => expect(targetColumns(context)).toHaveLength(2));
+  },
+};
+
+/** Dragging on a phone: the board scrolls sideways, the targets are still highlighted. */
+export const DraggingNarrow: Story = { ...DraggingWithTargets, parameters: phone, play: undefined };
+
+/** The same moves from the card's menu, for the keyboard and screen readers: no drag needed. */
+export const MovingFromTheMenu: Story = {
+  args: { board: boardWithMoves, onMove: fn() },
+  play: async (context) => {
+    const onMove = context.args.onMove as ReturnType<typeof fn>;
+    const trigger = within(draftCard(context)).getByRole("button", { name: storyText(context, copy.moveItem).replace("#", cards.draft.title) });
+    trigger.focus();
+    await userEvent.keyboard("{Enter}");
+    const menu = await screen.findByRole("dialog", { name: storyText(context, copy.moveItem).replace("#", cards.draft.title) });
+    // The same targets as dragging: the Stage two Transitions lead to is not offered.
+    const choices = within(menu).getAllByRole("button");
+    await expect(choices.map((c) => c.textContent)).toEqual([
+      `${sendForReview.label[storyLocale(context)]}${storyText(context, copy.moveTo).replace("#", stages.internal.name[storyLocale(context)])}`,
+      `${cancel.label[storyLocale(context)]}${storyText(context, copy.moveTo).replace("#", stages.revise.name[storyLocale(context)])}`,
+    ]);
+    await userEvent.keyboard("{Tab}{Enter}");
+    await expect(onMove).toHaveBeenCalledWith(cards.draft, cancel);
+    // A card with nothing to take has no menu.
+    await expect(context.canvas.getAllByRole("button", { name: /^(Move|نقل)/ })).toHaveLength(1);
+  },
+};
+
+/** Without `onMove`, even a card with moves can't be dragged or moved. */
+export const NoMoveHandler: Story = {
+  args: { board: boardWithMoves },
+  play: async (context) => {
+    await expect(context.canvas.queryAllByRole("button", { name: /^(Move|نقل)/ })).toHaveLength(0);
+    await expect(context.canvas.getAllByRole("listitem").filter((li) => li.hasAttribute("data-movable"))).toHaveLength(0);
   },
 };
 

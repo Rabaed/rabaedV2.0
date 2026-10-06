@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { boardLanes, workItemViewFromSearchParams, type BoardCardInput } from "./work-item-board.ts";
+import { boardLanes, dropTargets, workItemViewFromSearchParams, type BoardCardInput, type WorkItemMove } from "./work-item-board.ts";
 import type { WorkItemRow } from "./work-item.ts";
 
 const b = (en: string) => ({ en, ar: en });
@@ -80,5 +80,24 @@ describe("workItemViewFromSearchParams", () => {
     expect(workItemViewFromSearchParams({ view: "list" })).toBe("list");
     expect(workItemViewFromSearchParams({ view: "board" })).toBe("list");
     expect(workItemViewFromSearchParams({})).toBe("list");
+  });
+});
+
+describe("dropTargets", () => {
+  const move = (transition: string, stageKey: string): WorkItemMove => ({ transition, label: b(transition), kind: "send", stageKey, actionForm: null });
+
+  it("makes a Stage a target only when exactly one Transition leads to it", () => {
+    const moves = [move("approve_a", "approved"), move("approve_b", "approved"), move("revise_c", "revise_resubmit")];
+    const targets = dropTargets(moves, "pending_approval");
+    expect([...targets.keys()]).toEqual(["revise_resubmit"]);
+    expect(targets.get("revise_resubmit")?.transition).toBe("revise_c");
+  });
+
+  it("never offers the Stage the card is already in", () => {
+    expect(dropTargets([move("send_to_manager", "pending_approval")], "pending_approval").size).toBe(0);
+  });
+
+  it("has no targets without Transitions", () => {
+    expect(dropTargets([], "draft").size).toBe(0);
   });
 });
