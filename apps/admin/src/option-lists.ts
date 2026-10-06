@@ -1,6 +1,7 @@
 import type { Db } from "@rabaed/db";
 import { buildOptionLists, type OptionList, type OptionRow } from "@rabaed/domain";
 import { asEngineer } from "./admin-action.ts";
+import { Refused, refusable, type Refusable } from "./refusals.ts";
 
 // Option Lists (form-engine.md §10; RP-279): Rabaed Default data that Rabaed
 // Engineers maintain here. Every edit is an Engineer action with a reason in
@@ -23,25 +24,15 @@ export async function listOptionLists(adminDb: Db): Promise<OptionList[]> {
 /** Why an edit was refused (the transaction is rolled back, so nothing is logged). */
 type Refusal = "not_found" | "duplicate_value" | "too_deep";
 
-class Refused extends Error {
-  constructor(readonly reason: Refusal) {
-    super(reason);
-  }
-}
+export type EditResult<T> = Refusable<T, Refusal>;
 
-export type EditResult<T> = { ok: true; value: T } | { ok: false; reason: Refusal };
-
-async function refusable<T>(run: () => Promise<T>): Promise<EditResult<T>> {
-  try {
-    return { ok: true, value: await run() };
-  } catch (error) {
-    if (error instanceof Refused) return { ok: false, reason: error.reason };
-    const code = (error as { code?: string }).code;
-    if (code === "23505") return { ok: false, reason: "duplicate_value" };
-    // The level trigger: a fourth level (other check violations are not this).
-    if (code === "23514" && /at most three levels/.test((error as Error).message)) return { ok: false, reason: "too_deep" };
-    throw error;
-  }
+/** The database's own refusals of an Option List edit. */
+function optionListRefusal(error: unknown): Refusal | undefined {
+  const code = (error as { code?: string }).code;
+  if (code === "23505") return "duplicate_value";
+  // The level trigger: a fourth level (other check violations are not this).
+  if (code === "23514" && /at most three levels/.test((error as Error).message)) return "too_deep";
+  return undefined;
 }
 
 export function createOptionList(adminDb: Db, engineerId: string, input: { name: Label; reason: string }): Promise<string> {
@@ -82,6 +73,7 @@ export function addOption(
         result: option.id,
       };
     }),
+    optionListRefusal,
   );
 }
 
@@ -103,6 +95,7 @@ export function renameOption(
         result: undefined,
       };
     }),
+    optionListRefusal,
   );
 }
 
@@ -126,5 +119,6 @@ export function setOptionRetired(
         result: undefined,
       };
     }),
+    optionListRefusal,
   );
 }

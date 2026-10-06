@@ -1,4 +1,4 @@
-import { answerFields, isOpenStageCategory, stepAgeLabel, type Locale } from "@rabaed/domain";
+import { answerFields, formatNumber, isOpenStageCategory, stepAgeLabel, type Locale } from "@rabaed/domain";
 import { AgeDots, DocNo, StagePill, stageColour } from "@rabaed/ui";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
@@ -39,6 +39,7 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
   const { locale, workItemId } = await params;
   setRequestLocale(locale);
   const t = await getTranslations("workItems");
+  const tViews = await getTranslations("workItemViews");
   const [me, item, form, people, documents, links, linkedFrom, history, optionLists, chain, watch] = await Promise.all([
     getMe(),
     getWorkItem(workItemId),
@@ -141,7 +142,7 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
               {item.documentNumber ? (
                 <DocNo value={item.documentNumber} />
               ) : item.revisionNo > 0 ? (
-                t("revisionNoNumber", { no: item.revisionNo })
+                tViews("list.revisionNoNumber", { revision: formatNumber(item.revisionNo, locale) })
               ) : (
                 t("noNumber")
               )}

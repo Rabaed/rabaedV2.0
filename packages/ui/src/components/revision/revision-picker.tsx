@@ -1,6 +1,6 @@
 "use client";
 
-import type { Locale } from "@rabaed/domain";
+import { formatNumber, type Locale } from "@rabaed/domain";
 import { DocNo } from "../doc-no/doc-no.tsx";
 import { Field } from "../form/field.tsx";
 import { Select } from "../form/select.tsx";
@@ -14,8 +14,8 @@ import { Select } from "../form/select.tsx";
 
 /* eslint-disable rabaed/no-ui-translations -- existing labels, still to move to the app's messages (RP-362 retro) */
 const copy = {
-  en: { label: "Revision", noNumber: (no: number) => `Revision ${no}: no number yet` },
-  ar: { label: "المراجعة", noNumber: (no: number) => `المراجعة ${no}: بلا رقم بعد` },
+  en: { label: "Revision" },
+  ar: { label: "المراجعة" },
 } satisfies Record<Locale, unknown>;
 /* eslint-enable rabaed/no-ui-translations */
 
@@ -25,12 +25,14 @@ export type RevisionPickerProps = {
   revisions: { id: string; documentNumber: string | null; revisionNo: number }[];
   /** The Revision on the page: shown, and marked in the list. */
   currentId: string;
+  /** A Draft Revision, by its Rev number formatted for the viewer: the app's one wording, as the List and the Kanban show it. */
+  revisionNoNumber: (revision: string) => string;
   /** Opens the chosen Revision; never called for the one already open. */
   onOpen: (id: string) => void;
 };
 
 /** A drop-down of the chain's Revisions; nothing when the viewer sees no other Revision. */
-export function RevisionPicker({ locale, revisions, currentId, onOpen }: RevisionPickerProps) {
+export function RevisionPicker({ locale, revisions, currentId, revisionNoNumber, onOpen }: RevisionPickerProps) {
   const t = copy[locale];
   if (revisions.length < 2) return null;
   return (
@@ -42,7 +44,7 @@ export function RevisionPicker({ locale, revisions, currentId, onOpen }: Revisio
         }}
         options={revisions.map((r) => ({
           value: r.id,
-          label: r.documentNumber ? <DocNo value={r.documentNumber} /> : t.noNumber(r.revisionNo),
+          label: r.documentNumber ? <DocNo value={r.documentNumber} /> : revisionNoNumber(formatNumber(r.revisionNo, locale)),
         }))}
       />
     </Field>

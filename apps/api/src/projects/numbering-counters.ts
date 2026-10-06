@@ -1,4 +1,4 @@
-import { readCounterWorkItemTypes, readNumberingCounters, withMember, type Db } from "@rabaed/db";
+import { readNumberingCounters, readNumberingWorkItemTypes, withMember, type Db } from "@rabaed/db";
 import {
   counterStartRefusals,
   counterWorkItemTypes,
@@ -12,6 +12,7 @@ import {
 } from "@rabaed/domain";
 import { sql } from "kysely";
 import { checkedOutcome } from "../outcomes.ts";
+import { isProjectAdmin } from "./project-admin.ts";
 
 // Numbering counters and starting numbers (RP-315; workflow-engine.md §8
 // "Starting numbers"). Counter values reveal a Company's volume: only a
@@ -24,16 +25,13 @@ type CounterRefusal = (typeof numberingCounterRefusals)[number];
 export type CounterPreviewResult = { ok: true; preview: CounterPreview } | { ok: false; reason: CounterRefusal };
 export type CounterStartResult = { ok: true; start: CounterStart } | { ok: false; reason: (typeof counterStartRefusals)[number] };
 
-const isProjectAdmin = (trx: Db, projectId: string) =>
-  sql`select 1 from app.current_admin_project_ids() x where x = ${projectId}::uuid`.execute(trx).then((r) => r.rows.length > 0);
-
 /** A Project's counters and the Work Item Types to start one for, for its Project Admins; null for anyone else. */
 export function listNumberingCounters(db: Db, memberId: string, projectId: string): Promise<NumberingCounters | null> {
   return withMember(db, memberId, async (trx) => {
     if (!(await isProjectAdmin(trx, projectId))) return null;
     return {
       counters: (await readNumberingCounters(trx, projectId)).map(toNumberingCounter),
-      workItemTypes: counterWorkItemTypes(await readCounterWorkItemTypes(trx, projectId)),
+      workItemTypes: counterWorkItemTypes(await readNumberingWorkItemTypes(trx, projectId)),
     };
   });
 }
