@@ -103,11 +103,13 @@ export {
   type Tone,
 } from "./tokens/themes.ts";
 export { stageColour } from "./components/status/stage-colour.ts";
-export { WorkItemList, type WorkItemListProps } from "./components/views/work-item-list.tsx";
+export { WorkItemList, type WorkItemListLabels, type WorkItemListProps } from "./components/views/work-item-list.tsx";
 export {
   WorkItemBoard,
   WorkItemViewSwitch,
+  type WorkItemBoardLabels,
   type WorkItemBoardProps,
+  type WorkItemViewSwitchLabels,
   type WorkItemViewSwitchProps,
 } from "./components/views/work-item-board.tsx";
-export { ProjectCards, type ProjectCardsProps } from "./components/views/project-cards.tsx";
+export { ProjectCards, type ProjectCardsLabels, type ProjectCardsProps } from "./components/views/project-cards.tsx";

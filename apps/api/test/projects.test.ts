@@ -139,7 +139,7 @@ describe("a Project is invisible to anyone not on it", () => {
   });
 });
 
-describe("My Projects", () => {
+describe("the Projects page", () => {
   it("lists the Member's Projects, newest first", async () => {
     const b = await api.projectCreator();
     const first = await api.createProject(b.caller, { code: "ONE" });

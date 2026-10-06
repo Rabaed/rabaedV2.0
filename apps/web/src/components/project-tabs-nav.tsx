@@ -1,16 +1,16 @@
 "use client";
 
-import type { ModuleKey } from "@rabaed/domain";
+import { moduleTabPaths, type ModuleKey } from "@rabaed/domain";
 import { ProjectTabs, projectTabKeys, type ProjectTabKey } from "@rabaed/ui";
 import { useTranslations } from "next-intl";
 import { Link, usePathname } from "@/i18n/navigation";
 
-/** Where each tab leads; a Module tab other than Submittals has its Module's own path. */
+/** Where each tab leads: a Module's tab at its Module's path (`moduleTabPaths`). */
 const pathOf = (projectId: string, key: ProjectTabKey) => {
   const base = `/projects/${projectId}`;
   if (key === "dashboard") return base;
-  if (key === "submittals") return `${base}/work-items`;
-  return `${base}/${key}`;
+  if (key === "settings") return `${base}/settings`;
+  return `${base}/${moduleTabPaths[key]}`;
 };
 
 /**

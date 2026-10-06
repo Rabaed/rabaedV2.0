@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { bilingualText } from "./company.ts";
+import type { Locale } from "./locale.ts";
 import { formSchema } from "./form.ts";
 import { transitionKinds, workItemList, workItemRow, type WorkItemRow } from "./work-item.ts";
 
@@ -112,10 +113,16 @@ export function boardLanes(cards: readonly BoardCardInput[]): WorkItemBoardLane[
     lane.cards.push(card);
     lane.count += 1;
   }
-  const byName = (a: { en: string }, b: { en: string }) => a.en.localeCompare(b.en, "en");
-  return [
-    ...[...steps.values()].sort((a, b) => byName(a.step.name, b.step.name)),
-    ...[...companies.values()].sort((a, b) => byName(a.companyName, b.companyName)),
-    ...(closed.count > 0 ? [closed] : []),
-  ];
+  return lanesInLocale([...steps.values(), ...companies.values(), ...(closed.count > 0 ? [closed] : [])], "en");
+}
+
+/**
+ * A column's lanes in the order a viewer reads them: the viewer's own Steps,
+ * then the other Companies, each by name in the viewer's language, then the
+ * closed lane. The API sends them in English order; the board reorders them.
+ */
+export function lanesInLocale(lanes: readonly WorkItemBoardLane[], locale: Locale): WorkItemBoardLane[] {
+  const rank = { step: 0, company: 1, closed: 2 } as const;
+  const name = (l: WorkItemBoardLane) => (l.kind === "step" ? l.step.name[locale] : l.kind === "company" ? l.companyName[locale] : "");
+  return [...lanes].sort((a, b) => rank[a.kind] - rank[b.kind] || name(a).localeCompare(name(b), locale));
 }

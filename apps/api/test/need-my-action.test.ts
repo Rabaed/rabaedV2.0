@@ -10,7 +10,7 @@ import { testDatabaseUrls } from "@rabaed/db/test-support";
 import { workItemSearchParams, type ProjectSummary, type WorkItemList, type WorkItemQueryInput } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { attachDatasheet, createTestApi, type Caller } from "./support/harness.ts";
+import { attachDatasheet, createTestApi, expectHidden, type Caller } from "./support/harness.ts";
 import { all, bilingual, ok, projectMember, type Company } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
@@ -239,5 +239,29 @@ describe("Module tabs", () => {
     `.execute(migrator);
     expect((await card(c1.caller, other)).modules).toEqual(["submittals", "inspections"]);
     expect((await card(c1.caller)).modules).toEqual(["submittals"]);
+  });
+
+  it("each lead to their Module's List and Kanban, of that Module's Types only", async () => {
+    const path = (module: string, view = "") => `/v1/projects/${projectId}/modules/${module}/work-items${view}`;
+    // Before the Project has an Inspections Type, its Inspections answer as if they didn't exist, like a made-up Module.
+    await expectHidden(c1Engineer.get(path("inspections")));
+    await expectHidden(c1Engineer.get(path("inspections", "/kanban")));
+    await expectHidden(c1Engineer.get(path("rfis")));
+    const submittals: WorkItemList = (await ok(c1Engineer.get(path("submittals")), 200)).json();
+    expect(submittals.items.length).toBeGreaterThan(0);
+    expect(submittals.filters.types.map((t) => t.code)).toContain("MAR");
+
+    await sql`
+      insert into work_item_type (owner_kind, project_id, module_key, code, name, workflow_definition_id, outcome_kind)
+      select 'project', ${projectId}::uuid, 'inspections', 'WIR', ${JSON.stringify(bilingual("Work Inspection"))}::jsonb, workflow_definition_id, 'inspection_result'
+      from work_item_type where code = 'MAR' and project_id is null
+    `.execute(migrator);
+    const inspections: WorkItemList = (await ok(c1Engineer.get(path("inspections")), 200)).json();
+    expect(inspections.filters.types.map((t) => t.code)).toEqual(["WIR"]);
+    // Not one Submittal.
+    expect(inspections.items).toEqual([]);
+    expect((await ok(c1Engineer.get(path("inspections", "/kanban")), 200)).json().columns.flatMap((c: { lanes: unknown[] }) => c.lanes)).toEqual([]);
+    // Another Company's Member who isn't on the Project: not found, as ever.
+    await expectHidden((await api.authorizedPerson()).caller.get(path("inspections")));
   });
 });

@@ -26,6 +26,23 @@ export const createdProject = z.object({ projectId: z.uuid(), projectNumber: z.n
 export const moduleKeys = ["submittals", "inspections", "snag_list", "site_reports", "drawings"] as const;
 export type ModuleKey = (typeof moduleKeys)[number];
 
+/**
+ * Each Module tab's path under its Project, `/projects/{id}/{path}`: the one
+ * place a Module key and its URL meet. Submittals came first, at `work-items`.
+ */
+export const moduleTabPaths = {
+  submittals: "work-items",
+  inspections: "inspections",
+  snag_list: "snag-list",
+  site_reports: "site-reports",
+  drawings: "drawings",
+} as const satisfies Record<ModuleKey, string>;
+
+/** The Module whose tab is at `path` under its Project, or null. */
+export function moduleOfTabPath(path: string): ModuleKey | null {
+  return moduleKeys.find((m) => moduleTabPaths[m] === path) ?? null;
+}
+
 /** A Project as one of its Members sees it. */
 export const projectSummary = z.object({
   id: z.uuid(),

@@ -14,8 +14,8 @@ export const projectTabLabels: Record<ProjectTabKey, { en: string; ar: string }>
   dashboard: { en: "Dashboard", ar: "لوحة المعلومات" },
   submittals: { en: "Submittals", ar: "التقديمات" },
   inspections: { en: "Inspections", ar: "الفحوصات" },
-  "snag-list": { en: "Snag List", ar: "قائمة الملاحظات" },
-  "site-reports": { en: "Site Reports", ar: "تقارير الموقع" },
+  snag_list: { en: "Snag List", ar: "قائمة الملاحظات" },
+  site_reports: { en: "Site Reports", ar: "تقارير الموقع" },
   drawings: { en: "Drawings", ar: "المخططات" },
   settings: { en: "Settings", ar: "الإعدادات" },
 };

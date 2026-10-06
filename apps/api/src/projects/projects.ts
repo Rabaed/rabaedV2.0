@@ -85,7 +85,7 @@ async function summaries(trx: Transaction<Database>, rows: ProjectRow[]): Promis
   }));
 }
 
-/** My Projects, newest first. */
+/** The Member's Projects, as the Projects page lists them, newest first. */
 export function listMyProjects(db: Db, memberId: string): Promise<ProjectSummary[]> {
   return withMember(db, memberId, async (trx) =>
     summaries(trx, await selectProjects(trx, memberId).orderBy("p.created_at", "desc").orderBy("p.id", "desc").execute()),

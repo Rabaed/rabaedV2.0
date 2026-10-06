@@ -4,13 +4,14 @@ import { expect, within } from "storybook/test";
 import { expectLaidOutLeftToRight } from "../../storybook/bidi.ts";
 import { expectTouchTarget, phone } from "../../storybook/form.ts";
 import { storyLocale, storyText } from "../../storybook/locale.ts";
+import { projectCardsLabels } from "../../storybook/views.ts";
 import { ProjectCards } from "./project-cards.tsx";
 
 // The Projects page, the home page (RP-346), as a Contractor engineer of
 // Tamkeen sees it: each Project card with its Need My Action count. Story data only.
 const b = (en: string, ar: string) => ({ en, ar });
 const copy = {
-  list: b("My Projects", "مشاريعي"),
+  list: b("Projects", "المشاريع"),
   needMyAction: b("Need My Action", "بحاجة لإجرائي"),
   closed: b("Closed", "مغلق"),
   projectAdmin: b("Project Admin", "مسؤول المشروع"),
@@ -39,8 +40,8 @@ const projects: ProjectSummary[] = [
 const meta = {
   title: "Views/ProjectCards",
   component: ProjectCards,
-  args: { projects, locale: "en", href: (id: string) => `#/projects/${id}` },
-  render: (args, context) => <ProjectCards {...args} locale={storyLocale(context)} />,
+  args: { projects, locale: "en", labels: projectCardsLabels.en, href: (id: string) => `#/projects/${id}` },
+  render: (args, context) => <ProjectCards {...args} locale={storyLocale(context)} labels={projectCardsLabels[storyLocale(context)]} />,
 } satisfies Meta<typeof ProjectCards>;
 
 export default meta;

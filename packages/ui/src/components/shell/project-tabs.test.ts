@@ -11,13 +11,13 @@ describe("visibleProjectTabs", () => {
   });
 
   it("adds a Module's tab when the Project has a Type in it, in the agreed order", () => {
-    expect(visibleProjectTabs(["drawings", "submittals", "snag_list"])).toEqual(["dashboard", "submittals", "snag-list", "drawings", "settings"]);
+    expect(visibleProjectTabs(["drawings", "submittals", "snag_list"])).toEqual(["dashboard", "submittals", "snag_list", "drawings", "settings"]);
     expect(visibleProjectTabs(["submittals", "inspections", "snag_list", "site_reports", "drawings"])).toEqual([
       "dashboard",
       "submittals",
       "inspections",
-      "snag-list",
-      "site-reports",
+      "snag_list",
+      "site_reports",
       "drawings",
       "settings",
     ]);

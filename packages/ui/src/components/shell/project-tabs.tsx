@@ -1,20 +1,13 @@
 "use client";
 
-import type { ModuleKey } from "@rabaed/domain";
+import { moduleKeys, type ModuleKey } from "@rabaed/domain";
 import { useEffect, useRef, type ElementType } from "react";
 import { cn } from "../../lib/cn.ts";
 import { focusRing } from "../form/control-styles.ts";
 
-/** The Project tabs in the agreed order (design change requests, 2026-09-27). */
-export const projectTabKeys = ["dashboard", "submittals", "inspections", "snag-list", "site-reports", "drawings", "settings"] as const;
+/** The Project tabs in the agreed order (design change requests, 2026-09-27): a Module's tab is its Module key. */
+export const projectTabKeys = ["dashboard", ...moduleKeys, "settings"] as const;
 export type ProjectTabKey = (typeof projectTabKeys)[number];
-
-const moduleTabs: Record<Exclude<ModuleKey, "submittals">, ProjectTabKey> = {
-  inspections: "inspections",
-  snag_list: "snag-list",
-  site_reports: "site-reports",
-  drawings: "drawings",
-};
 
 /**
  * The tabs a Project shows (RP-346): Dashboard, Submittals and Settings always;
@@ -22,8 +15,7 @@ const moduleTabs: Record<Exclude<ModuleKey, "submittals">, ProjectTabKey> = {
  * an empty tab, and no placeholder for what isn't built.
  */
 export function visibleProjectTabs(modules: readonly ModuleKey[]): ProjectTabKey[] {
-  const shown = new Set<ProjectTabKey>(["dashboard", "submittals", "settings"]);
-  for (const m of modules) if (m !== "submittals") shown.add(moduleTabs[m]);
+  const shown = new Set<ProjectTabKey>(["dashboard", "submittals", "settings", ...modules]);
   return projectTabKeys.filter((key) => shown.has(key));
 }
 

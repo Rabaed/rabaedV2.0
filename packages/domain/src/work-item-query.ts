@@ -191,7 +191,8 @@ export function encodeWorkItemCursor(sort: WorkItemSort, key: readonly string[])
 // The last row's sort key, by sort, before its id: whether it sorts last (closed, or
 // no number yet) as "true" or "false", then when it entered its Step (UTC, to the
 // microsecond) or its Document Number. Checked here, so a tampered cursor is refused
-// before it reaches a query.
+// before it reaches a query. The API makes each key, and pages after it, in its one
+// definition per sort (`sorts`, apps/api/src/work-items/query.ts).
 const enteredAt = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/;
 const isFlag = (v: string | undefined) => v === "true" || v === "false";
 const cursorKeyValid: Record<WorkItemSort, (key: string[]) => boolean> = {
