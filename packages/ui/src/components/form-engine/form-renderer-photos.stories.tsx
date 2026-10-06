@@ -37,8 +37,8 @@ const copy = {
   taken: { en: "Taken ", ar: "التُقطت " },
   place: { en: "24.71360° N, 46.67530° E", ar: "24.71360° N, 46.67530° E" },
   full: { en: "This field takes at most 4 photos.", ar: "يقبل هذا الحقل 4 صور على الأكثر." },
-  openFacade: { en: "Open facade.jpg full size", ar: "فتح ⁨facade.jpg⁩ بالحجم الكامل" },
-  removeFacade: { en: "Remove facade.jpg", ar: "إزالة ⁨facade.jpg⁩" },
+  openFacade: { en: "Open facade.jpg full size", ar: "فتح \u2068facade.jpg\u2069 بالحجم الكامل" },
+  removeFacade: { en: "Remove facade.jpg", ar: "إزالة \u2068facade.jpg\u2069" },
   required: { en: "This field is required.", ar: "هذا الحقل مطلوب." },
 };
 

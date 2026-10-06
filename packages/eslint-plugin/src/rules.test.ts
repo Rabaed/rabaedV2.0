@@ -201,7 +201,66 @@ tsx.run("no-avoid-terms", rules["no-avoid-terms"], {
   ],
 });
 
-jsonTester.run("json-no-avoid-terms", rules["json-no-avoid-terms"], {
+// The characters are built here from escapes: this file must not hold a raw one itself.
+const LRI = "\u2066";
+const PDI = "\u2069";
+const LRM = "\u200E";
+const RLO = "\u202E";
+
+tsx.run("no-raw-bidi", rules["no-raw-bidi"], {
+  valid: [
+    `const isolate = "\\u2066" + id + "\\u2069";`,
+    "const s = `\\u2066${id}\\u2069`;",
+    `const arabic = "مرحبا";`,
+    `<p>{"\\u200E"}</p>`,
+  ],
+  invalid: [
+    {
+      code: `const s = "${LRI}" + id + "${PDI}";`,
+      output: `const s = "\\u2066" + id + "\\u2069";`,
+      errors: [{ messageId: "raw", data: { escape: "\\u2066", name: "left-to-right isolate" } }, { messageId: "raw" }],
+    },
+    { code: "const s = `" + LRI + "${id}" + PDI + "`;", output: "const s = `\\u2066${id}\\u2069`;", errors: [{ messageId: "raw" }, { messageId: "raw" }] },
+    { code: `const mark = "${LRM}";`, output: `const mark = "\\u200E";`, errors: [{ messageId: "raw", data: { escape: "\\u200E", name: "left-to-right mark" } }] },
+    { code: `const x = "${RLO}";`, output: `const x = "\\u202E";`, errors: [{ messageId: "raw" }] },
+    { code: `const re = /${LRI}/;`, output: `const re = /\\u2066/;`, errors: [{ messageId: "raw" }] },
+    { code: `// ${LRI} hidden`, output: `// \\u2066 hidden`, errors: [{ messageId: "raw" }] },
+    // Not fixed: an escape is not valid in JSX text or in a JSX attribute string.
+    { code: `<p>${LRI}x</p>`, output: null, errors: [{ messageId: "raw" }] },
+    { code: `<p title="${LRI}x" />`, output: null, errors: [{ messageId: "raw" }] },
+  ],
+});
+
+jsonTester.run("json-no-raw-bidi", rules["json-no-raw-bidi"], {
+  valid: [`{ "a": "\\u2066{id}\\u2069", "b": "مرحبا" }`],
+  invalid: [
+    { code: `{ "a": "${LRM}{email}${LRM}" }`, output: `{ "a": "\\u200E{email}\\u200E" }`, errors: [{ messageId: "raw" }, { messageId: "raw" }] },
+    { code: `{ "a": "${LRI}{id}${PDI}" }`, output: `{ "a": "\\u2066{id}\\u2069" }`, errors: [{ messageId: "raw" }, { messageId: "raw" }] },
+  ],
+});
+
+tsx.run("no-aws-ids-in-errors", rules["no-aws-ids-in-errors"], {
+  valid: [
+    `throw new Error(\`Secret \${name} is not readable\`);`,
+    `throw new Error("Expected role app");`,
+    `log.error({ err: error }, "secret read failed");`,
+    `const arn = "arn:aws:secretsmanager:eu-central-1:123456789012:secret:app";`,
+    `throw new Error("Missing id 0199a3b0-0000-7000-8000-000000000001");`,
+    `console.log("took 1234567890123 ms");`,
+    `expect(f).toThrow("arn:aws:s3:::bucket");`,
+  ],
+  invalid: [
+    { code: `throw new Error("no access to arn:aws:secretsmanager:eu-central-1:1:secret:app");`, errors: [{ messageId: "aws", data: { found: "arn:aws:" } }] },
+    { code: "throw new Error(`cannot read ${arn}: arn:aws:s3:::bucket`);", errors: [{ messageId: "aws" }] },
+    { code: `throw new SecretError("account 123456789012 refused");`, errors: [{ messageId: "aws", data: { found: "123456789012" } }] },
+    { code: `log.error({ secret: "arn:aws-cn:kms:cn-north-1:1:key/x" }, "failed");`, errors: [{ messageId: "aws" }] },
+    { code: `request.log.warn("deploying to 123456789012");`, errors: [{ messageId: "aws" }] },
+    { code: `console.error("Bootstrap failed in account 123456789012");`, errors: [{ messageId: "aws" }] },
+    { code: `throw "arn:aws:iam::1:role/x";`, errors: [{ messageId: "aws" }] },
+  ],
+});
+
+jsonTester.run("json-no-avoid-terms",rules["json-no-avoid-terms"], {
   valid: [`{ "members": { "title": "Members", "intro": "People of your Company" } }`, `{ "form": { "template": "Pick a Form" } }`],
   invalid: [
     { code: `{ "tenant": { "title": "Companies" } }`, errors: [{ messageId: "key" }] },

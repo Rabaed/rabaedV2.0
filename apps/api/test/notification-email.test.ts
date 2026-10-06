@@ -179,7 +179,7 @@ describe("scenario 69: K1 issues Code B on C1's item", () => {
     const [email, ...more] = about(raiser.email, "Code B");
     expect(more).toEqual([]);
     expect(email!.message).toMatchObject({ template: "notification-watched-event", locale: "en" });
-    expect(email!.subject).toBe(`⁦${item.documentNumber}⁩ · Pumps · Code B`);
+    expect(email!.subject).toBe(`\u2066${item.documentNumber}\u2069 · Pumps · Code B`);
   });
 
   it("names K1 as a Company and the Code's signer, nothing of K1's internal Steps, and links to the item", async () => {
@@ -198,7 +198,7 @@ describe("scenario 69: K1 issues Code B on C1's item", () => {
     const [email, ...more] = about(pm.email, "B");
     expect(more.filter((m) => m.subject.endsWith("الرمز B"))).toEqual([]);
     expect(email!.message.locale).toBe("ar");
-    expect(email!.subject).toBe(`⁦${item.documentNumber}⁩ · Pumps · الرمز B`);
+    expect(email!.subject).toBe(`\u2066${item.documentNumber}\u2069 · Pumps · الرمز B`);
     expect(email!.html).toContain(`<bdi dir="ltr">${item.documentNumber}</bdi>`);
     expect(email!.text).toContain("خالد الموقّع");
     expect(email!.text).toContain(`${WEB_URL}/ar/work-items/${item.id}`);
@@ -224,7 +224,7 @@ describe("a Step reached", () => {
     for (const who of [signer, k1Manager]) {
       const [email, ...more] = to(who.email).filter((m) => m.message.template === "notification-step-reached" && m.subject.includes(documentNumber));
       expect(more).toEqual([]);
-      expect(email!.subject).toBe(`⁦${documentNumber}⁩ · Valves · Reached you at Consultant review`);
+      expect(email!.subject).toBe(`\u2066${documentNumber}\u2069 · Valves · Reached you at Consultant review`);
     }
     // The PM Submitted it: the PM's own move tells the PM nothing.
     expect(to(pm.email).filter((m) => m.message.template === "notification-step-reached" && m.subject.includes(documentNumber))).toEqual([]);
@@ -310,7 +310,7 @@ describe("checked again at send time", () => {
     await sendHeldEmails();
     expect(to(orEngineer.email)).toEqual([]);
     // The raiser, who still sees it, is emailed.
-    expect(about(raiser.email, `${item.documentNumber}⁩ · Cooling towers · Code B`)).toHaveLength(1);
+    expect(about(raiser.email, `${item.documentNumber}\u2069 · Cooling towers · Code B`)).toHaveLength(1);
   });
 });
 
@@ -341,11 +341,11 @@ describe("a Send Back (RP-356)", () => {
     await take(signer.caller, item.id, "send_back");
     await drain();
     const { rows } = await sql<{ name: { en: string; ar: string } }>`select legal_name as name from company where id = ${k1.company.companyId}`.execute(migrator);
-    const [en] = about(raiser.email, `${item.documentNumber}⁩ · Dampers · Sent Back to you`);
+    const [en] = about(raiser.email, `${item.documentNumber}\u2069 · Dampers · Sent Back to you`);
     expect(en!.message.template).toBe("notification-sent-back");
     expect(en!.text).toContain(rows[0]!.name.en);
     expect(`${en!.subject}\n${en!.text}`).not.toMatch(K1_INTERNAL);
-    expect(about(pm.email, `${item.documentNumber}⁩ · Dampers · أُرجع إليكم`)).toHaveLength(1);
+    expect(about(pm.email, `${item.documentNumber}\u2069 · Dampers · أُرجع إليكم`)).toHaveLength(1);
     for (const who of [signer, k1Manager, c2Engineer]) expect(about(who.email, "Sent Back")).toEqual([]);
   });
 });

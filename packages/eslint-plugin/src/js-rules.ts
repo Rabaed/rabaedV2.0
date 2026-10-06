@@ -4,6 +4,7 @@ import {
   arbitraryColourClasses,
   camelCase,
   colourLiterals,
+  awsIdentifierIn,
   deadlineWord,
   kebabCase,
   logicalProperty,
@@ -168,7 +169,7 @@ const errorName = /^(e|err|error|\w+Error)$/;
 type AnyNode = { type: string; [key: string]: unknown };
 
 /** `log.error(…)`, `logger.warn(…)`, `request.log.info(…)`, `app.log.…`. Not `console`, which only the local CLIs use. */
-function isLogCall(node: Node): boolean {
+export function isLogCall(node: Node): boolean {
   if (node.type !== "CallExpression" || node.callee.type !== "MemberExpression") return false;
   const { property } = node.callee;
   let object = node.callee.object;
@@ -225,6 +226,59 @@ export const noRawErrorLogging: Rule.RuleModule = {
     return {
       CallExpression(node) {
         if (isLogCall(node)) for (const argument of node.arguments) scan(argument as unknown as AnyNode);
+      },
+    };
+  },
+};
+
+const consoleLevels = new Set(["log", "info", "warn", "error", "debug", "trace"]);
+
+/** `console.error(…)`, which the local CLIs and scripts use. */
+function isConsoleCall(node: Node): boolean {
+  return (
+    node.type === "CallExpression" &&
+    node.callee.type === "MemberExpression" &&
+    node.callee.object.type === "Identifier" &&
+    node.callee.object.name === "console" &&
+    node.callee.property.type === "Identifier" &&
+    consoleLevels.has(node.callee.property.name)
+  );
+}
+
+export const noAwsIdsInErrors: Rule.RuleModule = {
+  meta: {
+    type: "problem",
+    docs: { description: "Errors and logs name a resource, never its AWS ARN or account id (RP-329)." },
+    messages: {
+      aws: "'{{found}}': an AWS ARN or account id must not appear in an error or log message. Name the resource (the secret, the bucket), not its ARN or account.",
+    },
+    schema: [],
+  },
+  create(context) {
+    const keys = context.sourceCode.visitorKeys;
+    const reported = new Set<string>();
+    const scan = (node: AnyNode): void => {
+      if (node.type === "Literal" || node.type === "TemplateElement") {
+        const text = stringValue(node as unknown as StringNode);
+        const found = text && awsIdentifierIn(text);
+        const key = String((node as unknown as Node).range);
+        if (found && !reported.has(key)) {
+          reported.add(key);
+          context.report({ node: node as unknown as Node, messageId: "aws", data: { found } });
+        }
+      }
+      for (const key of keys[node.type] ?? []) {
+        const child = node[key] as AnyNode | AnyNode[] | null | undefined;
+        for (const item of Array.isArray(child) ? child : [child]) if (item) scan(item);
+      }
+    };
+    return {
+      ThrowStatement: (node) => scan(node.argument as unknown as AnyNode),
+      NewExpression(node) {
+        if (node.callee.type === "Identifier" && /Error$/.test(node.callee.name)) for (const argument of node.arguments) scan(argument as unknown as AnyNode);
+      },
+      CallExpression(node) {
+        if (isLogCall(node) || isConsoleCall(node)) for (const argument of node.arguments) scan(argument as unknown as AnyNode);
       },
     };
   },

@@ -57,7 +57,7 @@ const copy = {
   tooMany: { en: "Use at most 4 rows.", ar: "استخدم 4 صفوف على الأكثر." },
   required: { en: "This field is required.", ar: "هذا الحقل مطلوب." },
   notANumber: { en: "Enter a number.", ar: "أدخل رقمًا." },
-  belowMin: { en: "Enter 0 pcs or more.", ar: "أدخل ⁧0 pcs⁩ أو أكثر." },
+  belowMin: { en: "Enter 0 pcs or more.", ar: "أدخل \u20670 pcs\u2069 أو أكثر." },
   limitReached: { en: "The most rows allowed is 4.", ar: "أقصى عدد للصفوف هو 4." },
 };
 

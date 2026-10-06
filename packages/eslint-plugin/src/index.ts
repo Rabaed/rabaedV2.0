@@ -1,6 +1,7 @@
 import { cssNoHardcodedColour, cssNoPhysicalDirection } from "./css-rules.ts";
 import { jsonNoAvoidTerms, noAvoidTerms } from "./avoid-rules.ts";
-import { noDeadlineWords, noHardcodedColour, noPhysicalDirection, noRawErrorLogging } from "./js-rules.ts";
+import { jsonNoRawBidi, noRawBidi } from "./bidi-rules.ts";
+import { noAwsIdsInErrors, noDeadlineWords, noHardcodedColour, noPhysicalDirection, noRawErrorLogging } from "./js-rules.ts";
 import { jsonNoDeadlineWords } from "./json-rules.ts";
 
 /**
@@ -15,10 +16,13 @@ const plugin = {
     "no-deadline-words": noDeadlineWords,
     "no-raw-error-logging": noRawErrorLogging,
     "no-avoid-terms": noAvoidTerms,
+    "no-raw-bidi": noRawBidi,
+    "no-aws-ids-in-errors": noAwsIdsInErrors,
     "css-no-hardcoded-colour": cssNoHardcodedColour,
     "css-no-physical-direction": cssNoPhysicalDirection,
     "json-no-deadline-words": jsonNoDeadlineWords,
     "json-no-avoid-terms": jsonNoAvoidTerms,
+    "json-no-raw-bidi": jsonNoRawBidi,
   },
 };
 

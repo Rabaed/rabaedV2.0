@@ -60,7 +60,7 @@ const copy = {
     unknownOption: "اختر إحدى الإجابات.",
     tooLong: (max: number) => `استخدم ${formatNumber(max, "ar")} حرفًا على الأكثر.`,
     summary: "الملخص",
-    evidence: (item: string) => `صور ⁨${item}⁩`,
+    evidence: (item: string) => `صور \u2068${item}\u2069`,
     itemNumber: (n: number, of: number) => `${formatNumber(n, "ar")} من ${formatNumber(of, "ar")}`,
   },
 } satisfies Record<Locale, unknown>;

@@ -401,7 +401,7 @@ function itemLine(documentNumber: string | null, rest: string): Paragraph {
 
 /** Keeps a value left to right inside plain text (a subject, the text body): a Unicode left-to-right isolate. */
 function isolate(value: string): string {
-  return `⁦${value}⁩`;
+  return `\u2066${value}\u2069`;
 }
 
 function plain(paragraph: Paragraph): string {

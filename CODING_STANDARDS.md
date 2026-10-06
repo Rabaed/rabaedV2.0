@@ -31,12 +31,14 @@ Visibility is the top requirement (`docs/visibility.md`). Check every read path 
 
 - **Log database errors by class and code only** (checked: `rabaed/no-raw-error-logging`), following `failureOf` (outbox) and the worker's logger. Database messages can quote row values such as titles and names (RP-238).
 - **User-facing errors and logs never include another item's title, number or Company.**
+- **An error or log line names a resource, never its AWS ARN or account id:** "the secret", not its ARN (checked: `rabaed/no-aws-ids-in-errors`, on string and template literals in thrown errors and log or console calls, not tests).
 
 ## UI (`packages/ui/README.md`)
 
 - **Use the shared piece, not a copy:** `@rabaed/ui` components (`AgeDots`, `StagePill`, `WithChip`, form controls inside `Field`, …), its `focusRing` and tone helpers, and the shared test fixtures under each package's `test/support/` (RP-237, RP-289).
 - **Landmarks and labels:** every page has its landmarks, and every group of controls has a visible or accessible label.
 - Design tokens and logical CSS (checked: `rabaed/no-hardcoded-colour`, `rabaed/no-physical-direction`).
+- **Bidi isolates and marks (U+2066 to U+2069, U+200E, U+200F, U+202A to U+202E) are written as `\u` escapes,** never pasted in as invisible characters (checked: `rabaed/no-raw-bidi` in TS, TSX and message files; `eslint --fix` rewrites them).
 
 ## Domain language
 

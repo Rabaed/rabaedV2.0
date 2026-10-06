@@ -41,6 +41,19 @@ export default tseslint.config(
     rules: { "rabaed/no-raw-error-logging": "error" },
   },
   {
+    // Bidi isolates and marks are invisible in review: write them as \u escapes (RP-329). Autofixable.
+    files: jsTsFiles,
+    plugins: { rabaed },
+    rules: { "rabaed/no-raw-bidi": "error" },
+  },
+  {
+    // An ARN or account id in an error or log line reaches CloudWatch and the user (RP-329).
+    files: ["apps/**/*.{ts,tsx,js}", "packages/**/*.{ts,tsx,js}", "scripts/**/*.ts"],
+    ignores: ["**/*.test.{ts,tsx}", "**/test/**", "**/test-support/**"],
+    plugins: { rabaed },
+    rules: { "rabaed/no-aws-ids-in-errors": "error" },
+  },
+  {
     files: ["apps/web/**/*.{ts,tsx}"],
     plugins: { "@next/next": nextPlugin },
     languageOptions: { globals: { ...globals.browser } },
@@ -102,6 +115,6 @@ export default tseslint.config(
     files: ["apps/web/messages/*.json"],
     plugins: { json, rabaed },
     language: "json/json",
-    rules: { "rabaed/json-no-deadline-words": "error", "rabaed/json-no-avoid-terms": "error" },
+    rules: { "rabaed/json-no-deadline-words": "error", "rabaed/json-no-avoid-terms": "error", "rabaed/json-no-raw-bidi": "error" },
   },
 );
