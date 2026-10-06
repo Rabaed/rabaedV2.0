@@ -28,7 +28,7 @@ import { CodeBadge } from "../status/code-badge.tsx";
 import { stageColour } from "../status/stage-colour.ts";
 import { StagePill } from "../status/stage-pill.tsx";
 import { WithChip } from "../status/with-chip.tsx";
-import { chainBucketLabel } from "./project-dashboard.tsx";
+import { chainBucketLabel, codeCLabel } from "./project-dashboard.tsx";
 
 const copy = {
   toolbar: { en: "Filters and sort", ar: "التصفية والترتيب" },
@@ -179,10 +179,11 @@ export function WorkItemList({ list, query, locale, hrefFor, itemHref, onQueryCh
           <Field label={t("allRevisions")} layout="inline">
             <Switch checked={query.allRevisions} onCheckedChange={(on) => change({ allRevisions: on })} />
           </Field>
-          {/* A Dashboard number's filter, which the toolbar has no control for. */}
-          {query.bucket.length > 0 && (
+          {/* A Dashboard number's filter, which the toolbar has no control for: its buckets and Code C sub-states. */}
+          {query.bucket.length + query.codeC.length > 0 && (
             <Badge tone="info" data-testid="bucket-filter">
-              {t("dashboardFigure")}: {query.bucket.map((bucket) => chainBucketLabel(bucket, locale)).join(", ")}
+              {t("dashboardFigure")}:{" "}
+              {[...query.bucket.map((bucket) => chainBucketLabel(bucket, locale)), ...query.codeC.map((codeC) => codeCLabel(codeC, locale))].join(", ")}
             </Badge>
           )}
           {filtered && (

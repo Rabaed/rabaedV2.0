@@ -1,4 +1,4 @@
-import { dashboardCard, formatNumber, workItemSearchParams, type ChainBucket, type Dashboard } from "@rabaed/domain";
+import { dashboardCard, formatNumber, workItemSearchParams, type ChainBucket, type CodeCState, type Dashboard } from "@rabaed/domain";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, within } from "storybook/test";
 import { phone } from "../../storybook/form.ts";
@@ -7,7 +7,7 @@ import { ProjectDashboard } from "./project-dashboard.tsx";
 
 // The Dashboard's Type cards (RP-351, spec RP-344): one card per Work Item Type
 // under its Module, a card's bars by its Type's outcome kind, every number a
-// link to the List. Story data only.
+// link to the List; a Review Code card's Code C line (RP-352). Story data only.
 const b = (en: string, ar: string) => ({ en, ar });
 const copy = {
   snagList: b("Snag List", "قائمة الملاحظات"),
@@ -23,9 +23,30 @@ const copy = {
   dsr: b("Daily Site Report", "تقرير الموقع اليومي"),
   cmt: b("Comments", "الملاحظات"),
   open: b("Open", "مفتوحة"),
+  codeC: b("Code C", "الرمز C"),
+  approvedOnRevision: b("approved on revision", "معتمد بعد التعديل"),
+  awaitingRevision: b("awaiting revision", "بانتظار التعديل"),
+  noRevisionYet: b("no Revision yet", "لا تعديل بعد"),
+  revisionInProgress: b("Revision in progress", "التعديل جارٍ"),
+  rejectedAfterC: b("rejected after C", "مرفوض بعد C"),
 };
 
 const counts = (entries: [ChainBucket, number][]) => new Map<ChainBucket | null, number>(entries);
+const codeCCounts = (entries: [CodeCState, number][]) => new Map<CodeCState | null, number>(entries);
+
+/** The MAR card: 5 chains that had a Code C, 3 since approved; the raiser's Company sees the 2 awaiting split. */
+const marCard = (viewer: "raiser" | "other") =>
+  dashboardCard({
+    type: { code: "MAR", name: copy.mar },
+    moduleKey: "submittals",
+    outcomeKind: "review_code",
+    counts: counts([["pending", 4], ...(viewer === "raiser" ? [["in_preparation", 3] as [ChainBucket, number]] : []), ["C", 2], ["A", 6], ["B", 4], ["D", 0]]),
+    codeCCounts: codeCCounts(
+      viewer === "raiser"
+        ? [["approvedOnRevision", 3], ["noRevisionYet", 1], ["revisionInProgress", 1]]
+        : [["approvedOnRevision", 3], ["awaitingRevision", 2]],
+    ),
+  });
 
 /** As a Contractor sees it: its own MARs In preparation too. */
 const contractor: Dashboard = {
@@ -43,14 +64,7 @@ const contractor: Dashboard = {
     },
     {
       key: "submittals",
-      cards: [
-        dashboardCard({
-          type: { code: "MAR", name: copy.mar },
-          moduleKey: "submittals",
-          outcomeKind: "review_code",
-          counts: counts([["pending", 4], ["in_preparation", 3], ["C", 2], ["A", 6], ["B", 4], ["D", 0]]),
-        }),
-      ],
+      cards: [marCard("raiser")],
     },
     {
       key: "inspections",
@@ -77,12 +91,36 @@ const contractor: Dashboard = {
   ],
 };
 
-/** As the Consultant sees the same Project: no In preparation figure (V1). */
+/** As the Consultant sees the same Project: no In preparation figure, and awaiting revision as one figure (V1). */
 const consultant: Dashboard = {
   modules: contractor.modules.map((m) => ({
     ...m,
-    cards: m.cards.map((c) => (c.kind === "outcomes" ? { ...c, inPreparation: null, total: { ...c.total, count: c.total.count - (c.inPreparation?.count ?? 0) } } : c)),
+    cards: m.cards.map((c) =>
+      c.type.code === "MAR"
+        ? marCard("other")
+        : c.kind === "outcomes"
+          ? { ...c, inPreparation: null, total: { ...c.total, count: c.total.count - (c.inPreparation?.count ?? 0) } }
+          : c,
+    ),
   })),
+};
+
+/** A Code C chain since rejected: the line adds "rejected after C". */
+const withRejectedAfterC: Dashboard = {
+  modules: [
+    {
+      key: "submittals",
+      cards: [
+        dashboardCard({
+          type: { code: "MAR", name: copy.mar },
+          moduleKey: "submittals",
+          outcomeKind: "review_code",
+          counts: counts([["A", 3], ["C", 1], ["D", 1]]),
+          codeCCounts: codeCCounts([["approvedOnRevision", 3], ["awaitingRevision", 1], ["rejectedAfterC", 1]]),
+        }),
+      ],
+    },
+  ],
 };
 
 const hrefFor = (query: Parameters<typeof workItemSearchParams>[0]) => `?${workItemSearchParams(query)}`;
@@ -128,12 +166,49 @@ export const WithInPreparation: Story = {
   },
 };
 
-/** Another Company: the same cards, with no In preparation figure. */
+/** Another Company: the same cards, with no In preparation figure and awaiting revision as one figure. */
 export const WithoutInPreparation: Story = {
   args: { dashboard: consultant },
   play: async (context) => {
     await expect(context.canvas.queryByText(new RegExp(storyText(context, copy.inPreparation)))).toBeNull();
-    await expect(within(cardOf(context, copy.mar)).getByRole("link", { name: new RegExp(`^${storyText(context, copy.pending)}`) })).toBeVisible();
+    const mar = within(cardOf(context, copy.mar));
+    await expect(mar.getByRole("link", { name: new RegExp(`^${storyText(context, copy.pending)}`) })).toBeVisible();
+    await expect(mar.getByRole("link", { name: `${storyText(context, copy.awaitingRevision)} 2` })).toHaveAttribute("href", "?type=MAR&codeC=awaitingRevision");
+    await expect(mar.queryByText(new RegExp(storyText(context, copy.noRevisionYet)))).toBeNull();
+    await expect(mar.queryByText(new RegExp(storyText(context, copy.revisionInProgress)))).toBeNull();
+  },
+};
+
+/**
+ * The raiser's Company's Code C line: "Code C 5 · approved on revision 3 (60%)
+ * · awaiting revision 2", awaiting revision split into "no Revision yet" and
+ * "Revision in progress"; every figure links to its List.
+ */
+export const CodeCLine: Story = {
+  play: async (context) => {
+    const line = within(context.canvas.getByTestId("code-c-MAR"));
+    const t = (text: { en: string; ar: string }) => storyText(context, text);
+    await expect(line.getByRole("link", { name: `${t(copy.codeC)} 5` })).toHaveAttribute(
+      "href",
+      "?type=MAR&codeC=approvedOnRevision%2CawaitingRevision%2CrejectedAfterC",
+    );
+    const percent = formatNumber(0.6, storyLocale(context), { style: "percent" });
+    await expect(line.getByRole("link", { name: `${t(copy.approvedOnRevision)} 3 (${percent})` })).toHaveAttribute("href", "?type=MAR&codeC=approvedOnRevision");
+    await expect(line.getByRole("link", { name: `${t(copy.awaitingRevision)} 2` })).toHaveAttribute("href", "?type=MAR&codeC=awaitingRevision");
+    await expect(line.getByRole("link", { name: `${t(copy.noRevisionYet)} 1` })).toHaveAttribute("href", "?type=MAR&codeC=noRevisionYet");
+    await expect(line.getByRole("link", { name: `${t(copy.revisionInProgress)} 1` })).toHaveAttribute("href", "?type=MAR&codeC=revisionInProgress");
+    await expect(line.queryByText(new RegExp(t(copy.rejectedAfterC)))).toBeNull();
+    // Only Review Code cards have the line.
+    await expect(within(cardOf(context, copy.wir)).queryByText(new RegExp(t(copy.codeC)))).toBeNull();
+  },
+};
+
+/** The Code C line adds "rejected after C" when there is any. */
+export const CodeCLineRejectedAfterC: Story = {
+  args: { dashboard: withRejectedAfterC },
+  play: async (context) => {
+    const line = within(context.canvas.getByTestId("code-c-MAR"));
+    await expect(line.getByRole("link", { name: `${storyText(context, copy.rejectedAfterC)} 1` })).toHaveAttribute("href", "?type=MAR&codeC=rejectedAfterC");
   },
 };
 
