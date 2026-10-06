@@ -1,27 +1,31 @@
 "use client";
 
-import { useEffect, useId, useRef, type ElementType } from "react";
+import type { ModuleKey } from "@rabaed/domain";
+import { useEffect, useRef, type ElementType } from "react";
 import { cn } from "../../lib/cn.ts";
 import { focusRing } from "../form/control-styles.ts";
-import { Tooltip } from "../overlay/tooltip.tsx";
 
 /** The Project tabs in the agreed order (design change requests, 2026-09-27). */
-export const projectTabKeys = [
-  "dashboard",
-  "submittals",
-  "inspections",
-  "snag-list",
-  "site-reports",
-  "drawings",
-  "files",
-  "views",
-  "schedule",
-  "settings",
-] as const;
+export const projectTabKeys = ["dashboard", "submittals", "inspections", "snag-list", "site-reports", "drawings", "settings"] as const;
 export type ProjectTabKey = (typeof projectTabKeys)[number];
 
-/** Tabs that aren't built yet: shown greyed out, with the Coming soon hint. */
-const comingSoon: ReadonlySet<ProjectTabKey> = new Set<ProjectTabKey>(["schedule"]);
+const moduleTabs: Record<Exclude<ModuleKey, "submittals">, ProjectTabKey> = {
+  inspections: "inspections",
+  snag_list: "snag-list",
+  site_reports: "site-reports",
+  drawings: "drawings",
+};
+
+/**
+ * The tabs a Project shows (RP-346): Dashboard, Submittals and Settings always;
+ * another Module's tab only when the Project has a Work Item Type in it. Never
+ * an empty tab, and no placeholder for what isn't built.
+ */
+export function visibleProjectTabs(modules: readonly ModuleKey[]): ProjectTabKey[] {
+  const shown = new Set<ProjectTabKey>(["dashboard", "submittals", "settings"]);
+  for (const m of modules) if (m !== "submittals") shown.add(moduleTabs[m]);
+  return projectTabKeys.filter((key) => shown.has(key));
+}
 
 const tabClass = cn(
   "inline-flex h-12 shrink-0 items-center border-b-2 border-transparent text-body font-medium whitespace-nowrap",
@@ -37,12 +41,12 @@ export type ProjectTabsProps = {
   label: string;
   /** Every tab's name in the viewer's language. */
   labels: Record<ProjectTabKey, string>;
+  /** The Modules the Project has a Work Item Type in: each of them gets a tab. */
+  modules: readonly ModuleKey[];
   /** Where each tab leads. */
   href: (key: ProjectTabKey) => string;
-  /** The tab of the page being shown. */
-  current: ProjectTabKey;
-  /** The hint on tabs that aren't built yet, e.g. "Coming soon". */
-  comingSoonLabel: string;
+  /** The tab of the page being shown, if any. */
+  current?: ProjectTabKey;
   /** The link component, e.g. Next.js `Link`, so navigation stays client-side. Defaults to `<a>`. */
   linkAs?: ElementType;
   className?: string;
@@ -53,8 +57,7 @@ export type ProjectTabsProps = {
  * named `nav` rather than ARIA tabs. On a phone they scroll sideways, with the
  * current tab scrolled into view.
  */
-export function ProjectTabs({ label, labels, href, current, comingSoonLabel, linkAs: Link = "a", className }: ProjectTabsProps) {
-  const hintId = useId();
+export function ProjectTabs({ label, labels, modules, href, current, linkAs: Link = "a", className }: ProjectTabsProps) {
   const listRef = useRef<HTMLUListElement>(null);
   const currentRef = useRef<HTMLElement>(null);
   // Scroll the current tab into view sideways only; scrollIntoView could scroll the page too.
@@ -69,39 +72,17 @@ export function ProjectTabs({ label, labels, href, current, comingSoonLabel, lin
 
   return (
     <nav aria-label={label} className={className}>
-      <span id={hintId} hidden>
-        {comingSoonLabel}
-      </span>
       <ul ref={listRef} className="flex gap-7 overflow-x-auto border-b border-border [scrollbar-width:none]">
-        {projectTabKeys.map((key) => (
+        {visibleProjectTabs(modules).map((key) => (
           <li key={key} className="flex shrink-0">
-            {comingSoon.has(key) ? (
-              <Tooltip content={comingSoonLabel} side="bottom">
-                {/* Announced as a link that is unavailable; it has nowhere to go yet. */}
-                <a
-                  role="link"
-                  aria-disabled="true"
-                  // The hint as a description at all times, not only while the tooltip is open.
-                  aria-describedby={hintId}
-                  tabIndex={0}
-                  className={cn(tabClass, "cursor-not-allowed text-on-disabled")}
-                >
-                  {labels[key]}
-                </a>
-              </Tooltip>
-            ) : (
-              <Link
-                ref={key === current ? currentRef : undefined}
-                href={href(key)}
-                aria-current={key === current ? "page" : undefined}
-                className={cn(
-                  tabClass,
-                  key === current ? "border-primary font-semibold text-primary" : "text-muted hover:text-text",
-                )}
-              >
-                {labels[key]}
-              </Link>
-            )}
+            <Link
+              ref={key === current ? currentRef : undefined}
+              href={href(key)}
+              aria-current={key === current ? "page" : undefined}
+              className={cn(tabClass, key === current ? "border-primary font-semibold text-primary" : "text-muted hover:text-text")}
+            >
+              {labels[key]}
+            </Link>
           </li>
         ))}
       </ul>
