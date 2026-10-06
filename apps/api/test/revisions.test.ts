@@ -129,11 +129,11 @@ describe("C1 creates a Revision of a MAR that got Code C", () => {
     const original: DocumentList = (await ok(engineer.get(`/v1/work-items/${closed}/documents`), 200)).json();
     const copied: DocumentList = (await ok(engineer.get(`/v1/work-items/${revision}/documents`), 200)).json();
     expect(original.documents.map((d) => d.fileName)).toEqual(["datasheet.pdf", "wiring.pdf", "drawings.pdf"]);
-    // Copied together, by file name: their random ids say nothing of the order they were uploaded in (ADR 0015).
+    // In the order they were uploaded, as the copies keep their upload times (scenario 75), never by their random ids (ADR 0015).
     expect(copied.documents.map((d) => [d.fileName, d.fieldKey, d.frozen])).toEqual([
       ["datasheet.pdf", "datasheet", false],
-      ["drawings.pdf", null, false],
       ["wiring.pdf", null, false],
+      ["drawings.pdf", null, false],
     ]);
     expect(copied.documents.map((d) => d.id)).not.toEqual(expect.arrayContaining(original.documents.map((d) => d.id)));
     expect(copied.canChange).toBe(true);

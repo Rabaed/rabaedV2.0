@@ -166,7 +166,8 @@ create or replace function app.start_document_upload(
     end
   $$;
 
--- As in the create_revision migration, with random ids for the copied Documents.
+-- As in the draft_start_time migration (each copy keeps its source's times), with
+-- random ids for the copied Documents.
 create or replace function app.create_revision(p_work_item_id uuid, p_idempotency_key uuid, p_now timestamptz)
   returns table (outcome text, work_item_id uuid)
   language plpgsql volatile security definer
@@ -279,7 +280,7 @@ create or replace function app.create_revision(p_work_item_id uuid, p_idempotenc
         )
         select s.new_id, s.project_id, v_id, s.file_name, s.size_bytes, s.content_type,
           app.document_storage_key(s.project_id, v_id, s.new_id),
-          s.uploaded_by_member_id, s.uploaded_by_participant_id, v_at, v_at,
+          s.uploaded_by_member_id, s.uploaded_by_participant_id, s.created_at, s.confirmed_at,
           s.field_key, s.item_key, s.taken_at, s.taken_latitude, s.taken_longitude
         from source s
         returning document.id
