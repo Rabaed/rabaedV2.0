@@ -235,7 +235,6 @@
   "workItems": {
     "title": "Submittals",
     "newMar": "New Material Submittal",
-    "empty": "No Work Items you can see yet.",
     "noNumber": "No number yet",
     "revisionNoNumber": "No number yet: Revision {no}",
     "versionsChanged": "This Revision uses a newer version of the Form or Workflow than the one it revises. Answers to fields the newer Form no longer has were not copied.",

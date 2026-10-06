@@ -64,3 +64,20 @@ export const Company: Story = {
     await expect(context.canvas.getByText(storyText(context, otherCompany))).toBeVisible();
   },
 };
+
+/** A Step of the viewer's own Company that nobody has claimed: the Step, then "unclaimed"; no person, no avatar. */
+export const UnclaimedOwnStep: Story = {
+  render: (_args, context) => (
+    <WithChip
+      kind="pool"
+      inViewerCompany
+      companyName={storyText(context, ownCompany)}
+      stepName={storyText(context, { en: "Contractor review", ar: "مراجعة المقاول" })}
+      unclaimedLabel={storyText(context, { en: "unclaimed", ar: "لم تُستلَم" })}
+    />
+  ),
+  play: async (context) => {
+    await expect(context.canvasElement).toHaveTextContent(storyText(context, { en: "Contractor review · unclaimed", ar: "مراجعة المقاول · لم تُستلَم" }));
+    await expect(context.canvasElement.querySelector("img")).toBeNull();
+  },
+};

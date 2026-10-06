@@ -1,3 +1,4 @@
+import { cn } from "../../lib/cn.ts";
 import { Avatar, Chip, CompanyChip } from "../data/avatar.tsx";
 
 type HolderCompany = {
@@ -26,7 +27,17 @@ export type WithChipHolder =
       photoSrc?: string;
     })
   | (HolderCompany & NoPerson & { kind: "person"; inViewerCompany: false })
-  | (HolderCompany & NoPerson & { kind: "company"; inViewerCompany: boolean });
+  | (HolderCompany & NoPerson & { kind: "company"; inViewerCompany: boolean })
+  | (HolderCompany &
+      NoPerson & {
+        /** A Step of the viewer's own Company that nobody has claimed yet: "<Step> · unclaimed". */
+        kind: "pool";
+        inViewerCompany: true;
+        /** The Step's name. */
+        stepName: string;
+        /** "unclaimed", in the viewer's language. */
+        unclaimedLabel: string;
+      });
 
 export type WithChipProps = WithChipHolder & { className?: string };
 
@@ -40,6 +51,13 @@ export type WithChipProps = WithChipHolder & { className?: string };
 export function WithChip(props: WithChipProps) {
   const { companyName, logoSrc, className } = props;
   // Defence in depth: checks the values, not only the types, in case a caller casts.
+  if (props.kind === "pool" && props.inViewerCompany === true) {
+    return (
+      <span className={cn("inline-flex items-center gap-1 whitespace-nowrap text-body", className)}>
+        {props.stepName} <span className="text-muted">· {props.unclaimedLabel}</span>
+      </span>
+    );
+  }
   if (props.inViewerCompany !== true || props.kind !== "person" || !props.name) {
     return <CompanyChip name={companyName} logoSrc={logoSrc} className={className} />;
   }

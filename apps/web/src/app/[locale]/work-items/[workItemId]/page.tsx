@@ -1,5 +1,5 @@
 import { answerFields, isOpenStageCategory, stepAgeLabel, type Locale } from "@rabaed/domain";
-import { AgeDots, DocNo, StagePill } from "@rabaed/ui";
+import { AgeDots, DocNo, StagePill, stageColour } from "@rabaed/ui";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
 import { WorkItemActions } from "@/components/work-item-actions";
@@ -27,7 +27,6 @@ import {
   getWorkItemHistory,
   getWorkItemLinks,
 } from "@/lib/session";
-import { stageColour } from "@/lib/stage-colour";
 
 /**
  * One Work Item, in the frame every item has (form-engine.md §1): the System
