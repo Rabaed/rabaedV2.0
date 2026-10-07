@@ -240,6 +240,25 @@ A Module's Work Items and the Member's Projects, as the API returns them. Presen
   - **A changed story** still fails CI. When your PR touches a story or `packages/ui/src`, the **Update screenshots** workflow re-renders every baseline on each push and commits the changed ones to the PR for review. For any other PR, add the `update-screenshots` label (or run `gh workflow run update-screenshots.yml --ref <branch>`).
   - Any other story test failure (behaviour, axe, direction, digits) blocks both: nothing is committed until it is fixed.
 
+### Story tests on Linux, on your machine
+
+`pnpm test:stories:linux` runs the same suite in the Linux Playwright image CI uses, with the screenshot comparison on. The image is derived from `pnpm-lock.yaml` (the Playwright version, so the same Chromium) and the `stories` job's Ubuntu release in `.github/workflows/ci.yml`; nothing is pinned a second time. It needs Docker Desktop running. Extra arguments go to vitest.
+
+Reach for it when you change:
+
+- the harness (`test/stories.test.tsx`) or anything it does per story (emulation, touch-target checks, the screenshot step): behaviour can differ between the harness on Linux, which screenshots, and on Windows or macOS, which does not (RP-332's touch-target check passed on Windows and failed only on CI);
+- screenshots, or a story whose render you want to see as CI renders it; or
+- anything CI's story job fails that your own `pnpm test:stories` doesn't.
+
+```
+pnpm test:stories:linux                  # compare, as CI does
+pnpm test:stories:linux --update         # re-render every baseline into test/__screenshots__
+pnpm test:stories:linux --update=new     # write only the missing ones
+pnpm test:stories:linux -t "Button"      # one story file or name
+```
+
+The first run installs Linux `node_modules` into Docker volumes (`rabaed-stories-…`, one per workspace package and worktree) laid over the host's folders, so your Windows `node_modules` are never touched; later runs reuse them. Remove them with `docker volume rm $(docker volume ls -q -f name=rabaed-stories-)`. The script also adds the `fonts-dejavu-core` package, a fallback font the CI runner has and the image lacks. Without it ✍ in the Button stories renders as a colour emoji and fails against the baselines.
+
 ## Lint guard rails
 
 `pnpm lint` (run in CI on every PR) enforces the design rules in `packages/ui` and `apps/web`. The rules live in `packages/eslint-plugin` and are wired up in the root `eslint.config.js`.

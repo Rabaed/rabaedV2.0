@@ -27,7 +27,6 @@ const allow: GrantAllowList = {
   "app.numbering_counter_for": ["rabaed_admin"],
   "app.start_numbering_counter": ["rabaed_admin"],
   "app.current_member_id": both,
-  "app.uuid_v7": both,
   "app.is_bilingual": both,
 };
 

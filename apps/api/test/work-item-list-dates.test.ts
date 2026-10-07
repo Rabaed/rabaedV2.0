@@ -223,10 +223,18 @@ describe("cursor paging by Submission Date", () => {
     const engineer = await projectMember(api, c1, own, ["engineer"]);
     await projectMember(api, c1, own, ["project_manager"]);
     const created: string[] = [];
+    const subjects = new Map<string, string>();
     for (let i = 0; i < 53; i++) {
-      const res = await ok(engineer.post(`/v1/projects/${project}/work-items`, { type: "MAR", title: `Item ${i}`, answers: { trade: tradeId, location: locationId } }), 201);
+      // Five Subjects, shared, in an order unlike the order they were made in.
+      const title = `Item ${"DBEAC"[(i * 7) % 5]}`;
+      const res = await ok(engineer.post(`/v1/projects/${project}/work-items`, { type: "MAR", title, answers: { trade: tradeId, location: locationId } }), 201);
       created.push(res.json().id);
+      subjects.set(res.json().id, title);
     }
+    // Un-numbered Drafts and items not yet Submitted: by Subject, then id, never by when they were made (ADR 0015).
+    // Code-unit order is `collate "C"`'s byte order for these ASCII Subjects and the ids' lowercase hex.
+    const byCodeUnits = (a: string, b: string) => Number(a > b) - Number(a < b);
+    const bySubject = (a: string, b: string) => byCodeUnits(subjects.get(a)!, subjects.get(b)!) || byCodeUnits(a, b);
     // 49 carry a Submission Date, in groups that share one (the id breaks the tie); 4 have none.
     const submitted = created.slice(0, 49);
     for (const [i, id] of submitted.entries()) {
@@ -248,8 +256,8 @@ describe("cursor paging by Submission Date", () => {
     // The Submitted ones first, the latest first; then the rest.
     const times = seen.slice(0, 49).map((id) => created.indexOf(id)).map((n) => Math.floor(n / 7));
     expect(times).toEqual([...times].sort((a, b) => b - a));
-    expect(seen.slice(49).sort()).toEqual(created.slice(49).sort());
-    // Under the Step Age sort, a Draft with no number sorts last, by id, and its cursor holds no time (scenario 61).
+    expect(seen.slice(49)).toEqual(created.slice(49).sort(bySubject));
+    // Under the Step Age sort, a Draft with no number sorts last, by Subject, then id, and its cursor holds no time (scenarios 61 and 73).
     const stepAgeSeen: string[] = [];
     let stepAgeCursor: string | undefined;
     do {
@@ -259,7 +267,19 @@ describe("cursor paging by Submission Date", () => {
       if (stepAgeCursor) expect(decodeWorkItemCursor(stepAgeCursor, "stepAge")![1]).toBe("");
     } while (stepAgeCursor);
     expect(new Set(stepAgeSeen).size).toBe(53);
-    expect(stepAgeSeen).toEqual([...created].sort());
+    expect(stepAgeSeen).toEqual([...created].sort(bySubject));
+    // So does the Document Number sort, where they have no number, and the Kanban.
+    const numberSeen: string[] = [];
+    let numberCursor: string | undefined;
+    do {
+      const page = await list(engineer, { sort: "documentNumber", ...(numberCursor ? { cursor: numberCursor } : {}) }, project);
+      numberSeen.push(...ids(page));
+      numberCursor = page.nextCursor ?? undefined;
+    } while (numberCursor);
+    expect(numberSeen).toEqual([...created].sort(bySubject));
+    const board: WorkItemBoard = (await ok(engineer.get(`/v1/projects/${project}/work-items/kanban`), 200)).json();
+    const cards = board.columns.flatMap((c) => c.lanes.flatMap((l) => l.cards)).map((c) => c.id);
+    expect(cards).toEqual([...created].sort(bySubject));
     // A date range pages the same way.
     const ranged = await list(engineer, { sort: "submissionDate", submittedFrom: "2026-06-01" }, project);
     expect(ranged.items.length).toBe(49);

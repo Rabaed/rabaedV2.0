@@ -40,7 +40,7 @@ A Member sees a thing only if it passes **every** layer, in order.
 
 ## Leak channels
 
-Every one of these must apply the same layers. A new feature that adds a channel must add it here.
+Every one of these must apply the same layers. A new feature that adds a channel must add it here (every notification and outbox kind is checked by `scripts/check-leak-channels.test.ts`, RP-375).
 
 | Channel | Rule |
 |---|---|

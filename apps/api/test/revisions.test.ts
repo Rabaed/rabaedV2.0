@@ -10,7 +10,7 @@
 import { randomUUID } from "node:crypto";
 import type { DocumentList, LinkedFrom, RevisionChain, WorkItemDetail, WorkItemLinks } from "@rabaed/domain";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { attachDatasheet, createTestApi, expectHidden, type Caller } from "./support/harness.ts";
+import { attachDatasheet, createTestApi, expectHidden, uploadDocument, type Caller } from "./support/harness.ts";
 import { all, bilingual, ok, only, projectMember, type Company } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
@@ -61,14 +61,15 @@ async function codeC(id: string) {
   await take(k1Manager, id, "revise_c", { remarks: "Resubmit with 110 lm/W luminaires" });
 }
 
-/** A MAR with its datasheet, closed at Code C. */
-async function closedAtCodeC(title: string): Promise<string> {
+/** A MAR with its datasheet, and the Attachments named, closed at Code C. */
+async function closedAtCodeC(title: string, attachments: string[] = []): Promise<string> {
   const res = await ok(
     engineer.post(`/v1/projects/${projectId}/work-items`, { type: "MAR", title, answers: { ...complete, trade: electrical, location: buildingA } }),
     201,
   );
   const id = res.json().id as string;
   await attachDatasheet(engineer, id);
+  for (const fileName of attachments) await uploadDocument(engineer, id, { fileName, contentType: "application/pdf", body: `%PDF-1.7 ${fileName}` });
   await submit(id);
   await codeC(id);
   return id;
@@ -105,7 +106,7 @@ describe("C1 creates a Revision of a MAR that got Code C", () => {
   let closed = "";
   let revision = "";
   beforeAll(async () => {
-    closed = await closedAtCodeC("Fixtures");
+    closed = await closedAtCodeC("Fixtures", ["wiring.pdf", "drawings.pdf"]);
     revision = await revisionOf(closed);
   });
 
@@ -127,7 +128,13 @@ describe("C1 creates a Revision of a MAR that got Code C", () => {
   it("has the Documents copied as new rows the raiser can still change", async () => {
     const original: DocumentList = (await ok(engineer.get(`/v1/work-items/${closed}/documents`), 200)).json();
     const copied: DocumentList = (await ok(engineer.get(`/v1/work-items/${revision}/documents`), 200)).json();
-    expect(copied.documents.map((d) => [d.fileName, d.fieldKey, d.frozen])).toEqual(original.documents.map((d) => [d.fileName, d.fieldKey, false]));
+    expect(original.documents.map((d) => d.fileName)).toEqual(["datasheet.pdf", "wiring.pdf", "drawings.pdf"]);
+    // In the order they were uploaded, as the copies keep their upload times (scenario 75), never by their random ids (ADR 0015).
+    expect(copied.documents.map((d) => [d.fileName, d.fieldKey, d.frozen])).toEqual([
+      ["datasheet.pdf", "datasheet", false],
+      ["wiring.pdf", null, false],
+      ["drawings.pdf", null, false],
+    ]);
     expect(copied.documents.map((d) => d.id)).not.toEqual(expect.arrayContaining(original.documents.map((d) => d.id)));
     expect(copied.canChange).toBe(true);
     // Scenario 75: each copy keeps its original upload time, never the Revision's start.
