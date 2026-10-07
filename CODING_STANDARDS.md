@@ -46,6 +46,8 @@ Visibility is the top requirement (`docs/visibility.md`). Check every read path 
 - **Dates and numbers are formatted through `formatDate` and `formatNumber`** (`@rabaed/domain` locale module), so Arabic shows Latin digits and Saudi time. No `new Intl.*(…)` or `toLocale*String` elsewhere unless its locale is `intlLocaleOf(…)` (checked: `rabaed/locale-through-helpers`; a place that only parses or reads the clock says so in a commented `eslint-disable`).
 - **Bidi isolates and marks (U+2066 to U+2069, U+200E, U+200F, U+202A to U+202E) are written as `\u` escapes,** never pasted in as invisible characters (checked: `rabaed/no-raw-bidi` in TS, TSX and message files; `eslint --fix` rewrites them).
 - **A component that uses hooks or event handlers starts with `"use client"`** (checked: `rabaed/use-client-directive`; RP-362).
+- **A page matches its design, judged by looking at the whole page.** A UI ticket names its reference screen in `design/reference/claude-design/` (or the design request it waits for); its PR attaches full-page screenshots at 1366 and 1920 wide, in English and Arabic, beside the reference, plus 820 and 402 once the tablet and phone designs exist (RP-422). Review compares them: a clipped table, a squeezed card or a page that scrolls sideways is a finding even when every test passes. The product owner approves the first PR of each page template (Epic RP-405); the 2026-10-07 audit found pages built to pass tests that looked like a demo next to the kit.
+- **Until a page has its tablet and phone design, it at least doesn't break:** no page-level horizontal scroll at any width; tables and the Kanban scroll inside their own labelled region; the sidebar opens as a drawer below `lg`.
 
 ## Domain language
 
