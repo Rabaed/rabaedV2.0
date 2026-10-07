@@ -630,8 +630,7 @@
         "offered": "Only Submitted items you can see in this Project can be linked.",
         "failed": "Couldn't search. Try again.",
         "more": "Show more",
-        "count": "{count, plural, one {1 item} other {{n} items}}",
-        "moreBelow": ", more below"
+        "count": "{count, plural, one {1 item} other {{n} items}}{more, select, true {, more below} other {}}"
       }
     },
     "history": {

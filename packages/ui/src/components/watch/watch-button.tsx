@@ -32,7 +32,7 @@ export type WatchButtonProps = {
   onChange: WatchCall;
 };
 
-export function WatchButton({ labels: t, watching: initial, onChange }: WatchButtonProps) {
+export function WatchButton({ labels, watching: initial, onChange }: WatchButtonProps) {
   const [watching, setWatching] = useState(initial);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -44,9 +44,9 @@ export function WatchButton({ labels: t, watching: initial, onChange }: WatchBut
     try {
       const result = await onChange(next);
       if (result.ok) setWatching(next);
-      else setError(t.refusals[result.reason as WatchRefusal] ?? t.refusals.unavailable);
+      else setError(labels.refusals[result.reason as WatchRefusal] ?? labels.refusals.unavailable);
     } catch {
-      setError(t.refusals.unavailable);
+      setError(labels.refusals.unavailable);
     } finally {
       setPending(false);
     }
@@ -56,7 +56,7 @@ export function WatchButton({ labels: t, watching: initial, onChange }: WatchBut
     <div className="flex flex-wrap items-center gap-3">
       <Button variant={watching ? "secondary" : "ghost"} size="sm" aria-pressed={watching} disabled={pending} onClick={() => void toggle()}>
         <Icon name="eye" />
-        {watching ? t.watching : t.watch}
+        {watching ? labels.watching : labels.watch}
       </Button>
       {error && (
         <p role="alert" className="text-sm text-danger">

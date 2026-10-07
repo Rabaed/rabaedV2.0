@@ -9,8 +9,8 @@ import { testDatabaseUrls } from "@rabaed/db/test-support";
 import { decodeWorkItemCursor, workItemSearchParams, type WorkItemBoard, type WorkItemList, type WorkItemQueryInput, type WorkItemRow } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { attachDatasheet, createTestApi, DEFAULT_PASSWORD, type Caller } from "./support/harness.ts";
-import { all, bilingual, memberOnProject, ok, take, type Company } from "./support/tower.ts";
+import { attachDatasheet, createTestApi, type Caller } from "./support/harness.ts";
+import { all, bilingual, ok, projectMember, take, type Company } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
 const migrator = createDb(testDatabaseUrls().migrator, { max: 1 });
@@ -31,19 +31,6 @@ let c1Engineer: Caller;
 let c1Pm: Caller;
 let k1Engineer: Caller;
 let projectId = "";
-const emails = new Map<Caller, string>();
-
-async function memberWithEmail(...args: Parameters<typeof memberOnProject>) {
-  const { caller, email } = await memberOnProject(...args);
-  emails.set(caller, email);
-  return caller;
-}
-
-/** Moves the clock, signing every Member in again: it ends their sessions. */
-async function later(ms: number) {
-  api.advanceClock(ms);
-  for (const [caller, email] of emails) caller.useSessionToken((await api.signIn(email, DEFAULT_PASSWORD)).sessionToken);
-}
 
 async function list(by: Caller, query: WorkItemQueryInput = {}, project = projectId): Promise<WorkItemList> {
   return (await ok(by.get(`/v1/projects/${project}/work-items?${workItemSearchParams(query)}`), 200)).json();
@@ -86,7 +73,6 @@ async function setUpProject(): Promise<{ project: string; tradeId: string; locat
 
 beforeAll(async () => {
   c1 = await api.projectCreator();
-  emails.set(c1.caller, c1.company.authorizedPerson.email);
 });
 
 describe("Submission Date and Creation Date in the List (scenario 61)", () => {
@@ -100,23 +86,23 @@ describe("Submission Date and Creation Date in the List (scenario 61)", () => {
   beforeAll(async () => {
     const { project, tradeId, locationId, own } = await setUpProject();
     projectId = project;
-    c1Engineer = await memberWithEmail(api, c1, own, ["engineer"]);
-    c1Pm = await memberWithEmail(api, c1, own, ["project_manager"]);
+    c1Engineer = await projectMember(api, c1, own, ["engineer"]);
+    c1Pm = await projectMember(api, c1, own, ["project_manager"]);
     const k1Company = await api.authorizedPerson();
     const k1 = await api.addParticipant(c1.caller, project, k1Company.company, "consultant");
     await ok(c1.caller.request("PUT", `/v1/participants/${k1}/visibility`, { trade: all, location: all }));
-    k1Engineer = await memberWithEmail(api, k1Company, k1, ["engineer"]);
-    await memberWithEmail(api, k1Company, k1, ["manager"]); // holds the review Step, so Submit has somewhere to go
+    k1Engineer = await projectMember(api, k1Company, k1, ["engineer"]);
+    await projectMember(api, k1Company, k1, ["manager"]); // holds the review Step, so Submit has somewhere to go
     first = await draft(c1Engineer, project, "Fixtures", tradeId, locationId);
     second = await draft(c1Engineer, project, "Switchboards", tradeId, locationId);
     numbered = await draft(c1Engineer, project, "Busbars", tradeId, locationId);
     started = await draft(c1Engineer, project, "Cables", tradeId, locationId);
-    await later(2 * DAY);
+    await api.later(2 * DAY);
     for (const id of [first, second, numbered]) await take(c1Engineer, id, "send_for_review");
-    await later(10 * DAY);
+    await api.later(10 * DAY);
     await ok(c1Pm.post(`/v1/work-items/${first}/claim`));
     await take(c1Pm, first, "submit");
-    await later(8 * DAY);
+    await api.later(8 * DAY);
     await ok(c1Pm.post(`/v1/work-items/${second}/claim`));
     await take(c1Pm, second, "submit");
     firstSubmitted = (await recorded(first)).submittedAt!;
@@ -216,8 +202,8 @@ describe("Submission Date and Creation Date in the List (scenario 61)", () => {
 describe("cursor paging by Submission Date", () => {
   it("pages with no duplicates or gaps, across ties and into the items not yet Submitted", async () => {
     const { project, tradeId, locationId, own } = await setUpProject();
-    const engineer = await memberWithEmail(api, c1, own, ["engineer"]);
-    await memberWithEmail(api, c1, own, ["project_manager"]);
+    const engineer = await projectMember(api, c1, own, ["engineer"]);
+    await projectMember(api, c1, own, ["project_manager"]);
     const created: string[] = [];
     const subjects = new Map<string, string>();
     for (let i = 0; i < 53; i++) {

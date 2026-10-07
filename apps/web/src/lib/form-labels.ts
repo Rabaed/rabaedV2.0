@@ -17,44 +17,43 @@ export function useLinkSearchLabels(): LinkSearchLabels {
     offered: t("offered"),
     failed: t("failed"),
     more: t("more"),
-    count: (n, count, more) => `${t("count", { n, count })}${more ? t("moreBelow") : ""}`,
+    count: (n, count, more) => t("count", { n, count, more: String(more) }),
   };
 }
 
 /** The Form renderer's words, with each field type's. */
 export function useFormRendererLabels(): FormRendererLabels {
   const t = useTranslations("workItems.form");
-  const r = (key: string) => t(`renderer.${key}`);
-  const search = useLinkSearchLabels();
-  const tLinks = useTranslations("workItems.links");
+  const renderer = useTranslations("workItems.form.renderer");
+  const { item, search } = useLinksSectionLabels();
   return {
-    summary: (n, count) => t("renderer.summary", { n, count }),
-    required: r("required"),
-    wrongType: r("wrongType"),
-    tooLong: (max) => t("renderer.tooLong", { max }),
+    summary: (n, count) => renderer("summary", { n, count }),
+    required: renderer("required"),
+    wrongType: renderer("wrongType"),
+    tooLong: (max) => renderer("tooLong", { max }),
     invalidFormat: {
-      date: r("invalidFormat.date"),
-      time: r("invalidFormat.time"),
-      datetime: r("invalidFormat.datetime"),
-      email: r("invalidFormat.email"),
-      phone: r("invalidFormat.phone"),
+      date: renderer("invalidFormat.date"),
+      time: renderer("invalidFormat.time"),
+      datetime: renderer("invalidFormat.datetime"),
+      email: renderer("invalidFormat.email"),
+      phone: renderer("invalidFormat.phone"),
     },
-    notANumber: r("notANumber"),
-    belowMin: (min) => t("renderer.belowMin", { min }),
-    aboveMax: (max) => t("renderer.aboveMax", { max }),
-    tooManyDecimals: (n, count) => t("renderer.tooManyDecimals", { n, count }),
-    unknownOption: r("unknownOption"),
-    notWorkedOut: r("notWorkedOut"),
-    calculatedRequired: r("calculatedRequired"),
-    tooShallow: r("tooShallow"),
-    tooFewRows: (n, count) => t("renderer.tooFewRows", { n, count }),
-    tooManyRows: (n, count) => t("renderer.tooManyRows", { n, count }),
-    tooFewFiles: (n, count) => t("renderer.tooFewFiles", { n, count }),
-    choose: r("choose"),
-    none: r("none"),
-    leftProject: (name) => t("renderer.leftProject", { name }),
-    unanswered: r("unanswered"),
-    filledBy: (role) => t("renderer.filledBy", { role }),
+    notANumber: renderer("notANumber"),
+    belowMin: (min) => renderer("belowMin", { min }),
+    aboveMax: (max) => renderer("aboveMax", { max }),
+    tooManyDecimals: (n, count) => renderer("tooManyDecimals", { n, count }),
+    unknownOption: renderer("unknownOption"),
+    notWorkedOut: renderer("notWorkedOut"),
+    calculatedRequired: renderer("calculatedRequired"),
+    tooShallow: renderer("tooShallow"),
+    tooFewRows: (n, count) => renderer("tooFewRows", { n, count }),
+    tooManyRows: (n, count) => renderer("tooManyRows", { n, count }),
+    tooFewFiles: (n, count) => renderer("tooFewFiles", { n, count }),
+    choose: renderer("choose"),
+    none: renderer("none"),
+    leftProject: (name) => renderer("leftProject", { name }),
+    unanswered: renderer("unanswered"),
+    filledBy: (role) => renderer("filledBy", { role }),
     builtIn: { choose: t("builtIn.choose"), chooseTradeFirst: t("builtIn.chooseTradeFirst"), noScopes: t("builtIn.noScopes") },
     attachments: {
       none: t("attachmentsField.none"),
@@ -101,7 +100,7 @@ export function useFormRendererLabels(): FormRendererLabels {
       none: t("optionListField.none"),
       unavailable: t("optionListField.unavailable"),
     },
-    linkQuestion: { remove: (number) => t("linkQuestion.remove", { number }), item: { hidden: tLinks("hidden") }, search },
+    linkQuestion: { remove: (number) => t("linkQuestion.remove", { number }), item, search },
   };
 }
 

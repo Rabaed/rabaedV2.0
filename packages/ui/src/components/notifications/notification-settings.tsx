@@ -79,7 +79,7 @@ export type NotificationSettingsFormProps = {
   onMute: (projectId: string, muted: boolean) => ReturnType<SettingsCall>;
 };
 
-export function NotificationSettingsForm({ locale, labels: t, value, onSave, onMute }: NotificationSettingsFormProps) {
+export function NotificationSettingsForm({ locale, labels, value, onSave, onMute }: NotificationSettingsFormProps) {
   const [saved, setSaved] = useState<UpdateNotificationSettingsRequest>({
     settings: value.settings,
     emailPaused: value.emailPaused,
@@ -88,7 +88,7 @@ export function NotificationSettingsForm({ locale, labels: t, value, onSave, onM
   const [projects, setProjects] = useState(value.projects);
   const [error, setError] = useState<string | null>(null);
 
-  const refused = (reason: string) => setError(t.refusals[reason as Refusal] ?? t.refusals.unavailable);
+  const refused = (reason: string) => setError(labels.refusals[reason as Refusal] ?? labels.refusals.unavailable);
 
   async function change(next: UpdateNotificationSettingsRequest) {
     const before = saved;
@@ -128,7 +128,7 @@ export function NotificationSettingsForm({ locale, labels: t, value, onSave, onM
   const groups = notificationGroups.filter((g) => g !== "weekly_report" || value.receivesWeeklyReport);
   const emailOptions = (["off", "immediate", "digest"] as const satisfies readonly NotificationEmailChoice[]).map((choice) => ({
     value: choice,
-    label: t.emailChoice[choice],
+    label: labels.emailChoice[choice],
   }));
 
   return (
@@ -141,12 +141,12 @@ export function NotificationSettingsForm({ locale, labels: t, value, onSave, onM
 
       <section aria-labelledby="notification-email" className="space-y-4">
         <h2 id="notification-email" className="text-h6 font-semibold">
-          {t.email}
+          {labels.email}
         </h2>
-        <Field label={t.pauseAll} help={t.pauseHelp} layout="inline">
+        <Field label={labels.pauseAll} help={labels.pauseHelp} layout="inline">
           <Switch checked={saved.emailPaused} onCheckedChange={(emailPaused) => void change({ ...saved, emailPaused })} />
         </Field>
-        <Field label={t.language} group>
+        <Field label={labels.language} group>
           <SegmentedControl
             value={saved.preferredLanguage}
             onValueChange={(language) => void change({ ...saved, preferredLanguage: language as Locale })}
@@ -157,17 +157,17 @@ export function NotificationSettingsForm({ locale, labels: t, value, onSave, onM
 
       <section aria-labelledby="notification-groups" className="space-y-4">
         <h2 id="notification-groups" className="text-h6 font-semibold">
-          {t.groups}
+          {labels.groups}
         </h2>
         <ul className="divide-y divide-border border-y border-border">
           {groups.map((group) => {
             const setting = saved.settings[group];
             return (
               <li key={group} className="space-y-3 py-4" data-group={group}>
-                <h3 className="font-medium">{t.group[group]}</h3>
+                <h3 className="font-medium">{labels.group[group]}</h3>
                 {group === "weekly_report" ? (
                   // An email only, on its own schedule: on or off.
-                  <Field label={t.email} help={t.weeklyHelp} layout="inline">
+                  <Field label={labels.email} help={labels.weeklyHelp} layout="inline">
                     <Switch
                       checked={setting.email !== "off"}
                       aria-describedby={`group-${group}`}
@@ -176,14 +176,14 @@ export function NotificationSettingsForm({ locale, labels: t, value, onSave, onM
                   </Field>
                 ) : (
                   <div className="flex flex-wrap items-center gap-x-8 gap-y-3">
-                    <Field label={t.inApp} layout="inline">
+                    <Field label={labels.inApp} layout="inline">
                       <Switch
                         checked={setting.inApp}
                         aria-describedby={`group-${group}`}
                         onCheckedChange={(inApp) => void setGroup(group, { inApp })}
                       />
                     </Field>
-                    <Field label={t.email} group>
+                    <Field label={labels.email} group>
                       <SegmentedControl
                         value={setting.email}
                         aria-describedby={`group-${group}`}
@@ -195,14 +195,14 @@ export function NotificationSettingsForm({ locale, labels: t, value, onSave, onM
                 )}
                 {/* Names the row's controls for a screen reader: "In-app" alone doesn't say which group. */}
                 <span id={`group-${group}`} hidden>
-                  {t.group[group]}
+                  {labels.group[group]}
                 </span>
                 {group === "watched" && (
                   <details className="group/outcomes">
-                    <summary className="cursor-pointer text-sm font-medium text-primary pointer-coarse:min-h-11 pointer-coarse:py-3">{t.outcomes}</summary>
+                    <summary className="cursor-pointer text-sm font-medium text-primary pointer-coarse:min-h-11 pointer-coarse:py-3">{labels.outcomes}</summary>
                     <div className="mt-3 grid gap-6 sm:grid-cols-3">
                       {Object.entries(outcomeGroups).map(([key, outcomes]) => (
-                        <Field key={key} label={t.outcomeGroups[key as keyof typeof outcomeGroups]} group>
+                        <Field key={key} label={labels.outcomeGroups[key as keyof typeof outcomeGroups]} group>
                           <CheckboxGroup
                             options={outcomes.map((o) => ({ value: o, label: outcomeLabel(o, locale) }))}
                             value={saved.settings.watched.outcomes.filter((o) => outcomes.includes(o))}
@@ -225,12 +225,12 @@ export function NotificationSettingsForm({ locale, labels: t, value, onSave, onM
       <section aria-labelledby="notification-projects" className="space-y-4">
         <div className="space-y-1">
           <h2 id="notification-projects" className="text-h6 font-semibold">
-            {t.projects}
+            {labels.projects}
           </h2>
-          <p className="text-sm text-muted">{t.projectsHelp}</p>
+          <p className="text-sm text-muted">{labels.projectsHelp}</p>
         </div>
         {projects.length === 0 ? (
-          <p className="text-muted">{t.noProjects}</p>
+          <p className="text-muted">{labels.noProjects}</p>
         ) : (
           <ul className="divide-y divide-border border-y border-border">
             {projects.map((project) => (
@@ -243,7 +243,7 @@ export function NotificationSettingsForm({ locale, labels: t, value, onSave, onM
                     {project.code}
                   </span>
                 </span>
-                <Field label={t.mute} layout="inline">
+                <Field label={labels.mute} layout="inline">
                   <Switch
                     checked={project.muted}
                     aria-describedby={`project-${project.id}`}

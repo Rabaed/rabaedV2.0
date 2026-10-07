@@ -66,8 +66,8 @@ beforeAll(async () => {
     .participants.find((p: { isOwnCompany: boolean }) => p.isOwnCompany).id;
   await ok(c1.caller.request("PUT", `/v1/participants/${own}/visibility`, { trade: all, location: all }));
   engineer = await projectMember(api, c1, own, ["engineer"]);
-  electricalOnly = await projectMember(api, c1, own, ["engineer"], only(trade.electrical));
-  mechanicalOnly = await projectMember(api, c1, own, ["engineer"], only(trade.mechanical));
+  electricalOnly = await projectMember(api, c1, own, ["engineer"], { trade: only(trade.electrical) });
+  mechanicalOnly = await projectMember(api, c1, own, ["engineer"], { trade: only(trade.mechanical) });
   // The internal review's Step Pool, so a Draft can be sent.
   await projectMember(api, c1, own, ["project_manager"]);
 });

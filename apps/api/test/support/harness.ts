@@ -204,6 +204,11 @@ function callerFor(app: FastifyInstance): Caller {
   };
 }
 
+/** The body of a sign-in; `locale` is left out when the browser sent none. */
+function credentialsFor(email: string, password: string, locale?: string) {
+  return { email, password, ...(locale ? { locale } : {}) };
+}
+
 function expectStatus(res: LightMyRequestResponse, status: number, what: string) {
   if (res.statusCode !== status) throw new Error(`${what}: expected ${status}, got ${res.statusCode} ${res.body}`);
 }
@@ -346,8 +351,9 @@ export async function createTestApi(options: { databaseUrl?: string; files?: boo
 
     async signIn(email, password, locale) {
       const caller = callerFor(app);
-      expectStatus(await caller.post("/v1/session", { email, password, ...(locale ? { locale } : {}) }), 204, "sign in");
-      signedIn.set(caller, { email, password, ...(locale ? { locale } : {}) });
+      const credentials = credentialsFor(email, password, locale);
+      expectStatus(await caller.post("/v1/session", credentials), 204, "sign in");
+      signedIn.set(caller, credentials);
       return caller;
     },
 
@@ -355,7 +361,7 @@ export async function createTestApi(options: { databaseUrl?: string; files?: boo
       offset += ms;
       for (const [caller, { email, password, locale }] of signedIn) {
         const again = callerFor(app);
-        expectStatus(await again.post("/v1/session", { email, password, ...(locale ? { locale } : {}) }), 204, "sign in again");
+        expectStatus(await again.post("/v1/session", credentialsFor(email, password, locale)), 204, "sign in again");
         caller.useSessionToken(again.sessionToken);
       }
     },

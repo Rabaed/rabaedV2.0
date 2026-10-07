@@ -12,7 +12,7 @@ import { Select } from "../form/select.tsx";
 // Revision's " Rev n" included, left to right in both languages, as issued and
 // as on the paper register. Presentational: the page opens the chosen one.
 
-/** The drop-down's words, from the app's messages. */
+/** The Revision picker's words, from the app's messages. */
 export type RevisionPickerLabels = { label: string };
 
 export type RevisionPickerProps = {
@@ -29,10 +29,10 @@ export type RevisionPickerProps = {
 };
 
 /** A drop-down of the chain's Revisions; nothing when the viewer sees no other Revision. */
-export function RevisionPicker({ locale, labels: t, revisions, currentId, revisionNoNumber, onOpen }: RevisionPickerProps) {
+export function RevisionPicker({ locale, labels, revisions, currentId, revisionNoNumber, onOpen }: RevisionPickerProps) {
   if (revisions.length < 2) return null;
   return (
-    <Field label={t.label}>
+    <Field label={labels.label}>
       <Select
         value={currentId}
         onValueChange={(id) => {

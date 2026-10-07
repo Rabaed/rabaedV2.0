@@ -40,7 +40,7 @@ export type RevisionActionsProps = {
   onDiscard: RevisionCall;
 };
 
-export function RevisionActions({ labels: t, canCreate, canDiscard, onCreate, onDiscard }: RevisionActionsProps) {
+export function RevisionActions({ labels, canCreate, canDiscard, onCreate, onDiscard }: RevisionActionsProps) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
@@ -50,10 +50,10 @@ export function RevisionActions({ labels: t, canCreate, canDiscard, onCreate, on
     setError(null);
     try {
       const result = await call();
-      if (!result.ok) setError(t.refusals[result.reason as RevisionRefusal] ?? t.refusals.unavailable);
+      if (!result.ok) setError(labels.refusals[result.reason as RevisionRefusal] ?? labels.refusals.unavailable);
       return result.ok;
     } catch {
-      setError(t.refusals.unavailable);
+      setError(labels.refusals.unavailable);
       return false;
     } finally {
       setPending(false);
@@ -62,12 +62,12 @@ export function RevisionActions({ labels: t, canCreate, canDiscard, onCreate, on
 
   if (!canCreate && !canDiscard) return null;
   return (
-    <section aria-label={t.section} className="space-y-3 rounded-md border border-border p-4">
+    <section aria-label={labels.section} className="space-y-3 rounded-md border border-border p-4">
       {canCreate && (
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="text-body text-muted">{t.createIntro}</p>
+          <p className="text-body text-muted">{labels.createIntro}</p>
           <Button disabled={pending} onClick={() => void run(onCreate)}>
-            {t.create}
+            {labels.create}
           </Button>
         </div>
       )}
@@ -75,10 +75,10 @@ export function RevisionActions({ labels: t, canCreate, canDiscard, onCreate, on
         <Dialog open={confirming} onOpenChange={setConfirming}>
           <DialogTrigger asChild>
             <Button variant="secondary" disabled={pending}>
-              {t.discard}
+              {labels.discard}
             </Button>
           </DialogTrigger>
-          <DialogContent title={t.discardTitle} description={t.discardIntro} closeLabel={t.close}>
+          <DialogContent title={labels.discardTitle} description={labels.discardIntro} closeLabel={labels.close}>
             {error && (
               <p role="alert" className="text-sm text-danger">
                 {error}
@@ -86,7 +86,7 @@ export function RevisionActions({ labels: t, canCreate, canDiscard, onCreate, on
             )}
             <DialogFooter>
               <DialogClose asChild>
-                <Button variant="ghost">{t.cancel}</Button>
+                <Button variant="ghost">{labels.cancel}</Button>
               </DialogClose>
               <Button
                 variant="danger"
@@ -95,7 +95,7 @@ export function RevisionActions({ labels: t, canCreate, canDiscard, onCreate, on
                   if (await run(onDiscard)) setConfirming(false);
                 }}
               >
-                {t.discard}
+                {labels.discard}
               </Button>
             </DialogFooter>
           </DialogContent>
