@@ -1,7 +1,8 @@
 "use client";
 
 import type { Locale, NotificationSettingsView } from "@rabaed/domain";
-import { NotificationSettingsForm, type SettingsCall } from "@rabaed/ui";
+import { NotificationSettingsForm, type NotificationSettingsLabels, type SettingsCall } from "@rabaed/ui";
+import { useTranslations } from "next-intl";
 
 /** The API's answer to a save: ok, or the refusal's error code. */
 async function result(res: Response): ReturnType<SettingsCall> {
@@ -16,9 +17,35 @@ async function result(res: Response): ReturnType<SettingsCall> {
  * DELETE on its /mute.
  */
 export function NotificationSettings({ value, locale }: { value: NotificationSettingsView; locale: Locale }) {
+  const t = useTranslations("notificationSettings");
+  const labels: NotificationSettingsLabels = {
+    email: t("email"),
+    pauseAll: t("pauseAll"),
+    pauseHelp: t("pauseHelp"),
+    language: t("language"),
+    projects: t("projects"),
+    projectsHelp: t("projectsHelp"),
+    mute: t("mute"),
+    noProjects: t("noProjects"),
+    groups: t("groups"),
+    inApp: t("inApp"),
+    emailChoice: { off: t("emailChoice.off"), immediate: t("emailChoice.immediate"), digest: t("emailChoice.digest") },
+    group: {
+      step_reached: t("group.step_reached"),
+      watched: t("group.watched"),
+      sent_back: t("group.sent_back"),
+      vacancy: t("group.vacancy"),
+      weekly_report: t("group.weekly_report"),
+    },
+    weeklyHelp: t("weeklyHelp"),
+    outcomes: t("outcomes"),
+    outcomeGroups: { review_code: t("outcomeGroups.review_code"), inspection_result: t("outcomeGroups.inspection_result"), other: t("outcomeGroups.other") },
+    refusals: { not_found: t("refusals.not_found"), unavailable: t("refusals.unavailable") },
+  };
   return (
     <NotificationSettingsForm
       locale={locale}
+      labels={labels}
       value={value}
       onSave={async (settings) =>
         result(

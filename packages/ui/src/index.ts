@@ -67,6 +67,7 @@ export {
 export { RevisionPicker, type RevisionPickerLabels, type RevisionPickerProps } from "./components/revision/revision-picker.tsx";
 export {
   NotificationSettingsForm,
+  type NotificationSettingsLabels,
   type NotificationSettingsFormProps,
   type SettingsCall,
 } from "./components/notifications/notification-settings.tsx";

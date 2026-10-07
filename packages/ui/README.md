@@ -238,6 +238,7 @@ These components have no words of their own: each takes a `labels` prop (a funct
 | `WatchButton` | `WatchButtonLabels` (`watch`, `watching`, `refusals`) |
 | `RevisionActions` | `RevisionActionsLabels` (the section, both questions, `refusals`) |
 | `RevisionPicker` | `RevisionPickerLabels` (`label`); `revisionNoNumber` stays its own prop |
+| `NotificationSettingsForm` | `NotificationSettingsLabels`. The outcomes' names come from `watchOutcomeNames` in `@rabaed/domain`; the language names stay in the component |
 
 ## Storybook and story tests
 
