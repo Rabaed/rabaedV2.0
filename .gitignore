@@ -58,3 +58,7 @@ cdk.out/
 .claude/worktrees/
 # CDK context lookups name the AWS account; pin values in config.ts (RP-244).
 cdk.context.json
+
+# Playwright UAT spike artifacts (may contain the demo password)
+apps/e2e-results/
+apps/e2e-report/
