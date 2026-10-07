@@ -17,7 +17,7 @@ import { activityFeedSearchParams, type ActivityFeed, type ActivityFeedEntry, ty
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestApi, expectHidden, type Caller } from "./support/harness.ts";
-import { all, bilingual, buildTower, detail, ok, projectMember, submitted, type Company, type Tower } from "./support/tower.ts";
+import { all, bilingual, buildTower, detail, ok, projectMember, submitted, take, type Company, type Tower } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
 const migrator = createDb(testDatabaseUrls().migrator, { max: 1 });
@@ -105,9 +105,6 @@ async function otherParticipant(company: Company, role: "consultant" | "contract
   await ok(c1.caller.request("PUT", `/v1/participants/${participantId}/visibility`, { trade: all, location: all }));
   return participantId;
 }
-
-const take = (by: Caller, id: string, transition: string, extra: { internalNote?: string } = {}) =>
-  ok(by.post(`/v1/work-items/${id}/transitions`, { transition, idempotencyKey: randomUUID(), ...extra }));
 
 /** A new item of the test Type, at the C1 PM's Contractor review. */
 async function atContractorReview(by: Caller, title: string): Promise<string> {

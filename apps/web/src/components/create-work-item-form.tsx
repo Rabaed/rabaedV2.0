@@ -15,6 +15,7 @@ import { Button, Field, FormRenderer, Input, type BuiltInChoices } from "@rabaed
 import { useTranslations } from "next-intl";
 import { useState, type FormEvent } from "react";
 import { Link, useRouter } from "@/i18n/navigation";
+import { useFormRendererLabels } from "@/lib/form-labels";
 import { linkSearch } from "@/lib/link-search";
 
 /**
@@ -41,6 +42,7 @@ export function CreateWorkItemForm({
   locale: Locale;
 }) {
   const t = useTranslations("workItems");
+  const formLabels = useFormRendererLabels();
   const router = useRouter();
   const [answers, setAnswers] = useState<Record<string, unknown>>({});
   const [fieldErrors, setFieldErrors] = useState<readonly FieldError[]>([]);
@@ -119,6 +121,7 @@ export function CreateWorkItemForm({
         editableSections={form.editableSections}
         filledBy={form.filledBy}
         locale={locale}
+        labels={formLabels}
         choices={choices}
         people={people}
         optionLists={optionLists}

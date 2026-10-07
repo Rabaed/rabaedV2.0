@@ -29,28 +29,16 @@ import { Icon } from "../icon/icon.tsx";
 // one. Presentational only, like the renderer around it: the cell controls come
 // from the renderer, and errors from the shared validator.
 
-/* eslint-disable rabaed/no-ui-translations -- existing labels, still to move to the app's messages (RP-362 retro) */
-const copy = {
-  en: {
-    addRow: "Add row",
-    row: (n: number) => `Row ${formatNumber(n, "en")}`,
-    removeRow: (n: number) => `Remove row ${formatNumber(n, "en")}`,
-    noRows: "No rows yet.",
-    limitReached: (max: number) => `The most rows allowed is ${formatNumber(max, "en")}.`,
-    total: (column: string) => `Total ${column}`,
-    wrongType: "This row isn't valid here.",
-  },
-  ar: {
-    addRow: "إضافة صف",
-    row: (n: number) => `الصف ${formatNumber(n, "ar")}`,
-    removeRow: (n: number) => `حذف الصف ${formatNumber(n, "ar")}`,
-    noRows: "لا توجد صفوف بعد.",
-    limitReached: (max: number) => `أقصى عدد للصفوف هو ${formatNumber(max, "ar")}.`,
-    total: (column: string) => `إجمالي ${column}`,
-    wrongType: "هذا الصف غير صالح هنا.",
-  },
-} satisfies Record<Locale, unknown>;
-/* eslint-enable rabaed/no-ui-translations */
+/** The table's words, from the app's messages. A number is given already formatted for the locale. */
+export type TableFieldLabels = {
+  addRow: string;
+  row: (n: string) => string;
+  removeRow: (n: string) => string;
+  noRows: string;
+  limitReached: (max: string) => string;
+  total: (column: string) => string;
+  wrongType: string;
+};
 
 const isRowObject = (value: unknown): value is FormRow => typeof value === "object" && value !== null && !Array.isArray(value);
 
@@ -60,7 +48,7 @@ export const rowsOf = (value: unknown): FormRow[] => (Array.isArray(value) ? val
 const isNumeric = (column: TableColumn) => column.type === "number" || column.type === "currency";
 
 /** The totals under a table, one line per column that asks for one: "Total Quantity: 42". */
-function Totals({ field, rows, locale }: { field: TableField; rows: FormRow[]; locale: Locale }) {
+function Totals({ field, rows, locale, text }: { field: TableField; rows: FormRow[]; locale: Locale; text: TableFieldLabels }) {
   const totals = tableTotals(field, rows);
   const columns = field.columns.filter((c) => (c.type === "number" || c.type === "currency") && c.total);
   if (columns.length === 0 || rows.length === 0) return null;
@@ -69,7 +57,7 @@ function Totals({ field, rows, locale }: { field: TableField; rows: FormRow[]; l
     <dl aria-live="polite" className="flex flex-wrap gap-x-6 gap-y-1 text-body">
       {columns.map((column) => (
         <div key={column.key} className="flex gap-2">
-          <dt className="font-medium text-muted">{copy[locale].total(column.label[locale])}</dt>
+          <dt className="font-medium text-muted">{text.total(column.label[locale])}</dt>
           <dd className="font-semibold text-text">
             <bdi dir={directionOf(locale)}>{formatTableCell(column, totals[column.key] ?? 0, locale)}</bdi>
           </dd>
@@ -96,6 +84,7 @@ export function TableInput({
   field,
   value,
   locale,
+  labels: text,
   errors,
   cell,
   cellError,
@@ -104,12 +93,12 @@ export function TableInput({
   field: TableField;
   value: unknown;
   locale: Locale;
+  labels: TableFieldLabels;
   errors: readonly FieldError[];
   cell: TableCellControl;
   cellError: (column: TableColumn, error: FieldError) => string;
   onChange: (rows: FormRow[] | undefined) => void;
 }) {
-  const text = copy[locale];
   const generated = useId();
   const { id = `table${generated.replaceAll(":", "")}`, labelId, "aria-describedby": describedBy } = useFieldControl<FieldControlProps>({});
   const rows = rowsOf(value);
@@ -146,7 +135,7 @@ export function TableInput({
           <div
             key={i}
             role="group"
-            aria-label={text.row(i + 1)}
+            aria-label={text.row(formatNumber(i + 1, locale))}
             data-row={i}
             className="flex items-start gap-2 rounded-md border border-border bg-surface-subtle p-3"
           >
@@ -177,7 +166,7 @@ export function TableInput({
               </div>
             </div>
             <IconButton
-              label={text.removeRow(i + 1)}
+              label={text.removeRow(formatNumber(i + 1, locale))}
               onClick={() => {
                 focusNext.current = "add_row";
                 update(rows.filter((_, r) => r !== i));
@@ -188,7 +177,7 @@ export function TableInput({
           </div>
         );
       })}
-      <Totals field={field} rows={rows} locale={locale} />
+      <Totals field={field} rows={rows} locale={locale} text={text} />
       <div className="flex flex-wrap items-center gap-3">
         <Button
           ref={addButton}
@@ -203,7 +192,7 @@ export function TableInput({
           <Icon name="plus" size={16} />
           {text.addRow}
         </Button>
-        {atLimit && <span className="text-sm text-muted">{text.limitReached(limit)}</span>}
+        {atLimit && <span className="text-sm text-muted">{text.limitReached(formatNumber(limit, locale))}</span>}
       </div>
     </div>
   );
@@ -214,11 +203,13 @@ export function TableRead({
   field,
   value,
   locale,
+  labels: text,
   optionLists,
 }: {
   field: TableField;
   value: unknown;
   locale: Locale;
+  labels: TableFieldLabels;
   optionLists?: readonly OptionList[];
 }) {
   const rows = rowsOf(value).filter((row) => !Object.values(row).every(isUnanswered));
@@ -247,7 +238,7 @@ export function TableRead({
           ))}
         </TableBody>
       </Table>
-      <Totals field={field} rows={rows} locale={locale} />
+      <Totals field={field} rows={rows} locale={locale} text={text} />
     </div>
   );
 }

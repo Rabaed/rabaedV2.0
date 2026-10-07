@@ -22,7 +22,7 @@ import { OutsideField, useFieldControl, type FieldControlProps } from "../form/f
 import { SegmentedControl } from "../form/segmented-control.tsx";
 import { Textarea } from "../form/textarea.tsx";
 import { Icon } from "../icon/icon.tsx";
-import { PhotosField, type PhotosFieldFiles } from "./photos-field.tsx";
+import { PhotosField, type PhotosFieldFiles, type PhotosFieldLabels } from "./photos-field.tsx";
 
 // A Form's `checklist` field (RP-285; form-engine.md §3): the check items, each
 // answered from its answer set, with the comment and photos the item asks for,
@@ -32,40 +32,24 @@ import { PhotosField, type PhotosFieldFiles } from "./photos-field.tsx";
 // negative, and says what is missing when the item leaves Draft. Presentational:
 // the page uploads photos and passes the field's Documents back in.
 
-/* eslint-disable rabaed/no-ui-translations -- existing labels, still to move to the app's messages (RP-362 retro) */
-const copy = {
-  en: {
-    comment: "Comment",
-    photos: "Photos",
-    required: "required",
-    notAnswered: "Not answered",
-    answerThis: "Answer this item.",
-    commentNeeded: "Add a comment to explain this answer.",
-    photoNeeded: "Add a photo as evidence for this answer.",
-    wrongType: "This value isn't valid here.",
-    unknownOption: "Choose one of the answers.",
-    tooLong: (max: number) => `Use at most ${formatNumber(max, "en")} characters.`,
-    summary: "Summary",
-    evidence: (item: string) => `Photos for ${item}`,
-    itemNumber: (n: number, of: number) => `${formatNumber(n, "en")} of ${formatNumber(of, "en")}`,
-  },
-  ar: {
-    comment: "التعليق",
-    photos: "الصور",
-    required: "مطلوب",
-    notAnswered: "لم تتم الإجابة",
-    answerThis: "أجب عن هذا البند.",
-    commentNeeded: "أضف تعليقًا يوضح هذه الإجابة.",
-    photoNeeded: "أضف صورة كدليل لهذه الإجابة.",
-    wrongType: "هذه القيمة غير صالحة هنا.",
-    unknownOption: "اختر إحدى الإجابات.",
-    tooLong: (max: number) => `استخدم ${formatNumber(max, "ar")} حرفًا على الأكثر.`,
-    summary: "الملخص",
-    evidence: (item: string) => `صور \u2068${item}\u2069`,
-    itemNumber: (n: number, of: number) => `${formatNumber(n, "ar")} من ${formatNumber(of, "ar")}`,
-  },
-} satisfies Record<Locale, unknown>;
-/* eslint-enable rabaed/no-ui-translations */
+/** The checklist's words, from the app's messages. A number is given already formatted for the locale. */
+export type ChecklistFieldLabels = {
+  comment: string;
+  photos: string;
+  required: string;
+  notAnswered: string;
+  answerThis: string;
+  commentNeeded: string;
+  photoNeeded: string;
+  wrongType: string;
+  unknownOption: string;
+  tooLong: (max: string) => string;
+  summary: string;
+  evidence: (item: string) => string;
+  itemNumber: (n: string, of: string) => string;
+  /** An item's photos. */
+  photosField: PhotosFieldLabels;
+};
 
 /** What a checklist's photos are, and what may be done with them now: the field's Documents, whichever items they are evidence for. */
 export type ChecklistFiles = Omit<PhotosFieldFiles, "documents" | "pending"> & {
@@ -81,6 +65,7 @@ export type ChecklistFieldProps = {
   value: unknown;
   mode: "edit" | "read";
   locale: Locale;
+  labels: ChecklistFieldLabels;
   /** This checklist's per-item errors (`item` set), shown under their items. */
   errors?: readonly FieldError[];
   /** Undefined before the item exists (a new Draft): photos are added once it is saved. */
@@ -118,8 +103,7 @@ export function itemEvidence(item: ChecklistItem, entry: ChecklistAnswers[string
   };
 }
 
-function itemErrorText(error: FieldError, locale: Locale): string {
-  const text = copy[locale];
+function itemErrorText(error: FieldError, locale: Locale, text: ChecklistFieldLabels): string {
   switch (error.code) {
     case "required":
       return text.answerThis;
@@ -130,19 +114,19 @@ function itemErrorText(error: FieldError, locale: Locale): string {
     case "unknown_option":
       return text.unknownOption;
     case "too_long":
-      return text.tooLong(maxChecklistComment);
+      return text.tooLong(formatNumber(maxChecklistComment, locale));
     default:
       return text.wrongType;
   }
 }
 
 /** The derived summary: how many items were answered each way. A live region while it is being filled in. */
-function Summary({ field, value, locale }: { field: ChecklistFieldSchema; value: unknown; locale: Locale }) {
+function Summary({ field, value, locale, text }: { field: ChecklistFieldSchema; value: unknown; locale: Locale; text: ChecklistFieldLabels }) {
   const summary = checklistSummary(field, value);
   const answered = summary.counts.some((c) => c.count > 0);
   return (
     <output
-      aria-label={copy[locale].summary}
+      aria-label={text.summary}
       className={cn("flex flex-wrap items-center gap-x-2 text-body font-medium", answered ? "text-text" : "text-muted")}
     >
       <bdi>{checklistSummaryText(summary, locale)}</bdi>
@@ -159,8 +143,7 @@ const evidenceField = (item: ChecklistItem): PhotosFieldSchema => ({
   maxFiles: maxItemPhotos,
 });
 
-export function ChecklistField({ field, value, mode, locale, errors = [], files, onChange, onUpload, onOpen, onRemove }: ChecklistFieldProps) {
-  const text = copy[locale];
+export function ChecklistField({ field, value, mode, locale, labels: text, errors = [], files, onChange, onUpload, onOpen, onRemove }: ChecklistFieldProps) {
   const answers = answersOf(value);
   // The checklist's Field names and describes it as a group; its id is what the error summary links to.
   const { id, labelId, "aria-describedby": describedBy } = useFieldControl<FieldControlProps>({});
@@ -211,7 +194,7 @@ export function ChecklistField({ field, value, mode, locale, errors = [], files,
           </p>
           {entry?.comment && <p className="whitespace-pre-wrap text-body text-text"><bdi>{entry.comment}</bdi></p>}
           {documents.length > 0 && (
-            <PhotosField field={evidenceField(item)} files={itemFiles} mode="read" locale={locale} label={label} onOpen={onOpen} />
+            <PhotosField field={evidenceField(item)} files={itemFiles} mode="read" locale={locale} labels={text.photosField} label={label} onOpen={onOpen} />
           )}
         </li>
       );
@@ -223,7 +206,7 @@ export function ChecklistField({ field, value, mode, locale, errors = [], files,
       <li key={item.key} className="flex flex-col gap-3 rounded-md border border-border p-3">
         <div className="flex flex-col gap-0.5">
           <p id={textId} className="text-body font-medium text-text"><bdi>{item.text[locale]}</bdi></p>
-          <p className="text-sm text-muted">{text.itemNumber(index + 1, field.items.length)}</p>
+          <p className="text-sm text-muted">{text.itemNumber(formatNumber(index + 1, locale), formatNumber(field.items.length, locale))}</p>
         </div>
         <OutsideField>
           <SegmentedControl
@@ -262,6 +245,7 @@ export function ChecklistField({ field, value, mode, locale, errors = [], files,
                 files={itemFiles}
                 mode="edit"
                 locale={locale}
+                labels={text.photosField}
                 label={label}
                 onUpload={(picked) => onUpload?.(item.key, picked)}
                 onOpen={onOpen}
@@ -275,7 +259,7 @@ export function ChecklistField({ field, value, mode, locale, errors = [], files,
             {itemErrors.map((error) => (
               <li key={error.code} className="flex items-start gap-1 text-sm text-danger">
                 <Icon name="alert-circle" size={16} className="mt-0.5 shrink-0" />
-                <span>{itemErrorText(error, locale)}</span>
+                <span>{itemErrorText(error, locale, text)}</span>
               </li>
             ))}
           </ul>
@@ -294,7 +278,7 @@ export function ChecklistField({ field, value, mode, locale, errors = [], files,
       aria-describedby={describedBy}
       className="flex flex-col gap-3 focus:outline-none"
     >
-      <Summary field={field} value={answers} locale={locale} />
+      <Summary field={field} value={answers} locale={locale} text={text} />
       <ol className="flex flex-col gap-3">{items}</ol>
     </div>
   );

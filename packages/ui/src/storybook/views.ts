@@ -2,6 +2,8 @@ import type { Locale, WorkItemOutcome } from "@rabaed/domain";
 import type { WorkItemBoardLabels, WorkItemViewSwitchLabels } from "../components/views/work-item-board.tsx";
 import type { WorkItemListLabels } from "../components/views/work-item-list.tsx";
 import type { ProjectCardsLabels } from "../components/views/project-cards.tsx";
+import type { ActivityFeedPanelLabels } from "../components/views/activity-feed-panel.tsx";
+import type { ProjectDashboardLabels } from "../components/views/project-dashboard.tsx";
 
 // Story copy for the views: the labels the app passes from its messages
 // (apps/web/messages), in English and Arabic.
@@ -163,4 +165,72 @@ export const workItemBoardLabels: Record<Locale, WorkItemBoardLabels> = {
 export const viewSwitchLabels: Record<Locale, WorkItemViewSwitchLabels> = {
   en: { view: "View", list: "List", kanban: "Kanban" },
   ar: { view: "طريقة العرض", list: "قائمة", kanban: "كانبان" },
+};
+
+export const projectDashboardLabels: Record<Locale, ProjectDashboardLabels> = {
+  en: {
+    items: (count) => `${count} items`,
+    inPreparation: "In preparation",
+    open: "Open",
+    closed: "Closed",
+    empty: "No Work Item Types on this Project yet.",
+    codeC: "Code C",
+    buckets: workItemListLabels.en.buckets,
+    codeCStates: workItemListLabels.en.codeCStates,
+    approved: { review_code: "Approved (A+B)", inspection_result: "Passed, with or without Comments", none: "Approved" },
+  },
+  ar: {
+    items: (count) => `عدد العناصر: ${count}`,
+    inPreparation: "قيد الإعداد",
+    open: "مفتوحة",
+    closed: "مغلقة",
+    empty: "لا توجد أنواع عناصر عمل في هذا المشروع بعد.",
+    codeC: "الرمز C",
+    buckets: workItemListLabels.ar.buckets,
+    codeCStates: workItemListLabels.ar.codeCStates,
+    approved: { review_code: "المعتمد (A+B)", inspection_result: "الناجح، مع ملاحظات أو بدونها", none: "المعتمد" },
+  },
+};
+
+export const activityFeedPanelLabels: Record<Locale, ActivityFeedPanelLabels> = {
+  en: {
+    title: "Activity Feed",
+    module: "Module",
+    type: "Type",
+    all: "All",
+    mine: "Only items I'm on",
+    viewAll: "View all",
+    loadMore: "Load more",
+    loading: "Loading…",
+    empty: "Nothing has happened on the items you can see yet.",
+    internal: "Only your Company sees this",
+    noNumber: "No number yet",
+    claimed: "claimed",
+    released: "released to the pool",
+    assigned: "assigned",
+    internalNote: "wrote an Internal Note with",
+    recommended: "recommended a Code on",
+    cancelled: "cancelled",
+    updated: "updated",
+  },
+  ar: {
+    title: "النشاط",
+    module: "الوحدة",
+    type: "النوع",
+    all: "الكل",
+    mine: "العناصر التي أشارك فيها فقط",
+    viewAll: "عرض الكل",
+    loadMore: "تحميل المزيد",
+    loading: "جارٍ التحميل…",
+    empty: "لم يحدث شيء بعد على العناصر التي يمكنك رؤيتها.",
+    internal: "لا يراه إلا شركتك",
+    noNumber: "بلا رقم بعد",
+    claimed: "استلم",
+    released: "أعاد إلى المجموعة",
+    assigned: "أسند",
+    internalNote: "كتب ملاحظة داخلية مع",
+    recommended: "أوصى برمز على",
+    cancelled: "ألغى",
+    updated: "حدّث",
+  },
 };

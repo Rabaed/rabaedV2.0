@@ -3,6 +3,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, within } from "storybook/test";
 import { phone } from "../../storybook/form.ts";
 import { storyLocale, storyText } from "../../storybook/locale.ts";
+import { projectDashboardLabels } from "../../storybook/views.ts";
 import { ProjectDashboard } from "./project-dashboard.tsx";
 
 // The Dashboard's Type cards (RP-351, spec RP-344): one card per Work Item Type
@@ -128,8 +129,8 @@ const hrefFor = (query: Parameters<typeof workItemSearchParams>[0]) => `?${workI
 const meta = {
   title: "Views/ProjectDashboard",
   component: ProjectDashboard,
-  args: { dashboard: contractor, locale: "en", hrefFor },
-  render: (args, context) => <ProjectDashboard {...args} locale={storyLocale(context)} />,
+  args: { dashboard: contractor, locale: "en", labels: projectDashboardLabels.en, hrefFor },
+  render: (args, context) => <ProjectDashboard {...args} locale={storyLocale(context)} labels={projectDashboardLabels[storyLocale(context)]} />,
 } satisfies Meta<typeof ProjectDashboard>;
 
 export default meta;

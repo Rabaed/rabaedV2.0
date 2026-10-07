@@ -3,6 +3,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, fn, userEvent, within } from "storybook/test";
 import { expectTouchTarget, phone } from "../../storybook/form.ts";
 import { storyLocale, storyText } from "../../storybook/locale.ts";
+import { notificationSettingsLabels } from "../../storybook/notifications.ts";
 import { NotificationSettingsForm, type NotificationSettingsFormProps } from "./notification-settings.tsx";
 
 // The Member's notification settings (RP-355, spec RP-344; design §7). Story data only.
@@ -36,8 +37,8 @@ const ok = async () => ({ ok: true as const });
 const meta = {
   title: "Notifications/NotificationSettingsForm",
   component: NotificationSettingsForm,
-  args: { locale: "en", value, onSave: fn<NotificationSettingsFormProps["onSave"]>(ok), onMute: fn<NotificationSettingsFormProps["onMute"]>(ok) },
-  render: (args, context) => <NotificationSettingsForm {...args} locale={storyLocale(context)} />,
+  args: { locale: "en", labels: notificationSettingsLabels.en, value, onSave: fn<NotificationSettingsFormProps["onSave"]>(ok), onMute: fn<NotificationSettingsFormProps["onMute"]>(ok) },
+  render: (args, context) => <NotificationSettingsForm {...args} locale={storyLocale(context)} labels={notificationSettingsLabels[storyLocale(context)]} />,
   decorators: [(Story) => <main className="max-w-3xl p-4">{Story()}</main>],
 } satisfies Meta<typeof NotificationSettingsForm>;
 

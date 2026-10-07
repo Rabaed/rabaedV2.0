@@ -120,7 +120,7 @@ beforeAll(async () => {
   const c2ParticipantId = await api.addParticipant(c1.caller, at.projectId, c2.company, "contractor");
   await ok(c1.caller.request("PUT", `/v1/participants/${c2ParticipantId}/visibility`, { trade: all, location: all }));
   c2Engineer = await projectMember(api, c2, c2ParticipantId, ["engineer"]);
-  c1Narrowed = await projectMember(api, c1, at.c1ParticipantId, ["engineer"], only(at.mechanical));
+  c1Narrowed = await projectMember(api, c1, at.c1ParticipantId, ["engineer"], { trade: only(at.mechanical) });
   // C1's Authorized Person (a Project Member, as its creator) sees all of it.
   await ok(c1.caller.request("PUT", `/v1/participants/${at.c1ParticipantId}/members/${c1.company.authorizedPerson.id}/visibility`, { trade: all, location: all }));
   // Anything earlier tests left in the outbox is not ours to judge.

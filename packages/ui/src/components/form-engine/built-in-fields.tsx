@@ -1,6 +1,6 @@
 "use client";
 
-import { scopesFittingTrade, type Locale, type ScopeChoice } from "@rabaed/domain";
+import { scopesFittingTrade, type ScopeChoice } from "@rabaed/domain";
 import { useId } from "react";
 import { Checkbox } from "../form/checkbox.tsx";
 import { useFieldControl, type FieldControlProps } from "../form/field.tsx";
@@ -25,29 +25,25 @@ export type BuiltInChoices = {
 
 export const noChoices: BuiltInChoices = { trades: [], locations: [], scopes: [] };
 
-/* eslint-disable rabaed/no-ui-translations -- existing labels, still to move to the app's messages (RP-362 retro) */
-const copy = {
-  en: { choose: "Choose…", chooseTradeFirst: "Choose a Trade first.", noScopes: "This Trade has no Scopes." },
-  ar: { choose: "اختر…", chooseTradeFirst: "اختر التخصص أولًا.", noScopes: "لا توجد نطاقات لهذا التخصص." },
-} satisfies Record<Locale, unknown>;
-/* eslint-enable rabaed/no-ui-translations */
+/** The Built-in Fields' words, from the app's messages. */
+export type BuiltInFieldLabels = { choose: string; chooseTradeFirst: string; noScopes: string };
 
 /** Trade or Location: one of the values offered. */
 export function BuiltInSelect({
   value,
   choices,
-  locale,
+  labels,
   onChange,
 }: {
   value: string;
   choices: readonly BuiltInChoice[];
-  locale: Locale;
+  labels: BuiltInFieldLabels;
   onChange: (value: string) => void;
 }) {
   return (
     <Select
       value={value}
-      placeholder={copy[locale].choose}
+      placeholder={labels.choose}
       options={choices.map((c) => ({ value: c.id, label: c.label }))}
       onValueChange={onChange}
     />
@@ -63,13 +59,13 @@ export function ScopesChecklist({
   chosen,
   tradeId,
   scopes,
-  locale,
+  labels,
   onChange,
 }: {
   chosen: readonly string[];
   tradeId: string;
   scopes: BuiltInChoices["scopes"];
-  locale: Locale;
+  labels: BuiltInFieldLabels;
   onChange: (value: string[]) => void;
 }) {
   const generated = useId();
@@ -77,7 +73,7 @@ export function ScopesChecklist({
   if (!tradeId) {
     return (
       <p id={id} className="text-sm text-muted">
-        {copy[locale].chooseTradeFirst}
+        {labels.chooseTradeFirst}
       </p>
     );
   }
@@ -85,7 +81,7 @@ export function ScopesChecklist({
   if (ofTrade.length === 0) {
     return (
       <p id={id} className="text-sm text-muted">
-        {copy[locale].noScopes}
+        {labels.noScopes}
       </p>
     );
   }

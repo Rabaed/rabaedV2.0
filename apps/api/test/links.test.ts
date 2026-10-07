@@ -16,7 +16,7 @@ import { linksChangeField, type WorkItemHistory, type WorkItemLinks } from "@rab
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestApi, expectHidden, type Caller } from "./support/harness.ts";
-import { all, bilingual, buildTower, draft, inInternalReview, ok, only, projectMember, submitted, type Company, type Tower } from "./support/tower.ts";
+import { all, bilingual, buildTower, draft, inInternalReview, ok, only, projectMember, submitted, take, type Company, type Tower } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
 const migrator = createDb(testDatabaseUrls().migrator, { max: 1 });
@@ -33,9 +33,6 @@ let elsewhere: Tower; // A second Project of C1's and K1's.
 let c2Engineer: Caller;
 let c2Pm: Caller;
 let k1Mechanical: Caller; // A K1 manager covering Mechanical only.
-
-const take = (by: Caller, id: string, transition: string) =>
-  ok(by.post(`/v1/work-items/${id}/transitions`, { transition, idempotencyKey: randomUUID() }));
 
 const linksUrl = (id: string) => `/v1/work-items/${id}/links`;
 const addLink = (by: Caller, from: string, to: string) => by.post(linksUrl(from), { workItemId: to });
@@ -77,7 +74,7 @@ beforeAll(async () => {
   const k1ParticipantId = (await tower.k1Manager.get(`/v1/projects/${tower.projectId}/participants`))
     .json()
     .participants.find((p: { isOwnCompany: boolean }) => p.isOwnCompany).id;
-  k1Mechanical = await projectMember(api, k1, k1ParticipantId, ["manager"], only(tower.mechanical));
+  k1Mechanical = await projectMember(api, k1, k1ParticipantId, ["manager"], { trade: only(tower.mechanical) });
 
   const { c1Engineer, c1Pm, k1Manager } = tower;
   item.c1Draft = await draft(tower, c1Engineer, "Cable trays, draft");

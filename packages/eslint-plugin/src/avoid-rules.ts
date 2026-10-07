@@ -122,6 +122,7 @@ const allowedMessages: Record<string, string> = {
   "members.actions": "the column of a Member's row buttons (Deactivate, Reactivate), not Transitions",
   "scopes.invalid": "a Scope's name in both languages, not a Work Item's Subject",
   "workItemViews.viewSwitch.list": "the List view beside the Kanban (spec RP-344), not an Option List",
+  "numbering.counters.state": "a counter's state column (In use, Starts at …), not a Stage or a Step",
 };
 
 const glossary = readFileSync(glossaryUrl, "utf8");

@@ -26,64 +26,31 @@ import { Switch } from "../form/switch.tsx";
 // own schedule, never in the bell. Every change applies at once; a refused one is
 // undone and says so. Presentational: the page does the calls.
 
-/* eslint-disable rabaed/no-ui-translations -- existing labels, still to move to the app's messages (RP-362 retro) */
-const copy = {
-  en: {
-    email: "Email",
-    pauseAll: "Pause all email",
-    pauseHelp: "Stops every email until you turn it back on. Notifications still reach your bell.",
-    language: "Language of emails",
-    projects: "Projects",
-    projectsHelp: "A muted Project sends you no notifications or emails. Items waiting on you still show as yours.",
-    mute: "Mute",
-    noProjects: "You are not on any Project yet.",
-    groups: "Notifications",
-    inApp: "In-app",
-    emailChoice: { off: "Off", immediate: "Immediately", digest: "Daily digest" },
-    group: {
-      step_reached: "Step reached me or my pool",
-      watched: "Items I watch",
-      sent_back: "Sent Back to my Participant",
-      vacancy: "Vacancy in my Company",
-      weekly_report: "Weekly Step Age report",
-    },
-    weeklyHelp: "Emailed on Sunday mornings.",
-    outcomes: "Outcomes that notify me",
-    outcomeGroups: { review_code: "Review Codes", inspection_result: "Inspection Results", other: "Other outcomes" },
-    refusals: { not_found: "That Project is no longer available to you.", unavailable: "That didn't save. Try again." },
-  },
-  ar: {
-    email: "البريد الإلكتروني",
-    pauseAll: "إيقاف كل الرسائل مؤقتًا",
-    pauseHelp: "يوقف كل الرسائل حتى تعيد تشغيلها. تبقى الإشعارات تصلك في الجرس.",
-    language: "لغة الرسائل",
-    projects: "المشاريع",
-    projectsHelp: "المشروع المكتوم لا يرسل إليك إشعارات ولا رسائل. وتبقى البنود التي تنتظرك ظاهرة لك.",
-    mute: "كتم",
-    noProjects: "لست في أي مشروع بعد.",
-    groups: "الإشعارات",
-    inApp: "داخل التطبيق",
-    emailChoice: { off: "إيقاف", immediate: "فورًا", digest: "ملخص يومي" },
-    group: {
-      step_reached: "وصلتني خطوة أو وصلت مجموعتي",
-      watched: "البنود التي أراقبها",
-      sent_back: "أُرجع إلى المشارك الذي أنتمي إليه",
-      vacancy: "شاغر في شركتي",
-      weekly_report: "تقرير عمر الخطوة الأسبوعي",
-    },
-    weeklyHelp: "يُرسل بالبريد صباح كل أحد.",
-    outcomes: "النتائج التي تُشعرني",
-    outcomeGroups: { review_code: "رموز المراجعة", inspection_result: "نتائج الفحص", other: "نتائج أخرى" },
-    refusals: { not_found: "لم يعد هذا المشروع متاحًا لك.", unavailable: "لم يُحفظ ذلك. حاول مرة أخرى." },
-  },
-} satisfies Record<Locale, unknown>;
-/* eslint-enable rabaed/no-ui-translations */
+/** The form's words, from the app's messages. The outcomes' own names come from `watchOutcomeNames` in `@rabaed/domain`. */
+export type NotificationSettingsLabels = {
+  email: string;
+  pauseAll: string;
+  pauseHelp: string;
+  language: string;
+  projects: string;
+  projectsHelp: string;
+  mute: string;
+  noProjects: string;
+  groups: string;
+  inApp: string;
+  emailChoice: Record<NotificationEmailChoice, string>;
+  group: Record<NotificationGroup, string>;
+  weeklyHelp: string;
+  outcomes: string;
+  outcomeGroups: { review_code: string; inspection_result: string; other: string };
+  refusals: { not_found: string; unavailable: string };
+};
 
 // Each language named in itself, as language pickers do.
 // eslint-disable-next-line rabaed/no-ui-translations -- a documented exception in packages/ui/README.md (language names, each in its own language, as in MemberMenu)
 const languageNames: Record<Locale, string> = { en: "English", ar: "العربية" };
 
-const outcomeGroups: Record<keyof (typeof copy)["en"]["outcomeGroups"], readonly WatchOutcome[]> = {
+const outcomeGroups: Record<keyof NotificationSettingsLabels["outcomeGroups"], readonly WatchOutcome[]> = {
   review_code: ["A", "B", "C", "D"],
   inspection_result: ["passed", "passed_with_comments", "failed"],
   other: ["approved", "rejected", "cancelled"],
@@ -97,12 +64,13 @@ function outcomeLabel(outcome: WatchOutcome, locale: Locale): string {
   return reviewCodes.includes(outcome) ? `${outcome} · ${name}` : name;
 }
 
-type Refusal = keyof (typeof copy)["en"]["refusals"];
+type Refusal = keyof NotificationSettingsLabels["refusals"];
 /** A save as the page calls it: a refusal by the API's error code. */
 export type SettingsCall = () => Promise<{ ok: true } | { ok: false; reason: string }>;
 
 export type NotificationSettingsFormProps = {
   locale: Locale;
+  labels: NotificationSettingsLabels;
   /** The settings as the API answered. */
   value: NotificationSettingsView;
   /** Saves every setting at once. */
@@ -111,8 +79,7 @@ export type NotificationSettingsFormProps = {
   onMute: (projectId: string, muted: boolean) => ReturnType<SettingsCall>;
 };
 
-export function NotificationSettingsForm({ locale, value, onSave, onMute }: NotificationSettingsFormProps) {
-  const t = copy[locale];
+export function NotificationSettingsForm({ locale, labels, value, onSave, onMute }: NotificationSettingsFormProps) {
   const [saved, setSaved] = useState<UpdateNotificationSettingsRequest>({
     settings: value.settings,
     emailPaused: value.emailPaused,
@@ -121,7 +88,7 @@ export function NotificationSettingsForm({ locale, value, onSave, onMute }: Noti
   const [projects, setProjects] = useState(value.projects);
   const [error, setError] = useState<string | null>(null);
 
-  const refused = (reason: string) => setError(t.refusals[reason as Refusal] ?? t.refusals.unavailable);
+  const refused = (reason: string) => setError(labels.refusals[reason as Refusal] ?? labels.refusals.unavailable);
 
   async function change(next: UpdateNotificationSettingsRequest) {
     const before = saved;
@@ -161,7 +128,7 @@ export function NotificationSettingsForm({ locale, value, onSave, onMute }: Noti
   const groups = notificationGroups.filter((g) => g !== "weekly_report" || value.receivesWeeklyReport);
   const emailOptions = (["off", "immediate", "digest"] as const satisfies readonly NotificationEmailChoice[]).map((choice) => ({
     value: choice,
-    label: t.emailChoice[choice],
+    label: labels.emailChoice[choice],
   }));
 
   return (
@@ -174,12 +141,12 @@ export function NotificationSettingsForm({ locale, value, onSave, onMute }: Noti
 
       <section aria-labelledby="notification-email" className="space-y-4">
         <h2 id="notification-email" className="text-h6 font-semibold">
-          {t.email}
+          {labels.email}
         </h2>
-        <Field label={t.pauseAll} help={t.pauseHelp} layout="inline">
+        <Field label={labels.pauseAll} help={labels.pauseHelp} layout="inline">
           <Switch checked={saved.emailPaused} onCheckedChange={(emailPaused) => void change({ ...saved, emailPaused })} />
         </Field>
-        <Field label={t.language} group>
+        <Field label={labels.language} group>
           <SegmentedControl
             value={saved.preferredLanguage}
             onValueChange={(language) => void change({ ...saved, preferredLanguage: language as Locale })}
@@ -190,17 +157,17 @@ export function NotificationSettingsForm({ locale, value, onSave, onMute }: Noti
 
       <section aria-labelledby="notification-groups" className="space-y-4">
         <h2 id="notification-groups" className="text-h6 font-semibold">
-          {t.groups}
+          {labels.groups}
         </h2>
         <ul className="divide-y divide-border border-y border-border">
           {groups.map((group) => {
             const setting = saved.settings[group];
             return (
               <li key={group} className="space-y-3 py-4" data-group={group}>
-                <h3 className="font-medium">{t.group[group]}</h3>
+                <h3 className="font-medium">{labels.group[group]}</h3>
                 {group === "weekly_report" ? (
                   // An email only, on its own schedule: on or off.
-                  <Field label={t.email} help={t.weeklyHelp} layout="inline">
+                  <Field label={labels.email} help={labels.weeklyHelp} layout="inline">
                     <Switch
                       checked={setting.email !== "off"}
                       aria-describedby={`group-${group}`}
@@ -209,14 +176,14 @@ export function NotificationSettingsForm({ locale, value, onSave, onMute }: Noti
                   </Field>
                 ) : (
                   <div className="flex flex-wrap items-center gap-x-8 gap-y-3">
-                    <Field label={t.inApp} layout="inline">
+                    <Field label={labels.inApp} layout="inline">
                       <Switch
                         checked={setting.inApp}
                         aria-describedby={`group-${group}`}
                         onCheckedChange={(inApp) => void setGroup(group, { inApp })}
                       />
                     </Field>
-                    <Field label={t.email} group>
+                    <Field label={labels.email} group>
                       <SegmentedControl
                         value={setting.email}
                         aria-describedby={`group-${group}`}
@@ -228,14 +195,14 @@ export function NotificationSettingsForm({ locale, value, onSave, onMute }: Noti
                 )}
                 {/* Names the row's controls for a screen reader: "In-app" alone doesn't say which group. */}
                 <span id={`group-${group}`} hidden>
-                  {t.group[group]}
+                  {labels.group[group]}
                 </span>
                 {group === "watched" && (
                   <details className="group/outcomes">
-                    <summary className="cursor-pointer text-sm font-medium text-primary pointer-coarse:min-h-11 pointer-coarse:py-3">{t.outcomes}</summary>
+                    <summary className="cursor-pointer text-sm font-medium text-primary pointer-coarse:min-h-11 pointer-coarse:py-3">{labels.outcomes}</summary>
                     <div className="mt-3 grid gap-6 sm:grid-cols-3">
                       {Object.entries(outcomeGroups).map(([key, outcomes]) => (
-                        <Field key={key} label={t.outcomeGroups[key as keyof typeof outcomeGroups]} group>
+                        <Field key={key} label={labels.outcomeGroups[key as keyof typeof outcomeGroups]} group>
                           <CheckboxGroup
                             options={outcomes.map((o) => ({ value: o, label: outcomeLabel(o, locale) }))}
                             value={saved.settings.watched.outcomes.filter((o) => outcomes.includes(o))}
@@ -258,12 +225,12 @@ export function NotificationSettingsForm({ locale, value, onSave, onMute }: Noti
       <section aria-labelledby="notification-projects" className="space-y-4">
         <div className="space-y-1">
           <h2 id="notification-projects" className="text-h6 font-semibold">
-            {t.projects}
+            {labels.projects}
           </h2>
-          <p className="text-sm text-muted">{t.projectsHelp}</p>
+          <p className="text-sm text-muted">{labels.projectsHelp}</p>
         </div>
         {projects.length === 0 ? (
-          <p className="text-muted">{t.noProjects}</p>
+          <p className="text-muted">{labels.noProjects}</p>
         ) : (
           <ul className="divide-y divide-border border-y border-border">
             {projects.map((project) => (
@@ -276,7 +243,7 @@ export function NotificationSettingsForm({ locale, value, onSave, onMute }: Noti
                     {project.code}
                   </span>
                 </span>
-                <Field label={t.mute} layout="inline">
+                <Field label={labels.mute} layout="inline">
                   <Switch
                     checked={project.muted}
                     aria-describedby={`project-${project.id}`}

@@ -145,7 +145,21 @@ export interface TestApi {
   addProjectMember(by: Caller, participantId: string, memberId: string): Promise<void>;
   /** Signs in; `locale` is the browser's language, as the web app sends it. */
   signIn(email: string, password: string, locale?: string): Promise<Caller>;
-  /** Moves the API's clock forward. */
+  /**
+   * Moves the API's clock forward by `ms` and signs every Member this api signed in
+   * (`member`, `authorizedPerson`, `projectCreator`, `acceptInvitation`, `signIn`)
+   * in again, each `Caller` keeping working through `useSessionToken`. Use this,
+   * not `advanceClock`. Upload Documents before calling it: a presigned upload
+   * signed in the future is rejected by the file store.
+   */
+  later(ms: number): Promise<void>;
+  /** The API's clock now. */
+  now(): Date;
+  /**
+   * Moves the API's clock forward and nothing else: every session ends (the 12-hour
+   * TTL), and so does the signature of a presigned upload. Only for a test that
+   * wants sessions to expire; otherwise use `later`.
+   */
   advanceClock(ms: number): void;
   close(): Promise<void>;
 }
@@ -190,6 +204,11 @@ function callerFor(app: FastifyInstance): Caller {
   };
 }
 
+/** The body of a sign-in; `locale` is left out when the browser sent none. */
+function credentialsFor(email: string, password: string, locale?: string) {
+  return { email, password, ...(locale ? { locale } : {}) };
+}
+
 function expectStatus(res: LightMyRequestResponse, status: number, what: string) {
   if (res.statusCode !== status) throw new Error(`${what}: expected ${status}, got ${res.statusCode} ${res.body}`);
 }
@@ -218,6 +237,11 @@ export async function createTestApi(options: { databaseUrl?: string; files?: boo
   let engineerId: string | undefined;
   const theEngineer = async () => (engineerId ??= await api.engineer());
 
+  // Every Member signed in through this api, to sign in again when the clock moves.
+  const signedIn = new Map<Caller, { email: string; password: string; locale?: string }>();
+  // The email an invitation was sent to, learned when onboarding or inviting.
+  const invitedEmails = new Map<string, string>();
+
   const api: TestApi = {
     anonymous: () => callerFor(app),
 
@@ -240,6 +264,7 @@ export async function createTestApi(options: { databaseUrl?: string; files?: boo
       };
       const result = await onboardCompany(adminDb, await theEngineer(), body, now(), testConfig.invitationTtlMs);
       if (!result.ok) throw new Error(`onboard company: duplicate ${result.conflict}`);
+      invitedEmails.set(result.invitation.token, body.authorizedPerson.email);
       return {
         companyId: result.companyId,
         authorizedPerson: { id: result.authorizedPersonId, email: body.authorizedPerson.email },
@@ -260,6 +285,9 @@ export async function createTestApi(options: { databaseUrl?: string; files?: boo
     async acceptInvitation(token, password = DEFAULT_PASSWORD) {
       const caller = callerFor(app);
       expectStatus(await caller.post("/v1/invitations/accept", { token, password }), 204, "accept invitation");
+      // A token this api did not issue has no known email: that caller is not signed in again by `later`.
+      const email = invitedEmails.get(token);
+      if (email) signedIn.set(caller, { email, password });
       return caller;
     },
 
@@ -278,6 +306,7 @@ export async function createTestApi(options: { databaseUrl?: string; files?: boo
       const res = await by.post("/v1/members", body);
       expectStatus(res, 201, "invite member");
       const json = res.json();
+      invitedEmails.set(json.invitation.token, body.email);
       return { id: json.memberId, email: body.email, invitationToken: json.invitation.token };
     },
 
@@ -322,9 +351,22 @@ export async function createTestApi(options: { databaseUrl?: string; files?: boo
 
     async signIn(email, password, locale) {
       const caller = callerFor(app);
-      expectStatus(await caller.post("/v1/session", { email, password, ...(locale ? { locale } : {}) }), 204, "sign in");
+      const credentials = credentialsFor(email, password, locale);
+      expectStatus(await caller.post("/v1/session", credentials), 204, "sign in");
+      signedIn.set(caller, credentials);
       return caller;
     },
+
+    async later(ms) {
+      offset += ms;
+      for (const [caller, { email, password, locale }] of signedIn) {
+        const again = callerFor(app);
+        expectStatus(await again.post("/v1/session", credentialsFor(email, password, locale)), 204, "sign in again");
+        caller.useSessionToken(again.sessionToken);
+      }
+    },
+
+    now,
 
     advanceClock(ms) {
       offset += ms;

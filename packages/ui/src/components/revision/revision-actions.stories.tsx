@@ -1,35 +1,23 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, fn, screen, userEvent, waitFor, within } from "storybook/test";
 import { expectTouchTarget, phone } from "../../storybook/form.ts";
-import { storyLocale, storyText } from "../../storybook/locale.ts";
+import { storyLocale } from "../../storybook/locale.ts";
 import { overlay } from "../../storybook/overlay.ts";
+import { revisionActionsLabels } from "../../storybook/revision.ts";
 import { RevisionActions, type RevisionCall } from "./revision-actions.tsx";
 
 // Create Revision and Discard Revision on the item page (RP-316, spec RP-311):
 // each only when the API offers it. Story data only.
-const copy = {
-  section: { en: "Revision", ar: "المراجعة" },
-  create: { en: "Create Revision", ar: "إنشاء مراجعة" },
-  discard: { en: "Discard Revision", ar: "حذف مسودة المراجعة" },
-  discardTitle: { en: "Discard this Revision?", ar: "حذف مسودة هذه المراجعة؟" },
-  cancel: { en: "Cancel", ar: "إلغاء" },
-  refused: {
-    en: "A Revision can't be created from this item now. Reload the page to see why.",
-    ar: "لا يمكن إنشاء مراجعة من هذا البند الآن. أعد تحميل الصفحة لمعرفة السبب.",
-  },
-  notDiscardable: {
-    en: "This Revision has left Draft, so it can no longer be discarded.",
-    ar: "غادرت هذه المراجعة مرحلة المسودة، فلم يعد حذفها ممكنًا.",
-  },
-};
+
+const labelsOf = (context: { globals: Record<string, unknown> }) => revisionActionsLabels[storyLocale(context)];
 
 const ok: RevisionCall = async () => ({ ok: true });
 
 const meta = {
   title: "Work Items/RevisionActions",
   component: RevisionActions,
-  args: { locale: "en", canCreate: false, canDiscard: false, onCreate: fn<RevisionCall>(ok), onDiscard: fn<RevisionCall>(ok) },
-  render: (args, context) => <RevisionActions {...args} locale={storyLocale(context)} />,
+  args: { labels: revisionActionsLabels.en, canCreate: false, canDiscard: false, onCreate: fn<RevisionCall>(ok), onDiscard: fn<RevisionCall>(ok) },
+  render: (args, context) => <RevisionActions {...args} labels={labelsOf(context)} />,
   decorators: [(Story) => <div className="max-w-3xl">{Story()}</div>],
 } satisfies Meta<typeof RevisionActions>;
 
@@ -41,10 +29,10 @@ export const CreateRevision: Story = {
   args: { canCreate: true },
   play: async (context) => {
     const { canvas, args } = context;
-    const section = canvas.getByRole("region", { name: storyText(context, copy.section) });
-    await userEvent.click(within(section).getByRole("button", { name: storyText(context, copy.create) }));
+    const section = canvas.getByRole("region", { name: labelsOf(context).section });
+    await userEvent.click(within(section).getByRole("button", { name: labelsOf(context).create }));
     await expect(args.onCreate).toHaveBeenCalledOnce();
-    await expect(canvas.queryByRole("button", { name: storyText(context, copy.discard) })).toBeNull();
+    await expect(canvas.queryByRole("button", { name: labelsOf(context).discard })).toBeNull();
   },
 };
 
@@ -53,8 +41,8 @@ export const CreateRefused: Story = {
   args: { canCreate: true, onCreate: fn(async () => ({ ok: false as const, reason: "revision_not_allowed" })) },
   play: async (context) => {
     const { canvas } = context;
-    await userEvent.click(canvas.getByRole("button", { name: storyText(context, copy.create) }));
-    await expect(await canvas.findByRole("alert")).toHaveTextContent(storyText(context, copy.refused));
+    await userEvent.click(canvas.getByRole("button", { name: labelsOf(context).create }));
+    await expect(await canvas.findByRole("alert")).toHaveTextContent(labelsOf(context).refusals.revision_not_allowed);
   },
 };
 
@@ -64,11 +52,11 @@ export const DiscardRevision: Story = {
   args: { canDiscard: true },
   play: async (context) => {
     const { canvas, args } = context;
-    await userEvent.click(canvas.getByRole("button", { name: storyText(context, copy.discard) }));
-    const dialog = await screen.findByRole("dialog", { name: storyText(context, copy.discardTitle) });
+    await userEvent.click(canvas.getByRole("button", { name: labelsOf(context).discard }));
+    const dialog = await screen.findByRole("dialog", { name: labelsOf(context).discardTitle });
     await expect(args.onDiscard).not.toHaveBeenCalled();
-    await expect(within(dialog).getByRole("button", { name: storyText(context, copy.cancel) })).toBeVisible();
-    await expect(within(dialog).getByRole("button", { name: storyText(context, copy.discard) })).toBeVisible();
+    await expect(within(dialog).getByRole("button", { name: labelsOf(context).cancel })).toBeVisible();
+    await expect(within(dialog).getByRole("button", { name: labelsOf(context).discard })).toBeVisible();
   },
 };
 
@@ -77,9 +65,9 @@ export const DiscardConfirmed: Story = {
   args: { canDiscard: true },
   play: async (context) => {
     const { canvas, args } = context;
-    await userEvent.click(canvas.getByRole("button", { name: storyText(context, copy.discard) }));
-    const dialog = await screen.findByRole("dialog", { name: storyText(context, copy.discardTitle) });
-    await userEvent.click(within(dialog).getByRole("button", { name: storyText(context, copy.discard) }));
+    await userEvent.click(canvas.getByRole("button", { name: labelsOf(context).discard }));
+    const dialog = await screen.findByRole("dialog", { name: labelsOf(context).discardTitle });
+    await userEvent.click(within(dialog).getByRole("button", { name: labelsOf(context).discard }));
     await expect(args.onDiscard).toHaveBeenCalledOnce();
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   },
@@ -90,17 +78,17 @@ export const DiscardRefused: Story = {
   args: { canDiscard: true, onDiscard: fn(async () => ({ ok: false as const, reason: "not_discardable" })) },
   play: async (context) => {
     const { canvas } = context;
-    await userEvent.click(canvas.getByRole("button", { name: storyText(context, copy.discard) }));
-    const dialog = await screen.findByRole("dialog", { name: storyText(context, copy.discardTitle) });
-    await userEvent.click(within(dialog).getByRole("button", { name: storyText(context, copy.discard) }));
-    await expect(await within(dialog).findByRole("alert")).toHaveTextContent(storyText(context, copy.notDiscardable));
+    await userEvent.click(canvas.getByRole("button", { name: labelsOf(context).discard }));
+    const dialog = await screen.findByRole("dialog", { name: labelsOf(context).discardTitle });
+    await userEvent.click(within(dialog).getByRole("button", { name: labelsOf(context).discard }));
+    await expect(await within(dialog).findByRole("alert")).toHaveTextContent(labelsOf(context).refusals.not_discardable);
   },
 };
 
 /** Nothing offered (another Company, or a Member the Draft Step doesn't allow): nothing shown. */
 export const NothingOffered: Story = {
   play: async (context) => {
-    await expect(context.canvas.queryByRole("region", { name: storyText(context, copy.section) })).toBeNull();
+    await expect(context.canvas.queryByRole("region", { name: labelsOf(context).section })).toBeNull();
     await expect(context.canvas.queryAllByRole("button")).toHaveLength(0);
   },
 };
@@ -110,6 +98,6 @@ export const Phone: Story = {
   parameters: phone,
   args: { canCreate: true },
   play: async (context) => {
-    await expectTouchTarget(context.canvas.getByRole("button", { name: storyText(context, copy.create) }));
+    await expectTouchTarget(context.canvas.getByRole("button", { name: labelsOf(context).create }));
   },
 };

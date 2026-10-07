@@ -3,6 +3,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { useState } from "react";
 import { expect, userEvent } from "storybook/test";
 import { storyLocale, storyText } from "../../storybook/locale.ts";
+import { actionFormLabels } from "../../storybook/form-engine.ts";
 import { ActionForm } from "./action-form.tsx";
 
 // A Transition's pop-up (RP-300; form-engine.md §4 part 3): its Action Form, a
@@ -61,6 +62,7 @@ function Filling({ context, schema, initialErrors = [] }: { context: StoryContex
         errors={errors}
         internalNote={note}
         locale={storyLocale(context)}
+        labels={actionFormLabels[storyLocale(context)]}
         onChange={(changes) => setAnswers({ ...answers, ...changes })}
         onInternalNoteChange={setNote}
       />
@@ -72,7 +74,7 @@ function Filling({ context, schema, initialErrors = [] }: { context: StoryContex
 const meta = {
   title: "Form engine/ActionForm",
   component: ActionForm,
-  args: { schema: returnForm, answers: {}, internalNote: "", locale: "en", onChange: () => {}, onInternalNoteChange: () => {} },
+  args: { schema: returnForm, answers: {}, internalNote: "", locale: "en", labels: actionFormLabels.en, onChange: () => {}, onInternalNoteChange: () => {} },
   decorators: [(Story) => <div className="max-w-md">{Story()}</div>],
 } satisfies Meta<typeof ActionForm>;
 

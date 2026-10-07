@@ -1,8 +1,8 @@
 "use client";
 
 import type { CounterPreview, CounterStart, CounterStartRequest, CounterValues, Locale, NumberingCounter } from "@rabaed/domain";
-import { NumberingCounters, type ChoiceOption, type CounterCall } from "@rabaed/ui";
-import { useLocale } from "next-intl";
+import { NumberingCounters, type ChoiceOption, type CounterCall, type NumberingCountersLabels } from "@rabaed/ui";
+import { useLocale, useTranslations } from "next-intl";
 import { useCallback } from "react";
 import { useRouter } from "@/i18n/navigation";
 
@@ -28,6 +28,7 @@ export function NumberingCountersSection(props: {
 }) {
   const { projectId, ...lists } = props;
   const locale = useLocale() as Locale;
+  const t = useTranslations("numbering.counters");
   const router = useRouter();
   const base = `/api/v1/projects/${encodeURIComponent(projectId)}/numbering`;
 
@@ -57,5 +58,39 @@ export function NumberingCountersSection(props: {
     [base, router],
   );
 
-  return <NumberingCounters locale={locale} {...lists} preview={preview} onSetStart={onSetStart} />;
+  const labels: NumberingCountersLabels = {
+    title: t("title"),
+    intro: t("intro"),
+    counter: t("counter"),
+    lastNumber: t("lastNumber"),
+    state: t("state"),
+    none: t("none"),
+    inUse: t("inUse"),
+    startsAt: (n) => t("startsAt", { n }),
+    startTitle: t("startTitle"),
+    startIntro: t("startIntro"),
+    type: t("type"),
+    participant: t("participant"),
+    trade: t("trade"),
+    location: t("location"),
+    notCounted: t("notCounted"),
+    startingNumber: t("startingNumber"),
+    next: t("next"),
+    used: (n) => t("used", { n }),
+    save: t("save"),
+    saved: t("saved"),
+    refusals: {
+      participant_required: t("refusals.participant_required"),
+      trade_required: t("refusals.trade_required"),
+      location_required: t("refusals.location_required"),
+      value_not_found: t("refusals.value_not_found"),
+      type_not_found: t("refusals.type_not_found"),
+      counter_used: t("refusals.counter_used"),
+      project_closed: t("refusals.project_closed"),
+      not_found: t("refusals.not_found"),
+      invalid: t("refusals.invalid"),
+      unavailable: t("refusals.unavailable"),
+    },
+  };
+  return <NumberingCounters locale={locale} labels={labels} {...lists} preview={preview} onSetStart={onSetStart} />;
 }

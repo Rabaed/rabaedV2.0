@@ -3,8 +3,8 @@
 import type { LinkSearchResults, LinkTarget, Locale, WorkItemLink } from "@rabaed/domain";
 import { useId, type ElementType, type ReactNode } from "react";
 import { cn } from "../../lib/cn.ts";
-import { LinkSearch } from "./link-search.tsx";
-import { LinkedItemRow } from "./linked-item-row.tsx";
+import { LinkSearch, type LinkSearchLabels } from "./link-search.tsx";
+import { LinkedItemRow, type LinkedItemRowLabels } from "./linked-item-row.tsx";
 
 // The Links System Field, below the Form (form-engine.md part 2b; visibility.md
 // E1): every Link of the item, each the other item's Document Number and
@@ -15,24 +15,19 @@ import { LinkedItemRow } from "./linked-item-row.tsx";
 // listed under the question's label, and removed by changing its answer.
 // Presentational: the page passes the API's Links and does the adding and removing.
 
-/* eslint-disable rabaed/no-ui-translations -- existing labels, still to move to the app's messages (RP-362 retro) */
-const copy = {
-  en: {
-    title: "Links",
-    none: "No Links yet.",
-    remove: (number: string) => `Remove the Link to ${number}`,
-  },
-  ar: {
-    title: "الروابط",
-    none: "لا توجد روابط بعد.",
-    // The Document Number sits in a left-to-right isolate (\u2066, ended by \u2069).
-    remove: (number: string) => `إزالة الربط مع \u2066${number}\u2069`,
-  },
-} satisfies Record<Locale, unknown>;
-/* eslint-enable rabaed/no-ui-translations */
+/** The section's words, from the app's messages. */
+export type LinksSectionLabels = {
+  title: string;
+  none: string;
+  /** The remove button of a Link, naming its Document Number. */
+  remove: (number: string) => string;
+  item: LinkedItemRowLabels;
+  search: LinkSearchLabels;
+};
 
 export type LinksSectionProps = {
   locale: Locale;
+  labels: LinksSectionLabels;
   /** The item's Links, as the Links API returns them for the viewer. */
   links: readonly WorkItemLink[];
   /** Free Links may be added and removed now (the raiser's Company, until Submit). */
@@ -68,6 +63,7 @@ export type LinksSectionProps = {
  */
 export function LinksSection({
   locale,
+  labels: text,
   links,
   canChange,
   workItemId,
@@ -83,7 +79,6 @@ export function LinksSection({
   children,
   className,
 }: LinksSectionProps) {
-  const text = copy[locale];
   const titleId = useId();
   const free = links.filter((l) => l.fieldKey === null);
   const byQuestion = new Map<string, WorkItemLink[]>();
@@ -91,7 +86,7 @@ export function LinksSection({
   const row = (link: WorkItemLink) => (
     <LinkedItemRow
       key={link.id}
-      locale={locale}
+      labels={text.item}
       documentNumber={link.documentNumber}
       subject={link.subject}
       href={link.workItemId ? hrefFor(link.workItemId) : null}
@@ -126,6 +121,7 @@ export function LinksSection({
           // A fresh search once the picked item is linked, rather than results that no longer offer it.
           key={free.length}
           locale={locale}
+          labels={text.search}
           search={search}
           onPick={onAdd}
           exclude={[workItemId, ...free.flatMap((l) => (l.workItemId ? [l.workItemId] : []))]}

@@ -3,6 +3,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { useState } from "react";
 import { expect, screen, userEvent, waitFor } from "storybook/test";
 import { storyLocale, storyText } from "../../storybook/locale.ts";
+import { formRendererLabels } from "../../storybook/form-engine.ts";
 import { FormRenderer } from "./form-renderer.tsx";
 
 // Layout fields and conditions (RP-267). Story data only: real Forms are published by the database.
@@ -69,7 +70,7 @@ const copy = {
 const meta = {
   title: "Form engine/FormRenderer/Conditions and layout",
   component: FormRenderer,
-  args: { schema, answers: {}, mode: "edit", locale: "en" },
+  args: { schema, answers: {}, mode: "edit", locale: "en", labels: formRendererLabels.en },
   decorators: [(Story) => <div className="max-w-xl">{Story()}</div>],
 } satisfies Meta<typeof FormRenderer>;
 
@@ -92,6 +93,7 @@ export const Edit: Story = {
       <FormRenderer
         {...args}
         locale={storyLocale(context)}
+        labels={formRendererLabels[storyLocale(context)]}
         answers={values}
         errors={errors}
         onChange={(changes) => {
@@ -142,7 +144,7 @@ export const WithErrors: Story = {
       { key: "sample_reference", code: "required" },
     ],
   },
-  render: (args, context) => <FormRenderer {...args} locale={storyLocale(context)} />,
+  render: (args, context) => <FormRenderer {...args} locale={storyLocale(context)} labels={formRendererLabels[storyLocale(context)]} />,
   play: async (context) => {
     await expect(field(context, copy.details)).toHaveAccessibleDescription(storyText(context, copy.required));
     await expect(context.canvas.getAllByRole("link")).toHaveLength(1);
@@ -153,7 +155,7 @@ export const WithErrors: Story = {
 /** Read only: layout fields show, hidden fields and sections don't. */
 export const ReadOnly: Story = {
   args: { mode: "read", answers: { sample_provided: true, sample_reference: "S-1", lab_name: "SGS Jeddah", finish: "galvanised" } },
-  render: (args, context) => <FormRenderer {...args} locale={storyLocale(context)} />,
+  render: (args, context) => <FormRenderer {...args} locale={storyLocale(context)} labels={formRendererLabels[storyLocale(context)]} />,
   play: async (context) => {
     const { canvas } = context;
     await expect(canvas.getByRole("heading", { level: 4, name: storyText(context, copy.heading) })).toBeVisible();

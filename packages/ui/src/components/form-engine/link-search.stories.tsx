@@ -3,6 +3,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, fn, userEvent, waitFor, within } from "storybook/test";
 import { expectTouchTarget, phone } from "../../storybook/form.ts";
 import { storyLocale, storyText } from "../../storybook/locale.ts";
+import { linkSearchLabels } from "../../storybook/form-engine.ts";
 import { Field } from "../form/field.tsx";
 import { LinkSearch } from "./link-search.tsx";
 
@@ -58,7 +59,7 @@ const box = (canvas: ReturnType<typeof within>, context: Parameters<typeof story
 
 /** Before typing: the search box and a hint of what it searches. Nothing is listed yet. */
 export const Empty: Story = {
-  render: (args, context) => <LinkSearch locale={storyLocale(context)} search={searchOf(storyLocale(context))} onPick={args.onPick} debounceMs={0} />,
+  render: (args, context) => <LinkSearch locale={storyLocale(context)} labels={linkSearchLabels[storyLocale(context)]} search={searchOf(storyLocale(context))} onPick={args.onPick} debounceMs={0} />,
   play: async (context) => {
     const { canvas } = context;
     await expect(box(canvas, context)).toHaveValue("");
@@ -76,6 +77,7 @@ export const Results: Story = {
   render: (args, context) => (
     <LinkSearch
       locale={storyLocale(context)}
+      labels={linkSearchLabels[storyLocale(context)]}
       search={searchOf(storyLocale(context))}
       onPick={args.onPick}
       exclude={[targets(storyLocale(context))[1]!.id]}
@@ -101,7 +103,7 @@ export const Results: Story = {
 
 /** Nothing matches: says so, and that only Submitted items the Member can see are offered. */
 export const NoResults: Story = {
-  render: (args, context) => <LinkSearch locale={storyLocale(context)} search={searchOf(storyLocale(context))} onPick={args.onPick} debounceMs={0} />,
+  render: (args, context) => <LinkSearch locale={storyLocale(context)} labels={linkSearchLabels[storyLocale(context)]} search={searchOf(storyLocale(context))} onPick={args.onPick} debounceMs={0} />,
   play: async (context) => {
     const { canvas } = context;
     await userEvent.type(box(canvas, context), "XYZ");
@@ -113,7 +115,7 @@ export const NoResults: Story = {
 /** More than a page: "Show more" adds the next page under the first. */
 export const MorePages: Story = {
   render: (args, context) => (
-    <LinkSearch locale={storyLocale(context)} search={searchOf(storyLocale(context), 2)} onPick={args.onPick} debounceMs={0} />
+    <LinkSearch locale={storyLocale(context)} labels={linkSearchLabels[storyLocale(context)]} search={searchOf(storyLocale(context), 2)} onPick={args.onPick} debounceMs={0} />
   ),
   play: async (context) => {
     const { canvas } = context;
@@ -132,7 +134,7 @@ export const MorePages: Story = {
 export const InAField: Story = {
   render: (args, context) => (
     <Field label={storyText(context, copy.question)}>
-      <LinkSearch locale={storyLocale(context)} search={searchOf(storyLocale(context))} onPick={args.onPick} debounceMs={0} />
+      <LinkSearch locale={storyLocale(context)} labels={linkSearchLabels[storyLocale(context)]} search={searchOf(storyLocale(context))} onPick={args.onPick} debounceMs={0} />
     </Field>
   ),
   play: async (context) => {
@@ -144,7 +146,7 @@ export const InAField: Story = {
 /** At phone width: the box and every result are touch-sized. */
 export const Phone: Story = {
   parameters: phone,
-  render: (args, context) => <LinkSearch locale={storyLocale(context)} search={searchOf(storyLocale(context))} onPick={args.onPick} debounceMs={0} />,
+  render: (args, context) => <LinkSearch locale={storyLocale(context)} labels={linkSearchLabels[storyLocale(context)]} search={searchOf(storyLocale(context))} onPick={args.onPick} debounceMs={0} />,
   play: async (context) => {
     const { canvas } = context;
     await userEvent.type(box(canvas, context), storyText(context, copy.cable));

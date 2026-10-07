@@ -23,55 +23,22 @@ import type { AttachmentsFieldFiles } from "./attachments-field.tsx";
 // the phone's camera or choose, several at once, and to remove. Presentational:
 // the page uploads and passes the field's Documents, and their image URLs, back in.
 
-/* eslint-disable rabaed/no-ui-translations -- existing labels, still to move to the app's messages (RP-362 retro) */
-const copy = {
-  en: {
-    none: "No photos yet.",
-    notYet: "Photos can be added once the Draft is saved.",
-    uploading: "Uploading…",
-    takePhoto: "Take a photo",
-    open: (name: string) => `Open ${name} full size`,
-    remove: (name: string) => `Remove ${name}`,
-    frozen: "Sent: can't be changed",
-    taken: (when: string) => `Taken ${when}`,
-    nothingRecorded: "No time/location recorded",
-    noTime: "No time recorded",
-    noPlace: "No location recorded",
-    atMost: (n: number) => (n === 1 ? "At most 1 photo" : `At most ${formatNumber(n, "en")} photos`),
-    full: (n: number) => (n === 1 ? "This field takes 1 photo." : `This field takes at most ${formatNumber(n, "en")} photos.`),
-  },
-  ar: {
-    none: "لا توجد صور بعد.",
-    notYet: "يمكن إضافة الصور بعد حفظ المسودة.",
-    uploading: "جارٍ الرفع…",
-    takePhoto: "التقط صورة",
-    open: (name: string) => `فتح \u2068${name}\u2069 بالحجم الكامل`,
-    remove: (name: string) => `إزالة \u2068${name}\u2069`,
-    frozen: "مُرسَل: لا يمكن تغييره",
-    taken: (when: string) => `التُقطت ${when}`,
-    nothingRecorded: "لم يُسجَّل وقت أو موقع",
-    noTime: "لم يُسجَّل وقت",
-    noPlace: "لم يُسجَّل موقع",
-    // Arabic counts: one, two (dual), 3–10 (plural), 11 and more (singular accusative).
-    atMost: (n: number) =>
-      n === 1
-        ? "صورة واحدة على الأكثر"
-        : n === 2
-          ? "صورتان على الأكثر"
-          : n <= 10
-            ? `${formatNumber(n, "ar")} صور على الأكثر`
-            : `${formatNumber(n, "ar")} صورة على الأكثر`,
-    full: (n: number) =>
-      n === 1
-        ? "يقبل هذا الحقل صورة واحدة."
-        : n === 2
-          ? "يقبل هذا الحقل صورتين على الأكثر."
-          : n <= 10
-            ? `يقبل هذا الحقل ${formatNumber(n, "ar")} صور على الأكثر.`
-            : `يقبل هذا الحقل ${formatNumber(n, "ar")} صورة على الأكثر.`,
-  },
-} satisfies Record<Locale, unknown>;
-/* eslint-enable rabaed/no-ui-translations */
+/** The field's words, from the app's messages. A number is given already formatted for the locale, with the count itself where the wording depends on it. */
+export type PhotosFieldLabels = {
+  none: string;
+  notYet: string;
+  uploading: string;
+  takePhoto: string;
+  open: (name: string) => string;
+  remove: (name: string) => string;
+  frozen: string;
+  taken: (when: string) => string;
+  nothingRecorded: string;
+  noTime: string;
+  noPlace: string;
+  atMost: (n: string, count: number) => string;
+  full: (n: string, count: number) => string;
+};
 
 /** What a photos field's files are, what may be done with them now, and their images to show. */
 export type PhotosFieldFiles = AttachmentsFieldFiles & {
@@ -85,6 +52,7 @@ export type PhotosFieldProps = {
   files: PhotosFieldFiles | undefined;
   mode: "edit" | "read";
   locale: Locale;
+  labels: PhotosFieldLabels;
   /**
    * What names these photos when the field is not in a Field of its own (a
    * checklist item's evidence): its accessible name, in the viewer's language.
@@ -102,8 +70,8 @@ export function takesPhotos(field: PhotosFieldSchema, files: PhotosFieldFiles | 
 }
 
 /** The field's limit, as a hint: its maximum of photos. */
-export function photosLimits(field: PhotosFieldSchema, locale: Locale): string | undefined {
-  return field.maxFiles === undefined ? undefined : copy[locale].atMost(field.maxFiles);
+export function photosLimits(field: PhotosFieldSchema, locale: Locale, text: PhotosFieldLabels): string | undefined {
+  return field.maxFiles === undefined ? undefined : text.atMost(formatNumber(field.maxFiles, locale), field.maxFiles);
 }
 
 /** Where a photo was taken, as degrees north or south and east or west: Latin, left to right, in either language. */
@@ -113,8 +81,7 @@ export function placeText({ latitude, longitude }: TakenWhere): string {
 }
 
 /** When and where a photo was taken, or that it records neither. */
-function TakenLine({ document, locale }: { document: DocumentSummary; locale: Locale }) {
-  const text = copy[locale];
+function TakenLine({ document, locale, text }: { document: DocumentSummary; locale: Locale; text: PhotosFieldLabels }) {
   const { takenAt, takenWhere } = document;
   if (!takenAt && !takenWhere) return <p className="text-sm text-muted">{text.nothingRecorded}</p>;
   return (
@@ -145,13 +112,13 @@ function TakenLine({ document, locale }: { document: DocumentSummary; locale: Lo
 function PhotoInputs({
   field,
   pending,
-  locale,
+  labels: text,
   label,
   onUpload,
 }: {
   field: PhotosFieldSchema;
   pending: boolean;
-  locale: Locale;
+  labels: PhotosFieldLabels;
   label?: string;
   onUpload?: (files: File[]) => void;
 }) {
@@ -188,13 +155,13 @@ function PhotoInputs({
           )}
         >
           <Icon name="camera" size={20} />
-          {copy[locale].takePhoto}
+          {text.takePhoto}
           <input
             ref={camera}
             type="file"
             accept={accept}
             capture="environment"
-            aria-label={label && `${copy[locale].takePhoto}: ${label}`}
+            aria-label={label && `${text.takePhoto}: ${label}`}
             disabled={pending}
             onChange={() => picked(camera.current)}
             className="sr-only"
@@ -203,15 +170,14 @@ function PhotoInputs({
       </OutsideField>
       {pending && (
         <p role="status" className="text-sm text-muted">
-          {copy[locale].uploading}
+          {text.uploading}
         </p>
       )}
     </div>
   );
 }
 
-export function PhotosField({ field, files, mode, locale, label, onUpload, onOpen, onRemove }: PhotosFieldProps) {
-  const text = copy[locale];
+export function PhotosField({ field, files, mode, locale, labels: text, label, onUpload, onOpen, onRemove }: PhotosFieldProps) {
   const documents = files?.documents ?? [];
   const canRemove = mode === "edit" && !!files?.canChange;
   const upload = takesPhotos(field, files, mode);
@@ -259,7 +225,7 @@ export function PhotosField({ field, files, mode, locale, label, onUpload, onOpe
                     </IconButton>
                   )}
                 </div>
-                <TakenLine document={d} locale={locale} />
+                <TakenLine document={d} locale={locale} text={text} />
                 {d.frozen && mode === "edit" && <p className="text-sm text-muted">{text.frozen}</p>}
               </li>
             );
@@ -268,9 +234,9 @@ export function PhotosField({ field, files, mode, locale, label, onUpload, onOpe
       ) : (
         mode === "edit" && <p className="text-sm text-muted">{files ? text.none : text.notYet}</p>
       )}
-      {upload && <PhotoInputs field={field} pending={!!files?.pending} locale={locale} label={label} onUpload={onUpload} />}
+      {upload && <PhotoInputs field={field} pending={!!files?.pending} labels={text} label={label} onUpload={onUpload} />}
       {mode === "edit" && files?.canChange && !upload && field.maxFiles !== undefined && (
-        <p className="text-sm text-muted">{text.full(field.maxFiles)}</p>
+        <p className="text-sm text-muted">{text.full(formatNumber(field.maxFiles, locale), field.maxFiles)}</p>
       )}
     </div>
   );

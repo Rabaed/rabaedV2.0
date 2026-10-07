@@ -13,6 +13,7 @@ import { sql } from "kysely";
 import type { LightMyRequestResponse } from "fastify";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestApi, type Caller } from "./support/harness.ts";
+import { projectMember } from "./support/tower.ts";
 
 const api = await createTestApi();
 const migrator = createDb(testDatabaseUrls().migrator, { max: 1 });
@@ -130,16 +131,9 @@ beforeAll(async () => {
     .json()
     .participants.find((p: { isOwnCompany: boolean }) => p.isOwnCompany).id;
   await ok(c1.caller.request("PUT", `/v1/participants/${own}/visibility`, { trade: all, location: all }));
-  const projectMember = async (positions: string[]) => {
-    const { member, caller } = await api.member(c1.caller);
-    await api.addProjectMember(c1.caller, own, member.id);
-    await ok(c1.caller.request("PUT", `/v1/participants/${own}/members/${member.id}/visibility`, { trade: all, location: all }));
-    await ok(c1.caller.request("PUT", `/v1/participants/${own}/members/${member.id}/positions`, { positions }));
-    return caller;
-  };
-  engineer = await projectMember(["engineer"]);
+  engineer = await projectMember(api, c1, own, ["engineer"]);
   // Holds the Contractor review Step that Send for Review leads to.
-  await projectMember(["project_manager"]);
+  await projectMember(api, c1, own, ["project_manager"]);
 });
 
 describe("the Form with number and contact fields", () => {

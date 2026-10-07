@@ -2,6 +2,7 @@
 
 import {
   countsByParticipant,
+  formatNumber,
   documentNumbering,
   numberingPattern,
   type Locale,
@@ -35,84 +36,38 @@ const kinds: Kind[] = ["project", "type", "trade", "participant", "location", "t
 const maxSegments = 6;
 const digitChoices = [3, 4, 5, 6, 7];
 
-/* eslint-disable rabaed/no-ui-translations -- existing labels, still to move to the app's messages (RP-362 retro) */
-const copy = {
-  en: {
-    kinds: {
-      project: "Project",
-      type: "Work Item Type",
-      trade: "Trade",
-      participant: "Participant Code",
-      location: "Location level",
-      text: "Fixed text",
-    },
-    levels: ["Zone", "Building", "Floor"],
-    segments: "Segments",
-    segment: (n: number) => `Segment ${n}`,
-    level: "Level",
-    text: "Text",
-    textHint: "1 to 10 capital letters or digits.",
-    textInvalid: "Use 1 to 10 capital letters or digits.",
-    counted: "Counted separately",
-    countedHint: "The sequence runs on its own for each value of a ticked segment.",
-    moveUp: (n: number) => `Move segment ${n} up`,
-    moveDown: (n: number) => `Move segment ${n} down`,
-    remove: (n: number) => `Remove segment ${n}`,
-    add: "Add segment",
-    separator: "Separator",
-    digits: "Sequence digits",
-    example: "Example",
-    exampleHint: "The first number this pattern gives.",
-    sharedTitle: "One shared count",
-    sharedBody:
-      "The sequence doesn't count separately for the Participant Code, so every Company's items share one count. Each Company can then tell how many items the others numbered from the gaps in its own numbers.",
-    sharedAccept: "I accept that every Company can tell the others' volume from the gaps",
-    sharedReadOnly: "Every Company's items share one count, accepted by the Project Admin.",
-    save: "Save pattern",
-    saving: "Saving…",
-    afterChange: "A change applies only to items numbered after it; issued numbers never change.",
-    countedBadge: "Counted",
-  },
-  ar: {
-    kinds: {
-      project: "المشروع",
-      type: "نوع البند",
-      trade: "التخصص",
-      participant: "رمز المشارك",
-      location: "مستوى الموقع",
-      text: "نص ثابت",
-    },
-    levels: ["المنطقة", "المبنى", "الطابق"],
-    segments: "الأجزاء",
-    segment: (n: number) => `الجزء ${n}`,
-    level: "المستوى",
-    text: "النص",
-    textHint: "من 1 إلى 10 أحرف إنجليزية كبيرة أو أرقام.",
-    textInvalid: "استخدم من 1 إلى 10 أحرف إنجليزية كبيرة أو أرقام.",
-    counted: "يُعدّ منفصلًا",
-    countedHint: "يبدأ التسلسل عدًّا مستقلًا لكل قيمة من قيم الجزء المحدد.",
-    moveUp: (n: number) => `نقل الجزء ${n} إلى الأعلى`,
-    moveDown: (n: number) => `نقل الجزء ${n} إلى الأسفل`,
-    remove: (n: number) => `إزالة الجزء ${n}`,
-    add: "إضافة جزء",
-    separator: "الفاصل",
-    digits: "عدد خانات التسلسل",
-    example: "مثال",
-    exampleHint: "أول رقم يعطيه هذا النمط.",
-    sharedTitle: "عدّ مشترك واحد",
-    sharedBody:
-      "لا يُعدّ التسلسل منفصلًا حسب رمز المشارك، لذا تشترك بنود كل الشركات في عدّ واحد. وعندها تستطيع كل شركة أن تعرف من الفجوات في أرقامها عدد البنود التي رقّمتها الشركات الأخرى.",
-    sharedAccept: "أقبل أن كل شركة تستطيع معرفة حجم عمل الشركات الأخرى من الفجوات",
-    sharedReadOnly: "تشترك بنود كل الشركات في عدّ واحد، بقبول مسؤول المشروع.",
-    save: "حفظ النمط",
-    saving: "جارٍ الحفظ…",
-    afterChange: "يسري التغيير على البنود التي تُرقَّم بعده فقط، ولا تتغير الأرقام الصادرة أبدًا.",
-    countedBadge: "يُعدّ",
-  },
-} satisfies Record<Locale, unknown>;
-/* eslint-enable rabaed/no-ui-translations */
+/** The pattern builder's and the read-only view's words, from the app's messages. A number is given already formatted for the locale. */
+export type NumberingPatternLabels = {
+  kinds: Record<Kind, string>;
+  /** The Location levels, from the top: Zone, Building, Floor. */
+  levels: readonly [string, string, string];
+  segments: string;
+  segment: (n: string) => string;
+  level: string;
+  text: string;
+  textHint: string;
+  textInvalid: string;
+  counted: string;
+  countedHint: string;
+  moveUp: (n: string) => string;
+  moveDown: (n: string) => string;
+  remove: (n: string) => string;
+  add: string;
+  separator: string;
+  digits: string;
+  example: string;
+  exampleHint: string;
+  sharedTitle: string;
+  sharedBody: string;
+  sharedAccept: string;
+  sharedReadOnly: string;
+  save: string;
+  saving: string;
+  afterChange: string;
+  countedBadge: string;
+};
 
-type Text = (typeof copy)[Locale];
+type Text = NumberingPatternLabels;
 
 const segmentName = (text: Text, s: NumberingSegment) =>
   s.kind === "location" ? `${text.kinds.location}: ${text.levels[s.level - 1]}` : s.kind === "text" ? `${text.kinds.text}: ${s.text}` : text.kinds[s.kind];
@@ -139,7 +94,7 @@ function Example({ text, pattern, example }: { text: Text; pattern: NumberingPat
 }
 
 export type NumberingPatternViewProps = {
-  locale: Locale;
+  labels: NumberingPatternLabels;
   /** The pattern in effect: the saved one, or the Rabaed Default. */
   pattern: NumberingPattern;
   /** What the live example is built from. */
@@ -148,8 +103,7 @@ export type NumberingPatternViewProps = {
 };
 
 /** A Numbering Pattern read-only, as every Project Member sees it. */
-export function NumberingPatternView({ locale, pattern, example, className }: NumberingPatternViewProps) {
-  const text = copy[locale];
+export function NumberingPatternView({ labels: text, pattern, example, className }: NumberingPatternViewProps) {
   const listId = useId();
   return (
     <div className={cn("flex flex-col gap-4", className)} data-testid="numbering-pattern-view">
@@ -186,6 +140,7 @@ export function NumberingPatternView({ locale, pattern, example, className }: Nu
 }
 
 export type NumberingPatternBuilderProps = {
+  labels: NumberingPatternLabels;
   locale: Locale;
   /** Where the builder starts: the saved pattern, or the Rabaed Default. */
   pattern: NumberingPattern;
@@ -200,8 +155,7 @@ export type NumberingPatternBuilderProps = {
 };
 
 /** The Project Admin's Numbering Pattern builder, with its live example and the shared-counter warning. */
-export function NumberingPatternBuilder({ locale, pattern: initial, example, onSave, pending = false, error, className }: NumberingPatternBuilderProps) {
-  const text = copy[locale];
+export function NumberingPatternBuilder({ locale, labels: text, pattern: initial, example, onSave, pending = false, error, className }: NumberingPatternBuilderProps) {
   const id = useId();
   const [pattern, setPattern] = useState<NumberingPattern>(initial);
   const [accepted, setAccepted] = useState(false);
@@ -254,7 +208,7 @@ export function NumberingPatternBuilder({ locale, pattern: initial, example, onS
             const textInvalid = s.kind === "text" && !/^[A-Z0-9]{1,10}$/.test(s.text);
             return (
               <li key={i} className="flex flex-wrap items-end gap-3 rounded-md border border-border p-3" data-testid="numbering-segment">
-                <Field label={text.segment(n)} id={`${id}-kind-${i}`} className="min-w-44">
+                <Field label={text.segment(formatNumber(n, locale))} id={`${id}-kind-${i}`} className="min-w-44">
                   <Select options={kindOptions} value={s.kind} onValueChange={(k) => replace(i, newSegment(k as Kind))} />
                 </Field>
                 {s.kind === "location" && (
@@ -280,13 +234,13 @@ export function NumberingPatternBuilder({ locale, pattern: initial, example, onS
                   <Checkbox checked={pattern.countedBy.includes(i)} onCheckedChange={(c) => toggleCounted(i, c === true)} />
                 </Field>
                 <div className="ms-auto flex gap-1">
-                  <IconButton label={text.moveUp(n)} disabled={i === 0} onClick={() => move(i, i - 1)}>
+                  <IconButton label={text.moveUp(formatNumber(n, locale))} disabled={i === 0} onClick={() => move(i, i - 1)}>
                     <Icon name="arrow-up" />
                   </IconButton>
-                  <IconButton label={text.moveDown(n)} disabled={i === pattern.segments.length - 1} onClick={() => move(i, i + 1)}>
+                  <IconButton label={text.moveDown(formatNumber(n, locale))} disabled={i === pattern.segments.length - 1} onClick={() => move(i, i + 1)}>
                     <Icon name="arrow-down" />
                   </IconButton>
-                  <IconButton label={text.remove(n)} disabled={pattern.segments.length === 1} onClick={() => remove(i)}>
+                  <IconButton label={text.remove(formatNumber(n, locale))} disabled={pattern.segments.length === 1} onClick={() => remove(i)}>
                     <Icon name="trash" />
                   </IconButton>
                 </div>
