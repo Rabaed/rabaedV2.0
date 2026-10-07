@@ -2,39 +2,75 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { parse } from "yaml";
-import { buildComment, commentOnRemoval, firstErrorWithContext, latestQueueRun, type QueueDropGitHub } from "./queue-drop-comment.ts";
+import { buildComment, classify, commentOnRemoval, firstErrorWithContext, latestQueueRun, type QueueDropGitHub } from "./queue-drop-comment.ts";
 
 // RP-401: a PR the merge queue removes gets one comment saying why. The comment
 // is what wakes the session's Auto-fix; the removal itself reaches only the PR
 // timeline, and the PR's own checks stay green (PR #149 was removed five times).
 
 const stamp = "2026-10-07T12:00:00.0000000Z";
+// The drift job of PR #149's queue run (run 37572659419), as the API serves it.
 const migrationLog = [
-  `${stamp} ##[group]Run node scripts/check-migrations.ts`,
-  `${stamp} These migrations share a timestamp; rename this branch's 20261220000000_counter_for_pattern_in_effect.sql, 20261220000000_random_ids.sql`,
-  `${stamp} ##[error]Process completed with exit code 1.`,
-  `${stamp} ##[error]A later error`,
+  "2026-10-07T04:41:28.5022950Z   HEAD_SHA: edee29a3d93811baf65f484ef56454abcfdf7d6a",
+  "2026-10-07T04:41:28.5022950Z ##[endgroup]",
+  "2026-10-07T04:41:28.7903134Z These migrations share a timestamp; rename this branch's (it isn't on main yet) to a new, later one: 20261220000000_counter_for_pattern_in_effect.sql, 20261220000000_random_ids.sql",
+  "2026-10-07T04:41:28.7940125Z ##[error]Process completed with exit code 1.",
+  "2026-10-07T04:41:28.8068435Z Post job cleanup.",
+].join("\n");
+// The immutable job of the same run: the file name is two lines above the error.
+const immutableLog = [
+  "2026-10-07T04:41:29.3870108Z ##[endgroup]",
+  "2026-10-07T04:41:29.4657082Z packages/db/migrations/20261220000000_counter_for_pattern_in_effect.sql sorts before 20261220000000_random_ids.sql, the latest migration on the base branch.",
+  "2026-10-07T04:41:29.4658739Z   Merge the base branch, then rename the file to sort after that migration, and re-check every function it re-defines against the base's latest definition: a copy made before the base moved on brings back an outdated body or a stale overload.",
+  "2026-10-07T04:41:29.4729971Z ##[error]Process completed with exit code 1.",
 ].join("\n");
 
 describe("firstErrorWithContext", () => {
   it("returns the first ##[error] line and the line before it, without timestamps", () => {
     expect(firstErrorWithContext(migrationLog)).toEqual({
-      before: "These migrations share a timestamp; rename this branch's 20261220000000_counter_for_pattern_in_effect.sql, 20261220000000_random_ids.sql",
+      before: ["These migrations share a timestamp; rename this branch's (it isn't on main yet) to a new, later one: 20261220000000_counter_for_pattern_in_effect.sql, 20261220000000_random_ids.sql"],
       error: "Process completed with exit code 1.",
     });
   });
 
+  it("takes the two lines before the error, so the file name above the advice text is kept", () => {
+    const found = firstErrorWithContext(immutableLog);
+    expect(found?.before).toHaveLength(2);
+    expect(found?.before[0]).toContain("packages/db/migrations/20261220000000_counter_for_pattern_in_effect.sql sorts before");
+    expect(found?.before[1]).toContain("Merge the base branch");
+  });
+
   it("strips colour codes and skips ##[endgroup] lines when looking for the line before", () => {
     const log = `${stamp} \u001b[31mexpected 1 to be 2\u001b[0m\n${stamp} ##[endgroup]\n${stamp} ##[error]Process completed with exit code 1.`;
-    expect(firstErrorWithContext(log)).toEqual({ before: "expected 1 to be 2", error: "Process completed with exit code 1." });
+    expect(firstErrorWithContext(log)).toEqual({ before: ["expected 1 to be 2"], error: "Process completed with exit code 1." });
   });
 
   it("has no line before an error on the first line", () => {
-    expect(firstErrorWithContext(`${stamp} ##[error]boom`)).toEqual({ before: undefined, error: "boom" });
+    expect(firstErrorWithContext(`${stamp} ##[error]boom`)).toEqual({ before: [], error: "boom" });
   });
 
   it("returns undefined when the log has no ##[error] line", () => {
     expect(firstErrorWithContext(`${stamp} all fine`)).toBeUndefined();
+  });
+});
+
+describe("classify", () => {
+  it.each([
+    ["failed_checks", "failed"],
+    ["CI_FAILURE", "failed"],
+    ["ci_timeout", "failed"],
+    ["merge_conflict", "conflict"],
+    ["MERGE_CONFLICT", "conflict"],
+    ["queue_conflict", "conflict"],
+    ["merged", "merged"],
+    ["MERGED", "merged"],
+    ["already_merged", "merged"],
+    ["manual", "manual"],
+    ["MANUAL", "manual"],
+    ["queue_cleared", "other"],
+    ["unknown", "other"],
+  ] as const)("reads %s as %s", (reason, kind) => {
+    expect(classify(reason)).toBe(kind);
   });
 });
 
@@ -109,7 +145,7 @@ describe("commentOnRemoval", () => {
       ],
       failedJobs: async (id) => (id === 5 ? [{ id: 50, name: "migration-drift", url: "u50" }] : []),
       jobLog: async () => migrationLog,
-      removalReason: async () => "merge_conflict",
+      removalReason: async () => undefined,
       postComment: async (_pr, body) => void posted.push(body),
       ...over,
     };
@@ -130,10 +166,31 @@ describe("commentOnRemoval", () => {
     expect(posted[0]).toContain("conflict");
   });
 
-  it("asks the PR timeline for the reason when the event carries none", async () => {
-    const { api, posted } = github();
-    await commentOnRemoval({ pr: 149, reason: undefined, merged: false }, api);
-    expect(posted[0]).toContain("conflict");
+  it("reads the reason from the PR timeline first, and treats its upper-case enum form as the reason", async () => {
+    const { api, posted } = github({ removalReason: async () => "MERGE_CONFLICT" });
+    await commentOnRemoval({ pr: 149, reason: "failed_checks", merged: false }, api);
+    expect(posted).toHaveLength(1);
+    expect(posted[0]).toContain("conflicts with");
+  });
+
+  it("falls back to the webhook's reason when the timeline has none or cannot be read", async () => {
+    for (const removalReason of [async () => undefined, async () => Promise.reject(new Error("403"))]) {
+      const { api, posted } = github({ removalReason });
+      await commentOnRemoval({ pr: 149, reason: "merge_conflict", merged: false }, api);
+      expect(posted[0]).toContain("conflicts with");
+    }
+  });
+
+  it("posts nothing for a PR a person took out of the queue on purpose", async () => {
+    const { api, posted } = github({ removalReason: async () => "MANUAL" });
+    expect(await commentOnRemoval({ pr: 149, reason: undefined, merged: false }, api)).toBeUndefined();
+    expect(posted).toEqual([]);
+  });
+
+  it("posts nothing when the timeline says the PR merged", async () => {
+    const { api, posted } = github({ removalReason: async () => "MERGED" });
+    await commentOnRemoval({ pr: 149, reason: "failed_checks", merged: false }, api);
+    expect(posted).toEqual([]);
   });
 
   it("still posts the reason when the run's jobs cannot be read", async () => {

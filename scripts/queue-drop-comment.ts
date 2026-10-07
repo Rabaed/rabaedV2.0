@@ -9,6 +9,8 @@ import { resolve } from "node:path";
 // so Auto-fix never woke the session (PR #149 was removed five times). The
 // comment is what wakes it.
 //
+// A PR a person took out of the queue on purpose (reason manual) gets no comment.
+//
 // Environment: GITHUB_TOKEN, GITHUB_REPOSITORY, GITHUB_EVENT_PATH. Reads run
 // metadata and logs; runs no PR code. The log text it quotes is untrusted: it
 // goes into a code block that cannot be closed from inside.
@@ -26,8 +28,20 @@ export interface QueueRun {
   head_branch: string;
 }
 
-const FAILED_CHECK_REASONS = ["failed_checks", "ci_failure", "ci_timeout"];
-const CONFLICT_REASONS = ["merge_conflict", "queue_conflict"];
+export type RemovalKind = "failed" | "conflict" | "merged" | "manual" | "other";
+
+const KINDS: [RemovalKind, string[]][] = [
+  ["failed", ["failed_checks", "ci_failure", "ci_timeout"]],
+  ["conflict", ["merge_conflict", "queue_conflict"]],
+  ["merged", ["merged", "already_merged"]],
+  ["manual", ["manual"]],
+];
+
+/** What a removal reason means. Case-insensitive: the webhook sends "merge_conflict", the GraphQL enum "MERGE_CONFLICT". */
+export function classify(reason: string): RemovalKind {
+  const key = reason.trim().toLowerCase();
+  return KINDS.find(([, reasons]) => reasons.includes(key))?.[0] ?? "other";
+}
 
 const clean = (line: string) =>
   line
@@ -36,17 +50,26 @@ const clean = (line: string) =>
     .replace(/^\d{4}-\d{2}-\d{2}T[\d:.]+Z ?/, "")
     .trimEnd();
 
-/** The first ##[error] line of a job log and the line before it (timestamps and colours removed). */
-export function firstErrorWithContext(log: string): { before: string | undefined; error: string } | undefined {
+/**
+ * The first ##[error] line of a job log and up to two meaningful lines before it,
+ * oldest first (timestamps and colours removed). A script's advice text often sits
+ * between the error and the line that names the file, hence two. The lines stop at
+ * a ##[group]/##[endgroup] boundary once one is found (before that, an ##[endgroup]
+ * is skipped), so a step's env block is not quoted.
+ */
+export function firstErrorWithContext(log: string): { before: string[]; error: string } | undefined {
   const lines = log.split("\n").map(clean);
   const index = lines.findIndex((line) => line.startsWith("##[error]"));
   if (index < 0) return undefined;
-  let before: string | undefined;
-  for (let i = index - 1; i >= 0; i--) {
+  const before: string[] = [];
+  for (let i = index - 1; i >= 0 && before.length < 2; i--) {
     const line = lines[i] ?? "";
-    if (line.startsWith("##[endgroup]") || line.trim() === "") continue;
-    before = line;
-    break;
+    if (line.startsWith("##[group]") || line.startsWith("##[endgroup]")) {
+      if (before.length > 0 || line.startsWith("##[group]")) break;
+      continue;
+    }
+    if (line.trim() === "") continue;
+    before.unshift(line);
   }
   return { before, error: (lines[index] ?? "").slice("##[error]".length) };
 }
@@ -56,9 +79,9 @@ const quote = (text: string) => text.replaceAll("```", "'''").slice(0, 400);
 
 export function buildComment(input: { pr: number; reason: string; jobs: FailedJob[] }): string {
   const { pr, reason, jobs } = input;
-  const normal = reason.toLowerCase();
+  const kind = classify(reason);
   const lines = [MARKER, `The merge queue removed this PR (reason: \`${quote(reason).replaceAll("`", "'")}\`).`, ""];
-  if (FAILED_CHECK_REASONS.includes(normal)) {
+  if (kind === "failed") {
     lines.push("A check failed in the queue's CI run, on this PR merged with the PRs ahead of it. This PR's own checks can still be green.", "");
     if (jobs.length === 0) lines.push("I could not find a failing job of the PR's latest merge_group CI run: open the `gh-readonly-queue/main/pr-" + pr + "-...` run in the Actions tab.", "");
     for (const job of jobs) {
@@ -69,10 +92,10 @@ export function buildComment(input: { pr: number; reason: string; jobs: FailedJo
         continue;
       }
       lines.push("", "```");
-      if (found.before !== undefined) lines.push(quote(found.before));
+      for (const before of found.before) lines.push(quote(before));
       lines.push(quote(`##[error]${found.error}`), "```", "");
     }
-  } else if (CONFLICT_REASONS.includes(normal)) {
+  } else if (kind === "conflict") {
     lines.push("This PR conflicts with `main` or with a PR ahead of it in the queue. The queue does not resolve text conflicts.", "");
   } else {
     lines.push("Open the PR timeline for the details.", "");
@@ -91,17 +114,20 @@ export interface QueueDropGitHub {
   mergeGroupRuns(): Promise<QueueRun[]>;
   failedJobs(runId: number): Promise<{ id: number; name: string; url: string }[]>;
   jobLog(jobId: number): Promise<string>;
-  /** The latest RemovedFromMergeQueueEvent reason in the PR timeline. */
-  removalReason(pr: number): Promise<string>;
+  /** The latest RemovedFromMergeQueueEvent reason in the PR timeline (an enum, e.g. MERGE_CONFLICT); undefined when there is none. */
+  removalReason(pr: number): Promise<string | undefined>;
   postComment(pr: number, body: string): Promise<void>;
 }
 
 export async function commentOnRemoval(event: { pr: number; reason: string | undefined; merged: boolean }, github: QueueDropGitHub): Promise<string | undefined> {
   if (event.merged) return undefined;
-  const reason = event.reason ?? (await github.removalReason(event.pr).catch(() => "unknown"));
-  if (reason.toLowerCase() === "merged" || reason.toLowerCase() === "already_merged") return undefined;
+  // The timeline's reason has a known format; the webhook payload's is the fallback.
+  const reason = (await github.removalReason(event.pr).catch(() => undefined)) ?? event.reason ?? "unknown";
+  const kind = classify(reason);
+  // Merged: nothing to fix. Manual: a person took it out on purpose, so waking Auto-fix would only re-queue it.
+  if (kind === "merged" || kind === "manual") return undefined;
   const jobs: FailedJob[] = [];
-  if (FAILED_CHECK_REASONS.includes(reason.toLowerCase())) {
+  if (kind === "failed") {
     try {
       const run = latestQueueRun(await github.mergeGroupRuns(), event.pr);
       if (run) {
@@ -143,7 +169,7 @@ function overHttp(repository: string, token: string): QueueDropGitHub {
       const query = "query($owner:String!,$name:String!,$pr:Int!){repository(owner:$owner,name:$name){pullRequest(number:$pr){timelineItems(last:1,itemTypes:[REMOVED_FROM_MERGE_QUEUE_EVENT]){nodes{... on RemovedFromMergeQueueEvent{reason}}}}}}";
       const response = await api("graphql", { method: "POST", body: JSON.stringify({ query, variables: { owner, name, pr } }) });
       const body = (await response.json()) as { data?: { repository?: { pullRequest?: { timelineItems?: { nodes?: { reason?: string }[] } } } } };
-      return body.data?.repository?.pullRequest?.timelineItems?.nodes?.[0]?.reason ?? "unknown";
+      return body.data?.repository?.pullRequest?.timelineItems?.nodes?.[0]?.reason;
     },
     async postComment(pr, body) {
       await api(`repos/${repository}/issues/${pr}/comments`, { method: "POST", body: JSON.stringify({ body }) });
@@ -157,7 +183,7 @@ async function main() {
   if (!token || !repository) throw new Error("GITHUB_TOKEN and GITHUB_REPOSITORY must be set");
   const event = JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH ?? "", "utf8")) as { pull_request: { number: number; merged?: boolean }; reason?: string };
   const body = await commentOnRemoval({ pr: event.pull_request.number, reason: event.reason, merged: event.pull_request.merged === true }, overHttp(repository, token));
-  const summary = body ?? "Nothing to post: the PR merged.";
+  const summary = body ?? "Nothing to post: the PR merged, or a person removed it from the queue on purpose.";
   console.log(summary);
   if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${summary}\n`);
 }

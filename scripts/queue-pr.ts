@@ -1,6 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { join } from "node:path";
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
 
 // `pnpm queue <pr>` (RP-400, from the PR #149 retro): checks the branch against
 // today's origin/main, then queues the PR. A PR whose CI went green hours ago
@@ -17,8 +16,8 @@ export interface QueueSeam {
   head(): string;
   /** `gh pr view <pr> --json id,headRefOid` */
   pullRequest(pr: number): { id: string; headRefOid: string };
-  /** `git merge-tree --write-tree origin/main HEAD`: status 0 when it merges cleanly. */
-  mergeTree(): { status: number; output: string };
+  /** `git merge-tree --write-tree origin/main HEAD`: status 0 when it merges cleanly, 1 when it conflicts, anything else is an error. */
+  mergeTree(): { status: number; output: string; stderr: string };
   /** The migration checks against origin/main; status 0 when they pass. */
   check(name: "drift" | "immutable"): { status: number; output: string };
   /** The `enqueuePullRequest` mutation, pinned by expectedHeadOid. */
@@ -55,7 +54,14 @@ export function queuePr(pr: number, seam: QueueSeam): QueueResult {
   }
 
   const merge = seam.mergeTree();
-  if (merge.status !== 0) {
+  if (merge.status > 1 || merge.status < 0) {
+    return fail(
+      `git merge-tree failed with exit ${merge.status}; this is not a conflict:`,
+      merge.stderr.trimEnd() || "(no stderr)",
+      "Fix: check that origin/main was fetched and this worktree is a clean checkout of the PR branch, then run `pnpm queue` again.",
+    );
+  }
+  if (merge.status === 1) {
     const files = conflictedFiles(merge.output);
     return fail(
       `PR #${pr} conflicts with origin/main in ${files.length} file(s):`,
@@ -80,10 +86,10 @@ export function queuePr(pr: number, seam: QueueSeam): QueueResult {
 const mutation = "mutation($id: ID!, $head: GitObjectID!) { enqueuePullRequest(input: {pullRequestId: $id, expectedHeadOid: $head}) { mergeQueueEntry { position state } } }";
 
 /** The real git and gh calls. No shell is involved, so the caller needs no quoting tricks. */
-export function realSeam(cwd: string = process.cwd()): QueueSeam {
+export function realSeam(cwd: string = process.cwd(), spawn: typeof spawnSync = spawnSync): QueueSeam {
   const run = (command: string, args: string[]) => {
-    const done = spawnSync(command, args, { cwd, encoding: "utf8" });
-    return { status: done.status ?? 1, output: `${done.stdout ?? ""}${done.stderr ?? ""}`, stdout: done.stdout ?? "" };
+    const done = spawn(command, args, { cwd, encoding: "utf8" });
+    return { status: done.status ?? 128, output: `${done.stdout ?? ""}${done.stderr ?? ""}`, stdout: done.stdout ?? "", stderr: done.stderr ?? "" };
   };
   const must = (command: string, args: string[]) => {
     const done = run(command, args);
