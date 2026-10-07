@@ -3,7 +3,22 @@ import { existsSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "no
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { branchMerged, chooseWorktrees, gatherFacts, hasOwnCommit, isAgentWorktree, listWorktrees, parseWorktrees, refExists, removeWorktree, type WorktreeFacts } from "./worktrees.ts";
+import { samePath } from "./paths.ts";
+import {
+  branchMerged,
+  chooseWorktrees,
+  gatherFacts,
+  hasOwnCommit,
+  isAgentWorktree,
+  listWorktrees,
+  localBranches,
+  parseWorktrees,
+  refExists,
+  removeLinkedWorktree,
+  removeWorktree,
+  unpushedCount,
+  type WorktreeFacts,
+} from "./worktrees.ts";
 
 const main = "G:/Rabaed Contech";
 const here = `${main}/.claude/worktrees/agent-current`;
@@ -250,5 +265,77 @@ describe("gatherFacts and removeWorktree in a throwaway repository", () => {
     expect(branchMerged("RP-3-done", "main", root)).toBe(false);
     run(["merge", "--no-ff", "-m", "merge", "RP-3-done"]);
     expect(branchMerged("RP-3-done", "main", root)).toBe(true);
+  });
+});
+
+// worktrees:prune's git side: a clone (its folder name has a space) of a throwaway origin.
+describe("localBranches, unpushedCount and removeLinkedWorktree with an origin", () => {
+  let tmp = "";
+  let clone = "";
+  const run = (args: string[], cwd = clone) =>
+    execFileSync("git", ["-c", "user.name=Test", "-c", "user.email=test@example.com", ...args], { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+  const commit = (cwd: string, file: string) => {
+    writeFileSync(join(cwd, file), file);
+    run(["add", file], cwd);
+    run(["commit", "-m", file], cwd);
+  };
+  const listed = (dir: string) => listWorktrees(clone).find((w) => samePath(w.path, dir))!;
+
+  beforeEach(() => {
+    tmp = realpathSync(mkdtempSync(join(tmpdir(), "rabaed-prune-")));
+    run(["init", "--bare", "-b", "main", "origin.git"], tmp);
+    clone = join(tmp, "my clone");
+    run(["clone", join(tmp, "origin.git"), clone], tmp);
+    commit(clone, "a.txt");
+    run(["push", "origin", "main"]);
+  });
+
+  afterEach(() => rmSync(tmp, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }));
+
+  it("says which branches are in origin/main, had a commit, or lost their upstream", () => {
+    run(["checkout", "-b", "RP-1-merged"]);
+    commit(clone, "b.txt");
+    run(["push", "-u", "origin", "RP-1-merged"]);
+    run(["checkout", "main"]);
+    run(["merge", "--no-ff", "-m", "merge", "RP-1-merged"]);
+    run(["push", "origin", "main"]);
+    run(["push", "origin", "--delete", "RP-1-merged"]);
+    run(["branch", "RP-2-created"]);
+    run(["checkout", "-b", "RP-3-open"]);
+    commit(clone, "c.txt");
+    run(["checkout", "main"]);
+    run(["fetch", "--prune", "origin"]);
+
+    expect(localBranches("origin/main", clone)).toEqual([
+      { branch: "RP-1-merged", inMain: true, ownCommit: true, upstreamGone: true },
+      { branch: "RP-2-created", inMain: true, ownCommit: false, upstreamGone: false },
+      { branch: "RP-3-open", inMain: false, ownCommit: true, upstreamGone: false },
+      { branch: "main", inMain: true, ownCommit: true, upstreamGone: false },
+    ]);
+  });
+
+  it("counts the commits of a HEAD that no origin branch has", () => {
+    run(["checkout", "-b", "RP-4-work"]);
+    commit(clone, "d.txt");
+    commit(clone, "e.txt");
+    const head = run(["rev-parse", "HEAD"]).trim();
+    expect(unpushedCount(head, clone)).toBe(2);
+    run(["push", "origin", "RP-4-work"]);
+    expect(unpushedCount(head, clone)).toBe(0);
+  });
+
+  it("removes a worktree outside .claude/worktrees with its folder and merged branch, and refuses the main checkout", () => {
+    const dir = join(tmp, "RP 5 done");
+    run(["worktree", "add", "-b", "RP-5-done", dir]);
+    commit(dir, "f.txt");
+    run(["merge", "--no-ff", "-m", "merge", "RP-5-done"]);
+    run(["push", "origin", "main"]);
+    run(["fetch", "origin"]);
+
+    expect(() => removeWorktree(listed(dir), clone, "origin/main")).toThrow(/not an agent worktree/);
+    expect(removeLinkedWorktree(listed(dir), clone, "origin/main")).toEqual({});
+    expect(existsSync(dir)).toBe(false);
+    expect(refExists("RP-5-done", clone)).toBe(false);
+    expect(() => removeLinkedWorktree(listed(clone), clone, "origin/main")).toThrow(/main checkout/);
   });
 });

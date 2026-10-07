@@ -1,5 +1,5 @@
 // The [y/N] prompt the clean-up scripts (lanes:prune, lanes:drop-dbs,
-// worktrees:clean) ask before they delete anything.
+// worktrees:clean, worktrees:prune) ask before they delete anything.
 import { createInterface } from "node:readline/promises";
 
 /** Whether an answer to a [y/N] prompt is yes. */

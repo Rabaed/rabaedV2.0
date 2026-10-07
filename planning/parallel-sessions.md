@@ -39,11 +39,19 @@ A lane takes work in one of two ways: **one ticket per session** (below), or **a
    gh api graphql -f query='mutation($id: ID!, $head: GitObjectID!) { enqueuePullRequest(input: {pullRequestId: $id, expectedHeadOid: $head}) { mergeQueueEntry { position state } } }' -F id=<id> -F head=<headRefOid>
    ```
    `expectedHeadOid` is the commit CI passed on: if the branch has moved since, GitHub refuses to queue it. The merge queue tests the PR on top of the PRs queued ahead of it and merges it only when that run is green, so two PRs that are green alone cannot break `main` together. The queue does not resolve text conflicts: a PR that conflicts with one ahead of it leaves the queue, Auto-fix wakes the session, and it merges `main`, pushes and queues the PR again.
-5. After the queue merges the PR, run `/mattpocock-skills:retro` in that session (see below), then archive it. The next ticket gets a fresh session (this replaces `/clear`).
+5. After the queue merges the PR, run `pnpm worktrees:prune` (see "Pruning old lanes"), then `/mattpocock-skills:retro` in that session (see below), then archive it. The next ticket gets a fresh session (this replaces `/clear`).
 
 ## Pruning old lanes
 
 Every worktree that ran `pnpm dev` leaves a `rabaed-*` Docker Compose project behind (its containers, database volume and network), holding its lane's ports. `pnpm lanes:prune` lists those whose worktree no longer exists, that are not running, or that only have volumes left, and removes them with their volumes after you confirm (`--yes` skips the prompt). It never removes the current worktree's project. Run it from the planning session after archiving finished sessions, or in a lane when `lane:env` says a lane is taken. `lane:env` says whether the worktree holding the lane is on a branch already merged into `origin/main`; then `pnpm lanes:prune --merged` also removes the projects of such worktrees, unless a worktree that is not merged names the project in its `.env`.
+
+`pnpm worktrees:prune` does the whole clean-up after merges. After `git fetch --prune origin` it lists, and after you confirm (`--yes` skips the prompt) removes:
+
+1. Every worktree merged into `origin/main`, or whose upstream branch is gone, with its compose project, its folder and its branch. Desktop-app worktrees under `.claude/worktrees/` go only when merged into `origin/main`.
+2. Every other local branch merged into `origin/main` and checked out in no worktree. It checks with `merge-base --is-ancestor origin/main`, not `git branch -d`, and never deletes `main`.
+3. The orphaned compose projects `lanes:prune` finds.
+
+It never touches the main checkout or the current worktree. It skips, and lists, worktrees with uncommitted changes (untracked files outside ignored paths included), commits on no origin branch, a lock by hand, or an open Claude desktop session. A compose project that a kept worktree names in its `.env` stays.
 
 ## A whole spec in one session (`/implement-spec`)
 

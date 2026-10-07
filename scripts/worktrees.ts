@@ -7,7 +7,8 @@ import { normalPath, samePath } from "./paths.ts";
 // .claude/worktrees/agent-* (RP-326, planning/parallel-sessions.md). On Windows
 // `git worktree remove` deregisters a worktree but fails with "Directory not empty"
 // when node_modules is left behind, so the folder is deleted here as well. Used by
-// worktrees-clean.ts. The decision (chooseWorktrees) is pure; git and fs calls are below.
+// worktrees-clean.ts, and by worktrees-prune.ts for any worktree (removeLinkedWorktree).
+// The decision (chooseWorktrees) is pure; git and fs calls are below.
 
 export type Worktree = {
   path: string;
@@ -177,8 +178,18 @@ export function gatherFacts(worktrees: Worktree[], target: string, mainRoot: str
  * the app created the worktree on (named after its folder) goes too when it is in the
  * target. Returns why the branch was kept, if it was.
  */
-export function removeWorktree(w: Worktree, mainRoot: string, target = "main"): { branchKept?: string } {
+export function removeWorktree(w: Worktree, mainRoot: string, target = "main"): { branchKept?: string; folderLeft?: string } {
   if (!isAgentWorktree(w.path, mainRoot)) throw new Error(`refusing to remove ${w.path}: not an agent worktree`);
+  return removeLinkedWorktree(w, mainRoot, target);
+}
+
+/**
+ * removeWorktree for any worktree but the main checkout (worktrees:prune decides which).
+ * The folder removal retries while Windows briefly locks node_modules; a folder still
+ * there afterwards is returned as folderLeft, with why.
+ */
+export function removeLinkedWorktree(w: Worktree, mainRoot: string, target = "main"): { branchKept?: string; folderLeft?: string } {
+  if (samePath(w.path, mainRoot)) throw new Error(`refusing to remove ${w.path}: the main checkout`);
   if (w.locked !== undefined) git(["worktree", "unlock", w.path], mainRoot);
   try {
     git(["worktree", "remove", "--force", w.path], mainRoot);
@@ -186,17 +197,48 @@ export function removeWorktree(w: Worktree, mainRoot: string, target = "main"): 
     // "Directory not empty" leaves the worktree deregistered and its folder behind; any other failure leaves it listed.
     if (listWorktrees(mainRoot).some((x) => samePath(x.path, w.path))) throw error;
   }
-  if (existsSync(w.path)) rmSync(w.path, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+  let folderLeft: string | undefined;
+  try {
+    if (existsSync(w.path)) rmSync(w.path, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+  } catch (error) {
+    folderLeft = (error as { code?: string }).code ?? String(error);
+  }
+  const left = folderLeft ? { folderLeft } : {};
   const created = `worktree-${basename(normalPath(w.path))}`;
   if (created !== w.branch && refExists(created, mainRoot) && inTarget(created, target, mainRoot)) git(["branch", "-D", created], mainRoot);
-  if (!w.branch) return {};
-  if (!inTarget(w.branch, target, mainRoot)) return { branchKept: `${w.branch} has commits ${target} does not` };
+  if (!w.branch) return left;
+  if (!inTarget(w.branch, target, mainRoot)) return { ...left, branchKept: `${w.branch} has commits ${target} does not` };
   git(["branch", "-D", w.branch], mainRoot);
-  return {};
+  return left;
 }
 
+/**
+ * Every local branch: whether its tip is in the target (merge-base --is-ancestor; not
+ * `git branch -d`, which checks against the current HEAD), whether its reflog shows a
+ * commit of its own, and whether its upstream is gone (after `git fetch --prune`).
+ */
+export function localBranches(target: string, cwd: string): { branch: string; inMain: boolean; ownCommit: boolean; upstreamGone: boolean }[] {
+  return git(["for-each-ref", "--format=%(refname)%09%(upstream:track)", "refs/heads/"], cwd)
+    .split(/\r?\n/)
+    .filter((line) => line !== "")
+    .map((line) => {
+      const [ref = "", track = ""] = line.split("\t");
+      const branch = ref.replace(/^refs\/heads\//, "");
+      return { branch, inMain: inTarget(branch, target, cwd), ownCommit: hasOwnCommit(reflogSubjects(ref, cwd)), upstreamGone: track === "[gone]" };
+    });
+}
+
+/** Commits of head that no origin branch has. */
+export const unpushedCount = (head: string, cwd: string): number => Number(git(["rev-list", "--count", head, "--not", "--remotes=origin"], cwd).trim());
+
+/** Deletes a branch whose commits are all in the target (the caller checked). */
+export const deleteBranch = (branch: string, cwd: string) => git(["branch", "-D", branch], cwd);
+
+/** `git fetch --prune origin`. */
+export const fetchPrune = (cwd: string) => git(["fetch", "--prune", "origin"], cwd);
+
 /** Whether every commit of the branch is in the target. */
-function inTarget(branch: string, target: string, cwd: string): boolean {
+export function inTarget(branch: string, target: string, cwd: string): boolean {
   try {
     git(["merge-base", "--is-ancestor", `refs/heads/${branch}`, target], cwd);
     return true;

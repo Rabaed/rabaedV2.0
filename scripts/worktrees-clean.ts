@@ -60,8 +60,11 @@ await confirmOrExit("Remove them with their folders and branches?", { yes, verb:
 let failed = 0;
 for (const w of remove) {
   try {
-    const { branchKept } = removeWorktree(w, mainRoot, target);
-    console.log(`Removed ${w.path}.`);
+    const { branchKept, folderLeft } = removeWorktree(w, mainRoot, target);
+    if (folderLeft) {
+      failed++;
+      console.error(`Removed ${w.path} from git, but could not delete its folder (${folderLeft}); delete it by hand.`);
+    } else console.log(`Removed ${w.path}.`);
     if (branchKept) console.log(`  Kept branch ${w.branch}: ${branchKept}`);
   } catch (error) {
     failed++;
