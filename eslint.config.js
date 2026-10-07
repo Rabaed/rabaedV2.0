@@ -114,6 +114,8 @@ export default tseslint.config(
       "**/test-support/**",
       "**/*.stories.tsx", // mock construction data (concrete grades, electrical panels); the copy they show is the component's, which is checked
       "packages/ui/src/storybook/**", // the stories' mock shell (its Files and Schedule tabs are Module names) and harness
+      "scripts/queue-pr.ts", // GitHub's merge queue and the database migration checks, by their own names
+      "scripts/queue-drop-comment.ts", // GitHub's merge queue, its CI checks and Actions logs, by their own names
       "packages/infra/**", // AWS's own vocabulary: account, region, environment, subscriber
       "scripts/check-workflows.ts", // GitHub Actions' own vocabulary: pull_request, a git tag, a CI check
       "packages/eslint-plugin/**", // it names the terms it bans

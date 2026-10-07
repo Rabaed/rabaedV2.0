@@ -1,0 +1,37 @@
+name: Queue drop comment
+# Comments on a PR why the merge queue removed it (RP-401): the reason and, for a
+# failed check, each failing job of the PR's latest merge_group CI run with its
+# first error line. The PR's own checks stay green when the queue removes it, so
+# nothing else wakes the session's Auto-fix; the comment does. The logic is in
+# scripts/queue-drop-comment.ts. For pull_request, this YAML itself comes from the
+# PR's merge ref (so only same-repo authors can change it, which the `if` below
+# enforces); the code it checks out and runs is the default branch's, never the
+# pull request's, so no PR code meets the write token. A PR removed for a merge
+# conflict may not trigger it at all (GitHub skips pull_request workflows while
+# the PR has a conflict); a person's manual removal gets no comment on purpose.
+# Not a required check: it must never be added to the main ruleset (it does not
+# run on merge_group).
+on:
+  pull_request:
+    types: [dequeued]
+permissions: {}
+jobs:
+  comment:
+    # A fork's PR gets a read-only token anyway; this keeps the job off it entirely.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with: { node-version: 24 }
+      - name: Comment why the queue removed the PR
+        run: node scripts/queue-drop-comment.ts
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
