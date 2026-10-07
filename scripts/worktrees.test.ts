@@ -207,9 +207,37 @@ describe("gatherFacts and removeWorktree in a throwaway repository", () => {
     expect(refExists("worktree-agent-merged", root)).toBe(false);
 
     const { branchKept } = removeWorktree(listed("agent-unmerged"), root);
-    expect(branchKept).toMatch(/not fully merged/);
+    expect(branchKept).toMatch(/has commits main does not/);
     expect(refExists("worktree-agent-unmerged", root)).toBe(true);
     expect(existsSync(agent("agent-unmerged"))).toBe(false);
+  });
+
+  it("deletes branches merged into the target branch although main is checked out, and keeps one with commits the target lacks", () => {
+    run(["branch", "integration"]);
+    for (const name of ["agent-in", "agent-out"]) {
+      run(["worktree", "add", "-b", `RP-9-${name}`, agent(name), "integration"]);
+      writeFileSync(join(agent(name), `${name}.txt`), name);
+      run(["add", `${name}.txt`], agent(name));
+      run(["commit", "-m", name], agent(name));
+    }
+    // Merge it into integration through a throwaway worktree, since main holds the root checkout.
+    run(["worktree", "add", join(root, "int"), "integration"]);
+    run(["merge", "--no-ff", "-m", "merge", "RP-9-agent-in"], join(root, "int"));
+
+    expect(removeWorktree(listed("agent-in"), root, "integration")).toEqual({});
+    expect(refExists("RP-9-agent-in", root)).toBe(false);
+
+    const { branchKept } = removeWorktree(listed("agent-out"), root, "integration");
+    expect(branchKept).toMatch(/RP-9-agent-out/);
+    expect(refExists("RP-9-agent-out", root)).toBe(true);
+  });
+
+  it("also deletes the worktree-agent-* branch the worktree was created on, once it is in the target", () => {
+    run(["worktree", "add", "-b", "worktree-agent-renamed", agent("agent-renamed")]);
+    run(["checkout", "-b", "RP-10-renamed"], agent("agent-renamed"));
+    expect(removeWorktree(listed("agent-renamed"), root, "main")).toEqual({});
+    expect(refExists("RP-10-renamed", root)).toBe(false);
+    expect(refExists("worktree-agent-renamed", root)).toBe(false);
   });
 
   it("calls a branch merged only once it has a commit of its own that the target has", () => {

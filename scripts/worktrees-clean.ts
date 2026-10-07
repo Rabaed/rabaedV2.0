@@ -1,8 +1,9 @@
 // Removes the merged agent worktrees (.claude/worktrees/agent-*) `/implement-spec`
 // leaves behind: those whose branch is merged into the target branch, or whose HEAD
 // is detached with no unique commits. Each goes with its leftover folder (node_modules
-// included) and its branch (`git branch -d`; a branch git refuses to delete is kept and
-// named). Worktrees with uncommitted changes or unmerged commits are never touched, nor,
+// included) and its branch (`git branch -D` when the branch is an ancestor of the target,
+// whichever branch the main folder has checked out; otherwise it is kept and named), plus
+// the `worktree-agent-*` branch the app created it on. Worktrees with uncommitted changes or unmerged commits are never touched, nor,
 // without --include-empty, those whose branch has no commit of its own yet: their
 // subagent may still be running. They are listed as skipped.
 //
@@ -59,7 +60,7 @@ await confirmOrExit("Remove them with their folders and branches?", { yes, verb:
 let failed = 0;
 for (const w of remove) {
   try {
-    const { branchKept } = removeWorktree(w, mainRoot);
+    const { branchKept } = removeWorktree(w, mainRoot, target);
     console.log(`Removed ${w.path}.`);
     if (branchKept) console.log(`  Kept branch ${w.branch}: ${branchKept}`);
   } catch (error) {

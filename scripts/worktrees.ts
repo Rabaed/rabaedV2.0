@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, rmSync } from "node:fs";
+import { basename } from "node:path";
 import { normalPath, samePath } from "./paths.ts";
 
 // Cleaning up the app-made agent worktrees `/implement-spec` leaves under
@@ -170,11 +171,13 @@ export function gatherFacts(worktrees: Worktree[], target: string, mainRoot: str
 
 /**
  * Unlocks, removes and deletes one worktree: its folder (git leaves it behind on
- * Windows when node_modules is in it) and its branch, with `git branch -d`, which
- * deletes only a branch merged into the main folder's HEAD (or its upstream).
- * Returns why the branch was kept, if it was.
+ * Windows when node_modules is in it) and its branch. The branch is deleted with
+ * `git branch -D` when it is an ancestor of the target branch; `git branch -d` would
+ * check against the main folder's HEAD, not the target. The `worktree-agent-*` branch
+ * the app created the worktree on (named after its folder) goes too when it is in the
+ * target. Returns why the branch was kept, if it was.
  */
-export function removeWorktree(w: Worktree, mainRoot: string): { branchKept?: string } {
+export function removeWorktree(w: Worktree, mainRoot: string, target = "main"): { branchKept?: string } {
   if (!isAgentWorktree(w.path, mainRoot)) throw new Error(`refusing to remove ${w.path}: not an agent worktree`);
   if (w.locked !== undefined) git(["worktree", "unlock", w.path], mainRoot);
   try {
@@ -184,13 +187,21 @@ export function removeWorktree(w: Worktree, mainRoot: string): { branchKept?: st
     if (listWorktrees(mainRoot).some((x) => samePath(x.path, w.path))) throw error;
   }
   if (existsSync(w.path)) rmSync(w.path, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+  const created = `worktree-${basename(normalPath(w.path))}`;
+  if (created !== w.branch && refExists(created, mainRoot) && inTarget(created, target, mainRoot)) git(["branch", "-D", created], mainRoot);
   if (!w.branch) return {};
+  if (!inTarget(w.branch, target, mainRoot)) return { branchKept: `${w.branch} has commits ${target} does not` };
+  git(["branch", "-D", w.branch], mainRoot);
+  return {};
+}
+
+/** Whether every commit of the branch is in the target. */
+function inTarget(branch: string, target: string, cwd: string): boolean {
   try {
-    git(["branch", "-d", w.branch], mainRoot);
-    return {};
-  } catch (error) {
-    // The first line is the reason; git's hints after it suggest branch -D.
-    return { branchKept: gitError(error).split(/\r?\n/)[0] };
+    git(["merge-base", "--is-ancestor", `refs/heads/${branch}`, target], cwd);
+    return true;
+  } catch {
+    return false;
   }
 }
 
