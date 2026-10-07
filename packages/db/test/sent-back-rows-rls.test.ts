@@ -432,3 +432,67 @@ describe("when a Draft was started, through the app role (scenario 61; RP-334 re
     }
   });
 });
+
+describe("Documents and Links added during the Draft, through the app role (scenarios 61 and 74; RP-399-1)", () => {
+  let x = "";
+  let id = "";
+  let started: Date;
+  const uploadedAt = async (as: string) =>
+    (await call<{ uploaded_at: Date }>(as, sql`select uploaded_at from app.document_times(${id}::uuid) order by seq`)).map((r) => r.uploaded_at);
+  const linkedAt = async (as: string) =>
+    (await call<{ created_at: Date }>(as, sql`select created_at from app.work_item_links(${id}::uuid)`)).map((r) => r.created_at);
+
+  beforeAll(async () => {
+    x = await draft("DL-X");
+    await submit(x);
+    id = await draft("DL");
+    await document(id, "datasheet.pdf", "datasheet");
+    await addLink(id, x);
+    // As if added on 10 Feb, long before the Draft is numbered.
+    started = (await migrator.query("select now() - interval '20 days' as at")).rows[0].at as Date;
+    await migrator.query("update document set created_at = $2, confirmed_at = $2 where work_item_id = $1", [id, started]);
+    await migrator.query("update work_item_link set created_at = $2 where from_id = $1", [id, started]);
+  });
+
+  it("show the C1 Members working on the Draft their real times", async () => {
+    for (const as of [c1.member, c1Pm]) {
+      expect(await uploadedAt(as)).toEqual([started]);
+      expect(await linkedAt(as)).toEqual([started]);
+    }
+  });
+
+  it("read no earlier than the Creation Date once numbered, for C1 and K1 alike, and after a Send Back", async () => {
+    await submit(id);
+    const numberedAt = (await migrator.query("select numbered_at from work_item where id = $1", [id])).rows[0].numbered_at as Date;
+    const check = async () => {
+      for (const as of [c1.member, c1Pm, k1.member, ow.member]) {
+        expect(await uploadedAt(as)).toEqual([numberedAt]);
+        expect(await linkedAt(as)).toEqual([numberedAt]);
+      }
+    };
+    await check();
+    expect(await claim(k1.member, id)).toBe("claimed");
+    expect(await take(k1.member, id, "send_back_to_draft")).toBe("applied");
+    await check();
+    // The stored times stay for audit.
+    const { rows } = await migrator.query("select confirmed_at from document where work_item_id = $1", [id]);
+    expect(rows).toEqual([{ confirmed_at: started }]);
+  });
+
+  it("are never read raw from the tables", async () => {
+    for (const as of [c1.member, c1Pm, k1.member, ow.member]) {
+      for (const query of [
+        sql<object>`select created_at from document where work_item_id = ${id}`,
+        sql<object>`select confirmed_at from document where work_item_id = ${id}`,
+        sql<object>`select created_at from work_item_link where from_id = ${id}`,
+      ]) {
+        await expect(call(as, query)).rejects.toThrow(/permission denied/);
+      }
+    }
+  });
+
+  it("give no times of an item the caller can't see", async () => {
+    expect(await uploadedAt(stranger.member)).toEqual([]);
+    expect(await linkedAt(stranger.member)).toEqual([]);
+  });
+});

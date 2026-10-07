@@ -273,6 +273,53 @@ describe("a Revision's answer times (RP-392-2)", () => {
   });
 });
 
+describe("Documents added during the Draft (RP-399-1; scenarios 61, 74 and 75)", () => {
+  const uploaded = async (by: Caller, id: string) =>
+    ((await ok(by.get(`/v1/work-items/${id}/documents`), 200)).json() as DocumentList).documents.map((d) => [d.fileName, Date.parse(d.uploadedAt)] as const);
+  const creationDate = async (id: string) => Date.parse((await detail(engineer, id)).creationDate!);
+  const pause = () => new Promise((resolve) => setTimeout(resolve, 100));
+
+  it("read no earlier than the Creation Date once numbered, for the C1 PM and for K1, though the C1 engineer saw the real time", async () => {
+    const res = await ok(
+      engineer.post(`/v1/projects/${projectId}/work-items`, {
+        type: "MAR",
+        title: "Cable trays",
+        answers: { ...complete, trade: electrical, location: buildingA },
+      }),
+      201,
+    );
+    const id = res.json().id as string;
+    await attachDatasheet(engineer, id);
+    await uploadDocument(engineer, id, { fileName: "routes.pdf", contentType: "application/pdf", body: "%PDF-1.7 routes" });
+    const real = await uploaded(engineer, id);
+    await pause();
+    await take(engineer, id, "send_for_review");
+    const created = await creationDate(id);
+    for (const [, at] of real) expect(at).toBeLessThan(created);
+    await ok(pm.post(`/v1/work-items/${id}/claim`));
+    expect(await uploaded(pm, id)).toEqual(real.map(([name]) => [name, created]));
+    await take(pm, id, "submit");
+    for (const who of [engineer, pm, k1Manager]) expect(await uploaded(who, id)).toEqual(real.map(([name]) => [name, created]));
+  });
+
+  it("of a Revision follow its own Creation Date; its copies keep the original's upload times", async () => {
+    const closed = await closedAtCodeC("Busbars", ["layout.pdf"]);
+    const original = await uploaded(engineer, closed);
+    for (const [, at] of original) expect(at).toBeGreaterThanOrEqual(await creationDate(closed));
+    const rev = await revisionOf(closed);
+    await uploadDocument(engineer, rev, { fileName: "revised.pdf", contentType: "application/pdf", body: "%PDF-1.7 revised" });
+    const draft = await uploaded(engineer, rev);
+    expect(draft.slice(0, original.length)).toEqual(original);
+    await pause();
+    await take(engineer, rev, "send_for_review");
+    const created = await creationDate(rev);
+    expect(draft.at(-1)![1]).toBeLessThan(created);
+    await ok(pm.post(`/v1/work-items/${rev}/claim`));
+    await take(pm, rev, "submit");
+    for (const who of [engineer, pm, k1Manager]) expect(await uploaded(who, rev)).toEqual([...original, ["revised.pdf", created]]);
+  });
+});
+
 describe("the Revision drop-down (RP-318; scenarios 51 and 52)", () => {
   let closed = "";
   let base = "";
