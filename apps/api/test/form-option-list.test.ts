@@ -10,11 +10,12 @@ import { randomUUID } from "node:crypto";
 import { addOption, setOptionRetired } from "@rabaed/admin/services";
 import { createDb } from "@rabaed/db";
 import { testDatabaseUrls } from "@rabaed/db/test-support";
-import type { FormVersion, OptionList, WorkItemDetail } from "@rabaed/domain";
+import type { FormVersion, OptionList } from "@rabaed/domain";
 import type { LightMyRequestResponse } from "fastify";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestApi, type Caller } from "./support/harness.ts";
+import { detail, projectMember, tryTake } from "./support/tower.ts";
 
 const api = await createTestApi();
 const migrator = createDb(testDatabaseUrls().migrator, { max: 1 });
@@ -125,10 +126,8 @@ const createDraft = (answers: Record<string, unknown>) =>
   engineer.post(`/v1/projects/${projectId}/work-items`, { type: TYPE, title: "Finishes", answers: { ...builtIns(), ...answers } });
 const save = (id: string, answers: Record<string, unknown>) =>
   engineer.request("PUT", `/v1/work-items/${id}/answers`, { answers: { ...builtIns(), ...answers } });
-const take = (id: string, transition: string) => engineer.post(`/v1/work-items/${id}/transitions`, { transition, idempotencyKey: randomUUID() });
-const detail = async (id: string): Promise<WorkItemDetail> => (await ok(engineer.get(`/v1/work-items/${id}`), 200)).json();
 const answersOf = async (id: string) => {
-  const { trade: _trade, location: _location, ...own } = (await detail(id)).answers;
+  const { trade: _trade, location: _location, ...own } = (await detail(engineer, id)).answers;
   return own;
 };
 const formVersionNo = async () =>
@@ -162,15 +161,8 @@ beforeAll(async () => {
     .participants.find((p: { isOwnCompany: boolean }) => p.isOwnCompany).id;
   await ok(c1.caller.request("PUT", `/v1/participants/${own}/visibility`, { trade: all, location: all }));
   // The engineer raises the items; a Project Manager holds Internal Review once they are sent.
-  const projectMember = async (positions: string[]) => {
-    const { member, caller } = await api.member(c1.caller);
-    await api.addProjectMember(c1.caller, own, member.id);
-    await ok(c1.caller.request("PUT", `/v1/participants/${own}/members/${member.id}/visibility`, { trade: all, location: all }));
-    await ok(c1.caller.request("PUT", `/v1/participants/${own}/members/${member.id}/positions`, { positions }));
-    return caller;
-  };
-  engineer = await projectMember(["engineer"]);
-  await projectMember(["project_manager"]);
+  engineer = await projectMember(api, c1, own, ["engineer"]);
+  await projectMember(api, c1, own, ["project_manager"]);
 });
 
 describe("an option added in Rabaed Admin", () => {
@@ -206,7 +198,7 @@ describe("a retired option", () => {
     const held = { finish: value, items: [{ name: "Run", kind: inTheTable }] };
     await ok(save(id, held));
     expect(await answersOf(id)).toEqual(held);
-    await ok(take(id, "send_for_review"));
+    await ok(tryTake(engineer, id, "send_for_review"));
   });
 
   it("is refused for a new choice, in a field, a list and a table cell", async () => {
@@ -232,17 +224,17 @@ describe("a retired option", () => {
 describe("depth and single or multiple choice", () => {
   it("lets a Draft stop half way down, and blocks leaving Draft until it reaches the depth", async () => {
     const id = (await ok(createDraft({ finish: "cables" }), 201)).json().id as string;
-    expect(refusal(await take(id, "send_for_review"))).toEqual({
+    expect(refusal(await tryTake(engineer, id, "send_for_review"))).toEqual({
       status: 422,
       body: { error: "form_incomplete", fields: [{ key: "finish", code: "too_shallow" }] },
     });
     await ok(save(id, { finish: "two5" }));
-    await ok(take(id, "send_for_review"));
+    await ok(tryTake(engineer, id, "send_for_review"));
   });
 
   it("takes a branch that ends sooner than the depth", async () => {
     const id = (await ok(createDraft({ finish: "trays" }), 201)).json().id as string;
-    await ok(take(id, "send_for_review"));
+    await ok(tryTake(engineer, id, "send_for_review"));
   });
 
   it("refuses an option below a field's depth, and a list where one is wanted (and the reverse)", async () => {

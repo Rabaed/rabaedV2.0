@@ -5,13 +5,13 @@
 // against it, and stores them in the Transition's event. MAR Workflow Version 1
 // asks exactly what it did before: a reason on the Return, nothing elsewhere,
 // and an Internal Note under every pop-up that stays inside the writer's Company.
-import { randomUUID } from "node:crypto";
 import { createDb } from "@rabaed/db";
 import { testDatabaseUrls } from "@rabaed/db/test-support";
-import { workflowActionFormProblems, type WorkItemDetail, type WorkItemHistory } from "@rabaed/domain";
+import { workflowActionFormProblems, type WorkItemHistory } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { attachDatasheet, createTestApi, expectHidden, type Caller, type OnboardedCompany } from "./support/harness.ts";
+import { detail, projectMember, tryTake } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
 const migrator = createDb(testDatabaseUrls().migrator, { max: 1 });
@@ -39,14 +39,6 @@ async function ok(res: Promise<{ statusCode: number; body: string }>, status = 2
   expect(r.statusCode, r.body).toBe(status);
 }
 
-async function projectMember(company: Company, participantId: string, positions: string[]) {
-  const { member, caller } = await api.member(company.caller);
-  await api.addProjectMember(company.caller, participantId, member.id);
-  await ok(company.caller.request("PUT", `/v1/participants/${participantId}/members/${member.id}/visibility`, { trade: all, location: all }));
-  await ok(company.caller.request("PUT", `/v1/participants/${participantId}/members/${member.id}/positions`, { positions }));
-  return caller;
-}
-
 async function createDraft(title: string): Promise<string> {
   const res = await engineer.post(`/v1/projects/${projectId}/work-items`, {
     type: "MAR",
@@ -58,15 +50,6 @@ async function createDraft(title: string): Promise<string> {
   return res.json().id;
 }
 
-const take = (by: Caller, id: string, transition: string, extra: { answers?: unknown; internalNote?: string } = {}) =>
-  by.post(`/v1/work-items/${id}/transitions`, { transition, idempotencyKey: randomUUID(), ...extra });
-
-async function detail(by: Caller, id: string): Promise<WorkItemDetail> {
-  const res = await by.get(`/v1/work-items/${id}`);
-  expect(res.statusCode, res.body).toBe(200);
-  return res.json();
-}
-
 async function history(by: Caller, id: string): Promise<WorkItemHistory["events"]> {
   const res = await by.get(`/v1/work-items/${id}/history`);
   expect(res.statusCode, res.body).toBe(200);
@@ -76,7 +59,7 @@ async function history(by: Caller, id: string): Promise<WorkItemHistory["events"
 /** An item sent for review and claimed by the PM, at Internal Review. */
 async function atInternalReview(title: string) {
   const id = await createDraft(title);
-  await ok(take(engineer, id, "send_for_review"));
+  await ok(tryTake(engineer, id, "send_for_review"));
   await ok(pm.post(`/v1/work-items/${id}/claim`));
   return id;
 }
@@ -110,12 +93,12 @@ beforeAll(async () => {
     .json()
     .participants.find((p: { isOwnCompany: boolean }) => p.isOwnCompany).id;
   await ok(c1.caller.request("PUT", `/v1/participants/${c1ParticipantId}/visibility`, { trade: all, location: all }));
-  engineer = await projectMember(c1, c1ParticipantId, ["engineer"]);
-  pm = await projectMember(c1, c1ParticipantId, ["project_manager"]);
+  engineer = await projectMember(api, c1, c1ParticipantId, ["engineer"]);
+  pm = await projectMember(api, c1, c1ParticipantId, ["project_manager"]);
   const k1 = await api.authorizedPerson();
   const k1ParticipantId = await api.addParticipant(c1.caller, projectId, k1.company, "consultant");
   await ok(c1.caller.request("PUT", `/v1/participants/${k1ParticipantId}/visibility`, { trade: all, location: all }));
-  k1Manager = await projectMember(k1, k1ParticipantId, ["manager"]);
+  k1Manager = await projectMember(api, k1, k1ParticipantId, ["manager"]);
 });
 
 describe("publish check 7", () => {
@@ -148,7 +131,7 @@ describe("MAR Workflow Version 1's Action Forms", () => {
 describe("taking a Transition with its Action Form", () => {
   it("stores the answers in the Transition's event, where the history reads the reason", async () => {
     const id = await atInternalReview("Answered");
-    await ok(take(pm, id, "return", { answers: { reason: "Wrong tray size" } }));
+    await ok(tryTake(pm, id, "return", { answers: { reason: "Wrong tray size" } }));
     const events = await history(engineer, id);
     expect(events.at(-1)).toMatchObject({ type: "transition", transition: { en: "Return" }, reason: "Wrong tray size" });
     const { rows } = await sql<{ payload: unknown }>`
@@ -160,7 +143,7 @@ describe("taking a Transition with its Action Form", () => {
   it("refuses a Return without its reason, naming the field, and moves nothing", async () => {
     const id = await atInternalReview("No reason");
     for (const answers of [undefined, {}, { reason: "   " }]) {
-      const res = await take(pm, id, "return", { answers });
+      const res = await tryTake(pm, id, "return", { answers });
       expect(res.statusCode, res.body).toBe(422);
       expect(res.json()).toEqual({ error: "invalid_action_form", fields: [{ key: "reason", code: "required" }] });
     }
@@ -169,20 +152,20 @@ describe("taking a Transition with its Action Form", () => {
 
   it("refuses answers the Action Form doesn't ask for, or of the wrong kind", async () => {
     const id = await atInternalReview("Unknown answers");
-    expect((await take(pm, id, "return", { answers: { reason: "Fine", remarks: "Not asked" } })).json()).toEqual({
+    expect((await tryTake(pm, id, "return", { answers: { reason: "Fine", remarks: "Not asked" } })).json()).toEqual({
       error: "invalid_action_form",
       fields: [{ key: "remarks", code: "unknown_field" }],
     });
-    expect((await take(pm, id, "return", { answers: { reason: 42 } })).json()).toEqual({
+    expect((await tryTake(pm, id, "return", { answers: { reason: 42 } })).json()).toEqual({
       error: "invalid_action_form",
       fields: [{ key: "reason", code: "wrong_type" }],
     });
-    expect((await take(pm, id, "return", { answers: { reason: "x".repeat(2001) } })).json()).toEqual({
+    expect((await tryTake(pm, id, "return", { answers: { reason: "x".repeat(2001) } })).json()).toEqual({
       error: "invalid_action_form",
       fields: [{ key: "reason", code: "too_long" }],
     });
     // A Transition with no Action Form takes no answers.
-    expect((await take(pm, id, "submit", { answers: { reason: "Not asked" } })).json()).toEqual({
+    expect((await tryTake(pm, id, "submit", { answers: { reason: "Not asked" } })).json()).toEqual({
       error: "invalid_action_form",
       fields: [{ key: "reason", code: "unknown_field" }],
     });
@@ -191,15 +174,15 @@ describe("taking a Transition with its Action Form", () => {
 
   it("tells someone who can't take the Transition only that, never what its Action Form lacks", async () => {
     const id = await atInternalReview("Not theirs");
-    const res = await take(engineer, id, "return", { answers: {} });
+    const res = await tryTake(engineer, id, "return", { answers: {} });
     expect(res.statusCode, res.body).toBe(409);
     expect(res.json()).toEqual({ error: "not_holder" });
-    await expectHidden(take(k1Manager, id, "return", { answers: {} }));
+    await expectHidden(tryTake(k1Manager, id, "return", { answers: {} }));
   });
 
   it("keeps the Internal Note out of the shared payload, as its own internal event (V5, scenario 34)", async () => {
     const id = await atInternalReview("Noted");
-    await ok(take(pm, id, "submit", { internalNote: "Checked against the drawings" }));
+    await ok(tryTake(pm, id, "submit", { internalNote: "Checked against the drawings" }));
     const { rows } = await sql<{ type: string; audience: string; payload: Record<string, unknown> }>`
       select type, audience, payload from work_item_event where work_item_id = ${id}::uuid order by seq desc limit 2
     `.execute(migrator);

@@ -61,6 +61,25 @@ export default tseslint.config(
     rules: { "rabaed/locale-through-helpers": "error" },
   },
   {
+    // The api tests share `take`, `detail` and `projectMember` (RP-372); a local copy drifts from them.
+    files: ["apps/api/test/**/*.test.ts"],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        ...["take", "detail", "projectMember"].flatMap((name) => [
+          {
+            selector: `FunctionDeclaration[id.name='${name}']`,
+            message: `Don't define a local \`${name}\`: import it from "./support/tower.ts" (extend it there if it lacks something).`,
+          },
+          {
+            selector: `VariableDeclarator[id.name='${name}'][init.type=/^(ArrowFunctionExpression|FunctionExpression)$/]`,
+            message: `Don't define a local \`${name}\`: import it from "./support/tower.ts" (extend it there if it lacks something).`,
+          },
+        ]),
+      ],
+    },
+  },
+  {
     files: ["apps/web/**/*.{ts,tsx}"],
     plugins: { "@next/next": nextPlugin },
     languageOptions: { globals: { ...globals.browser } },

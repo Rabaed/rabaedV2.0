@@ -9,11 +9,12 @@ import { randomUUID } from "node:crypto";
 import { publishFormVersion } from "@rabaed/admin/services";
 import { createDb } from "@rabaed/db";
 import { testDatabaseUrls } from "@rabaed/db/test-support";
-import type { FormVersion, WorkItemDetail } from "@rabaed/domain";
+import type { FormVersion } from "@rabaed/domain";
 import { sql } from "kysely";
 import type { LightMyRequestResponse } from "fastify";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestApi, type Caller } from "./support/harness.ts";
+import { detail, projectMember } from "./support/tower.ts";
 
 const api = await createTestApi();
 const migrator = createDb(testDatabaseUrls().migrator, { max: 1 });
@@ -86,7 +87,6 @@ const created = async (answers: Record<string, unknown>) =>
 const save = (id: string, answers: Record<string, unknown>) =>
   engineer.request("PUT", `/v1/work-items/${id}/answers`, { answers: { ...builtIns(), ...answers } });
 const send = (id: string) => engineer.post(`/v1/work-items/${id}/transitions`, { transition: "send_for_review", idempotencyKey: randomUUID() });
-const detail = async (id: string): Promise<WorkItemDetail> => (await ok(engineer.get(`/v1/work-items/${id}`), 200)).json();
 
 beforeAll(async () => {
   formId = await newFormForTestType();
@@ -99,16 +99,9 @@ beforeAll(async () => {
     .json()
     .participants.find((p: { isOwnCompany: boolean }) => p.isOwnCompany).id;
   await ok(c1.caller.request("PUT", `/v1/participants/${own}/visibility`, { trade: all, location: all }));
-  const projectMember = async (positions: string[]) => {
-    const { member, caller } = await api.member(c1.caller);
-    await api.addProjectMember(c1.caller, own, member.id);
-    await ok(c1.caller.request("PUT", `/v1/participants/${own}/members/${member.id}/visibility`, { trade: all, location: all }));
-    await ok(c1.caller.request("PUT", `/v1/participants/${own}/members/${member.id}/positions`, { positions }));
-    return caller;
-  };
-  engineer = await projectMember(["engineer"]);
+  engineer = await projectMember(api, c1, own, ["engineer"]);
   // Holds the Contractor review Step that Send for Review leads to.
-  await projectMember(["project_manager"]);
+  await projectMember(api, c1, own, ["project_manager"]);
 });
 
 describe("publishing Version 2 of a Form", () => {
@@ -128,14 +121,14 @@ describe("publishing Version 2 of a Form", () => {
   it("gives new items Version 2, and pins them to it", async () => {
     expect(v2).toMatchObject({ versionNo: 2, schema: { sections: [{ fields: [{ key: "fire_rated" }] }, {}] } });
     const id = await created({ fire_rated: false });
-    expect(await detail(id)).toMatchObject({ formVersionId: v2.id, answers: { fire_rated: false } });
+    expect(await detail(engineer, id)).toMatchObject({ formVersionId: v2.id, answers: { fire_rated: false } });
     expect((await ok(engineer.get(`/v1/work-items/${id}/form`), 200)).json()).toEqual(v2);
     await ok(send(id));
   });
 
   it("leaves an item on Version 1 showing Version 1", async () => {
     expect(v1.versionNo).toBe(1);
-    expect((await detail(onVersion1)).formVersionId).toBe(v1.id);
+    expect((await detail(engineer, onVersion1)).formVersionId).toBe(v1.id);
     expect((await ok(engineer.get(`/v1/work-items/${onVersion1}/form`), 200)).json()).toEqual(v1);
   });
 
@@ -150,7 +143,7 @@ describe("publishing Version 2 of a Form", () => {
     expect(incomplete.json()).toEqual({ error: "form_incomplete", fields: [{ key: "colour", code: "required" }] });
     await ok(save(onVersion1, { colour: "Red" }));
     await ok(send(onVersion1));
-    expect(await detail(onVersion1)).toMatchObject({ formVersionId: v1.id, answers: { colour: "Red" } });
+    expect(await detail(engineer, onVersion1)).toMatchObject({ formVersionId: v1.id, answers: { colour: "Red" } });
   });
 });
 

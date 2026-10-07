@@ -11,7 +11,7 @@ import { drainOutbox, testDatabaseUrls } from "@rabaed/db/test-support";
 import type { DocumentList, NotificationList, WorkItemDetail, WorkItemLinks, WorkItemList } from "@rabaed/domain";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { attachDatasheet, createTestApi, type Caller } from "./support/harness.ts";
-import { all, bilingual, ok, projectMember, type Company } from "./support/tower.ts";
+import { all, bilingual, ok, projectMember, take, type Company } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
 // The worker delivers notifications; it connects as the app role, with no Member set.
@@ -36,8 +36,6 @@ let projectId = "";
 let trade = "";
 let location = "";
 
-const take = (by: Caller, id: string, transition: string, answers: Record<string, unknown> = {}) =>
-  ok(by.post(`/v1/work-items/${id}/transitions`, { transition, answers, idempotencyKey: randomUUID() }));
 const documentsOf = async (by: Caller, id: string): Promise<DocumentList> => (await ok(by.get(`/v1/work-items/${id}/documents`), 200)).json();
 
 /** Each id is a UUIDv4 and, read as a UUIDv7, names no moment anywhere near when it was made. */

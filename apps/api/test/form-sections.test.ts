@@ -11,11 +11,12 @@ import { randomUUID } from "node:crypto";
 import { publishFormVersion } from "@rabaed/admin/services";
 import { createDb } from "@rabaed/db";
 import { testDatabaseUrls } from "@rabaed/db/test-support";
-import type { FormToFill, WorkItemDetail } from "@rabaed/domain";
+import type { FormToFill } from "@rabaed/domain";
 import { sql } from "kysely";
 import type { LightMyRequestResponse } from "fastify";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestApi, type Caller } from "./support/harness.ts";
+import { detail, projectMember } from "./support/tower.ts";
 
 const api = await createTestApi();
 const migrator = createDb(testDatabaseUrls().migrator, { max: 1 });
@@ -84,10 +85,9 @@ const create = (answers: Record<string, unknown>) =>
   engineer.post(`/v1/projects/${projectId}/work-items`, { type: TYPE, title: "Fire doors", answers: { ...builtIns(), ...answers } });
 const save = (id: string, answers: Record<string, unknown>) =>
   engineer.request("PUT", `/v1/work-items/${id}/answers`, { answers: { ...builtIns(), ...answers } });
-const detail = async (id: string): Promise<WorkItemDetail> => (await ok(engineer.get(`/v1/work-items/${id}`), 200)).json();
 /** The Form's own answers, without the Built-in Fields. */
 const answersOf = async (id: string) => {
-  const { trade: _trade, location: _location, ...own } = (await detail(id)).answers;
+  const { trade: _trade, location: _location, ...own } = (await detail(engineer, id)).answers;
   return own;
 };
 
@@ -102,16 +102,9 @@ beforeAll(async () => {
     .json()
     .participants.find((p: { isOwnCompany: boolean }) => p.isOwnCompany).id;
   await ok(c1.caller.request("PUT", `/v1/participants/${own}/visibility`, { trade: all, location: all }));
-  const projectMember = async (positions: string[]) => {
-    const { member, caller } = await api.member(c1.caller);
-    await api.addProjectMember(c1.caller, own, member.id);
-    await ok(c1.caller.request("PUT", `/v1/participants/${own}/members/${member.id}/visibility`, { trade: all, location: all }));
-    await ok(c1.caller.request("PUT", `/v1/participants/${own}/members/${member.id}/positions`, { positions }));
-    return caller;
-  };
-  engineer = await projectMember(["engineer"]);
+  engineer = await projectMember(api, c1, own, ["engineer"]);
   // Holds the Contractor review Step that Send for Review leads to.
-  await projectMember(["project_manager"]);
+  await projectMember(api, c1, own, ["project_manager"]);
 });
 
 describe("publishing a Form whose sections name Steps", () => {

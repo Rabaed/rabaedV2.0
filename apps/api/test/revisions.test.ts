@@ -8,10 +8,10 @@
 // one takes its Rev number again. Until it is Submitted, nobody outside C1 sees
 // anything of it.
 import { randomUUID } from "node:crypto";
-import type { DocumentList, LinkedFrom, RevisionChain, WorkItemDetail, WorkItemLinks } from "@rabaed/domain";
+import type { DocumentList, LinkedFrom, RevisionChain, WorkItemLinks } from "@rabaed/domain";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { attachDatasheet, createTestApi, expectHidden, uploadDocument, type Caller } from "./support/harness.ts";
-import { all, bilingual, ok, only, projectMember, type Company } from "./support/tower.ts";
+import { all, bilingual, detail, ok, only, projectMember, take, type Company } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
 afterAll(() => api.close());
@@ -34,9 +34,6 @@ const complete = {
   items: [{ fixture_type: "Downlight", quantity: 120, unit: "pcs" }],
 };
 
-const take = (by: Caller, id: string, transition: string, answers: Record<string, unknown> = {}) =>
-  ok(by.post(`/v1/work-items/${id}/transitions`, { transition, answers, idempotencyKey: randomUUID() }));
-const detail = async (by: Caller, id: string): Promise<WorkItemDetail> => (await ok(by.get(`/v1/work-items/${id}`), 200)).json();
 const saveOver = async (by: Caller, id: string, changes: Record<string, unknown>) =>
   ok(by.request("PUT", `/v1/work-items/${id}/answers`, { answers: { ...(await detail(by, id)).answers, ...changes } }));
 const createRevision = (by: Caller, id: string, idempotencyKey: string = randomUUID()) =>

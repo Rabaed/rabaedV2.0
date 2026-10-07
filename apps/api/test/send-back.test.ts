@@ -14,7 +14,7 @@ import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestApi, type Caller } from "./support/harness.ts";
 import { addSendBackType } from "./support/send-back.ts";
-import { all, bilingual, detail, memberOnProject, ok, take, type Company } from "./support/tower.ts";
+import { all, bilingual, detail, ok, projectMember, take, type Company } from "./support/tower.ts";
 
 const api = await createTestApi();
 const migrator = createDb(testDatabaseUrls().migrator, { max: 1 });
@@ -66,12 +66,6 @@ const recorded = async (id: string) => {
   };
 };
 
-/** A signed-in Member of `company` on the Project, with `positions` and all of its Visibility, signed in again by api.later(). */
-async function projectMember(company: Company, participantId: string, positions: string[]): Promise<Caller> {
-  const { caller } = await memberOnProject(api, company, participantId, positions);
-  return caller;
-}
-
 async function newDraft(model: string): Promise<string> {
   const res = await ok(
     engineer.post(`/v1/projects/${projectId}/work-items`, { type: TYPE, title: model, answers: { model, trade: electrical, location: buildingA } }),
@@ -96,13 +90,13 @@ beforeAll(async () => {
     .json()
     .participants.find((p: { isOwnCompany: boolean }) => p.isOwnCompany).id;
   await ok(c1.caller.request("PUT", `/v1/participants/${own}/visibility`, { trade: all, location: all }));
-  engineer = await projectMember(c1, own, ["engineer"]);
-  pm = await projectMember(c1, own, ["project_manager"]);
+  engineer = await projectMember(api, c1, own, ["engineer"]);
+  pm = await projectMember(api, c1, own, ["project_manager"]);
   const participant = async (role: "consultant" | "owner_representative") => {
     const company = await api.authorizedPerson();
     const participantId = await api.addParticipant(c1.caller, projectId, company.company, role);
     await ok(c1.caller.request("PUT", `/v1/participants/${participantId}/visibility`, { trade: all, location: all }));
-    return projectMember(company, participantId, ["engineer"]);
+    return projectMember(api, company, participantId, ["engineer"]);
   };
   k1Engineer = await participant("consultant");
   orEngineer = await participant("owner_representative");

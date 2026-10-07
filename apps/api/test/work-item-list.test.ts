@@ -9,7 +9,7 @@ import { randomUUID } from "node:crypto";
 import { encodeWorkItemCursor, isOpenStageCategory, workItemSearchParams, type WorkItemList, type WorkItemQueryInput, type WorkItemRow } from "@rabaed/domain";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { attachDatasheet, createTestApi, expectHidden, type Caller } from "./support/harness.ts";
-import { all, bilingual, memberOnProject, ok, type Company } from "./support/tower.ts";
+import { all, bilingual, ok, projectMember, take, type Company } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
 afterAll(() => api.close());
@@ -34,14 +34,6 @@ const complete = {
   description: "LED fixtures",
   items: [{ fixture_type: "Downlight", quantity: 120, unit: "pcs" }],
 };
-
-async function projectMember(...args: Parameters<typeof memberOnProject>) {
-  const { caller } = await memberOnProject(...args);
-  return caller;
-}
-
-const take = (by: Caller, id: string, transition: string, answers: Record<string, unknown> = {}) =>
-  ok(by.post(`/v1/work-items/${id}/transitions`, { transition, answers, idempotencyKey: randomUUID() }));
 
 /** One page of the List as `by` reads it with `query`. */
 async function list(by: Caller, query: WorkItemQueryInput = {}, project = projectId): Promise<WorkItemList> {

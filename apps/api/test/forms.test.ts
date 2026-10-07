@@ -3,10 +3,11 @@
 // saves an incomplete draft, and can't Send for Review until the Form is
 // complete. The answers are filtered exactly like the Work Item: 404 when hidden.
 import { randomUUID } from "node:crypto";
-import { formSchemaProblems, isAnswerField, type FormVersion, type WorkItemDetail } from "@rabaed/domain";
+import { formSchemaProblems, isAnswerField, type FormVersion } from "@rabaed/domain";
 import type { LightMyRequestResponse } from "fastify";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { attachDatasheet, createTestApi, expectHidden, type Caller, type OnboardedCompany } from "./support/harness.ts";
+import { detail, projectMember } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
 afterAll(() => api.close());
@@ -33,21 +34,11 @@ async function ok(res: Promise<LightMyRequestResponse>, status = 204) {
   return r;
 }
 
-async function projectMember(company: Company, participantId: string, positions: string[]) {
-  const { member, caller } = await api.member(company.caller);
-  await api.addProjectMember(company.caller, participantId, member.id);
-  await ok(
-    company.caller.request("PUT", `/v1/participants/${participantId}/members/${member.id}/visibility`, { trade: all, location: all }),
-  );
-  await ok(company.caller.request("PUT", `/v1/participants/${participantId}/members/${member.id}/positions`, { positions }));
-  return caller;
-}
-
 async function otherParticipant(role: "contractor" | "consultant") {
   const company = await api.authorizedPerson();
   const participantId = await api.addParticipant(c1.caller, projectId, company.company, role);
   await ok(c1.caller.request("PUT", `/v1/participants/${participantId}/visibility`, { trade: all, location: all }));
-  return projectMember(company, participantId, ["engineer"]);
+  return projectMember(api, company, participantId, ["engineer"]);
 }
 
 const createDraft = (by: Caller, answers: Record<string, unknown>) =>
@@ -65,10 +56,6 @@ const save = (by: Caller, id: string, answers: Record<string, unknown>) =>
 const sendForReview = (by: Caller, id: string) =>
   by.post(`/v1/work-items/${id}/transitions`, { transition: "send_for_review", idempotencyKey: randomUUID() });
 
-async function detail(by: Caller, id: string): Promise<WorkItemDetail> {
-  return (await ok(by.get(`/v1/work-items/${id}`), 200)).json();
-}
-
 beforeAll(async () => {
   c1 = await api.projectCreator();
   projectId = (await api.createProject(c1.caller)).id;
@@ -78,8 +65,8 @@ beforeAll(async () => {
     .json()
     .participants.find((p: { isOwnCompany: boolean }) => p.isOwnCompany).id;
   await ok(c1.caller.request("PUT", `/v1/participants/${own}/visibility`, { trade: all, location: all }));
-  engineer = await projectMember(c1, own, ["engineer"]);
-  pm = await projectMember(c1, own, ["project_manager"]);
+  engineer = await projectMember(api, c1, own, ["engineer"]);
+  pm = await projectMember(api, c1, own, ["project_manager"]);
   c2Engineer = await otherParticipant("contractor");
   k1Engineer = await otherParticipant("consultant");
   outsider = (await api.member(c1.caller)).caller;

@@ -7,7 +7,6 @@
 //
 // The MAR Form Version 1 has no attachments field, so this file adds a test-only
 // Rabaed Default Type (the MAR's Workflow) whose Form has two.
-import { randomUUID } from "node:crypto";
 import { createDb } from "@rabaed/db";
 import { testDatabaseUrls } from "@rabaed/db/test-support";
 import { formSchema, type DocumentList, type FormVersion, type StartedDocumentUpload } from "@rabaed/domain";
@@ -15,6 +14,7 @@ import { sql } from "kysely";
 import type { LightMyRequestResponse } from "fastify";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestApi, expectHidden, type Caller } from "./support/harness.ts";
+import { projectMember, tryTake } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
 const migrator = createDb(testDatabaseUrls().migrator, { max: 1 });
@@ -105,8 +105,6 @@ const draft = async () =>
       201,
     )
   ).json().id as string;
-const take = (by: Caller, id: string, transition: string) =>
-  by.post(`/v1/work-items/${id}/transitions`, { transition, idempotencyKey: randomUUID() });
 
 const documentsUrl = (itemId: string) => `/v1/work-items/${itemId}/documents`;
 const documentUrl = (itemId: string, documentId: string) => `${documentsUrl(itemId)}/${documentId}`;
@@ -142,20 +140,13 @@ beforeAll(async () => {
     .json()
     .participants.find((p: { isOwnCompany: boolean }) => p.isOwnCompany).id;
   await ok(c1.caller.request("PUT", `/v1/participants/${own}/visibility`, { trade: all, location: all }));
-  const projectMember = async (owner: typeof c1, participantId: string, positions: string[]) => {
-    const { member, caller } = await api.member(owner.caller);
-    await api.addProjectMember(owner.caller, participantId, member.id);
-    await ok(owner.caller.request("PUT", `/v1/participants/${participantId}/members/${member.id}/visibility`, { trade: all, location: all }));
-    await ok(owner.caller.request("PUT", `/v1/participants/${participantId}/members/${member.id}/positions`, { positions }));
-    return caller;
-  };
-  engineer = await projectMember(c1, own, ["engineer"]);
-  pm = await projectMember(c1, own, ["project_manager"]);
+  engineer = await projectMember(api, c1, own, ["engineer"]);
+  pm = await projectMember(api, c1, own, ["project_manager"]);
   const other = async (role: "consultant" | "contractor", positions: string[]) => {
     const company = await api.authorizedPerson();
     const participantId = await api.addParticipant(c1.caller, projectId, company.company, role);
     await ok(c1.caller.request("PUT", `/v1/participants/${participantId}/visibility`, { trade: all, location: all }));
-    return projectMember(company, participantId, positions);
+    return projectMember(api, company, participantId, positions);
   };
   consultant = await other("consultant", ["manager"]);
   c2Engineer = await other("contractor", ["engineer"]);
@@ -226,12 +217,12 @@ describe("leaving Draft", () => {
     const id = await draft();
     await uploaded(engineer, id, { fileName: "general.pdf" });
     await uploaded(engineer, id, { fieldKey: "test_certificate" });
-    expect(await refusedWith(take(engineer, id, "send_for_review"))).toEqual({
+    expect(await refusedWith(tryTake(engineer, id, "send_for_review"))).toEqual({
       status: 422,
       body: { error: "form_incomplete", fields: [{ key: "datasheet", code: "required" }] },
     });
     await uploaded(engineer, id, { fieldKey: "datasheet" });
-    await ok(take(engineer, id, "send_for_review"));
+    await ok(tryTake(engineer, id, "send_for_review"));
   });
 
   it("counts confirmed files only, and none removed", async () => {
@@ -239,7 +230,7 @@ describe("leaving Draft", () => {
     await ok(start(engineer, id, { fieldKey: "datasheet" }), 201);
     const removed = await uploaded(engineer, id, { fieldKey: "datasheet" });
     await ok(engineer.request("DELETE", documentUrl(id, removed)));
-    expect((await take(engineer, id, "send_for_review")).json()).toEqual({
+    expect((await tryTake(engineer, id, "send_for_review")).json()).toEqual({
       error: "form_incomplete",
       fields: [{ key: "datasheet", code: "required" }],
     });
@@ -253,9 +244,9 @@ describe("once Submitted", () => {
   beforeAll(async () => {
     id = await draft();
     datasheet = await uploaded(engineer, id, { fieldKey: "datasheet" });
-    await ok(take(engineer, id, "send_for_review"));
+    await ok(tryTake(engineer, id, "send_for_review"));
     await ok(pm.post(`/v1/work-items/${id}/claim`));
-    await ok(take(pm, id, "submit"));
+    await ok(tryTake(pm, id, "submit"));
   });
 
   it("a field's file can't be removed, replaced or added to", async () => {

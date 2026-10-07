@@ -5,7 +5,6 @@
 //
 // The MAR Form Version 1 has no calculated field, so this file adds a test-only
 // Rabaed Default Type (the MAR's Workflow) whose Form has one.
-import { randomUUID } from "node:crypto";
 import { createDb } from "@rabaed/db";
 import { testDatabaseUrls } from "@rabaed/db/test-support";
 import { formSchema, type FormVersion, type WorkItemDetail } from "@rabaed/domain";
@@ -13,6 +12,7 @@ import { sql } from "kysely";
 import type { LightMyRequestResponse } from "fastify";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestApi, type Caller } from "./support/harness.ts";
+import { projectMember, tryTake } from "./support/tower.ts";
 
 const api = await createTestApi();
 const migrator = createDb(testDatabaseUrls().migrator, { max: 1 });
@@ -111,8 +111,6 @@ const createDraft = (answers: Record<string, unknown>) =>
   engineer.post(`/v1/projects/${projectId}/work-items`, { type: TYPE, title: "Fixtures", answers: { ...builtIns(), ...answers } });
 const save = (id: string, answers: Record<string, unknown>) =>
   engineer.request("PUT", `/v1/work-items/${id}/answers`, { answers: { ...builtIns(), ...answers } });
-const take = (id: string, transition: string) =>
-  engineer.post(`/v1/work-items/${id}/transitions`, { transition, idempotencyKey: randomUUID() });
 const answersOf = async (id: string) => {
   const detail: WorkItemDetail = (await ok(engineer.get(`/v1/work-items/${id}`), 200)).json();
   const { trade: _trade, location: _location, ...own } = detail.answers;
@@ -133,16 +131,9 @@ beforeAll(async () => {
     .json()
     .participants.find((p: { isOwnCompany: boolean }) => p.isOwnCompany).id;
   await ok(c1.caller.request("PUT", `/v1/participants/${own}/visibility`, { trade: all, location: all }));
-  const projectMember = async (positions: string[]) => {
-    const { member, caller } = await api.member(c1.caller);
-    await api.addProjectMember(c1.caller, own, member.id);
-    await ok(c1.caller.request("PUT", `/v1/participants/${own}/members/${member.id}/visibility`, { trade: all, location: all }));
-    await ok(c1.caller.request("PUT", `/v1/participants/${own}/members/${member.id}/positions`, { positions }));
-    return caller;
-  };
-  engineer = await projectMember(["engineer"]);
+  engineer = await projectMember(api, c1, own, ["engineer"]);
   // Holds Internal Review, so the item can be sent there.
-  await projectMember(["project_manager"]);
+  await projectMember(api, c1, own, ["project_manager"]);
 });
 
 describe("the Form with a calculated field", () => {
@@ -183,7 +174,7 @@ describe("the server's result", () => {
 describe("leaving Draft", () => {
   it("is blocked while a required calculated field is empty, then goes ahead on the stored answers", async () => {
     const id = (await ok(createDraft({ items, total: 420 }), 201)).json().id as string;
-    const res = await take(id, "send_for_review");
+    const res = await tryTake(engineer, id, "send_for_review");
     expect({ status: res.statusCode, body: res.json() }).toEqual({
       status: 422,
       body: { error: "form_incomplete", fields: [{ key: "total", code: "required" }] },
@@ -191,7 +182,7 @@ describe("leaving Draft", () => {
     await ok(save(id, { items, unit_price: 10 }));
     // The database lets the item move on only with the hash of answers the api found complete,
     // so the stored result is the one that was checked.
-    await ok(take(id, "send_for_review"));
+    await ok(tryTake(engineer, id, "send_for_review"));
     expect((await answersOf(id)).total).toBe(420);
   });
 });

@@ -7,14 +7,13 @@
 //
 // The seeded MAR has one Transition to each Stage, so this file adds a test-only
 // Work Item Type whose Consultant Step has two Transitions into Approved.
-import { randomUUID } from "node:crypto";
 import { createDb } from "@rabaed/db";
 import { testDatabaseUrls } from "@rabaed/db/test-support";
 import { dropTargets, workItemSearchParams, type WorkItemBoard, type WorkItemDetail } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { attachDatasheet, createTestApi, type Caller } from "./support/harness.ts";
-import { all, bilingual, memberOnProject, ok, type Company } from "./support/tower.ts";
+import { all, bilingual, memberOnProject, ok, take, type Company } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
 const migrator = createDb(testDatabaseUrls().migrator, { max: 1 });
@@ -86,9 +85,6 @@ const complete = {
   description: "LED fixtures",
   items: [{ fixture_type: "Downlight", quantity: 120, unit: "pcs" }],
 };
-
-const take = (by: Caller, id: string, transition: string, answers: Record<string, unknown> = {}) =>
-  ok(by.post(`/v1/work-items/${id}/transitions`, { transition, answers, idempotencyKey: randomUUID() }));
 
 async function board(by: Caller): Promise<WorkItemBoard> {
   return (await ok(by.get(`/v1/projects/${projectId}/work-items/kanban?${workItemSearchParams({})}`), 200)).json();
