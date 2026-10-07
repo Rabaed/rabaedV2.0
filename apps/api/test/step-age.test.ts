@@ -13,7 +13,7 @@ import { testDatabaseUrls } from "@rabaed/db/test-support";
 import type { WorkItemDetail, WorkItemSummary } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { attachDatasheet, createTestApi, DEFAULT_PASSWORD, type Caller, type OnboardedCompany } from "./support/harness.ts";
+import { attachDatasheet, createTestApi, type Caller, type OnboardedCompany } from "./support/harness.ts";
 
 const api = await createTestApi({ files: true });
 const migrator = createDb(testDatabaseUrls().migrator, { max: 1 });
@@ -43,9 +43,6 @@ let pm: Caller; // C1 Project Manager: submits.
 let k1Engineer: Caller; // K1 Engineer: holds the first Consultant Step.
 let k1Manager: Caller; // K1 Manager (the Consultant's PM): holds the second.
 let owner: Caller; // Owner, covering the whole Project: oversight.
-
-/** Each Member's email, to sign them in again once the clock has moved past their session. */
-const emails = new Map<Caller, string>();
 
 /** The test-only Rabaed Default Type: Draft → Contractor review → Consultant engineer ⇄ Consultant manager → Approved. */
 async function addInternalConsultantStepsType() {
@@ -126,7 +123,6 @@ async function ok(res: Promise<{ statusCode: number; body: string }>, status = 2
 async function projectMember(company: Company, participantId: string, positions: string[]) {
   const member = await api.inviteMember(company.caller);
   const caller = await api.acceptInvitation(member.invitationToken);
-  emails.set(caller, member.email);
   await api.addProjectMember(company.caller, participantId, member.id);
   await ok(
     company.caller.request("PUT", `/v1/participants/${participantId}/members/${member.id}/visibility`, {
@@ -161,15 +157,6 @@ async function seenBy(by: Caller, id: string) {
     history: hist.json().events as unknown[],
     body: [list.body, res.body, hist.body].join("\n"),
   };
-}
-
-/** Signs every Member in again: moving the clock ends their sessions. */
-async function later(ms: number) {
-  api.advanceClock(ms);
-  for (const [caller, email] of emails) {
-    const again = await api.signIn(email, DEFAULT_PASSWORD);
-    caller.useSessionToken(again.sessionToken);
-  }
 }
 
 beforeAll(async () => {
@@ -217,12 +204,12 @@ describe("K1 moves the Submitted item internally (scenario 35)", () => {
     submittedAt = atSubmit.pm.detail.stepEnteredAt!;
 
     // Two weeks later the K1 Engineer sends it to the K1 Manager…
-    await later(15 * DAY);
+    await api.later(15 * DAY);
     await ok(k1Engineer.post(`/v1/work-items/${id}/claim`));
     await ok(take(k1Engineer, id, "send_to_manager"));
     withManager = { pm: await seenBy(pm, id), owner: await seenBy(owner, id) };
     // …who, a week later, Returns it to the Engineer.
-    await later(8 * DAY);
+    await api.later(8 * DAY);
     await ok(k1Manager.post(`/v1/work-items/${id}/claim`));
     await ok(take(k1Manager, id, "return_to_engineer", { reason: RETURN_REASON }));
   });
