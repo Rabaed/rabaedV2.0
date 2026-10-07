@@ -4,6 +4,7 @@ import { useState } from "react";
 import { expect, fn, userEvent, within } from "storybook/test";
 import { expectTouchTarget, phone } from "../../storybook/form.ts";
 import { storyLocale, storyText } from "../../storybook/locale.ts";
+import { formRendererLabels } from "../../storybook/form-engine.ts";
 import { FormRenderer, type FormLinks } from "./form-renderer.tsx";
 
 // The link question, `work_item_ref` (RP-293, spec RP-289): the filler picks
@@ -68,7 +69,7 @@ const removeLabel = (locale: Locale, number: string) => (locale === "en" ? `Remo
 const meta = {
   title: "Form engine/FormRenderer/LinkQuestion",
   component: FormRenderer,
-  args: { schema, answers: {}, mode: "edit", locale: "en", onChange: fn() },
+  args: { schema, answers: {}, mode: "edit", locale: "en", labels: formRendererLabels.en, onChange: fn() },
   decorators: [(Story) => <div className="max-w-3xl">{Story()}</div>],
 } satisfies Meta<typeof FormRenderer>;
 
@@ -88,6 +89,7 @@ export const Edit: Story = {
       <FormRenderer
         {...args}
         locale={locale}
+        labels={formRendererLabels[locale]}
         answers={values}
         links={links(locale)}
         onChange={(changes) => {
@@ -128,7 +130,7 @@ export const Edit: Story = {
 export const HiddenChoice: Story = {
   render: (args, context) => {
     const locale = storyLocale(context);
-    return <FormRenderer {...args} locale={locale} answers={{ related: [itemId(1), hidden(locale, 2)] }} links={links(locale)} />;
+    return <FormRenderer {...args} locale={locale} labels={formRendererLabels[locale]} answers={{ related: [itemId(1), hidden(locale, 2)] }} links={links(locale)} />;
   },
   play: async (context) => {
     const { canvas, canvasElement, args } = context;
@@ -149,7 +151,7 @@ export const HiddenChoice: Story = {
 /** Required, and empty when leaving Draft: its own message, and the search box to fill it. */
 export const Required: Story = {
   args: { errors: [{ key: "related", code: "required" }] },
-  render: (args, context) => <FormRenderer {...args} locale={storyLocale(context)} links={links(storyLocale(context))} />,
+  render: (args, context) => <FormRenderer {...args} locale={storyLocale(context)} labels={formRendererLabels[storyLocale(context)]} links={links(storyLocale(context))} />,
   play: async (context) => {
     const { canvas } = context;
     await expect(canvas.getByRole("searchbox", { name: new RegExp(storyText(context, copy.label)) })).toHaveAccessibleDescription(
@@ -166,7 +168,7 @@ export const ReadOnly: Story = {
   args: { mode: "read" },
   render: (args, context) => {
     const locale = storyLocale(context);
-    return <FormRenderer {...args} locale={locale} answers={{ related: [itemId(0), hidden(locale, 2)] }} links={links(locale)} />;
+    return <FormRenderer {...args} locale={locale} labels={formRendererLabels[locale]} answers={{ related: [itemId(0), hidden(locale, 2)] }} links={links(locale)} />;
   },
   play: async (context) => {
     const { canvas, canvasElement } = context;
@@ -185,7 +187,7 @@ export const ReadOnly: Story = {
 /** Read only, nothing chosen: "Not answered". */
 export const ReadOnlyEmpty: Story = {
   args: { mode: "read" },
-  render: (args, context) => <FormRenderer {...args} locale={storyLocale(context)} links={links(storyLocale(context))} />,
+  render: (args, context) => <FormRenderer {...args} locale={storyLocale(context)} labels={formRendererLabels[storyLocale(context)]} links={links(storyLocale(context))} />,
   play: async (context) => {
     await expect(context.canvas.getByText(storyText(context, copy.unanswered))).toBeVisible();
   },
@@ -196,7 +198,7 @@ export const Phone: Story = {
   parameters: phone,
   render: (args, context) => {
     const locale = storyLocale(context);
-    return <FormRenderer {...args} locale={locale} answers={{ related: [itemId(0), itemId(1), hidden(locale, 2)] }} links={links(locale)} />;
+    return <FormRenderer {...args} locale={locale} labels={formRendererLabels[locale]} answers={{ related: [itemId(0), itemId(1), hidden(locale, 2)] }} links={links(locale)} />;
   },
   play: async (context) => {
     const { canvas } = context;

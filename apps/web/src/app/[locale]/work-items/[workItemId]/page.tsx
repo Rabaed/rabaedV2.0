@@ -162,7 +162,7 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
           locale={locale}
           questionLabels={Object.fromEntries(answerFields(form.schema).map((f) => [f.key, f.label[locale]]))}
         >
-          <WorkItemLinkedFrom items={linkedFrom.items} locale={locale} />
+          <WorkItemLinkedFrom items={linkedFrom.items} />
         </WorkItemLinks>
 
         <dl className="grid grid-cols-[max-content_1fr] gap-x-6 gap-y-2">

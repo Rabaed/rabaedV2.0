@@ -33,11 +33,11 @@ export { CheckboxGroup, type CheckboxGroupProps } from "./components/form/checkb
 export { DirectionProvider } from "./components/form/direction.tsx";
 export { Field, type ChoiceOption, type FieldProps } from "./components/form/field.tsx";
 export { type BuiltInChoice, type BuiltInChoices } from "./components/form-engine/built-in-fields.tsx";
-export { ActionForm, internalNoteMaxLength, type ActionFormProps } from "./components/form-engine/action-form.tsx";
-export { FormRenderer, type FormFiles, type FormLinks, type FormRendererProps } from "./components/form-engine/form-renderer.tsx";
-export { LinkSearch, type LinkSearchProps } from "./components/form-engine/link-search.tsx";
-export { LinkedFromList, type LinkedFromListProps } from "./components/form-engine/linked-from.tsx";
-export { LinksSection, type LinksSectionProps } from "./components/form-engine/links-section.tsx";
+export { ActionForm, internalNoteMaxLength, type ActionFormLabels, type ActionFormProps } from "./components/form-engine/action-form.tsx";
+export { FormRenderer, type FormFiles, type FormLinks, type FormRendererLabels, type FormRendererProps } from "./components/form-engine/form-renderer.tsx";
+export { LinkSearch, type LinkSearchLabels, type LinkSearchProps } from "./components/form-engine/link-search.tsx";
+export { LinkedFromList, type LinkedFromLabels, type LinkedFromListProps } from "./components/form-engine/linked-from.tsx";
+export { LinksSection, type LinksSectionLabels, type LinksSectionProps } from "./components/form-engine/links-section.tsx";
 export type { LinkTargetNames } from "./components/form-engine/link-question-field.tsx";
 export { Input, type InputProps } from "./components/form/input.tsx";
 export {

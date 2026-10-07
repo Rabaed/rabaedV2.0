@@ -468,7 +468,102 @@
       "notEditable": "These answers can't be changed any more.",
       "newVersion": "A new version of this Form was just published. Check your answers and save again.",
       "valueNotFound": "A Trade, Location or Scope you chose is no longer offered. Check the Form and save again.",
-      "unavailable": "Something went wrong. Try again."
+      "unavailable": "Something went wrong. Try again.",
+      "renderer": {
+        "summary": "{count, plural, one {1 field needs your attention:} other {{n} fields need your attention:}}",
+        "required": "This field is required.",
+        "wrongType": "This value isn't valid here.",
+        "tooLong": "Use at most {max} characters.",
+        "invalidFormat": {
+          "date": "Enter a valid date.",
+          "time": "Enter a valid time.",
+          "datetime": "Enter a valid date and time.",
+          "email": "Enter a valid email address, such as name@company.com.",
+          "phone": "Enter a valid phone number, such as 050 123 4567 or +966 50 123 4567."
+        },
+        "notANumber": "Enter a number.",
+        "belowMin": "Enter {min} or more.",
+        "aboveMax": "Enter {max} or less.",
+        "tooManyDecimals": "{count, plural, =0 {Enter a whole number.} one {Use at most 1 decimal place.} other {Use at most {n} decimal places.}}",
+        "unknownOption": "Choose one of the options.",
+        "notWorkedOut": "Not worked out yet",
+        "calculatedRequired": "Fill in the fields this is worked out from.",
+        "tooShallow": "Keep choosing down to the last level.",
+        "tooFewRows": "{count, plural, one {Add at least 1 row.} other {Add at least {n} rows.}}",
+        "tooManyRows": "{count, plural, one {Use at most 1 row.} other {Use at most {n} rows.}}",
+        "tooFewFiles": "{count, plural, one {Add at least 1 Document.} other {Add at least {n} Documents.}}",
+        "choose": "Choose…",
+        "none": "None",
+        "leftProject": "\u2068{name}\u2069 (no longer on the Project)",
+        "unanswered": "Not answered",
+        "filledBy": "Filled in by the {role}"
+      },
+      "builtIn": {
+        "choose": "Choose…",
+        "chooseTradeFirst": "Choose a Trade first.",
+        "noScopes": "This Trade has no Scopes."
+      },
+      "attachmentsField": {
+        "none": "No Documents yet.",
+        "notYet": "Documents can be added once the Draft is saved.",
+        "uploading": "Uploading…",
+        "open": "Open {name}",
+        "remove": "Remove {name}",
+        "frozen": "Sent: can't be changed",
+        "kb": "{size} KB",
+        "mb": "{size} MB",
+        "accepts": "{types} only",
+        "atMost": "{count, plural, one {At most 1 Document} other {At most {n} Documents}}",
+        "full": "{count, plural, one {This field takes 1 Document.} other {This field takes at most {n} Documents.}}"
+      },
+      "photosField": {
+        "none": "No photos yet.",
+        "notYet": "Photos can be added once the Draft is saved.",
+        "uploading": "Uploading…",
+        "takePhoto": "Take a photo",
+        "open": "Open {name} full size",
+        "remove": "Remove {name}",
+        "frozen": "Sent: can't be changed",
+        "taken": "Taken {when}",
+        "nothingRecorded": "No time/location recorded",
+        "noTime": "No time recorded",
+        "noPlace": "No location recorded",
+        "atMost": "{count, plural, one {At most 1 photo} other {At most {n} photos}}",
+        "full": "{count, plural, one {This field takes 1 photo.} other {This field takes at most {n} photos.}}"
+      },
+      "checklistField": {
+        "comment": "Comment",
+        "photos": "Photos",
+        "required": "required",
+        "notAnswered": "Not answered",
+        "answerThis": "Answer this item.",
+        "commentNeeded": "Add a comment to explain this answer.",
+        "photoNeeded": "Add a photo as evidence for this answer.",
+        "wrongType": "This value isn't valid here.",
+        "unknownOption": "Choose one of the answers.",
+        "tooLong": "Use at most {max} characters.",
+        "summary": "Summary",
+        "evidence": "Photos for {item}",
+        "itemNumber": "{n} of {of}"
+      },
+      "tableField": {
+        "addRow": "Add row",
+        "row": "Row {n}",
+        "removeRow": "Remove row {n}",
+        "noRows": "No rows yet.",
+        "limitReached": "The most rows allowed is {max}.",
+        "total": "Total {column}",
+        "wrongType": "This row isn't valid here."
+      },
+      "optionListField": {
+        "level": "Level {n}",
+        "choose": "Choose…",
+        "none": "None",
+        "unavailable": "This list isn't available."
+      },
+      "linkQuestion": {
+        "remove": "Remove {number}"
+      }
     },
     "actions": {
       "title": "Transitions",
@@ -486,7 +581,9 @@
       "formIncomplete": "Complete the Form first: the fields to fix are marked in it.",
       "saveFirst": "Your answers couldn't be saved, so nothing was sent. Check the Form.",
       "tryAgain": "The answers changed meanwhile. Try again.",
-      "unavailable": "Something went wrong. Try again."
+      "unavailable": "Something went wrong. Try again.",
+      "internalNote": "Internal Note",
+      "internalNoteHelp": "Optional. Only your Company sees it, even when the item goes to another Company. Anything for them goes in Chat or the Form."
     },
     "attachments": {
       "title": "Attachments",
@@ -515,7 +612,27 @@
       "alreadyLinked": "That item is already linked.",
       "notEditable": "Links can't be changed any more.",
       "projectClosed": "This Project is closed.",
-      "unavailable": "Something went wrong. Try again."
+      "unavailable": "Something went wrong. Try again.",
+      "title": "Links",
+      "none": "No Links yet.",
+      "remove": "Remove the Link to {number}",
+      "hidden": "You are not allowed to see the details of this item.",
+      "linkedFrom": {
+        "title": "Linked from",
+        "none": "No Submitted item links here yet."
+      },
+      "search": {
+        "label": "Find an item to link",
+        "hint": "Type part of a Document Number or Subject.",
+        "results": "Search results",
+        "searching": "Searching…",
+        "noMatch": "No items match.",
+        "offered": "Only Submitted items you can see in this Project can be linked.",
+        "failed": "Couldn't search. Try again.",
+        "more": "Show more",
+        "count": "{count, plural, one {1 item} other {{n} items}}",
+        "moreBelow": ", more below"
+      }
     },
     "history": {
       "title": "History",

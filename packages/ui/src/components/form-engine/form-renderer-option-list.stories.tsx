@@ -4,6 +4,7 @@ import { useState } from "react";
 import { expect, fn, screen, userEvent, within } from "storybook/test";
 import { phone } from "../../storybook/form.ts";
 import { storyLocale, storyText } from "../../storybook/locale.ts";
+import { formRendererLabels } from "../../storybook/form-engine.ts";
 import { FormRenderer } from "./form-renderer.tsx";
 
 // The option_list field (RP-282, spec RP-278): a choice from an Option List of up
@@ -73,7 +74,7 @@ const copy = {
 const meta = {
   title: "Form engine/FormRenderer/OptionList",
   component: FormRenderer,
-  args: { schema, answers: {}, mode: "edit", locale: "en", optionLists: [materials], onChange: fn() },
+  args: { schema, answers: {}, mode: "edit", locale: "en", labels: formRendererLabels.en, optionLists: [materials], onChange: fn() },
   decorators: [(Story) => <div className="max-w-3xl">{Story()}</div>],
 } satisfies Meta<typeof FormRenderer>;
 
@@ -88,6 +89,7 @@ export const Edit: Story = {
       <FormRenderer
         {...args}
         locale={storyLocale(context)}
+        labels={formRendererLabels[storyLocale(context)]}
         answers={values}
         onChange={(changes) => {
           args.onChange?.(changes);
@@ -126,7 +128,7 @@ export const Edit: Story = {
 /** A multiple choice: a checkbox for each option that can be chosen, named by its path. */
 export const Multiple: Story = {
   args: { answers: { grade: "two5", kinds: ["trays"] } },
-  render: (args, context) => <FormRenderer {...args} locale={storyLocale(context)} />,
+  render: (args, context) => <FormRenderer {...args} locale={storyLocale(context)} labels={formRendererLabels[storyLocale(context)]} />,
   play: async (context) => {
     const { canvas } = context;
     await userEvent.click(canvas.getByRole("checkbox", { name: storyText(context, copy.cables) }));
@@ -140,7 +142,7 @@ export const WithRetiredOption: Story = {
   args: {
     answers: { grade: "ten", kinds: ["conduit"], items: [{ name: "Main run", kind: "conduit" }, { name: "Spur", kind: "fibre" }] },
   },
-  render: (args, context) => <FormRenderer {...args} locale={storyLocale(context)} />,
+  render: (args, context) => <FormRenderer {...args} locale={storyLocale(context)} labels={formRendererLabels[storyLocale(context)]} />,
   play: async (context) => {
     const { canvas } = context;
     // The retired option stays chosen and is marked; the levels above it are as they were.
@@ -164,7 +166,7 @@ export const WithErrors: Story = {
       { key: "items", code: "unknown_option", row: 0, column: "kind" },
     ],
   },
-  render: (args, context) => <FormRenderer {...args} locale={storyLocale(context)} />,
+  render: (args, context) => <FormRenderer {...args} locale={storyLocale(context)} labels={formRendererLabels[storyLocale(context)]} />,
   play: async (context) => {
     const { canvas } = context;
     await expect(canvas.getByRole("group", { name: new RegExp(storyText(context, copy.grade)) })).toHaveAccessibleDescription(
@@ -182,7 +184,7 @@ export const ReadOnly: Story = {
     mode: "read",
     answers: { grade: "two5", kinds: ["trays", "conduit"], items: [{ name: "Main run", kind: "fibre" }, { name: "Spur", kind: "conduit" }] },
   },
-  render: (args, context) => <FormRenderer {...args} locale={storyLocale(context)} />,
+  render: (args, context) => <FormRenderer {...args} locale={storyLocale(context)} labels={formRendererLabels[storyLocale(context)]} />,
   play: async (context) => {
     const { canvas } = context;
     await expect(canvas.queryAllByRole("combobox")).toEqual([]);
@@ -198,7 +200,7 @@ export const ReadOnly: Story = {
 /** Nothing answered: "Not answered". */
 export const ReadOnlyEmpty: Story = {
   args: { mode: "read" },
-  render: (args, context) => <FormRenderer {...args} locale={storyLocale(context)} />,
+  render: (args, context) => <FormRenderer {...args} locale={storyLocale(context)} labels={formRendererLabels[storyLocale(context)]} />,
   play: async (context) => {
     await expect(context.canvas.getAllByText(storyText(context, { en: "Not answered", ar: "لم تتم الإجابة" })).length).toBeGreaterThan(0);
   },
@@ -208,7 +210,7 @@ export const ReadOnlyEmpty: Story = {
 export const PhoneEdit: Story = {
   parameters: phone,
   args: { answers: { grade: "two5", items: [{ name: "Main run", kind: "fibre" }] } },
-  render: (args, context) => <FormRenderer {...args} locale={storyLocale(context)} />,
+  render: (args, context) => <FormRenderer {...args} locale={storyLocale(context)} labels={formRendererLabels[storyLocale(context)]} />,
   play: async () => {
     await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(document.documentElement.clientWidth);
   },

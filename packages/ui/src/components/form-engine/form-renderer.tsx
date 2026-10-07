@@ -49,13 +49,13 @@ import { RadioGroup } from "../form/radio-group.tsx";
 import { Select } from "../form/select.tsx";
 import { Textarea } from "../form/textarea.tsx";
 import { Icon } from "../icon/icon.tsx";
-import { BuiltInSelect, builtInAnswerLabels, noChoices, ScopesChecklist, type BuiltInChoices } from "./built-in-fields.tsx";
-import { AttachmentsField, attachmentsLimits, takesUpload } from "./attachments-field.tsx";
-import { ChecklistField, type ChecklistFiles } from "./checklist-field.tsx";
-import { LinkQuestionField, linkChoicesOf, type FormLinks } from "./link-question-field.tsx";
-import { OptionListInput } from "./option-list-field.tsx";
-import { PhotosField, photosLimits, takesPhotos, type PhotosFieldFiles } from "./photos-field.tsx";
-import { TableInput, TableRead } from "./table-field.tsx";
+import { BuiltInSelect, builtInAnswerLabels, noChoices, ScopesChecklist, type BuiltInChoices, type BuiltInFieldLabels } from "./built-in-fields.tsx";
+import { AttachmentsField, attachmentsLimits, takesUpload, type AttachmentsFieldLabels } from "./attachments-field.tsx";
+import { ChecklistField, type ChecklistFieldLabels, type ChecklistFiles } from "./checklist-field.tsx";
+import { LinkQuestionField, linkChoicesOf, type FormLinks, type LinkQuestionLabels } from "./link-question-field.tsx";
+import { OptionListInput, type OptionListLabels } from "./option-list-field.tsx";
+import { PhotosField, photosLimits, takesPhotos, type PhotosFieldFiles, type PhotosFieldLabels } from "./photos-field.tsx";
+import { TableInput, TableRead, type TableFieldLabels } from "./table-field.tsx";
 
 // The Form engine's renderer (form-engine.md §1, §5): draws a Form Version's
 // schema with its answers and per-field errors, to fill in (`edit`) or to read
@@ -76,104 +76,48 @@ import { TableInput, TableRead } from "./table-field.tsx";
 
 export type { FormLinks } from "./link-question-field.tsx";
 
-/* eslint-disable rabaed/no-ui-translations -- existing labels, still to move to the app's messages (RP-362 retro) */
-const copy = {
-  en: {
-    summary: (n: number) => (n === 1 ? "1 field needs your attention:" : `${formatNumber(n, "en")} fields need your attention:`),
-    required: "This field is required.",
-    wrongType: "This value isn't valid here.",
-    tooLong: (max: number) => `Use at most ${formatNumber(max, "en")} characters.`,
-    invalidFormat: {
-      date: "Enter a valid date.",
-      time: "Enter a valid time.",
-      datetime: "Enter a valid date and time.",
-      email: "Enter a valid email address, such as name@company.com.",
-      phone: "Enter a valid phone number, such as 050 123 4567 or +966 50 123 4567.",
-    },
-    notANumber: "Enter a number.",
-    belowMin: (min: string) => `Enter ${min} or more.`,
-    aboveMax: (max: string) => `Enter ${max} or less.`,
-    tooManyDecimals: (n: number) =>
-      n === 0 ? "Enter a whole number." : n === 1 ? "Use at most 1 decimal place." : `Use at most ${formatNumber(n, "en")} decimal places.`,
-    unknownOption: "Choose one of the options.",
-    notWorkedOut: "Not worked out yet",
-    calculatedRequired: "Fill in the fields this is worked out from.",
-    tooShallow: "Keep choosing down to the last level.",
-    tooFewRows: (n: number) => (n === 1 ? "Add at least 1 row." : `Add at least ${formatNumber(n, "en")} rows.`),
-    tooManyRows: (n: number) => (n === 1 ? "Use at most 1 row." : `Use at most ${formatNumber(n, "en")} rows.`),
-    tooFewFiles: (n: number) => (n === 1 ? "Add at least 1 Document." : `Add at least ${formatNumber(n, "en")} Documents.`),
-    choose: "Choose…",
-    none: "None",
-    // The name sits in an isolate (\u2068 first strong, \u2069 ends), so an Arabic name keeps its place.
-    leftProject: (name: string) => `\u2068${name}\u2069 (no longer on the Project)`,
-    unanswered: "Not answered",
-    // A Project Role's name, e.g. "Filled in by the Consultant".
-    filledBy: (role: string) => `Filled in by the ${role}`,
-  },
-  ar: {
-    // Arabic counts: one, two (dual), 3–10 (plural), 11 and more (singular accusative).
-    summary: (n: number) =>
-      n === 1
-        ? "حقل واحد يحتاج إلى مراجعتك:"
-        : n === 2
-          ? "حقلان يحتاجان إلى مراجعتك:"
-          : n <= 10
-            ? `${formatNumber(n, "ar")} حقول تحتاج إلى مراجعتك:`
-            : `${formatNumber(n, "ar")} حقلًا يحتاج إلى مراجعتك:`,
-    required: "هذا الحقل مطلوب.",
-    wrongType: "هذه القيمة غير صالحة هنا.",
-    tooLong: (max: number) => `استخدم ${formatNumber(max, "ar")} حرفًا على الأكثر.`,
-    // Latin examples and limits sit in isolates (\u2066 left to right, \u2067 right to left, \u2069 ends), so a + or a unit stays in place.
-    invalidFormat: {
-      date: "أدخل تاريخًا صالحًا.",
-      time: "أدخل وقتًا صالحًا.",
-      datetime: "أدخل تاريخًا ووقتًا صالحين.",
-      email: "أدخل بريدًا إلكترونيًا صالحًا، مثل \u2066name@company.com\u2069.",
-      phone: "أدخل رقم هاتف صالحًا، مثل \u2066050 123 4567\u2069 أو \u2066+966 50 123 4567\u2069.",
-    },
-    notANumber: "أدخل رقمًا.",
-    belowMin: (min: string) => `أدخل \u2067${min}\u2069 أو أكثر.`,
-    aboveMax: (max: string) => `أدخل \u2067${max}\u2069 أو أقل.`,
-    tooManyDecimals: (n: number) =>
-      n === 0
-        ? "أدخل عددًا صحيحًا."
-        : n === 1
-          ? "استخدم منزلة عشرية واحدة على الأكثر."
-          : n === 2
-            ? "استخدم منزلتين عشريتين على الأكثر."
-            : `استخدم ${formatNumber(n, "ar")} منازل عشرية على الأكثر.`,
-    unknownOption: "اختر أحد الخيارات.",
-    notWorkedOut: "لم يُحسب بعد",
-    calculatedRequired: "أكمل الحقول التي يُحسب منها.",
-    tooShallow: "تابع الاختيار حتى المستوى الأخير.",
-    tooFewRows: (n: number) =>
-      n === 1 ? "أضف صفًا واحدًا على الأقل." : n === 2 ? "أضف صفين على الأقل." : n <= 10 ? `أضف ${formatNumber(n, "ar")} صفوف على الأقل.` : `أضف ${formatNumber(n, "ar")} صفًا على الأقل.`,
-    tooManyRows: (n: number) =>
-      n === 1
-        ? "استخدم صفًا واحدًا على الأكثر."
-        : n === 2
-          ? "استخدم صفين على الأكثر."
-          : n <= 10
-            ? `استخدم ${formatNumber(n, "ar")} صفوف على الأكثر.`
-            : `استخدم ${formatNumber(n, "ar")} صفًا على الأكثر.`,
-    tooFewFiles: (n: number) =>
-      n === 1
-        ? "أضف مستندًا واحدًا على الأقل."
-        : n === 2
-          ? "أضف مستندين على الأقل."
-          : n <= 10
-            ? `أضف ${formatNumber(n, "ar")} مستندات على الأقل.`
-            : `أضف ${formatNumber(n, "ar")} مستندًا على الأقل.`,
-    choose: "اختر…",
-    none: "بدون",
-    leftProject: (name: string) => `\u2068${name}\u2069 (لم يعد في المشروع)`,
-    unanswered: "لم تتم الإجابة",
-    filledBy: (role: string) => `يعبّئه ${role}`,
-  },
-} satisfies Record<Locale, unknown>;
-/* eslint-enable rabaed/no-ui-translations */
+/**
+ * The Form engine's words, from the app's messages: the renderer's own, and each
+ * field type's. A number is given already formatted for the locale, with the
+ * count itself where the wording depends on it (a plural).
+ */
+export type FormRendererLabels = {
+  /** The error summary's heading: how many fields need attention. */
+  summary: (n: string, count: number) => string;
+  required: string;
+  wrongType: string;
+  tooLong: (max: string) => string;
+  invalidFormat: { date: string; time: string; datetime: string; email: string; phone: string };
+  notANumber: string;
+  belowMin: (min: string) => string;
+  aboveMax: (max: string) => string;
+  tooManyDecimals: (n: string, count: number) => string;
+  unknownOption: string;
+  notWorkedOut: string;
+  calculatedRequired: string;
+  tooShallow: string;
+  tooFewRows: (n: string, count: number) => string;
+  tooManyRows: (n: string, count: number) => string;
+  tooFewFiles: (n: string, count: number) => string;
+  choose: string;
+  none: string;
+  /** A saved Member or Participant no longer on the Project, named. */
+  leftProject: (name: string) => string;
+  unanswered: string;
+  /** A Form Section filled in by another Participant, by that Participant's Project Role. */
+  filledBy: (role: string) => string;
+  builtIn: BuiltInFieldLabels;
+  attachments: AttachmentsFieldLabels;
+  photos: PhotosFieldLabels;
+  checklist: ChecklistFieldLabels;
+  table: TableFieldLabels;
+  optionList: OptionListLabels;
+  linkQuestion: LinkQuestionLabels;
+};
 
 export type FormRendererProps = {
+  /** The words, from the app's messages. */
+  labels: FormRendererLabels;
   /** The pinned Form Version's schema. */
   schema: FormSchema;
   /** The answers by field key. */
@@ -264,21 +208,20 @@ const filesOf = (files: FormFiles | undefined, key: string): PhotosFieldFiles | 
     imageUrls: files.imageUrls,
   };
 
-function errorText(field: AnswerField | TableColumn, error: FieldError, locale: Locale): string {
-  const text = copy[locale];
+function errorText(field: AnswerField | TableColumn, error: FieldError, locale: Locale, text: FormRendererLabels): string {
   switch (error.code) {
     case "too_few_files":
-      return field.type === "attachments" || field.type === "photos" ? text.tooFewFiles(Math.max(field.minFiles ?? 1, 1)) : text.wrongType;
+      return field.type === "attachments" || field.type === "photos" ? text.tooFewFiles(formatNumber(Math.max(field.minFiles ?? 1, 1), locale), Math.max(field.minFiles ?? 1, 1)) : text.wrongType;
     case "too_few_rows":
-      return field.type === "table" ? text.tooFewRows(Math.max(field.minRows ?? 1, 1)) : text.wrongType;
+      return field.type === "table" ? text.tooFewRows(formatNumber(Math.max(field.minRows ?? 1, 1), locale), Math.max(field.minRows ?? 1, 1)) : text.wrongType;
     case "too_many_rows":
-      return field.type === "table" ? text.tooManyRows(field.maxRows ?? maxTableRows) : text.wrongType;
+      return field.type === "table" ? text.tooManyRows(formatNumber(field.maxRows ?? maxTableRows, locale), field.maxRows ?? maxTableRows) : text.wrongType;
     case "required":
       // A calculated field can't be typed in: only its inputs can fill it.
       return field.type === "calculated" ? text.calculatedRequired : text.required;
     case "too_long":
       return field.type === "text" || field.type === "textarea"
-        ? text.tooLong(field.maxLength ?? defaultMaxLength[field.type])
+        ? text.tooLong(formatNumber(field.maxLength ?? defaultMaxLength[field.type], locale))
         : text.wrongType;
     case "invalid_format":
       return field.type === "date" ||
@@ -298,9 +241,9 @@ function errorText(field: AnswerField | TableColumn, error: FieldError, locale: 
     }
     case "too_many_decimals":
       return field.type === "number" && field.decimals !== undefined
-        ? text.tooManyDecimals(field.decimals)
+        ? text.tooManyDecimals(formatNumber(field.decimals, locale), field.decimals)
         : field.type === "currency"
-          ? text.tooManyDecimals(currencyDecimals(field.currency))
+          ? text.tooManyDecimals(formatNumber(currencyDecimals(field.currency), locale), currencyDecimals(field.currency))
           : text.wrongType;
     case "unknown_option":
       return text.unknownOption;
@@ -371,7 +314,7 @@ function NumberInput({
  * A calculated field's result, read-only: worked out from the answers now, and
  * announced as it changes (an `output` is a polite live region).
  */
-function CalculatedOutput({ field, value, locale }: { field: CalculatedField; value: unknown; locale: Locale }) {
+function CalculatedOutput({ field, value, locale, text }: { field: CalculatedField; value: unknown; locale: Locale; text: FormRendererLabels }) {
   const { labelId: _labelId, required: _required, disabled: _disabled, readOnly: _readOnly, ...control } = useFieldControl({});
   const hasResult = typeof value === "number";
   return (
@@ -383,7 +326,7 @@ function CalculatedOutput({ field, value, locale }: { field: CalculatedField; va
       )}
     >
       {/* A number reads in the page's direction, so its unit follows it. */}
-      {hasResult ? <bdi dir={directionOf(locale)}>{formatFormValue(field, value, locale)}</bdi> : copy[locale].notWorkedOut}
+      {hasResult ? <bdi dir={directionOf(locale)}>{formatFormValue(field, value, locale)}</bdi> : text.notWorkedOut}
     </output>
   );
 }
@@ -411,8 +354,8 @@ type ChecklistFieldSchema = Extract<AnswerField, { type: "checklist" }>;
 const noLinks: FormLinks = { targets: {}, search: async () => ({ links: [], nextPage: null }), hrefFor: () => "#" };
 
 /** A select's options, with "None" first when the field is optional, so a choice can be taken back. */
-const withNone = (field: { required: unknown }, options: { value: string; label: string }[], locale: Locale) =>
-  field.required ? options : [{ value: noChoice, label: copy[locale].none }, ...options];
+const withNone = (field: { required: unknown }, options: { value: string; label: string }[], text: FormRendererLabels) =>
+  field.required ? options : [{ value: noChoice, label: text.none }, ...options];
 
 /** One of the Form's own fields' control, and whether its Field labels a group (radios, checkboxes) rather than one control. */
 function control(
@@ -421,6 +364,7 @@ function control(
   field: Exclude<OwnField, { type: "attachments" | "photos" | "checklist" | "work_item_ref" }> | TableColumn,
   value: unknown,
   locale: Locale,
+  text: FormRendererLabels,
   people: FormChoices,
   naming: NamedAnswer | undefined,
   optionLists: readonly OptionList[],
@@ -428,7 +372,6 @@ function control(
   /** A table's cell errors (it has no others). */
   errors: readonly FieldError[] = [],
 ): { element: ReactNode; group?: boolean } {
-  const text = copy[locale];
   const name = field.key;
   switch (field.type) {
     case "text":
@@ -504,7 +447,7 @@ function control(
           <Select
             name={name}
             placeholder={text.choose}
-            options={withNone(field, optionsOf(field, locale), locale)}
+            options={withNone(field, optionsOf(field, locale), text)}
             value={textOf(value)}
             onValueChange={(v) => change(v === noChoice ? undefined : v)}
           />
@@ -533,7 +476,7 @@ function control(
           <Select
             name={name}
             placeholder={text.choose}
-            options={withNone(field, options, locale)}
+            options={withNone(field, options, text)}
             value={current}
             onValueChange={(v) => change(v === noChoice ? undefined : v)}
           />
@@ -550,6 +493,7 @@ function control(
             multiple={"multiple" in field && field.multiple}
             value={value}
             locale={locale}
+            labels={text.optionList}
             onChange={change}
           />
         ),
@@ -561,18 +505,19 @@ function control(
             field={field}
             value={value}
             locale={locale}
+            labels={text.table}
             errors={errors}
             // A cell is a control of its column's type, named by its row and column.
             cell={(column, row, cellValue, changeCell) =>
-              control({ ...column, key: `${field.key}.${row}.${column.key}` }, cellValue, locale, people, undefined, optionLists, changeCell)
+              control({ ...column, key: `${field.key}.${row}.${column.key}` }, cellValue, locale, text, people, undefined, optionLists, changeCell)
             }
-            cellError={(column, error) => errorText(column, error, locale)}
+            cellError={(column, error) => errorText(column, error, locale, text)}
             onChange={change}
           />
         ),
       };
     case "calculated":
-      return { element: <CalculatedOutput field={field} value={value} locale={locale} /> };
+      return { element: <CalculatedOutput field={field} value={value} locale={locale} text={text} /> };
     case "multi_select":
       return {
         group: true,
@@ -624,6 +569,7 @@ export function FormRenderer({
   mode,
   editableSections,
   filledBy = {},
+  labels,
   locale,
   choices = noChoices,
   people = noPeople,
@@ -658,7 +604,7 @@ export function FormRenderer({
             <BuiltInSelect
               value={textOf(answers.trade)}
               choices={choices.trades}
-              locale={locale}
+              labels={labels.builtIn}
               // A new Trade keeps only the Scopes that fit it.
               onChange={(trade) => onChange?.({ trade, scopes: scopesFittingTrade(idsOf(answers.scopes), trade, choices.scopes) })}
             />
@@ -670,7 +616,7 @@ export function FormRenderer({
             <BuiltInSelect
               value={textOf(answers.location)}
               choices={choices.locations}
-              locale={locale}
+              labels={labels.builtIn}
               onChange={(location) => onChange?.({ location })}
             />
           ),
@@ -683,7 +629,7 @@ export function FormRenderer({
               chosen={idsOf(answers.scopes)}
               tradeId={textOf(answers.trade)}
               scopes={choices.scopes}
-              locale={locale}
+              labels={labels.builtIn}
               onChange={(scopes) => onChange?.({ scopes })}
             />
           ),
@@ -700,6 +646,7 @@ export function FormRenderer({
         <AttachmentsField
           field={field}
           files={own}
+          labels={labels.attachments}
           mode="edit"
           locale={locale}
           onUpload={(file) => files?.onUpload?.(field.key, [file])}
@@ -719,6 +666,7 @@ export function FormRenderer({
         <PhotosField
           field={field}
           files={own}
+          labels={labels.photos}
           mode="edit"
           locale={locale}
           onUpload={(picked) => files?.onUpload?.(field.key, picked)}
@@ -748,6 +696,7 @@ export function FormRenderer({
         <ChecklistField
           field={field}
           value={answers[field.key]}
+          labels={labels.checklist}
           mode="edit"
           locale={locale}
           errors={itemErrorsOf(field.key)}
@@ -768,6 +717,7 @@ export function FormRenderer({
         <LinkQuestionField
           label={field.label[locale]}
           value={answers[field.key]}
+          labels={labels.linkQuestion}
           mode="edit"
           locale={locale}
           links={links}
@@ -781,7 +731,7 @@ export function FormRenderer({
   function helpOf(field: AnswerField): ReactNode {
     const help = field.help?.[locale];
     const limits =
-      field.type === "attachments" ? attachmentsLimits(field, locale) : field.type === "photos" ? photosLimits(field, locale) : undefined;
+      field.type === "attachments" ? attachmentsLimits(field, locale, labels.attachments) : field.type === "photos" ? photosLimits(field, locale, labels.photos) : undefined;
     if (!limits) return help;
     return help ? (
       <>
@@ -801,46 +751,46 @@ export function FormRenderer({
     if (field.type === "attachments") {
       const own = filesOf(files, field.key);
       return own && own.documents.length > 0 ? (
-        <AttachmentsField field={field} files={own} mode="read" locale={locale} onOpen={files?.onOpen} />
+        <AttachmentsField field={field} files={own} mode="read" locale={locale} labels={labels.attachments} onOpen={files?.onOpen} />
       ) : null;
     }
     if (field.type === "photos") {
       const own = filesOf(files, field.key);
       return own && own.documents.length > 0 ? (
-        <PhotosField field={field} files={own} mode="read" locale={locale} onOpen={files?.onOpen} />
+        <PhotosField field={field} files={own} mode="read" locale={locale} labels={labels.photos} onOpen={files?.onOpen} />
       ) : null;
     }
     if (field.type === "checklist") {
       const own = checklistFiles(field);
       const answered = typeof value === "object" && value !== null && Object.keys(value).length > 0;
       return answered || (own && own.documents.length > 0) ? (
-        <ChecklistField field={field} value={value} mode="read" locale={locale} files={own} onOpen={files?.onOpen} />
+        <ChecklistField field={field} value={value} mode="read" locale={locale} labels={labels.checklist} files={own} onOpen={files?.onOpen} />
       ) : null;
     }
     if (field.type === "work_item_ref") {
       return linkChoicesOf(value).length > 0 ? (
-        <LinkQuestionField label={field.label[locale]} value={value} mode="read" locale={locale} links={links} />
+        <LinkQuestionField label={field.label[locale]} value={value} mode="read" locale={locale} labels={labels.linkQuestion} links={links} />
       ) : null;
     }
     if (isBuiltInField(field)) {
-      const labels = builtInAnswerLabels(field.type, value, choices);
-      if (labels.length === 0) return null;
+      const names = builtInAnswerLabels(field.type, value, choices);
+      if (names.length === 0) return null;
       return field.type === "scopes" ? (
         <ul className="flex flex-col gap-1">
-          {labels.map((label) => (
+          {names.map((label) => (
             <li key={label}>
               <bdi>{label}</bdi>
             </li>
           ))}
         </ul>
       ) : (
-        <bdi>{labels[0]}</bdi>
+        <bdi>{names[0]}</bdi>
       );
     }
     // Another Company's Member comes named, without their id (V14).
     const naming = named[field.key];
     if (isUnanswered(value) && !naming) return null;
-    if (field.type === "table") return <TableRead field={field} value={value} locale={locale} optionLists={optionLists} />;
+    if (field.type === "table") return <TableRead field={field} value={value} locale={locale} labels={labels.table} optionLists={optionLists} />;
     const shown = formatFormValue(field, value, locale, naming, optionLists);
     // A number reads in the page's direction, so its unit follows it; an address or a phone number left to right.
     if (field.type === "number" || field.type === "currency" || field.type === "calculated") {
@@ -856,7 +806,7 @@ export function FormRenderer({
         <div role="alert" className="flex flex-col gap-2 rounded-md border border-danger bg-danger-tint p-4 text-body text-text">
           <p className="flex items-center gap-2 font-semibold">
             <Icon name="alert-circle" size={20} className="text-danger" />
-            {copy[locale].summary(shownErrors.length)}
+            {labels.summary(formatNumber(shownErrors.length, locale), shownErrors.length)}
           </p>
           <ul className="flex flex-col gap-1 ps-7">
             {shownErrors.map((e) => (
@@ -882,7 +832,7 @@ export function FormRenderer({
             <h3 id={headingId} className={cn("font-display text-h6 font-semibold text-text", sectionTitles === "hidden" && "sr-only")}>
               {section.title[locale]}
             </h3>
-            {unfilled && <p className="text-body text-muted">{copy[locale].filledBy(filler[locale])}</p>}
+            {unfilled && <p className="text-body text-muted">{labels.filledBy(filler[locale])}</p>}
             {editing ? (
               fields.map((field) => {
                 if (!isAnswerField(field)) return <Layout key={field.key} field={field} locale={locale} />;
@@ -902,6 +852,7 @@ export function FormRenderer({
                         // A calculated field shows the result worked out from the answers now, never one given.
                         field.type === "calculated" ? visibility.answers[field.key] : answers[field.key],
                         locale,
+                        labels,
                         people,
                         named[field.key],
                         optionLists,
@@ -914,7 +865,7 @@ export function FormRenderer({
                     id={fieldId(field.key)}
                     label={field.label[locale]}
                     help={helpOf(field)}
-                    error={error && errorText(field, error, locale)}
+                    error={error && errorText(field, error, locale, labels)}
                     // Trade and Location always are, whatever the schema says (isRequired).
                     required={isRequired(field, visibility.answers)}
                     group={group}
@@ -934,7 +885,7 @@ export function FormRenderer({
                           <dt className="text-sm font-medium text-muted">{field.label[locale]}</dt>
                           {/* The answer keeps its own direction, but lines up with the page's. */}
                           <dd className={cn("text-body", shownAnswer ? "whitespace-pre-wrap text-text" : "text-muted")}>
-                            {shownAnswer ?? copy[locale].unanswered}
+                            {shownAnswer ?? labels.unanswered}
                           </dd>
                         </div>
                       );

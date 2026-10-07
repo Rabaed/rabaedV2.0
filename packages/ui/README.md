@@ -235,6 +235,11 @@ These components have no words of their own: each takes a `labels` prop (a funct
 
 | Component | `labels` type |
 | --- | --- |
+| `FormRenderer` | `FormRendererLabels`: its own words, and one group per field type (`builtIn`, `attachments`, `photos`, `checklist`, `table`, `optionList`, `linkQuestion`), each the `labels` of that field's component. A number is given as text, with the count itself (`(n, count)`) where a plural needs it |
+| `ActionForm` | `ActionFormLabels` (`internalNote`, `internalNoteHelp`, and `form`: the `FormRendererLabels`) |
+| `LinksSection` | `LinksSectionLabels` (`title`, `none`, `remove`, `item`, `search`) |
+| `LinkedFromList` | `LinkedFromLabels` (`title`, `none`, `item`) |
+| `LinkSearch` | `LinkSearchLabels` (`count` takes the number as text, the count, and whether more are below) |
 | `WatchButton` | `WatchButtonLabels` (`watch`, `watching`, `refusals`) |
 | `ProjectDashboard` | `ProjectDashboardLabels` (`items` takes the count as text; `buckets` and `codeCStates` are the List's). `chainBucketLabel` is gone: the app names buckets from its messages |
 | `ActivityFeedPanel` | `ActivityFeedPanelLabels` (the panel, and what happened for events that are not a Transition) |
