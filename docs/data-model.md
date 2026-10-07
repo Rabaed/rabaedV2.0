@@ -5,7 +5,7 @@ The logical data model for the platform and the Project Module, in PostgreSQL te
 ## Conventions
 
 - **IDs** are random UUIDv4 in every table: safe to expose, because they carry no time, and nothing to enumerate. Not UUIDv7, whose creation time would reveal when a Draft was started ([ADR 0015](adr/0015-random-ids-not-uuidv7.md)).
-  Being random, an id never orders rows; it only breaks ties. Un-numbered Drafts (and items not yet Submitted) order by Subject, then id; Links by `created_at`, the linked item's Document Number, then id; Documents by `confirmed_at`, file name, then id.
+  Being random, an id never orders rows; it only breaks ties. Un-numbered Drafts (and items not yet Submitted) order by Subject, then id; Links by `created_at`, the linked item's Document Number, then id; Documents by `confirmed_at`, file name, then id (`app.document_times`' `seq`).
 - **Bilingual content** entered by customers (names, labels) is stored as `i18n jsonb` (`{"en": "...", "ar": "..."}`), so further languages can be added without schema changes. UI strings are *not* in the database; they are translation keys (Lokalise).
 - **Library pattern.** Forms, Workflows, Work Item Types, Positions, Trades and Scopes exist at three levels: `owner_kind ∈ {rabaed, company, project}` + `owner_id`. Using one always **copies** it down a level (`copied_from_id` keeps provenance). Nothing is linked live.
 - **Nothing is hard-deleted.** Rows are deactivated, withdrawn, cancelled or closed.
@@ -247,6 +247,7 @@ Need My Action reads these rows through `app.need_my_action(item)` (RP-346): `wa
 **work_item_link**
 `id`, `project_id`, `from_id`, `to_id`, `kind {related, raised_from, relies_on}`, `field_key` (nullable; set for `relies_on`, the `work_item_ref` field that made it), `created_by_member_id`, `created_at`. One row per (from, to, field key); never from an item to itself.
 - Read under the _from_ item's row-level security, keyed by Project. The app role can't read `to_id` (nor `created_by_member_id`): the targets come through `app.work_item_links`, with the id only for a target the reader sees (as built, RP-291).
+- `created_at` is not granted to the app role: a Link added during the Draft keeps its real time. `app.work_item_links` returns it no earlier than the item's Creation Date once numbered; while it is a Draft, real times (RP-399, scenario 61).
 - Both items are in the same Project, and the target has been Submitted (`submitted_at` set).
 - A viewer without access to the target sees only its Document Number and Subject (E1), and from Form engine part 4 may open its latest Documental Record. A viewer of the target sees every item with a `submitted_at` linking to it (with its Links as they were at a Send Back, while it is Sent Back), with number and Subject only for those they can't see (E3), through `app.work_item_linked_from` (as built, RP-292). Neither shows an item of the reader's item's own Revision chain that the reader can't see, not even by number (`app.chain_item_hidden`, RP-311 review; form-engine.md §2.8a).
 - Written only through `app.*` functions, with the answers; frozen at Submit.
@@ -270,6 +271,7 @@ A file attached to a Work Item: in the Attachments System Field (RP-269), or, wi
 Frozen at the first Send or Submit (a trigger when the item leaves Draft). After that the row can't change, even for its owner, and a change needs a Revision. A Document added after a Return to Draft is frozen at the next Send.
 `arrival` (RP-309): the item's `arrivals` when the row was added, set by a trigger. A Document added while the item is held (the raiser's Draft after a Send Back) is seen only by the holding Participant until the item leaves it; everyone else reads the Documents it had when it arrived (`app.item_row_seen`, in the RLS policy, so lists and downloads agree). A Document others have seen is frozen, so never removed.
 A Revision's Documents are copied as new rows with their own storage keys; **document_copy** (`document_id`, `copied_from_id`) records each one's source so the api copies the file, and is never granted to the app role (RP-316). A copy keeps its source's `created_at` and `confirmed_at` (its `uploadedAt`), never the Revision's start, so it carries no Draft-started time (RP-393, scenario 75).
+`created_at` and `confirmed_at` are not granted to the app role: a Document added during the Draft keeps its real time, for audit. `app.document_times` gives each visible Document its upload time (the api's `uploadedAt`), no earlier than the Creation Date of the item it was first uploaded on once that item is numbered, so a copy follows the original's Creation Date and a Revision's own Documents its own; while that item is a Draft, real times. It also gives the order they were uploaded in (`seq`) (RP-399, scenarios 61 and 75).
 `stored_file` (with its `sha256`) comes with the Files Module and the Documental Record; until then the file's details live on the Document.
 
 **documental_record**

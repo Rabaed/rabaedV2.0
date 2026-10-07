@@ -24,16 +24,15 @@ const REVIEWED: Record<string, string> = {
   work_item_dimension_value:
     "The item's Visibility values (Trade, Location), shown on the item; app.sees_work_item already requires the viewer's grants to cover each one.",
   work_item_scope: "The item's Scopes, shown on the item; every Project Member reads the Project's Scopes anyway.",
+  document:
+    "The item's Documents (V19 arrivals apply). created_at and confirmed_at are not granted: they keep the real time of a Document added during the Draft; app.document_times gives the upload time, no earlier than the Creation Date once numbered (RP-399).",
+  work_item_link:
+    "The item's Links (V19 arrivals apply); the linked item's id only through app.work_item_links. created_at is not granted: app.work_item_links gives it no earlier than the Creation Date once numbered (RP-399).",
 };
 
 // Tables of that shape with a column that reaches viewers it shouldn't, kept
 // here until it is fixed so the check still fails on anything new.
-const KNOWN_LEAKS: Record<string, string> = {
-  document:
-    "RP-367 finding: confirmed_at and created_at keep the real time of a Document added during the Draft, before the Creation Date; the api shows confirmed_at as uploadedAt (visibility.md 61, 74).",
-  work_item_link:
-    "RP-367 finding: created_at keeps the real time of a Link added during the Draft; the app role reads it and app.work_item_links returns it (visibility.md 61).",
-};
+const KNOWN_LEAKS: Record<string, string> = {};
 
 describe("tables the app role reads only through item visibility", () => {
   it("are each reviewed", async () => {

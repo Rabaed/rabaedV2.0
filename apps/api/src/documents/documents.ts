@@ -32,7 +32,7 @@ export function listDocuments(db: Db, memberId: string, workItemId: string, limi
       file_name: string;
       size_bytes: string;
       content_type: string;
-      confirmed_at: Date;
+      uploaded_at: Date;
       company_name: BilingualText;
       member_name: BilingualText | null;
       frozen: boolean;
@@ -42,17 +42,18 @@ export function listDocuments(db: Db, memberId: string, workItemId: string, limi
       taken_latitude: number | null;
       taken_longitude: number | null;
     }>`
-      select d.id, d.file_name, d.size_bytes, d.content_type, d.confirmed_at, co.legal_name as company_name,
+      select d.id, d.file_name, d.size_bytes, d.content_type, t.uploaded_at, co.legal_name as company_name,
         m.full_name as member_name, d.frozen_at is not null as frozen, d.field_key, d.item_key,
         d.taken_at, d.taken_latitude, d.taken_longitude
       from document d
+      -- The upload time, never earlier than the Creation Date once numbered (RP-399), and the
+      -- order they were uploaded in: ids are random and say nothing of it (ADR 0015).
+      join app.document_times(${workItemId}::uuid) t on t.document_id = d.id
       join app.work_item_companies(d.work_item_id) co on co.participant_id = d.uploaded_by_participant_id
       -- member's own RLS shows only the viewer's own Company's people (V14).
       left join member m on m.id = d.uploaded_by_member_id
       where d.work_item_id = ${workItemId}
-      -- Documents confirmed at the same moment by file name: ids are random and say nothing
-      -- of the order they were made in (ADR 0015).
-      order by d.confirmed_at, d.file_name, d.id
+      order by t.seq
     `.execute(trx);
     const { rows: can } = await sql<{ can: boolean }>`select app.can_change_documents(${workItemId}::uuid) as can`.execute(trx);
     return {
@@ -61,7 +62,7 @@ export function listDocuments(db: Db, memberId: string, workItemId: string, limi
         fileName: r.file_name,
         sizeBytes: Number(r.size_bytes),
         contentType: r.content_type,
-        uploadedAt: r.confirmed_at.toISOString(),
+        uploadedAt: r.uploaded_at.toISOString(),
         uploadedBy: { companyName: r.company_name, memberName: r.member_name },
         frozen: r.frozen,
         fieldKey: r.field_key,
