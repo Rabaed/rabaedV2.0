@@ -4,14 +4,14 @@
 // Link of the MAR under the question's key. MARs already on Version 1 or 2 keep
 // showing and validating with theirs. Version 3 passes the part-1 publish
 // checks against Versions 1 and 2.
-import { randomUUID } from "node:crypto";
 import { createDb } from "@rabaed/db";
 import { testDatabaseUrls } from "@rabaed/db/test-support";
-import { formSchema, publishProblems, type WorkItemDetail, type WorkItemLinks } from "@rabaed/domain";
+import { formSchema, publishProblems, type WorkItemLinks } from "@rabaed/domain";
 import { sql } from "kysely";
 import type { LightMyRequestResponse } from "fastify";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { attachDatasheet, createTestApi, type Caller } from "./support/harness.ts";
+import { detail, projectMember, tryTake } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
 const migrator = createDb(testDatabaseUrls().migrator, { max: 1 });
@@ -64,9 +64,6 @@ const created = async (title: string, answers: Record<string, unknown> = {}) =>
   ).json().id as string;
 const save = (id: string, answers: Record<string, unknown>) =>
   engineer.request("PUT", `/v1/work-items/${id}/answers`, { answers: { trade: electrical, location: buildingA, ...answers } });
-const take = (by: Caller, id: string, transition: string) =>
-  by.post(`/v1/work-items/${id}/transitions`, { transition, idempotencyKey: randomUUID() });
-const detail = async (id: string): Promise<WorkItemDetail> => (await ok(engineer.get(`/v1/work-items/${id}`), 200)).json();
 const links = async (id: string): Promise<WorkItemLinks> => (await ok(engineer.get(`/v1/work-items/${id}/links`), 200)).json();
 const pin = async (id: string, versionNo: number) => {
   const version = (await marVersions()).find((v) => v.version_no === versionNo)!;
@@ -77,9 +74,9 @@ const pin = async (id: string, versionNo: number) => {
 async function submitted(title: string): Promise<string> {
   const id = await created(title);
   await attachDatasheet(engineer, id);
-  await ok(take(engineer, id, "send_for_review"));
+  await ok(tryTake(engineer, id, "send_for_review"));
   await ok(pm.post(`/v1/work-items/${id}/claim`));
-  await ok(take(pm, id, "submit"));
+  await ok(tryTake(pm, id, "submit"));
   return id;
 }
 
@@ -98,17 +95,10 @@ beforeAll(async () => {
   const k1Caller = await api.acceptInvitation(k1.invitationToken);
   const k1Participant = await api.addParticipant(c1.caller, projectId, k1, "consultant");
   await ok(c1.caller.request("PUT", `/v1/participants/${k1Participant}/visibility`, { trade: all, location: all }));
-  const projectMember = async (company: Caller, participantId: string, positions: string[]) => {
-    const { member, caller } = await api.member(company);
-    await api.addProjectMember(company, participantId, member.id);
-    await ok(company.request("PUT", `/v1/participants/${participantId}/members/${member.id}/visibility`, { trade: all, location: all }));
-    await ok(company.request("PUT", `/v1/participants/${participantId}/members/${member.id}/positions`, { positions }));
-    return caller;
-  };
-  engineer = await projectMember(c1.caller, own, ["engineer"]);
-  pm = await projectMember(c1.caller, own, ["project_manager"]);
+  engineer = await projectMember(api, c1, own, ["engineer"]);
+  pm = await projectMember(api, c1, own, ["project_manager"]);
   // Holds the Consultant Step that Submit leads to.
-  await projectMember(k1Caller, k1Participant, ["manager"]);
+  await projectMember(api, { caller: k1Caller }, k1Participant, ["manager"]);
 });
 
 describe("the MAR Form Version 3", () => {
@@ -160,15 +150,15 @@ describe("a new MAR", () => {
   it("pins the latest Version (4 since RP-306, Version 3 plus the Consultant verification), and leaves Draft without Related submittals", async () => {
     const latest = (await marVersions()).at(-1)!;
     const id = await created("Lighting fixtures");
-    expect((await detail(id)).formVersionId).toBe(latest.id);
+    expect((await detail(engineer, id)).formVersionId).toBe(latest.id);
     await attachDatasheet(engineer, id);
-    await ok(take(engineer, id, "send_for_review"));
-    expect((await detail(id)).stage.key).not.toBe("draft");
+    await ok(tryTake(engineer, id, "send_for_review"));
+    expect((await detail(engineer, id)).stage.key).not.toBe("draft");
   });
 
   it("keeps a Submitted MAR picked under Related submittals, as a Link under that question", async () => {
     const id = await created("Cable tray brackets", { related_submittals: [approved] });
-    expect((await detail(id)).answers).toMatchObject({ related_submittals: [approved] });
+    expect((await detail(engineer, id)).answers).toMatchObject({ related_submittals: [approved] });
     expect((await links(id)).links).toMatchObject([
       { kind: "relies_on", fieldKey: "related_submittals", subject: "Cable trays, submitted", workItemId: approved },
     ]);
@@ -184,10 +174,10 @@ describe("a MAR on an earlier Version", () => {
     expect(refused.statusCode).toBe(422);
     expect(refused.json()).toEqual({ error: "invalid_answers", fields: [{ key: "related_submittals", code: "unknown_field" }] });
     // Version 2's required Datasheet still blocks leaving Draft.
-    const incomplete = await take(engineer, id, "send_for_review");
+    const incomplete = await tryTake(engineer, id, "send_for_review");
     expect(incomplete.json()).toEqual({ error: "form_incomplete", fields: [{ key: "datasheet", code: "required" }] });
     await attachDatasheet(engineer, id);
-    await ok(take(engineer, id, "send_for_review"));
+    await ok(tryTake(engineer, id, "send_for_review"));
   });
 
   it("keeps Version 1: it shows Version 1 and leaves Draft without a Datasheet", async () => {
@@ -196,7 +186,7 @@ describe("a MAR on an earlier Version", () => {
     expect((await ok(engineer.get(`/v1/work-items/${id}/form`), 200)).json().versionNo).toBe(1);
     const v1Answers = { manufacturer: "Zumtobel", quantity: 48, description: "Emergency luminaires" };
     await ok(save(id, v1Answers));
-    await ok(take(engineer, id, "send_for_review"));
-    expect((await detail(id)).answers).toMatchObject(v1Answers);
+    await ok(tryTake(engineer, id, "send_for_review"));
+    expect((await detail(engineer, id)).answers).toMatchObject(v1Answers);
   });
 });

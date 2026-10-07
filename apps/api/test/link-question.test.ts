@@ -12,12 +12,12 @@
 import { randomUUID } from "node:crypto";
 import { createDb } from "@rabaed/db";
 import { testDatabaseUrls } from "@rabaed/db/test-support";
-import type { WorkItemDetail, WorkItemHistory, WorkItemLinks } from "@rabaed/domain";
+import type { WorkItemHistory, WorkItemLinks } from "@rabaed/domain";
 import type { LightMyRequestResponse } from "fastify";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestApi, expectHidden, type Caller } from "./support/harness.ts";
-import { all, bilingual, buildTower, draft, inInternalReview, ok, only, projectMember, submitted, type Company, type Tower } from "./support/tower.ts";
+import { all, bilingual, buildTower, detail, draft, inInternalReview, ok, only, projectMember, submitted, tryTake, type Company, type Tower } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
 const migrator = createDb(testDatabaseUrls().migrator, { max: 1 });
@@ -89,15 +89,12 @@ let c2Pm: Caller;
 let k1Mechanical: Caller; // A K1 manager covering Mechanical only.
 let c1Mechanical: Caller; // A C1 engineer covering Mechanical only.
 
-const take = (by: Caller, id: string, transition: string) => by.post(`/v1/work-items/${id}/transitions`, { transition, idempotencyKey: randomUUID() });
-
 /** The answers of a link-question item on the Tower, Mechanical: the C1 Mechanical engineer sees it. */
 const lqAnswers = (answers: Record<string, unknown>) => ({ trade: tower.mechanical, location: tower.buildingA, ...answers });
 const createLq = (by: Caller, answers: Record<string, unknown>) =>
   by.post(`/v1/projects/${tower.projectId}/work-items`, { type: TYPE, title: "Chilled water pipes", answers: lqAnswers(answers) });
 const save = (by: Caller, id: string, answers: Record<string, unknown>) =>
   by.request("PUT", `/v1/work-items/${id}/answers`, { answers: lqAnswers(answers) });
-const detail = async (by: Caller, id: string): Promise<WorkItemDetail> => (await ok(by.get(`/v1/work-items/${id}`), 200)).json();
 const links = async (by: Caller, id: string): Promise<WorkItemLinks> => (await ok(by.get(`/v1/work-items/${id}/links`), 200)).json();
 /** The item's link-question Links, as [field key, linked item id or null]. */
 const questionLinks = async (by: Caller, id: string) =>
@@ -144,7 +141,7 @@ beforeAll(async () => {
   item.c1Approved = await submitted(tower, c1Engineer, c1Pm, "Cable trays, approved");
   await ok(k1Manager.post(`/v1/work-items/${item.c1Approved}/claim`));
   await verified(k1Manager, item.c1Approved);
-  await ok(take(k1Manager, item.c1Approved, "approve_a"));
+  await ok(tryTake(k1Manager, item.c1Approved, "approve_a"));
   item.c2Submitted = await submitted(tower, c2Engineer, c2Pm, "Cable trays, second contractor");
   item.elsewhere = await submitted(elsewhere, elsewhere.c1Engineer, elsewhere.c1Pm, "Cable trays, another Project");
   numbers.c1Submitted = await number(item.c1Submitted);
@@ -198,10 +195,10 @@ describe("a link question", () => {
 
   it("when required, blocks leaving Draft until an item is chosen", async () => {
     await ok(save(tower.c1Engineer, lq, { relies: true, related: [] }));
-    const r = await take(tower.c1Engineer, lq, "send_for_review");
+    const r = await tryTake(tower.c1Engineer, lq, "send_for_review");
     expect(refusal(r)).toEqual({ status: 422, body: { error: "form_incomplete", fields: [{ key: "related", code: "required" }] } });
     await ok(save(tower.c1Engineer, lq, { relies: true, related: [item.c1Submitted] }));
-    await ok(take(tower.c1Engineer, lq, "send_for_review"));
+    await ok(tryTake(tower.c1Engineer, lq, "send_for_review"));
   });
 
   it("changes in the raiser's internal review, each change in the field-level history as numbers and Subjects, never ids", async () => {
@@ -232,7 +229,7 @@ describe("a link question", () => {
 
   it("is frozen with the answers from Submit", async () => {
     await ok(tower.c1Pm.post(`/v1/work-items/${lq}/claim`));
-    await ok(take(tower.c1Pm, lq, "submit"));
+    await ok(tryTake(tower.c1Pm, lq, "submit"));
     const r = await save(tower.c1Engineer, lq, { relies: true, related: [item.c1Approved] });
     expect(refusal(r)).toEqual({ status: 409, body: { error: "not_editable" } });
     expect((await detail(tower.c1Engineer, lq)).answers).toMatchObject({ related: [item.c1Submitted, item.c1Approved] });

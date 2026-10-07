@@ -5,10 +5,9 @@
 // Member reads only their own "Watching": no read returns who else watches, nor
 // how many do. A hidden item is the plain 404.
 import { randomUUID } from "node:crypto";
-import type { WorkItemDetail } from "@rabaed/domain";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestApi, expectHidden, type Caller } from "./support/harness.ts";
-import { buildTower, draft, inInternalReview, ok, only, projectMember, submitted, take, type Company, type Tower } from "./support/tower.ts";
+import { buildTower, detail, draft, inInternalReview, ok, only, projectMember, submitted, take, type Company, type Tower } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
 afterAll(() => api.close());
@@ -26,7 +25,6 @@ const watchRead = (by: Caller, id: string) => by.get(`/v1/work-items/${id}/watch
 const watching = async (by: Caller, id: string): Promise<boolean> => (await ok(watchRead(by, id), 200)).json().watching;
 const watch = (by: Caller, id: string) => ok(by.request("PUT", `/v1/work-items/${id}/watch`));
 const unwatch = (by: Caller, id: string) => ok(by.delete(`/v1/work-items/${id}/watch`));
-const detail = async (by: Caller, id: string): Promise<WorkItemDetail> => (await ok(by.get(`/v1/work-items/${id}`), 200)).json();
 
 /** K1 verifies a Submitted MAR and issues Code C, closing it. */
 async function codeC(id: string, k1Manager: Caller) {

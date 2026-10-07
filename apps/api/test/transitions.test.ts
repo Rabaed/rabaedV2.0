@@ -6,6 +6,7 @@ import { randomUUID } from "node:crypto";
 import type { WorkItemDetail, WorkItemHistory } from "@rabaed/domain";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { attachDatasheet, createTestApi, expectHidden, type Caller, type OnboardedCompany } from "./support/harness.ts";
+import { detail, projectMember, tryTake } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
 afterAll(() => api.close());
@@ -33,27 +34,11 @@ async function ok(res: Promise<{ statusCode: number; body: string }>, status = 2
   expect(r.statusCode, r.body).toBe(status);
 }
 
-/** A signed-in Member of `company` on the Project through `participantId`, covering all of it, with `positions`. */
-async function projectMember(company: Company, participantId: string, positions: string[]) {
-  const { member, caller } = await api.member(company.caller);
-  await api.addProjectMember(company.caller, participantId, member.id);
-  await ok(
-    company.caller.request("PUT", `/v1/participants/${participantId}/members/${member.id}/visibility`, {
-      trade: all,
-      location: all,
-    }),
-  );
-  if (positions.length) {
-    await ok(company.caller.request("PUT", `/v1/participants/${participantId}/members/${member.id}/positions`, { positions }));
-  }
-  return caller;
-}
-
 async function otherParticipant(role: "contractor" | "consultant" | "owner_representative", positions: string[]) {
   const company = await api.authorizedPerson();
   const participantId = await api.addParticipant(c1.caller, projectId, company.company, role);
   await ok(c1.caller.request("PUT", `/v1/participants/${participantId}/visibility`, { trade: all, location: all }));
-  return projectMember(company, participantId, positions);
+  return projectMember(api, company, participantId, positions);
 }
 
 /** A complete Draft MAR. `datasheet: false` leaves out its Datasheet, for a raiser who can't attach files. */
@@ -67,15 +52,6 @@ async function createDraft(by: Caller, title = "Cable trays", { datasheet = true
   // The MAR Form Version 2 needs its Datasheet to leave Draft.
   if (datasheet) await attachDatasheet(by, res.json().id);
   return res.json().id;
-}
-
-const take = (by: Caller, id: string, transition: string, { reason, ...extra }: { reason?: string; idempotencyKey?: string } = {}) =>
-  by.post(`/v1/work-items/${id}/transitions`, { transition, idempotencyKey: randomUUID(), ...(reason === undefined ? {} : { answers: { reason } }), ...extra });
-
-async function detail(by: Caller, id: string): Promise<WorkItemDetail> {
-  const res = await by.get(`/v1/work-items/${id}`);
-  expect(res.statusCode, res.body).toBe(200);
-  return res.json();
 }
 
 async function history(by: Caller, id: string): Promise<WorkItemHistory["events"]> {
@@ -101,10 +77,10 @@ beforeAll(async () => {
     .json()
     .participants.find((p: { isOwnCompany: boolean }) => p.isOwnCompany).id;
   await ok(c1.caller.request("PUT", `/v1/participants/${c1ParticipantId}/visibility`, { trade: all, location: all }));
-  engineer = await projectMember(c1, c1ParticipantId, ["engineer"]);
-  pm1 = await projectMember(c1, c1ParticipantId, ["project_manager"]);
-  pm2 = await projectMember(c1, c1ParticipantId, ["project_manager"]);
-  noPosition = await projectMember(c1, c1ParticipantId, []);
+  engineer = await projectMember(api, c1, c1ParticipantId, ["engineer"]);
+  pm1 = await projectMember(api, c1, c1ParticipantId, ["project_manager"]);
+  pm2 = await projectMember(api, c1, c1ParticipantId, ["project_manager"]);
+  noPosition = await projectMember(api, c1, c1ParticipantId, []);
   c2Engineer = await otherParticipant("contractor", ["engineer"]);
   k1Engineer = await otherParticipant("consultant", ["engineer"]);
   orEngineer = await otherParticipant("owner_representative", ["engineer"]);
@@ -126,7 +102,7 @@ describe("Send for Review", () => {
   });
 
   it("moves the Draft to Internal Review, held by the PM pool, and assigns the Document Number", async () => {
-    await ok(take(engineer, id, "send_for_review"));
+    await ok(tryTake(engineer, id, "send_for_review"));
     const d = await detail(engineer, id);
     expect(d).toMatchObject({
       stage: { key: "internal_review" },
@@ -146,7 +122,7 @@ describe("Send for Review", () => {
       expect(list.stages.every((s: { count: number }) => s.count === 0)).toBe(true);
       await expectHidden(caller.get(`/v1/work-items/${id}`));
       await expectHidden(caller.get(`/v1/work-items/${id}/history`));
-      const res = await take(caller, id, "return", { reason: "x" });
+      const res = await tryTake(caller, id, "return", { reason: "x" });
       await expectHidden(res);
       await expectHidden(caller.post(`/v1/work-items/${id}/claim`));
     }
@@ -163,7 +139,7 @@ describe("Claim, Return and re-send", () => {
   let id = "";
   beforeAll(async () => {
     id = await createDraft(engineer, "Lighting fixtures");
-    await ok(take(engineer, id, "send_for_review"));
+    await ok(tryTake(engineer, id, "send_for_review"));
   });
 
   it("lets only one of two simultaneous Claims win", async () => {
@@ -188,7 +164,7 @@ describe("Claim, Return and re-send", () => {
   it("refuses the Engineer and the other PM, who don't hold the Step, and changes nothing (scenario 11)", async () => {
     const before = await history(engineer, id);
     for (const caller of [engineer, pm2]) {
-      const res = await take(caller, id, "return", { reason: "Wrong tray size" });
+      const res = await tryTake(caller, id, "return", { reason: "Wrong tray size" });
       expect(res.statusCode, res.body).toBe(409);
       expect(res.json()).toEqual({ error: "not_holder" });
     }
@@ -198,32 +174,32 @@ describe("Claim, Return and re-send", () => {
   });
 
   it("needs a reason to Return", async () => {
-    const res = await take(pm1, id, "return", { reason: "   " });
+    const res = await tryTake(pm1, id, "return", { reason: "   " });
     expect(res.statusCode).toBe(422);
     expect(res.json()).toEqual({ error: "invalid_action_form", fields: [{ key: "reason", code: "required" }] });
   });
 
   it("refuses a Transition that doesn't leave the current Step, or whose next Step nobody could hold", async () => {
-    expect((await take(pm1, id, "send_for_review")).json()).toEqual({ error: "transition_not_available" });
+    expect((await tryTake(pm1, id, "send_for_review")).json()).toEqual({ error: "transition_not_available" });
     // The Consultant has Engineers only: nobody could issue its Code (RP-194), which is theirs to know.
     // Submit isn't offered (above), and the answer is the one a Gap or an Overlap gets (scenario 37).
-    const res = await take(pm1, id, "submit");
+    const res = await tryTake(pm1, id, "submit");
     expect(res.statusCode).toBe(409);
     expect(res.body).toBe(JSON.stringify({ error: "next_step_unavailable" }));
-    expect((await take(pm1, id, "no_such_thing")).statusCode).toBe(409);
+    expect((await tryTake(pm1, id, "no_such_thing")).statusCode).toBe(409);
   });
 
   it("Returns it to the Engineer who sent it, with the reason, keeping the Document Number", async () => {
     const number = (await detail(pm1, id)).documentNumber;
     expect(number).toMatch(/^TWR-MAR-01-\d{4}$/);
-    await ok(take(pm1, id, "return", { reason: "Wrong tray size" }));
+    await ok(tryTake(pm1, id, "return", { reason: "Wrong tray size" }));
     const d = await detail(engineer, id);
     expect(d).toMatchObject({ stage: { key: "draft" }, documentNumber: number });
     expect(d.heldBy?.memberName).not.toBeNull();
     expect(buttons(d)).toEqual(["send_for_review"]);
     expect(buttons(await detail(pm1, id))).toEqual([]);
 
-    await ok(take(engineer, id, "send_for_review"));
+    await ok(tryTake(engineer, id, "send_for_review"));
     expect((await detail(engineer, id)).documentNumber).toBe(number);
     expect((await detail(pm1, id)).stage.key).toBe("internal_review");
   });
@@ -261,8 +237,8 @@ describe("the Document Number", () => {
     const a = await createDraft(engineer, "Switchgear");
     const b = await createDraft(engineer, "Busbars");
     expect((await detail(engineer, a)).documentNumber).toBeNull();
-    await ok(take(engineer, b, "send_for_review"));
-    await ok(take(engineer, a, "send_for_review"));
+    await ok(tryTake(engineer, b, "send_for_review"));
+    await ok(tryTake(engineer, a, "send_for_review"));
     const nb = (await detail(engineer, b)).documentNumber!;
     const na = (await detail(engineer, a)).documentNumber!;
     expect(Number(na.slice(-4))).toBe(Number(nb.slice(-4)) + 1);
@@ -272,7 +248,7 @@ describe("the Document Number", () => {
     const id = await createDraft(c2Engineer);
     // c2 has Engineers only: nobody could hold Internal Review, so it can't be sent, and no button says it can.
     expect(buttons(await detail(c2Engineer, id))).toEqual([]);
-    const res = await take(c2Engineer, id, "send_for_review");
+    const res = await tryTake(c2Engineer, id, "send_for_review");
     expect(res.statusCode).toBe(409);
     expect(res.json()).toEqual({ error: "no_step_pool" });
     expect((await detail(c2Engineer, id)).documentNumber).toBeNull();
@@ -284,17 +260,17 @@ describe("a Transition", () => {
     const id = await createDraft(engineer, "Earthing");
     const idempotencyKey = randomUUID();
     const [a, b] = await Promise.all([
-      take(engineer, id, "send_for_review", { idempotencyKey }),
-      take(engineer, id, "send_for_review", { idempotencyKey }),
+      tryTake(engineer, id, "send_for_review", { idempotencyKey }),
+      tryTake(engineer, id, "send_for_review", { idempotencyKey }),
     ]);
     expect([a.statusCode, b.statusCode]).toEqual([204, 204]);
-    await ok(take(engineer, id, "send_for_review", { idempotencyKey }));
+    await ok(tryTake(engineer, id, "send_for_review", { idempotencyKey }));
     const events = await history(engineer, id);
     expect(events.filter((e) => e.type === "transition")).toHaveLength(1);
     expect((await detail(engineer, id)).stage.key).toBe("internal_review");
 
     // The same key for another item is a mistake, not a replay.
-    const reused = await take(engineer, await createDraft(engineer), "send_for_review", { idempotencyKey });
+    const reused = await tryTake(engineer, await createDraft(engineer), "send_for_review", { idempotencyKey });
     expect(reused.statusCode).toBe(422);
     expect(reused.json()).toEqual({ error: "idempotency_key_reused" });
   });
@@ -303,8 +279,8 @@ describe("a Transition", () => {
     const [a, b] = [await createDraft(engineer, "Sockets"), await createDraft(engineer, "Switches")];
     const idempotencyKey = randomUUID();
     const results = await Promise.all([
-      take(engineer, a, "send_for_review", { idempotencyKey }),
-      take(engineer, b, "send_for_review", { idempotencyKey }),
+      tryTake(engineer, a, "send_for_review", { idempotencyKey }),
+      tryTake(engineer, b, "send_for_review", { idempotencyKey }),
     ]);
     expect(results.map((r) => r.statusCode).sort()).toEqual([204, 422]);
     const stages = [(await detail(engineer, a)).stage.key, (await detail(engineer, b)).stage.key].sort();
@@ -314,7 +290,7 @@ describe("a Transition", () => {
   it("is refused to a holder without the permission, and nothing changes (scenario 11)", async () => {
     const id = await createDraft(noPosition, "Cable glands", { datasheet: false });
     expect(buttons(await detail(noPosition, id))).toEqual([]);
-    const res = await take(noPosition, id, "send_for_review");
+    const res = await tryTake(noPosition, id, "send_for_review");
     expect(res.statusCode).toBe(403);
     expect(res.json()).toEqual({ error: "forbidden" });
     expect(await history(noPosition, id)).toEqual([]);
@@ -324,7 +300,7 @@ describe("a Transition", () => {
   it("needs a key and a session", async () => {
     const id = await createDraft(engineer, "Trunking");
     expect((await engineer.post(`/v1/work-items/${id}/transitions`, { transition: "send_for_review" })).statusCode).toBe(400);
-    expect((await take(api.anonymous(), id, "send_for_review")).statusCode).toBe(401);
+    expect((await tryTake(api.anonymous(), id, "send_for_review")).statusCode).toBe(401);
     await expectHidden(engineer.post(`/v1/work-items/${randomUUID()}/claim`));
   });
 });

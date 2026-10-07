@@ -23,23 +23,33 @@ export async function ok(res: Promise<LightMyRequestResponse>, status = 204) {
   return r;
 }
 
-/** A signed-in Member of `company`, on the Project through `participantId`, with `positions` and that Trade Visibility, and their email. */
-export async function memberOnProject(api: TestApi, company: Company, participantId: string, positions: string[], trade: VisibilityGrant = all) {
-  const { member, caller } = await api.member(company.caller);
+/** A signed-in Member of `company` (named `name`, if given), on the Project through `participantId`, with `positions` and that Trade Visibility, and their id and email. */
+export async function memberOnProject(api: TestApi, company: Pick<Company, "caller">, participantId: string, positions: string[], trade: VisibilityGrant = all, name?: string) {
+  const member = await api.inviteMember(company.caller, name === undefined ? {} : { fullName: bilingual(name) });
+  const caller = await api.acceptInvitation(member.invitationToken);
   await api.addProjectMember(company.caller, participantId, member.id);
   await ok(company.caller.request("PUT", `/v1/participants/${participantId}/members/${member.id}/visibility`, { trade, location: all }));
   await ok(company.caller.request("PUT", `/v1/participants/${participantId}/members/${member.id}/positions`, { positions }));
-  return { caller, email: member.email };
+  return { id: member.id, caller, email: member.email };
 }
 
-/** A signed-in Member of `company`, on the Project through `participantId`, with `positions` and that Trade Visibility. */
-export async function projectMember(api: TestApi, company: Company, participantId: string, positions: string[], trade: VisibilityGrant = all) {
-  return (await memberOnProject(api, company, participantId, positions, trade)).caller;
+/** A signed-in Member of `company` (named `name`, if given), on the Project through `participantId`, with `positions` and that Trade Visibility. */
+export async function projectMember(api: TestApi, company: Pick<Company, "caller">, participantId: string, positions: string[], trade: VisibilityGrant = all, name?: string) {
+  return (await memberOnProject(api, company, participantId, positions, trade, name)).caller;
 }
 
-/** `by` takes Transition `transition` on item `id`. */
-export const take = (by: Caller, id: string, transition: string) =>
-  ok(by.post(`/v1/work-items/${id}/transitions`, { transition, idempotencyKey: randomUUID() }));
+/** What a Transition may carry: `reason` and `remarks` are answers; `answers` are all of them (given with either, `reason` and `remarks` win). */
+export type TakeOptions = { reason?: string; remarks?: string; answers?: Record<string, unknown>; internalNote?: string; idempotencyKey?: string };
+
+/** `by` takes Transition `transition` on item `id`, and the response is returned as it came, for a test of a refusal. */
+export const tryTake = (by: Caller, id: string, transition: string, { reason, remarks, answers, ...rest }: TakeOptions = {}) => {
+  const own = { ...answers, ...(reason === undefined ? {} : { reason }), ...(remarks === undefined ? {} : { remarks }) };
+  const hasAnswers = answers !== undefined || reason !== undefined || remarks !== undefined;
+  return by.post(`/v1/work-items/${id}/transitions`, { transition, idempotencyKey: randomUUID(), ...(hasAnswers ? { answers: own } : {}), ...rest });
+};
+
+/** `by` takes Transition `transition` on item `id`, and it is accepted. */
+export const take = (by: Caller, id: string, transition: string, options: TakeOptions = {}) => ok(tryTake(by, id, transition, options));
 
 /** Item `id` as `by` reads it. */
 export const detail = async (by: Caller, id: string): Promise<WorkItemDetail> => (await ok(by.get(`/v1/work-items/${id}`), 200)).json();

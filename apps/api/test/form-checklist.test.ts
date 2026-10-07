@@ -8,15 +8,15 @@
 //
 // The MAR Form Version 1 has no checklist, so this file adds a test-only Rabaed
 // Default Type (the MAR's Workflow) whose Form has one.
-import { randomUUID } from "node:crypto";
 import { createDb } from "@rabaed/db";
 import { testDatabaseUrls } from "@rabaed/db/test-support";
-import type { DocumentList, StartedDocumentUpload, WorkItemDetail } from "@rabaed/domain";
+import type { DocumentList, StartedDocumentUpload } from "@rabaed/domain";
 import { sql } from "kysely";
 import type { LightMyRequestResponse } from "fastify";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { jpegWithExif } from "../src/demo/exif-jpeg.ts";
 import { createTestApi, expectHidden, type Caller } from "./support/harness.ts";
+import { detail, projectMember, tryTake } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
 const migrator = createDb(testDatabaseUrls().migrator, { max: 1 });
@@ -106,9 +106,6 @@ const createDraft = async (answers: Record<string, unknown> = {}) =>
     .id as string;
 const save = (id: string, answers: Record<string, unknown>) =>
   engineer.request("PUT", `/v1/work-items/${id}/answers`, { answers: { ...builtIns(), ...answers } });
-const take = (by: Caller, id: string, transition: string) =>
-  by.post(`/v1/work-items/${id}/transitions`, { transition, idempotencyKey: randomUUID() });
-const detail = async (by: Caller, id: string): Promise<WorkItemDetail> => (await ok(by.get(`/v1/work-items/${id}`), 200)).json();
 const checklistOf = async (by: Caller, id: string) => (await detail(by, id)).answers.pour_check;
 
 const documentsUrl = (itemId: string) => `/v1/work-items/${itemId}/documents`;
@@ -152,20 +149,13 @@ beforeAll(async () => {
     .json()
     .participants.find((p: { isOwnCompany: boolean }) => p.isOwnCompany).id;
   await ok(c1.caller.request("PUT", `/v1/participants/${own}/visibility`, { trade: all, location: all }));
-  const projectMember = async (owner: typeof c1, participantId: string, positions: string[]) => {
-    const { member, caller } = await api.member(owner.caller);
-    await api.addProjectMember(owner.caller, participantId, member.id);
-    await ok(owner.caller.request("PUT", `/v1/participants/${participantId}/members/${member.id}/visibility`, { trade: all, location: all }));
-    await ok(owner.caller.request("PUT", `/v1/participants/${participantId}/members/${member.id}/positions`, { positions }));
-    return caller;
-  };
-  engineer = await projectMember(c1, own, ["engineer"]);
-  pm = await projectMember(c1, own, ["project_manager"]);
+  engineer = await projectMember(api, c1, own, ["engineer"]);
+  pm = await projectMember(api, c1, own, ["project_manager"]);
   const other = async (role: "consultant" | "contractor", positions: string[]) => {
     const company = await api.authorizedPerson();
     const participantId = await api.addParticipant(c1.caller, projectId, company.company, role);
     await ok(c1.caller.request("PUT", `/v1/participants/${participantId}/visibility`, { trade: all, location: all }));
-    return projectMember(company, participantId, positions);
+    return projectMember(api, company, participantId, positions);
   };
   consultant = await other("consultant", ["manager"]);
   c2Engineer = await other("contractor", ["engineer"]);
@@ -245,7 +235,7 @@ describe("an item's photos", () => {
 describe("leaving Draft", () => {
   it("is refused for a Fail without the comment and photo its item requires, item by item", async () => {
     const id = await createDraft({ pour_check: { rebar_cover: { answer: "fail" }, formwork: { answer: "fail" } } });
-    expect((await take(engineer, id, "send_for_review")).json()).toEqual({
+    expect((await tryTake(engineer, id, "send_for_review")).json()).toEqual({
       error: "form_incomplete",
       fields: [
         { key: "pour_check", code: "comment_required", item: "rebar_cover" },
@@ -258,21 +248,21 @@ describe("leaving Draft", () => {
   it("is still refused for an item whose photo is another item's", async () => {
     const id = await createDraft({ pour_check: { rebar_cover: { answer: "fail", comment: "Cover 15 mm" }, formwork: { answer: "fail" } } });
     await uploaded(engineer, id, { itemKey: "rebar_cover" });
-    expect((await take(engineer, id, "send_for_review")).json().fields).toEqual([{ key: "pour_check", code: "photo_required", item: "formwork" }]);
+    expect((await tryTake(engineer, id, "send_for_review")).json().fields).toEqual([{ key: "pour_check", code: "photo_required", item: "formwork" }]);
   });
 
   it("succeeds once every Fail has its evidence", async () => {
     const id = await createDraft({ pour_check: { rebar_cover: { answer: "fail", comment: "Cover 15 mm" }, formwork: { answer: "fail" } } });
     await uploaded(engineer, id, { itemKey: "rebar_cover" });
     await uploaded(engineer, id, { itemKey: "formwork" });
-    await ok(take(engineer, id, "send_for_review"));
+    await ok(tryTake(engineer, id, "send_for_review"));
   });
 
   it("is not held up by a Pass or N/A, which needs no evidence", async () => {
     const id = await createDraft({ pour_check: answers });
-    expect((await take(engineer, id, "send_for_review")).json().fields).toEqual([{ key: "pour_check", code: "photo_required", item: "formwork" }]);
+    expect((await tryTake(engineer, id, "send_for_review")).json().fields).toEqual([{ key: "pour_check", code: "photo_required", item: "formwork" }]);
     await uploaded(engineer, id, { itemKey: "formwork" });
-    await ok(take(engineer, id, "send_for_review"));
+    await ok(tryTake(engineer, id, "send_for_review"));
   });
 });
 
@@ -283,9 +273,9 @@ describe("once Submitted", () => {
   beforeAll(async () => {
     id = await createDraft({ pour_check: { rebar_cover: { answer: "fail", comment: "Cover 15 mm" }, formwork: { answer: "pass" } } });
     photo = await uploaded(engineer, id, { itemKey: "rebar_cover" });
-    await ok(take(engineer, id, "send_for_review"));
+    await ok(tryTake(engineer, id, "send_for_review"));
     await ok(pm.post(`/v1/work-items/${id}/claim`));
-    await ok(take(pm, id, "submit"));
+    await ok(tryTake(pm, id, "submit"));
   });
 
   it("the Consultant reads the checklist's answers and sees the evidence, and can download it", async () => {

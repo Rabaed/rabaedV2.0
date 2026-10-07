@@ -15,6 +15,7 @@ import type { LightMyRequestResponse } from "fastify";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestApi, expectHidden, type Caller } from "./support/harness.ts";
+import { detail, tryTake } from "./support/tower.ts";
 
 const api = await createTestApi();
 const migrator = createDb(testDatabaseUrls().migrator, { max: 1 });
@@ -142,11 +143,6 @@ const ids = (list: { id: string }[]) => list.map((c) => c.id).sort();
 
 const createDraft = (by: Caller, answers: Record<string, unknown>) =>
   by.post(`/v1/projects/${projectId}/work-items`, { type: TYPE, title: "Cable trays", answers: { ...builtIns(), ...answers } });
-
-const take = (by: Caller, id: string, transition: string) =>
-  by.post(`/v1/work-items/${id}/transitions`, { transition, idempotencyKey: randomUUID() });
-
-const detail = async (by: Caller, id: string): Promise<WorkItemDetail> => (await ok(by.get(`/v1/work-items/${id}`), 200)).json();
 
 beforeAll(async () => {
   await addPeopleType();
@@ -281,9 +277,9 @@ describe("a Submitted item's member and participant answers", () => {
         201,
       )
     ).json().id;
-    await ok(take(engineer.caller, id, "send_for_review"));
+    await ok(tryTake(engineer.caller, id, "send_for_review"));
     await ok(pm.caller.post(`/v1/work-items/${id}/claim`));
-    await ok(take(pm.caller, id, "submit"));
+    await ok(tryTake(pm.caller, id, "submit"));
   });
 
   it("C1 reads its own Member by name", async () => {

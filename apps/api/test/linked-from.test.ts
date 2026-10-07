@@ -14,7 +14,7 @@ import { randomUUID } from "node:crypto";
 import type { LinkedFrom } from "@rabaed/domain";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { attachDatasheet, createTestApi, expectHidden, type Caller } from "./support/harness.ts";
-import { all, bilingual, ok, only, projectMember, type Company } from "./support/tower.ts";
+import { all, bilingual, ok, only, projectMember, take, type Company } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
 afterAll(() => api.close());
@@ -31,9 +31,6 @@ let c1Pm: Caller;
 let k1Manager: Caller; // Covers the whole Project.
 let k1Mechanical: Caller; // Covers Mechanical only.
 let c2Engineer: Caller; // Another Contractor on the Project, who sees none of C1's items.
-
-const take = (by: Caller, id: string, transition: string) =>
-  ok(by.post(`/v1/work-items/${id}/transitions`, { transition, idempotencyKey: randomUUID() }));
 
 /** A Draft MAR of C1's with the Subject `title`. */
 async function draft(title: string, trade: string): Promise<string> {

@@ -14,11 +14,12 @@ import { randomUUID } from "node:crypto";
 import { publishFormVersion } from "@rabaed/admin/services";
 import { createDb, withMember } from "@rabaed/db";
 import { testDatabaseUrls } from "@rabaed/db/test-support";
-import type { WorkItemDetail, WorkItemLinks } from "@rabaed/domain";
+import type { WorkItemLinks } from "@rabaed/domain";
 import { sql } from "kysely";
 import type { LightMyRequestResponse } from "fastify";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestApi, type Caller, type OnboardedCompany } from "./support/harness.ts";
+import { detail, memberOnProject, tryTake } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
 const urls = testDatabaseUrls();
@@ -142,14 +143,6 @@ async function ok(res: Promise<LightMyRequestResponse>, status = 204) {
   return r;
 }
 
-async function projectMember(company: Company, participantId: string, positions: string[]): Promise<Person> {
-  const { member, caller } = await api.member(company.caller);
-  await api.addProjectMember(company.caller, participantId, member.id);
-  await ok(company.caller.request("PUT", `/v1/participants/${participantId}/members/${member.id}/visibility`, { trade: all, location: all }));
-  await ok(company.caller.request("PUT", `/v1/participants/${participantId}/members/${member.id}/positions`, { positions }));
-  return { id: member.id, caller };
-}
-
 async function otherParticipant(role: "consultant" | "owner" | "owner_representative") {
   const company = await api.authorizedPerson();
   const participantId = await api.addParticipant(c1.caller, projectId, company.company, role);
@@ -158,16 +151,13 @@ async function otherParticipant(role: "consultant" | "owner" | "owner_representa
 }
 
 const builtIns = () => ({ trade: electrical, location: buildingA });
-const take = (by: Person, id: string, transition: string) =>
-  by.caller.post(`/v1/work-items/${id}/transitions`, { transition, idempotencyKey: randomUUID() });
-const detail = async (by: Person, id: string): Promise<WorkItemDetail> => (await ok(by.caller.get(`/v1/work-items/${id}`), 200)).json();
 /** The answers `by` reads, without the Built-in Fields. */
 const answersOf = async (by: Person, id: string) => {
-  const { trade: _trade, location: _location, ...own } = (await detail(by, id)).answers;
+  const { trade: _trade, location: _location, ...own } = (await detail(by.caller, id)).answers;
   return own;
 };
 const saveOver = async (by: Person, id: string, changes: Record<string, unknown>) =>
-  by.caller.request("PUT", `/v1/work-items/${id}/answers`, { answers: { ...(await detail(by, id)).answers, ...changes } });
+  by.caller.request("PUT", `/v1/work-items/${id}/answers`, { answers: { ...(await detail(by.caller, id)).answers, ...changes } });
 /** C1's engineer creates a Revision of `closed`. */
 const revisionOf = async (closed: string) =>
   (await ok(engineer.caller.post(`/v1/work-items/${closed}/revisions`, { idempotencyKey: randomUUID() }), 201)).json().id as string;
@@ -179,14 +169,14 @@ async function closedAtCodeC(model: string, answers: Record<string, unknown> = {
     201,
   );
   const id = res.json().id as string;
-  await ok(take(engineer, id, "send_for_review"));
+  await ok(tryTake(engineer.caller, id, "send_for_review"));
   await ok(pm.caller.post(`/v1/work-items/${id}/claim`));
-  await ok(take(pm, id, "submit"));
+  await ok(tryTake(pm.caller, id, "submit"));
   await ok(k1Engineer.caller.post(`/v1/work-items/${id}/claim`));
   await ok(saveOver(k1Engineer, id, { sample_checked: false, verification_note: "Sample does not match" }));
-  await ok(take(k1Engineer, id, "send_to_manager"));
+  await ok(tryTake(k1Engineer.caller, id, "send_to_manager"));
   await ok(k1Manager.caller.post(`/v1/work-items/${id}/claim`));
-  await ok(take(k1Manager, id, "revise_c"));
+  await ok(tryTake(k1Manager.caller, id, "revise_c"));
   return id;
 }
 
@@ -209,15 +199,15 @@ beforeAll(async () => {
     .json()
     .participants.find((p: { isOwnCompany: boolean }) => p.isOwnCompany).id;
   await ok(c1.caller.request("PUT", `/v1/participants/${own}/visibility`, { trade: all, location: all }));
-  engineer = await projectMember(c1, own, ["engineer"]);
-  pm = await projectMember(c1, own, ["project_manager"]);
+  engineer = await memberOnProject(api, c1, own, ["engineer"]);
+  pm = await memberOnProject(api, c1, own, ["project_manager"]);
   const k1 = await otherParticipant("consultant");
-  k1Engineer = await projectMember(k1.company, k1.participantId, ["engineer"]);
-  k1Manager = await projectMember(k1.company, k1.participantId, ["manager"]);
+  k1Engineer = await memberOnProject(api, k1.company, k1.participantId, ["engineer"]);
+  k1Manager = await memberOnProject(api, k1.company, k1.participantId, ["manager"]);
   const or = await otherParticipant("owner_representative");
-  orEngineer = await projectMember(or.company, or.participantId, ["engineer"]);
+  orEngineer = await memberOnProject(api, or.company, or.participantId, ["engineer"]);
   const ow = await otherParticipant("owner");
-  owner = await projectMember(ow.company, ow.participantId, ["representative"]);
+  owner = await memberOnProject(api, ow.company, ow.participantId, ["representative"]);
 });
 
 describe("C1 creates a Revision of the item that got Code C (scenario 49)", () => {
@@ -247,7 +237,7 @@ describe("C1 creates a Revision of the item that got Code C (scenario 49)", () =
   });
 
   it("keeps field times and the 'as arrived' copy to the answers it has", async () => {
-    const times = (await detail(engineer, revision)).fieldTimes;
+    const times = (await detail(engineer.caller, revision)).fieldTimes;
     expect(Object.keys(times).sort()).toEqual(["location", "model", "trade"]);
     const row = await rowOf(revision);
     expect(row.data_as_arrived).toBeNull();
@@ -273,7 +263,7 @@ describe("a Revision of an item whose answers name other items", () => {
     const target = await closedAtCodeC("FD-10");
     const closed = await closedAtCodeC("FD-11", { related: [target] });
     const revision = await revisionOf(closed);
-    expect((await detail(engineer, revision)).answers).toMatchObject({ related: [target] });
+    expect((await detail(engineer.caller, revision)).answers).toMatchObject({ related: [target] });
     const links: WorkItemLinks = (await ok(engineer.caller.get(`/v1/work-items/${revision}/links`), 200)).json();
     expect(links.links.filter((l) => l.kind === "relies_on").map((l) => [l.fieldKey, l.workItemId])).toEqual([["related", target]]);
   });
@@ -304,13 +294,13 @@ describe("a Revision onto a newer Form Version", () => {
     };
     expect(await publishFormVersion(migrator, formId, newer)).toMatchObject({ ok: true, versionNo: 2 });
     const revision = await revisionOf(closed);
-    const d = await detail(engineer, revision);
+    const d = await detail(engineer.caller, revision);
     expect(d.versionsChanged).toBe(true);
     // The notice lists the fields the newer Version no longer has (form-engine.md §7).
     expect(d.droppedFields).toEqual([{ key: "related", label: bilingual("Related submittals") }]);
     expect(d.answers).toEqual({ model: "FD-21", trade: electrical, location: buildingA });
     const links: WorkItemLinks = (await ok(engineer.caller.get(`/v1/work-items/${revision}/links`), 200)).json();
     expect(links.links).toEqual([]);
-    expect(await detail(engineer, closed)).toMatchObject({ versionsChanged: false, droppedFields: [] });
+    expect(await detail(engineer.caller, closed)).toMatchObject({ versionsChanged: false, droppedFields: [] });
   });
 });
