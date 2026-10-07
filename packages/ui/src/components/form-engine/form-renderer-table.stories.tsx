@@ -4,6 +4,7 @@ import { useState } from "react";
 import { expect, fireEvent, fn, userEvent, within } from "storybook/test";
 import { expectTouchTarget, phone } from "../../storybook/form.ts";
 import { storyLocale, storyText } from "../../storybook/locale.ts";
+import { formRendererLabels } from "../../storybook/form-engine.ts";
 import { FormRenderer } from "./form-renderer.tsx";
 
 // The table field (RP-280, spec RP-278): rows of typed columns, row limits and
@@ -70,7 +71,7 @@ const rows = [
 const meta = {
   title: "Form engine/FormRenderer/Table",
   component: FormRenderer,
-  args: { schema, answers: {}, mode: "edit", locale: "en", onChange: fn() },
+  args: { schema, answers: {}, mode: "edit", locale: "en", labels: formRendererLabels.en, onChange: fn() },
   decorators: [(Story) => <div className="max-w-3xl">{Story()}</div>],
 } satisfies Meta<typeof FormRenderer>;
 
@@ -89,6 +90,7 @@ export const Edit: Story = {
       <FormRenderer
         {...args}
         locale={storyLocale(context)}
+        labels={formRendererLabels[storyLocale(context)]}
         answers={values}
         onChange={(changes) => {
           args.onChange?.(changes);
@@ -140,7 +142,7 @@ export const Edit: Story = {
 /** The most rows the table allows: "Add row" stops, with the reason beside it. */
 export const AtMaximum: Story = {
   args: { answers: { items: [rows[0], rows[1], rows[2], { fixture: "Pole" }] } },
-  render: (args, context) => <FormRenderer {...args} locale={storyLocale(context)} />,
+  render: (args, context) => <FormRenderer {...args} locale={storyLocale(context)} labels={formRendererLabels[storyLocale(context)]} />,
   play: async (context) => {
     const { canvas } = context;
     await expect(canvas.getByRole("button", { name: storyText(context, copy.addRow) })).toBeDisabled();
@@ -164,7 +166,7 @@ export const WithErrors: Story = {
       { key: "items", code: "required", row: 2, column: "fixture" },
     ],
   },
-  render: (args, context) => <FormRenderer {...args} locale={storyLocale(context)} />,
+  render: (args, context) => <FormRenderer {...args} locale={storyLocale(context)} labels={formRendererLabels[storyLocale(context)]} />,
   play: async (context) => {
     const { canvas } = context;
     const quantity = (row: number) => within(rowGroup(context, row)).getByLabelText(storyText(context, copy.quantity), { exact: false });
@@ -184,7 +186,7 @@ export const WithErrors: Story = {
 /** Too few rows: the table's own error, with nothing to point at but the table. */
 export const TooFewRows: Story = {
   args: { errors: [{ key: "items", code: "required" }] },
-  render: (args, context) => <FormRenderer {...args} locale={storyLocale(context)} />,
+  render: (args, context) => <FormRenderer {...args} locale={storyLocale(context)} labels={formRendererLabels[storyLocale(context)]} />,
   play: async (context) => {
     const { canvas } = context;
     await expect(canvas.getByRole("group", { name: new RegExp(storyText(context, copy.items)) })).toHaveAccessibleDescription(
@@ -196,7 +198,7 @@ export const TooFewRows: Story = {
 /** Too many rows, in a table that is already full. */
 export const TooManyRows: Story = {
   args: { answers: { items: [...rows, ...rows] }, errors: [{ key: "items", code: "too_many_rows" }] },
-  render: (args, context) => <FormRenderer {...args} locale={storyLocale(context)} />,
+  render: (args, context) => <FormRenderer {...args} locale={storyLocale(context)} labels={formRendererLabels[storyLocale(context)]} />,
   play: async (context) => {
     await expect(context.canvas.getByText(storyText(context, copy.tooMany))).toBeVisible();
   },
@@ -205,7 +207,7 @@ export const TooManyRows: Story = {
 /** Read only: a real table of the rows as submitted, numbers and dates in the viewer's language, with the totals under it. */
 export const ReadOnly: Story = {
   args: { mode: "read", answers: { items: rows } },
-  render: (args, context) => <FormRenderer {...args} locale={storyLocale(context)} />,
+  render: (args, context) => <FormRenderer {...args} locale={storyLocale(context)} labels={formRendererLabels[storyLocale(context)]} />,
   play: async (context) => {
     const { canvas } = context;
     await expect(canvas.queryAllByRole("textbox")).toEqual([]);
@@ -222,7 +224,7 @@ export const ReadOnly: Story = {
 /** Nothing answered: "Not answered", like any other field. */
 export const ReadOnlyEmpty: Story = {
   args: { mode: "read" },
-  render: (args, context) => <FormRenderer {...args} locale={storyLocale(context)} />,
+  render: (args, context) => <FormRenderer {...args} locale={storyLocale(context)} labels={formRendererLabels[storyLocale(context)]} />,
   play: async (context) => {
     await expect(context.canvas.queryByRole("table")).toBeNull();
     await expect(context.canvas.getByText(storyText(context, { en: "Not answered", ar: "لم تتم الإجابة" }))).toBeVisible();
@@ -233,7 +235,7 @@ export const ReadOnlyEmpty: Story = {
 export const PhoneEdit: Story = {
   parameters: phone,
   args: { answers: { items: rows.slice(0, 2) } },
-  render: (args, context) => <FormRenderer {...args} locale={storyLocale(context)} />,
+  render: (args, context) => <FormRenderer {...args} locale={storyLocale(context)} labels={formRendererLabels[storyLocale(context)]} />,
   play: async (context) => {
     const { canvas } = context;
     await expectTouchTarget(canvas.getByRole("button", { name: storyText(context, copy.addRow) }));
@@ -246,7 +248,7 @@ export const PhoneEdit: Story = {
 export const PhoneReadOnly: Story = {
   parameters: phone,
   args: { mode: "read", answers: { items: rows } },
-  render: (args, context) => <FormRenderer {...args} locale={storyLocale(context)} />,
+  render: (args, context) => <FormRenderer {...args} locale={storyLocale(context)} labels={formRendererLabels[storyLocale(context)]} />,
   play: async () => {
     await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(document.documentElement.clientWidth);
   },

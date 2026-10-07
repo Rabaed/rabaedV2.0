@@ -2,6 +2,7 @@ import { rabaedDefaultNumberingPattern, type NumberingAttributes, type Numbering
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, fn, userEvent, within } from "storybook/test";
 import { storyLocale, storyText } from "../../storybook/locale.ts";
+import { numberingPatternLabels } from "../../storybook/numbering.ts";
 import { NumberingPatternBuilder, NumberingPatternView } from "./numbering-pattern.tsx";
 
 // Project Settings → Numbering (RP-313, spec RP-311): the Project Admin's
@@ -64,7 +65,7 @@ const exampleNumber = (canvasElement: HTMLElement) => within(canvasElement).getB
 export const Builder: Story = {
   args: { onSave: fn() },
   render: (args, context) => (
-    <NumberingPatternBuilder locale={storyLocale(context)} pattern={rabaedDefaultNumberingPattern} example={example} onSave={args.onSave} />
+    <NumberingPatternBuilder locale={storyLocale(context)} labels={numberingPatternLabels[storyLocale(context)]} pattern={rabaedDefaultNumberingPattern} example={example} onSave={args.onSave} />
   ),
   play: async (context) => {
     const { canvas, canvasElement, args } = context;
@@ -102,7 +103,7 @@ export const Builder: Story = {
 export const SharedCounterWarning: Story = {
   args: { onSave: fn() },
   render: (args, context) => (
-    <NumberingPatternBuilder locale={storyLocale(context)} pattern={rabaedDefaultNumberingPattern} example={example} onSave={args.onSave} />
+    <NumberingPatternBuilder locale={storyLocale(context)} labels={numberingPatternLabels[storyLocale(context)]} pattern={rabaedDefaultNumberingPattern} example={example} onSave={args.onSave} />
   ),
   play: async (context) => {
     const { canvas, args } = context;
@@ -122,7 +123,7 @@ export const SharedCounterWarning: Story = {
 /** A saved pattern with fixed text, the Trade and a Location level, opened in the builder. */
 export const TradeAndLocation: Story = {
   render: (_args, context) => (
-    <NumberingPatternBuilder locale={storyLocale(context)} pattern={tradeAndLocation} example={example} onSave={fn()} />
+    <NumberingPatternBuilder locale={storyLocale(context)} labels={numberingPatternLabels[storyLocale(context)]} pattern={tradeAndLocation} example={example} onSave={fn()} />
   ),
   play: async ({ canvasElement, canvas }) => {
     await expect(exampleNumber(canvasElement)).toHaveTextContent("TWR/SUB/EL/B1/01/00001");
@@ -134,7 +135,7 @@ export const TradeAndLocation: Story = {
 /** What every other Project Member sees: the example and the pattern, nothing to change. */
 export const ReadOnly: Story = {
   render: (_args, context) => (
-    <NumberingPatternView locale={storyLocale(context)} pattern={{ ...tradeAndLocation, countedBy: [0, 2, 3] }} example={example} />
+    <NumberingPatternView labels={numberingPatternLabels[storyLocale(context)]} pattern={{ ...tradeAndLocation, countedBy: [0, 2, 3] }} example={example} />
   ),
   play: async (context) => {
     const { canvas, canvasElement } = context;

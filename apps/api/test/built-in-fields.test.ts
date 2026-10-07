@@ -4,10 +4,10 @@
 // chosen Trade. The Work Item's Trade and Location, which decide who sees it,
 // are the answers to these fields.
 import { randomUUID } from "node:crypto";
-import type { WorkItemDetail } from "@rabaed/domain";
 import type { LightMyRequestResponse } from "fastify";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { attachDatasheet, createTestApi, expectHidden, type Caller, type OnboardedCompany } from "./support/harness.ts";
+import { detail, projectMember } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
 afterAll(() => api.close());
@@ -38,14 +38,6 @@ async function ok(res: Promise<LightMyRequestResponse>, status = 204) {
 const post = async (path: string, body: unknown) =>
   (await ok(c1.caller.post(`/v1/projects/${projectId}/${path}`, body), 201)).json().id as string;
 
-async function projectMember(tradeGrant: { isAll: boolean; valueIds: string[] }, positions = ["engineer"]) {
-  const { member, caller } = await api.member(c1.caller);
-  await api.addProjectMember(c1.caller, own, member.id);
-  await ok(c1.caller.request("PUT", `/v1/participants/${own}/members/${member.id}/visibility`, { trade: tradeGrant, location: all }));
-  await ok(c1.caller.request("PUT", `/v1/participants/${own}/members/${member.id}/positions`, { positions }));
-  return caller;
-}
-
 const createDraft = (answers: Record<string, unknown>) =>
   engineer.post(`/v1/projects/${projectId}/work-items`, { type: "MAR", title: "Cable trays", answers });
 
@@ -58,10 +50,6 @@ const save = (id: string, answers: Record<string, unknown>) =>
 
 const sendForReview = (id: string) =>
   engineer.post(`/v1/work-items/${id}/transitions`, { transition: "send_for_review", idempotencyKey: randomUUID() });
-
-async function detail(by: Caller, id: string): Promise<WorkItemDetail> {
-  return (await ok(by.get(`/v1/work-items/${id}`), 200)).json();
-}
 
 beforeAll(async () => {
   c1 = await api.projectCreator();
@@ -77,11 +65,11 @@ beforeAll(async () => {
     .json()
     .participants.find((p: { isOwnCompany: boolean }) => p.isOwnCompany).id;
   await ok(c1.caller.request("PUT", `/v1/participants/${own}/visibility`, { trade: all, location: all }));
-  engineer = await projectMember(all);
-  electricalOnly = await projectMember(only(trade.electrical));
-  mechanicalOnly = await projectMember(only(trade.mechanical));
+  engineer = await projectMember(api, c1, own, ["engineer"]);
+  electricalOnly = await projectMember(api, c1, own, ["engineer"], { trade: only(trade.electrical) });
+  mechanicalOnly = await projectMember(api, c1, own, ["engineer"], { trade: only(trade.mechanical) });
   // The internal review's Step Pool, so a Draft can be sent.
-  await projectMember(all, ["project_manager"]);
+  await projectMember(api, c1, own, ["project_manager"]);
 });
 
 describe("creating a MAR with its Built-in Fields", () => {

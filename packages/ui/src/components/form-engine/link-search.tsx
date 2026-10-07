@@ -16,39 +16,23 @@ import { Icon } from "../icon/icon.tsx";
 // Link search API; the API alone decides what may be offered (Submitted items
 // the Member sees, in the same Project), and says nothing of anything else.
 
-/* eslint-disable rabaed/no-ui-translations -- existing labels, still to move to the app's messages (RP-362 retro) */
-const copy = {
-  en: {
-    label: "Find an item to link",
-    hint: "Type part of a Document Number or Subject.",
-    results: "Search results",
-    searching: "Searching…",
-    noMatch: "No items match.",
-    offered: "Only Submitted items you can see in this Project can be linked.",
-    failed: "Couldn't search. Try again.",
-    more: "Show more",
-    count: (n: number, more: boolean) => `${n === 1 ? "1 item" : `${formatNumber(n, "en")} items`}${more ? ", more below" : ""}`,
-  },
-  ar: {
-    label: "ابحث عن بند لربطه",
-    hint: "اكتب جزءًا من رقم المستند أو الموضوع.",
-    results: "نتائج البحث",
-    searching: "جارٍ البحث…",
-    noMatch: "لا توجد بنود مطابقة.",
-    offered: "يمكن ربط البنود المقدَّمة التي تراها في هذا المشروع فقط.",
-    failed: "تعذّر البحث. حاول مرة أخرى.",
-    more: "عرض المزيد",
-    // Arabic counts: one, two (dual), 3–10 (plural), 11 and more (singular accusative).
-    count: (n: number, more: boolean) =>
-      `${
-        n === 1 ? "بند واحد" : n === 2 ? "بندان" : n <= 10 ? `${formatNumber(n, "ar")} بنود` : `${formatNumber(n, "ar")} بندًا`
-      }${more ? "، والمزيد أدناه" : ""}`,
-  },
-} satisfies Record<Locale, unknown>;
-/* eslint-enable rabaed/no-ui-translations */
+/** Link search's words, from the app's messages. A number is given already formatted for the locale, with the count itself where the wording depends on it. */
+export type LinkSearchLabels = {
+  label: string;
+  hint: string;
+  results: string;
+  searching: string;
+  noMatch: string;
+  offered: string;
+  failed: string;
+  more: string;
+  /** How many items were found, and whether more are below. */
+  count: (n: string, count: number, more: boolean) => string;
+};
 
 export type LinkSearchProps = {
   locale: Locale;
+  labels: LinkSearchLabels;
   /**
    * Searches for `query` (trimmed, never empty) and returns that page (from 1)
    * of the Link search API's results.
@@ -76,8 +60,7 @@ type Found =
  * and Subject, to pick one. In a Field (a link question), the Field's label names
  * the box; on its own, it shows its own label.
  */
-export function LinkSearch({ locale, search, onPick, exclude = [], debounceMs = 250, id: idProp, className }: LinkSearchProps) {
-  const text = copy[locale];
+export function LinkSearch({ locale, labels: text, search, onPick, exclude = [], debounceMs = 250, id: idProp, className }: LinkSearchProps) {
   const generated = useId();
   const control = useFieldControl<FieldControlProps>({ id: idProp });
   const id = control.id ?? `link-search${generated.replaceAll(":", "")}`;
@@ -116,7 +99,7 @@ export function LinkSearch({ locale, search, onPick, exclude = [], debounceMs = 
 
   let status = "";
   if (found.state === "searching" && found.links.length === 0) status = text.searching;
-  else if (found.state === "found") status = links.length === 0 && !nextPage ? `${text.noMatch} ${text.offered}` : text.count(links.length, !!nextPage);
+  else if (found.state === "found") status = links.length === 0 && !nextPage ? `${text.noMatch} ${text.offered}` : text.count(formatNumber(links.length, locale), links.length, !!nextPage);
 
   return (
     <div className={cn("flex flex-col gap-2", className)}>

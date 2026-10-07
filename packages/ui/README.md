@@ -229,6 +229,26 @@ A Module's Work Items and the Member's Projects, as the API returns them. Presen
 />
 ```
 
+### Components that take `labels`
+
+These components have no words of their own: each takes a `labels` prop (a function label takes a value already formatted for the locale), passed from the app's messages (`apps/web/messages/{en,ar}.json`). The story copy is in `src/storybook/`.
+
+| Component | `labels` type |
+| --- | --- |
+| `FormRenderer` | `FormRendererLabels`: its own words, and one group per field type (`builtIn`, `attachments`, `photos`, `checklist`, `table`, `optionList`, `linkQuestion`), each the `labels` of that field's component. A number is given as text, with the count itself (`(n, count)`) where a plural needs it |
+| `ActionForm` | `ActionFormLabels` (`internalNote`, `internalNoteHelp`, and `form`: the `FormRendererLabels`) |
+| `LinksSection` | `LinksSectionLabels` (`title`, `none`, `remove`, `item`, `search`) |
+| `LinkedFromList` | `LinkedFromLabels` (`title`, `none`, `item`) |
+| `LinkSearch` | `LinkSearchLabels` (`count` takes the number as text, the count, and whether more are below) |
+| `WatchButton` | `WatchButtonLabels` (`watch`, `watching`, `refusals`) |
+| `ProjectDashboard` | `ProjectDashboardLabels` (`items` takes the count as text; `buckets` and `codeCStates` are the List's). `chainBucketLabel` is gone: the app names buckets from its messages |
+| `ActivityFeedPanel` | `ActivityFeedPanelLabels` (the panel, and what happened for events that are not a Transition) |
+| `NumberingPatternBuilder`, `NumberingPatternView` | `NumberingPatternLabels` (a segment's number is given as text) |
+| `NumberingCounters` | `NumberingCountersLabels` (`startsAt` and `used` take the number as text) |
+| `RevisionActions` | `RevisionActionsLabels` (the section, both questions, `refusals`) |
+| `RevisionPicker` | `RevisionPickerLabels` (`label`); `revisionNoNumber` stays its own prop |
+| `NotificationSettingsForm` | `NotificationSettingsLabels`. The outcomes' names come from `watchOutcomeNames` in `@rabaed/domain`; the language names stay in the component |
+
 ## Storybook and story tests
 
 - `pnpm storybook` opens Storybook; the **Language** toolbar switches EN (LTR) / AR (RTL).
@@ -271,7 +291,7 @@ The first run installs Linux `node_modules` into Docker volumes (`rabaed-stories
 | `rabaed/css-no-physical-direction` | `margin-left`, `padding-right`, `left`, `border-left…`, `border-top-left-radius`, `text-align: left`, `float: right` and physical `@apply` classes in `.css` | `margin-inline-start`, `padding-inline-end`, `inset-inline-start`, `border-inline-start…`, `border-start-start-radius`, `text-align: start`, `float: inline-end` |
 | `rabaed/no-deadline-words` | Props, variables, fields and `t("…")` / `t.rich("…")` keys named with overdue / due date / deadline / SLA (tests are exempt) | Rabaed shows Step Age only: name it for weeks at step, e.g. `weeksAtStep` |
 | `rabaed/json-no-deadline-words` | The same words (English and Arabic) in `apps/web/messages/*.json` keys and text | Step Age wording, e.g. "4+ weeks at this step" |
-| `rabaed/no-ui-translations` | An object with exactly the keys `en` and `ar` in `src/components` (stories are exempt): the package has no translations of its own. The exceptions listed under Data display, and older labels still to move, carry an `eslint-disable` with the reason | Take the label as a prop and pass it from the app's messages |
+| `rabaed/no-ui-translations` | An object with exactly the keys `en` and `ar` in `src/components` (stories are exempt): the package has no translations of its own. The exceptions listed under Data display carry an `eslint-disable` with the reason | Take the label as a prop and pass it from the app's messages |
 | `rabaed/use-client-directive` | A `.tsx` file in `packages/ui/src` or `apps/web/src` that calls a hook (`useState`, `useTranslations`, a custom `use…`; `useId` and `use` also run on the server) or passes an `on…={…}` handler, without `"use client"` at the top (stories are exempt). Only `next build` would catch it otherwise (RP-362) | Start the file with `"use client";` |
 
 Raw colours may appear only in the token sources: `src/tokens/palette.ts`, `src/tokens/scales.ts`, their tests, and the generated `src/styles/tokens.css`. Vertical properties (`top`, `margin-top`, `height`) are fine: they don't change with direction.

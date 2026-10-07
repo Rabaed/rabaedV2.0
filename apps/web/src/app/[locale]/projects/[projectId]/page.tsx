@@ -6,12 +6,14 @@ import { ActivityFeedView } from "@/components/activity-feed-view";
 import { AddParticipantForm } from "@/components/add-participant-form";
 import { WithdrawInvitationButton } from "@/components/withdraw-invitation-button";
 import { Link, redirect } from "@/i18n/navigation";
+import { chainLabels } from "@/lib/chain-labels";
 import { getActivityFeed, getDashboard, getMe, getProject, getProjectInvitations, getProjectParticipants } from "@/lib/session";
 
 export default async function ProjectPage({ params }: { params: Promise<{ locale: Locale; projectId: string }> }) {
   const { locale, projectId } = await params;
   setRequestLocale(locale);
   const t = await getTranslations("projects");
+  const tViews = await getTranslations("workItemViews");
   // A Project the Member is not on is not found, exactly like one that doesn't exist.
   const [me, project, participants, dashboard, activity] = await Promise.all([
     getMe(),
@@ -35,6 +37,20 @@ export default async function ProjectPage({ params }: { params: Promise<{ locale
             <ProjectDashboard
               dashboard={dashboard}
               locale={locale}
+              labels={{
+                items: (count) => tViews("dashboard.items", { count }),
+                inPreparation: tViews("buckets.in_preparation"),
+                open: tViews("dashboard.open"),
+                closed: tViews("dashboard.closed"),
+                empty: tViews("dashboard.empty"),
+                codeC: tViews("dashboard.codeC"),
+                ...chainLabels(tViews),
+                approved: {
+                  review_code: tViews("dashboard.approved.review_code"),
+                  inspection_result: tViews("dashboard.approved.inspection_result"),
+                  none: tViews("dashboard.approved.none"),
+                },
+              }}
               linkAs={Link}
               hrefFor={(query) => workItemListHref(project.id, query)}
             />

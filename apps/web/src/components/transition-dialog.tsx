@@ -6,6 +6,7 @@ import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useWorkItemForm } from "@/components/work-item-form";
 import { useRouter } from "@/i18n/navigation";
+import { useActionFormLabels } from "@/lib/form-labels";
 
 /** A Transition as the pop-up needs it: the item's page and the Kanban's moves both have one. */
 export type TransitionChoice = { key: string; label: BilingualText; actionForm: FormSchema | null };
@@ -115,6 +116,7 @@ export function TransitionDialog({
   onClose: () => void;
 }) {
   const t = useTranslations("workItems.actions");
+  const actionFormLabels = useActionFormLabels();
   const itemForm = useWorkItemForm();
   const dialog = useRef<HTMLDialogElement>(null);
   const [answers, setAnswers] = useState<Record<string, unknown>>({});
@@ -166,6 +168,7 @@ export function TransitionDialog({
           errors={fieldErrors}
           internalNote={internalNote}
           locale={locale}
+          labels={actionFormLabels}
           onChange={(changes) => setAnswers((current) => ({ ...current, ...changes }))}
           onInternalNoteChange={setInternalNote}
           idPrefix={idPrefix}

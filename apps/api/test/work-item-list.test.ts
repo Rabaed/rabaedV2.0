@@ -8,8 +8,8 @@
 import { randomUUID } from "node:crypto";
 import { encodeWorkItemCursor, isOpenStageCategory, workItemSearchParams, type WorkItemList, type WorkItemQueryInput, type WorkItemRow } from "@rabaed/domain";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { attachDatasheet, createTestApi, DEFAULT_PASSWORD, expectHidden, type Caller } from "./support/harness.ts";
-import { all, bilingual, memberOnProject, ok, type Company } from "./support/tower.ts";
+import { attachDatasheet, createTestApi, expectHidden, type Caller } from "./support/harness.ts";
+import { all, bilingual, ok, projectMember, take, type Company } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
 afterAll(() => api.close());
@@ -34,24 +34,6 @@ const complete = {
   description: "LED fixtures",
   items: [{ fixture_type: "Downlight", quantity: 120, unit: "pcs" }],
 };
-
-/** Every signed-in Member here, to sign in again when the clock moves. */
-const emails = new Map<Caller, string>();
-
-async function projectMember(...args: Parameters<typeof memberOnProject>) {
-  const { caller, email } = await memberOnProject(...args);
-  emails.set(caller, email);
-  return caller;
-}
-
-/** Moves the clock, signing every Member in again: it ends their sessions. */
-async function later(ms: number) {
-  api.advanceClock(ms);
-  for (const [caller, email] of emails) caller.useSessionToken((await api.signIn(email, DEFAULT_PASSWORD)).sessionToken);
-}
-
-const take = (by: Caller, id: string, transition: string, answers: Record<string, unknown> = {}) =>
-  ok(by.post(`/v1/work-items/${id}/transitions`, { transition, answers, idempotencyKey: randomUUID() }));
 
 /** One page of the List as `by` reads it with `query`. */
 async function list(by: Caller, query: WorkItemQueryInput = {}, project = projectId): Promise<WorkItemList> {
@@ -102,7 +84,6 @@ async function codeC(id: string) {
 
 beforeAll(async () => {
   c1 = await api.projectCreator();
-  emails.set(c1.caller, c1.company.authorizedPerson.email);
   projectId = (await api.createProject(c1.caller)).id;
   const post = async (path: string, body: unknown) => (await ok(c1.caller.post(`/v1/projects/${projectId}/${path}`, body), 201)).json().id;
   trade.electrical = await post("trades", { code: "EL", name: bilingual("Electrical") });
@@ -131,7 +112,6 @@ beforeAll(async () => {
   k1ManagerB = await projectMember(api, k1.company, k1.participantId, ["manager"]);
   const stranger = await api.authorizedPerson();
   outsider = stranger.caller;
-  emails.set(outsider, stranger.company.authorizedPerson.email);
 });
 
 // First, on a Project of its own: the later tests move the clock, which spoils an upload's signature.
@@ -288,7 +268,7 @@ describe("filters and sorts, combined", () => {
     electricalInA = await draft("Switchboards");
     submittedOld = await draft("Busbars");
     await submit(submittedOld);
-    await later(2 * WEEK + 86_400_000);
+    await api.later(2 * WEEK + 86_400_000);
   });
 
   it("filters by Type, Stage, Trade and Location, a Location taking in the ones under it", async () => {

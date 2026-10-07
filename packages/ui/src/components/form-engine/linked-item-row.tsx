@@ -1,6 +1,5 @@
 "use client";
 
-import type { Locale } from "@rabaed/domain";
 import { useId, useState, type ElementType } from "react";
 import { cn } from "../../lib/cn.ts";
 import { IconButton } from "../button/button.tsx";
@@ -14,15 +13,14 @@ import { Icon, type IconName } from "../icon/icon.tsx";
 // may not see its details, and asks nothing of the API. Shared by the Links
 // section, Linked from and the link question.
 
-/* eslint-disable rabaed/no-ui-translations -- existing labels, still to move to the app's messages (RP-362 retro) */
-const copy = {
-  en: { hidden: "You are not allowed to see the details of this item." },
-  ar: { hidden: "غير مسموح لك برؤية تفاصيل هذا البند." },
-} satisfies Record<Locale, unknown>;
-/* eslint-enable rabaed/no-ui-translations */
+/** The row's words, from the app's messages. */
+export type LinkedItemRowLabels = {
+  /** Said of an item the viewer can't see. */
+  hidden: string;
+};
 
 export type LinkedItemRowProps = {
-  locale: Locale;
+  labels: LinkedItemRowLabels;
   documentNumber: string;
   subject: string;
   /** Where the item opens; null for one the viewer can't see. */
@@ -34,8 +32,7 @@ export type LinkedItemRowProps = {
 };
 
 /** A list item: the linked item, opening it or saying the viewer may not see it, and its remove button. */
-export function LinkedItemRow({ locale, documentNumber, subject, href, linkAs: Anchor, remove }: LinkedItemRowProps) {
-  const text = copy[locale];
+export function LinkedItemRow({ labels: text, documentNumber, subject, href, linkAs: Anchor, remove }: LinkedItemRowProps) {
   const messageId = useId();
   const [explained, setExplained] = useState(false);
   const target = cn(

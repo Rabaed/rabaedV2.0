@@ -8,11 +8,12 @@
 import { randomUUID } from "node:crypto";
 import { createDb } from "@rabaed/db";
 import { testDatabaseUrls } from "@rabaed/db/test-support";
-import { formSchema, publishProblems, tableTotals, type FormVersion, type TableField, type WorkItemDetail } from "@rabaed/domain";
+import { formSchema, publishProblems, tableTotals, type FormVersion, type TableField } from "@rabaed/domain";
 import { sql } from "kysely";
 import type { LightMyRequestResponse } from "fastify";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { attachDatasheet, createTestApi, uploadDocument, type Caller } from "./support/harness.ts";
+import { detail, projectMember } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
 const migrator = createDb(testDatabaseUrls().migrator, { max: 1 });
@@ -64,7 +65,6 @@ const created = async (answers: Record<string, unknown>) => {
 const save = (id: string, answers: Record<string, unknown>) =>
   engineer.request("PUT", `/v1/work-items/${id}/answers`, { answers: { ...builtIns(), ...answers } });
 const send = (id: string) => engineer.post(`/v1/work-items/${id}/transitions`, { transition: "send_for_review", idempotencyKey: randomUUID() });
-const detail = async (id: string): Promise<WorkItemDetail> => (await ok(engineer.get(`/v1/work-items/${id}`), 200)).json();
 
 beforeAll(async () => {
   const c1 = await api.projectCreator();
@@ -76,16 +76,9 @@ beforeAll(async () => {
     .json()
     .participants.find((p: { isOwnCompany: boolean }) => p.isOwnCompany).id;
   await ok(c1.caller.request("PUT", `/v1/participants/${own}/visibility`, { trade: all, location: all }));
-  const projectMember = async (positions: string[]) => {
-    const { member, caller } = await api.member(c1.caller);
-    await api.addProjectMember(c1.caller, own, member.id);
-    await ok(c1.caller.request("PUT", `/v1/participants/${own}/members/${member.id}/visibility`, { trade: all, location: all }));
-    await ok(c1.caller.request("PUT", `/v1/participants/${own}/members/${member.id}/positions`, { positions }));
-    return caller;
-  };
-  engineer = await projectMember(["engineer"]);
+  engineer = await projectMember(api, c1, own, ["engineer"]);
   // Holds the Contractor review Step that Send for Review leads to.
-  await projectMember(["project_manager"]);
+  await projectMember(api, c1, own, ["project_manager"]);
 });
 
 describe("the MAR Form Version 2", () => {
@@ -126,7 +119,7 @@ describe("a MAR on Version 2", () => {
   it("is pinned to Version 2, and keeps its Items as rows", async () => {
     const [, v2] = await marVersions();
     const id = await created(complete);
-    expect(await detail(id)).toMatchObject({ formVersionId: v2!.id, answers: { ...complete } });
+    expect(await detail(engineer, id)).toMatchObject({ formVersionId: v2!.id, answers: { ...complete } });
   });
 
   it("can't be sent for review without the Datasheet, refused per field; with it, it can", async () => {
@@ -134,11 +127,11 @@ describe("a MAR on Version 2", () => {
     const refused = await send(id);
     expect(refused.statusCode).toBe(422);
     expect(refused.json()).toEqual({ error: "form_incomplete", fields: [{ key: "datasheet", code: "required" }] });
-    expect((await detail(id)).stage.key).toBe("draft");
+    expect((await detail(engineer, id)).stage.key).toBe("draft");
 
     await attachDatasheet(engineer, id);
     await ok(send(id));
-    expect((await detail(id)).stage.key).not.toBe("draft");
+    expect((await detail(engineer, id)).stage.key).not.toBe("draft");
   });
 
   it("takes only a PDF as its Datasheet, and only an image as its Sample photo", async () => {
@@ -163,7 +156,7 @@ describe("a MAR on Version 1", () => {
 
   it("keeps showing Version 1", async () => {
     const [v1] = await marVersions();
-    expect((await detail(onVersion1)).formVersionId).toBe(v1!.id);
+    expect((await detail(engineer, onVersion1)).formVersionId).toBe(v1!.id);
     const form: FormVersion = (await ok(engineer.get(`/v1/work-items/${onVersion1}/form`), 200)).json();
     expect(form.versionNo).toBe(1);
   });
@@ -181,6 +174,6 @@ describe("a MAR on Version 1", () => {
     const v1Answers = { manufacturer: "Zumtobel", quantity: 48, description: "Emergency luminaires" };
     await ok(save(onVersion1, v1Answers));
     await ok(send(onVersion1));
-    expect(await detail(onVersion1)).toMatchObject({ answers: v1Answers });
+    expect(await detail(engineer, onVersion1)).toMatchObject({ answers: v1Answers });
   });
 });

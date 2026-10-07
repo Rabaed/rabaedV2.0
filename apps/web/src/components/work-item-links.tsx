@@ -5,6 +5,7 @@ import { LinksSection } from "@rabaed/ui";
 import { useTranslations } from "next-intl";
 import { useState, type ReactNode } from "react";
 import { Link, useRouter } from "@/i18n/navigation";
+import { useLinksSectionLabels } from "@/lib/form-labels";
 import { linkSearch } from "@/lib/link-search";
 
 // The Links System Field, below the Form (form-engine.md part 2b): the item's
@@ -38,6 +39,7 @@ export function WorkItemLinks({
   children?: ReactNode;
 }) {
   const t = useTranslations("workItems.links");
+  const labels = useLinksSectionLabels();
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -63,6 +65,7 @@ export function WorkItemLinks({
   return (
     <LinksSection
       locale={locale}
+      labels={labels}
       links={list.links}
       canChange={list.canChange}
       workItemId={workItemId}

@@ -3,11 +3,11 @@
 // the answers in Draft and its internal Steps, every change after Draft is a
 // field-level diff in the raiser's own history, and from Submit onwards nobody
 // can save. The Consultant and the Owner Representative never see the diffs.
-import { randomUUID } from "node:crypto";
-import type { WorkItemDetail, WorkItemHistory } from "@rabaed/domain";
+import type { WorkItemHistory } from "@rabaed/domain";
 import type { LightMyRequestResponse } from "fastify";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { attachDatasheet, createTestApi, type Caller, type OnboardedCompany } from "./support/harness.ts";
+import { detail, projectMember, tryTake } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
 afterAll(() => api.close());
@@ -37,31 +37,16 @@ async function ok(res: Promise<LightMyRequestResponse>, status = 204) {
   return r;
 }
 
-async function projectMember(company: Company, participantId: string, positions: string[]) {
-  const { member, caller } = await api.member(company.caller);
-  await api.addProjectMember(company.caller, participantId, member.id);
-  await ok(
-    company.caller.request("PUT", `/v1/participants/${participantId}/members/${member.id}/visibility`, { trade: all, location: all }),
-  );
-  await ok(company.caller.request("PUT", `/v1/participants/${participantId}/members/${member.id}/positions`, { positions }));
-  return caller;
-}
-
 async function otherParticipant(role: Role, positions: string[]) {
   const company = await api.authorizedPerson();
   const participantId = await api.addParticipant(c1.caller, projectId, company.company, role);
   await ok(c1.caller.request("PUT", `/v1/participants/${participantId}/visibility`, { trade: all, location: all }));
-  return projectMember(company, participantId, positions);
+  return projectMember(api, company, participantId, positions);
 }
 
 /** Save draft: the whole set of answers, the Built-in Fields always among them. */
 const save = (by: Caller, id: string, answers: Record<string, unknown>) =>
   by.request("PUT", `/v1/work-items/${id}/answers`, { answers: { trade: electrical, location: buildingA, ...answers } });
-
-const take = (by: Caller, id: string, transition: string) =>
-  by.post(`/v1/work-items/${id}/transitions`, { transition, idempotencyKey: randomUUID() });
-
-const detail = async (by: Caller, id: string): Promise<WorkItemDetail> => (await ok(by.get(`/v1/work-items/${id}`), 200)).json();
 
 async function history(by: Caller, id: string): Promise<WorkItemHistory["events"]> {
   return (await ok(by.get(`/v1/work-items/${id}/history`), 200)).json().events;
@@ -78,8 +63,8 @@ beforeAll(async () => {
     .json()
     .participants.find((p: { isOwnCompany: boolean }) => p.isOwnCompany).id;
   await ok(c1.caller.request("PUT", `/v1/participants/${own}/visibility`, { trade: all, location: all }));
-  engineer = await projectMember(c1, own, ["engineer"]);
-  pm = await projectMember(c1, own, ["project_manager"]);
+  engineer = await projectMember(api, c1, own, ["engineer"]);
+  pm = await projectMember(api, c1, own, ["project_manager"]);
   signer = await otherParticipant("consultant", ["manager"]);
   orEngineer = await otherParticipant("owner_representative", ["engineer"]);
 });
@@ -97,7 +82,7 @@ describe("answers after Draft", () => {
     // Changes in Draft are the Draft itself: no diff.
     await ok(save(engineer, id, { ...complete, model: DRAFT_MODEL }));
     await attachDatasheet(engineer, id);
-    await ok(take(engineer, id, "send_for_review"));
+    await ok(tryTake(engineer, id, "send_for_review"));
     await ok(pm.post(`/v1/work-items/${id}/claim`));
   });
 
@@ -134,7 +119,7 @@ describe("answers after Draft", () => {
 
   it("checks the Form is complete again at Submit", async () => {
     await ok(save(engineer, id, { description: REVIEWED }));
-    const res = await take(pm, id, "submit");
+    const res = await tryTake(pm, id, "submit");
     expect({ status: res.statusCode, body: res.json() }).toEqual({
       status: 422,
       body: { error: "form_incomplete", fields: [{ key: "manufacturer", code: "required" }] },
@@ -145,7 +130,7 @@ describe("answers after Draft", () => {
 
   describe("from Submit onwards", () => {
     beforeAll(async () => {
-      await ok(take(pm, id, "submit"));
+      await ok(tryTake(pm, id, "submit"));
     });
 
     it("refuses every save of the Contractor's sections, the Contractor's and the Consultant's alike, and changes nothing", async () => {

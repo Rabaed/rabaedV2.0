@@ -4,6 +4,7 @@ import { useState } from "react";
 import { expect, fn, userEvent, within } from "storybook/test";
 import { expectTouchTarget, phone } from "../../storybook/form.ts";
 import { storyLocale, storyText } from "../../storybook/locale.ts";
+import { formRendererLabels } from "../../storybook/form-engine.ts";
 import { FormRenderer, type FormFiles } from "./form-renderer.tsx";
 
 // The `checklist` field (RP-285, spec RP-278): a pour inspection recorded item by
@@ -107,9 +108,9 @@ const files = (documents: DocumentSummary[], canChange = true): FormFiles => ({
 const meta = {
   title: "Form engine/FormRenderer/Checklist field",
   component: FormRenderer,
-  args: { schema, answers: {}, mode: "edit", locale: "en", files: files([]), onChange: fn() },
+  args: { schema, answers: {}, mode: "edit", locale: "en", labels: formRendererLabels.en, files: files([]), onChange: fn() },
   decorators: [(Story) => <div className="max-w-xl">{Story()}</div>],
-  render: (args, context) => <FormRenderer {...args} locale={storyLocale(context)} />,
+  render: (args, context) => <FormRenderer {...args} locale={storyLocale(context)} labels={formRendererLabels[storyLocale(context)]} />,
 } satisfies Meta<typeof FormRenderer>;
 
 export default meta;
@@ -154,6 +155,7 @@ export const AnsweringAsksForEvidence: Story = {
       <FormRenderer
         {...args}
         locale={storyLocale(context)}
+        labels={formRendererLabels[storyLocale(context)]}
         answers={values}
         onChange={(changes) => {
           args.onChange?.(changes);

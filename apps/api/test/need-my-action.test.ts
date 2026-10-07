@@ -4,14 +4,13 @@
 // Step Pool, on items I can see, plus my own Drafts, which are never counted.
 // The count on the Project card is the toggle's rows minus my Drafts, and a
 // closed Project has none.
-import { randomUUID } from "node:crypto";
 import { createDb } from "@rabaed/db";
 import { testDatabaseUrls } from "@rabaed/db/test-support";
 import { workItemSearchParams, type ProjectSummary, type WorkItemList, type WorkItemQueryInput } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { attachDatasheet, createTestApi, expectHidden, type Caller } from "./support/harness.ts";
-import { all, bilingual, ok, projectMember, type Company } from "./support/tower.ts";
+import { all, bilingual, ok, projectMember, take, type Company } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
 // What no api does yet: closing a Project, adding a Project's own Work Item Type.
@@ -37,9 +36,6 @@ const complete = {
   description: "LED fixtures",
   items: [{ fixture_type: "Downlight", quantity: 120, unit: "pcs" }],
 };
-
-const take = (by: Caller, id: string, transition: string) =>
-  ok(by.post(`/v1/work-items/${id}/transitions`, { transition, answers: {}, idempotencyKey: randomUUID() }));
 
 async function list(by: Caller, query: WorkItemQueryInput = {}, project = projectId): Promise<WorkItemList> {
   return (await ok(by.get(`/v1/projects/${project}/work-items?${workItemSearchParams({ needMyAction: true, ...query })}`), 200)).json();

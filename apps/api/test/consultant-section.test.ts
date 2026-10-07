@@ -13,15 +13,15 @@
 // Workflow with a Send Back (addSendBackWorkflow): Draft → Contractor review →
 // Consultant review ⇄ (Send Back) Contractor review; Consultant review →
 // Consultant approval → Approved or Revise & Resubmit.
-import { randomUUID } from "node:crypto";
 import { publishFormVersion } from "@rabaed/admin/services";
 import { createDb } from "@rabaed/db";
 import { addSendBackWorkflow, testDatabaseUrls } from "@rabaed/db/test-support";
-import type { FormToFill, WorkItemDetail, WorkItemHistory } from "@rabaed/domain";
+import type { FormToFill, WorkItemHistory } from "@rabaed/domain";
 import { sql } from "kysely";
 import type { LightMyRequestResponse } from "fastify";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestApi, type Caller, type OnboardedCompany } from "./support/harness.ts";
+import { detail, projectMember, tryTake } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
 const migrator = createDb(testDatabaseUrls().migrator, { max: 1 });
@@ -110,14 +110,6 @@ async function ok(res: Promise<LightMyRequestResponse>, status = 204) {
   return r;
 }
 
-async function projectMember(company: Company, participantId: string, positions: string[]) {
-  const { member, caller } = await api.member(company.caller);
-  await api.addProjectMember(company.caller, participantId, member.id);
-  await ok(company.caller.request("PUT", `/v1/participants/${participantId}/members/${member.id}/visibility`, { trade: all, location: all }));
-  await ok(company.caller.request("PUT", `/v1/participants/${participantId}/members/${member.id}/positions`, { positions }));
-  return caller;
-}
-
 async function otherParticipant(role: "consultant" | "owner" | "owner_representative") {
   const company = await api.authorizedPerson();
   const participantId = await api.addParticipant(c1.caller, projectId, company.company, role);
@@ -126,9 +118,6 @@ async function otherParticipant(role: "consultant" | "owner" | "owner_representa
 }
 
 const builtIns = () => ({ trade: electrical, location: buildingA });
-const take = (by: Caller, id: string, transition: string) =>
-  by.post(`/v1/work-items/${id}/transitions`, { transition, idempotencyKey: randomUUID() });
-const detail = async (by: Caller, id: string): Promise<WorkItemDetail> => (await ok(by.get(`/v1/work-items/${id}`), 200)).json();
 /** The answers `by` reads, without the Built-in Fields. */
 const answersOf = async (by: Caller, id: string) => {
   const { trade: _trade, location: _location, ...own } = (await detail(by, id)).answers;
@@ -144,9 +133,9 @@ const saveOver = async (by: Caller, id: string, changes: Record<string, unknown>
 async function atConsultantReview(model: string): Promise<string> {
   const res = await ok(engineer.post(`/v1/projects/${projectId}/work-items`, { type: TYPE, title: model, answers: { ...builtIns(), model } }), 201);
   const id = res.json().id as string;
-  await ok(take(engineer, id, "send_for_review"));
+  await ok(tryTake(engineer, id, "send_for_review"));
   await ok(pm.post(`/v1/work-items/${id}/claim`));
-  await ok(take(pm, id, "submit"));
+  await ok(tryTake(pm, id, "submit"));
   await ok(k1Engineer.post(`/v1/work-items/${id}/claim`));
   return id;
 }
@@ -163,16 +152,16 @@ beforeAll(async () => {
     .json()
     .participants.find((p: { isOwnCompany: boolean }) => p.isOwnCompany).id;
   await ok(c1.caller.request("PUT", `/v1/participants/${own}/visibility`, { trade: all, location: all }));
-  engineer = await projectMember(c1, own, ["engineer"]);
-  pm = await projectMember(c1, own, ["project_manager"]);
+  engineer = await projectMember(api, c1, own, ["engineer"]);
+  pm = await projectMember(api, c1, own, ["project_manager"]);
   const k1 = await otherParticipant("consultant");
-  k1Engineer = await projectMember(k1.company, k1.participantId, ["engineer"]);
-  k1Pm = await projectMember(k1.company, k1.participantId, ["engineer"]);
-  k1Manager = await projectMember(k1.company, k1.participantId, ["manager"]);
+  k1Engineer = await projectMember(api, k1.company, k1.participantId, ["engineer"]);
+  k1Pm = await projectMember(api, k1.company, k1.participantId, ["engineer"]);
+  k1Manager = await projectMember(api, k1.company, k1.participantId, ["manager"]);
   const or = await otherParticipant("owner_representative");
-  orEngineer = await projectMember(or.company, or.participantId, ["engineer"]);
+  orEngineer = await projectMember(api, or.company, or.participantId, ["engineer"]);
   const ow = await otherParticipant("owner");
-  owner = await projectMember(ow.company, ow.participantId, ["representative"]);
+  owner = await projectMember(api, ow.company, ow.participantId, ["representative"]);
 });
 
 describe("the Consultant's section at its Step", () => {
@@ -237,7 +226,7 @@ describe("K1 fills its section and saves twice, without issuing a Code (scenario
   });
 
   it("stays with K1 when K1 moves the item internally", async () => {
-    await ok(take(k1Engineer, id, "send_to_manager"));
+    await ok(tryTake(k1Engineer, id, "send_to_manager"));
     expect(await answersOf(engineer, id)).toEqual({ model: "FD-90" });
     expect(await answersOf(owner, id)).toEqual({ model: "FD-90" });
     expect(await answersOf(k1Manager, id)).toMatchObject({ sample_checked: true });
@@ -245,7 +234,7 @@ describe("K1 fills its section and saves twice, without issuing a Code (scenario
 
   it("is everyone's once K1 issues the Code, its changes still K1's", async () => {
     await ok(k1Manager.post(`/v1/work-items/${id}/claim`));
-    await ok(take(k1Manager, id, "revise_c"));
+    await ok(tryTake(k1Manager, id, "revise_c"));
     for (const other of [engineer, pm, orEngineer, owner]) {
       expect(await answersOf(other, id)).toEqual({ model: "FD-90", sample_checked: true, verification_note: "Matches the sample" });
       expect(await diffs(other, id)).toEqual([]);
@@ -262,16 +251,16 @@ describe("required fields, per section, by the Step being left", () => {
 
   it("hold up K1's forward Transition out of the Step its section names", async () => {
     const id = await atConsultantReview("FD-71");
-    const res = await take(k1Engineer, id, "send_to_manager");
+    const res = await tryTake(k1Engineer, id, "send_to_manager");
     expect(res.statusCode).toBe(422);
     expect(res.json()).toMatchObject({ error: "form_incomplete", fields: [{ key: "sample_checked", code: "required" }] });
     await ok(saveOver(k1Engineer, id, { sample_checked: false }));
-    await ok(take(k1Engineer, id, "send_to_manager"));
+    await ok(tryTake(k1Engineer, id, "send_to_manager"));
   });
 
   it("don't hold up a Send Back", async () => {
     const id = await atConsultantReview("FD-72");
-    await ok(take(k1Engineer, id, "send_back"));
+    await ok(tryTake(k1Engineer, id, "send_back"));
   });
 });
 
@@ -280,7 +269,7 @@ describe("K1 fills in part of its section, then Sends the item Back to C1 (scena
   beforeAll(async () => {
     id = await atConsultantReview("FD-50");
     await ok(saveOver(k1Engineer, id, { sample_checked: false, verification_note: "Wrong fire rating" }));
-    await ok(take(k1Engineer, id, "send_back"));
+    await ok(tryTake(k1Engineer, id, "send_back"));
   });
 
   const unseen = async (other: Caller) => {
@@ -311,7 +300,7 @@ describe("K1 fills in part of its section, then Sends the item Back to C1 (scena
   // OR and OW see the item again once it is Submitted (V2).
   it("shows OR and OW the section as it arrived once C1 Submits again", async () => {
     await ok(pm.post(`/v1/work-items/${id}/claim`));
-    await ok(take(pm, id, "submit"));
+    await ok(tryTake(pm, id, "submit"));
     for (const other of [orEngineer, owner, engineer]) await unseen(other);
   });
 

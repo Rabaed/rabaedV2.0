@@ -33,15 +33,16 @@ export { CheckboxGroup, type CheckboxGroupProps } from "./components/form/checkb
 export { DirectionProvider } from "./components/form/direction.tsx";
 export { Field, type ChoiceOption, type FieldProps } from "./components/form/field.tsx";
 export { type BuiltInChoice, type BuiltInChoices } from "./components/form-engine/built-in-fields.tsx";
-export { ActionForm, internalNoteMaxLength, type ActionFormProps } from "./components/form-engine/action-form.tsx";
-export { FormRenderer, type FormFiles, type FormLinks, type FormRendererProps } from "./components/form-engine/form-renderer.tsx";
-export { LinkSearch, type LinkSearchProps } from "./components/form-engine/link-search.tsx";
-export { LinkedFromList, type LinkedFromListProps } from "./components/form-engine/linked-from.tsx";
-export { LinksSection, type LinksSectionProps } from "./components/form-engine/links-section.tsx";
+export { ActionForm, internalNoteMaxLength, type ActionFormLabels, type ActionFormProps } from "./components/form-engine/action-form.tsx";
+export { FormRenderer, type FormFiles, type FormLinks, type FormRendererLabels, type FormRendererProps } from "./components/form-engine/form-renderer.tsx";
+export { LinkSearch, type LinkSearchLabels, type LinkSearchProps } from "./components/form-engine/link-search.tsx";
+export { LinkedFromList, type LinkedFromLabels, type LinkedFromListProps } from "./components/form-engine/linked-from.tsx";
+export { LinksSection, type LinksSectionLabels, type LinksSectionProps } from "./components/form-engine/links-section.tsx";
 export type { LinkTargetNames } from "./components/form-engine/link-question-field.tsx";
 export { Input, type InputProps } from "./components/form/input.tsx";
 export {
   NumberingPatternBuilder,
+  type NumberingPatternLabels,
   NumberingPatternView,
   type NumberingPatternBuilderProps,
   type NumberingPatternViewProps,
@@ -53,6 +54,7 @@ export { Switch, type SwitchProps } from "./components/form/switch.tsx";
 export { Textarea, type TextareaProps } from "./components/form/textarea.tsx";
 export {
   NumberingCounters,
+  type NumberingCountersLabels,
   type CounterCall,
   type CounterRefusal,
   type NumberingCountersProps,
@@ -65,17 +67,19 @@ export {
 } from "./components/numbering/participant-codes.tsx";
 export {
   RevisionActions,
+  type RevisionActionsLabels,
   type RevisionActionsProps,
   type RevisionCall,
   type RevisionRefusal,
 } from "./components/revision/revision-actions.tsx";
-export { RevisionPicker, type RevisionPickerProps } from "./components/revision/revision-picker.tsx";
+export { RevisionPicker, type RevisionPickerLabels, type RevisionPickerProps } from "./components/revision/revision-picker.tsx";
 export {
   NotificationSettingsForm,
+  type NotificationSettingsLabels,
   type NotificationSettingsFormProps,
   type SettingsCall,
 } from "./components/notifications/notification-settings.tsx";
-export { WatchButton, type WatchButtonProps, type WatchCall } from "./components/watch/watch-button.tsx";
+export { WatchButton, type WatchButtonLabels, type WatchButtonProps, type WatchCall } from "./components/watch/watch-button.tsx";
 export { Icon, directionalIconNames, iconNames, type IconName, type IconProps } from "./components/icon/icon.tsx";
 export { Tabs, TabsContent, TabsList, TabsTrigger, type TabsListProps, type TabsTriggerProps } from "./components/navigation/tabs.tsx";
 export { Dialog, DialogClose, DialogContent, DialogFooter, DialogTrigger, type DialogContentProps } from "./components/overlay/dialog.tsx";
@@ -125,6 +129,6 @@ export {
   type WorkItemViewSwitchProps,
 } from "./components/views/work-item-board.tsx";
 export { ProjectCards, type ProjectCardsLabels, type ProjectCardsProps } from "./components/views/project-cards.tsx";
-export { ProjectDashboard, chainBucketLabel, type ProjectDashboardProps } from "./components/views/project-dashboard.tsx";
+export { ProjectDashboard, type ProjectDashboardLabels, type ProjectDashboardProps } from "./components/views/project-dashboard.tsx";
 export { moduleName } from "./lib/module-name.ts";
-export { ActivityFeedPanel, type ActivityFeedFilters, type ActivityFeedPanelProps } from "./components/views/activity-feed-panel.tsx";
+export { ActivityFeedPanel, type ActivityFeedFilters, type ActivityFeedPanelLabels, type ActivityFeedPanelProps } from "./components/views/activity-feed-panel.tsx";

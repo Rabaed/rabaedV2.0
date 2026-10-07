@@ -3,7 +3,7 @@
 import type { FieldError, FormSchema, FormValue, Locale } from "@rabaed/domain";
 import { Field } from "../form/field.tsx";
 import { Textarea } from "../form/textarea.tsx";
-import { FormRenderer } from "./form-renderer.tsx";
+import { FormRenderer, type FormRendererLabels } from "./form-renderer.tsx";
 
 // A Transition's pop-up (RP-300; form-engine.md §4 "Settled 2026-10-05 (part 3)"):
 // its Action Form, a Form schema drawn by the Form engine's renderer, then the
@@ -15,21 +15,15 @@ import { FormRenderer } from "./form-renderer.tsx";
 /** The longest Internal Note the API takes. */
 export const internalNoteMaxLength = 4000;
 
-/* eslint-disable rabaed/no-ui-translations -- existing labels, still to move to the app's messages (RP-362 retro) */
-const copy = {
-  en: {
-    internalNote: "Internal Note",
-    internalNoteHelp:
-      "Optional. Only your Company sees it, even when the item goes to another Company. Anything for them goes in Chat or the Form.",
-  },
-  ar: {
-    internalNote: "ملاحظة داخلية",
-    internalNoteHelp: "اختيارية. لا يراها إلا شركتك، حتى عندما ينتقل العنصر إلى شركة أخرى. ما يخصهم يُكتب في المحادثة أو النموذج.",
-  },
-} satisfies Record<Locale, unknown>;
-/* eslint-enable rabaed/no-ui-translations */
+/** The pop-up form's words, from the app's messages: its Internal Note, and the Form engine's. */
+export type ActionFormLabels = {
+  internalNote: string;
+  internalNoteHelp: string;
+  form: FormRendererLabels;
+};
 
 export type ActionFormProps = {
+  labels: ActionFormLabels;
   /** The Transition's Action Form; null when it asks nothing but the Internal Note. */
   schema: FormSchema | null;
   /** Its answers so far, by field key. */
@@ -48,13 +42,13 @@ export function ActionForm({
   schema,
   answers,
   errors,
+  labels: text,
   internalNote,
   locale,
   onChange,
   onInternalNoteChange,
   idPrefix = "action-form",
 }: ActionFormProps) {
-  const text = copy[locale];
   return (
     <div className="flex flex-col gap-4">
       {schema && (
@@ -64,6 +58,7 @@ export function ActionForm({
           errors={errors}
           mode="edit"
           locale={locale}
+          labels={text.form}
           onChange={onChange}
           idPrefix={idPrefix}
           sectionTitles="hidden"

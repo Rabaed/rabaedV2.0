@@ -2,8 +2,8 @@
 
 import { isHiddenLinkChoice, type HiddenLinkChoice, type LinkSearchResults, type LinkTarget, type Locale } from "@rabaed/domain";
 import { useState, type ElementType } from "react";
-import { LinkSearch } from "./link-search.tsx";
-import { LinkedItemRow } from "./linked-item-row.tsx";
+import { LinkSearch, type LinkSearchLabels } from "./link-search.tsx";
+import { LinkedItemRow, type LinkedItemRowLabels } from "./linked-item-row.tsx";
 
 // The link question, `work_item_ref` (RP-293, form-engine.md part 2b): the items
 // chosen, each its Document Number (left to right) and Subject, and Link search
@@ -13,17 +13,13 @@ import { LinkedItemRow } from "./linked-item-row.tsx";
 // API. Presentational: the page passes the Link search API and the names of the
 // chosen items the viewer sees.
 
-/* eslint-disable rabaed/no-ui-translations -- existing labels, still to move to the app's messages (RP-362 retro) */
-const copy = {
-  en: {
-    remove: (number: string) => `Remove ${number}`,
-  },
-  ar: {
-    // The Document Number sits in a left-to-right isolate (\u2066, ended by \u2069).
-    remove: (number: string) => `إزالة \u2066${number}\u2069`,
-  },
-} satisfies Record<Locale, unknown>;
-/* eslint-enable rabaed/no-ui-translations */
+/** The link question's words, from the app's messages. */
+export type LinkQuestionLabels = {
+  /** The remove button of a chosen item, naming its Document Number. */
+  remove: (number: string) => string;
+  item: LinkedItemRowLabels;
+  search: LinkSearchLabels;
+};
 
 /** A chosen item's number and Subject, by its id. */
 export type LinkTargetNames = Readonly<Record<string, Omit<LinkTarget, "id">>>;
@@ -54,13 +50,13 @@ export const linkChoicesOf = (value: unknown): Choice[] =>
 function ChosenItem({
   choice,
   name,
-  locale,
+  labels,
   links,
   onRemove,
 }: {
   choice: Choice;
   name: Omit<LinkTarget, "id"> | undefined;
-  locale: Locale;
+  labels: LinkQuestionLabels;
   links: FormLinks;
   onRemove?: () => void;
 }) {
@@ -70,12 +66,12 @@ function ChosenItem({
   if (!shown) return null;
   return (
     <LinkedItemRow
-      locale={locale}
+      labels={labels.item}
       documentNumber={shown.documentNumber}
       subject={shown.subject}
       href={typeof choice === "string" ? links.hrefFor(choice) : null}
       linkAs={Anchor}
-      remove={onRemove && { label: copy[locale].remove(shown.documentNumber), icon: "x", onRemove }}
+      remove={onRemove && { label: labels.remove(shown.documentNumber), icon: "x", onRemove }}
     />
   );
 }
@@ -87,6 +83,7 @@ export type LinkQuestionFieldProps = {
   value: unknown;
   mode: "edit" | "read";
   locale: Locale;
+  labels: LinkQuestionLabels;
   links: FormLinks;
   /** Called with the new answer (edit mode); `undefined` once nothing is chosen. */
   onChange?: (value: Choice[] | undefined) => void;
@@ -96,7 +93,7 @@ export type LinkQuestionFieldProps = {
  * A link question: its chosen items, and in edit mode Link search (named by the
  * Field's label) to choose more, never offering one already chosen or the item itself.
  */
-export function LinkQuestionField({ label, value, mode, locale, links, onChange }: LinkQuestionFieldProps) {
+export function LinkQuestionField({ label, value, mode, locale, labels, links, onChange }: LinkQuestionFieldProps) {
   // Items picked here, named until the page's `targets` name them.
   const [picked, setPicked] = useState<LinkTargetNames>({});
   const chosen = linkChoicesOf(value);
@@ -112,7 +109,7 @@ export function LinkQuestionField({ label, value, mode, locale, links, onChange 
               key={keyOf(c)}
               choice={c}
               name={typeof c === "string" ? (links.targets[c] ?? picked[c]) : undefined}
-              locale={locale}
+              labels={labels}
               links={links}
               onRemove={mode === "edit" ? () => set(chosen.filter((other) => keyOf(other) !== keyOf(c))) : undefined}
             />
@@ -124,6 +121,7 @@ export function LinkQuestionField({ label, value, mode, locale, links, onChange 
           // A fresh search once an item is picked, rather than results that no longer offer it.
           key={ids.length}
           locale={locale}
+          labels={labels.search}
           search={links.search}
           exclude={[...(links.workItemId ? [links.workItemId] : []), ...ids]}
           debounceMs={links.debounceMs}

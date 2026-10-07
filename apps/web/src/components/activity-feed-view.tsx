@@ -1,7 +1,8 @@
 "use client";
 
 import { activityFeedSearchParams, type ActivityFeed, type Locale } from "@rabaed/domain";
-import { ActivityFeedPanel, type ActivityFeedFilters } from "@rabaed/ui";
+import { ActivityFeedPanel, type ActivityFeedFilters, type ActivityFeedPanelLabels } from "@rabaed/ui";
+import { useTranslations } from "next-intl";
 import { useRef, useState } from "react";
 import { Link } from "@/i18n/navigation";
 
@@ -22,6 +23,27 @@ export function ActivityFeedView({
   locale: Locale;
   fullHeight?: boolean;
 }) {
+  const t = useTranslations("workItemViews.activityFeed");
+  const labels: ActivityFeedPanelLabels = {
+    title: t("title"),
+    module: t("module"),
+    type: t("type"),
+    all: t("all"),
+    mine: t("mine"),
+    viewAll: t("viewAll"),
+    loadMore: t("loadMore"),
+    loading: t("loading"),
+    empty: t("empty"),
+    internal: t("internal"),
+    noNumber: t("noNumber"),
+    claimed: t("claimed"),
+    released: t("released"),
+    assigned: t("assigned"),
+    internalNote: t("internalNote"),
+    recommended: t("recommended"),
+    cancelled: t("cancelled"),
+    updated: t("updated"),
+  };
   const [query, setQuery] = useState<ActivityFeedFilters>({ type: [], mine: false });
   const [entries, setEntries] = useState(initial.entries);
   const [nextCursor, setNextCursor] = useState(initial.nextCursor);
@@ -61,6 +83,7 @@ export function ActivityFeedView({
       }}
       types={initial.types}
       locale={locale}
+      labels={labels}
       // Link adds the locale.
       itemHref={(id) => `/work-items/${id}`}
       viewAllHref={fullHeight ? undefined : `/projects/${projectId}/activity`}

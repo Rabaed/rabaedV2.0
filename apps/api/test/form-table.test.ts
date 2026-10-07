@@ -5,14 +5,14 @@
 //
 // The MAR Form Version 1 has no table, so this file adds a test-only Rabaed
 // Default Type (the MAR's Workflow) whose Form has one.
-import { randomUUID } from "node:crypto";
 import { createDb } from "@rabaed/db";
 import { testDatabaseUrls } from "@rabaed/db/test-support";
-import { formSchema, type FormVersion, type WorkItemDetail } from "@rabaed/domain";
+import { formSchema, type FormVersion } from "@rabaed/domain";
 import { sql } from "kysely";
 import type { LightMyRequestResponse } from "fastify";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestApi, type Caller } from "./support/harness.ts";
+import { detail, projectMember, tryTake } from "./support/tower.ts";
 
 const api = await createTestApi();
 const migrator = createDb(testDatabaseUrls().migrator, { max: 1 });
@@ -108,9 +108,6 @@ const createDraft = (answers: Record<string, unknown>) =>
   engineer.post(`/v1/projects/${projectId}/work-items`, { type: TYPE, title: "Fixtures", answers: { ...builtIns(), ...answers } });
 const save = (by: Caller, id: string, answers: Record<string, unknown>) =>
   by.request("PUT", `/v1/work-items/${id}/answers`, { answers: { ...builtIns(), ...answers } });
-const take = (by: Caller, id: string, transition: string) =>
-  by.post(`/v1/work-items/${id}/transitions`, { transition, idempotencyKey: randomUUID() });
-const detail = async (by: Caller, id: string): Promise<WorkItemDetail> => (await ok(by.get(`/v1/work-items/${id}`), 200)).json();
 const answersOf = async (by: Caller, id: string) => {
   const { trade: _trade, location: _location, ...own } = (await detail(by, id)).answers;
   return own;
@@ -127,19 +124,12 @@ beforeAll(async () => {
     .json()
     .participants.find((p: { isOwnCompany: boolean }) => p.isOwnCompany).id;
   await ok(c1.caller.request("PUT", `/v1/participants/${own}/visibility`, { trade: all, location: all }));
-  const projectMember = async (owner: typeof c1, participantId: string, positions: string[]) => {
-    const { member, caller } = await api.member(owner.caller);
-    await api.addProjectMember(owner.caller, participantId, member.id);
-    await ok(owner.caller.request("PUT", `/v1/participants/${participantId}/members/${member.id}/visibility`, { trade: all, location: all }));
-    await ok(owner.caller.request("PUT", `/v1/participants/${participantId}/members/${member.id}/positions`, { positions }));
-    return caller;
-  };
-  engineer = await projectMember(c1, own, ["engineer"]);
-  pm = await projectMember(c1, own, ["project_manager"]);
+  engineer = await projectMember(api, c1, own, ["engineer"]);
+  pm = await projectMember(api, c1, own, ["project_manager"]);
   const k1 = await api.authorizedPerson();
   const k1Participant = await api.addParticipant(c1.caller, projectId, k1.company, "consultant");
   await ok(c1.caller.request("PUT", `/v1/participants/${k1Participant}/visibility`, { trade: all, location: all }));
-  consultant = await projectMember(k1, k1Participant, ["manager"]);
+  consultant = await projectMember(api, k1, k1Participant, ["manager"]);
 });
 
 describe("the Form with a table", () => {
@@ -196,23 +186,23 @@ describe("a wrong cell", () => {
 describe("leaving Draft", () => {
   it("is blocked by too few rows, with a per-field error", async () => {
     const id = (await ok(createDraft({}), 201)).json().id as string;
-    const res = await take(engineer, id, "send_for_review");
+    const res = await tryTake(engineer, id, "send_for_review");
     expect({ status: res.statusCode, body: res.json() }).toEqual({
       status: 422,
       body: { error: "form_incomplete", fields: [{ key: "items", code: "required" }] },
     });
     await ok(save(engineer, id, { items: rows }));
-    await ok(take(engineer, id, "send_for_review"));
+    await ok(tryTake(engineer, id, "send_for_review"));
   });
 
   it("is blocked by too many rows and by a required cell left empty, row by row", async () => {
     const id = (await ok(createDraft({ items: [...rows, ...rows] }), 201)).json().id as string;
-    expect((await take(engineer, id, "send_for_review")).json()).toEqual({
+    expect((await tryTake(engineer, id, "send_for_review")).json()).toEqual({
       error: "form_incomplete",
       fields: [{ key: "items", code: "too_many_rows" }],
     });
     await ok(save(engineer, id, { items: [rows[0], { fixture: "Panel light", tested: true }] }));
-    expect((await take(engineer, id, "send_for_review")).json()).toEqual({
+    expect((await tryTake(engineer, id, "send_for_review")).json()).toEqual({
       error: "form_incomplete",
       fields: [{ key: "items", code: "required", row: 1, column: "quantity" }],
     });
@@ -224,9 +214,9 @@ describe("another Company", () => {
 
   beforeAll(async () => {
     id = (await ok(createDraft({ items: rows }), 201)).json().id as string;
-    await ok(take(engineer, id, "send_for_review"));
+    await ok(tryTake(engineer, id, "send_for_review"));
     await ok(pm.post(`/v1/work-items/${id}/claim`));
-    await ok(take(pm, id, "submit"));
+    await ok(tryTake(pm, id, "submit"));
   });
 
   it("sees the whole table once the item reaches them (V13)", async () => {

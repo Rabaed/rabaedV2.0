@@ -7,7 +7,6 @@
 //
 // The MAR Form Version 1 has no photos field, so this file adds a test-only
 // Rabaed Default Type (the MAR's Workflow) whose Form has one.
-import { randomUUID } from "node:crypto";
 import { createDb } from "@rabaed/db";
 import { testDatabaseUrls } from "@rabaed/db/test-support";
 import type { DocumentList, StartedDocumentUpload } from "@rabaed/domain";
@@ -16,6 +15,7 @@ import type { LightMyRequestResponse } from "fastify";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { jpegWithExif } from "../src/demo/exif-jpeg.ts";
 import { createTestApi, expectHidden, type Caller } from "./support/harness.ts";
+import { projectMember, tryTake } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
 const migrator = createDb(testDatabaseUrls().migrator, { max: 1 });
@@ -97,8 +97,6 @@ const draft = async () =>
       201,
     )
   ).json().id as string;
-const take = (by: Caller, id: string, transition: string) =>
-  by.post(`/v1/work-items/${id}/transitions`, { transition, idempotencyKey: randomUUID() });
 
 const documentsUrl = (itemId: string) => `/v1/work-items/${itemId}/documents`;
 const documentUrl = (itemId: string, documentId: string) => `${documentsUrl(itemId)}/${documentId}`;
@@ -141,20 +139,13 @@ beforeAll(async () => {
     .json()
     .participants.find((p: { isOwnCompany: boolean }) => p.isOwnCompany).id;
   await ok(c1.caller.request("PUT", `/v1/participants/${own}/visibility`, { trade: all, location: all }));
-  const projectMember = async (owner: typeof c1, participantId: string, positions: string[]) => {
-    const { member, caller } = await api.member(owner.caller);
-    await api.addProjectMember(owner.caller, participantId, member.id);
-    await ok(owner.caller.request("PUT", `/v1/participants/${participantId}/members/${member.id}/visibility`, { trade: all, location: all }));
-    await ok(owner.caller.request("PUT", `/v1/participants/${participantId}/members/${member.id}/positions`, { positions }));
-    return caller;
-  };
-  engineer = await projectMember(c1, own, ["engineer"]);
-  pm = await projectMember(c1, own, ["project_manager"]);
+  engineer = await projectMember(api, c1, own, ["engineer"]);
+  pm = await projectMember(api, c1, own, ["project_manager"]);
   const other = async (role: "consultant" | "contractor", positions: string[]) => {
     const company = await api.authorizedPerson();
     const participantId = await api.addParticipant(c1.caller, projectId, company.company, role);
     await ok(c1.caller.request("PUT", `/v1/participants/${participantId}/visibility`, { trade: all, location: all }));
-    return projectMember(company, participantId, positions);
+    return projectMember(api, company, participantId, positions);
   };
   consultant = await other("consultant", ["manager"]);
   c2Engineer = await other("contractor", ["engineer"]);
@@ -213,12 +204,12 @@ describe("a photo's time and place", () => {
 describe("leaving Draft", () => {
   it("is refused without a photo in the required field", async () => {
     const id = await draft();
-    expect((await take(engineer, id, "send_for_review")).json()).toEqual({
+    expect((await tryTake(engineer, id, "send_for_review")).json()).toEqual({
       error: "form_incomplete",
       fields: [{ key: "sample_photos", code: "required" }],
     });
     await uploaded(engineer, id);
-    await ok(take(engineer, id, "send_for_review"));
+    await ok(tryTake(engineer, id, "send_for_review"));
   });
 });
 
@@ -229,9 +220,9 @@ describe("once Submitted", () => {
   beforeAll(async () => {
     id = await draft();
     photo = await uploaded(engineer, id, { body: jpegWithExif(inRiyadh) });
-    await ok(take(engineer, id, "send_for_review"));
+    await ok(tryTake(engineer, id, "send_for_review"));
     await ok(pm.post(`/v1/work-items/${id}/claim`));
-    await ok(take(pm, id, "submit"));
+    await ok(tryTake(pm, id, "submit"));
   });
 
   it("the Consultant sees the photo with its time and place, and can download it", async () => {

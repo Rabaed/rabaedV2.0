@@ -1,9 +1,9 @@
 "use client";
 
-import type { LinkedFromItem, Locale } from "@rabaed/domain";
+import type { LinkedFromItem } from "@rabaed/domain";
 import { useId, type ElementType } from "react";
 import { cn } from "../../lib/cn.ts";
-import { LinkedItemRow } from "./linked-item-row.tsx";
+import { LinkedItemRow, type LinkedItemRowLabels } from "./linked-item-row.tsx";
 
 // "Linked from" (form-engine.md part 2b; visibility.md E3): the Submitted items
 // that link to this one, shown in the Links section below its Links. Each is the
@@ -12,21 +12,15 @@ import { LinkedItemRow } from "./linked-item-row.tsx";
 // details, and asks nothing of the API. Read only: a Link is changed on the item
 // it is on. Presentational: the page passes what the API returns.
 
-/* eslint-disable rabaed/no-ui-translations -- existing labels, still to move to the app's messages (RP-362 retro) */
-const copy = {
-  en: {
-    title: "Linked from",
-    none: "No Submitted item links here yet.",
-  },
-  ar: {
-    title: "مرتبط من",
-    none: "لا يرتبط بهذا البند أي بند مُقدَّم بعد.",
-  },
-} satisfies Record<Locale, unknown>;
-/* eslint-enable rabaed/no-ui-translations */
+/** The list's words, from the app's messages. */
+export type LinkedFromLabels = {
+  title: string;
+  none: string;
+  item: LinkedItemRowLabels;
+};
 
 export type LinkedFromListProps = {
-  locale: Locale;
+  labels: LinkedFromLabels;
   /** The Submitted items linking here, as the Linked from API returns them for the viewer. */
   items: readonly LinkedFromItem[];
   /** Where a linking item the viewer can see opens. */
@@ -37,8 +31,7 @@ export type LinkedFromListProps = {
 };
 
 /** "Linked from": the Submitted items linking to this one, under its own heading in the Links section. */
-export function LinkedFromList({ locale, items, hrefFor, linkAs = "a", className }: LinkedFromListProps) {
-  const text = copy[locale];
+export function LinkedFromList({ labels: text, items, hrefFor, linkAs = "a", className }: LinkedFromListProps) {
   const titleId = useId();
   return (
     <div className={cn("flex flex-col gap-2", className)} data-testid="work-item-linked-from">
@@ -53,7 +46,7 @@ export function LinkedFromList({ locale, items, hrefFor, linkAs = "a", className
             // A hidden item has no id; the API lists each item once, by Document Number.
             <LinkedItemRow
               key={item.workItemId ?? `${item.documentNumber}-${i}`}
-              locale={locale}
+              labels={text.item}
               documentNumber={item.documentNumber}
               subject={item.subject}
               href={item.workItemId ? hrefFor(item.workItemId) : null}

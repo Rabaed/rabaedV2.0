@@ -111,6 +111,38 @@
       "C": "Code C",
       "D": "Code D",
       "closed": "Closed"
+    },
+    "dashboard": {
+      "items": "{count} items",
+      "open": "Open",
+      "closed": "Closed",
+      "empty": "No Work Item Types on this Project yet.",
+      "codeC": "Code C",
+      "approved": {
+        "review_code": "Approved (A+B)",
+        "inspection_result": "Passed, with or without Comments",
+        "none": "Approved"
+      }
+    },
+    "activityFeed": {
+      "title": "Activity Feed",
+      "module": "Module",
+      "type": "Type",
+      "all": "All",
+      "mine": "Only items I'm on",
+      "viewAll": "View all",
+      "loadMore": "Load more",
+      "loading": "Loading…",
+      "empty": "Nothing has happened on the items you can see yet.",
+      "internal": "Only your Company sees this",
+      "noNumber": "No number yet",
+      "claimed": "claimed",
+      "released": "released to the pool",
+      "assigned": "assigned",
+      "internalNote": "wrote an Internal Note with",
+      "recommended": "recommended a Code on",
+      "cancelled": "cancelled",
+      "updated": "updated"
     }
   },
   "health": {
@@ -280,6 +312,79 @@
     "addOverride": "Override for this Type",
     "edit": "Change the pattern",
     "cancel": "Cancel",
+    "pattern": {
+      "kinds": {
+        "project": "Project",
+        "type": "Work Item Type",
+        "trade": "Trade",
+        "participant": "Participant Code",
+        "location": "Location level",
+        "text": "Fixed text"
+      },
+      "levels": {
+        "zone": "Zone",
+        "building": "Building",
+        "floor": "Floor"
+      },
+      "segments": "Segments",
+      "segment": "Segment {n}",
+      "level": "Level",
+      "text": "Text",
+      "textHint": "1 to 10 capital letters or digits.",
+      "textInvalid": "Use 1 to 10 capital letters or digits.",
+      "counted": "Counted separately",
+      "countedHint": "The sequence runs on its own for each value of a ticked segment.",
+      "moveUp": "Move segment {n} up",
+      "moveDown": "Move segment {n} down",
+      "remove": "Remove segment {n}",
+      "add": "Add segment",
+      "separator": "Separator",
+      "digits": "Sequence digits",
+      "example": "Example",
+      "exampleHint": "The first number this pattern gives.",
+      "sharedTitle": "One shared count",
+      "sharedBody": "The sequence doesn't count separately for the Participant Code, so every Company's items share one count. Each Company can then tell how many items the others numbered from the gaps in its own numbers.",
+      "sharedAccept": "I accept that every Company can tell the others' volume from the gaps",
+      "sharedReadOnly": "Every Company's items share one count, accepted by the Project Admin.",
+      "save": "Save pattern",
+      "saving": "Saving…",
+      "afterChange": "A change applies only to items numbered after it; issued numbers never change.",
+      "countedBadge": "Counted"
+    },
+    "counters": {
+      "title": "Counters",
+      "intro": "Each counter issues the sequence of the numbers it counts. Only Project Admins see counters.",
+      "counter": "Counter",
+      "lastNumber": "Last number",
+      "state": "State",
+      "none": "No counters yet. A counter starts with the first number it issues.",
+      "inUse": "In use",
+      "startsAt": "Starts at {n}",
+      "startTitle": "Set a starting number",
+      "startIntro": "Continuing a paper register? Set the number the counter issues next, before it issues its first. It can't change after that.",
+      "type": "Work Item Type",
+      "participant": "Participant",
+      "trade": "Trade",
+      "location": "Location",
+      "notCounted": "Not counted",
+      "startingNumber": "Starting number",
+      "next": "The next number will be",
+      "used": "This counter has already issued numbers, up to {n}. Its starting number can't change.",
+      "save": "Set starting number",
+      "saved": "Starting number set. The next number will be",
+      "refusals": {
+        "participant_required": "Choose a Participant: the Numbering Pattern counts by it.",
+        "trade_required": "Choose a Trade: the Numbering Pattern counts by it.",
+        "location_required": "Choose a Location: the Numbering Pattern counts by it.",
+        "value_not_found": "That choice is no longer on the Project. Reload the page.",
+        "type_not_found": "That Work Item Type is no longer on the Project. Reload the page.",
+        "counter_used": "This counter has issued a number since. Its starting number can't change.",
+        "project_closed": "The Project is closed.",
+        "not_found": "You can't change numbering on this Project.",
+        "invalid": "Enter a whole number from 1 to 9,999,999.",
+        "unavailable": "That didn't work. Try again."
+      }
+    },
     "invalid": "Check the pattern: up to 6 segments, 3 to 7 digits.",
     "sharedCounterNotAccepted": "Accept the shared-count warning to save this pattern.",
     "notFound": "This is no longer available. Refresh the page.",
@@ -371,7 +476,102 @@
       "notEditable": "These answers can't be changed any more.",
       "newVersion": "A new version of this Form was just published. Check your answers and save again.",
       "valueNotFound": "A Trade, Location or Scope you chose is no longer offered. Check the Form and save again.",
-      "unavailable": "Something went wrong. Try again."
+      "unavailable": "Something went wrong. Try again.",
+      "renderer": {
+        "summary": "{count, plural, one {1 field needs your attention:} other {{n} fields need your attention:}}",
+        "required": "This field is required.",
+        "wrongType": "This value isn't valid here.",
+        "tooLong": "Use at most {max} characters.",
+        "invalidFormat": {
+          "date": "Enter a valid date.",
+          "time": "Enter a valid time.",
+          "datetime": "Enter a valid date and time.",
+          "email": "Enter a valid email address, such as name@company.com.",
+          "phone": "Enter a valid phone number, such as 050 123 4567 or +966 50 123 4567."
+        },
+        "notANumber": "Enter a number.",
+        "belowMin": "Enter {min} or more.",
+        "aboveMax": "Enter {max} or less.",
+        "tooManyDecimals": "{count, plural, =0 {Enter a whole number.} one {Use at most 1 decimal place.} other {Use at most {n} decimal places.}}",
+        "unknownOption": "Choose one of the options.",
+        "notWorkedOut": "Not worked out yet",
+        "calculatedRequired": "Fill in the fields this is worked out from.",
+        "tooShallow": "Keep choosing down to the last level.",
+        "tooFewRows": "{count, plural, one {Add at least 1 row.} other {Add at least {n} rows.}}",
+        "tooManyRows": "{count, plural, one {Use at most 1 row.} other {Use at most {n} rows.}}",
+        "tooFewFiles": "{count, plural, one {Add at least 1 Document.} other {Add at least {n} Documents.}}",
+        "choose": "Choose…",
+        "none": "None",
+        "leftProject": "\u2068{name}\u2069 (no longer on the Project)",
+        "unanswered": "Not answered",
+        "filledBy": "Filled in by the {role}"
+      },
+      "builtIn": {
+        "choose": "Choose…",
+        "chooseTradeFirst": "Choose a Trade first.",
+        "noScopes": "This Trade has no Scopes."
+      },
+      "attachmentsField": {
+        "none": "No Documents yet.",
+        "notYet": "Documents can be added once the Draft is saved.",
+        "uploading": "Uploading…",
+        "open": "Open {name}",
+        "remove": "Remove {name}",
+        "frozen": "Sent: can't be changed",
+        "kb": "{size} KB",
+        "mb": "{size} MB",
+        "accepts": "{types} only",
+        "atMost": "{count, plural, one {At most 1 Document} other {At most {n} Documents}}",
+        "full": "{count, plural, one {This field takes 1 Document.} other {This field takes at most {n} Documents.}}"
+      },
+      "photosField": {
+        "none": "No photos yet.",
+        "notYet": "Photos can be added once the Draft is saved.",
+        "uploading": "Uploading…",
+        "takePhoto": "Take a photo",
+        "open": "Open {name} full size",
+        "remove": "Remove {name}",
+        "frozen": "Sent: can't be changed",
+        "taken": "Taken {when}",
+        "nothingRecorded": "No time/location recorded",
+        "noTime": "No time recorded",
+        "noPlace": "No location recorded",
+        "atMost": "{count, plural, one {At most 1 photo} other {At most {n} photos}}",
+        "full": "{count, plural, one {This field takes 1 photo.} other {This field takes at most {n} photos.}}"
+      },
+      "checklistField": {
+        "comment": "Comment",
+        "photos": "Photos",
+        "required": "required",
+        "notAnswered": "Not answered",
+        "answerThis": "Answer this item.",
+        "commentNeeded": "Add a comment to explain this answer.",
+        "photoNeeded": "Add a photo as evidence for this answer.",
+        "wrongType": "This value isn't valid here.",
+        "unknownOption": "Choose one of the answers.",
+        "tooLong": "Use at most {max} characters.",
+        "summary": "Summary",
+        "evidence": "Photos for {item}",
+        "itemNumber": "{n} of {of}"
+      },
+      "tableField": {
+        "addRow": "Add row",
+        "row": "Row {n}",
+        "removeRow": "Remove row {n}",
+        "noRows": "No rows yet.",
+        "limitReached": "The most rows allowed is {max}.",
+        "total": "Total {column}",
+        "wrongType": "This row isn't valid here."
+      },
+      "optionListField": {
+        "level": "Level {n}",
+        "choose": "Choose…",
+        "none": "None",
+        "unavailable": "This list isn't available."
+      },
+      "linkQuestion": {
+        "remove": "Remove {number}"
+      }
     },
     "actions": {
       "title": "Transitions",
@@ -389,7 +589,9 @@
       "formIncomplete": "Complete the Form first: the fields to fix are marked in it.",
       "saveFirst": "Your answers couldn't be saved, so nothing was sent. Check the Form.",
       "tryAgain": "The answers changed meanwhile. Try again.",
-      "unavailable": "Something went wrong. Try again."
+      "unavailable": "Something went wrong. Try again.",
+      "internalNote": "Internal Note",
+      "internalNoteHelp": "Optional. Only your Company sees it, even when the item goes to another Company. Anything for them goes in Chat or the Form."
     },
     "attachments": {
       "title": "Attachments",
@@ -418,7 +620,26 @@
       "alreadyLinked": "That item is already linked.",
       "notEditable": "Links can't be changed any more.",
       "projectClosed": "This Project is closed.",
-      "unavailable": "Something went wrong. Try again."
+      "unavailable": "Something went wrong. Try again.",
+      "title": "Links",
+      "none": "No Links yet.",
+      "remove": "Remove the Link to {number}",
+      "hidden": "You are not allowed to see the details of this item.",
+      "linkedFrom": {
+        "title": "Linked from",
+        "none": "No Submitted item links here yet."
+      },
+      "search": {
+        "label": "Find an item to link",
+        "hint": "Type part of a Document Number or Subject.",
+        "results": "Search results",
+        "searching": "Searching…",
+        "noMatch": "No items match.",
+        "offered": "Only Submitted items you can see in this Project can be linked.",
+        "failed": "Couldn't search. Try again.",
+        "more": "Show more",
+        "count": "{count, plural, one {1 item} other {{n} items}}{more, select, true {, more below} other {}}"
+      }
     },
     "history": {
       "title": "History",
@@ -437,6 +658,31 @@
       "linksField": "Links"
     }
   },
+  "revision": {
+    "section": "Revision",
+    "pickerLabel": "Revision",
+    "createIntro": "Create a Revision of this item under the same number: it starts as a Draft with your answers and Documents.",
+    "create": "Create Revision",
+    "discard": "Discard Revision",
+    "discardTitle": "Discard this Revision?",
+    "discardIntro": "It is still a Draft, so nobody outside your company has seen it. The next Revision you create takes its Rev number.",
+    "cancel": "Cancel",
+    "close": "Close",
+    "refusals": {
+      "revision_not_allowed": "A Revision can't be created from this item now. Reload the page to see why.",
+      "not_discardable": "This Revision has left Draft, so it can no longer be discarded.",
+      "project_closed": "The Project is closed.",
+      "not_found": "This item is no longer available to you.",
+      "idempotency_key_reused": "That didn't work. Try again.",
+      "unavailable": "That didn't work. Try again."
+    }
+  },
+  "watch": {
+    "watch": "Watch",
+    "watching": "Watching",
+    "notFound": "This item is no longer available to you.",
+    "unavailable": "That didn't work. Try again."
+  },
   "notifications": {
     "title": "Notifications",
     "bellUnread": "{count, plural, other {Notifications, {shown} unread}}",
@@ -449,6 +695,41 @@
     "cancelled": "Cancelled",
     "sentBack": "Sent Back to you by {company}",
     "vacancy": "Vacancy at {step}: assign a replacement"
+  },
+  "notificationSettings": {
+    "email": "Email",
+    "pauseAll": "Pause all email",
+    "pauseHelp": "Stops every email until you turn it back on. Notifications still reach your bell.",
+    "language": "Language of emails",
+    "projects": "Projects",
+    "projectsHelp": "A muted Project sends you no notifications or emails. Items waiting on you still show as yours.",
+    "mute": "Mute",
+    "noProjects": "You are not on any Project yet.",
+    "groups": "Notifications",
+    "inApp": "In-app",
+    "emailChoice": {
+      "off": "Off",
+      "immediate": "Immediately",
+      "digest": "Daily digest"
+    },
+    "group": {
+      "step_reached": "Step reached me or my pool",
+      "watched": "Items I watch",
+      "sent_back": "Sent Back to my Participant",
+      "vacancy": "Vacancy in my Company",
+      "weekly_report": "Weekly Step Age report"
+    },
+    "weeklyHelp": "Emailed on Sunday mornings.",
+    "outcomes": "Outcomes that notify me",
+    "outcomeGroups": {
+      "review_code": "Review Codes",
+      "inspection_result": "Inspection Results",
+      "other": "Other outcomes"
+    },
+    "refusals": {
+      "not_found": "That Project is no longer available to you.",
+      "unavailable": "That didn't save. Try again."
+    }
   },
   "profile": {
     "title": "Profile",

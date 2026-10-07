@@ -2,6 +2,7 @@ import { formSchema } from "@rabaed/domain";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, within } from "storybook/test";
 import { storyLocale, storyText } from "../../storybook/locale.ts";
+import { formRendererLabels } from "../../storybook/form-engine.ts";
 import { FormRenderer } from "./form-renderer.tsx";
 
 // Who fills which Form Section (RP-301; form-engine.md §4). A section that isn't
@@ -39,7 +40,7 @@ const copy = {
 const meta = {
   title: "Form engine/FormRenderer/Form Sections",
   component: FormRenderer,
-  args: { schema, answers: {}, mode: "edit", locale: "en", editableSections: ["material"], filledBy: { verification: consultant } },
+  args: { schema, answers: {}, mode: "edit", locale: "en", labels: formRendererLabels.en, editableSections: ["material"], filledBy: { verification: consultant } },
   decorators: [(Story) => <div className="max-w-xl">{Story()}</div>],
 } satisfies Meta<typeof FormRenderer>;
 
@@ -52,7 +53,7 @@ const region = (context: PlayContext, label: { en: string; ar: string }) =>
 
 /** The raiser at the Draft: its own section to fill, the Consultant's empty, read-only and marked with who fills it. */
 export const FilledByAnotherParticipant: Story = {
-  render: (args, context) => <FormRenderer {...args} locale={storyLocale(context)} />,
+  render: (args, context) => <FormRenderer {...args} locale={storyLocale(context)} labels={formRendererLabels[storyLocale(context)]} />,
   play: async (context) => {
     await expect(within(region(context, copy.material)).getByRole("textbox", { name: storyText(context, copy.model) })).toBeVisible();
     const verification = within(region(context, copy.verification));
@@ -65,7 +66,7 @@ export const FilledByAnotherParticipant: Story = {
 /** Once the Consultant has answered, its answers read like any other, without the mark. */
 export const FilledIn: Story = {
   args: { answers: { model: "FD-90", sample_checked: true, verification_note: "Matches the sample." } },
-  render: (args, context) => <FormRenderer {...args} locale={storyLocale(context)} />,
+  render: (args, context) => <FormRenderer {...args} locale={storyLocale(context)} labels={formRendererLabels[storyLocale(context)]} />,
   play: async (context) => {
     const verification = within(region(context, copy.verification));
     await expect(verification.getByText(storyText(context, copy.yes))).toBeVisible();
