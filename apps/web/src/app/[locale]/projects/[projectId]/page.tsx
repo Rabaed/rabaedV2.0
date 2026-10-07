@@ -1,4 +1,4 @@
-import { chainBuckets, codeCStates, workItemListHref, type ChainBucket, type CodeCState, type Locale } from "@rabaed/domain";
+import { workItemListHref, type Locale } from "@rabaed/domain";
 import { ProjectDashboard } from "@rabaed/ui";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
@@ -7,6 +7,7 @@ import { AddParticipantForm } from "@/components/add-participant-form";
 import { ParticipantCodeForm } from "@/components/participant-code-form";
 import { WithdrawInvitationButton } from "@/components/withdraw-invitation-button";
 import { Link, redirect } from "@/i18n/navigation";
+import { chainLabels } from "@/lib/chain-labels";
 import { getActivityFeed, getDashboard, getMe, getProject, getProjectInvitations, getProjectParticipants } from "@/lib/session";
 
 export default async function ProjectPage({ params }: { params: Promise<{ locale: Locale; projectId: string }> }) {
@@ -44,8 +45,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ locale
                 closed: tViews("dashboard.closed"),
                 empty: tViews("dashboard.empty"),
                 codeC: tViews("dashboard.codeC"),
-                buckets: Object.fromEntries(chainBuckets.map((b) => [b, tViews(`buckets.${b}`)])) as Record<ChainBucket, string>,
-                codeCStates: Object.fromEntries(codeCStates.map((s) => [s, tViews(`codeCStates.${s}`)])) as Record<CodeCState, string>,
+                ...chainLabels(tViews),
                 approved: {
                   review_code: tViews("dashboard.approved.review_code"),
                   inspection_result: tViews("dashboard.approved.inspection_result"),

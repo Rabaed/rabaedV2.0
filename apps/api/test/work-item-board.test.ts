@@ -15,8 +15,8 @@ import {
   type WorkItemRow,
 } from "@rabaed/domain";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { attachDatasheet, createTestApi, DEFAULT_PASSWORD, expectHidden, type Caller } from "./support/harness.ts";
-import { all, bilingual, memberOnProject, ok, take, type Company } from "./support/tower.ts";
+import { attachDatasheet, createTestApi, expectHidden, type Caller } from "./support/harness.ts";
+import { all, bilingual, ok, projectMember, take, type Company } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
 afterAll(() => api.close());
@@ -41,21 +41,6 @@ const complete = {
   description: "LED fixtures",
   items: [{ fixture_type: "Downlight", quantity: 120, unit: "pcs" }],
 };
-
-/** Every signed-in Member here, to sign in again when the clock moves. */
-const emails = new Map<Caller, string>();
-
-async function memberWithEmail(...args: Parameters<typeof memberOnProject>) {
-  const { caller, email } = await memberOnProject(...args);
-  emails.set(caller, email);
-  return caller;
-}
-
-/** Moves the clock, signing every Member in again: it ends their sessions. */
-async function later(ms: number) {
-  api.advanceClock(ms);
-  for (const [caller, email] of emails) caller.useSessionToken((await api.signIn(email, DEFAULT_PASSWORD)).sessionToken);
-}
 
 /** The board as `by` reads it with `query`. */
 async function board(by: Caller, query: WorkItemQueryInput = {}): Promise<WorkItemBoard> {
@@ -146,7 +131,6 @@ let c2Item = "";
 
 beforeAll(async () => {
   c1 = await api.projectCreator();
-  emails.set(c1.caller, c1.company.authorizedPerson.email);
   projectId = (await api.createProject(c1.caller)).id;
   const post = async (path: string, body: unknown) => (await ok(c1.caller.post(`/v1/projects/${projectId}/${path}`, body), 201)).json().id;
   trade.electrical = await post("trades", { code: "EL", name: bilingual("Electrical") });
@@ -163,24 +147,22 @@ beforeAll(async () => {
     await ok(c1.caller.request("PUT", `/v1/participants/${participantId}/visibility`, { trade: all, location: all }));
     return { company, participantId };
   };
-  c1Engineer = await memberWithEmail(api, c1, own, ["engineer"]);
-  c1Pm = await memberWithEmail(api, c1, own, ["project_manager"]);
+  c1Engineer = await projectMember(api, c1, own, ["engineer"]);
+  c1Pm = await projectMember(api, c1, own, ["project_manager"]);
   const c2 = await participant("contractor");
-  c2Engineer = await memberWithEmail(api, c2.company, c2.participantId, ["engineer"]);
+  c2Engineer = await projectMember(api, c2.company, c2.participantId, ["engineer"]);
   const k1 = await participant("consultant");
   k1ParticipantId = k1.participantId;
-  k1Engineer = await memberWithEmail(api, k1.company, k1.participantId, ["engineer"]);
+  k1Engineer = await projectMember(api, k1.company, k1.participantId, ["engineer"]);
   // Named, so the test can tell that C1 never reads their name.
   const managerA = await api.inviteMember(k1.company.caller, { fullName: { en: "Hessa Al Otaibi", ar: "حصة العتيبي" } });
   k1ManagerA = await api.acceptInvitation(managerA.invitationToken);
-  emails.set(k1ManagerA, managerA.email);
   await api.addProjectMember(k1.company.caller, k1.participantId, managerA.id);
   await ok(k1.company.caller.request("PUT", `/v1/participants/${k1.participantId}/members/${managerA.id}/visibility`, { trade: all, location: all }));
   await ok(k1.company.caller.request("PUT", `/v1/participants/${k1.participantId}/members/${managerA.id}/positions`, { positions: ["manager"] }));
-  k1ManagerB = await memberWithEmail(api, k1.company, k1.participantId, ["manager"]);
+  k1ManagerB = await projectMember(api, k1.company, k1.participantId, ["manager"]);
   const stranger = await api.authorizedPerson();
   outsider = stranger.caller;
-  emails.set(outsider, stranger.company.authorizedPerson.email);
 
   draftItem = await draft("Fire alarm cables");
   mechanical = await draft("Chillers", { trade: trade.mechanical, location: loc.buildingB });
@@ -338,10 +320,10 @@ describe("closed columns", () => {
     const total = stage(before, closedStage).count;
     expect(column(before, closedStage).shown).toBe(total);
 
-    await later((closedColumnDays - 1) * DAY);
+    await api.later((closedColumnDays - 1) * DAY);
     expect(cardIds(await board(k1ManagerB))).toContain(closedItem);
 
-    await later(2 * DAY);
+    await api.later(2 * DAY);
     const after = await board(k1ManagerB);
     expect(cardIds(after)).not.toContain(closedItem);
     expect(cardIds(after)).not.toContain(chainRoot);

@@ -79,7 +79,7 @@ beforeAll(async () => {
   c1Engineer = await projectMember(api, c1, c1ParticipantId, ["engineer"]);
   c1Pm = await projectMember(api, c1, c1ParticipantId, ["project_manager"]);
   k1Manager = await projectMember(api, k1, k1ParticipantId, ["manager"]);
-  k1Mechanical = await projectMember(api, k1, k1ParticipantId, ["manager"], only(mechanical));
+  k1Mechanical = await projectMember(api, k1, k1ParticipantId, ["manager"], { trade: only(mechanical) });
   c2Engineer = await projectMember(api, c2, c2ParticipantId, ["engineer"]);
 });
 

@@ -131,8 +131,8 @@ beforeAll(async () => {
   const k1ParticipantId = (await tower.k1Manager.get(`/v1/projects/${tower.projectId}/participants`))
     .json()
     .participants.find((p: { isOwnCompany: boolean }) => p.isOwnCompany).id;
-  k1Mechanical = await projectMember(api, k1, k1ParticipantId, ["manager"], only(tower.mechanical));
-  c1Mechanical = await projectMember(api, c1, tower.c1ParticipantId, ["engineer"], only(tower.mechanical));
+  k1Mechanical = await projectMember(api, k1, k1ParticipantId, ["manager"], { trade: only(tower.mechanical) });
+  c1Mechanical = await projectMember(api, c1, tower.c1ParticipantId, ["engineer"], { trade: only(tower.mechanical) });
 
   const { c1Engineer, c1Pm, k1Manager } = tower;
   item.c1Draft = await draft(tower, c1Engineer, "Cable trays, draft");

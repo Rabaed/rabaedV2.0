@@ -23,8 +23,17 @@ export async function ok(res: Promise<LightMyRequestResponse>, status = 204) {
   return r;
 }
 
+/** What sets a Member on a Project apart: their Trade Visibility (all by default) and their name. */
+export type MemberOptions = { trade?: VisibilityGrant; name?: string };
+
 /** A signed-in Member of `company` (named `name`, if given), on the Project through `participantId`, with `positions` and that Trade Visibility, and their id and email. */
-export async function memberOnProject(api: TestApi, company: Pick<Company, "caller">, participantId: string, positions: string[], trade: VisibilityGrant = all, name?: string) {
+export async function memberOnProject(
+  api: TestApi,
+  company: Pick<Company, "caller">,
+  participantId: string,
+  positions: string[],
+  { trade = all, name }: MemberOptions = {},
+) {
   const member = await api.inviteMember(company.caller, name === undefined ? {} : { fullName: bilingual(name) });
   const caller = await api.acceptInvitation(member.invitationToken);
   await api.addProjectMember(company.caller, participantId, member.id);
@@ -34,8 +43,8 @@ export async function memberOnProject(api: TestApi, company: Pick<Company, "call
 }
 
 /** A signed-in Member of `company` (named `name`, if given), on the Project through `participantId`, with `positions` and that Trade Visibility. */
-export async function projectMember(api: TestApi, company: Pick<Company, "caller">, participantId: string, positions: string[], trade: VisibilityGrant = all, name?: string) {
-  return (await memberOnProject(api, company, participantId, positions, trade, name)).caller;
+export async function projectMember(api: TestApi, company: Pick<Company, "caller">, participantId: string, positions: string[], options: MemberOptions = {}) {
+  return (await memberOnProject(api, company, participantId, positions, options)).caller;
 }
 
 /** What a Transition may carry: `reason` and `remarks` are answers; `answers` are all of them (given with either, `reason` and `remarks` win). */

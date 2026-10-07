@@ -42,7 +42,7 @@ beforeAll(async () => {
     .json()
     .participants.find((p: { isOwnCompany: boolean }) => !p.isOwnCompany).id;
   k1Engineer = await projectMember(api, k1, k1ParticipantId, ["engineer"]);
-  k1Mechanical = await projectMember(api, k1, k1ParticipantId, ["engineer"], only(at.mechanical));
+  k1Mechanical = await projectMember(api, k1, k1ParticipantId, ["engineer"], { trade: only(at.mechanical) });
   c1Viewer = await projectMember(api, c1, at.c1ParticipantId, []);
   stranger = (await api.authorizedPerson()).caller;
 });

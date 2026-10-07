@@ -1,13 +1,9 @@
 "use client";
 
 import {
-  chainBuckets,
-  codeCStates,
   watchOutcomeNames,
   workItemOutcomes,
   workItemSearchParams,
-  type ChainBucket,
-  type CodeCState,
   type Locale,
   type WorkItemBoard as WorkItemBoardData,
   type WorkItemList as WorkItemListData,
@@ -26,6 +22,7 @@ import { useState } from "react";
 import NextLink from "next/link";
 import { WorkItemBoardMove } from "@/components/work-item-board-move";
 import { getPathname } from "@/i18n/navigation";
+import { chainLabels } from "@/lib/chain-labels";
 
 const sharedOutcomeNames = {
   passed: watchOutcomeNames.passed,
@@ -62,8 +59,7 @@ function useViewLabels(tableLabel: string): { list: WorkItemListLabels; board: W
       table: tableLabel,
       weeksOrMore: (weeks, count) => t("list.weeksOrMore", { weeks, count }),
       dashboardFigure: l("dashboardFigure"),
-      buckets: Object.fromEntries(chainBuckets.map((b) => [b, t(`buckets.${b}`)])) as Record<ChainBucket, string>,
-      codeCStates: Object.fromEntries(codeCStates.map((s) => [s, t(`codeCStates.${s}`)])) as Record<CodeCState, string>,
+      ...chainLabels(t),
     },
     board: {
       ...shared,

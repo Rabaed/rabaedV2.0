@@ -45,7 +45,7 @@ function succeeds(command: string, input?: string, env?: NodeJS.ProcessEnv) {
   }
 }
 
-wizardDescribe("typed answers",() => {
+wizardDescribe("typed answers", () => {
   it.each([
     ["arrow keys typed before it", "\x1b[A\x1b[B\x1b[C\x1b[Drabaed-dev", "rabaed-dev"],
     ["arrow keys in application mode", "\x1bOArabaed-dev\x1bOB", "rabaed-dev"],
@@ -65,7 +65,7 @@ wizardDescribe("typed answers",() => {
   });
 });
 
-wizardDescribe("the AWS root user",() => {
+wizardDescribe("the AWS root user", () => {
   it.each([
     ["arn:aws:iam::111111111111:root", true],
     ["arn:aws-cn:iam::111111111111:root", true],
@@ -77,7 +77,7 @@ wizardDescribe("the AWS root user",() => {
   });
 });
 
-wizardDescribe("short-lived credentials",() => {
+wizardDescribe("short-lived credentials", () => {
   const bins: string[] = [];
   afterEach(() => bins.splice(0).forEach((bin) => rmSync(bin, { recursive: true, force: true })));
 

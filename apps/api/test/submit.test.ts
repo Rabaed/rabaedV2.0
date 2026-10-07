@@ -59,7 +59,7 @@ async function memberWithEmail(
   positions: string[],
   { name = "Test Member", trade = all }: { name?: string; trade?: Coverage } = {},
 ) {
-  const member = await memberOnProject(api, company, participantId, positions, trade, name);
+  const member = await memberOnProject(api, company, participantId, positions, { trade, name });
   emails.set(member.caller, member.email);
   return member.caller;
 }
