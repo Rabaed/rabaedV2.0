@@ -1,14 +1,18 @@
 // Removes the merged agent worktrees (.claude/worktrees/agent-*) `/implement-spec`
 // leaves behind: those whose branch is merged into the target branch, or whose HEAD
 // is detached with no unique commits. Each goes with its leftover folder (node_modules
-// included) and its branch (`git branch -d`; a branch git refuses to delete is kept and
-// named). Worktrees with uncommitted changes or unmerged commits are never touched, nor,
-// without --include-empty, those whose branch has no commit of its own yet: their
-// subagent may still be running. They are listed as skipped.
+// included) and its branch (`git branch -D` when the branch is an ancestor of the
+// target, whichever branch the main folder has checked out; otherwise it is kept and
+// named), plus the `worktree-agent-*` branch the app created it on. Worktrees with
+// uncommitted changes or unmerged commits are never touched, nor, without
+// --include-empty, those whose branch has no commit of its own yet: their subagent
+// may still be running. They are listed as skipped.
 //
-//   pnpm worktrees:clean [--into <branch>] [--include-empty] [--yes]     default branch: main; --yes skips the confirmation
+//   pnpm worktrees:clean [--into <branch>] [--include-empty] [--yes]
+//
+// The default branch is main; --yes skips the confirmation.
 import { confirmOrExit } from "./confirm.ts";
-import { chooseWorktrees, currentRoot, gatherFacts, gitError, isAgentWorktree, listWorktrees, pruneWorktrees, refExists, removeWorktree } from "./worktrees.ts";
+import { chooseWorktrees, currentRoot, gatherFacts, gitError, isAgentWorktree, listWorktrees, pruneWorktrees, refExists, removeWorktree, reportRemoval } from "./worktrees.ts";
 
 const usage = "Usage: pnpm worktrees:clean [--into <branch>] [--include-empty] [--yes]";
 const args = process.argv.slice(2);
@@ -59,13 +63,16 @@ await confirmOrExit("Remove them with their folders and branches?", { yes, verb:
 let failed = 0;
 for (const w of remove) {
   try {
-    const { branchKept } = removeWorktree(w, mainRoot);
-    console.log(`Removed ${w.path}.`);
-    if (branchKept) console.log(`  Kept branch ${w.branch}: ${branchKept}`);
+    if (reportRemoval(w.path, removeWorktree(w, mainRoot, target))) failed++;
   } catch (error) {
     failed++;
     console.error(`Could not remove ${w.path}: ${gitError(error)}`);
   }
 }
-pruneWorktrees(mainRoot);
+try {
+  pruneWorktrees(mainRoot);
+} catch (error) {
+  failed++;
+  console.error(`git worktree prune failed: ${gitError(error)}`);
+}
 if (failed > 0) process.exit(1);
