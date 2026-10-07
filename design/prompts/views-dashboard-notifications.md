@@ -17,6 +17,7 @@ These prototypes show UI intent only. Terms follow `GLOSSARY.md`. Every screen o
 - One name everywhere: **Need My Action** (بحاجة لإجرائي). Rename every "Assigned to me" (مسند إليّ) toggle in the Plan, Snag List and their phone variants.
 - It is a toggle in the view toolbar of List and Kanban. It keeps the Steps I hold and the unclaimed Steps in my Step Pool. My own Drafts stay in view but are not counted.
 - Each Project card on the Projects page shows "N need my action". Remove the home page's cross-Project "Needs my action" panel and its "Submittals need my action" KPI: home is the Projects list.
+  - **Reversed 2026-10-07 (Epic RP-405, RP-407):** Home is built after all, with the cross-Project "Needs my action" panel and counts (visible items only), "4+ weeks at their step" instead of "Overdue", and no Payment Requests.
 
 ## 3. List
 

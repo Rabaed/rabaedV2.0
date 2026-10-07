@@ -45,6 +45,7 @@ Run these in `/to-spec` and `/to-tickets`, before the issue is created.
   - For every event, status, permission or role the ticket relies on, find on `main` the code that **produces** it: inserts the event, sets the status, seeds or grants the permission. A name found only in a check constraint, enum or type list doesn't count. RP-356 hooked the Vacancy notification to the "existing" `vacated` event, which only a check constraint allows and nothing inserts (RP-108 builds it); RP-359 sent the weekly report to Members holding `assign`, which no seeded Position holds.
   - Anything with no producer gets a "Blocks" link from the ticket that builds it, or the ticket says how its tests set it up.
 - **Ticket: shared files.** Name the shared modules the ticket changes, e.g. the work item query (`apps/api/src/work-items/query.ts`), so the planning session can keep two lanes off the same module (`planning/parallel-sessions.md`, rule 4). A ticket that changes root `package.json`, `pnpm-lock.yaml` or `.github/workflows/*` says **own PR** (rule 3).
+- **Ticket: UI.** A ticket that adds or changes a page names its reference screen in `design/reference/claude-design/`, says which kit parts it does **not** copy (anything against `CLAUDE.md` Rules or `docs/visibility.md`), and asks for full-page screenshots at 1366 and 1920, English and Arabic, in the PR (`CODING_STANDARDS.md` › UI). A page with no design gets a "Design: …" task for the product owner (`ready-for-human`, label `design`, a prompt in `design/prompts/`) that blocks it.
 
 ## Wayfinding operations
 
