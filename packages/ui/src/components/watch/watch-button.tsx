@@ -1,6 +1,5 @@
 "use client";
 
-import type { Locale } from "@rabaed/domain";
 import { useState } from "react";
 import { Button } from "../button/button.tsx";
 import { Icon } from "../icon/icon.tsx";
@@ -11,41 +10,29 @@ import { Icon } from "../icon/icon.tsx";
 // the Watch row). A toggle: pressed while watching. Presentational: the page
 // does the calls; a refusal leaves the state as it was and says so.
 
-/* eslint-disable rabaed/no-ui-translations -- existing labels, still to move to the app's messages (RP-362 retro) */
-const copy = {
-  en: {
-    watch: "Watch",
-    watching: "Watching",
-    refusals: {
-      not_found: "This item is no longer available to you.",
-      unavailable: "That didn't work. Try again.",
-    },
-  },
-  ar: {
-    watch: "مراقبة",
-    watching: "قيد المراقبة",
-    refusals: {
-      not_found: "لم يعد هذا البند متاحًا لك.",
-      unavailable: "لم ينجح ذلك. حاول مرة أخرى.",
-    },
-  },
-} satisfies Record<Locale, unknown>;
-/* eslint-enable rabaed/no-ui-translations */
+/** The button's words, from the app's messages. */
+export type WatchButtonLabels = {
+  watch: string;
+  watching: string;
+  refusals: {
+    not_found: string;
+    unavailable: string;
+  };
+};
 
-type WatchRefusal = keyof (typeof copy)["en"]["refusals"];
+type WatchRefusal = keyof WatchButtonLabels["refusals"];
 /** Watch or Unwatch as the page calls it: a refusal by the API's error code. */
 export type WatchCall = (watch: boolean) => Promise<{ ok: true } | { ok: false; reason: string }>;
 
 export type WatchButtonProps = {
-  locale: Locale;
+  labels: WatchButtonLabels;
   /** Whether the viewer watches the item now, as the API answered. */
   watching: boolean;
   /** Called with `true` to watch, `false` to stop. */
   onChange: WatchCall;
 };
 
-export function WatchButton({ locale, watching: initial, onChange }: WatchButtonProps) {
-  const t = copy[locale];
+export function WatchButton({ labels: t, watching: initial, onChange }: WatchButtonProps) {
   const [watching, setWatching] = useState(initial);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);

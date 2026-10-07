@@ -11,57 +11,27 @@ import { Icon } from "../icon/icon.tsx";
 // (the same signed URLs as the Attachments System Field) and passes the
 // field's Documents back in.
 
-// Words as the Attachments System Field's (the web app's messages): a Document, never a "file" (GLOSSARY.md).
-/* eslint-disable rabaed/no-ui-translations -- existing labels, still to move to the app's messages (RP-362 retro) */
-const copy = {
-  en: {
-    none: "No Documents yet.",
-    notYet: "Documents can be added once the Draft is saved.",
-    uploading: "Uploading…",
-    open: (name: string) => `Open ${name}`,
-    remove: (name: string) => `Remove ${name}`,
-    frozen: "Sent: can't be changed",
-    kb: (size: string) => `${size} KB`,
-    mb: (size: string) => `${size} MB`,
-    accepts: (types: string) => `${types} only`,
-    atMost: (n: number) => (n === 1 ? "At most 1 Document" : `At most ${formatNumber(n, "en")} Documents`),
-    full: (n: number) => (n === 1 ? "This field takes 1 Document." : `This field takes at most ${formatNumber(n, "en")} Documents.`),
-  },
-  ar: {
-    none: "لا توجد مستندات بعد.",
-    notYet: "يمكن إضافة المستندات بعد حفظ المسودة.",
-    uploading: "جارٍ الرفع…",
-    open: (name: string) => `فتح \u2068${name}\u2069`,
-    remove: (name: string) => `إزالة \u2068${name}\u2069`,
-    frozen: "مُرسَل: لا يمكن تغييره",
-    kb: (size: string) => `${size} ك.ب`,
-    mb: (size: string) => `${size} م.ب`,
-    // Latin file types sit in an isolate (\u2066 left to right, \u2069 ends).
-    accepts: (types: string) => `\u2066${types}\u2069 فقط`,
-    // Arabic counts: one, two (dual), 3–10 (plural), 11 and more (singular accusative).
-    atMost: (n: number) =>
-      n === 1
-        ? "مستند واحد على الأكثر"
-        : n === 2
-          ? "مستندان على الأكثر"
-          : n <= 10
-            ? `${formatNumber(n, "ar")} مستندات على الأكثر`
-            : `${formatNumber(n, "ar")} مستندًا على الأكثر`,
-    full: (n: number) =>
-      n === 1
-        ? "يقبل هذا الحقل مستندًا واحدًا."
-        : n === 2
-          ? "يقبل هذا الحقل مستندين على الأكثر."
-          : n <= 10
-            ? `يقبل هذا الحقل ${formatNumber(n, "ar")} مستندات على الأكثر.`
-            : `يقبل هذا الحقل ${formatNumber(n, "ar")} مستندًا على الأكثر.`,
-  },
-} satisfies Record<Locale, unknown>;
-/* eslint-enable rabaed/no-ui-translations */
+/**
+ * The field's words, from the app's messages: as the Attachments System Field's,
+ * a Document, never a "file" (GLOSSARY.md). A number is given already formatted
+ * for the locale, with the count itself where the wording depends on it.
+ */
+export type AttachmentsFieldLabels = {
+  none: string;
+  notYet: string;
+  uploading: string;
+  open: (name: string) => string;
+  remove: (name: string) => string;
+  frozen: string;
+  kb: (size: string) => string;
+  mb: (size: string) => string;
+  accepts: (types: string) => string;
+  atMost: (n: string, count: number) => string;
+  full: (n: string, count: number) => string;
+};
 
 /** A file's size in the viewer's language, with Latin digits: KB below a megabyte, else MB to one decimal. */
-function fileSize(bytes: number, locale: Locale): string {
-  const text = copy[locale];
+function fileSize(bytes: number, locale: Locale, text: AttachmentsFieldLabels): string {
   return bytes < 1024 * 1024
     ? text.kb(formatNumber(Math.max(1, Math.round(bytes / 1024)), locale))
     : text.mb(formatNumber(bytes / (1024 * 1024), locale, { maximumFractionDigits: 1 }));
@@ -86,6 +56,7 @@ export type AttachmentsFieldProps = {
   files: AttachmentsFieldFiles | undefined;
   mode: "edit" | "read";
   locale: Locale;
+  labels: AttachmentsFieldLabels;
   onUpload?: (file: File) => void;
   onOpen?: (documentId: string) => void;
   onRemove?: (documentId: string) => void;
@@ -97,7 +68,7 @@ export function takesUpload(field: AttachmentsFieldSchema, files: AttachmentsFie
 }
 
 /** The file input, wired to its Field: the Field's label names it, and its help and error describe it. */
-function FileInput({ field, pending, locale, onUpload }: { field: AttachmentsFieldSchema; pending: boolean; locale: Locale; onUpload?: (file: File) => void }) {
+function FileInput({ field, pending, labels, onUpload }: { field: AttachmentsFieldSchema; pending: boolean; labels: AttachmentsFieldLabels; onUpload?: (file: File) => void }) {
   const input = useRef<HTMLInputElement>(null);
   const { labelId: _labelId, ...props } = useFieldControl({});
   return (
@@ -117,7 +88,7 @@ function FileInput({ field, pending, locale, onUpload }: { field: AttachmentsFie
       />
       {pending && (
         <p role="status" className="text-sm text-muted">
-          {copy[locale].uploading}
+          {labels.uploading}
         </p>
       )}
     </div>
@@ -125,17 +96,15 @@ function FileInput({ field, pending, locale, onUpload }: { field: AttachmentsFie
 }
 
 /** The field's limits, as a hint: its file types and its maximum. */
-export function attachmentsLimits(field: AttachmentsFieldSchema, locale: Locale): string | undefined {
-  const text = copy[locale];
+export function attachmentsLimits(field: AttachmentsFieldSchema, locale: Locale, text: AttachmentsFieldLabels): string | undefined {
   const parts = [
     field.contentTypes && text.accepts([...new Set(field.contentTypes.map(typeName))].join(", ")),
-    field.maxFiles !== undefined && text.atMost(field.maxFiles),
+    field.maxFiles !== undefined && text.atMost(formatNumber(field.maxFiles, locale), field.maxFiles),
   ].filter((p): p is string => typeof p === "string");
   return parts.length > 0 ? parts.join(" · ") : undefined;
 }
 
-export function AttachmentsField({ field, files, mode, locale, onUpload, onOpen, onRemove }: AttachmentsFieldProps) {
-  const text = copy[locale];
+export function AttachmentsField({ field, files, mode, locale, labels: text, onUpload, onOpen, onRemove }: AttachmentsFieldProps) {
   const documents = files?.documents ?? [];
   const canRemove = mode === "edit" && !!files?.canChange;
   const upload = takesUpload(field, files, mode);
@@ -154,7 +123,7 @@ export function AttachmentsField({ field, files, mode, locale, onUpload, onOpen,
                   <bdi>{d.fileName}</bdi>
                 </p>
                 <p className="text-sm text-muted">
-                  {fileSize(d.sizeBytes, locale)}
+                  {fileSize(d.sizeBytes, locale, text)}
                   {d.frozen && mode === "edit" && ` · ${text.frozen}`}
                 </p>
               </div>
@@ -172,9 +141,9 @@ export function AttachmentsField({ field, files, mode, locale, onUpload, onOpen,
       ) : (
         mode === "edit" && <p className="text-sm text-muted">{files ? text.none : text.notYet}</p>
       )}
-      {upload && <FileInput field={field} pending={!!files?.pending} locale={locale} onUpload={onUpload} />}
+      {upload && <FileInput field={field} pending={!!files?.pending} labels={text} onUpload={onUpload} />}
       {mode === "edit" && files?.canChange && !upload && field.maxFiles !== undefined && (
-        <p className="text-sm text-muted">{text.full(field.maxFiles)}</p>
+        <p className="text-sm text-muted">{text.full(formatNumber(field.maxFiles, locale), field.maxFiles)}</p>
       )}
     </div>
   );

@@ -3,6 +3,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { useState } from "react";
 import { expect, fireEvent, fn } from "storybook/test";
 import { storyLocale, storyText } from "../../storybook/locale.ts";
+import { formRendererLabels } from "../../storybook/form-engine.ts";
 import { FormRenderer } from "./form-renderer.tsx";
 
 // Numbers, amounts and contact details (RP-264). Story data only: real Forms are published by the database.
@@ -95,7 +96,7 @@ const answers: Record<string, FormValue> = {
 const meta = {
   title: "Form engine/FormRenderer/Numbers and contacts",
   component: FormRenderer,
-  args: { schema, answers: {}, mode: "edit", locale: "en", onChange: fn() },
+  args: { schema, answers: {}, mode: "edit", locale: "en", labels: formRendererLabels.en, onChange: fn() },
   decorators: [(Story) => <div className="max-w-xl">{Story()}</div>],
 } satisfies Meta<typeof FormRenderer>;
 
@@ -115,6 +116,7 @@ export const Edit: Story = {
       <FormRenderer
         {...args}
         locale={storyLocale(context)}
+        labels={formRendererLabels[storyLocale(context)]}
         answers={values}
         onChange={(changes) => {
           args.onChange?.(changes);
@@ -180,7 +182,7 @@ export const WithErrors: Story = {
       { key: "contact_phone", code: "invalid_format" },
     ],
   },
-  render: (args, context) => <FormRenderer {...args} locale={storyLocale(context)} />,
+  render: (args, context) => <FormRenderer {...args} locale={storyLocale(context)} labels={formRendererLabels[storyLocale(context)]} />,
   play: async (context) => {
     const { canvas } = context;
     const quantity = labelled(context, copy.quantity);
@@ -200,7 +202,7 @@ export const WithErrors: Story = {
 /** Read only: numbers grouped with Latin digits and their unit, amounts in SAR, contact details as typed. */
 export const ReadOnly: Story = {
   args: { mode: "read", answers },
-  render: (args, context) => <FormRenderer {...args} locale={storyLocale(context)} />,
+  render: (args, context) => <FormRenderer {...args} locale={storyLocale(context)} labels={formRendererLabels[storyLocale(context)]} />,
   play: async (context) => {
     const { canvas } = context;
     await expect(canvas.queryAllByRole("textbox")).toEqual([]);

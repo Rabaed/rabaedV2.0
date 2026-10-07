@@ -21,6 +21,7 @@ import { Button, FormRenderer, SaveStatus, type BuiltInChoices, type LinkTargetN
 import { useLocale, useTranslations } from "next-intl";
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useRouter } from "@/i18n/navigation";
+import { useFormRendererLabels } from "@/lib/form-labels";
 import { linkSearch } from "@/lib/link-search";
 import { useDocuments, useImageUrls } from "./use-documents";
 
@@ -261,6 +262,7 @@ export function WorkItemFormProvider({
 export function WorkItemAnswers({ locale, workItemId, documents }: { locale: Locale; workItemId: string; documents: DocumentList }) {
   const t = useTranslations("workItems.form");
   const tItems = useTranslations("workItems");
+  const formLabels = useFormRendererLabels();
   const form = useWorkItemForm();
   // The Form's `attachments`, `photos` and `checklist` fields upload as the Attachments System Field does (RP-281, RP-284, RP-285).
   const files = useDocuments(workItemId, documents.limits);
@@ -289,6 +291,7 @@ export function WorkItemAnswers({ locale, workItemId, documents }: { locale: Loc
         editableSections={form.editableSections}
         filledBy={form.filledBy}
         locale={locale}
+        labels={formLabels}
         onChange={form.change}
         idPrefix="answer"
         links={{

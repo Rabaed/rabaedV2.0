@@ -3,6 +3,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, fn, userEvent, within } from "storybook/test";
 import { expectTouchTarget, phone } from "../../storybook/form.ts";
 import { storyLocale, storyText } from "../../storybook/locale.ts";
+import { linksSectionLabels } from "../../storybook/form-engine.ts";
 import { LinksSection } from "./links-section.tsx";
 
 // The Links System Field (RP-291, spec RP-289): an item's Links, each the other
@@ -69,6 +70,7 @@ const section = (
 ) => (
   <LinksSection
     locale={locale}
+    labels={linksSectionLabels[locale]}
     links={links}
     canChange
     workItemId={self}

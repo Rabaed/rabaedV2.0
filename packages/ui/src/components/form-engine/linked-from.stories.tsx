@@ -3,6 +3,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, fn, userEvent, within } from "storybook/test";
 import { expectTouchTarget, phone } from "../../storybook/form.ts";
 import { storyLocale, storyText } from "../../storybook/locale.ts";
+import { linkedFromLabels, linksSectionLabels } from "../../storybook/form-engine.ts";
 import { LinkedFromList } from "./linked-from.tsx";
 import { LinksSection } from "./links-section.tsx";
 
@@ -44,6 +45,7 @@ type Story = StoryObj;
 const section = (locale: Locale, items: LinkedFromItem[]) => (
   <LinksSection
     locale={locale}
+    labels={linksSectionLabels[locale]}
     links={[]}
     canChange={false}
     workItemId="00000000-0000-4000-8000-000000000099"
@@ -52,7 +54,7 @@ const section = (locale: Locale, items: LinkedFromItem[]) => (
     onRemove={fn()}
     hrefFor={(id) => `#/work-items/${id}`}
   >
-    <LinkedFromList locale={locale} items={items} hrefFor={(id) => `#/work-items/${id}`} />
+    <LinkedFromList labels={linkedFromLabels[locale]} items={items} hrefFor={(id) => `#/work-items/${id}`} />
   </LinksSection>
 );
 

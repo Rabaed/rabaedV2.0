@@ -1,7 +1,8 @@
 "use client";
 
-import type { LinkedFromItem, Locale } from "@rabaed/domain";
+import type { LinkedFromItem } from "@rabaed/domain";
 import { LinkedFromList } from "@rabaed/ui";
+import { useLinkedFromLabels } from "@/lib/form-labels";
 import { Link } from "@/i18n/navigation";
 
 // "Linked from", in the Links section below the item's Links (form-engine.md
@@ -9,6 +10,7 @@ import { Link } from "@/i18n/navigation";
 // returns them for the viewer. One they can't see comes as its number and
 // Subject only, without an id, so it can't be opened.
 
-export function WorkItemLinkedFrom({ items, locale }: { items: readonly LinkedFromItem[]; locale: Locale }) {
-  return <LinkedFromList locale={locale} items={items} hrefFor={(id) => `/work-items/${id}`} linkAs={Link} />;
+export function WorkItemLinkedFrom({ items }: { items: readonly LinkedFromItem[] }) {
+  const labels = useLinkedFromLabels();
+  return <LinkedFromList labels={labels} items={items} hrefFor={(id) => `/work-items/${id}`} linkAs={Link} />;
 }

@@ -3,6 +3,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, fn, screen, userEvent, within } from "storybook/test";
 import { phone } from "../../storybook/form.ts";
 import { storyLocale, storyText } from "../../storybook/locale.ts";
+import { activityFeedPanelLabels } from "../../storybook/views.ts";
 import { ActivityFeedPanel } from "./activity-feed-panel.tsx";
 
 // The Activity Feed panel (RP-353, spec RP-344, design §5): "<Company> <did
@@ -77,12 +78,13 @@ const meta = {
     query: { type: [], mine: false },
     types,
     locale: "en",
+    labels: activityFeedPanelLabels.en,
     itemHref: (itemId: string) => `/work-items/${itemId}`,
     viewAllHref: "/projects/p/activity",
     onQueryChange: fn(),
     onLoadMore: fn(),
   },
-  render: (args, context) => <ActivityFeedPanel {...args} locale={storyLocale(context)} />,
+  render: (args, context) => <ActivityFeedPanel {...args} locale={storyLocale(context)} labels={activityFeedPanelLabels[storyLocale(context)]} />,
 } satisfies Meta<typeof ActivityFeedPanel>;
 
 export default meta;

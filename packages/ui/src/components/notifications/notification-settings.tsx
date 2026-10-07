@@ -26,64 +26,31 @@ import { Switch } from "../form/switch.tsx";
 // own schedule, never in the bell. Every change applies at once; a refused one is
 // undone and says so. Presentational: the page does the calls.
 
-/* eslint-disable rabaed/no-ui-translations -- existing labels, still to move to the app's messages (RP-362 retro) */
-const copy = {
-  en: {
-    email: "Email",
-    pauseAll: "Pause all email",
-    pauseHelp: "Stops every email until you turn it back on. Notifications still reach your bell.",
-    language: "Language of emails",
-    projects: "Projects",
-    projectsHelp: "A muted Project sends you no notifications or emails. Items waiting on you still show as yours.",
-    mute: "Mute",
-    noProjects: "You are not on any Project yet.",
-    groups: "Notifications",
-    inApp: "In-app",
-    emailChoice: { off: "Off", immediate: "Immediately", digest: "Daily digest" },
-    group: {
-      step_reached: "Step reached me or my pool",
-      watched: "Items I watch",
-      sent_back: "Sent Back to my Participant",
-      vacancy: "Vacancy in my Company",
-      weekly_report: "Weekly Step Age report",
-    },
-    weeklyHelp: "Emailed on Sunday mornings.",
-    outcomes: "Outcomes that notify me",
-    outcomeGroups: { review_code: "Review Codes", inspection_result: "Inspection Results", other: "Other outcomes" },
-    refusals: { not_found: "That Project is no longer available to you.", unavailable: "That didn't save. Try again." },
-  },
-  ar: {
-    email: "البريد الإلكتروني",
-    pauseAll: "إيقاف كل الرسائل مؤقتًا",
-    pauseHelp: "يوقف كل الرسائل حتى تعيد تشغيلها. تبقى الإشعارات تصلك في الجرس.",
-    language: "لغة الرسائل",
-    projects: "المشاريع",
-    projectsHelp: "المشروع المكتوم لا يرسل إليك إشعارات ولا رسائل. وتبقى البنود التي تنتظرك ظاهرة لك.",
-    mute: "كتم",
-    noProjects: "لست في أي مشروع بعد.",
-    groups: "الإشعارات",
-    inApp: "داخل التطبيق",
-    emailChoice: { off: "إيقاف", immediate: "فورًا", digest: "ملخص يومي" },
-    group: {
-      step_reached: "وصلتني خطوة أو وصلت مجموعتي",
-      watched: "البنود التي أراقبها",
-      sent_back: "أُرجع إلى المشارك الذي أنتمي إليه",
-      vacancy: "شاغر في شركتي",
-      weekly_report: "تقرير عمر الخطوة الأسبوعي",
-    },
-    weeklyHelp: "يُرسل بالبريد صباح كل أحد.",
-    outcomes: "النتائج التي تُشعرني",
-    outcomeGroups: { review_code: "رموز المراجعة", inspection_result: "نتائج الفحص", other: "نتائج أخرى" },
-    refusals: { not_found: "لم يعد هذا المشروع متاحًا لك.", unavailable: "لم يُحفظ ذلك. حاول مرة أخرى." },
-  },
-} satisfies Record<Locale, unknown>;
-/* eslint-enable rabaed/no-ui-translations */
+/** The form's words, from the app's messages. The outcomes' own names come from `watchOutcomeNames` in `@rabaed/domain`. */
+export type NotificationSettingsLabels = {
+  email: string;
+  pauseAll: string;
+  pauseHelp: string;
+  language: string;
+  projects: string;
+  projectsHelp: string;
+  mute: string;
+  noProjects: string;
+  groups: string;
+  inApp: string;
+  emailChoice: Record<NotificationEmailChoice, string>;
+  group: Record<NotificationGroup, string>;
+  weeklyHelp: string;
+  outcomes: string;
+  outcomeGroups: { review_code: string; inspection_result: string; other: string };
+  refusals: { not_found: string; unavailable: string };
+};
 
 // Each language named in itself, as language pickers do.
 // eslint-disable-next-line rabaed/no-ui-translations -- a documented exception in packages/ui/README.md (language names, each in its own language, as in MemberMenu)
 const languageNames: Record<Locale, string> = { en: "English", ar: "العربية" };
 
-const outcomeGroups: Record<keyof (typeof copy)["en"]["outcomeGroups"], readonly WatchOutcome[]> = {
+const outcomeGroups: Record<keyof NotificationSettingsLabels["outcomeGroups"], readonly WatchOutcome[]> = {
   review_code: ["A", "B", "C", "D"],
   inspection_result: ["passed", "passed_with_comments", "failed"],
   other: ["approved", "rejected", "cancelled"],
@@ -97,12 +64,13 @@ function outcomeLabel(outcome: WatchOutcome, locale: Locale): string {
   return reviewCodes.includes(outcome) ? `${outcome} · ${name}` : name;
 }
 
-type Refusal = keyof (typeof copy)["en"]["refusals"];
+type Refusal = keyof NotificationSettingsLabels["refusals"];
 /** A save as the page calls it: a refusal by the API's error code. */
 export type SettingsCall = () => Promise<{ ok: true } | { ok: false; reason: string }>;
 
 export type NotificationSettingsFormProps = {
   locale: Locale;
+  labels: NotificationSettingsLabels;
   /** The settings as the API answered. */
   value: NotificationSettingsView;
   /** Saves every setting at once. */
@@ -111,8 +79,7 @@ export type NotificationSettingsFormProps = {
   onMute: (projectId: string, muted: boolean) => ReturnType<SettingsCall>;
 };
 
-export function NotificationSettingsForm({ locale, value, onSave, onMute }: NotificationSettingsFormProps) {
-  const t = copy[locale];
+export function NotificationSettingsForm({ locale, labels: t, value, onSave, onMute }: NotificationSettingsFormProps) {
   const [saved, setSaved] = useState<UpdateNotificationSettingsRequest>({
     settings: value.settings,
     emailPaused: value.emailPaused,

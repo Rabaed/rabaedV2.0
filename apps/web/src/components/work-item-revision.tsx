@@ -1,7 +1,7 @@
 "use client";
 
-import type { Locale } from "@rabaed/domain";
-import { RevisionActions, type RevisionCall } from "@rabaed/ui";
+import { RevisionActions, type RevisionActionsLabels, type RevisionCall } from "@rabaed/ui";
+import { useTranslations } from "next-intl";
 import { useRef } from "react";
 import { useRouter } from "@/i18n/navigation";
 
@@ -16,15 +16,14 @@ export function WorkItemRevision({
   projectId,
   canCreate,
   canDiscard,
-  locale,
 }: {
   workItemId: string;
   projectId: string;
   canCreate: boolean;
   canDiscard: boolean;
-  locale: Locale;
 }) {
   const router = useRouter();
+  const t = useTranslations("revision");
   const key = useRef<string | null>(null);
 
   async function post(path: string, body: unknown) {
@@ -55,5 +54,24 @@ export function WorkItemRevision({
     return { ok: true };
   };
 
-  return <RevisionActions locale={locale} canCreate={canCreate} canDiscard={canDiscard} onCreate={create} onDiscard={discard} />;
+  const labels: RevisionActionsLabels = {
+    section: t("section"),
+    createIntro: t("createIntro"),
+    create: t("create"),
+    discard: t("discard"),
+    discardTitle: t("discardTitle"),
+    discardIntro: t("discardIntro"),
+    cancel: t("cancel"),
+    close: t("close"),
+    refusals: {
+      revision_not_allowed: t("refusals.revision_not_allowed"),
+      not_discardable: t("refusals.not_discardable"),
+      project_closed: t("refusals.project_closed"),
+      not_found: t("refusals.not_found"),
+      idempotency_key_reused: t("refusals.idempotency_key_reused"),
+      unavailable: t("refusals.unavailable"),
+    },
+  };
+
+  return <RevisionActions labels={labels} canCreate={canCreate} canDiscard={canDiscard} onCreate={create} onDiscard={discard} />;
 }

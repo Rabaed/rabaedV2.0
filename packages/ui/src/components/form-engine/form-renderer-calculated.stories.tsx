@@ -4,6 +4,7 @@ import { useState } from "react";
 import { expect, fireEvent, fn, userEvent, within } from "storybook/test";
 import { phone } from "../../storybook/form.ts";
 import { storyLocale, storyText } from "../../storybook/locale.ts";
+import { formRendererLabels } from "../../storybook/form-engine.ts";
 import { FormRenderer } from "./form-renderer.tsx";
 
 // The calculated field (RP-283, spec RP-278): a read-only number worked out
@@ -63,7 +64,7 @@ const copy = {
 const meta = {
   title: "Form engine/FormRenderer/Calculated",
   component: FormRenderer,
-  args: { schema, answers: {}, mode: "edit", locale: "en", onChange: fn() },
+  args: { schema, answers: {}, mode: "edit", locale: "en", labels: formRendererLabels.en, onChange: fn() },
   decorators: [(Story) => <div className="max-w-3xl">{Story()}</div>],
 } satisfies Meta<typeof FormRenderer>;
 
@@ -85,6 +86,7 @@ export const Edit: Story = {
       <FormRenderer
         {...args}
         locale={storyLocale(context)}
+        labels={formRendererLabels[storyLocale(context)]}
         answers={values}
         onChange={(changes) => {
           args.onChange?.(changes);
@@ -120,7 +122,7 @@ export const Edit: Story = {
 /** Required and empty when leaving Draft: the message says to fill in its inputs, since it can't be typed. */
 export const RequiredEmpty: Story = {
   args: { answers: { length: 4 }, errors: [{ key: "area", code: "required" }] },
-  render: (args, context) => <FormRenderer {...args} locale={storyLocale(context)} />,
+  render: (args, context) => <FormRenderer {...args} locale={storyLocale(context)} labels={formRendererLabels[storyLocale(context)]} />,
   play: async (context) => {
     await expect(result(context, copy.area)).toHaveAccessibleDescription(storyText(context, copy.emptyRequired));
     await expect(within(context.canvas.getByRole("alert")).getByRole("link", { name: storyText(context, copy.area) })).toBeVisible();
@@ -133,7 +135,7 @@ export const ReadOnly: Story = {
     mode: "read",
     answers: { length: 4, width: 2.5, area: 10, items: [{ fixture: "Downlight", quantity: 25 }], per_m2: 2.5 },
   },
-  render: (args, context) => <FormRenderer {...args} locale={storyLocale(context)} />,
+  render: (args, context) => <FormRenderer {...args} locale={storyLocale(context)} labels={formRendererLabels[storyLocale(context)]} />,
   play: async (context) => {
     const { canvas } = context;
     await expect(canvas.queryByRole("status")).toBeNull();
@@ -145,7 +147,7 @@ export const ReadOnly: Story = {
 /** Read only, with an empty result: "Not answered", like any other field. */
 export const ReadOnlyEmpty: Story = {
   args: { mode: "read", answers: { length: 4 } },
-  render: (args, context) => <FormRenderer {...args} locale={storyLocale(context)} />,
+  render: (args, context) => <FormRenderer {...args} locale={storyLocale(context)} labels={formRendererLabels[storyLocale(context)]} />,
   play: async (context) => {
     await expect(context.canvas.getByText(storyText(context, copy.area)).nextElementSibling).toHaveTextContent(
       storyText(context, copy.unanswered),
@@ -157,7 +159,7 @@ export const ReadOnlyEmpty: Story = {
 export const PhoneEdit: Story = {
   parameters: phone,
   args: { answers: { length: 4, width: 2.5, items: [{ fixture: "Downlight", quantity: 25 }] } },
-  render: (args, context) => <FormRenderer {...args} locale={storyLocale(context)} />,
+  render: (args, context) => <FormRenderer {...args} locale={storyLocale(context)} labels={formRendererLabels[storyLocale(context)]} />,
   play: async (context) => {
     await expect(result(context, copy.area)).toHaveTextContent("10.00 m²");
     await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(document.documentElement.clientWidth);

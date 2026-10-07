@@ -7,7 +7,7 @@ import {
   type NumberingSettings,
   type SaveNumberingPatternRequest,
 } from "@rabaed/domain";
-import { Button, NumberingPatternBuilder, NumberingPatternView } from "@rabaed/ui";
+import { Button, NumberingPatternBuilder, NumberingPatternView, type NumberingPatternLabels } from "@rabaed/ui";
 import { useLocale, useTranslations } from "next-intl";
 import { useState } from "react";
 import { useRouter } from "@/i18n/navigation";
@@ -16,6 +16,46 @@ import { useRouter } from "@/i18n/navigation";
 // Project's pattern and each Work Item Type's override. Every Project Member
 // sees them read-only; a Project Admin changes them in the builder. The other
 // Numbering sections (Participant Codes, counters) sit beside it on the page.
+
+/** The builder's and the view's words, from the app's messages. */
+function usePatternLabels(): NumberingPatternLabels {
+  const t = useTranslations("numbering.pattern");
+  return {
+    kinds: {
+      project: t("kinds.project"),
+      type: t("kinds.type"),
+      trade: t("kinds.trade"),
+      participant: t("kinds.participant"),
+      location: t("kinds.location"),
+      text: t("kinds.text"),
+    },
+    levels: [t("levels.zone"), t("levels.building"), t("levels.floor")],
+    segments: t("segments"),
+    segment: (n) => t("segment", { n }),
+    level: t("level"),
+    text: t("text"),
+    textHint: t("textHint"),
+    textInvalid: t("textInvalid"),
+    counted: t("counted"),
+    countedHint: t("countedHint"),
+    moveUp: (n) => t("moveUp", { n }),
+    moveDown: (n) => t("moveDown", { n }),
+    remove: (n) => t("remove", { n }),
+    add: t("add"),
+    separator: t("separator"),
+    digits: t("digits"),
+    example: t("example"),
+    exampleHint: t("exampleHint"),
+    sharedTitle: t("sharedTitle"),
+    sharedBody: t("sharedBody"),
+    sharedAccept: t("sharedAccept"),
+    sharedReadOnly: t("sharedReadOnly"),
+    save: t("save"),
+    saving: t("saving"),
+    afterChange: t("afterChange"),
+    countedBadge: t("countedBadge"),
+  };
+}
 
 /** Saves a pattern and refreshes the page; on a refusal, says why. */
 function useSavePattern(projectId: string) {
@@ -82,11 +122,12 @@ function PatternEditor({
   const locale = useLocale() as Locale;
   const [editing, setEditing] = useState(false);
   const { save, pending, error } = useSavePattern(projectId);
+  const labels = usePatternLabels();
 
   if (!editing) {
     return (
       <div className="space-y-3">
-        {!hideView && <NumberingPatternView locale={locale} pattern={pattern} example={example} />}
+        {!hideView && <NumberingPatternView labels={labels} pattern={pattern} example={example} />}
         {canEdit && (
           <Button variant="secondary" onClick={() => setEditing(true)}>
             {editLabel}
@@ -98,6 +139,7 @@ function PatternEditor({
   return (
     <div className="space-y-3">
       <NumberingPatternBuilder
+        labels={labels}
         locale={locale}
         pattern={pattern}
         example={example}

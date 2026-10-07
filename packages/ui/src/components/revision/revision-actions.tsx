@@ -1,6 +1,6 @@
 "use client";
 
-import type { Locale, RevisionRefusal } from "@rabaed/domain";
+import type { RevisionRefusal } from "@rabaed/domain";
 import { useState } from "react";
 import { Button } from "../button/button.tsx";
 import { Dialog, DialogClose, DialogContent, DialogFooter, DialogTrigger } from "../overlay/dialog.tsx";
@@ -13,53 +13,25 @@ import { Dialog, DialogClose, DialogContent, DialogFooter, DialogTrigger } from 
 // shows what it offers. Presentational: the page does the calls, and moves to
 // the new Revision once it is created.
 
-/* eslint-disable rabaed/no-ui-translations -- existing labels, still to move to the app's messages (RP-362 retro) */
-const copy = {
-  en: {
-    section: "Revision",
-    createIntro: "Create a Revision of this item under the same number: it starts as a Draft with your answers and Documents.",
-    create: "Create Revision",
-    discard: "Discard Revision",
-    discardTitle: "Discard this Revision?",
-    discardIntro: "It is still a Draft, so nobody outside your company has seen it. The next Revision you create takes its Rev number.",
-    cancel: "Cancel",
-    close: "Close",
-    refusals: {
-      revision_not_allowed: "A Revision can't be created from this item now. Reload the page to see why.",
-      not_discardable: "This Revision has left Draft, so it can no longer be discarded.",
-      project_closed: "The Project is closed.",
-      not_found: "This item is no longer available to you.",
-      idempotency_key_reused: "That didn't work. Try again.",
-      unavailable: "That didn't work. Try again.",
-    },
-  },
-  ar: {
-    section: "المراجعة",
-    createIntro: "أنشئ مراجعة لهذا البند بالرقم نفسه: تبدأ مسودةً فيها إجاباتك ومستنداتك.",
-    create: "إنشاء مراجعة",
-    discard: "حذف مسودة المراجعة",
-    discardTitle: "حذف مسودة هذه المراجعة؟",
-    discardIntro: "ما زالت مسودة، فلم يطّلع عليها أحد خارج شركتك. تأخذ المراجعة التالية التي تنشئها رقمها.",
-    cancel: "إلغاء",
-    close: "إغلاق",
-    refusals: {
-      revision_not_allowed: "لا يمكن إنشاء مراجعة من هذا البند الآن. أعد تحميل الصفحة لمعرفة السبب.",
-      not_discardable: "غادرت هذه المراجعة مرحلة المسودة، فلم يعد حذفها ممكنًا.",
-      project_closed: "المشروع مغلق.",
-      not_found: "لم يعد هذا البند متاحًا لك.",
-      idempotency_key_reused: "لم ينجح ذلك. حاول مرة أخرى.",
-      unavailable: "لم ينجح ذلك. حاول مرة أخرى.",
-    },
-  },
-} satisfies Record<Locale, { refusals: Record<RevisionRefusal | "unavailable", string>; [text: string]: unknown }>;
-/* eslint-enable rabaed/no-ui-translations */
+/** The section's words, from the app's messages. */
+export type RevisionActionsLabels = {
+  section: string;
+  createIntro: string;
+  create: string;
+  discard: string;
+  discardTitle: string;
+  discardIntro: string;
+  cancel: string;
+  close: string;
+  refusals: Record<RevisionRefusal | "unavailable", string>;
+};
 
 export type { RevisionRefusal };
 /** A Revision command as the page calls it: a refusal by the API's error code. */
 export type RevisionCall = () => Promise<{ ok: true } | { ok: false; reason: string }>;
 
 export type RevisionActionsProps = {
-  locale: Locale;
+  labels: RevisionActionsLabels;
   /** The API offers Create Revision to the viewer on this item. */
   canCreate: boolean;
   /** The API offers Discard Revision to the viewer on this item. */
@@ -68,8 +40,7 @@ export type RevisionActionsProps = {
   onDiscard: RevisionCall;
 };
 
-export function RevisionActions({ locale, canCreate, canDiscard, onCreate, onDiscard }: RevisionActionsProps) {
-  const t = copy[locale];
+export function RevisionActions({ labels: t, canCreate, canDiscard, onCreate, onDiscard }: RevisionActionsProps) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);

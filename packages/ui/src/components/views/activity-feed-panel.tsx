@@ -11,29 +11,27 @@ import { Select } from "../form/select.tsx";
 import { Switch } from "../form/switch.tsx";
 import { moduleName } from "../../lib/module-name.ts";
 
-/* eslint-disable rabaed/no-ui-translations -- existing labels, still to move to the app's messages (RP-362 retro) */
-const copy = {
-  title: { en: "Activity Feed", ar: "النشاط" },
-  module: { en: "Module", ar: "الوحدة" },
-  type: { en: "Type", ar: "النوع" },
-  all: { en: "All", ar: "الكل" },
-  mine: { en: "Only items I'm on", ar: "العناصر التي أشارك فيها فقط" },
-  viewAll: { en: "View all", ar: "عرض الكل" },
-  loadMore: { en: "Load more", ar: "تحميل المزيد" },
-  loading: { en: "Loading…", ar: "جارٍ التحميل…" },
-  empty: { en: "Nothing has happened on the items you can see yet.", ar: "لم يحدث شيء بعد على العناصر التي يمكنك رؤيتها." },
-  internal: { en: "Only your Company sees this", ar: "لا يراه إلا شركتك" },
-  noNumber: { en: "No number yet", ar: "بلا رقم بعد" },
-  // What happened, for events that aren't a Transition.
-  claimed: { en: "claimed", ar: "استلم" },
-  released: { en: "released to the pool", ar: "أعاد إلى المجموعة" },
-  assigned: { en: "assigned", ar: "أسند" },
-  internalNote: { en: "wrote an Internal Note with", ar: "كتب ملاحظة داخلية مع" },
-  recommended: { en: "recommended a Code on", ar: "أوصى برمز على" },
-  cancelled: { en: "cancelled", ar: "ألغى" },
-  updated: { en: "updated", ar: "حدّث" },
-} satisfies Record<string, Record<Locale, string>>;
-/* eslint-enable rabaed/no-ui-translations */
+/** The panel's words, from the app's messages. What happened, for events that are not a Transition, reads after the Company's name. */
+export type ActivityFeedPanelLabels = {
+  title: string;
+  module: string;
+  type: string;
+  all: string;
+  mine: string;
+  viewAll: string;
+  loadMore: string;
+  loading: string;
+  empty: string;
+  internal: string;
+  noNumber: string;
+  claimed: string;
+  released: string;
+  assigned: string;
+  internalNote: string;
+  recommended: string;
+  cancelled: string;
+  updated: string;
+};
 
 /** A Select's value for "no filter": Radix Select takes no empty value. */
 const ALL = "all";
@@ -56,6 +54,7 @@ export type ActivityFeedPanelProps = {
   /** The Project's Work Item Types, for the Module and Type filters. */
   types: { code: string; name: BilingualText; moduleKey: ModuleKey }[];
   locale: Locale;
+  labels: ActivityFeedPanelLabels;
   /** An item's page. */
   itemHref: (id: string) => string;
   /** Where "View all" opens the feed full height; left out on that page itself. */
@@ -83,12 +82,13 @@ export function ActivityFeedPanel({
   onQueryChange,
   types,
   locale,
+  labels,
   itemHref,
   viewAllHref,
   fullHeight = false,
   linkAs: Link = "a",
 }: ActivityFeedPanelProps) {
-  const t = (key: keyof typeof copy) => copy[key][locale];
+  const t = (key: keyof ActivityFeedPanelLabels) => labels[key];
   const titleId = useId();
   const scroller = useRef<HTMLDivElement>(null);
   const end = useRef<HTMLDivElement>(null);
@@ -158,7 +158,7 @@ export function ActivityFeedPanel({
                 <Link href={itemHref(e.workItem.id)} className={cn("block space-y-1 rounded-sm px-1 py-3 hover:bg-hover", focusRing)}>
                   <p className="break-words">
                     <span className="font-semibold">{e.by.companyName?.[locale]}</span>
-                    {e.by.memberName && <span className="text-muted"> · {e.by.memberName[locale]}</span>} {whatHappened(e, locale)}{" "}
+                    {e.by.memberName && <span className="text-muted"> · {e.by.memberName[locale]}</span>} {whatHappened(e, locale, labels)}{" "}
                     {e.workItem.documentNumber ? <DocNo value={e.workItem.documentNumber} /> : <span className="text-muted">({t("noNumber")})</span>}
                     <span> · {e.workItem.title}</span>
                   </p>
@@ -185,26 +185,26 @@ export function ActivityFeedPanel({
 }
 
 /** "<did what>": the Transition taken, or what kind of event it was. */
-function whatHappened(e: ActivityFeedEntry, locale: Locale): string {
+function whatHappened(e: ActivityFeedEntry, locale: Locale, labels: ActivityFeedPanelLabels): string {
   const label = e.transition?.[locale];
   switch (e.type) {
     case "transition":
     case "issue_code":
-      return label ?? copy.updated[locale];
+      return label ?? labels.updated;
     case "internal_note":
-      return label ? `${copy.internalNote[locale]} ${label}` : copy.internalNote[locale];
+      return label ? `${labels.internalNote} ${label}` : labels.internalNote;
     case "claimed":
-      return copy.claimed[locale];
+      return labels.claimed;
     case "released":
-      return copy.released[locale];
+      return labels.released;
     case "assigned":
     case "admin_reassigned":
-      return copy.assigned[locale];
+      return labels.assigned;
     case "recommend_code":
-      return copy.recommended[locale];
+      return labels.recommended;
     case "cancelled":
-      return copy.cancelled[locale];
+      return labels.cancelled;
     default:
-      return copy.updated[locale];
+      return labels.updated;
   }
 }

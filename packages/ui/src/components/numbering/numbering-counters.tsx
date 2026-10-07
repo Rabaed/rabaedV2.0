@@ -31,88 +31,49 @@ import { Select } from "../form/select.tsx";
 // number while it has issued nothing. Presentational: the page passes what the
 // API returns and does the calls.
 
-/* eslint-disable rabaed/no-ui-translations -- existing labels, still to move to the app's messages (RP-362 retro) */
-const copy = {
-  en: {
-    title: "Counters",
-    intro: "Each counter issues the sequence of the numbers it counts. Only Project Admins see counters.",
-    counter: "Counter",
-    lastNumber: "Last number",
-    // eslint-disable-next-line rabaed/no-avoid-terms -- a counter's state (In use, Starts at …), not a Stage or Step.
-    state: "State",
-    none: "No counters yet. A counter starts with the first number it issues.",
-    inUse: "In use",
-    startsAt: (n: string) => `Starts at ${n}`,
-    startTitle: "Set a starting number",
-    startIntro:
-      "Continuing a paper register? Set the number the counter issues next, before it issues its first. It can't change after that.",
-    type: "Work Item Type",
-    participant: "Participant",
-    trade: "Trade",
-    location: "Location",
-    notCounted: "Not counted",
-    startingNumber: "Starting number",
-    next: "The next number will be",
-    used: (n: string) => `This counter has already issued numbers, up to ${n}. Its starting number can't change.`,
-    save: "Set starting number",
-    saved: "Starting number set. The next number will be",
-    refusals: {
-      participant_required: "Choose a Participant: the Numbering Pattern counts by it.",
-      trade_required: "Choose a Trade: the Numbering Pattern counts by it.",
-      location_required: "Choose a Location: the Numbering Pattern counts by it.",
-      value_not_found: "That choice is no longer on the Project. Reload the page.",
-      type_not_found: "That Work Item Type is no longer on the Project. Reload the page.",
-      counter_used: "This counter has issued a number since. Its starting number can't change.",
-      project_closed: "The Project is closed.",
-      not_found: "You can't change numbering on this Project.",
-      invalid: "Enter a whole number from 1 to 9,999,999.",
-      unavailable: "That didn't work. Try again.",
-    },
-  },
-  ar: {
-    title: "العدّادات",
-    intro: "يُصدر كل عدّاد تسلسل الأرقام التي يعدّها. لا يرى العدّادات إلا مسؤولو المشروع.",
-    counter: "العدّاد",
-    lastNumber: "آخر رقم",
-    state: "الحالة",
-    none: "لا توجد عدّادات بعد. يبدأ العدّاد بأول رقم يُصدره.",
-    inUse: "مستخدم",
-    startsAt: (n: string) => `يبدأ من ${n}`,
-    startTitle: "تحديد رقم البداية",
-    startIntro: "هل تواصلون سجلًا ورقيًا؟ حدّدوا الرقم الذي يُصدره العدّاد تاليًا قبل أن يُصدر أول رقم. لا يمكن تغييره بعد ذلك.",
-    type: "نوع البند",
-    participant: "المشارك",
-    trade: "التخصص",
-    location: "الموقع",
-    notCounted: "غير معدود",
-    startingNumber: "رقم البداية",
-    next: "سيكون الرقم التالي",
-    used: (n: string) => `أصدر هذا العدّاد أرقامًا بالفعل حتى ${n}. لا يمكن تغيير رقم بدايته.`,
-    save: "تحديد رقم البداية",
-    saved: "تم تحديد رقم البداية. سيكون الرقم التالي",
-    refusals: {
-      participant_required: "اختر مشاركًا: نمط الترقيم يعدّ حسبه.",
-      trade_required: "اختر تخصصًا: نمط الترقيم يعدّ حسبه.",
-      location_required: "اختر موقعًا: نمط الترقيم يعدّ حسبه.",
-      value_not_found: "لم يعد هذا الاختيار في المشروع. أعد تحميل الصفحة.",
-      type_not_found: "لم يعد نوع البند هذا في المشروع. أعد تحميل الصفحة.",
-      counter_used: "أصدر هذا العدّاد رقمًا منذ ذلك الحين. لا يمكن تغيير رقم بدايته.",
-      project_closed: "المشروع مغلق.",
-      not_found: "لا يمكنك تغيير الترقيم في هذا المشروع.",
-      invalid: "أدخل عددًا صحيحًا من 1 إلى 9,999,999.",
-      unavailable: "لم ينجح ذلك. حاول مرة أخرى.",
-    },
-  },
-} satisfies Record<Locale, unknown>;
-/* eslint-enable rabaed/no-ui-translations */
+export type CounterRefusal =
+  | "participant_required"
+  | "trade_required"
+  | "location_required"
+  | "value_not_found"
+  | "type_not_found"
+  | "counter_used"
+  | "project_closed"
+  | "not_found"
+  | "invalid"
+  | "unavailable";
 
-export type CounterRefusal = keyof (typeof copy)["en"]["refusals"];
+/** The counters section's words, from the app's messages. A number is given already formatted for the locale. */
+export type NumberingCountersLabels = {
+  title: string;
+  intro: string;
+  counter: string;
+  lastNumber: string;
+  state: string;
+  none: string;
+  inUse: string;
+  startsAt: (n: string) => string;
+  startTitle: string;
+  startIntro: string;
+  type: string;
+  participant: string;
+  trade: string;
+  location: string;
+  notCounted: string;
+  startingNumber: string;
+  next: string;
+  used: (n: string) => string;
+  save: string;
+  saved: string;
+  refusals: Record<CounterRefusal, string>;
+};
 
 /** What the API answered: the result, or why it refused. */
 export type CounterCall<T> = { ok: true; value: T } | { ok: false; reason: string };
 
 export type NumberingCountersProps = {
   locale: Locale;
+  labels: NumberingCountersLabels;
   /** The Project's counters, as the API returns them to a Project Admin. */
   counters: readonly NumberingCounter[];
   /** The Work Item Types a counter can be started for. */
@@ -135,6 +96,7 @@ const chosen = (value: string) => (value === NONE ? null : value);
 /** Project Settings → Numbering: the counters with their last number, and setting a counter's starting number. */
 export function NumberingCounters({
   locale,
+  labels: text,
   counters,
   workItemTypes,
   participants,
@@ -144,7 +106,6 @@ export function NumberingCounters({
   onSetStart,
   className,
 }: NumberingCountersProps) {
-  const text = copy[locale];
   const titleId = useId();
   const startId = useId();
   const [type, setType] = useState(workItemTypes[0]?.code ?? "");

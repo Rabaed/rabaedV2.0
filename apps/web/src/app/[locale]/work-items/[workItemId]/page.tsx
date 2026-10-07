@@ -88,7 +88,7 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
           <div className="flex flex-wrap items-start justify-between gap-3">
             <h1 className="text-h4 font-semibold">{item.title}</h1>
             {/* The viewer's own Watch only: no list or count of watchers anywhere. */}
-            {watch && <WorkItemWatch workItemId={item.id} watching={watch.watching} locale={locale} />}
+            {watch && <WorkItemWatch workItemId={item.id} watching={watch.watching} />}
           </div>
           <div className="flex flex-wrap items-center gap-3">
             <StagePill stage={stageColour(item.stage)} label={item.stage.name[locale]} />
@@ -111,7 +111,6 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
           projectId={item.projectId}
           canCreate={item.actions.createRevision}
           canDiscard={item.actions.discardRevision}
-          locale={locale}
         />
         {item.versionsChanged && (
           <div role="note" className="flex flex-col gap-2 rounded-md border border-border bg-surface p-3 text-sm text-muted">
@@ -163,7 +162,7 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
           locale={locale}
           questionLabels={Object.fromEntries(answerFields(form.schema).map((f) => [f.key, f.label[locale]]))}
         >
-          <WorkItemLinkedFrom items={linkedFrom.items} locale={locale} />
+          <WorkItemLinkedFrom items={linkedFrom.items} />
         </WorkItemLinks>
 
         <dl className="grid grid-cols-[max-content_1fr] gap-x-6 gap-y-2">

@@ -3,6 +3,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { useState } from "react";
 import { expect, screen, userEvent, waitFor } from "storybook/test";
 import { storyLocale, storyText } from "../../storybook/locale.ts";
+import { formRendererLabels } from "../../storybook/form-engine.ts";
 import type { BuiltInChoices } from "./built-in-fields.tsx";
 import { FormRenderer } from "./form-renderer.tsx";
 
@@ -111,7 +112,7 @@ const answers = {
 const meta = {
   title: "Form engine/FormRenderer",
   component: FormRenderer,
-  args: { schema, answers: {}, mode: "edit", locale: "en" },
+  args: { schema, answers: {}, mode: "edit", locale: "en", labels: formRendererLabels.en },
   decorators: [(Story) => <div className="max-w-xl">{Story()}</div>],
 } satisfies Meta<typeof FormRenderer>;
 
@@ -143,6 +144,7 @@ function Filling({ locale }: { locale: StoryContext }) {
         schema={schema}
         mode="edit"
         locale={storyLocale(locale)}
+        labels={formRendererLabels[storyLocale(locale)]}
         choices={choices(locale)}
         answers={values}
         errors={errors}
@@ -232,7 +234,7 @@ export const WithErrors: Story = {
       { key: "colour", code: "unknown_field" },
     ],
   },
-  render: (args, context) => <FormRenderer {...args} locale={storyLocale(context)} choices={choices(context)} />,
+  render: (args, context) => <FormRenderer {...args} locale={storyLocale(context)} labels={formRendererLabels[storyLocale(context)]} choices={choices(context)} />,
   play: async (context) => {
     const manufacturer = textbox(context, copy.manufacturer);
     await expect(manufacturer).toBeInvalid();
@@ -254,7 +256,7 @@ export const WithErrors: Story = {
 /** Read only: labels and answers, line breaks kept, chosen values by name; an empty field says so. No controls. */
 export const ReadOnly: Story = {
   args: { mode: "read", answers },
-  render: (args, context) => <FormRenderer {...args} locale={storyLocale(context)} choices={choices(context)} />,
+  render: (args, context) => <FormRenderer {...args} locale={storyLocale(context)} labels={formRendererLabels[storyLocale(context)]} choices={choices(context)} />,
   play: async (context) => {
     await expect(context.canvas.queryAllByRole("textbox")).toEqual([]);
     await expect(context.canvas.queryAllByRole("combobox")).toEqual([]);

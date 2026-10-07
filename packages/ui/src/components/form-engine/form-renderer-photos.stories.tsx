@@ -3,6 +3,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, fn, userEvent } from "storybook/test";
 import { expectTouchTarget, phone } from "../../storybook/form.ts";
 import { storyLocale, storyText } from "../../storybook/locale.ts";
+import { formRendererLabels } from "../../storybook/form-engine.ts";
 import { FormRenderer, type FormFiles } from "./form-renderer.tsx";
 
 // The `photos` field (RP-284): Sample photos, up to 4, taken with the phone's
@@ -83,9 +84,9 @@ const files = (documents: DocumentSummary[], canChange = true): FormFiles => ({
 const meta = {
   title: "Form engine/FormRenderer/Photos field",
   component: FormRenderer,
-  args: { schema, answers: {}, mode: "edit", locale: "en", files: files([]) },
+  args: { schema, answers: {}, mode: "edit", locale: "en", labels: formRendererLabels.en, files: files([]) },
   decorators: [(Story) => <div className="max-w-xl">{Story()}</div>],
-  render: (args, context) => <FormRenderer {...args} locale={storyLocale(context)} />,
+  render: (args, context) => <FormRenderer {...args} locale={storyLocale(context)} labels={formRendererLabels[storyLocale(context)]} />,
 } satisfies Meta<typeof FormRenderer>;
 
 export default meta;

@@ -13,9 +13,11 @@ import { useRouter } from "@/i18n/navigation";
 export function WorkItemRevisionPicker({ chain, workItemId, locale }: { chain: RevisionChain; workItemId: string; locale: Locale }) {
   const router = useRouter();
   const t = useTranslations("workItemViews");
+  const tRevision = useTranslations("revision");
   return (
     <RevisionPicker
       locale={locale}
+      labels={{ label: tRevision("pickerLabel") }}
       revisions={chain.revisions}
       currentId={workItemId}
       revisionNoNumber={(revision) => t("list.revisionNoNumber", { revision })}

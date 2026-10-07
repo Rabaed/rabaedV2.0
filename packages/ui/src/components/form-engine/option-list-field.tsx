@@ -21,22 +21,13 @@ import { Select } from "../form/select.tsx";
 // on an answer that holds it, marked, but is never offered for a new choice.
 // Presentational only, like the renderer around it.
 
-/* eslint-disable rabaed/no-ui-translations -- existing labels, still to move to the app's messages (RP-362 retro) */
-const copy = {
-  en: {
-    level: (n: number) => `Level ${formatNumber(n, "en")}`,
-    choose: "Choose…",
-    none: "None",
-    unavailable: "This list isn't available.",
-  },
-  ar: {
-    level: (n: number) => `المستوى ${formatNumber(n, "ar")}`,
-    choose: "اختر…",
-    none: "بدون",
-    unavailable: "هذه القائمة غير متاحة.",
-  },
-} satisfies Record<Locale, unknown>;
-/* eslint-enable rabaed/no-ui-translations */
+/** The field's words, from the app's messages. A number is given already formatted for the locale. */
+export type OptionListLabels = {
+  level: (n: string) => string;
+  choose: string;
+  none: string;
+  unavailable: string;
+};
 
 // A select's "no choice" item: option values never are "-" alone, so it never clashes with one.
 const noChoice = "-";
@@ -91,13 +82,13 @@ export type OptionListInputProps = {
   /** The option value (single), or the values in the order chosen (multiple). */
   value: unknown;
   locale: Locale;
+  labels: OptionListLabels;
   /** `undefined` clears the answer. */
   onChange: (value: string | string[] | undefined) => void;
 };
 
 /** An Option List field's control. Put it in a Field with `group`, which names it. */
-export function OptionListInput({ list, depth, multiple, value, locale, onChange }: OptionListInputProps) {
-  const text = copy[locale];
+export function OptionListInput({ list, depth, multiple, value, locale, labels: text, onChange }: OptionListInputProps) {
   const generated = useId();
   const { id = `ol${generated.replaceAll(":", "")}`, labelId, required, "aria-describedby": describedBy } = useFieldControl<FieldControlProps>({});
   if (!list) {
@@ -125,7 +116,7 @@ export function OptionListInput({ list, depth, multiple, value, locale, onChange
   return (
     <div id={id} role="group" aria-labelledby={labelId} aria-describedby={describedBy} className="grid grid-cols-[repeat(auto-fit,minmax(11rem,1fr))] gap-3">
       {levels.map((level, i) => (
-        <Field key={i} id={`${id}-level${i + 1}`} label={text.level(i + 1)} required={required && i === 0}>
+        <Field key={i} id={`${id}-level${i + 1}`} label={text.level(formatNumber(i + 1, locale))} required={required && i === 0}>
           <Select
             placeholder={text.choose}
             // Taking a choice back is offered where the answer can be empty: the first level of an optional field, or any deeper one.

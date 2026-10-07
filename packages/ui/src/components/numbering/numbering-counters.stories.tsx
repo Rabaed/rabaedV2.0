@@ -3,6 +3,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, fn, userEvent, waitFor, within } from "storybook/test";
 import { expectTouchTarget, phone } from "../../storybook/form.ts";
 import { storyLocale, storyText } from "../../storybook/locale.ts";
+import { numberingCountersLabels } from "../../storybook/numbering.ts";
 import { NumberingCounters } from "./numbering-counters.tsx";
 
 // Counters and starting numbers on Project Settings → Numbering (RP-315, spec
@@ -71,6 +72,7 @@ const render =
       <NumberingCounters
         {...args}
         locale={locale}
+        labels={numberingCountersLabels[locale]}
         counters={options.counters ?? counters}
         workItemTypes={workItemTypes}
         participants={options.firstParticipant === "01" ? [...people].reverse() : people}

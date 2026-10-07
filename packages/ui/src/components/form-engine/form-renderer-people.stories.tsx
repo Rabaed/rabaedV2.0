@@ -3,6 +3,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { useState } from "react";
 import { expect, fn, screen, userEvent, waitFor } from "storybook/test";
 import { storyLocale, storyText } from "../../storybook/locale.ts";
+import { formRendererLabels } from "../../storybook/form-engine.ts";
 import { FormRenderer } from "./form-renderer.tsx";
 
 // Member and Participant fields (RP-266). Story data only: the API offers the
@@ -68,7 +69,7 @@ const choices: FormChoices = {
 const meta = {
   title: "Form engine/FormRenderer/Members and Participants",
   component: FormRenderer,
-  args: { schema, answers: {}, people: choices, mode: "edit", locale: "en", onChange: fn() },
+  args: { schema, answers: {}, people: choices, mode: "edit", locale: "en", labels: formRendererLabels.en, onChange: fn() },
   decorators: [(Story) => <div className="max-w-xl">{Story()}</div>],
 } satisfies Meta<typeof FormRenderer>;
 
@@ -83,6 +84,7 @@ export const Edit: Story = {
       <FormRenderer
         {...args}
         locale={storyLocale(context)}
+        labels={formRendererLabels[storyLocale(context)]}
         answers={values}
         onChange={(changes) => {
           args.onChange?.(changes);
@@ -129,7 +131,7 @@ export const MembersSortedByLanguage: Story = {
       participants: choices.participants,
     },
   },
-  render: (args, context) => <FormRenderer {...args} locale={storyLocale(context)} />,
+  render: (args, context) => <FormRenderer {...args} locale={storyLocale(context)} labels={formRendererLabels[storyLocale(context)]} />,
   play: async (context) => {
     await userEvent.click(context.canvas.getByRole("combobox", { name: storyText(context, copy.siteEngineer) }));
     const listed = (await screen.findAllByRole("option")).map((o) => o.textContent);
@@ -157,6 +159,7 @@ export const SavedMemberLeftProject: Story = {
       <FormRenderer
         {...args}
         locale={storyLocale(context)}
+        labels={formRendererLabels[storyLocale(context)]}
         answers={values}
         onChange={(changes) => {
           args.onChange?.(changes);
@@ -201,7 +204,7 @@ export const WithErrors: Story = {
       { key: "supplied_through", code: "unknown_option" },
     ],
   },
-  render: (args, context) => <FormRenderer {...args} locale={storyLocale(context)} />,
+  render: (args, context) => <FormRenderer {...args} locale={storyLocale(context)} labels={formRendererLabels[storyLocale(context)]} />,
   play: async (context) => {
     const { canvas } = context;
     const engineer = canvas.getByRole("combobox", { name: storyText(context, copy.siteEngineer) });
@@ -222,7 +225,7 @@ export const ReadOwnCompany: Story = {
       supplied_through: { companyName: copy.host, memberName: null },
     } satisfies NamedAnswers,
   },
-  render: (args, context) => <FormRenderer {...args} locale={storyLocale(context)} />,
+  render: (args, context) => <FormRenderer {...args} locale={storyLocale(context)} labels={formRendererLabels[storyLocale(context)]} />,
   play: async (context) => {
     const shown = context.canvas.getAllByRole("definition").map((dd) => dd.textContent ?? "");
     await expect(shown).toEqual([storyText(context, copy.ahmed), storyText(context, copy.host)]);
@@ -242,7 +245,7 @@ export const ReadAnotherCompany: Story = {
       supplied_through: { companyName: null, memberName: null },
     } satisfies NamedAnswers,
   },
-  render: (args, context) => <FormRenderer {...args} locale={storyLocale(context)} />,
+  render: (args, context) => <FormRenderer {...args} locale={storyLocale(context)} labels={formRendererLabels[storyLocale(context)]} />,
   play: async (context) => {
     const shown = context.canvas.getAllByRole("definition").map((dd) => dd.textContent ?? "");
     await expect(shown).toEqual([storyText(context, copy.c1), storyText(context, copy.anotherCompany)]);
