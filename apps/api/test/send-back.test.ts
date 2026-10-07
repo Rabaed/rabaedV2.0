@@ -12,9 +12,9 @@ import { testDatabaseUrls } from "@rabaed/db/test-support";
 import { workflowKindProblems, type PublishedTransition } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createTestApi, DEFAULT_PASSWORD, type Caller } from "./support/harness.ts";
+import { createTestApi, type Caller } from "./support/harness.ts";
 import { addSendBackType } from "./support/send-back.ts";
-import { all, bilingual, detail, memberOnProject, ok, take, type Company } from "./support/tower.ts";
+import { all, bilingual, detail, ok, projectMember, take, type Company } from "./support/tower.ts";
 
 const api = await createTestApi();
 const migrator = createDb(testDatabaseUrls().migrator, { max: 1 });
@@ -66,21 +66,6 @@ const recorded = async (id: string) => {
   };
 };
 
-const emails = new Map<Caller, string>();
-
-/** A signed-in Member of `company` on the Project, with `positions` and all of its Visibility, signed in again by later(). */
-async function memberWithEmail(company: Company, participantId: string, positions: string[]): Promise<Caller> {
-  const { caller, email } = await memberOnProject(api, company, participantId, positions);
-  emails.set(caller, email);
-  return caller;
-}
-
-/** Moves the clock on, and signs every Member in again: moving it ends their sessions. */
-async function later(ms: number) {
-  api.advanceClock(ms);
-  for (const [caller, email] of emails) caller.useSessionToken((await api.signIn(email, DEFAULT_PASSWORD)).sessionToken);
-}
-
 async function newDraft(model: string): Promise<string> {
   const res = await ok(
     engineer.post(`/v1/projects/${projectId}/work-items`, { type: TYPE, title: model, answers: { model, trade: electrical, location: buildingA } }),
@@ -105,13 +90,13 @@ beforeAll(async () => {
     .json()
     .participants.find((p: { isOwnCompany: boolean }) => p.isOwnCompany).id;
   await ok(c1.caller.request("PUT", `/v1/participants/${own}/visibility`, { trade: all, location: all }));
-  engineer = await memberWithEmail(c1, own, ["engineer"]);
-  pm = await memberWithEmail(c1, own, ["project_manager"]);
+  engineer = await projectMember(api, c1, own, ["engineer"]);
+  pm = await projectMember(api, c1, own, ["project_manager"]);
   const participant = async (role: "consultant" | "owner_representative") => {
     const company = await api.authorizedPerson();
     const participantId = await api.addParticipant(c1.caller, projectId, company.company, role);
     await ok(c1.caller.request("PUT", `/v1/participants/${participantId}/visibility`, { trade: all, location: all }));
-    return memberWithEmail(company, participantId, ["engineer"]);
+    return projectMember(api, company, participantId, ["engineer"]);
   };
   k1Engineer = await participant("consultant");
   orEngineer = await participant("owner_representative");
@@ -191,7 +176,7 @@ describe("the Submission Date", () => {
     const id = await newDraft("SD-1");
     await take(engineer, id, "send_for_review");
     expect(await dates(pm, id)).toMatchObject({ submissionDate: null });
-    await later(DAY);
+    await api.later(DAY);
     await submit(id);
     const first = (await recorded(id)).submittedAt;
     expect(first).not.toBeNull();
@@ -199,7 +184,7 @@ describe("the Submission Date", () => {
 
     await ok(k1Engineer.post(`/v1/work-items/${id}/claim`));
     await take(k1Engineer, id, "send_back");
-    await later(3 * DAY);
+    await api.later(3 * DAY);
     await submit(id);
     expect((await recorded(id)).submittedAt).toBe(first);
     for (const viewer of [engineer, pm, k1Engineer, orEngineer]) expect((await dates(viewer, id)).submissionDate).toBe(first);
@@ -215,14 +200,14 @@ describe("answer times never earlier than the Creation Date once numbered (RP-39
   beforeAll(async () => {
     id = await newDraft("RP-392");
     draftSaved = Math.min(...(await answerTimes(engineer, id)));
-    await later(2 * DAY);
+    await api.later(2 * DAY);
     await take(engineer, id, "send_for_review");
   });
 
   it("gives co-editors the real times while it is still a Draft", async () => {
     const draft = await newDraft("RP-392 draft");
     const started = Math.min(...(await answerTimes(engineer, draft)));
-    await later(DAY);
+    await api.later(DAY);
     // Not numbered: the times are as stamped, not raised to anything.
     expect(await recorded(draft)).toMatchObject({ numberedAt: null });
     expect(await answerTimes(engineer, draft)).toContain(started);
@@ -237,7 +222,7 @@ describe("answer times never earlier than the Creation Date once numbered (RP-39
   });
 
   it("reads none for the raiser after a Send Back either", async () => {
-    await later(DAY);
+    await api.later(DAY);
     await submit(id);
     await ok(k1Engineer.post(`/v1/work-items/${id}/claim`));
     await take(k1Engineer, id, "send_back_to_draft");
@@ -272,9 +257,9 @@ describe("C1 starts a Draft, sends it for review two days later, and Submits it 
   let id = "";
   beforeAll(async () => {
     id = await newDraft("SC-61");
-    await later(2 * DAY);
+    await api.later(2 * DAY);
     await take(engineer, id, "send_for_review");
-    await later(17 * DAY);
+    await api.later(17 * DAY);
     await submit(id);
   });
 

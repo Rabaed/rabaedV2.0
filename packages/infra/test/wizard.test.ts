@@ -9,6 +9,28 @@ import { afterEach, describe, expect, it } from "vitest";
 // wizard runs them (RP-273).
 const checks = fileURLToPath(new URL("../scripts/wizard-checks.sh", import.meta.url));
 
+// Without a working bash (Windows without WSL) the wizard tests are skipped,
+// with the reason in their names. CI runs on Linux, so there a missing bash
+// fails the suite instead of skipping it (RP-376).
+const bashAvailable = (() => {
+  try {
+    execFileSync("bash", ["-c", "true"], { stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+})();
+const skipReason = "bash not available: the wizard checks run in CI on Linux";
+const inCi = Boolean(process.env.CI);
+
+function wizardDescribe(name: string, body: () => void) {
+  describe.skipIf(!bashAvailable)(bashAvailable ? name : `${name} (skipped, ${skipReason})`, body);
+}
+
+it.runIf(inCi)("bash is available, so the wizard tests run and are not skipped", () => {
+  expect(bashAvailable, "CI must have bash: the wizard tests cannot be skipped there").toBe(true);
+});
+
 // The input goes in $INPUT: Windows drops a carriage return from arguments.
 function run(command: string, input = "", env: NodeJS.ProcessEnv = process.env) {
   return execFileSync("bash", ["-c", `source "$0"; ${command}`, checks], { encoding: "utf8", env: { ...env, INPUT: input } });
@@ -23,7 +45,7 @@ function succeeds(command: string, input?: string, env?: NodeJS.ProcessEnv) {
   }
 }
 
-describe("typed answers", () => {
+wizardDescribe("typed answers",() => {
   it.each([
     ["arrow keys typed before it", "\x1b[A\x1b[B\x1b[C\x1b[Drabaed-dev", "rabaed-dev"],
     ["arrow keys in application mode", "\x1bOArabaed-dev\x1bOB", "rabaed-dev"],
@@ -43,7 +65,7 @@ describe("typed answers", () => {
   });
 });
 
-describe("the AWS root user", () => {
+wizardDescribe("the AWS root user",() => {
   it.each([
     ["arn:aws:iam::111111111111:root", true],
     ["arn:aws-cn:iam::111111111111:root", true],
@@ -55,7 +77,7 @@ describe("the AWS root user", () => {
   });
 });
 
-describe("short-lived credentials", () => {
+wizardDescribe("short-lived credentials",() => {
   const bins: string[] = [];
   afterEach(() => bins.splice(0).forEach((bin) => rmSync(bin, { recursive: true, force: true })));
 

@@ -16,7 +16,7 @@ import type { NotificationSettings, NotificationSettingsView, StepAgeReport, Vis
 import { stepAgeReportMessage } from "@rabaed/mailer";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createTestApi, DEFAULT_PASSWORD, type Caller } from "./support/harness.ts";
+import { createTestApi, type Caller } from "./support/harness.ts";
 import { addSendBackType } from "./support/send-back.ts";
 import { all, bilingual, buildTower, ok, only, take, type Company, type Tower } from "./support/tower.ts";
 
@@ -38,20 +38,10 @@ const WEB_URL = "https://rabaed.test";
 const TYPE = "WSAR";
 const LEAD = "report_lead";
 
-/** The API's clock: moved forward by `later`. */
-let offset = 0;
-const now = () => new Date(Date.now() + offset);
+/** The API's clock: moved forward by `api.later`. */
+const now = () => api.now();
 
 type Person = { caller: Caller; id: string; email: string };
-/** Everyone signed in, Authorized Persons included. */
-const people: { caller: Caller; email: string }[] = [];
-
-/** Moves the API's clock forward and signs everyone in again (moving it ends their sessions). */
-async function later(ms: number) {
-  api.advanceClock(ms);
-  offset += ms;
-  for (const p of people) p.caller.useSessionToken((await api.signIn(p.email, DEFAULT_PASSWORD)).sessionToken);
-}
 
 /** A signed-in Member of `company` on the Project, with `positions` and that Trade Visibility. */
 async function person(company: Company, participantId: string, positions: string[], trade: VisibilityGrant = all): Promise<Person> {
@@ -60,9 +50,7 @@ async function person(company: Company, participantId: string, positions: string
   await api.addProjectMember(company.caller, participantId, invited.id);
   await ok(company.caller.request("PUT", `/v1/participants/${participantId}/members/${invited.id}/visibility`, { trade, location: all }));
   await ok(company.caller.request("PUT", `/v1/participants/${participantId}/members/${invited.id}/positions`, { positions }));
-  const p = { caller, id: invited.id, email: invited.email };
-  people.push(p);
-  return p;
+  return { caller, id: invited.id, email: invited.email };
 }
 
 const settingsOf = async (by: Caller): Promise<NotificationSettingsView> => (await ok(by.get("/v1/notification-settings"), 200)).json();
@@ -184,7 +172,6 @@ beforeAll(async () => {
   k1 = await api.authorizedPerson();
   c2 = await api.authorizedPerson();
   or = await api.authorizedPerson();
-  for (const c of [c1, k1, c2, or]) people.push({ caller: c.caller, email: c.company.authorizedPerson.email });
   at = await buildTower(api, { c1, k1 }, "WSR");
   const participants = (await c1.caller.get(`/v1/projects/${at.projectId}/participants`)).json().participants as { id: string; isOwnCompany: boolean }[];
   k1ParticipantId = participants.find((p) => !p.isOwnCompany)!.id;
@@ -208,16 +195,16 @@ beforeAll(async () => {
   await take(k1Lead.caller, closed, "send_to_manager");
   await ok(k1Lead.caller.post(`/v1/work-items/${closed}/claim`));
   await ok(k1Lead.caller.post(`/v1/work-items/${closed}/transitions`, { transition: "approve_b", answers: {}, idempotencyKey: randomUUID() }));
-  await later(10 * DAY);
+  await api.later(10 * DAY);
   pumps = await item(at.projectId, c1Engineer, "Pumps", at.mechanical, c1Pm);
   c2Item = await item(at.projectId, c2Engineer, "C2 lighting", at.electrical, c2Lead);
-  await later(5 * DAY);
+  await api.later(5 * DAY);
   // K1 moves the trays inside K1: nobody else's age of it changes (V14).
   await ok(k1Lead.caller.post(`/v1/work-items/${oldTrays}/claim`));
   await take(k1Lead.caller, oldTrays, "send_to_manager");
-  await later(5 * DAY);
+  await api.later(5 * DAY);
   valves = await item(at.projectId, c1Engineer, "Draft valves", at.electrical);
-  await later(3 * DAY);
+  await api.later(3 * DAY);
 });
 
 describe("one week's reports", () => {
