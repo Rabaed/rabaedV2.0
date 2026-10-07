@@ -236,6 +236,8 @@ These components have no words of their own: each takes a `labels` prop (a funct
 | Component | `labels` type |
 | --- | --- |
 | `WatchButton` | `WatchButtonLabels` (`watch`, `watching`, `refusals`) |
+| `ProjectDashboard` | `ProjectDashboardLabels` (`items` takes the count as text; `buckets` and `codeCStates` are the List's). `chainBucketLabel` is gone: the app names buckets from its messages |
+| `ActivityFeedPanel` | `ActivityFeedPanelLabels` (the panel, and what happened for events that are not a Transition) |
 | `NumberingPatternBuilder`, `NumberingPatternView` | `NumberingPatternLabels` (a segment's number is given as text) |
 | `NumberingCounters` | `NumberingCountersLabels` (`startsAt` and `used` take the number as text) |
 | `RevisionActions` | `RevisionActionsLabels` (the section, both questions, `refusals`) |

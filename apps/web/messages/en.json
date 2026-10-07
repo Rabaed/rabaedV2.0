@@ -111,6 +111,38 @@
       "C": "Code C",
       "D": "Code D",
       "closed": "Closed"
+    },
+    "dashboard": {
+      "items": "{count} items",
+      "open": "Open",
+      "closed": "Closed",
+      "empty": "No Work Item Types on this Project yet.",
+      "codeC": "Code C",
+      "approved": {
+        "review_code": "Approved (A+B)",
+        "inspection_result": "Passed, with or without Comments",
+        "none": "Approved"
+      }
+    },
+    "activityFeed": {
+      "title": "Activity Feed",
+      "module": "Module",
+      "type": "Type",
+      "all": "All",
+      "mine": "Only items I'm on",
+      "viewAll": "View all",
+      "loadMore": "Load more",
+      "loading": "Loading…",
+      "empty": "Nothing has happened on the items you can see yet.",
+      "internal": "Only your Company sees this",
+      "noNumber": "No number yet",
+      "claimed": "claimed",
+      "released": "released to the pool",
+      "assigned": "assigned",
+      "internalNote": "wrote an Internal Note with",
+      "recommended": "recommended a Code on",
+      "cancelled": "cancelled",
+      "updated": "updated"
     }
   },
   "health": {

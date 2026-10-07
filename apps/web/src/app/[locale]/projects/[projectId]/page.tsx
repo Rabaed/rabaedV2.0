@@ -1,4 +1,4 @@
-import { workItemListHref, type Locale } from "@rabaed/domain";
+import { chainBuckets, codeCStates, workItemListHref, type ChainBucket, type CodeCState, type Locale } from "@rabaed/domain";
 import { ProjectDashboard } from "@rabaed/ui";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
@@ -13,6 +13,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ locale
   const { locale, projectId } = await params;
   setRequestLocale(locale);
   const t = await getTranslations("projects");
+  const tViews = await getTranslations("workItemViews");
   // A Project the Member is not on is not found, exactly like one that doesn't exist.
   const [me, project, participants, dashboard, activity] = await Promise.all([
     getMe(),
@@ -36,6 +37,21 @@ export default async function ProjectPage({ params }: { params: Promise<{ locale
             <ProjectDashboard
               dashboard={dashboard}
               locale={locale}
+              labels={{
+                items: (count) => tViews("dashboard.items", { count }),
+                inPreparation: tViews("buckets.in_preparation"),
+                open: tViews("dashboard.open"),
+                closed: tViews("dashboard.closed"),
+                empty: tViews("dashboard.empty"),
+                codeC: tViews("dashboard.codeC"),
+                buckets: Object.fromEntries(chainBuckets.map((b) => [b, tViews(`buckets.${b}`)])) as Record<ChainBucket, string>,
+                codeCStates: Object.fromEntries(codeCStates.map((s) => [s, tViews(`codeCStates.${s}`)])) as Record<CodeCState, string>,
+                approved: {
+                  review_code: tViews("dashboard.approved.review_code"),
+                  inspection_result: tViews("dashboard.approved.inspection_result"),
+                  none: tViews("dashboard.approved.none"),
+                },
+              }}
               linkAs={Link}
               hrefFor={(query) => workItemListHref(project.id, query)}
             />
