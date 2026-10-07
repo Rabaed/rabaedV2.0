@@ -28,6 +28,7 @@ type Side = {
   targetNumber: string;
   link: string; // from -> target.
   backLink: string; // target -> from.
+  mar: (title: string) => Promise<string>; // Another MAR in Building A.
 };
 let a: Side; // Project A, its Contractor's.
 let b: Side; // Project B, another Company's.
@@ -117,6 +118,7 @@ async function side(engineer: string, name: string, code: string): Promise<Side>
     targetNumber,
     link: await insertLink(projectId, from, target, ap),
     backLink: await insertLink(projectId, target, from, ap),
+    mar: (title) => mar(title, buildingA),
   };
 }
 
@@ -175,6 +177,33 @@ describe("a Link", () => {
       values (${a.projectId}::uuid, ${a.target}::uuid, ${a.from}::uuid, 'related', ${a.ap}::uuid)`)).rejects.toThrow(/permission denied/);
     await expect(call(a.ap, sql<object>`update work_item_link set kind = 'relies_on' where id = ${a.link}::uuid`)).rejects.toThrow(/permission denied/);
     await expect(call(a.ap, sql<object>`delete from work_item_link where id = ${a.link}::uuid`)).rejects.toThrow(/permission denied/);
+  });
+});
+
+describe("an item's free Links, as its history records them", () => {
+  it("made at the same time go by the linked item's Document Number, not by their random ids (scenario 73)", async () => {
+    const linking = await a.mar("Earthing");
+    await migrator.query("begin");
+    try {
+      const at = "2027-01-01T00:00:00Z";
+      const link = (to: string) =>
+        one("insert into work_item_link (project_id, from_id, to_id, kind, created_by_member_id, created_at) values ($1, $2, $3, 'related', $4, $5) returning id", [
+          a.projectId,
+          linking,
+          to,
+          a.ap,
+          at,
+        ]);
+      const toTarget = await link(a.target);
+      const toFrom = await link(a.from);
+      // The numbers in the opposite order to the Links' ids.
+      const fromNumber = toTarget < toFrom ? "AAA-MAR-01-0000" : "AAA-MAR-01-0002";
+      await migrator.query("update work_item set document_number = $1 where id = $2", [fromNumber, a.from]);
+      const { rows } = await migrator.query("select app.free_links_record($1) as record", [linking]);
+      expect(rows[0].record.map((l: { documentNumber: string }) => l.documentNumber)).toEqual([fromNumber, a.targetNumber].sort());
+    } finally {
+      await migrator.query("rollback");
+    }
   });
 });
 

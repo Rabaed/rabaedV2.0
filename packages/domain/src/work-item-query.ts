@@ -214,23 +214,39 @@ export function encodeWorkItemCursor(sort: WorkItemSort, key: readonly string[])
   return toBase64Url(JSON.stringify([sort, ...key]));
 }
 
-// The last row's sort key, by sort, before its id: whether it sorts last (closed, or
-// no number yet) as "true" or "false", then when it entered its Step (UTC, to the
-// microsecond) or its Document Number. Checked here, so a tampered cursor is refused
-// before it reaches a query. The API makes each key, and pages after it, in its one
-// definition per sort (`sorts`, apps/api/src/work-items/query.ts).
+/**
+ * The last row's sort key, the same shape for every sort, as text:
+ * - `last`: whether it sorts in the group that comes last (closed; no number yet;
+ *   not yet Submitted), "true" or "false";
+ * - `value`: what it sorts by: when it entered its Step or its Submission Date (UTC,
+ *   to the microsecond), or its Document Number; empty when it has none;
+ * - `subject`: its Subject, only when it has no value, empty otherwise. A row with
+ *   no value sorts by its Subject, never by its id alone, which says nothing of when
+ *   it was made (ADR 0015);
+ * - `id`: its id, which only breaks ties.
+ *
+ * The API makes each key, and pages after it, in its one definition per sort
+ * (`sorts`, apps/api/src/work-items/query.ts).
+ */
+export type WorkItemCursorKey = readonly [last: string, value: string, subject: string, id: string];
+
+// Checked here, so a tampered cursor is refused before it reaches a query.
 const enteredAt = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/;
-const isFlag = (v: string | undefined) => v === "true" || v === "false";
-const cursorKeyValid: Record<WorkItemSort, (key: string[]) => boolean> = {
-  // An empty time: the item has no Step Age (a Draft with no number) and sorts last.
-  stepAge: ([last, at, id]) => isFlag(last) && (at === "" || enteredAt.test(at ?? "")) && uuid.safeParse(id).success,
-  documentNumber: ([last, , id]) => isFlag(last) && uuid.safeParse(id).success,
-  // Not yet Submitted sorts last: its flag is "true" and its time is empty.
-  submissionDate: ([last, at, id]) => isFlag(last) && (last === "true" ? at === "" : enteredAt.test(at ?? "")) && uuid.safeParse(id).success,
+const isFlag = (v: string) => v === "true" || v === "false";
+// A row's value, or its Subject when it has none: never both.
+const valueOrSubject = (value: string, subject: string, isValue: (v: string) => boolean) =>
+  value === "" || (isValue(value) && subject === "");
+const cursorKeyValid: Record<WorkItemSort, (key: WorkItemCursorKey) => boolean> = {
+  // `last` is closed; any item, closed or not, may have no Step Age (a Draft with no number).
+  stepAge: ([last, at, subject]) => isFlag(last) && valueOrSubject(at, subject, (v) => enteredAt.test(v)),
+  // `last` is no number yet, which then has no number.
+  documentNumber: ([last, number, subject]) => isFlag(last) && (last === "true" ? number === "" : number !== "" && subject === ""),
+  // `last` is not yet Submitted, which then has no Submission Date.
+  submissionDate: ([last, at, subject]) => isFlag(last) && (last === "true" ? at === "" : enteredAt.test(at) && subject === ""),
 };
 
 /** The sort key a cursor holds, or null when it isn't a cursor made for `sort`. */
-export function decodeWorkItemCursor(cursor: string, sort: WorkItemSort): string[] | null {
+export function decodeWorkItemCursor(cursor: string, sort: WorkItemSort): WorkItemCursorKey | null {
   let decoded: unknown;
   try {
     decoded = JSON.parse(fromBase64Url(cursor));
@@ -239,8 +255,10 @@ export function decodeWorkItemCursor(cursor: string, sort: WorkItemSort): string
   }
   if (!Array.isArray(decoded) || decoded[0] !== sort || !decoded.every((v) => typeof v === "string")) return null;
   const key = decoded.slice(1) as string[];
-  if (key.length !== 3 || !cursorKeyValid[sort](key)) return null;
-  return key;
+  if (key.length !== 4) return null;
+  const [last, value, subject, id] = key as [string, string, string, string];
+  if (!uuid.safeParse(id).success || !cursorKeyValid[sort]([last, value, subject, id])) return null;
+  return [last, value, subject, id];
 }
 
 /** Base64url of UTF-8 text, in the browser as on the server (opaque cursors). */

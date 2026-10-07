@@ -178,6 +178,12 @@ describe("a link question", () => {
     expect(await questionLinks(tower.c1Engineer, lq)).toEqual([]);
   });
 
+  it("lists Links made in one save by the linked item's Document Number, not by their random ids (scenario 73)", async () => {
+    const both = (await ok(createLq(tower.c1Engineer, { relies: true, related: [item.c1Approved, item.c1Submitted] }), 201)).json().id;
+    const byNumber = numbers.c1Submitted < numbers.c1Approved ? [item.c1Submitted, item.c1Approved] : [item.c1Approved, item.c1Submitted];
+    expect(await questionLinks(tower.c1Engineer, both)).toEqual(byNumber.map((id) => ["related", id]));
+  });
+
   it("refuses a hidden, Draft, internal, other-Project or made-up item, or the item itself, like an unknown option (scenarios 11, 80)", async () => {
     await ok(save(tower.c1Engineer, lq, { relies: true, related: [item.c1Submitted] }));
     for (const refused of [item.c2Submitted, item.c1Draft, item.c1Internal, item.elsewhere, randomUUID(), lq]) {
