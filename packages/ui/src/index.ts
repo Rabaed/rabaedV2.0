@@ -60,6 +60,12 @@ export {
   type NumberingCountersProps,
 } from "./components/numbering/numbering-counters.tsx";
 export {
+  ParticipantCodes,
+  type ParticipantCodeRefusal,
+  type ParticipantCodesLabels,
+  type ParticipantCodesProps,
+} from "./components/numbering/participant-codes.tsx";
+export {
   RevisionActions,
   type RevisionActionsLabels,
   type RevisionActionsProps,

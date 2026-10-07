@@ -67,6 +67,12 @@ export const projectParticipant = z.object({
   projectRole,
   /** The Participant Code in the Project's Document Numbers; null until a Project Admin sets it. */
   code: z.string().nullable(),
+  /**
+   * Its order on the Project (1, 2, …): what its Document Numbers print until a code
+   * is set. Only for Project Admins, null for anyone else: orders are max+1, so even a
+   * Participant's own would tell how many others there are (visibility.md RP-381-1).
+   */
+  ordinal: z.number().int().nullable(),
   /** The viewer's own Company: its Project Members list is theirs to see. */
   isOwnCompany: z.boolean(),
 });

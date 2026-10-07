@@ -1,8 +1,9 @@
-import type { Locale } from "@rabaed/domain";
+import { participantSegment, type Locale } from "@rabaed/domain";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
 import { NumberingCountersSection } from "@/components/numbering-counters";
 import { NumberingPatterns } from "@/components/numbering-patterns";
+import { ParticipantCodesSection } from "@/components/participant-codes";
 import { Link, redirect } from "@/i18n/navigation";
 import { treeOrder } from "@/lib/dimension-tree";
 import {
@@ -21,7 +22,9 @@ const PDI = String.fromCodePoint(0x2069);
 /**
  * Project Settings → Numbering (spec RP-311), one section component per part.
  * The Numbering Pattern and its per-Type overrides (RP-313): every Project Member
- * reads them, a Project Admin changes them. The counters and starting numbers
+ * reads them, a Project Admin changes them. The Participant Codes (RP-381): the
+ * only place they are set, by a Project Admin; other Project Members read those
+ * of the Participants they can see (V15). The counters and starting numbers
  * (RP-315): Project Admins only, since the API returns counters to nobody else
  * (visibility.md scenario 55), and then the section isn't shown.
  */
@@ -33,9 +36,13 @@ export default async function NumberingPage({ params }: { params: Promise<{ loca
   if (!me) return redirect({ href: "/sign-in", locale });
   if (!project || !settings) notFound();
 
-  const [counters, participants, dimensions] = project.isProjectAdmin
-    ? await Promise.all([getNumberingCounters(projectId), getProjectParticipants(projectId), getProjectDimensions(projectId)])
-    : [null, null, null];
+  // The Participants the API lists for the viewer, exactly as on the Project overview:
+  // every one for a Project Admin, otherwise only their own Company's (V15).
+  const [participants, counters, dimensions] = await Promise.all([
+    getProjectParticipants(projectId),
+    project.isProjectAdmin ? getNumberingCounters(projectId) : null,
+    project.isProjectAdmin ? getProjectDimensions(projectId) : null,
+  ]);
   const code = (value: string) => ` (${LRI}${value}${PDI})`;
 
   return (
@@ -48,15 +55,17 @@ export default async function NumberingPage({ params }: { params: Promise<{ loca
         <p className="text-muted">{t("intro")}</p>
       </div>
       <NumberingPatterns projectId={project.id} settings={settings} />
+      {participants && <ParticipantCodesSection participants={participants.participants} canEdit={project.isProjectAdmin} />}
       {counters && participants && dimensions && (
         <NumberingCountersSection
           projectId={project.id}
           counters={counters.counters}
           workItemTypes={counters.workItemTypes}
-          participants={participants.participants.map((p) => ({
-            value: p.id,
-            label: `${p.company.legalName[locale]}${p.code ? code(p.code) : ""}`,
-          }))}
+          participants={participants.participants.map(({ id, company, code: participantCode, ordinal }) => {
+            // Shown to Project Admins only, who get every Participant's order on the Project (RP-381-1).
+            const printed = ordinal === null ? participantCode : participantSegment({ code: participantCode, ordinal });
+            return { value: id, label: `${company.legalName[locale]}${printed === null ? "" : code(printed)}` };
+          })}
           trades={dimensions.trade.map((v) => ({ value: v.id, label: `${v.name[locale]}${code(v.code)}` }))}
           locations={treeOrder(dimensions.location).map((v) => ({
             value: v.id,

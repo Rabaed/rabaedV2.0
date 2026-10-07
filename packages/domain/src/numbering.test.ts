@@ -5,6 +5,7 @@ import {
   documentNumbering,
   numberingAttributes,
   numberingPattern,
+  participantSegment,
   rabaedDefaultNumberingPattern,
   saveNumberingPatternRequest,
   type NumberingPattern,
@@ -70,5 +71,14 @@ describe("countsByParticipant", () => {
     expect(countsByParticipant(rabaedDefaultNumberingPattern)).toBe(true);
     expect(countsByParticipant({ ...rabaedDefaultNumberingPattern, countedBy: [0, 1] })).toBe(false);
     expect(countsByParticipant(pattern({ segments: [{ kind: "project" }, { kind: "type" }], countedBy: [0, 1] }))).toBe(false);
+  });
+});
+
+// RP-381: the Numbering page shows each Participant as its Document Numbers print it.
+describe("participantSegment", () => {
+  it("is the Participant Code once set, otherwise the order on the Project padded to two digits", () => {
+    expect(participantSegment({ code: "CCM", ordinal: 3 })).toBe("CCM");
+    expect(participantSegment({ code: null, ordinal: 2 })).toBe("02");
+    expect(participantSegment({ code: null, ordinal: 123 })).toBe("123");
   });
 });

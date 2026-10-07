@@ -4,7 +4,6 @@ import { getTranslations, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
 import { ActivityFeedView } from "@/components/activity-feed-view";
 import { AddParticipantForm } from "@/components/add-participant-form";
-import { ParticipantCodeForm } from "@/components/participant-code-form";
 import { WithdrawInvitationButton } from "@/components/withdraw-invitation-button";
 import { Link, redirect } from "@/i18n/navigation";
 import { chainLabels } from "@/lib/chain-labels";
@@ -105,10 +104,15 @@ export default async function ProjectPage({ params }: { params: Promise<{ locale
                     </Link>
                   )}
                 </div>
-                {project.isProjectAdmin && <ParticipantCodeForm participantId={p.id} code={p.code} />}
               </li>
             ))}
           </ul>
+        )}
+        {/* Participant Codes are set in one place, Project Settings → Numbering (RP-381). */}
+        {project.isProjectAdmin && (
+          <Link href={`/projects/${project.id}/settings/numbering`} className="text-sm text-primary underline underline-offset-4">
+            {t("setParticipantCodes")}
+          </Link>
         )}
         {/* Pending invitations, for the Project Admin only: by CR number, never by Company name (ADR 0009). */}
         {invitations && invitations.invitations.length > 0 && (

@@ -3,6 +3,8 @@ import type { ComponentProps } from "react";
 import { cn } from "../../lib/cn.ts";
 
 // The revision suffix (GLOSSARY.md, Revision) is fixed product wording, so every Module words it the same.
+// The stored Document Number's English ` Rev n` (issued by app.take_transition, docs/workflow-engine.md) is the
+// definition; this is its display wording for a separate `rev`, plus the Arabic form.
 // eslint-disable-next-line rabaed/no-ui-translations -- a documented exception in packages/ui/README.md (DocNo's revision word)
 const revisionWord: Record<Locale, string> = { en: "Rev", ar: "مراجعة" };
 
