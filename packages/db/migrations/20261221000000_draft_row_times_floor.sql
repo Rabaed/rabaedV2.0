@@ -8,7 +8,7 @@
 -- * document.created_at and confirmed_at, and work_item_link.created_at, are no
 --   longer granted to the app role. The stored times stay for audit.
 -- * app.document_times gives each Document of a visible item its upload time, as
---   the documents policy shows them: once the item the file was first uploaded on
+--   the documents policy shows them: once the item the Document was first uploaded on
 --   is numbered, a time earlier than that item's numbered_at reads as numbered_at.
 --   A Revision's own Documents follow its own Creation Date; a copied Document
 --   keeps the original's upload time (scenario 75, the draft_start_time
@@ -16,7 +16,8 @@
 --   `seq` is the order they were uploaded in: an order, not a time.
 -- * app.work_item_links is as in the random_ids migration, except that its
 --   created_at is floored to the item's numbered_at the same way. A Revision's
---   Links are its own rows, so they follow its own Creation Date.
+--   Links are its own rows, so they follow its own Creation Date. They are still
+--   ordered by the stored time, which gives an order, not a time.
 -- * While the item is a Draft (numbered_at is null), nothing changes, so the C1
 --   Members working on it see real times.
 

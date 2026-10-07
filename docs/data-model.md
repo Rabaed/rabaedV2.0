@@ -5,7 +5,7 @@ The logical data model for the platform and the Project Module, in PostgreSQL te
 ## Conventions
 
 - **IDs** are random UUIDv4 in every table: safe to expose, because they carry no time, and nothing to enumerate. Not UUIDv7, whose creation time would reveal when a Draft was started ([ADR 0015](adr/0015-random-ids-not-uuidv7.md)).
-  Being random, an id never orders rows; it only breaks ties. Un-numbered Drafts (and items not yet Submitted) order by Subject, then id; Links by `created_at`, the linked item's Document Number, then id; Documents by `confirmed_at`, file name, then id (`app.document_times`' `seq`).
+  Being random, an id never orders rows; it only breaks ties. Un-numbered Drafts (and items not yet Submitted) order by Subject, then id; Links by `created_at`, the linked item's Document Number, then id; Documents in upload order (`app.document_times`' `seq`: `confirmed_at`, file name, then id).
 - **Bilingual content** entered by customers (names, labels) is stored as `i18n jsonb` (`{"en": "...", "ar": "..."}`), so further languages can be added without schema changes. UI strings are *not* in the database; they are translation keys (Lokalise).
 - **Library pattern.** Forms, Workflows, Work Item Types, Positions, Trades and Scopes exist at three levels: `owner_kind ∈ {rabaed, company, project}` + `owner_id`. Using one always **copies** it down a level (`copied_from_id` keeps provenance). Nothing is linked live.
 - **Nothing is hard-deleted.** Rows are deactivated, withdrawn, cancelled or closed.
