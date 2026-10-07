@@ -429,6 +429,12 @@
       "linksField": "Links"
     }
   },
+  "watch": {
+    "watch": "Watch",
+    "watching": "Watching",
+    "notFound": "This item is no longer available to you.",
+    "unavailable": "That didn't work. Try again."
+  },
   "notifications": {
     "title": "Notifications",
     "bellUnread": "{count, plural, other {Notifications, {shown} unread}}",

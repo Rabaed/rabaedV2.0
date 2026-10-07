@@ -88,7 +88,7 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
           <div className="flex flex-wrap items-start justify-between gap-3">
             <h1 className="text-h4 font-semibold">{item.title}</h1>
             {/* The viewer's own Watch only: no list or count of watchers anywhere. */}
-            {watch && <WorkItemWatch workItemId={item.id} watching={watch.watching} locale={locale} />}
+            {watch && <WorkItemWatch workItemId={item.id} watching={watch.watching} />}
           </div>
           <div className="flex flex-wrap items-center gap-3">
             <StagePill stage={stageColour(item.stage)} label={item.stage.name[locale]} />

@@ -229,6 +229,14 @@ A Module's Work Items and the Member's Projects, as the API returns them. Presen
 />
 ```
 
+### Components that take `labels`
+
+These components have no words of their own: each takes a `labels` prop (a function label takes a value already formatted for the locale), passed from the app's messages (`apps/web/messages/{en,ar}.json`). The story copy is in `src/storybook/`.
+
+| Component | `labels` type |
+| --- | --- |
+| `WatchButton` | `WatchButtonLabels` (`watch`, `watching`, `refusals`) |
+
 ## Storybook and story tests
 
 - `pnpm storybook` opens Storybook; the **Language** toolbar switches EN (LTR) / AR (RTL).
