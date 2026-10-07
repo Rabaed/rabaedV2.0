@@ -11,6 +11,7 @@ import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { CODE_C_TITLE, DEMO_ENGINEER_EMAIL } from "../src/demo/seed.ts";
 import { createTestApi, expectHidden, DEFAULT_PASSWORD, uploadDocument, type Caller } from "./support/harness.ts";
+import { detail, take } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
 const urls = testDatabaseUrls();
@@ -232,11 +233,6 @@ describe("the seeded Links", () => {
 
 describe("the README walkthrough", () => {
   let mar = "";
-  const detail = async (who: Caller): Promise<WorkItemDetail> => {
-    const r = await who.get(`/v1/work-items/${mar}`);
-    expect(r.statusCode, r.body).toBe(200);
-    return r.json();
-  };
   /** Not in the detail, the list, or (for Beta Build, with no items of its own) any count. */
   const hidden = async (who: Caller, { countsZero = false } = {}) => {
     await expectHidden(who.get(`/v1/work-items/${mar}`));
@@ -244,13 +240,9 @@ describe("the README walkthrough", () => {
     expect(list.items.map((i: { id: string }) => i.id)).not.toContain(mar);
     if (countsZero) expect(list.stages.every((s: { count: number }) => s.count === 0)).toBe(true);
   };
-  const take = async (who: Caller, transition: string, reason = "", extra: Record<string, string> = {}) => {
-    const r = await who.post(`/v1/work-items/${mar}/transitions`, { transition, answers: { ...(reason ? { reason } : {}), ...extra }, idempotencyKey: randomUUID() });
-    expect(r.statusCode, r.body).toBe(204);
-  };
   /** The Consultant's verification, saved over the answers `who` reads, as the web form does. */
   const verify = async (who: Caller, verification: Record<string, unknown>) => {
-    const saved = await who.request("PUT", `/v1/work-items/${mar}/answers`, { answers: { ...(await detail(who)).answers, ...verification } });
+    const saved = await who.request("PUT", `/v1/work-items/${mar}/answers`, { answers: { ...(await detail(who, mar)).answers, ...verification } });
     expect(saved.statusCode, saved.body).toBe(204);
   };
   const claim = async (who: Caller) => expect((await who.post(`/v1/work-items/${mar}/claim`)).statusCode).toBe(204);
@@ -279,7 +271,7 @@ describe("the README walkthrough", () => {
 
   it("1. Hafiz creates a MAR with the Form half filled: a Draft only TMC sees", async () => {
     mar = await raise("Lighting Fixtures", { manufacturer: "Philips", trade: electrical, location: tower1Floor2 });
-    expect((await detail(ali)).stage.key).toBe("draft");
+    expect((await detail(ali, mar)).stage.key).toBe("draft");
     await hidden(yousef, { countsZero: true });
     for (const who of [ahmed, mohammed, faisal]) await hidden(who);
   });
@@ -294,51 +286,51 @@ describe("the README walkthrough", () => {
         { key: "datasheet", code: "required" },
       ],
     });
-    expect((await detail(hafiz)).stage.key).toBe("draft");
+    expect((await detail(hafiz, mar)).stage.key).toBe("draft");
   });
 
   it("3. Hafiz completes the Form with its Items and a Datasheet, and Saves the Draft", async () => {
     const saved = await hafiz.request("PUT", `/v1/work-items/${mar}/answers`, { answers: filled() });
     expect(saved.statusCode, saved.body).toBe(204);
     await attachDatasheet(hafiz, "CoreLine-datasheet.pdf", "%PDF-1.4 Philips CoreLine Panel 600 x 600 datasheet (demo)");
-    expect((await detail(hafiz)).answers).toMatchObject(filled());
+    expect((await detail(hafiz, mar)).answers).toMatchObject(filled());
     expect((await documents(hafiz)).documents.map((d) => [d.fieldKey, d.fileName])).toEqual([["datasheet", "CoreLine-datasheet.pdf"]]);
     await hidden(yousef, { countsZero: true });
   });
 
   it("3. Sent for Review, it reaches Ali, with a notification; still nobody outside TMC", async () => {
-    await take(hafiz, "send_for_review");
+    await take(hafiz, mar, "send_for_review");
     await drainOutbox(worker);
     const notifications = (await ali.get("/v1/notifications")).json().notifications;
     expect(notifications.map((n: { workItemId: string }) => n.workItemId)).toContain(mar);
-    expect((await detail(ali)).documentNumber).toMatch(/^TWR-MAR-01-\d{4}$/);
+    expect((await detail(ali, mar)).documentNumber).toMatch(/^TWR-MAR-01-\d{4}$/);
     await hidden(yousef, { countsZero: true });
     for (const who of [ahmed, mohammed, faisal]) await hidden(who);
   });
 
   it("4. Ali claims and Returns it with a reason; 5. Hafiz re-sends it", async () => {
     await claim(ali);
-    await take(ali, "return", "Add emergency duration");
-    expect((await detail(hafiz)).stage.key).toBe("draft");
-    await take(hafiz, "send_for_review");
+    await take(ali, mar, "return", { reason: "Add emergency duration" });
+    expect((await detail(hafiz, mar)).stage.key).toBe("draft");
+    await take(hafiz, mar, "send_for_review");
     await claim(ali);
   });
 
   it("6. Ali Submits it: With Design Consultants LLC; the Consultant and Al Waha see it, Beta Build never does", async () => {
-    await take(ali, "submit");
-    expect((await detail(hafiz)).heldBy).toEqual({
+    await take(ali, mar, "submit");
+    expect((await detail(hafiz, mar)).heldBy).toEqual({
       companyName: { en: "Design Consultants LLC", ar: "المصممون الاستشاريون ذ.م.م" },
       memberName: null,
     });
-    expect((await detail(ahmed)).actions).toMatchObject({ claim: false, transitions: [] });
-    expect((await detail(mohammed)).actions.claim).toBe(true);
-    expect((await detail(faisal)).stage.key).toBe("pending_approval");
+    expect((await detail(ahmed, mar)).actions).toMatchObject({ claim: false, transitions: [] });
+    expect((await detail(mohammed, mar)).actions.claim).toBe(true);
+    expect((await detail(faisal, mar)).stage.key).toBe("pending_approval");
     await hidden(yousef, { countsZero: true });
     expect((await ahmed.get(`/v1/work-items/${mar}/history`)).body).not.toContain("Add emergency duration");
   });
 
   it("7. The Consultant reads the Form's answers and the frozen Datasheet; the other Contractor still sees nothing", async () => {
-    expect((await detail(ahmed)).answers).toMatchObject(filled());
+    expect((await detail(ahmed, mar)).answers).toMatchObject(filled());
     const seen = await documents(ahmed);
     expect(seen).toMatchObject({ canChange: false, documents: [{ fieldKey: "datasheet", fileName: "CoreLine-datasheet.pdf", frozen: true }] });
     const link = (await ahmed.get(`/v1/work-items/${mar}/documents/${seen.documents[0]!.id}/download`)).json().url as string;
@@ -349,8 +341,8 @@ describe("the README walkthrough", () => {
   it("8. Mohammed claims it and issues Code A; TMC and Al Waha see the Code and its signer", async () => {
     await claim(mohammed);
     await verify(mohammed, { sample_checked: true, matches_specification: true });
-    await take(mohammed, "approve_a");
-    expect(await detail(hafiz)).toMatchObject({ stage: { key: "approved" }, outcome: "A" });
+    await take(mohammed, mar, "approve_a");
+    expect(await detail(hafiz, mar)).toMatchObject({ stage: { key: "approved" }, outcome: "A" });
     for (const who of [hafiz, faisal]) {
       const events = (await who.get(`/v1/work-items/${mar}/history`)).json().events;
       expect(events.at(-1)).toMatchObject({ type: "issue_code", by: { memberName: { en: "Mohammed Al Shamsi" } } });
@@ -361,13 +353,13 @@ describe("the README walkthrough", () => {
   it("9. A second MAR ends Revise & Resubmit with Code C", async () => {
     mar = await raise("Cable tray layout – Level 2");
     await attachDatasheet(hafiz, "cable-tray-datasheet.pdf", "%PDF-1.4 Cable tray datasheet (demo)");
-    await take(hafiz, "send_for_review");
+    await take(hafiz, mar, "send_for_review");
     await claim(ali);
-    await take(ali, "submit");
+    await take(ali, mar, "submit");
     await claim(mohammed);
     await verify(mohammed, { sample_checked: true, matches_specification: false, verification_note: "Wrong datasheet revision" });
-    await take(mohammed, "revise_c", "", { remarks: "Submit the 2020 revision of the datasheet" });
-    expect(await detail(hafiz)).toMatchObject({ stage: { key: "revise_resubmit" }, outcome: "C" });
+    await take(mohammed, mar, "revise_c", { remarks: "Submit the 2020 revision of the datasheet" });
+    expect(await detail(hafiz, mar)).toMatchObject({ stage: { key: "revise_resubmit" }, outcome: "C" });
   });
 
   it("10. Hafiz opens the seeded MAR on Version 4: its Links open the approved MAR, which lists it under Linked from", async () => {
@@ -398,13 +390,13 @@ describe("the README walkthrough", () => {
     const free = await hafiz.post(`/v1/work-items/${mar}/links`, { workItemId: lightingFixtures });
     expect(free.statusCode, free.body).toBe(201);
     await attachDatasheet(hafiz, "wiring-datasheet.pdf", "%PDF-1.4 Lighting control wiring datasheet (demo)");
-    await take(hafiz, "send_for_review");
+    await take(hafiz, mar, "send_for_review");
     // In TMC's internal review it isn't listed yet, whoever asks.
     expect((await linkedFrom(hafiz, linking)).items).toEqual([]);
     expect((await linkedFrom(omar, linking)).items).toEqual([]);
     await claim(ali);
-    await take(ali, "submit");
-    const documentNumber = (await detail(hafiz)).documentNumber;
+    await take(ali, mar, "submit");
+    const documentNumber = (await detail(hafiz, mar)).documentNumber;
     const subject = "Lighting control wiring – Tower 1";
     expect((await linkedFrom(hafiz, linking)).items).toEqual([{ documentNumber, subject, workItemId: mar }]);
     expect((await linkedFrom(omar, linking)).items).toEqual([{ documentNumber, subject, workItemId: null }]);
@@ -421,10 +413,10 @@ describe("the README walkthrough", () => {
     expect(draft.filledBy.consultant_verification).toMatchObject({ en: "Consultant", ar: expect.any(String) });
     const refused = await hafiz.request("PUT", `/v1/work-items/${mar}/answers`, { answers: { ...filled(), sample_checked: true } });
     expect(refused.statusCode, refused.body).toBe(409);
-    await take(hafiz, "send_for_review");
+    await take(hafiz, mar, "send_for_review");
     await claim(ali);
     // Leaving Draft and the Contractor's review never needed the Consultant's answers.
-    await take(ali, "submit");
+    await take(ali, mar, "submit");
     for (const who of [hafiz, ali, faisal]) {
       const form: FormToFill = (await who.get(`/v1/work-items/${mar}/form`)).json();
       expect(form.filledBy.consultant_verification, "marked").toBeDefined();
@@ -434,10 +426,10 @@ describe("the README walkthrough", () => {
     const consultantForm: FormToFill = (await ahmed.get(`/v1/work-items/${mar}/form`)).json();
     expect(consultantForm.editableSections).toEqual(["consultant_verification"]);
     await verify(ahmed, { sample_checked: true, matches_specification: false });
-    expect(await detail(ahmed)).toMatchObject({ answers: { sample_checked: true, matches_specification: false } });
+    expect(await detail(ahmed, mar)).toMatchObject({ answers: { sample_checked: true, matches_specification: false } });
     // The Contractor and Al Waha still read it empty, and see no change.
     for (const who of [hafiz, ali, faisal]) {
-      const seen = (await detail(who)).answers;
+      const seen = (await detail(who, mar)).answers;
       expect(seen).not.toHaveProperty("sample_checked");
       expect(seen).not.toHaveProperty("matches_specification");
       const history = (await who.get(`/v1/work-items/${mar}/history`)).json() as WorkItemHistory;
@@ -456,10 +448,10 @@ describe("the README walkthrough", () => {
     await verify(mohammed, { verification_note: "Lamp efficacy is below the specified 110 lm/W" });
     const noRemarks = await mohammed.post(`/v1/work-items/${mar}/transitions`, { transition: "revise_c", answers: {}, idempotencyKey: randomUUID() });
     expect(noRemarks.statusCode, noRemarks.body).toBe(422);
-    await take(mohammed, "revise_c", "", { remarks: "Replace with 110 lm/W luminaires. / استبدلها بوحدات 110 لومن/واط." });
+    await take(mohammed, mar, "revise_c", { remarks: "Replace with 110 lm/W luminaires. / استبدلها بوحدات 110 لومن/واط." });
     // Both Companies now read the answers and the Remarks (scenario 48).
     for (const who of [hafiz, faisal]) {
-      expect(await detail(who)).toMatchObject({
+      expect(await detail(who, mar)).toMatchObject({
         stage: { key: "revise_resubmit" },
         outcome: "C",
         answers: { sample_checked: true, matches_specification: false, verification_note: "Lamp efficacy is below the specified 110 lm/W" },
@@ -472,7 +464,7 @@ describe("the README walkthrough", () => {
 
   it("14. Hafiz creates Rev 1 of it: his drop-down lists the original and the Draft; the Consultant and Al Waha see only the original", async () => {
     const original = mar;
-    const base = (await detail(hafiz)).documentNumber!;
+    const base = (await detail(hafiz, mar)).documentNumber!;
     const created = await hafiz.post(`/v1/work-items/${original}/revisions`, { idempotencyKey: randomUUID() });
     expect(created.statusCode, created.body).toBe(201);
     const rev1 = created.json().id as string;

@@ -5,7 +5,6 @@
 // publish checks against Versions 1 to 3 and against the MAR's Workflow (`editable_at`
 // names a Step the Workflow has). Issuing a Code is refused while the verification
 // is incomplete; once issued, the answers and the Remarks are everyone's.
-import { randomUUID } from "node:crypto";
 import { createDb } from "@rabaed/db";
 import { testDatabaseUrls } from "@rabaed/db/test-support";
 import {
@@ -14,13 +13,13 @@ import {
   type FormToFill,
   type FormVersion,
   type WorkflowStepHolder,
-  type WorkItemDetail,
   type WorkItemHistory,
 } from "@rabaed/domain";
 import { sql } from "kysely";
 import type { LightMyRequestResponse } from "fastify";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { attachDatasheet, createTestApi, type Caller } from "./support/harness.ts";
+import { detail, projectMember, tryTake } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
 const migrator = createDb(testDatabaseUrls().migrator, { max: 1 });
@@ -81,9 +80,6 @@ const complete = {
 const created = async (title: string) =>
   (await ok(engineer.post(`/v1/projects/${projectId}/work-items`, { type: "MAR", title, answers: { ...complete, trade: electrical, location: buildingA } }), 201))
     .json().id as string;
-const take = (by: Caller, id: string, transition: string, extra: { answers?: Record<string, unknown>; internalNote?: string } = {}) =>
-  by.post(`/v1/work-items/${id}/transitions`, { transition, idempotencyKey: randomUUID(), ...extra });
-const detail = async (by: Caller, id: string): Promise<WorkItemDetail> => (await ok(by.get(`/v1/work-items/${id}`), 200)).json();
 const history = async (by: Caller, id: string): Promise<WorkItemHistory> => (await ok(by.get(`/v1/work-items/${id}/history`), 200)).json();
 /** Saves `changes` over the answers `by` reads, as the web form does. */
 const saveOver = async (by: Caller, id: string, changes: Record<string, unknown>) =>
@@ -93,9 +89,9 @@ const saveOver = async (by: Caller, id: string, changes: Record<string, unknown>
 async function atConsultantReview(title: string): Promise<string> {
   const id = await created(title);
   await attachDatasheet(engineer, id);
-  await ok(take(engineer, id, "send_for_review"));
+  await ok(tryTake(engineer, id, "send_for_review"));
   await ok(pm.post(`/v1/work-items/${id}/claim`));
-  await ok(take(pm, id, "submit"));
+  await ok(tryTake(pm, id, "submit"));
   return id;
 }
 
@@ -109,26 +105,19 @@ beforeAll(async () => {
     .json()
     .participants.find((p: { isOwnCompany: boolean }) => p.isOwnCompany).id;
   await ok(c1.caller.request("PUT", `/v1/participants/${own}/visibility`, { trade: all, location: all }));
-  const projectMember = async (company: Caller, participantId: string, positions: string[]) => {
-    const { member, caller } = await api.member(company);
-    await api.addProjectMember(company, participantId, member.id);
-    await ok(company.request("PUT", `/v1/participants/${participantId}/members/${member.id}/visibility`, { trade: all, location: all }));
-    await ok(company.request("PUT", `/v1/participants/${participantId}/members/${member.id}/positions`, { positions }));
-    return caller;
-  };
   const otherParticipant = async (role: "consultant" | "owner_representative") => {
     const company = await api.authorizedPerson();
     const participantId = await api.addParticipant(c1.caller, projectId, company.company, role);
     await ok(c1.caller.request("PUT", `/v1/participants/${participantId}/visibility`, { trade: all, location: all }));
     return { caller: company.caller, participantId };
   };
-  engineer = await projectMember(c1.caller, own, ["engineer"]);
-  pm = await projectMember(c1.caller, own, ["project_manager"]);
+  engineer = await projectMember(api, c1, own, ["engineer"]);
+  pm = await projectMember(api, c1, own, ["project_manager"]);
   const k1 = await otherParticipant("consultant");
-  k1Engineer = await projectMember(k1.caller, k1.participantId, ["engineer"]);
-  k1Manager = await projectMember(k1.caller, k1.participantId, ["manager"]);
+  k1Engineer = await projectMember(api, k1, k1.participantId, ["engineer"]);
+  k1Manager = await projectMember(api, k1, k1.participantId, ["manager"]);
   const or = await otherParticipant("owner_representative");
-  orEngineer = await projectMember(or.caller, or.participantId, ["engineer"]);
+  orEngineer = await projectMember(api, or, or.participantId, ["engineer"]);
 });
 
 describe("the MAR Form Version 4", () => {
@@ -173,7 +162,7 @@ describe("a new MAR, and one on an earlier Version", () => {
     const id = await created("Lighting fixtures");
     expect((await detail(engineer, id)).formVersionId).toBe(v4!.id);
     await attachDatasheet(engineer, id);
-    await ok(take(engineer, id, "send_for_review"));
+    await ok(tryTake(engineer, id, "send_for_review"));
     expect((await detail(engineer, id)).stage.key).not.toBe("draft");
   });
 
@@ -186,7 +175,7 @@ describe("a new MAR, and one on an earlier Version", () => {
     expect(form.editableSections).toEqual([]);
     expect(form.filledBy).toEqual({});
     await ok(k1Manager.post(`/v1/work-items/${id}/claim`));
-    await ok(take(k1Manager, id, "approve_a"));
+    await ok(tryTake(k1Manager, id, "approve_a"));
     expect(await detail(engineer, id)).toMatchObject({ stage: { key: "approved" }, outcome: "A" });
   });
 });
@@ -217,7 +206,7 @@ describe("issuing a Code (scenario 48)", () => {
   it("is refused while the verification is incomplete, with what is missing", async () => {
     const id = await atConsultantReview("Fixtures, incomplete");
     await ok(k1Manager.post(`/v1/work-items/${id}/claim`));
-    const res = await take(k1Manager, id, "approve_a");
+    const res = await tryTake(k1Manager, id, "approve_a");
     expect(res.statusCode, res.body).toBe(422);
     expect(res.json()).toEqual({
       error: "form_incomplete",
@@ -228,7 +217,7 @@ describe("issuing a Code (scenario 48)", () => {
     });
     // Matches specification: No makes the note required.
     await ok(saveOver(k1Manager, id, { sample_checked: true, matches_specification: false }));
-    const noNote = await take(k1Manager, id, "approve_a");
+    const noNote = await tryTake(k1Manager, id, "approve_a");
     expect(noNote.statusCode, noNote.body).toBe(422);
     expect(noNote.json()).toEqual({ error: "form_incomplete", fields: [{ key: "verification_note", code: "required" }] });
     expect((await detail(engineer, id)).stage.key).toBe("pending_approval");
@@ -245,7 +234,7 @@ describe("issuing a Code (scenario 48)", () => {
       expect((await history(other, id)).events.filter((e) => e.type === "answers_changed")).toEqual([]);
     }
     await ok(k1Manager.post(`/v1/work-items/${id}/claim`));
-    await ok(take(k1Manager, id, "revise_c", { answers: { remarks: "Resubmit with 110 lm/W luminaires" }, internalNote: "Internal: supplier is on probation" }));
+    await ok(tryTake(k1Manager, id, "revise_c", { answers: { remarks: "Resubmit with 110 lm/W luminaires" }, internalNote: "Internal: supplier is on probation" }));
     for (const other of [engineer, pm, orEngineer]) {
       expect(await detail(other, id)).toMatchObject({
         stage: { key: "revise_resubmit" },

@@ -7,6 +7,7 @@ import { randomUUID } from "node:crypto";
 import type { WorkItemDetail, WorkItemHistory } from "@rabaed/domain";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { attachDatasheet, createTestApi, expectHidden, DEFAULT_PASSWORD, type Caller, type OnboardedCompany } from "./support/harness.ts";
+import { detail, memberOnProject, tryTake, type TakeOptions } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
 afterAll(() => api.close());
@@ -51,27 +52,16 @@ async function ok(res: Promise<{ statusCode: number; body: string }>, status = 2
   expect(r.statusCode, r.body).toBe(status);
 }
 
-/** A signed-in Member of `company` named `name`, on the Project through `participantId`, with `positions`. */
-async function projectMember(
+/** A signed-in Member of `company` named `name`, on the Project through `participantId`, with `positions`; their email is kept for signing in again. */
+async function memberWithEmail(
   company: Company,
   participantId: string,
   positions: string[],
   { name = "Test Member", trade = all }: { name?: string; trade?: Coverage } = {},
 ) {
-  const member = await api.inviteMember(company.caller, { fullName: bilingual(name) });
-  const caller = await api.acceptInvitation(member.invitationToken);
-  emails.set(caller, member.email);
-  await api.addProjectMember(company.caller, participantId, member.id);
-  await ok(
-    company.caller.request("PUT", `/v1/participants/${participantId}/members/${member.id}/visibility`, {
-      trade,
-      location: all,
-    }),
-  );
-  if (positions.length) {
-    await ok(company.caller.request("PUT", `/v1/participants/${participantId}/members/${member.id}/positions`, { positions }));
-  }
-  return caller;
+  const member = await memberOnProject(api, company, participantId, positions, trade, name);
+  emails.set(member.caller, member.email);
+  return member.caller;
 }
 
 /** Another Company on the Project in `role`, with the Participant Visibility the Project Admin gives it. */
@@ -109,16 +99,11 @@ async function verified(by: Caller, id: string) {
   if (answers) await by.request("PUT", `/v1/work-items/${id}/answers`, { answers: { ...answers, sample_checked: true, matches_specification: true } });
 }
 
-const take = async (by: Caller, id: string, transition: string, { reason, remarks, ...extra }: { reason?: string; remarks?: string; internalNote?: string } = {}) => {
+/** `by` takes the Transition, after the signer's verification where a Code is issued; the response as it came. */
+const takeVerifying = async (by: Caller, id: string, transition: string, options: TakeOptions = {}) => {
   if (transition === "approve_a" || transition === "revise_c") await verified(by, id);
-  return by.post(`/v1/work-items/${id}/transitions`, { transition, idempotencyKey: randomUUID(), ...(reason === undefined && remarks === undefined ? {} : { answers: { ...(reason === undefined ? {} : { reason }), ...(remarks === undefined ? {} : { remarks }) } }), ...extra });
+  return tryTake(by, id, transition, options);
 };
-
-async function detail(by: Caller, id: string): Promise<WorkItemDetail> {
-  const res = await by.get(`/v1/work-items/${id}`);
-  expect(res.statusCode, res.body).toBe(200);
-  return res.json();
-}
 
 async function history(by: Caller, id: string): Promise<WorkItemHistory["events"]> {
   const res = await by.get(`/v1/work-items/${id}/history`);
@@ -152,10 +137,10 @@ async function everything(by: Caller, id: string) {
 /** A Draft, sent, Returned once with a reason, sent again and claimed by the PM: ready to Submit. */
 async function readyToSubmit(title: string) {
   const id = await createDraft(engineer, title);
-  await ok(take(engineer, id, "send_for_review"));
+  await ok(takeVerifying(engineer, id, "send_for_review"));
   await ok(pm.post(`/v1/work-items/${id}/claim`));
-  await ok(take(pm, id, "return", { reason: "Wrong tray size" }));
-  await ok(take(engineer, id, "send_for_review"));
+  await ok(takeVerifying(pm, id, "return", { reason: "Wrong tray size" }));
+  await ok(takeVerifying(engineer, id, "send_for_review"));
   await ok(pm.post(`/v1/work-items/${id}/claim`));
   return id;
 }
@@ -174,27 +159,27 @@ beforeAll(async () => {
     .json()
     .participants.find((p: { isOwnCompany: boolean }) => p.isOwnCompany).id;
   await ok(c1.caller.request("PUT", `/v1/participants/${c1ParticipantId}/visibility`, { trade: all, location: all }));
-  engineer = await projectMember(c1, c1ParticipantId, ["engineer"]);
-  pm = await projectMember(c1, c1ParticipantId, ["project_manager"]);
+  engineer = await memberWithEmail(c1, c1ParticipantId, ["engineer"]);
+  pm = await memberWithEmail(c1, c1ParticipantId, ["project_manager"]);
 
   const consultant = await participant("consultant", { trade: all, location: all }, CONSULTANT);
   k1 = consultant.company;
   k1ParticipantId = consultant.participantId;
-  signer = await projectMember(k1, consultant.participantId, ["manager"], { name: SIGNER });
-  otherManager = await projectMember(k1, consultant.participantId, ["manager"], { name: OTHER_MANAGER });
-  mechanicalManager = await projectMember(k1, consultant.participantId, ["manager"], { trade: only(mechanical) });
-  k1Engineer = await projectMember(k1, consultant.participantId, ["engineer"]);
+  signer = await memberWithEmail(k1, consultant.participantId, ["manager"], { name: SIGNER });
+  otherManager = await memberWithEmail(k1, consultant.participantId, ["manager"], { name: OTHER_MANAGER });
+  mechanicalManager = await memberWithEmail(k1, consultant.participantId, ["manager"], { trade: only(mechanical) });
+  k1Engineer = await memberWithEmail(k1, consultant.participantId, ["engineer"]);
 
   const c2 = await participant("contractor");
-  c2Engineer = await projectMember(c2.company, c2.participantId, ["engineer"]);
+  c2Engineer = await memberWithEmail(c2.company, c2.participantId, ["engineer"]);
   const or = await participant("owner_representative", { trade: only(electrical), location: all });
-  orEngineer = await projectMember(or.company, or.participantId, ["engineer"]);
+  orEngineer = await memberWithEmail(or.company, or.participantId, ["engineer"]);
   const orB = await participant("owner_representative", { trade: all, location: only(buildingB) });
-  orElsewhere = await projectMember(orB.company, orB.participantId, ["engineer"]);
+  orElsewhere = await memberWithEmail(orB.company, orB.participantId, ["engineer"]);
   const orM = await participant("owner_representative", { trade: only(mechanical), location: all });
-  orMechanical = await projectMember(orM.company, orM.participantId, ["engineer"]);
+  orMechanical = await memberWithEmail(orM.company, orM.participantId, ["engineer"]);
   const ow = await participant("owner");
-  owner = await projectMember(ow.company, ow.participantId, ["representative"]);
+  owner = await memberWithEmail(ow.company, ow.participantId, ["representative"]);
 });
 
 describe("Submit", () => {
@@ -214,7 +199,7 @@ describe("Submit", () => {
   });
 
   it("moves the item to Pending Approval, with the Consultant's pool", async () => {
-    await ok(take(pm, id, "submit"));
+    await ok(takeVerifying(pm, id, "submit"));
     const d = await detail(pm, id);
     expect(d).toMatchObject({
       stage: { key: "pending_approval" },
@@ -271,7 +256,7 @@ describe("Submit", () => {
     expect(await listed(c2Engineer)).toMatchObject({ ids: [], counts: { pending_approval: 0 } });
     await expectHidden(c2Engineer.get(`/v1/work-items/${id}`));
     await expectHidden(c2Engineer.get(`/v1/work-items/${id}/history`));
-    await expectHidden(take(c2Engineer, id, "approve_a"));
+    await expectHidden(takeVerifying(c2Engineer, id, "approve_a"));
   });
 
   it("shows the Consultant the Submit, never the Contractor's Return or internal moves (V5)", async () => {
@@ -294,7 +279,7 @@ describe("Submit", () => {
   });
 
   it("is refused to a PM holding nothing, and to the Contractor once the item left it", async () => {
-    expect((await take(pm, id, "submit")).json()).toEqual({ error: "not_holder" });
+    expect((await takeVerifying(pm, id, "submit")).json()).toEqual({ error: "not_holder" });
   });
 });
 
@@ -302,7 +287,7 @@ describe("Approve · A", () => {
   let id = "";
   beforeAll(async () => {
     id = await readyToSubmit("Lighting fixtures");
-    await ok(take(pm, id, "submit"));
+    await ok(takeVerifying(pm, id, "submit"));
   });
 
   it("goes to the Consultant manager who claims it; the Contractor still sees only the Company", async () => {
@@ -317,11 +302,11 @@ describe("Approve · A", () => {
   });
 
   it("is refused to a Consultant Member who doesn't hold the Step", async () => {
-    expect((await take(otherManager, id, "approve_a")).json()).toEqual({ error: "not_holder" });
+    expect((await takeVerifying(otherManager, id, "approve_a")).json()).toEqual({ error: "not_holder" });
   });
 
   it("closes the item Approved with Code A", async () => {
-    await ok(take(signer, id, "approve_a"));
+    await ok(takeVerifying(signer, id, "approve_a"));
     for (const caller of [engineer, pm, signer, otherManager, orEngineer]) {
       const d = await detail(caller, id);
       expect(d).toMatchObject({ stage: { key: "approved", category: "closed_positive" }, outcome: "A", heldBy: null });
@@ -361,7 +346,7 @@ describe("Approve · A", () => {
       [signer, "revise_c"],
       [pm, "submit"],
     ] as const) {
-      const res = await take(caller, id, key);
+      const res = await takeVerifying(caller, id, key);
       expect(res.statusCode, res.body).toBe(409);
       expect(res.json()).toEqual({ error: "item_closed" });
     }
@@ -381,12 +366,12 @@ describe("Revise & Resubmit · C", () => {
   let id = "";
   beforeAll(async () => {
     id = await readyToSubmit("Busbars");
-    await ok(take(pm, id, "submit"));
+    await ok(takeVerifying(pm, id, "submit"));
   });
 
   it("closes the item Revise & Resubmit with Code C", async () => {
     await ok(otherManager.post(`/v1/work-items/${id}/claim`));
-    await ok(take(otherManager, id, "revise_c", { remarks: "Resubmit with the type test certificate" }));
+    await ok(takeVerifying(otherManager, id, "revise_c", { remarks: "Resubmit with the type test certificate" }));
     const d = await detail(engineer, id);
     expect(d).toMatchObject({ stage: { key: "revise_resubmit", category: "closed_negative" }, outcome: "C", heldBy: null });
     expect((await history(engineer, id)).at(-1)).toMatchObject({
@@ -407,7 +392,7 @@ describe("Remarks with the Code (MAR Workflow Version 2)", () => {
 
   async function submitted(title: string) {
     const id = await readyToSubmit(title);
-    await ok(take(pm, id, "submit"));
+    await ok(takeVerifying(pm, id, "submit"));
     await ok(signer.post(`/v1/work-items/${id}/claim`));
     return id;
   }
@@ -427,7 +412,7 @@ describe("Remarks with the Code (MAR Workflow Version 2)", () => {
   it("refuses C without Remarks and leaves the item where it was", async () => {
     const id = await submitted("C without remarks");
     for (const remarks of [undefined, "   "]) {
-      const res = await take(signer, id, "revise_c", remarks === undefined ? {} : { remarks });
+      const res = await takeVerifying(signer, id, "revise_c", remarks === undefined ? {} : { remarks });
       expect(res.statusCode, res.body).toBe(422);
       expect(res.json()).toEqual({ error: "invalid_action_form", fields: [{ key: "remarks", code: "required" }] });
     }
@@ -437,16 +422,16 @@ describe("Remarks with the Code (MAR Workflow Version 2)", () => {
 
   it("accepts A without Remarks, and with them", async () => {
     const plain = await submitted("A without remarks");
-    await ok(take(signer, plain, "approve_a"));
+    await ok(takeVerifying(signer, plain, "approve_a"));
     expect((await history(pm, plain)).at(-1)).toMatchObject({ type: "issue_code", outcome: "A", remarks: null });
     const worded = await submitted("A with remarks");
-    await ok(take(signer, worded, "approve_a", { remarks: REMARKS_A }));
+    await ok(takeVerifying(signer, worded, "approve_a", { remarks: REMARKS_A }));
     expect((await history(pm, worded)).at(-1)).toMatchObject({ type: "issue_code", outcome: "A", remarks: REMARKS_A });
   });
 
   it("shows C's Remarks beside the Code to the Contractor, Owner Representative and Owner, the Internal Note to no one but the Consultant", async () => {
     const id = await submitted("Remarks with a note");
-    await ok(take(signer, id, "revise_c", { remarks: REMARKS_C, internalNote: NOTE }));
+    await ok(takeVerifying(signer, id, "revise_c", { remarks: REMARKS_C, internalNote: NOTE }));
     for (const caller of [engineer, pm, orEngineer, owner, signer, otherManager]) {
       const events = await history(caller, id);
       expect(events.at(-1), "the Code event").toMatchObject({ type: "issue_code", outcome: "C", audience: "shared", remarks: REMARKS_C });
@@ -472,7 +457,7 @@ describe("Submit with no single Consultant to take it (scenario 37)", () => {
   /** Submit isn't offered, and taking it gets the one answer, naming nobody and nothing. */
   async function expectRefused(id: string) {
     expect(buttons(await detail(pm, id))).toEqual(["release", "return"]);
-    const res = await take(pm, id, "submit");
+    const res = await takeVerifying(pm, id, "submit");
     expect(res.statusCode).toBe(409);
     expect(res.body).toBe(ANSWER);
     for (const name of NEVER_IN_REFUSAL) expect(res.body).not.toContain(name);
@@ -497,7 +482,7 @@ describe("Submit with no single Consultant to take it (scenario 37)", () => {
 
   it("is not offered, and refused with the same answer, when two Consultants cover the item (a Visibility Overlap)", async () => {
     const k2 = await participant("consultant", { trade: only(electrical), location: all }, SECOND_CONSULTANT);
-    await projectMember(k2.company, k2.participantId, ["manager"]);
+    await memberWithEmail(k2.company, k2.participantId, ["manager"]);
     const id = await readyToSubmit("Switchgear");
     await expectRefused(id);
     // Narrow the second Consultant away: Submit comes back.
@@ -519,12 +504,12 @@ describe("Internal Note (V5, scenarios 7 and 34)", () => {
 
   beforeAll(async () => {
     id = await createDraft(engineer, "Cable glands");
-    await ok(take(engineer, id, "send_for_review", { internalNote: SENT }));
+    await ok(takeVerifying(engineer, id, "send_for_review", { internalNote: SENT }));
     await ok(pm.post(`/v1/work-items/${id}/claim`));
-    await ok(take(pm, id, "return", { reason: "Wrong gland size", internalNote: RETURNED }));
-    await ok(take(engineer, id, "send_for_review"));
+    await ok(takeVerifying(pm, id, "return", { reason: "Wrong gland size", internalNote: RETURNED }));
+    await ok(takeVerifying(engineer, id, "send_for_review"));
     await ok(pm.post(`/v1/work-items/${id}/claim`));
-    await ok(take(pm, id, "submit", { internalNote: SUBMITTED }));
+    await ok(takeVerifying(pm, id, "submit", { internalNote: SUBMITTED }));
   });
 
   it("is recorded with each Transition, Send for Review, Return and Submit, inside the Contractor", async () => {
@@ -552,7 +537,7 @@ describe("Internal Note (V5, scenarios 7 and 34)", () => {
 
   it("written with the Code, stays inside the Consultant (scenario 8)", async () => {
     await ok(signer.post(`/v1/work-items/${id}/claim`));
-    await ok(take(signer, id, "approve_a", { internalNote: CODED }));
+    await ok(takeVerifying(signer, id, "approve_a", { internalNote: CODED }));
     expect(await notes(otherManager)).toEqual([["Approve · A", CODED, "internal"]]);
     for (const caller of [engineer, pm, orEngineer]) {
       const events = await history(caller, id);
@@ -570,25 +555,25 @@ describe("Internal Note (V5, scenarios 7 and 34)", () => {
       engineer.post(`/v1/work-items/${other}/transitions`, { transition: "send_for_review", internalNote: SENT, idempotencyKey });
     await Promise.all([ok(send()), ok(send())]);
     await ok(pm.post(`/v1/work-items/${other}/claim`));
-    await ok(take(pm, other, "return", { reason: "Again", internalNote: "   " }));
+    await ok(takeVerifying(pm, other, "return", { reason: "Again", internalNote: "   " }));
     const events = await history(engineer, other);
     expect(events.filter((e) => e.type === "internal_note").map((e) => e.internalNote)).toEqual([SENT]);
   });
 
   it("writes nothing when the Transition is refused", async () => {
     const other = await createDraft(engineer, "Cable ties");
-    expect((await take(pm, other, "send_for_review", { internalNote: "Not mine to send" })).statusCode).not.toBe(204);
-    await ok(take(engineer, other, "send_for_review"));
+    expect((await takeVerifying(pm, other, "send_for_review", { internalNote: "Not mine to send" })).statusCode).not.toBe(204);
+    await ok(takeVerifying(engineer, other, "send_for_review"));
     await ok(pm.post(`/v1/work-items/${other}/claim`));
-    expect((await take(pm, other, "return", { internalNote: "No reason given" })).json()).toEqual({ error: "invalid_action_form", fields: [{ key: "reason", code: "required" }] });
+    expect((await takeVerifying(pm, other, "return", { internalNote: "No reason given" })).json()).toEqual({ error: "invalid_action_form", fields: [{ key: "reason", code: "required" }] });
     const events = await history(pm, other);
     expect(events.some((e) => e.type === "internal_note")).toBe(false);
   });
 
   it("is at most 4000 characters", async () => {
     const other = await createDraft(engineer, "Cable clips");
-    expect((await take(engineer, other, "send_for_review", { internalNote: "x".repeat(4001) })).statusCode).toBe(400);
-    await ok(take(engineer, other, "send_for_review", { internalNote: "x".repeat(4000) }));
+    expect((await takeVerifying(engineer, other, "send_for_review", { internalNote: "x".repeat(4001) })).statusCode).toBe(400);
+    await ok(takeVerifying(engineer, other, "send_for_review", { internalNote: "x".repeat(4000) }));
   });
 });
 
@@ -596,7 +581,7 @@ describe("Internal Note (V5, scenarios 7 and 34)", () => {
 describe("Step Age", () => {
   it("counts the weeks at the Consultant's Step, for both sides", async () => {
     const id = await readyToSubmit("Earthing");
-    await ok(take(pm, id, "submit"));
+    await ok(takeVerifying(pm, id, "submit"));
     api.advanceClock(15 * 86_400_000);
     for (const caller of [pm, signer]) {
       const again = await api.signIn(emails.get(caller)!, DEFAULT_PASSWORD);

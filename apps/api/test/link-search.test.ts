@@ -11,7 +11,7 @@ import { randomUUID } from "node:crypto";
 import type { LinkSearchResults } from "@rabaed/domain";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestApi, expectHidden, type Caller } from "./support/harness.ts";
-import { all, bilingual, buildTower, draft, inInternalReview, ok, only, projectMember, submitted, type Company, type Tower } from "./support/tower.ts";
+import { all, bilingual, buildTower, draft, inInternalReview, ok, only, projectMember, submitted, take, type Company, type Tower } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
 afterAll(() => api.close());
@@ -25,9 +25,6 @@ let c2Engineer: Caller;
 let c2Pm: Caller;
 let k1Mechanical: Caller; // A K1 manager covering Mechanical only.
 let c1Outsider: Caller; // A C1 Member who isn't on the Project.
-
-const take = (by: Caller, id: string, transition: string) =>
-  ok(by.post(`/v1/work-items/${id}/transitions`, { transition, idempotencyKey: randomUUID() }));
 
 const searchUrl = (projectId: string, query: Record<string, string>) =>
   `/v1/projects/${projectId}/work-items/link-search?${new URLSearchParams(query).toString()}`;

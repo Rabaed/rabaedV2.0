@@ -9,7 +9,7 @@ import { randomUUID } from "node:crypto";
 import { encodeWorkItemCursor, isOpenStageCategory, workItemSearchParams, type WorkItemList, type WorkItemQueryInput, type WorkItemRow } from "@rabaed/domain";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { attachDatasheet, createTestApi, DEFAULT_PASSWORD, expectHidden, type Caller } from "./support/harness.ts";
-import { all, bilingual, memberOnProject, ok, type Company } from "./support/tower.ts";
+import { all, bilingual, memberOnProject, ok, take, type Company } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
 afterAll(() => api.close());
@@ -38,7 +38,7 @@ const complete = {
 /** Every signed-in Member here, to sign in again when the clock moves. */
 const emails = new Map<Caller, string>();
 
-async function projectMember(...args: Parameters<typeof memberOnProject>) {
+async function memberWithEmail(...args: Parameters<typeof memberOnProject>) {
   const { caller, email } = await memberOnProject(...args);
   emails.set(caller, email);
   return caller;
@@ -49,9 +49,6 @@ async function later(ms: number) {
   api.advanceClock(ms);
   for (const [caller, email] of emails) caller.useSessionToken((await api.signIn(email, DEFAULT_PASSWORD)).sessionToken);
 }
-
-const take = (by: Caller, id: string, transition: string, answers: Record<string, unknown> = {}) =>
-  ok(by.post(`/v1/work-items/${id}/transitions`, { transition, answers, idempotencyKey: randomUUID() }));
 
 /** One page of the List as `by` reads it with `query`. */
 async function list(by: Caller, query: WorkItemQueryInput = {}, project = projectId): Promise<WorkItemList> {
@@ -120,15 +117,15 @@ beforeAll(async () => {
     await ok(c1.caller.request("PUT", `/v1/participants/${participantId}/visibility`, { trade: all, location: all }));
     return { company, participantId };
   };
-  c1Engineer = await projectMember(api, c1, own, ["engineer"]);
-  c1Pm = await projectMember(api, c1, own, ["project_manager"]);
+  c1Engineer = await memberWithEmail(api, c1, own, ["engineer"]);
+  c1Pm = await memberWithEmail(api, c1, own, ["project_manager"]);
   const c2 = await participant("contractor");
-  c2Engineer = await projectMember(api, c2.company, c2.participantId, ["engineer"]);
+  c2Engineer = await memberWithEmail(api, c2.company, c2.participantId, ["engineer"]);
   const k1 = await participant("consultant");
   k1ParticipantId = k1.participantId;
-  k1Engineer = await projectMember(api, k1.company, k1.participantId, ["engineer"]);
-  k1ManagerA = await projectMember(api, k1.company, k1.participantId, ["manager"]);
-  k1ManagerB = await projectMember(api, k1.company, k1.participantId, ["manager"]);
+  k1Engineer = await memberWithEmail(api, k1.company, k1.participantId, ["engineer"]);
+  k1ManagerA = await memberWithEmail(api, k1.company, k1.participantId, ["manager"]);
+  k1ManagerB = await memberWithEmail(api, k1.company, k1.participantId, ["manager"]);
   const stranger = await api.authorizedPerson();
   outsider = stranger.caller;
   emails.set(outsider, stranger.company.authorizedPerson.email);
@@ -149,8 +146,8 @@ describe("cursor paging", () => {
       .json()
       .participants.find((p: { isOwnCompany: boolean }) => p.isOwnCompany).id;
     await ok(c1.caller.request("PUT", `/v1/participants/${own}/visibility`, { trade: all, location: all }));
-    engineer = await projectMember(api, c1, own, ["engineer"]);
-    await projectMember(api, c1, own, ["project_manager"]); // holds the internal review
+    engineer = await memberWithEmail(api, c1, own, ["engineer"]);
+    await memberWithEmail(api, c1, own, ["project_manager"]); // holds the internal review
     for (let i = 0; i < 53; i++) {
       const answers = i < 3 ? { ...complete, trade: tradeId, location: locationId } : { trade: tradeId };
       const res = await ok(engineer.post(`/v1/projects/${pagingProject}/work-items`, { type: "MAR", title: `Item ${i}`, answers }), 201);

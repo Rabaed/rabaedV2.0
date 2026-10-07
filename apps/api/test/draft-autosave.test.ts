@@ -3,11 +3,11 @@
 // it changed; a save carrying the times it was based on keeps a field another
 // Member changed since as theirs and says who; Draft saves write no
 // answers_changed events, and after Draft each button save writes one.
-import { randomUUID } from "node:crypto";
-import type { SavedAnswers, WorkItemDetail, WorkItemHistory } from "@rabaed/domain";
+import type { SavedAnswers, WorkItemHistory } from "@rabaed/domain";
 import type { LightMyRequestResponse } from "fastify";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { attachDatasheet, createTestApi, type Caller } from "./support/harness.ts";
+import { detail, projectMember, tryTake } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
 afterAll(() => api.close());
@@ -29,22 +29,11 @@ async function ok(res: Promise<LightMyRequestResponse>, status = 204) {
   return r;
 }
 
-async function projectMember(participantId: string, positions: string[]) {
-  const { member, caller } = await api.member(c1.caller);
-  await api.addProjectMember(c1.caller, participantId, member.id);
-  await ok(c1.caller.request("PUT", `/v1/participants/${participantId}/members/${member.id}/visibility`, { trade: all, location: all }));
-  await ok(c1.caller.request("PUT", `/v1/participants/${participantId}/members/${member.id}/positions`, { positions }));
-  return caller;
-}
-
 const builtIns = () => ({ trade: electrical, location: buildingA });
 const save = (by: Caller, id: string, answers: Record<string, unknown>, basedOn?: Record<string, string>) =>
   by.request("PUT", `/v1/work-items/${id}/answers`, { answers: { ...builtIns(), ...answers }, ...(basedOn ? { basedOn } : {}) });
-const detail = async (by: Caller, id: string): Promise<WorkItemDetail> => (await ok(by.get(`/v1/work-items/${id}`), 200)).json();
 const times = async (by: Caller, id: string) =>
   Object.fromEntries(Object.entries((await detail(by, id)).fieldTimes).map(([k, v]) => [k, v.at]));
-const take = (by: Caller, id: string, transition: string) =>
-  by.post(`/v1/work-items/${id}/transitions`, { transition, idempotencyKey: randomUUID() });
 async function diffs(by: Caller, id: string) {
   const events: WorkItemHistory["events"] = (await ok(by.get(`/v1/work-items/${id}/history`), 200)).json().events;
   return events.filter((e) => e.type === "answers_changed");
@@ -65,9 +54,9 @@ beforeAll(async () => {
     .json()
     .participants.find((p: { isOwnCompany: boolean }) => p.isOwnCompany).id;
   await ok(c1.caller.request("PUT", `/v1/participants/${own}/visibility`, { trade: all, location: all }));
-  engineer = await projectMember(own, ["engineer"]);
-  colleague = await projectMember(own, ["engineer"]);
-  pm = await projectMember(own, ["project_manager"]);
+  engineer = await projectMember(api, c1, own, ["engineer"]);
+  colleague = await projectMember(api, c1, own, ["engineer"]);
+  pm = await projectMember(api, c1, own, ["project_manager"]);
 });
 
 describe("per-field times", () => {
@@ -149,7 +138,7 @@ describe("history", () => {
     await ok(save(colleague, id, { manufacturer: "ACME", description: "d2" }, await times(colleague, id)), 200);
     expect(await diffs(engineer, id)).toEqual([]);
     await attachDatasheet(engineer, id);
-    await ok(take(engineer, id, "send_for_review"));
+    await ok(tryTake(engineer, id, "send_for_review"));
     // After Draft the web doesn't autosave.
     expect((await detail(engineer, id)).autosave).toBe(false);
     await ok(pm.post(`/v1/work-items/${id}/claim`));

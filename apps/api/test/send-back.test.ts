@@ -69,7 +69,7 @@ const recorded = async (id: string) => {
 const emails = new Map<Caller, string>();
 
 /** A signed-in Member of `company` on the Project, with `positions` and all of its Visibility, signed in again by later(). */
-async function projectMember(company: Company, participantId: string, positions: string[]): Promise<Caller> {
+async function memberWithEmail(company: Company, participantId: string, positions: string[]): Promise<Caller> {
   const { caller, email } = await memberOnProject(api, company, participantId, positions);
   emails.set(caller, email);
   return caller;
@@ -105,13 +105,13 @@ beforeAll(async () => {
     .json()
     .participants.find((p: { isOwnCompany: boolean }) => p.isOwnCompany).id;
   await ok(c1.caller.request("PUT", `/v1/participants/${own}/visibility`, { trade: all, location: all }));
-  engineer = await projectMember(c1, own, ["engineer"]);
-  pm = await projectMember(c1, own, ["project_manager"]);
+  engineer = await memberWithEmail(c1, own, ["engineer"]);
+  pm = await memberWithEmail(c1, own, ["project_manager"]);
   const participant = async (role: "consultant" | "owner_representative") => {
     const company = await api.authorizedPerson();
     const participantId = await api.addParticipant(c1.caller, projectId, company.company, role);
     await ok(c1.caller.request("PUT", `/v1/participants/${participantId}/visibility`, { trade: all, location: all }));
-    return projectMember(company, participantId, ["engineer"]);
+    return memberWithEmail(company, participantId, ["engineer"]);
   };
   k1Engineer = await participant("consultant");
   orEngineer = await participant("owner_representative");

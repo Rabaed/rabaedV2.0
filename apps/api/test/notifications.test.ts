@@ -11,6 +11,7 @@ import type { NotificationList } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { attachDatasheet, createTestApi, type Caller, type OnboardedCompany } from "./support/harness.ts";
+import { memberOnProject, take } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
 const urls = testDatabaseUrls();
@@ -52,17 +53,6 @@ async function ok(res: Promise<{ statusCode: number; body: string }>, status = 2
   expect(r.statusCode, r.body).toBe(status);
 }
 
-async function projectMember(company: Company, participantId: string, positions: string[]): Promise<Member> {
-  const member = await api.inviteMember(company.caller);
-  const caller = await api.acceptInvitation(member.invitationToken);
-  await api.addProjectMember(company.caller, participantId, member.id);
-  await setVisibility(company, participantId, member.id, all);
-  if (positions.length) {
-    await ok(company.caller.request("PUT", `/v1/participants/${participantId}/members/${member.id}/positions`, { positions }));
-  }
-  return { id: member.id, caller };
-}
-
 const setVisibility = (company: Company, participantId: string, memberId: string, trade: Coverage) =>
   ok(company.caller.request("PUT", `/v1/participants/${participantId}/members/${memberId}/visibility`, { trade, location: all }));
 
@@ -84,9 +74,6 @@ async function createDraft(title: string, by: Member = engineer): Promise<string
   await attachDatasheet(by.caller, res.json().id);
   return res.json().id;
 }
-
-const take = (by: Member, id: string, transition: string, reason = "") =>
-  ok(by.caller.post(`/v1/work-items/${id}/transitions`, { transition, answers: reason ? { reason } : {}, idempotencyKey: randomUUID() }));
 
 async function notifications(by: Member): Promise<NotificationList> {
   const res = await by.caller.get("/v1/notifications");
@@ -116,16 +103,16 @@ beforeAll(async () => {
     .json()
     .participants.find((p: { isOwnCompany: boolean }) => p.isOwnCompany).id;
   await ok(c1.caller.request("PUT", `/v1/participants/${c1ParticipantId}/visibility`, { trade: all, location: all }));
-  engineer = await projectMember(c1, c1ParticipantId, ["engineer"]);
-  pm = await projectMember(c1, c1ParticipantId, ["project_manager"]);
-  pmRemoved = await projectMember(c1, c1ParticipantId, ["project_manager"]);
-  pmNarrowed = await projectMember(c1, c1ParticipantId, ["project_manager"]);
+  engineer = await memberOnProject(api, c1, c1ParticipantId, ["engineer"]);
+  pm = await memberOnProject(api, c1, c1ParticipantId, ["project_manager"]);
+  pmRemoved = await memberOnProject(api, c1, c1ParticipantId, ["project_manager"]);
+  pmNarrowed = await memberOnProject(api, c1, c1ParticipantId, ["project_manager"]);
   k1 = await participant("consultant");
-  manager = await projectMember(k1.company, k1.participantId, ["manager"]);
-  k1Engineer = await projectMember(k1.company, k1.participantId, ["engineer"]);
+  manager = await memberOnProject(api, k1.company, k1.participantId, ["manager"]);
+  k1Engineer = await memberOnProject(api, k1.company, k1.participantId, ["engineer"]);
   const c2 = await participant("contractor");
-  c2Engineer = await projectMember(c2.company, c2.participantId, ["engineer"]);
-  engineerPm = await projectMember(c1, c1ParticipantId, ["engineer", "project_manager"]);
+  c2Engineer = await memberOnProject(api, c2.company, c2.participantId, ["engineer"]);
+  engineerPm = await memberOnProject(api, c1, c1ParticipantId, ["engineer", "project_manager"]);
   // Anything earlier tests left in the outbox is not ours to judge.
   await drainOutbox(worker);
 });
@@ -134,7 +121,7 @@ describe("Send for Review", () => {
   let id = "";
   beforeAll(async () => {
     id = await createDraft("Cable trays");
-    await take(engineer, id, "send_for_review");
+    await take(engineer.caller, id, "send_for_review");
   });
 
   it("writes one outbox row in the Transition's transaction, and notifies nobody before delivery", async () => {
@@ -170,7 +157,7 @@ describe("Send for Review", () => {
 
   it("never notifies the Member whose move it was, even when they are in the pool", async () => {
     const own = await createDraft("Cable ladders", engineerPm);
-    await take(engineerPm, own, "send_for_review");
+    await take(engineerPm.caller, own, "send_for_review");
     await drainOutbox(worker);
     expect(await about(engineerPm, own)).toEqual([]);
     expect(await about(pm, own)).toHaveLength(1);
@@ -186,9 +173,9 @@ describe("Return and Submit", () => {
   let id = "";
   beforeAll(async () => {
     id = await createDraft("Lighting fixtures");
-    await take(engineer, id, "send_for_review");
+    await take(engineer.caller, id, "send_for_review");
     await ok(pm.caller.post(`/v1/work-items/${id}/claim`));
-    await take(pm, id, "return", "Wrong tray size");
+    await take(pm.caller, id, "return", { reason: "Wrong tray size" });
     await drainOutbox(worker);
   });
 
@@ -200,9 +187,9 @@ describe("Return and Submit", () => {
   });
 
   it("notifies the Consultant's pool on Submit, never the Consultant's Engineer or the second Contractor", async () => {
-    await take(engineer, id, "send_for_review");
+    await take(engineer.caller, id, "send_for_review");
     await ok(pm.caller.post(`/v1/work-items/${id}/claim`));
-    await take(pm, id, "submit");
+    await take(pm.caller, id, "submit");
     await drainOutbox(worker);
     const [n] = await about(manager, id);
     expect(n).toMatchObject({ title: "Lighting fixtures", step: { name: { en: "Consultant review" } } });
@@ -248,8 +235,8 @@ describe("a failing delivery", () => {
   it("is retried later without blocking other rows, and dead-lettered after the last attempt", async () => {
     const failing = await createDraft("Switchgear");
     const fine = await createDraft("Sockets");
-    await take(engineer, failing, "send_for_review");
-    await take(engineer, fine, "send_for_review");
+    await take(engineer.caller, failing, "send_for_review");
+    await take(engineer.caller, fine, "send_for_review");
     const flaky = async (trx: Parameters<typeof deliverNotification>[0], row: OutboxRow) => {
       if (row.payload.work_item_id === failing) throw new Error("mail server down");
       await deliverNotification(trx, row);
@@ -276,7 +263,7 @@ describe("a failing delivery", () => {
 describe("the outbox", () => {
   it("reports its backlog and oldest age for the worker's log, dead-lettered rows included", async () => {
     const id = await createDraft("Earthing");
-    await take(engineer, id, "send_for_review");
+    await take(engineer.caller, id, "send_for_review");
     const before = await outboxStats(worker);
     expect(before.backlog).toBeGreaterThanOrEqual(1);
     expect(before.oldestAgeSeconds).toBeGreaterThanOrEqual(0);

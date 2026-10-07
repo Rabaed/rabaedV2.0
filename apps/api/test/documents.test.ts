@@ -8,6 +8,7 @@ import type { DocumentList, StartedDocumentUpload } from "@rabaed/domain";
 import type { LightMyRequestResponse } from "fastify";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { attachDatasheet, createTestApi, expectHidden, type Caller, type OnboardedCompany } from "./support/harness.ts";
+import { projectMember, tryTake } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
 afterAll(() => api.close());
@@ -37,23 +38,11 @@ async function ok(res: Promise<LightMyRequestResponse>, status = 204) {
   return r;
 }
 
-async function projectMember(company: Company, participantId: string, positions: string[]) {
-  const { member, caller } = await api.member(company.caller);
-  await api.addProjectMember(company.caller, participantId, member.id);
-  await ok(
-    company.caller.request("PUT", `/v1/participants/${participantId}/members/${member.id}/visibility`, { trade: all, location: all }),
-  );
-  if (positions.length) {
-    await ok(company.caller.request("PUT", `/v1/participants/${participantId}/members/${member.id}/positions`, { positions }));
-  }
-  return caller;
-}
-
 async function otherParticipant(role: "contractor" | "consultant") {
   const company = await api.authorizedPerson();
   const participantId = await api.addParticipant(c1.caller, projectId, company.company, role);
   await ok(c1.caller.request("PUT", `/v1/participants/${participantId}/visibility`, { trade: all, location: all }));
-  return (positions: string[]) => projectMember(company, participantId, positions);
+  return (positions: string[]) => projectMember(api, company, participantId, positions);
 }
 
 async function draft(answers: Record<string, unknown> = complete): Promise<string> {
@@ -68,9 +57,6 @@ async function draft(answers: Record<string, unknown> = complete): Promise<strin
   );
   return res.json().id;
 }
-
-const take = (by: Caller, id: string, transition: string, { reason, ...extra }: { reason?: string } = {}) =>
-  by.post(`/v1/work-items/${id}/transitions`, { transition, idempotencyKey: randomUUID(), ...(reason === undefined ? {} : { answers: { reason } }), ...extra });
 
 const documentsUrl = (itemId: string) => `/v1/work-items/${itemId}/documents`;
 const documentUrl = (itemId: string, documentId: string) => `${documentsUrl(itemId)}/${documentId}`;
@@ -107,9 +93,9 @@ beforeAll(async () => {
     .json()
     .participants.find((p: { isOwnCompany: boolean }) => p.isOwnCompany).id;
   await ok(c1.caller.request("PUT", `/v1/participants/${own}/visibility`, { trade: all, location: all }));
-  engineer = await projectMember(c1, own, ["engineer"]);
-  pm = await projectMember(c1, own, ["project_manager"]);
-  viewer = await projectMember(c1, own, []);
+  engineer = await projectMember(api, c1, own, ["engineer"]);
+  pm = await projectMember(api, c1, own, ["project_manager"]);
+  viewer = await projectMember(api, c1, own, []);
   c2Engineer = await (await otherParticipant("contractor"))(["engineer"]);
   const k1 = await otherParticipant("consultant");
   k1Engineer = await k1(["engineer"]);
@@ -212,7 +198,7 @@ describe("Documents once the item is sent", () => {
     itemId = await draft();
     documentId = await uploaded(engineer, itemId);
     datasheetId = await attachDatasheet(engineer, itemId);
-    await ok(take(engineer, itemId, "send_for_review"));
+    await ok(tryTake(engineer, itemId, "send_for_review"));
   });
 
   it("are frozen: no removal, no replacement, no new upload", async () => {
@@ -237,7 +223,7 @@ describe("Documents once the item is sent", () => {
 
   it("stay frozen when the item is Returned to Draft, where new ones may be added", async () => {
     await ok(pm.post(`/v1/work-items/${itemId}/claim`));
-    await ok(take(pm, itemId, "return", { reason: "Add the test certificate" }));
+    await ok(tryTake(pm, itemId, "return", { reason: "Add the test certificate" }));
     expect((await engineer.delete(documentUrl(itemId, documentId))).json()).toEqual({ error: "document_frozen" });
     const certificate = await uploaded(engineer, itemId, "%PDF-1.7 certificate", "certificate.pdf");
     expect((await list(engineer, itemId)).documents.map((d) => [d.id, d.frozen])).toEqual([
@@ -249,9 +235,9 @@ describe("Documents once the item is sent", () => {
   });
 
   it("go with the item to the Consultant once Submitted, who sees the Company, not the person", async () => {
-    await ok(take(engineer, itemId, "send_for_review"));
+    await ok(tryTake(engineer, itemId, "send_for_review"));
     await ok(pm.post(`/v1/work-items/${itemId}/claim`));
-    await ok(take(pm, itemId, "submit"));
+    await ok(tryTake(pm, itemId, "submit"));
     const seen = await list(k1Engineer, itemId);
     expect(seen).toMatchObject({
       documents: [

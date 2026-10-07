@@ -7,13 +7,13 @@
 // Type whose Workflow has two: the Consultant's Engineer, then its Manager, who
 // can Return it to the Engineer. The Manager's Step is in another Stage, so the
 // Stage too must stay the one the item arrived in.
-import { randomUUID } from "node:crypto";
 import { createDb } from "@rabaed/db";
 import { testDatabaseUrls } from "@rabaed/db/test-support";
 import type { WorkItemDetail, WorkItemSummary } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { attachDatasheet, createTestApi, DEFAULT_PASSWORD, type Caller, type OnboardedCompany } from "./support/harness.ts";
+import { memberOnProject, tryTake } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
 const migrator = createDb(testDatabaseUrls().migrator, { max: 1 });
@@ -123,19 +123,10 @@ async function ok(res: Promise<{ statusCode: number; body: string }>, status = 2
 }
 
 /** A signed-in Member of `company` on the Project through `participantId`, with `positions`. */
-async function projectMember(company: Company, participantId: string, positions: string[]) {
-  const member = await api.inviteMember(company.caller);
-  const caller = await api.acceptInvitation(member.invitationToken);
-  emails.set(caller, member.email);
-  await api.addProjectMember(company.caller, participantId, member.id);
-  await ok(
-    company.caller.request("PUT", `/v1/participants/${participantId}/members/${member.id}/visibility`, {
-      trade: all,
-      location: all,
-    }),
-  );
-  await ok(company.caller.request("PUT", `/v1/participants/${participantId}/members/${member.id}/positions`, { positions }));
-  return caller;
+async function memberWithEmail(company: Company, participantId: string, positions: string[]) {
+  const member = await memberOnProject(api, company, participantId, positions);
+  emails.set(member.caller, member.email);
+  return member.caller;
 }
 
 async function participant(c1: Company, role: "consultant" | "owner", legalName: string) {
@@ -145,9 +136,6 @@ async function participant(c1: Company, role: "consultant" | "owner", legalName:
   await ok(c1.caller.request("PUT", `/v1/participants/${participantId}/visibility`, { trade: all, location: all }));
   return { company, participantId };
 }
-
-const take = (by: Caller, id: string, transition: string, { reason, ...extra }: { reason?: string } = {}) =>
-  by.post(`/v1/work-items/${id}/transitions`, { transition, idempotencyKey: randomUUID(), ...(reason === undefined ? {} : { answers: { reason } }), ...extra });
 
 /** Everything a caller learns of the item: its list row, detail and history. */
 async function seenBy(by: Caller, id: string) {
@@ -184,14 +172,14 @@ beforeAll(async () => {
     .json()
     .participants.find((p: { isOwnCompany: boolean }) => p.isOwnCompany).id;
   await ok(c1.caller.request("PUT", `/v1/participants/${c1ParticipantId}/visibility`, { trade: all, location: all }));
-  engineer = await projectMember(c1, c1ParticipantId, ["engineer"]);
-  pm = await projectMember(c1, c1ParticipantId, ["project_manager"]);
+  engineer = await memberWithEmail(c1, c1ParticipantId, ["engineer"]);
+  pm = await memberWithEmail(c1, c1ParticipantId, ["project_manager"]);
 
   const k1 = await participant(c1, "consultant", CONSULTANT);
-  k1Engineer = await projectMember(k1.company, k1.participantId, ["engineer"]);
-  k1Manager = await projectMember(k1.company, k1.participantId, ["manager"]);
+  k1Engineer = await memberWithEmail(k1.company, k1.participantId, ["engineer"]);
+  k1Manager = await memberWithEmail(k1.company, k1.participantId, ["manager"]);
   const ow = await participant(c1, "owner", "Test Owner");
-  owner = await projectMember(ow.company, ow.participantId, ["representative"]);
+  owner = await memberWithEmail(ow.company, ow.participantId, ["representative"]);
 });
 
 describe("K1 moves the Submitted item internally (scenario 35)", () => {
@@ -210,21 +198,21 @@ describe("K1 moves the Submitted item internally (scenario 35)", () => {
     expect(res.statusCode, res.body).toBe(201);
     id = res.json().id;
     await attachDatasheet(engineer, id);
-    await ok(take(engineer, id, "send_for_review"));
+    await ok(tryTake(engineer, id, "send_for_review"));
     await ok(pm.post(`/v1/work-items/${id}/claim`));
-    await ok(take(pm, id, "submit"));
+    await ok(tryTake(pm, id, "submit"));
     atSubmit = { pm: await seenBy(pm, id), owner: await seenBy(owner, id) };
     submittedAt = atSubmit.pm.detail.stepEnteredAt!;
 
     // Two weeks later the K1 Engineer sends it to the K1 Manager…
     await later(15 * DAY);
     await ok(k1Engineer.post(`/v1/work-items/${id}/claim`));
-    await ok(take(k1Engineer, id, "send_to_manager"));
+    await ok(tryTake(k1Engineer, id, "send_to_manager"));
     withManager = { pm: await seenBy(pm, id), owner: await seenBy(owner, id) };
     // …who, a week later, Returns it to the Engineer.
     await later(8 * DAY);
     await ok(k1Manager.post(`/v1/work-items/${id}/claim`));
-    await ok(take(k1Manager, id, "return_to_engineer", { reason: RETURN_REASON }));
+    await ok(tryTake(k1Manager, id, "return_to_engineer", { reason: RETURN_REASON }));
   });
 
   it("shows the C1 PM and the Owner Step Age counted from the Submit: no reset", async () => {
@@ -264,9 +252,9 @@ describe("K1 moves the Submitted item internally (scenario 35)", () => {
   });
 
   it("counts again from the Code for everyone once K1 closes the item", async () => {
-    await ok(take(k1Engineer, id, "send_to_manager"));
+    await ok(tryTake(k1Engineer, id, "send_to_manager"));
     await ok(k1Manager.post(`/v1/work-items/${id}/claim`));
-    await ok(take(k1Manager, id, "approve_a"));
+    await ok(tryTake(k1Manager, id, "approve_a"));
     for (const caller of [pm, owner, k1Engineer, k1Manager]) {
       const { detail } = await seenBy(caller, id);
       expect(detail).toMatchObject({ outcome: "A", stepAgeWeeks: 1 });
