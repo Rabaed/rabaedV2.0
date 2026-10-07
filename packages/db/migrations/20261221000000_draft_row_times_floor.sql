@@ -37,6 +37,9 @@ create function app.document_times(p_work_item_id uuid)
   as $$
     #variable_conflict use_column
     begin
+      if not app.sees_work_item(p_work_item_id) then
+        return;
+      end if;
       return query
         with recursive visible as (
           -- The rows the documents policy shows the acting Member.
