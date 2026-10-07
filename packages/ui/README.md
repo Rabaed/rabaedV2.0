@@ -236,6 +236,8 @@ These components have no words of their own: each takes a `labels` prop (a funct
 | Component | `labels` type |
 | --- | --- |
 | `WatchButton` | `WatchButtonLabels` (`watch`, `watching`, `refusals`) |
+| `RevisionActions` | `RevisionActionsLabels` (the section, both questions, `refusals`) |
+| `RevisionPicker` | `RevisionPickerLabels` (`label`); `revisionNoNumber` stays its own prop |
 
 ## Storybook and story tests
 

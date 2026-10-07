@@ -3,13 +3,13 @@ import { expect, fn, screen, userEvent, waitFor, within } from "storybook/test";
 import { expectLaidOutLeftToRight } from "../../storybook/bidi.ts";
 import { expectTouchTarget, phone } from "../../storybook/form.ts";
 import { storyLocale, storyText } from "../../storybook/locale.ts";
+import { revisionPickerLabels } from "../../storybook/revision.ts";
 import { workItemListLabels } from "../../storybook/views.ts";
 import { RevisionPicker, type RevisionPickerProps } from "./revision-picker.tsx";
 
 // The Revision drop-down on the item page (RP-318, spec RP-311): the Revisions
 // of the chain the viewer may see, as the API lists them. Story data only.
 const copy = {
-  label: { en: "Revision", ar: "المراجعة" },
   noNumber: { en: "Revision 2: no number yet", ar: "المراجعة 2: بلا رقم بعد" },
 };
 
@@ -22,13 +22,14 @@ const meta = {
   component: RevisionPicker,
   args: {
     locale: "en",
+    labels: revisionPickerLabels.en,
     revisions: [original, rev1],
     currentId: rev1.id,
     revisionNoNumber: workItemListLabels.en.revisionNoNumber,
     onOpen: fn<RevisionPickerProps["onOpen"]>(),
   },
   render: (args, context) => (
-    <RevisionPicker {...args} locale={storyLocale(context)} revisionNoNumber={workItemListLabels[storyLocale(context)].revisionNoNumber} />
+    <RevisionPicker {...args} locale={storyLocale(context)} labels={revisionPickerLabels[storyLocale(context)]} revisionNoNumber={workItemListLabels[storyLocale(context)].revisionNoNumber} />
   ),
   decorators: [(Story) => <div className="max-w-sm">{Story()}</div>],
 } satisfies Meta<typeof RevisionPicker>;
@@ -37,7 +38,7 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 type PlayContext = Parameters<NonNullable<Story["play"]>>[0];
 
-const picker = (context: PlayContext) => context.canvas.getByRole("combobox", { name: storyText(context, copy.label) });
+const picker = (context: PlayContext) => context.canvas.getByRole("combobox", { name: revisionPickerLabels[storyLocale(context)].label });
 
 /**
  * The Consultant on Rev 1 (scenario 52): the drop-down shows Rev 1, the one

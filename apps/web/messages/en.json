@@ -429,6 +429,25 @@
       "linksField": "Links"
     }
   },
+  "revision": {
+    "section": "Revision",
+    "pickerLabel": "Revision",
+    "createIntro": "Create a Revision of this item under the same number: it starts as a Draft with your answers and Documents.",
+    "create": "Create Revision",
+    "discard": "Discard Revision",
+    "discardTitle": "Discard this Revision?",
+    "discardIntro": "It is still a Draft, so nobody outside your company has seen it. The next Revision you create takes its Rev number.",
+    "cancel": "Cancel",
+    "close": "Close",
+    "refusals": {
+      "revision_not_allowed": "A Revision can't be created from this item now. Reload the page to see why.",
+      "not_discardable": "This Revision has left Draft, so it can no longer be discarded.",
+      "project_closed": "The Project is closed.",
+      "not_found": "This item is no longer available to you.",
+      "idempotency_key_reused": "That didn't work. Try again.",
+      "unavailable": "That didn't work. Try again."
+    }
+  },
   "watch": {
     "watch": "Watch",
     "watching": "Watching",

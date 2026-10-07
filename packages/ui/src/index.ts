@@ -59,11 +59,12 @@ export {
 } from "./components/numbering/numbering-counters.tsx";
 export {
   RevisionActions,
+  type RevisionActionsLabels,
   type RevisionActionsProps,
   type RevisionCall,
   type RevisionRefusal,
 } from "./components/revision/revision-actions.tsx";
-export { RevisionPicker, type RevisionPickerProps } from "./components/revision/revision-picker.tsx";
+export { RevisionPicker, type RevisionPickerLabels, type RevisionPickerProps } from "./components/revision/revision-picker.tsx";
 export {
   NotificationSettingsForm,
   type NotificationSettingsFormProps,

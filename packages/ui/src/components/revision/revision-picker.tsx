@@ -12,15 +12,12 @@ import { Select } from "../form/select.tsx";
 // Revision's " Rev n" included, left to right in both languages, as issued and
 // as on the paper register. Presentational: the page opens the chosen one.
 
-/* eslint-disable rabaed/no-ui-translations -- existing labels, still to move to the app's messages (RP-362 retro) */
-const copy = {
-  en: { label: "Revision" },
-  ar: { label: "المراجعة" },
-} satisfies Record<Locale, unknown>;
-/* eslint-enable rabaed/no-ui-translations */
+/** The drop-down's words, from the app's messages. */
+export type RevisionPickerLabels = { label: string };
 
 export type RevisionPickerProps = {
   locale: Locale;
+  labels: RevisionPickerLabels;
   /** The chain as the API lists it (`RevisionChain.revisions`), in order. */
   revisions: { id: string; documentNumber: string | null; revisionNo: number }[];
   /** The Revision on the page: shown, and marked in the list. */
@@ -32,8 +29,7 @@ export type RevisionPickerProps = {
 };
 
 /** A drop-down of the chain's Revisions; nothing when the viewer sees no other Revision. */
-export function RevisionPicker({ locale, revisions, currentId, revisionNoNumber, onOpen }: RevisionPickerProps) {
-  const t = copy[locale];
+export function RevisionPicker({ locale, labels: t, revisions, currentId, revisionNoNumber, onOpen }: RevisionPickerProps) {
   if (revisions.length < 2) return null;
   return (
     <Field label={t.label}>

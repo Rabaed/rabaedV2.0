@@ -111,7 +111,6 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
           projectId={item.projectId}
           canCreate={item.actions.createRevision}
           canDiscard={item.actions.discardRevision}
-          locale={locale}
         />
         {item.versionsChanged && (
           <div role="note" className="flex flex-col gap-2 rounded-md border border-border bg-surface p-3 text-sm text-muted">
