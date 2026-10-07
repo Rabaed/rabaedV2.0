@@ -218,11 +218,11 @@ describe("gatherFacts and removeWorktree in a throwaway repository", () => {
     }
     run(["merge", "--no-ff", "-m", "merge", "worktree-agent-merged"]);
 
-    expect(removeWorktree(listed("agent-merged"), root)).toEqual({});
+    expect(removeWorktree(listed("agent-merged"), root, "main")).toEqual({});
     expect(refExists("worktree-agent-merged", root)).toBe(false);
 
-    const { branchKept } = removeWorktree(listed("agent-unmerged"), root);
-    expect(branchKept).toMatch(/has commits main does not/);
+    const { branchesKept } = removeWorktree(listed("agent-unmerged"), root, "main");
+    expect(branchesKept).toEqual([{ branch: "worktree-agent-unmerged", reason: "worktree-agent-unmerged has commits main does not" }]);
     expect(refExists("worktree-agent-unmerged", root)).toBe(true);
     expect(existsSync(agent("agent-unmerged"))).toBe(false);
   });
@@ -242,8 +242,8 @@ describe("gatherFacts and removeWorktree in a throwaway repository", () => {
     expect(removeWorktree(listed("agent-in"), root, "integration")).toEqual({});
     expect(refExists("RP-9-agent-in", root)).toBe(false);
 
-    const { branchKept } = removeWorktree(listed("agent-out"), root, "integration");
-    expect(branchKept).toMatch(/RP-9-agent-out/);
+    const { branchesKept } = removeWorktree(listed("agent-out"), root, "integration");
+    expect(branchesKept?.map((b) => b.branch)).toEqual(["RP-9-agent-out"]);
     expect(refExists("RP-9-agent-out", root)).toBe(true);
   });
 
@@ -253,6 +253,27 @@ describe("gatherFacts and removeWorktree in a throwaway repository", () => {
     expect(removeWorktree(listed("agent-renamed"), root, "main")).toEqual({});
     expect(refExists("RP-10-renamed", root)).toBe(false);
     expect(refExists("worktree-agent-renamed", root)).toBe(false);
+  });
+
+  it("finds the worktree-agent-* branch by its folder's own case, refs packed", () => {
+    run(["worktree", "add", "-b", "worktree-agent-Mixed", agent("agent-Mixed")]);
+    run(["checkout", "-b", "RP-11-mixed"], agent("agent-Mixed"));
+    // Packed refs are matched case-sensitively, also on Windows.
+    run(["pack-refs", "--all"]);
+    expect(removeWorktree(listed("agent-Mixed"), root, "main")).toEqual({});
+    expect(refExists("worktree-agent-Mixed", root)).toBe(false);
+  });
+
+  it("keeps, and names, a worktree-agent-* branch git will not delete, and still deletes the worktree's own branch", () => {
+    run(["worktree", "add", "-b", "worktree-agent-held", agent("agent-held")]);
+    run(["checkout", "-b", "RP-12-held"], agent("agent-held"));
+    // Another worktree has the created branch checked out, so `git branch -D` refuses it.
+    run(["worktree", "add", join(root, "other"), "worktree-agent-held"]);
+    const { branchesKept, folderLeft } = removeWorktree(listed("agent-held"), root, "main");
+    expect(folderLeft).toBeUndefined();
+    expect(branchesKept?.map((b) => b.branch)).toEqual(["worktree-agent-held"]);
+    expect(existsSync(agent("agent-held"))).toBe(false);
+    expect(refExists("RP-12-held", root)).toBe(false);
   });
 
   it("calls a branch merged only once it has a commit of its own that the target has", () => {
@@ -307,10 +328,10 @@ describe("localBranches, unpushedCount and removeLinkedWorktree with an origin",
     run(["fetch", "--prune", "origin"]);
 
     expect(localBranches("origin/main", clone)).toEqual([
-      { branch: "RP-1-merged", inMain: true, ownCommit: true, upstreamGone: true },
-      { branch: "RP-2-created", inMain: true, ownCommit: false, upstreamGone: false },
-      { branch: "RP-3-open", inMain: false, ownCommit: true, upstreamGone: false },
-      { branch: "main", inMain: true, ownCommit: true, upstreamGone: false },
+      { branch: "RP-1-merged", inTarget: true, ownCommit: true, upstreamGone: true },
+      { branch: "RP-2-created", inTarget: true, ownCommit: false, upstreamGone: false },
+      { branch: "RP-3-open", inTarget: false, ownCommit: true, upstreamGone: false },
+      { branch: "main", inTarget: true, ownCommit: true, upstreamGone: false },
     ]);
   });
 
@@ -322,6 +343,21 @@ describe("localBranches, unpushedCount and removeLinkedWorktree with an origin",
     expect(unpushedCount(head, clone)).toBe(2);
     run(["push", "origin", "RP-4-work"]);
     expect(unpushedCount(head, clone)).toBe(0);
+  });
+
+  it("counts a squash-merged branch's commits as on no origin branch once its remote branch is deleted", () => {
+    run(["checkout", "-b", "RP-6-squashed"]);
+    commit(clone, "g.txt");
+    run(["push", "-u", "origin", "RP-6-squashed"]);
+    const head = run(["rev-parse", "HEAD"]).trim();
+    run(["checkout", "main"]);
+    run(["merge", "--squash", "RP-6-squashed"]);
+    run(["commit", "-m", "RP-6 squashed"]);
+    run(["push", "origin", "main"]);
+    run(["push", "origin", "--delete", "RP-6-squashed"]);
+    run(["fetch", "--prune", "origin"]);
+    expect(localBranches("origin/main", clone).find((b) => b.branch === "RP-6-squashed")).toMatchObject({ inTarget: false, upstreamGone: true });
+    expect(unpushedCount(head, clone)).toBe(1);
   });
 
   it("removes a worktree outside .claude/worktrees with its folder and merged branch, and refuses the main checkout", () => {

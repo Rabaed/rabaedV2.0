@@ -1,6 +1,6 @@
 import { mergedProjects, staleProjects, type Container, type StaleProject, type Volume, type WorktreeLane } from "./lanes.ts";
 import { normalPath, samePath } from "./paths.ts";
-import { lockedByApp, type Skipped, type Worktree, type WorktreeFacts } from "./worktrees.ts";
+import { lockedByApp, type LocalBranch, type Skipped, type Worktree, type WorktreeFacts } from "./worktrees.ts";
 
 // What `pnpm worktrees:prune` removes once PRs have merged (RP-308): every worktree
 // merged into origin/main, with its rabaed-* compose project and branch, then the
@@ -16,16 +16,6 @@ export type PruneWorktree = WorktreeFacts & {
   unpushed: number;
   /** COMPOSE_PROJECT_NAME from its .env, if any. */
   project: string | undefined;
-};
-
-/** A local branch, as step 3 sees it. */
-export type LocalBranch = {
-  branch: string;
-  /** Its tip is an ancestor of origin/main (merge-base --is-ancestor). */
-  inMain: boolean;
-  /** Its reflog shows a commit made on it (worktrees.ts hasOwnCommit). */
-  ownCommit: boolean;
-  upstreamGone: boolean;
 };
 
 export type DockerState = {
@@ -55,7 +45,15 @@ export type PruneChoice = {
   /** Other local branches to delete, merged into origin/main and checked out nowhere. */
   branches: string[];
   /** Compose projects to remove: those of removed worktrees, and the orphans lanes:prune finds. */
-  projects: StaleProject[];
+  projects: PruneProject[];
+};
+
+export type PruneProject = StaleProject & {
+  /**
+   * The worktrees chosen for removal it belongs to: it goes only once they are all
+   * removed. Empty for an orphan lanes:prune removes anyway.
+   */
+  waitsFor: string[];
 };
 
 /** Whether the path is under `<mainRoot>/.claude/worktrees/`, where the desktop app makes its worktrees. */
@@ -70,7 +68,8 @@ const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
  * merged: all its commits are in origin/main and its branch has had one of its own, or
  * its upstream is gone (desktop-app worktrees need the former). Never the main checkout,
  * the current worktree, one on `main`, one locked by hand, or one with uncommitted
- * changes or commits on no origin branch; those are skipped with their reason.
+ * changes or commits on no origin branch (so a squash-merged worktree whose remote
+ * branch was deleted stays); those are skipped with their reason.
  */
 export function choosePrune({ worktrees, branches, mainRoot, currentPath, docker, exists, platform }: PruneInput): PruneChoice {
   const remove: Worktree[] = [];
@@ -85,10 +84,22 @@ export function choosePrune({ worktrees, branches, mainRoot, currentPath, docker
   const removed = (path: string) => remove.some((w) => samePath(w.path, path, platform));
   const checkedOut = new Set(worktrees.map((w) => w.branch).filter((b) => b !== undefined));
   const branchesToDelete = branches
-    .filter((b) => b.branch !== "main" && !checkedOut.has(b.branch) && b.inMain && (b.ownCommit || b.upstreamGone))
+    .filter((b) => b.branch !== "main" && !checkedOut.has(b.branch) && b.inTarget &&(b.ownCommit || b.upstreamGone))
     .map((b) => b.branch);
 
-  return { remove, skipped, branches: branchesToDelete, projects: docker ? projectsToRemove(worktrees, removed, exists, currentPath, docker, platform) : [] };
+  return { remove, skipped, branches: branchesToDelete, projects: docker ? projectsToRemove({ worktrees, removed, folderExists: exists, cwd: currentPath, docker, platform }) : [] };
+}
+
+/**
+ * Why a worktree chosen for removal stays after all, judged on its facts gathered
+ * again just before removing it (undefined when no longer listed by git), or
+ * undefined when it still goes.
+ */
+export function changedSinceListed(now: PruneWorktree | undefined): string | undefined {
+  if (!now) return "no longer a worktree";
+  if (now.dirty) return "uncommitted changes since it was listed";
+  if (now.unpushed > 0) return `${plural(now.unpushed, "commit")} on no origin branch since it was listed`;
+  return undefined;
 }
 
 /** Why a worktree stays, or undefined when it goes. */
@@ -105,19 +116,35 @@ function skipReason(w: PruneWorktree, mainRoot: string, currentPath: string, pla
   return w.ahead > 0 ? `${plural(w.ahead, "commit")} not in origin/main` : "no commits yet, may still be running";
 }
 
+type ProjectsInput = {
+  worktrees: PruneWorktree[];
+  /** Whether the worktree at the path is chosen for removal. */
+  removed: (path: string) => boolean;
+  folderExists: (dir: string) => boolean;
+  cwd: string;
+  docker: DockerState;
+  platform: NodeJS.Platform | undefined;
+};
+
 /**
  * lanes:prune's two rules (mergedProjects, staleProjects) with the removed worktrees
  * counted as merged and gone. A project a kept worktree names in its .env always stays:
  * it may share that lane's database (lane:env --db) without containers of its own.
+ * A project lanes:prune alone would not remove waits for the removed worktrees it
+ * belongs to (by their .env or its containers' folder).
  */
-function projectsToRemove(
-  worktrees: PruneWorktree[],
-  removed: (path: string) => boolean,
-  folderExists: (dir: string) => boolean,
-  cwd: string,
-  { containers, volumes, currentProject }: DockerState,
-  platform: NodeJS.Platform | undefined,
-): StaleProject[] {
+function projectsToRemove({ worktrees, removed, folderExists, cwd, docker, platform }: ProjectsInput): PruneProject[] {
+  const orphans = new Set(chosenProjects({ worktrees, removed: () => false, folderExists, cwd, docker, platform }).map((p) => p.project));
+  return chosenProjects({ worktrees, removed, folderExists, cwd, docker, platform }).map((p) => {
+    const dirs = docker.containers.filter((c) => c.project === p.project).map((c) => c.workingDir);
+    const waitsFor = orphans.has(p.project)
+      ? []
+      : worktrees.filter((w) => removed(w.path) && (w.project === p.project || dirs.some((d) => samePath(d, w.path, platform)))).map((w) => w.path);
+    return { ...p, waitsFor };
+  });
+}
+
+function chosenProjects({ worktrees, removed, folderExists, cwd, docker: { containers, volumes, currentProject }, platform }: ProjectsInput): StaleProject[] {
   const lanes: WorktreeLane[] = worktrees.map((w) => ({ path: w.path, branch: w.branch, merged: removed(w.path), project: w.project }));
   const kept = new Set(worktrees.filter((w) => !removed(w.path)).map((w) => w.project));
   const exists = (dir: string) => !removed(dir) && folderExists(dir);

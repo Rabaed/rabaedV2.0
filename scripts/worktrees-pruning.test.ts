@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Container, Volume } from "./lanes.ts";
-import { choosePrune, type LocalBranch, type PruneWorktree } from "./worktrees-pruning.ts";
+import { changedSinceListed, choosePrune, type PruneWorktree } from "./worktrees-pruning.ts";
+import type { LocalBranch } from "./worktrees.ts";
 
 const main = "G:/Rabaed Contech";
 const here = `${main}/.claude/worktrees/RP-1-current`;
@@ -21,7 +22,7 @@ const wt = (path: string, w: Partial<PruneWorktree> = {}): PruneWorktree => ({
 const mainCheckout = wt(main, { branch: "main", project: "rabaed" });
 const current = wt(here, { branch: "RP-1-current", ahead: 2, project: "rabaed-lane2" });
 const container = (name: string, project: string, workingDir: string, state = "running"): Container => ({ name, state, project, workingDir, ports: [] });
-const merged = (branch: string, b: Partial<LocalBranch> = {}): LocalBranch => ({ branch, inMain: true, ownCommit: true, upstreamGone: false, ...b });
+const merged = (branch: string, b: Partial<LocalBranch> = {}): LocalBranch => ({ branch, inTarget: true, ownCommit: true, upstreamGone: false, ...b });
 const volume =(project: string): Volume => ({ name: `${project}_db`, project });
 
 const choose = (worktrees: PruneWorktree[], more: Partial<Parameters<typeof choosePrune>[0]> = {}) =>
@@ -37,6 +38,8 @@ describe("choosePrune", () => {
     });
     expect(p.remove.map((w) => w.path)).toEqual(["G:/work/RP-5 done"]);
     expect(p.projects.map((x) => [x.project, x.containers, x.volumes])).toEqual([["rabaed-lane3", ["rabaed-lane3-db-1"], ["rabaed-lane3_db"]]]);
+    // Removed only once that worktree is.
+    expect(p.projects[0]?.waitsFor).toEqual(["G:/work/RP-5 done"]);
     // RP-5-done goes with its worktree; the other merged branches are listed on their own.
     expect(p.branches).toEqual(["RP-4-old"]);
   });
@@ -91,9 +94,17 @@ describe("choosePrune", () => {
     expect(reasons(choose([wt("/w/a", { dirty: true, unpushed: 1, upstreamGone: true })]))[2]?.[1]).toBe("uncommitted changes");
   });
 
-  it("treats a gone upstream as merged, though origin/main has other commits (squash)", () => {
-    const p = choose([wt("/w/squashed", { ahead: 3, upstreamGone: true })]);
-    expect(p.remove.map((w) => w.path)).toEqual(["/w/squashed"]);
+  it("keeps a squash-merged worktree whose remote branch was deleted: its commits are on no origin branch", () => {
+    // After a squash merge and the remote branch's deletion, origin has none of its commits.
+    const p = choose([wt("/w/squashed", { ahead: 3, upstreamGone: true, unpushed: 3 })]);
+    expect(p.remove).toEqual([]);
+    expect(reasons(p)[2]).toEqual(["/w/squashed", "3 commits on no origin branch"]);
+  });
+
+  it("treats a gone upstream as merged when another origin branch still has its commits", () => {
+    // E.g. a stacked branch merged into its base branch, which origin still has.
+    const p = choose([wt("/w/stacked", { ahead: 3, upstreamGone: true, unpushed: 0 })]);
+    expect(p.remove.map((w) => w.path)).toEqual(["/w/stacked"]);
   });
 
   it("includes a desktop-app worktree only when merged into origin/main, not for a gone upstream alone", () => {
@@ -123,7 +134,7 @@ describe("choosePrune", () => {
         merged("RP-2-merged"),
         merged("RP-3-gone", { ownCommit: false, upstreamGone: true }),
         merged("RP-4-just-created", { ownCommit: false }),
-        merged("RP-5-open", { inMain: false, upstreamGone: true }),
+        merged("RP-5-open", { inTarget: false, upstreamGone: true }),
       ],
     });
     expect(p.branches).toEqual(["RP-2-merged", "RP-3-gone"]);
@@ -151,13 +162,25 @@ describe("choosePrune", () => {
       },
       exists: (dir) => dir !== "/gone",
     });
-    expect(p.projects.map((x) => [x.project, x.reason])).toEqual([
-      ["rabaed-lane5", "worktree gone (/gone)"],
-      ["rabaed-lane7", "no containers, only volumes"],
+    expect(p.projects.map((x) => [x.project, x.reason, x.waitsFor])).toEqual([
+      ["rabaed-lane5", "worktree gone (/gone)", []],
+      ["rabaed-lane7", "no containers, only volumes", []],
     ]);
   });
 
   it("chooses no compose project when Docker is not running", () => {
     expect(choose([wt("/w/done", { project: "rabaed-lane3" })]).projects).toEqual([]);
+  });
+});
+
+describe("changedSinceListed", () => {
+  it("lets a worktree go that is still clean and pushed", () => {
+    expect(changedSinceListed(wt("/w/done"))).toBeUndefined();
+  });
+
+  it("keeps one that got uncommitted changes or unpushed commits after it was listed, or is gone from git", () => {
+    expect(changedSinceListed(wt("/w/done", { dirty: true }))).toBe("uncommitted changes since it was listed");
+    expect(changedSinceListed(wt("/w/done", { unpushed: 1 }))).toBe("1 commit on no origin branch since it was listed");
+    expect(changedSinceListed(undefined)).toBe("no longer a worktree");
   });
 });

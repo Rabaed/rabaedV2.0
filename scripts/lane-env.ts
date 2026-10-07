@@ -12,8 +12,9 @@
 // --db <suffix> (e.g. rp322) names the three database URLs rabaed_<suffix>, so the seam suites
 // use rabaed_<suffix>_test: several worktrees of one lane (e.g. /implement-spec's implementer
 // subagents) can share its Postgres without migrating the same database. A --db run may share
-// a lane with another worktree, but only the lane owner's own implementer subagents use it: a
-// session whose lane another session holds takes --free or runs lanes:prune. Without --db the .env is as before.
+// a lane with another worktree, but only the lane owner's own implementer subagents use it:
+// a session whose lane another session holds takes --free or runs lanes:prune. Without --db
+// the .env is as before.
 // `pnpm lanes:prune` removes the compose projects old worktrees left behind;
 // `pnpm lanes:drop-dbs` drops the --db databases of worktrees that are gone.
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
