@@ -58,10 +58,14 @@ export async function listParticipants(db: Db, memberId: string, projectId: stri
       role_name: BilingualText;
       own: boolean;
       code: string | null;
+      ordinal: number | null;
     }>`
       -- The code is read through the participant table's row-level security: a Member
       -- gets the codes of the Participants they can see (V15), and the join adds no row.
-      select p.*, p.company_id = app.current_company_id() as own, pt.code
+      -- The order on the Project only to its Project Admins: orders are max+1, so a
+      -- Participant's own would tell anyone else how many others there are (RP-381-1).
+      select p.*, p.company_id = app.current_company_id() as own, pt.code,
+        case when ${projectId}::uuid in (select app.current_admin_project_ids()) then pt.ordinal end as ordinal
       from app.project_participants(${projectId}::uuid) p
       join participant pt on pt.id = p.participant_id
     `.execute(trx);
@@ -72,6 +76,7 @@ export async function listParticipants(db: Db, memberId: string, projectId: stri
         company: { id: r.company_id, legalName: r.legal_name },
         projectRole: { baseRole: r.base_role, name: r.role_name },
         code: r.code,
+        ordinal: r.ordinal,
         isOwnCompany: r.own,
       })),
     };

@@ -43,6 +43,7 @@ describe("adding a Participant", () => {
         company: { id: host.company.companyId, legalName: { en: "Test Constructions", ar: "إنشاءات الاختبار" } },
         projectRole: { baseRole: "contractor", name: { en: "Contractor", ar: "المقاول" } },
         code: null,
+        ordinal: 1,
         isOwnCompany: true,
       },
       {
@@ -50,6 +51,7 @@ describe("adding a Participant", () => {
         company: { id: consultant.company.companyId, legalName: { en: "Test Constructions", ar: "إنشاءات الاختبار" } },
         projectRole: { baseRole: "consultant", name: { en: "Consultant", ar: "الاستشاري" } },
         code: null,
+        ordinal: 2,
         isOwnCompany: false,
       },
     ]);
@@ -309,6 +311,8 @@ describe("the Participants of a Project", () => {
           company: { id: c1.company.companyId, legalName: expect.any(Object) },
           projectRole: { baseRole: "contractor", name: { en: "Contractor", ar: "المقاول" } },
           code: null,
+          // Not even its own order on the Project, which would count the others (RP-381-1).
+          ordinal: null,
           isOwnCompany: true,
         },
       ],

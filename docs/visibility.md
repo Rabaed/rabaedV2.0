@@ -168,6 +168,7 @@ Rows 1–81 keep their numbers; a new row takes an ID from the key of the ticket
 | 81 | K1 reads the answers of an item whose link question points at an item K1 can't see | K1 (app database role) | The answer holds that item's Document Number and Subject, never its id (ADR 0012) |
 | RP-392-1 | C1 engineer saves a Draft on day 1; it is numbered on day 3, and later sent back (to its Draft, or to Internal Review) | C1 PM at Internal Review; C1 engineer after the Send Back | No answer time, in the API or in "Saved <time>", is earlier than day 3: an earlier stored time reads as the Creation Date, and stays in the audit trail. While it is still a Draft, co-editors see real times. The app role can't read `work_item.field_times` |
 | RP-392-2 | C1 creates a Revision on day 5 and sends it for review on day 7 | C1 PM at Internal Review | No answer time or "Saved" earlier than day 7, the Revision's own Creation Date, whatever the original item's times |
+| RP-381-1 | The Tower has three Participants, none with a Participant Code; K1's manager and a C1 engineer open the Participants (API) and Project Settings → Numbering | K1 manager; C1 engineer (neither a Project Admin) | Each gets their own Participant without its order on the Project (`ordinal` null, "No code yet" on the page): orders are given out max+1, so even their own would count the other Participants (V15, side channels). Project Admins get every order |
 
 Every change to rules or channels must add or update rows here and in the test suite. A failing visibility test blocks release.
 
