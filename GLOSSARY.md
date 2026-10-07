@@ -206,11 +206,11 @@ The part of a Library that holds Saved Fields and Option Lists.
 _Avoid_: Field management (the screen, not the thing)
 
 **Library**:
-A Company's own collection of Forms, its Field Library, its Trade and Scope lists, and its Workflows and Work Item Types, built or copied. A Project copies a Company's Trade and Scope lists when it is set up, and takes later changes only when its Project Admin pulls them in. A Project takes its Forms from the Rabaed Defaults or from any of its Participants' Libraries, as the Project Admin chooses. Taking or copying one always makes an independent copy that notes where it came from: later changes to the original never reach it.
+A Company's own collection of Forms, its Field Library, its Trade and Scope lists, and its Workflows and Work Item Types, built or copied. A Project copies a Company's Trade and Scope lists when it is set up, and takes later changes only when its Project Admin pulls them in. A Project takes its Forms and Workflows from the Rabaed Defaults or from any of its Participants' Libraries, as the Project Admin chooses. Taking or copying one always makes an independent copy that notes where it came from: later changes to the original never reach it.
 _Avoid_: Template library, catalogue
 
 **Workflow**:
-The versioned graph of Steps and Transitions, drawn in the visual workflow builder, that a Work Item passes through. A Work Item stays on the Workflow version it started with.
+The versioned graph of Steps and Transitions, drawn in the visual workflow builder, that a Work Item passes through. A Work Item stays on the Workflow version it started with. A Project runs its own copy for each Work Item Type, sometimes a different one for one raising Participant; everyone on the Project can read its map (ADR 0016).
 
 **Version**:
 A published, unchangeable edition of a Form or a Workflow. A Work Item stays on the Versions it started with; later Versions apply only to new Work Items.
@@ -281,6 +281,10 @@ _Avoid_: System template, built-in
 The formal outcome of reviewing a Work Item such as a submittal: A (Approved), B (Approved with Comments), C (Revise and Resubmit) or D (Rejected). Every code closes the Work Item; with B, its Comments continue in the Snag List.
 _Avoid_: Status, result
 
+**Outcome**:
+How a Work Item ends, set by the Transition that closes it: a Review Code, an Inspection Result, or another outcome its Work Item Type defines, such as Approved or Rejected. Each outcome is positive or negative, and some lead to more work: Comments in the Snag List with Code B, a Revision with Code C, a replacement with Code D.
+_Avoid_: Status, result
+
 **Recommended Code**:
 A Review Code a reviewer proposes to the next reviewer, for information only; the next reviewer can accept it, override it, or send it back.
 _Avoid_: Draft code, proposed status
@@ -291,7 +295,7 @@ _Avoid_: Final status
 
 **Remarks**:
 The shared text the Consultant writes with a Review Code, a field of the Code Transitions' Action Form: optional with A, required with C. Unlike an Internal Note, everyone who can see the Work Item reads it, in the item's history.
-_Avoid_: Comments (reserved for the Snag List), note
+_Avoid_: Comments (reserved for the Snag List), note, recommendation (too close to Recommended Code), highlights
 
 **Revision**:
 A resubmission of a Work Item that ended with Code C: a new Work Item, started as a Draft from the latest one, that keeps the same number with a revision suffix (MS-003 → MS-003 Rev 1) and is linked to the one before it. The first submission has no suffix. The earlier one stays closed at Code C, and anyone who sees a Revision can switch to the earlier ones they may see.
@@ -344,7 +348,7 @@ An earlier copy of a free file in the Files Module, kept when a new copy is uplo
 _Avoid_: Revision, Drawing Revision
 
 **Signature**:
-A Member's signature, kept in their profile and applied, together with who acted and when, every time they take a signing Transition on a Work Item. A Member without one cannot take signing Transitions.
+A Member's signature, kept in their profile and applied, together with who acted and when, every time they take a Transition on a Work Item; the Documental Record shows the Signature of everyone who acted on the item's path (ADR 0017). A Member without one cannot take Transitions.
 _Avoid_: Stamp, initials
 
 **Documental Record**:
