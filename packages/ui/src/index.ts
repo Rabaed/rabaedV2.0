@@ -42,6 +42,7 @@ export type { LinkTargetNames } from "./components/form-engine/link-question-fie
 export { Input, type InputProps } from "./components/form/input.tsx";
 export {
   NumberingPatternBuilder,
+  type NumberingPatternLabels,
   NumberingPatternView,
   type NumberingPatternBuilderProps,
   type NumberingPatternViewProps,
@@ -53,6 +54,7 @@ export { Switch, type SwitchProps } from "./components/form/switch.tsx";
 export { Textarea, type TextareaProps } from "./components/form/textarea.tsx";
 export {
   NumberingCounters,
+  type NumberingCountersLabels,
   type CounterCall,
   type CounterRefusal,
   type NumberingCountersProps,
