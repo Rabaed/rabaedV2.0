@@ -159,7 +159,8 @@ This is the shared set per Module. Workflows reference Stages by `key`, so libra
 `work_item_type.pdf_template_id` picks the template per Project. `documental_record.pdf_template_version_id` records which one sealed it.
 
 **workflow_definition** / **workflow_version**
-- `workflow_definition`: `id`, `owner_kind/owner_id`, `name i18n`, `copied_from_id`.
+- `workflow_definition`: `id`, `owner_kind/owner_id`, `name i18n`. As built (RP-426, ADR 0016): `owner_kind {rabaed, project, company}` with `project_id` or `company_id` (a Company's Library); no `copied_from_id`, since a copy is independent of its original. Read by every Member for a Rabaed Default, by the Project's Members for a Project's, by its own Company for a Library's (visibility.md V18, V20).
+- `workflow_binding` (RP-426): `id`, `project_id`, `work_item_type_id`, `raising_participant_id` (null: the Type's Workflow on the Project; else an exception for items that Participant raises), `workflow_definition_id`. Unique per (Project, Type) and per (Project, Type, raising Participant). Names the Project's own Workflow or a Rabaed Default with a published Version (trigger `workflow_binding_checked`). Read by the Project's Members; an exception only by its Participant's Members and the Project Admins (V15). See workflow-engine.md §1 "Ownership and binding".
 - `workflow_version`: `id`, `workflow_definition_id`, `version_no`, `status {draft, published}`, `layout jsonb` (React Flow node positions only), `published_at`. Published versions are immutable.
 
 **workflow_step**
@@ -176,7 +177,7 @@ This is the shared set per Module. Workflows reference Stages by `key`, so libra
 
 **work_item_type**
 `id`, `project_id`, `module_key`, `code` (MAR, SAR, DAR…), `name i18n`, `form_definition_id`, `workflow_definition_id`, `outcome_kind {review_code, inspection_result, none}`, `expected_frequency {none, daily, weekly, monthly}`, `allows_subtasks bool`, `copied_from_id`.
-New items use the latest *published* versions of the Form and Workflow at creation time.
+New items use the latest *published* versions of the Form and Workflow at creation time. `workflow_definition_id` is the Type's Rabaed Default; a Project's `workflow_binding` overrides it for that Project's new items (RP-426).
 
 **step_default_holder**
 `project_id`, `participant_id`, `work_item_type_id`, `step_key`, `member_id`. Set by each Participant for its own Steps.

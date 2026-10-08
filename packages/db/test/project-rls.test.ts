@@ -167,11 +167,20 @@ async function fillProject(projectId: string, creator: string) {
     projectId,
     name,
   ]);
-  await migrator.query(
+  const type = await one(
     `insert into work_item_type (owner_kind, project_id, module_key, code, name, workflow_definition_id, outcome_kind, form_definition_id)
-     values ('project', $1, 'submittals', 'OWN', $2, $3, 'none', $4)`,
+     values ('project', $1, 'submittals', 'OWN', $2, $3, 'none', $4) returning id`,
     [projectId, name, definition, form],
   );
+  // A binding names a Workflow with a published Version (RP-426).
+  await migrator.query("insert into workflow_version (workflow_definition_id, version_no, status, published_at) values ($1, 1, 'published', now())", [
+    definition,
+  ]);
+  await migrator.query("insert into workflow_binding (project_id, work_item_type_id, workflow_definition_id) values ($1, $2, $3)", [
+    projectId,
+    type,
+    definition,
+  ]);
   // Nothing writes Numbering Patterns yet (RP-313).
   await migrator.query(
     `insert into numbering_pattern (project_id, segments, separator, seq_digits, seq_scope, set_by_member_id)

@@ -284,7 +284,7 @@ function formToFillAt(form: FormVersion, { steps, roleNames }: WorkflowSteps, at
 /**
  * The Form for a new item of the Rabaed Default Type `typeCode` on one of the
  * Member's Projects: the latest published Version, as it is filled in at the
- * Draft of the latest published Workflow Version. Null when it isn't one of
+ * Draft of the Workflow Version it would start on (draftOf). Null when it isn't one of
  * their Projects, or there is no such Type.
  */
 export function getNewWorkItemForm(db: Db, memberId: string, projectId: string, typeCode: string): Promise<FormToFill | null> {
@@ -292,21 +292,27 @@ export function getNewWorkItemForm(db: Db, memberId: string, projectId: string, 
     const onProject = await trx.selectFrom("project").select("id").where("id", "=", projectId).executeTakeFirst();
     if (!onProject) return null;
     const form = await latestForm(trx, typeCode);
-    return form && formToFillAt(form, ...(await draftOf(trx, typeCode)));
+    return form && formToFillAt(form, ...(await draftOf(trx, projectId, typeCode)));
   });
 }
 
-/** The Steps of the Workflow a new item of `typeCode` starts on (its latest published Version), and its Draft. */
-async function draftOf(trx: Trx, typeCode: string): Promise<[WorkflowSteps, SectionEditContext]> {
-  const { rows } = await sql<{ type_id: string; workflow_version_id: string }>`
-    select t.id as type_id, v.id as workflow_version_id
+/**
+ * The Steps of the Workflow a new item of `typeCode` raised by the acting Member
+ * on `projectId` starts on, and its Draft: the latest published Version of the
+ * Workflow bound for their Participant, as app.create_work_item resolves it (RP-426).
+ */
+async function draftOf(trx: Trx, projectId: string, typeCode: string): Promise<[WorkflowSteps, SectionEditContext]> {
+  const { rows } = await sql<{ type_id: string; workflow_version_id: string | null }>`
+    select t.id as type_id, app.new_item_workflow_version(${projectId}::uuid, t.id, (
+      select pm.participant_id from project_member pm
+      where pm.project_id = ${projectId}::uuid and pm.member_id = app.current_member_id() and pm.status = 'active'
+        and pm.participant_id in (select app.current_participant_ids())
+    )) as workflow_version_id
     from work_item_type t
-    join workflow_version v on v.workflow_definition_id = t.workflow_definition_id and v.status = 'published'
     where t.owner_kind = 'rabaed' and t.code = ${typeCode}
-    order by v.version_no desc limit 1
   `.execute(trx);
   const r = rows[0];
-  if (!r) throw new Error(`Work Item Type ${typeCode} has no published Workflow Version`);
+  if (!r?.workflow_version_id) throw new Error(`Work Item Type ${typeCode} has no published Workflow Version`);
   const workflow = await workflowSteps(trx, r.type_id, r.workflow_version_id);
   const draft = workflow.steps.find((s) => s.draft);
   if (!draft) throw new Error(`The Workflow of Work Item Type ${typeCode} has no Draft Step`);
@@ -449,7 +455,7 @@ export function createWorkItem(
       const form = await latestForm(trx, input.type);
       if (!form) return { ok: false, reason: "type_not_found" };
       // Only the Form Sections editable at the Draft take answers (form-engine.md §4).
-      const atDraft = formToFillAt(form, ...(await draftOf(trx, input.type)));
+      const atDraft = formToFillAt(form, ...(await draftOf(trx, projectId, input.type)));
       if (changedOutside(form.schema, new Set(atDraft.editableSections), {}, input.answers).length > 0) {
         return { ok: false, reason: "not_editable" };
       }
@@ -542,8 +548,11 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
       versions_changed: boolean;
       can_create_revision: boolean;
       can_discard_revision: boolean;
+      workflow_name: BilingualText;
+      workflow_version_no: number;
     }>`
       select app.work_item_answers(w.id) as data, w.form_version_id, app.work_item_creation_date(w.id) as creation_date,
+        wd.name as workflow_name, wv.version_no as workflow_version_no,
         w.submitted_at, w.outcome, w.closed_at, s.key as step_key, s.name as step_name,
         raiser.legal_name as raised_by, holder.legal_name as held_by, m.full_name as holder_name,
         app.can_save_answers(w.id) as can_save_answers, w.revision_no, app.revision_versions_changed(w.id) as versions_changed,
@@ -551,6 +560,9 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
       from work_item w
       cross join lateral app.step_as_seen(w.id) seen
       join workflow_step s on s.id = seen.step_id
+      -- Definitions every Project Member reads (V20).
+      join workflow_version wv on wv.id = w.workflow_version_id
+      join workflow_definition wd on wd.id = wv.workflow_definition_id
       join app.work_item_companies(w.id) raiser on raiser.participant_id = w.raised_by_participant_id
       left join app.work_item_holder(w.id) a on true
       left join app.work_item_companies(w.id) holder on holder.participant_id = a.participant_id
@@ -579,6 +591,7 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
     return {
       ...toSummary(row, now),
       formVersionId: d.form_version_id,
+      workflow: { name: d.workflow_name, versionNo: d.workflow_version_no },
       revisionNo: d.revision_no,
       versionsChanged: d.versions_changed,
       droppedFields: dropped.map((f) => ({ key: f.field_key, label: f.label })),

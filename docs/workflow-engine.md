@@ -64,6 +64,18 @@ As built (RP-334): checks 4 and 8 are `workflowKindProblems` in `packages/domain
 
 Published versions never change. As built (RP-424): triggers `workflow_version_published_frozen`, `workflow_step_published_frozen` and `workflow_transition_published_frozen` refuse any UPDATE or DELETE of a published `workflow_version` and of the `workflow_step` / `workflow_transition` rows of one, even for the table owner (error 42501, as `form_version`'s guard); a draft stays editable and can be published. Seam-2 `workflow-version-frozen.test.ts`. Publishing v2 leaves v1 items untouched. Items on v1 show a notice ("Workflow updated to v2"), and anyone can view v2.
 
+### Ownership and binding (ADR 0016)
+
+A Workflow definition belongs to Rabaed (a **Rabaed Default**), to a Project (its own copy) or to a Company's **Library** (`workflow_definition.owner_kind` `rabaed`, `project` or `company`, with `project_id` or `company_id`). A copy keeps no link to the Workflow it was copied from.
+
+A Project chooses the Workflow of each Work Item Type with a **binding** (`workflow_binding`): (Project, Type) → Workflow, and optionally exceptions (Project, Type, raising Participant) → Workflow, such as "Contractor X's DARs". At most one of each. A binding names one of the Project's own Workflows or a Rabaed Default with a published Version, never another Project's or a Library's (copied into the Project first).
+
+A new item starts on the latest published Version of: the raiser's Participant's exception, else the Project's binding, else the Type's Rabaed Default; and keeps it (§2). Binding another Workflow, or publishing a new Version, reaches only items created afterwards.
+
+Every Project Member reads the Project's Workflows whole, with every Company's Steps; a Library only its Company (visibility.md V20, V18). The item read gives its Workflow's name and Version number (`workflow` in the item detail).
+
+As built (RP-426): `app.new_item_workflow_version(project, type, participant)` resolves the Version, for `app.create_work_item` and for the api's new-item Form (which Form Sections are editable at that Workflow's Draft). The trigger `workflow_binding_checked` refuses a binding outside these rules (error 23514). Bindings are written by the migrator until WF-4's commands (RP-427). Still the Type's Rabaed Default: a Revision's start (`app.latest_draft_step`, §5.4). `app.is_draft_step` reads a Step's Stage without the Type whose default its Workflow is (a Project's own Workflow is no Type's default); a Stage key of category `draft` is a Draft in each Module that has it, until Stages per Project and Module.
+
 ---
 
 ## 2. Run-time state
