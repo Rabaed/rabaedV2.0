@@ -81,6 +81,17 @@ export type WorkItemSummary = z.infer<typeof workItemSummary>;
 
 /** How a closed Work Item ended: its Issued Code, Inspection result, or cancelled (workflow-engine.md §1). */
 export const workItemOutcomes = ["A", "B", "C", "D", "passed", "passed_with_comments", "failed", "cancelled", "closed"] as const;
+
+/**
+ * The outcomes a closing Transition may set, by the Work Item Type's outcome kind
+ * (`work_item_type.outcome_kind`): the Review Codes, the Inspection Results, or
+ * `closed` for a Type with neither. Fixed until WF-6 (RP-429) makes them per Type.
+ */
+export const outcomeSets = {
+  review_code: ["A", "B", "C", "D"],
+  inspection_result: ["passed", "passed_with_comments", "failed"],
+  none: ["closed"],
+} as const satisfies Record<string, readonly WorkItemOutcome[]>;
 export const workItemOutcome = z.enum(workItemOutcomes);
 export type WorkItemOutcome = z.infer<typeof workItemOutcome>;
 
