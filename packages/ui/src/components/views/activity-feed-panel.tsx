@@ -184,8 +184,11 @@ export function ActivityFeedPanel({
   );
 }
 
-/** "<did what>": the Transition taken, or what kind of event it was. */
-function whatHappened(e: ActivityFeedEntry, locale: Locale, labels: ActivityFeedPanelLabels): string {
+/** The labels `whatHappened` reads. */
+export type ActivityEventLabels = Pick<ActivityFeedPanelLabels, "claimed" | "released" | "assigned" | "internalNote" | "recommended" | "cancelled" | "updated">;
+
+/** "<did what>": the Transition taken, or what kind of event it was. Home's recent activity words its entries the same way. */
+export function whatHappened(e: ActivityFeedEntry, locale: Locale, labels: ActivityEventLabels): string {
   const label = e.transition?.[locale];
   switch (e.type) {
     case "transition":
