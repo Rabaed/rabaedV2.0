@@ -14,15 +14,18 @@
  * executes SQL as the migrator (a pg client's or Kysely's query); the result is
  * the new Workflow definition's id, for a test Type to use.
  */
-export async function addSendBackWorkflow(run: (text: string) => Promise<{ rows: unknown[] }>): Promise<string> {
+export async function addSendBackWorkflow(
+  run: (text: string) => Promise<{ rows: unknown[] }>,
+  { withApproveB = false }: { withApproveB?: boolean } = {},
+): Promise<string> {
   const { rows } = await run(`
     with definition as (
       insert into workflow_definition (owner_kind, name)
       values ('rabaed', '{"en": "Send Back (test)", "ar": "الإرجاع (اختبار)"}')
       returning id
     ), version as (
-      insert into workflow_version (workflow_definition_id, version_no, status, published_at)
-      select id, 1, 'published', now() from definition
+      insert into workflow_version (workflow_definition_id, version_no, status)
+      select id, 1, 'draft' from definition
       returning id
     ), steps as (
       insert into workflow_step (workflow_version_id, key, name, stage_key, actor_rule, outcome_mode)
@@ -55,6 +58,8 @@ export async function addSendBackWorkflow(run: (text: string) => Promise<{ rows:
           'return', null, 'approve', 7),
         ('approve_a', 'consultant_approval', 'approved', '{"en": "Approve · A", "ar": "اعتماد · A"}', 'close', 'A', 'approve', 8),
         ('revise_c', 'consultant_approval', 'revise_resubmit', '{"en": "Revise · C", "ar": "مراجعة · C"}', 'close', 'C', 'approve', 9)
+        ${withApproveB ? `, ('approve_b', 'consultant_approval', 'approved', '{"en": "Approve with Comments · B", "ar": "اعتماد مع ملاحظات · B"}',
+          'close', 'B', 'approve', 10)` : ""}
       ) as t (key, from_key, to_key, label, kind, outcome, permission, sort)
       join steps f on f.key = t.from_key
       join steps s on s.key = t.to_key
@@ -64,5 +69,7 @@ export async function addSendBackWorkflow(run: (text: string) => Promise<{ rows:
   `);
   const id = (rows[0] as { id?: string } | undefined)?.id;
   if (!id) throw new Error("addSendBackWorkflow: nothing inserted");
+  // Built as a draft, then published: a published Version takes no new parts (RP-424).
+  await run(`update workflow_version set status = 'published', published_at = now() where workflow_definition_id = '${id}'`);
   return id;
 }

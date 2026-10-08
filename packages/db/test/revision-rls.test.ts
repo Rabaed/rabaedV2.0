@@ -90,8 +90,8 @@ async function addType() {
         values (v_form, 1, 'published', now(), '${JSON.stringify(schema)}'::jsonb);
         insert into workflow_definition (owner_kind, name) values ('rabaed', '{"en": "Revisions", "ar": "المراجعات"}')
         returning id into v_definition;
-        insert into workflow_version (workflow_definition_id, version_no, status, published_at)
-        values (v_definition, 1, 'published', now()) returning id into v_version;
+        insert into workflow_version (workflow_definition_id, version_no, status)
+        values (v_definition, 1, 'draft') returning id into v_version;
         insert into workflow_step (workflow_version_id, key, name, stage_key, actor_rule, outcome_mode) values
           (v_version, 'draft', '{"en": "Draft", "ar": "مسودة"}', 'draft', '{"base_role": "contractor", "permission": "create"}', 'none'),
           (v_version, 'internal_review', '{"en": "Contractor review", "ar": "مراجعة المقاول"}', 'internal_review',
@@ -108,6 +108,9 @@ async function addType() {
         ) as t (key, from_key, to_key, label, kind, outcome, permission, sort)
         join workflow_step f on f.workflow_version_id = v_version and f.key = t.from_key
         join workflow_step s on s.workflow_version_id = v_version and s.key = t.to_key;
+        -- Published once its parts are in: a published Version takes none (RP-424).
+        update workflow_version set status = 'published', published_at = now() where id = v_version;
+
         insert into work_item_type (owner_kind, module_key, code, name, workflow_definition_id, outcome_kind, form_definition_id)
         values ('rabaed', 'submittals', '${TYPE}', '{"en": "Revisions", "ar": "المراجعات"}', v_definition, 'review_code', v_form);
       end
