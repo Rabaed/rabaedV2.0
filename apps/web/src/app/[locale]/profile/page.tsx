@@ -13,7 +13,7 @@ export default async function ProfilePage({ params }: { params: Promise<{ locale
   if (!me) return redirect({ href: "/sign-in", locale });
 
   return (
-    <div className="space-y-8">
+    <div className="max-w-3xl space-y-8">
       <div className="space-y-1">
         <h1 className="text-h4 font-semibold">{t("title")}</h1>
         <p className="text-muted">{me.member.fullName[locale]}</p>

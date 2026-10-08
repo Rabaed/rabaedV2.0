@@ -12,7 +12,7 @@ export default async function HealthPage({ params }: { params: Promise<{ locale:
   const health = await fetchApiHealth();
 
   return (
-    <div className="space-y-6">
+    <div className="max-w-3xl space-y-6">
       <h1 className="text-h4 font-semibold">{t("title")}</h1>
       <dl className="grid grid-cols-[max-content_1fr] gap-x-6 gap-y-2">
         <dt className="text-muted">{t("api")}</dt>

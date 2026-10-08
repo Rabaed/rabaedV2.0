@@ -266,7 +266,7 @@ export function WorkItemList({ list, query, locale, labels, hrefFor, itemHref, o
         ))}
       </ul>
 
-      <Table label={t("table")}>
+      <Table label={t("table")} className="[&_td]:px-2 [&_th]:px-2">
         <TableHeader>
           <TableRow>
             <TableHead>{t("documentNumber")}</TableHead>
@@ -277,7 +277,7 @@ export function WorkItemList({ list, query, locale, labels, hrefFor, itemHref, o
             <TableHead>{t("stepAge")}</TableHead>
             <TableHead>{t("trade")}</TableHead>
             <TableHead>{t("location")}</TableHead>
-            <TableHead>{t("outcome")}</TableHead>
+            <TableHead className="min-w-24 whitespace-normal">{t("outcome")}</TableHead>
             <TableHead>{t("submissionDate")}</TableHead>
             {showCreationDate && <TableHead>{t("creationDate")}</TableHead>}
           </TableRow>
@@ -298,7 +298,7 @@ export function WorkItemList({ list, query, locale, labels, hrefFor, itemHref, o
                     </span>
                   )}
                 </TableCell>
-                <TableCell className="min-w-48">
+                <TableCell className="min-w-40">
                   <a href={itemHref(item.id)} className={cn("font-medium text-primary underline underline-offset-4", touchBox)}>
                     {item.title}
                   </a>
@@ -314,8 +314,8 @@ export function WorkItemList({ list, query, locale, labels, hrefFor, itemHref, o
                   {/* A closed item doesn't age. */}
                   {isOpenStageCategory(item.stage.category) && item.stepAgeWeeks !== null ? <AgeDots weeks={item.stepAgeWeeks} locale={locale} /> : null}
                 </TableCell>
-                <TableCell className="whitespace-nowrap">{item.trade.name[locale]}</TableCell>
-                <TableCell className="whitespace-nowrap">{item.location?.name[locale]}</TableCell>
+                <TableCell className="min-w-24">{item.trade.name[locale]}</TableCell>
+                <TableCell className="min-w-24">{item.location?.name[locale]}</TableCell>
                 <TableCell>{item.outcome ? <Outcome outcome={item.outcome} locale={locale} labels={labels.outcomes} /> : null}</TableCell>
                 <TableCell className="whitespace-nowrap">{date(item.submissionDate)}</TableCell>
                 {showCreationDate && <TableCell className="whitespace-nowrap">{date(item.creationDate)}</TableCell>}
