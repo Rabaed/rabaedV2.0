@@ -12,7 +12,7 @@ import {
   formSchema,
   workflowPublishProblems,
   type OutcomeKind,
-  type WorkflowPublishContext,
+  type StageCategory,
   type WorkflowVersionRows,
 } from "@rabaed/domain";
 import { sql } from "kysely";
@@ -29,7 +29,6 @@ type Version = {
   id: string;
   name: string;
   versionNo: number;
-  ownerKind: WorkflowPublishContext["ownerKind"];
   layout: unknown;
   typeId: string | null;
   moduleKey: string | null;
@@ -59,13 +58,14 @@ beforeAll(async () => {
   });
   versions = (
     await sql<Version>`
-      select v.id, d.name ->> 'en' as name, v.version_no as "versionNo", d.owner_kind as "ownerKind", v.layout,
+      select v.id, d.name ->> 'en' as name, v.version_no as "versionNo", v.layout,
         t.id as "typeId", t.module_key as "moduleKey", t.project_id as "projectId", t.outcome_kind as "outcomeKind",
         (select f.schema from form_version f
          where f.form_definition_id = t.form_definition_id and f.status = 'published'
          order by f.version_no desc limit 1) as form
       from workflow_version v
       join workflow_definition d on d.id = v.workflow_definition_id
+      -- Should iterate WF-3's (Project, Work Item Type, raising Participant) bindings once they exist.
       -- The Type the Workflow was made for: the first on it. Test Types reuse the MAR's
       -- Workflow as a shortcut, even in other Modules (a WIR), which no publish would allow.
       left join lateral (
@@ -121,13 +121,12 @@ describe("every published Workflow Version", () => {
   });
 
   it("passes every publish check", async () => {
-    const stages = await sql<{ moduleKey: string; projectId: string | null; key: string; category: WorkflowPublishContext["stages"][number]["category"] }>`
+    const stages = await sql<{ moduleKey: string; projectId: string | null; key: string; category: StageCategory }>`
       select module_key as "moduleKey", project_id as "projectId", key, category from stage order by sort
     `.execute(migrator);
     const lists = await sql<{ id: string }>`select id from option_list`.execute(migrator);
     const problems = versions.flatMap((v) =>
       workflowPublishProblems(definitionFromRows(rows.get(v.id)!), {
-        ownerKind: v.ownerKind,
         outcomeKind: v.outcomeKind!,
         stages: stages.rows.filter((s) => s.moduleKey === v.moduleKey && (s.projectId === null || s.projectId === v.projectId)),
         form: v.form === null ? null : formSchema.parse(v.form),

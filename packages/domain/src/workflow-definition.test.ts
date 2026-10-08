@@ -5,7 +5,7 @@ import {
   parseWorkflowDefinition,
   type WorkflowDefinition,
 } from "./workflow-definition.ts";
-import { marRows } from "./test-support/mar-workflow.ts";
+import { marRows } from "../test/support/mar-workflow.ts";
 
 // Pure domain: the Workflow definition format (workflow-engine.md §1, §11; RP-425,
 // spec RP-423). One JSON document per Workflow Version, read from and written to
@@ -52,11 +52,21 @@ describe("the Workflow definition format", () => {
     definition.transitions[2] = {
       ...definition.transitions[2]!,
       rules: {
-        restrict: [{ type: "condition", condition: { field: "cost_impact", op: ">", value: 500000 } }, { type: "been_through", step: "internal_review" }],
-        validate: [{ type: "form_complete" }],
+        restrict: [
+          { type: "condition", condition: { field: "cost_impact", op: ">", value: 500000 } },
+          { type: "been_through", step: "internal_review" },
+          { type: "been_through", fact: "sent_back" },
+          { type: "not_same_person", transition: "send_for_review" },
+          { type: "not_same_person", step: "draft" },
+        ],
+        validate: [{ type: "form_complete" }, { type: "has_document" }, { type: "has_document", field: "datasheet" }],
       },
-      actions: [{ type: "offer_assign_to" }],
-      notifications: [{ to: "holder" }, { to: "raiser" }],
+      actions: [
+        { type: "offer_assign_to" },
+        { type: "set_field", field: "submitted_on", value: { now: true } },
+        { type: "set_field", field: "model", value: "now" },
+      ],
+      notifications: [{ to: "holder" }, { to: "raiser" }, { to: "watchers" }, { to: "position", position: "project_manager" }],
     };
     expect(definitionFromRows(definitionToRows(definition, "review_code"))).toEqual(definition);
   });
@@ -78,6 +88,32 @@ describe("parseWorkflowDefinition", () => {
     const actor = mar();
     ((actor.steps as Record<string, unknown>[])[0]!.actor as Record<string, unknown>).holder = "ali";
     expect(parseWorkflowDefinition(actor)).toMatchObject({ ok: false, issues: [{ path: "steps.0.actor" }] });
+  });
+
+  it("has no way to name a person: Positions only, in actor rules, actions and notifications (ADR 0016)", () => {
+    const member = "0192f6c5-3c2e-7c4a-9d4e-1a2b3c4d5e6f";
+    const actor = mar();
+    ((actor.steps as Record<string, unknown>[])[1]!.actor as Record<string, unknown>).member = member;
+    expect(parseWorkflowDefinition(actor)).toMatchObject({ ok: false, issues: [{ path: "steps.1.actor" }] });
+    const assign = mar();
+    (assign.transitions as Record<string, unknown>[])[0]!.actions = [{ type: "assign_to", member }];
+    expect(parseWorkflowDefinition(assign)).toMatchObject({ ok: false, issues: [{ path: "transitions.0.actions.0.type" }] });
+    const notify = mar();
+    (notify.transitions as Record<string, unknown>[])[0]!.notifications = [{ to: "member", member }];
+    expect(parseWorkflowDefinition(notify)).toMatchObject({ ok: false, issues: [{ path: "transitions.0.notifications.0.to" }] });
+  });
+
+  it("refuses a rule naming both a Step and a Transition, a fact it doesn't know, and \"now\" as anything but its own value", () => {
+    const withRestrict = (restrict: unknown[]) => {
+      const d = mar();
+      (d.transitions as Record<string, unknown>[])[2]!.rules = { restrict };
+      return d;
+    };
+    expect(parseWorkflowDefinition(withRestrict([{ type: "not_same_person", step: "draft", transition: "submit" }]))).toMatchObject({ ok: false });
+    expect(parseWorkflowDefinition(withRestrict([{ type: "been_through", fact: "returned" }]))).toMatchObject({ ok: false });
+    const now = mar();
+    (now.transitions as Record<string, unknown>[])[2]!.actions = [{ type: "set_field", field: "model", value: { now: false } }];
+    expect(parseWorkflowDefinition(now)).toMatchObject({ ok: false });
   });
 
   it("refuses an unknown Transition kind and an outcome mode the format doesn't have", () => {

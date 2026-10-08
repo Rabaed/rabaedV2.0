@@ -1,4 +1,4 @@
-import type { WorkflowVersionRows } from "../workflow-definition.ts";
+import type { WorkflowVersionRows } from "../../src/workflow-definition.ts";
 
 // MAR Workflow Versions 1 and 2 as their migrations publish them
 // (20260929000000_work_items.sql, 20261029000000_mar_workflow_v2.sql), as rows.

@@ -12,6 +12,10 @@ import { transitionKinds, type TransitionKind } from "./work-item.ts";
 // checks (`workflowPublishProblems`, workflow-checks.ts) run over it. A Version is
 // stored as rows (workflow_step, workflow_transition, workflow_version.layout);
 // `definitionFromRows` and `definitionToRows` convert both ways without loss.
+//
+// No Workflow names a person: a Rabaed Default is copied into Projects of other
+// Companies, and a Project or Library Workflow is read project-wide (ADR 0016). The
+// format has Positions only, so it has no way to hold a Member.
 
 /** A Step, Transition, Stage, Position or Form field key (snake_case, as Form keys are). */
 const key = z.string().regex(/^[a-z][a-z0-9_]*$/).max(64);
@@ -30,14 +34,12 @@ export type OutcomeMode = (typeof outcomeModes)[number];
 
 /**
  * Who may hold a Step: a Participant role, the Function Permission its Step Pool
- * holds, and optionally the Positions it is narrowed to. `member` names one
- * person; a Library or Project Workflow names none (publish check `names_person`).
+ * holds, and optionally the Positions it is narrowed to.
  */
 const actorRule = z.strictObject({
   role: z.enum(baseRoles),
   permission: z.enum(functionPermissions),
   positions: z.array(key).min(1).optional(),
-  member: z.uuid().optional(),
 });
 export type ActorRule = z.infer<typeof actorRule>;
 
@@ -52,18 +54,25 @@ const step = z.strictObject({
 });
 export type WorkflowStep = z.infer<typeof step>;
 
+/** What every Participant may know of an item's route (WF-7): it was Sent Back, or it is a Revision. */
+export const sharedRouteFacts = ["sent_back", "revision"] as const;
+
 /**
  * Restrict (Jira's "conditions"): the Transition is offered only when each holds.
- * `condition` reads the item's Form answers and attributes (§4); among
- * Transitions sharing a label and source Step it picks the one that matches.
+ * `condition` reads the item's Form answers and attributes, and the Action Form
+ * answers when it picks among Transitions sharing a label and source Step (§4).
  */
-const restriction = z.discriminatedUnion("type", [
+const restriction = z.union([
   z.strictObject({ type: z.literal("condition"), condition }),
   z.strictObject({ type: z.literal("positions"), positions: z.array(key).min(1) }),
-  /** Separation of duties: not the Member who took the item out of this Step. */
+  /** Separation of duties: not the Member who held this Step… */
   z.strictObject({ type: z.literal("not_same_person"), step: key }),
-  /** The item has been through this Step (one of the acting Participant's own). */
+  /** …or who took this Transition. */
+  z.strictObject({ type: z.literal("not_same_person"), transition: key }),
+  /** The item has been through this Step (one of the acting Participant's own)… */
   z.strictObject({ type: z.literal("been_through"), step: key }),
+  /** …or a fact every Participant knows. */
+  z.strictObject({ type: z.literal("been_through"), fact: z.enum(sharedRouteFacts) }),
   z.strictObject({ type: z.literal("all_closed"), items: z.enum(["comments", "subtasks"]) }),
 ]);
 export type Restriction = z.infer<typeof restriction>;
@@ -72,30 +81,32 @@ export type Restriction = z.infer<typeof restriction>;
 const validation = z.discriminatedUnion("type", [
   z.strictObject({ type: z.literal("condition"), condition, message: bilingualText }),
   z.strictObject({ type: z.literal("form_complete") }),
-  z.strictObject({ type: z.literal("has_document") }),
+  /** At least one Document: on the item, or in the named Document field. */
+  z.strictObject({ type: z.literal("has_document"), field: key.optional() }),
 ]);
 export type Validation = z.infer<typeof validation>;
 
 const scalar = z.union([z.string(), z.number(), z.boolean()]);
 
+/** The moment the Transition is taken, as a set field's value (not the text "now"). */
+const setToNow =z.strictObject({ now: z.literal(true) });
+
 /** What taking the Transition does besides moving the item. */
 const transitionAction = z.discriminatedUnion("type", [
-  /** Offer "Assign to" among the acting Participant's own Members. */
+  /** Offer "Assign to" among the acting Participant's own Members (WF-8): the actor picks; nothing is stored here. */
   z.strictObject({ type: z.literal("offer_assign_to") }),
-  /** Assign the next Step to one named Member. */
-  z.strictObject({ type: z.literal("assign_to"), member: z.uuid() }),
-  z.strictObject({ type: z.literal("set_field"), field: key, value: scalar }),
+  z.strictObject({ type: z.literal("set_field"), field: key, value: z.union([scalar, setToNow]) }),
   z.strictObject({ type: z.literal("copy_field"), from: key, to: key }),
 ]);
 export type TransitionAction = z.infer<typeof transitionAction>;
 
-/** Whom the Transition notifies (in-app always; email by each Member's settings). */
+/** Whom the Transition notifies besides the next holder or Step Pool (in-app always; email by each Member's settings). */
 const recipient = z.discriminatedUnion("to", [
   z.strictObject({ to: z.literal("holder") }),
   z.strictObject({ to: z.literal("raiser") }),
   z.strictObject({ to: z.literal("watchers") }),
+  /** A Position of the acting Participant. */
   z.strictObject({ to: z.literal("position"), position: key }),
-  z.strictObject({ to: z.literal("member"), member: z.uuid() }),
 ]);
 export type NotificationRecipient = z.infer<typeof recipient>;
 
@@ -119,7 +130,7 @@ export type WorkflowTransition = z.infer<typeof transition>;
 export const workflowDefinition = z.strictObject({
   steps: z.array(step),
   transitions: z.array(transition),
-  /** Node positions for the builder, by Step key. */
+  /** Step positions on the builder's canvas, by Step key. */
   layout: z.record(key, z.strictObject({ x: z.number(), y: z.number() })),
 });
 export type WorkflowDefinition = z.infer<typeof workflowDefinition>;
@@ -141,7 +152,7 @@ export type WorkflowStepRow = {
   key: string;
   name: BilingualText;
   stage_key: string;
-  /** `{ base_role, permission, positions?, member? }`; `{}` on a terminal Step. */
+  /** `{ base_role, permission, positions? }`; `{}` on a terminal Step. */
   actor_rule: Record<string, unknown>;
   /** Dropped by ADR 0017 (every Transition is confirmed and recorded): always written false. */
   is_signing: boolean;
@@ -160,7 +171,7 @@ export type WorkflowTransitionRow = {
   label: BilingualText;
   kind: TransitionKind;
   outcome: string | null;
-  permission: string;
+  permission: FunctionPermission;
   sort: number;
   action_form: unknown;
   rules?: unknown;
@@ -192,20 +203,17 @@ export function definitionFromRows(rows: WorkflowVersionRows): WorkflowDefinitio
         outcome: t.outcome,
         permission: t.permission,
         actionForm: t.action_form ?? null,
-        ...(t.rules === undefined ? {} : { rules: t.rules }),
-        ...(t.actions === undefined ? {} : { actions: t.actions }),
-        ...(t.notifications === undefined ? {} : { notifications: t.notifications }),
+        ...transitionParts(t),
       })),
     layout: rows.layout,
   });
 }
 
-const actorFromRule = ({ base_role, ...rest }: Record<string, unknown>) => ({ role: base_role, ...rest });
-
 /**
  * A definition as a Version's rows, for a Work Item Type of `outcomeKind`: an
  * issuing Step issues its Inspection Result for a Type with Inspection Results,
- * else its Review Code. Transitions are sorted as listed, from 1.
+ * else its Review Code. Transitions are sorted as listed, from 1. The outcome
+ * kind gives way to the Type's own outcome set when WF-6 (RP-429) adds it.
  */
 export function definitionToRows(definition: WorkflowDefinition, outcomeKind: OutcomeKind): WorkflowVersionRows {
   return {
@@ -214,7 +222,7 @@ export function definitionToRows(definition: WorkflowDefinition, outcomeKind: Ou
       key: s.key,
       name: s.name,
       stage_key: s.stage,
-      actor_rule: s.actor === null ? {} : (({ role, ...rest }) => ({ base_role: role, ...rest }))(s.actor),
+      actor_rule: s.actor === null ? {} : ruleFromActor(s.actor),
       is_signing: false,
       outcome_mode: s.outcomeMode === "issue_outcome" ? (outcomeKind === "inspection_result" ? "inspection_result" : "issue_code") : s.outcomeMode,
     })),
@@ -228,9 +236,22 @@ export function definitionToRows(definition: WorkflowDefinition, outcomeKind: Ou
       permission: t.permission,
       sort: index + 1,
       action_form: t.actionForm,
-      ...(t.rules === undefined ? {} : { rules: t.rules }),
-      ...(t.actions === undefined ? {} : { actions: t.actions }),
-      ...(t.notifications === undefined ? {} : { notifications: t.notifications }),
+      ...transitionParts(t),
     })),
   };
+}
+
+/** An actor rule as stored names its role `base_role`; the definition calls it `role`. */
+const actorFromRule = ({ base_role, ...rest }: Record<string, unknown>) => ({ role: base_role, ...rest });
+const ruleFromActor = ({ role, ...rest }: ActorRule): Record<string, unknown> => ({ base_role: role, ...rest });
+
+type TransitionParts = Pick<WorkflowTransitionRow, "rules" | "actions" | "notifications">;
+
+/** A Transition's rules, actions and notifications, each only when it has them (same names in rows and definition). */
+function transitionParts<T extends TransitionParts>({ rules, actions, notifications }: T): Pick<T, keyof TransitionParts> {
+  return {
+    ...(rules === undefined ? {} : { rules }),
+    ...(actions === undefined ? {} : { actions }),
+    ...(notifications === undefined ? {} : { notifications }),
+  } as Pick<T, keyof TransitionParts>;
 }

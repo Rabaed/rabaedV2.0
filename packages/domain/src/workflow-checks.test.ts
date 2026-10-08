@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { formSchema } from "./form.ts";
-import { marRows } from "./test-support/mar-workflow.ts";
+import { marRows } from "../test/support/mar-workflow.ts";
 import { workflowPublishProblems, type WorkflowPublishContext } from "./workflow-checks.ts";
 import { definitionFromRows, type WorkflowDefinition, type WorkflowStep, type WorkflowTransition } from "./workflow-definition.ts";
 
@@ -28,13 +28,23 @@ const marForm = formSchema.parse({
         { key: "model", type: "text", label: { en: "Model", ar: "الطراز" } },
         { key: "cost_impact", type: "number", label: { en: "Cost impact", ar: "الأثر المالي" } },
         { key: "note", type: "textarea", label: { en: "Note", ar: "ملاحظة" } },
+        { key: "datasheet", type: "attachments", label: { en: "Datasheet", ar: "ورقة البيانات" } },
+      ],
+    },
+    {
+      key: "consultant",
+      title: { en: "Consultant", ar: "الاستشاري" },
+      editable_at: ["consultant_review"],
+      fields: [
+        { key: "reviewed_on", type: "date", label: { en: "Reviewed on", ar: "تاريخ المراجعة" } },
+        { key: "consultant_note", type: "textarea", label: { en: "Consultant note", ar: "ملاحظة الاستشاري" } },
+        { key: "reviewer", type: "member", label: { en: "Reviewer", ar: "المراجع" } },
       ],
     },
   ],
 });
 
 const context = (over: Partial<WorkflowPublishContext> = {}): WorkflowPublishContext => ({
-  ownerKind: "project",
   outcomeKind: "review_code",
   stages: submittalStages,
   form: marForm,
@@ -62,7 +72,7 @@ const problems = (definition: WorkflowDefinition, ctx = context()) =>
 
 describe("workflowPublishProblems", () => {
   it.each([1, 2] as const)("passes MAR Version %i", (version) => {
-    expect(workflowPublishProblems(definitionFromRows(marRows(version)), context({ ownerKind: "rabaed" }))).toEqual([]);
+    expect(workflowPublishProblems(definitionFromRows(marRows(version)), context())).toEqual([]);
   });
 
   describe("check 1: one Draft start Step, every Step reachable, no dead end", () => {
@@ -214,28 +224,17 @@ describe("workflowPublishProblems", () => {
     });
   });
 
-  describe("a Library or Project Workflow names no person (Positions only)", () => {
-    const member = "0192f6c5-3c2e-7c4a-9d4e-1a2b3c4d5e6f";
-    const naming = () => {
+  describe("no Workflow names a person: Positions only (a Rabaed Default is copied across Companies too)", () => {
+    it("refuses an action setting a Member field to a value", () => {
       const d = mar();
-      step(d, "internal_review").actor = { role: "contractor", permission: "review", member };
-      transition(d, "submit").actions = [{ type: "assign_to", member }];
-      transition(d, "approve_a").notifications = [{ to: "member", member }];
-      return d;
-    };
-
-    it.each(["project", "company"] as const)("refuses a person named in a %s Workflow's actor rule, assignment or notification", (ownerKind) => {
-      expect(problems(naming(), context({ ownerKind }))).toEqual([
-        { code: "names_person", severity: "error", step: "internal_review" },
-        { code: "names_person", severity: "error", transition: "submit" },
-        { code: "names_person", severity: "error", transition: "approve_a" },
-      ]);
+      transition(d, "approve_a").actions = [{ type: "set_field", field: "reviewer", value: "0192f6c5-3c2e-7c4a-9d4e-1a2b3c4d5e6f" }];
+      expect(problems(d)).toEqual([{ code: "names_person", severity: "error", transition: "approve_a" }]);
     });
 
-    it("passes Positions", () => {
+    it("passes Positions, notifying the raiser and watchers, and offering \"Assign to\"", () => {
       const d = mar();
       step(d, "internal_review").actor = { role: "contractor", permission: "review", positions: ["project_manager"] };
-      transition(d, "approve_a").notifications = [{ to: "position", position: "project_manager" }, { to: "raiser" }];
+      transition(d, "approve_a").notifications = [{ to: "position", position: "project_manager" }, { to: "raiser" }, { to: "watchers" }];
       transition(d, "submit").actions = [{ type: "offer_assign_to" }];
       expect(problems(d)).toEqual([]);
     });
@@ -250,7 +249,6 @@ describe("workflowPublishProblems", () => {
       transition(d, "revise_c").rules = {
         validate: [{ type: "condition", condition: { field: "remarks", op: "not_empty" }, message: { en: "Write Remarks.", ar: "اكتب الملاحظات." } }],
       };
-      transition(d, "approve_a").actions = [{ type: "copy_field", from: "remarks", to: "note" }, { type: "set_field", field: "model", value: "X" }];
       expect(problems(d)).toEqual([]);
     });
 
@@ -259,15 +257,13 @@ describe("workflowPublishProblems", () => {
       transition(d, "submit").rules = {
         restrict: [{ type: "condition", condition: { any: [{ field: "colour", op: "=", value: "red" }, { attr: "weather", op: "empty" }] } }],
       };
-      transition(d, "approve_a").actions = [{ type: "set_field", field: "grade", value: 1 }];
       expect(workflowPublishProblems(d, context()).map((p) => [p.code, p.transition, p.detail])).toEqual([
         ["unknown_field", "submit", "colour"],
         ["unknown_attribute", "submit", "weather"],
-        ["unknown_field", "approve_a", "grade"],
       ]);
     });
 
-    it("refuses a Restrict on an Action Form answer: it is read before the pop-up is filled", () => {
+    it("refuses a Restrict on an Action Form answer when no other Transition shares its label: it hides the button, before the pop-up is filled", () => {
       const d = mar();
       transition(d, "revise_c").rules = { restrict: [{ type: "condition", condition: { field: "remarks", op: "not_empty" } }] };
       expect(problems(d)).toEqual([{ code: "unknown_field", severity: "error", transition: "revise_c" }]);
@@ -279,18 +275,79 @@ describe("workflowPublishProblems", () => {
       expect(problems(d, context({ form: null }))).toEqual([{ code: "unknown_field", severity: "error", transition: "submit" }]);
     });
 
-    it("refuses a rule on a Step that isn't there, and 'been through' another Participant's Step", () => {
+    it("passes separation of duties by Step or Transition, 'been through' the acting Participant's Step or a shared fact, and a Document", () => {
+      const d = mar();
+      transition(d, "approve_a").rules = {
+        restrict: [
+          { type: "not_same_person", step: "internal_review" },
+          { type: "not_same_person", transition: "submit" },
+          { type: "been_through", step: "consultant_review" },
+          { type: "been_through", fact: "sent_back" },
+          { type: "been_through", fact: "revision" },
+        ],
+        validate: [{ type: "has_document" }, { type: "has_document", field: "datasheet" }],
+      };
+      expect(problems(d)).toEqual([]);
+    });
+
+    it("refuses a rule on a Step or Transition that isn't there, and 'been through' another Participant's Step", () => {
       const d = mar();
       transition(d, "approve_a").rules = {
         restrict: [
           { type: "not_same_person", step: "manager_review" },
+          { type: "not_same_person", transition: "approve_b" },
           { type: "been_through", step: "internal_review" },
         ],
       };
       expect(workflowPublishProblems(d, context()).map((p) => [p.code, p.transition, p.detail])).toEqual([
         ["unknown_step", "approve_a", "manager_review"],
+        ["unknown_transition", "approve_a", "approve_b"],
         ["been_through_other_participant", "approve_a", "internal_review"],
       ]);
+    });
+
+    it("refuses a Document rule naming a field that isn't there or isn't a Document field", () => {
+      const d = mar();
+      transition(d, "approve_a").rules = { validate: [{ type: "has_document", field: "datasheets" }, { type: "has_document", field: "model" }] };
+      expect(workflowPublishProblems(d, context()).map((p) => [p.code, p.transition, p.detail])).toEqual([
+        ["unknown_field", "approve_a", "datasheets"],
+        ["not_a_document_field", "approve_a", "model"],
+      ]);
+    });
+  });
+
+  describe("actions write only fields the acting Participant fills at that Step (WF-8)", () => {
+    it("passes setting and copying the Form fields its Step fills and its own Action Form answers, and \"now\" into a date", () => {
+      const d = mar();
+      transition(d, "approve_a").actions = [
+        { type: "copy_field", from: "remarks", to: "consultant_note" },
+        { type: "set_field", field: "reviewed_on", value: { now: true } },
+        { type: "set_field", field: "remarks", value: "Approved as submitted." },
+      ];
+      transition(d, "submit").actions = [{ type: "set_field", field: "note", value: "X" }, { type: "copy_field", from: "model", to: "note" }];
+      expect(problems(d)).toEqual([]);
+    });
+
+    it("refuses a field another Participant fills, as target or as source, and a field that isn't there", () => {
+      const d = mar();
+      transition(d, "approve_a").actions = [
+        { type: "set_field", field: "model", value: "X" },
+        { type: "copy_field", from: "note", to: "consultant_note" },
+        { type: "set_field", field: "grade", value: 1 },
+      ];
+      transition(d, "submit").actions = [{ type: "copy_field", from: "consultant_note", to: "note" }];
+      expect(workflowPublishProblems(d, context()).map((p) => [p.code, p.transition, p.detail])).toEqual([
+        ["field_not_filled_at_step", "submit", "consultant_note"],
+        ["field_not_filled_at_step", "approve_a", "model"],
+        ["field_not_filled_at_step", "approve_a", "note"],
+        ["unknown_field", "approve_a", "grade"],
+      ]);
+    });
+
+    it("refuses \"now\" into a field that isn't a date or time", () => {
+      const d = mar();
+      transition(d, "approve_a").actions = [{ type: "set_field", field: "consultant_note", value: { now: true } }];
+      expect(workflowPublishProblems(d, context()).map((p) => [p.code, p.transition, p.detail])).toEqual([["now_not_a_date_field", "approve_a", "consultant_note"]]);
     });
   });
 
@@ -335,6 +392,22 @@ describe("workflowPublishProblems", () => {
       expect(problems(d)).toEqual([{ code: "condition_overlap", severity: "warning", transition: "submit" }]);
     });
 
+    it("lets Transitions sharing a label route on an answer every one of their Action Forms asks", () => {
+      const estimate = {
+        sections: [{ key: "cost", title: { en: "Cost", ar: "التكلفة" }, fields: [{ key: "estimate", type: "number", label: { en: "Estimate", ar: "التقدير" } }] }],
+      };
+      const d = routed({ field: "estimate", op: "<=", value: 500000 }, { field: "estimate", op: ">", value: 500000 });
+      transition(d, "submit").actionForm = estimate;
+      transition(d, "submit_high").actionForm = estimate;
+      expect(problems(d)).toEqual([{ code: "condition_gap", severity: "warning", transition: "submit" }]);
+      transition(d, "submit_high").actionForm = null;
+      expect(problems(d)).toEqual([
+        { code: "unknown_field", severity: "error", transition: "submit" },
+        { code: "unknown_field", severity: "error", transition: "submit_high" },
+        { code: "condition_gap", severity: "warning", transition: "submit" },
+      ]);
+    });
+
     it("leaves Transitions with different labels alone", () => {
       const d = routed(null, null);
       transition(d, "submit_high").label = { en: "Submit to the Owner Representative", ar: "تقديم إلى ممثل المالك" };
@@ -374,6 +447,18 @@ describe("workflowPublishProblems", () => {
       const d = mar();
       transition(d, "submit").actionForm = { sections: [] };
       expect(problems(d)).toEqual([{ code: "invalid_action_form", severity: "error", transition: "submit" }]);
+    });
+
+    it("names the Action Form's field in both languages, and its English-only problem code in English only", () => {
+      const d = mar();
+      const remarks = transition(d, "approve_a").actionForm as { sections: { key: string }[] };
+      remarks.sections[0]!.key = "remarks";
+      expect(workflowPublishProblems(d, context()).map((p) => p.message)).toEqual([
+        {
+          en: `The Action Form of "Approve · A" isn't a valid Form: "remarks" (duplicate_key).`,
+          ar: `النموذج المنبثق لـ "اعتماد · A" ليس نموذجًا صالحًا: "remarks".`,
+        },
+      ]);
     });
 
     it("refuses a loop across Participants without a Send Back (check 8)", () => {

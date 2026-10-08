@@ -12,7 +12,7 @@ The engine has two halves:
 
 A Workflow version is a directed graph.
 
-- **Steps** are nodes. Each has:
+- **Steps** are the points of the graph. Each has:
   - a `stage_key`, which decides its Kanban column;
   - an **actor rule**: who may hold it (§3);
   - an `outcome_mode`: `none`, `recommend_code`, `issue_code` or `inspection_result`;
@@ -50,28 +50,38 @@ The Issued Code is the `outcome` of the Transition taken from the `issue_code` S
 
 As built (RP-425): one JSON document per Workflow Version, `WorkflowDefinition` in `packages/domain` (`workflow-definition.ts`), used by the builder (live), the api (publish) and Rabaed Admin (import):
 
-- `steps`: `key`, `name` (English and Arabic), `stage` (the Stage key), `actor` (`role`, the Function Permission `permission`, optional `positions`, and `member`, which only a Rabaed Default may use; null on a terminal Step), `outcomeMode` (`none`, `recommend_code`, `issue_outcome`: the Issued Code or the Inspection Result, by the Work Item Type's `outcome_kind`).
-- `transitions`: `key`, `label`, `kind`, `from`, `to`, `outcome`, `permission`, `actionForm`, and optionally `rules` (`restrict`: a condition, Positions, not the same person as at a Step, has been through a Step, all Comments or Subtasks closed; `validate`: a condition with its message, Form complete, a Document), `actions` (offer "Assign to", assign to a Member, set a field, copy a field) and `notifications` (the holder or Step Pool, the raiser, watchers, a Position, a Member). WF-7, WF-8 and WF-9 give them meaning at run time.
-- `layout`: the builder's node positions, by Step key.
+- `steps`: `key`, `name` (English and Arabic), `stage` (the Stage key), `actor` (`role`, the Function Permission `permission`, optional `positions`; null on a terminal Step), `outcomeMode` (`none`, `recommend_code`, `issue_outcome`: the Issued Code or the Inspection Result, by the Work Item Type's `outcome_kind`).
+- `transitions`: `key`, `label`, `kind`, `from`, `to`, `outcome`, `permission`, `actionForm`, and optionally:
+  - `rules.restrict`: a condition; Positions; not the same person as held a Step (`step`) or took a Transition (`transition`); has been through a Step (`step`, one of the acting Participant's own) or a shared fact (`fact`: `sent_back`, `revision`); all Comments or Subtasks closed;
+  - `rules.validate`: a condition with its message; Form complete; a Document (`has_document`, optionally in a named Document field);
+  - `actions`: offer "Assign to" (the actor picks among their own Participant's Members; nothing is stored), set a field to a value or to the moment taken (`{ "now": true }`, never the text "now"), copy a field;
+  - `notifications`: the holder or Step Pool, the raiser, watchers, a Position of the acting Participant.
+
+  WF-7, WF-8 and WF-9 give them meaning at run time.
+- `layout`: Step positions on the builder's canvas, by Step key.
+
+Stages are not in the definition: a Step names its Stage by key, and the Stages (with their categories) come from the Project and Module the Workflow runs in (the checks' `stages`).
+
+**Positions only.** No Workflow names a person, whoever owns it: a Rabaed Default is copied into other Companies' Projects, and every Project Workflow is read project-wide (ADR 0016). The format enforces it: an actor rule, an action and a notification have no field that holds a Member, and the one way left (setting a Member field to a value) is refused at publish (`names_person`).
 
 `parseWorkflowDefinition` refuses unknown keys at any depth. `definitionFromRows` / `definitionToRows` convert a Version's rows (`workflow_step`, `workflow_transition` with Steps by key, `workflow_version.layout`) without loss: `is_signing` is always written false (ADR 0017), and `rules`, `actions` and `notifications` have no columns yet, so a row carries them only when the definition has them.
 
 ### Publish-time validation
 
-A draft Workflow version can't be published unless all of these hold. `workflowPublishProblems(definition, context)` in `packages/domain` (`workflow-checks.ts`, RP-425) runs every one of them, given the owner kind, the Type's `outcome_kind`, the Module's Stages and the Type's latest published Form; each problem has a stable code, the Step or Transition it concerns, its severity (`error`, or `warning`) and an English and Arabic message for the builder. Workflow Versions are published as data by migration until the authoring commands (WF-4), so seam-1 `workflow-definition.test.ts` runs it on every published Version, and the rows' round trip with it.
+A draft Workflow version can't be published unless all of these hold. `workflowPublishProblems(definition, context)` in `packages/domain` (`workflow-checks.ts`, RP-425) runs every one of them, given the Type's `outcome_kind`, the Module's Stages and the Type's latest published Form; each problem has a stable code, the Step or Transition it concerns, its severity (`error`, or `warning`) and an English and Arabic message for the builder. Workflow Versions are published as data by migration until the authoring commands (WF-4), so seam-1 `workflow-definition.test.ts` runs it on every published Version, and the rows' round trip with it.
 
 1. Exactly one Draft start Step. Every Step is reachable from it, and every non-terminal Step has an outgoing Transition and an actor rule. `workflow-checks.ts` (with key uniqueness and Transitions naming existing Steps).
 2. Every `stage_key` exists in the Module's Stage set, and terminal Steps sit in closed or cancelled Stages: nothing leaves a Step in a closed or cancelled Stage. `workflow-checks.ts`.
-3. The Work Item Type's `outcome_kind` matches: some Step issues the outcome, every Transition into a terminal Step is a close (or a Cancel) and sets an outcome of the Type's outcome set, from a Step that issues it, and no other Transition sets one. Until WF-6 (RP-429) the sets are fixed: A–D for `review_code`, `passed` / `passed_with_comments` / `failed` for `inspection_result`, `closed` for `none` (`outcomeSets`). `workflow-checks.ts`.
+3. The Work Item Type's `outcome_kind` matches: some Step issues the outcome, every Transition into a terminal Step is a close (or a Cancel) and sets an outcome of the Type's outcome set, from a Step that issues it, and no other Transition sets one. Until WF-6 (RP-429) the sets are the fixed ones: A–D for `review_code`, `passed` / `passed_with_comments` / `failed` for `inspection_result`, `closed` for `none` (`outcomeSets` in `work-item.ts`, which the Dashboard buckets read too). WF-6 makes them per Work Item Type, and then the checks' `outcomeKind` and `definitionToRows`'s outcome-kind parameter give way to the Type's outcome set. `workflow-checks.ts`.
 4. A `return` goes only to an earlier Step held by the **same** Participant role. A `submit` always crosses to a different role. A `send_back` goes from a Step of the role the item was Submitted to, back to a Step of the role that Submitted it, which the Workflow chooses; it sets no outcome. `workflowKindProblems` (`workflow-publish.ts`, RP-334).
 5. ~~Every `submit` Transition and every Transition from an `issue_code` Step is signing.~~ Dropped by ADR 0017: every Transition is confirmed and recorded.
-6. Conditions reference only fields that exist in the Form (checked against the Form's latest published version). A Restrict reads the Form and item attributes (`workflowRuleAttrs`: `trade`, `location`, `work_item_type`, `revision_no`), since it is read before the Action Form is filled; a Validate also reads the Transition's Action Form answers; a field an action sets is the Form's. The Steps a rule names exist, and "has been through" names one of the acting Participant's own Steps. `workflow-checks.ts`.
+6. Conditions reference only fields that exist in the Form (checked against the Form's latest published version). Conditions read the Form and item attributes (`workflowRuleAttrs`: `trade`, `location`, `work_item_type`, `revision_no`); a Validate also reads the Transition's Action Form answers. A Restrict reads Action Form answers (WF-7) only where it picks among Transitions sharing a label and source Step, once the pop-up is filled, and then only fields every one of their Action Forms asks; a Restrict that hides a button is read before any pop-up. Actions write only fields the acting Participant fills at that Step (WF-8): the Transition's Action Form and the Form Sections changed at its source Step (`sectionSteps`); a copy reads only from those, never another Participant's answers (`field_not_filled_at_step`); "now" goes only into a date or time field. The Steps and Transitions a rule names exist, "has been through" a Step names one of the acting Participant's own, and a Document rule names a Document field (`attachments`, `photos`). `workflow-checks.ts`.
 7. Action Forms are valid Form schemas. `workflowActionFormProblems` (`action-form.ts`, RP-300).
 8. No cycle is possible without a `return` or a `send_back`. A loop across Participants always goes through a `send_back`, never through Submit alone. `workflowKindProblems` (`workflow-publish.ts`, RP-334).
 
 And, from spec RP-423 (`workflow-checks.ts`):
 
-- A Library or Project Workflow names no person (ADR 0016): Positions only, in actor rules, assignments and notifications (`names_person`).
+- No Workflow names a person: Positions only. The format enforces it (see "Definition format"); an action setting a Member field to a value is `names_person`.
 - A Cancel leaves only the raiser's own Steps (the Draft Step's role), goes to a Step in a cancelled Stage, and sets no outcome.
 - Among Transitions sharing a label and source Step, conditions that can overlap or leave a gap are a **warning** (§4): `condition_overlap`, `condition_gap`, found by trying the answers on each condition's edges.
 
@@ -330,11 +340,11 @@ Error codes, api (`/v1/projects/:id/numbering`, `/numbering/counters…`, `/v1/p
 ## 11. Builder (React Flow) contract
 
 - The editor saves a **draft** `workflow_version` in these parts:
-  - `layout jsonb`: node positions only;
+  - `layout jsonb`: Step positions on the canvas only;
   - `workflow_step` rows;
   - `workflow_transition` rows.
 - Stages appear as horizontal swim-bands, and Steps are dropped into a band.
-- The side panel edits the selected node or edge: actor rule, outcome mode and signing (Steps); label, kind, condition, outcome, Action Form (using the Form builder component) and notifications (Transitions).
+- The side panel edits the selected Step or Transition: actor rule, outcome mode and signing (Steps); label, kind, condition, outcome, Action Form (using the Form builder component) and notifications (Transitions).
 - "Validate" runs the §1 checks live, and "Publish" runs them again server-side.
 
 ---
