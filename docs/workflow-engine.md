@@ -62,7 +62,7 @@ A draft Workflow version can't be published unless all of these hold:
 
 As built (RP-334): checks 4 and 8 are `workflowKindProblems` in `packages/domain` (`workflow-publish.ts`), run like check 7 on every published Version by a seam test. A Step's role is its actor rule's `base_role`; a `send_back` is valid from a Step of role A to a Step of role B when some `submit` goes from a Step of B to a Step of A. The database also refuses a `send_back` with an outcome (`workflow_transition_send_back_no_outcome`), and `take_transition` raises on a `return` that would cross Participants. The seam suites' test Workflow with a Send Back is `addSendBackWorkflow` (`packages/db/test-support`).
 
-Published versions never change. Publishing v2 leaves v1 items untouched. Items on v1 show a notice ("Workflow updated to v2"), and anyone can view v2.
+Published versions never change. As built (RP-424): triggers `workflow_version_published_frozen`, `workflow_step_published_frozen` and `workflow_transition_published_frozen` refuse any UPDATE or DELETE of a published `workflow_version` and of the `workflow_step` / `workflow_transition` rows of one, even for the table owner (error 42501, as `form_version`'s guard); a draft stays editable and can be published. Seam-2 `workflow-version-frozen.test.ts`. Publishing v2 leaves v1 items untouched. Items on v1 show a notice ("Workflow updated to v2"), and anyone can view v2.
 
 ---
 
