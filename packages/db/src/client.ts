@@ -14,15 +14,33 @@ export interface CreateDbOptions {
   password?: RotatingPassword;
 }
 
+/**
+ * node-postgres emits "error" on the pool when the server closes an idle
+ * connection (a database reset, an RDS restart or failover); with no listener
+ * Node crashes the process. The pool drops that connection itself and the next
+ * query opens a new one, so log it and carry on. Logged by class and code
+ * only, because PostgreSQL messages can quote row values (CODING_STANDARDS
+ * "Logging and errors"). This is not shared with the outbox's failureOf (it
+ * returns a string, not the class) or the worker's error log (packages/db
+ * cannot import from an app); it is the same rule in a few lines.
+ */
+function listenForPoolErrors(pool: pg.Pool): pg.Pool {
+  pool.on("error", (error) => {
+    const code = "code" in error && typeof error.code === "string" ? error.code : undefined;
+    process.stderr.write(JSON.stringify({ level: "warn", msg: "idle database connection failed", err: { type: error.constructor.name, code } }) + "\n");
+  });
+  return pool;
+}
+
 export function createDb(connectionString: string, options: CreateDbOptions = {}): Db {
   const max = options.max ?? 10;
   const { password } = options;
-  if (!password) return new Kysely<Database>({ dialect: new PostgresDialect({ pool: new pg.Pool({ connectionString, max }) }) });
+  if (!password) return new Kysely<Database>({ dialect: new PostgresDialect({ pool: listenForPoolErrors(new pg.Pool({ connectionString, max })) }) });
 
   // The URL's parts, not the URL itself: pg lets a connection string's (empty)
   // password win over the password function.
   const { password: _ignored, ...config } = parseIntoClientConfig(connectionString);
-  const pool = new pg.Pool({ ...config, max, password: () => password.get() });
+  const pool = listenForPoolErrors(new pg.Pool({ ...config, max, password: () => password.get() }));
   return new Kysely<Database>({
     dialect: new PostgresDialect({
       pool: {
