@@ -219,14 +219,13 @@ async function pinnedForm(trx: Trx, workItemId: string): Promise<PinnedForm | nu
       project_id: string;
       data: Record<string, unknown>;
       data_sha256: Buffer | null;
-      work_item_type_id: string;
       workflow_version_id: string;
       step_key: string;
     }
   >`
     select v.id, v.version_no, v.schema, w.project_id, app.work_item_answers(w.id) as data,
       app.answers_sha256(w.id) as data_sha256,
-      w.work_item_type_id, w.workflow_version_id, s.key as step_key
+      w.workflow_version_id, s.key as step_key
     from work_item w
     join form_version v on v.id = w.form_version_id
     -- The Step as the Member sees it (V14): the current one whenever they may save,
@@ -240,7 +239,7 @@ async function pinnedForm(trx: Trx, workItemId: string): Promise<PinnedForm | nu
   const form = toFormVersion(r);
   // app.answers_sha256 is null exactly when app.can_save_answers is false: one permission check, not two.
   const canSave = r.data_sha256 !== null;
-  const steps = await workflowSteps(trx, r.work_item_type_id, r.workflow_version_id);
+  const steps = await workflowSteps(trx, r.workflow_version_id);
   return {
     form,
     projectId: r.project_id,
@@ -254,13 +253,14 @@ async function pinnedForm(trx: Trx, workItemId: string): Promise<PinnedForm | nu
 /** A Workflow Version's Steps as Form Sections are matched to them, and the name of each base role's Project Role. */
 type WorkflowSteps = { steps: WorkflowStepHolder[]; roleNames: ReadonlyMap<string, BilingualText> };
 
-/** The Steps of the Workflow Version `workflowVersionId` of the Type `typeId`. Definitions, which every Member reads. */
-async function workflowSteps(trx: Trx, typeId: string, workflowVersionId: string): Promise<WorkflowSteps> {
+/** The Steps of the Workflow Version `workflowVersionId`. Definitions, which every Member reads. */
+async function workflowSteps(trx: Trx, workflowVersionId: string): Promise<WorkflowSteps> {
   const { rows } = await sql<{ key: string; role: string | null; draft: boolean; role_name: BilingualText | null }>`
-    select s.key, s.actor_rule ->> 'base_role' as role, coalesce(st.category = 'draft', false) as draft, r.name as role_name
+    -- A Draft as app.is_draft_step (which the app role can't call) tells it: a Rabaed Stage of category draft, in any Module.
+    select s.key, s.actor_rule ->> 'base_role' as role,
+      exists (select 1 from stage st where st.owner_kind = 'rabaed' and st.key = s.stage_key and st.category = 'draft') as draft,
+      r.name as role_name
     from workflow_step s
-    join work_item_type t on t.id = ${typeId}
-    left join stage st on st.owner_kind = 'rabaed' and st.module_key = t.module_key and st.key = s.stage_key
     -- Projects use the Rabaed Default Project Roles for now.
     left join project_role r on r.owner_kind = 'rabaed' and r.base_role = s.actor_rule ->> 'base_role'
     where s.workflow_version_id = ${workflowVersionId}
@@ -313,7 +313,7 @@ async function draftOf(trx: Trx, projectId: string, typeCode: string): Promise<[
   `.execute(trx);
   const r = rows[0];
   if (!r?.workflow_version_id) throw new Error(`Work Item Type ${typeCode} has no published Workflow Version`);
-  const workflow = await workflowSteps(trx, r.type_id, r.workflow_version_id);
+  const workflow = await workflowSteps(trx, r.workflow_version_id);
   const draft = workflow.steps.find((s) => s.draft);
   if (!draft) throw new Error(`The Workflow of Work Item Type ${typeCode} has no Draft Step`);
   return [workflow, { step: draft.key, canSave: true }];
@@ -552,7 +552,7 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
       workflow_version_no: number;
     }>`
       select app.work_item_answers(w.id) as data, w.form_version_id, app.work_item_creation_date(w.id) as creation_date,
-        wd.name as workflow_name, wv.version_no as workflow_version_no,
+        wf.name as workflow_name, wf.version_no as workflow_version_no,
         w.submitted_at, w.outcome, w.closed_at, s.key as step_key, s.name as step_name,
         raiser.legal_name as raised_by, holder.legal_name as held_by, m.full_name as holder_name,
         app.can_save_answers(w.id) as can_save_answers, w.revision_no, app.revision_versions_changed(w.id) as versions_changed,
@@ -560,9 +560,8 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
       from work_item w
       cross join lateral app.step_as_seen(w.id) seen
       join workflow_step s on s.id = seen.step_id
-      -- Definitions every Project Member reads (V20).
-      join workflow_version wv on wv.id = w.workflow_version_id
-      join workflow_definition wd on wd.id = wv.workflow_definition_id
+      -- Its Workflow's name and Version, for whoever sees the item, whatever Workflow rows they read (V20).
+      left join lateral app.work_item_workflow(w.id) wf on true
       join app.work_item_companies(w.id) raiser on raiser.participant_id = w.raised_by_participant_id
       left join app.work_item_holder(w.id) a on true
       left join app.work_item_companies(w.id) holder on holder.participant_id = a.participant_id

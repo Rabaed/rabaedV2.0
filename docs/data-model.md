@@ -344,7 +344,7 @@ Each created Draft carries `import_id` for traceability.
 | `audience` | `shared` or `internal` |
 | `audience_participant_id` | set when `audience = internal` |
 | `signature_id → member_signature` | set on every Transition once RP-85 builds the Signature (ADR 0017) |
-| `content_sha256` | on a Transition: hash of the item's Subject, answers, outcome and Documents at that moment (`app.work_item_content_sha256`, workflow-engine.md §7) |
+| `content_sha256` | on a Transition: hash of the item's Subject, answers, outcome and Documents at that moment (`app.work_item_content_sha256`, workflow-engine.md §7). Not granted to the app role, nor are `prev_hash` and `hash` (RP-448 review) |
 | `prev_hash`, `hash` | hash chain → tamper-evident |
 | `created_at` | |
 

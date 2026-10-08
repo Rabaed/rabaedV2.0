@@ -4,7 +4,8 @@ import { notificationDigestHandler, notificationEmailHandler, processOutbox, typ
 import { databaseNameOf, databaseUrlsFromEnv, withDatabaseName, type DatabaseUrls } from "../src/config.ts";
 import { stepAgeReportHandler } from "../src/step-age-report.ts";
 
-export { addSendBackWorkflow, type SendBackWorkflowOptions } from "./send-back-workflow.ts";
+export { addTestWorkflow, type TestWorkflowOptions } from "./test-workflow.ts";
+export { expectedContentSha256, jsonbText, type HashedDocument } from "./content-hash.ts";
 
 class Rollback extends Error {}
 

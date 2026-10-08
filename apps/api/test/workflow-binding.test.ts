@@ -8,7 +8,7 @@
 // internal Steps stays its own (V5, V14). Bindings are written by the migrator
 // here: their authoring commands are WF-4's (RP-427).
 import { createDb } from "@rabaed/db";
-import { addSendBackWorkflow, testDatabaseUrls } from "@rabaed/db/test-support";
+import { addTestWorkflow, testDatabaseUrls } from "@rabaed/db/test-support";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestApi, type Caller } from "./support/harness.ts";
@@ -53,8 +53,8 @@ beforeAll(async () => {
     .json()
     .participants.find((p: { isOwnCompany: boolean; id: string }) => !p.isOwnCompany && p.id !== c2ParticipantId).id;
   k1Engineer = await projectMember(api, k1, k1ParticipantId, ["engineer"]);
-  towerRoute = await addSendBackWorkflow(run, { name: TOWER_ROUTE, owner: { kind: "project", projectId: at.projectId } });
-  c2Route = await addSendBackWorkflow(run, { name: C2_ROUTE, owner: { kind: "project", projectId: at.projectId } });
+  towerRoute = await addTestWorkflow(run, { name: TOWER_ROUTE, owner: { kind: "project", projectId: at.projectId } });
+  c2Route = await addTestWorkflow(run, { name: C2_ROUTE, owner: { kind: "project", projectId: at.projectId } });
 });
 
 describe("a new item's Workflow", () => {
@@ -82,7 +82,7 @@ describe("a new item's Workflow", () => {
 
   it("is a new Version only for items created after it is published", async () => {
     const earlier = await draft(at, at.c1Engineer, "On Version 1");
-    await addSendBackWorkflow(run, { version: { definitionId: towerRoute, no: 2 } });
+    await addTestWorkflow(run, { version: { definitionId: towerRoute, no: 2 } });
     const later = await draft(at, at.c1Engineer, "On Version 2");
     expect((await detail(at.c1Engineer, later)).workflow).toEqual({ name: TOWER_ROUTE, versionNo: 2 });
     expect((await detail(at.c1Engineer, earlier)).workflow).toEqual({ name: TOWER_ROUTE, versionNo: 1 });

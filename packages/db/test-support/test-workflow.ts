@@ -1,6 +1,7 @@
 /**
- * A test-only Rabaed Workflow with a Send Back (ADR 0014; RP-334), since no
- * Rabaed Default uses one yet (the MAR keeps Code C only):
+ * The test Workflow: a Contractor-to-Consultant review with Returns, two Send
+ * Backs (ADR 0014; RP-334, since no Rabaed Default has one yet: the MAR keeps
+ * Code C only) and a Code, owned by Rabaed, a Project or a Company (ADR 0016):
  *
  *   Draft ─send_for_review→ Contractor review ─submit→ Consultant review
  *   Contractor review ─return→ Draft
@@ -19,9 +20,9 @@
  * `name` names it, `version` adds Version n to an existing definition instead
  * of a new one, and `publish: false` leaves that Version a draft.
  */
-export async function addSendBackWorkflow(
+export async function addTestWorkflow(
   run: (text: string) => Promise<{ rows: unknown[] }>,
-  options: SendBackWorkflowOptions = {},
+  options: TestWorkflowOptions = {},
 ): Promise<string> {
   const { withApproveB = false, publish = true } = options;
   const name = JSON.stringify(options.name ?? { en: "Send Back (test)", ar: "الإرجاع (اختبار)" }).replaceAll("'", "''");
@@ -80,13 +81,13 @@ export async function addSendBackWorkflow(
     select definition.id, version.id as version_id from definition, version where (select count(*) from transitions) > 0
   `);
   const row = rows[0] as { id?: string; version_id?: string } | undefined;
-  if (!row?.id) throw new Error("addSendBackWorkflow: nothing inserted");
+  if (!row?.id) throw new Error("addTestWorkflow: nothing inserted");
   // Built as a draft, then published: a published Version takes no new parts (RP-424).
   if (publish) await run(`update workflow_version set status = 'published', published_at = now() where id = '${row.version_id}'`);
   return row.id;
 }
 
-export type SendBackWorkflowOptions = {
+export type TestWorkflowOptions = {
   withApproveB?: boolean;
   name?: { en: string; ar: string };
   /** A Project's own Workflow, or one in a Company's Library; a Rabaed Default when left out. */

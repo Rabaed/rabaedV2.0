@@ -10,7 +10,7 @@ import { sql } from "kysely";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb, withMember, type Db } from "../src/index.ts";
-import { addSendBackWorkflow, joinProject, testDatabaseUrls } from "../test-support/index.ts";
+import { addTestWorkflow, expectedContentSha256, joinProject, testDatabaseUrls } from "../test-support/index.ts";
 
 const urls = testDatabaseUrls();
 const digits = (n: number) => Array.from({ length: n }, () => randomInt(10)).join("");
@@ -58,7 +58,7 @@ const call = <T extends object>(as: string, query: ReturnType<typeof sql<T>>) =>
   withMember(app, as, (trx) => query.execute(trx).then((r) => r.rows));
 const outcome = (as: string, query: ReturnType<typeof sql<{ outcome: string }>>) => call(as, query).then((rows) => rows[0]!.outcome);
 
-/** A test-only Type on the test Workflow with a Send Back (addSendBackWorkflow), its Form with a Consultant section. */
+/** A test-only Type on the test Workflow with a Send Back (addTestWorkflow), its Form with a Consultant section. */
 async function addType() {
   const schema = {
     sections: [
@@ -84,7 +84,7 @@ async function addType() {
       },
     ],
   };
-  const workflowId = await addSendBackWorkflow((text) => migrator.query(text));
+  const workflowId = await addTestWorkflow((text) => migrator.query(text));
   await migrator.query(`
     do $$
       declare
@@ -331,9 +331,8 @@ describe("a Send Back out of K1's Step", () => {
   });
 
   it("puts the field times of K1's section back, and hashes the answers it leaves with", async () => {
-    const { rows } = await migrator.query<{ data: object; data_as_arrived: object | null; times: string[]; same_hash: boolean }>(
-      `select w.data, w.data_as_arrived, array(select jsonb_object_keys(w.field_times) order by 1) as times,
-         e.content_sha256 = app.work_item_content_sha256(w.id, w.title, w.data, w.outcome) as same_hash
+    const { rows } = await migrator.query<{ data: object; data_as_arrived: object | null; times: string[]; hash: string }>(
+      `select w.data, w.data_as_arrived, array(select jsonb_object_keys(w.field_times) order by 1) as times, encode(e.content_sha256, 'hex') as hash
        from work_item w
        cross join lateral (
          select x.content_sha256 from work_item_event x where x.work_item_id = w.id and x.type = 'transition' order by x.seq desc limit 1
@@ -341,7 +340,13 @@ describe("a Send Back out of K1's Step", () => {
        where w.id = $1`,
       [id],
     );
-    expect(rows[0]).toEqual({ data: { model: "FD-40" }, data_as_arrived: null, times: ["location", "model", "trade"], same_hash: true });
+    // The Send Back's hash is over the item as it leaves it, K1's answers discarded, worked out here from the spec (RP-448 review).
+    expect(rows[0]).toEqual({
+      data: { model: "FD-40" },
+      data_as_arrived: null,
+      times: ["location", "model", "trade"],
+      hash: expectedContentSha256({ title: "FD-40", data: { model: "FD-40" }, outcome: null, documents: [] }),
+    });
   });
 });
 

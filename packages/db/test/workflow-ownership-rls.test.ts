@@ -15,7 +15,7 @@ import { sql, type RawBuilder } from "kysely";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb, withMember, type Db } from "../src/index.ts";
-import { addSendBackWorkflow, joinProject, testDatabaseUrls, type SendBackWorkflowOptions } from "../test-support/index.ts";
+import { addTestWorkflow, joinProject, testDatabaseUrls, type TestWorkflowOptions } from "../test-support/index.ts";
 
 const urls = testDatabaseUrls();
 const digits = (n: number) => Array.from({ length: n }, () => randomInt(10)).join("");
@@ -70,8 +70,8 @@ const call = <T extends object = Record<string, unknown>>(as: string, query: Raw
   withMember(app, as, (trx) => (query as RawBuilder<T>).execute(trx).then((r) => r.rows));
 const outcome = (as: string, query: ReturnType<typeof sql<{ outcome: string }>>) => call(as, query).then((rows) => rows[0]!.outcome);
 
-const workflow = (name: string, options: SendBackWorkflowOptions = {}) =>
-  addSendBackWorkflow((text) => migrator.query(text), { name: { en: name, ar: name }, ...options });
+const workflow = (name: string, options: TestWorkflowOptions = {}) =>
+  addTestWorkflow((text) => migrator.query(text), { name: { en: name, ar: name }, ...options });
 
 /** A test-only Rabaed Type on its own Rabaed Default (the test Send Back Workflow), with a small Form. */
 async function addType(): Promise<{ typeId: string; workflowId: string }> {
@@ -381,5 +381,71 @@ describe("scenario RP-426-1: the map is everyone's, an item's internal moves are
     expect(seen!.key).toBe("consultant_review");
     // C2 sees none of C1's item, its Workflow notwithstanding (V3).
     expect(await call(c2.member, sql`select id from work_item where id = ${item.id}::uuid`)).toEqual([]);
+  });
+});
+
+// RP-448 review: one definition of a Draft Step. app.create_work_item starts a new
+// item at the Step app.is_draft_step calls the Draft: a Step whose Stage key is a
+// Rabaed Stage of category draft, in whichever Module (a Step has no Module of its
+// own until Stages per Project and Module, spec RP-423).
+describe("the Draft Step a new item starts at", () => {
+  it("is the one app.is_draft_step names, whichever Module's Stage set has its Stage", async () => {
+    await migrator.query(
+      `insert into stage (owner_kind, module_key, key, name, category, sort)
+       values ('rabaed', 'inspections', 'wfown_start', '{"en": "Start (test)", "ar": "البداية (اختبار)"}', 'draft', 90)
+       on conflict do nothing`,
+    );
+    const definition = await workflow("Starts elsewhere (test)", { publish: false });
+    const { rows: versions } = await migrator.query(
+      "update workflow_step set stage_key = 'wfown_start' where key = 'draft' and workflow_version_id = (select id from workflow_version where workflow_definition_id = $1) returning id",
+      [definition],
+    );
+    await migrator.query("update workflow_version set status = 'published', published_at = now() where workflow_definition_id = $1", [definition]);
+    const draftStep = versions[0].id as string;
+    expect((await migrator.query("select app.is_draft_step($1) as draft", [draftStep])).rows[0].draft).toBe(true);
+
+    const code = "WFDRF";
+    await migrator.query(
+      `insert into work_item_type (owner_kind, module_key, code, name, workflow_definition_id, outcome_kind, form_definition_id)
+       select 'rabaed', 'submittals', $1, '{"en": "Draft rule", "ar": "قاعدة المسودة"}', $2, 'review_code', t.form_definition_id
+       from work_item_type t where t.id = $3
+       on conflict do nothing`,
+      [code, definition, typeId],
+    );
+    await migrator.query("update work_item_type set workflow_definition_id = $2 where owner_kind = 'rabaed' and code = $1", [code, definition]);
+    const [created] = await call<{ outcome: string; work_item_id: string }>(
+      c1.member,
+      sql`select outcome, work_item_id from app.create_work_item(
+        ${projectId}::uuid, ${code}, 'Starts elsewhere', app.latest_form_version(${code}), '{"model": "SE-1"}'::jsonb,
+        ${electrical}::uuid, ${buildingA}::uuid, now())`,
+    );
+    expect(created!.outcome).toBe("created");
+    expect((await migrator.query("select current_step_id from work_item where id = $1", [created!.work_item_id])).rows[0].current_step_id).toBe(draftStep);
+    const [canSave] = await call<{ ok: boolean }>(c1.member, sql`select app.can_save_answers(${created!.work_item_id}::uuid) as ok`);
+    expect(canSave!.ok).toBe(true);
+  });
+});
+
+// RP-448 review: the item read names its Workflow through app.work_item_workflow,
+// so a viewer who sees the item but not its Workflow's rows (as an E2 reader will)
+// still reads the item. Last in the file: it gives C1 an exception binding.
+describe("an item's Workflow name and Version", () => {
+  const named = (as: string, id: string) =>
+    call<{ name: { en: string }; version_no: number }>(as, sql`select name, version_no from app.work_item_workflow(${id}::uuid)`);
+
+  it("are read by whoever sees the item, even without its Workflow's rows, and by nobody else", async () => {
+    const hidden = await workflow("Later out of sight (test)", { owner: { kind: "project", projectId } });
+    await bind(hidden, participant.c1);
+    const item = await raise(c1.member);
+    expect(item.definition).toBe(hidden);
+    expect(await named(c1.member, item.id)).toEqual([{ name: { en: "Later out of sight (test)", ar: "Later out of sight (test)" }, version_no: 1 }]);
+    // Its definition moves out of the Project's reach (test-only): C1 still sees the item, not the Workflow's rows.
+    await migrator.query("update workflow_definition set owner_kind = 'company', project_id = null, company_id = $2 where id = $1", [hidden, x.id]);
+    expect(await definitionsRead(c1.member, [hidden])).toEqual([]);
+    expect(await call(c1.member, sql`select id from work_item where id = ${item.id}::uuid`)).toHaveLength(1);
+    expect(await named(c1.member, item.id)).toEqual([{ name: { en: "Later out of sight (test)", ar: "Later out of sight (test)" }, version_no: 1 }]);
+    // A Draft is its raiser's alone (V1): K1 and C2 get nothing, as for an item that doesn't exist.
+    for (const as of [k1.member, c2.member, x.member]) expect(await named(as, item.id), as).toEqual([]);
+    expect(await named(c1.member, randomUUID())).toEqual([]);
   });
 });

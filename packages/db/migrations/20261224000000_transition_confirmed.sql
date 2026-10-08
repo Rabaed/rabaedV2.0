@@ -11,6 +11,9 @@
 --   Documents are never changed in place (one is added or removed), so each is
 --   hashed by what names its file: id, field, name, type, size and storage key.
 --   A Document's own file hash comes with freezing (§5.1 effect 1, RP-23).
+-- * The app role no longer reads work_item_event.content_sha256, nor the chain's
+--   prev_hash and hash: the hash is over content not every reader of the event
+--   sees (CODING_STANDARDS, Side channels; visibility.md Documental Record row).
 -- * There is no per-Transition signing choice: workflow_step.is_signing stays as
 --   a column nothing reads, until the definition format (WF-2) drops it.
 -- * app.take_transition: as the send_back migration left it, except the hash.
@@ -41,6 +44,20 @@ create function app.work_item_content_sha256(p_work_item_id uuid, p_title text, 
   $$;
 
 revoke all on function app.work_item_content_sha256(uuid, text, jsonb, text) from public;
+
+-- The hash is over the item's exact content (ADR 0017), not over what one reader
+-- sees of it: the full answers, references stripped from another Company's
+-- reading included (ADR 0012), and every Document, whichever Participant V19
+-- keeps it with. A hash confirms a guess at what it covers, so it is read by
+-- nobody through the app role (CODING_STANDARDS, Side channels), nor are the
+-- chain's hashes, each over the event before it (an internal one too) and the
+-- event's content hash. The Documental Record (RP-23) and the chain check read
+-- them as the owner.
+revoke select on work_item_event from rabaed_app;
+grant select (
+  id, project_id, work_item_id, seq, type, actor_member_id, actor_engineer_id, actor_participant_id, transition_id,
+  from_step_id, to_step_id, payload, audience, audience_participant_id, created_at
+) on work_item_event to rabaed_app;
 
 create or replace function app.take_transition(
   p_work_item_id uuid, p_transition_key text, p_answers jsonb, p_internal_note text, p_checked_data_sha256 bytea,

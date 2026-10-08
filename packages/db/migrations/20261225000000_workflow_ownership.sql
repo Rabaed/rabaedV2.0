@@ -18,7 +18,11 @@
 --   Library only its own Company. Only published Versions are read through the
 --   app role (drafts are authoring, WF-4's). A binding is read by every Project
 --   Member; an exception only by its raising Participant's Members and the
---   Project Admins, since a Participant never learns of another (V15).
+--   Project Admins, since a Participant never learns of another (V15). The item
+--   read takes its Workflow's name and Version from app.work_item_workflow, for
+--   whoever sees the item, so it never depends on reading the Workflow's rows.
+-- - One definition of a Draft Step: app.create_work_item starts at the Step
+--   app.is_draft_step names.
 -- Writes only through WF-4's commands: the app role writes none of these.
 
 -- Ownership ---------------------------------------------------------------------------
@@ -47,6 +51,9 @@ create table workflow_binding (
   raising_participant_id uuid references participant (id),
   workflow_definition_id uuid not null references workflow_definition (id),
   created_at timestamptz not null default now(),
+  -- As on every table (data-model.md), set by the function that changes the row,
+  -- `updated_at = v_at`, as the repo's commands do (no trigger keeps it): WF-4's
+  -- rebinding command (RP-427). Nothing changes a binding before it.
   updated_at timestamptz not null default now()
 );
 create unique index workflow_binding_default_key on workflow_binding (project_id, work_item_type_id)
@@ -151,6 +158,30 @@ create function app.new_item_workflow_version(p_project_id uuid, p_type_id uuid,
     end
   $$;
 
+-- The Workflow an item runs, for its read --------------------------------------------
+
+-- The name of the Workflow item p_work_item_id runs and the number of the Version
+-- it is pinned to, for whoever sees the item, whether or not they read that
+-- Workflow's rows (an E2 reader won't); nothing for anyone else, as for an item
+-- that doesn't exist. The item read joins it, so it never hides the item.
+create function app.work_item_workflow(p_work_item_id uuid) returns table (name jsonb, version_no integer)
+  language plpgsql stable security definer
+  set search_path = pg_catalog, public
+  as $$
+    #variable_conflict use_column
+    begin
+      if not app.sees_work_item(p_work_item_id) then
+        return;
+      end if;
+      return query
+        select d.name, v.version_no
+        from work_item w
+        join workflow_version v on v.id = w.workflow_version_id
+        join workflow_definition d on d.id = v.workflow_definition_id
+        where w.id = p_work_item_id;
+    end
+  $$;
+
 -- Whether a Step is a Draft ------------------------------------------------------------
 
 -- As in the plpgsql definer helpers migration (20261108000000), except that a
@@ -179,7 +210,8 @@ create or replace function app.is_draft_step(p_step_id uuid) returns boolean
 
 -- As in the built-in fields migration (20261012000000), except that the Workflow
 -- Version is the one app.new_item_workflow_version resolves for the raiser's
--- Participant, not always the Type's Rabaed Default's.
+-- Participant, not always the Type's Rabaed Default's, and its Draft Step is the
+-- one app.is_draft_step names (before: a Stage of the Type's Module only).
 create or replace function app.create_work_item(
   p_project_id uuid, p_type_code text, p_title text, p_form_version_id uuid, p_data jsonb,
   p_trade_id uuid, p_location_id uuid, p_now timestamptz, p_scope_ids uuid[] default '{}'
@@ -228,11 +260,11 @@ create or replace function app.create_work_item(
       end if;
       -- And the latest published Version of the Workflow bound for the raiser (RP-426).
       v_version_id := app.new_item_workflow_version(p_project_id, v_type.id, v_participant_id);
-      -- The start: the one Step in a Stage of category draft.
+      -- The start: the one Step in a Stage of category draft, as app.is_draft_step
+      -- tells it everywhere else (one definition of a Draft Step).
       select s.id, s.stage_key, s.actor_rule into v_step
       from workflow_step s
-      join stage st on st.owner_kind = 'rabaed' and st.module_key = v_type.module_key and st.key = s.stage_key
-      where s.workflow_version_id = v_version_id and st.category = 'draft';
+      where s.workflow_version_id = v_version_id and app.is_draft_step(s.id);
       if v_step.actor_rule ->> 'base_role' is distinct from v_base_role then
         raise exception 'only a % can raise this Work Item Type', initcap(v_step.actor_rule ->> 'base_role')
           using errcode = '42501';
@@ -275,3 +307,5 @@ create or replace function app.create_work_item(
 revoke all on function app.check_workflow_binding() from public;
 revoke all on function app.new_item_workflow_version(uuid, uuid, uuid) from public;
 grant execute on function app.new_item_workflow_version(uuid, uuid, uuid) to rabaed_app;
+revoke all on function app.work_item_workflow(uuid) from public;
+grant execute on function app.work_item_workflow(uuid) to rabaed_app;
