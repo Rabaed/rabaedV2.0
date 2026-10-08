@@ -46,20 +46,36 @@ The MAR has no Send Back: the Consultant sends work back to the Contractor only 
 
 The Issued Code is the `outcome` of the Transition taken from the `issue_code` Step. The "Approve / B / C / D" buttons are four Transitions, each with its own Action Form. For example, B requires at least one comment row, and each row becomes a Comment Work Item.
 
+### Definition format
+
+As built (RP-425): one JSON document per Workflow Version, `WorkflowDefinition` in `packages/domain` (`workflow-definition.ts`), used by the builder (live), the api (publish) and Rabaed Admin (import):
+
+- `steps`: `key`, `name` (English and Arabic), `stage` (the Stage key), `actor` (`role`, the Function Permission `permission`, optional `positions`, and `member`, which only a Rabaed Default may use; null on a terminal Step), `outcomeMode` (`none`, `recommend_code`, `issue_outcome`: the Issued Code or the Inspection Result, by the Work Item Type's `outcome_kind`).
+- `transitions`: `key`, `label`, `kind`, `from`, `to`, `outcome`, `permission`, `actionForm`, and optionally `rules` (`restrict`: a condition, Positions, not the same person as at a Step, has been through a Step, all Comments or Subtasks closed; `validate`: a condition with its message, Form complete, a Document), `actions` (offer "Assign to", assign to a Member, set a field, copy a field) and `notifications` (the holder or Step Pool, the raiser, watchers, a Position, a Member). WF-7, WF-8 and WF-9 give them meaning at run time.
+- `layout`: the builder's node positions, by Step key.
+
+`parseWorkflowDefinition` refuses unknown keys at any depth. `definitionFromRows` / `definitionToRows` convert a Version's rows (`workflow_step`, `workflow_transition` with Steps by key, `workflow_version.layout`) without loss: `is_signing` is always written false (ADR 0017), and `rules`, `actions` and `notifications` have no columns yet, so a row carries them only when the definition has them.
+
 ### Publish-time validation
 
-A draft Workflow version can't be published unless all of these hold:
+A draft Workflow version can't be published unless all of these hold. `workflowPublishProblems(definition, context)` in `packages/domain` (`workflow-checks.ts`, RP-425) runs every one of them, given the owner kind, the Type's `outcome_kind`, the Module's Stages and the Type's latest published Form; each problem has a stable code, the Step or Transition it concerns, its severity (`error`, or `warning`) and an English and Arabic message for the builder. Workflow Versions are published as data by migration until the authoring commands (WF-4), so seam-1 `workflow-definition.test.ts` runs it on every published Version, and the rows' round trip with it.
 
-1. Exactly one Draft start Step. Every Step is reachable from it, and every non-terminal Step has an outgoing Transition.
-2. Every `stage_key` exists in the Module's Stage set, and terminal Steps sit in closed or cancelled Stages.
-3. The Work Item Type's `outcome_kind` matches: for `review_code`, exactly one path passes an `issue_code` Step, and every Transition into a terminal Step sets an outcome.
-4. A `return` goes only to an earlier Step held by the **same** Participant role. A `submit` always crosses to a different role. A `send_back` goes from a Step of the role the item was Submitted to, back to a Step of the role that Submitted it, which the Workflow chooses; it sets no outcome.
-5. Every `submit` Transition and every Transition from an `issue_code` Step is signing.
-6. Conditions reference only fields that exist in the Form (checked against the Form's latest published version).
-7. Action Forms are valid Form schemas. As built (RP-300): `workflowActionFormProblems` in `packages/domain` (`action-form.ts`). Workflow Versions are published as data by migration until the builder (part 5), so a seam test runs it on every published Version.
-8. No cycle is possible without a `return` or a `send_back`. A loop across Participants always goes through a `send_back`, never through Submit alone.
+1. Exactly one Draft start Step. Every Step is reachable from it, and every non-terminal Step has an outgoing Transition and an actor rule. `workflow-checks.ts` (with key uniqueness and Transitions naming existing Steps).
+2. Every `stage_key` exists in the Module's Stage set, and terminal Steps sit in closed or cancelled Stages: nothing leaves a Step in a closed or cancelled Stage. `workflow-checks.ts`.
+3. The Work Item Type's `outcome_kind` matches: some Step issues the outcome, every Transition into a terminal Step is a close (or a Cancel) and sets an outcome of the Type's outcome set, from a Step that issues it, and no other Transition sets one. Until WF-6 (RP-429) the sets are fixed: A–D for `review_code`, `passed` / `passed_with_comments` / `failed` for `inspection_result`, `closed` for `none` (`outcomeSets`). `workflow-checks.ts`.
+4. A `return` goes only to an earlier Step held by the **same** Participant role. A `submit` always crosses to a different role. A `send_back` goes from a Step of the role the item was Submitted to, back to a Step of the role that Submitted it, which the Workflow chooses; it sets no outcome. `workflowKindProblems` (`workflow-publish.ts`, RP-334).
+5. ~~Every `submit` Transition and every Transition from an `issue_code` Step is signing.~~ Dropped by ADR 0017: every Transition is confirmed and recorded.
+6. Conditions reference only fields that exist in the Form (checked against the Form's latest published version). A Restrict reads the Form and item attributes (`workflowRuleAttrs`: `trade`, `location`, `work_item_type`, `revision_no`), since it is read before the Action Form is filled; a Validate also reads the Transition's Action Form answers; a field an action sets is the Form's. The Steps a rule names exist, and "has been through" names one of the acting Participant's own Steps. `workflow-checks.ts`.
+7. Action Forms are valid Form schemas. `workflowActionFormProblems` (`action-form.ts`, RP-300).
+8. No cycle is possible without a `return` or a `send_back`. A loop across Participants always goes through a `send_back`, never through Submit alone. `workflowKindProblems` (`workflow-publish.ts`, RP-334).
 
-As built (RP-334): checks 4 and 8 are `workflowKindProblems` in `packages/domain` (`workflow-publish.ts`), run like check 7 on every published Version by a seam test. A Step's role is its actor rule's `base_role`; a `send_back` is valid from a Step of role A to a Step of role B when some `submit` goes from a Step of B to a Step of A. The database also refuses a `send_back` with an outcome (`workflow_transition_send_back_no_outcome`), and `take_transition` raises on a `return` that would cross Participants. The seam suites' test Workflow with a Send Back is `addSendBackWorkflow` (`packages/db/test-support`).
+And, from spec RP-423 (`workflow-checks.ts`):
+
+- A Library or Project Workflow names no person (ADR 0016): Positions only, in actor rules, assignments and notifications (`names_person`).
+- A Cancel leaves only the raiser's own Steps (the Draft Step's role), goes to a Step in a cancelled Stage, and sets no outcome.
+- Among Transitions sharing a label and source Step, conditions that can overlap or leave a gap are a **warning** (§4): `condition_overlap`, `condition_gap`, found by trying the answers on each condition's edges.
+
+As built (RP-334): checks 4 and 8 are `workflowKindProblems`, which `workflowPublishProblems` runs. A Step's role is its actor rule's `base_role`; a `send_back` is valid from a Step of role A to a Step of role B when some `submit` goes from a Step of B to a Step of A. The database also refuses a `send_back` with an outcome (`workflow_transition_send_back_no_outcome`), and `take_transition` raises on a `return` that would cross Participants. The seam suites' test Workflow with a Send Back is `addSendBackWorkflow` (`packages/db/test-support`).
 
 Published versions never change. As built (RP-424): triggers `workflow_version_published_frozen`, `workflow_step_published_frozen` and `workflow_transition_published_frozen` refuse any UPDATE or DELETE of a published `workflow_version` and of the `workflow_step` / `workflow_transition` rows of one, even for the table owner (error 42501, as `form_version`'s guard); a draft stays editable and can be published. Seam-2 `workflow-version-frozen.test.ts`. Publishing v2 leaves v1 items untouched. Items on v1 show a notice ("Workflow updated to v2"), and anyone can view v2.
 
