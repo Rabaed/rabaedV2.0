@@ -24,8 +24,12 @@ create function app.refuse_published_workflow_version_change() returns trigger
 create trigger workflow_version_published_frozen before update or delete on workflow_version
   for each row execute function app.refuse_published_workflow_version_change();
 
+-- security definer: it reads workflow_version without the caller's row-level
+-- security, so a role that can't see the Version is refused all the same.
 create function app.refuse_published_workflow_part_change() returns trigger
   language plpgsql
+  security definer
+  set search_path = pg_catalog, public
   as $$
     begin
       -- The Version the row was in (update, delete) and the one it goes into

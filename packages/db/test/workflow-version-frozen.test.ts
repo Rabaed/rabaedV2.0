@@ -98,7 +98,62 @@ describe("a published Workflow Version, as its owner", () => {
   });
 });
 
+describe("a published Workflow Version, more ways", () => {
+  it("can't go back to a draft", async () => {
+    await refused("update workflow_version set status = 'draft', published_at = null where id = $1", [published.version]);
+  });
+
+  // rabaed_app has no write path to a Version, Step or Transition (no INSERT, UPDATE or
+  // DELETE grant), so the guard is never reached through it; the owner is the only writer.
+  it("has no write path for rabaed_app", async () => {
+    const app = new pg.Client({ connectionString: urls.app });
+    await app.connect();
+    try {
+      await expect(
+        app.query(
+          `insert into workflow_step (workflow_version_id, key, name, stage_key, actor_rule)
+           values ($1, 'extra', $2, 'draft', '{}')`,
+          [published.version, name],
+        ),
+      ).rejects.toMatchObject({ code: "42501", message: expect.stringContaining("permission denied") });
+      await expect(app.query("delete from workflow_version where id = $1", [published.version])).rejects.toMatchObject({
+        message: expect.stringContaining("permission denied"),
+      });
+    } finally {
+      await app.end();
+    }
+  });
+
+  // The guard reads workflow_version without the caller's row-level security, so a role
+  // that can't see the Version is refused all the same.
+  it("is checked by security definer functions with a fixed search_path", async () => {
+    const { rows } = await migrator.query(
+      `select p.proname, p.prosecdef, p.proconfig from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+       where n.nspname = 'app' and p.proname like 'refuse_published_workflow%' order by p.proname`,
+    );
+    expect(rows.map((r) => r.proname)).toEqual(["refuse_published_workflow_part_change", "refuse_published_workflow_version_change"]);
+    const part = rows[0];
+    expect(part.prosecdef).toBe(true);
+    expect(part.proconfig).toEqual(["search_path=pg_catalog, public"]);
+  });
+});
+
 describe("a draft Workflow Version", () => {
+  it("takes a new Step and Transition after it was created", async () => {
+    const definition = await one("insert into workflow_definition (owner_kind, name) values ('rabaed', $1) returning id", [name]);
+    const later = await addVersion(definition, 1, "draft");
+    const step = await one(
+      `insert into workflow_step (workflow_version_id, key, name, stage_key, actor_rule)
+       values ($1, 'third', $2, 'draft', '{}') returning id`,
+      [later.version, name],
+    );
+    await migrator.query(
+      `insert into workflow_transition (workflow_version_id, key, from_step_id, to_step_id, label, kind, permission)
+       values ($1, 'onward', $2, $3, $4, 'send', 'create')`,
+      [later.version, later.toStep, step, name],
+    );
+  });
+
   it("can have its Version, Steps and Transitions changed", async () => {
     await migrator.query("update workflow_version set layout = '{\"x\": 1}' where id = $1", [draft.version]);
     await migrator.query("update workflow_step set stage_key = 'in_review' where id = $1", [draft.fromStep]);
