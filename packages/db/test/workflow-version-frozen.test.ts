@@ -17,10 +17,11 @@ let published: Version;
 let draft: Version;
 
 async function addVersion(definition: string, no: number, status: "draft" | "published"): Promise<Version> {
+  // Built as a draft, then published: a published Version takes no new parts.
   const version = await one(
-    `insert into workflow_version (workflow_definition_id, version_no, status, published_at)
-     values ($1, $2, $3::text, case when $3::text = 'published' then now() end) returning id`,
-    [definition, no, status],
+    `insert into workflow_version (workflow_definition_id, version_no, status)
+     values ($1, $2, 'draft') returning id`,
+    [definition, no],
   );
   const step = (key: string) =>
     one(
@@ -35,6 +36,9 @@ async function addVersion(definition: string, no: number, status: "draft" | "pub
      values ($1, 'go', $2, $3, $4, 'send', 'create') returning id`,
     [version, fromStep, toStep, name],
   );
+  if (status === "published") {
+    await migrator.query("update workflow_version set status = 'published', published_at = now() where id = $1", [version]);
+  }
   return { version, fromStep, toStep, transition };
 }
 
@@ -71,6 +75,26 @@ describe("a published Workflow Version, as its owner", () => {
 
   it("can't have a Step or Transition moved out to a draft Version", async () => {
     await refused("update workflow_step set workflow_version_id = $2 where id = $1", [published.fromStep, draft.version]);
+  });
+
+  it("can't take a new Step or Transition", async () => {
+    await refused(
+      `insert into workflow_step (workflow_version_id, key, name, stage_key, actor_rule)
+       values ($1, 'extra', $2, 'draft', '{}')`,
+      [published.version, name],
+    );
+    await refused(
+      `insert into workflow_transition (workflow_version_id, key, from_step_id, to_step_id, label, kind, permission)
+       values ($1, 'extra', $2, $3, $4, 'send', 'create')`,
+      [published.version, published.fromStep, published.toStep, name],
+    );
+  });
+
+  it("can't take a draft's Step or Transition moved into it", async () => {
+    const definition = await one("insert into workflow_definition (owner_kind, name) values ('rabaed', $1) returning id", [name]);
+    const other = await addVersion(definition, 1, "draft");
+    await refused("update workflow_step set workflow_version_id = $2, key = 'moved' where id = $1", [other.fromStep, published.version]);
+    await refused("update workflow_transition set workflow_version_id = $2, key = 'moved' where id = $1", [other.transition, published.version]);
   });
 });
 
