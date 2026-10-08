@@ -68,6 +68,7 @@ export const Wide: Story = {
     await expect(cardOf(context, projects[2]!.name)).toHaveAccessibleDescription(expect.stringContaining(`${needMyAction}: 0`));
     const closed = cardOf(context, projects[3]!.name);
     await expect(closed).toHaveAccessibleDescription(expect.stringContaining(storyText(context, copy.closed)));
+    await expect(within(tower).getByText(storyText(context, b("Tamkeen Contracting", "تمكين للمقاولات")))).toBeInTheDocument();
     const code = within(tower).getByText("TWR");
     await expect(getComputedStyle(code).direction).toBe("ltr");
     await expectLaidOutLeftToRight(within(cardOf(context, projects[1]!.name)).getByText("KAFD2"));

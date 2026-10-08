@@ -43,8 +43,7 @@ export function CreateProjectForm() {
   }
 
   return (
-    <section className="space-y-4 rounded-md border border-border p-4">
-      <h2 className="text-h6 font-semibold">{t("createTitle")}</h2>
+    <div className="space-y-4">
       <form onSubmit={onSubmit} className="grid gap-4 sm:grid-cols-2" noValidate>
         <Field label={t("nameEn")} id="project-name-en" required>
           <Input name="nameEn" dir="ltr" lang="en" />
@@ -73,6 +72,6 @@ export function CreateProjectForm() {
           {error}
         </p>
       )}
-    </section>
+    </div>
   );
 }
