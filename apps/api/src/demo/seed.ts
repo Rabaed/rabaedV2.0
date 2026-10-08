@@ -367,7 +367,7 @@ export async function seedDemo(
     const mohammedCaller = await signedIn(dcl, mohammed);
     const ahmedCaller = await signedIn(dcl, ahmed);
     const take = (caller: Call, itemId: string, transition: string) =>
-      caller("POST", `/v1/work-items/${itemId}/transitions`, { transition, idempotencyKey: randomUUID() });
+      caller("POST", `/v1/work-items/${itemId}/transitions`, { transition, confirmed: true, idempotencyKey: randomUUID() });
     /**
      * Hafiz raises the MAR with its Datasheet and its free Links to `freeLinks`, and
      * sends it; Ali claims it and Submits it to the Consultant.
@@ -457,6 +457,7 @@ export async function seedDemo(
         remarks:
           "Resubmit with hot dip galvanised trays (EN ISO 1461). / أعد التقديم بلوحات مجلفنة بالغمس الساخن (EN ISO 1461).",
       },
+      confirmed: true,
       idempotencyKey: randomUUID(),
     });
 

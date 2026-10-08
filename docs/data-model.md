@@ -163,7 +163,7 @@ This is the shared set per Module. Workflows reference Stages by `key`, so libra
 - `workflow_version`: `id`, `workflow_definition_id`, `version_no`, `status {draft, published}`, `layout jsonb` (React Flow node positions only), `published_at`. Published versions are immutable.
 
 **workflow_step**
-`id`, `workflow_version_id`, `key`, `name i18n`, `stage_key`, `actor_rule jsonb`, `is_signing bool`, `outcome_mode {none, recommend_code, issue_code, inspection_result}`.
+`id`, `workflow_version_id`, `key`, `name i18n`, `stage_key`, `actor_rule jsonb`, `is_signing bool` (read by nothing: every Transition is signed, ADR 0017), `outcome_mode {none, recommend_code, issue_code, inspection_result}`.
 - `actor_rule` says who can hold the Step: base role or project role, required permission (e.g. `approve`), and optional default assignee resolution. The Participant is resolved at runtime from the item's Visibility values; that is how "Electrical goes to Consultant A" works.
 - `issue_code` marks the final review Step.
 
@@ -276,7 +276,7 @@ A Revision's Documents are copied as new rows with their own storage keys; **doc
 
 **documental_record**
 `id`, `work_item_id`, `stored_file_id`, `pdf_template_version_id`, `language`, `outcome`, `content_sha256`, `sealed_at`, `verification_code` (QR target).
-Produced on every closure. The PDF includes every signing event and the cross-Participant events, but no Internal Communication and no Chat. It is sealed with PAdES and a trusted timestamp (ADR 0003).
+Produced on every closure. The PDF names everyone who took a Transition on the item's path to its outcome, whichever Company (name, Position, Company, date, Signature), but no Returns, Internal Notes, Recommended Codes, Chat or in-progress answers (visibility.md V7, ADR 0017). It is sealed with PAdES and a trusted timestamp (ADR 0003).
 
 **distribution_list** / **distribution_recipient**
 - `distribution_list`: `id`, `project_id`, `work_item_type_id`.
@@ -342,8 +342,8 @@ Each created Draft carries `import_id` for traceability.
 | `payload jsonb` | Action Form answers, code, note text |
 | `audience` | `shared` or `internal` |
 | `audience_participant_id` | set when `audience = internal` |
-| `signature_id → member_signature` | set when the event signs |
-| `content_sha256` | hash of item data + documents at that moment |
+| `signature_id → member_signature` | set on every Transition once RP-85 builds the Signature (ADR 0017) |
+| `content_sha256` | on a Transition: hash of the item's Subject, answers, outcome and Documents at that moment (`app.work_item_content_sha256`, workflow-engine.md §7) |
 | `prev_hash`, `hash` | hash chain → tamper-evident |
 | `created_at` | |
 

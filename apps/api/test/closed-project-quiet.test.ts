@@ -95,7 +95,7 @@ async function issueCodeB(id: string) {
   await ok(signer.caller.post(`/v1/work-items/${id}/claim`));
   await take(signer.caller, id, "send_to_manager");
   await ok(signer.caller.post(`/v1/work-items/${id}/claim`));
-  await ok(signer.caller.post(`/v1/work-items/${id}/transitions`, { transition: "approve_b", answers: {}, idempotencyKey: randomUUID() }));
+  await ok(signer.caller.post(`/v1/work-items/${id}/transitions`, { transition: "approve_b", answers: {}, confirmed: true, idempotencyKey: randomUUID() }));
 }
 
 let earlier = ""; // Submitted and delivered while the Project was active; Code B left in the outbox.

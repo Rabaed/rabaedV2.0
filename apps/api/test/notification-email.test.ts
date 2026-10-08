@@ -95,7 +95,7 @@ async function issueCodeB(id: string, signer: Person) {
   await ok(signer.caller.post(`/v1/work-items/${id}/claim`));
   await take(signer.caller, id, "send_to_manager");
   await ok(signer.caller.post(`/v1/work-items/${id}/claim`));
-  await ok(signer.caller.post(`/v1/work-items/${id}/transitions`, { transition: "approve_b", answers: {}, idempotencyKey: randomUUID() }));
+  await ok(signer.caller.post(`/v1/work-items/${id}/transitions`, { transition: "approve_b", answers: {}, confirmed: true, idempotencyKey: randomUUID() }));
 }
 
 /** The email outbox rows of the notifications of item `id`, as the migrator sees them. */

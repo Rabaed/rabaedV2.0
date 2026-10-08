@@ -700,6 +700,7 @@ const transitionRefusals = [
   "no_step_pool",
   "idempotency_key_reused",
   "form_not_checked",
+  "not_confirmed",
 ] as const;
 export type TakeTransitionResult =
   | { ok: true }
@@ -731,7 +732,9 @@ async function fieldFileCounts(trx: Trx, workItemId: string): Promise<Record<str
  * Return or a cancel) by a Member who may save the answers needs the sections
  * naming the Step being left complete, their `attachments` fields' files
  * included: otherwise it is refused with the per-field errors. Sections another
- * Participant fills later are not checked (RP-304).
+ * Participant fills later are not checked (RP-304). Every Transition needs the
+ * Member's confirmation from its pop-up (`confirmed`, ADR 0017): without it,
+ * an item they see is refused `not_confirmed`, and nothing is written.
  */
 export function takeTransition(
   db: Db,
@@ -743,6 +746,8 @@ export function takeTransition(
   return withMember(db, memberId, async (trx): Promise<TakeTransitionResult> => {
     const pinned = await pinnedForm(trx, workItemId);
     if (!pinned) return { ok: false, reason: "not_found" };
+    // A hidden item is the plain 404 first; then nothing moves unconfirmed.
+    if (!input.confirmed) return { ok: false, reason: "not_confirmed" };
     // Only a Transition the Member may take is checked here, so anyone else is told why
     // they can't act (by the database), never what its Action Form or the Form lacks.
     const [taking] = await actionRows(trx, workItemId, input.transition);

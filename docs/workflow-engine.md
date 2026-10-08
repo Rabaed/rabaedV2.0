@@ -15,8 +15,9 @@ A Workflow version is a directed graph.
 - **Steps** are nodes. Each has:
   - a `stage_key`, which decides its Kanban column;
   - an **actor rule**: who may hold it (§3);
-  - an `outcome_mode`: `none`, `recommend_code`, `issue_code` or `inspection_result`;
-  - `is_signing`.
+  - an `outcome_mode`: `none`, `recommend_code`, `issue_code` or `inspection_result`.
+
+  There is no per-Step or per-Transition signing choice: every Transition is confirmed and recorded (§7, ADR 0017). The old `workflow_step.is_signing` column is read by nothing; the definition format (WF-2) and the builder leave it out.
 - **Transitions** are edges. Each has:
   - a `label` (i18n);
   - a `kind`: `send` (within the Participant), `submit` (to another Participant), `return` (back within the Participant), `send_back` (back to the Participant that Submitted it, with no outcome; ADR 0014), `close` or `cancel`;
@@ -54,7 +55,7 @@ A draft Workflow version can't be published unless all of these hold:
 2. Every `stage_key` exists in the Module's Stage set, and terminal Steps sit in closed or cancelled Stages.
 3. The Work Item Type's `outcome_kind` matches: for `review_code`, exactly one path passes an `issue_code` Step, and every Transition into a terminal Step sets an outcome.
 4. A `return` goes only to an earlier Step held by the **same** Participant role. A `submit` always crosses to a different role. A `send_back` goes from a Step of the role the item was Submitted to, back to a Step of the role that Submitted it, which the Workflow chooses; it sets no outcome.
-5. Every `submit` Transition and every Transition from an `issue_code` Step is signing.
+5. _Dropped (ADR 0017): every Transition is confirmed and recorded, so there is no signing check._
 6. Conditions reference only fields that exist in the Form (checked against the Form's latest published version).
 7. Action Forms are valid Form schemas. As built (RP-300): `workflowActionFormProblems` in `packages/domain` (`action-form.ts`). Workflow Versions are published as data by migration until the builder (part 5), so a seam test runs it on every published Version.
 8. No cycle is possible without a `return` or a `send_back`. A loop across Participants always goes through a `send_back`, never through Submit alone.
@@ -122,7 +123,7 @@ Every command runs in **one transaction**:
 - it takes an **idempotency key**, so a double-click can't apply twice;
 - it writes side effects (notifications, PDF jobs, emails) to an **outbox** table in the same transaction, and workers deliver them afterwards.
 
-### 5.1 `take_transition(item, transition, action_form_answers, confirm_signing?)`
+### 5.1 `take_transition(item, transition, action_form_answers, confirmed)`
 
 Checks, in order. Any failure aborts with nothing written.
 
@@ -131,7 +132,7 @@ Checks, in order. Any failure aborts with nothing written.
 3. The Transition starts from the current Step on the item's **pinned** Workflow version, and its condition matches.
 4. The caller holds the permission the Transition needs.
 5. The Action Form answers validate. With Code B, there is at least one comment.
-6. **Signing:** if the Transition is signing, the caller has an active `member_signature` and `confirm_signing = true` from the confirmation pop-up.
+6. **Confirmed** (ADR 0017): every Transition carries `confirmed = true` from its confirmation pop-up. As built (RP-436): the api's `takeTransitionRequest.confirmed`; without it, an item the caller sees is refused `not_confirmed` (422), a hidden one is the plain 404, and nothing is written. A Member also needs a saved Signature (`member_signature`) before taking any Transition; that check comes with the Signature itself (RP-85) and is not enforced yet.
 7. **On `submit`:**
    - all Form-required fields are complete;
    - for a Revision of a drawing submittal, every carried Markup has a reply.
@@ -146,8 +147,9 @@ Effects, in order:
    - type `transition` (or `recommend_code` / `issue_code`);
    - the Action Form payload;
    - `audience`: `shared` if the Transition is `submit` or `send_back`, closes the item, or comes from an `issue_code` Step; otherwise `internal` to the actor's Participant;
-   - `signature_id` if signing;
-   - a `content_sha256` of the item data plus its frozen Documents;
+   - who took it (`actor_member_id`, `actor_participant_id`) and when (`created_at`);
+   - `signature_id`, the Member's saved Signature version, once RP-85 builds it;
+   - a `content_sha256` of the item's exact content as the Transition leaves it (§7);
    - the hash chain.
 
    An Internal Note written in the Action Form is its own `internal_note` event, appended just before the Transition's, carrying the Transition's id. It is always `internal` to the actor's Participant, even with a Submit or a Code (visibility.md V5).
@@ -237,11 +239,14 @@ There is no admin path to `take_transition`, `recommend_code`, `issue_code`, or 
 
 ## 7. Signing and the Documental Record
 
-- **At each signing Transition:** the event stores `signature_id` (the exact signature version) and a `content_sha256`, and joins the hash chain.
+Every Transition a Member takes is signed ([ADR 0017](adr/0017-the-documental-record-names-everyone-who-acted.md), amending ADR 0003): there is no per-Transition signing choice in the Workflow.
+
+- **At every Transition:** the Member confirms it in its pop-up (§5.1 check 6), and its event in the append-only `work_item_event` trail records who took it, from which Participant, when, `signature_id` (the exact Signature version, once RP-85 builds it) and a `content_sha256`, and joins the hash chain.
+- **The content hash** (as built, RP-436: `app.work_item_content_sha256`, called only by `app.take_transition`) is the SHA-256 of the item's Subject, its Form answers and its outcome as the Transition leaves them (a Send Back's sections already put back), and every confirmed, unremoved Document it holds then, each by id, field, file name, type, size and storage key. Documents are never changed in place, so any answer, Document or outcome that changes changes the hash. A Document's own file hash joins it when Documents are frozen (§5.1 effect 1).
 - **At closure,** a background job:
   1. renders the Form and the Action Form history into an HTML template, then to PDF in the Project's record language;
   2. appends frozen PDF and image Documents. Other file types, such as DWG, are listed with their hashes, and their original files remain downloadable in the portal;
-  3. adds a signing-trail page: every signing event with name, Position, Company, time and content hash, plus the cross-Participant events. There is no Internal Communication and no Chat;
+  3. adds a signing-trail page naming everyone who acted on the item's path, whichever Company: for each Transition taken on the way to the outcome, the Member's name, Position, Company, the date, their saved Signature and the content hash (visibility.md V7). Returns and the work around them, Internal Notes, Recommended Codes, Chat and in-progress answers stay out;
   4. seals the PDF with PAdES using a KMS-held key, adds an RFC 3161 timestamp, and embeds a QR code to the verification page;
   5. stores the file and its hash as a `documental_record`, then sends it to the Distribution List through expiring links.
 - A job failure never rolls back the closure. The job retries and shows in the Job Monitor.
@@ -318,7 +323,7 @@ Error codes, api (`/v1/projects/:id/numbering`, `/numbering/counters…`, `/v1/p
   - `workflow_step` rows;
   - `workflow_transition` rows.
 - Stages appear as horizontal swim-bands, and Steps are dropped into a band.
-- The side panel edits the selected node or edge: actor rule, outcome mode and signing (Steps); label, kind, condition, outcome, Action Form (using the Form builder component) and notifications (Transitions).
+- The side panel edits the selected node or edge: actor rule and outcome mode (Steps; no signing option, ADR 0017); label, kind, condition, outcome, Action Form (using the Form builder component) and notifications (Transitions).
 - "Validate" runs the §1 checks live, and "Publish" runs them again server-side.
 
 ---

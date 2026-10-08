@@ -40,6 +40,7 @@ export function useWorkItemCalls(workItemId: string) {
     project_closed: t("projectClosed"),
     form_incomplete: t("formIncomplete"),
     form_not_checked: t("tryAgain"),
+    not_confirmed: t("tryAgain"),
   };
 
   /** POSTs to the item's `path`: true when done, else the refusal, its message shown as `error`. */
@@ -69,14 +70,17 @@ export function useWorkItemCalls(workItemId: string) {
     }
   }
 
-  /** Takes `transition` with its checked answers and Internal Note. */
+  /**
+   * Takes `transition` with its checked answers and Internal Note. Called only
+   * from the pop-up's confirm button, so the Transition goes as confirmed (ADR 0017).
+   */
   async function take(transition: string, answers: Record<string, unknown>, internalNote: string): Promise<true | Refusal> {
     let idempotencyKey = keys.current.get(transition);
     if (!idempotencyKey) {
       idempotencyKey = crypto.randomUUID();
       keys.current.set(transition, idempotencyKey);
     }
-    const result = await send("transitions", { transition, answers, internalNote: internalNote.trim(), idempotencyKey });
+    const result = await send("transitions", { transition, answers, internalNote: internalNote.trim(), confirmed: true, idempotencyKey });
     if (result === true) keys.current.delete(transition);
     return result;
   }

@@ -194,7 +194,7 @@ beforeAll(async () => {
   await ok(k1Lead.caller.post(`/v1/work-items/${closed}/claim`));
   await take(k1Lead.caller, closed, "send_to_manager");
   await ok(k1Lead.caller.post(`/v1/work-items/${closed}/claim`));
-  await ok(k1Lead.caller.post(`/v1/work-items/${closed}/transitions`, { transition: "approve_b", answers: {}, idempotencyKey: randomUUID() }));
+  await ok(k1Lead.caller.post(`/v1/work-items/${closed}/transitions`, { transition: "approve_b", answers: {}, confirmed: true, idempotencyKey: randomUUID() }));
   await api.later(10 * DAY);
   pumps = await item(at.projectId, c1Engineer, "Pumps", at.mechanical, c1Pm);
   c2Item = await item(at.projectId, c2Engineer, "C2 lighting", at.electrical, c2Lead);

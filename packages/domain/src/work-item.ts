@@ -283,6 +283,11 @@ export const takeTransitionRequest = z.object({
    * when the Transition goes to another, such as Submit (visibility.md V5).
    */
   internalNote: z.string().trim().max(4000).default(""),
+  /**
+   * The Member confirmed the Transition in its pop-up (ADR 0017): every Transition
+   * is confirmed and recorded. Without it, refused with `not_confirmed`.
+   */
+  confirmed: z.boolean().default(false),
   idempotencyKey: z.uuid(),
 });
 export type TakeTransitionRequest = z.input<typeof takeTransitionRequest>;

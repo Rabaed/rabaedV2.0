@@ -39,6 +39,8 @@ const answers = {
   // A Transition's Action Form answers (RP-300): the body lists each field's error.
   invalid_action_form: () => new HttpError(422, "invalid_action_form"),
   idempotency_key_reused: () => new HttpError(422, "idempotency_key_reused"),
+  // Every Transition is confirmed in its pop-up before it is taken (ADR 0017).
+  not_confirmed: () => new HttpError(422, "not_confirmed"),
   // Form answers (RP-262): the body lists each field's error (answersRefusal).
   invalid_answers: () => new HttpError(422, "invalid_answers"),
   form_incomplete: () => new HttpError(422, "form_incomplete"),

@@ -312,7 +312,8 @@ describe("C1 changes an item K1 Sent Back to its Draft", () => {
     const { rows } = await migrator.query("select count(*)::int as n from work_item_link where from_id = $1", [id]);
     expect(rows[0].n).toBe(2);
     const { rows: hashed } = await migrator.query(
-      `select e.content_sha256 = sha256(convert_to(jsonb_build_object('title', w.title, 'data', w.data)::text, 'UTF8')) as same
+      // The item's content as the Submit left it (RP-436: its Documents and outcome too).
+      `select e.content_sha256 = app.work_item_content_sha256(w.id, w.title, w.data, w.outcome) as same
        from work_item_event e join work_item w on w.id = e.work_item_id
        join workflow_transition t on t.id = e.transition_id
        where e.work_item_id = $1 and t.key = 'submit' order by e.seq desc limit 1`,

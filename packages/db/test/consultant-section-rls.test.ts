@@ -333,7 +333,7 @@ describe("a Send Back out of K1's Step", () => {
   it("puts the field times of K1's section back, and hashes the answers it leaves with", async () => {
     const { rows } = await migrator.query<{ data: object; data_as_arrived: object | null; times: string[]; same_hash: boolean }>(
       `select w.data, w.data_as_arrived, array(select jsonb_object_keys(w.field_times) order by 1) as times,
-         e.content_sha256 = sha256(convert_to(jsonb_build_object('title', w.title, 'data', w.data)::text, 'UTF8')) as same_hash
+         e.content_sha256 = app.work_item_content_sha256(w.id, w.title, w.data, w.outcome) as same_hash
        from work_item w
        cross join lateral (
          select x.content_sha256 from work_item_event x where x.work_item_id = w.id and x.type = 'transition' order by x.seq desc limit 1

@@ -552,7 +552,7 @@ describe("Internal Note (V5, scenarios 7 and 34)", () => {
     const other = await createDraft(engineer, "Cable lugs");
     const idempotencyKey = randomUUID();
     const send = () =>
-      engineer.post(`/v1/work-items/${other}/transitions`, { transition: "send_for_review", internalNote: SENT, idempotencyKey });
+      engineer.post(`/v1/work-items/${other}/transitions`, { transition: "send_for_review", internalNote: SENT, confirmed: true, idempotencyKey });
     await Promise.all([ok(send()), ok(send())]);
     await ok(pm.post(`/v1/work-items/${other}/claim`));
     await ok(takeVerifying(pm, other, "return", { reason: "Again", internalNote: "   " }));
