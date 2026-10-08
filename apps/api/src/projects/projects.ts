@@ -1,5 +1,5 @@
 import { withMember, type Database, type Db } from "@rabaed/db";
-import { moduleTabOrder, type CreateProjectRequest, type ModuleKey, type ProjectSummary } from "@rabaed/domain";
+import { moduleTabOrder, type BilingualText, type CreateProjectRequest, type ModuleKey, type ProjectSummary } from "@rabaed/domain";
 import { sql, type Transaction } from "kysely";
 import { refusedAsForbidden, type Forbidden } from "../db-error.ts";
 
@@ -41,6 +41,8 @@ function selectProjects(trx: Transaction<Database>, memberId: string) {
       "p.code",
       "p.name",
       "p.status",
+      // Every Member of the Project sees the Host Company's name (V15).
+      sql<BilingualText>`app.project_host_company_name(p.id)`.as("hostName"),
       "r.base_role as baseRole",
       "r.name as roleName",
       sql<boolean>`pa.id is not null`.as("isProjectAdmin"),
@@ -77,8 +79,9 @@ async function summaries(trx: Transaction<Database>, rows: ProjectRow[]): Promis
     join work_item_type t on t.project_id is null or t.project_id = p.id
     where p.id = any(${projectIds}::uuid[])
   `.execute(trx);
-  return rows.map(({ baseRole, roleName, ...row }) => ({
+  return rows.map(({ baseRole, roleName, hostName, ...row }) => ({
     ...row,
+    hostCompany: { legalName: hostName },
     projectRole: { baseRole, name: roleName },
     needMyAction: counts.find((c) => c.project_id === row.id)?.count ?? 0,
     modules: moduleTabOrder.filter((key) => modules.some((m) => m.project_id === row.id && m.module_key === key)),

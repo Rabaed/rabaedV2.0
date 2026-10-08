@@ -51,6 +51,8 @@ export const projectSummary = z.object({
   code: z.string(),
   name: bilingualText,
   status: z.enum(["active", "closed"]),
+  /** The Company that created the Project: its name, which every Member of the Project sees (V15). */
+  hostCompany: z.object({ legalName: bilingualText }),
   /** The Project Role the viewer's Company plays on it. */
   projectRole: z.object({ baseRole: z.enum(baseRoles), name: bilingualText }),
   isProjectAdmin: z.boolean(),

@@ -23,6 +23,7 @@ const project = (n: number, rest: Partial<ProjectSummary>): ProjectSummary => ({
   code: "TWR",
   name: b("Riyadh Gate Tower", "برج بوابة الرياض"),
   status: "active",
+  hostCompany: { legalName: b("Tamkeen Contracting", "تمكين للمقاولات") },
   projectRole: { baseRole: "contractor", name: b("Contractor", "المقاول") },
   isProjectAdmin: false,
   needMyAction: 0,
