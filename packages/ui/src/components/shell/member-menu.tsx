@@ -91,7 +91,7 @@ export function MemberMenu({
         aria-label={label}
         side={inSidebar ? "top" : "bottom"}
         align={inSidebar ? "start" : "end"}
-        className="flex w-64 flex-col gap-4"
+        className="flex w-72 flex-col gap-4"
       >
         <div className="flex items-center gap-3">
           <Avatar name={name} src={photoSrc} size="lg" decorative />
