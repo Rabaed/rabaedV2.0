@@ -141,16 +141,7 @@ beforeAll(async () => {
         ],
       },
     ],
-  });
-  await sql`
-    insert into workflow_transition (workflow_version_id, key, from_step_id, to_step_id, label, kind, outcome, permission, sort)
-    select f.workflow_version_id, 'approve_b', f.id, t.id, '{"en": "Approve with Comments · B", "ar": "اعتماد مع ملاحظات · B"}', 'close', 'B', 'approve', 10
-    from work_item_type wt
-    join workflow_version v on v.workflow_definition_id = wt.workflow_definition_id
-    join workflow_step f on f.workflow_version_id = v.id and f.key = 'consultant_approval'
-    join workflow_step t on t.workflow_version_id = v.id and t.key = 'approved'
-    where wt.code = ${TYPE}
-  `.execute(migrator);
+  }, { withApproveB: true });
 
   raiser = await person(c1, at.c1ParticipantId, ["engineer"]);
   pm = await person(c1, at.c1ParticipantId, ["project_manager"], { en: "Layla PM", ar: "ليلى المديرة" });
