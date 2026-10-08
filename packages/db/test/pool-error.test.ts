@@ -5,8 +5,8 @@
 // opens a fresh connection.
 import { sql } from "kysely";
 import pg from "pg";
-import { afterAll, describe, expect, it } from "vitest";
-import { createDb, poolErrorLog } from "../src/index.ts";
+import { afterAll, describe, expect, it, vi } from "vitest";
+import { createDb } from "../src/index.ts";
 import { testDatabaseUrls } from "../test-support/index.ts";
 
 const urls = testDatabaseUrls();
@@ -31,32 +31,39 @@ const opened: Array<ReturnType<typeof createDb>> = [];
 afterAll(() => Promise.all(opened.map((db) => db.destroy())));
 
 describe("createDb pool errors", () => {
-  it("survives Postgres closing an idle connection, and the next query works", async () => {
-    const errors: unknown[] = [];
-    const db = createDb(urls.app, { max: 1, onPoolError: (error) => errors.push(error) });
+  it("survives Postgres closing an idle connection, logs it by class and code only, and the next query works", async () => {
+    const db = createDb(urls.app, { max: 1 });
     opened.push(db);
     const pid = await idleBackend(db);
 
+    const written: string[] = [];
+    const stderr = vi.spyOn(process.stderr, "write").mockImplementation((chunk) => {
+      written.push(String(chunk));
+      return true;
+    });
     const unhandled: unknown[] = [];
     const record = (error: unknown) => unhandled.push(error);
     process.on("uncaughtException", record);
+    let line: string | undefined;
     try {
       await terminate(pid);
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      await vi.waitFor(
+        () => {
+          line = written.find((entry) => entry.includes("idle database connection failed"));
+          expect(line).toBeDefined();
+        },
+        { timeout: 5000 },
+      );
     } finally {
       process.off("uncaughtException", record);
+      stderr.mockRestore();
     }
 
     expect(unhandled).toEqual([]);
-    expect(errors).toHaveLength(1);
-    expect(poolErrorLog(errors[0])).toEqual({ level: "warn", msg: "idle database connection failed", err: { type: "DatabaseError", code: "57P01" } });
+    expect(JSON.parse(line!)).toEqual({ level: "warn", msg: "idle database connection failed", err: { type: "DatabaseError", code: "57P01" } });
+    // The server's own text ("terminating connection due to administrator command") is not logged.
+    expect(line).not.toContain("terminating");
     expect((await sql<{ one: number }>`select 1 as one`.execute(db)).rows).toEqual([{ one: 1 }]);
     expect(await idleBackend(db)).not.toBe(pid);
-  });
-
-  it("logs by class and code only, never the message", () => {
-    const error = Object.assign(new Error("terminating connection: row 'Secret Tower' quoted"), { code: "57P01", severity: "FATAL" });
-    expect(JSON.stringify(poolErrorLog(error))).not.toContain("Secret Tower");
-    expect(poolErrorLog(new Error("boom"))).toEqual({ level: "warn", msg: "idle database connection failed", err: { type: "Error", code: undefined } });
   });
 });

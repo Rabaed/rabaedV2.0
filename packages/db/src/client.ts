@@ -12,41 +12,35 @@ export interface CreateDbOptions {
   max?: number;
   /** Read at each new connection instead of the URL's password (see rotating-password.ts). */
   password?: RotatingPassword;
-  /** Told when the server closes an idle connection (see poolErrorLog); defaults to a JSON line on stderr. */
-  onPoolError?: (error: unknown) => void;
-}
-
-/**
- * What an idle-connection failure is logged as: the error by class and code
- * only, because PostgreSQL messages can quote row values (CODING_STANDARDS
- * "Logging and errors"; the same shape as the outbox failureOf and the worker log).
- */
-export function poolErrorLog(error: unknown) {
-  const type = error instanceof Error ? (error.constructor?.name ?? error.name) : typeof error;
-  const code = typeof error === "object" && error !== null && "code" in error && typeof error.code === "string" ? error.code : undefined;
-  return { level: "warn", msg: "idle database connection failed", err: { type, code } };
 }
 
 /**
  * node-postgres emits "error" on the pool when the server closes an idle
  * connection (a database reset, an RDS restart or failover); with no listener
  * Node crashes the process. The pool drops that connection itself and the next
- * query opens a new one, so log it and carry on.
+ * query opens a new one, so log it and carry on. Logged by class and code
+ * only, because PostgreSQL messages can quote row values (CODING_STANDARDS
+ * "Logging and errors"). This is not shared with the outbox's failureOf (it
+ * returns a string, not the class) or the worker's error log (packages/db
+ * cannot import from an app); it is the same rule in a few lines.
  */
-function listenForPoolErrors(pool: pg.Pool, onPoolError: CreateDbOptions["onPoolError"]): pg.Pool {
-  pool.on("error", onPoolError ?? ((error) => process.stderr.write(JSON.stringify(poolErrorLog(error)) + "\n")));
+function listenForPoolErrors(pool: pg.Pool): pg.Pool {
+  pool.on("error", (error) => {
+    const code = "code" in error && typeof error.code === "string" ? error.code : undefined;
+    process.stderr.write(JSON.stringify({ level: "warn", msg: "idle database connection failed", err: { type: error.constructor.name, code } }) + "\n");
+  });
   return pool;
 }
 
 export function createDb(connectionString: string, options: CreateDbOptions = {}): Db {
   const max = options.max ?? 10;
-  const { password, onPoolError } = options;
-  if (!password) return new Kysely<Database>({ dialect: new PostgresDialect({ pool: listenForPoolErrors(new pg.Pool({ connectionString, max }), onPoolError) }) });
+  const { password } = options;
+  if (!password) return new Kysely<Database>({ dialect: new PostgresDialect({ pool: listenForPoolErrors(new pg.Pool({ connectionString, max })) }) });
 
   // The URL's parts, not the URL itself: pg lets a connection string's (empty)
   // password win over the password function.
   const { password: _ignored, ...config } = parseIntoClientConfig(connectionString);
-  const pool = listenForPoolErrors(new pg.Pool({ ...config, max, password: () => password.get() }), onPoolError);
+  const pool = listenForPoolErrors(new pg.Pool({ ...config, max, password: () => password.get() }));
   return new Kysely<Database>({
     dialect: new PostgresDialect({
       pool: {
