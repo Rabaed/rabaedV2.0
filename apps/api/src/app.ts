@@ -16,6 +16,7 @@ import { loggerOptions } from "./logging.ts";
 import { companyRoutes } from "./routes/companies.ts";
 import { documentRoutes } from "./routes/documents.ts";
 import { healthRoutes } from "./routes/health.ts";
+import { homeRoutes } from "./routes/home.ts";
 import { memberRoutes } from "./routes/members.ts";
 import { notificationSettingsRoutes } from "./routes/notification-settings.ts";
 import { notificationRoutes } from "./routes/notifications.ts";
@@ -124,6 +125,7 @@ export async function buildApp({
   await app.register(companyRoutes(context));
   await app.register(memberRoutes(context));
   await app.register(projectRoutes(context));
+  await app.register(homeRoutes(context));
   await app.register(participantRoutes(context));
   await app.register(visibilityRoutes(context));
   await app.register(scopeRoutes(context));

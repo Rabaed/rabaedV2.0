@@ -52,27 +52,38 @@ function selectProjects(trx: Transaction<Database>, memberId: string) {
 type ProjectRow = Awaited<ReturnType<ReturnType<typeof selectProjects>["executeTakeFirstOrThrow"]>>;
 
 /**
- * Per Project, what its card and shell show besides its row: the Need My Action
- * count and the Modules it has a Work Item Type in.
- *
- * The count follows the List's toggle row for row, minus the Member's own
- * Drafts: the items app.need_my_action says are waiting on them, one per
- * Revision chain, the latest Revision they see (app.latest_visible_revision), as
- * the List shows by default. Same functions, so the two can't disagree. Only open assignments of the Member's own Participants are
- * candidates (RLS on step_assignment), and RLS on work_item keeps it to items
- * they see. A closed Project counts 0.
+ * The items waiting on the Member in these Projects, each once: the rows behind
+ * the Need My Action count, which Home lists too (RP-407). The items
+ * app.need_my_action says are waiting on them, one per Revision chain, the
+ * latest Revision they see (app.latest_visible_revision), as the List shows by
+ * default; never their own Drafts. Only open assignments of the Member's own
+ * Participants are candidates (RLS on step_assignment), and RLS on work_item
+ * keeps it to items they see. Nothing on a closed Project.
  */
-async function summaries(trx: Transaction<Database>, rows: ProjectRow[]): Promise<ProjectSummary[]> {
-  if (rows.length === 0) return [];
-  const projectIds = rows.map((r) => r.id);
-  const { rows: counts } = await sql<{ project_id: string; count: number }>`
-    select w.project_id, count(distinct w.id)::int as count
+export async function waitingOnMember(trx: Transaction<Database>, projectIds: readonly string[]): Promise<{ projectId: string; id: string }[]> {
+  if (projectIds.length === 0) return [];
+  const { rows } = await sql<{ project_id: string; id: string }>`
+    select distinct w.project_id, w.id
     from work_item w
     join step_assignment a on a.work_item_id = w.id and a.status in ('pooled', 'claimed')
     where w.project_id = any(${projectIds}::uuid[]) and app.need_my_action(w.id) = 'waiting'
       and app.latest_visible_revision(w.id)
-    group by w.project_id
   `.execute(trx);
+  return rows.map((r) => ({ projectId: r.project_id, id: r.id }));
+}
+
+/**
+ * Per Project, what its card and shell show besides its row: the Need My Action
+ * count and the Modules it has a Work Item Type in.
+ *
+ * The count follows the List's toggle row for row, minus the Member's own
+ * Drafts (`waitingOnMember`): the same functions, so the two can't disagree.
+ * A closed Project counts 0.
+ */
+async function summaries(trx: Transaction<Database>, rows: ProjectRow[]): Promise<ProjectSummary[]> {
+  if (rows.length === 0) return [];
+  const projectIds = rows.map((r) => r.id);
+  const waiting = await waitingOnMember(trx, projectIds);
   const { rows: modules } = await sql<{ project_id: string; module_key: ModuleKey }>`
     select distinct p.id as project_id, t.module_key
     from project p
@@ -83,16 +94,19 @@ async function summaries(trx: Transaction<Database>, rows: ProjectRow[]): Promis
     ...row,
     hostCompany: { legalName: hostName },
     projectRole: { baseRole, name: roleName },
-    needMyAction: counts.find((c) => c.project_id === row.id)?.count ?? 0,
+    needMyAction: waiting.filter((w) => w.projectId === row.id).length,
     modules: moduleTabOrder.filter((key) => modules.some((m) => m.project_id === row.id && m.module_key === key)),
   }));
 }
 
+/** The Member's Projects, as the Projects page lists them, newest first, within the Member's transaction. */
+export async function myProjectSummaries(trx: Transaction<Database>, memberId: string): Promise<ProjectSummary[]> {
+  return summaries(trx, await selectProjects(trx, memberId).orderBy("p.created_at", "desc").orderBy("p.id", "desc").execute());
+}
+
 /** The Member's Projects, as the Projects page lists them, newest first. */
 export function listMyProjects(db: Db, memberId: string): Promise<ProjectSummary[]> {
-  return withMember(db, memberId, async (trx) =>
-    summaries(trx, await selectProjects(trx, memberId).orderBy("p.created_at", "desc").orderBy("p.id", "desc").execute()),
-  );
+  return withMember(db, memberId, (trx) => myProjectSummaries(trx, memberId));
 }
 
 /** One of my Projects, or null: a Project the Member is not on is indistinguishable from one that doesn't exist. */
