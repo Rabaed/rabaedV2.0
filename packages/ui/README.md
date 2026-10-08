@@ -176,29 +176,41 @@ const chip: WithChipHolder =
 
 ## Shell
 
-Every page sits in the same layout, in English and Arabic, on desktop and phone. Presentational only: the app passes the navigation targets, labels and data.
+Every page sits in the same layout, in English and Arabic, on desktop and phone. Presentational only: the app passes the navigation targets, labels and data. Reference: `design/reference/claude-design/ui_kits/app/saas-shell.html` (RP-406). In `apps/web` the shell is wired once, in `src/components/app-frame.tsx` (used by `app/[locale]/layout.tsx`; the top bar's title and a Project's tabs come from the `@heading` and `@tabs` slots there), so a page renders only its content.
 
 | Component | Use for |
 |---|---|
-| `AppShell` | The page layout: `Sidebar` on the inline-start side (the right in Arabic), `TopBar` and the page beside it. Below `md` the sidebar becomes a `Sheet` from the start side, opened by a menu button in the top bar; choosing a page closes it. |
-| `Sidebar` / `SidebarNav` | The main navigation: sections of items (`key`, `label`, `icon`, `href`, optional `count`), the `current` one marked `aria-current="page"`. Collapses to icons with a button (mouse or keyboard); collapsed, each item shows its name in a tooltip and each section stays a named group. `brandCollapsed` (e.g. the logo mark) shows when collapsed; `defaultCollapsed` and `onCollapsedChange` let the app remember the choice. |
-| `TopBar` | The banner landmark, with slots for `search`, `notifications` and `member`. |
-| `MemberMenu` | The signed-in Member's avatar and name, opening a menu with the language switch (each language named in itself, the current one pressed) and any extra items, e.g. Sign out. |
-| `PageHeader` | A page's one `h1`, with an optional `eyebrow`, `description`, `actions` and `tabs`. |
-| `ProjectTabs` | A Project's tabs, always in the agreed order (`projectTabKeys`): Dashboard · Submittals · Inspections · Snag List · Site Reports · Drawings · Settings; a Module's tab key is its Module key (`snag_list`). Dashboard, Submittals and Settings always; another Module's tab only when the Project has a Work Item Type in it (`modules`, from the Project's summary; `visibleProjectTabs`). No empty tab and no placeholder for what isn't built. Page navigation, so links in a named `nav` (not ARIA tabs); `current` is optional. They scroll sideways on a phone. |
+| `AppShell` | The page layout: `Sidebar` on the inline-start side (the right in Arabic), `TopBar` and the page beside it. Below `lg` (1024px) the sidebar becomes a `Sheet` from the start side, opened by a menu button in the top bar; choosing a page closes it. Its `main` has no padding: an optional `TabsBar`, then the page in `PageContent`. |
+| `Sidebar` / `SidebarNav` | The main navigation, 264px wide (72px collapsed): `brand` at the top, sections of items (`key`, `label`, `icon`, `href`, optional `count`; a line between sections) with the `current` one marked `aria-current="page"`, tinted and with an accent bar on the edge, and at the bottom `footer` (the Member's card; a function receives `collapsed`) beside the collapse button. Collapses to an icon rail (mouse or keyboard); collapsed, each item shows its name in a tooltip and each section stays a named group. `brandCollapsed` shows when collapsed; `defaultCollapsed` and `onCollapsedChange` let the app remember the choice. |
+| `SidebarBrand` / `RabaedLogoTile` / `RabaedMark` | The top of the sidebar (logo tile, product name, the Member's Company; never a switcher); the logo on its tile (the collapsed brand); the logo mark alone, in the current colour. |
+| `TopBar` | The banner landmark, 72px tall: `title` at the start, then slots for `search` (not used yet), `notifications` and `member`. |
+| `TopBarTitle` / `ProjectMark` | The top bar's `title`: where the Member is, not the page's `h1` (the page keeps its own). A page name; inside a Project, `back` (a link to the Projects page, its arrow mirrored in Arabic), `mark` (`ProjectMark`: the name's first letter on a tile), the Project's name and a `subtitle` (its Host Company). |
+| `TabsBar` | The band under the top bar holding a page's tabs (`ProjectTabs`), edge to edge. |
+| `PageContent` | The content area: side padding and the whole width beside the sidebar (tables, boards); `narrow` for a reading width (forms, text). |
+| `MemberMenu` | The signed-in Member's avatar and name, opening a menu with the language switch (each language named in itself, the current one pressed) and any extra items, e.g. Profile and Sign out. `placement="topBar"` (default), or `"sidebar"`: a card with the name and Company that opens upwards, the avatar only when `collapsed`. |
+| `PageHeader` | A page's one `h1` in a surface band, with an optional `eyebrow`, `description`, `actions` and `tabs`. |
+| `ProjectTabs` | A Project's tabs, always in the agreed order (`projectTabKeys`): Dashboard · Submittals · Inspections · Snag List · Site Reports · Drawings · Activity Feed · Settings; a Module's tab key is its Module key (`snag_list`). Dashboard, Submittals, Activity Feed and Settings always; another Module's tab only when the Project has a Work Item Type in it (`modules`, from the Project's summary; `visibleProjectTabs`). No empty tab and no placeholder for what isn't built. Page navigation, so links in a named `nav` (not ARIA tabs); `current` is optional. They scroll sideways on a phone. |
 
 ```tsx
 <AppShell
-  sidebar={{ brand: "Rabaed", label: t("main"), sections, current: "projects", collapseLabel: t("collapse"), expandLabel: t("expand"), linkAs: Link }}
-  topBar={{ search: <SearchButton />, notifications: <NotificationsButton />, member: <MemberMenu … /> }}
+  sidebar={{
+    brand: <SidebarBrand name="Rabaed" companyName={company} />,
+    brandCollapsed: <RabaedLogoTile />,
+    footer: (collapsed) => <MemberMenu placement="sidebar" collapsed={collapsed} … />,
+    label: t("main"), sections, current: "projects", collapseLabel: t("collapse"), expandLabel: t("expand"), linkAs: Link,
+  }}
+  topBar={{
+    title: <TopBarTitle back={{ href: "/projects", label: t("back") }} mark={<ProjectMark name={name} />} title={name} subtitle={host} linkAs={Link} />,
+    notifications: <NotificationsButton />,
+    member: <MemberMenu … />,
+  }}
   menuLabel={t("menu")}
   closeLabel={t("close")}
 >
-  <PageHeader
-    title={project.name}
-    tabs={<ProjectTabs label={t("project")} labels={tabLabels} modules={project.modules} href={(key) => pathOf(project.id, key)} current="submittals" linkAs={Link} />}
-  />
-  …
+  <TabsBar>
+    <ProjectTabs label={t("project")} labels={tabLabels} modules={project.modules} href={(key) => pathOf(project.id, key)} current="submittals" linkAs={Link} />
+  </TabsBar>
+  <PageContent>…</PageContent>
 </AppShell>
 ```
 

@@ -7,8 +7,18 @@
     "projects": "Projects",
     "members": "Members",
     "participations": "Company Projects",
-    "signedInAs": "Signed in as {name}, {company}",
-    "profile": "Profile"
+    "profile": "Profile",
+    "home": "Home",
+    "myCompany": "My Company",
+    "collapseSidebar": "Collapse sidebar",
+    "expandSidebar": "Expand sidebar",
+    "menu": "Menu",
+    "close": "Close",
+    "language": "Language",
+    "memberMenu": "Your menu",
+    "profileSettings": "Profile & notification settings",
+    "backToProjects": "Back to Projects",
+    "hostCompany": "Host Company: {company}"
   },
   "home": {
     "title": "Rabaed",
@@ -25,6 +35,7 @@
     "snag_list": "Snag List",
     "site_reports": "Site Reports",
     "drawings": "Drawings",
+    "activity": "Activity Feed",
     "settings": "Settings"
   },
   "workItemViews": {

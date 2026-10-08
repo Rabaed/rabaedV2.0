@@ -37,6 +37,7 @@ import type {
 } from "@rabaed/domain";
 import { activityFeedSearchParams, workItemSearchParams } from "@rabaed/domain";
 import { cookies } from "next/headers";
+import { cache } from "react";
 import { apiUrl } from "./api-url.ts";
 
 /** GETs an API path with the browser's session cookie; null if signed out or it fails. */
@@ -55,10 +56,11 @@ async function apiGet<T>(path: string): Promise<T | null> {
   }
 }
 
-/** The signed-in Member, read from the API with the browser's session cookie; null if signed out. */
-export function getMe(): Promise<SignedInMember | null> {
-  return apiGet<SignedInMember>("/v1/me");
-}
+/**
+ * The signed-in Member, read from the API with the browser's session cookie; null if signed out.
+ * Read once per request: the layout and the page both ask.
+ */
+export const getMe = cache((): Promise<SignedInMember | null> => apiGet<SignedInMember>("/v1/me"));
 
 /** The signed-in Member's Company's Members; null if signed out. */
 export function getMembers(): Promise<CompanyMembers | null> {
@@ -70,10 +72,13 @@ export function getMyProjects(): Promise<MyProjects | null> {
   return apiGet<MyProjects>("/v1/projects");
 }
 
-/** One of the signed-in Member's Projects; null if it isn't one of theirs (or doesn't exist). */
-export function getProject(projectId: string): Promise<ProjectSummary | null> {
-  return apiGet<ProjectSummary>(`/v1/projects/${encodeURIComponent(projectId)}`);
-}
+/**
+ * One of the signed-in Member's Projects; null if it isn't one of theirs (or doesn't exist).
+ * Read once per request: the top bar, the Project tabs and the page all ask.
+ */
+export const getProject = cache(
+  (projectId: string): Promise<ProjectSummary | null> => apiGet<ProjectSummary>(`/v1/projects/${encodeURIComponent(projectId)}`),
+);
 
 /** The Participants of one of the signed-in Member's Projects; null if it isn't one of theirs. */
 export function getProjectParticipants(projectId: string): Promise<ProjectParticipants | null> {

@@ -27,25 +27,72 @@ export type MemberMenuProps = {
   onLocaleChange: (locale: Locale) => void;
   /** More items, e.g. a Sign out button. */
   children?: ReactNode;
+  /**
+   * Where the button sits: in the top bar (avatar, name, chevron; the default),
+   * or at the bottom of the sidebar (a card with the name and Company, opening upwards).
+   */
+  placement?: "topBar" | "sidebar";
+  /** In a collapsed sidebar: the avatar only, still named after the Member. */
+  collapsed?: boolean;
 };
 
-/** The signed-in Member's avatar and name in the top bar, opening their menu with the language switch. */
-export function MemberMenu({ name, companyName, photoSrc, label, locale, languageLabel, onLocaleChange, children }: MemberMenuProps) {
+/**
+ * The signed-in Member's avatar and name, opening their menu with the language
+ * switch and the items passed in (Profile, Sign out). In the top bar, or as the
+ * card at the bottom of the sidebar.
+ */
+export function MemberMenu({
+  name,
+  companyName,
+  photoSrc,
+  label,
+  locale,
+  languageLabel,
+  onLocaleChange,
+  children,
+  placement = "topBar",
+  collapsed = false,
+}: MemberMenuProps) {
+  const inSidebar = placement === "sidebar";
   return (
     <Popover>
-      <PopoverTrigger
-        className={cn(
-          "inline-flex h-10 items-center gap-2 rounded-full px-1 text-body font-medium text-text hover:bg-hover sm:pe-3",
-          "justify-center pointer-coarse:min-h-11 pointer-coarse:min-w-11",
-          focusRing,
-        )}
+      {inSidebar ? (
+        <PopoverTrigger
+          aria-label={collapsed ? name : undefined}
+          className={cn(
+            "flex w-full min-w-0 items-center gap-3 rounded-md text-start hover:bg-press",
+            collapsed ? "justify-center p-0.5" : "bg-hover p-2",
+            focusRing,
+          )}
+        >
+          <Avatar name={name} src={photoSrc} size="lg" decorative />
+          {!collapsed && (
+            <span className="flex min-w-0 flex-col">
+              <span className="truncate text-body font-bold text-text">{name}</span>
+              {companyName !== undefined && <span className="truncate text-caption text-muted">{companyName}</span>}
+            </span>
+          )}
+        </PopoverTrigger>
+      ) : (
+        <PopoverTrigger
+          className={cn(
+            "inline-flex h-10 items-center gap-2 rounded-full px-1 text-body font-medium text-text hover:bg-hover sm:pe-3",
+            "justify-center pointer-coarse:min-h-11 pointer-coarse:min-w-11",
+            focusRing,
+          )}
+        >
+          <Avatar name={name} src={photoSrc} decorative />
+          {/* Hidden on a phone, but still the button's name. */}
+          <span className="sr-only sm:not-sr-only">{name}</span>
+          <Icon name="chevron-down" size={16} className="hidden text-muted sm:block" />
+        </PopoverTrigger>
+      )}
+      <PopoverContent
+        aria-label={label}
+        side={inSidebar ? "top" : "bottom"}
+        align={inSidebar ? "start" : "end"}
+        className="flex w-64 flex-col gap-4"
       >
-        <Avatar name={name} src={photoSrc} decorative />
-        {/* Hidden on a phone, but still the button's name. */}
-        <span className="sr-only sm:not-sr-only">{name}</span>
-        <Icon name="chevron-down" size={16} className="hidden text-muted sm:block" />
-      </PopoverTrigger>
-      <PopoverContent aria-label={label} align="end" className="flex w-64 flex-col gap-4">
         <div className="flex items-center gap-3">
           <Avatar name={name} src={photoSrc} size="lg" decorative />
           <div className="min-w-0">

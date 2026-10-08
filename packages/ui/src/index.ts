@@ -95,10 +95,22 @@ export { WithChip, type WithChipHolder, type WithChipProps } from "./components/
 export { WorkItemCard, type WorkItemCardProps, type WorkItemState } from "./components/status/work-item-card.tsx";
 export { AppShell, TopBar, type AppShellProps, type TopBarProps } from "./components/shell/app-shell.tsx";
 export { PageHeader, type PageHeaderProps } from "./components/shell/page-header.tsx";
+export {
+  PageContent,
+  ProjectMark,
+  TabsBar,
+  TopBarTitle,
+  type PageContentProps,
+  type TopBarTitleProps,
+} from "./components/shell/page-frame.tsx";
 export { ProjectTabs, projectTabKeys, visibleProjectTabs, type ProjectTabKey, type ProjectTabsProps } from "./components/shell/project-tabs.tsx";
 export {
+  RabaedLogoTile,
+  RabaedMark,
   Sidebar,
+  SidebarBrand,
   SidebarNav,
+  type SidebarBrandProps,
   type SidebarItem,
   type SidebarNavProps,
   type SidebarProps,

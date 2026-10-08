@@ -42,7 +42,7 @@ export function NotificationBell({ unread: initial }: { unread: number }) {
       href="/notifications"
       aria-label={label}
       title={label}
-      className="relative inline-flex size-9 items-center justify-center rounded-sm"
+      className="relative inline-flex size-10 shrink-0 items-center justify-center rounded-sm text-text-secondary hover:bg-hover pointer-coarse:size-11"
       data-testid="notification-bell"
     >
       <Icon name="bell" />

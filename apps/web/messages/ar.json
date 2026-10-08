@@ -7,8 +7,18 @@
     "projects": "المشاريع",
     "members": "الأعضاء",
     "participations": "مشاريع الشركة",
-    "signedInAs": "مسجّل الدخول باسم {name}، {company}",
-    "profile": "الملف الشخصي"
+    "profile": "الملف الشخصي",
+    "home": "الرئيسية",
+    "myCompany": "شركتي",
+    "collapseSidebar": "طي الشريط الجانبي",
+    "expandSidebar": "توسيع الشريط الجانبي",
+    "menu": "القائمة",
+    "close": "إغلاق",
+    "language": "اللغة",
+    "memberMenu": "قائمتك",
+    "profileSettings": "الملف الشخصي وإعدادات الإشعارات",
+    "backToProjects": "العودة إلى المشاريع",
+    "hostCompany": "الشركة المضيفة: {company}"
   },
   "home": {
     "title": "ربائد",
@@ -25,6 +35,7 @@
     "snag_list": "قائمة الملاحظات",
     "site_reports": "تقارير الموقع",
     "drawings": "المخططات",
+    "activity": "النشاط",
     "settings": "الإعدادات"
   },
   "workItemViews": {

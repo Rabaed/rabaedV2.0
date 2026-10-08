@@ -18,7 +18,7 @@ const tabNames = (context: PlayContext) => context.canvas.getAllByRole("link").m
 const labelsOf = (context: PlayContext, keys: ProjectTabKey[]) => keys.map((key) => storyText(context, projectTabLabels[key]));
 
 /**
- * A Project with only Submittals Types: Dashboard, Submittals and Settings.
+ * A Project with only Submittals Types: Dashboard, Submittals, Activity and Settings.
  * The tabs are page navigation: links in a named `nav`, the current one marked
  * `aria-current="page"`. No empty Module tab, and no placeholder.
  */
@@ -26,7 +26,7 @@ export const SubmittalsOnly: Story = {
   play: async (context) => {
     const nav = context.canvas.getByRole("navigation", { name: storyText(context, projectTabsLabel) });
     await expect(nav).toBeVisible();
-    await expect(tabNames(context)).toEqual(labelsOf(context, ["dashboard", "submittals", "settings"]));
+    await expect(tabNames(context)).toEqual(labelsOf(context, ["dashboard", "submittals", "activity", "settings"]));
     await expect(context.canvas.getByRole("link", { name: storyText(context, projectTabLabels.submittals) })).toHaveAttribute(
       "aria-current",
       "page",
@@ -39,7 +39,7 @@ export const EveryModule: Story = {
   render: (_args, context) => storyProjectTabs(context, "submittals", ["submittals", "inspections", "snag_list", "site_reports", "drawings"]),
   play: async (context) => {
     await expect(tabNames(context)).toEqual(
-      labelsOf(context, ["dashboard", "submittals", "inspections", "snag_list", "site_reports", "drawings", "settings"]),
+      labelsOf(context, ["dashboard", "submittals", "inspections", "snag_list", "site_reports", "drawings", "activity", "settings"]),
     );
   },
 };
