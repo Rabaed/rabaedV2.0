@@ -1,0 +1,138 @@
+// Seam 1: every publish check over every published Workflow Version (RP-425, spec
+// RP-423; workflow-engine.md §1). Rabaed Defaults are still published as data by
+// migration until the builder and the authoring commands (WF-4, RP-427), so this
+// runs workflowPublishProblems on each of them, with its Work Item Type, the
+// Module's Stages and the Type's latest published Form, as publishing will. Each
+// Version's rows also read as a definition and write back as the same rows.
+import { createDb } from "@rabaed/db";
+import { testDatabaseUrls } from "@rabaed/db/test-support";
+import {
+  definitionFromRows,
+  definitionToRows,
+  formSchema,
+  workflowPublishProblems,
+  type OutcomeKind,
+  type StageCategory,
+  type WorkflowVersionRows,
+} from "@rabaed/domain";
+import { sql } from "kysely";
+import { isDeepStrictEqual } from "node:util";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { addSendBackType } from "./support/send-back.ts";
+
+const migrator = createDb(testDatabaseUrls().migrator, { max: 1 });
+afterAll(async () => {
+  await migrator.destroy();
+});
+
+type Version = {
+  id: string;
+  name: string;
+  versionNo: number;
+  layout: unknown;
+  typeId: string | null;
+  moduleKey: string | null;
+  projectId: string | null;
+  outcomeKind: OutcomeKind | null;
+  form: unknown;
+};
+
+let versions: Version[] = [];
+let rows: Map<string, WorkflowVersionRows>;
+
+beforeAll(async () => {
+  // A Workflow with Send Backs is among them, whichever tests ran first.
+  await addSendBackType(migrator, "WFDEF", { en: "Workflow definition check", ar: "فحص تعريف سير العمل" }, {
+    sections: [
+      { key: "material", title: { en: "Material", ar: "المادة" }, fields: [{ key: "model", type: "text", label: { en: "Model", ar: "الطراز" } }] },
+      {
+        key: "classification",
+        title: { en: "Classification", ar: "التصنيف" },
+        fields: [
+          { key: "trade", type: "trade", label: { en: "Trade", ar: "التخصص" } },
+          { key: "location", type: "location", label: { en: "Location", ar: "الموقع" } },
+          { key: "scopes", type: "scopes", label: { en: "Scopes", ar: "النطاقات" } },
+        ],
+      },
+    ],
+  });
+  versions = (
+    await sql<Version>`
+      select v.id, d.name ->> 'en' as name, v.version_no as "versionNo", v.layout,
+        t.id as "typeId", t.module_key as "moduleKey", t.project_id as "projectId", t.outcome_kind as "outcomeKind",
+        (select f.schema from form_version f
+         where f.form_definition_id = t.form_definition_id and f.status = 'published'
+         order by f.version_no desc limit 1) as form
+      from workflow_version v
+      join workflow_definition d on d.id = v.workflow_definition_id
+      -- Should iterate WF-3's (Project, Work Item Type, raising Participant) bindings once they exist.
+      -- The Type the Workflow was made for: the first on it. Test Types reuse the MAR's
+      -- Workflow as a shortcut, even in other Modules (a WIR), which no publish would allow.
+      left join lateral (
+        select * from work_item_type wt where wt.workflow_definition_id = d.id order by wt.created_at, wt.id limit 1
+      ) t on true
+      where v.status = 'published'
+      order by d.created_at, v.version_no
+    `.execute(migrator)
+  ).rows;
+  const steps = await sql<WorkflowVersionRows["steps"][number] & { version: string }>`
+    select s.workflow_version_id as version, s.key, s.name, s.stage_key, s.actor_rule, s.is_signing, s.outcome_mode
+    from workflow_step s join workflow_version v on v.id = s.workflow_version_id
+    where v.status = 'published'
+    order by s.created_at, s.key
+  `.execute(migrator);
+  const transitions = await sql<WorkflowVersionRows["transitions"][number] & { version: string }>`
+    select tr.workflow_version_id as version, tr.key, f.key as from_step_key, s.key as to_step_key, tr.label, tr.kind, tr.outcome,
+      tr.permission, tr.sort, tr.action_form
+    from workflow_transition tr
+    join workflow_version v on v.id = tr.workflow_version_id
+    join workflow_step f on f.id = tr.from_step_id
+    join workflow_step s on s.id = tr.to_step_id
+    where v.status = 'published'
+    order by tr.sort
+  `.execute(migrator);
+  rows = new Map(
+    versions.map((v) => [
+      v.id,
+      {
+        layout: v.layout,
+        steps: steps.rows.filter((s) => s.version === v.id).map(({ version: _, ...s }) => s),
+        transitions: transitions.rows.filter((t) => t.version === v.id).map(({ version: _, ...t }) => t),
+      },
+    ]),
+  );
+});
+
+describe("every published Workflow Version", () => {
+  it("includes MAR Versions 1 and 2, each used by a Work Item Type", () => {
+    expect(versions.filter((v) => v.name === "Material Submittal (MAR)").map((v) => [v.versionNo, v.outcomeKind])).toEqual([
+      [1, "review_code"],
+      [2, "review_code"],
+    ]);
+    expect(versions.filter((v) => v.typeId === null).map((v) => v.name)).toEqual([]);
+  });
+
+  it("reads as a definition and writes back as the same rows", () => {
+    const changed = versions.filter((v) => {
+      const stored = rows.get(v.id)!;
+      return !isDeepStrictEqual(definitionToRows(definitionFromRows(stored), v.outcomeKind!), stored);
+    });
+    expect(changed.map((v) => `${v.name} v${v.versionNo}`)).toEqual([]);
+  });
+
+  it("passes every publish check", async () => {
+    const stages = await sql<{ moduleKey: string; projectId: string | null; key: string; category: StageCategory }>`
+      select module_key as "moduleKey", project_id as "projectId", key, category from stage order by sort
+    `.execute(migrator);
+    const lists = await sql<{ id: string }>`select id from option_list`.execute(migrator);
+    const problems = versions.flatMap((v) =>
+      workflowPublishProblems(definitionFromRows(rows.get(v.id)!), {
+        outcomeKind: v.outcomeKind!,
+        stages: stages.rows.filter((s) => s.moduleKey === v.moduleKey && (s.projectId === null || s.projectId === v.projectId)),
+        form: v.form === null ? null : formSchema.parse(v.form),
+        optionListIds: new Set(lists.rows.map((l) => l.id)),
+      }).map((p) => ({ version: `${v.name} v${v.versionNo}`, code: p.code, step: p.step, transition: p.transition, message: p.message.en })),
+    );
+    expect(problems).toEqual([]);
+  });
+});
