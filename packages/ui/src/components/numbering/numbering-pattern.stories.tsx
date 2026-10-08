@@ -97,8 +97,8 @@ export const Builder: Story = {
 };
 
 /**
- * Unticking the Participant Code shows the shared-counter warning; Save stays
- * off until it is accepted, and then sends the acceptance.
+ * Unticking the Participant Code shows the shared-counter warning; Save then
+ * opens a dialog that sends the pattern only once the shared count is accepted.
  */
 export const SharedCounterWarning: Story = {
   args: { onSave: fn() },
@@ -107,15 +107,19 @@ export const SharedCounterWarning: Story = {
   ),
   play: async (context) => {
     const { canvas, args } = context;
-    const save = canvas.getByRole("button", { name: storyText(context, copy.save) });
     await userEvent.click(canvas.getAllByRole("checkbox", { name: storyText(context, copy.counted) })[2]!);
-    const warning = canvas.getByRole("group", { name: storyText(context, copy.shared) });
-    await expect(warning).toBeVisible();
-    await expect(save).toBeDisabled();
+    // The warning is a notice; it doesn't stop the Save button, which opens the dialog.
+    await expect(canvas.getByRole("group", { name: storyText(context, copy.shared) })).toBeVisible();
+    await userEvent.click(canvas.getByRole("button", { name: storyText(context, copy.save) }));
+    await expect(args.onSave).not.toHaveBeenCalled();
 
-    await userEvent.click(within(warning).getByRole("checkbox", { name: storyText(context, copy.accept) }));
-    await expect(save).toBeEnabled();
-    await userEvent.click(save);
+    // The dialog saves only once the shared count is accepted.
+    const dialog = within(await within(document.body).findByRole("dialog", { name: storyText(context, copy.shared) }));
+    const confirm = dialog.getByRole("button", { name: storyText(context, copy.save) });
+    await expect(confirm).toBeDisabled();
+    await userEvent.click(dialog.getByRole("checkbox", { name: storyText(context, copy.accept) }));
+    await expect(confirm).toBeEnabled();
+    await userEvent.click(confirm);
     await expect(args.onSave).toHaveBeenCalledWith({ ...rabaedDefaultNumberingPattern, countedBy: [0, 1] }, true);
   },
 };

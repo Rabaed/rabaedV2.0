@@ -13,7 +13,6 @@ import {
   type NumberingCounter,
 } from "@rabaed/domain";
 import { useEffect, useId, useState, type FormEvent } from "react";
-import { cn } from "../../lib/cn.ts";
 import { Button } from "../button/button.tsx";
 import { Badge } from "../data/badge.tsx";
 import { Table, TableBody, TableCell, TableEmpty, TableHead, TableHeader, TableRow } from "../data/table.tsx";
@@ -21,6 +20,7 @@ import { DocNo } from "../doc-no/doc-no.tsx";
 import { Field, type ChoiceOption } from "../form/field.tsx";
 import { Input } from "../form/input.tsx";
 import { Select } from "../form/select.tsx";
+import { SettingsSection } from "../settings/settings-layout.tsx";
 
 // Counters and starting numbers on Project Settings → Numbering (RP-315;
 // workflow-engine.md §8 "Starting numbers"). For Project Admins only: a
@@ -106,7 +106,6 @@ export function NumberingCounters({
   onSetStart,
   className,
 }: NumberingCountersProps) {
-  const titleId = useId();
   const startId = useId();
   const [type, setType] = useState(workItemTypes[0]?.code ?? "");
   const [participant, setParticipant] = useState(participants[0]?.value ?? NONE);
@@ -163,12 +162,8 @@ export function NumberingCounters({
   const optional = (options: readonly ChoiceOption[]) => [{ value: NONE, label: text.notCounted }, ...options];
 
   return (
-    <section aria-labelledby={titleId} className={cn("flex flex-col gap-6", className)} data-testid="numbering-counters">
+    <SettingsSection title={text.title} description={text.intro} className={className} data-testid="numbering-counters">
       <div className="flex flex-col gap-2">
-        <h2 id={titleId} className="text-h6 font-semibold text-text">
-          {text.title}
-        </h2>
-        <p className="text-sm text-muted">{text.intro}</p>
         <Table label={text.title}>
           <TableHeader>
             <TableRow>
@@ -208,7 +203,7 @@ export function NumberingCounters({
         </Table>
       </div>
 
-      <form aria-labelledby={startId} onSubmit={submit} className="flex flex-col gap-4" noValidate>
+      <form aria-labelledby={startId} onSubmit={submit} className="flex flex-col gap-4 border-t border-border pt-4" noValidate>
         <div className="flex flex-col gap-1">
           <h3 id={startId} className="text-body font-semibold text-text">
             {text.startTitle}
@@ -274,6 +269,6 @@ export function NumberingCounters({
           </Button>
         </div>
       </form>
-    </section>
+    </SettingsSection>
   );
 }

@@ -42,6 +42,7 @@ export const numberingPatternLabels: Record<Locale, NumberingPatternLabels> = {
     saving: "Saving…",
     afterChange: "A change applies only to items numbered after it; issued numbers never change.",
     countedBadge: "Counted",
+    close: "Close",
   },
   ar: {
     kinds: {
@@ -78,6 +79,7 @@ export const numberingPatternLabels: Record<Locale, NumberingPatternLabels> = {
     saving: "جارٍ الحفظ…",
     afterChange: "يسري التغيير على البنود التي تُرقَّم بعده فقط، ولا تتغير الأرقام الصادرة أبدًا.",
     countedBadge: "يُعدّ",
+    close: "إغلاق",
   },
 };
 

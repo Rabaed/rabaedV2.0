@@ -117,6 +117,17 @@ export {
   type SidebarSection,
 } from "./components/shell/sidebar.tsx";
 export { MemberMenu, type MemberMenuProps } from "./components/shell/member-menu.tsx";
+export {
+  SettingsHeader,
+  SettingsLayout,
+  SettingsNav,
+  SettingsSection,
+  type SettingsHeaderProps,
+  type SettingsLayoutProps,
+  type SettingsNavItem,
+  type SettingsNavProps,
+  type SettingsSectionProps,
+} from "./components/settings/settings-layout.tsx";
 export { cn } from "./lib/cn.ts";
 export {
   themes,

@@ -1,11 +1,11 @@
 "use client";
 
 import { participantSegment, type BilingualText, type Locale } from "@rabaed/domain";
-import { useId, useState, type FormEvent } from "react";
-import { cn } from "../../lib/cn.ts";
+import { useState, type FormEvent } from "react";
 import { Button } from "../button/button.tsx";
 import { Field } from "../form/field.tsx";
 import { Input } from "../form/input.tsx";
+import { SettingsSection } from "../settings/settings-layout.tsx";
 
 // Participant Codes on Project Settings → Numbering (RP-381, spec RP-311). Each
 // Participant with what its Document Numbers print: its Participant Code, or its
@@ -48,13 +48,8 @@ export type ParticipantCodesProps = {
 
 /** Project Settings → Numbering: each Participant's Participant Code, set by a Project Admin. */
 export function ParticipantCodes({ locale, participants, canEdit, labels, onSave, className }: ParticipantCodesProps) {
-  const titleId = useId();
   return (
-    <section aria-labelledby={titleId} className={cn("flex flex-col gap-2", className)} data-testid="participant-codes">
-      <h2 id={titleId} className="text-h6 font-semibold text-text">
-        {labels.title}
-      </h2>
-      <p className="text-sm text-muted">{labels.intro}</p>
+    <SettingsSection title={labels.title} description={labels.intro} className={className} data-testid="participant-codes">
       <ul aria-label={labels.participants} className="divide-y divide-border border-y border-border">
         {participants.map((p) => (
           <li key={p.id} className="py-3">
@@ -69,7 +64,7 @@ export function ParticipantCodes({ locale, participants, canEdit, labels, onSave
           </li>
         ))}
       </ul>
-    </section>
+    </SettingsSection>
   );
 }
 
