@@ -52,6 +52,8 @@ Every worktree that ran `pnpm dev` leaves a `rabaed-*` Docker Compose project be
 
 It never touches the main checkout or the current worktree. It skips, and lists, worktrees with uncommitted changes (untracked files outside ignored paths included), commits on no origin branch, a lock by hand, or an open Claude desktop session. A compose project that a kept worktree names in its `.env` stays.
 
+Under the skipped list, both `worktrees:prune` and `worktrees:clean` print a **Stale** section (RP-506): the skipped worktrees whose last commit and newest uncommitted file are both older than `--stale-days <n>` (default 7), oldest first, with the age in days, the branch, the skip reason and, when the lock names a pid, whether that process still runs. It only lists; nothing in it is removed, unlocked or changed. Decide on those by hand (a lock whose pid is not running is a leftover of a closed session).
+
 ## A whole spec in one session (`/implement-spec`)
 
 Use it when a spec's tickets form a chain that one lane would otherwise work through one session at a time (e.g. RP-290 → RP-294 under spec RP-289). Implementer subagents build the ready tickets in parallel, each in its own worktree, and merge them onto one **integration branch**; one `/code-review` runs over the whole branch at the end, which counts as the spec's epic review.

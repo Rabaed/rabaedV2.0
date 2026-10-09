@@ -8,14 +8,19 @@
 // --include-empty, those whose branch has no commit of its own yet: their subagent
 // may still be running. They are listed as skipped.
 //
-//   pnpm worktrees:clean [--into <branch>] [--include-empty] [--yes]
+// Of the skipped it also lists, read-only, the stale ones: nothing committed or changed
+// for --stale-days (default 7), with age, branch and the lock's pid state (RP-506).
+//
+//   pnpm worktrees:clean [--into <branch>] [--include-empty] [--stale-days <n>] [--yes]
 //
 // The default branch is main; --yes skips the confirmation.
 import { confirmOrExit } from "./confirm.ts";
+import { DEFAULT_STALE_DAYS, parseStaleDays, printStale } from "./worktrees-stale.ts";
 import { chooseWorktrees, currentRoot, gatherFacts, gitError, isAgentWorktree, listWorktrees, pruneWorktrees, refExists, removeWorktree, reportRemoval } from "./worktrees.ts";
 
-const usage = "Usage: pnpm worktrees:clean [--into <branch>] [--include-empty] [--yes]";
+const usage = "Usage: pnpm worktrees:clean [--into <branch>] [--include-empty] [--stale-days <n>] [--yes]";
 const args = process.argv.slice(2);
+let staleDays = DEFAULT_STALE_DAYS;
 let target = "main";
 let yes = false;
 let includeEmpty = false;
@@ -24,7 +29,10 @@ for (let i = 0; i < args.length; i++) {
   const next = args[i + 1];
   if (a === "--yes") yes = true;
   else if (a === "--include-empty") includeEmpty = true;
-  else if (a === "--into" && next && !next.startsWith("--")) {
+  else if (a === "--stale-days" && parseStaleDays(next) !== undefined && next !== undefined) {
+    staleDays = parseStaleDays(next)!;
+    i++;
+  } else if (a === "--into" && next && !next.startsWith("--")) {
     target = next;
     i++;
   } else {
@@ -50,6 +58,10 @@ const name = (w: { path: string; branch: string | undefined }) => `${w.path} (${
 if (skipped.length > 0) {
   console.log("Skipped:");
   for (const s of skipped) console.log(`  ${name(s.worktree)}: ${s.reason}`);
+  printStale(
+    skipped.filter((s) => s.reason !== "this is the current worktree"),
+    staleDays,
+  );
 }
 if (remove.length === 0) {
   console.log(`No agent worktrees merged into ${target} to remove.`);
