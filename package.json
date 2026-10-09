@@ -31,8 +31,7 @@
     "test:infra": "vitest run --project infra",
     "test:mail": "vitest run --project mail",
     "engineer:create": "node scripts/pnpm.ts --filter @rabaed/admin run engineer:create",
-    "form:publish": "node scripts/pnpm.ts --filter @rabaed/admin run form:publish",
-    "workflow:publish": "node scripts/pnpm.ts --filter @rabaed/admin run workflow:publish"
+    "form:publish": "node scripts/pnpm.ts --filter @rabaed/admin run form:publish"
   },
   "devDependencies": {
     "@eslint/css": "^2.0.0",
