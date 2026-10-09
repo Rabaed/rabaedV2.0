@@ -306,7 +306,7 @@ The identifier a Work Item gets when it first leaves Draft (e.g. TWR-MAR-CCM-000
 _Avoid_: ID, reference number
 
 **Numbering Pattern**:
-How a Project builds its Document Numbers: up to six segments (Project, Work Item Type, Trade, Participant Code, Location level, fixed text), a separator and a sequence, with the segments the sequence counts separately for. One per Project, optionally overridden per Work Item Type. Set by the Project Admin or a Rabaed Engineer; a change applies only to Work Items numbered after it.
+How a Project builds its Document Numbers: up to six segments (Project, Work Item Type, Trade, Participant Code, Location level, fixed text), a separator and a sequence, with the segments the sequence counts separately for. One per Project, optionally a Custom pattern per Work Item Type. Set by the Project Admin or a Rabaed Engineer; a change applies only to Work Items numbered after it.
 _Avoid_: Numbering scheme, format
 
 **Participant Code**:

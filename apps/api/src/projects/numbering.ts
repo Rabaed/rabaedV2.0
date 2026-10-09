@@ -1,9 +1,10 @@
-import { readNumberingPatterns, readNumberingWorkItemTypes, withMember, type Db } from "@rabaed/db";
+import { readNumberingPatterns, readNumberingVersions, readNumberingWorkItemTypes, withMember, type Db } from "@rabaed/db";
 import {
   numberingPatternRefusals,
   numberingPatternsInEffect,
   type NumberingSettings,
-  type SaveNumberingPatternRequest,
+  toNumberingVersion,
+  type SaveNumberingRequest,
 } from "@rabaed/domain";
 import { sql } from "kysely";
 import { commandResult } from "../outcomes.ts";
@@ -35,6 +36,7 @@ export function getNumberingSettings(db: Db, memberId: string, projectId: string
     // The pattern in effect now, per Type and for the Project (the newest row of each).
     const patterns = await readNumberingPatterns(trx, projectId, now);
     const types = await readNumberingWorkItemTypes(trx, projectId);
+    const versions = await readNumberingVersions(trx, projectId, now);
     // The live example's Trade and Location: the Project's first ones, the Location from its Zone down.
     const { rows: trades } = await sql<{ code: string }>`
       select v.code from dimension_value v join visibility_dimension d on d.id = v.dimension_id
@@ -62,6 +64,7 @@ export function getNumberingSettings(db: Db, memberId: string, projectId: string
         participant: { code: project.participant_code, ordinal: project.ordinal },
         locationPath: locations.map((l) => l.code),
       },
+      versions: versions.map(toNumberingVersion),
     };
   });
 }
@@ -71,15 +74,17 @@ export function saveNumberingPattern(
   db: Db,
   memberId: string,
   projectId: string,
-  input: SaveNumberingPatternRequest,
+  input: SaveNumberingRequest,
   now: Date,
 ): Promise<SaveNumberingPatternResult> {
   return withMember(db, memberId, async (trx) => {
     const { pattern } = input;
+    // A null pattern: the Type uses the Project pattern again (refused for the Project's own).
+    const json = (value: unknown) => (pattern === null ? null : JSON.stringify(value));
     const { rows } = await sql<{ outcome: string }>`
       select app.set_numbering_pattern(
-        ${projectId}::uuid, ${input.workItemTypeId}::uuid, ${JSON.stringify(pattern.segments)}::jsonb, ${pattern.separator},
-        ${pattern.seqDigits}::integer, ${JSON.stringify(pattern.countedBy)}::jsonb, ${input.sharedCounterAccepted}, ${now}
+        ${projectId}::uuid, ${input.workItemTypeId}::uuid, ${json(pattern?.segments)}::jsonb, ${pattern?.separator ?? null},
+        ${pattern?.seqDigits ?? null}::integer, ${json(pattern?.countedBy)}::jsonb, ${input.sharedCounterAccepted}, ${now}
       ) as outcome
     `.execute(trx);
     return commandResult(rows[0]!.outcome, "saved", numberingPatternRefusals);

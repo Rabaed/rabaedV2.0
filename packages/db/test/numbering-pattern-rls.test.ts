@@ -350,3 +350,94 @@ describe("the first exit from Draft", () => {
     expect(await t.numbered(t.c1.member)).toBe("TWC/MAR/01/00002");
   });
 });
+
+describe("a Custom pattern given up (RP-412 rebuild)", () => {
+  const mar = async () => (await migrator.query("select id from work_item_type where code = 'MAR' and project_id is null")).rows[0].id as string;
+  const use = (as: string, projectId: string, typeId: string | null) =>
+    outcome(as, sql`select app.set_numbering_pattern(${projectId}::uuid, ${typeId}::uuid, null, null, null, null, false, now()) as outcome`);
+
+  it("numbers the Type under the Project's pattern again, keeping the Custom pattern as history", async () => {
+    const t = await tower("TWU");
+    await t.pattern({ segments: [project, participantCode], seqScope: [0, 1] });
+    await t.pattern({ type: "MAR", segments: [type, participantCode], seqScope: [0, 1] });
+    expect(await t.numbered(t.c1.member)).toBe("MAR-01-0001");
+    expect(await use(t.c1.ap, t.projectId, await mar())).toBe("saved");
+    expect(await t.numbered(t.c1.member)).toBe("TWU-01-0001");
+    const rows = (await migrator.query("select follows_project, segments from numbering_pattern where project_id = $1 order by created_at", [t.projectId]))
+      .rows;
+    expect(rows.map((r) => [r.follows_project, r.segments === null])).toEqual([
+      [false, false],
+      [false, false],
+      [true, true],
+    ]);
+  });
+
+  it("falls back to the Rabaed Default when the Project has no pattern of its own", async () => {
+    const t = await tower("TWD");
+    await t.pattern({ type: "MAR", segments: [type, participantCode], seqScope: [0, 1] });
+    expect(await use(t.c1.ap, t.projectId, await mar())).toBe("saved");
+    expect(await t.numbered(t.c1.member)).toBe("TWD-MAR-01-0001");
+  });
+
+  it("is refused for the Project's own pattern, and to anyone but the Project Admin", async () => {
+    const t = await tower("TWN");
+    expect(await use(t.c1.ap, t.projectId, null)).toBe("invalid_pattern");
+    expect(await use(t.c1.member, t.projectId, await mar())).toBe("not_found");
+    expect(await use(t.c2.member, t.projectId, await mar())).toBe("not_found");
+  });
+});
+
+describe("app.numbering_pattern_versions (visibility.md RP-412-3)", () => {
+  type Version = { work_item_type_id: string | null; version_no: number; by_rabaed: boolean; company_name: unknown; member_name: unknown };
+  const versions = (as: string, projectId: string) =>
+    call<Version>(
+      as,
+      sql`select work_item_type_id, version_no, by_rabaed, company_name, member_name from app.numbering_pattern_versions(${projectId}::uuid, now())`,
+    );
+
+  it("names a saver's Company outside the Host Company only to its own Members and the Project Admins, and the saver only within it", async () => {
+    const t = await tower("TWV");
+    // C2's engineer is made a Project Admin too: a saver whose Company isn't the Host Company.
+    await migrator.query("insert into project_admin (project_id, member_id, appointed_by_member_id) values ($1, $2, $3)", [
+      t.projectId,
+      t.c2.member,
+      t.c1.ap,
+    ]);
+    expect(
+      await outcome(
+        t.c2.member,
+        sql`select app.set_numbering_pattern(${t.projectId}::uuid, null, '[{"kind": "project"}, {"kind": "participant"}]'::jsonb, '-', 4, '[0, 1]'::jsonb, false, now()) as outcome`,
+      ),
+    ).toBe("saved");
+    // And a Rabaed Engineer's save through Rabaed Admin.
+    const action = await one(
+      "insert into admin_action (engineer_id, action, target_kind, target_id, reason) values ($1, 'set_numbering_pattern', 'project', $2, 'Seam two') returning id",
+      [engineer, t.projectId],
+    );
+    await migrator.query(
+      `insert into numbering_pattern (project_id, segments, separator, seq_digits, seq_scope, admin_action_id)
+       values ($1, '[{"kind": "participant"}]'::jsonb, '-', 4, '[0]'::jsonb, $2)`,
+      [t.projectId, action],
+    );
+
+    const c2Name = { en: "C2", ar: "C2" };
+    const c2Saver = { en: "engineer", ar: "engineer" };
+    const rabaed = { work_item_type_id: null, version_no: 2, by_rabaed: true, company_name: null, member_name: null };
+    // C1's engineer: the Host Company's, neither a Project Admin nor C2's.
+    expect(await versions(t.c1.member, t.projectId)).toEqual([
+      rabaed,
+      { work_item_type_id: null, version_no: 1, by_rabaed: false, company_name: null, member_name: null },
+    ]);
+    // A Project Admin sees every Participant (V15), but another Company's people only by name of the Company (V14).
+    expect((await versions(t.c1.ap, t.projectId))[1]).toEqual({ work_item_type_id: null, version_no: 1, by_rabaed: false, company_name: c2Name, member_name: null });
+    // C2's own Members.
+    expect((await versions(t.c2.member, t.projectId))[1]).toMatchObject({ company_name: c2Name, member_name: c2Saver });
+  });
+
+  it("returns nothing to anyone outside the Project", async () => {
+    const t = await tower("TWO");
+    const other = await tower("TWQ");
+    await t.pattern({ segments: [project, participantCode], seqScope: [0, 1] });
+    expect(await versions(other.c1.ap, t.projectId)).toEqual([]);
+  });
+});
