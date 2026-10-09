@@ -97,6 +97,29 @@ describe("a Project Admin authors the Project's own Workflow", () => {
     }
   });
 
+  it("keeps a Transition's rules, actions and notifications in the draft (WF-7 to WF-9)", async () => {
+    const saved = (await read(c1.caller, route)).draft!.definition;
+    const [first, ...rest] = saved.transitions;
+    const definition: WorkflowDefinition = {
+      ...saved,
+      transitions: [
+        {
+          ...first!,
+          rules: { validate: [{ type: "form_complete" }] },
+          actions: [{ type: "offer_assign_to" }],
+          notifications: [{ to: "raiser" }],
+        },
+        ...rest,
+      ],
+    };
+    const res = await c1.caller.request("PUT", `/v1/workflows/${route}/draft`, { definition });
+    expect(res.statusCode, res.body).toBe(200);
+    expect((await read(c1.caller, route)).draft!.definition).toEqual(definition);
+    // Back to the draft the next tests start from.
+    await ok(c1.caller.request("PUT", `/v1/workflows/${route}/draft`, { definition: saved }), 200);
+    expect((await read(c1.caller, route)).draft!.definition).toEqual(saved);
+  });
+
   it("refuses a draft that isn't a definition, saying where", async () => {
     const res = await c1.caller.request("PUT", `/v1/workflows/${route}/draft`, { definition: { steps: [], transitions: [] } });
     expect(res.statusCode).toBe(422);

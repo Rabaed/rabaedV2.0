@@ -234,13 +234,13 @@ describe("an outcome the Project Admin added", () => {
     expect(created.statusCode, created.body).toBe(201);
     item = created.json().id;
     await attachDatasheet(t.c1Engineer, item);
-    await ok(t.c1Engineer.post(`/v1/work-items/${item}/transitions`, { transition: "send_for_review", idempotencyKey: randomUUID() }));
+    await ok(t.c1Engineer.post(`/v1/work-items/${item}/transitions`, { transition: "send_for_review", confirmed: true, idempotencyKey: randomUUID() }));
     await ok(t.c1Pm.post(`/v1/work-items/${item}/claim`));
-    await ok(t.c1Pm.post(`/v1/work-items/${item}/transitions`, { transition: "submit", idempotencyKey: randomUUID() }));
+    await ok(t.c1Pm.post(`/v1/work-items/${item}/transitions`, { transition: "submit", confirmed: true, idempotencyKey: randomUUID() }));
     const answers = (await ok(t.k1Manager.get(`/v1/work-items/${item}`), 200)).json().answers as Record<string, unknown>;
     await ok(t.k1Manager.request("PUT", `/v1/work-items/${item}/answers`, { answers: { ...answers, sample_checked: true, matches_specification: true } }));
     await ok(t.k1Manager.post(`/v1/work-items/${item}/claim`));
-    await ok(t.k1Manager.post(`/v1/work-items/${item}/transitions`, { transition: "approve_e", answers: {}, idempotencyKey: randomUUID() }));
+    await ok(t.k1Manager.post(`/v1/work-items/${item}/transitions`, { transition: "approve_e", answers: {}, confirmed: true, idempotencyKey: randomUUID() }));
   });
 
   it("closes the item with it, from the published Workflow", async () => {

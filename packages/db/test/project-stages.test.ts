@@ -83,7 +83,8 @@ describe("a new Project's Stages", () => {
         `insert into stage (owner_kind, module_key, key, name, category, sort)
          values ('rabaed', 'inspections', 'probe_stage', '{"en": "Probe", "ar": "تجربة"}', 'in_progress', 1)`,
       );
-      expect(await stagesOf(projectId, "inspections")).toEqual([{ key: "probe_stage", category: "in_progress" }]);
+      // Other tests may have added Rabaed Default Stages to the Module (workflow-ownership-rls's): each is copied too.
+      expect(await stagesOf(projectId, "inspections")).toContainEqual({ key: "probe_stage", category: "in_progress" });
     } finally {
       await migrator.query("rollback");
     }
