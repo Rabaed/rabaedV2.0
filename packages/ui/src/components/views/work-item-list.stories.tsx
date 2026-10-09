@@ -1,8 +1,9 @@
-import { workItemQuery, workItemSearchParams, type WorkItemList as WorkItemListData, type WorkItemQuery, type WorkItemRow } from "@rabaed/domain";
+import { encodeWorkItemCursor, workItemQuery, workItemSearchParams, type WorkItemList as WorkItemListData, type WorkItemQuery, type WorkItemRow } from "@rabaed/domain";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, fn, screen, userEvent, within } from "storybook/test";
 import { expectLaidOutLeftToRight } from "../../storybook/bidi.ts";
 import { phone } from "../../storybook/form.ts";
+import { overlay } from "../../storybook/overlay.ts";
 import { storyLocale, storyText } from "../../storybook/locale.ts";
 import { workItemListLabels } from "../../storybook/views.ts";
 import { WorkItemList, type WorkItemListProps } from "./work-item-list.tsx";
@@ -18,14 +19,19 @@ const copy = {
   needMyAction: b("Need My Action", "بحاجة لإجرائي"),
   nextPage: b("Next page", "الصفحة التالية"),
   firstPage: b("First page", "الصفحة الأولى"),
+  previousPage: b("Previous page", "الصفحة السابقة"),
+  pages: b("Pages", "الصفحات"),
+  filters: b("Filters", "التصفية"),
+  type: b("Type", "النوع"),
+  clearAll: b("Clear all", "مسح الكل"),
   clear: b("Clear filters", "مسح التصفية"),
   empty: b("No items you can see match these filters.", "لا توجد عناصر يمكنك رؤيتها تطابق هذه التصفية."),
   table: b("Submittals", "الاعتمادات"),
   submissionDate: b("Submission Date", "تاريخ التقديم"),
   creationDate: b("Creation Date", "تاريخ الإنشاء"),
   submittedFrom: b("Submitted from", "قُدِّم من"),
-  sort: b("Sort by", "الترتيب حسب"),
-  sortSubmissionDate: b("Submission Date, latest first", "تاريخ التقديم، الأحدث أولًا"),
+  documentNumber: b("Document Number", "رقم المستند"),
+  subject: b("Subject", "الموضوع"),
 };
 
 const stages = {
@@ -151,7 +157,17 @@ const list: WorkItemListData = {
 };
 
 const defaults: WorkItemQuery = workItemQuery.parse({});
-const hrefFor = (q: WorkItemQuery) => `?${workItemSearchParams(q)}`;
+// As the web keeps it: the pages before a later page, after its query.
+const hrefFor = (q: WorkItemQuery, trail?: readonly string[]) => {
+  const params = workItemSearchParams(q);
+  if (q.cursor !== undefined && trail !== undefined) {
+    params.set("page", String(trail.length + 2));
+    for (const cursor of trail) params.append("before", cursor);
+  }
+  return `?${params}`;
+};
+// Cursors as the API makes them, for the sort by Step Age.
+const cursorAfter = (n: number) => encodeWorkItemCursor("stepAge", ["false", "", `Item ${n}`, `00000000-0000-4000-8000-00000000010${n}`]);
 
 const meta = {
   title: "Views/WorkItemList",
@@ -235,16 +251,38 @@ export const DatesForAnotherCompany: Story = {
   },
 };
 
-/** Choosing a Submission Date range, or sorting by it, asks for the same query with it, from the first page. */
+/** Opens the Filters and shows `field`'s values; returns the panel. */
+const openFilters = async (context: PlayContext, field: { en: string; ar: string }) => {
+  await userEvent.click(context.canvas.getByRole("button", { name: storyText(context, copy.filters) }));
+  const panel = await screen.findByRole("dialog", { name: storyText(context, copy.filters) });
+  await userEvent.click(within(panel).getByRole("tab", { name: storyText(context, field) }));
+  return panel;
+};
+
+/** Choosing a Submission Date range asks for the same query with it, from the first page. */
 export const SubmissionDateRange: Story = {
   args: { query: { ...defaults, cursor: "abc" } },
   play: async (context) => {
-    const from = context.canvas.getByLabelText(storyText(context, copy.submittedFrom));
-    await userEvent.type(from, "2026-09-01");
+    const panel = await openFilters(context, copy.submissionDate);
+    await userEvent.type(within(panel).getByLabelText(storyText(context, copy.submittedFrom)), "2026-09-01");
     await expect(context.args.onQueryChange).toHaveBeenLastCalledWith({ ...defaults, submittedFrom: "2026-09-01" });
-    await userEvent.click(context.canvas.getByRole("combobox", { name: storyText(context, copy.sort) }));
-    await userEvent.click(await screen.findByRole("option", { name: storyText(context, copy.sortSubmissionDate) }));
+  },
+};
+
+/**
+ * Sorting is in the column headers, for the sorts that exist: the current one
+ * is announced with its order; another asks for the query sorted by it, from the first page.
+ */
+export const SortingByAColumn: Story = {
+  args: { query: { ...defaults, cursor: "abc" } },
+  play: async (context) => {
+    const table = context.canvas.getByRole("table", { name: storyText(context, copy.table) });
+    await expect(within(table).getByRole("columnheader", { name: storyText(context, b("Step Age", "عمر الخطوة")) })).toHaveAttribute("aria-sort", "descending");
+    await expect(within(table).getByRole("columnheader", { name: storyText(context, copy.subject) })).not.toHaveAttribute("aria-sort");
+    await userEvent.click(within(table).getByRole("button", { name: storyText(context, copy.submissionDate) }));
     await expect(context.args.onQueryChange).toHaveBeenLastCalledWith({ ...defaults, sort: "submissionDate" });
+    await userEvent.click(within(table).getByRole("button", { name: storyText(context, copy.documentNumber) }));
+    await expect(context.args.onQueryChange).toHaveBeenLastCalledWith({ ...defaults, sort: "documentNumber" });
   },
 };
 
@@ -261,20 +299,54 @@ export const Narrow: Story = {
 export const ChoosingAFilter: Story = {
   args: { query: { ...defaults, cursor: "abc" } },
   play: async (context) => {
-    await userEvent.click(context.canvas.getByRole("combobox", { name: storyText(context, copy.stage) }));
-    await userEvent.click(await screen.findByRole("option", { name: stages.internal.name[storyLocale(context)] }));
+    const panel = await openFilters(context, copy.stage);
+    await userEvent.click(within(panel).getByRole("button", { name: stages.internal.name[storyLocale(context)] }));
     await expect(context.args.onQueryChange).toHaveBeenCalledWith({ ...defaults, stage: ["internal_review"] });
   },
 };
 
-/** "With" offers me, unclaimed, my own Company's Steps and the other Companies holding my items, by name. */
+/** "With" offers all, me, unclaimed, my own Company's Steps and the other Companies holding my items, by name. */
 export const WithChoices: Story = {
   play: async (context) => {
-    await userEvent.click(context.canvas.getByRole("combobox", { name: storyText(context, copy.with) }));
-    const options = within(await screen.findByRole("listbox")).getAllByRole("option");
-    await expect(options).toHaveLength(6);
-    await userEvent.click(options[5]!);
+    const panel = await openFilters(context, copy.with);
+    const choices = within(within(panel).getByRole("group", { name: storyText(context, copy.with) })).getAllByRole("button");
+    await expect(choices).toHaveLength(6);
+    await expect(choices[0]).toHaveAttribute("aria-pressed", "true");
+    await userEvent.click(choices[5]!);
     await expect(context.args.onQueryChange).toHaveBeenCalledWith({ ...defaults, with: [`company:${consultantId}`] });
+  },
+};
+
+/**
+ * The filters applied: the Filters button counts them, each field its values,
+ * the chosen value is pressed, and "Clear all" clears them but not the search
+ * or Need My Action. Left open for the screenshot.
+ */
+export const FiltersOpen: Story = {
+  parameters: overlay,
+  args: { query: { ...defaults, stage: ["pending_approval"], stepAgeMin: 2, needMyAction: true, q: "LED" } },
+  play: async (context) => {
+    const button = context.canvas.getByRole("button", { name: `${storyText(context, copy.filters)} 2` });
+    await userEvent.click(button);
+    const panel = await screen.findByRole("dialog", { name: storyText(context, copy.filters) });
+    await expect(within(panel).getByRole("tab", { name: `${storyText(context, copy.stage)} 1` })).toBeVisible();
+    await userEvent.click(within(panel).getByRole("tab", { name: `${storyText(context, copy.stage)} 1` }));
+    await expect(within(panel).getByRole("button", { name: stages.pending.name[storyLocale(context)] })).toHaveAttribute("aria-pressed", "true");
+    await userEvent.click(within(panel).getByRole("button", { name: storyText(context, copy.clearAll) }));
+    await expect(context.args.onQueryChange).toHaveBeenLastCalledWith({ ...defaults, needMyAction: true, q: "LED" });
+  },
+};
+
+/** On a phone the filters open in a sheet, every field one under the other. Left open for the screenshot. */
+export const FiltersOnAPhone: Story = {
+  parameters: { ...phone, ...overlay },
+  args: { query: { ...defaults, type: ["MAR"] } },
+  play: async (context) => {
+    await userEvent.click(context.canvas.getByRole("button", { name: `${storyText(context, copy.filters)} 1` }));
+    const sheet = await screen.findByRole("dialog", { name: storyText(context, copy.filters) });
+    await expect(within(sheet).getByRole("heading", { name: `${storyText(context, copy.type)} 1` })).toBeVisible();
+    await expect(within(sheet).getByRole("group", { name: storyText(context, copy.stage) })).toBeInTheDocument();
+    await expect(within(sheet).queryByRole("tab")).toBeNull();
   },
 };
 
@@ -328,15 +400,63 @@ export const NeedMyActionNarrow: Story = {
   },
 };
 
-/** A later page links back to the first and on to the next, its filters kept. */
-export const Paged: Story = {
-  args: { query: { ...defaults, stage: ["internal_review"], cursor: "page2" }, list: { ...list, nextCursor: "page3" } },
+/** 120 items in all: three pages of 50. */
+const longList = { ...list, stages: list.stages.map((s) => ({ ...s, count: s.key === "pending_approval" ? 115 : s.count })) };
+const pager = (context: PlayContext) => within(context.canvas.getByRole("navigation", { name: storyText(context, copy.pages) }));
+
+/** The first page: no way back, on to the next, and how many pages and items there are. */
+export const FirstPage: Story = {
+  args: { list: { ...longList, nextCursor: cursorAfter(1) } },
   play: async (context) => {
-    await expect(context.canvas.getByRole("link", { name: storyText(context, copy.firstPage) })).toHaveAttribute("href", "?stage=internal_review");
-    await expect(context.canvas.getByRole("link", { name: storyText(context, copy.nextPage) })).toHaveAttribute(
+    await expect(pager(context).queryByRole("link", { name: storyText(context, copy.firstPage) })).toBeNull();
+    await expect(pager(context).queryByRole("link", { name: storyText(context, copy.previousPage) })).toBeNull();
+    await expect(pager(context).getByRole("link", { name: storyText(context, copy.nextPage) })).toHaveAttribute("href", `?cursor=${cursorAfter(1)}&page=2`);
+    await expect(pager(context).getByText(storyText(context, b("Page 1 of 3 · 120 items", "صفحة 1 من 3 · 120 عناصر")))).toBeVisible();
+  },
+};
+
+/**
+ * A later page reached from this List: its number, back to the one before
+ * and to the first, on to the next, its filters kept.
+ */
+export const Paged: Story = {
+  args: {
+    query: { ...defaults, stage: ["pending_approval"], cursor: cursorAfter(2) },
+    pageTrail: [cursorAfter(1)],
+    list: { ...longList, nextCursor: cursorAfter(3) },
+  },
+  play: async (context) => {
+    await expect(pager(context).getByRole("link", { name: storyText(context, copy.firstPage) })).toHaveAttribute("href", "?stage=pending_approval");
+    await expect(pager(context).getByRole("link", { name: storyText(context, copy.previousPage) })).toHaveAttribute(
       "href",
-      "?stage=internal_review&cursor=page3",
+      `?stage=pending_approval&cursor=${cursorAfter(1)}&page=2`,
     );
+    await expect(pager(context).getByRole("link", { name: storyText(context, copy.nextPage) })).toHaveAttribute(
+      "href",
+      `?stage=pending_approval&cursor=${cursorAfter(3)}&page=4&before=${cursorAfter(1)}&before=${cursorAfter(2)}`,
+    );
+    await expect(pager(context).getByText(storyText(context, b("Page 3 of 3 · 120 items", "صفحة 3 من 3 · 120 عناصر")))).toBeVisible();
+  },
+};
+
+/** A later page opened from a link elsewhere: back to the first only, and no page number, which isn't known. */
+export const PagedFromALink: Story = {
+  args: { query: { ...defaults, cursor: cursorAfter(2) }, list: longList },
+  play: async (context) => {
+    await expect(pager(context).getByRole("link", { name: storyText(context, copy.firstPage) })).toHaveAttribute("href", "?");
+    await expect(pager(context).queryByRole("link", { name: storyText(context, copy.previousPage) })).toBeNull();
+    await expect(pager(context).queryByRole("link", { name: storyText(context, copy.nextPage) })).toBeNull();
+    await expect(pager(context).getByText(storyText(context, b("120 items", "120 عناصر")))).toBeVisible();
+  },
+};
+
+/** Under a search there is no total ("Search and filters"): the pager says the page alone. */
+export const PagedUnderASearch: Story = {
+  args: { query: { ...defaults, q: "LED", cursor: cursorAfter(1) }, pageTrail: [], list: { ...longList, nextCursor: cursorAfter(2) } },
+  play: async (context) => {
+    await expect(pager(context).getByText(storyText(context, b("Page 2", "صفحة 2")), { exact: true })).toBeVisible();
+    await expect(pager(context).queryByText(/120/)).toBeNull();
+    await expect(pager(context).getByRole("link", { name: storyText(context, copy.previousPage) })).toHaveAttribute("href", "?q=LED");
   },
 };
 
@@ -355,7 +475,7 @@ export const NothingMatches: Story = {
 // Search (RP-347): in the toolbar, scoped to the Project, kept in the URL.
 const search = {
   box: b("Search", "بحث"),
-  button: b("Search", "بحث"),
+  help: b("Searches Document Number, Subject, Type, Trade, Location and Company", "يبحث في رقم المستند والموضوع والنوع والتخصص والموقع والشركة"),
   none: b("No items you can see match this search.", "لا توجد عناصر يمكنك رؤيتها تطابق هذا البحث."),
 };
 
@@ -368,8 +488,22 @@ export const Searching: Story = {
     await userEvent.type(box, `  ${words} {enter}`);
     await expect(context.args.onQueryChange).toHaveBeenLastCalledWith({ ...defaults, stage: ["pending_approval"], q: words });
     await userEvent.clear(box);
-    await userEvent.click(context.canvas.getByRole("button", { name: storyText(context, search.button) }));
+    await userEvent.type(box, "{enter}");
     await expect(context.args.onQueryChange).toHaveBeenLastCalledWith({ ...defaults, stage: ["pending_approval"], q: undefined });
+  },
+};
+
+/** "/" anywhere on the page puts the cursor in the search box, but types a "/" in another text box. */
+export const SlashFocusesSearch: Story = {
+  play: async (context) => {
+    const box = context.canvas.getByRole("searchbox", { name: storyText(context, search.box) });
+    await expect(box).toHaveAccessibleDescription(storyText(context, search.help));
+    (document.activeElement as HTMLElement | null)?.blur();
+    await userEvent.keyboard("/");
+    await expect(box).toHaveFocus();
+    await expect(box).toHaveValue("");
+    await userEvent.keyboard("/");
+    await expect(box).toHaveValue("/");
   },
 };
 

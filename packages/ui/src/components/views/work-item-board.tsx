@@ -20,6 +20,7 @@ import { useState, type ElementType } from "react";
 import { cn } from "../../lib/cn.ts";
 import { buttonVariants } from "../button/button.tsx";
 import { focusRing, touchBox } from "../form/control-styles.ts";
+import { Icon } from "../icon/icon.tsx";
 import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "../overlay/popover.tsx";
 import { stageColour } from "../status/stage-colour.ts";
 import { StagePill } from "../status/stage-pill.tsx";
@@ -353,14 +354,19 @@ export type WorkItemViewSwitchProps = {
 /** List / Kanban, as two links: the View is part of the URL. */
 export function WorkItemViewSwitch({ view, labels, hrefFor, linkAs: Link = "a" }: WorkItemViewSwitchProps) {
   return (
-    <nav aria-label={labels.view} className="inline-flex rounded-md border border-border p-0.5">
+    <nav aria-label={labels.view} className="inline-flex gap-0.5 rounded-sm bg-surface-subtle p-0.5 ring-1 ring-border ring-inset">
       {(["list", "kanban"] as const).map((v) => (
         <Link
           key={v}
           href={hrefFor(v)}
           aria-current={v === view ? "page" : undefined}
-          className={cn(buttonVariants({ variant: v === view ? "secondary" : "ghost", size: "sm" }), "pointer-coarse:min-h-11")}
+          className={cn(
+            "inline-flex h-8 items-center gap-1.5 rounded-xs px-3 text-sm font-semibold text-muted hover:text-text pointer-coarse:min-h-11",
+            "aria-[current=page]:bg-surface aria-[current=page]:text-text aria-[current=page]:shadow-xs aria-[current=page]:ring-1 aria-[current=page]:ring-border",
+            focusRing,
+          )}
         >
+          <Icon name={v === "list" ? "list" : "layout-grid"} size={16} />
           {labels[v]}
         </Link>
       ))}
