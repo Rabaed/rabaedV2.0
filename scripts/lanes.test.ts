@@ -372,8 +372,8 @@ describe("onlyLane (lanes:prune --lane N)", () => {
 
 describe("pruneCommand", () => {
   it("names the targeted command for a lane, so the suggestion never reaches other lanes", () => {
-    expect(pruneCommand(3, true)).toBe("pnpm lanes:prune --merged --lane 3");
-    expect(pruneCommand(3, false)).toBe("pnpm lanes:prune --lane 3");
+    expect(pruneCommand(3, { merged: true })).toBe("pnpm lanes:prune --merged --lane 3");
+    expect(pruneCommand(3, { merged: false })).toBe("pnpm lanes:prune --lane 3");
   });
 });
 

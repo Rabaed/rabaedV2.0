@@ -146,6 +146,12 @@ describe("chooseWorktrees", () => {
     expect(skipped).toEqual([]);
   });
 
+  it("with only, matches names case-insensitively on win32 and exactly elsewhere", () => {
+    const input = { worktrees: [wt("agent-a", { noCommitsYet: true })], currentPath: here, only: ["Agent-A"] };
+    expect(chooseWorktrees({ ...input, platform: "win32" }).remove).toHaveLength(1);
+    expect(chooseWorktrees({ ...input, platform: "linux" }).remove).toEqual([]);
+  });
+
   it("with only, still skips and names a named worktree holding changes or unmerged commits", () => {
     const { remove, skipped } = chooseWorktrees({
       worktrees: [wt("agent-a", { noCommitsYet: true, dirty: true }), wt("agent-b", { noCommitsYet: true, ahead: 1 })],

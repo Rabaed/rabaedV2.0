@@ -193,7 +193,7 @@ export const onlyLane = (projects: StaleProject[], lane: number | undefined): St
   lane === undefined ? projects : projects.filter((p) => p.project === laneProject(lane));
 
 /** The lanes:prune command that frees lane n alone (RP-505), with --merged when the holder's branch is merged. */
-export const pruneCommand = (lane: number, merged: boolean): string => `pnpm lanes:prune${merged ? " --merged" : ""} --lane ${lane}`;
+export const pruneCommand = (lane: number, { merged }: { merged: boolean }): string => `pnpm lanes:prune${merged ? " --merged" : ""} --lane ${lane}`;
 
 /**
  * The worktrees (other than cwd) holding lane n, as laneClashes counts them: its compose

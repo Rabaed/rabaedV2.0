@@ -16,14 +16,24 @@ import { composeProjectOfEnv, listContainers, listVolumes, mergedProjects, onlyL
 import { branchMerged, listWorktrees, refExists } from "./worktrees.ts";
 
 const usage = "Usage: pnpm lanes:prune [--merged] [--lane N] [--yes]   (--lane N: only rabaed-laneN, N = 0..9)";
-const laneAt = process.argv.slice(2).indexOf("--lane");
-const args = process.argv.slice(2).filter((_, i) => laneAt === -1 || (i !== laneAt && i !== laneAt + 1));
-const lane = laneAt === -1 ? undefined : Number(process.argv.slice(2)[laneAt + 1]);
-if (args.some((a) => a !== "--yes" && a !== "--merged") || (lane !== undefined && (!Number.isInteger(lane) || lane < 0 || lane > 9))) {
+const args = process.argv.slice(2);
+let yes = false;
+let withMerged = false;
+let lane: number | undefined;
+for (let i = 0; i < args.length; i++) {
+  const a = args[i]!;
+  if (a === "--yes") yes = true;
+  else if (a === "--merged") withMerged = true;
+  else if (a === "--lane") lane = Number(args[++i]);
+  else {
+    console.error(usage);
+    process.exit(1);
+  }
+}
+if (lane !== undefined && (!Number.isInteger(lane) || lane < 0 || lane > 9)) {
   console.error(usage);
   process.exit(1);
 }
-const withMerged = args.includes("--merged");
 
 const containers = listContainers();
 if (!containers) {
@@ -69,7 +79,7 @@ for (const s of candidates) {
 }
 
 await confirmOrExit("Remove them with their volumes? Their databases are lost, including those of stopped worktrees that still exist.", {
-  yes: args.includes("--yes"),
+  yes,
   verb: "remove",
   done: "removed",
 });
