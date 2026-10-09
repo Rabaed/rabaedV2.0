@@ -235,15 +235,17 @@ function matching(q: WorkItemQuery, now: Date, scope: QueryScope): RawBuilder<bo
     // only with items the caller sees; the rows here are those already.
     // The Kanban's search (RP-410) also finds the words, as one phrase of 3 letters or more, in what
     // the card shows besides: its owner as the viewer may read it (my own Company's person; another
-    // Company's name only, V14) and the Zone, Building or Floor its Location is in.
+    // Company's name only, V14), only while the card shows one (an open item: a closed one has no
+    // owner, so it is never found by its last holder), and the Zone, Building or Floor its Location is in.
+    // The holder's name is read only for another Company's items, and only under a search.
     const phrase = `%${q.q.replace(/[\\%_]/g, "\\$&")}%`;
     const named = (name: RawBuilder<unknown>) => sql<boolean>`concat_ws(' ', ${name} ->> 'en', ${name} ->> 'ar') ilike ${phrase}`;
     const onCard =
       q.q.length < 3
         ? sql<boolean>`false`
         : sql<boolean>`(
-          (r.held_by_own and exists (select 1 from member o where o.id = r.assignee_member_id and ${named(sql.ref("o.full_name"))}))
-          or (not r.held_by_own and exists (
+          (not r.closed and r.held_by_own and exists (select 1 from member o where o.id = r.assignee_member_id and ${named(sql.ref("o.full_name"))}))
+          or (not r.closed and not r.held_by_own and r.holder_participant_id is not null and exists (
             select 1 from app.work_item_companies(r.id) o where o.participant_id = r.holder_participant_id and ${named(sql.ref("o.legal_name"))}))
           or exists (
             with recursive up as (
@@ -258,11 +260,14 @@ function matching(q: WorkItemQuery, now: Date, scope: QueryScope): RawBuilder<bo
   if (q.trade.length > 0) conditions.push(sql`r.trade_id = any(${q.trade}::uuid[])`);
   if (q.location.length > 0) {
     // A Location takes in the ones under it. The Zone, Building and Floor filters are levels of one
-    // tree (RP-410): values of one level are any of them, and each level chosen must hold, so
-    // "Zone A and Floor 5" is Floor 5 of Zone A. An item with no Location matches none.
+    // tree (RP-410), grouped by the level's name (its depth where it has none), so an uneven tree
+    // (a Floor right under a Zone) still groups with the other Floors: values of one level are any of
+    // them, and the levels chosen must all hold (AND), so "Zone A and Floor 5" is Floor 5 of Zone A.
+    // One level only, as every earlier link holds, is the old "any of them". An item with no Location
+    // matches none.
     conditions.push(sql`(r.location_id is not null and not exists (
       select 1 from dimension_value chosen where chosen.id = any(${q.location}::uuid[])
-      group by chosen.depth
+      group by coalesce(chosen.level_name ->> 'en', chosen.depth::text)
       having not bool_or(chosen.id in (
         with recursive up as (
           select id, parent_id from dimension_value where id = r.location_id
@@ -416,13 +421,17 @@ function toRow(r: Row, now: Date): WorkItemRow {
 // Who holds a row of `visibleRows` (as `r`), by name: only the viewer's own
 // Participant's holder is named (app.work_item_holder), and member's own RLS
 // shows only their own Company's people (V14).
-const holderColumns = sql`hc.legal_name as holder_name,
-  m.full_name as claimer_name, coalesce(r.assignee_member_id = app.current_member_id(), false) as claimed_by_me,
-  rc.legal_name as raiser_name`;
-// The raising Company, from the same Companies on the item everyone who sees it may name.
-const holderJoins = sql`left join lateral app.work_item_companies(r.id) hc on hc.participant_id = r.holder_participant_id
-  left join member m on m.id = r.assignee_member_id
-  left join lateral (select x.legal_name from app.work_item_companies(r.id) x where x.participant_id = r.raiser_participant_id limit 1) rc on true`;
+const holderColumns = sql`co.holder_name, co.raiser_name,
+  m.full_name as claimer_name, coalesce(r.assignee_member_id = app.current_member_id(), false) as claimed_by_me`;
+// The holder's and the raiser's Companies, from one read of the Companies on the item that everyone
+// who sees it may name (RP-410: the raiser is the card's Contractor name).
+const holderJoins = sql`left join lateral (
+    select
+      (max(x.legal_name::text) filter (where x.participant_id = r.holder_participant_id))::jsonb as holder_name,
+      (max(x.legal_name::text) filter (where x.participant_id = r.raiser_participant_id))::jsonb as raiser_name
+    from app.work_item_companies(r.id) x
+  ) co on true
+  left join member m on m.id = r.assignee_member_id`;
 
 /** One page of the scope's visible items matching `q`, and how many match in each Stage. */
 export async function queryWorkItems(
@@ -543,44 +552,51 @@ export async function countWorkItemBuckets(
 }
 
 /**
- * What the "With" filter offers: the Steps of the viewer's own Participant and
- * the other Companies that hold one of the viewer's visible open items, each by
- * name only (V14). Nothing that isn't in a row the viewer could list.
+ * What the "With", Owner and Step filters offer, from one read of the viewer's
+ * visible open items: the Steps of the viewer's own Participant, the other
+ * Companies that hold one of them, each by name only (V14), and my own
+ * Company's Members who have claimed one (RP-410). app.work_item_holder gives
+ * no other Company's Member, and member's own RLS shows only my own Company's
+ * people. Nothing that isn't in a row the viewer could list.
  */
-async function withChoices(trx: Trx, scope: QueryScope): Promise<WorkItemList["filters"]["with"]> {
-  const { rows } = await sql<{ held_by_own: boolean; step_key: string; step_name: BilingualText; participant_id: string; name: BilingualText }>`
+async function holderChoices(
+  trx: Trx,
+  scope: QueryScope,
+): Promise<Pick<WorkItemList["filters"], "with" | "owners">> {
+  const { rows } = await sql<{
+    held_by_own: boolean;
+    step_key: string;
+    step_name: BilingualText;
+    participant_id: string;
+    name: BilingualText;
+    member_id: string | null;
+    member_name: BilingualText | null;
+  }>`
     with r as (${visibleRows(scope, false)})
-    select distinct r.held_by_own, r.step_key, r.step_name, r.holder_participant_id as participant_id, hc.legal_name as name
+    select distinct r.held_by_own, r.step_key, r.step_name, r.holder_participant_id as participant_id, hc.legal_name as name,
+      m.id as member_id, m.full_name as member_name
     from r
     join lateral app.work_item_companies(r.id) hc on hc.participant_id = r.holder_participant_id
+    left join member m on m.id = r.assignee_member_id and r.held_by_own
     where not r.closed
   `.execute(trx);
   const steps = new Map<string, BilingualText>();
   const companies = new Map<string, BilingualText>();
+  const owners = new Map<string, BilingualText>();
   for (const r of rows) {
-    if (r.held_by_own) steps.set(r.step_key, r.step_name);
-    else companies.set(r.participant_id, r.name);
+    if (r.held_by_own) {
+      steps.set(r.step_key, r.step_name);
+      if (r.member_id && r.member_name) owners.set(r.member_id, r.member_name);
+    } else companies.set(r.participant_id, r.name);
   }
   const byName = <T extends { name: BilingualText }>(a: T, b: T) => a.name.en.localeCompare(b.name.en);
   return {
-    steps: [...steps].map(([key, name]) => ({ key, name })).sort(byName),
-    companies: [...companies].map(([participantId, name]) => ({ participantId, name })).sort(byName),
+    with: {
+      steps: [...steps].map(([key, name]) => ({ key, name })).sort(byName),
+      companies: [...companies].map(([participantId, name]) => ({ participantId, name })).sort(byName),
+    },
+    owners: [...owners].map(([memberId, name]) => ({ memberId, name })).sort(byName),
   };
-}
-
-/**
- * The Owner filter's people (RP-410): my own Company's Members who have claimed
- * one of my visible open items. app.work_item_holder gives no other Company's
- * Member, and member's own RLS shows only my own Company's people (V14).
- */
-async function ownerChoices(trx: Trx, scope: QueryScope): Promise<WorkItemList["filters"]["owners"]> {
-  const { rows } = await sql<{ member_id: string; name: BilingualText }>`
-    with r as (${visibleRows(scope, false)})
-    select distinct m.id as member_id, m.full_name as name
-    from r join member m on m.id = r.assignee_member_id
-    where r.held_by_own and not r.closed
-  `.execute(trx);
-  return rows.map((r) => ({ memberId: r.member_id, name: r.name })).sort((a, b) => a.name.en.localeCompare(b.name.en));
 }
 
 /** The Member's own Card view layout of the scope's board (RP-410), or the default. */
@@ -715,8 +731,7 @@ async function stagesAndFilters(trx: Trx, scope: QueryScope, stageCounts: Map<st
       locations: values
         .filter((v) => v.kind === "location")
         .map(({ id, code, name, parent_id, depth, level_name }) => ({ id, code, name, parentId: parent_id, depth, levelName: level_name })),
-      with: await withChoices(trx, scope),
-      owners: await ownerChoices(trx, scope),
+      ...(await holderChoices(trx, scope)),
     },
   };
 }

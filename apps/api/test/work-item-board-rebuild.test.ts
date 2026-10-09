@@ -49,6 +49,7 @@ async function list(by: Caller, query: WorkItemQueryInput = {}): Promise<WorkIte
 }
 const cardIds = (b: WorkItemBoard) => b.columns.flatMap((c) => c.lanes.flatMap((l) => l.cards.map((card) => card.id))).sort();
 const ids = (...items: string[]) => [...items].sort();
+const listIds = async (by: Caller, query: WorkItemQueryInput) => (await list(by, query)).items.map((i) => i.id).sort();
 
 async function draft(title: string, answers: Record<string, unknown> = {}): Promise<string> {
   const res = await ok(
@@ -166,10 +167,14 @@ describe("Owner and Role (scenario RP-410-1, V5, V14)", () => {
     expect(cardIds(await board(c1Engineer, { owner: [`member:${c1PmId}`] }))).toEqual(ids(atA1f1, late));
     expect(cardIds(await board(c1Engineer, { owner: ["unclaimed"] }))).toEqual([atZoneB]);
     expect(cardIds(await board(c1Engineer, { owner: [`company:${k1ParticipantId}`, "unclaimed"] }))).toEqual(ids(atZoneB, withK1));
+    // The List reads the same filter.
+    expect(await listIds(c1Engineer, { owner: [`member:${c1PmId}`] })).toEqual(ids(atA1f1, late));
+    expect(await listIds(c1Engineer, { owner: [`company:${k1ParticipantId}`, "unclaimed"] })).toEqual(ids(atZoneB, withK1));
   });
 
   it("matches nothing for another Company's person, though they hold one of my items", async () => {
     expect(cardIds(await board(c1Engineer, { owner: [`member:${k1ManagerId}`] }))).toEqual([]);
+    expect(await listIds(c1Engineer, { owner: [`member:${k1ManagerId}`] })).toEqual([]);
     expect((await list(c1Engineer, { owner: [`member:${k1ManagerId}`] })).stages.every((s) => s.count === 0)).toBe(true);
     // K1's own filter finds it.
     expect(cardIds(await board(k1Engineer, { owner: [`member:${k1ManagerId}`] }))).toEqual([withK1]);
@@ -184,6 +189,10 @@ describe("Owner and Role (scenario RP-410-1, V5, V14)", () => {
     expect(cardIds(await board(k1Engineer, { role: ["consultant_review"] }))).toEqual([withK1]);
     // K1 sees C1's items by C1's name only, and can't reach C1's roles either.
     expect(cardIds(await board(k1Engineer, { role: ["internal_review"] }))).toEqual([]);
+    // The List reads the same filter.
+    expect(await listIds(c1Engineer, { role: ["internal_review"] })).toEqual(ids(atA1f1, atZoneB, late));
+    expect(await listIds(c1Engineer, { role: ["consultant_review"] })).toEqual([]);
+    expect(await listIds(k1Engineer, { role: ["internal_review"] })).toEqual([]);
   });
 });
 
@@ -201,6 +210,39 @@ describe("search on this board (RP-410, V14)", () => {
     expect(cardIds(await board(c1Engineer, { q: "Zone A" }))).toEqual(ids(atA1f1, atA2));
     expect(cardIds(await board(c1Engineer, { q: "Building 1" }))).toEqual([atA1f1]);
     expect((await list(c1Engineer, { q: "Building 1" })).items.map((i) => i.id)).toEqual([atA1f1]);
+  });
+
+  it("never finds another Company's items the viewer can't see: K1 finds nothing of C1's still in C1's internal review", async () => {
+    // Zone B holds C1's "Busbars" and "Pumps" in C1's internal review, and "Fixtures", Submitted to K1.
+    expect(cardIds(await board(c1Engineer, { q: "Zone B" }))).toEqual(ids(atZoneB, withK1, late));
+    expect(cardIds(await board(k1Engineer, { q: "Zone B" }))).toEqual([withK1]);
+    expect(await listIds(k1Engineer, { q: "Zone B" })).toEqual([withK1]);
+  });
+});
+
+describe("search on a closed item", () => {
+  let closed = "";
+  beforeAll(async () => {
+    // Submitted, claimed by K1's manager, who closes it with Code C: nobody holds it now.
+    closed = await draft("Gaskets", { trade: trade.mechanical, location: loc.zoneA });
+    await inReview(closed);
+    await take(c1Pm, closed, "submit");
+    const { answers } = (await ok(k1Engineer.get(`/v1/work-items/${closed}`), 200)).json();
+    await ok(
+      k1Engineer.request("PUT", `/v1/work-items/${closed}/answers`, {
+        answers: { ...answers, sample_checked: true, matches_specification: false, verification_note: "Wrong rating" },
+      }),
+    );
+    await ok(k1Manager.post(`/v1/work-items/${closed}/claim`));
+    await take(k1Manager, closed, "revise_c", { remarks: "Resubmit with the rated gaskets" });
+  });
+
+  it("is never found by its last holder: the card shows no owner", async () => {
+    expect(cardIds(await board(k1Engineer, { q: "Hessa" }))).toEqual([withK1]);
+    expect(await listIds(k1Engineer, { q: "Hessa" })).toEqual([withK1]);
+    // Still found by what its card shows.
+    expect(cardIds(await board(k1Engineer, { q: "Gaskets" }))).toEqual([closed]);
+    expect(cardIds(await board(c1Engineer, { q: "Zone A" }))).toContain(closed);
   });
 });
 
@@ -252,6 +294,10 @@ describe("Created date (visibility.md Creation Date)", () => {
     expect(cardIds(await board(c1Engineer, { createdWithin: 30 }))).toContain(late);
     // K1 sees it from its Submission Date, 2 days ago, and nothing of how long C1 worked on it.
     expect(cardIds(await board(k1Engineer, { createdWithin: 7 }))).toEqual([late]);
+    // The List reads the same filter.
+    expect(await listIds(c1Engineer, { createdWithin: 7 })).not.toContain(late);
+    expect(await listIds(c1Engineer, { createdWithin: 30 })).toContain(late);
+    expect(await listIds(k1Engineer, { createdWithin: 7 })).toEqual([late]);
     const card = (await board(k1Engineer)).columns.flatMap((c) => c.lanes.flatMap((l) => l.cards)).find((c) => c.id === late)!;
     expect(card.creationDate).toBeNull();
   });
