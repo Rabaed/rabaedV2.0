@@ -14,9 +14,12 @@ import { keysToClose } from "./jira-close-keys.ts";
 
 const JIRA = "https://rabaedsa.atlassian.net";
 
+/** An issue with this label is a spec: the planning session closes it by hand, never a merge (RP-451). */
+const SPEC_LABEL = "spec";
+
 export interface Jira {
-  /** Status category key of the ticket: "new", "indeterminate" or "done". Throws if the ticket is missing. */
-  statusCategory(key: string): Promise<string>;
+  /** Labels and status category key ("new", "indeterminate" or "done") of the ticket, in one read. Throws if the ticket is missing. */
+  issue(key: string): Promise<{ labels: string[]; statusCategory: string }>;
   /** Moves the ticket to a Done-category status and comments. Throws if it can't. */
   closeWithComment(key: string, comment: string): Promise<void>;
 }
@@ -24,15 +27,23 @@ export interface Jira {
 export interface CloseResult {
   closed: string[];
   alreadyDone: string[];
+  /** Spec issues named by the branch or body, left open. */
+  skippedSpecs: string[];
   failed: { key: string; reason: string }[];
 }
 
 export async function closeIssues(keys: string[], pullRequest: number, jira: Jira): Promise<CloseResult> {
-  const result: CloseResult = { closed: [], alreadyDone: [], failed: [] };
+  const result: CloseResult = { closed: [], alreadyDone: [], skippedSpecs: [], failed: [] };
   for (const key of keys) {
     try {
-      if ((await jira.statusCategory(key)) === "done") {
+      const { labels, statusCategory } = await jira.issue(key);
+      // Done first: a spec closed by hand is not reported as left open.
+      if (statusCategory === "done") {
         result.alreadyDone.push(key);
+        continue;
+      }
+      if (labels.includes(SPEC_LABEL)) {
+        result.skippedSpecs.push(key);
         continue;
       }
       await jira.closeWithComment(key, `Closed by PR #${pullRequest} (merged)`);
@@ -53,9 +64,9 @@ export function jiraOverHttp(email: string, token: string, fetchImpl: typeof fet
     return response.status === 204 ? undefined : ((await response.json()) as unknown);
   };
   return {
-    async statusCategory(key) {
-      const issue = (await call("GET", `issue/${key}?fields=status`)) as { fields: { status: { statusCategory: { key: string } } } };
-      return issue.fields.status.statusCategory.key;
+    async issue(key) {
+      const found = (await call("GET", `issue/${key}?fields=labels,status`)) as { fields: { labels: string[]; status: { statusCategory: { key: string } } } };
+      return { labels: found.fields.labels, statusCategory: found.fields.status.statusCategory.key };
     },
     async closeWithComment(key, comment) {
       const { transitions } = (await call("GET", `issue/${key}/transitions`)) as { transitions: { id: string; to: { statusCategory: { key: string } } }[] };
@@ -121,8 +132,9 @@ async function main(mode: string) {
     const keys = keysToClose({ branch: pull.branch, body: pull.body });
     const result = await closeIssues(keys, pull.number, jira);
     failures += result.failed.length;
-    if (mode === "event" || result.closed.length > 0 || result.failed.length > 0) {
+    if (mode === "event" || result.closed.length > 0 || result.skippedSpecs.length > 0 || result.failed.length > 0) {
       lines.push(`- PR #${pull.number}: closed ${result.closed.join(", ") || "none"}; already Done ${result.alreadyDone.join(", ") || "none"}`);
+      for (const spec of result.skippedSpecs) lines.push(`  - ${spec}: spec issue, left open`);
       for (const failure of result.failed) lines.push(`  - FAILED ${failure.key}: ${failure.reason}`);
     }
   }
