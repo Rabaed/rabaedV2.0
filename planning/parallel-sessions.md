@@ -56,7 +56,7 @@ It never touches the main checkout or the current worktree. It skips, and lists,
 
 Use it when a spec's tickets form a chain that one lane would otherwise work through one session at a time (e.g. RP-290 → RP-294 under spec RP-289). Implementer subagents build the ready tickets in parallel, each in its own worktree, and merge them onto one **integration branch**; one `/code-review` runs over the whole branch at the end, which counts as the spec's epic review.
 
-1. Start the session as in step 1 above, named `Agent X – RP-nnn (spec)`, with the spec's key.
+1. Start the session as in step 1 above, named `Agent X – RP-nnn (spec)`, with the spec's key. First move the spec issue to **In Progress**; if it already is In Progress, another session owns it: stop. `pnpm lane:env` also refuses a worktree locked by another live `claude session`, even with `--force` (RP-461 was run by two sessions at once).
 2. First message:
    ```
    Lane N. Run `pnpm lane:env N --force`, then /mattpocock-skills:implement-spec RP-nnn. Name the integration branch RP-nnn-<spec-name> and open its draft PR after the first merge.
