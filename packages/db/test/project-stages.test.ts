@@ -118,6 +118,45 @@ describe("the Project Admin's Stage commands", () => {
     expect(await stagesOf(projectId)).toEqual(before);
   });
 
+  it("keep a Stage that a Workflow the Project once bound uses, after the binding is taken away", async () => {
+    // A Rabaed Workflow for the MAR whose one Step is in a Stage only it uses.
+    const { rows } = await migrator.query<{ definition_id: string; type_id: string }>(`
+      with type as (select id from work_item_type where code = 'MAR' and project_id is null),
+      definition as (
+        insert into workflow_definition (owner_kind, name, work_item_type_id)
+        select 'rabaed', '{"en": "Held route (test)", "ar": "مسار معلق"}', id from type returning id
+      ), version as (
+        insert into workflow_version (workflow_definition_id, version_no, status) select id, 1, 'draft' from definition returning id
+      ), step as (
+        insert into workflow_step (workflow_version_id, key, name, stage_key, actor_rule, outcome_mode)
+        select id, 'held', '{"en": "Held", "ar": "معلق"}', 'probe_held', '{"base_role": "contractor", "permission": "create"}', 'none'
+        from version returning id
+      )
+      select definition.id as definition_id, (select id from type) as type_id from definition, step`);
+    const { definition_id: definitionId, type_id: typeId } = rows[0]!;
+    await migrator.query("update workflow_version set status = 'published', published_at = now() where workflow_definition_id = $1", [definitionId]);
+    expect(
+      await outcomeAs(
+        creator,
+        sql`select app.add_stage(${projectId}::uuid, 'submittals', 'probe_held', '{"en": "Held", "ar": "معلق"}'::jsonb, 'in_progress') as outcome`,
+      ),
+    ).toBe("added");
+    const inUse = () =>
+      withMember(app, creator, (trx) => sql<{ in_use: boolean }>`select app.stage_in_use(${projectId}::uuid, 'submittals', 'probe_held') as in_use`.execute(trx)).then(
+        (r) => r.rows[0]!.in_use,
+      );
+    expect(await inUse()).toBe(false);
+
+    expect(await outcomeAs(creator, sql`select app.bind_workflow(${projectId}::uuid, ${typeId}::uuid, null, ${definitionId}::uuid, now()) as outcome`)).toBe(
+      "bound",
+    );
+    expect(await inUse()).toBe(true);
+    // Items raised meanwhile may still run it: the Stage stays.
+    expect(await outcomeAs(creator, sql`select app.unbind_workflow(${projectId}::uuid, ${typeId}::uuid, null, now()) as outcome`)).toBe("unbound");
+    expect(await inUse()).toBe(true);
+    expect(await outcomeAs(creator, sql`select app.delete_stage(${projectId}::uuid, 'submittals', 'probe_held') as outcome`)).toBe("stage_in_use");
+  });
+
   it("can't be written around: the app role writes no Stage directly", async () => {
     await expect(withMember(app, creator, (trx) => sql`update stage set sort = 0`.execute(trx))).rejects.toThrow(/permission denied/);
   });
