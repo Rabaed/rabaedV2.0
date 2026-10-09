@@ -31,6 +31,8 @@ export interface QueueSeam {
   pullRequest(pr: number): { id: string; headRefOid: string };
   /** `git merge-tree --write-tree origin/main <commit>`: status 0 when it merges cleanly, 1 when it conflicts, anything else is an error. */
   mergeTree(commit: string): { status: number; output: string; stderr: string };
+  /** Paths the PR changes against main (`git diff --name-only origin/main...<commit>`). */
+  changedFiles(commit: string): string[];
   /** The migration checks of `commit` against origin/main; status 0 when they pass. */
   check(name: "drift" | "immutable", commit: string): { status: number; output: string };
   /** The `enqueuePullRequest` mutation, pinned by expectedHeadOid. */
@@ -58,6 +60,17 @@ export function conflictedFiles(output: string): string[] {
   return [...paths];
 }
 
+const isRootShared = (file: string) => file === "package.json" || file === "pnpm-lock.yaml" || file.startsWith(".github/workflows/");
+const isDoc = (file: string) => file.startsWith("docs/") || file.endsWith(".md");
+
+/** Rule 3 (planning/parallel-sessions.md): root shared files travel in their own PR, with at most docs. */
+export function rootSharedFilesBreach(files: string[]): { root: string[]; others: number; example: string } | undefined {
+  const root = files.filter(isRootShared);
+  const others = files.filter((file) => !isRootShared(file) && !isDoc(file));
+  const [example] = others;
+  return root.length > 0 && example !== undefined ? { root, others: others.length, example } : undefined;
+}
+
 export function queuePr(pr: number, seam: QueueSeam): QueueResult {
   if (!seam.fetchMain()) return fail("git fetch origin main failed; the checks need a current origin/main. Get online and run `pnpm queue` again.");
 
@@ -74,6 +87,16 @@ export function queuePr(pr: number, seam: QueueSeam): QueueResult {
   const checkout = seam.head();
   if (checkout !== head && seam.isBehind(checkout, head)) {
     warnings.push(`Warning: HEAD (${checkout}) is behind PR #${pr}'s head (${head}); checked and queued the PR's head. Pull to catch up.`);
+  }
+
+  const shared = rootSharedFilesBreach(seam.changedFiles(head));
+  if (shared) {
+    return fail(
+      `PR #${pr} breaks planning/parallel-sessions.md rule 3: it changes root shared file(s) together with other files.`,
+      ...shared.root.map((file) => `  shared: ${file}`),
+      `  and ${shared.others} other file(s), e.g. ${shared.example}`,
+      "Fix: a change to root package.json, pnpm-lock.yaml or .github/workflows/* is its own PR (only those and docs). Split it out, then run `pnpm queue` again.",
+    );
   }
 
   const merge = seam.mergeTree(head);
@@ -159,6 +182,10 @@ export function realSeam(cwd: string = process.cwd(), spawn: typeof spawnSync = 
     isBehind: (ancestor, commit) => run("git", ["merge-base", "--is-ancestor", ancestor, commit]).status === 0,
     pullRequest: (pr) => JSON.parse(must("gh", ["pr", "view", String(pr), "--json", "id,headRefOid"])) as { id: string; headRefOid: string },
     mergeTree: (commit) => run("git", ["merge-tree", "--write-tree", "origin/main", commit]),
+    changedFiles: (commit) =>
+      must("git", ["diff", "--name-only", `origin/main...${commit}`])
+        .split("\n")
+        .filter(Boolean),
     check: (name, commit) => (name === "drift" ? script("check-migration-drift.ts", ["origin/main", commit]) : script("check-migrations-immutable.ts", ["origin/main", commit])),
     status: (id) => graphql("query($id: ID!) { node(id: $id) { ... on PullRequest { state isInMergeQueue } } }", id).data.node as unknown as PullStatus,
     removalReason: (id) => {
