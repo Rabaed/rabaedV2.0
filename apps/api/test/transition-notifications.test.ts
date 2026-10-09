@@ -95,7 +95,11 @@ async function inReview(title: string): Promise<string> {
 
 beforeAll(async () => {
   await addSendBackType(migrator, TYPE, { en: "Transition notices", ar: "إشعارات الانتقال" }, schema, {
-    notifications: { submit: [{ to: "holder" }, { to: "raiser" }, { to: "watchers" }, { to: "position", position: "engineer" }] },
+    notifications: {
+      submit: [{ to: "holder" }, { to: "raiser" }, { to: "watchers" }, { to: "position", position: "engineer" }],
+      // A close from a Step that issues a Code: its event is `issue_code`, not `transition`.
+      approve_a: [{ to: "raiser" }],
+    },
   });
   c1 = await api.projectCreator();
   k1 = await api.authorizedPerson();
@@ -154,6 +158,21 @@ describe("a Transition that notifies the raiser", () => {
     await take(at.c1Pm, id, "submit");
     await drainOutbox(worker);
     expect(await movesOf(at.c1Engineer, id)).toHaveLength(1);
+  });
+});
+
+describe("a Code issued", () => {
+  it("tells the recipients its Transition names, as any other move does: here the raiser who stopped watching", async () => {
+    const id = await inReview("Pipes");
+    await ok(at.c1Engineer.delete(`/v1/work-items/${id}/watch`));
+    await take(at.c1Pm, id, "submit");
+    await ok(at.k1Manager.post(`/v1/work-items/${id}/claim`));
+    await take(at.k1Manager, id, "send_to_manager");
+    await ok(at.k1Manager.post(`/v1/work-items/${id}/claim`));
+    await take(at.k1Manager, id, "approve_a");
+    await drainOutbox(worker);
+    const issued = (await about(at.c1Engineer, id)).filter((n) => n.kind === "watched_event" && n.event?.transition?.en === "Approve · A");
+    expect(issued).toHaveLength(1);
   });
 });
 
