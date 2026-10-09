@@ -596,20 +596,16 @@ async function readBoardLayout(trx: Trx, { projectId, moduleKey }: QueryScope): 
 /**
  * Changes the Member's own Card view layout of a board (RP-410): the switches
  * given, the others kept. Null when the Module has no tab on one of their
- * Projects, as for the board itself. RLS keeps the row the Member's own.
+ * Projects, as for the board itself. app.set_board_layout writes the Member's own row only.
  */
 export function changeBoardLayout(db: Db, memberId: string, scope: QueryScope, change: BoardCardLayoutChange): Promise<BoardCardLayout | null> {
   return withMember(db, memberId, async (trx) => {
     if (!(await hasModuleTab(trx, scope))) return null;
     const next = { ...(await readBoardLayout(trx, scope)), ...change };
-    await sql`
-      insert into member_board_layout (member_id, project_id, module_key, contractor_name, location, creation_date)
-      values (app.current_member_id(), ${scope.projectId}::uuid, ${scope.moduleKey}, ${next.contractorName}, ${next.location}, ${next.creationDate})
-      on conflict (member_id, project_id, module_key) do update
-        set contractor_name = excluded.contractor_name, location = excluded.location,
-          creation_date = excluded.creation_date, updated_at = now()
+    const { rows } = await sql<{ outcome: string }>`
+      select app.set_board_layout(${scope.projectId}::uuid, ${scope.moduleKey}, ${next.contractorName}, ${next.location}, ${next.creationDate}) as outcome
     `.execute(trx);
-    return next;
+    return rows[0]?.outcome === "set" ? next : null;
   });
 }
 
