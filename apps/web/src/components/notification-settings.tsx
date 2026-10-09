@@ -28,7 +28,6 @@ export function NotificationSettings({ value, locale }: { value: NotificationSet
     mute: t("mute"),
     noProjects: t("noProjects"),
     groups: t("groups"),
-    inApp: t("inApp"),
     emailChoice: { off: t("emailChoice.off"), immediate: t("emailChoice.immediate"), digest: t("emailChoice.digest") },
     group: {
       step_reached: t("group.step_reached"),

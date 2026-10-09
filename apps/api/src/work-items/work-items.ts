@@ -264,7 +264,11 @@ async function workflowSteps(trx: Trx, typeId: string, workflowVersionId: string
     select s.key, s.actor_rule ->> 'base_role' as role, coalesce(st.category = 'draft', false) as draft, r.name as role_name
     from workflow_step s
     join work_item_type t on t.id = ${typeId}
-    left join stage st on st.owner_kind = 'rabaed' and st.module_key = t.module_key and st.key = s.stage_key
+    join workflow_version v on v.id = s.workflow_version_id
+    join workflow_definition d on d.id = v.workflow_definition_id
+    -- The Stage set the Workflow is published against, as app.is_draft_step reads it (RP-428).
+    left join stage st on st.module_key = t.module_key and st.key = s.stage_key
+      and case when d.owner_kind = 'project' then st.project_id = d.project_id else st.owner_kind = 'rabaed' end
     -- Projects use the Rabaed Default Project Roles for now.
     left join project_role r on r.owner_kind = 'rabaed' and r.base_role = s.actor_rule ->> 'base_role'
     where s.workflow_version_id = ${workflowVersionId}
@@ -406,7 +410,7 @@ function visibleItems(trx: Trx, where: RawBuilder<unknown>) {
     from work_item w
     cross join lateral app.step_as_seen(w.id) seen
     join work_item_type t on t.id = w.work_item_type_id
-    join stage st on st.module_key = t.module_key and st.key = seen.stage_key and st.project_id is null
+    join stage st on st.project_id = w.project_id and st.module_key = t.module_key and st.key = seen.stage_key
     join visibility_dimension td on td.project_id = w.project_id and td.kind = 'trade'
     join work_item_dimension_value tdv on tdv.work_item_id = w.id and tdv.dimension_id = td.id
     join dimension_value tv on tv.id = tdv.dimension_value_id

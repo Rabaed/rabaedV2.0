@@ -76,6 +76,12 @@ const answers = {
   // outside the raiser learns whether a Draft Revision is open.
   revision_not_allowed: () => new HttpError(409, "revision_not_allowed"),
   not_discardable: () => new HttpError(409, "not_discardable"),
+  // A Project's Stages (RP-428). The shapes are checked by the request schemas first.
+  invalid_name: () => new HttpError(422, "invalid_name"),
+  invalid_stage: () => new HttpError(422, "invalid_stage"),
+  stage_exists: () => new HttpError(409, "stage_exists"),
+  invalid_order: () => new HttpError(422, "invalid_order"),
+  stage_in_use: () => new HttpError(409, "stage_in_use"),
 } satisfies Record<string, () => HttpError>;
 
 export type RefusalReason = keyof typeof answers;

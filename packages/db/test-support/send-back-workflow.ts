@@ -16,7 +16,7 @@
  */
 export async function addSendBackWorkflow(
   run: (text: string) => Promise<{ rows: unknown[] }>,
-  { withApproveB = false }: { withApproveB?: boolean } = {},
+  { withApproveB = false, notifications = {} }: { withApproveB?: boolean; notifications?: Record<string, unknown[]> } = {},
 ): Promise<string> {
   const { rows } = await run(`
     with definition as (
@@ -70,6 +70,13 @@ export async function addSendBackWorkflow(
   const id = (rows[0] as { id?: string } | undefined)?.id;
   if (!id) throw new Error("addSendBackWorkflow: nothing inserted");
   // Built as a draft, then published: a published Version takes no new parts (RP-424).
+  // `notifications` names a Transition's extra recipients by its key (RP-432).
+  for (const [key, recipients] of Object.entries(notifications)) {
+    await run(`
+      update workflow_transition set notifications = '${JSON.stringify(recipients)}'::jsonb
+      where key = '${key}' and workflow_version_id in (select id from workflow_version where workflow_definition_id = '${id}')
+    `);
+  }
   await run(`update workflow_version set status = 'published', published_at = now() where workflow_definition_id = '${id}'`);
   return id;
 }

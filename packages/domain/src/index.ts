@@ -38,3 +38,4 @@ export * from "./code-c.ts";
 export * from "./dashboard.ts";
 export * from "./activity-feed.ts";
 export * from "./step-age-report.ts";
+export * from "./stage.ts";

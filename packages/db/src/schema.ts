@@ -359,6 +359,8 @@ export interface WorkflowTransitionTable {
   outcome: string | null;
   permission: string;
   sort: Generated<number>;
+  /** Whom it notifies besides the next holder or Step Pool: a list of recipients, or null for none (RP-432). */
+  notifications: ColumnType<unknown, string | null | undefined, string | null>;
   /** Its Action Form: a Form schema, or null for none (RP-300). */
   action_form: ColumnType<unknown, string | null | undefined, string | null>;
   created_at: Generated<Timestamp>;

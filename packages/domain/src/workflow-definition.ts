@@ -164,9 +164,9 @@ export type WorkflowStepRow = {
 };
 
 /**
- * A `workflow_transition` row of a Version, its Steps by key. `rules` is its
- * column (WF-7), null when it has none; `actions` and `notifications` have no
- * columns yet (WF-8, WF-9 add them). Each is present only when the definition has it.
+ * A `workflow_transition` row of a Version, its Steps by key. `rules` (WF-7) and
+ * `notifications` (WF-9) are columns, null when it has none; `actions` has no
+ * column yet (WF-8 adds it). Each is present only when the definition has it.
  */
 export type WorkflowTransitionRow = {
   key: string;
