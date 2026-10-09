@@ -74,7 +74,7 @@ export const workItemListLabels: Record<Locale, WorkItemListLabels> = {
     clearAll: "Clear all",
     done: "Done",
     close: "Close",
-    filtersApplied: (n, count) => (count === 0 ? "No filters applied" : count === 1 ? "Filters applied: 1" : `${n} filters applied`),
+    filtersApplied: (n, count) => (count === 0 ? "No filters applied" : count === 1 ? "1 filter applied" : `${n} filters applied`),
     noResults: "No items you can see match this search.",
     pages: "Pages",
     firstPage: "First page",

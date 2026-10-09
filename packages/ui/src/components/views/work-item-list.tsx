@@ -23,12 +23,11 @@ import {
 } from "@rabaed/domain";
 import { type ElementType, type ReactNode } from "react";
 import type { Tone } from "../../tokens/themes.ts";
-import { buttonVariants } from "../button/button.tsx";
 import { Badge } from "../data/badge.tsx";
 import { Table, TableBody, TableCell, TableEmpty, TableHead, TableHeader, TableRow, type TableSort } from "../data/table.tsx";
 import { DocNo } from "../doc-no/doc-no.tsx";
 import { cn } from "../../lib/cn.ts";
-import { touchBox } from "../form/control-styles.ts";
+import { focusRing, touchBox } from "../form/control-styles.ts";
 import { Field } from "../form/field.tsx";
 import { Input } from "../form/input.tsx";
 import { Avatar } from "../data/avatar.tsx";
@@ -343,7 +342,7 @@ export function WorkItemList({
     ),
     ...levels.map(
       (level): FilterMenuField => ({
-        key: `location-${level.depth}`,
+        key: `location-${level.key}`,
         label: level.label,
         hint: level.hint,
         group: "place",
@@ -443,6 +442,7 @@ export function WorkItemList({
       <ListToolbar label={t("toolbar")} end={viewSwitch} className="gap-3">
         {action}
         <ToolbarSearch
+          tall
           // A new query (back button, a cleared filter) shows its own words.
           key={query.q ?? ""}
           value={query.q}
@@ -452,7 +452,10 @@ export function WorkItemList({
           description={t("searchHelp")}
           onSearch={(q) => change({ q })}
         />
+        <span className="inline-flex shrink-0 items-center">
         <FilterMenu
+          // With filters on, the button carries a small × that clears them (search and Need My Action too), so the toolbar keeps one row.
+          triggerClassName={filtered ? "rounded-e-none" : undefined}
           fields={fields}
           labels={{ filters: t("filters"), clearAll: t("clearAll"), done: t("done"), close: t("close"), applied: labels.filtersApplied, number: n }}
           onClearAll={() =>
@@ -473,6 +476,20 @@ export function WorkItemList({
             })
           }
         />
+        {filtered && (
+          <Link
+            href={hrefFor(withoutFilters(query))}
+            aria-label={t("clear")}
+            title={t("clear")}
+            className={cn(
+              "-ms-px inline-flex h-[42px] w-9 items-center justify-center rounded-e-sm border border-border-strong bg-surface text-muted hover:bg-hover hover:text-text pointer-coarse:min-h-11 pointer-coarse:w-11",
+              focusRing,
+            )}
+          >
+            <Icon name="x" size={16} />
+          </Link>
+        )}
+        </span>
         <ToolbarSwitch label={t("needMyAction")} checked={query.needMyAction} onCheckedChange={(on) => change({ needMyAction: on })} />
         {/* A Dashboard number's filter, which the toolbar has no control for: its buckets and Code C sub-states. */}
         {query.bucket.length + query.codeC.length > 0 && (
@@ -483,11 +500,6 @@ export function WorkItemList({
               ...query.codeC.map((codeC) => labels.codeCStates[codeC]),
             ].join(", ")}
           </Badge>
-        )}
-        {filtered && (
-          <Link href={hrefFor(withoutFilters(query))} className={buttonVariants({ variant: "ghost", size: "sm" })}>
-            {t("clear")}
-          </Link>
         )}
       </ListToolbar>
 
@@ -660,12 +672,17 @@ function locationLevels(locations: WorkItemListData["filters"]["locations"], loc
     seen.add(l.id);
     return [...above(l.parentId, seen), l.name];
   };
-  const depths = [...new Set(locations.map((l) => l.depth))].sort((a, b) => a - b);
-  return depths.map((depth) => {
-    const at = locations.filter((l) => l.depth === depth);
+  // A level is its name (its depth where it has none), as the API groups it, so an uneven tree
+  // (a Floor right under a Zone) still puts every Floor in one field; levels in the order they first appear.
+  const levelOf = (l: (typeof locations)[number]) => (l.levelName ? `name:${l.levelName.en}` : `depth:${l.depth}`);
+  const firstDepth = new Map<string, number>();
+  for (const l of locations) firstDepth.set(levelOf(l), Math.min(firstDepth.get(levelOf(l)) ?? l.depth, l.depth));
+  const levels = [...firstDepth].sort((a, b) => a[1] - b[1]);
+  return levels.map(([key, depth]) => {
+    const at = locations.filter((l) => levelOf(l) === key);
     const named = at.find((l) => l.levelName !== null)?.levelName;
     return {
-      depth,
+      key,
       label: named ? named[locale] : labels.level(formatNumber(depth, locale)),
       // The level's name in the other language, as the other fields have it.
       hint: named ? named[locale === "en" ? "ar" : "en"] : undefined,

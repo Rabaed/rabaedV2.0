@@ -110,6 +110,16 @@ export const workItemBoard = workItemList.pick({ stages: true, filters: true }).
 });
 export type WorkItemBoard = z.infer<typeof workItemBoard>;
 
+/**
+ * The number a Kanban card shows (RP-410): a Revision's Document Number without
+ * the " Rev n" app.take_transition issued it with, since the card's R badge
+ * carries the Revision. Any other number is shown whole.
+ */
+export function cardNumber(documentNumber: string | null, revisionNo: number): string | null {
+  const suffix = ` Rev ${revisionNo}`;
+  return documentNumber !== null && revisionNo > 0 && documentNumber.endsWith(suffix) ? documentNumber.slice(0, -suffix.length) : documentNumber;
+}
+
 /** A card with the Participant holding it, which only the API knows: another Company's lane is keyed by it. */
 export type BoardCardInput = { card: WorkItemRow; holderParticipantId: string | null };
 

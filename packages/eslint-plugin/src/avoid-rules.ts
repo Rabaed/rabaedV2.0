@@ -60,8 +60,6 @@ const allowedInText: string[] = [
   "file store", // the S3 file store (`FILE_STORE_*`) that holds Documents' bytes.
   "both names", // a Member's or Company's name in English and Arabic.
   "filters", // the List's own filters ("Clear filters"; docs/data-model.md, List and Dashboard). "Filter" alone names a Visibility Dimension.
-  "card view layout", // the parts a Kanban card shows, each Member's own (RP-410, the owner's Kanban Card Anatomy), not a View.
-  "contractor name", // the raising Company's name on a Kanban card (RP-410), not a Subject.
 ];
 
 const allowedInNames: string[] = [
@@ -125,6 +123,9 @@ const allowedMessages: Record<string, string> = {
   "scopes.invalid": "a Scope's name in both languages, not a Work Item's Subject",
   "workItemViews.viewSwitch.list": "the List view beside the Kanban (spec RP-344), not an Option List",
   "numbering.counters.state": "a counter's state column (In use, Starts at …), not a Stage or a Step",
+  "workItemViews.layout.title": "the Kanban card's Card view layout (RP-410, the owner's Kanban Card Anatomy): which parts a card shows, not a View",
+  "workItemViews.layout.contractorName": "the raising Company's name on a Kanban card (RP-410), not a Subject",
+  "workItemViews.list.filtersApplied": "the filter panel's footer, \"1 filter applied\": the List's own filters, not a Visibility Dimension",
 };
 
 const glossary = readFileSync(glossaryUrl, "utf8");

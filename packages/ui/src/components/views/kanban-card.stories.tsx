@@ -133,6 +133,8 @@ export const Hover: Story = {
   args: { hovered: true },
   play: async (context) => {
     await waitFor(() => expect(getComputedStyle(within(card(context)).getByRole("img")).opacity).toBe("1"));
+    // The Subject turns tomato.
+    await expect(within(card(context)).getByRole("link")).toHaveClass("group-data-hovered/card:text-brand-fg");
   },
 };
 

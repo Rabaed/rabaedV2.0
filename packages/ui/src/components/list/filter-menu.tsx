@@ -54,16 +54,18 @@ export type FilterMenuProps = {
   onClearAll?: () => void;
   /** The field shown first in the panel; defaults to the first. */
   initialField?: string;
+  /** Extra classes for the button, e.g. to join it to a control beside it. */
+  triggerClassName?: string;
 };
 
 /** The Filter button with the number of fields filtered, opening the filter panel. */
-export function FilterMenu({ fields, labels, onClearAll, initialField }: FilterMenuProps) {
+export function FilterMenu({ fields, labels, onClearAll, initialField, triggerClassName }: FilterMenuProps) {
   const wide = useMediaQuery("(min-width: 48rem)");
   const applied = fields.filter((f) => f.count > 0).length;
   const trigger = (
     <button
       type="button"
-      className={cn(toolbarButton, "data-[state=open]:border-brand data-[state=open]:bg-brand-tint data-[state=open]:text-brand-fg")}
+      className={cn(toolbarButton, "data-[state=open]:border-brand data-[state=open]:bg-brand-tint data-[state=open]:text-brand-fg", triggerClassName)}
     >
       <Icon name="filter" />
       {labels.filters}
@@ -155,12 +157,13 @@ function CountPill({ count, number }: { count: number; number: (n: number) => st
   );
 }
 
+/** A field's name on one line, and its name in the other language after it; either cut with an ellipsis, both in the tooltip. */
 function FieldName({ field }: { field: FilterMenuField }) {
   return (
-    <span className="flex min-w-0 items-baseline gap-1.5">
-      <span>{field.label}</span>
+    <span className="flex min-w-0 items-baseline gap-1.5" title={field.hint ? `${field.label} · ${field.hint}` : field.label}>
+      <span className="min-w-0 shrink truncate">{field.label}</span>
       {field.hint && (
-        <span aria-hidden="true" className="truncate text-notes font-normal text-muted">
+        <span aria-hidden="true" className="min-w-0 shrink-[2] truncate text-notes font-normal text-muted">
           {field.hint}
         </span>
       )}

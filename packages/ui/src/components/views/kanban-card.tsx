@@ -166,7 +166,10 @@ export function KanbanCard({
           dir="auto"
           title={title}
           className={cn(
-            "line-clamp-2 rounded-xs after:absolute after:inset-0 after:rounded-md after:content-[''] hover:text-brand-fg",
+            // Tomato while the card is hovered or dragged (the anatomy's states).
+            "line-clamp-2 rounded-xs after:absolute after:inset-0 after:rounded-md after:content-['']",
+            "group-hover/card:text-brand-fg group-data-hovered/card:text-brand-fg",
+            selected && "text-brand-fg",
             focusRing,
           )}
         >

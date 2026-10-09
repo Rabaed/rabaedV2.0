@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  cardNumber,
   closedColumnDays,
   dropTargets,
   formatDate,
@@ -165,8 +166,8 @@ export function WorkItemBoard({
               data-drop-target={dropMove ? "" : undefined}
               data-drop-over={dropMove && over === stage.key ? "" : undefined}
               className={cn(
-                // The column scrolls up and down on its own, under its fixed header; the board scrolls sideways.
-                "flex max-h-[min(56rem,max(24rem,calc(100dvh_-_20rem)))] w-[318px] shrink-0 flex-col rounded-lg border border-border bg-surface transition-shadow",
+                // A column grows with its cards (the anatomy): the page scrolls down, the board sideways in its own region.
+                "flex w-[318px] shrink-0 flex-col rounded-lg border border-border bg-surface transition-shadow",
                 dropMove && "outline-2 outline-offset-2 outline-brand outline-dashed",
                 dropMove && over === stage.key && "outline-solid",
               )}
@@ -215,7 +216,7 @@ export function WorkItemBoard({
                   </span>
                 </div>
               )}
-              <div className="flex min-h-16 flex-col overflow-y-auto px-2 py-1.5">
+              <div className="flex min-h-16 flex-col px-2 py-1.5">
                 {shown === 0 ? (
                   <p className="px-1 py-4 text-center text-caption text-muted">{labels.noItems}</p>
                 ) : (
@@ -473,7 +474,8 @@ export function cardContent(
   const place: KanbanCardPlace[] | undefined =
     card.location === null ? [] : places.get(card.location.id)?.map((p) => ({ depth: p.depth, name: p.name[locale] })) ?? [{ depth: 1, name: card.location.name[locale] }];
   return {
-    number: card.documentNumber,
+    // The R badge carries the Revision, so the number leaves out its " Rev n".
+    number: cardNumber(card.documentNumber, card.revisionNo),
     noNumberLabel: card.revisionNo > 0 ? labels.revisionNoNumber(formatNumber(card.revisionNo, locale)) : labels.noNumber,
     title: card.title,
     badge: badgeOf(card, locale, labels, outcomes),
@@ -540,7 +542,7 @@ export function WorkItemViewSwitch({ view, labels, hrefFor, linkAs: Link = "a" }
           href={hrefFor(v)}
           aria-current={v === view ? "page" : undefined}
           className={cn(
-            "inline-flex h-9 items-center gap-1.5 px-[14px] text-sm font-semibold text-text-secondary hover:bg-hover pointer-coarse:min-h-11",
+            "inline-flex h-10 items-center gap-1.5 px-[14px] text-sm font-semibold text-text-secondary hover:bg-hover pointer-coarse:min-h-11",
             "aria-[current=page]:bg-primary aria-[current=page]:text-on-primary aria-[current=page]:hover:bg-primary-hover",
             focusRing,
           )}

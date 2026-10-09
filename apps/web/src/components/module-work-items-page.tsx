@@ -1,5 +1,5 @@
 import { workItemQueryFromSearchParams, workItemViewFromSearchParams, type Locale, type ModuleKey } from "@rabaed/domain";
-import { Icon, buttonVariants } from "@rabaed/ui";
+import { Icon, buttonVariants, cn } from "@rabaed/ui";
 import { getTranslations } from "next-intl/server";
 import { notFound } from "next/navigation";
 import { WorkItemListOrKanban } from "@/components/work-item-list-or-kanban";
@@ -50,7 +50,7 @@ export async function ModuleWorkItemsPage({
   // The MAR's Draft Step is held by Contractors; the API refuses anyone else too.
   const action =
     module === "submittals" && project.projectRole.baseRole === "contractor" ? (
-      <Link href={`/projects/${project.id}/work-items/new`} className={buttonVariants()}>
+      <Link href={`/projects/${project.id}/work-items/new`} className={cn(buttonVariants(), "h-[42px]")}>
         <Icon name="plus" />
         {t("newMar")}
       </Link>

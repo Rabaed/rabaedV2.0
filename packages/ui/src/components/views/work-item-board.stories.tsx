@@ -117,6 +117,8 @@ const cards = {
   pool: card(33, { title: "Lighting Control Panels", location: at(zoneB), stepAgeWeeks: 1, with: own(pmStep, null) }),
   r2: card(31, {
     title: "Fire Suppression System",
+    // Issued with its Revision; the card shows the number alone, the R badge the Revision.
+    documentNumber: "12789331 Rev 2",
     stage: stages.resubmitted,
     revisionNo: 2,
     stepAgeWeeks: 3,
@@ -258,7 +260,8 @@ export const Wide: Story = {
     await expect(cardOf(context, cards.hvac)).not.toHaveTextContent(/overdue|late|متأخر/i);
 
     const r2 = cardOf(context, cards.r2);
-    const number = within(r2).getByText(cards.r2.documentNumber!);
+    const number = within(r2).getByText("12789331");
+    await expect(within(r2).queryByText(/Rev 2/)).toBeNull();
     await expect(getComputedStyle(number).direction).toBe("ltr");
     await expectLaidOutLeftToRight(number);
     // The badge in the left corner, in both languages.
@@ -359,21 +362,20 @@ const crowded: WorkItemBoardData = {
 };
 
 /**
- * A column with many cards scrolls up and down on its own, under its header;
- * the board scrolls sideways and the page never does (Epic RP-405, decision 7).
+ * A column with many cards grows with them, as the anatomy draws it: no inner
+ * scroll, the page scrolls down. The board scrolls sideways in its own region
+ * and the page never does (Epic RP-405, decision 7).
  */
-export const ColumnScrollsOnItsOwn: Story = {
+export const ColumnsGrowWithTheirCards: Story = {
   args: { board: crowded },
   play: async (context) => {
     const column = columnOf(context, stages.pending);
-    const list = [...column.querySelectorAll<HTMLElement>("div")].find((d) => getComputedStyle(d).overflowY === "auto")!;
-    await expect(list.scrollHeight).toBeGreaterThan(list.clientHeight);
-    const header = within(column).getByRole("heading", { level: 2 });
-    const top = header.getBoundingClientRect().top;
-    list.scrollTop = list.scrollHeight;
-    await expect(header.getBoundingClientRect().top).toBe(top);
+    const inner = [...column.querySelectorAll<HTMLElement>("*")].filter((d) => ["auto", "scroll"].includes(getComputedStyle(d).overflowY));
+    await expect(inner).toEqual([]);
+    const cardsHeight = [...column.querySelectorAll("[data-kanban-card]")].reduce((sum, c) => sum + c.getBoundingClientRect().height, 0);
+    await expect(column.getBoundingClientRect().height).toBeGreaterThan(cardsHeight);
     const region = context.canvas.getByRole("region", { name: storyText(context, copy.board) });
-    await expect(region.scrollWidth).toBeGreaterThanOrEqual(region.clientWidth);
+    await expect(region.scrollWidth).toBeGreaterThan(region.clientWidth);
     await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(document.documentElement.clientWidth);
   },
 };
@@ -465,7 +467,7 @@ function Toolbar({ args, locale }: { args: Story["args"]; locale: "en" | "ar" })
       itemHref={(id) => `#${id}`}
       onQueryChange={fn()}
       action={
-        <a href="#new" className="inline-flex h-9 items-center rounded-sm bg-primary px-3.5 text-sm font-semibold text-on-primary pointer-coarse:min-h-11">
+        <a href="#new" className="inline-flex h-[42px] items-center rounded-sm bg-primary px-3.5 text-sm font-semibold text-on-primary pointer-coarse:min-h-11">
           {locale === "en" ? "+ Add Submittal" : "+ إضافة اعتماد"}
         </a>
       }
