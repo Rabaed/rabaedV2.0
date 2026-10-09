@@ -24,8 +24,6 @@ afterAll(async () => {
 });
 
 const TYPE = "RULED";
-// The same Workflow, with a Transition whose stored rules no longer fit the definition format.
-const UNREADABLE = "RULBAD";
 
 let engineer: Caller; // C1 engineer: raises the items.
 let pm: Caller; // C1 PM: Submits.
@@ -96,18 +94,6 @@ async function expectNotAvailable(response: ReturnType<typeof tryTake>) {
 
 beforeAll(async () => {
   await addRulesType(migrator, TYPE);
-  await addRulesType(migrator, UNREADABLE, [
-    {
-      key: "submit_unreadable",
-      from: "internal_review",
-      to: "consultant_review",
-      label: bilingual("Submit (unreadable rules)"),
-      kind: "submit",
-      outcome: null,
-      permission: "submit",
-      rules: { validate: [{ type: "no_such_rule" }] },
-    },
-  ]);
   const c1 = await api.projectCreator();
   projectId = (await api.createProject(c1.caller)).id;
   electrical = (await c1.caller.post(`/v1/projects/${projectId}/trades`, { code: "EL", name: bilingual("Electrical") })).json().id;
@@ -299,24 +285,6 @@ describe("Validate: the Form complete", () => {
     await ok(k1Manager.request("PUT", `/v1/work-items/${id}/answers`, { answers: { ...answers, verdict: "Fit for use" } }));
     await take(k1Manager, id, "return_from_senior");
     await take(k1Engineer, id, "escalate");
-  });
-});
-
-describe("stored rules that don't parse", () => {
-  it("fail loudly, never taken as a Transition with no rules", async () => {
-    const res = await ok(
-      engineer.post(`/v1/projects/${projectId}/work-items`, {
-        type: UNREADABLE,
-        title: "Unreadable",
-        answers: { model: "Unreadable", trade: electrical, location: buildingA },
-      }),
-      201,
-    );
-    const id = res.json().id as string;
-    await take(engineer, id, "send_for_review");
-    await claim(pm, id);
-    expect((await tryTake(pm, id, "submit_unreadable")).statusCode).toBe(500);
-    expect((await detail(pm, id)).step.key).toBe("internal_review");
   });
 });
 

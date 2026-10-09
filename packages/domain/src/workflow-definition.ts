@@ -90,6 +90,15 @@ export type Validation = z.infer<typeof validation>;
 export const transitionRules = z.strictObject({ restrict: z.array(restriction).optional(), validate: z.array(validation).optional() });
 export type TransitionRules = z.infer<typeof transitionRules>;
 
+/**
+ * A Transition's rules as `workflow_transition.rules` stores them (null: none). They fit
+ * the format when they were published: rules that no longer do throw, never read as no
+ * rules (a skipped Validate would let the move through).
+ */
+export function storedTransitionRules(stored: unknown): TransitionRules {
+  return stored == null ? {} : transitionRules.parse(stored);
+}
+
 const scalar = z.union([z.string(), z.number(), z.boolean()]);
 
 /** The moment the Transition is taken, as a set field's value (not the text "now"). */
