@@ -43,6 +43,9 @@ async function preview(values: CounterValues) {
 const copy = {
   title: { en: "Counters", ar: "العدّادات" },
   startingNumber: { en: "Starting number", ar: "رقم البداية" },
+  trade: { en: "Trade", ar: "التخصص" },
+  location: { en: "Location", ar: "الموقع" },
+  notCounted: { en: "Not counted", ar: "غير معدود" },
   save: { en: "Set starting number", ar: "تحديد رقم البداية" },
   next: { en: "The next number will be", ar: "سيكون الرقم التالي" },
   saved: { en: "Starting number set. The next number will be", ar: "تم تحديد رقم البداية. سيكون الرقم التالي" },
@@ -113,6 +116,28 @@ export const SetStartingNumber: Story = {
       startingNumber: 144,
     });
     await expect(await canvas.findByRole("status")).toHaveTextContent(storyText(context, copy.saved));
+  },
+};
+
+/**
+ * The MAR's pattern counts by Company and Trade, not Location: Trade is required and
+ * starts on the first Trade, Location is "Not counted" and can't change, so the form
+ * never asks for a value the pattern doesn't count by, nor hides one it does.
+ */
+export const CountedByThePattern: Story = {
+  args: { onSetStart: fn(async () => ({ ok: true as const, value: { counterKey: "TWR-MAR-CCM-EL", nextNumber: "TWR-MAR-CCM-EL-0010" } })) },
+  render: (args, context) => render()!({ ...args, countedBy: { MAR: { participant: true, trade: true, location: false } } }, context),
+  play: async (context) => {
+    const { canvas, args } = context;
+    const location = canvas.getByRole("combobox", { name: storyText(context, copy.location) });
+    await expect(location).toBeDisabled();
+    await expect(location).toHaveTextContent(storyText(context, copy.notCounted));
+    await expect(canvas.getByRole("combobox", { name: new RegExp(storyText(context, copy.trade)) })).toHaveTextContent(trades(storyLocale(context))[0]!.label);
+    const start = canvas.getByRole("textbox", { name: storyText(context, copy.startingNumber) });
+    await userEvent.clear(start);
+    await userEvent.type(start, "10");
+    await userEvent.click(canvas.getByRole("button", { name: storyText(context, copy.save) }));
+    await expect(args.onSetStart).toHaveBeenCalledWith(expect.objectContaining({ tradeId: trades("en")[0]!.value, locationId: null }));
   },
 };
 
