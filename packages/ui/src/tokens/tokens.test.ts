@@ -4,7 +4,7 @@ import { contrastRatio } from "./contrast.ts";
 import { generateTokensCss } from "./generate.ts";
 import { palette } from "./palette.ts";
 import { shadows, spacing } from "./scales.ts";
-import { coolLight, resolveRole, reviewCodes, stageKeys, toneKeys, type SemanticRole } from "./themes.ts";
+import { coolLight, resolveRole, reviewCodes, segmentToneKeys, stageKeys, toneKeys, type SemanticRole } from "./themes.ts";
 
 describe("contrastRatio", () => {
   it("is 21 for black on white and 1 for a colour on itself", () => {
@@ -73,6 +73,7 @@ describe("cool light launch theme", () => {
       (s) => [`stage-${s}-fg`, `stage-${s}-bg`] as [SemanticRole, SemanticRole],
     ),
     ...reviewCodes.map((c) => [`code-${c}-fg`, `code-${c}-bg`] as [SemanticRole, SemanticRole]),
+    ...segmentToneKeys.map((s) => [`segment-${s}-fg`, `segment-${s}-tint`] as [SemanticRole, SemanticRole]),
   ];
 
   it.each(textPairs)("%s on %s meets 4.5:1", (fg, bg) => {
