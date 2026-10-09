@@ -245,7 +245,17 @@
     "deactivate": "Deactivate",
     "confirmDeactivate": "Deactivate {name}? They will be signed out at once and can no longer sign in.",
     "reactivate": "Reactivate",
-    "confirmReactivate": "Reactivate {name}? They keep their Signature and records."
+    "confirmReactivate": "Reactivate {name}? They keep their Signature and records.",
+    "inviteMember": "Invite Member",
+    "close": "Close",
+    "toolbar": "Search and invite",
+    "search": "Search by full name or email",
+    "searchHelp": "Looks in each Member's name (English and Arabic) and email.",
+    "tableLabel": "Members",
+    "emptyTitle": "No Members yet",
+    "empty": "Invite your colleagues to get them on Rabaed.",
+    "noMatchesTitle": "No matching Members",
+    "noMatches": "No Member of your Company matches that search."
   },
   "projects": {
     "title": "Projects",
