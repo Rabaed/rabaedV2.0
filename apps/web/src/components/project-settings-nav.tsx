@@ -26,7 +26,7 @@ export function ProjectSettingsNav({
   const base = `/projects/${projectId}/settings`;
 
   const items: SettingsNavItem[] = [
-    { key: "numbering", label: t("numbering"), icon: "file-text", href: `${base}/numbering` },
+    { key: "numbering", label: t("numbering"), icon: "list", href: `${base}/numbering` },
     { key: "trades-locations", label: t("tradesLocations"), icon: "map-pin", href: `${base}/trades-locations` },
     ...(isProjectAdmin ? [{ key: "visibility", label: t("visibility"), icon: "eye", href: `${base}/visibility` } satisfies SettingsNavItem] : []),
     ...(ownParticipantId

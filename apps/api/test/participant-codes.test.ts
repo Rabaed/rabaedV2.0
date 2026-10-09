@@ -163,6 +163,10 @@ describe("Document Numbers", () => {
     expect(changed.json()).toEqual({ error: "code_in_use" });
     await ok(code(c1.caller, at.c1ParticipantId, "CMC"));
     expect((await codesOf(c1.caller, at.projectId))[at.c1ParticipantId]).toBe("CMC");
+    // The Numbering page shows it fixed (RP-412); another Participant's isn't.
+    const listed = (await c1.caller.get(`/v1/projects/${at.projectId}/participants`)).json().participants as { id: string; codeLocked: boolean }[];
+    expect(listed.find((p) => p.id === at.c1ParticipantId)!.codeLocked).toBe(true);
+    expect(listed.find((p) => p.id === at.k1ParticipantId)!.codeLocked).toBe(false);
     // Another Participant's code is still free to change.
     await ok(code(c1.caller, at.k1ParticipantId, "KNS"));
     await ok(code(c1.caller, at.k1ParticipantId, "KN2"));

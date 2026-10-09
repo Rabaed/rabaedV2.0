@@ -1,32 +1,36 @@
 "use client";
 
-import { participantSegment, type BilingualText, type Locale } from "@rabaed/domain";
+import { formatNumber, type BilingualText, type Locale } from "@rabaed/domain";
 import { useState, type FormEvent } from "react";
+import { cn } from "../../lib/cn.ts";
 import { Button } from "../button/button.tsx";
-import { Field } from "../form/field.tsx";
-import { Input } from "../form/input.tsx";
+import { focusRing } from "../form/control-styles.ts";
+import { Icon } from "../icon/icon.tsx";
 import { SettingsSection } from "../settings/settings-layout.tsx";
 
-// Participant Codes on Project Settings → Numbering (RP-381, spec RP-311). Each
-// Participant with what its Document Numbers print: its Participant Code, or its
-// order on the Project (01) until one is set. A Project Admin sets the codes here;
-// every other Project Member reads them. The page passes only the Participants the
-// API lists for the viewer (V15: a Project Admin gets every one, anyone else only
-// their own Company's), so this shows nothing beyond that; and the API gives the
-// order on the Project only to Project Admins (RP-381-1), so anyone else reads a
-// plain "no code yet" in its place. Presentational: the page does
-// the calls, and the API keeps its refusals (2-6 letters or digits with at least
-// one letter, unique in the Project, fixed once used).
+// Participant Codes on Project Settings → Document Numbering (RP-381, spec RP-311;
+// restyled to the kit's cards in the RP-412 rebuild): a table of the Participants
+// with their order on the Project and their code, edited in place by a Project
+// Admin; a code a Document Number fixed shows a lock. Every other Project Member
+// reads the codes of the Participants the API lists for them (V15: only their own
+// Company's), and the order on the Project is given to Project Admins only
+// (RP-381-1), so its column is theirs alone. Presentational: the page does the
+// calls; the API keeps its refusals (2-6 letters or digits with at least one
+// letter, unique in the Project, fixed once used).
 
 export type ParticipantCodesLabels = {
   title: string;
   intro: string;
-  /** The list's name. */
+  /** The table's name. */
   participants: string;
-  code: string;
-  /** Beside the order on the Project, shown to a Project Admin in place of a code. */
-  order: string;
-  /** In place of a code, for a viewer the order on the Project isn't given to. */
+  colParticipant: string;
+  colOrder: string;
+  colCode: string;
+  /** The code input's name, for one Participant. */
+  codeOf: (company: string) => string;
+  /** Beside a code a Document Number fixed. */
+  locked: string;
+  /** In place of a code not set yet. */
   noCode: string;
   save: string;
   saved: string;
@@ -37,8 +41,8 @@ export type ParticipantCodeRefusal = "invalid" | "duplicate_code" | "code_in_use
 
 export type ParticipantCodesProps = {
   locale: Locale;
-  participants: readonly { id: string; company: { legalName: BilingualText }; code: string | null; ordinal: number | null }[];
-  /** A Project Admin: each row is a form. */
+  participants: readonly { id: string; company: { legalName: BilingualText }; code: string | null; ordinal: number | null; codeLocked: boolean }[];
+  /** A Project Admin: each code is edited in place. */
   canEdit: boolean;
   labels: ParticipantCodesLabels;
   /** Sets the code (PUT /v1/participants/:id/code); the page refreshes on success. */
@@ -46,50 +50,70 @@ export type ParticipantCodesProps = {
   className?: string;
 };
 
-/** Project Settings → Numbering: each Participant's Participant Code, set by a Project Admin. */
+const cell = "px-5 py-3 align-middle";
+const head = "border-b border-border-subtle bg-surface-subtle px-5 py-2.5 text-start text-caption font-semibold whitespace-nowrap text-muted";
+
+/** Project Settings → Document Numbering: each Participant's Participant Code. */
 export function ParticipantCodes({ locale, participants, canEdit, labels, onSave, className }: ParticipantCodesProps) {
+  const showOrder = participants.some((p) => p.ordinal !== null);
   return (
-    <SettingsSection title={labels.title} description={labels.intro} className={className} data-testid="participant-codes">
-      <ul aria-label={labels.participants} className="divide-y divide-border border-y border-border">
-        {participants.map((p) => (
-          <li key={p.id} className="py-3">
-            {canEdit ? (
-              <CodeForm participant={p} locale={locale} labels={labels} onSave={onSave} />
-            ) : (
-              <div className="flex flex-wrap items-baseline justify-between gap-4">
-                <span className="font-medium text-text">{p.company.legalName[locale]}</span>
-                <Printed participant={p} labels={labels} />
-              </div>
-            )}
-          </li>
-        ))}
-      </ul>
+    <SettingsSection title={labels.title} description={labels.intro} className={className} bodyClassName="px-0 pt-[14px] pb-0" data-testid="participant-codes">
+      <div role="region" aria-label={labels.participants} tabIndex={0} className="overflow-x-auto">
+        <table className="w-full border-collapse text-[13.5px]">
+          <thead>
+            <tr>
+              <th scope="col" className={head}>
+                {labels.colParticipant}
+              </th>
+              {showOrder && (
+                <th scope="col" className={head}>
+                  {labels.colOrder}
+                </th>
+              )}
+              <th scope="col" className={cn(head, "w-full")}>
+                {labels.colCode}
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {participants.map((p) => (
+              <tr key={p.id} className="border-b border-border-subtle last:border-b-0" data-testid="participant-code-row">
+                <td className={cn(cell, "font-semibold whitespace-nowrap text-text")}>{p.company.legalName[locale]}</td>
+                {showOrder && (
+                  <td className={cn(cell, "text-muted tabular-nums")}>
+                    {p.ordinal === null ? "—" : <bdi dir="ltr">{formatNumber(p.ordinal, locale, { minimumIntegerDigits: 2, useGrouping: false })}</bdi>}
+                  </td>
+                )}
+                <td className={cell}>
+                  {canEdit && !p.codeLocked ? (
+                    <CodeForm participant={p} locale={locale} labels={labels} onSave={onSave} />
+                  ) : (
+                    <Printed code={p.code} locked={p.codeLocked} labels={labels} />
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </SettingsSection>
   );
 }
 
-/**
- * What the Participant's numbers print, always left to right; the order on the
- * Project says so. Without a code or an order, a plain "no code yet".
- */
-function Printed({
-  participant: { code, ordinal },
-  labels,
-}: {
-  participant: { code: string | null; ordinal: number | null };
-  labels: ParticipantCodesLabels;
-}) {
-  const printed = ordinal === null ? code : participantSegment({ code, ordinal });
-  if (printed === null) return <span className="text-sm text-muted">{labels.noCode}</span>;
+function Printed({ code, locked, labels }: { code: string | null; locked: boolean; labels: ParticipantCodesLabels }) {
   return (
-    <span className="text-sm">
-      <bdi dir="ltr" translate="no" className="font-medium tabular-nums">
-        {printed}
-      </bdi>
-      {code === null && (
-        <span className="text-muted">
-          {" · "}
-          <span>{labels.order}</span>
+    <span className="inline-flex items-center gap-2">
+      {code === null ? (
+        <span className="text-sm text-muted">{labels.noCode}</span>
+      ) : (
+        <bdi dir="ltr" translate="no" className="rounded-[5px] bg-segment-participant-tint px-1.5 py-px text-caption font-bold text-segment-participant-fg">
+          {code}
+        </bdi>
+      )}
+      {locked && (
+        <span className="inline-flex items-center gap-1 text-caption text-muted">
+          <Icon name="lock" size={14} />
+          {labels.locked}
         </span>
       )}
     </span>
@@ -130,36 +154,39 @@ function CodeForm({
   }
 
   return (
-    <form aria-label={name} onSubmit={submit} className="flex flex-col gap-2" noValidate>
-      <div className="flex flex-wrap items-baseline justify-between gap-4">
-        <span className="font-medium text-text">{name}</span>
-        <Printed participant={participant} labels={labels} />
-      </div>
-      <div className="flex flex-wrap items-end gap-4">
-        <Field label={labels.code}>
-          <Input
-            dir="ltr"
-            maxLength={6}
-            autoCapitalize="characters"
-            value={value}
-            onChange={(e) => {
-              // Codes are stored in capitals; show them so while typing.
-              setValue(e.target.value.toUpperCase());
-              setSaved(false);
-            }}
-          />
-        </Field>
-        <Button type="submit" disabled={pending}>
+    <form aria-label={name} onSubmit={submit} className="flex flex-col gap-1" noValidate>
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          aria-label={labels.codeOf(name)}
+          aria-invalid={error ? true : undefined}
+          dir="ltr"
+          maxLength={6}
+          autoCapitalize="characters"
+          value={value}
+          placeholder={labels.noCode}
+          onChange={(e) => {
+            // Codes are stored in capitals; show them so while typing.
+            setValue(e.target.value.toUpperCase());
+            setSaved(false);
+          }}
+          className={cn(
+            "h-8 w-28 rounded-sm border border-control-border pointer-coarse:h-11 bg-surface px-2.5 text-sm font-semibold text-text placeholder:font-normal placeholder:text-muted hover:border-control-border-hover",
+            "aria-invalid:border-danger",
+            focusRing,
+          )}
+        />
+        <Button type="submit" size="sm" variant="secondary" disabled={pending || value.trim() === (participant.code ?? "")}>
           {labels.save}
         </Button>
+        {saved && (
+          <span role="status" className="inline-flex items-center gap-1 text-caption text-success-fg">
+            <Icon name="circle-check" size={14} />
+            {labels.saved}
+          </span>
+        )}
       </div>
-      {saved && (
-        <p role="status" className="text-sm text-text">
-          {labels.saved}
-        </p>
-      )}
       {error && (
-        <p role="alert" className="text-sm text-danger">
+        <p role="alert" className="text-caption text-danger">
           {error}
         </p>
       )}

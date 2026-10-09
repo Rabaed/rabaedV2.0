@@ -6,19 +6,20 @@ import { storyLocale } from "../../storybook/locale.ts";
 import { participantCodesLabels } from "../../storybook/numbering.ts";
 import { ParticipantCodes, type ParticipantCodesProps } from "./participant-codes.tsx";
 
-// Participant Codes on Project Settings → Numbering (RP-381, spec RP-311). A
-// Project Admin sets them; every other Project Member reads the Participants the
-// API lists for them (their own Company's, V15), without their order on the
-// Project (RP-381-1). Story data only.
+// Participant Codes on Project Settings → Document Numbering (RP-381, spec RP-311;
+// kit-style table in the RP-412 rebuild). A Project Admin sets them in place; a code
+// a number fixed shows a lock; every other Project Member reads the Participants the
+// API lists for them (their own Company's, V15), without their order on the Project
+// (RP-381-1). Story data only.
 const b = (en: string, ar: string) => ({ en, ar });
 const pCcm = "00000000-0000-4000-8000-000000000301";
 const pElectro = "00000000-0000-4000-8000-000000000302";
 const pKns = "00000000-0000-4000-8000-000000000303";
 
 const all: ParticipantCodesProps["participants"] = [
-  { id: pCcm, company: { legalName: b("Contracting Co.", "شركة المقاولات") }, code: "CCM", ordinal: 1 },
-  { id: pElectro, company: { legalName: b("Electro Works", "الأعمال الكهربائية") }, code: null, ordinal: 2 },
-  { id: pKns, company: { legalName: b("Consult Partners", "شركاء الاستشارات") }, code: "KNS", ordinal: 3 },
+  { id: pCcm, company: { legalName: b("Contracting Co.", "شركة المقاولات") }, code: "CCM", ordinal: 1, codeLocked: false },
+  { id: pElectro, company: { legalName: b("Electro Works", "الأعمال الكهربائية") }, code: null, ordinal: 2, codeLocked: false },
+  { id: pKns, company: { legalName: b("Consult Partners", "شركاء الاستشارات") }, code: "KNS", ordinal: 3, codeLocked: true },
 ];
 
 const ok = async () => ({ ok: true as const });
@@ -37,22 +38,27 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 const labels = (context: { globals: Record<string, unknown> }) => participantCodesLabels[storyLocale(context)];
+const name = (context: { globals: Record<string, unknown> }, en: string, ar: string) => (storyLocale(context) === "en" ? en : ar);
 
-/** A Project Admin sets Electro Works' code; it is sent as typed, and the row says it is saved. */
+/** A Project Admin sets Electro Works' code in its row; it is sent as typed, and the row says it is saved. A fixed code shows a lock. */
 export const SetCode: Story = {
   play: async (context) => {
     const { canvas, args } = context;
     const text = labels(context);
-    const row = within(canvas.getByRole("form", { name: storyLocale(context) === "en" ? "Electro Works" : "الأعمال الكهربائية" }));
-    // Without a code, its numbers print its order on the Project.
-    await expect(row.getByText("02")).toHaveAttribute("dir", "ltr");
-    await expect(row.getByText(text.order)).toBeVisible();
-    const input = row.getByRole("textbox", { name: text.code });
+    const company = name(context, "Electro Works", "الأعمال الكهربائية");
+    // Without a code, its numbers print its order on the Project, in its own column.
+    await expect(canvas.getByRole("columnheader", { name: text.colOrder })).toBeVisible();
+    await expect(canvas.getByText("02")).toHaveAttribute("dir", "ltr");
+    const row = within(canvas.getByRole("form", { name: company }));
+    const input = row.getByRole("textbox", { name: text.codeOf(company) });
     await expect(input).toHaveAttribute("dir", "ltr");
     await userEvent.type(input, "ELW");
     await userEvent.click(row.getByRole("button", { name: text.save }));
     await expect(args.onSave).toHaveBeenCalledWith(pElectro, "ELW");
     await expect(await row.findByRole("status")).toHaveTextContent(text.saved);
+    // KNS is fixed: no box, a lock.
+    await expect(canvas.queryByRole("form", { name: name(context, "Consult Partners", "شركاء الاستشارات") })).toBeNull();
+    await expect(canvas.getByText(text.locked)).toBeVisible();
   },
 };
 
@@ -62,8 +68,9 @@ export const CodeInUse: Story = {
   play: async (context) => {
     const { canvas } = context;
     const text = labels(context);
-    const row = within(canvas.getByRole("form", { name: storyLocale(context) === "en" ? "Contracting Co." : "شركة المقاولات" }));
-    const input = row.getByRole("textbox", { name: text.code });
+    const company = name(context, "Contracting Co.", "شركة المقاولات");
+    const row = within(canvas.getByRole("form", { name: company }));
+    const input = row.getByRole("textbox", { name: text.codeOf(company) });
     await expect(input).toHaveValue("CCM");
     await userEvent.clear(input);
     await userEvent.type(input, "CCX");
@@ -72,7 +79,7 @@ export const CodeInUse: Story = {
   },
 };
 
-/** Another Project Member reads the codes of the Participants listed for them: no box, no button. */
+/** Another Project Member reads the codes of the Participants listed for them: no box, no button, no order. */
 export const ReadOnly: Story = {
   args: { canEdit: false, participants: [{ ...all[0]!, ordinal: null }] },
   play: async (context) => {
@@ -80,9 +87,10 @@ export const ReadOnly: Story = {
     const text = labels(context);
     await expect(canvas.queryByRole("textbox")).toBeNull();
     await expect(canvas.queryByRole("button")).toBeNull();
-    const list = canvas.getByRole("list", { name: text.participants });
-    await expect(within(list).getAllByRole("listitem")).toHaveLength(1);
-    const code = within(list).getByText("CCM");
+    await expect(canvas.queryByRole("columnheader", { name: text.colOrder })).toBeNull();
+    const table = canvas.getByRole("region", { name: text.participants });
+    await expect(within(table).getAllByRole("row")).toHaveLength(2);
+    const code = within(table).getByText("CCM");
     await expect(code).toHaveAttribute("dir", "ltr");
     await expectLaidOutLeftToRight(code);
   },
@@ -99,12 +107,11 @@ export const ReadOnlyNoCode: Story = {
     const { canvas } = context;
     const text = labels(context);
     await expect(canvas.getByText(text.noCode)).toBeVisible();
-    await expect(canvas.queryByText(text.order)).toBeNull();
-    await expect(canvas.getByRole("list", { name: text.participants })).not.toHaveTextContent(/\d/);
+    await expect(canvas.getByRole("region", { name: text.participants })).not.toHaveTextContent(/\d/);
   },
 };
 
-/** At phone width: every Save button is touch-sized. */
+/** At phone width: the table scrolls in its own region, and every Save button is touch-sized. */
 export const Phone: Story = {
   parameters: phone,
   play: async (context) => {

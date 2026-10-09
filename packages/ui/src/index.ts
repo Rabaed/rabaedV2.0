@@ -42,12 +42,14 @@ export { LinksSection, type LinksSectionLabels, type LinksSectionProps } from ".
 export type { LinkTargetNames } from "./components/form-engine/link-question-field.tsx";
 export { Input, type InputProps } from "./components/form/input.tsx";
 export {
-  NumberingPatternBuilder,
-  type NumberingPatternLabels,
-  NumberingPatternView,
-  type NumberingPatternBuilderProps,
-  type NumberingPatternViewProps,
-} from "./components/numbering/numbering-pattern.tsx";
+  DocumentNumbering,
+  type DocumentNumberingProps,
+  type NumberingContext,
+  type NumberingTypeRow,
+  type PatternChange,
+} from "./components/numbering/document-numbering.tsx";
+export { NumberingVersions, type NumberingVersionsProps } from "./components/numbering/numbering-versions.tsx";
+export type { NumberingText } from "./components/numbering/numbering-text.tsx";
 export { RadioGroup, type RadioGroupProps } from "./components/form/radio-group.tsx";
 export { SegmentedControl, type SegmentedControlProps } from "./components/form/segmented-control.tsx";
 export { Select, type SelectProps } from "./components/form/select.tsx";

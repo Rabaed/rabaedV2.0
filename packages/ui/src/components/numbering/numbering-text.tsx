@@ -42,8 +42,6 @@ export function Code({ children, className }: { children: ReactNode; className?:
 export type PatternNumberProps = {
   parts: NumberPart[];
   separator: string;
-  /** The whole number, for assistive technology. */
-  text: string;
   /** The big preview number; otherwise it sizes with the surrounding text. */
   size?: "lg" | "md" | "inherit";
   className?: string;
@@ -53,7 +51,7 @@ export type PatternNumberProps = {
  * A Document Number with each segment on its own colour. Always left to right, the
  * whole number one isolated unit; read as one string by assistive technology.
  */
-export function PatternNumber({ parts, separator, text, size = "inherit", className }: PatternNumberProps) {
+export function PatternNumber({ parts, separator, size = "inherit", className }: PatternNumberProps) {
   return (
     <bdi
       dir="ltr"
@@ -66,15 +64,10 @@ export function PatternNumber({ parts, separator, text, size = "inherit", classN
       )}
       data-testid="pattern-number"
     >
-      <span className="sr-only">{text}</span>
       {parts.map((part, i) => (
         <Fragment key={i}>
-          {i > 0 && (
-            <span aria-hidden="true" className="px-px text-faint">
-              {separator}
-            </span>
-          )}
-          <span aria-hidden="true" className={cn("rounded-[6px] px-[3px]", toneClasses[part.kind].tint, toneClasses[part.kind].fg)}>
+          {i > 0 && <span className="px-px text-muted">{separator}</span>}
+          <span className={cn("rounded-[6px] px-[3px]", toneClasses[part.kind].tint, toneClasses[part.kind].fg)}>
             {part.text}
           </span>
         </Fragment>

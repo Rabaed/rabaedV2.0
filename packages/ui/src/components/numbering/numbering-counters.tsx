@@ -15,7 +15,6 @@ import {
 import { useEffect, useId, useState, type FormEvent } from "react";
 import { Button } from "../button/button.tsx";
 import { Badge } from "../data/badge.tsx";
-import { Table, TableBody, TableCell, TableEmpty, TableHead, TableHeader, TableRow } from "../data/table.tsx";
 import { DocNo } from "../doc-no/doc-no.tsx";
 import { Field, type ChoiceOption } from "../form/field.tsx";
 import { Input } from "../form/input.tsx";
@@ -162,50 +161,62 @@ export function NumberingCounters({
   const optional = (options: readonly ChoiceOption[]) => [{ value: NONE, label: text.notCounted }, ...options];
 
   return (
-    <SettingsSection title={text.title} description={text.intro} className={className} data-testid="numbering-counters">
-      <div className="flex flex-col gap-2">
-        <Table label={text.title}>
-          <TableHeader>
-            <TableRow>
-              <TableHead>{text.counter}</TableHead>
-              <TableHead align="end">{text.lastNumber}</TableHead>
-              <TableHead>{text.state}</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
+    <SettingsSection title={text.title} description={text.intro} className={className} bodyClassName="px-0 pt-[14px] pb-0 gap-0" data-testid="numbering-counters">
+      <div role="region" aria-label={text.title} tabIndex={0} className="overflow-x-auto">
+        <table aria-label={text.title} className="w-full border-collapse text-[13.5px]">
+          <thead>
+            <tr className="bg-surface-subtle">
+              <th scope="col" className="border-b border-border-subtle px-5 py-2.5 text-start text-caption font-semibold whitespace-nowrap text-muted">
+                {text.counter}
+              </th>
+              <th scope="col" className="border-b border-border-subtle px-5 py-2.5 text-end text-caption font-semibold whitespace-nowrap text-muted">
+                {text.lastNumber}
+              </th>
+              <th scope="col" className="border-b border-border-subtle px-5 py-2.5 text-start text-caption font-semibold whitespace-nowrap text-muted">
+                {text.state}
+              </th>
+            </tr>
+          </thead>
+          <tbody>
             {counters.length === 0 ? (
-              <TableEmpty colSpan={3}>
-                <p className="p-4 text-sm text-muted">{text.none}</p>
-              </TableEmpty>
+              <tr>
+                <td colSpan={3} className="px-5 py-4 text-sm text-muted">
+                  {text.none}
+                </td>
+              </tr>
             ) : (
               counters.map((c) => (
-                <TableRow key={c.counterKey}>
-                  <TableCell>
+                <tr key={c.counterKey} className="border-b border-border-subtle last:border-b-0">
+                  <td className="px-5 py-3">
                     {/* A counter key isn't a Document Number, but reads left to right like one. */}
-                    <bdi dir="ltr" translate="no" className="whitespace-nowrap font-medium tabular-nums">
+                    <bdi dir="ltr" translate="no" className="text-[12.5px] font-semibold whitespace-nowrap text-text tabular-nums">
                       {c.counterKey}
                     </bdi>
-                  </TableCell>
-                  <TableCell align="end" className="tabular-nums">
+                  </td>
+                  <td className="px-5 py-3 text-end font-semibold text-text tabular-nums">
                     {c.issued ? formatNumber(c.lastValue, locale, { useGrouping: false }) : "—"}
-                  </TableCell>
-                  <TableCell>
+                  </td>
+                  <td className="px-5 py-3 whitespace-nowrap">
                     {c.issued || c.startingNumber === null ? (
-                      <Badge tone="neutral">{text.inUse}</Badge>
+                      <Badge tone="neutral" className="h-[22px] rounded-[6px] px-2 text-[11.5px]">
+                        {text.inUse}
+                      </Badge>
                     ) : (
-                      <Badge tone="info">{text.startsAt(formatNumber(c.startingNumber, locale, { useGrouping: false }))}</Badge>
+                      <Badge tone="info" className="h-[22px] rounded-[6px] px-2 text-[11.5px]">
+                        {text.startsAt(formatNumber(c.startingNumber, locale, { useGrouping: false }))}
+                      </Badge>
                     )}
-                  </TableCell>
-                </TableRow>
+                  </td>
+                </tr>
               ))
             )}
-          </TableBody>
-        </Table>
+          </tbody>
+        </table>
       </div>
 
-      <form aria-labelledby={startId} onSubmit={submit} className="flex flex-col gap-4 border-t border-border pt-4" noValidate>
+      <form aria-labelledby={startId} onSubmit={submit} className="flex flex-col gap-4 border-t border-border-subtle px-5 pt-4 pb-5" noValidate>
         <div className="flex flex-col gap-1">
-          <h3 id={startId} className="text-body font-semibold text-text">
+          <h3 id={startId} className="text-sm font-semibold text-text">
             {text.startTitle}
           </h3>
           <p className="text-sm text-muted">{text.startIntro}</p>

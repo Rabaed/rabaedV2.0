@@ -253,7 +253,7 @@ function SegmentValue({
       >
         {levelKeys.map((key, i) => (
           <option key={key} value={i + 1}>
-            {`${t(`levels.${key}`)} · ⁦${example.locationPath[i] ?? "—"}⁩`}
+            {`${t(`levels.${key}`)} · \u2066${example.locationPath[i] ?? "—"}\u2069`}
           </option>
         ))}
       </select>
@@ -289,7 +289,7 @@ export function AddSegments({ t, pattern, example, onChange }: EditorProps & { o
           >
             <i aria-hidden="true" className={cn("size-2 rounded-[3px]", toneClasses[kind].solid)} />
             {t(`kinds.${kind}`)}
-            <bdi dir="ltr" aria-hidden="true" className="text-notes font-semibold text-faint">
+            <bdi dir="ltr" aria-hidden="true" className="text-notes font-semibold text-muted">
               {exampleCode(kind === "location" ? { kind, level: 2 } : kind === "text" ? { kind, text: "SUB" } : { kind }, example)}
             </bdi>
           </button>
@@ -317,7 +317,7 @@ export function PatternWarnings({ t, pattern, length, onChange }: { t: Numbering
           ) : (
             <Button size="sm" variant="secondary" className="ms-auto bg-surface" disabled={full} onClick={() => onChange(addSegment(pattern, "participant"))}>
               <Icon name="plus" />
-              {t("addCompany")}
+              {t("companySegment")}
             </Button>
           ))}
       </Warning>,
@@ -476,7 +476,7 @@ export function SequenceOptions({
                 className="flex items-center gap-2 rounded-sm bg-surface-subtle px-2.5 py-2 text-caption text-muted shadow-[inset_0_0_0_1px_var(--border-subtle)]"
               >
                 <span className="min-w-0 truncate">{e.label}</span>
-                <b className="ms-auto font-bold text-text tabular-nums">
+                <b className="ms-auto shrink-0 font-bold whitespace-nowrap text-text tabular-nums">
                   <bdi dir="ltr">→ {e.next}</bdi>
                 </b>
               </li>
