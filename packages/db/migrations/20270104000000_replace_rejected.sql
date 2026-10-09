@@ -8,7 +8,9 @@
 --   chain, and a new Document Number from the counter when it first leaves
 --   Draft. It starts as a Draft with the source's answers (never another
 --   Participant's Form Sections, as for a Revision) and Documents copied as new
---   unfrozen rows, pinned to the latest published Form and Workflow Versions,
+--   unfrozen rows, pinned to the latest published Form Version and the latest
+--   published Version of the Workflow a new item of its Type raised by its raiser
+--   runs (app.new_item_workflow_version, RP-426: not the source's chain's),
 --   visible like any new Draft: to the raiser only (V1).
 -- * `work_item_link.kind` gains `replaces`: from the replacement TO the source,
 --   made at creation. It is read under the replacement's row-level security, so
@@ -91,7 +93,7 @@ create or replace function app.fill_revision(p_revision_id uuid, p_closed_item_i
 
 -- Who may create one ------------------------------------------------------------------
 
--- As app.can_create_revision (20270102000000_outcome_sets.sql): the raiser's Participant
+-- As app.can_create_revision (20270105000000_on_workflow_core.sql): the raiser's Participant
 -- and a Member the Workflow's Draft Step allows, on a closed item whose outcome offers a
 -- replacement; no replacement of it standing (not discarded, not cancelled).
 create function app.can_create_replacement(p_work_item_id uuid) returns boolean
@@ -109,7 +111,9 @@ create function app.can_create_replacement(p_work_item_id uuid) returns boolean
           join app.acting_project_member(w.id) me on me.participant_id = w.raised_by_participant_id
           join participant p on p.id = me.participant_id
           join project_role r on r.id = p.project_role_id
-          join app.latest_draft_step(w.work_item_type_id) d on true
+          -- The Draft Step of the Workflow a new item of its Type raised by its raiser runs.
+          join workflow_step d on d.workflow_version_id = app.new_item_workflow_version(w.project_id, w.work_item_type_id, w.raised_by_participant_id)
+            and app.is_draft_step(d.id)
           where w.id = p_work_item_id
             and w.closed_at is not null and w.discarded_at is null
             and app.outcome_offers(w.project_id, w.work_item_type_id, w.outcome, 'offer_replacement')
@@ -186,7 +190,13 @@ create function app.create_replacement(p_work_item_id uuid, p_idempotency_key uu
         return;
       end if;
 
-      select * into v_draft from app.latest_draft_step(v_item.work_item_type_id);
+      -- A new item: on the Workflow a new item of its Type raised by its raiser runs (the
+      -- raiser's exception, else the Project's binding, else the Rabaed Default; RP-426),
+      -- at its Draft Step, as app.create_work_item starts one.
+      select s.id as step_id, s.workflow_version_id, s.stage_key into v_draft
+      from workflow_step s
+      where s.workflow_version_id = app.new_item_workflow_version(v_item.project_id, v_item.work_item_type_id, v_item.raised_by_participant_id)
+        and app.is_draft_step(s.id);
       v_form_version_id := app.latest_form_version((select t.code from work_item_type t where t.id = v_item.work_item_type_id));
       -- A new original: not a Revision (no revision_of_id; the trigger makes it its own chain's root).
       insert into work_item (

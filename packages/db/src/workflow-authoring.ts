@@ -76,24 +76,22 @@ export type DraftArguments = { layout: string; steps: string; transitions: strin
 
 /**
  * A definition document prepared for saving: refused with `issues` where it doesn't fit
- * the format or holds what the rows can't store yet (with its publish problems when it
- * parsed), else its rows as the draft functions take them and its publish problems.
+ * the format, else its rows as the draft functions take them (a Transition's rules,
+ * actions and notifications included, WF-7 to WF-9) and its publish problems.
  */
 export type PreparedDraft =
   | { ok: false; issues: DefinitionIssue[]; problems: WorkflowProblem[] }
   | { ok: true; definition: WorkflowDefinition; args: DraftArguments; problems: WorkflowProblem[] };
 
 /**
- * Parses `input` as a definition, runs every publish check on it in `check`'s context
- * and refuses what saving would lose: the one sequence every save, check and publish
- * of a Workflow runs, in the api and in Rabaed Admin.
+ * Parses `input` as a definition and runs every publish check on it in `check`'s
+ * context: the one sequence every save, check and publish of a Workflow runs, in the
+ * api and in Rabaed Admin.
  */
 export function prepareDraft(input: unknown, check: WorkflowCheckContext): PreparedDraft {
   const parsed = parseWorkflowDefinition(input);
   if (!parsed.ok) return { ok: false, issues: parsed.issues, problems: [] };
   const problems = workflowPublishProblems(parsed.definition, check.context);
-  const unstorable = unstorableParts(parsed.definition);
-  if (unstorable.length > 0) return { ok: false, issues: unstorable, problems };
   const rows = definitionToRows(parsed.definition, check.outcomeKind);
   return {
     ok: true,
@@ -106,19 +104,6 @@ export function prepareDraft(input: unknown, check: WorkflowCheckContext): Prepa
 /** What a check of a prepared document answers: where it doesn't fit, and every publish problem. */
 export function draftValidation(prepared: PreparedDraft): WorkflowValidation {
   return { issues: prepared.ok ? [] : prepared.issues, problems: prepared.problems };
-}
-
-/**
- * Parts of a definition the rows can't hold yet: a Transition's rules, actions or
- * notifications have no columns until WF-7, WF-8 and WF-9 add them. Saving them would
- * lose them, so a draft carrying them is refused, saying where.
- */
-function unstorableParts(definition: WorkflowDefinition): DefinitionIssue[] {
-  return definition.transitions.flatMap((t, index) =>
-    (["rules", "actions", "notifications"] as const)
-      .filter((part) => t[part] !== undefined)
-      .map((part) => ({ path: `transitions.${index}.${part}`, message: "Not set up yet: this Workflow can't store it" })),
-  );
 }
 
 /** A Version's rows as `app.workflow_version_rows` shapes them. */
