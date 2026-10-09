@@ -49,15 +49,18 @@ export const SetCode: Story = {
     // Without a code, its numbers print its order on the Project, in its own column.
     await expect(canvas.getByRole("columnheader", { name: text.colOrder })).toBeVisible();
     await expect(canvas.getByText("02")).toHaveAttribute("dir", "ltr");
-    const row = within(canvas.getByRole("form", { name: company }));
-    const input = row.getByRole("textbox", { name: text.codeOf(company) });
+    // No Save button per row: the pencil edits the code in place, Enter saves.
+    await expect(canvas.queryByRole("textbox")).toBeNull();
+    await userEvent.click(canvas.getByRole("button", { name: text.editOf(company) }));
+    const input = canvas.getByRole("textbox", { name: text.codeOf(company) });
+    await expect(input).toHaveFocus();
     await expect(input).toHaveAttribute("dir", "ltr");
-    await userEvent.type(input, "ELW");
-    await userEvent.click(row.getByRole("button", { name: text.save }));
+    await userEvent.type(input, "elw{Enter}");
     await expect(args.onSave).toHaveBeenCalledWith(pElectro, "ELW");
-    await expect(await row.findByRole("status")).toHaveTextContent(text.saved);
-    // KNS is fixed: no box, a lock.
-    await expect(canvas.queryByRole("form", { name: name(context, "Consult Partners", "شركاء الاستشارات") })).toBeNull();
+    await expect(await canvas.findByRole("status")).toHaveTextContent(text.saved);
+    await expect(canvas.getByRole("button", { name: text.editOf(company) })).toHaveFocus();
+    // KNS is fixed: no pencil, a lock.
+    await expect(canvas.queryByRole("button", { name: text.editOf(name(context, "Consult Partners", "شركاء الاستشارات")) })).toBeNull();
     await expect(canvas.getByText(text.locked)).toBeVisible();
   },
 };
@@ -69,13 +72,29 @@ export const CodeInUse: Story = {
     const { canvas } = context;
     const text = labels(context);
     const company = name(context, "Contracting Co.", "شركة المقاولات");
-    const row = within(canvas.getByRole("form", { name: company }));
-    const input = row.getByRole("textbox", { name: text.codeOf(company) });
+    await userEvent.click(canvas.getByRole("button", { name: text.editOf(company) }));
+    const input = canvas.getByRole("textbox", { name: text.codeOf(company) });
     await expect(input).toHaveValue("CCM");
     await userEvent.clear(input);
     await userEvent.type(input, "CCX");
-    await userEvent.click(row.getByRole("button", { name: text.save }));
-    await expect(await row.findByRole("alert")).toHaveTextContent(text.refusals.code_in_use);
+    // Leaving the box saves; the refusal stays on the row, the box open.
+    await userEvent.tab();
+    await expect(await canvas.findByRole("alert")).toHaveTextContent(text.refusals.code_in_use);
+    await expect(input).toBeInTheDocument();
+  },
+};
+
+/** Escape puts the code back without saving. */
+export const EscapeCancels: Story = {
+  play: async (context) => {
+    const { canvas, args } = context;
+    const text = labels(context);
+    const company = name(context, "Contracting Co.", "شركة المقاولات");
+    await userEvent.click(canvas.getByRole("button", { name: text.editOf(company) }));
+    await userEvent.type(canvas.getByRole("textbox", { name: text.codeOf(company) }), "Z{Escape}");
+    await expect(canvas.queryByRole("textbox")).toBeNull();
+    await expect(canvas.getByText("CCM")).toBeVisible();
+    await expect(args.onSave).not.toHaveBeenCalled();
   },
 };
 
@@ -111,10 +130,14 @@ export const ReadOnlyNoCode: Story = {
   },
 };
 
-/** At phone width: the table scrolls in its own region, and every Save button is touch-sized. */
+/** At phone width: every pencil is touch-sized, and the box fits its row. */
 export const Phone: Story = {
   parameters: phone,
   play: async (context) => {
-    for (const button of context.canvas.getAllByRole("button", { name: labels(context).save })) await expectTouchTarget(button);
+    const text = labels(context);
+    for (const button of context.canvas.getAllByRole("button", { name: /./ })) await expectTouchTarget(button);
+    const company = name(context, "Electro Works", "الأعمال الكهربائية");
+    await userEvent.click(context.canvas.getByRole("button", { name: text.editOf(company) }));
+    await expectTouchTarget(context.canvas.getByRole("textbox", { name: text.codeOf(company) }));
   },
 };

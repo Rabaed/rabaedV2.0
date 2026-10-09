@@ -3,6 +3,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, userEvent, within } from "storybook/test";
 import { storyLocale } from "../../storybook/locale.ts";
 import { numberingText } from "../../storybook/numbering.ts";
+import { phone } from "../../storybook/form.ts";
 import { expectFocusTrapped, overlay } from "../../storybook/overlay.ts";
 import { NumberingVersions, type NumberingVersionsProps } from "./numbering-versions.tsx";
 
@@ -68,6 +69,8 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 const text = (context: { globals: Record<string, unknown> }) => numberingText(storyLocale(context));
+/** The elements showing a text: the table from a tablet up, the list on a phone (the other is display: none). */
+const shown = (elements: HTMLElement[]) => elements.filter((element) => element.checkVisibility());
 
 /** Each version, newest first, per scope: the Company by name, the person only when they are the reader's own, "Rabaed", or "A Project Admin". */
 export const Default: Story = {
@@ -76,10 +79,10 @@ export const Default: Story = {
     const t = text(context);
     const en = storyLocale(context) === "en";
     await expect(canvas.getAllByTestId("numbering-version")).toHaveLength(5);
-    await expect(canvas.getByText(t("savedByMember", { member: en ? "Saeed Al Qahtani" : "سعيد القحطاني", company: en ? tmc.en : tmc.ar }))).toBeVisible();
-    await expect(canvas.getByText(t("savedByRabaed"))).toBeVisible();
-    await expect(canvas.getByText(t("savedByAdmin"))).toBeVisible();
-    await expect(canvas.getAllByText(t("current"))).toHaveLength(2);
+    await expect(shown(canvas.getAllByText(t("savedByMember", { member: en ? "Saeed Al Qahtani" : "سعيد القحطاني", company: en ? tmc.en : tmc.ar })))).toHaveLength(1);
+    await expect(shown(canvas.getAllByText(t("savedByRabaed")))).toHaveLength(1);
+    await expect(shown(canvas.getAllByText(t("savedByAdmin")))).toHaveLength(1);
+    await expect(shown(canvas.getAllByText(t("current")))).toHaveLength(2);
   },
 };
 
@@ -105,5 +108,21 @@ export const None: Story = {
   args: { versions: [] },
   play: async (context) => {
     await expect(context.canvas.getByText(text(context)("versionsNone"))).toBeVisible();
+  },
+};
+
+/** On a phone, one block per version: the sample number and Compare in reach without scrolling sideways. */
+export const Phone: Story = {
+  parameters: phone,
+  play: async (context) => {
+    const { canvas } = context;
+    const t = text(context);
+    const items = canvas.getAllByTestId("numbering-version-item");
+    await expect(items).toHaveLength(5);
+    for (const item of items) await expect(item).toBeVisible();
+    const compare = canvas.getByRole("button", { name: t("compareWith", { n: 1, scope: t("projectScope") }) });
+    const box = compare.getBoundingClientRect();
+    await expect(box.right).toBeLessThanOrEqual(document.documentElement.clientWidth);
+    await expect(box.left).toBeGreaterThanOrEqual(0);
   },
 };

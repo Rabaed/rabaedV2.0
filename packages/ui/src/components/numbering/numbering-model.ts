@@ -70,6 +70,58 @@ export function nextSequences(pattern: NumberingPattern, items: readonly Numberi
   });
 }
 
+/**
+ * Where example numbers are built from: a Participant and a Trade. `company` is its
+ * short label (the Participant Code once set, else the Company's name) and `trade`
+ * the Trade's name, both shown only where the pattern uses them.
+ */
+export type SampleContext = { company: string; trade: string | null; attributes: Omit<NumberingAttributes, "typeCode"> };
+
+/** One line of "Next numbers" or of the scope's counters: its label's parts, the number, and the sequence alone. */
+export type SampleEntry = { company: string | null; trade: string | null; text: string; next: string; parts: NumberPart[] };
+
+/**
+ * The samples under `pattern` for a Type, one per distinct `by`: per counter (the
+ * scope's example counters: a pattern that doesn't count by Trade lists no
+ * per-Trade counters) or per number (the "Next numbers" box). Each is labelled by
+ * the values that tell it apart: what the counter counts by, or what the number prints.
+ */
+export function sampleEntries(
+  pattern: NumberingPattern,
+  contexts: readonly SampleContext[],
+  typeCode: string,
+  by: "counter" | "number",
+  counters?: readonly NumberingCounter[],
+): SampleEntry[] {
+  const items = contexts.map((c) => ({ ...c.attributes, typeCode }));
+  const seqs = nextSequences(pattern, items, counters);
+  const shows = (kind: SegmentKind) => (by === "counter" ? isCounted(pattern, kind) : pattern.segments.some((s) => s.kind === kind));
+  const seen = new Set<string>();
+  return contexts.flatMap((context, i) => {
+    const n = patternNumber(pattern, items[i]!, seqs[i]!);
+    const key = by === "counter" ? n.counterKey : n.text;
+    if (seen.has(key)) return [];
+    seen.add(key);
+    return [
+      {
+        company: shows("participant") ? context.company : null,
+        trade: shows("trade") && items[i]!.tradeCode !== null ? context.trade : null,
+        text: n.text,
+        next: n.parts.at(-1)!.text,
+        parts: n.parts,
+      },
+    ];
+  });
+}
+
+/**
+ * The Type the live preview numbers: the first that uses the Project pattern, so the
+ * preview follows the pattern being edited; else the first Type, under its Custom pattern.
+ */
+export function previewType<T extends { custom: NumberingPattern | null }>(types: readonly T[]): T | undefined {
+  return types.find((type) => type.custom === null) ?? types[0];
+}
+
 /** Adds a segment at the end. A Project or Company segment is counted separately, as in the Rabaed Default. */
 export function addSegment(pattern: NumberingPattern, kind: SegmentKind): NumberingPattern {
   if (pattern.segments.length >= maxSegments) return pattern;

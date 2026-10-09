@@ -49,6 +49,7 @@ export {
   type PatternChange,
 } from "./components/numbering/document-numbering.tsx";
 export { NumberingVersions, type NumberingVersionsProps } from "./components/numbering/numbering-versions.tsx";
+export type { SampleContext } from "./components/numbering/numbering-model.ts";
 export type { NumberingText } from "./components/numbering/numbering-text.tsx";
 export { RadioGroup, type RadioGroupProps } from "./components/form/radio-group.tsx";
 export { SegmentedControl, type SegmentedControlProps } from "./components/form/segmented-control.tsx";
@@ -59,6 +60,7 @@ export {
   NumberingCounters,
   type NumberingCountersLabels,
   type CounterCall,
+  type CountedValues,
   type CounterRefusal,
   type NumberingCountersProps,
 } from "./components/numbering/numbering-counters.tsx";

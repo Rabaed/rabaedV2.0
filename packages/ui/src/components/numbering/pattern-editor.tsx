@@ -2,11 +2,11 @@
 
 import { segmentValue, type NumberingAttributes, type NumberingPattern, type NumberingSegment } from "@rabaed/domain";
 import { useDirection } from "@radix-ui/react-direction";
+import * as RadioGroupPrimitive from "@radix-ui/react-radio-group";
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { cn } from "../../lib/cn.ts";
 import { Button } from "../button/button.tsx";
 import { focusRing } from "../form/control-styles.ts";
-import { SegmentedControl } from "../form/segmented-control.tsx";
 import { Icon } from "../icon/icon.tsx";
 import {
   addSegment,
@@ -22,6 +22,7 @@ import {
   segmentKinds,
   setCounted,
   sharesCounter,
+  type SampleEntry,
   type SegmentKind,
 } from "./numbering-model.ts";
 import { Code, rich, toneClasses, type NumberingText } from "./numbering-text.tsx";
@@ -93,8 +94,9 @@ export function SegmentChips({ t, pattern, example, onChange }: EditorProps) {
     move(i, to, true);
   };
 
+  // Each chip carries the separator after it, so a wrapped line never starts with one (the kit's trailing separator).
   const separator = (
-    <span aria-hidden="true" className="self-center font-bold text-faint">
+    <span aria-hidden="true" className="self-center text-sm font-bold text-faint">
       {pattern.separator}
     </span>
   );
@@ -112,7 +114,6 @@ export function SegmentChips({ t, pattern, example, onChange }: EditorProps) {
           const label = name(segment.kind);
           return (
             <li key={i} className="flex items-stretch gap-2">
-              {i > 0 && separator}
               <div
                 className={cn(
                   chipBase,
@@ -174,11 +175,11 @@ export function SegmentChips({ t, pattern, example, onChange }: EditorProps) {
                   </button>
                 )}
               </div>
+              {separator}
             </li>
           );
         })}
         <li className="flex items-stretch gap-2">
-          {separator}
           <div className={cn(chipBase, "cursor-default bg-press")} title={t("sequenceLocked")}>
             <span aria-hidden="true" className={cn("h-[30px] w-1 shrink-0 rounded-[3px]", toneClasses.sequence.solid)} />
             <span className="flex min-w-0 flex-col gap-0.5">
@@ -212,7 +213,11 @@ function Chip({ kind, children }: { kind: SegmentKind | "sequence"; children: Re
   );
 }
 
-const mini = cn("h-6 rounded-[5px] border border-control-border bg-surface px-1.5 text-caption text-text", focusRing);
+// The kit's `.mini`: a 24px control with a light inset edge, inside a chip.
+const mini = cn(
+  "h-6 rounded-[5px] bg-surface px-1.5 text-caption text-text shadow-[inset_0_0_0_1px_var(--border-strong)] hover:shadow-[inset_0_0_0_1px_var(--control-border)]",
+  focusRing,
+);
 
 /** The chip's example code; for a Project Admin, a Location's level and a fixed text are edited in place. */
 function SegmentValue({
@@ -244,19 +249,23 @@ function SegmentValue({
     );
   }
   if (editable && segment.kind === "location") {
+    // A native select (a phone opens its own picker), drawn as the kit's mini control with its own chevron.
     return (
-      <select
-        aria-label={t("level")}
-        value={segment.level}
-        onChange={(e) => onChange({ kind: "location", level: Number(e.target.value) })}
-        className={cn(mini, "w-auto")}
-      >
-        {levelKeys.map((key, i) => (
-          <option key={key} value={i + 1}>
-            {`${t(`levels.${key}`)} · \u2066${example.locationPath[i] ?? "—"}\u2069`}
-          </option>
-        ))}
-      </select>
+      <span className="relative inline-flex self-start">
+        <select
+          aria-label={t("level")}
+          value={segment.level}
+          onChange={(e) => onChange({ kind: "location", level: Number(e.target.value) })}
+          className={cn(mini, "w-auto cursor-pointer appearance-none pe-5 font-semibold")}
+        >
+          {levelKeys.map((key, i) => (
+            <option key={key} value={i + 1}>
+              {`${t(`levels.${key}`)} · \u2066${example.locationPath[i] ?? "—"}\u2069`}
+            </option>
+          ))}
+        </select>
+        <Icon name="chevron-down" size={12} className="pointer-events-none absolute end-1.5 top-1/2 -translate-y-1/2 text-muted" />
+      </span>
     );
   }
   return <Chip kind={segment.kind}>{exampleCode(segment, example)}</Chip>;
@@ -305,57 +314,143 @@ export function PatternWarnings({ t, pattern, length, onChange }: { t: Numbering
   const warnings: ReactNode[] = [];
   if (sharesCounter(pattern)) {
     warnings.push(
-      <Warning key="company" tone="amber" icon="alert-triangle" testId="shared-counter-warning">
-        <span>
-          <b>{hasCompany ? t("companySharedTitle") : t("noCompanyTitle")}</b> {t("noCompanyBody")}
-        </span>
-        {onChange &&
+      <Warning
+        key="company"
+        tone="amber"
+        icon="alert-triangle"
+        testId="shared-counter-warning"
+        action={
+          onChange &&
           (hasCompany ? (
-            <Button size="sm" variant="secondary" className="ms-auto bg-surface" onClick={() => onChange(setCounted(pattern, "participant", true))}>
+            <Button size="sm" variant="secondary" className="bg-surface" onClick={() => onChange(setCounted(pattern, "participant", true))}>
               {t("countCompany")}
             </Button>
           ) : (
-            <Button size="sm" variant="secondary" className="ms-auto bg-surface" disabled={full} onClick={() => onChange(addSegment(pattern, "participant"))}>
+            <Button size="sm" variant="secondary" className="bg-surface" disabled={full} onClick={() => onChange(addSegment(pattern, "participant"))}>
               <Icon name="plus" />
               {t("companySegment")}
             </Button>
-          ))}
+          ))
+        }
+      >
+        <b>{hasCompany ? t("companySharedTitle") : t("noCompanyTitle")}</b> {t("noCompanyBody")}
       </Warning>,
     );
   }
   if (onChange && full) {
     warnings.push(
-      <Warning key="max" tone="blue" icon="info-circle">
-        <span>{t("maxSegments")}</span>
+      <Warning key="max" tone="blue" icon="info-circle" testId="max-segments">
+        {t("maxSegments")}
       </Warning>,
     );
   }
   if (length > comfortableLength) {
     warnings.push(
       <Warning key="long" tone="amber" icon="ruler">
-        <span>{rich(t, "tooLong", { n: <b>{length}</b> })}</span>
+        {rich(t, "tooLong", { n: <b>{length}</b> })}
       </Warning>,
     );
   }
   return warnings.length > 0 ? <div className="mt-3 flex flex-col gap-2">{warnings}</div> : null;
 }
 
-function Warning({ tone, icon, testId, children }: { tone: "amber" | "blue"; icon: "alert-triangle" | "info-circle" | "ruler"; testId?: string; children: ReactNode }) {
+/** The kit's `.wn`: one row of icon, text and an action at the end; the text wraps, the action stays beside it. */
+function Warning({
+  tone,
+  icon,
+  testId,
+  action,
+  children,
+}: {
+  tone: "amber" | "blue";
+  icon: "alert-triangle" | "info-circle" | "ruler";
+  testId?: string;
+  action?: ReactNode;
+  children: ReactNode;
+}) {
   return (
     <div
       className={cn(
-        "flex flex-wrap items-start gap-2.5 rounded-[10px] px-3 py-2.5 text-sm leading-[1.45]",
+        "flex flex-wrap items-start gap-2.5 rounded-[10px] px-3 py-2.5 text-[13px] leading-[1.45] sm:flex-nowrap",
         tone === "amber" ? "bg-warning-tint text-warning-fg" : "bg-info-tint text-info-fg",
       )}
       data-testid={testId}
     >
       <Icon name={icon} size={17} className="mt-px shrink-0" />
-      <div className="flex min-w-0 flex-1 flex-wrap items-start gap-2.5">{children}</div>
+      <p className="min-w-0 flex-1 basis-56">{children}</p>
+      {action && <div className="-my-0.5 shrink-0 ms-auto">{action}</div>}
     </div>
   );
 }
 
-export type ScopeExample = { label: string; next: string };
+/**
+ * The kit's `.segx`: a light grey track with a light edge, the chosen option a raised
+ * white pill. A radio group underneath, as SegmentedControl: arrow keys follow the
+ * reading direction; read-only, it still says which one is chosen.
+ */
+function KitSegmented({
+  labelledBy,
+  value,
+  onChange,
+  options,
+}: {
+  labelledBy: string;
+  value: string;
+  onChange?: (value: string) => void;
+  options: { value: string; label: ReactNode }[];
+}) {
+  const readOnly = onChange === undefined;
+  return (
+    <RadioGroupPrimitive.Root
+      aria-labelledby={labelledBy}
+      aria-readonly={readOnly || undefined}
+      orientation="horizontal"
+      value={value}
+      onValueChange={readOnly ? undefined : onChange}
+      className="inline-flex w-fit gap-0.5 self-start rounded-sm bg-surface-subtle p-0.5 shadow-[inset_0_0_0_1px_var(--border)]"
+    >
+      {options.map((option) => (
+        <RadioGroupPrimitive.Item
+          key={option.value}
+          value={option.value}
+          // Read-only: the others can't be chosen, the chosen one still reads as chosen.
+          disabled={readOnly && option.value !== value}
+          className={cn(
+            "inline-flex h-[30px] min-w-10 items-center justify-center rounded-[6px] px-3 text-[13px] font-semibold text-muted",
+            "pointer-coarse:min-h-11 pointer-coarse:min-w-11",
+            !readOnly && "cursor-pointer hover:text-text",
+            "data-[state=checked]:bg-surface data-[state=checked]:text-text",
+            "data-[state=checked]:shadow-[0_1px_2px_color-mix(in_srgb,var(--shadow-colour)_8%,transparent),inset_0_0_0_1px_var(--border)]",
+            "disabled:cursor-default",
+            focusRing,
+          )}
+        >
+          {option.label}
+        </RadioGroupPrimitive.Item>
+      ))}
+    </RadioGroupPrimitive.Root>
+  );
+}
+
+/** A sample's label: the Company's short label (truncated) and the Trade, as far as the pattern tells them apart. */
+export function SampleLabel({ entry, fallback, className }: { entry: SampleEntry; fallback: string; className?: string }) {
+  const pieces = [entry.company, entry.trade].filter((p): p is string => p !== null);
+  return (
+    <span className={cn("flex min-w-0 items-center gap-1 whitespace-nowrap", className)}>
+      {pieces.length === 0 ? (
+        <span className="min-w-0 truncate">{fallback}</span>
+      ) : (
+        pieces.map((piece, i) => (
+          <span key={i} className={cn(i === 0 && pieces.length > 1 ? "max-w-[11ch] shrink-0 truncate" : "min-w-0 truncate")}>
+            {i > 0 && <span aria-hidden="true">· </span>}
+            {i > 0 && <span className="sr-only">, </span>}
+            <bdi>{piece}</bdi>
+          </span>
+        ))
+      )}
+    </span>
+  );
+}
 
 /** Separator, digits and the sequence scope with its plain explanation and example counters. */
 export function SequenceOptions({
@@ -364,59 +459,58 @@ export function SequenceOptions({
   onChange,
   tradeCodes,
   examples,
+  fallback,
 }: {
   t: NumberingText;
   pattern: NumberingPattern;
   onChange?: (pattern: NumberingPattern) => void;
   /** Two of the Project's Trade codes, for the explanation. */
   tradeCodes: readonly string[];
-  /** The next number of a few counters: real for a Project Admin, examples from 1 for anyone else. */
-  examples: readonly ScopeExample[];
+  /** One per counter of the pattern (`sampleEntries` by counter): real next numbers for a Project Admin, examples from 1 for anyone else. */
+  examples: readonly SampleEntry[];
+  /** The label of a counter the pattern splits by nothing it shows, e.g. the Type's name. */
+  fallback: string;
 }) {
   const separatorId = useId();
   const digitsId = useId();
   const scopeId = useId();
   const scoped = [...new Set(pattern.segments.map((s) => s.kind))].filter((k) => scopedKinds.has(k));
-  const hasTrade = pattern.segments.some((s) => s.kind === "trade");
+  const tradeCounted = pattern.segments.some((s) => s.kind === "trade") && isCounted(pattern, "trade");
   const [a, b] = tradeCodes;
   const readOnly = onChange === undefined;
+  const first = `${"0".repeat(pattern.seqDigits - 1)}1`;
   return (
     <div className="grid gap-4 md:grid-cols-2">
       <div className="flex flex-col gap-2">
-        <b id={separatorId} className="text-sm font-semibold text-text">
+        <b id={separatorId} className="text-[13px] font-semibold text-text">
           {t("separator")}
         </b>
-        <SegmentedControl
-          aria-labelledby={separatorId}
-          readOnly={readOnly}
+        <KitSegmented
+          labelledBy={separatorId}
           value={pattern.separator}
-          onValueChange={(separator) => onChange?.({ ...pattern, separator: separator as NumberingPattern["separator"] })}
+          onChange={onChange && ((separator) => onChange({ ...pattern, separator: separator as NumberingPattern["separator"] }))}
           options={[
-            { value: "-", label: <bdi dir="ltr" className="min-w-4 font-semibold">-</bdi> },
-            { value: "/", label: <bdi dir="ltr" className="min-w-4 font-semibold">/</bdi> },
+            { value: "-", label: <bdi dir="ltr">-</bdi> },
+            { value: "/", label: <bdi dir="ltr">/</bdi> },
           ]}
         />
       </div>
       <div className="flex flex-col gap-2">
-        <b id={digitsId} className="text-sm font-semibold text-text">
+        <b id={digitsId} className="text-[13px] font-semibold text-text">
           {t("digits")}
         </b>
-        <SegmentedControl
-          aria-labelledby={digitsId}
-          readOnly={readOnly}
+        <KitSegmented
+          labelledBy={digitsId}
           value={String(pattern.seqDigits)}
-          onValueChange={(d) => onChange?.({ ...pattern, seqDigits: Number(d) })}
-          options={digitChoices.map((d) => ({ value: String(d), label: <span className="min-w-4 font-semibold">{d}</span> }))}
+          onChange={onChange && ((d) => onChange({ ...pattern, seqDigits: Number(d) }))}
+          options={digitChoices.map((d) => ({ value: String(d), label: d }))}
         />
         <small className="text-caption text-muted">
-          {t("zeroPadded")} ·{" "}
-          <bdi dir="ltr">
-            {`${"0".repeat(pattern.seqDigits - 1)}1 … ${"9".repeat(pattern.seqDigits)}`}
-          </bdi>
+          {t("zeroPadded")} · <bdi dir="ltr">{`${first} … ${"9".repeat(pattern.seqDigits)}`}</bdi>
         </small>
       </div>
       <div className="flex flex-col gap-2 md:col-span-2" role="group" aria-labelledby={scopeId}>
-        <b id={scopeId} className="text-sm font-semibold text-text">
+        <b id={scopeId} className="text-[13px] font-semibold text-text">
           {t("scopeTitle")}
         </b>
         <small className="text-caption text-muted">{t("scopeHint")}</small>
@@ -431,7 +525,7 @@ export function SequenceOptions({
                 <li key={kind}>
                   <label
                     className={cn(
-                      "inline-flex h-[34px] items-center gap-2 rounded-sm ps-2.5 pe-3 text-sm select-none",
+                      "inline-flex h-[34px] items-center gap-2 rounded-sm ps-2.5 pe-3 text-[13px] select-none",
                       on ? cn(tone.tint, tone.fg, "font-semibold") : "bg-surface text-text shadow-[inset_0_0_0_1px_var(--border)]",
                       !readOnly && "cursor-pointer has-[input:focus-visible]:outline-2 has-[input:focus-visible]:outline-offset-2 has-[input:focus-visible]:outline-focus",
                     )}
@@ -449,7 +543,7 @@ export function SequenceOptions({
                       aria-hidden="true"
                       className={cn(
                         "flex size-4 shrink-0 items-center justify-center rounded-xs text-on-primary",
-                        on ? tone.solid : "bg-surface shadow-[inset_0_0_0_1.5px_var(--control-border)]",
+                        on ? tone.solid : "bg-surface shadow-[inset_0_0_0_1.5px_var(--border-strong)]",
                       )}
                     >
                       {on && <Icon name="check" size={11} />}
@@ -461,21 +555,21 @@ export function SequenceOptions({
             })}
           </ul>
         )}
-        {hasTrade && a !== undefined && b !== undefined && (
-          <p className="mt-1 text-[12.5px] leading-normal text-muted">
-            {isCounted(pattern, "trade")
-              ? rich(t, "scopeSeparate", { a: <Code>{`…${a}…-${"0".repeat(pattern.seqDigits - 1)}1`}</Code>, b: <Code>{`…${b}…-${"0".repeat(pattern.seqDigits - 1)}1`}</Code> })
+        {a !== undefined && b !== undefined && (
+          <p className="mt-1 text-[12.5px] leading-normal text-muted" data-testid="scope-explanation">
+            {tradeCounted
+              ? rich(t, "scopeSeparate", { a: <Code>{`…${a}…-${first}`}</Code>, b: <Code>{`…${b}…-${first}`}</Code> })
               : rich(t, "scopeShared", { a: <Code>{a}</Code>, b: <Code>{b}</Code> })}
           </p>
         )}
         {examples.length > 0 && (
-          <ul aria-label={t("scopeExamples")} className="mt-1 grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-2" data-testid="scope-examples">
+          <ul aria-label={t("scopeExamples")} className="mt-1 grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-2" data-testid="scope-examples">
             {examples.map((e, i) => (
               <li
                 key={i}
-                className="flex items-center gap-2 rounded-sm bg-surface-subtle px-2.5 py-2 text-caption text-muted shadow-[inset_0_0_0_1px_var(--border-subtle)]"
+                className="flex min-w-0 items-center gap-2 rounded-sm bg-surface-subtle px-2.5 py-2 text-caption text-muted shadow-[inset_0_0_0_1px_var(--border-subtle)]"
               >
-                <span className="min-w-0 truncate">{e.label}</span>
+                <SampleLabel entry={e} fallback={fallback} />
                 <b className="ms-auto shrink-0 font-bold whitespace-nowrap text-text tabular-nums">
                   <bdi dir="ltr">→ {e.next}</bdi>
                 </b>

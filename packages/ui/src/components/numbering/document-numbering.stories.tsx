@@ -6,6 +6,7 @@ import { storyLocale } from "../../storybook/locale.ts";
 import { numberingText } from "../../storybook/numbering.ts";
 import { expectFocusTrapped, overlay } from "../../storybook/overlay.ts";
 import { DocumentNumbering, type DocumentNumberingProps, type NumberingContext } from "./document-numbering.tsx";
+import type { SampleContext } from "./numbering-model.ts";
 
 // Project Settings → Document Numbering (RP-412 rebuild; kit
 // settings-numbering.html): the states the kit shows, in English and Arabic.
@@ -19,18 +20,18 @@ const kitPattern: NumberingPattern = {
   countedBy: [0, 1, 2, 3],
 };
 
-const attributes = (code: string, ordinal: number, tradeCode: string): NumberingContext["attributes"] => ({
+const attributes = (code: string | null, ordinal: number | null, tradeCode: string): NumberingContext["attributes"] => ({
   projectCode: "TWR",
   tradeCode,
   participant: { code, ordinal },
   locationPath: ["ZA", "T1", "F01"],
 });
 
-const preview: NumberingContext = { label: "TMC Constructions · Electrical", attributes: attributes("TMC", 1, "EL") };
-const samples: NumberingContext[] = [
+const preview: NumberingContext = { label: "TMC Constructions · Electrical", company: "TMC", trade: "Electrical", attributes: attributes("TMC", 1, "EL") };
+const samples: SampleContext[] = [
   preview,
-  { label: "TMC Constructions · Civil", attributes: attributes("TMC", 1, "CV") },
-  { label: "Gulf Builders · Electrical", attributes: attributes("GLF", 2, "EL") },
+  { company: "TMC", trade: "Civil", attributes: attributes("TMC", 1, "CV") },
+  { company: "GLF", trade: "Electrical", attributes: attributes("GLF", 2, "EL") },
 ];
 const counters: NumberingCounter[] = [
   { counterKey: "TWR-TMC-EL-MAR", lastValue: 41, startingNumber: null, issued: true },
@@ -145,6 +146,8 @@ export const SaveModal: Story = {
     const modal = within(await within(document.body).findByTestId("numbering-save-modal"));
     await expect(modal.getByText("TWR-TMC-EL-MAR-042")).toBeVisible();
     await expect(modal.getByTestId("after-number")).toHaveTextContent("TWR-EL-MAR-");
+    // As the kit: the Custom patterns saved with it (SAR's), though they don't change.
+    await expect(modal.getByText(t("customsSavedOne", { n: 1 }))).toBeVisible();
     const save = modal.getByRole("button", { name: t("saveNew") });
     await expect(save).toBeDisabled();
     await userEvent.click(modal.getByRole("checkbox", { name: t("sharedAccept") }));
@@ -214,5 +217,60 @@ export const ReadOnly: Story = {
     await expect(canvas.queryByRole("textbox")).toBeNull();
     await expect(canvas.getByText(t("patternHintReadOnly"))).toBeVisible();
     await expect(canvas.getByText(t("colExample"))).toBeVisible();
+  },
+};
+
+/**
+ * Every number of a Type is built under the pattern in effect for it: with MAR on a
+ * Custom pattern without Trade, the preview, Next numbers and revision example are
+ * MAR's own, and its counters list no per-Trade counter.
+ */
+export const PreviewUnderCustomPattern: Story = {
+  args: {
+    types: [
+      {
+        ...types[0]!,
+        custom: { segments: [{ kind: "project" }, { kind: "type" }, { kind: "participant" }], separator: "/", seqDigits: 4, countedBy: [0, 1, 2] },
+      },
+    ],
+    counters: [{ counterKey: "TWR-MAR-TMC", lastValue: 6, startingNumber: null, issued: true }],
+  },
+  play: async (context) => {
+    const { canvas } = context;
+    await expect(previewNumber(canvas)).toHaveTextContent("TWR/MAR/TMC/0007");
+    const next = within(canvas.getByTestId("next-numbers"));
+    await expect(next.getAllByRole("listitem").map((li) => li.textContent)).toEqual(["TMCTWR/MAR/TMC/0007", "GLFTWR/MAR/GLF/0001"]);
+    await expect(canvas.getByTestId("revision-example")).toHaveTextContent("TWR/MAR/TMC/0007 Rev 1");
+  },
+};
+
+/** A Project pattern without Trade: one example counter per Company, none per Trade. */
+export const CountersFollowTheScope: Story = {
+  args: {
+    projectPattern: { segments: [{ kind: "project" }, { kind: "participant" }, { kind: "type" }], separator: "-", seqDigits: 3, countedBy: [0, 1, 2] },
+    counters: [{ counterKey: "TWR-TMC-MAR", lastValue: 59, startingNumber: null, issued: true }],
+  },
+  play: async (context) => {
+    const { canvas } = context;
+    const items = within(canvas.getByTestId("scope-examples")).getAllByRole("listitem");
+    await expect(items.map((li) => li.textContent)).toEqual(["TMC→ 060", "GLF→ 001"]);
+  },
+};
+
+/**
+ * A Member whose Participant has no code yet: the Company segment prints a
+ * placeholder, never the Participant's order on the Project (RP-381-1).
+ */
+export const MemberWithoutCode: Story = {
+  args: {
+    canEdit: false,
+    counters: undefined,
+    preview: { ...preview, company: "TMC Constructions", attributes: attributes(null, null, "EL") },
+    samples: [{ ...preview, company: "TMC Constructions", attributes: attributes(null, null, "EL") }],
+  },
+  play: async (context) => {
+    const { canvas } = context;
+    await expect(previewNumber(canvas)).toHaveTextContent("TWR-XX-EL-MAR-001");
+    await expect(canvas.getByTestId("numbering-project-pattern")).not.toHaveTextContent(/\b0\d\b/);
   },
 };

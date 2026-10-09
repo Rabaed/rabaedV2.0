@@ -10,9 +10,19 @@ import { Field } from "../form/field.tsx";
 import { Icon } from "../icon/icon.tsx";
 import { SettingsSection } from "../settings/settings-layout.tsx";
 import { NumberingDrawer, NumberingModal, TypeCode } from "./numbering-drawer.tsx";
-import { comfortableLength, maxSegments, nextSequences, patternNumber, samePattern, sharesCounter } from "./numbering-model.ts";
+import {
+  comfortableLength,
+  maxSegments,
+  nextSequences,
+  patternNumber,
+  previewType,
+  sampleEntries,
+  samePattern,
+  sharesCounter,
+  type SampleContext,
+} from "./numbering-model.ts";
 import { PatternNumber, rich, toneClasses, type NumberingText } from "./numbering-text.tsx";
-import { AddSegments, PatternWarnings, SegmentChips, SequenceOptions } from "./pattern-editor.tsx";
+import { AddSegments, PatternWarnings, SampleLabel, SegmentChips, SequenceOptions } from "./pattern-editor.tsx";
 
 // Project Settings → Document Numbering (RP-412 rebuild; kit settings-numbering.html,
 // settings/numbering.js and .css; brief design/prompts/document-numbering-settings.md):
@@ -21,12 +31,17 @@ import { AddSegments, PatternWarnings, SegmentChips, SequenceOptions } from "./p
 // suffix, and the floating "Unsaved changes" bar that opens the save confirmation.
 // Every Project Member reads it; only a Project Admin (`canEdit`) gets the controls.
 //
-// Visibility (visibility.md scenario 55, RP-412-2): real next numbers come only from
-// `counters`, which the page passes to Project Admins only, who read counters
-// anyway. Everyone else sees examples from their own Participant, sequence from 1.
+// Every number shown for a Type is built under the pattern in effect for it: its
+// Custom pattern if it has one, else the Project pattern; example counters follow
+// that pattern's scope (`sampleEntries`).
+//
+// Visibility (visibility.md scenario 55, RP-412-2, RP-381-1): real next numbers come
+// only from `counters`, which the page passes to Project Admins only, who read
+// counters anyway. Everyone else sees examples from their own Participant, sequence
+// from 1, and a placeholder for a Participant Code not set yet, never its order.
 
-/** Where example numbers are built from: a Participant and Trade, labelled, e.g. "TMC Constructions · Electrical". */
-export type NumberingContext = { label: string; attributes: Omit<NumberingAttributes, "typeCode"> };
+/** The live preview's item: a sample, with the long label of its line ("TMC Constructions · Electrical"). */
+export type NumberingContext = SampleContext & { label: string };
 
 /** A Work Item Type with its Custom pattern (null: it uses the Project pattern). */
 export type NumberingTypeRow = { id: string; code: string; name: string; custom: NumberingPattern | null };
@@ -44,7 +59,7 @@ export type DocumentNumberingProps = {
   /** The live preview's item: the viewer's own Participant and the Project's first Trade. */
   preview: NumberingContext;
   /** The items of the "Next numbers" box and the scope's counters. */
-  samples: readonly NumberingContext[];
+  samples: readonly SampleContext[];
   /** A Project Admin's counters: the numbers become real next numbers. Absent for anyone else. */
   counters?: readonly NumberingCounter[];
   /** Two of the Project's Trade codes, for the scope's explanation. */
@@ -53,12 +68,12 @@ export type DocumentNumberingProps = {
   onSave: (changes: PatternChange[], sharedCounterAccepted: boolean) => Promise<{ ok: true } | { ok: false; error: string }>;
 };
 
-const withType = (context: NumberingContext, typeCode: string): NumberingAttributes => ({ ...context.attributes, typeCode });
+const withType = (context: SampleContext, typeCode: string): NumberingAttributes => ({ ...context.attributes, typeCode });
+
+type NumberFor = (pattern: NumberingPattern, contexts: readonly SampleContext[], typeCode: string) => ReturnType<typeof patternNumber>[];
 
 /** The Document Numbering page's settings, below its header. */
 export function DocumentNumbering({ t, canEdit, projectPattern, isRabaedDefault, types, preview, samples, counters, tradeCodes, onSave }: DocumentNumberingProps) {
-  const firstType = types[0];
-  const firstCode = firstType?.code ?? "MAR";
   const savedCustoms = () => Object.fromEntries(types.map((type) => [type.id, type.custom])) as Record<string, NumberingPattern | null>;
 
   // What is saved, and the Project Admin's edits not saved yet.
@@ -91,15 +106,27 @@ export function DocumentNumbering({ t, canEdit, projectPattern, isRabaedDefault,
   const dirty = canEdit && changes.length > 0;
   const needsAcceptance = changes.some((c) => c.pattern !== null && sharesCounter(c.pattern));
 
-  const numberFor = (pattern: NumberingPattern, contexts: readonly NumberingContext[], typeCode: string) => {
+  const numberFor: NumberFor = (pattern, contexts, typeCode) => {
     const items = contexts.map((c) => withType(c, typeCode));
     const seqs = nextSequences(pattern, items, counters);
     return items.map((item, i) => patternNumber(pattern, item, seqs[i]!));
   };
-  const [previewNumber] = numberFor(project, [preview], firstCode);
-  const typeName = firstType?.name ?? firstCode;
-  const previewContext = `${preview.label} · ${typeName}`;
-  const sampleNumbers = numberFor(project, samples, firstCode);
+
+  // The Types as edited, and the pattern in effect for each.
+  const current = types.map((type) => ({ ...type, custom: customs[type.id] ?? null }));
+  const inEffect = (type: { custom: NumberingPattern | null }) => type.custom ?? project;
+  // The preview numbers a Type on the Project pattern where there is one, so it follows the edits.
+  const shown = previewType(current);
+  const shownCode = shown?.code ?? "MAR";
+  const shownPattern = shown ? inEffect(shown) : project;
+  const [previewNumber] = numberFor(shownPattern, [preview], shownCode);
+  const previewContext = `${preview.label} · ${shown?.name ?? shownCode}`;
+  const nextNumbers = sampleEntries(shownPattern, samples, shownCode, "number", counters);
+  // The Project pattern's own examples: a Type that uses it (none when every Type has a Custom pattern).
+  const onProject = current.find((type) => type.custom === null);
+  const projectCode = onProject?.code ?? shownCode;
+  const [projectNumber] = numberFor(project, [preview], projectCode);
+  const projectCounters = onProject ? sampleEntries(project, samples, onProject.code, "counter", counters) : [];
 
   const discard = () => {
     setProject(saved.project);
@@ -121,7 +148,7 @@ export function DocumentNumbering({ t, canEdit, projectPattern, isRabaedDefault,
   };
 
   const editProject = canEdit ? setProject : undefined;
-  const legendKinds = [...new Set(project.segments.map((s) => s.kind))];
+  const legendKinds = [...new Set(shownPattern.segments.map((s) => s.kind))];
 
   return (
     <>
@@ -131,9 +158,9 @@ export function DocumentNumbering({ t, canEdit, projectPattern, isRabaedDefault,
         description={t(counters ? "previewNext" : "previewExample", { context: previewContext })}
         data-testid="numbering-preview"
       >
-        <div className="grid items-center gap-6 min-[1100px]:grid-cols-[minmax(0,1fr)_300px]">
+        <div className="grid items-start gap-6 min-[1100px]:grid-cols-[minmax(0,1fr)_300px]">
           <div className="min-w-0">
-            <PatternNumber parts={previewNumber!.parts} separator={project.separator} size="lg" />
+            <PatternNumber parts={previewNumber!.parts} separator={shownPattern.separator} size="lg" />
             <ul aria-label={t("legend")} className="mt-3 flex flex-wrap gap-x-[14px] gap-y-1.5 text-caption text-muted">
               {[...legendKinds, "sequence" as const].map((kind) => (
                 <li key={kind} className="inline-flex items-center gap-1.5">
@@ -150,17 +177,17 @@ export function DocumentNumbering({ t, canEdit, projectPattern, isRabaedDefault,
               / {comfortableLength}
             </p>
           </div>
-          {counters && sampleNumbers.length > 0 && (
+          {counters && nextNumbers.length > 0 && (
             <div className="flex min-w-0 flex-col gap-2 rounded-md bg-surface-subtle px-[14px] py-3 shadow-[inset_0_0_0_1px_var(--border-subtle)]" data-testid="next-numbers">
               <h3 className="text-[10.5px] font-bold text-muted uppercase ltr:tracking-[0.06em]">{t("nextNumbers")}</h3>
               <ul className="flex flex-col gap-2">
-                {sampleNumbers.map((n, i) => (
-                  <li key={i} className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[12.5px] text-text-secondary">
-                    <span className="min-w-0 truncate">{samples[i]!.label}</span>
+                {nextNumbers.map((n, i) => (
+                  <li key={i} className="flex min-w-0 items-center gap-2.5 text-[12.5px] text-text-secondary">
+                    <SampleLabel entry={n} fallback={shown?.name ?? shownCode} />
                     <bdi
                       dir="ltr"
                       translate="no"
-                      className="ms-auto rounded-[6px] bg-surface px-[7px] py-[3px] font-semibold whitespace-nowrap text-text tabular-nums shadow-[inset_0_0_0_1px_var(--border)]"
+                      className="ms-auto shrink-0 rounded-[6px] bg-surface px-[7px] py-[3px] font-semibold whitespace-nowrap text-text tabular-nums shadow-[inset_0_0_0_1px_var(--border)]"
                     >
                       {n.text}
                     </bdi>
@@ -180,21 +207,15 @@ export function DocumentNumbering({ t, canEdit, projectPattern, isRabaedDefault,
         data-testid="numbering-project-pattern"
       >
         <div>
-          <SegmentChips t={t} pattern={project} example={withType(preview, firstCode)} onChange={editProject} />
-          {editProject && <AddSegments t={t} pattern={project} example={withType(preview, firstCode)} onChange={editProject} />}
-          <PatternWarnings t={t} pattern={project} length={previewNumber!.text.length} onChange={editProject} />
+          <SegmentChips t={t} pattern={project} example={withType(preview, projectCode)} onChange={editProject} />
+          {editProject && <AddSegments t={t} pattern={project} example={withType(preview, projectCode)} onChange={editProject} />}
+          <PatternWarnings t={t} pattern={project} length={projectNumber!.text.length} onChange={editProject} />
         </div>
       </SettingsSection>
 
       {/* The sequence */}
       <SettingsSection title={t("sequenceTitle")}>
-        <SequenceOptions
-          t={t}
-          pattern={project}
-          onChange={editProject}
-          tradeCodes={tradeCodes}
-          examples={sampleNumbers.map((n, i) => ({ label: samples[i]!.label, next: n.parts.at(-1)!.text }))}
-        />
+        <SequenceOptions t={t} pattern={project} onChange={editProject} tradeCodes={tradeCodes} examples={projectCounters} fallback={onProject?.name ?? projectCode} />
       </SettingsSection>
 
       {/* Per Work Item Type */}
@@ -220,9 +241,9 @@ export function DocumentNumbering({ t, canEdit, projectPattern, isRabaedDefault,
               </tr>
             </thead>
             <tbody>
-              {types.map((type) => {
-                const custom = customs[type.id] ?? null;
-                const [n] = numberFor(custom ?? project, [preview], type.code);
+              {current.map((type) => {
+                const custom = type.custom;
+                const [n] = numberFor(inEffect(type), [preview], type.code);
                 return (
                   <tr key={type.id} className="border-b border-border-subtle last:border-b-0" data-testid="numbering-type-row">
                     <td className="px-5 py-3 whitespace-nowrap">
@@ -288,11 +309,11 @@ export function DocumentNumbering({ t, canEdit, projectPattern, isRabaedDefault,
           </span>
         }
       >
-        <p className="flex flex-wrap items-center gap-[14px]">
+        <p className="flex flex-wrap items-center gap-[14px]" data-testid="revision-example">
           {[0, 1, 2].map((rev) => (
             <span key={rev} className="inline-flex items-center gap-[14px]">
               {rev > 0 && <Icon name="arrow-right" size={16} className="text-faint" />}
-              <bdi dir="ltr" translate="no" className="text-[15px] font-bold text-text tabular-nums">
+              <bdi dir="ltr" translate="no" className="text-[15px] font-bold whitespace-nowrap text-text tabular-nums">
                 {previewNumber!.text}
                 {rev > 0 && <em className="text-brand-fg not-italic"> Rev {rev}</em>}
               </bdi>
@@ -301,15 +322,18 @@ export function DocumentNumbering({ t, canEdit, projectPattern, isRabaedDefault,
         </p>
       </SettingsSection>
 
+      {/* Room under the last card, so the floating bar never covers it (the kit's padding under the page). */}
+      {(dirty || done) && <div aria-hidden="true" className="h-16 shrink-0" data-testid="unsaved-bar-room" />}
+
       {dirty && (
         <div
           role="region"
           aria-label={t("unsaved")}
-          className="fixed end-7 bottom-[18px] z-40 flex items-center gap-3 rounded-md bg-inverse py-2.5 ps-4 pe-3 text-[13.5px] font-semibold whitespace-nowrap text-on-inverse shadow-lg"
+          className="fixed end-4 bottom-[18px] z-40 flex max-w-[calc(100vw-2rem)] items-center gap-3 rounded-md bg-inverse py-2.5 ps-4 pe-3 text-[13.5px] font-semibold whitespace-nowrap text-on-inverse shadow-lg sm:end-7"
           data-testid="unsaved-bar"
         >
-          <Icon name="alert-circle" size={17} />
-          {t("unsaved")}
+          <Icon name="alert-circle" size={17} className="shrink-0" />
+          <span className="min-w-0 truncate">{t("unsaved")}</span>
           <Button size="sm" variant="ghost" className="text-on-inverse hover:bg-on-inverse/15 active:bg-on-inverse/25" onClick={discard}>
             {t("discard")}
           </Button>
@@ -329,7 +353,7 @@ export function DocumentNumbering({ t, canEdit, projectPattern, isRabaedDefault,
       {done && (
         <div
           role="status"
-          className="fixed end-7 bottom-[18px] z-40 flex items-center gap-2 rounded-md bg-inverse px-4 py-2.5 text-[13.5px] font-semibold text-on-inverse shadow-lg"
+          className="fixed end-4 bottom-[18px] z-40 flex items-center gap-2 rounded-md bg-inverse px-4 py-2.5 text-[13.5px] font-semibold text-on-inverse shadow-lg sm:end-7"
         >
           <Icon name="circle-check" size={17} />
           {t("saved")}
@@ -342,7 +366,8 @@ export function DocumentNumbering({ t, canEdit, projectPattern, isRabaedDefault,
         onOpenChange={setReviewing}
         changes={changes}
         saved={saved}
-        types={types}
+        types={current}
+        projectCode={projectCode}
         preview={preview}
         numberFor={numberFor}
         needsAcceptance={needsAcceptance}
@@ -367,6 +392,7 @@ export function DocumentNumbering({ t, canEdit, projectPattern, isRabaedDefault,
           }}
           preview={preview}
           samples={samples}
+          counters={counters}
           tradeCodes={tradeCodes}
           numberFor={numberFor}
         />
@@ -374,8 +400,6 @@ export function DocumentNumbering({ t, canEdit, projectPattern, isRabaedDefault,
     </>
   );
 }
-
-type NumberFor = (pattern: NumberingPattern, contexts: readonly NumberingContext[], typeCode: string) => ReturnType<typeof patternNumber>[];
 
 /** The save confirmation: before → after of each pattern that changes, the guarantees, and the shared-counter acceptance where it applies. */
 function SaveModal({
@@ -385,6 +409,7 @@ function SaveModal({
   changes,
   saved,
   types,
+  projectCode,
   preview,
   numberFor,
   needsAcceptance,
@@ -399,8 +424,11 @@ function SaveModal({
   onOpenChange: (open: boolean) => void;
   changes: PatternChange[];
   saved: { project: NumberingPattern; customs: Record<string, NumberingPattern | null> };
+  /** The Types as they will be saved. */
   types: readonly NumberingTypeRow[];
-  preview: NumberingContext;
+  /** The Type the Project pattern's before and after are numbered for. */
+  projectCode: string;
+  preview: SampleContext;
   numberFor: NumberFor;
   needsAcceptance: boolean;
   accepted: boolean;
@@ -410,13 +438,20 @@ function SaveModal({
   onConfirm: () => void;
 }) {
   const acceptId = useId();
-  const firstCode = types[0]?.code ?? "MAR";
   const typeChanges = changes.filter((c) => c.workItemTypeId !== null);
   const project = changes.find((c) => c.workItemTypeId === null);
   // The Project pattern's before and after (unchanged when only Types change), as in the kit.
   const after = project?.pattern ?? saved.project;
-  const [beforeNumber] = numberFor(saved.project, [preview], firstCode);
-  const [afterNumber] = numberFor(after, [preview], firstCode);
+  const [beforeNumber] = numberFor(saved.project, [preview], projectCode);
+  const [afterNumber] = numberFor(after, [preview], projectCode);
+  // As the kit: the Custom patterns kept with the save, whether or not they change.
+  const customCount = types.filter((type) => type.custom !== null).length;
+  const lines = [
+    t("keepsRegister"),
+    t("keepsRevisions"),
+    ...(customCount > 0 ? [t(customCount === 1 ? "customsSavedOne" : "customsSavedOther", { n: customCount })] : []),
+    ...(typeChanges.length > 0 ? [t("typesSaved", { types: typeChanges.map((c) => types.find((x) => x.id === c.workItemTypeId)!.code).join(", ") })] : []),
+  ];
   return (
     <NumberingModal
       open={open}
@@ -443,15 +478,13 @@ function SaveModal({
         const [a] = numberFor(change.pattern ?? after, [preview], type.code);
         return <BeforeAfter key={type.id} t={t} label={type.code} before={b!.text} after={a!.text} />;
       })}
-      <ul className="flex flex-col gap-1.5 text-sm text-text-secondary">
-        {[t("keepsRegister"), t("keepsRevisions"), ...(typeChanges.length > 0 ? [t("typesSaved", { types: typeChanges.map((c) => types.find((x) => x.id === c.workItemTypeId)!.code).join(", ") })] : [])].map(
-          (line) => (
-            <li key={line} className="flex items-start gap-2">
-              <Icon name="circle-check" size={16} className="mt-px shrink-0 text-success" />
-              {line}
-            </li>
-          ),
-        )}
+      <ul className="flex flex-col gap-1.5 text-[13px] text-text-secondary" data-testid="save-checks">
+        {lines.map((line) => (
+          <li key={line} className="flex items-start gap-2">
+            <Icon name="circle-check" size={16} className="mt-px shrink-0 text-success" />
+            {line}
+          </li>
+        ))}
       </ul>
       {needsAcceptance && (
         <div className="flex flex-col gap-2 rounded-[10px] bg-warning-tint px-3 py-2.5 text-sm text-warning-fg" data-testid="shared-counter-acceptance">
@@ -475,21 +508,24 @@ function SaveModal({
   );
 }
 
+/** The kit's `.ba`: the label column, the numbers beside it on the reading side, the arrow under the before number. */
 function BeforeAfter({ t, label, before, after }: { t: NumberingText; label?: string; before: string; after: string }) {
+  // A number reads left to right, but sits against its label: on the right in Arabic.
+  const number = "block text-left text-base font-bold whitespace-nowrap tabular-nums rtl:text-right";
   return (
-    <div className="grid grid-cols-[70px_minmax(0,1fr)] items-center gap-x-3 gap-y-2 rounded-md bg-surface-subtle p-[14px] shadow-[inset_0_0_0_1px_var(--border-subtle)]">
+    <div className="grid grid-cols-[70px_minmax(0,1fr)] items-center gap-x-3 gap-y-2 overflow-x-auto rounded-md bg-surface-subtle p-[14px] shadow-[inset_0_0_0_1px_var(--border-subtle)]">
       {label !== undefined && (
         <bdi dir="auto" className="col-span-2 text-caption font-semibold text-muted">
           {label}
         </bdi>
       )}
       <small className="text-[11.5px] font-bold text-muted uppercase ltr:tracking-[0.04em]">{t("before")}</small>
-      <bdi dir="ltr" translate="no" className="text-start text-lg font-bold break-all text-muted tabular-nums">
+      <bdi dir="ltr" translate="no" className={cn(number, "text-muted")}>
         {before}
       </bdi>
-      <Icon name="arrow-down" size={14} className="col-start-2 text-faint" />
+      <Icon name="arrow-down" size={14} className="col-start-2 justify-self-start text-faint" />
       <small className="text-[11.5px] font-bold text-muted uppercase ltr:tracking-[0.04em]">{t("after")}</small>
-      <bdi dir="ltr" translate="no" className="text-start text-lg font-bold break-all text-text tabular-nums" data-testid="after-number">
+      <bdi dir="ltr" translate="no" className={cn(number, "text-text")} data-testid="after-number">
         {after}
       </bdi>
     </div>
@@ -507,6 +543,7 @@ function CustomPatternDrawer({
   onApply,
   preview,
   samples,
+  counters,
   tradeCodes,
   numberFor,
 }: {
@@ -517,13 +554,14 @@ function CustomPatternDrawer({
   onChange: (pattern: NumberingPattern) => void;
   onClose: () => void;
   onApply: () => void;
-  preview: NumberingContext;
-  samples: readonly NumberingContext[];
+  preview: SampleContext;
+  samples: readonly SampleContext[];
+  counters?: readonly NumberingCounter[];
   tradeCodes: readonly string[];
   numberFor: NumberFor;
 }) {
   const [n] = numberFor(pattern, [preview], type.code);
-  const examples = numberFor(pattern, samples, type.code);
+  const examples = sampleEntries(pattern, samples, type.code, "counter", counters);
   const example = withType(preview, type.code);
   return (
     <NumberingDrawer
@@ -559,13 +597,7 @@ function CustomPatternDrawer({
         <PatternWarnings t={t} pattern={pattern} length={n!.text.length} onChange={onChange} />
       </DrawerCard>
       <DrawerCard>
-        <SequenceOptions
-          t={t}
-          pattern={pattern}
-          onChange={onChange}
-          tradeCodes={tradeCodes}
-          examples={examples.map((e, i) => ({ label: samples[i]!.label, next: e.parts.at(-1)!.text }))}
-        />
+        <SequenceOptions t={t} pattern={pattern} onChange={onChange} tradeCodes={tradeCodes} examples={examples} fallback={type.name} />
       </DrawerCard>
     </NumberingDrawer>
   );

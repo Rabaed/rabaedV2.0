@@ -67,6 +67,9 @@ export type NumberingCountersLabels = {
   refusals: Record<CounterRefusal, string>;
 };
 
+/** Which of a counter's values a Work Item Type's pattern counts by. */
+export type CountedValues = { participant: boolean; trade: boolean; location: boolean };
+
 /** What the API answered: the result, or why it refused. */
 export type CounterCall<T> = { ok: true; value: T } | { ok: false; reason: string };
 
@@ -81,6 +84,12 @@ export type NumberingCountersProps = {
   participants: readonly ChoiceOption[];
   trades: readonly ChoiceOption[];
   locations: readonly ChoiceOption[];
+  /**
+   * Per Work Item Type code, what the pattern in effect for it counts by. A value it
+   * counts by must be chosen (no "Not counted"); one it doesn't is "Not counted",
+   * fixed. Absent: every value is optional, and the counter preview says what is missing.
+   */
+  countedBy?: Readonly<Record<string, CountedValues>>;
   /** The counter some values fall under (GET …/numbering/counter). */
   preview: (values: CounterValues) => Promise<CounterCall<CounterPreview>>;
   /** Sets the starting number (PUT …/numbering/counters/start); the page refreshes the counters on success. */
@@ -101,6 +110,7 @@ export function NumberingCounters({
   participants,
   trades,
   locations,
+  countedBy,
   preview,
   onSetStart,
   className,
@@ -116,7 +126,19 @@ export function NumberingCounters({
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
-  const values: CounterValues = { workItemType: type, participantId: chosen(participant), tradeId: chosen(trade), locationId: chosen(location) };
+  // What the chosen Type's pattern counts by decides each value: required, or not counted.
+  const counts = countedBy?.[type];
+  const effective = (dimension: keyof CountedValues, value: string, options: readonly ChoiceOption[]) =>
+    !counts ? value : counts[dimension] ? (value === NONE ? (options[0]?.value ?? NONE) : value) : NONE;
+  const participantValue = effective("participant", participant, participants);
+  const tradeValue = effective("trade", trade, trades);
+  const locationValue = effective("location", location, locations);
+  const values: CounterValues = {
+    workItemType: type,
+    participantId: chosen(participantValue),
+    tradeId: chosen(tradeValue),
+    locationId: chosen(locationValue),
+  };
   const valuesKey = JSON.stringify(values);
 
   // The counter the chosen values fall under, again whenever they change.
@@ -158,7 +180,11 @@ export function NumberingCounters({
     }
   }
 
-  const optional = (options: readonly ChoiceOption[]) => [{ value: NONE, label: text.notCounted }, ...options];
+  const notCounted = { value: NONE, label: text.notCounted };
+  const optionsOf = (dimension: keyof CountedValues, options: readonly ChoiceOption[]) =>
+    !counts ? [notCounted, ...options] : counts[dimension] ? [...options] : [notCounted];
+  // The kit's form: light edges.
+  const light = "border-border-strong";
 
   return (
     <SettingsSection title={text.title} description={text.intro} className={className} bodyClassName="px-0 pt-[14px] pb-0 gap-0" data-testid="numbering-counters">
@@ -224,22 +250,24 @@ export function NumberingCounters({
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label={text.type} required>
             <Select
+              className={light}
               value={type}
               onValueChange={setType}
               options={workItemTypes.map((t) => ({ value: t.code, label: `${t.name[locale]} (${t.code})` }))}
             />
           </Field>
-          <Field label={text.participant}>
-            <Select value={participant} onValueChange={setParticipant} options={optional(participants)} />
+          <Field label={text.participant} required={counts?.participant}>
+            <Select className={light} disabled={counts && !counts.participant} value={participantValue} onValueChange={setParticipant} options={optionsOf("participant", participants)} />
           </Field>
-          <Field label={text.trade}>
-            <Select value={trade} onValueChange={setTrade} options={optional(trades)} />
+          <Field label={text.trade} required={counts?.trade}>
+            <Select className={light} disabled={counts && !counts.trade} value={tradeValue} onValueChange={setTrade} options={optionsOf("trade", trades)} />
           </Field>
-          <Field label={text.location}>
-            <Select value={location} onValueChange={setLocation} options={optional(locations)} />
+          <Field label={text.location} required={counts?.location}>
+            <Select className={light} disabled={counts && !counts.location} value={locationValue} onValueChange={setLocation} options={optionsOf("location", locations)} />
           </Field>
           <Field label={text.startingNumber} required error={start && !validStart ? text.refusals.invalid : undefined}>
             <Input
+              className={light}
               inputMode="numeric"
               dir="ltr"
               value={start}

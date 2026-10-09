@@ -1,9 +1,9 @@
 "use client";
 
 import { formatNumber, type BilingualText, type Locale } from "@rabaed/domain";
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { cn } from "../../lib/cn.ts";
-import { Button } from "../button/button.tsx";
+import { IconButton } from "../button/button.tsx";
 import { focusRing } from "../form/control-styles.ts";
 import { Icon } from "../icon/icon.tsx";
 import { SettingsSection } from "../settings/settings-layout.tsx";
@@ -32,7 +32,9 @@ export type ParticipantCodesLabels = {
   locked: string;
   /** In place of a code not set yet. */
   noCode: string;
-  save: string;
+  /** The button that edits one Participant's code in place. */
+  editOf: (company: string) => string;
+  saving: string;
   saved: string;
   refusals: Record<ParticipantCodeRefusal, string>;
 };
@@ -78,7 +80,7 @@ export function ParticipantCodes({ locale, participants, canEdit, labels, onSave
           <tbody>
             {participants.map((p) => (
               <tr key={p.id} className="border-b border-border-subtle last:border-b-0" data-testid="participant-code-row">
-                <td className={cn(cell, "font-semibold whitespace-nowrap text-text")}>{p.company.legalName[locale]}</td>
+                <td className={cn(cell, "min-w-32 font-semibold text-text sm:whitespace-nowrap")}>{p.company.legalName[locale]}</td>
                 {showOrder && (
                   <td className={cn(cell, "text-muted tabular-nums")}>
                     {p.ordinal === null ? "—" : <bdi dir="ltr">{formatNumber(p.ordinal, locale, { minimumIntegerDigits: 2, useGrouping: false })}</bdi>}
@@ -86,7 +88,7 @@ export function ParticipantCodes({ locale, participants, canEdit, labels, onSave
                 )}
                 <td className={cell}>
                   {canEdit && !p.codeLocked ? (
-                    <CodeForm participant={p} locale={locale} labels={labels} onSave={onSave} />
+                    <InlineCode participant={p} locale={locale} labels={labels} onSave={onSave} />
                   ) : (
                     <Printed code={p.code} locked={p.codeLocked} labels={labels} />
                   )}
@@ -120,7 +122,12 @@ function Printed({ code, locked, labels }: { code: string | null; locked: boolea
   );
 }
 
-function CodeForm({
+/**
+ * A Participant's code, edited in place: the code (or "no code yet") with a pencil;
+ * the pencil turns it into a box. Enter or leaving the box saves a changed code,
+ * Escape puts it back; while it saves the box says so, and a refusal stays on the row.
+ */
+function InlineCode({
   participant,
   locale,
   labels,
@@ -132,20 +139,51 @@ function CodeForm({
   onSave: ParticipantCodesProps["onSave"];
 }) {
   const name = participant.company.legalName[locale];
+  const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(participant.code ?? "");
   const [pending, setPending] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const input = useRef<HTMLInputElement>(null);
+  const edit = useRef<HTMLButtonElement>(null);
+  // Escape and a finished save close the box without saving on the blur that follows.
+  const closing = useRef(false);
+  // Where focus goes once the box closes: back to the pencil when the keyboard closed it.
+  const refocus = useRef(false);
 
-  async function submit(event: FormEvent) {
-    event.preventDefault();
+  useEffect(() => {
+    if (editing) input.current?.select();
+    else if (refocus.current) {
+      refocus.current = false;
+      edit.current?.focus();
+    }
+  }, [editing]);
+  useEffect(() => {
+    if (!editing) setValue(participant.code ?? "");
+  }, [participant.code, editing]);
+
+  const close = (focusEdit: boolean) => {
+    closing.current = true;
+    setEditing(false);
+    setError(null);
+    refocus.current = focusEdit;
+  };
+
+  async function save(focusEdit: boolean) {
+    const code = value.trim();
+    if (code === (participant.code ?? "")) return close(focusEdit);
     setPending(true);
     setSaved(false);
     setError(null);
     try {
-      const result = await onSave(participant.id, value.trim());
-      if (result.ok) setSaved(true);
-      else setError(labels.refusals[result.reason]);
+      const result = await onSave(participant.id, code);
+      if (result.ok) {
+        setSaved(true);
+        close(focusEdit);
+      } else {
+        setError(labels.refusals[result.reason]);
+        input.current?.focus();
+      }
     } catch {
       setError(labels.refusals.unavailable);
     } finally {
@@ -153,12 +191,52 @@ function CodeForm({
     }
   }
 
+  const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      void save(true);
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      setValue(participant.code ?? "");
+      close(true);
+    }
+  };
+
+  if (!editing) {
+    return (
+      <span className="inline-flex items-center gap-1.5">
+        <Printed code={participant.code} locked={false} labels={labels} />
+        <IconButton
+          ref={edit}
+          size="sm"
+          label={labels.editOf(name)}
+          onClick={() => {
+            closing.current = false;
+            setSaved(false);
+            setEditing(true);
+          }}
+        >
+          <Icon name="edit" size={15} />
+        </IconButton>
+        {saved && (
+          <span role="status" className="inline-flex items-center gap-1 text-caption text-success-fg">
+            <Icon name="circle-check" size={14} />
+            {labels.saved}
+          </span>
+        )}
+      </span>
+    );
+  }
+
   return (
-    <form aria-label={name} onSubmit={submit} className="flex flex-col gap-1" noValidate>
-      <div className="flex flex-wrap items-center gap-2">
+    <span className="flex flex-col gap-1">
+      <span className="flex items-center gap-2">
         <input
+          ref={input}
           aria-label={labels.codeOf(name)}
           aria-invalid={error ? true : undefined}
+          aria-busy={pending || undefined}
+          readOnly={pending}
           dir="ltr"
           maxLength={6}
           autoCapitalize="characters"
@@ -167,29 +245,31 @@ function CodeForm({
           onChange={(e) => {
             // Codes are stored in capitals; show them so while typing.
             setValue(e.target.value.toUpperCase());
-            setSaved(false);
+            setError(null);
+          }}
+          onKeyDown={onKeyDown}
+          onBlur={() => {
+            if (closing.current || pending) return;
+            void save(false);
           }}
           className={cn(
-            "h-8 w-28 rounded-sm border border-control-border pointer-coarse:h-11 bg-surface px-2.5 text-sm font-semibold text-text placeholder:font-normal placeholder:text-muted hover:border-control-border-hover",
-            "aria-invalid:border-danger",
+            "h-8 w-24 rounded-sm bg-surface px-2.5 text-sm font-semibold text-text shadow-[inset_0_0_0_1px_var(--border-strong)] pointer-coarse:h-11",
+            "placeholder:font-normal placeholder:text-muted hover:shadow-[inset_0_0_0_1px_var(--control-border)]",
+            "aria-invalid:shadow-[inset_0_0_0_1px_var(--danger)] read-only:bg-surface-subtle",
             focusRing,
           )}
         />
-        <Button type="submit" size="sm" variant="secondary" disabled={pending || value.trim() === (participant.code ?? "")}>
-          {labels.save}
-        </Button>
-        {saved && (
-          <span role="status" className="inline-flex items-center gap-1 text-caption text-success-fg">
-            <Icon name="circle-check" size={14} />
-            {labels.saved}
+        {pending && (
+          <span role="status" className="text-caption text-muted">
+            {labels.saving}
           </span>
         )}
-      </div>
+      </span>
       {error && (
-        <p role="alert" className="text-caption text-danger">
+        <span role="alert" className="text-caption text-danger">
           {error}
-        </p>
+        </span>
       )}
-    </form>
+    </span>
   );
 }

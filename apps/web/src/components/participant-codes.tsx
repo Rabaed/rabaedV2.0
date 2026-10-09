@@ -59,7 +59,8 @@ export function ParticipantCodesSection({ participants, canEdit }: { participant
         codeOf: (company) => t("codeOf", { company }),
         locked: t("locked"),
         noCode: t("noCode"),
-        save: t("save"),
+        editOf: (company) => t("editOf", { company }),
+        saving: t("saving"),
         saved: t("saved"),
         refusals: {
           invalid: t("invalid"),

@@ -1,7 +1,7 @@
 "use client";
 
 import type { Locale, NumberingCounter, NumberingPattern, NumberingVersion, SaveNumberingRequest } from "@rabaed/domain";
-import { DocumentNumbering, NumberingVersions, type NumberingContext, type NumberingTypeRow, type PatternChange } from "@rabaed/ui";
+import { DocumentNumbering, NumberingVersions, type NumberingContext, type NumberingTypeRow, type PatternChange, type SampleContext } from "@rabaed/ui";
 import { useLocale, useTranslations } from "next-intl";
 import { useRouter } from "@/i18n/navigation";
 
@@ -23,7 +23,7 @@ export function DocumentNumberingSettings({
   isRabaedDefault: boolean;
   types: NumberingTypeRow[];
   preview: NumberingContext;
-  samples: NumberingContext[];
+  samples: SampleContext[];
   counters?: NumberingCounter[];
   tradeCodes: string[];
   versions: NumberingVersion[];

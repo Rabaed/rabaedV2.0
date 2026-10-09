@@ -44,33 +44,35 @@ export type PatternNumberProps = {
   separator: string;
   /** The big preview number; otherwise it sizes with the surrounding text. */
   size?: "lg" | "md" | "inherit";
+  /** On one line whatever the width (the compare drawer); otherwise it may wrap, only after a separator. */
+  nowrap?: boolean;
   className?: string;
 };
 
 /**
  * A Document Number with each segment on its own colour. Always left to right, the
- * whole number one isolated unit; read as one string by assistive technology.
+ * whole number one isolated unit; read as one string by assistive technology. It
+ * never breaks inside a segment: a long one wraps after a separator, which ends the line.
  */
-export function PatternNumber({ parts, separator, size = "inherit", className }: PatternNumberProps) {
+export function PatternNumber({ parts, separator, size = "inherit", nowrap = false, className }: PatternNumberProps) {
   return (
     <bdi
       dir="ltr"
       translate="no"
       className={cn(
-        "flex flex-wrap items-baseline font-bold break-all tabular-nums rtl:justify-end",
-        size === "lg" && "text-[34px] leading-[1.2] tracking-[0.01em]",
+        "flex items-baseline font-bold tabular-nums rtl:justify-end",
+        nowrap ? "flex-nowrap whitespace-nowrap" : "flex-wrap",
+        size === "lg" && "text-[24px] leading-[1.2] tracking-[0.01em] sm:text-[34px]",
         size === "md" && "text-h4 leading-[1.2]",
         className,
       )}
       data-testid="pattern-number"
     >
       {parts.map((part, i) => (
-        <Fragment key={i}>
-          {i > 0 && <span className="px-px text-muted">{separator}</span>}
-          <span className={cn("rounded-[6px] px-[3px]", toneClasses[part.kind].tint, toneClasses[part.kind].fg)}>
-            {part.text}
-          </span>
-        </Fragment>
+        <span key={i} className="inline-flex items-baseline whitespace-nowrap">
+          <span className={cn("rounded-[6px] px-[3px]", toneClasses[part.kind].tint, toneClasses[part.kind].fg)}>{part.text}</span>
+          {i < parts.length - 1 && <span className="px-px text-faint">{separator}</span>}
+        </span>
       ))}
     </bdi>
   );

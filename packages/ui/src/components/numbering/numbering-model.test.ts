@@ -1,6 +1,16 @@
 import { rabaedDefaultNumberingPattern, type NumberingAttributes, type NumberingPattern } from "@rabaed/domain";
 import { describe, expect, it } from "vitest";
-import { addSegment, moveSegment, nextSequences, patternNumber, removeSegment, setCounted, sharesCounter } from "./numbering-model.ts";
+import {
+  addSegment,
+  moveSegment,
+  nextSequences,
+  patternNumber,
+  previewType,
+  removeSegment,
+  sampleEntries,
+  setCounted,
+  sharesCounter,
+} from "./numbering-model.ts";
 
 const item = (tradeCode: string | null, code: string | null = "TMC"): NumberingAttributes => ({
   projectCode: "TWR",
@@ -52,6 +62,53 @@ describe("nextSequences", () => {
       { counterKey: "TWR-TMC-CV-MAR", lastValue: 143, startingNumber: 144, issued: false },
     ];
     expect(nextSequences(kit, items, counters)).toEqual([42, 144, 1]);
+  });
+});
+
+describe("sampleEntries", () => {
+  const at = (company: string, code: string, trade: string, tradeCode: string) => ({
+    company,
+    trade,
+    attributes: { projectCode: "TWR", tradeCode, participant: { code, ordinal: null }, locationPath: ["Z1", "T1"] },
+  });
+  const contexts = [at("TMC", "TMC", "Electrical", "EL"), at("TMC", "TMC", "Civil", "CV"), at("GLF", "GLF", "Electrical", "EL")];
+  const labels = (entries: { company: string | null; trade: string | null; next: string }[]) => entries.map((e) => [e.company, e.trade, e.next]);
+
+  it("lists one counter per value the pattern counts by, labelled by those values only", () => {
+    expect(labels(sampleEntries(kit, contexts, "MAR", "counter"))).toEqual([
+      ["TMC", "Electrical", "001"],
+      ["TMC", "Civil", "001"],
+      ["GLF", "Electrical", "001"],
+    ]);
+    // A pattern without Trade lists no per-Trade counters.
+    const noTrade = removeSegment(kit, 2);
+    expect(labels(sampleEntries(noTrade, contexts, "MAR", "counter"))).toEqual([
+      ["TMC", null, "001"],
+      ["GLF", null, "001"],
+    ]);
+    // Trade printed but counted together: one counter per Company.
+    expect(labels(sampleEntries(setCounted(kit, "trade", false), contexts, "MAR", "counter"))).toEqual([
+      ["TMC", null, "001"],
+      ["GLF", null, "001"],
+    ]);
+  });
+
+  it("lists each distinct next number once, labelled by the values it prints", () => {
+    const counters = [{ counterKey: "TWR-TMC-MAR", lastValue: 41, startingNumber: null, issued: true }];
+    const noTrade = removeSegment(kit, 2);
+    expect(sampleEntries(noTrade, contexts, "MAR", "number", counters).map((e) => [e.company, e.trade, e.text])).toEqual([
+      ["TMC", null, "TWR-TMC-MAR-042"],
+      ["GLF", null, "TWR-GLF-MAR-001"],
+    ]);
+  });
+});
+
+describe("previewType", () => {
+  it("is the first Type on the Project pattern, so the preview follows its edits; else the first Type", () => {
+    const custom = { ...kit, seqDigits: 5 };
+    expect(previewType([{ id: "a", custom }, { id: "b", custom: null }])?.id).toBe("b");
+    expect(previewType([{ id: "a", custom }])?.id).toBe("a");
+    expect(previewType([])).toBeUndefined();
   });
 });
 

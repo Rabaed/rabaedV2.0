@@ -36,7 +36,8 @@ export const participantCodesLabels: Record<Locale, ParticipantCodesLabels> = Ob
         codeOf: (company: string) => m.codeOf.replace("{company}", company),
         locked: m.locked,
         noCode: m.noCode,
-        save: m.save,
+        editOf: (company: string) => m.editOf.replace("{company}", company),
+        saving: m.saving,
         saved: m.saved,
         refusals: {
           invalid: m.invalid,

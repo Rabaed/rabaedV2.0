@@ -1,5 +1,5 @@
 import { participantSegment, rabaedDefaultNumberingPattern, type Locale } from "@rabaed/domain";
-import { SettingsHeader, type NumberingContext } from "@rabaed/ui";
+import { SettingsHeader, type CountedValues, type NumberingContext, type SampleContext } from "@rabaed/ui";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
 import { DocumentNumberingSettings } from "@/components/document-numbering-settings";
@@ -52,21 +52,39 @@ export default async function NumberingPage({ params }: { params: Promise<{ loca
   const own = participants?.participants.find((p) => p.isOwnCompany);
   const ownName = own?.company.legalName[locale] ?? "";
 
-  // The examples: the viewer's own Participant (as the API gives it to them) with the Project's Trades.
-  const context = (name: string, participant: { code: string | null; ordinal: number }, trade: (typeof trades)[number] | undefined): NumberingContext => ({
-    label: trade ? `${name} · ${trade.name[locale]}` : name,
+  // The examples: the viewer's own Participant, as the API gives it to them (its order on the
+  // Project to a Project Admin only, RP-381-1), with the Project's Trades. A sample's short
+  // label is the Participant Code once set, else the Company's name (the page truncates it).
+  type Participant = SampleContext["attributes"]["participant"];
+  const sample = (name: string, participant: Participant, trade: (typeof trades)[number] | undefined): SampleContext => ({
+    company: participant.code ?? name,
+    trade: trade?.name[locale] ?? null,
     attributes: { ...settings.example, participant, tradeCode: trade?.code ?? settings.example.tradeCode },
   });
   const previewTrade = trades.find((v) => v.code === settings.example.tradeCode) ?? trades[0];
-  const preview = context(ownName, settings.example.participant, previewTrade);
+  const preview: NumberingContext = {
+    ...sample(ownName, settings.example.participant, previewTrade),
+    label: previewTrade ? `${ownName} · ${previewTrade.name[locale]}` : ownName,
+  };
   const other = project.isProjectAdmin ? participants?.participants.find((p) => !p.isOwnCompany && p.ordinal !== null) : undefined;
-  const samples: NumberingContext[] = project.isProjectAdmin
+  const samples: SampleContext[] = project.isProjectAdmin
     ? [
         preview,
-        ...(trades[1] ? [context(ownName, settings.example.participant, trades[1])] : []),
-        ...(other ? [context(other.company.legalName[locale], { code: other.code, ordinal: other.ordinal! }, previewTrade)] : []),
+        ...(trades[1] ? [sample(ownName, settings.example.participant, trades[1])] : []),
+        ...(other ? [sample(other.company.legalName[locale], { code: other.code, ordinal: other.ordinal }, previewTrade)] : []),
       ]
-    : [preview, ...trades.filter((v) => v !== previewTrade).slice(0, 2).map((v) => context(ownName, settings.example.participant, v))];
+    : [preview, ...trades.filter((v) => v !== previewTrade).slice(0, 2).map((v) => sample(ownName, settings.example.participant, v))];
+
+  // What each Type's pattern in effect counts by, for setting a counter's starting number.
+  const projectPattern = settings.project?.pattern ?? rabaedDefaultNumberingPattern;
+  const countedBy = Object.fromEntries(
+    settings.types.map((type) => {
+      const pattern = type.override?.pattern ?? projectPattern;
+      const counts = (kind: string) => pattern.countedBy.some((i) => pattern.segments[i]?.kind === kind);
+      const values: CountedValues = { participant: counts("participant"), trade: counts("trade"), location: counts("location") };
+      return [type.code, values];
+    }),
+  );
 
   return (
     <>
@@ -74,7 +92,7 @@ export default async function NumberingPage({ params }: { params: Promise<{ loca
       <DocumentNumberingSettings
         projectId={project.id}
         canEdit={settings.canEdit}
-        projectPattern={settings.project?.pattern ?? rabaedDefaultNumberingPattern}
+        projectPattern={projectPattern}
         isRabaedDefault={settings.project === null}
         types={settings.types.map((type) => ({ id: type.id, code: type.code, name: type.name[locale], custom: type.override?.pattern ?? null }))}
         preview={preview}
@@ -90,6 +108,7 @@ export default async function NumberingPage({ params }: { params: Promise<{ loca
           projectId={project.id}
           counters={counters.counters}
           workItemTypes={counters.workItemTypes}
+          countedBy={countedBy}
           participants={participants.participants.map(({ id, company, code: participantCode, ordinal }) => {
             // Shown to Project Admins only, who get every Participant's order on the Project (RP-381-1).
             const printed = ordinal === null ? participantCode : participantSegment({ code: participantCode, ordinal });

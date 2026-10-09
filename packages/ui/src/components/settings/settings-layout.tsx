@@ -3,7 +3,7 @@
 import { useId, type ElementType, type HTMLAttributes, type ReactNode } from "react";
 import { cn } from "../../lib/cn.ts";
 import { Field } from "../form/field.tsx";
-import { focusRing, textBox } from "../form/control-styles.ts";
+import { focusRing } from "../form/control-styles.ts";
 import { Icon, type IconName } from "../icon/icon.tsx";
 
 // The template of every Project Settings page (RP-412): a navigation of the
@@ -34,6 +34,7 @@ export type SettingsNavProps = {
 /** The settings navigation: a card of links from `md` up, a select below it. */
 export function SettingsNav({ heading, items, current, linkAs: Link = "a", onNavigate, className }: SettingsNavProps) {
   const headingId = useId();
+  const currentItem = items.find((item) => item.key === current);
   return (
     <div className={cn("min-w-0 md:sticky md:top-6", className)}>
       <nav aria-labelledby={headingId} className="hidden flex-col gap-0.5 rounded-[14px] border border-border bg-surface p-2 md:flex">
@@ -64,19 +65,29 @@ export function SettingsNav({ heading, items, current, linkAs: Link = "a", onNav
       </nav>
       <div className="md:hidden">
         <Field label={heading} id={`${headingId}-select`}>
-          {/* A native select: the page's value is always shown, and a phone opens its own picker. */}
-          <select
-            id={`${headingId}-select`}
-            className={cn(textBox, "h-11 bg-surface")}
-            value={items.find((item) => item.key === current)?.href ?? ""}
-            onChange={(e) => onNavigate(e.target.value)}
-          >
-            {items.map((item) => (
-              <option key={item.key} value={item.href}>
-                {item.label}
-              </option>
-            ))}
-          </select>
+          {/* A native select (the page's value always shown, a phone opens its own picker), drawn as the kit's nav card: its icon, the current page in the brand tint. */}
+          <span className="relative flex">
+            {currentItem && (
+              <Icon name={currentItem.icon} size={17} className="pointer-events-none absolute start-2.5 top-1/2 -translate-y-1/2 text-brand-fg" />
+            )}
+            <select
+              id={`${headingId}-select`}
+              className={cn(
+                "h-11 w-full cursor-pointer appearance-none rounded-[14px] border border-border bg-surface ps-8 pe-8 text-[13.5px] font-semibold text-brand-fg",
+                "hover:border-border-strong",
+                focusRing,
+              )}
+              value={currentItem?.href ?? ""}
+              onChange={(e) => onNavigate(e.target.value)}
+            >
+              {items.map((item) => (
+                <option key={item.key} value={item.href}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
+            <Icon name="chevron-down" size={16} className="pointer-events-none absolute end-2.5 top-1/2 -translate-y-1/2 text-muted" />
+          </span>
         </Field>
       </div>
     </div>
