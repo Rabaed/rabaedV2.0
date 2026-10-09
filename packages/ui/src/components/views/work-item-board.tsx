@@ -23,7 +23,7 @@ import { focusRing, touchBox } from "../form/control-styles.ts";
 import { Icon } from "../icon/icon.tsx";
 import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "../overlay/popover.tsx";
 import { stageColour } from "../status/stage-colour.ts";
-import { StagePill } from "../status/stage-pill.tsx";
+import { StageDot } from "../status/stage-pill.tsx";
 import { WithChip } from "../status/with-chip.tsx";
 import { WorkItemCard, type WorkItemState } from "../status/work-item-card.tsx";
 import { Outcome } from "./work-item-list.tsx";
@@ -103,14 +103,14 @@ export function WorkItemBoard({ board, query, locale, labels, listHrefFor, itemH
       aria-label={labels.board}
       // Focusable, so the board can be scrolled with the keyboard.
       tabIndex={0}
-      className={cn("overflow-x-auto rounded-md pb-2", focusRing)}
+      className={cn("relative overflow-x-auto rounded-md pb-3", focusRing)}
     >
       {dragging && (
         <p role="status" className="sr-only">
           {labels.dragging}
         </p>
       )}
-      <ol className="flex items-start gap-3">
+      <ol className="flex w-max items-start gap-3.5">
         {board.stages.map((stage) => {
           const column = columns.get(stage.key);
           const shown = column?.shown ?? 0;
@@ -124,7 +124,8 @@ export function WorkItemBoard({ board, query, locale, labels, listHrefFor, itemH
               data-stage={stage.key}
               data-drop-target={dropMove ? "" : undefined}
               className={cn(
-                "flex w-72 shrink-0 flex-col gap-3 rounded-md bg-surface-subtle p-2",
+                // The column scrolls up and down on its own, under its fixed header; the board scrolls sideways.
+                "flex max-h-[min(56rem,max(24rem,calc(100dvh_-_20rem)))] w-75 shrink-0 flex-col rounded-lg border border-border bg-surface",
                 dropMove && "bg-hover outline-2 outline-dashed outline-border-strong",
               )}
               // Only a Stage one Transition alone leads to takes a drop; a drop elsewhere does nothing.
@@ -146,11 +147,13 @@ export function WorkItemBoard({ board, query, locale, labels, listHrefFor, itemH
                   : undefined
               }
             >
-              <h2 id={headingId} className="flex items-center justify-between gap-2 px-1 pt-1">
-                <StagePill stage={stageColour(stage)} label={stage.name[locale]} count={shown} locale={locale} />
+              <h2 id={headingId} className="flex items-center gap-2 border-b border-border-subtle px-3.5 py-3 text-body font-bold text-text">
+                <StageDot stage={stageColour(stage)} />
+                <span className="min-w-0 truncate">{stage.name[locale]}</span>
+                <span className="rounded-full bg-neutral-tint px-2 text-caption font-semibold text-neutral-fg tabular-nums">{formatNumber(shown, locale)}</span>
               </h2>
               {closed && (
-                <div className="flex flex-col gap-1 px-1 text-caption text-muted">
+                <div className="flex flex-col gap-1 border-b border-border-subtle px-3.5 py-2 text-caption text-muted">
                   <span>{labels.closedSince(formatNumber(closedColumnDays, locale))}</span>
                   <span className="flex flex-wrap items-center justify-between gap-2">
                     {/* A search counts only what it shows, so it has no total to give. */}
@@ -165,8 +168,9 @@ export function WorkItemBoard({ board, query, locale, labels, listHrefFor, itemH
                   </span>
                 </div>
               )}
+              <div className="flex min-h-16 flex-col gap-3 overflow-y-auto p-2.5">
               {shown === 0 ? (
-                <p className="px-1 pb-1 text-caption text-muted">{labels.noItems}</p>
+                <p className="px-1 py-3 text-center text-caption text-muted">{labels.noItems}</p>
               ) : (
                 lanesInLocale(column!.lanes, locale).map((lane) => (
                   <Lane
@@ -184,6 +188,7 @@ export function WorkItemBoard({ board, query, locale, labels, listHrefFor, itemH
                   />
                 ))
               )}
+              </div>
             </li>
           );
         })}
@@ -257,7 +262,8 @@ function Lane({
                 title={card.title}
                 state={cardState(card, locale, labels)}
                 locale={locale}
-                density="compact"
+                trade={card.trade.name[locale]}
+                location={card.location?.name[locale]}
                 href={itemHref(card.id)}
                 linkAs={linkAs}
               />

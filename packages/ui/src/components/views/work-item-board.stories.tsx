@@ -262,6 +262,41 @@ export const Narrow: Story = {
   },
 };
 
+// A Stage with many cards: the column holds them under its fixed header.
+const manyCards = Array.from({ length: 14 }, (_, i) => card(20 + i, { title: `Cable ladder section ${i + 1}`, stepAgeWeeks: (i % 4) + 1, with: withConsultant }));
+const crowded: WorkItemBoardData = {
+  ...board,
+  stages: board.stages.map((s) => (s.key === "pending_approval" ? { ...s, count: manyCards.length } : s)),
+  columns: board.columns.map((c) =>
+    c.stageKey === "pending_approval"
+      ? { ...c, shown: manyCards.length, lanes: [{ kind: "company" as const, participantId: consultantId, companyName: consultant, count: manyCards.length, cards: manyCards }] }
+      : c,
+  ),
+};
+
+/**
+ * A column with many cards scrolls up and down on its own, under its header;
+ * the board scrolls sideways and the page never does (Epic RP-405, decision 7).
+ */
+export const ColumnScrollsOnItsOwn: Story = {
+  args: { board: crowded },
+  play: async (context) => {
+    const column = columnOf(context, stages.pending);
+    const list = [...column.querySelectorAll<HTMLElement>("div")].find((d) => getComputedStyle(d).overflowY === "auto")!;
+    await expect(list.scrollHeight).toBeGreaterThan(list.clientHeight);
+    await expect(column.getBoundingClientRect().height).toBeLessThan(list.scrollHeight);
+    // The header stays where it is while the cards scroll.
+    const header = within(column).getByRole("heading", { level: 2 });
+    const top = header.getBoundingClientRect().top;
+    list.scrollTop = list.scrollHeight;
+    await expect(header.getBoundingClientRect().top).toBe(top);
+    // The board itself scrolls sideways; the page doesn't.
+    const region = context.canvas.getByRole("region", { name: storyText(context, copy.board) });
+    await expect(region.scrollWidth).toBeGreaterThanOrEqual(region.clientWidth);
+    await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(document.documentElement.clientWidth);
+  },
+};
+
 const draftCard = (context: PlayContext) => columnOf(context, stages.draft).querySelector<HTMLElement>(`li[data-movable]`)!;
 const dragData = () => ({ dataTransfer: new DataTransfer() });
 const targetColumns = (context: PlayContext) =>
