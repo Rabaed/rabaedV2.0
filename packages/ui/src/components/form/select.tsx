@@ -1,7 +1,7 @@
 "use client";
 
 import * as SelectPrimitive from "@radix-ui/react-select";
-import type { ComponentProps, ReactNode } from "react";
+import { useState, type ComponentProps, type ReactNode } from "react";
 import { cn } from "../../lib/cn.ts";
 import { Icon } from "../icon/icon.tsx";
 import { textBox } from "./control-styles.ts";
@@ -30,10 +30,22 @@ export function Select({ options, placeholder, className, value, defaultValue, o
     "aria-invalid": invalid,
     ...root
   } = useFieldControl(props);
+  const [uncontrolled, setUncontrolled] = useState(defaultValue);
+  const current = value ?? uncontrolled;
+  const selected = options.find((option) => option.value === current);
   const state = readOnly
     ? // Always controlled, so typeahead on the closed trigger can't change it either.
       { value: value ?? defaultValue ?? "", open: false }
-    : { value, defaultValue, onValueChange, open, onOpenChange };
+    : {
+        value,
+        defaultValue,
+        onValueChange: (next: string) => {
+          setUncontrolled(next);
+          onValueChange?.(next);
+        },
+        open,
+        onOpenChange,
+      };
   return (
     <SelectPrimitive.Root disabled={disabled} required={required} {...state} {...root}>
       <SelectPrimitive.Trigger
@@ -49,7 +61,12 @@ export function Select({ options, placeholder, className, value, defaultValue, o
           className,
         )}
       >
-        <SelectPrimitive.Value placeholder={placeholder} />
+        {/*
+          The chosen option's label, given outright: Radix fills the Value from the
+          options' text only once they mount in the browser, so a page rendered on the
+          server showed every Select empty until it hydrated (RP-412).
+        */}
+        <SelectPrimitive.Value placeholder={placeholder}>{selected?.label}</SelectPrimitive.Value>
         <SelectPrimitive.Icon className="text-muted">
           <Icon name="chevron-down" size={16} />
         </SelectPrimitive.Icon>
