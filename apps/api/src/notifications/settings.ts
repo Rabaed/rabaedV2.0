@@ -23,14 +23,14 @@ import { commandResult } from "../outcomes.ts";
 /** The signed-in Member's settings, and their Projects with each one's mute. */
 export function getNotificationSettings(db: Db, memberId: string): Promise<NotificationSettingsView> {
   return withMember(db, memberId, async (trx) => {
-    const { rows: groups } = await sql<{ notification_group: NotificationGroup; in_app: boolean; email: NotificationGroupSetting["email"]; outcomes: NotificationGroupSetting["outcomes"] | null }>`
-      select notification_group, in_app, email, outcomes from notification_setting
+    const { rows: groups } = await sql<{ notification_group: NotificationGroup; email: NotificationGroupSetting["email"]; outcomes: NotificationGroupSetting["outcomes"] | null }>`
+      select notification_group, email, outcomes from notification_setting
     `.execute(trx);
     const settings: NotificationSettings = structuredClone(defaultNotificationSettings);
     for (const g of groups) {
-      if (g.notification_group === "watched") settings.watched = { inApp: g.in_app, email: g.email, outcomes: g.outcomes ?? [] };
+      if (g.notification_group === "watched") settings.watched = { email: g.email, outcomes: g.outcomes ?? [] };
       else if (g.notification_group === "weekly_report") settings.weekly_report = weeklyReportSettingOf(g.email);
-      else settings[g.notification_group] = { inApp: g.in_app, email: g.email };
+      else settings[g.notification_group] = { email: g.email };
     }
     const { rows: me } = await sql<{ email_paused: boolean | null; language: Locale; holds_assign: boolean }>`
       select p.email_paused, coalesce(p.preferred_language, m.locale) as language, app.holds_assign_permission() as holds_assign
@@ -61,10 +61,10 @@ export function updateNotificationSettings(db: Db, memberId: string, body: Updat
       const setting: NotificationGroupSetting = body.settings[group];
       const outcomes = group === "watched" ? (setting.outcomes ?? []) : null;
       await sql`
-        insert into notification_setting (member_id, notification_group, in_app, email, outcomes, updated_at)
-        values (${memberId}::uuid, ${group}, ${setting.inApp}, ${setting.email}, ${outcomes}::text[], ${now})
+        insert into notification_setting (member_id, notification_group, email, outcomes, updated_at)
+        values (${memberId}::uuid, ${group}, ${setting.email}, ${outcomes}::text[], ${now})
         on conflict (member_id, notification_group) do update
-        set in_app = excluded.in_app, email = excluded.email, outcomes = excluded.outcomes, updated_at = excluded.updated_at
+        set email = excluded.email, outcomes = excluded.outcomes, updated_at = excluded.updated_at
       `.execute(trx);
     }
     await sql`

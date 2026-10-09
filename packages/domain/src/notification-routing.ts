@@ -68,7 +68,6 @@ export function isWatchOutcome(outcome: string | null): outcome is WatchOutcome 
 }
 
 export const notificationGroupSetting = z.object({
-  inApp: z.boolean(),
   email: z.enum(notificationEmailChoices),
   /** "Items I watch" only: the outcomes that notify. */
   outcomes: z.array(z.enum(watchOutcomes)).optional(),
@@ -80,14 +79,13 @@ export type NotificationGroupSetting = z.infer<typeof notificationGroupSetting>;
  * schedule, so it is on (stored as `immediate`) or off, and never in the bell.
  */
 export const weeklyReportSetting = z.object({
-  inApp: z.literal(false),
   email: z.enum(["off", "immediate"]),
 });
 export type WeeklyReportSetting = z.infer<typeof weeklyReportSetting>;
 
 /** The weekly report's setting from a stored row: on unless its email is off. */
 export function weeklyReportSettingOf(email: NotificationEmailChoice): WeeklyReportSetting {
-  return { inApp: false, email: email === "off" ? "off" : "immediate" };
+  return { email: email === "off" ? "off" : "immediate" };
 }
 
 export const notificationSettings = z.object({
@@ -99,13 +97,13 @@ export const notificationSettings = z.object({
 });
 export type NotificationSettings = z.infer<typeof notificationSettings>;
 
-/** In-app on; email immediately for Step reached and Sent Back, a digest for the rest; every outcome ticked; the weekly report emailed. */
+/** Email immediately for Step reached and Sent Back, a digest for the rest; every outcome ticked; the weekly report emailed. In-app has no setting: it is always sent. */
 export const defaultNotificationSettings: NotificationSettings = {
-  step_reached: { inApp: true, email: "immediate" },
-  watched: { inApp: true, email: "digest", outcomes: [...watchOutcomes] },
-  sent_back: { inApp: true, email: "immediate" },
-  vacancy: { inApp: true, email: "digest" },
-  weekly_report: { inApp: false, email: "immediate" },
+  step_reached: { email: "immediate" },
+  watched: { email: "digest", outcomes: [...watchOutcomes] },
+  sent_back: { email: "immediate" },
+  vacancy: { email: "digest" },
+  weekly_report: { email: "immediate" },
 };
 
 export interface RouteNotificationInput {
@@ -131,7 +129,8 @@ const silent: NotificationRoute = { inApp: false, email: "none" };
 /**
  * For one recipient of one event: whether it reaches their bell, and how it is
  * emailed. A muted Project, or an outcome a watcher didn't tick, silences both;
- * pausing email stops only the email. The weekly report is an email only, sent
+ * pausing email, or a group's email off, stops only the email: in-app is always
+ * sent. The weekly report is an email only, sent
  * on its own schedule whenever its email is on. Need My Action never passes
  * through here.
  */
@@ -139,7 +138,8 @@ export function routeNotification({ kind, outcome, settings, muted, emailPaused 
   const setting: NotificationGroupSetting = settings[notificationGroupOf(kind)];
   if (muted) return silent;
   if (kind === "watched_event" && isWatchOutcome(outcome) && !(setting.outcomes ?? watchOutcomes).includes(outcome)) return silent;
-  const inApp = kind !== "weekly_report" && setting.inApp;
+  // In-app is always sent (decision 2026-10-08); only the weekly report, an email, never reaches the bell.
+  const inApp = kind !== "weekly_report";
   if (emailPaused || setting.email === "off") return { inApp, email: "none" };
   return { inApp, email: kind === "weekly_report" ? "immediate" : setting.email };
 }

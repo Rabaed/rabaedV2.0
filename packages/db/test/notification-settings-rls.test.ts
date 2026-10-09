@@ -70,13 +70,13 @@ afterAll(async () => {
 
 describe("notification_setting and member_notification_preference", () => {
   beforeAll(async () => {
-    await rowsAs(a.member, sql`insert into notification_setting (member_id, notification_group, in_app, email) values (${a.member}::uuid, 'vacancy', false, 'off')`);
+    await rowsAs(a.member, sql`insert into notification_setting (member_id, notification_group, email) values (${a.member}::uuid, 'vacancy', 'off')`);
     await rowsAs(a.member, sql`insert into member_notification_preference (member_id, email_paused, preferred_language) values (${a.member}::uuid, true, 'ar')`);
   });
 
   it("are read by their own Member", async () => {
-    expect(await rowsAs(a.member, sql`select notification_group, in_app, email from notification_setting`)).toEqual([
-      { notification_group: "vacancy", in_app: false, email: "off" },
+    expect(await rowsAs(a.member, sql`select notification_group, email from notification_setting`)).toEqual([
+      { notification_group: "vacancy", email: "off" },
     ]);
     expect(await rowsAs(a.member, sql`select email_paused, preferred_language from member_notification_preference`)).toEqual([
       { email_paused: true, preferred_language: "ar" },
@@ -92,16 +92,16 @@ describe("notification_setting and member_notification_preference", () => {
   });
 
   it("can't be written by another Member", async () => {
-    await rowsAs(b.member, sql`update notification_setting set in_app = true`);
+    await rowsAs(b.member, sql`update notification_setting set email = 'immediate'`);
     await rowsAs(b.member, sql`update member_notification_preference set email_paused = false`);
     await rowsAs(b.member, sql`delete from notification_setting`);
     await expect(
-      rowsAs(b.member, sql`insert into notification_setting (member_id, notification_group, in_app, email) values (${a.member}::uuid, 'step_reached', false, 'off')`),
+      rowsAs(b.member, sql`insert into notification_setting (member_id, notification_group, email) values (${a.member}::uuid, 'step_reached', 'off')`),
     ).rejects.toThrow(/row-level security/);
     await expect(
       rowsAs(b.member, sql`insert into member_notification_preference (member_id, email_paused) values (${a.member}::uuid, false)`),
     ).rejects.toThrow(/row-level security/);
-    expect((await migrator.query("select in_app from notification_setting where member_id = $1", [a.member])).rows).toEqual([{ in_app: false }]);
+    expect((await migrator.query("select email from notification_setting where member_id = $1", [a.member])).rows).toEqual([{ email: "off" }]);
     expect((await migrator.query("select email_paused from member_notification_preference where member_id = $1", [a.member])).rows).toEqual([
       { email_paused: true },
     ]);
@@ -147,11 +147,9 @@ describe("the routing rule in the database", () => {
     const tickSets = [[...watchOutcomes], [], ["A", "B"]];
     const cases = notificationKinds.flatMap((kind) =>
       outcomes.flatMap((outcome) =>
-        [true, false].flatMap((inApp) =>
-          notificationEmailChoices.flatMap((email) =>
-            tickSets.flatMap((ticks) =>
-              [true, false].flatMap((muted) => [true, false].map((emailPaused) => ({ kind, outcome, inApp, email, ticks, muted, emailPaused }))),
-            ),
+        notificationEmailChoices.flatMap((email) =>
+          tickSets.flatMap((ticks) =>
+            [true, false].flatMap((muted) => [true, false].map((emailPaused) => ({ kind, outcome, email, ticks, muted, emailPaused }))),
           ),
         ),
       ),
@@ -160,7 +158,7 @@ describe("the routing rule in the database", () => {
       `select r.in_app, r.email
        from jsonb_array_elements($1::jsonb) with ordinality c(v, n)
        cross join lateral app.notification_route(
-         c.v ->> 'kind', c.v ->> 'outcome', (c.v ->> 'inApp')::boolean, c.v ->> 'email',
+         c.v ->> 'kind', c.v ->> 'outcome', c.v ->> 'email',
          array(select jsonb_array_elements_text(c.v -> 'ticks')), (c.v ->> 'muted')::boolean, (c.v ->> 'emailPaused')::boolean) r
        order by c.n`,
       [JSON.stringify(cases)],
@@ -169,7 +167,7 @@ describe("the routing rule in the database", () => {
       const group = notificationGroupOf(c.kind);
       const settings = {
         ...defaultNotificationSettings,
-        [group]: { inApp: c.inApp, email: c.email, outcomes: c.ticks },
+        [group]: { email: c.email, outcomes: c.ticks },
       } as NotificationSettings;
       const route = routeNotification({ kind: c.kind, outcome: c.outcome, settings, muted: c.muted, emailPaused: c.emailPaused });
       return { in_app: route.inApp, email: route.email };
@@ -192,14 +190,15 @@ describe("the routing rule in the database", () => {
         routeNotification({ kind, outcome: null, settings: defaultNotificationSettings, muted: false, emailPaused: false }),
       );
     }
-    // A turned Vacancy off, paused email, and muted their Project.
+    // A turned Vacancy's email off, paused email, and muted their Project.
     expect(await route(a.member, a.projectId, "step_reached", null)).toEqual({ inApp: false, email: "none" });
     await rowsAs(a.member, sql`select app.set_project_mute(${a.projectId}::uuid, false)`);
     expect(await route(a.member, a.projectId, "step_reached", null)).toEqual({ inApp: true, email: "none" });
-    expect(await route(a.member, a.projectId, "vacancy", null)).toEqual({ inApp: false, email: "none" });
+    // In-app is always sent, even for a group whose email they turned off.
+    expect(await route(a.member, a.projectId, "vacancy", null)).toEqual({ inApp: true, email: "none" });
     await rowsAs(
       a.member,
-      sql`insert into notification_setting (member_id, notification_group, in_app, email, outcomes) values (${a.member}::uuid, 'watched', true, 'immediate', '{A,B}')`,
+      sql`insert into notification_setting (member_id, notification_group, email, outcomes) values (${a.member}::uuid, 'watched', 'immediate', '{A,B}')`,
     );
     await rowsAs(a.member, sql`update member_notification_preference set email_paused = false`);
     expect(await route(a.member, a.projectId, "watched_event", "B")).toEqual({ inApp: true, email: "immediate" });
