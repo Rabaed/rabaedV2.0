@@ -26,6 +26,7 @@ Use the Atlassian MCP tools (`createJiraIssue`, `editJiraIssue`, `getJiraIssue`,
 - **Known limits**: the sweep closes a ticket again if it was reopened within 7 days of the PR's merge (reopen it after that, or edit the PR body). If the comment fails after the transition, the run goes red but the ticket is already Done, so the sweep does not add the comment.
 - **Integration PRs** (`/implement-spec`): write `Closes RP-a, RP-b, …` in the PR body, listing each ticket; a range such as "RP-290 … RP-294" is not expanded.
 - **Credentials**: repo secrets `JIRA_EMAIL` and `JIRA_API_TOKEN`, an API token for a bot account that may transition RP issues. Never committed. The workflow has `contents: read` only and runs the script from the default branch, so PR code never meets the token. A pull request from a fork has no secrets, so its run fails visibly.
+- **Spec issues are skipped**: an issue labelled `spec` is never closed, on merge or in the sweep, and the run summary lists it as "spec issue, left open"; the integration branch is named for its spec, so a merge would otherwise close the spec before its tickets are done. The planning session closes specs by hand.
 - **Code**: `scripts/jira-close-keys.ts` (key parsing, unit-tested) and `scripts/jira-close.ts`.
 
 ## When a skill says "publish to the issue tracker"
