@@ -64,7 +64,7 @@ const created = async (answers: Record<string, unknown>) => {
 };
 const save = (id: string, answers: Record<string, unknown>) =>
   engineer.request("PUT", `/v1/work-items/${id}/answers`, { answers: { ...builtIns(), ...answers } });
-const send = (id: string) => engineer.post(`/v1/work-items/${id}/transitions`, { transition: "send_for_review", idempotencyKey: randomUUID() });
+const send = (id: string) => engineer.post(`/v1/work-items/${id}/transitions`, { transition: "send_for_review", confirmed: true, idempotencyKey: randomUUID() });
 
 beforeAll(async () => {
   const c1 = await api.projectCreator();

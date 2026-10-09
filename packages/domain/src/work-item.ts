@@ -304,6 +304,11 @@ export const takeTransitionRequest = z.object({
    * offered is refused with `assignee_not_offered`, whoever it names.
    */
   assignTo: z.uuid().nullable().default(null),
+  /**
+   * The Member confirmed the Transition in its pop-up (ADR 0017): every Transition
+   * is confirmed and recorded. Without it, refused with `not_confirmed`.
+   */
+  confirmed: z.boolean().default(false),
   idempotencyKey: z.uuid(),
 });
 export type TakeTransitionRequest = z.input<typeof takeTransitionRequest>;
@@ -371,6 +376,12 @@ export type WorkItemActions = z.infer<typeof workItemActions>;
 export const workItemDetail = workItemSummary.extend({
   /** The Form Version the item is pinned to, for good (ADR 0006). */
   formVersionId: z.uuid(),
+  /**
+   * The Workflow it runs and the Version it is pinned to, for good: the one bound
+   * for its Type and raiser when it was created (ADR 0016). Every Participant who
+   * sees the item reads the same (visibility.md V20).
+   */
+  workflow: z.object({ name: bilingualText, versionNo: z.number().int().positive() }),
   /** Its place in its chain of Revisions: 0 for the first submission, then 1, 2… (its number's " Rev n"). */
   revisionNo: z.number().int().nonnegative(),
   /** A Revision pinned to a newer Form or Workflow Version than the item it revises: the page says so. */

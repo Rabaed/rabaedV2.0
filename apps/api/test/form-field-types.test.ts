@@ -203,7 +203,7 @@ describe("a bad value", () => {
 describe("leaving Draft", () => {
   it("needs every required date and choice; No counts as an answer", async () => {
     const id = (await ok(createDraft({ finish: "galvanised" }), 201)).json().id as string;
-    const send = () => engineer.post(`/v1/work-items/${id}/transitions`, { transition: "send_for_review", idempotencyKey: randomUUID() });
+    const send = () => engineer.post(`/v1/work-items/${id}/transitions`, { transition: "send_for_review", confirmed: true, idempotencyKey: randomUUID() });
     const res = await send();
     expect(res.statusCode, res.body).toBe(422);
     expect(res.json()).toEqual({

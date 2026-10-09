@@ -31,7 +31,7 @@ async function codeC(id: string, k1Manager: Caller) {
   const answers = { ...(await detail(k1Engineer, id)).answers, sample_checked: true, matches_specification: false, verification_note: "Too dim" };
   await ok(k1Engineer.request("PUT", `/v1/work-items/${id}/answers`, { answers }));
   await ok(k1Manager.post(`/v1/work-items/${id}/claim`));
-  await ok(k1Manager.post(`/v1/work-items/${id}/transitions`, { transition: "revise_c", answers: { remarks: "Resubmit" }, idempotencyKey: randomUUID() }));
+  await ok(k1Manager.post(`/v1/work-items/${id}/transitions`, { transition: "revise_c", answers: { remarks: "Resubmit" }, confirmed: true, idempotencyKey: randomUUID() }));
 }
 
 beforeAll(async () => {

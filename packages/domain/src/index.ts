@@ -27,6 +27,7 @@ export * from "./workflow-publish.ts";
 export * from "./workflow-definition.ts";
 export * from "./workflow-checks.ts";
 export * from "./transition-rules.ts";
+export * from "./workflow-authoring.ts";
 export * from "./numbering.ts";
 export * from "./numbering-counter.ts";
 export * from "./numbering-admin.ts";

@@ -102,7 +102,7 @@ async function atConsultant(tower: Tower, title: string, holder: Caller = tower.
 
 /** `holder` takes Send Back `transition` on item `id`. */
 const sendBack = (holder: Caller, id: string, transition = "send_back") =>
-  ok(holder.post(`/v1/work-items/${id}/transitions`, { transition, idempotencyKey: randomUUID() }));
+  ok(holder.post(`/v1/work-items/${id}/transitions`, { transition, confirmed: true, idempotencyKey: randomUUID() }));
 
 beforeAll(async () => {
   await addSendBackType(migrator, TYPE, { en: "Sent Back submittal", ar: "اعتماد مُرجع" }, schema);

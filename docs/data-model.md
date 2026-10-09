@@ -160,11 +160,13 @@ As built (RP-428, WF-5): `owner_kind {rabaed, project}`. Every Project has its o
 `work_item_type.pdf_template_id` picks the template per Project. `documental_record.pdf_template_version_id` records which one sealed it.
 
 **workflow_definition** / **workflow_version**
-- `workflow_definition`: `id`, `owner_kind/owner_id`, `name i18n`, `copied_from_id`.
-- `workflow_version`: `id`, `workflow_definition_id`, `version_no`, `status {draft, published}`, `layout jsonb` (React Flow node positions only), `published_at`. Published versions are immutable.
+- `workflow_definition`: `id`, `owner_kind/owner_id`, `name i18n`. As built (RP-426, ADR 0016): `owner_kind {rabaed, project, company}` with `project_id` or `company_id` (a Company's Library); no `copied_from_id`, since a copy is independent of its original. Read by every Member for a Rabaed Default, by the Project's Members for a Project's, by its own Company for a Library's (visibility.md V18, V20). `work_item_type_id` (RP-427): the Work Item Type it is made for, whose outcome set, Module Stages and Form its publish checks use; copied with it, and a binding names a Workflow of the bound Type. Changed only through the authoring commands (workflow-engine.md §1 "Authoring").
+- `workflow_event` (RP-427): `id`, `workflow_definition_id` (null for an unbinding), `project_id` or `company_id`, `actor_member_id`, `type {duplicated, draft_saved, published, bound, unbound}`, `payload`, `created_at`. The audit trail of Members' Workflow and binding changes; append-only, read by nobody through the app role. A Rabaed Engineer's changes are in `admin_action`.
+- `workflow_binding` (RP-426): `id`, `project_id`, `work_item_type_id`, `raising_participant_id` (null: the Type's Workflow on the Project; else an exception for items that Participant raises), `workflow_definition_id`. Unique per (Project, Type) and per (Project, Type, raising Participant). Names the Project's own Workflow or a Rabaed Default with a published Version (trigger `workflow_binding_checked`). Read by the Project's Members; an exception only by its Participant's Members and the Project Admins (V15). See workflow-engine.md §1 "Ownership and binding".
+- `workflow_version`: `id`, `workflow_definition_id`, `version_no`, `status {draft, published}`, `layout jsonb` (React Flow node positions only), `published_at`. Published versions are immutable. `draft_name i18n` (RP-427): a draft's new name for the Workflow, given to `workflow_definition.name` when it is published and then cleared, so nobody but the draft's authors reads it before (V20). A definition with no published Version is read by its authors only.
 
 **workflow_step**
-`id`, `workflow_version_id`, `key`, `name i18n`, `stage_key`, `actor_rule jsonb`, `is_signing bool`, `outcome_mode {none, recommend_code, issue_code, inspection_result}`.
+`id`, `workflow_version_id`, `key`, `name i18n`, `stage_key`, `actor_rule jsonb`, `is_signing bool` (read by nothing: every Transition is signed, ADR 0017), `outcome_mode {none, recommend_code, issue_code, inspection_result}`.
 - `actor_rule` says who can hold the Step: base role or project role, required permission (e.g. `approve`), and optional default assignee resolution. The Participant is resolved at runtime from the item's Visibility values; that is how "Electrical goes to Consultant A" works.
 - `issue_code` marks the final review Step.
 
@@ -181,7 +183,7 @@ As built (RP-428, WF-5): `owner_kind {rabaed, project}`. Every Project has its o
 
 **work_item_type**
 `id`, `project_id`, `module_key`, `code` (MAR, SAR, DAR…), `name i18n`, `form_definition_id`, `workflow_definition_id`, `outcome_kind {review_code, inspection_result, approval, none}`, `expected_frequency {none, daily, weekly, monthly}`, `allows_subtasks bool`, `copied_from_id`.
-New items use the latest *published* versions of the Form and Workflow at creation time. As built (RP-429): `outcome_kind` only names the Rabaed Default outcome set a new Type starts with; its outcomes are then its own (**outcome**).
+New items use the latest *published* versions of the Form and Workflow at creation time. `workflow_definition_id` is the Type's Rabaed Default; a Project's `workflow_binding` overrides it for that Project's new items (RP-426). As built (RP-429): `outcome_kind` only names the Rabaed Default outcome set a new Type starts with; its outcomes are then its own (**outcome**).
 
 **outcome** (RP-429, WF-6; glossary Outcome)
 A Work Item Type's outcome set: `id` (random), `owner_kind {rabaed, project}`, `project_id` (null for a Rabaed Default), `work_item_type_id`, `code` (a letter, then letters, digits or `_`, ≤ 32; never `cancelled`, `pending` or `in_preparation`: `app.is_outcome_code`), `name i18n`, `closing bool`, `polarity {positive, negative}`, `actions jsonb` (follow-up actions, each kind once: `{kind: create_items, type: <Type code>}`, `{kind: offer_revision}`, `{kind: offer_replacement}`; `app.is_outcome_actions`), `sort`, `created_at`, `updated_at`. Unique `(work_item_type_id, code)` for a Rabaed Default, `(project_id, work_item_type_id, code)` for a Project's. `@rabaed/domain`'s `outcome.ts` is the TypeScript side (`outcomeSchema`, `defaultOutcomeSets`).
@@ -290,7 +292,7 @@ A Revision's Documents are copied as new rows with their own storage keys; **doc
 
 **documental_record**
 `id`, `work_item_id`, `stored_file_id`, `pdf_template_version_id`, `language`, `outcome`, `content_sha256`, `sealed_at`, `verification_code` (QR target).
-Produced on every closure. The PDF includes every signing event and the cross-Participant events, but no Internal Communication and no Chat. It is sealed with PAdES and a trusted timestamp (ADR 0003).
+Produced on every closure. The PDF names everyone who took a Transition on the item's path to its outcome, whichever Company (name, Position, Company, date, Signature), but no Returns, Internal Notes, Recommended Codes, Chat or in-progress answers (visibility.md V7, ADR 0017). It is sealed with PAdES and a trusted timestamp (ADR 0003).
 
 **distribution_list** / **distribution_recipient**
 - `distribution_list`: `id`, `project_id`, `work_item_type_id`.
@@ -356,8 +358,8 @@ Each created Draft carries `import_id` for traceability.
 | `payload jsonb` | Action Form answers, code, note text |
 | `audience` | `shared` or `internal` |
 | `audience_participant_id` | set when `audience = internal` |
-| `signature_id → member_signature` | set when the event signs |
-| `content_sha256` | hash of item data + documents at that moment |
+| `signature_id → member_signature` | set on every Transition once RP-85 builds the Signature (ADR 0017) |
+| `content_sha256` | on a Transition: hash of the item's Subject, answers, outcome and Documents at that moment (`app.work_item_content_sha256`, workflow-engine.md §7). Not granted to the app role, nor are `prev_hash` and `hash` (RP-448 review) |
 | `prev_hash`, `hash` | hash chain → tamper-evident |
 | `created_at` | |
 
@@ -392,7 +394,7 @@ Rabaed Admin's own sign-in (ADR 0010), used by the admin service only, never the
 - **engineer_sign_in_event**: append-only log of every sign-in, failure and sign-out: `engineer_id` (null when the email matched none), `email`, `event`, `ip`, `user_agent`, `at`.
 
 **admin_action**: `id`, `engineer_id`, `action`, `target_kind/target_id` (`target_id` null for a read of a list), `reason` (required), `before jsonb`, `after jsonb`, `at`.
-Allowed actions are an explicit list: onboard Company, invite its Authorized Person again, reassign, reset step, transfer Authorized Person, unlock, run import, fix visibility, publish library template.
+Allowed actions are an explicit list: onboard Company, invite its Authorized Person again, reassign, reset step, transfer Authorized Person, unlock, run import, fix visibility, publish library template, save and publish a Rabaed Default Workflow (`save_workflow_draft`, `publish_workflow`, RP-427).
 
 **job**: background jobs (PDF sealing, imports, deliveries) with status and error, which is the Job Monitor.
 

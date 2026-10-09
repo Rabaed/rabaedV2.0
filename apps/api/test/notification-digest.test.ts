@@ -107,7 +107,7 @@ async function issueCodeB(id: string, signer: Person) {
   await ok(signer.caller.post(`/v1/work-items/${id}/claim`));
   await take(signer.caller, id, "send_to_manager");
   await ok(signer.caller.post(`/v1/work-items/${id}/claim`));
-  await ok(signer.caller.post(`/v1/work-items/${id}/transitions`, { transition: "approve_b", answers: {}, idempotencyKey: randomUUID() }));
+  await ok(signer.caller.post(`/v1/work-items/${id}/transitions`, { transition: "approve_b", answers: {}, confirmed: true, idempotencyKey: randomUUID() }));
 }
 
 let raiser: Person; // C1 engineer: watches what they raise; the digest by default.
@@ -307,7 +307,7 @@ describe("a new Revision (scenario 75)", () => {
     const answers = { ...(await detail(at.k1Manager, id)).answers, sample_checked: true, matches_specification: false, verification_note: "Too dim" };
     await ok(at.k1Manager.request("PUT", `/v1/work-items/${id}/answers`, { answers }));
     await ok(at.k1Manager.post(`/v1/work-items/${id}/claim`));
-    await ok(at.k1Manager.post(`/v1/work-items/${id}/transitions`, { transition: "revise_c", answers: { remarks: "Resubmit" }, idempotencyKey: randomUUID() }));
+    await ok(at.k1Manager.post(`/v1/work-items/${id}/transitions`, { transition: "revise_c", answers: { remarks: "Resubmit" }, confirmed: true, idempotencyKey: randomUUID() }));
     await drain();
     await poll(riyadh(14));
     digests = [];
