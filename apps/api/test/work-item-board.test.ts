@@ -345,6 +345,11 @@ describe("closed columns", () => {
     expect(cardIds(after)).toContain(withK1);
     // The List behind "Show all" still has them.
     expect((await listAll(k1ManagerB, { stage: [closedStage] })).items.map((r) => r.id)).toEqual(expect.arrayContaining([closedItem, chainRoot]));
+    // The List has no 30-day cut at all (RP-410): with no filter, every closed item is there, counted in its Stage.
+    const { first, items } = await listAll(k1ManagerB);
+    expect(items.map((r) => r.id)).toEqual(expect.arrayContaining([closedItem, chainRoot]));
+    expect(first.stages.find((s) => s.key === closedStage)!.count).toBe(total);
+    expect(items.filter((r) => r.stage.key === closedStage)).toHaveLength(total);
   });
 });
 
