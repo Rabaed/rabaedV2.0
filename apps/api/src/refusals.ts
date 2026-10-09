@@ -45,6 +45,10 @@ const answers = {
   // whatever the reason.
   assignee_not_offered: () => new HttpError(422, "assignee_not_offered"),
   action_not_allowed: () => new HttpError(409, "action_not_allowed"),
+  // A Recommended Code the Transition doesn't offer (RP-433): not from a Step that
+  // Recommends a Code, not to the same Participant's next reviewer, or not a closing
+  // outcome of the Type's set; one answer whatever the reason.
+  recommended_code_not_offered: () => new HttpError(422, "recommended_code_not_offered"),
   validation_failed: () => new HttpError(422, "validation_failed"),
   // A Transition's Action Form answers (RP-300): the body lists each field's error.
   invalid_action_form: () => new HttpError(422, "invalid_action_form"),

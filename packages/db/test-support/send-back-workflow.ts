@@ -10,13 +10,22 @@
  *   Consultant approval ─return_to_engineer→ Consultant review
  *   Consultant approval ─approve_a→ Approved · A, ─revise_c→ Revise & Resubmit · C
  *
+ * `withCancel` adds a Cancel from each of the raiser's Steps (Draft, Contractor
+ * review) to a Cancelled Step (RP-433); `recommendCode` makes Consultant review a
+ * Step that Recommends a Code to the manager (§5.3, RP-433).
+ *
  * It passes publish checks 4 and 8, as every published Version must. `run`
  * executes SQL as the migrator (a pg client's or Kysely's query); the result is
  * the new Workflow definition's id, for a test Type to use.
  */
 export async function addSendBackWorkflow(
   run: (text: string) => Promise<{ rows: unknown[] }>,
-  { withApproveB = false, notifications = {} }: { withApproveB?: boolean; notifications?: Record<string, unknown[]> } = {},
+  {
+    withApproveB = false,
+    withCancel = false,
+    recommendCode = false,
+    notifications = {},
+  }: { withApproveB?: boolean; withCancel?: boolean; recommendCode?: boolean; notifications?: Record<string, unknown[]> } = {},
 ): Promise<string> {
   const { rows } = await run(`
     with definition as (
@@ -35,11 +44,12 @@ export async function addSendBackWorkflow(
         ('internal_review', '{"en": "Contractor review", "ar": "مراجعة المقاول"}', 'internal_review',
           '{"base_role": "contractor", "permission": "review"}', 'none'),
         ('consultant_review', '{"en": "Consultant review", "ar": "مراجعة الاستشاري"}', 'pending_approval',
-          '{"base_role": "consultant", "permission": "review"}', 'none'),
+          '{"base_role": "consultant", "permission": "review"}', '${recommendCode ? "recommend_code" : "none"}'),
         ('consultant_approval', '{"en": "Consultant approval", "ar": "اعتماد الاستشاري"}', 'internal_review',
           '{"base_role": "consultant", "permission": "approve"}', 'issue_code'),
         ('approved', '{"en": "Approved", "ar": "معتمد"}', 'approved', '{}', 'none'),
         ('revise_resubmit', '{"en": "Revise & Resubmit", "ar": "مراجعة وإعادة تقديم"}', 'revise_resubmit', '{}', 'none')
+        ${withCancel ? `, ('cancelled', '{"en": "Cancelled", "ar": "ملغى"}', 'cancelled', '{}', 'none')` : ""}
       ) as s (key, name, stage_key, actor_rule, outcome_mode)
       returning id, key, workflow_version_id
     ), transitions as (
@@ -60,6 +70,8 @@ export async function addSendBackWorkflow(
         ('revise_c', 'consultant_approval', 'revise_resubmit', '{"en": "Revise · C", "ar": "مراجعة · C"}', 'close', 'C', 'approve', 9)
         ${withApproveB ? `, ('approve_b', 'consultant_approval', 'approved', '{"en": "Approve with Comments · B", "ar": "اعتماد مع ملاحظات · B"}',
           'close', 'B', 'approve', 10)` : ""}
+        ${withCancel ? `, ('cancel', 'draft', 'cancelled', '{"en": "Cancel", "ar": "إلغاء"}', 'cancel', null, 'create', ${withApproveB ? 11 : 10}),
+          ('cancel_review', 'internal_review', 'cancelled', '{"en": "Cancel", "ar": "إلغاء"}', 'cancel', null, 'review', ${withApproveB ? 12 : 11})` : ""}
       ) as t (key, from_key, to_key, label, kind, outcome, permission, sort)
       join steps f on f.key = t.from_key
       join steps s on s.key = t.to_key

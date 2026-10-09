@@ -578,6 +578,10 @@
       "assignToPool": "Step Pool: anyone who may take it",
       "assigneeNotOffered": "That person can't take the next step. Choose someone from the list.",
       "actionNotAllowed": "This Transition can't fill in those fields here. Ask a Project Admin to check the Workflow.",
+      "recommendCode": "Recommended Code",
+      "recommendCodeHelp": "Optional. Your advice to the next reviewer in your Company, with the Internal Note below. Only your Company sees it.",
+      "recommendCodeNone": "No Recommended Code",
+      "recommendedCodeNotOffered": "That Code can't be recommended here. Choose one from the list.",
       "projectClosed": "This Project is closed.",
       "formIncomplete": "Complete the Form first: the fields to fix are marked in it.",
       "saveFirst": "Your answers couldn't be saved, so nothing was sent. Check the Form.",
@@ -648,7 +652,8 @@
       "answersChanged": "Form changed",
       "emptyAnswer": "(empty)",
       "changedValue": "changed",
-      "linksField": "Links"
+      "linksField": "Links",
+      "recommendedCode": "Recommended Code"
     }
   },
   "revision": {

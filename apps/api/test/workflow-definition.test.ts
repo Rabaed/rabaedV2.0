@@ -48,8 +48,7 @@ beforeAll(async () => {
   await addRulesType(migrator, "WFRUL");
   // A Workflow with actions (WF-8) is among them, whichever tests ran first.
   await addActionsType(migrator, "WFACT");
-  // A Workflow with Send Backs is among them, whichever tests ran first.
-  await addSendBackType(migrator, "WFDEF", { en: "Workflow definition check", ar: "فحص تعريف سير العمل" }, {
+  const sendBackForm = {
     sections: [
       { key: "material", title: { en: "Material", ar: "المادة" }, fields: [{ key: "model", type: "text", label: { en: "Model", ar: "الطراز" } }] },
       {
@@ -62,7 +61,11 @@ beforeAll(async () => {
         ],
       },
     ],
-  });
+  };
+  // A Workflow with Send Backs is among them, whichever tests ran first.
+  await addSendBackType(migrator, "WFDEF", { en: "Workflow definition check", ar: "فحص تعريف سير العمل" }, sendBackForm);
+  // And one with Cancels and a Step that Recommends a Code (RP-433).
+  await addSendBackType(migrator, "WFCNL", { en: "Cancel check", ar: "فحص الإلغاء" }, sendBackForm, { withCancel: true, recommendCode: true });
   versions = (
     await sql<Version>`
       select v.id, d.name ->> 'en' as name, v.version_no as "versionNo", v.layout,

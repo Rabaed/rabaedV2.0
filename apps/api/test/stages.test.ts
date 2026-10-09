@@ -39,7 +39,7 @@ const list = async (by: Caller, at: Tower): Promise<WorkItemList> =>
 const board = async (by: Caller, at: Tower): Promise<WorkItemBoard> =>
   (await ok(by.get(`/v1/projects/${at.projectId}/work-items/kanban?${workItemSearchParams({})}`), 200)).json();
 
-const rabaedDefaultKeys = ["draft", "internal_review", "pending_approval", "approved", "revise_resubmit"];
+const rabaedDefaultKeys = ["draft", "internal_review", "pending_approval", "approved", "revise_resubmit", "cancelled"];
 
 describe("a new Project's Stages", () => {
   it("are the Rabaed Defaults, read by every Project Member, editable by its Project Admin only", async () => {
@@ -101,7 +101,7 @@ describe("adding and reordering Stages", () => {
     const added = (await stagesOf(c1.caller, t)).stages;
     expect(added.at(-1)).toEqual({ key: "on_hold", name: { en: "On Hold", ar: "معلّق" }, category: "in_progress", inUse: false });
 
-    const order = ["draft", "internal_review", "on_hold", "pending_approval", "approved", "revise_resubmit"];
+    const order = ["draft", "internal_review", "on_hold", "pending_approval", "approved", "revise_resubmit", "cancelled"];
     await ok(reorder(c1.caller, t, order));
     expect((await stagesOf(c1.caller, t)).stages.map((s) => s.key)).toEqual(order);
     expect((await board(t.c1Pm, t)).columns.map((c) => c.stageKey)).toEqual(order);

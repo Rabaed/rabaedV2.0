@@ -8,7 +8,7 @@ import { expect } from "vitest";
 
 /** Adds Rabaed Type `code`, named `name`, on a new test Send Back Workflow, with its Form published with `schema` (as the migrator). */
 export async function addSendBackType(migrator: Db, code: string, name: { en: string; ar: string }, schema: unknown,
-  options: { withApproveB?: boolean; notifications?: Record<string, unknown[]> } = {},
+  options: { withApproveB?: boolean; withCancel?: boolean; recommendCode?: boolean; notifications?: Record<string, unknown[]> } = {},
 ): Promise<void> {
   const { id: formId } = await migrator
     .insertInto("form_definition")

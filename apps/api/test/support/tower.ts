@@ -56,6 +56,8 @@ export type TakeOptions = {
   idempotencyKey?: string;
   /** "Assign to" (WF-8): the next holder picked. */
   assignTo?: string;
+  /** The Recommended Code (RP-433), from a Step that Recommends a Code. */
+  recommendedCode?: string;
 };
 
 /** `by` takes Transition `transition` on item `id`, and the response is returned as it came, for a test of a refusal. */

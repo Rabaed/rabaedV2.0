@@ -662,6 +662,8 @@ type ActionRow = {
   action_form: unknown;
   /** Whether it offers "Assign to" (WF-8). */
   offers_assign_to: boolean;
+  /** Whether it may carry a Recommended Code (RP-433): a `send` from a Step that Recommends a Code. */
+  may_recommend: boolean;
 };
 
 /**
@@ -672,10 +674,12 @@ type ActionRow = {
 async function actionRows(trx: Trx, workItemId: string, transitionKey?: string): Promise<ActionRow[]> {
   const { rows } = await sql<ActionRow>`
     select a.action, a.transition_key, a.label, a.transition_kind, tr.action_form,
-      coalesce(tr.actions @> '[{"type": "offer_assign_to"}]', false) as offers_assign_to
+      coalesce(tr.actions @> '[{"type": "offer_assign_to"}]', false) as offers_assign_to,
+      coalesce(tr.kind = 'send' and src.outcome_mode = 'recommend_code', false) as may_recommend
     from app.work_item_actions(${workItemId}::uuid) with ordinality a (action, transition_key, label, transition_kind, n)
     left join work_item w on w.id = ${workItemId}::uuid
     left join workflow_transition tr on tr.workflow_version_id = w.workflow_version_id and tr.key = a.transition_key
+    left join workflow_step src on src.id = tr.from_step_id
     where ${transitionKey === undefined ? sql`true` : sql`a.action = 'transition' and a.transition_key = ${transitionKey}`}
     order by a.n
   `.execute(trx);
@@ -687,6 +691,9 @@ async function actions(trx: Trx, workItemId: string): Promise<Omit<WorkItemActio
   const rows = await actionRows(trx, workItemId);
   const transitions = rows.filter((r) => r.action === "transition");
   const offered = await Promise.all(transitions.map((r) => (r.offers_assign_to ? assignees(trx, workItemId, r.transition_key!) : [])));
+  const recommendable = await Promise.all(
+    transitions.map((r) => (r.may_recommend ? recommendableOutcomes(trx, workItemId, r.transition_key!) : [])),
+  );
   return {
     claim: rows.some((r) => r.action === "claim"),
     release: rows.some((r) => r.action === "release"),
@@ -696,8 +703,21 @@ async function actions(trx: Trx, workItemId: string): Promise<Omit<WorkItemActio
       kind: r.transition_kind!,
       actionForm: parseActionForm(r.action_form),
       ...(offered[i]!.length > 0 ? { assignTo: offered[i] } : {}),
+      ...(recommendable[i]!.length > 0 ? { recommendCode: recommendable[i] } : {}),
     })),
   };
+}
+
+/**
+ * The Recommended Code (RP-433): the outcomes the acting Member may recommend when
+ * taking `transitionKey` (app.transition_recommendable_outcomes): the Type's closing
+ * outcomes, from a Step that Recommends a Code, to their own Participant's next reviewer.
+ */
+async function recommendableOutcomes(trx: Trx, workItemId: string, transitionKey: string): Promise<{ code: string; name: BilingualText }[]> {
+  const { rows } = await sql<{ code: string; name: BilingualText }>`
+    select code, name from app.transition_recommendable_outcomes(${workItemId}::uuid, ${transitionKey})
+  `.execute(trx);
+  return rows;
 }
 
 /**
@@ -727,6 +747,7 @@ const transitionRefusals = [
   "no_route",
   "assignee_not_offered",
   "action_not_allowed",
+  "recommended_code_not_offered",
 ] as const;
 export type TakeTransitionResult =
   | { ok: true }
@@ -858,7 +879,8 @@ export function takeTransition(
     const { rows } = await sql<{ outcome: string }>`
       select app.take_transition(
         ${workItemId}::uuid, ${input.transition}, ${JSON.stringify(answers)}::jsonb, ${input.internalNote},
-        ${pinned.dataSha256}::bytea, ${input.idempotencyKey}::uuid, ${now}, ${input.assignTo}::uuid) as outcome
+        ${pinned.dataSha256}::bytea, ${input.idempotencyKey}::uuid, ${now}, ${input.assignTo}::uuid,
+        ${input.recommendedCode}::text) as outcome
     `.execute(trx);
     // A Validate rule the database found not holding, by its place in `validate`.
     const failed = /^validation_failed:(\d+)$/.exec(rows[0]!.outcome);
@@ -994,6 +1016,7 @@ export function getWorkItemHistory(db: Db, memberId: string, workItemId: string)
       document_number: string | null;
       outcome: WorkItemOutcome | null;
       internal_note: string | null;
+      recommended_code: string | null;
       changes: { field: string; old: unknown; new: unknown }[] | null;
     }>`select * from app.work_item_history(${workItemId}::uuid)`.execute(trx);
     return {
@@ -1011,6 +1034,7 @@ export function getWorkItemHistory(db: Db, memberId: string, workItemId: string)
         documentNumber: r.document_number,
         outcome: r.outcome,
         internalNote: r.internal_note,
+        recommendedCode: r.recommended_code,
         changes: r.changes,
       })),
     };

@@ -137,7 +137,7 @@ describe("a Contractor engineer's Draft MAR", () => {
       stepEnteredAt: null,
       stepAgeWeeks: null,
     });
-    expect(counts(l)).toEqual({ draft: 1, internal_review: 0, pending_approval: 0, approved: 0, revise_resubmit: 0 });
+    expect(counts(l)).toEqual({ draft: 1, internal_review: 0, pending_approval: 0, approved: 0, revise_resubmit: 0, cancelled: 0 });
   });
 
   it("opens for them, held by its creator, with Step Age in weeks", async () => {

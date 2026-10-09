@@ -296,6 +296,14 @@ export const takeTransitionRequest = z.object({
    * offered is refused with `assignee_not_offered`, whoever it names.
    */
   assignTo: z.uuid().nullable().default(null),
+  /**
+   * The Recommended Code (RP-433, workflow-engine.md §5.3): from a Step that
+   * Recommends a Code, one of the outcomes the Transition offers
+   * (`recommendCode`), for the next reviewer of the same Participant; its note is
+   * the Internal Note. Only the taker's own Participant ever reads it (V5). One it
+   * doesn't offer is refused with `recommended_code_not_offered`.
+   */
+  recommendedCode: workItemOutcome.nullable().default(null),
   idempotencyKey: z.uuid(),
 });
 export type TakeTransitionRequest = z.input<typeof takeTransitionRequest>;
@@ -340,6 +348,13 @@ export const workItemActions = z.object({
        * another Participant's).
        */
       assignTo: z.array(z.object({ memberId: z.uuid(), name: bilingualText })).optional(),
+      /**
+       * The Recommended Code (RP-433): the outcomes the pop-up may recommend to the
+       * next reviewer of the viewer's own Participant, in order; absent when the
+       * Transition offers none (not from a Step that Recommends a Code, or it
+       * leaves the Participant).
+       */
+      recommendCode: z.array(z.object({ code: workItemOutcome, name: bilingualText })).optional(),
     }),
   ),
 });
@@ -443,6 +458,8 @@ export const workItemHistory = z.object({
       outcome: workItemOutcome.nullable(),
       /** Set on an internal_note event: the Internal Note, written with its `transition`. */
       internalNote: z.string().nullable(),
+      /** Set on a recommend_code event: the Recommended Code, internal to the recommender's Participant (V5). */
+      recommendedCode: workItemOutcome.nullable(),
       /**
        * Set on an answers_changed event: each answer changed after Draft, by field
        * key, a missing answer as null. Internal to the raiser's Participant (V5).

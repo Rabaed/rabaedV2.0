@@ -86,7 +86,7 @@ A draft Workflow version can't be published unless all of these hold. `workflowP
 And, from spec RP-423 (`workflow-checks.ts`):
 
 - No Workflow names a person: Positions only. The format enforces it (see "Definition format"); an action setting a Member field to a value is `names_person`.
-- A Cancel leaves only the raiser's own Steps (the Draft Step's role), goes to a Step in a cancelled Stage, and sets no outcome.
+- A Cancel leaves only the raiser's own Steps (the Draft Step's role), goes to a Step in a cancelled Stage, and sets no outcome. At run time it is offered only until the first Submit (§5.1 "Cancel").
 - Among Transitions sharing a label and source Step, conditions that can overlap or leave a gap are a **warning** (§4): `condition_overlap`, `condition_gap`, found by trying the answers on each condition's edges.
 
 As built (RP-334): checks 4 and 8 are `workflowKindProblems`, which `workflowPublishProblems` runs. A Step's role is its actor rule's `base_role`; a `send_back` is valid from a Step of role A to a Step of role B when some `submit` goes from a Step of B to a Step of A. The database also refuses a `send_back` with an outcome (`workflow_transition_send_back_no_outcome`), and `take_transition` raises on a `return` that would cross Participants. The seam suites' test Workflow with a Send Back is `addSendBackWorkflow` (`packages/db/test-support`).
@@ -215,6 +215,8 @@ Effects, in order:
 - **Set and copy** (`app.transition_actions`, the actions step, kept apart so later redefinitions call it unchanged): a write goes into the Action Form answers when the Action Form has that key, else into the Form; only into what the acting Participant fills at this Step (its Action Form's fields, and the Form Sections it may change now, `app.editable_section_keys`; never a calculated or Built-in Field). A copy reads only from those fields, the Form as the actor reads it (`app.work_item_answers`), so never another Participant's answers, and on a `send` or `return` never an Action Form answer into the Form (V5). "Now" (`app.moment_answer`) is the moment taken: a `date` or `time` in Riyadh, a `datetime` in UTC. Anything else, whatever the reason, is refused `action_not_allowed` (409) with nothing written; publishing refuses each case first (§1, check 6). Actions run in order, a copy reading what an earlier one wrote.
 - Form writes are saved as Save draft saves them: the answers as they arrived kept for everyone else (V19), field times, and once the item has left Draft an `answers_changed` event internal to the actor's Participant, just before the Transition's event, whose content hash covers them. Action Form writes are in the Transition event's payload.
 
+**Cancel** (as built, RP-433, WF-10). A `cancel` Transition (publishing keeps it to the raiser's own Steps, into a Step in a cancelled Stage, with no outcome) is offered (`app.takeable_transitions`) and taken only until the item is first Submitted (`submitted_at`): after that it isn't there, even back at the raiser's Steps after a Send Back, and taking it is refused `transition_not_available`. It needs no complete Form, closes the item with outcome `cancelled` (allowed outside every outcome set), and is recorded like any Transition: a `transition` event, `shared` (nobody outside the raiser's Participant sees an item before its first Submit). A Cancel issues no Document Number: a Draft cancelled keeps "No number yet"; one cancelled from Internal Review keeps the number it got leaving Draft. Open Subtasks are cancelled with it (§6) once Subtasks exist (no `work_item.parent_id` yet); Comments are raised only by a Code, so never before Submit. The Rabaed Default Stages of Submittals include **Cancelled** (category `cancelled`), copied into every Project. Seam 1 and 2: `cancel-recommended-code.test.ts`, `cancel-recommended-code-rls.test.ts` (the test Workflow's `withCancel`).
+
 ### 5.2 `claim(item)` / `release(item)`
 
 - Claim takes a pooled assignment. It uses a conditional update, so only one claimer wins.
@@ -227,6 +229,7 @@ Effects, in order:
 - Only on a `recommend_code` Step, usually as part of that Step's forward Transition Action Form.
 - It is stored as an internal event, and `recommended_code` is updated.
 - It is never visible outside the Participant.
+- **As built (RP-433, WF-10; `20270103000000_cancel_recommended_code.sql`):** part of `take_transition`, as `p_recommended_code` (the api's `recommendedCode`); its note is the Internal Note written with it. Offered only on a `send` from a Step whose outcome mode is `recommend_code`, whose next Step the same Participant holds, and only the Type's closing outcomes on the item's Project, in order (`app.recommendable_outcomes`; for the api `app.transition_recommendable_outcomes`, as `WorkItemActions.transitions[].recommendCode`, with each outcome's name). Any other is refused `recommended_code_not_offered` (422), one answer whatever the reason, with nothing written. It is optional. It is its own `recommend_code` event (`payload.recommended_code`), always `internal` to the recommender's Participant, just before the Internal Note and the Transition; there is no `recommended_code` column, since every Participant that sees the item reads its row. So the history (`app.work_item_history`'s `recommended_code`, the api's `recommendedCode`), the Activity Feed and their numbering read it through the same RLS as any internal event, and no notification carries it (the watched-event trigger ignores it). Visibility scenario RP-433-1.
 
 ### 5.4 `create_revision(closed_item)`
 
@@ -278,7 +281,7 @@ As built (RP-429): what an outcome leads to is its follow-up actions in its Type
 | D | Closed with a "Create replacement" action. |
 | passed / passed_with_comments | Like A / B, for Inspections. |
 | failed | Like C: re-inspection by Revision. |
-| cancelled | Closed. Open Subtasks are cancelled too. |
+| cancelled | Closed. Open Subtasks are cancelled too (once Subtasks exist; RP-433: a Cancel is taken only before the first Submit, so no Comment exists yet). |
 
 ---
 
