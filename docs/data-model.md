@@ -159,7 +159,8 @@ This is the shared set per Module. Workflows reference Stages by `key`, so libra
 `work_item_type.pdf_template_id` picks the template per Project. `documental_record.pdf_template_version_id` records which one sealed it.
 
 **workflow_definition** / **workflow_version**
-- `workflow_definition`: `id`, `owner_kind/owner_id`, `name i18n`. As built (RP-426, ADR 0016): `owner_kind {rabaed, project, company}` with `project_id` or `company_id` (a Company's Library); no `copied_from_id`, since a copy is independent of its original. Read by every Member for a Rabaed Default, by the Project's Members for a Project's, by its own Company for a Library's (visibility.md V18, V20).
+- `workflow_definition`: `id`, `owner_kind/owner_id`, `name i18n`. As built (RP-426, ADR 0016): `owner_kind {rabaed, project, company}` with `project_id` or `company_id` (a Company's Library); no `copied_from_id`, since a copy is independent of its original. Read by every Member for a Rabaed Default, by the Project's Members for a Project's, by its own Company for a Library's (visibility.md V18, V20). `work_item_type_id` (RP-427): the Work Item Type it is made for, whose outcome set, Module Stages and Form its publish checks use; copied with it, and a binding names a Workflow of the bound Type. Changed only through the authoring commands (workflow-engine.md §1 "Authoring").
+- `workflow_event` (RP-427): `id`, `workflow_definition_id` (null for an unbinding), `project_id` or `company_id`, `actor_member_id`, `type {duplicated, draft_saved, published, bound, unbound}`, `payload`, `created_at`. The audit trail of Members' Workflow and binding changes; append-only, read by nobody through the app role. A Rabaed Engineer's changes are in `admin_action`.
 - `workflow_binding` (RP-426): `id`, `project_id`, `work_item_type_id`, `raising_participant_id` (null: the Type's Workflow on the Project; else an exception for items that Participant raises), `workflow_definition_id`. Unique per (Project, Type) and per (Project, Type, raising Participant). Names the Project's own Workflow or a Rabaed Default with a published Version (trigger `workflow_binding_checked`). Read by the Project's Members; an exception only by its Participant's Members and the Project Admins (V15). See workflow-engine.md §1 "Ownership and binding".
 - `workflow_version`: `id`, `workflow_definition_id`, `version_no`, `status {draft, published}`, `layout jsonb` (React Flow node positions only), `published_at`. Published versions are immutable.
 
@@ -379,7 +380,7 @@ Rabaed Admin's own sign-in (ADR 0010), used by the admin service only, never the
 - **engineer_sign_in_event**: append-only log of every sign-in, failure and sign-out: `engineer_id` (null when the email matched none), `email`, `event`, `ip`, `user_agent`, `at`.
 
 **admin_action**: `id`, `engineer_id`, `action`, `target_kind/target_id` (`target_id` null for a read of a list), `reason` (required), `before jsonb`, `after jsonb`, `at`.
-Allowed actions are an explicit list: onboard Company, invite its Authorized Person again, reassign, reset step, transfer Authorized Person, unlock, run import, fix visibility, publish library template.
+Allowed actions are an explicit list: onboard Company, invite its Authorized Person again, reassign, reset step, transfer Authorized Person, unlock, run import, fix visibility, publish library template, save and publish a Rabaed Default Workflow (`save_workflow_draft`, `publish_workflow`, RP-427).
 
 **job**: background jobs (PDF sealing, imports, deliveries) with status and error, which is the Job Monitor.
 
