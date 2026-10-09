@@ -296,7 +296,7 @@ describe("not the same person keeps that Member from holding the next Step (RP-4
     expect(await take(k1.member, id, "fresh_eyes")).toBe("applied");
     // The manager who sent it to the Manager can't claim it; the other can.
     expect(await claim(k1Manager, id)).toBe("forbidden");
-    expect(await call(k1Manager, sql`select action from app.work_item_actions(${id}::uuid) where action = 'claim'`)).toEqual([]);
+    expect(await call(k1Manager, sql<{ action: string }>`select action from app.work_item_actions(${id}::uuid) where action = 'claim'`)).toEqual([]);
     expect(await claim(k1Manager2, id)).toBe("claimed");
 
     // Returned to the review, which K1's engineer left last: not back to them, nor to the
