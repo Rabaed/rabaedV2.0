@@ -18,6 +18,7 @@ export function selectSteps(changed: string[]): { steps: Step[]; skipped: Skippe
   const steps: Step[] = [];
   const skipped: Skipped[] = [];
   if (migrationChanged) steps.push(step("check:migrations"));
+  // eslint-disable-next-line rabaed/no-avoid-terms -- the database-schema migration files, named as the check script names them.
   else skipped.push({ name: "check:migrations", reason: "no migration changed against origin/main" });
   steps.push(step("lint"), step("typecheck"), step("test:unit"), step("test:seam1"), step("test:seam2"));
   if (uiChanged) steps.push(step("test:stories"));
