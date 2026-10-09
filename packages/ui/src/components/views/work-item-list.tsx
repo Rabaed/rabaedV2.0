@@ -473,11 +473,21 @@ export function Outcome({
   cancelled: string;
 }) {
   const found = outcomes.find((o) => o.type === typeCode && o.code === outcome);
-  if (!found) return <Badge tone="neutral">{outcome === "cancelled" ? cancelled : outcome}</Badge>;
+  if (!found)
+    return (
+      <Badge tone="neutral" data-outcome={outcome}>
+        {outcome === "cancelled" ? cancelled : outcome}
+      </Badge>
+    );
   const label = outcomeLabel(found, locale);
-  if (found.code.length > 3) return <Badge tone={outcomeTone(found)}>{label}</Badge>;
+  if (found.code.length > 3)
+    return (
+      <Badge tone={outcomeTone(found)} data-outcome={found.code}>
+        {label}
+      </Badge>
+    );
   return (
-    <Badge tone={outcomeTone(found)} title={label}>
+    <Badge tone={outcomeTone(found)} title={label} data-outcome={found.code}>
       <span aria-hidden="true" translate="no">
         {found.code}
       </span>

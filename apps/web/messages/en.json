@@ -675,6 +675,18 @@
       "unavailable": "That didn't work. Try again."
     }
   },
+  "replacement": {
+    "section": "Replacement",
+    "createIntro": "This item was rejected. Create a replacement: a new item with a new number, starting as a Draft with your answers and Documents.",
+    "create": "Create replacement",
+    "refusals": {
+      "replacement_not_allowed": "A replacement can't be created from this item now. Reload the page to see why.",
+      "project_closed": "The Project is closed.",
+      "not_found": "This item is no longer available to you.",
+      "idempotency_key_reused": "That didn't work. Try again.",
+      "unavailable": "That didn't work. Try again."
+    }
+  },
   "watch": {
     "watch": "Watch",
     "watching": "Watching",

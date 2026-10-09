@@ -579,7 +579,7 @@ export interface WorkItemLinkTable {
   project_id: string;
   from_id: string;
   to_id: string;
-  kind: "related" | "relies_on" | "raised_from";
+  kind: "related" | "relies_on" | "raised_from" | "replaces";
   /** Set for `relies_on`: the link question (`work_item_ref` field) that made it. */
   field_key: string | null;
   created_by_member_id: string;
