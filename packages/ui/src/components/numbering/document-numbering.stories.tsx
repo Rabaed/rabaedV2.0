@@ -147,7 +147,7 @@ export const SaveModal: Story = {
     await expect(modal.getByText("TWR-TMC-EL-MAR-042")).toBeVisible();
     await expect(modal.getByTestId("after-number")).toHaveTextContent("TWR-EL-MAR-");
     // As the kit: the Custom patterns saved with it (SAR's), though they don't change.
-    await expect(modal.getByText(t("customsSavedOne", { n: 1 }))).toBeVisible();
+    await expect(modal.getByText(t("customsSaved", { count: 1, n: 1 }))).toBeVisible();
     const save = modal.getByRole("button", { name: t("saveNew") });
     await expect(save).toBeDisabled();
     await userEvent.click(modal.getByRole("checkbox", { name: t("sharedAccept") }));
@@ -216,7 +216,7 @@ export const ReadOnly: Story = {
     await expect(canvas.queryByRole("button")).toBeNull();
     await expect(canvas.queryByRole("textbox")).toBeNull();
     await expect(canvas.getByText(t("patternHintReadOnly"))).toBeVisible();
-    await expect(canvas.getByText(t("colExample"))).toBeVisible();
+    await expect(canvas.getByRole("columnheader", { name: t("colExample") })).toBeVisible();
   },
 };
 

@@ -290,15 +290,16 @@ export function AddSegments({ t, pattern, example, onChange }: EditorProps & { o
             aria-label={t("add", { segment: t(`kinds.${kind}`) })}
             onClick={() => onChange(addSegment(pattern, kind))}
             className={cn(
-              "inline-flex h-[30px] items-center gap-1.5 rounded-sm bg-surface px-2.5 text-[12.5px] font-semibold text-text-secondary",
-              "outline-1 -outline-offset-1 outline-border-strong outline-dashed hover:text-brand-fg hover:outline-primary",
-              "disabled:cursor-not-allowed disabled:opacity-45",
+              "group inline-flex h-[30px] items-center gap-1.5 rounded-sm bg-surface px-2.5 text-[12.5px] font-semibold text-text-secondary",
+              "outline-1 -outline-offset-1 outline-border-strong outline-dashed enabled:hover:text-brand-fg enabled:hover:outline-primary",
+              // Disabled: the plain muted look, no segment tone and no hover colour.
+              "disabled:cursor-not-allowed disabled:bg-surface-subtle disabled:text-on-disabled disabled:outline-border",
               "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus focus-visible:outline-solid",
             )}
           >
-            <i aria-hidden="true" className={cn("size-2 rounded-[3px]", toneClasses[kind].solid)} />
+            <i aria-hidden="true" className={cn("size-2 rounded-[3px] group-disabled:bg-border-strong", toneClasses[kind].solid)} />
             {t(`kinds.${kind}`)}
-            <bdi dir="ltr" aria-hidden="true" className="text-notes font-semibold text-muted">
+            <bdi dir="ltr" aria-hidden="true" className="text-notes font-semibold text-muted group-disabled:text-on-disabled">
               {exampleCode(kind === "location" ? { kind, level: 2 } : kind === "text" ? { kind, text: "SUB" } : { kind }, example)}
             </bdi>
           </button>
@@ -432,21 +433,28 @@ function KitSegmented({
   );
 }
 
-/** A sample's label: the Company's short label (truncated) and the Trade, as far as the pattern tells them apart. */
+/**
+ * A sample's label, truncated as a whole with the Trade kept: the Company part gives
+ * way first ("TMC Constr… · Electrical"), down to a few letters. The whole label is its
+ * title, so two rows that still look alike can be told apart.
+ */
 export function SampleLabel({ entry, fallback, className }: { entry: SampleEntry; fallback: string; className?: string }) {
   const pieces = [entry.company, entry.trade].filter((p): p is string => p !== null);
+  const whole = pieces.length === 0 ? fallback : pieces.join(" · ");
   return (
-    <span className={cn("flex min-w-0 items-center gap-1 whitespace-nowrap", className)}>
-      {pieces.length === 0 ? (
-        <span className="min-w-0 truncate">{fallback}</span>
+    <span title={whole} className={cn("flex min-w-0 items-center whitespace-nowrap", className)}>
+      {pieces.length < 2 ? (
+        <bdi className="min-w-0 truncate">{pieces[0] ?? fallback}</bdi>
       ) : (
-        pieces.map((piece, i) => (
-          <span key={i} className={cn(i === 0 && pieces.length > 1 ? "max-w-[11ch] shrink-0 truncate" : "min-w-0 truncate")}>
-            {i > 0 && <span aria-hidden="true">· </span>}
-            {i > 0 && <span className="sr-only">, </span>}
-            <bdi>{piece}</bdi>
+        <>
+          {/* Shrinks far sooner than the Trade (a thousand to one), never below a few letters. */}
+          <bdi className="min-w-[4ch] shrink-[1000] truncate">{pieces[0]}</bdi>
+          <span aria-hidden="true" className="shrink-0 px-1">
+            ·
           </span>
-        ))
+          <span className="sr-only">, </span>
+          <bdi className="min-w-0 truncate">{pieces[1]}</bdi>
+        </>
       )}
     </span>
   );

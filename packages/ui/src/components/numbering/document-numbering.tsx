@@ -220,7 +220,12 @@ export function DocumentNumbering({ t, canEdit, projectPattern, isRabaedDefault,
 
       {/* Per Work Item Type */}
       <SettingsSection title={t("typesTitle")} description={t("typesIntro")} bodyClassName="px-0 pt-[14px] pb-0" data-testid="numbering-types">
-        <div role="region" aria-label={t("typesTitle")} tabIndex={0} className="relative overflow-x-auto focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus">
+        <div
+          role="region"
+          aria-label={t("typesTitle")}
+          tabIndex={0}
+          className="relative hidden overflow-x-auto focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus sm:block"
+        >
           <table className="w-full border-collapse text-[13.5px]">
             <thead>
               <tr className="bg-surface-subtle">
@@ -253,16 +258,7 @@ export function DocumentNumbering({ t, canEdit, projectPattern, isRabaedDefault,
                       </span>
                     </td>
                     <td className="px-5 py-3 whitespace-nowrap">
-                      {custom ? (
-                        <Badge tone="brand" className="h-[22px] gap-[5px] rounded-[6px] px-2 text-[11.5px]">
-                          <Icon name="edit" size={13} />
-                          {t("custom")}
-                        </Badge>
-                      ) : (
-                        <Badge tone="neutral" className="h-[22px] rounded-[6px] px-2 text-[11.5px]">
-                          {t("usesProject")}
-                        </Badge>
-                      )}
+                      <PatternBadge t={t} custom={custom !== null} />
                     </td>
                     <td className="px-5 py-3 whitespace-nowrap">
                       <bdi dir="ltr" translate="no" className="text-[12.5px] font-semibold text-text tabular-nums">
@@ -272,21 +268,12 @@ export function DocumentNumbering({ t, canEdit, projectPattern, isRabaedDefault,
                     {canEdit && (
                       <td className="px-5 py-3 whitespace-nowrap">
                         <span className="flex justify-end gap-1.5">
-                          {custom ? (
-                            <>
-                              <Button size="sm" variant="secondary" onClick={() => setDrawer({ type, pattern: custom })}>
-                                <Icon name="edit" />
-                                {t("edit")}
-                              </Button>
-                              <Button size="sm" variant="ghost" onClick={() => setCustoms({ ...customs, [type.id]: null })}>
-                                {t("useProject")}
-                              </Button>
-                            </>
-                          ) : (
-                            <Button size="sm" variant="secondary" onClick={() => setDrawer({ type, pattern: project })}>
-                              {t("customize")}
-                            </Button>
-                          )}
+                          <TypeActions
+                            t={t}
+                            custom={custom !== null}
+                            onEdit={() => setDrawer({ type, pattern: custom ?? project })}
+                            onUseProject={() => setCustoms({ ...customs, [type.id]: null })}
+                          />
                         </span>
                       </td>
                     )}
@@ -296,6 +283,40 @@ export function DocumentNumbering({ t, canEdit, projectPattern, isRabaedDefault,
             </tbody>
           </table>
         </div>
+        {/* On a phone, one card per Type (as Versions), its number and action in reach without scrolling sideways. */}
+        <ul aria-label={t("typesTitle")} className="flex flex-col sm:hidden">
+          {current.map((type) => {
+            const custom = type.custom;
+            const [n] = numberFor(inEffect(type), [preview], type.code);
+            return (
+              <li key={type.id} className="flex flex-col gap-2 border-t border-border-subtle px-5 py-3 text-[13.5px]" data-testid="numbering-type-item">
+                <span className="flex min-w-0 items-center gap-2.5">
+                  <TypeCode code={type.code} />
+                  <b className="min-w-0 truncate font-semibold text-text">{type.name}</b>
+                  <span className="shrink-0 ms-auto">
+                    <PatternBadge t={t} custom={custom !== null} />
+                  </span>
+                </span>
+                <span className="flex flex-wrap items-center gap-2">
+                  <span className="text-caption text-muted">{counters ? t("colNext") : t("colExample")}</span>
+                  <bdi dir="ltr" translate="no" className="text-[12.5px] font-semibold whitespace-nowrap text-text tabular-nums">
+                    {n!.text}
+                  </bdi>
+                </span>
+                {canEdit && (
+                  <span className="flex flex-wrap gap-1.5">
+                    <TypeActions
+                      t={t}
+                      custom={custom !== null}
+                      onEdit={() => setDrawer({ type, pattern: custom ?? project })}
+                      onUseProject={() => setCustoms({ ...customs, [type.id]: null })}
+                    />
+                  </span>
+                )}
+              </li>
+            );
+          })}
+        </ul>
       </SettingsSection>
 
       {/* Revision suffix */}
@@ -401,6 +422,39 @@ export function DocumentNumbering({ t, canEdit, projectPattern, isRabaedDefault,
   );
 }
 
+/** A Type's Pattern badge: "Custom", or "Uses Project pattern". */
+function PatternBadge({ t, custom }: { t: NumberingText; custom: boolean }) {
+  return custom ? (
+    <Badge tone="brand" className="h-[22px] gap-[5px] rounded-[6px] px-2 text-[11.5px]">
+      <Icon name="edit" size={13} />
+      {t("custom")}
+    </Badge>
+  ) : (
+    <Badge tone="neutral" className="h-[22px] rounded-[6px] px-2 text-[11.5px]">
+      {t("usesProject")}
+    </Badge>
+  );
+}
+
+/** A Type's actions: Edit and "Use Project pattern" for a Custom pattern, else Customize. */
+function TypeActions({ t, custom, onEdit, onUseProject }: { t: NumberingText; custom: boolean; onEdit: () => void; onUseProject: () => void }) {
+  return custom ? (
+    <>
+      <Button size="sm" variant="secondary" onClick={onEdit}>
+        <Icon name="edit" />
+        {t("edit")}
+      </Button>
+      <Button size="sm" variant="ghost" onClick={onUseProject}>
+        {t("useProject")}
+      </Button>
+    </>
+  ) : (
+    <Button size="sm" variant="secondary" onClick={onEdit}>
+      {t("customize")}
+    </Button>
+  );
+}
+
 /** The save confirmation: before → after of each pattern that changes, the guarantees, and the shared-counter acceptance where it applies. */
 function SaveModal({
   t,
@@ -449,7 +503,7 @@ function SaveModal({
   const lines = [
     t("keepsRegister"),
     t("keepsRevisions"),
-    ...(customCount > 0 ? [t(customCount === 1 ? "customsSavedOne" : "customsSavedOther", { n: customCount })] : []),
+    ...(customCount > 0 ? [t("customsSaved", { count: customCount, n: String(customCount) })] : []),
     ...(typeChanges.length > 0 ? [t("typesSaved", { types: typeChanges.map((c) => types.find((x) => x.id === c.workItemTypeId)!.code).join(", ") })] : []),
   ];
   return (

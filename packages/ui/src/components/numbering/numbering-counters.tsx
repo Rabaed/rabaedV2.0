@@ -191,14 +191,14 @@ export function NumberingCounters({
       <div role="region" aria-label={text.title} tabIndex={0} className="relative overflow-x-auto focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus">
         <table aria-label={text.title} className="w-full border-collapse text-[13.5px]">
           <thead>
-            <tr className="bg-surface-subtle">
-              <th scope="col" className="border-b border-border-subtle px-5 py-2.5 text-start text-caption font-semibold whitespace-nowrap text-muted">
+            <tr className="bg-surface-subtle [&>*:first-child]:ps-5 [&>*:last-child]:pe-5">
+              <th scope="col" className="border-b border-border-subtle px-3 py-2.5 sm:px-5 text-start text-caption font-semibold whitespace-nowrap text-muted">
                 {text.counter}
               </th>
-              <th scope="col" className="border-b border-border-subtle px-5 py-2.5 text-end text-caption font-semibold whitespace-nowrap text-muted">
+              <th scope="col" className="border-b border-border-subtle px-3 py-2.5 sm:px-5 text-end text-caption font-semibold whitespace-nowrap text-muted">
                 {text.lastNumber}
               </th>
-              <th scope="col" className="border-b border-border-subtle px-5 py-2.5 text-start text-caption font-semibold whitespace-nowrap text-muted">
+              <th scope="col" className="border-b border-border-subtle px-3 py-2.5 sm:px-5 text-start text-caption font-semibold whitespace-nowrap text-muted">
                 {text.state}
               </th>
             </tr>
@@ -212,17 +212,17 @@ export function NumberingCounters({
               </tr>
             ) : (
               counters.map((c) => (
-                <tr key={c.counterKey} className="border-b border-border-subtle last:border-b-0">
-                  <td className="px-5 py-3">
+                <tr key={c.counterKey} className="border-b border-border-subtle last:border-b-0 [&>*:first-child]:ps-5 [&>*:last-child]:pe-5">
+                  <td className="px-3 py-3 sm:px-5">
                     {/* A counter key isn't a Document Number, but reads left to right like one. */}
                     <bdi dir="ltr" translate="no" className="text-[12.5px] font-semibold whitespace-nowrap text-text tabular-nums">
                       {c.counterKey}
                     </bdi>
                   </td>
-                  <td className="px-5 py-3 text-end font-semibold text-text tabular-nums">
+                  <td className="px-3 py-3 sm:px-5 text-end font-semibold text-text tabular-nums">
                     {c.issued ? formatNumber(c.lastValue, locale, { useGrouping: false }) : "—"}
                   </td>
-                  <td className="px-5 py-3 whitespace-nowrap">
+                  <td className="px-3 py-3 sm:px-5 whitespace-nowrap">
                     {c.issued || c.startingNumber === null ? (
                       <Badge tone="neutral" className="h-[22px] rounded-[6px] px-2 text-[11.5px]">
                         {text.inUse}

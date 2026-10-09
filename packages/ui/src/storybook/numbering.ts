@@ -1,4 +1,4 @@
-import type { Locale } from "@rabaed/domain";
+import { intlLocaleOf, type Locale } from "@rabaed/domain";
 import ar from "../../../../apps/web/messages/ar.json" with { type: "json" };
 import en from "../../../../apps/web/messages/en.json" with { type: "json" };
 import type { NumberingCountersLabels } from "../components/numbering/numbering-counters.tsx";
@@ -11,13 +11,39 @@ import type { ParticipantCodesLabels } from "../components/numbering/participant
 
 const messages = { en, ar } as const;
 
-/** The app's `numbering.page` messages as next-intl gives them: a key, `{name}` placeholders filled in. */
+/**
+ * An ICU `{count, plural, …}` message's branch for a count, as next-intl picks it: an
+ * exact `=n`, else the locale's plural category (Arabic: zero, one, two, few, many, other).
+ */
+function plural(message: string, locale: Locale, values: Record<string, string | number>): string {
+  const head = /^\{(\w+), plural,/.exec(message);
+  if (!head) return message;
+  const count = Number(values[head[1]!]);
+  const branches = new Map<string, string>();
+  let i = head[0].length;
+  while (i < message.length - 1) {
+    const key = /^\s*(=?\w+)\s*\{/.exec(message.slice(i));
+    if (!key) break;
+    i += key[0].length;
+    let depth = 1;
+    const start = i;
+    while (depth > 0) {
+      if (message[i] === "{") depth += 1;
+      else if (message[i] === "}") depth -= 1;
+      i += 1;
+    }
+    branches.set(key[1]!, message.slice(start, i - 1));
+  }
+  return branches.get(`=${count}`) ?? branches.get(new Intl.PluralRules(intlLocaleOf(locale)).select(count)) ?? branches.get("other") ?? message;
+}
+
+/** The app's `numbering.page` messages as next-intl gives them: a key, plural branches chosen, `{name}` placeholders filled in. */
 export function numberingText(locale: Locale): NumberingText {
   const page = messages[locale].numbering.page as Record<string, unknown>;
   return (key, values = {}) => {
     const found = key.split(".").reduce<unknown>((at, part) => (at as Record<string, unknown> | undefined)?.[part], page);
     if (typeof found !== "string") throw new Error(`No numbering.page message ${key}`);
-    return found.replace(/\{(\w+)\}/g, (all, name: string) => (name in values ? String(values[name]) : all));
+    return plural(found, locale, values).replace(/\{(\w+)\}/g, (all, name: string) => (name in values ? String(values[name]) : all));
   };
 }
 
