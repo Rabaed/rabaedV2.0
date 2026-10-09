@@ -10,6 +10,7 @@
 // The Type is test-only, on the test Workflow with a Send Back (addSendBackType),
 // with a Cancel from Draft and from Contractor review, and Consultant review
 // Recommending a Code.
+import { randomUUID } from "node:crypto";
 import { createDb } from "@rabaed/db";
 import { drainOutbox, testDatabaseUrls } from "@rabaed/db/test-support";
 import type { ActivityFeed, NotificationList, WorkItemDetail, WorkItemHistory } from "@rabaed/domain";
@@ -96,6 +97,43 @@ beforeAll(async () => {
   at = await buildTower(api, { c1, k1 }, "CNR");
   const participants = (await c1.caller.get(`/v1/projects/${at.projectId}/participants`)).json().participants as { id: string; isOwnCompany: boolean }[];
   k1Engineer = await projectMember(api, k1, participants.find((p) => !p.isOwnCompany)!.id, ["engineer"]);
+});
+
+describe("Cancel is discard for a Revision (decided 2026-10-09)", () => {
+  /** The original, closed at Code C by K1's manager. */
+  async function revisedAtC(title: string): Promise<string> {
+    const id = await atConsultantReview(title);
+    await take(k1Engineer, id, "send_to_manager");
+    await ok(at.k1Manager.post(`/v1/work-items/${id}/claim`));
+    await take(at.k1Manager, id, "revise_c");
+    return id;
+  }
+  const createRevision = async (id: string): Promise<string> =>
+    (await ok(at.c1Engineer.post(`/v1/work-items/${id}/revisions`, { idempotencyKey: randomUUID() }), 201)).json().id;
+
+  it("offers a Draft Revision no Cancel; the raiser discards it, and the next Revision reuses its number", async () => {
+    const original = await revisedAtC("Valves");
+    const rev = await createRevision(original);
+    const draft = await detail(at.c1Engineer, rev);
+    expect(draft.revisionNo).toBe(1);
+    expect(draft.actions.transitions.map((t) => t.kind)).not.toContain("cancel");
+    expect(draft.actions.discardRevision).toBe(true);
+    const refused = await tryTake(at.c1Engineer, rev, "cancel");
+    expect(refused.statusCode, refused.body).toBe(409);
+    expect(refused.json()).toEqual({ error: "transition_not_available" });
+
+    await ok(at.c1Engineer.post(`/v1/work-items/${rev}/discard`));
+    const again = await createRevision(original);
+    expect((await detail(at.c1Engineer, again)).revisionNo).toBe(1);
+  });
+
+  it("offers no Cancel at the raiser's own review either, so a chain never ends by Cancel", async () => {
+    const rev = await createRevision(await revisedAtC("Gaskets"));
+    await take(at.c1Engineer, rev, "send_for_review");
+    await ok(at.c1Pm.post(`/v1/work-items/${rev}/claim`));
+    expect((await actionsOf(at.c1Pm, rev)).map((t) => t.kind)).not.toContain("cancel");
+    expect((await tryTake(at.c1Pm, rev, "cancel_review")).statusCode).toBe(409);
+  });
 });
 
 describe("Cancel", () => {
