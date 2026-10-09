@@ -96,6 +96,14 @@ type Row = {
   claimed_by_me: boolean;
   /** The raising Company's name: everyone who sees the item reads it (Search finds it too). */
   raiser_name: BilingualText | null;
+  /** The role holding it, my own Company's only (RP-410): its Position and my Project Role. */
+  role_position_key: string | null;
+  role_position_name: BilingualText | null;
+  role_position_sort: number | null;
+  role_project_role: BilingualText | null;
+  /** Who closed it: my own Company's person by name, else the closing Company only (V14). */
+  closer_name: BilingualText | null;
+  closer_company_name: BilingualText | null;
 };
 
 /**
@@ -137,7 +145,7 @@ function visibleRows({ projectId, moduleKey }: QueryScope, allRevisions: boolean
       app.work_item_creation_date(w.id) as creation_date,
       h.participant_id as holder_participant_id, h.assignee_member_id, w.raised_by_participant_id as raiser_participant_id,
       coalesce(h.participant_id in (select app.current_participant_ids()), false) as held_by_own,
-      s.key as step_key, s.name as step_name
+      s.key as step_key, s.name as step_name, s.id as step_id, s.actor_rule, t.module_key
     from work_item w
     cross join lateral app.step_as_seen(w.id) seen
     -- A Draft with no number has never moved, so its Step began when it was started: nobody sees that (visibility.md
@@ -404,6 +412,14 @@ function toRow(r: Row, now: Date): WorkItemRow {
     submissionDate: r.submitted_at?.toISOString() ?? null,
     creationDate: r.creation_date?.toISOString() ?? null,
     ...(r.raiser_name ? { raiserCompanyName: r.raiser_name } : {}),
+    // Who closed it (RP-410): my own Company's person, or the Company only (V14).
+    closedBy: open
+      ? null
+      : r.closer_name && r.closer_company_name
+        ? { kind: "own", name: r.closer_name, companyName: r.closer_company_name }
+        : r.closer_company_name
+          ? { kind: "company", companyName: r.closer_company_name }
+          : null,
     with:
       !open || r.holder_name === null
         ? null
@@ -413,6 +429,10 @@ function toRow(r: Row, now: Date): WorkItemRow {
               companyName: r.holder_name,
               step: { key: r.step_key, name: r.step_name },
               claimer: r.claimer_name ? { name: r.claimer_name, isMe: r.claimed_by_me } : null,
+              role:
+                r.role_position_key && r.role_position_name && r.role_project_role
+                  ? { position: { key: r.role_position_key, name: r.role_position_name, sort: r.role_position_sort ?? 0 }, projectRole: r.role_project_role }
+                  : null,
             }
           : { kind: "company", companyName: r.holder_name },
   };
@@ -421,17 +441,59 @@ function toRow(r: Row, now: Date): WorkItemRow {
 // Who holds a row of `visibleRows` (as `r`), by name: only the viewer's own
 // Participant's holder is named (app.work_item_holder), and member's own RLS
 // shows only their own Company's people (V14).
-const holderColumns = sql`co.holder_name, co.raiser_name,
-  m.full_name as claimer_name, coalesce(r.assignee_member_id = app.current_member_id(), false) as claimed_by_me`;
-// The holder's and the raiser's Companies, from one read of the Companies on the item that everyone
-// who sees it may name (RP-410: the raiser is the card's Contractor name).
+const holderColumns = sql`co.holder_name, co.raiser_name, co.closer_company_name, cm.full_name as closer_name,
+  m.full_name as claimer_name, coalesce(r.assignee_member_id = app.current_member_id(), false) as claimed_by_me,
+  hr.key as role_position_key, hr.name as role_position_name, hr.sort as role_position_sort, hr.project_role as role_project_role`;
+// RP-410:
+// - The closing move of a closed item: the latest event, as RLS lets the viewer read it (the
+//   closing Transition is shared), that brought it to the Step it is at. Its actor is named only
+//   when they are of the viewer's own Participant; anyone else's Company by name only (V14).
+// - The holder's, the raiser's (the card's Contractor name) and the closer's Companies, from one read
+//   of the Companies on the item that everyone who sees it may name.
+// - The role holding an open item of my own Company: the claimer's Position on the Project, or for an
+//   unclaimed Step the Positions its Step Pool holds (the Step's permission, narrowed to the Step's
+//   Positions where it names them), the first in the Positions' order where it spans several; with
+//   my own Project Role. project_member_position is read only for my own Participant (RLS), and
+//   nothing here is asked of another Company's items (V5, V14).
 const holderJoins = sql`left join lateral (
+    select e.actor_participant_id, e.actor_member_id
+    from work_item_event e
+    where r.closed and e.work_item_id = r.id and e.to_step_id = r.step_id
+    order by e.seq desc
+    limit 1
+  ) ce on true
+  left join lateral (
     select
       (max(x.legal_name::text) filter (where x.participant_id = r.holder_participant_id))::jsonb as holder_name,
-      (max(x.legal_name::text) filter (where x.participant_id = r.raiser_participant_id))::jsonb as raiser_name
+      (max(x.legal_name::text) filter (where x.participant_id = r.raiser_participant_id))::jsonb as raiser_name,
+      (max(x.legal_name::text) filter (where x.participant_id = ce.actor_participant_id))::jsonb as closer_company_name
     from app.work_item_companies(r.id) x
   ) co on true
-  left join member m on m.id = r.assignee_member_id`;
+  left join member cm on cm.id = ce.actor_member_id and ce.actor_participant_id in (select app.current_participant_ids())
+  left join member m on m.id = r.assignee_member_id
+  left join lateral (
+    select p.key, p.name, p.sort, pr.name as project_role
+    from participant hp
+    join project_role pr on pr.id = hp.project_role_id
+    join position p on p.base_role = pr.base_role
+    where r.held_by_own and not r.closed and hp.id = r.holder_participant_id
+      and (not (r.actor_rule ? 'positions') or p.key in (select jsonb_array_elements_text(r.actor_rule -> 'positions')))
+      and (
+        case when r.assignee_member_id is null
+          then exists (
+            select 1 from position_permission pp
+            where pp.position_id = p.id and pp.module_key = r.module_key and pp.permission = r.actor_rule ->> 'permission')
+          else p.id in (
+            select mp.position_id from project_member_position mp
+            join project_member pm on pm.id = mp.project_member_id
+            where pm.member_id = r.assignee_member_id and pm.project_id = r.project_id and pm.status = 'active')
+        end)
+    order by exists (
+        select 1 from position_permission pp
+        where pp.position_id = p.id and pp.module_key = r.module_key and pp.permission = r.actor_rule ->> 'permission') desc,
+      p.sort, p.key
+    limit 1
+  ) hr on true`;
 
 /** One page of the scope's visible items matching `q`, and how many match in each Stage. */
 export async function queryWorkItems(

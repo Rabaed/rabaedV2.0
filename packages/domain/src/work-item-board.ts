@@ -32,7 +32,17 @@ const laneCards = { count: z.number().int().nonnegative(), cards: z.array(workIt
 
 /** One swimlane of a column (V14). */
 export const workItemBoardLane = z.discriminatedUnion("kind", [
-  /** A Step of the viewer's own Company. */
+  /**
+   * A role of the viewer's own Company (RP-410): a Position, e.g. Engineer, with the
+   * viewer's Project Role, e.g. Contractor ("Contractor Engineer").
+   */
+  z.object({
+    kind: z.literal("role"),
+    position: z.object({ key: z.string(), name: bilingualText, sort: z.number().int() }),
+    projectRole: bilingualText,
+    ...laneCards,
+  }),
+  /** A Step of the viewer's own Company, for an item whose role can't be named. */
   z.object({ kind: z.literal("step"), step: z.object({ key: z.string(), name: bilingualText }), ...laneCards }),
   /** Another Company, as one lane: its name only. */
   z.object({ kind: z.literal("company"), participantId: z.uuid(), companyName: bilingualText, ...laneCards }),
@@ -124,20 +134,26 @@ export function cardNumber(documentNumber: string | null, revisionNo: number): s
 export type BoardCardInput = { card: WorkItemRow; holderParticipantId: string | null };
 
 /**
- * A column's swimlanes (V14): its cards grouped by who holds them, each lane's
- * cards in the order given. The viewer's own Steps come first, then the other
- * Companies, each by name, then the closed lane. A card nobody may be named
- * for (closed, or its holder unknown) goes in the closed lane.
+ * A column's swimlanes (V5, V14): its cards grouped by who holds them, each
+ * lane's cards in the order given. The viewer's own roles come first (a
+ * Position; a Step where no role can be named), then the other Companies, each
+ * one lane by name, never split into its roles, then the closed lane ("Mixed").
+ * A card nobody may be named for (closed, or its holder unknown) goes in the
+ * closed lane.
  */
 export function boardLanes(cards: readonly BoardCardInput[]): WorkItemBoardLane[] {
   type Lane<K> = Extract<WorkItemBoardLane, { kind: K }>;
+  const roles = new Map<string, Lane<"role">>();
   const steps = new Map<string, Lane<"step">>();
   const companies = new Map<string, Lane<"company">>();
   const closed: Lane<"closed"> = { kind: "closed", count: 0, cards: [] };
   for (const { card, holderParticipantId } of cards) {
     const w = card.with;
     let lane: WorkItemBoardLane = closed;
-    if (w?.kind === "own") {
+    if (w?.kind === "own" && w.role) {
+      lane = roles.get(w.role.position.key) ?? { kind: "role", position: w.role.position, projectRole: w.role.projectRole, count: 0, cards: [] };
+      roles.set(w.role.position.key, lane);
+    } else if (w?.kind === "own") {
       lane = steps.get(w.step.key) ?? { kind: "step", step: w.step, count: 0, cards: [] };
       steps.set(w.step.key, lane);
     } else if (w?.kind === "company" && holderParticipantId !== null) {
@@ -147,16 +163,19 @@ export function boardLanes(cards: readonly BoardCardInput[]): WorkItemBoardLane[
     lane.cards.push(card);
     lane.count += 1;
   }
-  return lanesInLocale([...steps.values(), ...companies.values(), ...(closed.count > 0 ? [closed] : [])], "en");
+  return lanesInLocale([...roles.values(), ...steps.values(), ...companies.values(), ...(closed.count > 0 ? [closed] : [])], "en");
 }
 
 /**
- * A column's lanes in the order a viewer reads them: the viewer's own Steps,
- * then the other Companies, each by name in the viewer's language, then the
- * closed lane. The API sends them in English order; the board reorders them.
+ * A column's lanes in the order a viewer reads them: the viewer's own roles in
+ * their Positions' order (Engineer before Project Manager), then own Steps, then
+ * the other Companies, each by name in the viewer's language, then the closed
+ * lane. The API sends them in English order; the board reorders them.
  */
 export function lanesInLocale(lanes: readonly WorkItemBoardLane[], locale: Locale): WorkItemBoardLane[] {
-  const rank = { step: 0, company: 1, closed: 2 } as const;
-  const name = (l: WorkItemBoardLane) => (l.kind === "step" ? l.step.name[locale] : l.kind === "company" ? l.companyName[locale] : "");
-  return [...lanes].sort((a, b) => rank[a.kind] - rank[b.kind] || name(a).localeCompare(name(b), locale));
+  const rank = { role: 0, step: 1, company: 2, closed: 3 } as const;
+  const sort = (l: WorkItemBoardLane) => (l.kind === "role" ? l.position.sort : 0);
+  const name = (l: WorkItemBoardLane) =>
+    l.kind === "role" ? l.position.name[locale] : l.kind === "step" ? l.step.name[locale] : l.kind === "company" ? l.companyName[locale] : "";
+  return [...lanes].sort((a, b) => rank[a.kind] - rank[b.kind] || sort(a) - sort(b) || name(a).localeCompare(name(b), locale));
 }

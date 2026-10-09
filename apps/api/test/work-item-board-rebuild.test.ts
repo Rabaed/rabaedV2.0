@@ -237,6 +237,19 @@ describe("search on a closed item", () => {
     await take(k1Manager, closed, "revise_c", { remarks: "Resubmit with the rated gaskets" });
   });
 
+  it("names who closed it: K1's own person to K1, K1 by name only to C1 (V14)", async () => {
+    const closedCard = (b: WorkItemBoard) => b.columns.flatMap((c) => c.lanes.flatMap((l) => l.cards)).find((c) => c.id === closed)!;
+    const theirs = closedCard(await board(k1Engineer));
+    expect(theirs.closedBy).toMatchObject({ kind: "own", name: { en: "Hessa Al Otaibi" } });
+    const k1Name = theirs.closedBy?.companyName.en;
+    const mineBoard = await board(c1Engineer);
+    expect(closedCard(mineBoard).closedBy).toEqual({ kind: "company", companyName: expect.objectContaining({ en: k1Name }) });
+    expect(JSON.stringify(mineBoard)).not.toContain("Hessa");
+    expect(JSON.stringify(await list(c1Engineer))).not.toContain("Hessa");
+    // An open item has nobody who closed it.
+    expect(closedCard(mineBoard).with).toBeNull();
+  });
+
   it("is never found by its last holder: the card shows no owner", async () => {
     expect(cardIds(await board(k1Engineer, { q: "Hessa" }))).toEqual([withK1]);
     expect(await listIds(k1Engineer, { q: "Hessa" })).toEqual([withK1]);

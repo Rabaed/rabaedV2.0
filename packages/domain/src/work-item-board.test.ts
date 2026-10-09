@@ -42,7 +42,36 @@ function card(w: WorkItemRow["with"], holderParticipantId: string | null = null)
 const ownStep = (key: string, name: string): WorkItemRow["with"] => ({ kind: "own", companyName: own, step: { key, name: b(name) }, claimer: null });
 const company = (name: string): WorkItemRow["with"] => ({ kind: "company", companyName: b(name) });
 
+const contractor = b("Contractor");
+const engineer = { key: "engineer", name: b("Engineer"), sort: 1 };
+const pm = { key: "project_manager", name: b("Project Manager"), sort: 2 };
+const ownRole = (position: typeof engineer, step = "review"): WorkItemRow["with"] => ({
+  kind: "own",
+  companyName: own,
+  step: { key: step, name: b(step) },
+  claimer: null,
+  role: { position, projectRole: contractor },
+});
+
 describe("boardLanes", () => {
+  it("makes each of my own roles (Positions) a lane, in the Positions' order, whatever their Steps; another Company stays one lane (V5)", () => {
+    const lanes = boardLanes([
+      card(ownRole(pm, "review")),
+      card(company("Al Waha PMC"), k1),
+      card(ownRole(engineer, "draft")),
+      card(ownRole(pm, "draft")),
+      card(ownStep("odd", "Odd step")),
+    ]);
+    expect(lanes.map((l) => (l.kind === "role" ? l.position.key : l.kind === "step" ? `step:${l.step.key}` : l.kind))).toEqual([
+      "engineer",
+      "project_manager",
+      "step:odd",
+      "company",
+    ]);
+    const pmLane = lanes[1]!;
+    expect(pmLane).toMatchObject({ kind: "role", projectRole: contractor, count: 2 });
+  });
+
   it("makes each own Step a lane, each other Company one lane, and closed items a lane of their own, in that order", () => {
     const cards = [
       card(company("Zeta PMC"), k2),

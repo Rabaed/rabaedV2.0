@@ -99,6 +99,15 @@ export const workItemWith = z.discriminatedUnion("kind", [
     companyName: bilingualText,
     step: z.object({ key: z.string(), name: bilingualText }),
     claimer: z.object({ name: bilingualText, isMe: z.boolean() }).nullable(),
+    /**
+     * The role holding it (RP-410, the Kanban's lanes): the claimer's Position, or for an
+     * unclaimed Step the first Position of its Step Pool, with the viewer's own Project
+     * Role. Only ever my own Company's (V5, V14); null when none can be named.
+     */
+    role: z
+      .object({ position: z.object({ key: z.string(), name: bilingualText, sort: z.number().int() }), projectRole: bilingualText })
+      .nullable()
+      .optional(),
   }),
   z.object({ kind: z.literal("company"), companyName: bilingualText }),
 ]);
@@ -122,6 +131,18 @@ export const workItemRow = workItemSummary.extend({
    * filters"). Left out by reads that don't give it.
    */
   raiserCompanyName: bilingualText.optional(),
+  /**
+   * Who closed it (RP-410, a closed Kanban card's footer), by the Transition that
+   * closed it: my own Company's person who took it, or another Company by its name
+   * only, never its people (V14). Null while open; left out by reads that don't give it.
+   */
+  closedBy: z
+    .discriminatedUnion("kind", [
+      z.object({ kind: z.literal("own"), name: bilingualText, companyName: bilingualText }),
+      z.object({ kind: z.literal("company"), companyName: bilingualText }),
+    ])
+    .nullable()
+    .optional(),
 });
 export type WorkItemRow = z.infer<typeof workItemRow>;
 
