@@ -16,7 +16,8 @@
 --   the api's work item query) read the item's Project's Stages, never the Rabaed
 --   Defaults. Whether a Step is a Draft start (app.is_draft_step) is read from the
 --   Stage set its Workflow is published against: the Project's for a Project's
---   own Workflow, the Rabaed Defaults' for any other.
+--   own Workflow, the Rabaed Defaults' for any other (redefined on PR #159's body
+--   in 20270105000000_on_workflow_core.sql).
 -- * Stages stay readable by every Member of the Project (policy
 --   member_reads_stages, unchanged): they are the Kanban columns everyone sees.
 
@@ -117,8 +118,9 @@ create trigger project_event_no_truncate before truncate on project_event
 -- Whether a Step of any Workflow Version of the Project uses the Stage: a Version
 -- of one of the Project's own Workflows (any Module: a Workflow names no Module), or
 -- of the Workflow of a Work Item Type of that Module the Project can use (the
--- Rabaed Defaults' included, which every Project runs today). Every item is on a
--- Version of its Type's Workflow, so no item is ever left in a deleted Stage. Read
+-- Rabaed Defaults' included), or of a Workflow the Project binds a Type of that
+-- Module to (workflow_binding, RP-426, an exception's included), so no item on
+-- one of them is left in a deleted Stage. Read
 -- from definitions only, which every Member of the Project reads (ADR 0016), never
 -- from items: the answer says nothing about items the caller doesn't see.
 create function app.stage_in_use(p_project_id uuid, p_module_key text, p_key text) returns boolean
@@ -139,6 +141,14 @@ create function app.stage_in_use(p_project_id uuid, p_module_key text, p_key tex
             or v.workflow_definition_id in (
               select t.workflow_definition_id from work_item_type t
               where t.module_key = p_module_key and (t.project_id is null or t.project_id = p_project_id)
+            )
+            -- A Workflow the Project binds a Type of that Module to (WF-3, RP-426), an
+            -- exception's too: it is the Project's own or a Rabaed Default, which every
+            -- Member reads (V20), so the answer names no Participant.
+            or v.workflow_definition_id in (
+              select b.workflow_definition_id from workflow_binding b
+              join work_item_type t on t.id = b.work_item_type_id
+              where b.project_id = p_project_id and t.module_key = p_module_key
             )
           )
       );
@@ -309,29 +319,6 @@ revoke all on function app.delete_stage(uuid, text, text) from public;
 grant execute on function app.delete_stage(uuid, text, text) to rabaed_app;
 
 -- Reads of Stages -------------------------------------------------------------------
-
--- As in 20261108000000_plpgsql_definer_helpers.sql, but the Stage set is the one the
--- Step's Workflow is published against: its Project's for a Project's own Workflow,
--- the Rabaed Defaults' for any other.
-create or replace function app.is_draft_step(p_step_id uuid) returns boolean
-  language plpgsql stable security definer
-  set search_path = pg_catalog, public
-  as $$
-    #variable_conflict use_column
-    begin
-      return (
-        select exists (
-          select 1 from workflow_step s
-          join workflow_version v on v.id = s.workflow_version_id
-          join workflow_definition d on d.id = v.workflow_definition_id
-          join work_item_type t on t.workflow_definition_id = v.workflow_definition_id
-          join stage st on st.module_key = t.module_key and st.key = s.stage_key
-            and case when d.owner_kind = 'project' then st.project_id = d.project_id else st.owner_kind = 'rabaed' end
-          where s.id = p_step_id and st.category = 'draft'
-        )
-      );
-    end
-  $$;
 
 -- As in 20261202000000_need_my_action.sql, but with the item's Project's Stages.
 create or replace function app.need_my_action(p_work_item_id uuid) returns text

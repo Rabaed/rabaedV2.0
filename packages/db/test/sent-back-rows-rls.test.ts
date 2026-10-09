@@ -11,7 +11,7 @@ import { sql } from "kysely";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb, withMember, type Db } from "../src/index.ts";
-import { addSendBackWorkflow, joinProject, testDatabaseUrls } from "../test-support/index.ts";
+import { addTestWorkflow, expectedContentSha256, joinProject, testDatabaseUrls } from "../test-support/index.ts";
 
 const urls = testDatabaseUrls();
 const digits = (n: number) => Array.from({ length: n }, () => randomInt(10)).join("");
@@ -82,7 +82,7 @@ async function addType() {
       },
     ],
   };
-  const workflowId = await addSendBackWorkflow((text) => migrator.query(text));
+  const workflowId = await addTestWorkflow((text) => migrator.query(text));
   await migrator.query(`
     do $$
       declare
@@ -231,6 +231,7 @@ describe("C1 changes an item K1 Sent Back to its Draft", () => {
   let id = "";
   let atSendBack: Awaited<ReturnType<typeof reads>>;
   let added: string[] = [];
+  let first: string[] = [];
 
   beforeAll(async () => {
     x = await draft("X");
@@ -238,8 +239,7 @@ describe("C1 changes an item K1 Sent Back to its Draft", () => {
     y = await draft("Y");
     await submit(y);
     id = await draft("F", { related: [x] });
-    await document(id, "datasheet-1.pdf", "datasheet");
-    await document(id, "letter-1.pdf");
+    first = [await document(id, "datasheet-1.pdf", "datasheet"), await document(id, "letter-1.pdf")];
     const freeToX = await addLink(id, x);
     await submit(id);
     expect(await claim(k1.member, id)).toBe("claimed");
@@ -300,6 +300,20 @@ describe("C1 changes an item K1 Sent Back to its Draft", () => {
     }
   });
 
+  // RP-448 review: the Send Back's hash is over the item's exact content, so it is
+  // read by nobody through the app role, nor the chain hashes that cover it (Side channels).
+  it("never lets the app role read a Transition's content hash or the chain hashes over it, while it reads the events", async () => {
+    for (const as of [c1.member, k1.member, ow.member]) {
+      const events = await call<{ type: string }>(as, sql`select type from work_item_event where work_item_id = ${id}`);
+      expect(events.length, as).toBeGreaterThan(0);
+      for (const column of ["content_sha256", "hash", "prev_hash"]) {
+        await expect(call(as, sql<object>`select ${sql.ref(column)} from work_item_event where work_item_id = ${id}`), column).rejects.toThrow(
+          /permission denied/,
+        );
+      }
+    }
+  });
+
   it("makes everything everyone's once C1 Submits it again, the Transition hashing the Subject and the answers", async () => {
     await submit(id);
     const c1Reads = await reads(c1.member, id);
@@ -311,14 +325,29 @@ describe("C1 changes an item K1 Sent Back to its Draft", () => {
     // The removed Link to X is gone from the table.
     const { rows } = await migrator.query("select count(*)::int as n from work_item_link where from_id = $1", [id]);
     expect(rows[0].n).toBe(2);
+    // The item's content as the Submit left it (RP-436: its Documents and outcome
+    // too), worked out here from what C1 put in, not by the database's function.
+    const file = (docId: string, fileName: string, fieldKey: string | null) => ({
+      id: docId,
+      field_key: fieldKey,
+      item_key: null,
+      file_name: fileName,
+      content_type: "application/pdf",
+      size_bytes: 10,
+      storage_key: `projects/${projectId}/work-items/${id}/documents/${docId}`,
+    });
+    const documents = [
+      file(first[0]!, "datasheet-1.pdf", "datasheet"),
+      file(first[1]!, "letter-1.pdf", null),
+      file(added[0]!, "datasheet-2.pdf", "datasheet"),
+      file(added[1]!, "letter-2.pdf", null),
+    ];
     const { rows: hashed } = await migrator.query(
-      `select e.content_sha256 = sha256(convert_to(jsonb_build_object('title', w.title, 'data', w.data)::text, 'UTF8')) as same
-       from work_item_event e join work_item w on w.id = e.work_item_id
-       join workflow_transition t on t.id = e.transition_id
+      `select encode(e.content_sha256, 'hex') as hash from work_item_event e join workflow_transition t on t.id = e.transition_id
        where e.work_item_id = $1 and t.key = 'submit' order by e.seq desc limit 1`,
       [id],
     );
-    expect(hashed[0].same).toBe(true);
+    expect(hashed[0].hash).toBe(expectedContentSha256({ title: "F", data: { model: "F", related: [y] }, outcome: null, documents }));
   });
 });
 

@@ -138,7 +138,7 @@ beforeAll(async () => {
 });
 
 const send = (id: string) =>
-  engineer.post(`/v1/work-items/${id}/transitions`, { transition: "send_for_review", idempotencyKey: randomUUID() });
+  engineer.post(`/v1/work-items/${id}/transitions`, { transition: "send_for_review", confirmed: true, idempotencyKey: randomUUID() });
 
 describe("an answer to a field that becomes hidden", () => {
   it("is cleared on save", async () => {

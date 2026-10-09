@@ -12,7 +12,7 @@
 import { randomUUID } from "node:crypto";
 import { publishFormVersion } from "@rabaed/admin/services";
 import { createDb } from "@rabaed/db";
-import { addSendBackWorkflow, testDatabaseUrls } from "@rabaed/db/test-support";
+import { addTestWorkflow, testDatabaseUrls } from "@rabaed/db/test-support";
 import { activityFeedSearchParams, type ActivityFeed, type ActivityFeedEntry, type ActivityFeedQuery } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -65,7 +65,7 @@ async function addFeedType() {
     .executeTakeFirstOrThrow();
   const existing = await migrator.selectFrom("work_item_type").select("id").where("owner_kind", "=", "rabaed").where("code", "=", TYPE).executeTakeFirst();
   if (!existing) {
-    const workflowId = await addSendBackWorkflow((text) => sql.raw(text).execute(migrator));
+    const workflowId = await addTestWorkflow((text) => sql.raw(text).execute(migrator));
     await migrator
       .insertInto("work_item_type")
       .values({

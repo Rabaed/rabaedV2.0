@@ -32,7 +32,8 @@
 --   Project, Type and code), app.work_item_outcome_actions (the actions of the
 --   outcome a closed item the caller sees ended with: WF-11's items to create,
 --   WF-12's replacement) and app.can_create_revision (Code C's Revision is now an
---   outcome offering a Revision).
+--   outcome offering a Revision; redefined on PR #159's body in
+--   20270105000000_on_workflow_core.sql).
 
 -- The table ------------------------------------------------------------------------
 
@@ -272,38 +273,6 @@ create function app.check_work_item_outcome() returns trigger
 revoke all on function app.check_work_item_outcome() from public;
 create trigger work_item_outcome_in_set before insert or update of outcome on work_item
   for each row execute function app.check_work_item_outcome();
-
--- As in 20261108000000_plpgsql_definer_helpers.sql, but the closed item's outcome
--- offers a Revision (Code C in the Rabaed Defaults) in its Type's set on the Project.
-create or replace function app.can_create_revision(p_work_item_id uuid) returns boolean
-  language plpgsql stable security definer
-  set search_path = pg_catalog, public
-  as $$
-    #variable_conflict use_column
-    begin
-      return (
-        select app.sees_work_item(p_work_item_id) and exists (
-          select 1
-          from work_item w
-          join work_item_type t on t.id = w.work_item_type_id
-          join project pr on pr.id = w.project_id and pr.status = 'active'
-          join app.acting_project_member(w.id) me on me.participant_id = w.raised_by_participant_id
-          join participant p on p.id = me.participant_id
-          join project_role r on r.id = p.project_role_id
-          join app.latest_draft_step(w.work_item_type_id) d on true
-          where w.id = p_work_item_id
-            and app.outcome_offers(w.project_id, w.work_item_type_id, w.outcome, 'offer_revision') and w.discarded_at is null
-            and d.actor_rule ->> 'base_role' = r.base_role
-            and app.project_member_has_permission(me.project_member_id, t.module_key, d.actor_rule ->> 'permission')
-            -- The latest of its chain, and nothing of the chain open.
-            and not exists (
-              select 1 from work_item o
-              where o.root_id = w.root_id and o.discarded_at is null
-                and (o.revision_no > w.revision_no or o.closed_at is null))
-        )
-      );
-    end
-  $$;
 
 -- The Project Admin's commands ---------------------------------------------------------
 

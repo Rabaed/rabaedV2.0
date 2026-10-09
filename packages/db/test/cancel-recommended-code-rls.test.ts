@@ -9,7 +9,7 @@ import { sql } from "kysely";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb, withMember, type Db } from "../src/index.ts";
-import { addSendBackWorkflow, joinProject, testDatabaseUrls } from "../test-support/index.ts";
+import { addTestWorkflow, joinProject, testDatabaseUrls } from "../test-support/index.ts";
 
 const urls = testDatabaseUrls();
 const digits = (n: number) => Array.from({ length: n }, () => randomInt(10)).join("");
@@ -127,7 +127,7 @@ beforeAll(async () => {
   migrator = new pg.Client({ connectionString: urls.migrator });
   await migrator.connect();
   app = createDb(urls.app, { max: 2 });
-  const workflowId = await addSendBackWorkflow((text) => migrator.query(text), { withCancel: true, recommendCode: true });
+  const workflowId = await addTestWorkflow((text) => migrator.query(text), { withCancel: true, recommendCode: true });
   const form = await one(`insert into form_definition (owner_kind, name) values ('rabaed', '{"en": "Cancel", "ar": "إلغاء"}') returning id`, []);
   await migrator.query(
     "insert into form_version (form_definition_id, version_no, status, published_at, schema) values ($1, 1, 'published', now(), $2::jsonb)",

@@ -65,7 +65,7 @@ async function numbered(at: Tower, engineer: Caller, location = at.buildingA): P
   expect(res.statusCode, res.body).toBe(201);
   const id = res.json().id as string;
   await attachDatasheet(engineer, id);
-  await ok(engineer.post(`/v1/work-items/${id}/transitions`, { transition: "send_for_review", idempotencyKey: randomUUID() }));
+  await ok(engineer.post(`/v1/work-items/${id}/transitions`, { transition: "send_for_review", confirmed: true, idempotencyKey: randomUUID() }));
   return (await engineer.get(`/v1/work-items/${id}`)).json().documentNumber as string;
 }
 

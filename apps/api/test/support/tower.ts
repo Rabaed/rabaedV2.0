@@ -64,7 +64,14 @@ export type TakeOptions = {
 export const tryTake = (by: Caller, id: string, transition: string, { reason, remarks, answers, ...rest }: TakeOptions = {}) => {
   const own = { ...answers, ...(reason === undefined ? {} : { reason }), ...(remarks === undefined ? {} : { remarks }) };
   const hasAnswers = answers !== undefined || reason !== undefined || remarks !== undefined;
-  return by.post(`/v1/work-items/${id}/transitions`, { transition, idempotencyKey: randomUUID(), ...(hasAnswers ? { answers: own } : {}), ...rest });
+  // Confirmed in the pop-up, as every Transition is (ADR 0017).
+  return by.post(`/v1/work-items/${id}/transitions`, {
+    transition,
+    confirmed: true,
+    idempotencyKey: randomUUID(),
+    ...(hasAnswers ? { answers: own } : {}),
+    ...rest,
+  });
 };
 
 /** `by` takes Transition `transition` on item `id`, and it is accepted. */

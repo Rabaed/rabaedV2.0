@@ -131,7 +131,9 @@ export interface AdminActionTable {
     | "read_numbering"
     | "set_numbering_pattern"
     | "set_participant_code"
-    | "set_numbering_counter_start";
+    | "set_numbering_counter_start"
+    | "save_workflow_draft"
+    | "publish_workflow";
   target_kind: string;
   /** Null for a read of a list. */
   target_id: string | null;
@@ -318,9 +320,36 @@ export interface StageTable {
 
 export interface WorkflowDefinitionTable {
   id: Generated<string>;
-  owner_kind: OwnerKind;
+  /** `company`: a Workflow in that Company's Library (RP-426, ADR 0016). */
+  owner_kind: OwnerKind | "company";
   project_id: string | null;
+  company_id: string | null;
   name: ColumnType<Bilingual, string, string>;
+  /** The Work Item Type it is made for (RP-427); null only for test Workflows made before it. */
+  work_item_type_id: string | null;
+  created_at: Generated<Timestamp>;
+  updated_at: Generated<Timestamp>;
+}
+
+/** A Member's change to a Workflow or a binding, append-only (RP-427). Not granted to the app role. */
+export interface WorkflowEventTable {
+  id: Generated<string>;
+  workflow_definition_id: string | null;
+  project_id: string | null;
+  company_id: string | null;
+  actor_member_id: string;
+  type: "duplicated" | "draft_saved" | "published" | "bound" | "unbound";
+  payload: Json;
+  created_at: Generated<Timestamp>;
+}
+
+/** Which Workflow a Project's new items of a Type run; for one raising Participant only when it names one (RP-426). */
+export interface WorkflowBindingTable {
+  id: Generated<string>;
+  project_id: string;
+  work_item_type_id: string;
+  raising_participant_id: string | null;
+  workflow_definition_id: string;
   created_at: Generated<Timestamp>;
   updated_at: Generated<Timestamp>;
 }
@@ -331,6 +360,8 @@ export interface WorkflowVersionTable {
   version_no: number;
   status: "draft" | "published";
   layout: Generated<Json>;
+  /** A draft's new name for the Workflow, given to it at publish (RP-427); null otherwise. */
+  draft_name: ColumnType<Bilingual | null, string | null | undefined, string | null>;
   published_at: Timestamp | null;
   created_at: Generated<Timestamp>;
   updated_at: Generated<Timestamp>;
@@ -639,6 +670,8 @@ export interface Database {
   scope: ScopeTable;
   stage: StageTable;
   workflow_definition: WorkflowDefinitionTable;
+  workflow_binding: WorkflowBindingTable;
+  workflow_event: WorkflowEventTable;
   workflow_version: WorkflowVersionTable;
   workflow_step: WorkflowStepTable;
   workflow_transition: WorkflowTransitionTable;

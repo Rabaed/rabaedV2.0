@@ -1,6 +1,7 @@
 /**
- * A test-only Rabaed Workflow with a Send Back (ADR 0014; RP-334), since no
- * Rabaed Default uses one yet (the MAR keeps Code C only):
+ * The test Workflow: a Contractor-to-Consultant review with Returns, two Send
+ * Backs (ADR 0014; RP-334, since no Rabaed Default has one yet: the MAR keeps
+ * Code C only) and a Code, owned by Rabaed, a Project or a Company (ADR 0016):
  *
  *   Draft ─send_for_review→ Contractor review ─submit→ Consultant review
  *   Contractor review ─return→ Draft
@@ -17,24 +18,31 @@
  * It passes publish checks 4 and 8, as every published Version must. `run`
  * executes SQL as the migrator (a pg client's or Kysely's query); the result is
  * the new Workflow definition's id, for a test Type to use.
+ *
+ * By default a Rabaed Default named "Send Back (test)", Version 1, published.
+ * `owner` makes it a Project's or a Company's Library Workflow (ADR 0016),
+ * `name` names it, `version` adds Version n to an existing definition instead
+ * of a new one, and `publish: false` leaves that Version a draft.
  */
-export async function addSendBackWorkflow(
+export async function addTestWorkflow(
   run: (text: string) => Promise<{ rows: unknown[] }>,
-  {
-    withApproveB = false,
-    withCancel = false,
-    recommendCode = false,
-    notifications = {},
-  }: { withApproveB?: boolean; withCancel?: boolean; recommendCode?: boolean; notifications?: Record<string, unknown[]> } = {},
+  options: TestWorkflowOptions = {},
 ): Promise<string> {
+  const { withApproveB = false, withCancel = false, recommendCode = false, publish = true } = options;
+  const name = JSON.stringify(options.name ?? { en: "Send Back (test)", ar: "الإرجاع (اختبار)" }).replaceAll("'", "''");
+  const owner = options.owner;
+  const definition = options.version
+    ? `select '${options.version.definitionId}'::uuid as id`
+    : `insert into workflow_definition (owner_kind, project_id, company_id, name)
+      values ('${owner?.kind ?? "rabaed"}', ${owner?.kind === "project" ? `'${owner.projectId}'` : "null"},
+        ${owner?.kind === "company" ? `'${owner.companyId}'` : "null"}, '${name}')
+      returning id`;
   const { rows } = await run(`
     with definition as (
-      insert into workflow_definition (owner_kind, name)
-      values ('rabaed', '{"en": "Send Back (test)", "ar": "الإرجاع (اختبار)"}')
-      returning id
+      ${definition}
     ), version as (
       insert into workflow_version (workflow_definition_id, version_no, status)
-      select id, 1, 'draft' from definition
+      select id, ${options.version?.no ?? 1}, 'draft' from definition
       returning id
     ), steps as (
       insert into workflow_step (workflow_version_id, key, name, stage_key, actor_rule, outcome_mode)
@@ -77,18 +85,35 @@ export async function addSendBackWorkflow(
       join steps s on s.key = t.to_key
       returning id
     )
-    select id from definition where (select count(*) from transitions) > 0
+    select definition.id, version.id as version_id from definition, version where (select count(*) from transitions) > 0
   `);
-  const id = (rows[0] as { id?: string } | undefined)?.id;
-  if (!id) throw new Error("addSendBackWorkflow: nothing inserted");
+  const row = rows[0] as { id?: string; version_id?: string } | undefined;
+  if (!row?.id) throw new Error("addTestWorkflow: nothing inserted");
   // Built as a draft, then published: a published Version takes no new parts (RP-424).
   // `notifications` names a Transition's extra recipients by its key (RP-432).
-  for (const [key, recipients] of Object.entries(notifications)) {
+  for (const [key, recipients] of Object.entries(options.notifications ?? {})) {
     await run(`
       update workflow_transition set notifications = '${JSON.stringify(recipients)}'::jsonb
-      where key = '${key}' and workflow_version_id in (select id from workflow_version where workflow_definition_id = '${id}')
+      where key = '${key}' and workflow_version_id = '${row.version_id}'
     `);
   }
-  await run(`update workflow_version set status = 'published', published_at = now() where workflow_definition_id = '${id}'`);
-  return id;
+  if (publish) await run(`update workflow_version set status = 'published', published_at = now() where id = '${row.version_id}'`);
+  return row.id;
 }
+
+export type TestWorkflowOptions = {
+  withApproveB?: boolean;
+  /** A Cancel from Draft and from Contractor review, to a Cancelled Step (RP-433). */
+  withCancel?: boolean;
+  /** Consultant review Recommends a Code (RP-433). */
+  recommendCode?: boolean;
+  name?: { en: string; ar: string };
+  /** A Project's own Workflow, or one in a Company's Library; a Rabaed Default when left out. */
+  owner?: { kind: "project"; projectId: string } | { kind: "company"; companyId: string };
+  /** Adds Version `no` to the definition `definitionId` rather than creating one. */
+  version?: { definitionId: string; no: number };
+  /** False leaves the new Version a draft. */
+  publish?: boolean;
+  /** A Transition's extra recipients (RP-432), by its key. */
+  notifications?: Record<string, unknown[]>;
+};

@@ -71,7 +71,7 @@ async function issue(id: string, code: "approve_a" | "revise_c", by: Caller = at
   const answers = { ...(await detail(by, id)).answers, sample_checked: true, ...verification };
   await ok(by.request("PUT", `/v1/work-items/${id}/answers`, { answers }));
   await ok(by.post(`/v1/work-items/${id}/claim`));
-  await ok(by.post(`/v1/work-items/${id}/transitions`, { transition: code, answers: { remarks: "Noted" }, idempotencyKey: randomUUID() }));
+  await ok(by.post(`/v1/work-items/${id}/transitions`, { transition: code, answers: { remarks: "Noted" }, confirmed: true, idempotencyKey: randomUUID() }));
 }
 
 /** A MAR C1's engineer sends to C1's internal review. */
@@ -213,7 +213,7 @@ describe("watched items", () => {
   it("never tell a watcher of their own move, nor tell them twice when it waits on them", async () => {
     const id = await inReview("Busbars");
     await ok(at.c1Pm.post(`/v1/work-items/${id}/claim`));
-    await ok(at.c1Pm.post(`/v1/work-items/${id}/transitions`, { transition: "return", answers: { reason: "Wrong tray size" }, idempotencyKey: randomUUID() }));
+    await ok(at.c1Pm.post(`/v1/work-items/${id}/transitions`, { transition: "return", answers: { reason: "Wrong tray size" }, confirmed: true, idempotencyKey: randomUUID() }));
     await drainOutbox(worker);
     // The raiser watches, and the Return waits on them: one "Step reached", no more.
     expect(await kinds(at.c1Engineer, id)).toEqual(["step_reached"]);
@@ -268,7 +268,7 @@ describe("watched items", () => {
     await drainOutbox(worker);
     // Scenario 75: nothing while it is a Draft with no number, so its start reaches nobody.
     expect(await routed(rev)).toEqual([]);
-    await ok(at.c1Engineer.post(`/v1/work-items/${rev}/transitions`, { transition: "send_for_review", answers: {}, idempotencyKey: randomUUID() }));
+    await ok(at.c1Engineer.post(`/v1/work-items/${rev}/transitions`, { transition: "send_for_review", answers: {}, confirmed: true, idempotencyKey: randomUUID() }));
     await drainOutbox(worker);
     const creationDate = (await detail(at.c1Pm, rev)).creationDate;
     expect(creationDate).not.toBeNull();
