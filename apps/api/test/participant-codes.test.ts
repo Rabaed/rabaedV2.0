@@ -128,6 +128,11 @@ describe("who sees a code (V15)", () => {
     expect(orders(k1Sees)).toEqual([[at.k1ParticipantId, null]]);
     const engineerSees = (await at.c1Engineer.get(`/v1/projects/${at.projectId}/participants`)).json().participants;
     expect(orders(engineerSees)).toEqual([[at.c1ParticipantId, null]]);
+    // Nor through Project Settings → Numbering's example (its preview prints a placeholder instead).
+    for (const who of [at.k1Manager, at.c1Engineer]) {
+      expect((await ok(who.get(`/v1/projects/${at.projectId}/numbering`), 200)).json().example.participant).toEqual({ code: null, ordinal: null });
+    }
+    expect((await ok(c1.caller.get(`/v1/projects/${at.projectId}/numbering`), 200)).json().example.participant).toEqual({ code: null, ordinal: 1 });
   });
 });
 

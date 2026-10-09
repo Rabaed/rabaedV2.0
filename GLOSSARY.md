@@ -213,7 +213,7 @@ _Avoid_: Template library, catalogue
 The versioned graph of Steps and Transitions, drawn in the visual workflow builder, that a Work Item passes through. A Work Item stays on the Workflow version it started with. A Project runs its own copy for each Work Item Type, sometimes a different one for one raising Participant; everyone on the Project can read its map (ADR 0016).
 
 **Version**:
-A published, unchangeable edition of a Form or a Workflow. A Work Item stays on the Versions it started with; later Versions apply only to new Work Items.
+A published, unchangeable edition of a Form, a Workflow or a Numbering Pattern. A Work Item stays on the Versions it started with (its number keeps the pattern it was numbered under); later Versions apply only to new Work Items.
 _Avoid_: Revision (reserved for Work Items), edition
 
 **Stage**:
@@ -299,7 +299,7 @@ _Avoid_: Comments (reserved for the Snag List), note, recommendation (too close 
 
 **Revision**:
 A resubmission of a Work Item that ended with Code C: a new Work Item, started as a Draft from the latest one, that keeps the same number with a revision suffix (MS-003 → MS-003 Rev 1) and is linked to the one before it. The first submission has no suffix. The earlier one stays closed at Code C, and anyone who sees a Revision can switch to the earlier ones they may see.
-_Avoid_: Version (reserved for Forms and Workflows), resubmittal
+_Avoid_: Version (reserved for Forms, Workflows and Numbering Patterns), resubmittal
 
 **Document Number**:
 The identifier a Work Item gets when it first leaves Draft (e.g. TWR-MAR-CCM-0001); numbers are never reused, built from the Project's Numbering Pattern. A Revision keeps the number of the one before it, with its revision suffix.

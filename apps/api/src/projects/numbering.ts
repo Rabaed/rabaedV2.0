@@ -22,7 +22,7 @@ export function getNumberingSettings(db: Db, memberId: string, projectId: string
   return withMember(db, memberId, async (trx) => {
     const { rows: projects } = await sql<{ code: string; participant_code: string | null; ordinal: number }>`
       select pr.code,
-        -- The reader's own Participant: its Participant Code, or its position until set.
+        -- The reader's own Participant: its Participant Code, and its position for a Project Admin only.
         p.code as participant_code, p.ordinal
       from project pr
       join project_member pm on pm.project_id = pr.id and pm.member_id = app.current_member_id() and pm.status = 'active'
@@ -55,13 +55,16 @@ export function getNumberingSettings(db: Db, memberId: string, projectId: string
       select code from first_down order by depth
     `.execute(trx);
 
+    const canEdit = await isProjectAdmin(trx, projectId);
     return {
-      canEdit: await isProjectAdmin(trx, projectId),
+      canEdit,
       ...numberingPatternsInEffect(patterns, types),
       example: {
         projectCode: project.code,
         tradeCode: trades[0]?.code ?? null,
-        participant: { code: project.participant_code, ordinal: project.ordinal },
+        // Orders are given out max+1, so even the reader's own would count the other
+        // Participants: Project Admins only (visibility.md RP-381-1).
+        participant: { code: project.participant_code, ordinal: canEdit ? project.ordinal : null },
         locationPath: locations.map((l) => l.code),
       },
       versions: versions.map(toNumberingVersion),

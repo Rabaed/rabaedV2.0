@@ -16,8 +16,9 @@
 -- * app.numbering_pattern_versions(project, at): the versions of a Project's
 --   patterns, for its Project Members: when each took effect, the pattern, and who
 --   saved it. The saver's Company is named when it is the reader's own Company or the
---   Host Company, or the reader is a Project Admin (who sees every Participant);
---   otherwise not, since a Participant never learns of another (V15). The saver's
+--   reader is a Project Admin (who sees every Participant); otherwise not, since a
+--   Participant never learns of another (V15), and being the Host Company is no
+--   exception: the page says "A Project Admin" (RP-412 review). The saver's
 --   name only within the reader's own Company (V14). A Rabaed Engineer's save says so
 --   and names nobody.
 
@@ -148,10 +149,9 @@ create function app.numbering_pattern_versions(p_project_id uuid, p_at timestamp
           (row_number() over (partition by np.work_item_type_id order by np.effective_from, np.id))::integer,
           np.effective_from, np.follows_project, np.segments, np.separator, np.seq_digits, np.seq_scope,
           np.admin_action_id is not null,
-          case when m.company_id = v_company_id or m.company_id = pr.host_company_id or v_is_admin then c.legal_name end,
+          case when m.company_id = v_company_id or v_is_admin then c.legal_name end,
           case when m.company_id = v_company_id then m.full_name end
         from numbering_pattern np
-        join project pr on pr.id = np.project_id
         left join member m on m.id = np.set_by_member_id
         left join company c on c.id = m.company_id
         where np.project_id = p_project_id and np.effective_from <= greatest(p_at, now())

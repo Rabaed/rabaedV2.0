@@ -79,15 +79,16 @@ describe("the Numbering page's settings", () => {
     expect(s.example).toEqual({ projectCode: "NDF", tradeCode: "EL", participant: { code: null, ordinal: 1 }, locationPath: ["BA"] });
   });
 
-  it("give the example the reader's own Participant Code once it is set", async () => {
+  it("give the example the reader's own Participant Code once it is set, its order on the Project only to a Project Admin", async () => {
     const t = await tower("NPC");
     await ok(c1.caller.request("PUT", `/v1/participants/${t.c1ParticipantId}/code`, { code: "CCM" }));
     const s = (await ok(settingsOf(t.c1Engineer, t), 200)).json() as NumberingSettings;
-    expect(s.example.participant).toEqual({ code: "CCM", ordinal: 1 });
+    expect(s.example.participant).toEqual({ code: "CCM", ordinal: null });
     expect(((await ok(settingsOf(t.c2Engineer, t), 200)).json() as NumberingSettings).example.participant).toEqual({
       code: null,
-      ordinal: 3,
+      ordinal: null,
     });
+    expect(((await ok(settingsOf(c1.caller, t), 200)).json() as NumberingSettings).example.participant).toEqual({ code: "CCM", ordinal: 1 });
   });
 
   it("are saved by the Project Admin, Project pattern and per-Type override, and read by every other Project Member", async () => {
@@ -236,7 +237,7 @@ describe("visibility.md, Document Numbers", () => {
     ]);
   });
 
-  it("RP-412-1: every Project Member reads the versions of the patterns, the saver's Company by name, the saver only within it", async () => {
+  it("RP-412-1: every Project Member reads the versions of the patterns, the saver's Company only within it or as a Project Admin, the saver only within it", async () => {
     const t = await tower("NVR");
     const mar = ((await settingsOf(c1.caller, t)).json() as NumberingSettings).types.find((x) => x.code === "MAR")!.id;
     const first = pattern({ segments: [project, type, participantCode], countedBy: [0, 1, 2] });
@@ -256,7 +257,8 @@ describe("visibility.md, Document Numbers", () => {
     ] as const) {
       const res = await ok(settingsOf(who, t), 200);
       const s = res.json() as NumberingSettings;
-      const savedBy = { rabaed: false, company: c1Company, member: own ? { en: "Test Person", ar: expect.any(String) } : null };
+      // C1 is the Host Company, which earns it no exception: C2 and K1 read "a Project Admin" (V15).
+      const savedBy = { rabaed: false, company: own ? c1Company : null, member: own ? { en: "Test Person", ar: expect.any(String) } : null };
       expect(s.versions.filter((v) => v.workItemTypeId === null)).toEqual([
         { workItemTypeId: null, version: 2, effectiveFrom: expect.any(String), pattern: second, savedBy },
         { workItemTypeId: null, version: 1, effectiveFrom: expect.any(String), pattern: first, savedBy },
@@ -265,8 +267,9 @@ describe("visibility.md, Document Numbers", () => {
         [2, null],
         [1, custom],
       ]);
-      // Another Company never gets the saver's name or id (V14).
+      // Another Company never gets the saver's name or id (V14), nor the saver's Company (V15).
       if (!own) expect(res.body).not.toContain(c1.company.authorizedPerson.id);
+      if (!own) expect(res.body).not.toContain("Test Constructions");
       // The Custom pattern is gone: MAR uses the Project pattern again.
       expect(s.types.find((x) => x.id === mar)!.override).toBeNull();
     }
@@ -285,6 +288,8 @@ describe("visibility.md, Document Numbers", () => {
       const res = await ok(settingsOf(who, t), 200);
       expect(Object.keys(res.json()).sort(), label).toEqual(["canEdit", "example", "project", "types", "versions"]);
       expect(res.body, label).not.toMatch(/lastValue|counterKey|0002/);
+      // Nor the reader's own order on the Project, which counts the other Participants (RP-381-1).
+      expect((res.json() as NumberingSettings).example.participant.ordinal, label).toBeNull();
       await expectHidden(who.get(`/v1/projects/${t.projectId}/numbering/counters`), label);
       await expectHidden(who.get(`/v1/projects/${t.projectId}/numbering/counter?workItemType=MAR`), label);
     }

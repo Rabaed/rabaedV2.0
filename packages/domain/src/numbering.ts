@@ -84,8 +84,13 @@ export const numberingAttributes = z.object({
   typeCode: z.string(),
   /** Null without a Trade: the segment prints nothing. */
   tradeCode: z.string().nullable(),
-  /** The raiser's Participant: its Participant Code, null until set, and its position on the Project. */
-  participant: z.object({ code: z.string().nullable(), ordinal: z.number().int() }),
+  /**
+   * The raiser's Participant: its Participant Code, null until set, and its position
+   * on the Project. The position is null where the reader may not know it (anyone
+   * but a Project Admin, visibility.md RP-381-1): an example then prints
+   * `participantPlaceholder`. An issued number always has it.
+   */
+  participant: z.object({ code: z.string().nullable(), ordinal: z.number().int().nullable() }),
   /** The codes of the item's Location and its parents, from the Zone down; empty without a Location. */
   locationPath: z.array(z.string()),
 });
@@ -199,7 +204,8 @@ export const numberingPatternRefusals = ["not_found", "project_closed", "type_no
  * A Project's numbering, as every Project Member reads it on the Numbering page.
  * `project` null: the Rabaed Default. A Type whose `override` is null follows the
  * Project's pattern. `example`: what the live example is built from, the Project's
- * code, its first Trade and Location, and the reader's own Participant. Only
+ * code, its first Trade and Location, and the reader's own Participant (its order on
+ * the Project for a Project Admin only, RP-381-1). Only
  * `canEdit` (a Project Admin) may save. Never a counter's value: only Project Admins
  * read those, from the counters (visibility.md scenario 55, RP-412-2).
  */
@@ -224,9 +230,16 @@ export function sequencedNumber(prefix: string, separator: string, seqDigits: nu
   return prefix + separator + padded(seq, seqDigits);
 }
 
-/** What the Participant segment prints: the Participant Code, or the Participant's order on the Project (01) until one is set. */
-export function participantSegment(participant: { code: string | null; ordinal: number }): string {
-  return participant.code ?? padded(participant.ordinal, 2);
+/** What an example prints for a Participant without a code whose order on the Project the reader may not know (RP-381-1). */
+export const participantPlaceholder = "XX";
+
+/**
+ * What the Participant segment prints: the Participant Code, or the Participant's
+ * order on the Project (01) until one is set; `participantPlaceholder` when the
+ * order is withheld from the reader, never a number.
+ */
+export function participantSegment(participant: { code: string | null; ordinal: number | null }): string {
+  return participant.code ?? (participant.ordinal === null ? participantPlaceholder : padded(participant.ordinal, 2));
 }
 
 /** What one segment prints for an item; null when the item has no such value (an item without a Trade). */

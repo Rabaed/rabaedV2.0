@@ -395,7 +395,7 @@ describe("app.numbering_pattern_versions (visibility.md RP-412-3)", () => {
       sql`select work_item_type_id, version_no, by_rabaed, company_name, member_name from app.numbering_pattern_versions(${projectId}::uuid, now())`,
     );
 
-  it("names a saver's Company outside the Host Company only to its own Members and the Project Admins, and the saver only within it", async () => {
+  it("names a saver's Company only to its own Members and the Project Admins, the Host Company's too, and the saver only within it", async () => {
     const t = await tower("TWV");
     // C2's engineer is made a Project Admin too: a saver whose Company isn't the Host Company.
     await migrator.query("insert into project_admin (project_id, member_id, appointed_by_member_id) values ($1, $2, $3)", [
@@ -420,18 +420,31 @@ describe("app.numbering_pattern_versions (visibility.md RP-412-3)", () => {
       [t.projectId, action],
     );
 
+    // And the Host Company's Project Admin (C1's) saves a third, once C2's engineer is no longer a Project Admin.
+    await migrator.query("delete from project_admin where project_id = $1 and member_id = $2", [t.projectId, t.c2.member]);
+    expect(
+      await outcome(
+        t.c1.ap,
+        sql`select app.set_numbering_pattern(${t.projectId}::uuid, null, '[{"kind": "type"}, {"kind": "participant"}]'::jsonb, '-', 4, '[0, 1]'::jsonb, false, now()) as outcome`,
+      ),
+    ).toBe("saved");
+
+    const c1Name = { en: "C1", ar: "C1" };
     const c2Name = { en: "C2", ar: "C2" };
     const c2Saver = { en: "engineer", ar: "engineer" };
+    const version = async (as: string, n: number) => (await versions(as, t.projectId)).find((v) => v.version_no === n);
     const rabaed = { work_item_type_id: null, version_no: 2, by_rabaed: true, company_name: null, member_name: null };
-    // C1's engineer: the Host Company's, neither a Project Admin nor C2's.
+    // C1's engineer: the Host Company's, neither a Project Admin nor C2's; reads C1's save by Company and person.
     expect(await versions(t.c1.member, t.projectId)).toEqual([
+      { work_item_type_id: null, version_no: 3, by_rabaed: false, company_name: c1Name, member_name: { en: "ap", ar: "ap" } },
       rabaed,
       { work_item_type_id: null, version_no: 1, by_rabaed: false, company_name: null, member_name: null },
     ]);
     // A Project Admin sees every Participant (V15), but another Company's people only by name of the Company (V14).
-    expect((await versions(t.c1.ap, t.projectId))[1]).toEqual({ work_item_type_id: null, version_no: 1, by_rabaed: false, company_name: c2Name, member_name: null });
-    // C2's own Members.
-    expect((await versions(t.c2.member, t.projectId))[1]).toMatchObject({ company_name: c2Name, member_name: c2Saver });
+    expect(await version(t.c1.ap, 1)).toEqual({ work_item_type_id: null, version_no: 1, by_rabaed: false, company_name: c2Name, member_name: null });
+    // C2's own Members read their own save; the Host Company's save is no exception to V15: no Company, no person.
+    expect(await version(t.c2.member, 1)).toMatchObject({ company_name: c2Name, member_name: c2Saver });
+    expect(await version(t.c2.member, 3)).toEqual({ work_item_type_id: null, version_no: 3, by_rabaed: false, company_name: null, member_name: null });
   });
 
   it("returns nothing to anyone outside the Project", async () => {
