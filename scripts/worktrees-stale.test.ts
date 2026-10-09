@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { findStale, formatStale, lockPid, parseStaleDays, type Activity } from "./worktrees-stale.ts";
+import { findStale, formatStale, lockPid, parseStaleDays, staleDaysAt, type Activity } from "./worktrees-stale.ts";
 import type { Skipped } from "./worktrees.ts";
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -64,12 +64,28 @@ describe("formatStale", () => {
   it("prints age, branch, reason and the lock's pid state", () => {
     const old = { lastCommit: ago(8), newestChange: undefined };
     const lines = formatStale(
-      run([skip("/w/gone", { locked: "claude agent a (pid 111)" }), skip("/w/alive", { locked: "claude agent b (pid 222)", branch: undefined })], { "/w/gone": old, "/w/alive": old }, { running: [222] }),
+      run(
+        [skip("/w/gone", { locked: "claude agent a (pid 111)" }), skip("/w/alive", { locked: "claude agent b (pid 222)", branch: undefined }), skip("/w/hand", { locked: "keep" }), skip("/w/bare", { locked: "" })],
+        { "/w/gone": old, "/w/alive": old, "/w/hand": old, "/w/bare": old },
+        { running: [222] },
+      ),
     );
     expect(lines).toEqual([
       "  /w/gone (RP-1-x), 8 days: uncommitted changes; locked, pid 111 is not running",
       "  /w/alive (detached HEAD), 8 days: uncommitted changes; locked, pid 222 is still running",
+      "  /w/hand (RP-1-x), 8 days: uncommitted changes; locked",
+      "  /w/bare (RP-1-x), 8 days: uncommitted changes; locked",
     ]);
+  });
+});
+
+describe("staleDaysAt", () => {
+  it("reads the value after --stale-days, and only there", () => {
+    const args = ["--yes", "--stale-days", "14"];
+    expect(staleDaysAt(args, 1)).toBe(14);
+    expect(staleDaysAt(args, 0)).toBeUndefined();
+    expect(staleDaysAt(["--stale-days"], 0)).toBeUndefined();
+    expect(staleDaysAt(["--stale-days", "x"], 0)).toBeUndefined();
   });
 });
 

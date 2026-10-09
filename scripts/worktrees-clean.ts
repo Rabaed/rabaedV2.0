@@ -15,8 +15,8 @@
 //
 // The default branch is main; --yes skips the confirmation.
 import { confirmOrExit } from "./confirm.ts";
-import { DEFAULT_STALE_DAYS, parseStaleDays, printStale } from "./worktrees-stale.ts";
-import { chooseWorktrees, currentRoot, gatherFacts, gitError, isAgentWorktree, listWorktrees, pruneWorktrees, refExists, removeWorktree, reportRemoval } from "./worktrees.ts";
+import { DEFAULT_STALE_DAYS, printStale, staleDaysAt } from "./worktrees-stale.ts";
+import { CURRENT_WORKTREE, chooseWorktrees, currentRoot, gatherFacts, gitError, isAgentWorktree, listWorktrees, pruneWorktrees, refExists, removeWorktree, reportRemoval } from "./worktrees.ts";
 
 const usage = "Usage: pnpm worktrees:clean [--into <branch>] [--include-empty] [--stale-days <n>] [--yes]";
 const args = process.argv.slice(2);
@@ -27,10 +27,11 @@ let includeEmpty = false;
 for (let i = 0; i < args.length; i++) {
   const a = args[i]!;
   const next = args[i + 1];
+  const days = staleDaysAt(args, i);
   if (a === "--yes") yes = true;
   else if (a === "--include-empty") includeEmpty = true;
-  else if (a === "--stale-days" && parseStaleDays(next) !== undefined && next !== undefined) {
-    staleDays = parseStaleDays(next)!;
+  else if (days !== undefined) {
+    staleDays = days;
     i++;
   } else if (a === "--into" && next && !next.startsWith("--")) {
     target = next;
@@ -59,7 +60,7 @@ if (skipped.length > 0) {
   console.log("Skipped:");
   for (const s of skipped) console.log(`  ${name(s.worktree)}: ${s.reason}`);
   printStale(
-    skipped.filter((s) => s.reason !== "this is the current worktree"),
+    skipped.filter((s) => s.reason !== CURRENT_WORKTREE),
     staleDays,
   );
 }

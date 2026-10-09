@@ -24,9 +24,10 @@ import { join } from "node:path";
 import { confirmOrExit } from "./confirm.ts";
 import { composeProjectOfEnv, listContainers, listVolumes, removeProject } from "./lanes.ts";
 import { samePath } from "./paths.ts";
-import { DEFAULT_STALE_DAYS, parseStaleDays, printStale } from "./worktrees-stale.ts";
+import { DEFAULT_STALE_DAYS, printStale, staleDaysAt } from "./worktrees-stale.ts";
 import { changedSinceListed, choosePrune, type PruneWorktree } from "./worktrees-pruning.ts";
 import {
+  CURRENT_WORKTREE,
   currentRoot,
   deleteBranch,
   fetchPrune,
@@ -50,9 +51,12 @@ let yes = false;
 let staleDays = DEFAULT_STALE_DAYS;
 for (let i = 0; i < args.length; i++) {
   const a = args[i]!;
+  const days = staleDaysAt(args, i);
   if (a === "--yes") yes = true;
-  else if (a === "--stale-days" && parseStaleDays(args[i + 1]) !== undefined && args[i + 1] !== undefined) staleDays = parseStaleDays(args[++i])!;
-  else {
+  else if (days !== undefined) {
+    staleDays = days;
+    i++;
+  } else {
     console.error(usage);
     process.exit(1);
   }
@@ -90,7 +94,7 @@ const docker = containers && { containers, volumes: listVolumes(), currentProjec
 const chosen = choosePrune({ worktrees, branches, mainRoot, currentPath: here, docker, exists: existsSync });
 
 const name = (w: { path: string; branch: string | undefined }) => `${w.path} (${w.branch ?? "detached HEAD"})`;
-const goesWithoutSaying = (reason: string) => reason === "the main checkout" || reason === "this is the current worktree";
+const goesWithoutSaying = (reason: string) => reason === "the main checkout" || reason === CURRENT_WORKTREE;
 const listed = chosen.skipped.filter((s) => !goesWithoutSaying(s.reason));
 if (listed.length > 0) {
   console.log("Skipped:");

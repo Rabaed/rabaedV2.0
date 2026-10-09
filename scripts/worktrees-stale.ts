@@ -48,6 +48,12 @@ export function parseStaleDays(value: string | undefined): number | undefined {
   return Number.isFinite(n) && n > 0 ? n : undefined;
 }
 
+/** The valid --stale-days value when args[i] is that flag, else undefined (the flag's value is args[i + 1]). */
+export function staleDaysAt(args: string[], i: number): number | undefined {
+  const value = args[i + 1];
+  return args[i] === "--stale-days" && value !== undefined ? parseStaleDays(value) : undefined;
+}
+
 /** The skipped worktrees untouched for at least staleDays, oldest first. */
 export function findStale({ skipped, now, staleDays, activityOf, pidRunning }: StaleInput): StaleEntry[] {
   const entries: StaleEntry[] = [];
@@ -66,7 +72,7 @@ export function findStale({ skipped, now, staleDays, activityOf, pidRunning }: S
 /** One line per stale worktree. */
 export function formatStale(entries: StaleEntry[]): string[] {
   return entries.map((e) => {
-    const lock = e.pid === undefined ? "" : `; locked, pid ${e.pid} ${e.pidRunning ? "is still running" : "is not running"}`;
+    const lock = e.pid !== undefined ? `; locked, pid ${e.pid} ${e.pidRunning ? "is still running" : "is not running"}` : e.worktree.locked !== undefined ? "; locked" : "";
     return `  ${e.worktree.path} (${e.worktree.branch ?? "detached HEAD"}), ${e.ageDays} ${e.ageDays === 1 ? "day" : "days"}: ${e.reason}${lock}`;
   });
 }
@@ -98,7 +104,7 @@ export function readActivity(path: string): Activity | undefined {
     const commit = git(["log", "-1", "--format=%ct"], path).trim();
     const lastCommit = commit === "" ? undefined : Number(commit) * 1000;
     // -z output: "XY path\0", with a second "\0from" entry after a rename.
-    const files = git(["status", "--porcelain", "-z", "--untracked-files=all"], path)
+    const files = git(["--no-optional-locks", "status", "--porcelain", "-z", "--untracked-files=all"], path)
       .split("\0")
       .filter((e) => e.length > 3 && e[2] === " ")
       .map((e) => e.slice(3));

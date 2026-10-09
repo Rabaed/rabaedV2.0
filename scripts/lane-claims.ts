@@ -24,13 +24,15 @@ export function claimWarnings(git: ClaimGit, currentPath: string, currentBranch:
   if (!key) return [];
   const same = (branch: string | undefined): branch is string => branch !== undefined && branchKey(branch) === key && branch !== currentBranch;
   const worktrees = git.worktrees().filter((w) => !samePath(w.path, currentPath));
+  const local = git.localBranches();
+  const remoteNames = git.remoteBranches();
   const names = new Set<string>();
-  for (const b of [...git.localBranches(), ...worktrees.map((w) => w.branch), ...git.remoteBranches()]) if (same(b)) names.add(b);
-  const remote = new Set(git.remoteBranches());
+  for (const b of [...local, ...worktrees.map((w) => w.branch), ...remoteNames]) if (same(b)) names.add(b);
+  const remote = new Set(remoteNames);
   return [...names].sort().map((branch) => {
     const where = [
       ...worktrees.filter((w) => w.branch === branch).map((w) => `worktree ${w.path}`),
-      ...(git.localBranches().includes(branch) && !worktrees.some((w) => w.branch === branch) ? ["local branch"] : []),
+      ...(local.includes(branch) && !worktrees.some((w) => w.branch === branch) ? ["local branch"] : []),
       ...(remote.has(branch) ? [`origin/${branch}`] : []),
     ];
     return `${key} may already be claimed: ${branch} (${where.join(", ")}).`;
@@ -41,30 +43,23 @@ const gitOut = (args: string[]) => execFileSync("git", args, { encoding: "utf8",
 const lines = (out: string) => out.split(/\r?\n/).filter((l) => l !== "");
 
 /** The real git behind ClaimGit; a failing call (no origin, say) reads as no branches. */
+const orEmpty = <T>(read: () => T[]): T[] => {
+  try {
+    return read();
+  } catch {
+    return [];
+  }
+};
+
 export const realClaimGit: ClaimGit = {
-  worktrees: () => {
-    try {
-      return listWorktrees();
-    } catch {
-      return [];
-    }
-  },
-  localBranches: () => {
-    try {
-      return lines(gitOut(["for-each-ref", "--format=%(refname:short)", "refs/heads/"]));
-    } catch {
-      return [];
-    }
-  },
-  remoteBranches: () => {
-    try {
-      return lines(gitOut(["for-each-ref", "--format=%(refname:short)", "refs/remotes/origin/"]))
+  worktrees: () => orEmpty(listWorktrees),
+  localBranches: () => orEmpty(() => lines(gitOut(["for-each-ref", "--format=%(refname:short)", "refs/heads/"]))),
+  remoteBranches: () =>
+    orEmpty(() =>
+      lines(gitOut(["for-each-ref", "--format=%(refname:short)", "refs/remotes/origin/"]))
         .filter((r) => r.startsWith("origin/"))
-        .map((r) => r.slice("origin/".length));
-    } catch {
-      return [];
-    }
-  },
+        .map((r) => r.slice("origin/".length)),
+    ),
 };
 
 export const currentBranch = (): string | undefined => {
