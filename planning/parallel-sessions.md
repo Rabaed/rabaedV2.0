@@ -77,6 +77,7 @@ Use it when a spec's tickets form a chain that one lane would otherwise work thr
    2. It unlocks and removes every `.claude/worktrees/agent-*` worktree whose commits are all in that branch, with its leftover folder (Windows keeps `node_modules` behind). It deletes each branch that is an ancestor of that branch with `git branch -D` (so `--into <integration branch>` works from the main folder, which has `main` checked out), plus the `worktree-agent-*` branch the app created the worktree on; a branch with commits not in the target is kept and named.
    3. It skips, and lists, worktrees with uncommitted changes or unmerged commits, and worktrees with no commits yet, since their subagent may still be running (another lane's, too: all lanes share `.claude/worktrees/agent-*`). `--include-empty` removes those with no commits yet anyway.
    4. Then run `/mattpocock-skills:retro` and archive the session.
+   5. When you stop an implementer yourself, remove only its worktree: `pnpm worktrees:clean --only agent-<id> --yes` (several ids may follow `--only`). It removes the named worktree even with no commits, and leaves other sessions' worktrees unlooked at; hand-run `git worktree remove` and `git branch -D` are refused by auto mode.
 
 ## Retro before archiving
 

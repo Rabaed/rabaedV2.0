@@ -78,8 +78,13 @@ type ChooseInput = {
   currentPath: string;
   /** Also remove worktrees with no commits yet (--include-empty). */
   includeEmpty?: boolean;
+  /** Folder names (agent-*) to limit the run to (--only); they count as includeEmpty, the rest are left out of the run. */
+  only?: string[];
   platform?: NodeJS.Platform;
 };
+
+/** The last segment of a worktree path. */
+export const worktreeName = (path: string): string => path.replace(/[\\/]+$/, "").split(/[\\/]/).pop() ?? "";
 
 /**
  * Which agent worktrees to remove: those whose commits are all in the target
@@ -88,10 +93,12 @@ type ChooseInput = {
  * (unless includeEmpty). Everything else is skipped with its reason.
  * The caller passes agent worktrees only.
  */
-export function chooseWorktrees({ worktrees, currentPath, includeEmpty = false, platform }: ChooseInput): { remove: Worktree[]; skipped: Skipped[] } {
+export function chooseWorktrees({ worktrees, currentPath, includeEmpty = false, only, platform }: ChooseInput): { remove: Worktree[]; skipped: Skipped[] } {
   const remove: Worktree[] = [];
   const skipped: Skipped[] = [];
+  if (only) includeEmpty = true;
   for (const { ahead, dirty, noCommitsYet, ...w } of worktrees) {
+    if (only && !only.includes(worktreeName(w.path))) continue;
     const reason = samePath(w.path, currentPath, platform)
       ? "this is the current worktree"
       : dirty
