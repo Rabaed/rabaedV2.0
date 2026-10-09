@@ -33,6 +33,8 @@ type Version = {
   typeId: string | null;
   moduleKey: string | null;
   projectId: string | null;
+  /** The Project owning the Workflow; null for a Rabaed Default. */
+  ownerProjectId: string | null;
   outcomeKind: OutcomeKind | null;
   form: unknown;
 };
@@ -59,7 +61,7 @@ beforeAll(async () => {
   versions = (
     await sql<Version>`
       select v.id, d.name ->> 'en' as name, v.version_no as "versionNo", v.layout,
-        t.id as "typeId", t.module_key as "moduleKey", t.project_id as "projectId", t.outcome_kind as "outcomeKind",
+        t.id as "typeId", t.module_key as "moduleKey", t.project_id as "projectId", d.project_id as "ownerProjectId", t.outcome_kind as "outcomeKind",
         (select f.schema from form_version f
          where f.form_definition_id = t.form_definition_id and f.status = 'published'
          order by f.version_no desc limit 1) as form
@@ -128,7 +130,8 @@ describe("every published Workflow Version", () => {
     const problems = versions.flatMap((v) =>
       workflowPublishProblems(definitionFromRows(rows.get(v.id)!), {
         outcomeKind: v.outcomeKind!,
-        stages: stages.rows.filter((s) => s.moduleKey === v.moduleKey && (s.projectId === null || s.projectId === v.projectId)),
+        // The Stage set it is published against (RP-428): its Project's for a Project's own Workflow, else the Rabaed Defaults'.
+        stages: stages.rows.filter((s) => s.moduleKey === v.moduleKey && s.projectId === v.ownerProjectId),
         form: v.form === null ? null : formSchema.parse(v.form),
         optionListIds: new Set(lists.rows.map((l) => l.id)),
       }).map((p) => ({ version: `${v.name} v${v.versionNo}`, code: p.code, step: p.step, transition: p.transition, message: p.message.en })),

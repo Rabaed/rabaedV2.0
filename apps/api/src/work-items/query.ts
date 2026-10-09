@@ -133,7 +133,8 @@ function visibleRows({ projectId, moduleKey }: QueryScope, allRevisions: boolean
     cross join lateral (select case when w.document_number is null then null else seen.entered_at end as step_entered_at) e
     join workflow_step s on s.id = seen.step_id
     join work_item_type t on t.id = w.work_item_type_id
-    join stage st on st.module_key = t.module_key and st.key = seen.stage_key and st.project_id is null
+    -- The Project's own Stages (RP-428): their names, order and categories, never the Rabaed Defaults'.
+    join stage st on st.project_id = w.project_id and st.module_key = t.module_key and st.key = seen.stage_key
     join visibility_dimension td on td.project_id = w.project_id and td.kind = 'trade'
     join work_item_dimension_value tdv on tdv.work_item_id = w.id and tdv.dimension_id = td.id
     join dimension_value tv on tv.id = tdv.dimension_value_id
@@ -559,8 +560,9 @@ async function stagesAndFilters(trx: Trx, scope: QueryScope, stageCounts: Map<st
     .selectFrom("stage")
     .select(["key", "name", "category"])
     .where("module_key", "=", scope.moduleKey)
-    .where("project_id", "is", null)
+    .where("project_id", "=", projectId)
     .orderBy("sort")
+    .orderBy("key")
     .execute();
   const types = await trx
     .selectFrom("work_item_type")
