@@ -59,17 +59,23 @@ beforeAll(async () => {
   versions = (
     await sql<Version>`
       select v.id, d.name ->> 'en' as name, v.version_no as "versionNo", v.layout,
-        t.id as "typeId", t.module_key as "moduleKey", t.project_id as "projectId", t.outcome_kind as "outcomeKind",
+        t.id as "typeId", t.module_key as "moduleKey", coalesce(d.project_id, t.project_id) as "projectId", t.outcome_kind as "outcomeKind",
         (select f.schema from form_version f
          where f.form_definition_id = t.form_definition_id and f.status = 'published'
          order by f.version_no desc limit 1) as form
       from workflow_version v
       join workflow_definition d on d.id = v.workflow_definition_id
-      -- Should iterate WF-3's (Project, Work Item Type, raising Participant) bindings once they exist.
-      -- The Type the Workflow was made for: the first on it. Test Types reuse the MAR's
-      -- Workflow as a shortcut, even in other Modules (a WIR), which no publish would allow.
+      -- The Type the Workflow was made for: the first that has it as its Rabaed Default,
+      -- else the first a Project binds it to (WF-3, RP-426), checked against that Project's
+      -- Stages. Test Types reuse the MAR's Workflow as a shortcut, even in other Modules
+      -- (a WIR), which no publish would allow.
       left join lateral (
-        select * from work_item_type wt where wt.workflow_definition_id = d.id order by wt.created_at, wt.id limit 1
+        select wt.* from (
+          select wt.*, 0 as via from work_item_type wt where wt.workflow_definition_id = d.id
+          union all
+          select wt.*, 1 as via from workflow_binding b join work_item_type wt on wt.id = b.work_item_type_id
+          where b.workflow_definition_id = d.id
+        ) wt order by wt.via, wt.created_at, wt.id limit 1
       ) t on true
       where v.status = 'published'
       order by d.created_at, v.version_no
