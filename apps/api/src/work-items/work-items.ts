@@ -794,8 +794,9 @@ async function routedTransition(trx: Trx, workItemId: string, key: string, answe
   `.execute(trx);
   const row = rows[0];
   if (!row) return null;
-  const rules = transitionRules.safeParse(row.rules ?? {});
-  return { kind: row.kind, action_form: row.action_form, rules: rules.success ? rules.data : {} };
+  // Stored rules passed the definition format when published: one that no longer
+  // parses fails loudly, never taken as a Transition with no rules.
+  return { kind: row.kind, action_form: row.action_form, rules: row.rules == null ? {} : transitionRules.parse(row.rules) };
 }
 
 /** A refused Validate rule, with its message in English and Arabic (WF-7). */

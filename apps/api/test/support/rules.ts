@@ -3,7 +3,7 @@
 // WF-8): no Rabaed Default has rules or actions yet.
 import { publishFormVersion } from "@rabaed/admin/services";
 import type { Db } from "@rabaed/db";
-import { actionsFormSchema, addActionsWorkflow, addRulesWorkflow, rulesFormSchema } from "@rabaed/db/test-support";
+import { actionsFormSchema, addActionsWorkflow, addRulesWorkflow, rulesFormSchema, type RulesTransition } from "@rabaed/db/test-support";
 import { sql } from "kysely";
 import { expect } from "vitest";
 
@@ -33,9 +33,9 @@ async function addTestType(migrator: Db, code: string, name: { en: string; ar: s
   expect(published, JSON.stringify(published)).toMatchObject({ ok: true });
 }
 
-/** Adds Rabaed Type `code` on a new rules Workflow, its Form published with rulesFormSchema (as the migrator). */
-export function addRulesType(migrator: Db, code: string): Promise<void> {
-  return addTestType(migrator, code, { en: "Ruled submittal", ar: "تقديم بقواعد" }, (run) => addRulesWorkflow(run), rulesFormSchema);
+/** Adds Rabaed Type `code` on a new rules Workflow (with the `extra` Transitions), its Form published with rulesFormSchema (as the migrator). */
+export function addRulesType(migrator: Db, code: string, extra: RulesTransition[] = []): Promise<void> {
+  return addTestType(migrator, code, { en: "Ruled submittal", ar: "تقديم بقواعد" }, (run) => addRulesWorkflow(run, { extra }), rulesFormSchema);
 }
 
 /** Adds Rabaed Type `code` on a new actions Workflow, its Form published with actionsFormSchema (as the migrator). */
