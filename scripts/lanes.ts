@@ -188,6 +188,13 @@ export function mergedProjects({ containers, volumes, worktrees, cwd, currentPro
   return merged;
 }
 
+/** lanes:prune --lane N: only lane N's compose project among the candidates (all of them without --lane). */
+export const onlyLane = (projects: StaleProject[], lane: number | undefined): StaleProject[] =>
+  lane === undefined ? projects : projects.filter((p) => p.project === laneProject(lane));
+
+/** The lanes:prune command that frees lane n alone (RP-505), with --merged when the holder's branch is merged. */
+export const pruneCommand = (lane: number, merged: boolean): string => `pnpm lanes:prune${merged ? " --merged" : ""} --lane ${lane}`;
+
 /**
  * The worktrees (other than cwd) holding lane n, as laneClashes counts them: its compose
  * project's containers, or a running container on one of its ports. With ownDatabase

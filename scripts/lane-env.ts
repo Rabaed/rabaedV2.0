@@ -8,7 +8,7 @@
 //
 // It refuses a lane whose ports are taken, or whose compose project another worktree
 // already uses, and names the holder, saying whether that worktree's branch is already merged
-// into origin/main (then `pnpm lanes:prune --merged` frees it). --free takes the next lane that is free instead.
+// into origin/main (then `pnpm lanes:prune --merged --lane N` frees just that lane). --free takes the next lane that is free instead.
 // --db <suffix> (e.g. rp322) names the three database URLs rabaed_<suffix>, so the seam suites
 // use rabaed_<suffix>_test: several worktrees of one lane (e.g. /implement-spec's implementer
 // subagents) can share its Postgres without migrating the same database. A --db run may share
@@ -19,7 +19,7 @@
 // `pnpm lanes:prune` removes the compose projects old worktrees left behind;
 // `pnpm lanes:drop-dbs` drops the --db databases of worktrees that are gone.
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { firstFreeLane, isValidDbSuffix, laneClashes, laneEnv, laneHolders, lanePorts, laneProject, listContainers, takenLanePorts } from "./lanes.ts";
+import { firstFreeLane, isValidDbSuffix, laneClashes, laneEnv, laneHolders, lanePorts, laneProject, listContainers, pruneCommand, takenLanePorts } from "./lanes.ts";
 import { samePath } from "./paths.ts";
 import { foreignSessionLock, readProcessList } from "./session-lock.ts";
 import { branchMerged, currentRoot, listWorktrees, refExists, type Worktree } from "./worktrees.ts";
@@ -78,11 +78,11 @@ function holderStatus(lane: number): string[] {
   const hasOriginMain = refExists("origin/main", mainRoot);
   return holders.map((dir) => {
     const w = worktrees.find((x) => samePath(x.path, dir));
-    if (!w) return `  ${dir} is not a worktree of this clone (or is gone): \`pnpm lanes:prune\` frees the lane.`;
+    if (!w) return `  ${dir} is not a worktree of this clone (or is gone): \`${pruneCommand(lane, false)}\` frees the lane.`;
     if (!w.branch) return `  ${dir} has a detached HEAD.`;
     if (!hasOriginMain) return `  ${dir} is on ${w.branch}; run \`git fetch origin main\` to see whether it is merged.`;
     return branchMerged(w.branch, "origin/main", mainRoot)
-      ? `  ${dir} is on ${w.branch}, already merged into origin/main: free the lane with \`pnpm lanes:prune --merged\`, then re-run.`
+      ? `  ${dir} is on ${w.branch}, already merged into origin/main: free the lane with \`${pruneCommand(lane, true)}\`, then re-run.`
       : `  ${dir} is on ${w.branch}, not merged into origin/main yet: its session may still need the lane.`;
   });
 }

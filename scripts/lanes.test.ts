@@ -15,10 +15,12 @@ import {
   laneHolders,
   lanePorts,
   mergedProjects,
+  onlyLane,
   orphanDatabases,
   parseConnections,
   parseContainers,
   parseVolumes,
+  pruneCommand,
   staleProjects,
   type Container,
   type WorktreeLane,
@@ -352,6 +354,26 @@ describe("mergedProjects (lanes:prune --merged)", () => {
   it("keeps a project with a container from a folder that is not a worktree of this clone", () => {
     const other = [container({ name: "rabaed-lane6-db-1", project: "rabaed-lane6", workingDir: "D:\\other-clone\\wt" })];
     expect(mergedProjects({ containers: other, volumes: [], worktrees, cwd, currentProject: undefined, platform: "win32" })).toEqual([]);
+  });
+});
+
+describe("onlyLane (lanes:prune --lane N)", () => {
+  const prunable = ["rabaed-lane1", "rabaed-lane3", "rabaed-lane4"].map((project) => ({ project, reason: "not running", containers: [], volumes: [] }));
+
+  it("with three prunable projects, --lane 3 selects only rabaed-lane3", () => {
+    expect(onlyLane(prunable, 3).map((p) => p.project)).toEqual(["rabaed-lane3"]);
+  });
+
+  it("selects nothing when the lane is not among them, and everything without --lane", () => {
+    expect(onlyLane(prunable, 2)).toEqual([]);
+    expect(onlyLane(prunable, undefined)).toEqual(prunable);
+  });
+});
+
+describe("pruneCommand", () => {
+  it("names the targeted command for a lane, so the suggestion never reaches other lanes", () => {
+    expect(pruneCommand(3, true)).toBe("pnpm lanes:prune --merged --lane 3");
+    expect(pruneCommand(3, false)).toBe("pnpm lanes:prune --lane 3");
   });
 });
 
