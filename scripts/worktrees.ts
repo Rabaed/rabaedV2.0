@@ -78,8 +78,17 @@ type ChooseInput = {
   currentPath: string;
   /** Also remove worktrees with no commits yet (--include-empty). */
   includeEmpty?: boolean;
+  /** Folder names (agent-*) to limit the run to (--only); they count as includeEmpty, the rest are left out of the run. */
+  only?: string[];
   platform?: NodeJS.Platform;
 };
+
+/** The last segment of a worktree path. */
+export const worktreeName = (path: string): string => path.replace(/[\\/]+$/, "").split(/[\\/]/).pop() ?? "";
+
+/** Whether the worktree's folder name is one of `names`; case-insensitive on Windows, like paths. */
+export const isNamed = (path: string, names: string[], platform?: NodeJS.Platform): boolean =>
+  names.some((n) => normalPath(n, platform) === normalPath(worktreeName(path), platform));
 
 /**
  * Which agent worktrees to remove: those whose commits are all in the target
@@ -88,17 +97,19 @@ type ChooseInput = {
  * (unless includeEmpty). Everything else is skipped with its reason.
  * The caller passes agent worktrees only.
  */
-export function chooseWorktrees({ worktrees, currentPath, includeEmpty = false, platform }: ChooseInput): { remove: Worktree[]; skipped: Skipped[] } {
+export function chooseWorktrees({ worktrees, currentPath, includeEmpty = false, only, platform }: ChooseInput): { remove: Worktree[]; skipped: Skipped[] } {
   const remove: Worktree[] = [];
   const skipped: Skipped[] = [];
+  const keepEmpty = includeEmpty || only !== undefined;
   for (const { ahead, dirty, noCommitsYet, ...w } of worktrees) {
+    if (only && !isNamed(w.path, only, platform)) continue;
     const reason = samePath(w.path, currentPath, platform)
       ? "this is the current worktree"
       : dirty
         ? "uncommitted changes"
         : ahead > 0
           ? `${ahead} unmerged commit${ahead === 1 ? "" : "s"}${w.branch ? ` on ${w.branch}` : " (detached HEAD)"}`
-          : noCommitsYet && !includeEmpty
+          : noCommitsYet && !keepEmpty
             ? "no commits yet, may still be running (--include-empty removes it)"
             : w.locked !== undefined && !lockedByApp(w.locked)
               ? `locked by hand (${w.locked || "no reason"})`

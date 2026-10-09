@@ -8,19 +8,21 @@
 //
 // It refuses a lane whose ports are taken, or whose compose project another worktree
 // already uses, and names the holder, saying whether that worktree's branch is already merged
-// into origin/main (then `pnpm lanes:prune --merged` frees it). --free takes the next lane that is free instead.
+// into origin/main (then `pnpm lanes:prune --merged --lane N` frees just that lane). --free takes the next lane that is free instead.
 // --db <suffix> (e.g. rp322) names the three database URLs rabaed_<suffix>, so the seam suites
 // use rabaed_<suffix>_test: several worktrees of one lane (e.g. /implement-spec's implementer
 // subagents) can share its Postgres without migrating the same database. A --db run may share
 // a lane with another worktree, but only the lane owner's own implementer subagents use it:
 // a session whose lane another session holds takes --free or runs lanes:prune. Without --db
 // the .env is as before.
+// It also refuses, even with --force, a worktree locked by another live `claude session` (RP-501).
 // `pnpm lanes:prune` removes the compose projects old worktrees left behind;
 // `pnpm lanes:drop-dbs` drops the --db databases of worktrees that are gone.
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { firstFreeLane, isValidDbSuffix, laneClashes, laneEnv, laneHolders, lanePorts, laneProject, listContainers, takenLanePorts } from "./lanes.ts";
+import { firstFreeLane, isValidDbSuffix, laneClashes, laneEnv, laneHolders, lanePorts, laneProject, listContainers, pruneCommand, takenLanePorts } from "./lanes.ts";
 import { samePath } from "./paths.ts";
-import { branchMerged, listWorktrees, refExists, type Worktree } from "./worktrees.ts";
+import { foreignSessionLock, parseSessionLock, readProcessList } from "./session-lock.ts";
+import { branchMerged, currentRoot, listWorktrees, refExists, type Worktree } from "./worktrees.ts";
 
 const args = process.argv.slice(2);
 const force = args.includes("--force");
@@ -39,6 +41,25 @@ if (
 ) {
   console.error("Usage: pnpm lane:env <n> [--force] [--free] [--db <suffix>]   (n = 0..9, one per worktree; suffix: lowercase letters and digits, e.g. rp322)");
   process.exit(1);
+}
+// A worktree locked by another live Claude session belongs to that session; --force does not override this (RP-501).
+let locked: string | undefined;
+try {
+  locked = listWorktrees().find((w) => samePath(w.path, currentRoot()))?.locked;
+} catch {
+  // Not a git checkout, or git is missing: nothing to check.
+}
+if (parseSessionLock(locked)) {
+  let refusal: string | undefined;
+  try {
+    refusal = foreignSessionLock(locked, process.pid, readProcessList());
+  } catch (e) {
+    console.warn(`Session-lock check skipped (${e instanceof Error ? e.message.split("\n")[0] : String(e)}), so a live Claude session holding this worktree would not be noticed.`);
+  }
+  if (refusal) {
+    console.error(refusal);
+    process.exit(1);
+  }
 }
 if (existsSync(".env") && !force) {
   console.error(".env already exists. Re-run with --force to overwrite it.");
@@ -64,11 +85,11 @@ function holderStatus(lane: number): string[] {
   const hasOriginMain = refExists("origin/main", mainRoot);
   return holders.map((dir) => {
     const w = worktrees.find((x) => samePath(x.path, dir));
-    if (!w) return `  ${dir} is not a worktree of this clone (or is gone): \`pnpm lanes:prune\` frees the lane.`;
+    if (!w) return `  ${dir} is not a worktree of this clone (or is gone): \`${pruneCommand(lane, { merged: false })}\` frees the lane.`;
     if (!w.branch) return `  ${dir} has a detached HEAD.`;
     if (!hasOriginMain) return `  ${dir} is on ${w.branch}; run \`git fetch origin main\` to see whether it is merged.`;
     return branchMerged(w.branch, "origin/main", mainRoot)
-      ? `  ${dir} is on ${w.branch}, already merged into origin/main: free the lane with \`pnpm lanes:prune --merged\`, then re-run.`
+      ? `  ${dir} is on ${w.branch}, already merged into origin/main: free the lane with \`${pruneCommand(lane, { merged: true })}\`, then re-run.`
       : `  ${dir} is on ${w.branch}, not merged into origin/main yet: its session may still need the lane.`;
   });
 }
