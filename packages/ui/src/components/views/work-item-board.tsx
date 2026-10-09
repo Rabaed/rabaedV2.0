@@ -90,6 +90,8 @@ export type WorkItemBoardProps = {
    * Transition's Action Form. Without it, the cards can't be moved.
    */
   onMove?: (card: WorkItemRow, move: WorkItemMove) => void;
+  /** E.g. negative margins and padding, so the grey canvas reaches the page's edges as the anatomy draws it. */
+  className?: string;
 };
 
 type Dragging = { card: WorkItemRow; targets: Map<string, WorkItemMove> };
@@ -126,6 +128,7 @@ export function WorkItemBoard({
   itemHref,
   linkAs: Link = "a",
   onMove,
+  className,
 }: WorkItemBoardProps) {
   const columns = new Map(board.columns.map((c) => [c.stageKey, c]));
   const stageNames = new Map(board.stages.map((s) => [s.key, s.name]));
@@ -140,7 +143,7 @@ export function WorkItemBoard({
       // Focusable, so the board can be scrolled with the keyboard.
       tabIndex={0}
       data-board=""
-      className={cn("relative -mx-4 overflow-x-auto bg-canvas px-4 pt-[18px] pb-[40px] sm:-mx-7 sm:px-7", focusRing)}
+      className={cn("relative overflow-x-auto bg-canvas pt-[18px] pb-[40px]", focusRing, className)}
     >
       {dragging && (
         <p role="status" className="sr-only">

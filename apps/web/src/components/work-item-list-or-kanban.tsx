@@ -181,6 +181,8 @@ export function WorkItemListOrKanban(
               labels={labels.board}
               layout={layout ?? props.board.layout}
               storageKey={`${projectId}:${module}`}
+              // The canvas reaches the page's edges (PageContent's padding), as the anatomy draws it.
+              className="-mx-4 px-4 sm:-mx-7 sm:px-7"
               listHrefFor={(q) => hrefIn("list", q)}
               itemHref={itemHref}
               linkAs={NextLink}
