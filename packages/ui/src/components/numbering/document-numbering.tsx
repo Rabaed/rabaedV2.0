@@ -168,7 +168,7 @@ export function DocumentNumbering({ t, canEdit, projectPattern, isRabaedDefault,
         description={t(counters ? "previewNext" : "previewExample", { context: previewContext })}
         data-testid="numbering-preview"
       >
-        <div className="grid items-start gap-6 min-[1100px]:grid-cols-[minmax(0,1fr)_300px]">
+        <div className="grid items-start gap-6 min-[1100px]:grid-cols-[minmax(0,1fr)_320px]">
           <div className="min-w-0">
             <PatternNumber parts={previewNumber!.parts} separator={shownPattern.separator} size="lg" />
             <ul aria-label={t("legend")} className="mt-3 flex flex-wrap gap-x-[14px] gap-y-1.5 text-caption text-muted">

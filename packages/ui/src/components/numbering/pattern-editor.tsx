@@ -447,13 +447,13 @@ export function SampleLabel({ entry, fallback, className }: { entry: SampleEntry
         <bdi className="min-w-0 truncate">{pieces[0] ?? fallback}</bdi>
       ) : (
         <>
-          {/* Shrinks far sooner than the Trade (a thousand to one), never below a few letters. */}
-          <bdi className="min-w-[4ch] shrink-[1000] truncate">{pieces[0]}</bdi>
+          {/* Gives way first, down to three letters; the Trade shrinks only once the Company cannot. */}
+          <bdi className="min-w-[3ch] shrink truncate">{pieces[0]}</bdi>
           <span aria-hidden="true" className="shrink-0 px-1">
             ·
           </span>
           <span className="sr-only">, </span>
-          <bdi className="min-w-0 truncate">{pieces[1]}</bdi>
+          <bdi className="min-w-0 shrink-[0.001] truncate">{pieces[1]}</bdi>
         </>
       )}
     </span>
