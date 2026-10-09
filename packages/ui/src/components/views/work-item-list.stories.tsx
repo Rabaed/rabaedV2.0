@@ -21,9 +21,10 @@ const copy = {
   firstPage: b("First page", "الصفحة الأولى"),
   previousPage: b("Previous page", "الصفحة السابقة"),
   pages: b("Pages", "الصفحات"),
-  filters: b("Filters", "التصفية"),
+  filters: b("Filter", "التصفية"),
+  status: b("Status", "الحالة"),
   owner: b("Owner", "المسؤول"),
-  role: b("Step", "الخطوة"),
+  role: b("Role", "الدور"),
   documentType: b("Document type", "نوع المستند"),
   building: b("Building", "المبنى"),
   type: b("Type", "النوع"),
@@ -306,7 +307,7 @@ export const Narrow: Story = {
 export const ChoosingAFilter: Story = {
   args: { query: { ...defaults, cursor: "abc" } },
   play: async (context) => {
-    const panel = await openFilters(context, copy.stage);
+    const panel = await openFilters(context, copy.status);
     await userEvent.click(within(panel).getByRole("checkbox", { name: stages.internal.name[storyLocale(context)] }));
     await expect(context.args.onQueryChange).toHaveBeenCalledWith({ ...defaults, stage: ["internal_review"] });
   },
@@ -316,7 +317,7 @@ export const ChoosingAFilter: Story = {
 export const SeveralValues: Story = {
   args: { query: { ...defaults, stage: ["internal_review"] } },
   play: async (context) => {
-    const panel = await openFilters(context, copy.stage);
+    const panel = await openFilters(context, copy.status);
     const locale = storyLocale(context);
     await expect(within(panel).getByRole("checkbox", { name: stages.internal.name[locale] })).toBeChecked();
     await userEvent.click(within(panel).getByRole("checkbox", { name: stages.pending.name[locale] }));
@@ -373,8 +374,8 @@ export const FiltersOpen: Story = {
     const button = context.canvas.getByRole("button", { name: `${storyText(context, copy.filters)} 2` });
     await userEvent.click(button);
     const panel = await screen.findByRole("dialog", { name: storyText(context, copy.filters) });
-    await expect(within(panel).getByRole("tab", { name: `${storyText(context, copy.stage)} 1` })).toBeVisible();
-    await userEvent.click(within(panel).getByRole("tab", { name: `${storyText(context, copy.stage)} 1` }));
+    await expect(within(panel).getByRole("tab", { name: `${storyText(context, copy.status)} 1` })).toBeVisible();
+    await userEvent.click(within(panel).getByRole("tab", { name: `${storyText(context, copy.status)} 1` }));
     await expect(within(panel).getByRole("checkbox", { name: stages.pending.name[storyLocale(context)] })).toBeChecked();
     await userEvent.click(within(panel).getByRole("button", { name: storyText(context, copy.clearAll) }));
     await expect(context.args.onQueryChange).toHaveBeenLastCalledWith({ ...defaults, needMyAction: true, q: "LED" });
@@ -389,7 +390,7 @@ export const FiltersOnAPhone: Story = {
     await userEvent.click(context.canvas.getByRole("button", { name: `${storyText(context, copy.filters)} 1` }));
     const sheet = await screen.findByRole("dialog", { name: storyText(context, copy.filters) });
     await expect(within(sheet).getByRole("heading", { name: `${storyText(context, copy.documentType)} 1` })).toBeVisible();
-    await expect(within(sheet).getByRole("group", { name: storyText(context, copy.stage) })).toBeInTheDocument();
+    await expect(within(sheet).getByRole("group", { name: storyText(context, copy.status) })).toBeInTheDocument();
     await expect(within(sheet).queryByRole("tab")).toBeNull();
   },
 };

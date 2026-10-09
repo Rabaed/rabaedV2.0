@@ -103,9 +103,10 @@
       "pageOf": "صفحة {page} من {pages}",
       "items": "{count, plural, one {عنصر واحد} two {عنصران} few {{n} عناصر} many {{n} عنصرًا} other {{n} عنصر}}",
       "dashboardFigure": "من لوحة المعلومات",
+      "statusField": "الحالة",
       "documentType": "نوع المستند",
       "owner": "المسؤول",
-      "role": "الخطوة",
+      "role": "الدور",
       "createdDate": "تاريخ الإنشاء",
       "withinDays": "{count, plural, one {آخر يوم} two {آخر يومين} few {آخر {days} أيام} many {آخر {days} يومًا} other {آخر {days} يوم}}",
       "level": "المستوى {n}",
@@ -188,10 +189,10 @@
     "layout": {
       "title": "تخطيط عرض البطاقة",
       "boardSettings": "إعدادات اللوحة",
-      "fixedParts": "الرقم والموضوع والتخصص والنوع والمسؤول",
+      "fixedParts": "الترويسة والموضوع والوسوم والمسؤول",
       "alwaysShown": "تظهر دائمًا",
       "contractorName": "اسم المقاول",
-      "location": "الموقع",
+      "location": "الموقع في المخطط",
       "creationDate": "تاريخ الإنشاء",
       "preview": "معاينة"
     }
@@ -597,6 +598,7 @@
   "workItems": {
     "title": "الاعتمادات",
     "newMar": "اعتماد مواد جديد",
+    "addSubmittal": "إضافة تقديم",
     "noNumber": "بلا رقم بعد",
     "versionsChanged": "تستخدم هذه المراجعة إصدارًا أحدث من النموذج أو سير العمل مما استخدمه البند الذي تراجعه. لم تُنسخ إجابات الحقول التي لم يعد النموذج الأحدث يتضمنها.",
     "droppedFields": "حقول لم يعد النموذج الأحدث يتضمنها، وتبقى إجاباتها في المراجعة السابقة فقط:",

@@ -98,7 +98,8 @@ export function tradeChipClass(code: string): string {
 
 const outcomeLooks: Record<OutcomeLook, { classes: string; icon: IconName }> = {
   a: { classes: "bg-code-a-bg text-code-a-fg", icon: "circle-check" },
-  b: { classes: "bg-code-b-bg text-code-b-fg ring-1 ring-inset ring-code-b-fg/40", icon: "circle-check" },
+  // Code A: the solid green pill, and the green card; Code B: a light green pill (light fill, green text) on a white card.
+  b: { classes: "bg-code-b-bg text-code-b-fg", icon: "circle-check" },
   c: { classes: "bg-code-c-bg text-code-c-fg ring-1 ring-inset ring-code-c-fg/40", icon: "refresh" },
   d: { classes: "bg-code-d-bg text-code-d-fg", icon: "circle-x" },
 };

@@ -29,9 +29,12 @@ export async function ModuleWorkItemsPage({
   const tabs = await getTranslations("projectTabs");
   // The filter fields' names in the other language, small after each (the owner's anatomy, RP-410).
   const other = await getTranslations({ locale: locale === "en" ? "ar" : "en", namespace: "workItemViews.list" });
-  const hints = Object.fromEntries(
-    (["stage", "trade", "documentType", "owner", "role", "createdDate", "stepAge", "outcome", "submissionDate", "revisions"] as const).map((key) => [key, other(key)]),
-  );
+  const hints = {
+    stage: other("statusField"),
+    ...Object.fromEntries(
+      (["trade", "documentType", "owner", "role", "createdDate", "stepAge", "outcome", "submissionDate", "revisions"] as const).map((key) => [key, other(key)]),
+    ),
+  };
   // A filter the URL holds that isn't valid is left out, so an old or edited link still opens.
   // The tab's path names the Module, whatever the query string says.
   const query = { ...workItemQueryFromSearchParams(searchParams), module };
@@ -52,7 +55,7 @@ export async function ModuleWorkItemsPage({
     module === "submittals" && project.projectRole.baseRole === "contractor" ? (
       <Link href={`/projects/${project.id}/work-items/new`} className={cn(buttonVariants(), "h-[42px]")}>
         <Icon name="plus" />
-        {t("newMar")}
+        {t("addSubmittal")}
       </Link>
     ) : undefined;
 

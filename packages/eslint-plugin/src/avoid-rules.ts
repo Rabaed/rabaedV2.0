@@ -125,7 +125,13 @@ const allowedMessages: Record<string, string> = {
   "numbering.counters.state": "a counter's state column (In use, Starts at …), not a Stage or a Step",
   "workItemViews.layout.title": "the Kanban card's Card view layout (RP-410, the owner's Kanban Card Anatomy): which parts a card shows, not a View",
   "workItemViews.layout.contractorName": "the raising Company's name on a Kanban card (RP-410), not a Subject",
-  "workItemViews.list.filtersApplied": "the filter panel's footer, \"1 filter applied\": the List's own filters, not a Visibility Dimension",
+  // The Kanban's and List's toolbar and filter panel use the owner's anatomy's words (RP-410); code, api and docs keep the glossary's.
+  "workItemViews.list.filters": "owner's anatomy (2026-10-10): the toolbar's \"Filter\" button",
+  "workItemViews.list.statusField": "owner's anatomy (2026-10-10): the filter panel's \"Status\" field, for the Stage",
+  "workItemViews.list.role": "owner's anatomy (2026-10-10): the filter panel's \"Role\" field, for the Step holding the item",
+  "workItemViews.layout.location": "owner's anatomy (2026-10-10): the Card view layout's \"Plan location\" switch, for the Location",
+  "workItemViews.layout.fixedParts": "owner's anatomy (2026-10-10): the Card view layout's \"Header, subject, tags, owner\" row",
+  "workItemViews.list.filtersApplied":"the filter panel's footer, \"1 filter applied\": the List's own filters, not a Visibility Dimension",
 };
 
 const glossary = readFileSync(glossaryUrl, "utf8");

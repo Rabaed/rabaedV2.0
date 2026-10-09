@@ -124,6 +124,8 @@ export type WorkItemListLabels = {
   /** The filter panel's value search. */
   searchValues: string;
   noMatches: string;
+  /** The filter panel's name for the Stage field: "Status", as the owner's anatomy has it. */
+  statusField: string;
   /** The search box's placeholder on the Kanban, e.g. "Search this board". */
   searchPlaceholderBoard: string;
   /** The filter panel's field for "Show all Revisions" (RP-410: the toolbar keeps the anatomy's five controls). */
@@ -282,7 +284,8 @@ export function WorkItemList({
   // Zone, Building, Floor…: one field per level of the Location tree, its values any of them; levels together, all of them.
   const levels = locationLevels(list.filters.locations, locale, labels);
   const fields: FilterMenuField[] = [
-    many("stage", t("stage"), hints?.stage, "workflow", stageChoices),
+    // The filter panel names the Stage "Status" and the Step "Role", as the owner's anatomy does (2026-10-10).
+    many("stage", t("statusField"), hints?.stage, "workflow", stageChoices),
     many(
       "trade",
       t("trade"),

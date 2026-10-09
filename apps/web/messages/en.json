@@ -89,7 +89,7 @@
       "search": "Search",
       "searchHelp": "Searches Document Number, Subject, Type, Trade, Location, Company and owner",
       "searchPlaceholder": "Search this list",
-      "filters": "Filters",
+      "filters": "Filter",
       "clearAll": "Clear all",
       "done": "Done",
       "close": "Close",
@@ -103,9 +103,10 @@
       "pageOf": "Page {page} of {pages}",
       "items": "{count, plural, one {1 item} other {{n} items}}",
       "dashboardFigure": "From the Dashboard",
+      "statusField": "Status",
       "documentType": "Document type",
       "owner": "Owner",
-      "role": "Step",
+      "role": "Role",
       "createdDate": "Created date",
       "withinDays": "{count, plural, one {Last day} other {Last {days} days}}",
       "level": "Level {n}",
@@ -188,10 +189,10 @@
     "layout": {
       "title": "Card view layout",
       "boardSettings": "Board settings",
-      "fixedParts": "Number, Subject, Trade and Type, owner",
+      "fixedParts": "Header, subject, tags, owner",
       "alwaysShown": "Always shown",
       "contractorName": "Contractor name",
-      "location": "Location",
+      "location": "Plan location",
       "creationDate": "Creation date",
       "preview": "Preview"
     }
@@ -597,6 +598,7 @@
   "workItems": {
     "title": "Submittals",
     "newMar": "New Material Submittal",
+    "addSubmittal": "Add Submittal",
     "noNumber": "No number yet",
     "versionsChanged": "This Revision uses a newer version of the Form or Workflow than the one it revises. Answers to fields the newer Form no longer has were not copied.",
     "droppedFields": "Fields the newer Form no longer has, whose answers stay on the earlier Revision only:",
