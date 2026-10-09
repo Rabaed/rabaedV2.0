@@ -97,7 +97,11 @@ const setToNow =z.strictObject({ now: z.literal(true) });
 
 /** What taking the Transition does besides moving the item. */
 const transitionAction = z.discriminatedUnion("type", [
-  /** Offer "Assign to" among the acting Participant's own Members (WF-8): the actor picks; nothing is stored here. */
+  /**
+   * Offer "Assign to" (WF-8): the actor picks the next holder among their own
+   * Participant's Members who may hold the next Step (its Step Pool), so only when
+   * that Participant holds it; nothing is stored here.
+   */
   z.strictObject({ type: z.literal("offer_assign_to") }),
   z.strictObject({ type: z.literal("set_field"), field: key, value: z.union([scalar, setToNow]) }),
   z.strictObject({ type: z.literal("copy_field"), from: key, to: key }),
@@ -164,9 +168,9 @@ export type WorkflowStepRow = {
 };
 
 /**
- * A `workflow_transition` row of a Version, its Steps by key. `rules` (WF-7) and
- * `notifications` (WF-9) are columns, null when it has none; `actions` has no
- * column yet (WF-8 adds it). Each is present only when the definition has it.
+ * A `workflow_transition` row of a Version, its Steps by key. `rules` (WF-7),
+ * `actions` (WF-8) and `notifications` (WF-9) are columns, null when it has none.
+ * Each is present only when the definition has it.
  */
 export type WorkflowTransitionRow = {
   key: string;

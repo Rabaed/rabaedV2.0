@@ -294,6 +294,13 @@ export const takeTransitionRequest = z.object({
    * when the Transition goes to another, such as Submit (visibility.md V5).
    */
   internalNote: z.string().trim().max(4000).default(""),
+  /**
+   * "Assign to" (WF-8): the next holder, picked among the Members the Transition
+   * offers (`assignTo` of its action), so only the taker's own Company's. Left
+   * out, the next Step goes to its Step Pool as ever. A pick it couldn't have
+   * offered is refused with `assignee_not_offered`, whoever it names.
+   */
+  assignTo: z.uuid().nullable().default(null),
   idempotencyKey: z.uuid(),
 });
 export type TakeTransitionRequest = z.input<typeof takeTransitionRequest>;
@@ -331,6 +338,13 @@ export const workItemActions = z.object({
        * every pop-up has; null when it asks nothing else.
        */
       actionForm: formSchema.nullable(),
+      /**
+       * "Assign to" (WF-8): the Members of the viewer's own Participant who may
+       * hold the next Step, one of whom the pop-up may name as its holder; absent
+       * when the Transition offers none (no Assign to, or the next Step is
+       * another Participant's).
+       */
+      assignTo: z.array(z.object({ memberId: z.uuid(), name: bilingualText })).optional(),
     }),
   ),
 });

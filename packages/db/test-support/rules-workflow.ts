@@ -29,16 +29,33 @@
  * test of what publishing would refuse. `run` executes SQL as the migrator; the
  * result is the new Workflow definition's id.
  */
-export async function addRulesWorkflow(
+export function addRulesWorkflow(
   run: (text: string) => Promise<{ rows: unknown[] }>,
   { extra = [] }: { extra?: RulesTransition[] } = {},
 ): Promise<string> {
-  const definition = JSON.stringify({ steps, transitions: [...transitions, ...extra] });
+  return insertTestWorkflow(run, { en: "Rules (test)", ar: "القواعد (اختبار)" }, steps, [...transitions, ...extra]);
+}
+
+/** A Step as insertTestWorkflow takes it: a `workflow_step` row, by key. */
+export type TestStep = { key: string; name: { en: string; ar: string }; stage_key: string; actor_rule: object; outcome_mode: string };
+
+/**
+ * Inserts a Rabaed Workflow named `workflowName` with these Steps and Transitions
+ * (their rules and actions too) as Version 1, built as a draft, then published.
+ * `run` executes SQL as the migrator; the result is the Workflow definition's id.
+ */
+export async function insertTestWorkflow(
+  run: (text: string) => Promise<{ rows: unknown[] }>,
+  workflowName: { en: string; ar: string },
+  steps: readonly TestStep[],
+  transitions: readonly RulesTransition[],
+): Promise<string> {
+  const definition = JSON.stringify({ steps, transitions });
   const { rows } = await run(`
     with input as (select $json$${definition}$json$::jsonb as d),
     definition as (
       insert into workflow_definition (owner_kind, name)
-      values ('rabaed', '{"en": "Rules (test)", "ar": "القواعد (اختبار)"}')
+      values ('rabaed', $json$${JSON.stringify(workflowName)}$json$::jsonb)
       returning id
     ), version as (
       insert into workflow_version (workflow_definition_id, version_no, status)
@@ -50,13 +67,14 @@ export async function addRulesWorkflow(
       from version, input, jsonb_to_recordset(input.d -> 'steps') as s (key text, name jsonb, stage_key text, actor_rule jsonb, outcome_mode text)
       returning id, key, workflow_version_id
     ), transitions as (
-      insert into workflow_transition (workflow_version_id, key, from_step_id, to_step_id, label, kind, outcome, permission, sort, action_form, rules)
-      select f.workflow_version_id, t.key, f.id, s.id, t.label, t.kind, t.outcome, t.permission, t.n::integer, t.action_form, t.rules
+      insert into workflow_transition (
+        workflow_version_id, key, from_step_id, to_step_id, label, kind, outcome, permission, sort, action_form, rules, actions)
+      select f.workflow_version_id, t.key, f.id, s.id, t.label, t.kind, t.outcome, t.permission, t.n::integer, t.action_form, t.rules, t.actions
       from input
       cross join rows from (
         jsonb_to_recordset(input.d -> 'transitions') as (
-          key text, "from" text, "to" text, label jsonb, kind text, outcome text, permission text, action_form jsonb, rules jsonb)
-      ) with ordinality as t (key, "from", "to", label, kind, outcome, permission, action_form, rules, n)
+          key text, "from" text, "to" text, label jsonb, kind text, outcome text, permission text, action_form jsonb, rules jsonb, actions jsonb)
+      ) with ordinality as t (key, "from", "to", label, kind, outcome, permission, action_form, rules, actions, n)
       join steps f on f.key = t."from"
       join steps s on s.key = t."to"
       returning id
@@ -64,7 +82,7 @@ export async function addRulesWorkflow(
     select id from definition where (select count(*) from transitions) > 0
   `);
   const id = (rows[0] as { id?: string } | undefined)?.id;
-  if (!id) throw new Error("addRulesWorkflow: nothing inserted");
+  if (!id) throw new Error("insertTestWorkflow: nothing inserted");
   // Built as a draft, then published: a published Version takes no new parts (RP-424).
   await run(`update workflow_version set status = 'published', published_at = now() where workflow_definition_id = '${id}'`);
   return id;
@@ -81,6 +99,7 @@ export type RulesTransition = {
   permission: string;
   action_form?: unknown;
   rules?: unknown;
+  actions?: unknown;
 };
 
 /** The Form the rules Workflow is checked with: the cost impact and Datasheet it reads, and the manager's verdict. */
@@ -116,7 +135,7 @@ export const rulesFormSchema = {
 
 const name = (en: string, ar: string) => ({ en, ar });
 
-const steps = [
+const steps: TestStep[] = [
   { key: "draft", name: name("Draft", "مسودة"), stage_key: "draft", actor_rule: { base_role: "contractor", permission: "create" }, outcome_mode: "none" },
   {
     key: "internal_review",

@@ -48,7 +48,15 @@ export async function projectMember(api: TestApi, company: Pick<Company, "caller
 }
 
 /** What a Transition may carry: `reason` and `remarks` are answers; `answers` are all of them (given with either, `reason` and `remarks` win). */
-export type TakeOptions = { reason?: string; remarks?: string; answers?: Record<string, unknown>; internalNote?: string; idempotencyKey?: string };
+export type TakeOptions = {
+  reason?: string;
+  remarks?: string;
+  answers?: Record<string, unknown>;
+  internalNote?: string;
+  idempotencyKey?: string;
+  /** "Assign to" (WF-8): the next holder picked. */
+  assignTo?: string;
+};
 
 /** `by` takes Transition `transition` on item `id`, and the response is returned as it came, for a test of a refusal. */
 export const tryTake = (by: Caller, id: string, transition: string, { reason, remarks, answers, ...rest }: TakeOptions = {}) => {

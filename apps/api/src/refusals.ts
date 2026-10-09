@@ -39,6 +39,12 @@ const answers = {
   // Transition rules (WF-7): the answers route to none, or to several, of the
   // Transitions sharing a label; a Validate rule refuses, with its message.
   no_route: () => new HttpError(409, "no_route"),
+  // Transition actions (WF-8): a pick "Assign to" couldn't have offered (another
+  // Company's Member, one who can't hold the next Step, a made-up id), and a set or
+  // copy outside what the acting Participant fills at that Step; one answer each,
+  // whatever the reason.
+  assignee_not_offered: () => new HttpError(422, "assignee_not_offered"),
+  action_not_allowed: () => new HttpError(409, "action_not_allowed"),
   validation_failed: () => new HttpError(422, "validation_failed"),
   // A Transition's Action Form answers (RP-300): the body lists each field's error.
   invalid_action_form: () => new HttpError(422, "invalid_action_form"),

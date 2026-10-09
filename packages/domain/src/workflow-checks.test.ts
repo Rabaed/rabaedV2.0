@@ -344,6 +344,24 @@ describe("workflowPublishProblems", () => {
       ]);
     });
 
+    it("refuses copying an internal move's Action Form answer into the Form, which every Participant reads later (V5)", () => {
+      const d = mar();
+      const forPm = { key: "for_pm", type: "text", label: { en: "For the PM", ar: "إلى مدير المشروع" } };
+      const ownCopy = { key: "own_copy", type: "text", label: { en: "Kept", ar: "محفوظ" } };
+      transition(d, "send_for_review").actionForm = { sections: [{ key: "to_pm", title: { en: "To the PM", ar: "إلى المدير" }, fields: [forPm, ownCopy] }] };
+      transition(d, "send_for_review").actions = [
+        { type: "copy_field", from: "for_pm", to: "note" },
+        { type: "copy_field", from: "for_pm", to: "own_copy" },
+        { type: "copy_field", from: "model", to: "own_copy" },
+      ];
+      // A Submit's Action Form answers are shared: copying them into the Form is fine.
+      transition(d, "submit").actionForm = { sections: [{ key: "to_k1", title: { en: "To K1", ar: "إلى الاستشاري" }, fields: [forPm] }] };
+      transition(d, "submit").actions = [{ type: "copy_field", from: "for_pm", to: "note" }];
+      expect(workflowPublishProblems(d, context()).map((p) => [p.code, p.transition, p.detail])).toEqual([
+        ["copy_internal_answer", "send_for_review", "for_pm"],
+      ]);
+    });
+
     it("refuses \"now\" into a field that isn't a date or time", () => {
       const d = mar();
       transition(d, "approve_a").actions = [{ type: "set_field", field: "consultant_note", value: { now: true } }];

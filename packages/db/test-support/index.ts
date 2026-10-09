@@ -6,6 +6,7 @@ import { stepAgeReportHandler } from "../src/step-age-report.ts";
 
 export { addSendBackWorkflow } from "./send-back-workflow.ts";
 export { addRulesWorkflow, rulesFormSchema, type RulesTransition } from "./rules-workflow.ts";
+export { actionsFormSchema, addActionsWorkflow } from "./actions-workflow.ts";
 
 class Rollback extends Error {}
 

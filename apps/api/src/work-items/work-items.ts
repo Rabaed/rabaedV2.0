@@ -660,6 +660,8 @@ type ActionRow = {
   label: BilingualText | null;
   transition_kind: WorkItemActions["transitions"][number]["kind"] | null;
   action_form: unknown;
+  /** Whether it offers "Assign to" (WF-8). */
+  offers_assign_to: boolean;
 };
 
 /**
@@ -669,7 +671,8 @@ type ActionRow = {
  */
 async function actionRows(trx: Trx, workItemId: string, transitionKey?: string): Promise<ActionRow[]> {
   const { rows } = await sql<ActionRow>`
-    select a.action, a.transition_key, a.label, a.transition_kind, tr.action_form
+    select a.action, a.transition_key, a.label, a.transition_kind, tr.action_form,
+      coalesce(tr.actions @> '[{"type": "offer_assign_to"}]', false) as offers_assign_to
     from app.work_item_actions(${workItemId}::uuid) with ordinality a (action, transition_key, label, transition_kind, n)
     left join work_item w on w.id = ${workItemId}::uuid
     left join workflow_transition tr on tr.workflow_version_id = w.workflow_version_id and tr.key = a.transition_key
@@ -682,18 +685,31 @@ async function actionRows(trx: Trx, workItemId: string, transitionKey?: string):
 /** What the acting Member may press on a visible item now. */
 async function actions(trx: Trx, workItemId: string): Promise<Omit<WorkItemActions, "saveAnswers" | "createRevision" | "discardRevision">> {
   const rows = await actionRows(trx, workItemId);
+  const transitions = rows.filter((r) => r.action === "transition");
+  const offered = await Promise.all(transitions.map((r) => (r.offers_assign_to ? assignees(trx, workItemId, r.transition_key!) : [])));
   return {
     claim: rows.some((r) => r.action === "claim"),
     release: rows.some((r) => r.action === "release"),
-    transitions: rows
-      .filter((r) => r.action === "transition")
-      .map((r) => ({
-        key: r.transition_key!,
-        label: r.label!,
-        kind: r.transition_kind!,
-        actionForm: parseActionForm(r.action_form),
-      })),
+    transitions: transitions.map((r, i) => ({
+      key: r.transition_key!,
+      label: r.label!,
+      kind: r.transition_kind!,
+      actionForm: parseActionForm(r.action_form),
+      ...(offered[i]!.length > 0 ? { assignTo: offered[i] } : {}),
+    })),
   };
+}
+
+/**
+ * "Assign to" (WF-8): the Members the acting Member may pick as the next holder
+ * when taking `transitionKey` (app.transition_assignees): their own Participant's,
+ * who may hold the next Step; none when that Step is another Participant's.
+ */
+async function assignees(trx: Trx, workItemId: string, transitionKey: string): Promise<{ memberId: string; name: BilingualText }[]> {
+  const { rows } = await sql<{ member_id: string; full_name: BilingualText }>`
+    select member_id, full_name from app.transition_assignees(${workItemId}::uuid, ${transitionKey})
+  `.execute(trx);
+  return rows.map((r) => ({ memberId: r.member_id, name: r.full_name }));
 }
 
 const transitionRefusals = [
@@ -709,6 +725,8 @@ const transitionRefusals = [
   "idempotency_key_reused",
   "form_not_checked",
   "no_route",
+  "assignee_not_offered",
+  "action_not_allowed",
 ] as const;
 export type TakeTransitionResult =
   | { ok: true }
@@ -840,7 +858,7 @@ export function takeTransition(
     const { rows } = await sql<{ outcome: string }>`
       select app.take_transition(
         ${workItemId}::uuid, ${input.transition}, ${JSON.stringify(answers)}::jsonb, ${input.internalNote},
-        ${pinned.dataSha256}::bytea, ${input.idempotencyKey}::uuid, ${now}) as outcome
+        ${pinned.dataSha256}::bytea, ${input.idempotencyKey}::uuid, ${now}, ${input.assignTo}::uuid) as outcome
     `.execute(trx);
     // A Validate rule the database found not holding, by its place in `validate`.
     const failed = /^validation_failed:(\d+)$/.exec(rows[0]!.outcome);
