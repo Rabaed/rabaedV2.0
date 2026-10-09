@@ -32,11 +32,13 @@ export type AvatarProps = {
   size?: keyof typeof sizes;
   /** Hide it from screen readers when the name is shown beside it, so the name is read once. */
   decorative?: boolean;
+  /** The name the initials come from, when not `name`: e.g. the English one, for Latin initials on an Arabic card. */
+  initialsFrom?: string;
   className?: string;
 };
 
 /** A person's photo or initials, or a company's logo or initials, named after them. */
-export function Avatar({ name, src, kind = "person", size = "md", decorative = false, className }: AvatarProps) {
+export function Avatar({ name, src, kind = "person", size = "md", decorative = false, initialsFrom, className }: AvatarProps) {
   const [failedSrc, setFailedSrc] = useState<string>();
   const showImage = src !== undefined && src !== failedSrc;
   return (
@@ -54,7 +56,7 @@ export function Avatar({ name, src, kind = "person", size = "md", decorative = f
         // Named by the wrapper, so the image itself is decorative.
         <img src={src} alt="" className="size-full object-cover" onError={() => setFailedSrc(src)} />
       ) : (
-        initials(name)
+        initials(initialsFrom ?? name)
       )}
     </span>
   );

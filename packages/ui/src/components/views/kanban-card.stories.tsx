@@ -33,7 +33,8 @@ const text = {
   rejected: b("Rejected", "مرفوض"),
   approvedNoted: b("Approved with Comments", "معتمد مع ملاحظات"),
   revise: b("Revise and Resubmit", "يُعدَّل ويُعاد تقديمه"),
-  date: b("Sep 8", "8 سبتمبر"),
+  // Cards write dates in English, Arabic too (the anatomy's "8 Sep").
+  date: b("Sep 8", "Sep 8"),
 };
 
 const props = (locale: Locale, rest: Partial<KanbanCardProps> = {}): KanbanCardProps => ({
@@ -48,7 +49,7 @@ const props = (locale: Locale, rest: Partial<KanbanCardProps> = {}): KanbanCardP
     { depth: 2, name: text.building[locale] },
     { depth: 3, name: text.floor[locale] },
   ],
-  owner: { kind: "person", name: text.nasser[locale] },
+  owner: { kind: "person", name: text.nasser[locale], initialsFrom: text.nasser.en },
   date: { text: text.date[locale], label: text.created[locale] },
   stepAgeWeeks: 2,
   locale,
@@ -81,11 +82,11 @@ function argsFor(args: StoryArgs, locale: Locale): Partial<KanbanCardProps> {
       return { ...shared, badge: { kind: "revision", label: "R2" } };
     case "codeA":
       return {
+        owner: { kind: "person", name: text.shamsi[locale], initialsFrom: text.shamsi.en },
         ...civil,
         number: "12789320",
         title: text.concrete[locale],
         badge: { kind: "outcome", look: "a", label: "Code A", name: text.approved[locale] },
-        owner: undefined,
         stepAgeWeeks: null,
       };
     case "codeB":
@@ -99,11 +100,11 @@ function argsFor(args: StoryArgs, locale: Locale): Partial<KanbanCardProps> {
         number: "12789319",
         title: text.hvac[locale],
         trade: { code: "ME", name: text.mechanical[locale] },
-        owner: { kind: "person", name: text.abdullah[locale] },
+        owner: { kind: "person", name: text.abdullah[locale], initialsFrom: text.abdullah.en },
         stepAgeWeeks: 5,
       };
     case "company":
-      return { ...civil, title: text.drainage[locale], owner: { kind: "company", name: text.consultant[locale] }, badge: { kind: "revision", label: "R1" } };
+      return { ...civil, title: text.drainage[locale], owner: { kind: "company", name: text.consultant[locale], initialsFrom: text.consultant.en }, badge: { kind: "revision", label: "R1" } };
     case "pool":
       return { owner: { kind: "pool", name: locale === "en" ? "Contractor review · unclaimed" : "مراجعة المقاول · لم تُستلَم" } };
     case "contractor":
@@ -123,6 +124,9 @@ export const Default: Story = {
     const c = card(context);
     await expect(within(c).getByRole("link", { name: text.title[storyLocale(context)] })).toBeVisible();
     await expect(within(c).getByText("12789331")).toBeVisible();
+    // Latin initials and an English date, in Arabic too.
+    await expect(c).toHaveTextContent("NA");
+    await expect(c).toHaveTextContent("Sep 8");
     // The dots are there for screen readers, hidden until a hover.
     await expect(getComputedStyle(within(c).getByRole("img")).opacity).toBe("0");
   },
@@ -133,8 +137,8 @@ export const Hover: Story = {
   args: { hovered: true },
   play: async (context) => {
     await waitFor(() => expect(getComputedStyle(within(card(context)).getByRole("img")).opacity).toBe("1"));
-    // The Subject turns tomato.
-    await expect(within(card(context)).getByRole("link")).toHaveClass("group-data-hovered/card:text-brand-fg");
+    // Only the lift, the shadow and the dots: the Subject keeps its colour.
+    await expect(getComputedStyle(within(card(context)).getByRole("link")).color).toBe(getComputedStyle(within(card(context)).getByText("MAR").closest("article")!.querySelector("h3")!).color);
   },
 };
 
@@ -172,8 +176,13 @@ export const CodeA: Story = {
     await expect(c).toHaveAttribute("data-approved");
     // Named in full for screen readers.
     await expect(within(c).getByText(text.approved[storyLocale(context)])).toHaveClass("sr-only");
-    // A closed item doesn't age, and nobody holds it.
+    // A closed item doesn't age; it names who closed it.
     await expect(within(c).queryByRole("img")).toBeNull();
+    await expect(c).toHaveTextContent(text.shamsi[storyLocale(context)]);
+    // The Code pill, like the R badge, sits in the left corner in both languages.
+    const pill = c.querySelector("[data-outcome-look]")!.getBoundingClientRect();
+    await expect(pill.left).toBeLessThan(within(c).getByText("12789320").getBoundingClientRect().left);
+    await expect(pill.left - c.getBoundingClientRect().left).toBeLessThan(20);
   },
 };
 

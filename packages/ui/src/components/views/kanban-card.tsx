@@ -30,14 +30,18 @@ export type KanbanCardBadge =
     }
   | { kind: "plain"; label: string };
 
-/** Who holds the card, as the viewer may read it (V14). */
+/**
+ * Who holds the card, or who closed it, as the viewer may read it (V14). `initialsFrom`
+ * is the name its avatar's initials come from: the English one, so an Arabic card shows
+ * Latin initials (the anatomy's "NA").
+ */
 export type KanbanCardOwner =
   /** One of my own Company's people. */
-  | { kind: "person"; name: string }
+  | { kind: "person"; name: string; initialsFrom?: string }
   /** My own Company's Step nobody has claimed yet: the Step and "unclaimed". */
   | { kind: "pool"; name: string }
   /** Another Company, by its name only. */
-  | { kind: "company"; name: string };
+  | { kind: "company"; name: string; initialsFrom?: string };
 
 /** One level of the plan location: its level (1 Zone, 2 Building, 3 Floor…) and the Location's name. */
 export type KanbanCardPlace = { depth: number; name: string };
@@ -166,10 +170,7 @@ export function KanbanCard({
           dir="auto"
           title={title}
           className={cn(
-            // Tomato while the card is hovered or dragged (the anatomy's states).
             "line-clamp-2 rounded-xs after:absolute after:inset-0 after:rounded-md after:content-['']",
-            "group-hover/card:text-brand-fg group-data-hovered/card:text-brand-fg",
-            selected && "text-brand-fg",
             focusRing,
           )}
         >
@@ -211,7 +212,7 @@ export function KanbanCard({
                 <Icon name={poolIcon} size={13} />
               </span>
             ) : (
-              <Avatar name={owner.name} kind={owner.kind === "company" ? "company" : "person"} size="sm" decorative />
+              <Avatar name={owner.name} initialsFrom={owner.initialsFrom} kind={owner.kind === "company" ? "company" : "person"} size="sm" decorative />
             )}
             <span className="truncate text-sm">{owner.name}</span>
           </span>

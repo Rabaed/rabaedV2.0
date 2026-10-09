@@ -141,6 +141,7 @@
       "moveTo": "To {stage}",
       "dragging": "Drop on a highlighted column to move the item.",
       "mixed": "Mixed",
+      "roleLane": "{role} {position}",
       "revision": "R{n}",
       "code": "Code {code}",
       "createdOn": "Created {date}",

@@ -76,11 +76,16 @@ const consultantId = "00000000-0000-4000-8000-0000000000c1";
 const mar = { code: "MAR", name: b("Material Submittal", "اعتماد مواد") };
 const sar = { code: "SAR", name: b("Shop Drawing Submittal", "اعتماد مخططات") };
 const draftStep = { key: "draft", name: b("Draft", "مسودة") };
-const engineerStep = { key: "engineer_review", name: b("Contractor Engineer", "مهندس المقاول") };
-const pmStep = { key: "pm_review", name: b("Contractor Project Manager", "مدير مشروع المقاول") };
+const reviewStep = { key: "internal_review", name: b("Contractor review", "مراجعة المقاول") };
+// My own roles: a Position with my Project Role (RP-410).
+const contractor = b("Contractor", "المقاول");
+const engineer = { key: "engineer", name: b("Engineer", "مهندس"), sort: 1 };
+const pm = { key: "project_manager", name: b("Project Manager", "مدير المشروع"), sort: 2 };
+const engineerLane = b("Contractor Engineer", "مهندس المقاول");
+const pmLane = b("Contractor Project Manager", "مدير المشروع المقاول");
 const person = (en: string, ar: string, isMe = false) => ({ name: b(en, ar), isMe });
-const own = (step: { key: string; name: { en: string; ar: string } }, claimer: ReturnType<typeof person> | null) =>
-  ({ kind: "own", companyName: ownCompany, step, claimer }) as const;
+const own = (position: typeof engineer, claimer: ReturnType<typeof person> | null, step = reviewStep) =>
+  ({ kind: "own", companyName: ownCompany, step, claimer, role: { position, projectRole: contractor } }) as const;
 const withConsultant = { kind: "company", companyName: consultant } as const;
 
 const card = (n: number, rest: Partial<WorkItemRow>): WorkItemRow => ({
@@ -104,17 +109,17 @@ const card = (n: number, rest: Partial<WorkItemRow>): WorkItemRow => ({
 });
 
 const cards = {
-  draft: card(1, { title: "Fire alarm cables", documentNumber: null, stepEnteredAt: null, stepAgeWeeks: null, stage: stages.draft, with: own(draftStep, person("Sara Al Qahtani", "سارة القحطاني", true)) }),
-  fire: card(28, { title: "Fire Suppression System", stepAgeWeeks: 2, with: own(engineerStep, person("Ahmed bin Said", "أحمد بن سعيد", true)) }),
+  draft: card(1, { title: "Fire alarm cables", documentNumber: null, stepEnteredAt: null, stepAgeWeeks: null, stage: stages.draft, with: own(engineer, person("Sara Al Qahtani", "سارة القحطاني", true), draftStep) }),
+  fire: card(28, { title: "Fire Suppression System", stepAgeWeeks: 2, with: own(engineer, person("Ahmed bin Said", "أحمد بن سعيد", true)) }),
   hvac: card(19, {
     title: "HVAC Ducting",
     trade: trades.mechanical,
     location: at(b1),
     stepAgeWeeks: 5,
     creationDate: "2026-06-12T09:00:00.000Z",
-    with: own(engineerStep, person("Abdullah Al Saadi", "عبدالله السعدي")),
+    with: own(engineer, person("Abdullah Al Saadi", "عبدالله السعدي")),
   }),
-  pool: card(33, { title: "Lighting Control Panels", location: at(zoneB), stepAgeWeeks: 1, with: own(pmStep, null) }),
+  pool: card(33, { title: "Lighting Control Panels", location: at(zoneB), stepAgeWeeks: 1, with: own(pm, null) }),
   r2: card(31, {
     title: "Fire Suppression System",
     // Issued with its Revision; the card shows the number alone, the R badge the Revision.
@@ -122,14 +127,14 @@ const cards = {
     stage: stages.resubmitted,
     revisionNo: 2,
     stepAgeWeeks: 3,
-    with: own(engineerStep, person("Nasser Al Kaabi", "ناصر الكعبي")),
+    with: own(engineer, person("Nasser Al Kaabi", "ناصر الكعبي")),
   }),
-  r3: card(35, { title: "Chilled Water Pipes", stage: stages.resubmitted, revisionNo: 3, trade: trades.mechanical, location: at(fG), with: own(pmStep, person("Khalid Al Dhaheri", "خالد الظاهري")) }),
+  r3: card(35, { title: "Chilled Water Pipes", stage: stages.resubmitted, revisionNo: 3, trade: trades.mechanical, location: at(fG), with: own(pm, person("Khalid Al Dhaheri", "خالد الظاهري")) }),
   pending1: card(40, { title: "Cable Tray Supports", stage: stages.pending, creationDate: null, stepAgeWeeks: 2, with: withConsultant, raiserCompanyName: ownCompany }),
   pending2: card(41, { title: "Drainage System", type: sar, stage: stages.pending, trade: trades.civil, location: at(fG), revisionNo: 1, creationDate: null, with: withConsultant }),
-  codeA: card(20, { title: "Concrete Mix Design", type: sar, stage: stages.approved, trade: trades.civil, location: at(fG), outcome: "A", stepAgeWeeks: null }),
-  codeB: card(22, { title: "Busbar Trunking", stage: stages.approved, outcome: "B", stepAgeWeeks: null, location: at(b2) }),
-  codeD: card(24, { title: "Pump Sets", stage: stages.rejected, trade: trades.mechanical, outcome: "D", stepAgeWeeks: null, location: at(b1) }),
+  codeA: card(20, { title: "Concrete Mix Design", type: sar, stage: stages.approved, trade: trades.civil, location: at(fG), outcome: "A", stepAgeWeeks: null, closedBy: { kind: "company", companyName: consultant } }),
+  codeB: card(22, { title: "Busbar Trunking", stage: stages.approved, outcome: "B", stepAgeWeeks: null, location: at(b2), closedBy: { kind: "company", companyName: consultant } }),
+  codeD: card(24, { title: "Pump Sets", stage: stages.rejected, trade: trades.mechanical, outcome: "D", stepAgeWeeks: null, location: at(b1), closedBy: { kind: "company", companyName: consultant } }),
 };
 
 const board: WorkItemBoardData = {
@@ -147,25 +152,25 @@ const board: WorkItemBoardData = {
     outcomes: [...defaultOutcomeSets.review_code.map((o) => ({ ...o, type: mar.code })), ...defaultOutcomeSets.review_code.map((o) => ({ ...o, type: sar.code }))],
     trades: Object.values(trades),
     locations,
-    with: { steps: [draftStep, engineerStep, pmStep], companies: [{ participantId: consultantId, name: consultant }] },
+    with: { steps: [draftStep, reviewStep], companies: [{ participantId: consultantId, name: consultant }] },
     owners: [],
   },
   columns: [
-    { stageKey: "draft", shown: 1, lanes: [{ kind: "step", step: draftStep, count: 1, cards: [cards.draft] }] },
+    { stageKey: "draft", shown: 1, lanes: [{ kind: "role", position: engineer, projectRole: contractor, count: 1, cards: [cards.draft] }] },
     {
       stageKey: "internal_review",
       shown: 3,
       lanes: [
-        { kind: "step", step: engineerStep, count: 2, cards: [cards.hvac, cards.fire] },
-        { kind: "step", step: pmStep, count: 1, cards: [cards.pool] },
+        { kind: "role", position: engineer, projectRole: contractor, count: 2, cards: [cards.hvac, cards.fire] },
+        { kind: "role", position: pm, projectRole: contractor, count: 1, cards: [cards.pool] },
       ],
     },
     {
       stageKey: "revise_resubmit",
       shown: 2,
       lanes: [
-        { kind: "step", step: engineerStep, count: 1, cards: [cards.r2] },
-        { kind: "step", step: pmStep, count: 1, cards: [cards.r3] },
+        { kind: "role", position: engineer, projectRole: contractor, count: 1, cards: [cards.r2] },
+        { kind: "role", position: pm, projectRole: contractor, count: 1, cards: [cards.r3] },
       ],
     },
     {
@@ -243,21 +248,26 @@ export const Wide: Story = {
     const internal = columnOf(context, stages.internal);
     const groups = within(internal).getAllByRole("region");
     // In the viewer's alphabetical order.
-    const steps = [engineerStep.name[locale], pmStep.name[locale]].sort((x, y) => x.localeCompare(y, locale));
-    await expect(groups.map((g) => g.getAttribute("aria-label"))).toEqual(steps);
-    const pmGroup = groups.find((g) => g.getAttribute("aria-label") === pmStep.name[locale])!;
+    // My own roles, in their Positions' order: Engineer, then Project Manager.
+    await expect(groups.map((g) => g.getAttribute("aria-label"))).toEqual([engineerLane[locale], pmLane[locale]]);
+    const pmGroup = groups[1]!;
     await expect(within(pmGroup).getByText(new RegExp(storyText(context, copy.unclaimed)))).toBeVisible();
 
     const pending = columnOf(context, stages.pending);
     await expect(within(pending).getAllByRole("region").map((g) => g.getAttribute("aria-label"))).toEqual([consultant[locale]]);
     // Another Company: its name only, never a Step or a person.
-    await expect(within(pending).queryByText(engineerStep.name[locale])).toBeNull();
+    await expect(within(pending).queryByText(engineerLane[locale])).toBeNull();
 
     await expect(within(columnOf(context, stages.approved)).getByRole("region")).toHaveAccessibleName(storyText(context, copy.mixed));
     await expect(cardOf(context, cards.codeA)).toHaveAttribute("data-approved");
     await expect(cardOf(context, cards.codeB)).not.toHaveAttribute("data-approved");
     await expect(cardOf(context, cards.hvac)).toHaveAttribute("data-aged");
     await expect(cardOf(context, cards.hvac)).not.toHaveTextContent(/overdue|late|متأخر/i);
+    // A closed card names who closed it: another Company by its name only (V14).
+    await expect(cardOf(context, cards.codeA)).toHaveTextContent(consultant[locale]);
+    // Latin initials and an English month, in Arabic too.
+    await expect(cardOf(context, cards.hvac)).toHaveTextContent("AA");
+    await expect(cardOf(context, cards.hvac)).toHaveTextContent("Jun 12");
 
     const r2 = cardOf(context, cards.r2);
     const number = within(r2).getByText("12789331");
@@ -283,7 +293,7 @@ export const ColumnsRunInReadingOrder: Story = {
 export const CollapsedGroup: Story = {
   play: async (context) => {
     const internal = columnOf(context, stages.internal);
-    const toggle = within(internal).getByRole("button", { name: new RegExp(engineerStep.name[storyLocale(context)]) });
+    const toggle = within(internal).getByRole("button", { name: new RegExp(engineerLane[storyLocale(context)]) });
     await expect(toggle).toHaveAttribute("aria-expanded", "true");
     await userEvent.click(toggle);
     await expect(toggle).toHaveAttribute("aria-expanded", "false");

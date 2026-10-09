@@ -58,6 +58,8 @@ export type WorkItemBoardLabels = {
   cancelled: string;
   /** The lane of closed items, which nobody holds (the anatomy's "Mixed"). */
   mixed: string;
+  /** A role lane of my own Company: my Project Role and the Position, e.g. "Contractor Engineer". */
+  roleLane: (projectRole: string, position: string) => string;
   /** The Revision badge, e.g. "R2". */
   revision: (n: string) => string;
   /** A letter outcome's pill, e.g. "Code A". */
@@ -258,7 +260,13 @@ export function WorkItemBoard({
 }
 
 function laneKey(lane: WorkItemBoardLane): string {
-  return lane.kind === "step" ? `step:${lane.step.key}` : lane.kind === "company" ? `company:${lane.participantId}` : "closed";
+  return lane.kind === "role"
+    ? `role:${lane.position.key}`
+    : lane.kind === "step"
+      ? `step:${lane.step.key}`
+      : lane.kind === "company"
+        ? `company:${lane.participantId}`
+        : "closed";
 }
 
 /** The lanes the viewer collapsed, kept in this browser per board; a convenience, so it works without storage too. */
@@ -348,8 +356,23 @@ function Lane({
   dragging: string | null;
   onDragChange: (dragging: Dragging | null) => void;
 }) {
-  const name = lane.kind === "step" ? lane.step.name[locale] : lane.kind === "company" ? lane.companyName[locale] : labels.mixed;
-  const dot = lane.kind === "step" ? stepDots[index % stepDots.length] : lane.kind === "company" ? "bg-stage-resubmitted-dot" : "bg-stage-cancelled-dot";
+  const name =
+    lane.kind === "role"
+      ? labels.roleLane(lane.projectRole[locale], lane.position.name[locale])
+      : lane.kind === "step"
+        ? lane.step.name[locale]
+        : lane.kind === "company"
+          ? lane.companyName[locale]
+          : labels.mixed;
+  // A role's dot by its Position's order (Engineer blue, Project Manager violet…), so it reads the same in every column.
+  const dot =
+    lane.kind === "role"
+      ? stepDots[(lane.position.sort - 1 + stepDots.length) % stepDots.length]
+      : lane.kind === "step"
+        ? stepDots[index % stepDots.length]
+        : lane.kind === "company"
+          ? "bg-stage-resubmitted-dot"
+          : "bg-stage-cancelled-dot";
   const listId = `lane-${laneKey(lane).replace(/[^a-z0-9_-]/gi, "-")}-${index}`;
   return (
     <section aria-label={name} data-lane={lane.kind} className="flex flex-col border-border-subtle not-first:mt-1 not-first:border-t not-first:pt-1">
@@ -469,8 +492,9 @@ export function cardContent(
 ) {
   const open = isOpenStageCategory(card.stage.category);
   // The Creation Date on my own Company's items (the API gives it to the raiser's Participant only), else the Submission Date.
+  // Written in English on every card, Arabic too (the anatomy's "8 Sep"), with Latin digits.
   const dateIso = card.creationDate ?? card.submissionDate;
-  const dateText = dateIso === null ? null : formatDate(new Date(dateIso), locale, { month: "short", day: "numeric" });
+  const dateText = dateIso === null ? null : formatDate(new Date(dateIso), "en", { month: "short", day: "numeric" });
   const place: KanbanCardPlace[] | undefined =
     card.location === null ? [] : places.get(card.location.id)?.map((p) => ({ depth: p.depth, name: p.name[locale] })) ?? [{ depth: 1, name: card.location.name[locale] }];
   return {
@@ -506,12 +530,23 @@ function badgeOf(card: WorkItemRow, locale: Locale, labels: WorkItemBoardLabels,
   return card.revisionNo > 0 ? { kind: "revision", label: labels.revision(formatNumber(card.revisionNo, locale)) } : undefined;
 }
 
-/** Who holds it (V14): my own Company's person or unclaimed Step; another Company by its name only. Nobody holds a closed item. */
+/**
+ * Who holds it (V14): my own Company's person or unclaimed Step; another Company by
+ * its name only. A closed item, which nobody holds, shows who closed it, the same way.
+ * Avatars take Latin initials from the English name.
+ */
 function ownerOf(card: WorkItemRow, locale: Locale, labels: WorkItemBoardLabels): KanbanCardOwner | undefined {
+  if (!isOpenStageCategory(card.stage.category)) {
+    const c = card.closedBy;
+    if (!c) return undefined;
+    return c.kind === "own"
+      ? { kind: "person", name: c.name[locale], initialsFrom: c.name.en }
+      : { kind: "company", name: c.companyName[locale], initialsFrom: c.companyName.en };
+  }
   const w = card.with;
-  if (!w || !isOpenStageCategory(card.stage.category)) return undefined;
-  if (w.kind === "company") return { kind: "company", name: w.companyName[locale] };
-  if (w.claimer) return { kind: "person", name: w.claimer.name[locale] };
+  if (!w) return undefined;
+  if (w.kind === "company") return { kind: "company", name: w.companyName[locale], initialsFrom: w.companyName.en };
+  if (w.claimer) return { kind: "person", name: w.claimer.name[locale], initialsFrom: w.claimer.name.en };
   return { kind: "pool", name: `${w.step.name[locale]} · ${labels.unclaimed}` };
 }
 

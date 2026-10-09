@@ -82,6 +82,7 @@ function useViewLabels(tableLabel: string): { list: WorkItemListLabels; board: W
       moveTo: (stage) => t("board.moveTo", { stage }),
       dragging: t("board.dragging"),
       mixed: t("board.mixed"),
+      roleLane: (role, position) => t("board.roleLane", { role, position }),
       revision: (n) => t("board.revision", { n }),
       code: (code) => t("board.code", { code }),
       createdOn: (date) => t("board.createdOn", { date }),

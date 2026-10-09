@@ -141,6 +141,7 @@
       "moveTo": "إلى {stage}",
       "dragging": "أفلت العنصر على عمود مظلَّل لنقله.",
       "mixed": "مختلط",
+      "roleLane": "{position} {role}",
       "revision": "R{n}",
       "code": "Code {code}",
       "createdOn": "أُنشئ في {date}",
