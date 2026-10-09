@@ -229,7 +229,8 @@ export function participantSegment(participant: { code: string | null; ordinal: 
   return participant.code ?? padded(participant.ordinal, 2);
 }
 
-function segmentValue(segment: NumberingSegment, item: NumberingAttributes): string | null {
+/** What one segment prints for an item; null when the item has no such value (an item without a Trade). */
+export function segmentValue(segment: NumberingSegment, item: NumberingAttributes): string | null {
   switch (segment.kind) {
     case "project":
       return item.projectCode;
