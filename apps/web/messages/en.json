@@ -359,12 +359,14 @@
     "unavailable": "Something went wrong. Try again."
   },
   "numbering": {
-    "title": "Numbering",
+    "title": "Document Numbering",
     "intro": "How this Project builds its Document Numbers. Every Project Member sees it; only the Project Admin changes it.",
     "projectPattern": "Project pattern",
     "rabaedDefault": "The Rabaed Default: Project, Work Item Type and Participant Code, 4 digits, counted separately for each.",
     "types": "Overrides per Work Item Type",
     "followsProject": "Follows the Project pattern.",
+    "usesDefault": "Uses Project default",
+    "custom": "Custom",
     "override": "Override for {type}",
     "addOverride": "Override for this Type",
     "edit": "Change the pattern",
@@ -406,7 +408,8 @@
       "save": "Save pattern",
       "saving": "Saving…",
       "afterChange": "A change applies only to items numbered after it; issued numbers never change.",
-      "countedBadge": "Counted"
+      "countedBadge": "Counted",
+      "close": "Close"
     },
     "counters": {
       "title": "Counters",
@@ -792,5 +795,16 @@
     "title": "Profile",
     "notificationSettings": "Notification settings",
     "unavailable": "Something went wrong. Try again."
+  },
+  "settings": {
+    "heading": "Project settings",
+    "numbering": "Document Numbering",
+    "tradesLocations": "Trades & Locations",
+    "visibility": "Visibility",
+    "membersVisibility": "Your Members' Visibility",
+    "readOnly": "Only Project Admins can change this",
+    "previewTitle": "Preview",
+    "previewHint": "The first number an item gets with the Project pattern.",
+    "length": "Length {n}"
   }
 }

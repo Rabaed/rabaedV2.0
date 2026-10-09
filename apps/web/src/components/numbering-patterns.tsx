@@ -7,7 +7,7 @@ import {
   type NumberingSettings,
   type SaveNumberingPatternRequest,
 } from "@rabaed/domain";
-import { Button, NumberingPatternBuilder, NumberingPatternView, type NumberingPatternLabels } from "@rabaed/ui";
+import { Badge, Button, NumberingPatternBuilder, NumberingPatternView, SettingsSection, type NumberingPatternLabels } from "@rabaed/ui";
 import { useLocale, useTranslations } from "next-intl";
 import { useState } from "react";
 import { useRouter } from "@/i18n/navigation";
@@ -54,6 +54,7 @@ function usePatternLabels(): NumberingPatternLabels {
     saving: t("saving"),
     afterChange: t("afterChange"),
     countedBadge: t("countedBadge"),
+    close: t("close"),
   };
 }
 
@@ -166,9 +167,11 @@ export function NumberingPatterns({ projectId, settings }: { projectId: string; 
 
   return (
     <>
-      <section className="space-y-4" data-testid="numbering-project-pattern">
-        <h2 className="text-h6 font-semibold">{t("projectPattern")}</h2>
-        {!settings.project && <p className="text-sm text-muted">{t("rabaedDefault")}</p>}
+      <SettingsSection
+        title={t("projectPattern")}
+        description={settings.project ? undefined : t("rabaedDefault")}
+        data-testid="numbering-project-pattern"
+      >
         <PatternEditor
           projectId={projectId}
           workItemTypeId={null}
@@ -177,19 +180,21 @@ export function NumberingPatterns({ projectId, settings }: { projectId: string; 
           canEdit={settings.canEdit}
           editLabel={t("edit")}
         />
-      </section>
+      </SettingsSection>
 
-      <section className="space-y-4" data-testid="numbering-type-overrides">
-        <h2 className="text-h6 font-semibold">{t("types")}</h2>
-        <ul className="divide-y divide-border border-y border-border">
+      <SettingsSection title={t("types")} data-testid="numbering-type-overrides">
+        <ul className="-my-4 divide-y divide-border">
           {settings.types.map((type) => (
             <li key={type.id} className="space-y-3 py-4">
-              <h3 className="font-medium">
-                {type.name[locale]}{" "}
-                <bdi dir="ltr" className="text-sm text-muted">
-                  {type.code}
-                </bdi>
-              </h3>
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="font-semibold">
+                  {type.name[locale]}{" "}
+                  <bdi dir="ltr" className="text-sm font-normal text-muted">
+                    {type.code}
+                  </bdi>
+                </h3>
+                <Badge tone={type.override ? "brand" : "neutral"}>{type.override ? t("custom") : t("usesDefault")}</Badge>
+              </div>
               {type.override ? (
                 <PatternEditor
                   projectId={projectId}
@@ -218,7 +223,7 @@ export function NumberingPatterns({ projectId, settings }: { projectId: string; 
             </li>
           ))}
         </ul>
-      </section>
+      </SettingsSection>
     </>
   );
 }
