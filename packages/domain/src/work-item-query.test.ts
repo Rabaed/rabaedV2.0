@@ -21,12 +21,15 @@ const defaults: WorkItemQuery = {
   type: [],
   stage: [],
   with: [],
+  owner: [],
+  role: [],
   trade: [],
   location: [],
   outcome: [],
   bucket: [],
   codeC: [],
   stepAgeMin: undefined,
+  createdWithin: undefined,
   q: undefined,
   needMyAction: false,
   allRevisions: false,
@@ -52,6 +55,29 @@ describe("workItemQuery", () => {
     for (const bad of ["someone", "step:", "company:not-an-id", "step:Bad Key"]) {
       expect(workItemQuery.safeParse({ with: bad }).success, bad).toBe(false);
     }
+  });
+
+  it("takes every Owner value (one of my people, my unclaimed pool, another Company), and nothing else (RP-410)", () => {
+    const values = [`member:${row}`, "unclaimed", `company:${participant}`];
+    expect(workItemQuery.parse({ owner: values.join(",") }).owner).toEqual(values);
+    for (const bad of ["me", "member:", "member:someone", "company:x", "step:k1"]) {
+      expect(workItemQuery.safeParse({ owner: bad }).success, bad).toBe(false);
+    }
+  });
+
+  it("takes several Roles, as Step keys of my own Company (RP-410)", () => {
+    expect(workItemQuery.parse({ role: "internal_review,draft" }).role).toEqual(["internal_review", "draft"]);
+    expect(workItemQuery.safeParse({ role: "Bad Key" }).success).toBe(false);
+  });
+
+  it("takes a Created date window of 7, 30 or 90 days, and keeps it in the URL (RP-410)", () => {
+    expect(workItemQuery.parse({ createdWithin: "30" }).createdWithin).toBe(30);
+    expect(workItemQuery.safeParse({ createdWithin: "10" }).success).toBe(false);
+    const q = workItemQuery.parse({ createdWithin: 7, owner: "unclaimed", role: "draft" });
+    expect(workItemSearchParams(q).toString()).toBe("owner=unclaimed&role=draft&createdWithin=7");
+    expect(workItemQueryFromSearchParams(workItemSearchParams(q))).toEqual(q);
+    expect(isFilteredWorkItemQuery(q)).toBe(true);
+    expect(withoutFilters(q)).toEqual(defaults);
   });
 
   it("takes the Dashboard's buckets, an outcome a Project Admin added among them, and nothing else", () => {
@@ -91,12 +117,15 @@ describe("the query in the URL", () => {
     type: ["MAR"],
     stage: ["submitted", "under_review"],
     with: ["unclaimed", `company:${participant}`],
+    owner: [`member:${row}`, `company:${participant}`],
+    role: ["internal_review"],
     trade: [trade],
     location: [location],
     outcome: ["C", "passed_with_comments"],
     bucket: ["pending", "in_preparation"],
     codeC: ["rejectedAfterC"],
     stepAgeMin: 2,
+    createdWithin: 90,
     needMyAction: true,
     allRevisions: true,
     sort: "documentNumber",

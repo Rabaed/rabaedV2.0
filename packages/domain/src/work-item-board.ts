@@ -67,6 +67,28 @@ export function dropTargets(moves: readonly WorkItemMove[], currentStageKey: str
 }
 
 /**
+ * Card view layout (RP-410): the optional parts of a Kanban card, switched by
+ * each Member for each board (a Project's Module), and kept for them alone.
+ * The header, subject, tags and owner are always shown.
+ */
+export const boardCardLayout = z.object({
+  /** The raising Company's name, between the tags and the plan location. */
+  contractorName: z.boolean(),
+  /** The Location as Zone → Building → Floor chips. */
+  planLocation: z.boolean(),
+  /** The card's date: the Creation Date on my own Company's items, the Submission Date on others'. */
+  creationDate: z.boolean(),
+});
+export type BoardCardLayout = z.infer<typeof boardCardLayout>;
+
+/** A Member's layout until they change it: the Contractor name off, the rest on. */
+export const defaultBoardCardLayout: BoardCardLayout = { contractorName: false, planLocation: true, creationDate: true };
+
+/** A change to the layout: the switches given; the others stay. */
+export const boardCardLayoutChange = boardCardLayout.partial().strict();
+export type BoardCardLayoutChange = z.infer<typeof boardCardLayoutChange>;
+
+/**
  * The board of a Module's Work Items the viewer can see that match the work
  * item query. `stages` and `filters` are the List's: each Stage's count is of
  * every matching item in it, so a closed column's count is its "Show all"
@@ -83,6 +105,8 @@ export const workItemBoard = workItemList.pick({ stages: true, filters: true }).
    * Transition is not here (the "Refusals of a Transition" channel).
    */
   moves: z.record(z.uuid(), z.array(workItemMove)),
+  /** The viewer's own Card view layout for this board (RP-410). */
+  layout: boardCardLayout,
 });
 export type WorkItemBoard = z.infer<typeof workItemBoard>;
 

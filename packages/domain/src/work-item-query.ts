@@ -53,6 +53,25 @@ export const withFilterValue = z
   )
   .transform((v) => v as WithFilterValue);
 
+/**
+ * Who holds an item, as the Owner filter has it (RP-410, V14):
+ * - `member:<member id>`: one of my own Company's people has claimed it;
+ * - `unclaimed`: my own Company's Step nobody has claimed yet;
+ * - `company:<participant id>`: another Company holds it, as one.
+ * Another Company's people are never a value: the API never names them.
+ */
+export type OwnerFilterValue = "unclaimed" | `member:${string}` | `company:${string}`;
+export const ownerFilterValue = z
+  .string()
+  .refine(
+    (v) => v === "unclaimed" || (v.startsWith("member:") && uuid.safeParse(v.slice(7)).success) || (v.startsWith("company:") && uuid.safeParse(v.slice(8)).success),
+    "Not an Owner filter",
+  )
+  .transform((v) => v as OwnerFilterValue);
+
+/** The Created date filter (RP-410): items whose date the viewer sees is in the last this many days. */
+export const createdWithinDays = [7, 30, 90] as const;
+
 /** A list parameter: given repeated or joined by commas, read as one list. */
 const list = <T extends z.ZodType>(item: T) =>
   z
@@ -79,6 +98,10 @@ const queryFields = {
   type: list(workItemTypeCode),
   stage: list(stageKey),
   with: list(withFilterValue),
+  /** Who holds it (RP-410): one of my people, my unclaimed pool, or another Company as one. */
+  owner: list(ownerFilterValue),
+  /** The role holding it (RP-410): a Step of my own Company, by key; another Company's items match none (V5). */
+  role: list(stageKey),
   trade: list(uuid),
   /** A Location takes in the Locations under it. */
   location: list(uuid),
@@ -91,6 +114,15 @@ const queryFields = {
   stepAgeMin: z.coerce
     .number()
     .pipe(z.union(stepAgeMinimums.map((n) => z.literal(n))))
+    .optional(),
+  /**
+   * Created date (RP-410): the date the card shows is in the last this many Saudi days, today
+   * included: the Creation Date of my own Company's items, the Submission Date of anyone else's
+   * (visibility.md "Creation Date"), so it reads nothing the card hides.
+   */
+  createdWithin: z.coerce
+    .number()
+    .pipe(z.union(createdWithinDays.map((n) => z.literal(n))))
     .optional(),
   /** The Submission Date range, both days included: an item not yet Submitted has no Submission Date and is left out. */
   submittedFrom: day.optional(),
@@ -118,9 +150,9 @@ const queryFields = {
 };
 
 /** The filters that take a list of values; every other key takes one. */
-const listKeys = ["type", "stage", "with", "trade", "location", "outcome", "bucket", "codeC"] as const satisfies readonly (keyof typeof queryFields)[];
+const listKeys = ["type", "stage", "with", "owner", "role", "trade", "location", "outcome", "bucket", "codeC"] as const satisfies readonly (keyof typeof queryFields)[];
 /** The keys that narrow the rows, as opposed to how they are shown (sort, Revisions, page). */
-const filterKeys = [...listKeys, "stepAgeMin", "q", "needMyAction", "submittedFrom", "submittedTo"] as const;
+const filterKeys = [...listKeys, "stepAgeMin", "createdWithin", "q", "needMyAction", "submittedFrom", "submittedTo"] as const;
 
 /** The query as the API takes it; a cursor must be one made for its sort. */
 export const workItemQuery = z.object(queryFields).superRefine((q, ctx) => {
@@ -172,6 +204,7 @@ export function workItemSearchParams(query: Partial<WorkItemQuery>): URLSearchPa
     if (values && values.length > 0) params.set(key, values.join(","));
   }
   if (query.stepAgeMin !== undefined) params.set("stepAgeMin", String(query.stepAgeMin));
+  if (query.createdWithin !== undefined) params.set("createdWithin", String(query.createdWithin));
   if (query.q) params.set("q", query.q);
   if (query.submittedFrom) params.set("submittedFrom", query.submittedFrom);
   if (query.submittedTo) params.set("submittedTo", query.submittedTo);

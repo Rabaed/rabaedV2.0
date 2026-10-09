@@ -6,6 +6,7 @@ import {
   codeCFilterStates,
   codeCRules,
   decodeWorkItemCursor,
+  defaultBoardCardLayout,
   encodeWorkItemCursor,
   enteredStepBy,
   isOpenStageCategory,
@@ -14,6 +15,8 @@ import {
   stepAgeWeeks,
   workItemPageSize,
   type BilingualText,
+  type BoardCardLayout,
+  type BoardCardLayoutChange,
   type BoardCardInput,
   type ChainBucket,
   type CodeCCondition,
@@ -91,6 +94,8 @@ type Row = {
   holder_name: BilingualText | null;
   claimer_name: BilingualText | null;
   claimed_by_me: boolean;
+  /** The raising Company's name: everyone who sees the item reads it (Search finds it too). */
+  raiser_name: BilingualText | null;
 };
 
 /**
@@ -130,7 +135,7 @@ function visibleRows({ projectId, moduleKey }: QueryScope, allRevisions: boolean
       -- numbered_at, which app.work_item_creation_date gives to the raiser's own Participant only.
       w.submitted_at, to_char(w.submitted_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as submitted_key,
       app.work_item_creation_date(w.id) as creation_date,
-      h.participant_id as holder_participant_id, h.assignee_member_id,
+      h.participant_id as holder_participant_id, h.assignee_member_id, w.raised_by_participant_id as raiser_participant_id,
       coalesce(h.participant_id in (select app.current_participant_ids()), false) as held_by_own,
       s.key as step_key, s.name as step_name
     from work_item w
@@ -234,13 +239,18 @@ function matching(q: WorkItemQuery, now: Date, scope: QueryScope): RawBuilder<bo
   if (q.stage.length > 0) conditions.push(sql`r.stage_key = any(${q.stage}::text[])`);
   if (q.trade.length > 0) conditions.push(sql`r.trade_id = any(${q.trade}::uuid[])`);
   if (q.location.length > 0) {
-    // A Location takes in the ones under it.
-    conditions.push(sql`r.location_id in (
-      with recursive under as (
-        select id from dimension_value where id = any(${q.location}::uuid[])
-        union all
-        select v.id from dimension_value v join under u on v.parent_id = u.id
-      ) select id from under)`);
+    // A Location takes in the ones under it. The Zone, Building and Floor filters are levels of one
+    // tree (RP-410): values of one level are any of them, and each level chosen must hold, so
+    // "Zone A and Floor 5" is Floor 5 of Zone A. An item with no Location matches none.
+    conditions.push(sql`(r.location_id is not null and not exists (
+      select 1 from dimension_value chosen where chosen.id = any(${q.location}::uuid[])
+      group by chosen.depth
+      having not bool_or(chosen.id in (
+        with recursive up as (
+          select id, parent_id from dimension_value where id = r.location_id
+          union all
+          select v.id, v.parent_id from dimension_value v join up on v.id = up.parent_id
+        ) select id from up))))`);
   }
   if (q.outcome.length > 0) conditions.push(sql`r.outcome = any(${q.outcome}::text[])`);
   if (q.bucket.length > 0) conditions.push(sql`${bucketOfRow} = any(${q.bucket}::text[])`);
@@ -248,6 +258,14 @@ function matching(q: WorkItemQuery, now: Date, scope: QueryScope): RawBuilder<bo
   if (q.stepAgeMin !== undefined) {
     // A closed item doesn't age.
     conditions.push(sql`not r.closed and r.step_entered_at <= ${enteredStepBy(q.stepAgeMin, now)}::timestamptz`);
+  }
+  if (q.createdWithin !== undefined) {
+    // The date the card shows (RP-410): the Creation Date, which app.work_item_creation_date gives the
+    // raiser's own Participant only, else the Submission Date everyone who sees the item reads. So
+    // another Company filters by nothing but the Submission Date (visibility.md "Creation Date").
+    // The last N Saudi days, today included.
+    conditions.push(sql`(coalesce(r.creation_date, r.submitted_at) at time zone 'Asia/Riyadh')::date
+      > (${now}::timestamptz at time zone 'Asia/Riyadh')::date - ${q.createdWithin}::int`);
   }
   // The Submission Date range, in Saudi days, both days included; an item not yet Submitted has none and is left out.
   if (q.submittedFrom !== undefined) conditions.push(sql`(r.submitted_at at time zone 'Asia/Riyadh')::date >= ${q.submittedFrom}::date`);
@@ -264,6 +282,20 @@ function matching(q: WorkItemQuery, now: Date, scope: QueryScope): RawBuilder<bo
     if (companies.length > 0) any.push(sql`(not r.held_by_own and r.holder_participant_id = any(${companies}::uuid[]))`);
     conditions.push(sql`(${sql.join(any, sql` or `)})`);
   }
+  if (q.owner.length > 0) {
+    // Who holds it (RP-410). Only my own Company's people are named: app.work_item_holder gives
+    // nobody else's Member, so another Company's Member id matches nothing (V14).
+    const members = q.owner.flatMap((v) => (v.startsWith("member:") ? [v.slice(7)] : []));
+    const companies = q.owner.flatMap((v) => (v.startsWith("company:") ? [v.slice(8)] : []));
+    const any: RawBuilder<boolean>[] = [];
+    if (members.length > 0) any.push(sql`(r.held_by_own and r.assignee_member_id = any(${members}::uuid[]))`);
+    if (q.owner.includes("unclaimed")) any.push(sql`(r.held_by_own and r.assignee_member_id is null)`);
+    if (companies.length > 0) any.push(sql`(not r.held_by_own and r.holder_participant_id = any(${companies}::uuid[]))`);
+    conditions.push(sql`(${sql.join(any, sql` or `)})`);
+  }
+  // The role holding it (RP-410): a Step of my own Company. Another Company's items match none,
+  // as it is one lane, never split into its roles (V5).
+  if (q.role.length > 0) conditions.push(sql`(r.held_by_own and r.step_key = any(${q.role}::text[]))`);
   return sql`(${sql.join(conditions, sql` and `)})`;
 }
 
@@ -348,6 +380,7 @@ function toRow(r: Row, now: Date): WorkItemRow {
     outcome: r.outcome,
     submissionDate: r.submitted_at?.toISOString() ?? null,
     creationDate: r.creation_date?.toISOString() ?? null,
+    ...(r.raiser_name ? { raiserCompanyName: r.raiser_name } : {}),
     with:
       !open || r.holder_name === null
         ? null
@@ -366,9 +399,12 @@ function toRow(r: Row, now: Date): WorkItemRow {
 // Participant's holder is named (app.work_item_holder), and member's own RLS
 // shows only their own Company's people (V14).
 const holderColumns = sql`hc.legal_name as holder_name,
-  m.full_name as claimer_name, coalesce(r.assignee_member_id = app.current_member_id(), false) as claimed_by_me`;
+  m.full_name as claimer_name, coalesce(r.assignee_member_id = app.current_member_id(), false) as claimed_by_me,
+  rc.legal_name as raiser_name`;
+// The raising Company, from the same Companies on the item everyone who sees it may name.
 const holderJoins = sql`left join lateral app.work_item_companies(r.id) hc on hc.participant_id = r.holder_participant_id
-  left join member m on m.id = r.assignee_member_id`;
+  left join member m on m.id = r.assignee_member_id
+  left join lateral (select x.legal_name from app.work_item_companies(r.id) x where x.participant_id = r.raiser_participant_id limit 1) rc on true`;
 
 /** One page of the scope's visible items matching `q`, and how many match in each Stage. */
 export async function queryWorkItems(
@@ -515,6 +551,51 @@ async function withChoices(trx: Trx, scope: QueryScope): Promise<WorkItemList["f
 }
 
 /**
+ * The Owner filter's people (RP-410): my own Company's Members who have claimed
+ * one of my visible open items. app.work_item_holder gives no other Company's
+ * Member, and member's own RLS shows only my own Company's people (V14).
+ */
+async function ownerChoices(trx: Trx, scope: QueryScope): Promise<WorkItemList["filters"]["owners"]> {
+  const { rows } = await sql<{ member_id: string; name: BilingualText }>`
+    with r as (${visibleRows(scope, false)})
+    select distinct m.id as member_id, m.full_name as name
+    from r join member m on m.id = r.assignee_member_id
+    where r.held_by_own and not r.closed
+  `.execute(trx);
+  return rows.map((r) => ({ memberId: r.member_id, name: r.name })).sort((a, b) => a.name.en.localeCompare(b.name.en));
+}
+
+/** The Member's own Card view layout of the scope's board (RP-410), or the default. */
+async function readBoardLayout(trx: Trx, { projectId, moduleKey }: QueryScope): Promise<BoardCardLayout> {
+  const { rows } = await sql<{ contractor_name: boolean; plan_location: boolean; creation_date: boolean }>`
+    select contractor_name, plan_location, creation_date from member_board_layout
+    where member_id = app.current_member_id() and project_id = ${projectId}::uuid and module_key = ${moduleKey}
+  `.execute(trx);
+  const row = rows[0];
+  return row ? { contractorName: row.contractor_name, planLocation: row.plan_location, creationDate: row.creation_date } : defaultBoardCardLayout;
+}
+
+/**
+ * Changes the Member's own Card view layout of a board (RP-410): the switches
+ * given, the others kept. Null when the Module has no tab on one of their
+ * Projects, as for the board itself. RLS keeps the row the Member's own.
+ */
+export function changeBoardLayout(db: Db, memberId: string, scope: QueryScope, change: BoardCardLayoutChange): Promise<BoardCardLayout | null> {
+  return withMember(db, memberId, async (trx) => {
+    if (!(await hasModuleTab(trx, scope))) return null;
+    const next = { ...(await readBoardLayout(trx, scope)), ...change };
+    await sql`
+      insert into member_board_layout (member_id, project_id, module_key, contractor_name, plan_location, creation_date)
+      values (app.current_member_id(), ${scope.projectId}::uuid, ${scope.moduleKey}, ${next.contractorName}, ${next.planLocation}, ${next.creationDate})
+      on conflict (member_id, project_id, module_key) do update
+        set contractor_name = excluded.contractor_name, plan_location = excluded.plan_location,
+          creation_date = excluded.creation_date, updated_at = now()
+    `.execute(trx);
+    return next;
+  });
+}
+
+/**
  * Whether the Member is on the scope's Project (RLS on project) and it has a
  * Work Item Type in the scope's Module, so the Module has a tab there (RP-346).
  */
@@ -560,7 +641,7 @@ export function boardWorkItems(db: Db, memberId: string, scope: QueryScope, q: W
       return { stageKey: s.key, shown: lanes.reduce((sum, l) => sum + l.count, 0), lanes };
     });
     const moves = await boardMoves(trx, [...cards.values()].flatMap((c) => c.map((i) => i.card)));
-    return { stages, filters, columns, moves };
+    return { stages, filters, columns, moves, layout: await readBoardLayout(trx, scope) };
   });
 }
 
@@ -596,8 +677,16 @@ async function stagesAndFilters(trx: Trx, scope: QueryScope, stageCounts: Map<st
       and (t.project_id is null or t.project_id = ${projectId}::uuid)
     order by t.code, o.sort, o.code
   `.execute(trx);
-  const { rows: values } = await sql<{ kind: "trade" | "location"; id: string; code: string; name: BilingualText; parent_id: string | null }>`
-    select d.kind, v.id, v.code, v.name, v.parent_id
+  const { rows: values } = await sql<{
+    kind: "trade" | "location";
+    id: string;
+    code: string;
+    name: BilingualText;
+    parent_id: string | null;
+    depth: number;
+    level_name: BilingualText | null;
+  }>`
+    select d.kind, v.id, v.code, v.name, v.parent_id, v.depth, v.level_name
     from dimension_value v
     join visibility_dimension d on d.id = v.dimension_id
     where v.project_id = ${projectId} and d.kind in ('trade', 'location')
@@ -609,8 +698,11 @@ async function stagesAndFilters(trx: Trx, scope: QueryScope, stageCounts: Map<st
       types,
       outcomes,
       trades: values.filter((v) => v.kind === "trade").map(({ id, code, name }) => ({ id, code, name })),
-      locations: values.filter((v) => v.kind === "location").map(({ id, code, name, parent_id }) => ({ id, code, name, parentId: parent_id })),
+      locations: values
+        .filter((v) => v.kind === "location")
+        .map(({ id, code, name, parent_id, depth, level_name }) => ({ id, code, name, parentId: parent_id, depth, levelName: level_name })),
       with: await withChoices(trx, scope),
+      owners: await ownerChoices(trx, scope),
     },
   };
 }

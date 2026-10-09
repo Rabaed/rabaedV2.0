@@ -3,6 +3,8 @@ import {
   activityFeedQuery,
   addedLink,
   addLinkRequest,
+  boardCardLayout,
+  boardCardLayoutChange,
   createdWorkItem,
   createReplacementRequest,
   createRevisionRequest,
@@ -36,7 +38,7 @@ import { getActivityFeed } from "../work-items/activity-feed.ts";
 import { getDashboard } from "../work-items/dashboard.ts";
 import { getLinkedFrom } from "../work-items/linked-from.ts";
 import { addWorkItemLink, getWorkItemLinks, removeWorkItemLink } from "../work-items/links.ts";
-import { boardWorkItems, listWorkItems, type QueryScope } from "../work-items/query.ts";
+import { boardWorkItems, changeBoardLayout, listWorkItems, type QueryScope } from "../work-items/query.ts";
 import { createReplacement, createRevision, discardRevision, getRevisionChain } from "../work-items/revisions.ts";
 import {
   claimStep,
@@ -105,6 +107,17 @@ export const workItemRoutes =
         const memberId = ctx.requireMember(request);
         return visibleOrNotFound(boardWorkItems(ctx.db, memberId, ...scoped(request.params, request.query), ctx.now()));
       });
+
+      // The Member's own Card view layout of the board (RP-410): the switches given, the others kept.
+      app.put(
+        `${path}/kanban/layout`,
+        { schema: { params, body: boardCardLayoutChange, response: { 200: boardCardLayout } } },
+        async (request) => {
+          const memberId = ctx.requireMember(request);
+          const [scope] = scoped(request.params, workItemQuery.parse({}));
+          return visibleOrNotFound(changeBoardLayout(ctx.db, memberId, scope, request.body));
+        },
+      );
     }
 
     // The Dashboard: Type cards per Module, counted per Revision chain over the

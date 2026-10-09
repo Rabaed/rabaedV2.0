@@ -116,6 +116,12 @@ export const workItemRow = workItemSummary.extend({
   submissionDate: z.iso.datetime().nullable(),
   /** Only for a Member of the raiser's Participant (visibility.md "Creation Date"); null for everyone else. Never the time the Draft was started. */
   creationDate: z.iso.datetime().nullable(),
+  /**
+   * The raising Company's name, for everyone who sees the item (the Kanban card's
+   * "Contractor name", RP-410; Search already finds it, visibility.md "Search and
+   * filters"). Left out by reads that don't give it.
+   */
+  raiserCompanyName: bilingualText.optional(),
 });
 export type WorkItemRow = z.infer<typeof workItemRow>;
 
@@ -136,11 +142,20 @@ export const workItemList = z.object({
     /** Each Type's outcomes on the Project, by Type code, in their order (RP-429): the outcome filter and badges read them. */
     outcomes: z.array(outcomeSchema.extend({ type: z.string() })),
     trades: z.array(dimensionValueRef),
-    locations: z.array(dimensionValueRef.extend({ parentId: z.uuid().nullable() })),
+    /** Each Location with its place in the tree: its level (1 the top) and the level's name, e.g. Zone, Building, Floor (RP-410). */
+    locations: z.array(
+      dimensionValueRef.extend({ parentId: z.uuid().nullable(), depth: z.number().int().positive(), levelName: bilingualText.nullable() }),
+    ),
     with: z.object({
       steps: z.array(z.object({ key: z.string(), name: bilingualText })),
       companies: z.array(z.object({ participantId: z.uuid(), name: bilingualText })),
     }),
+    /**
+     * The Owner filter's people (RP-410): my own Company's Members who have claimed
+     * one of my visible open items, by name. Another Company is offered by its name
+     * only, from `with.companies` (V14).
+     */
+    owners: z.array(z.object({ memberId: z.uuid(), name: bilingualText })),
   }),
 });
 export type WorkItemList = z.infer<typeof workItemList>;
