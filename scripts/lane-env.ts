@@ -15,12 +15,14 @@
 // a lane with another worktree, but only the lane owner's own implementer subagents use it:
 // a session whose lane another session holds takes --free or runs lanes:prune. Without --db
 // the .env is as before.
+// It also refuses, even with --force, a worktree locked by another live `claude session` (RP-501).
 // `pnpm lanes:prune` removes the compose projects old worktrees left behind;
 // `pnpm lanes:drop-dbs` drops the --db databases of worktrees that are gone.
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { firstFreeLane, isValidDbSuffix, laneClashes, laneEnv, laneHolders, lanePorts, laneProject, listContainers, takenLanePorts } from "./lanes.ts";
 import { samePath } from "./paths.ts";
-import { branchMerged, listWorktrees, refExists, type Worktree } from "./worktrees.ts";
+import { foreignSessionLock, readProcessList } from "./session-lock.ts";
+import { branchMerged, currentRoot, listWorktrees, refExists, type Worktree } from "./worktrees.ts";
 
 const args = process.argv.slice(2);
 const force = args.includes("--force");
@@ -39,6 +41,18 @@ if (
 ) {
   console.error("Usage: pnpm lane:env <n> [--force] [--free] [--db <suffix>]   (n = 0..9, one per worktree; suffix: lowercase letters and digits, e.g. rp322)");
   process.exit(1);
+}
+// A worktree locked by another live Claude session belongs to that session; --force does not override this (RP-501).
+try {
+  const here = listWorktrees().find((w) => samePath(w.path, currentRoot()));
+  const processes = readProcessList();
+  const refusal = processes ? foreignSessionLock(here?.locked, process.pid, processes) : undefined;
+  if (refusal) {
+    console.error(refusal);
+    process.exit(1);
+  }
+} catch {
+  // Not a git checkout, or git is missing: nothing to check.
 }
 if (existsSync(".env") && !force) {
   console.error(".env already exists. Re-run with --force to overwrite it.");
