@@ -15,7 +15,10 @@
  *                     ─send_to_manager→ Consultant approval  ┐ one label, "Send to Manager":
  *                     ─send_to_senior→ Senior approval       ┘ cost impact over 500,000 goes to Senior
  *                     ─escalate→ Consultant approval  validate: the Form is complete
+ *                     ─fresh_eyes→ Consultant approval  not the Members who took send_to_manager
+ *                                                       or return_to_engineer, nor in its pool; Assign to
  *   Consultant approval ─return_to_engineer→ Consultant review
+ *                       ─return_fresh→ Consultant review  not the Member who left Consultant review
  *                       ─approve_a→ Approved · A       not the Member who took send_to_manager
  *                       ─revise_c→ Revise · C          validate: Remarks given (Action Form)
  *                       ─reject_d→ Revise · D          all Comments closed
@@ -249,6 +252,32 @@ const transitions: RulesTransition[] = [
     outcome: null,
     permission: "review",
     rules: { validate: [{ type: "form_complete" }] },
+  },
+  {
+    key: "fresh_eyes",
+    from: "consultant_review",
+    to: "consultant_approval",
+    label: name("Send to fresh eyes", "إرسال لعين جديدة"),
+    kind: "send",
+    outcome: null,
+    permission: "review",
+    rules: {
+      restrict: [
+        { type: "not_same_person", transition: "send_to_manager" },
+        { type: "not_same_person", transition: "return_to_engineer" },
+      ],
+    },
+    actions: [{ type: "offer_assign_to" }],
+  },
+  {
+    key: "return_fresh",
+    from: "consultant_approval",
+    to: "consultant_review",
+    label: name("Return to fresh eyes", "إعادة لعين جديدة"),
+    kind: "return",
+    outcome: null,
+    permission: "approve",
+    rules: { restrict: [{ type: "not_same_person", step: "consultant_review" }] },
   },
   {
     key: "return_to_engineer",

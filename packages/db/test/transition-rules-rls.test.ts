@@ -257,6 +257,64 @@ describe("not the same person (RP-430-1)", () => {
   });
 });
 
+describe("not the same person keeps that Member from holding the next Step (RP-430-1)", () => {
+  const release = (as: string, id: string) => outcome(as, sql`select app.release_step(${id}::uuid, now()) as outcome`);
+  const assignees = async (as: string, id: string, transition: string) =>
+    (await call<{ member_id: string }>(as, sql`select member_id from app.transition_assignees(${id}::uuid, ${transition})`)).map((r) => r.member_id);
+  const holding = async (id: string) =>
+    (
+      await migrator.query<{ status: string; assignee_member_id: string | null }>(
+        "select status, assignee_member_id from step_assignment where work_item_id = $1 and status in ('pooled', 'claimed', 'vacant')",
+        [id],
+      )
+    ).rows[0];
+
+  /** At K1's review again, held by its engineer: K1's manager sent it to the Manager, `returner` returned it. */
+  async function backAtReview(model: string, returner: string): Promise<string> {
+    const id = await submitted(model);
+    expect(await claim(k1Manager, id)).toBe("claimed");
+    expect(await take(k1Manager, id, "send_to_manager")).toBe("applied");
+    expect(await claim(returner, id)).toBe("claimed");
+    expect(await take(returner, id, "return_to_engineer")).toBe("applied");
+    // Back to the manager who held the review; handed on to K1's engineer.
+    expect(await release(k1Manager, id)).toBe("released");
+    expect(await claim(k1.member, id)).toBe("claimed");
+    return id;
+  }
+
+  it("leaves the Member out of the next Step's pool, of Assign to and of coming back", async () => {
+    const id = await backAtReview("Fresh eyes", k1Manager);
+    expect(await offered(k1.member, id)).toContain("fresh_eyes");
+    expect(await assignees(k1.member, id, "fresh_eyes")).toEqual([k1Manager2]);
+    expect(
+      await outcome(
+        k1.member,
+        sql`select app.take_transition(${id}::uuid, 'fresh_eyes', '{}'::jsonb, '', app.answers_sha256(${id}::uuid),
+          ${randomUUID()}::uuid, now(), ${k1Manager}::uuid) as outcome`,
+      ),
+    ).toBe("assignee_not_offered");
+    expect(await take(k1.member, id, "fresh_eyes")).toBe("applied");
+    // The manager who sent it to the Manager can't claim it; the other can.
+    expect(await claim(k1Manager, id)).toBe("forbidden");
+    expect(await call(k1Manager, sql`select action from app.work_item_actions(${id}::uuid) where action = 'claim'`)).toEqual([]);
+    expect(await claim(k1Manager2, id)).toBe("claimed");
+
+    // Returned to the review, which K1's engineer left last: not back to them, nor to the
+    // manager who left it before, but to its pool without either.
+    expect(await take(k1Manager2, id, "return_fresh")).toBe("applied");
+    expect(await holding(id)).toEqual({ status: "pooled", assignee_member_id: null });
+    expect(await claim(k1.member, id)).toBe("forbidden");
+    expect(await claim(k1Manager, id)).toBe("forbidden");
+    expect(await claim(k1Manager2, id)).toBe("claimed");
+  });
+
+  it("is refused with the usual answer when nobody is left to hold the next Step", async () => {
+    const id = await backAtReview("No fresh eyes", k1Manager2);
+    expect(await offered(k1.member, id)).not.toContain("fresh_eyes");
+    expect(await take(k1.member, id, "fresh_eyes")).toBe("next_step_unavailable");
+  });
+});
+
 describe("has been through a Step (RP-430-2)", () => {
   it("never holds for K1 on the Contractor's Step, though C1's Submit left it", async () => {
     const id = await submitted("Contractor route");

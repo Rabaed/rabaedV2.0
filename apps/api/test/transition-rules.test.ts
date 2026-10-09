@@ -168,6 +168,37 @@ describe("Restrict: not the same person", () => {
   });
 });
 
+describe("Restrict: not the same person keeps that Member from holding the next Step", () => {
+  /** At K1's review again, held by its engineer: K1's manager sent it to the Manager, `returner` returned it. */
+  async function backAtReview(model: string, returner: Caller): Promise<string> {
+    const id = await atApproval(model, k1Manager, returner);
+    await take(returner, id, "return_to_engineer");
+    // Back with the manager who held the review; handed on to K1's engineer.
+    await release(k1Manager, id);
+    await claim(k1Engineer, id);
+    return id;
+  }
+
+  it("leaves the manager who sent it to the Manager out of the next Step's pool and of Assign to", async () => {
+    const id = await backAtReview("Fresh eyes", k1Manager);
+    const fresh = (await detail(k1Engineer, id)).actions.transitions.find((t) => t.key === "fresh_eyes");
+    // The other manager only.
+    expect(fresh?.assignTo).toHaveLength(1);
+    await take(k1Engineer, id, "fresh_eyes");
+    const refused = await k1Manager.post(`/v1/work-items/${id}/claim`);
+    expect(refused.statusCode, refused.body).toBe(403);
+    await claim(k1Manager2, id);
+  });
+
+  it("refuses with the usual answer when nobody is left to hold the next Step", async () => {
+    const id = await backAtReview("No fresh eyes", k1Manager2);
+    expect(await offered(k1Engineer, id)).not.toContain("fresh_eyes");
+    const res = await tryTake(k1Engineer, id, "fresh_eyes");
+    expect(res.statusCode, res.body).toBe(409);
+    expect(res.json()).toEqual({ error: "next_step_unavailable" });
+  });
+});
+
 describe("Restrict: has been through a Step, or a shared fact", () => {
   it("offers Submit directly from the Draft only once it has been through Contractor review", async () => {
     const id = await newDraft(pm, "Been through");
