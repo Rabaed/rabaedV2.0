@@ -22,8 +22,8 @@ export type StatTileProps = {
  */
 export function StatTile({ label, value, icon, tone = "neutral", locale, className }: StatTileProps) {
   return (
-    <div className={cn("flex min-w-0 flex-col gap-2.5 rounded-lg border border-border bg-surface px-5 py-4.5", className)}>
-      <span aria-hidden="true" className={cn("inline-flex size-10 items-center justify-center rounded-md", toneClasses[tone])}>
+    <div className={cn("flex min-w-0 items-center gap-3 rounded-lg border border-border bg-surface px-5 py-4 sm:flex-col sm:items-start sm:gap-2.5", className)}>
+      <span aria-hidden="true" className={cn("inline-flex size-10 shrink-0 items-center justify-center rounded-md", toneClasses[tone])}>
         <Icon name={icon} size={22} />
       </span>
       <p className="flex flex-col gap-0.5">

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { byNewestWaiting, mergeActivity } from "./home.ts";
+import { byNewestWaiting, homeGreeting, mergeActivity } from "./home.ts";
 
 const item = (id: string, title: string, stepEnteredAt: string | null) => ({ id, title, stepEnteredAt });
 
@@ -19,6 +19,19 @@ describe("byNewestWaiting", () => {
     const at = "2026-09-01T08:00:00.000Z";
     const rows = [item("b", "Same", at), item("a", "Same", at), item("c", "Earlier letter", at)];
     expect(rows.toSorted(byNewestWaiting).map((r) => r.id)).toEqual(["c", "a", "b"]);
+  });
+});
+
+describe("homeGreeting", () => {
+  it("follows the time in Riyadh, not UTC", () => {
+    // 05:30 UTC is 08:30 in Riyadh.
+    expect(homeGreeting(new Date("2026-10-09T05:30:00Z"))).toBe("morning");
+    expect(homeGreeting(new Date("2026-10-09T08:59:00Z"))).toBe("morning");
+    expect(homeGreeting(new Date("2026-10-09T09:00:00Z"))).toBe("afternoon");
+    expect(homeGreeting(new Date("2026-10-09T15:00:00Z"))).toBe("evening");
+    // 22:30 UTC is 01:30 the next day in Riyadh.
+    expect(homeGreeting(new Date("2026-10-09T22:30:00Z"))).toBe("evening");
+    expect(homeGreeting(new Date("2026-10-10T01:00:00Z"))).toBe("morning");
   });
 });
 

@@ -10,6 +10,7 @@ import type {
   DocumentList,
   FormChoices,
   FormToFill,
+  Home,
   LinkedFrom,
   MemberVisibility,
   MyProjects,
@@ -68,6 +69,11 @@ export function getMembers(): Promise<CompanyMembers | null> {
 }
 
 /** The signed-in Member's Projects; null if signed out. */
+/** Home across the signed-in Member's Projects (RP-407); null when signed out or unavailable. */
+export function getHome(): Promise<Home | null> {
+  return apiGet<Home>("/v1/home");
+}
+
 export function getMyProjects(): Promise<MyProjects | null> {
   return apiGet<MyProjects>("/v1/projects");
 }

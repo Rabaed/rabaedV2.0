@@ -1,4 +1,4 @@
-import type { HomeActivityEntry, HomeWorkItem, Locale } from "@rabaed/domain";
+import { stepAgeLabel, type HomeActivityEntry, type HomeWorkItem, type Locale } from "@rabaed/domain";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, within } from "storybook/test";
 import { expectLaidOutLeftToRight } from "../../storybook/bidi.ts";
@@ -68,7 +68,7 @@ const needsLabels: Record<Locale, NeedsMyActionCardLabels> = {
 };
 const activityLabels: Record<Locale, RecentActivityCardLabels> = {
   en: {
-    title: "Recent activity",
+    title: "Activity Feed",
     empty: "Nothing has happened on the items you can see yet.",
     noNumber: "No number yet",
     internal: "Only your Company sees this",
@@ -81,7 +81,7 @@ const activityLabels: Record<Locale, RecentActivityCardLabels> = {
     updated: "updated",
   },
   ar: {
-    title: "آخر النشاطات",
+    title: "النشاط",
     empty: "لم يحدث شيء بعد على العناصر التي يمكنك رؤيتها.",
     noNumber: "بلا رقم بعد",
     internal: "لا يراه إلا شركتك",
@@ -134,7 +134,7 @@ export const Wide: Story = {
     await expect(within(rows[0]!).getByRole("link")).toHaveAttribute("href", `#/work-items/${items[0]!.id}`);
     await expectLaidOutLeftToRight(within(rows[1]!).getByText("JCV-C1-ME-MAR-0002 Rev 1"));
     await expect(within(rows[1]!).getByText(new RegExp(storyText(context, villas.name)))).toBeVisible();
-    await expect(within(rows[2]!).getByRole("img", { name: /4\+|4/ })).toBeVisible();
+    await expect(within(rows[2]!).getByRole("img", { name: stepAgeLabel(5, storyLocale(context)) })).toBeVisible();
     await expect(within(needs).getAllByRole("link", { name: new RegExp(storyText(context, boardLabel)) })).toHaveLength(2);
 
     const activity = context.canvas.getByRole("region", { name: storyText(context, b(activityLabels.en.title, activityLabels.ar.title)) });

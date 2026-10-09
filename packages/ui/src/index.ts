@@ -2,6 +2,7 @@ export { Button, IconButton, buttonVariants, type ButtonProps, type IconButtonPr
 export { SignButton, type SignButtonProps } from "./components/button/sign-button.tsx";
 export { Avatar, CompanyChip, type AvatarProps, type CompanyChipProps } from "./components/data/avatar.tsx";
 export { Badge, type BadgeProps } from "./components/data/badge.tsx";
+export { StatTile, type StatTileProps } from "./components/data/stat-tile.tsx";
 export {
   Table,
   TableBody,
@@ -151,3 +152,11 @@ export {
 export { ProjectDashboard, type ProjectDashboardLabels, type ProjectDashboardProps } from "./components/views/project-dashboard.tsx";
 export { moduleName } from "./lib/module-name.ts";
 export { ActivityFeedPanel, type ActivityFeedFilters, type ActivityFeedPanelLabels, type ActivityFeedPanelProps } from "./components/views/activity-feed-panel.tsx";
+export {
+  NeedsMyActionCard,
+  RecentActivityCard,
+  type NeedsMyActionCardLabels,
+  type NeedsMyActionCardProps,
+  type RecentActivityCardLabels,
+  type RecentActivityCardProps,
+} from "./components/views/home-cards.tsx";

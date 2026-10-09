@@ -18,7 +18,7 @@ export const homeStepAgeWeeks = 4;
 /** Rows in the "Needs my action" list; the tile counts them all. */
 export const homeNeedsMyActionLimit = 8;
 /** Entries in "Recent activity". */
-export const homeActivityLimit = 8;
+export const homeActivityLimit = 6;
 
 /** The Project a Home row belongs to: what its Members see of it on every page. */
 const homeProject = z.object({ id: z.uuid(), code: z.string(), name: bilingualText });
@@ -42,6 +42,12 @@ export const home = z.object({
 export type Home = z.infer<typeof home>;
 export type HomeWorkItem = Home["needsMyAction"][number];
 export type HomeActivityEntry = Home["activity"][number];
+
+/** Home's greeting by the time of day in Saudi Arabia (UTC+3 all year): morning to noon, afternoon to 6 pm, then evening. */
+export function homeGreeting(now: Date): "morning" | "afternoon" | "evening" {
+  const hour = (now.getUTCHours() + 3) % 24;
+  return hour >= 4 && hour < 12 ? "morning" : hour >= 12 && hour < 18 ? "afternoon" : "evening";
+}
 
 /**
  * Newest-waiting first: the item that reached its Step last comes first. An

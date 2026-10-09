@@ -25,7 +25,27 @@
     "tagline": "مشاريع البناء في مكان واحد، وكل شركة ترى عملها فقط.",
     "healthLink": "حالة النظام",
     "documentNumberLabel": "أرقام المستندات تُقرأ من اليسار إلى اليمين في كل لغة:",
-    "signIn": "تسجيل الدخول"
+    "signIn": "تسجيل الدخول",
+    "greeting": {
+      "morning": "صباح الخير، {name}",
+      "afternoon": "مساء الخير، {name}",
+      "evening": "مساء الخير، {name}"
+    },
+    "intro": "إليك ما يحتاج إلى إجرائك في مشاريعك اليوم.",
+    "counts": "في مشاريعك",
+    "activeProjects": "المشاريع النشطة",
+    "needMyAction": "بحاجة لإجرائي",
+    "longAtStep": "عناصر شركتك في خطوتها منذ 4 أسابيع أو أكثر",
+    "needsMyAction": "بحاجة لإجرائي",
+    "nothingWaiting": "لا شيء بانتظارك.",
+    "openBoard": "فتح اللوحة",
+    "openBoardOf": "فتح اللوحة · {code}",
+    "recentActivity": "النشاط",
+    "noActivity": "لم يحدث شيء بعد على العناصر التي يمكنك رؤيتها.",
+    "yourProjects": "مشاريعك",
+    "viewAll": "عرض الكل",
+    "noProjects": "لست عضوًا في أي مشروع بعد.",
+    "unavailable": "تعذّر تحميل الصفحة الرئيسية. حاول مرة أخرى."
   },
   "projectTabs": {
     "label": "المشروع",

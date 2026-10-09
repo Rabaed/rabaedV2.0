@@ -25,7 +25,27 @@
     "tagline": "Construction projects, one place, each company sees only its own work.",
     "healthLink": "System health",
     "documentNumberLabel": "Document Numbers read left to right in every language:",
-    "signIn": "Sign in"
+    "signIn": "Sign in",
+    "greeting": {
+      "morning": "Good morning, {name}",
+      "afternoon": "Good afternoon, {name}",
+      "evening": "Good evening, {name}"
+    },
+    "intro": "Here's what needs you across your Projects today.",
+    "counts": "Across your Projects",
+    "activeProjects": "Active Projects",
+    "needMyAction": "Need My Action",
+    "longAtStep": "Your Company's items at their step for 4+ weeks",
+    "needsMyAction": "Needs my action",
+    "nothingWaiting": "Nothing is waiting on you.",
+    "openBoard": "Open board",
+    "openBoardOf": "Open board · {code}",
+    "recentActivity": "Activity Feed",
+    "noActivity": "Nothing has happened on the items you can see yet.",
+    "yourProjects": "Your Projects",
+    "viewAll": "View all",
+    "noProjects": "You are not on any Project yet.",
+    "unavailable": "Home couldn't be loaded. Try again."
   },
   "projectTabs": {
     "label": "Project",
