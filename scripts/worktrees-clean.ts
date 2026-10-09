@@ -11,12 +11,12 @@
 //   pnpm worktrees:clean [--into <branch>] [--include-empty] [--only <agent-id>...] [--yes]
 //
 // --only limits the run to the named agent-* worktrees (a session's own stopped
-// implementers), removed even with no commits; other sessions' worktrees are not
-// looked at. Uncommitted changes or unmerged commits still skip a named one.
+// implementers), removed even with no commits; other sessions' worktrees are left
+// out of the run. Uncommitted changes or unmerged commits still skip a named one.
 //
 // The default branch is main; --yes skips the confirmation.
 import { confirmOrExit } from "./confirm.ts";
-import { chooseWorktrees, currentRoot, gatherFacts, gitError, isAgentWorktree, listWorktrees, pruneWorktrees, refExists, removeWorktree, reportRemoval, worktreeName } from "./worktrees.ts";
+import { chooseWorktrees, currentRoot, gatherFacts, gitError, isAgentWorktree, isNamed, listWorktrees, pruneWorktrees, refExists, removeWorktree, reportRemoval } from "./worktrees.ts";
 
 const usage = "Usage: pnpm worktrees:clean [--into <branch>] [--include-empty] [--only <agent-id>...] [--yes]";
 const args = process.argv.slice(2);
@@ -47,9 +47,9 @@ if (!refExists(target, mainRoot)) {
   console.error(`Branch ${target} not found; pass an existing branch with --into.`);
   process.exit(1);
 }
-const agentWorktrees = all.filter((w) => isAgentWorktree(w.path, mainRoot) && (!only || only.includes(worktreeName(w.path))));
+const agentWorktrees = all.filter((w) => isAgentWorktree(w.path, mainRoot));
 for (const n of only ?? []) {
-  if (!agentWorktrees.some((w) => worktreeName(w.path) === n)) console.log(`Not an agent worktree here, ignored: ${n}`);
+  if (!agentWorktrees.some((w) => isNamed(w.path, [n]))) console.log(`Not an agent worktree here, ignored: ${n}`);
 }
 const agents = gatherFacts(agentWorktrees, target, mainRoot);
 const { remove, skipped } = chooseWorktrees({ worktrees: agents, currentPath: currentRoot(), includeEmpty, only });

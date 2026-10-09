@@ -21,7 +21,7 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { firstFreeLane, isValidDbSuffix, laneClashes, laneEnv, laneHolders, lanePorts, laneProject, listContainers, pruneCommand, takenLanePorts } from "./lanes.ts";
 import { samePath } from "./paths.ts";
-import { foreignSessionLock, readProcessList } from "./session-lock.ts";
+import { foreignSessionLock, parseSessionLock, readProcessList } from "./session-lock.ts";
 import { branchMerged, currentRoot, listWorktrees, refExists, type Worktree } from "./worktrees.ts";
 
 const args = process.argv.slice(2);
@@ -43,16 +43,23 @@ if (
   process.exit(1);
 }
 // A worktree locked by another live Claude session belongs to that session; --force does not override this (RP-501).
+let locked: string | undefined;
 try {
-  const here = listWorktrees().find((w) => samePath(w.path, currentRoot()));
-  const processes = readProcessList();
-  const refusal = processes ? foreignSessionLock(here?.locked, process.pid, processes) : undefined;
+  locked = listWorktrees().find((w) => samePath(w.path, currentRoot()))?.locked;
+} catch {
+  // Not a git checkout, or git is missing: nothing to check.
+}
+if (parseSessionLock(locked)) {
+  let refusal: string | undefined;
+  try {
+    refusal = foreignSessionLock(locked, process.pid, readProcessList());
+  } catch (e) {
+    console.warn(`Session-lock check skipped (${e instanceof Error ? e.message.split("\n")[0] : String(e)}), so a live Claude session holding this worktree would not be noticed.`);
+  }
   if (refusal) {
     console.error(refusal);
     process.exit(1);
   }
-} catch {
-  // Not a git checkout, or git is missing: nothing to check.
 }
 if (existsSync(".env") && !force) {
   console.error(".env already exists. Re-run with --force to overwrite it.");
@@ -78,11 +85,11 @@ function holderStatus(lane: number): string[] {
   const hasOriginMain = refExists("origin/main", mainRoot);
   return holders.map((dir) => {
     const w = worktrees.find((x) => samePath(x.path, dir));
-    if (!w) return `  ${dir} is not a worktree of this clone (or is gone): \`${pruneCommand(lane, false)}\` frees the lane.`;
+    if (!w) return `  ${dir} is not a worktree of this clone (or is gone): \`${pruneCommand(lane, { merged: false })}\` frees the lane.`;
     if (!w.branch) return `  ${dir} has a detached HEAD.`;
     if (!hasOriginMain) return `  ${dir} is on ${w.branch}; run \`git fetch origin main\` to see whether it is merged.`;
     return branchMerged(w.branch, "origin/main", mainRoot)
-      ? `  ${dir} is on ${w.branch}, already merged into origin/main: free the lane with \`${pruneCommand(lane, true)}\`, then re-run.`
+      ? `  ${dir} is on ${w.branch}, already merged into origin/main: free the lane with \`${pruneCommand(lane, { merged: true })}\`, then re-run.`
       : `  ${dir} is on ${w.branch}, not merged into origin/main yet: its session may still need the lane.`;
   });
 }

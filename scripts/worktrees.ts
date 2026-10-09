@@ -86,6 +86,10 @@ type ChooseInput = {
 /** The last segment of a worktree path. */
 export const worktreeName = (path: string): string => path.replace(/[\\/]+$/, "").split(/[\\/]/).pop() ?? "";
 
+/** Whether the worktree's folder name is one of `names`; case-insensitive on Windows, like paths. */
+export const isNamed = (path: string, names: string[], platform?: NodeJS.Platform): boolean =>
+  names.some((n) => normalPath(n, platform) === normalPath(worktreeName(path), platform));
+
 /**
  * Which agent worktrees to remove: those whose commits are all in the target
  * branch (a merged branch, or a detached HEAD with no unique commits), that
@@ -96,16 +100,16 @@ export const worktreeName = (path: string): string => path.replace(/[\\/]+$/, ""
 export function chooseWorktrees({ worktrees, currentPath, includeEmpty = false, only, platform }: ChooseInput): { remove: Worktree[]; skipped: Skipped[] } {
   const remove: Worktree[] = [];
   const skipped: Skipped[] = [];
-  if (only) includeEmpty = true;
+  const keepEmpty = includeEmpty || only !== undefined;
   for (const { ahead, dirty, noCommitsYet, ...w } of worktrees) {
-    if (only && !only.includes(worktreeName(w.path))) continue;
+    if (only && !isNamed(w.path, only, platform)) continue;
     const reason = samePath(w.path, currentPath, platform)
       ? "this is the current worktree"
       : dirty
         ? "uncommitted changes"
         : ahead > 0
           ? `${ahead} unmerged commit${ahead === 1 ? "" : "s"}${w.branch ? ` on ${w.branch}` : " (detached HEAD)"}`
-          : noCommitsYet && !includeEmpty
+          : noCommitsYet && !keepEmpty
             ? "no commits yet, may still be running (--include-empty removes it)"
             : w.locked !== undefined && !lockedByApp(w.locked)
               ? `locked by hand (${w.locked || "no reason"})`
