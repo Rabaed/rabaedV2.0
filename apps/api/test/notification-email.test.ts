@@ -74,7 +74,7 @@ async function saveSettings(by: Caller, change: { settings?: Partial<Notificatio
 }
 /** Every watched-item event emailed at once. */
 const watchImmediately = (by: Caller, outcomes: NotificationSettings["watched"]["outcomes"] = ["A", "B", "C", "D", "cancelled"]) =>
-  saveSettings(by, { settings: { watched: { inApp: true, email: "immediate", outcomes } } });
+  saveSettings(by, { settings: { watched: { email: "immediate", outcomes } } });
 
 /** A test-Type item C1's `raiser` raises and C1's `pm` Submits to K1. */
 async function submittedItem(raiser: Person, pm: Person, title: string): Promise<{ id: string; documentNumber: string }> {
@@ -222,9 +222,9 @@ describe("a Step reached", () => {
     expect(id).not.toBe("");
   });
 
-  it("is emailed even with the bell switched off for it", async () => {
+  it("is emailed by the default 'immediately' choice, which no longer comes with a bell switch", async () => {
     const quiet = await person(k1, k1ParticipantId, ["manager"]);
-    await saveSettings(quiet.caller, { settings: { step_reached: { inApp: false, email: "immediate" } } });
+    await saveSettings(quiet.caller, { settings: { step_reached: { email: "immediate" } } });
     const { documentNumber } = await submittedItem(raiser, pm, "Fans");
     await drain();
     expect(about(quiet.email, documentNumber)).toHaveLength(1);
@@ -364,7 +364,7 @@ describe("a Vacancy (RP-356)", () => {
 
   beforeAll(async () => {
     await ok(c1.caller.request("PUT", `/v1/participants/${at.c1ParticipantId}/members/${c1.company.authorizedPerson.id}/visibility`, { trade: all, location: all }));
-    await saveSettings(c1.caller, { settings: { vacancy: { inApp: true, email: "immediate" } } });
+    await saveSettings(c1.caller, { settings: { vacancy: { email: "immediate" } } });
   });
 
   it("emails C1's Authorized Person which Step is vacant", async () => {

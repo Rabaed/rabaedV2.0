@@ -11,6 +11,10 @@
  *   Consultant approval ─return_to_engineer→ Consultant review
  *   Consultant approval ─approve_a→ Approved · A, ─revise_c→ Revise & Resubmit · C
  *
+ * `withCancel` adds a Cancel from each of the raiser's Steps (Draft, Contractor
+ * review) to a Cancelled Step (RP-433); `recommendCode` makes Consultant review a
+ * Step that Recommends a Code to the manager (§5.3, RP-433).
+ *
  * It passes publish checks 4 and 8, as every published Version must. `run`
  * executes SQL as the migrator (a pg client's or Kysely's query); the result is
  * the new Workflow definition's id, for a test Type to use.
@@ -24,7 +28,7 @@ export async function addTestWorkflow(
   run: (text: string) => Promise<{ rows: unknown[] }>,
   options: TestWorkflowOptions = {},
 ): Promise<string> {
-  const { withApproveB = false, publish = true } = options;
+  const { withApproveB = false, withCancel = false, recommendCode = false, publish = true } = options;
   const name = JSON.stringify(options.name ?? { en: "Send Back (test)", ar: "الإرجاع (اختبار)" }).replaceAll("'", "''");
   const owner = options.owner;
   const definition = options.version
@@ -48,11 +52,12 @@ export async function addTestWorkflow(
         ('internal_review', '{"en": "Contractor review", "ar": "مراجعة المقاول"}', 'internal_review',
           '{"base_role": "contractor", "permission": "review"}', 'none'),
         ('consultant_review', '{"en": "Consultant review", "ar": "مراجعة الاستشاري"}', 'pending_approval',
-          '{"base_role": "consultant", "permission": "review"}', 'none'),
+          '{"base_role": "consultant", "permission": "review"}', '${recommendCode ? "recommend_code" : "none"}'),
         ('consultant_approval', '{"en": "Consultant approval", "ar": "اعتماد الاستشاري"}', 'internal_review',
           '{"base_role": "consultant", "permission": "approve"}', 'issue_code'),
         ('approved', '{"en": "Approved", "ar": "معتمد"}', 'approved', '{}', 'none'),
         ('revise_resubmit', '{"en": "Revise & Resubmit", "ar": "مراجعة وإعادة تقديم"}', 'revise_resubmit', '{}', 'none')
+        ${withCancel ? `, ('cancelled', '{"en": "Cancelled", "ar": "ملغى"}', 'cancelled', '{}', 'none')` : ""}
       ) as s (key, name, stage_key, actor_rule, outcome_mode)
       returning id, key, workflow_version_id
     ), transitions as (
@@ -73,6 +78,8 @@ export async function addTestWorkflow(
         ('revise_c', 'consultant_approval', 'revise_resubmit', '{"en": "Revise · C", "ar": "مراجعة · C"}', 'close', 'C', 'approve', 9)
         ${withApproveB ? `, ('approve_b', 'consultant_approval', 'approved', '{"en": "Approve with Comments · B", "ar": "اعتماد مع ملاحظات · B"}',
           'close', 'B', 'approve', 10)` : ""}
+        ${withCancel ? `, ('cancel', 'draft', 'cancelled', '{"en": "Cancel", "ar": "إلغاء"}', 'cancel', null, 'create', ${withApproveB ? 11 : 10}),
+          ('cancel_review', 'internal_review', 'cancelled', '{"en": "Cancel", "ar": "إلغاء"}', 'cancel', null, 'review', ${withApproveB ? 12 : 11})` : ""}
       ) as t (key, from_key, to_key, label, kind, outcome, permission, sort)
       join steps f on f.key = t.from_key
       join steps s on s.key = t.to_key
@@ -83,12 +90,23 @@ export async function addTestWorkflow(
   const row = rows[0] as { id?: string; version_id?: string } | undefined;
   if (!row?.id) throw new Error("addTestWorkflow: nothing inserted");
   // Built as a draft, then published: a published Version takes no new parts (RP-424).
+  // `notifications` names a Transition's extra recipients by its key (RP-432).
+  for (const [key, recipients] of Object.entries(options.notifications ?? {})) {
+    await run(`
+      update workflow_transition set notifications = '${JSON.stringify(recipients)}'::jsonb
+      where key = '${key}' and workflow_version_id = '${row.version_id}'
+    `);
+  }
   if (publish) await run(`update workflow_version set status = 'published', published_at = now() where id = '${row.version_id}'`);
   return row.id;
 }
 
 export type TestWorkflowOptions = {
   withApproveB?: boolean;
+  /** A Cancel from Draft and from Contractor review, to a Cancelled Step (RP-433). */
+  withCancel?: boolean;
+  /** Consultant review Recommends a Code (RP-433). */
+  recommendCode?: boolean;
   name?: { en: string; ar: string };
   /** A Project's own Workflow, or one in a Company's Library; a Rabaed Default when left out. */
   owner?: { kind: "project"; projectId: string } | { kind: "company"; companyId: string };
@@ -96,4 +114,6 @@ export type TestWorkflowOptions = {
   version?: { definitionId: string; no: number };
   /** False leaves the new Version a draft. */
   publish?: boolean;
+  /** A Transition's extra recipients (RP-432), by its key. */
+  notifications?: Record<string, unknown[]>;
 };

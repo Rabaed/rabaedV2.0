@@ -11,7 +11,6 @@ import {
   type WorkItemBoard as WorkItemBoardData,
   type WorkItemBoardLane,
   type WorkItemMove,
-  type WorkItemOutcome,
   type WorkItemQuery,
   type WorkItemRow,
   type WorkItemView,
@@ -26,7 +25,7 @@ import { stageColour } from "../status/stage-colour.ts";
 import { StageDot } from "../status/stage-pill.tsx";
 import { WithChip } from "../status/with-chip.tsx";
 import { WorkItemCard, type WorkItemState } from "../status/work-item-card.tsx";
-import { Outcome } from "./work-item-list.tsx";
+import { Outcome, type ListOutcomes } from "./work-item-list.tsx";
 
 /**
  * The board's words, in the viewer's language, from the app's messages: the
@@ -51,8 +50,8 @@ export type WorkItemBoardLabels = {
   moveTo: (stage: string) => string;
   /** Announced while a card is dragged. */
   dragging: string;
-  /** Each Review Code and Inspection Result, as its badge. */
-  outcomes: Record<WorkItemOutcome, string>;
+  /** The outcome of a cancelled item, as its badge; every other outcome is named by its Type's set (RP-429). */
+  cancelled: string;
 };
 
 export type WorkItemBoardProps = {
@@ -110,7 +109,7 @@ export function WorkItemBoard({ board, query, locale, labels, listHrefFor, itemH
           {labels.dragging}
         </p>
       )}
-      <ol className="flex w-max items-start gap-3.5">
+      <ol className="flex w-max items-start gap-4">
         {board.stages.map((stage) => {
           const column = columns.get(stage.key);
           const shown = column?.shown ?? 0;
@@ -147,13 +146,13 @@ export function WorkItemBoard({ board, query, locale, labels, listHrefFor, itemH
                   : undefined
               }
             >
-              <h2 id={headingId} className="flex items-center gap-2 border-b border-border-subtle px-3.5 py-3 text-body font-bold text-text">
+              <h2 id={headingId} className="flex items-center gap-2 border-b border-border-subtle px-4 py-3 text-body font-bold text-text">
                 <StageDot stage={stageColour(stage)} />
                 <span className="min-w-0 truncate">{stage.name[locale]}</span>
                 <span className="rounded-full bg-neutral-tint px-2 text-caption font-semibold text-neutral-fg tabular-nums">{formatNumber(shown, locale)}</span>
               </h2>
               {closed && (
-                <div className="flex flex-col gap-1 border-b border-border-subtle px-3.5 py-2 text-caption text-muted">
+                <div className="flex flex-col gap-1 border-b border-border-subtle px-4 py-2 text-caption text-muted">
                   <span>{labels.closedSince(formatNumber(closedColumnDays, locale))}</span>
                   <span className="flex flex-wrap items-center justify-between gap-2">
                     {/* A search counts only what it shows, so it has no total to give. */}
@@ -182,6 +181,7 @@ export function WorkItemBoard({ board, query, locale, labels, listHrefFor, itemH
                     linkAs={Link}
                     moves={onMove ? board.moves : {}}
                     stageNames={stageNames}
+                    outcomes={board.filters.outcomes}
                     onMove={onMove}
                     dragging={dragging?.card.id ?? null}
                     onDragChange={setDragging}
@@ -210,6 +210,7 @@ function Lane({
   linkAs,
   moves,
   stageNames,
+  outcomes,
   onMove,
   dragging,
   onDragChange,
@@ -221,6 +222,8 @@ function Lane({
   linkAs: ElementType;
   moves: Record<string, WorkItemMove[]>;
   stageNames: Map<string, BilingualText>;
+  /** Each Type's outcomes on the Project, for a closed card's badge (RP-429). */
+  outcomes: ListOutcomes;
   onMove?: (card: WorkItemRow, move: WorkItemMove) => void;
   /** The id of the card being dragged. */
   dragging: string | null;
@@ -260,7 +263,7 @@ function Lane({
                 number={card.documentNumber}
                 noNumberLabel={card.revisionNo > 0 ? labels.revisionNoNumber(formatNumber(card.revisionNo, locale)) : labels.noNumber}
                 title={card.title}
-                state={cardState(card, locale, labels)}
+                state={cardState(card, locale, labels, outcomes)}
                 locale={locale}
                 trade={card.trade.name[locale]}
                 location={card.location?.name[locale]}
@@ -325,8 +328,8 @@ function MoveMenu({
   );
 }
 
-/** Open: its Step Age, and who in my own Company has claimed it (V14); closed: its Review Code or Inspection Result. */
-function cardState(card: WorkItemRow, locale: Locale, labels: WorkItemBoardLabels): WorkItemState | undefined {
+/** Open: its Step Age, and who in my own Company has claimed it (V14); closed: its outcome, from its Type's set. */
+function cardState(card: WorkItemRow, locale: Locale, labels: WorkItemBoardLabels, outcomes: ListOutcomes): WorkItemState | undefined {
   if (isOpenStageCategory(card.stage.category)) {
     const w = card.with;
     const holder =
@@ -337,7 +340,12 @@ function cardState(card: WorkItemRow, locale: Locale, labels: WorkItemBoardLabel
         : undefined;
     return { open: true, stepAgeWeeks: card.stepAgeWeeks, ...(holder ? { holder } : {}) };
   }
-  return card.outcome ? { open: false, badge: <Outcome outcome={card.outcome} locale={locale} labels={labels.outcomes} /> } : undefined;
+  return card.outcome
+    ? {
+        open: false,
+        badge: <Outcome outcome={card.outcome} typeCode={card.type.code} outcomes={outcomes} locale={locale} cancelled={labels.cancelled} />,
+      }
+    : undefined;
 }
 
 /** The View switch's words, from the app's messages. */

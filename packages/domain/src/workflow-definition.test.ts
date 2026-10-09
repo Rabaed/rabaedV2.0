@@ -3,6 +3,7 @@ import {
   definitionFromRows,
   definitionToRows,
   parseWorkflowDefinition,
+  storedTransitionRules,
   type WorkflowDefinition,
 } from "./workflow-definition.ts";
 import { marRows } from "../test/support/mar-workflow.ts";
@@ -129,5 +130,17 @@ describe("parseWorkflowDefinition", () => {
     const name = mar();
     (name.steps as Record<string, unknown>[])[0]!.name = { en: "Draft" };
     expect(parseWorkflowDefinition(name)).toMatchObject({ ok: false, issues: [{ path: "steps.0.name.ar" }] });
+  });
+});
+
+describe("a Transition's stored rules", () => {
+  it("read as none when the Transition has none, and as they are when they fit the format", () => {
+    expect(storedTransitionRules(null)).toEqual({});
+    expect(storedTransitionRules({ validate: [{ type: "form_complete" }] })).toEqual({ validate: [{ type: "form_complete" }] });
+  });
+
+  it("fail loudly when they no longer fit the format, never read as no rules", () => {
+    expect(() => storedTransitionRules({ validate: [{ type: "no_such_rule" }] })).toThrow();
+    expect(() => storedTransitionRules({ restrict: "not a list" })).toThrow();
   });
 });

@@ -1,12 +1,15 @@
 import {
   formatNumber,
-  type ChainBucket,
+  outcomeLabel,
   type CodeCFilter,
   type Dashboard,
+  type DashboardBar,
+  type DashboardBarTone,
   type DashboardCard,
   type DashboardCodeCLine,
   type DashboardFigure,
   type DashboardFigureQuery,
+  type FixedChainBucket,
   type Locale,
   type OutcomeKind,
 } from "@rabaed/domain";
@@ -24,28 +27,24 @@ export type ProjectDashboardLabels = {
   closed: string;
   empty: string;
   codeC: string;
-  /** Each bucket's name on a bar. */
-  buckets: Record<ChainBucket, string>;
+  /** The name of each bucket that isn't an outcome (an outcome's bar has its own name from the Type's set). */
+  buckets: Record<FixedChainBucket, string>;
   /** The Code C line's sub-states, as the line and a List filtered from it name them. */
   codeCStates: Record<CodeCFilter, string>;
   /** The footer's name for the approved share, by outcome kind. */
   approved: Record<OutcomeKind, string>;
 };
 
-/** Each bucket's bar colour: the Stage colour it ends in. Full class names, so Tailwind finds them. */
-const barColour: Record<ChainBucket, string> = {
+/**
+ * Each bar's colour, by its tone (RP-429: the outcome's polarity and follow-up
+ * actions, never its code): the Stage colour it ends in. Full class names, so
+ * Tailwind finds them.
+ */
+const barColour: Record<DashboardBarTone, string> = {
   pending: "bg-stage-pending-dot",
-  in_preparation: "bg-stage-internal-dot",
-  C: "bg-stage-resubmitted-dot",
-  A: "bg-stage-approved-dot",
-  B: "bg-stage-approved-dot",
-  D: "bg-stage-rejected-dot",
-  passed: "bg-stage-approved-dot",
-  passed_with_comments: "bg-stage-approved-dot",
-  failed: "bg-stage-rejected-dot",
-  approved: "bg-stage-approved-dot",
-  rejected: "bg-stage-rejected-dot",
-  cancelled: "bg-stage-cancelled-dot",
+  revision: "bg-stage-resubmitted-dot",
+  positive: "bg-stage-approved-dot",
+  negative: "bg-stage-rejected-dot",
 };
 
 export type ProjectDashboardProps = {
@@ -118,7 +117,7 @@ function TypeCard({ card, ...ctx }: { card: DashboardCard } & Ctx) {
           <ul className="space-y-1">
             {card.bars.map((bar) => (
               <li key={bar.bucket}>
-                <Bar label={labels.buckets[bar.bucket]} colour={barColour[bar.bucket]} figure={bar} total={card.total.count} {...ctx} />
+                <Bar label={barLabel(bar, locale, labels)} colour={barColour[bar.tone]} figure={bar} total={card.total.count} {...ctx} />
               </li>
             ))}
           </ul>
@@ -185,6 +184,12 @@ function CodeCLine({ typeCode, line, ...ctx }: { typeCode: string; line: Dashboa
       )}
     </p>
   );
+}
+
+/** A bar's name: its outcome's, from the Type's set ("Approved (A)"), or the app's word for Pending, Approved and Rejected. */
+function barLabel(bar: DashboardBar, locale: Locale, labels: ProjectDashboardLabels): string {
+  if (bar.name) return outcomeLabel({ code: bar.bucket, name: bar.name }, locale);
+  return (labels.buckets as Record<string, string>)[bar.bucket] ?? bar.bucket;
 }
 
 /** A number as a link to its List. */

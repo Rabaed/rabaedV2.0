@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { isOpenStageCategory, outcomeSets, stageCategories, type WorkItemOutcome } from "./work-item.ts";
+import { dashboardBarOutcomes, offersRevision, outcomeCodePattern, type Outcome, type OutcomePolarity } from "./outcome.ts";
+import { isOpenStageCategory, stageCategories, type WorkItemOutcome } from "./work-item.ts";
 
 /**
  * The bucket a Revision chain counts in on the Dashboard (spec RP-344,
@@ -8,60 +9,70 @@ import { isOpenStageCategory, outcomeSets, stageCategories, type WorkItemOutcome
  * - `pending`: open and Submitted, for everyone who sees it;
  * - `in_preparation`: open and not yet Submitted (Draft or internal review), for
  *   the raiser's Participant only (V1);
- * - once closed, its outcome: a Review Code, an Inspection Result, Approved or
- *   Rejected by its Stage for a Type with neither, or Cancelled.
+ * - once closed, its outcome when that is one of its Type's Dashboard bars
+ *   (`dashboardBarOutcomes`: a closing outcome of a set with two or more, such as
+ *   a Review Code, an Inspection Result or one a Project Admin added, RP-429);
+ *   otherwise Approved or Rejected by its Stage; or Cancelled.
  *
  * The rule is a list of conditions read in order, the first that holds giving
  * the bucket. The work item query turns the same list into its SQL (the
  * `bucket` filter and the Dashboard's counts), so a Dashboard number and the
- * List behind it can't disagree.
+ * List behind it can't disagree. It reads outcomes by their place in the Type's
+ * set (bar, polarity, follow-up actions), never by code.
  */
-
-/** How a Work Item Type's items end (`work_item_type.outcome_kind`). */
-export const outcomeKinds = ["review_code", "inspection_result", "none"] as const;
-export type OutcomeKind = (typeof outcomeKinds)[number];
 
 export type StageCategory = (typeof stageCategories)[number];
 
-export const chainBuckets = [
-  "pending",
-  "in_preparation",
-  "A",
-  "B",
-  "C",
-  "D",
-  "passed",
-  "passed_with_comments",
-  "failed",
-  "approved",
-  "rejected",
-  "cancelled",
-] as const;
-export const chainBucketSchema = z.enum(chainBuckets);
-export type ChainBucket = (typeof chainBuckets)[number];
+/** The buckets that aren't an outcome: open chains, chains counted by their Stage, and cancelled ones. */
+export const fixedChainBuckets = ["pending", "in_preparation", "approved", "rejected", "cancelled"] as const;
+export type FixedChainBucket = (typeof fixedChainBuckets)[number];
+
+/** A bucket: a fixed one, or an outcome code of the Type's set (an outcome never takes a fixed open bucket's code). */
+export const chainBucketSchema = z.string().regex(outcomeCodePattern);
+export type ChainBucket = string;
 
 /** What the rule reads: the chain's latest visible Revision, and whether the viewer's Participant raised it. */
 export type ChainBucketInput = {
-  outcomeKind: OutcomeKind;
   stageCategory: StageCategory;
   outcome: WorkItemOutcome | null;
   /** It has a Submission Date (`submitted_at`). */
   submitted: boolean;
   /** The viewer's own Participant raised it. */
   raisedByViewer: boolean;
+} & ChainOutcomeTraits;
+
+/** What the rule reads of its outcome, from its Type's set (`chainOutcomeTraits`). */
+export type ChainOutcomeTraits = {
+  /** Its outcome is one of its Type's Dashboard bars (`dashboardBarOutcomes`). */
+  outcomeBar: boolean;
+  /** Its outcome's polarity; null while open, when cancelled, or for an outcome not in the set. */
+  polarity: OutcomePolarity | null;
+  /** Its outcome offers the raiser a Revision (Code C). */
+  offersRevision: boolean;
 };
+
+/** What the rule reads of `outcome` in its Type's set. */
+export function chainOutcomeTraits(set: readonly Outcome[], outcome: string | null): ChainOutcomeTraits {
+  const found = outcome === null ? undefined : set.find((o) => o.code === outcome);
+  if (!found) return { outcomeBar: false, polarity: null, offersRevision: false };
+  return { outcomeBar: dashboardBarOutcomes(set).includes(found), polarity: found.polarity, offersRevision: offersRevision(found) };
+}
 
 /** One condition of the rule: every key given must hold. `open` is read from the Stage category. */
 export type ChainBucketCondition = {
   open?: boolean;
   submitted?: boolean;
   raisedByViewer?: boolean;
-  outcomeKind?: OutcomeKind;
   outcome?: WorkItemOutcome;
   stageCategory?: StageCategory;
+  outcomeBar?: boolean;
+  polarity?: OutcomePolarity;
+  offersRevision?: boolean;
 };
 
-export type ChainBucketRule = { readonly when: ChainBucketCondition; readonly bucket: ChainBucket | null };
+/** The bucket a rule gives: a fixed one, the chain's own outcome (`outcomeBucket`), or none. */
+export const outcomeBucket = { fromOutcome: true } as const;
+export type ChainBucketRule = { readonly when: ChainBucketCondition; readonly bucket: FixedChainBucket | typeof outcomeBucket | null };
 
 /**
  * How each key of a condition holds. One entry per key, so a new key can't be
@@ -72,9 +83,11 @@ const holds: { [K in keyof ChainBucketCondition]-?: (value: NonNullable<ChainBuc
   open: (open, input) => open === isOpenStageCategory(input.stageCategory),
   submitted: (submitted, input) => submitted === input.submitted,
   raisedByViewer: (raised, input) => raised === input.raisedByViewer,
-  outcomeKind: (kind, input) => kind === input.outcomeKind,
   outcome: (outcome, input) => outcome === input.outcome,
   stageCategory: (category, input) => category === input.stageCategory,
+  outcomeBar: (bar, input) => bar === input.outcomeBar,
+  polarity: (polarity, input) => polarity === input.polarity,
+  offersRevision: (offers, input) => offers === input.offersRevision,
 };
 
 /** Every key a condition may give, each handled by `holdsChainCondition`. */
@@ -86,9 +99,6 @@ export const chainConditionKeys = Object.keys(holds) as (keyof ChainBucketCondit
  */
 export const unseenBeforeSubmit = { open: true, submitted: false, raisedByViewer: false } as const satisfies ChainBucketCondition;
 
-const codeRules = (outcomeKind: OutcomeKind, outcomes: readonly (WorkItemOutcome & ChainBucket)[]): ChainBucketRule[] =>
-  outcomes.map((outcome) => ({ when: { outcomeKind, outcome }, bucket: outcome }));
-
 /** The rule, in order: the first condition that holds gives the bucket. */
 export const chainBucketRules: readonly ChainBucketRule[] = [
   { when: unseenBeforeSubmit, bucket: null },
@@ -96,8 +106,7 @@ export const chainBucketRules: readonly ChainBucketRule[] = [
   { when: { open: true, raisedByViewer: true }, bucket: "in_preparation" },
   { when: { outcome: "cancelled" }, bucket: "cancelled" },
   { when: { stageCategory: "cancelled" }, bucket: "cancelled" },
-  ...codeRules("review_code", outcomeSets.review_code),
-  ...codeRules("inspection_result", outcomeSets.inspection_result),
+  { when: { open: false, outcomeBar: true }, bucket: outcomeBucket },
   { when: { stageCategory: "closed_positive" }, bucket: "approved" },
   { when: { stageCategory: "closed_negative" }, bucket: "rejected" },
 ];
@@ -113,8 +122,9 @@ export function holdsChainCondition(when: ChainBucketCondition, input: ChainBuck
 
 /** The bucket a chain counts in, or null when it counts in none. */
 export function chainBucket(input: ChainBucketInput): ChainBucket | null {
-  return chainBucketRules.find((rule) => holdsChainCondition(rule.when, input))?.bucket ?? null;
+  const bucket = chainBucketRules.find((rule) => holdsChainCondition(rule.when, input))?.bucket ?? null;
+  return typeof bucket === "object" && bucket !== null ? input.outcome : bucket;
 }
 
-/** The buckets of a chain that has been Submitted: every bucket but In preparation (the Approved %'s denominator). */
-export const submittedBuckets: readonly ChainBucket[] = chainBuckets.filter((b) => b !== "in_preparation");
+/** The buckets of open chains. */
+export const openBuckets: readonly ChainBucket[] = ["pending", "in_preparation"];

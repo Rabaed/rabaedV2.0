@@ -97,6 +97,29 @@ describe("a Project Admin authors the Project's own Workflow", () => {
     }
   });
 
+  it("keeps a Transition's rules, actions and notifications in the draft (WF-7 to WF-9)", async () => {
+    const saved = (await read(c1.caller, route)).draft!.definition;
+    const [first, ...rest] = saved.transitions;
+    const definition: WorkflowDefinition = {
+      ...saved,
+      transitions: [
+        {
+          ...first!,
+          rules: { validate: [{ type: "form_complete" }] },
+          actions: [{ type: "offer_assign_to" }],
+          notifications: [{ to: "raiser" }],
+        },
+        ...rest,
+      ],
+    };
+    const res = await c1.caller.request("PUT", `/v1/workflows/${route}/draft`, { definition });
+    expect(res.statusCode, res.body).toBe(200);
+    expect((await read(c1.caller, route)).draft!.definition).toEqual(definition);
+    // Back to the draft the next tests start from.
+    await ok(c1.caller.request("PUT", `/v1/workflows/${route}/draft`, { definition: saved }), 200);
+    expect((await read(c1.caller, route)).draft!.definition).toEqual(saved);
+  });
+
   it("refuses a draft that isn't a definition, saying where", async () => {
     const res = await c1.caller.request("PUT", `/v1/workflows/${route}/draft`, { definition: { steps: [], transitions: [] } });
     expect(res.statusCode).toBe(422);
@@ -172,6 +195,54 @@ describe("a Project Admin authors the Project's own Workflow", () => {
     const id = await draft(at, at.c1Engineer, "Unbound");
     expect((await detail(at.c1Engineer, id)).workflow.name.en).toBe("Material Submittal (MAR)");
     await ok(bind(c1.caller, at.projectId, route));
+  });
+});
+
+describe("copying a Workflow into a Project maps its Stages by key (WF-5)", () => {
+  it("is refused, naming the Stage and a Step in it in English and Arabic, when the Project's Module lacks one", async () => {
+    // A Project Workflow whose Consultant review is in a Stage only that Project has.
+    await ok(
+      c1.caller.post(`/v1/projects/${at.projectId}/modules/submittals/stages`, {
+        key: "on_hold",
+        name: { en: "On Hold", ar: "معلّق" },
+        category: "in_progress",
+      }),
+      201,
+    );
+    const held = await duplicate(c1.caller, marDefault, at.projectId, { en: "Held route", ar: "مسار معلّق" });
+    const saved = (await read(c1.caller, held)).draft!.definition;
+    const definition = { ...saved, steps: saved.steps.map((s) => (s.stage === "pending_approval" ? { ...s, stage: "on_hold" } : s)) };
+    await ok(c1.caller.request("PUT", `/v1/workflows/${held}/draft`, { definition }), 200);
+    await ok(c1.caller.post(`/v1/workflows/${held}/publish`), 200);
+    const step = definition.steps.find((s) => s.stage === "on_hold")!;
+
+    const third = await buildTower(api, { c1, k1 }, "WFS");
+    const res = await c1.caller.post(`/v1/workflows/${held}/duplicate`, { projectId: third.projectId, name: { en: "Copy", ar: "نسخة" } });
+    expect(res.statusCode, res.body).toBe(422);
+    expect(res.json()).toEqual({
+      error: "stage_missing",
+      problems: [
+        {
+          code: "stage_missing",
+          stage: "on_hold",
+          step: step.key,
+          message: {
+            en: `This Project has no Stage "on_hold" (used by ${step.name.en}). Add it in the Project's Stages first.`,
+            ar: `لا توجد في هذا المشروع مرحلة "on_hold" (تستخدمها الخطوة ${step.name.ar}). أضفها أولاً في مراحل المشروع.`,
+          },
+        },
+      ],
+    });
+    // Nothing was copied; once the Project has the Stage, the copy goes ahead.
+    await ok(
+      c1.caller.post(`/v1/projects/${third.projectId}/modules/submittals/stages`, {
+        key: "on_hold",
+        name: { en: "On Hold", ar: "معلّق" },
+        category: "in_progress",
+      }),
+      201,
+    );
+    await duplicate(c1.caller, held, third.projectId, { en: "Copy", ar: "نسخة" });
   });
 });
 

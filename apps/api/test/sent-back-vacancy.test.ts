@@ -222,32 +222,33 @@ describe("a Vacancy", () => {
   });
 });
 
-describe("the bell's switch, a mute and a closed Project", () => {
-  it("a Send Back: the switch off still emails; a mute sends nothing", async () => {
+describe("email off, a mute and a closed Project", () => {
+  it("a Send Back: email off still shows in the bell; a mute sends nothing", async () => {
     const off = await projectMember(api, c1, at.c1ParticipantId, ["engineer"]);
     const muted = await projectMember(api, c1, at.c1ParticipantId, ["engineer"]);
-    await saveSettings(off, { sent_back: { inApp: false, email: "immediate" } });
+    await saveSettings(off, { sent_back: { email: "off" } });
     await mute(muted, at.projectId);
     const id = await atConsultant(at, "Strainers");
     await sendBack(at.k1Manager, id);
     await drainOutbox(worker);
 
-    for (const who of [off, muted]) expect(await about(who, id)).toEqual([]);
+    expect(await about(muted, id)).toEqual([]);
+    expect((await about(off, id)).length).toBe(1);
     const byMember = new Map((await routed(id, "sent_back")).map((r) => [r.member_id, { in_app: r.in_app, email: r.email }]));
-    expect(byMember.get(await meOf(off))).toEqual({ in_app: false, email: "immediate" });
+    expect(byMember.get(await meOf(off))).toEqual({ in_app: true, email: "none" });
     expect(byMember.has(await meOf(muted))).toBe(false);
     expect(byMember.get(await meOf(at.c1Pm))).toEqual({ in_app: true, email: "immediate" });
   });
 
-  it("a Vacancy: the switch off still emails (a digest by default); a mute sends nothing", async () => {
+  it("a Vacancy: email off still shows in the bell; a mute sends nothing", async () => {
     const apId = c1.company.authorizedPerson.id;
-    await saveSettings(c1.caller, { vacancy: { inApp: false, email: "digest" } });
+    await saveSettings(c1.caller, { vacancy: { email: "off" } });
     const switchedOff = await vacated(at, "Heaters", await projectMember(api, c1, at.c1ParticipantId, ["project_manager"]));
     await drainOutbox(worker);
-    expect(await about(c1.caller, switchedOff)).toEqual([]);
-    expect(await routed(switchedOff, "vacancy")).toEqual([{ member_id: apId, in_app: false, email: "digest" }]);
+    expect((await about(c1.caller, switchedOff)).length).toBe(1);
+    expect(await routed(switchedOff, "vacancy")).toEqual([{ member_id: apId, in_app: true, email: "none" }]);
 
-    await saveSettings(c1.caller, { vacancy: { inApp: true, email: "digest" } });
+    await saveSettings(c1.caller, { vacancy: { email: "digest" } });
     await mute(c1.caller, at.projectId);
     try {
       const muted = await vacated(at, "Coolers", await projectMember(api, c1, at.c1ParticipantId, ["project_manager"]));

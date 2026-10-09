@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { bilingualText } from "./company.ts";
 import { formAnswers, formSchema, namedAnswers } from "./form.ts";
+import { outcomeCodePattern, outcomeSchema } from "./outcome.ts";
 
 /** A Work Item Type's short code, used in filters and Document Numbers (MAR, SAR…). */
 export const workItemTypeCode = z.string().regex(/^[A-Z]{2,6}$/);
@@ -79,21 +80,13 @@ export const workItemSummary = z.object({
 });
 export type WorkItemSummary = z.infer<typeof workItemSummary>;
 
-/** How a closed Work Item ended: its Issued Code, Inspection result, or cancelled (workflow-engine.md §1). */
-export const workItemOutcomes = ["A", "B", "C", "D", "passed", "passed_with_comments", "failed", "cancelled", "closed"] as const;
-
 /**
- * The outcomes a closing Transition may set, by the Work Item Type's outcome kind
- * (`work_item_type.outcome_kind`): the Review Codes, the Inspection Results, or
- * `closed` for a Type with neither. Fixed until WF-6 (RP-429) makes them per Type.
+ * How a closed Work Item ended (workflow-engine.md §1): the code of an outcome of
+ * its Type's set (outcome.ts, RP-429), such as an Issued Code or an Inspection
+ * Result, or `cancelled`.
  */
-export const outcomeSets = {
-  review_code: ["A", "B", "C", "D"],
-  inspection_result: ["passed", "passed_with_comments", "failed"],
-  none: ["closed"],
-} as const satisfies Record<string, readonly WorkItemOutcome[]>;
-export const workItemOutcome = z.enum(workItemOutcomes);
-export type WorkItemOutcome = z.infer<typeof workItemOutcome>;
+export const workItemOutcome = z.string().regex(outcomeCodePattern);
+export type WorkItemOutcome = string;
 
 /**
  * Who an open item is with, as the viewer may read it (V14): `own` when the
@@ -140,6 +133,8 @@ export const workItemList = z.object({
   nextCursor: z.string().nullable(),
   filters: z.object({
     types: z.array(z.object({ code: z.string(), name: bilingualText })),
+    /** Each Type's outcomes on the Project, by Type code, in their order (RP-429): the outcome filter and badges read them. */
+    outcomes: z.array(outcomeSchema.extend({ type: z.string() })),
     trades: z.array(dimensionValueRef),
     locations: z.array(dimensionValueRef.extend({ parentId: z.uuid().nullable() })),
     with: z.object({
@@ -177,9 +172,10 @@ export type LinkSearchResults = z.infer<typeof linkSearchResults>;
 
 /**
  * How a Link was made: `related` freely in the Links System Field, `relies_on`
- * by a link question (its field key says which), `raised_from` by the Snag List.
+ * by a link question (its field key says which), `raised_from` by the Snag List,
+ * `replaces` by Create replacement (from the replacement to the rejected item).
  */
-export const linkKinds = ["related", "relies_on", "raised_from"] as const;
+export const linkKinds = ["related", "relies_on", "raised_from", "replaces"] as const;
 export type LinkKind = (typeof linkKinds)[number];
 
 /**
@@ -260,6 +256,13 @@ export type RevisionChain = z.infer<typeof revisionChain>;
 /** The refusals of creating a Revision (app.create_revision). One word for every reason it isn't allowed, so it names nothing. */
 export const createRevisionRefusals = ["not_found", "project_closed", "idempotency_key_reused", "revision_not_allowed"] as const;
 
+/**
+ * The refusals of creating a replacement (app.create_replacement; workflow-engine.md §5.5).
+ * One word for every reason it isn't allowed, so it names nothing.
+ */
+export const createReplacementRefusals = ["not_found", "project_closed", "idempotency_key_reused", "replacement_not_allowed"] as const;
+export type ReplacementRefusal = (typeof createReplacementRefusals)[number];
+
 /** The refusals of discarding a Draft Revision (app.discard_revision). */
 export const discardRevisionRefusals = ["not_found", "project_closed", "not_discardable"] as const;
 
@@ -295,6 +298,21 @@ export const takeTransitionRequest = z.object({
    */
   internalNote: z.string().trim().max(4000).default(""),
   /**
+   * "Assign to" (WF-8): the next holder, picked among the Members the Transition
+   * offers (`assignTo` of its action), so only the taker's own Company's. Left
+   * out, the next Step goes to its Step Pool as ever. A pick it couldn't have
+   * offered is refused with `assignee_not_offered`, whoever it names.
+   */
+  assignTo: z.uuid().nullable().default(null),
+  /**
+   * The Recommended Code (RP-433, workflow-engine.md §5.3): from a Step that
+   * Recommends a Code, one of the outcomes the Transition offers
+   * (`recommendCode`), for the next reviewer of the same Participant; its note is
+   * the Internal Note. Only the taker's own Participant ever reads it (V5). One it
+   * doesn't offer is refused with `recommended_code_not_offered`.
+   */
+  recommendedCode: workItemOutcome.nullable().default(null),
+  /**
    * The Member confirmed the Transition in its pop-up (ADR 0017): every Transition
    * is confirmed and recorded. Without it, refused with `not_confirmed`.
    */
@@ -310,6 +328,13 @@ export type TakeTransitionRequest = z.input<typeof takeTransitionRequest>;
 export const createRevisionRequest = z.object({ idempotencyKey: z.uuid() });
 export type CreateRevisionRequest = z.infer<typeof createRevisionRequest>;
 
+/**
+ * Create a replacement of a rejected item (workflow-engine.md §5.5): a new Draft
+ * with a new number, linked to it. The key makes a repeated request apply once.
+ */
+export const createReplacementRequest = z.object({ idempotencyKey: z.uuid() });
+export type CreateReplacementRequest = z.infer<typeof createReplacementRequest>;
+
 /** Exactly what the viewer may press on the item now. */
 export const workItemActions = z.object({
   /** Take the pooled Step. */
@@ -324,6 +349,13 @@ export const workItemActions = z.object({
    * Company whom the Workflow's Draft Step allows.
    */
   createRevision: z.boolean(),
+  /**
+   * Create a replacement (workflow-engine.md §5.5): the item is closed with an
+   * outcome whose follow-up actions offer one (Code D in the Rabaed Defaults), no
+   * replacement of it stands, for a Member of the raiser's Company whom the
+   * Workflow's Draft Step allows.
+   */
+  createReplacement: z.boolean(),
   /** Discard this Revision: still in Draft, never numbered, for the raiser's Company. */
   discardRevision: z.boolean(),
   transitions: z.array(
@@ -336,6 +368,20 @@ export const workItemActions = z.object({
        * every pop-up has; null when it asks nothing else.
        */
       actionForm: formSchema.nullable(),
+      /**
+       * "Assign to" (WF-8): the Members of the viewer's own Participant who may
+       * hold the next Step, one of whom the pop-up may name as its holder; absent
+       * when the Transition offers none (no Assign to, or the next Step is
+       * another Participant's).
+       */
+      assignTo: z.array(z.object({ memberId: z.uuid(), name: bilingualText })).optional(),
+      /**
+       * The Recommended Code (RP-433): the outcomes the pop-up may recommend to the
+       * next reviewer of the viewer's own Participant, in order; absent when the
+       * Transition offers none (not from a Step that Recommends a Code, or it
+       * leaves the Participant).
+       */
+      recommendCode: z.array(z.object({ code: workItemOutcome, name: bilingualText })).optional(),
     }),
   ),
 });
@@ -445,6 +491,8 @@ export const workItemHistory = z.object({
       outcome: workItemOutcome.nullable(),
       /** Set on an internal_note event: the Internal Note, written with its `transition`. */
       internalNote: z.string().nullable(),
+      /** Set on a recommend_code event: the Recommended Code, internal to the recommender's Participant (V5). */
+      recommendedCode: workItemOutcome.nullable(),
       /**
        * Set on an answers_changed event: each answer changed after Draft, by field
        * key, a missing answer as null. Internal to the raiser's Participant (V5).

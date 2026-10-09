@@ -1,4 +1,4 @@
-import type { DefinitionIssue, FieldError, WorkflowProblem } from "@rabaed/domain";
+import type { BilingualText, DefinitionIssue, FieldError, StageCopyProblem, WorkflowProblem } from "@rabaed/domain";
 import { forbidden, HttpError, notFound } from "./http-error.ts";
 
 // Every refusal the API's commands answer with, as the API's HTTP answer.
@@ -36,6 +36,20 @@ const answers = {
   transition_not_available: () => new HttpError(409, "transition_not_available"),
   no_step_pool: () => new HttpError(409, "no_step_pool"),
   next_step_unavailable: () => new HttpError(409, "next_step_unavailable"),
+  // Transition rules (WF-7): the answers route to none, or to several, of the
+  // Transitions sharing a label; a Validate rule refuses, with its message.
+  no_route: () => new HttpError(409, "no_route"),
+  // Transition actions (WF-8): a pick "Assign to" couldn't have offered (another
+  // Company's Member, one who can't hold the next Step, a made-up id), and a set or
+  // copy outside what the acting Participant fills at that Step; one answer each,
+  // whatever the reason.
+  assignee_not_offered: () => new HttpError(422, "assignee_not_offered"),
+  action_not_allowed: () => new HttpError(409, "action_not_allowed"),
+  // A Recommended Code the Transition doesn't offer (RP-433): not from a Step that
+  // Recommends a Code, not to the same Participant's next reviewer, or not a closing
+  // outcome of the Type's set; one answer whatever the reason.
+  recommended_code_not_offered: () => new HttpError(422, "recommended_code_not_offered"),
+  validation_failed: () => new HttpError(422, "validation_failed"),
   // A Transition's Action Form answers (RP-300): the body lists each field's error.
   invalid_action_form: () => new HttpError(422, "invalid_action_form"),
   idempotency_key_reused: () => new HttpError(422, "idempotency_key_reused"),
@@ -74,6 +88,18 @@ const answers = {
   // outside the raiser learns whether a Draft Revision is open.
   revision_not_allowed: () => new HttpError(409, "revision_not_allowed"),
   not_discardable: () => new HttpError(409, "not_discardable"),
+  // Replacements (RP-435): one answer whatever the reason (the outcome offers none, one already
+  // stands, a Member the Draft Step doesn't allow), so nobody outside the raiser learns whether one stands.
+  replacement_not_allowed: () => new HttpError(409, "replacement_not_allowed"),
+  // A Project's Stages (RP-428). The shapes are checked by the request schemas first;
+  // a Stage's name that isn't English and Arabic is `invalid_name` (below).
+  invalid_stage: () => new HttpError(422, "invalid_stage"),
+  stage_exists: () => new HttpError(409, "stage_exists"),
+  invalid_order: () => new HttpError(422, "invalid_order"),
+  stage_in_use: () => new HttpError(409, "stage_in_use"),
+  // A Type's outcome set on a Project (RP-429). The shapes are checked by the request schemas first.
+  invalid_outcome: () => new HttpError(422, "invalid_outcome"),
+  outcome_exists: () => new HttpError(409, "outcome_exists"),
   // Workflow authoring (RP-427): a name that isn't English and Arabic; a document that
   // isn't a definition (the body says where); a draft with an error (the body lists
   // every problem); nothing to publish; a Workflow with no published Version or made
@@ -85,26 +111,37 @@ const answers = {
   workflow_not_published: () => new HttpError(409, "workflow_not_published"),
   workflow_not_for_type: () => new HttpError(422, "workflow_not_for_type"),
   workflow_name_names_participant: () => new HttpError(422, "workflow_name_names_participant"),
+  // A Workflow copied into a Project whose Module lacks one of its Stages (WF-5): `problems` names each.
+  stage_missing: () => new HttpError(422, "stage_missing"),
+  // A used outcome's code, closing or polarity (RP-429, decided 2026-10-09); the body has its message.
+  outcome_in_use: () => new HttpError(409, "outcome_in_use"),
 } satisfies Record<string, () => HttpError>;
 
 export type RefusalReason = keyof typeof answers;
 
 /**
  * A refused result as the HTTP error to throw, with what the body says of it: the
- * per-field errors of refused answers; where a Workflow document doesn't fit the
- * format (`issues`) or every publish problem of a Workflow draft (`problems`).
+ * per-field errors of refused answers, else the message of a refused Validate rule;
+ * where a Workflow document doesn't fit the format (`issues`) or every publish
+ * problem of a Workflow draft, or each Stage a Workflow copied into a Project lacks (`problems`).
  */
 export function refusal(result: {
   reason: RefusalReason;
   errors?: FieldError[];
+  message?: BilingualText;
   issues?: DefinitionIssue[];
-  problems?: WorkflowProblem[];
+  problems?: (WorkflowProblem | StageCopyProblem)[];
 }): HttpError {
   const error = answers[result.reason]();
   const details = {
-    ...(result.errors ? { fields: result.errors } : {}),
+    ...(result.errors ? { fields: result.errors } : result.message ? { message: result.message } : {}),
     ...(result.issues ? { issues: result.issues } : {}),
     ...(result.problems ? { problems: result.problems } : {}),
   };
   return Object.keys(details).length > 0 ? new HttpError(error.statusCode, error.code, details) : error;
+}
+
+/** Throws a refused command's HTTP answer (`refusal`); a done command passes. */
+export function throwIfRefused(result: { ok: true } | ({ ok: false } & Parameters<typeof refusal>[0])): void {
+  if (!result.ok) throw refusal(result);
 }

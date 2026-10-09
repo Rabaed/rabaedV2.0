@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { formSchema } from "./form.ts";
+import { defaultOutcomeSets } from "./outcome.ts";
 import { marRows } from "../test/support/mar-workflow.ts";
 import { workflowPublishProblems, type WorkflowPublishContext } from "./workflow-checks.ts";
 import { definitionFromRows, type WorkflowDefinition, type WorkflowStep, type WorkflowTransition } from "./workflow-definition.ts";
@@ -45,7 +46,7 @@ const marForm = formSchema.parse({
 });
 
 const context = (over: Partial<WorkflowPublishContext> = {}): WorkflowPublishContext => ({
-  outcomeKind: "review_code",
+  outcomes: defaultOutcomeSets.review_code,
   stages: submittalStages,
   form: marForm,
   ...over,
@@ -156,10 +157,34 @@ describe("workflowPublishProblems", () => {
       const d = mar();
       transition(d, "approve_a").outcome = "passed";
       expect(problems(d)).toEqual([{ code: "outcome_not_in_set", severity: "error", transition: "approve_a" }]);
-      expect(problems(mar(), context({ outcomeKind: "inspection_result" }))).toEqual([
+      expect(problems(mar(), context({ outcomes: defaultOutcomeSets.inspection_result }))).toEqual([
         { code: "outcome_not_in_set", severity: "error", transition: "approve_a" },
         { code: "outcome_not_in_set", severity: "error", transition: "revise_c" },
       ]);
+    });
+
+    it("passes an outcome the Project Admin added to the Type's set (RP-429)", () => {
+      const d = mar();
+      transition(d, "approve_a").outcome = "E";
+      expect(problems(d)).toEqual([{ code: "outcome_not_in_set", severity: "error", transition: "approve_a" }]);
+      const e = { code: "E", name: { en: "Approved for construction only", ar: "معتمد للتنفيذ فقط" }, closing: true, polarity: "positive", actions: [] } as const;
+      expect(problems(d, context({ outcomes: [...defaultOutcomeSets.review_code, e] }))).toEqual([]);
+    });
+
+    it("refuses an outcome of the set that doesn't close the item", () => {
+      const d = mar();
+      transition(d, "approve_a").outcome = "H";
+      const h = { code: "H", name: { en: "On hold", ar: "معلق" }, closing: false, polarity: "negative", actions: [] } as const;
+      expect(problems(d, context({ outcomes: [...defaultOutcomeSets.review_code, h] }))).toEqual([
+        { code: "outcome_not_in_set", severity: "error", transition: "approve_a" },
+      ]);
+    });
+
+    it("needs no issuing Step for a Type with one closing outcome", () => {
+      const d = mar();
+      step(d, "consultant_review").outcomeMode = "none";
+      for (const t of d.transitions) if (t.outcome !== null) t.outcome = "closed";
+      expect(problems(d, context({ outcomes: defaultOutcomeSets.none }))).toEqual([]);
     });
 
     it("refuses an outcome on a Transition to an open Step, and a close to an open Step", () => {
@@ -341,6 +366,24 @@ describe("workflowPublishProblems", () => {
         ["field_not_filled_at_step", "approve_a", "model"],
         ["field_not_filled_at_step", "approve_a", "note"],
         ["unknown_field", "approve_a", "grade"],
+      ]);
+    });
+
+    it("refuses copying an internal move's Action Form answer into the Form, which every Participant reads later (V5)", () => {
+      const d = mar();
+      const forPm = { key: "for_pm", type: "text", label: { en: "For the PM", ar: "إلى مدير المشروع" } };
+      const ownCopy = { key: "own_copy", type: "text", label: { en: "Kept", ar: "محفوظ" } };
+      transition(d, "send_for_review").actionForm = { sections: [{ key: "to_pm", title: { en: "To the PM", ar: "إلى المدير" }, fields: [forPm, ownCopy] }] };
+      transition(d, "send_for_review").actions = [
+        { type: "copy_field", from: "for_pm", to: "note" },
+        { type: "copy_field", from: "for_pm", to: "own_copy" },
+        { type: "copy_field", from: "model", to: "own_copy" },
+      ];
+      // A Submit's Action Form answers are shared: copying them into the Form is fine.
+      transition(d, "submit").actionForm = { sections: [{ key: "to_k1", title: { en: "To K1", ar: "إلى الاستشاري" }, fields: [forPm] }] };
+      transition(d, "submit").actions = [{ type: "copy_field", from: "for_pm", to: "note" }];
+      expect(workflowPublishProblems(d, context()).map((p) => [p.code, p.transition, p.detail])).toEqual([
+        ["copy_internal_answer", "send_for_review", "for_pm"],
       ]);
     });
 

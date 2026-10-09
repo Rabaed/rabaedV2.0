@@ -372,10 +372,16 @@ describe("an item closed otherwise than with Code C", () => {
     expect(await claim(k1.member, id)).toBe("claimed");
     expect(await take(k1.member, id, "revise_c")).toBe("applied");
     expect(await call(c1.member, sql`select app.can_create_revision(${id}::uuid) as can`)).toEqual([{ can: true }]);
-    // As an Inspection that failed would close.
-    await migrator.query("update work_item set outcome = 'failed' where id = $1", [id]);
+    // An outcome of its Type's set that offers no Revision (RP-429): Code D, which offers a replacement.
+    await migrator.query("update work_item set outcome = 'D' where id = $1", [id]);
     expect(await call(c1.member, sql`select app.can_create_revision(${id}::uuid) as can`)).toEqual([{ can: false }]);
     expect(await createRevision(c1.member, id)).toEqual({ outcome: "revision_not_allowed", work_item_id: null });
+    // Only an outcome of the item's Type's set closes it (RP-429): an Inspection Result isn't one of the MAR's.
+    await expect(migrator.query("update work_item set outcome = 'failed' where id = $1", [id])).rejects.toThrow(/not a closing outcome/);
+    // Its follow-up actions are read through the item, by whoever sees it.
+    expect(await call(c1.member, sql`select app.work_item_outcome_actions(${id}::uuid) as actions`)).toEqual([
+      { actions: [{ kind: "offer_replacement" }] },
+    ]);
   });
 });
 
@@ -391,5 +397,88 @@ describe("a discarded Revision (scenario 56)", () => {
     const again = await createRevision(c1.member, closed);
     expect(again.outcome).toBe("created");
     expect(await call(c1.member, sql`select revision_no from work_item where id = ${again.work_item_id}`)).toEqual([{ revision_no: 1 }]);
+  });
+});
+
+// A replacement of an item closed with an outcome that offers one (RP-435, WF-12;
+// workflow-engine.md §5.5; visibility.md scenario RP-435-1): a new Draft that is
+// C1's alone, linked "replaces" to the rejected item; it reaches the rejected item's
+// Linked from only once Submitted, never its Links, and nobody else can create one.
+describe("a replacement of a rejected item (RP-435-1)", () => {
+  let rejected = "";
+  let replacement = "";
+  const createReplacement = (as: string, id: string) =>
+    call<{ outcome: string; work_item_id: string | null }>(
+      as,
+      sql`select outcome, work_item_id from app.create_replacement(${id}::uuid, ${randomUUID()}::uuid, now())`,
+    ).then((rows) => rows[0]!);
+  const links = (as: string, id: string) =>
+    call<{ kind: string; document_number: string | null }>(as, sql`select kind, document_number from app.work_item_links(${id}::uuid)`);
+  const linkedFrom = (as: string, id: string) =>
+    call<{ document_number: string }>(as, sql`select document_number from app.work_item_linked_from(${id}::uuid)`);
+
+  beforeAll(async () => {
+    const [draft] = await call<{ outcome: string; work_item_id: string }>(
+      c1.member,
+      sql`select outcome, work_item_id from app.create_work_item(
+        ${projectId}::uuid, ${TYPE}, 'Door closers', app.latest_form_version(${TYPE}), '{"model": "DC-1"}'::jsonb,
+        ${electrical}::uuid, ${buildingA}::uuid, now())`,
+    );
+    rejected = draft!.work_item_id;
+    expect(await take(c1.member, rejected, "send_for_review")).toBe("applied");
+    expect(await claim(c1Pm, rejected)).toBe("claimed");
+    expect(await take(c1Pm, rejected, "submit")).toBe("applied");
+    expect(await claim(k1.member, rejected)).toBe("claimed");
+    expect(await take(k1.member, rejected, "revise_c")).toBe("applied");
+    // Code C offers a Revision, not a replacement; the outcome set is what decides (RP-429).
+    expect(await call(c1.member, sql`select app.can_create_replacement(${rejected}::uuid) as can`)).toEqual([{ can: false }]);
+    await migrator.query("update work_item set outcome = 'D' where id = $1", [rejected]);
+    const created = await createReplacement(c1.member, rejected);
+    expect(created.outcome).toBe("created");
+    replacement = created.work_item_id!;
+  });
+
+  it("is a new Draft of C1's, not a Revision, with the answers copied and a Link to the rejected item", async () => {
+    expect(await call(c1.member, sql`select revision_no from work_item where id = ${replacement}`)).toEqual([{ revision_no: 0 }]);
+    expect((await everythingOf(c1Pm, replacement)).answers).toMatchObject({ model: "DC-1" });
+    expect(await links(c1.member, replacement)).toEqual([{ kind: "replaces", document_number: expect.any(String) }]);
+    expect(await chain(c1.member, replacement)).toEqual([{ work_item_id: replacement, document_number: null, revision_no: 0 }]);
+    expect(await call(c1.member, sql`select app.can_create_revision(${rejected}::uuid) as can`)).toEqual([{ can: false }]);
+  });
+
+  it("returns nothing to K1 or the Owner, who see the rejected item, as a Draft", async () => {
+    for (const other of [k1.member, ow.member]) {
+      expect(await call(other, sql`select id from work_item where id = ${rejected}`)).toEqual([{ id: rejected }]);
+      expect(await everythingOf(other, replacement)).toEqual(nothing);
+      expect(await call(other, sql`select id from work_item_link where from_id = ${replacement}`)).toEqual([]);
+      expect(await links(other, replacement)).toEqual([]);
+      expect(await linkedFrom(other, rejected)).toEqual([]);
+    }
+    // The rejected item's own Links name nothing of it either, for C1 too.
+    expect(await links(c1.member, rejected)).toEqual([]);
+    expect(await linkedFrom(c1.member, rejected)).toEqual([]);
+  });
+
+  it("can't be created by K1 or the Owner, nor again by C1, and the refusal names nothing", async () => {
+    for (const other of [k1.member, ow.member]) {
+      expect(await createReplacement(other, rejected)).toEqual({ outcome: "replacement_not_allowed", work_item_id: null });
+      expect(await call(other, sql`select app.can_create_replacement(${rejected}::uuid) as can`)).toEqual([{ can: false }]);
+    }
+    expect(await createReplacement(c1.member, rejected)).toEqual({ outcome: "replacement_not_allowed", work_item_id: null });
+    expect(await createReplacement(k1.member, randomUUID())).toEqual({ outcome: "not_found", work_item_id: null });
+  });
+
+  it("takes a new Document Number at its first Send, and reaches the rejected item's Linked from once Submitted (E1, E3)", async () => {
+    expect(await take(c1.member, replacement, "send_for_review")).toBe("applied");
+    const rows = await call<{ document_number: string }>(c1.member, sql`select document_number from work_item where id = ${replacement}`);
+    const number = rows[0]!.document_number;
+    expect(number).not.toContain("Rev");
+    expect(await linkedFrom(k1.member, rejected)).toEqual([]);
+    expect(await claim(c1Pm, replacement)).toBe("claimed");
+    expect(await take(c1Pm, replacement, "submit")).toBe("applied");
+    for (const who of [c1.member, k1.member, ow.member]) {
+      expect(await linkedFrom(who, rejected)).toEqual([{ document_number: number }]);
+      expect((await links(who, replacement)).map((l) => l.kind)).toEqual(["replaces"]);
+    }
   });
 });

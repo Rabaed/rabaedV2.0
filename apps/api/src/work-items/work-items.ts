@@ -13,7 +13,11 @@ import {
   parseActionForm,
   stepAgeWeeks,
   checklistItemFilesKey,
+  storedTransitionRules,
   validateAnswers,
+  validationMessage,
+  type TransitionRules,
+  type Validation,
   type BilingualText,
   type CreateWorkItemRequest,
   type FieldError,
@@ -256,11 +260,19 @@ type WorkflowSteps = { steps: WorkflowStepHolder[]; roleNames: ReadonlyMap<strin
 /** The Steps of the Workflow Version `workflowVersionId`. Definitions, which every Member reads. */
 async function workflowSteps(trx: Trx, workflowVersionId: string): Promise<WorkflowSteps> {
   const { rows } = await sql<{ key: string; role: string | null; draft: boolean; role_name: BilingualText | null }>`
-    -- A Draft as app.is_draft_step (which the app role can't call) tells it: a Rabaed Stage of category draft, in any Module.
+    -- A Draft as app.is_draft_step (which the app role can't call) tells it: a Stage of category draft, in any
+    -- Module, of the Stage set the Workflow is published against (RP-428): its Project's for a Project's own
+    -- Workflow, the Rabaed Defaults' for any other.
     select s.key, s.actor_rule ->> 'base_role' as role,
-      exists (select 1 from stage st where st.owner_kind = 'rabaed' and st.key = s.stage_key and st.category = 'draft') as draft,
+      exists (
+        select 1 from stage st
+        where st.key = s.stage_key and st.category = 'draft'
+          and case when d.owner_kind = 'project' then st.project_id = d.project_id else st.owner_kind = 'rabaed' end
+      ) as draft,
       r.name as role_name
     from workflow_step s
+    join workflow_version v on v.id = s.workflow_version_id
+    join workflow_definition d on d.id = v.workflow_definition_id
     -- Projects use the Rabaed Default Project Roles for now.
     left join project_role r on r.owner_kind = 'rabaed' and r.base_role = s.actor_rule ->> 'base_role'
     where s.workflow_version_id = ${workflowVersionId}
@@ -408,7 +420,7 @@ function visibleItems(trx: Trx, where: RawBuilder<unknown>) {
     from work_item w
     cross join lateral app.step_as_seen(w.id) seen
     join work_item_type t on t.id = w.work_item_type_id
-    join stage st on st.module_key = t.module_key and st.key = seen.stage_key and st.project_id is null
+    join stage st on st.project_id = w.project_id and st.module_key = t.module_key and st.key = seen.stage_key
     join visibility_dimension td on td.project_id = w.project_id and td.kind = 'trade'
     join work_item_dimension_value tdv on tdv.work_item_id = w.id and tdv.dimension_id = td.id
     join dimension_value tv on tv.id = tdv.dimension_value_id
@@ -548,6 +560,7 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
       versions_changed: boolean;
       can_create_revision: boolean;
       can_discard_revision: boolean;
+      can_create_replacement: boolean;
       workflow_name: BilingualText;
       workflow_version_no: number;
     }>`
@@ -556,7 +569,8 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
         w.submitted_at, w.outcome, w.closed_at, s.key as step_key, s.name as step_name,
         raiser.legal_name as raised_by, holder.legal_name as held_by, m.full_name as holder_name,
         app.can_save_answers(w.id) as can_save_answers, w.revision_no, app.revision_versions_changed(w.id) as versions_changed,
-        app.can_create_revision(w.id) as can_create_revision, app.can_discard_revision(w.id) as can_discard_revision
+        app.can_create_revision(w.id) as can_create_revision, app.can_discard_revision(w.id) as can_discard_revision,
+        app.can_create_replacement(w.id) as can_create_replacement
       from work_item w
       cross join lateral app.step_as_seen(w.id) seen
       join workflow_step s on s.id = seen.step_id
@@ -612,6 +626,7 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
         ...(await actions(trx, workItemId)),
         saveAnswers: d.can_save_answers,
         createRevision: d.can_create_revision,
+        createReplacement: d.can_create_replacement,
         discardRevision: d.can_discard_revision,
       },
     };
@@ -664,6 +679,10 @@ type ActionRow = {
   label: BilingualText | null;
   transition_kind: WorkItemActions["transitions"][number]["kind"] | null;
   action_form: unknown;
+  /** Whether it offers "Assign to" (WF-8). */
+  offers_assign_to: boolean;
+  /** Whether it may carry a Recommended Code (RP-433): a `send` from a Step that Recommends a Code. */
+  may_recommend: boolean;
 };
 
 /**
@@ -673,10 +692,13 @@ type ActionRow = {
  */
 async function actionRows(trx: Trx, workItemId: string, transitionKey?: string): Promise<ActionRow[]> {
   const { rows } = await sql<ActionRow>`
-    select a.action, a.transition_key, a.label, a.transition_kind, tr.action_form
+    select a.action, a.transition_key, a.label, a.transition_kind, tr.action_form,
+      coalesce(tr.actions @> '[{"type": "offer_assign_to"}]', false) as offers_assign_to,
+      coalesce(tr.kind = 'send' and src.outcome_mode = 'recommend_code', false) as may_recommend
     from app.work_item_actions(${workItemId}::uuid) with ordinality a (action, transition_key, label, transition_kind, n)
     left join work_item w on w.id = ${workItemId}::uuid
     left join workflow_transition tr on tr.workflow_version_id = w.workflow_version_id and tr.key = a.transition_key
+    left join workflow_step src on src.id = tr.from_step_id
     where ${transitionKey === undefined ? sql`true` : sql`a.action = 'transition' and a.transition_key = ${transitionKey}`}
     order by a.n
   `.execute(trx);
@@ -684,20 +706,49 @@ async function actionRows(trx: Trx, workItemId: string, transitionKey?: string):
 }
 
 /** What the acting Member may press on a visible item now. */
-async function actions(trx: Trx, workItemId: string): Promise<Omit<WorkItemActions, "saveAnswers" | "createRevision" | "discardRevision">> {
+async function actions(trx: Trx, workItemId: string): Promise<Omit<WorkItemActions, "saveAnswers" | "createRevision" | "createReplacement" | "discardRevision">> {
   const rows = await actionRows(trx, workItemId);
+  const transitions = rows.filter((r) => r.action === "transition");
+  const offered = await Promise.all(transitions.map((r) => (r.offers_assign_to ? assignees(trx, workItemId, r.transition_key!) : [])));
+  const recommendable = await Promise.all(
+    transitions.map((r) => (r.may_recommend ? recommendableOutcomes(trx, workItemId, r.transition_key!) : [])),
+  );
   return {
     claim: rows.some((r) => r.action === "claim"),
     release: rows.some((r) => r.action === "release"),
-    transitions: rows
-      .filter((r) => r.action === "transition")
-      .map((r) => ({
-        key: r.transition_key!,
-        label: r.label!,
-        kind: r.transition_kind!,
-        actionForm: parseActionForm(r.action_form),
-      })),
+    transitions: transitions.map((r, i) => ({
+      key: r.transition_key!,
+      label: r.label!,
+      kind: r.transition_kind!,
+      actionForm: parseActionForm(r.action_form),
+      ...(offered[i]!.length > 0 ? { assignTo: offered[i] } : {}),
+      ...(recommendable[i]!.length > 0 ? { recommendCode: recommendable[i] } : {}),
+    })),
   };
+}
+
+/**
+ * The Recommended Code (RP-433): the outcomes the acting Member may recommend when
+ * taking `transitionKey` (app.transition_recommendable_outcomes): the Type's closing
+ * outcomes, from a Step that Recommends a Code, to their own Participant's next reviewer.
+ */
+async function recommendableOutcomes(trx: Trx, workItemId: string, transitionKey: string): Promise<{ code: string; name: BilingualText }[]> {
+  const { rows } = await sql<{ code: string; name: BilingualText }>`
+    select code, name from app.transition_recommendable_outcomes(${workItemId}::uuid, ${transitionKey})
+  `.execute(trx);
+  return rows;
+}
+
+/**
+ * "Assign to" (WF-8): the Members the acting Member may pick as the next holder
+ * when taking `transitionKey` (app.transition_assignees): their own Participant's,
+ * who may hold the next Step; none when that Step is another Participant's.
+ */
+async function assignees(trx: Trx, workItemId: string, transitionKey: string): Promise<{ memberId: string; name: BilingualText }[]> {
+  const { rows } = await sql<{ member_id: string; full_name: BilingualText }>`
+    select member_id, full_name from app.transition_assignees(${workItemId}::uuid, ${transitionKey})
+  `.execute(trx);
+  return rows.map((r) => ({ memberId: r.member_id, name: r.full_name }));
 }
 
 const transitionRefusals = [
@@ -712,13 +763,49 @@ const transitionRefusals = [
   "no_step_pool",
   "idempotency_key_reused",
   "form_not_checked",
+  "no_route",
+  "assignee_not_offered",
+  "action_not_allowed",
+  "recommended_code_not_offered",
   "not_confirmed",
 ] as const;
 export type TakeTransitionResult =
   | { ok: true }
   | AnswersRefused
   | { ok: false; reason: "invalid_action_form"; errors: FieldError[] }
+  | { ok: false; reason: "validation_failed"; message: BilingualText }
   | { ok: false; reason: (typeof transitionRefusals)[number] };
+
+/** A Transition of the item's pinned Workflow Version, as taking it checks it. */
+type TransitionToTake = { kind: WorkItemActions["transitions"][number]["kind"]; action_form: unknown; rules: TransitionRules };
+
+/**
+ * The Transition that taking `key` with `answers` takes on a visible item: itself,
+ * or among Transitions sharing its label and source Step, the one the answers
+ * route to (app.transition_route, §4). Null when they route to none, or to several.
+ */
+async function routedTransition(trx: Trx, workItemId: string, key: string, answers: unknown): Promise<TransitionToTake | null> {
+  const { rows } = await sql<{ kind: TransitionToTake["kind"]; action_form: unknown; rules: unknown }>`
+    select tr.kind, tr.action_form, tr.rules
+    from work_item w
+    join workflow_transition tr on tr.workflow_version_id = w.workflow_version_id
+      and tr.key = app.transition_route(w.id, ${key}, ${JSON.stringify(answers)}::jsonb)
+    where w.id = ${workItemId}
+  `.execute(trx);
+  const row = rows[0];
+  if (!row) return null;
+  return { kind: row.kind, action_form: row.action_form, rules: storedTransitionRules(row.rules) };
+}
+
+/** A refused Validate rule, with its message in English and Arabic (WF-7). */
+function validationRefused(rule: Validation, form: FormSchema, actionForm: FormSchema | null): TakeTransitionResult {
+  const fields = [...formFields(form), ...(actionForm ? formFields(actionForm) : [])];
+  const fieldLabel = (key: string) => {
+    const field = fields.find((f) => f.key === key);
+    return field && "label" in field ? field.label : null;
+  };
+  return { ok: false, reason: "validation_failed", message: validationMessage(rule, fieldLabel) };
+}
 
 /**
  * How many confirmed files each `attachments` or `photos` field of a visible
@@ -747,6 +834,12 @@ async function fieldFileCounts(trx: Trx, workItemId: string): Promise<Record<str
  * Participant fills later are not checked (RP-304). Every Transition needs the
  * Member's confirmation from its pop-up (`confirmed`, ADR 0017): without it,
  * an item they see is refused `not_confirmed`, and nothing is written.
+ *
+ * Its rules (WF-7): a label shared by several Transitions takes the one the
+ * answers route to, whose Action Form is the one checked; a Restrict that doesn't
+ * hold is refused like a Transition that isn't there, by the database; a Validate
+ * rule that doesn't hold is refused with its message. "Form complete" is checked
+ * here, over the whole Form as the Member reads it; the database checks the others.
  */
 export function takeTransition(
   db: Db,
@@ -763,11 +856,13 @@ export function takeTransition(
     // Only a Transition the Member may take is checked here, so anyone else is told why
     // they can't act (by the database), never what its Action Form or the Form lacks.
     const [taking] = await actionRows(trx, workItemId, input.transition);
+    const routed = taking ? await routedTransition(trx, workItemId, input.transition, input.answers) : null;
+    if (taking && !routed) return { ok: false, reason: "no_route" };
+    const actionForm = routed ? parseActionForm(routed.action_form) : null;
     // Its Action Form's answers, as the Form's are checked when leaving Draft. The
     // database takes only keys the schema has, with what it always requires.
     let answers: Record<string, unknown> = input.answers;
-    if (taking) {
-      const actionForm = parseActionForm(taking.action_form);
+    if (routed) {
       if (actionForm) {
         const checked = validateAnswers(actionForm, input.answers, "complete", { optionLists: await optionListsFor(trx, actionForm) });
         if (!checked.ok) return { ok: false, reason: "invalid_action_form", errors: checked.errors };
@@ -776,31 +871,46 @@ export function takeTransition(
         return { ok: false, reason: "invalid_action_form", errors: Object.keys(input.answers).map((key) => ({ key, code: "unknown_field" })) };
       }
     }
-    // Moving on by a Member who may save the answers now (other than a cancel or a Return)
-    // needs the required fields of the sections naming the Step being left (form-engine.md §4);
-    // the database refuses answers that weren't checked.
-    if (pinned.canSave) {
-      const scopes = await projectScopes(trx, pinned.projectId);
-      // What is saved is checked as it stands: a retired option it holds stays valid (held).
-      const checked = validateAnswers(pinned.form.schema, pinned.data, "complete", {
-        scopes,
+    // The Form's answers as they stand, checked as complete: a retired option they
+    // hold stays valid (held).
+    const checkFormComplete = async () =>
+      validateAnswers(pinned.form.schema, pinned.data, "complete", {
+        scopes: await projectScopes(trx, pinned.projectId),
         optionLists: await optionListsFor(trx, pinned.form.schema),
         held: pinned.data,
         files: await fieldFileCounts(trx, workItemId),
       });
+    // Moving on by a Member who may save the answers now (other than a cancel or a Return)
+    // needs the required fields of the sections naming the Step being left (form-engine.md §4);
+    // the database refuses answers that weren't checked.
+    if (pinned.canSave) {
+      const checked = await checkFormComplete();
       const missing = checked.ok ? [] : errorsInSections(pinned.form.schema, pinned.toFill.editableSections, checked.errors);
       // A cancel, a Return or a Send Back takes the item back: nothing has to be complete.
-      const kind = taking?.transition_kind;
+      const kind = routed?.kind;
       const back = kind === "cancel" || (kind != null && backwardKinds.includes(kind));
-      if (taking && !back && missing.length > 0) {
+      if (routed && !back && missing.length > 0) {
         return { ok: false, reason: "form_incomplete", errors: missing };
       }
+    }
+    // Validate "the Form is complete": the whole Form, as this Member reads it.
+    const validate = routed?.rules.validate ?? [];
+    const formComplete = validate.find((v) => v.type === "form_complete");
+    if (formComplete && !(await checkFormComplete()).ok) {
+      return validationRefused(formComplete, pinned.form.schema, actionForm);
     }
     const { rows } = await sql<{ outcome: string }>`
       select app.take_transition(
         ${workItemId}::uuid, ${input.transition}, ${JSON.stringify(answers)}::jsonb, ${input.internalNote},
-        ${pinned.dataSha256}::bytea, ${input.idempotencyKey}::uuid, ${now}) as outcome
+        ${pinned.dataSha256}::bytea, ${input.idempotencyKey}::uuid, ${now}, ${input.assignTo}::uuid,
+        ${input.recommendedCode}::text) as outcome
     `.execute(trx);
+    // A Validate rule the database found not holding, by its place in `validate`.
+    const failed = /^validation_failed:(\d+)$/.exec(rows[0]!.outcome);
+    if (failed) {
+      const rule = (routed ?? (await routedTransition(trx, workItemId, input.transition, answers)))?.rules.validate?.[Number(failed[1])];
+      if (rule) return validationRefused(rule, pinned.form.schema, actionForm);
+    }
     return commandResult(rows[0]!.outcome, "applied", transitionRefusals);
   });
 }
@@ -929,6 +1039,7 @@ export function getWorkItemHistory(db: Db, memberId: string, workItemId: string)
       document_number: string | null;
       outcome: WorkItemOutcome | null;
       internal_note: string | null;
+      recommended_code: string | null;
       changes: { field: string; old: unknown; new: unknown }[] | null;
     }>`select * from app.work_item_history(${workItemId}::uuid)`.execute(trx);
     return {
@@ -946,6 +1057,7 @@ export function getWorkItemHistory(db: Db, memberId: string, workItemId: string)
         documentNumber: r.document_number,
         outcome: r.outcome,
         internalNote: r.internal_note,
+        recommendedCode: r.recommended_code,
         changes: r.changes,
       })),
     };
