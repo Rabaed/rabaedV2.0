@@ -22,6 +22,10 @@ const copy = {
   previousPage: b("Previous page", "الصفحة السابقة"),
   pages: b("Pages", "الصفحات"),
   filters: b("Filters", "التصفية"),
+  owner: b("Owner", "المسؤول"),
+  role: b("Step", "الخطوة"),
+  documentType: b("Document type", "نوع المستند"),
+  building: b("Building", "المبنى"),
   type: b("Type", "النوع"),
   clearAll: b("Clear all", "مسح الكل"),
   clear: b("Clear filters", "مسح التصفية"),
@@ -47,6 +51,7 @@ const level3 = { id: "00000000-0000-4000-8000-0000000000a2", code: "L3", name: b
 const ownCompany = b("Tamkeen Contracting", "تمكين للمقاولات");
 const consultant = b("Al Waha PMC", "الواحة لإدارة المشاريع");
 const consultantId = "00000000-0000-4000-8000-0000000000c1";
+const saraId = "00000000-0000-4000-8000-0000000000d1";
 const mar = { code: "MAR", name: b("Material Submittal", "اعتماد مواد") };
 
 const row = (n: number, rest: Partial<WorkItemRow>): WorkItemRow => ({
@@ -144,8 +149,8 @@ const list: WorkItemListData = {
     outcomes: defaultOutcomeSets.review_code.map((o) => ({ ...o, type: mar.code })),
     trades: [electrical],
     locations: [
-      { ...tower, parentId: null },
-      { ...level3, parentId: tower.id },
+      { ...tower, parentId: null, depth: 1, levelName: b("Building", "المبنى") },
+      { ...level3, parentId: tower.id, depth: 2, levelName: b("Floor", "الطابق") },
     ],
     with: {
       steps: [
@@ -154,6 +159,7 @@ const list: WorkItemListData = {
       ],
       companies: [{ participantId: consultantId, name: consultant }],
     },
+    owners: [{ memberId: saraId, name: b("Sara Al Qahtani", "سارة القحطاني") }],
   },
 };
 
@@ -254,9 +260,9 @@ export const DatesForAnotherCompany: Story = {
 
 /** Opens the Filters and shows `field`'s values; returns the panel. */
 const openFilters = async (context: PlayContext, field: { en: string; ar: string }) => {
-  await userEvent.click(context.canvas.getByRole("button", { name: storyText(context, copy.filters) }));
+  await userEvent.click(context.canvas.getByRole("button", { name: new RegExp(`^${storyText(context, copy.filters)}( \\d+)?$`) }));
   const panel = await screen.findByRole("dialog", { name: storyText(context, copy.filters) });
-  await userEvent.click(within(panel).getByRole("tab", { name: storyText(context, field) }));
+  await userEvent.click(within(panel).getByRole("tab", { name: new RegExp(`^${storyText(context, field)}( \\d+)?$`) }));
   return panel;
 };
 
@@ -301,20 +307,57 @@ export const ChoosingAFilter: Story = {
   args: { query: { ...defaults, cursor: "abc" } },
   play: async (context) => {
     const panel = await openFilters(context, copy.stage);
-    await userEvent.click(within(panel).getByRole("button", { name: stages.internal.name[storyLocale(context)] }));
+    await userEvent.click(within(panel).getByRole("checkbox", { name: stages.internal.name[storyLocale(context)] }));
     await expect(context.args.onQueryChange).toHaveBeenCalledWith({ ...defaults, stage: ["internal_review"] });
   },
 };
 
-/** "With" offers all, me, unclaimed, my own Company's Steps and the other Companies holding my items, by name. */
-export const WithChoices: Story = {
+/** Several values of one field, any of them (RP-410): a second Stage joins the first; unticking one leaves the other. */
+export const SeveralValues: Story = {
+  args: { query: { ...defaults, stage: ["internal_review"] } },
   play: async (context) => {
-    const panel = await openFilters(context, copy.with);
-    const choices = within(within(panel).getByRole("group", { name: storyText(context, copy.with) })).getAllByRole("button");
-    await expect(choices).toHaveLength(6);
-    await expect(choices[0]).toHaveAttribute("aria-pressed", "true");
-    await userEvent.click(choices[5]!);
-    await expect(context.args.onQueryChange).toHaveBeenCalledWith({ ...defaults, with: [`company:${consultantId}`] });
+    const panel = await openFilters(context, copy.stage);
+    const locale = storyLocale(context);
+    await expect(within(panel).getByRole("checkbox", { name: stages.internal.name[locale] })).toBeChecked();
+    await userEvent.click(within(panel).getByRole("checkbox", { name: stages.pending.name[locale] }));
+    await expect(context.args.onQueryChange).toHaveBeenLastCalledWith({ ...defaults, stage: ["internal_review", "pending_approval"] });
+    await userEvent.click(within(panel).getByRole("checkbox", { name: stages.internal.name[locale] }));
+    await expect(context.args.onQueryChange).toHaveBeenLastCalledWith({ ...defaults, stage: [] });
+  },
+};
+
+/** Owner offers my own Company's people, my unclaimed pool and the other Companies holding my items, by name only (V14). */
+export const OwnerChoices: Story = {
+  play: async (context) => {
+    const panel = await openFilters(context, copy.owner);
+    const choices = within(within(panel).getByRole("group", { name: storyText(context, copy.owner) })).getAllByRole("checkbox");
+    await expect(choices).toHaveLength(3);
+    await expect(choices[0]).toHaveAccessibleName(storyText(context, b("Sara Al Qahtani", "سارة القحطاني")));
+    await expect(choices[1]).toHaveAccessibleName(storyText(context, b("Unclaimed", "لم تُستلَم")));
+    await expect(choices[2]).toHaveAccessibleName(storyText(context, consultant));
+    await userEvent.click(choices[2]!);
+    await expect(context.args.onQueryChange).toHaveBeenCalledWith({ ...defaults, owner: [`company:${consultantId}`] });
+  },
+};
+
+/** Role offers my own Company's Steps only: another Company is one lane, never its roles (V5). */
+export const RoleChoices: Story = {
+  play: async (context) => {
+    const panel = await openFilters(context, copy.role);
+    const choices = within(within(panel).getByRole("group", { name: storyText(context, copy.role) })).getAllByRole("checkbox");
+    await expect(choices).toHaveLength(2);
+    await userEvent.click(choices[1]!);
+    await expect(context.args.onQueryChange).toHaveBeenCalledWith({ ...defaults, role: ["internal_review"] });
+  },
+};
+
+/** A Location level is its own field, named by the level: its values add to the Location filter. */
+export const LocationLevels: Story = {
+  args: { query: { ...defaults, location: [level3.id] } },
+  play: async (context) => {
+    const panel = await openFilters(context, copy.building);
+    await userEvent.click(within(panel).getByRole("checkbox", { name: tower.name[storyLocale(context)] }));
+    await expect(context.args.onQueryChange).toHaveBeenLastCalledWith({ ...defaults, location: [level3.id, tower.id] });
   },
 };
 
@@ -332,7 +375,7 @@ export const FiltersOpen: Story = {
     const panel = await screen.findByRole("dialog", { name: storyText(context, copy.filters) });
     await expect(within(panel).getByRole("tab", { name: `${storyText(context, copy.stage)} 1` })).toBeVisible();
     await userEvent.click(within(panel).getByRole("tab", { name: `${storyText(context, copy.stage)} 1` }));
-    await expect(within(panel).getByRole("button", { name: stages.pending.name[storyLocale(context)] })).toHaveAttribute("aria-pressed", "true");
+    await expect(within(panel).getByRole("checkbox", { name: stages.pending.name[storyLocale(context)] })).toBeChecked();
     await userEvent.click(within(panel).getByRole("button", { name: storyText(context, copy.clearAll) }));
     await expect(context.args.onQueryChange).toHaveBeenLastCalledWith({ ...defaults, needMyAction: true, q: "LED" });
   },
@@ -345,7 +388,7 @@ export const FiltersOnAPhone: Story = {
   play: async (context) => {
     await userEvent.click(context.canvas.getByRole("button", { name: `${storyText(context, copy.filters)} 1` }));
     const sheet = await screen.findByRole("dialog", { name: storyText(context, copy.filters) });
-    await expect(within(sheet).getByRole("heading", { name: `${storyText(context, copy.type)} 1` })).toBeVisible();
+    await expect(within(sheet).getByRole("heading", { name: `${storyText(context, copy.documentType)} 1` })).toBeVisible();
     await expect(within(sheet).getByRole("group", { name: storyText(context, copy.stage) })).toBeInTheDocument();
     await expect(within(sheet).queryByRole("tab")).toBeNull();
   },
@@ -354,7 +397,8 @@ export const FiltersOnAPhone: Story = {
 /** "Show all Revisions" asks for every visible Revision. */
 export const ShowAllRevisions: Story = {
   play: async (context) => {
-    await userEvent.click(context.canvas.getByRole("switch", { name: storyText(context, copy.allRevisions) }));
+    const panel = await openFilters(context, b("Revisions", "المراجعات"));
+    await userEvent.click(within(panel).getByRole("checkbox", { name: storyText(context, copy.allRevisions) }));
     await expect(context.args.onQueryChange).toHaveBeenCalledWith({ ...defaults, allRevisions: true });
   },
 };

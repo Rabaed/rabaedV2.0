@@ -3,6 +3,8 @@
 import {
   watchOutcomeNames,
   workItemSearchParams,
+  type BoardCardLayout,
+  type BoardCardLayoutChange,
   type Locale,
   type WorkItemBoard as WorkItemBoardData,
   type WorkItemList as WorkItemListData,
@@ -11,7 +13,16 @@ import {
   type WorkItemRow,
   type WorkItemView,
 } from "@rabaed/domain";
-import { WorkItemBoard, WorkItemList, WorkItemViewSwitch, type WorkItemBoardLabels, type WorkItemListLabels } from "@rabaed/ui";
+import {
+  BoardLayoutMenu,
+  WorkItemBoard,
+  WorkItemList,
+  WorkItemViewSwitch,
+  type BoardLayoutMenuLabels,
+  type WorkItemBoardLabels,
+  type WorkItemFilterHints,
+  type WorkItemListLabels,
+} from "@rabaed/ui";
 import { useLocale, useTranslations } from "next-intl";
 import { usePathname, useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
@@ -24,7 +35,7 @@ import { chainLabels } from "@/lib/chain-labels";
 import { workItemListSearchParams } from "@/lib/page-trail";
 
 /** The List's and the Kanban's words, from the app's messages. */
-function useViewLabels(tableLabel: string): { list: WorkItemListLabels; board: WorkItemBoardLabels } {
+function useViewLabels(tableLabel: string): { list: WorkItemListLabels; board: WorkItemBoardLabels; layout: BoardLayoutMenuLabels } {
   const t = useTranslations("workItemViews");
   const l = (key: string) => t(`list.${key}`);
   const locale = useLocale() as Locale;
@@ -39,8 +50,10 @@ function useViewLabels(tableLabel: string): { list: WorkItemListLabels; board: W
     "toolbar", "all", "type", "stage", "with", "withMe", "anyUnclaimed", "trade", "location", "outcome", "stepAge",
     "submissionDate", "creationDate", "submittedFrom", "submittedTo", "allRevisions", "needMyAction", "clear", "stageCounts",
     "documentNumber", "subject", "empty", "search", "searchPlaceholder", "searchHelp", "noResults", "filters", "clearAll", "done",
-    "close", "pages", "firstPage", "previousPage", "nextPage",
+    "close", "pages", "firstPage", "previousPage", "nextPage", "documentType", "owner", "role", "createdDate", "clearField",
+    "searchValues", "noMatches", "searchPlaceholderBoard", "revisions",
   ] as const;
+  const layoutKeys = ["title", "boardSettings", "fixedParts", "alwaysShown", "contractorName", "location", "creationDate", "preview"] as const;
   return {
     list: {
       ...(Object.fromEntries(keys.map((key) => [key, l(key)])) as Record<(typeof keys)[number], string>),
@@ -52,6 +65,8 @@ function useViewLabels(tableLabel: string): { list: WorkItemListLabels; board: W
       pageOf: (page, pages) => t("list.pageOf", { page, pages }),
       items: (n, count) => t("list.items", { n, count }),
       dashboardFigure: l("dashboardFigure"),
+      withinDays: (days, count) => t("list.withinDays", { days, count }),
+      level: (n) => t("list.level", { n }),
       ...chainLabels(t),
     },
     board: {
@@ -66,7 +81,13 @@ function useViewLabels(tableLabel: string): { list: WorkItemListLabels; board: W
       moveItem: (subject) => t("board.moveItem", { subject }),
       moveTo: (stage) => t("board.moveTo", { stage }),
       dragging: t("board.dragging"),
+      mixed: t("board.mixed"),
+      revision: (n) => t("board.revision", { n }),
+      code: (code) => t("board.code", { code }),
+      createdOn: (date) => t("board.createdOn", { date }),
+      submittedOn: (date) => t("board.submittedOn", { date }),
     },
+    layout: Object.fromEntries(layoutKeys.map((key) => [key, t(`layout.${key}`)])) as BoardLayoutMenuLabels,
   };
 }
 
@@ -83,13 +104,28 @@ export function WorkItemListOrKanban(
     tableLabel: string;
     /** The toolbar's primary action, e.g. "New Material Submittal". */
     action?: ReactNode;
+    /** The Project and Module of the tab: the board's Card view layout and collapsed groups are kept per board. */
+    projectId: string;
+    module: string;
+    /** The filter fields' names in the other language. */
+    hints?: WorkItemFilterHints;
   } & ({ view: "list"; list: WorkItemListData; pageTrail?: readonly string[] } | { view: "kanban"; board: WorkItemBoardData }),
 ) {
-  const { query, locale, view, action } = props;
+  const { query, locale, view, action, projectId, module, hints } = props;
   const t = useTranslations("workItemViews");
   const labels = useViewLabels(props.tableLabel);
   const router = useRouter();
   const [moving, setMoving] = useState<{ card: WorkItemRow; move: WorkItemMove } | null>(null);
+  // The viewer's own Card view layout: shown at once, kept for them by the API (RP-410).
+  const [layout, setLayout] = useState<BoardCardLayout | null>(props.view === "kanban" ? props.board.layout : null);
+  const changeLayout = (change: BoardCardLayoutChange) => {
+    setLayout((current) => (current ? { ...current, ...change } : current));
+    void fetch(`/api/v1/projects/${projectId}/modules/${module}/work-items/kanban/layout`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(change),
+    });
+  };
   // The path with its locale, as the browser shows it.
   const pathname = usePathname();
   const hrefIn = (v: WorkItemView, q: WorkItemQuery, trail?: readonly string[]) => {
@@ -113,14 +149,27 @@ export function WorkItemListOrKanban(
       linkAs={NextLink}
       onQueryChange={(q) => router.push(hrefFor(q))}
       action={action}
+      hints={hints}
       viewSwitch={
-        // The Kanban has no pages: switching keeps the filters, from the first page.
-        <WorkItemViewSwitch
-          view={view}
-          labels={{ view: t("viewSwitch.view"), list: t("viewSwitch.list"), kanban: t("viewSwitch.kanban") }}
-          hrefFor={(v) => hrefIn(v, { ...query, cursor: undefined })}
-          linkAs={NextLink}
-        />
+        <>
+          {props.view === "kanban" && layout && (
+            <BoardLayoutMenu
+              layout={layout}
+              onChange={changeLayout}
+              labels={labels.layout}
+              board={props.board}
+              boardLabels={labels.board}
+              locale={locale}
+            />
+          )}
+          {/* The Kanban has no pages: switching keeps the filters, from the first page. */}
+          <WorkItemViewSwitch
+            view={view}
+            labels={{ view: t("viewSwitch.view"), list: t("viewSwitch.list"), kanban: t("viewSwitch.kanban") }}
+            hrefFor={(v) => hrefIn(v, { ...query, cursor: undefined })}
+            linkAs={NextLink}
+          />
+        </>
       }
       board={
         props.view === "kanban" ? (
@@ -130,6 +179,8 @@ export function WorkItemListOrKanban(
               query={query}
               locale={locale}
               labels={labels.board}
+              layout={layout ?? props.board.layout}
+              storageKey={`${projectId}:${module}`}
               listHrefFor={(q) => hrefIn("list", q)}
               itemHref={itemHref}
               linkAs={NextLink}

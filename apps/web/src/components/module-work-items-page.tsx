@@ -27,6 +27,11 @@ export async function ModuleWorkItemsPage({
 }) {
   const t = await getTranslations("workItems");
   const tabs = await getTranslations("projectTabs");
+  // The filter fields' names in the other language, small after each (the owner's anatomy, RP-410).
+  const other = await getTranslations({ locale: locale === "en" ? "ar" : "en", namespace: "workItemViews.list" });
+  const hints = Object.fromEntries(
+    (["stage", "trade", "documentType", "owner", "role", "createdDate", "stepAge", "outcome", "submissionDate", "revisions"] as const).map((key) => [key, other(key)]),
+  );
   // A filter the URL holds that isn't valid is left out, so an old or edited link still opens.
   // The tab's path names the Module, whatever the query string says.
   const query = { ...workItemQueryFromSearchParams(searchParams), module };
@@ -56,7 +61,17 @@ export async function ModuleWorkItemsPage({
       {/* The top bar names the Project and its tabs the Module: the heading is for screen readers. */}
       <h1 className="sr-only">{title}</h1>
       {board ? (
-        <WorkItemListOrKanban view="kanban" board={board} query={query} locale={locale} tableLabel={title} action={action} />
+        <WorkItemListOrKanban
+          view="kanban"
+          board={board}
+          query={query}
+          locale={locale}
+          tableLabel={title}
+          action={action}
+          projectId={project.id}
+          module={module}
+          hints={hints}
+        />
       ) : (
         list && (
           <WorkItemListOrKanban
@@ -67,6 +82,9 @@ export async function ModuleWorkItemsPage({
             locale={locale}
             tableLabel={title}
             action={action}
+            projectId={project.id}
+            module={module}
+            hints={hints}
           />
         )
       )}

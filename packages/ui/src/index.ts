@@ -162,16 +162,35 @@ export {
 export {
   FilterChoices,
   FilterMenu,
+  FilterValues,
   type FilterChoice,
   type FilterChoicesProps,
   type FilterMenuField,
   type FilterMenuLabels,
   type FilterMenuProps,
+  type FilterValuesLabels,
+  type FilterValuesProps,
 } from "./components/list/filter-menu.tsx";
 export { Pager, TableCard, type PagerLabels, type PagerProps, type TableCardProps } from "./components/list/table-card.tsx";
-export { WorkItemList, type WorkItemListLabels, type WorkItemListProps, type WorkItemPageTrail } from "./components/views/work-item-list.tsx";
+export {
+  WorkItemList,
+  type WorkItemFilterHints,
+  type WorkItemListLabels,
+  type WorkItemListProps,
+  type WorkItemPageTrail,
+} from "./components/views/work-item-list.tsx";
+export {
+  KanbanCard,
+  tradeChipClass,
+  type KanbanCardBadge,
+  type KanbanCardOwner,
+  type KanbanCardPlace,
+  type KanbanCardProps,
+} from "./components/views/kanban-card.tsx";
+export { BoardLayoutMenu, type BoardLayoutMenuLabels, type BoardLayoutMenuProps } from "./components/views/board-layout-menu.tsx";
 export {
   WorkItemBoard,
+  boardStages,
   WorkItemViewSwitch,
   type WorkItemBoardLabels,
   type WorkItemBoardProps,

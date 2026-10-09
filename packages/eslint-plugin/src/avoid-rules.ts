@@ -60,6 +60,8 @@ const allowedInText: string[] = [
   "file store", // the S3 file store (`FILE_STORE_*`) that holds Documents' bytes.
   "both names", // a Member's or Company's name in English and Arabic.
   "filters", // the List's own filters ("Clear filters"; docs/data-model.md, List and Dashboard). "Filter" alone names a Visibility Dimension.
+  "card view layout", // the parts a Kanban card shows, each Member's own (RP-410, the owner's Kanban Card Anatomy), not a View.
+  "contractor name", // the raising Company's name on a Kanban card (RP-410), not a Subject.
 ];
 
 const allowedInNames: string[] = [

@@ -65,7 +65,7 @@ export function ToolbarSearch({ label, placeholder, description, value, maxLengt
   return (
     <form
       role="search"
-      className={cn("w-full sm:w-60", className)}
+      className={cn("w-full sm:w-56", className)}
       onSubmit={(event) => {
         event.preventDefault();
         const words = String(new FormData(event.currentTarget).get("q") ?? "").trim();
@@ -115,7 +115,7 @@ export type ToolbarSwitchProps = {
 export function ToolbarSwitch({ label, checked, onCheckedChange }: ToolbarSwitchProps) {
   const id = useId();
   return (
-    <div className="inline-flex h-9 items-center gap-2 rounded-sm px-2 text-sm font-semibold whitespace-nowrap text-text-secondary hover:bg-hover pointer-coarse:min-h-11">
+    <div className="inline-flex h-9 shrink-0 items-center gap-2 rounded-sm border border-border-strong bg-surface px-3 text-sm font-semibold whitespace-nowrap text-text-secondary hover:bg-hover pointer-coarse:min-h-11">
       <Switch id={id} checked={checked} onCheckedChange={onCheckedChange} />
       <label htmlFor={id} className="cursor-pointer select-none">
         {label}
@@ -124,10 +124,10 @@ export function ToolbarSwitch({ label, checked, onCheckedChange }: ToolbarSwitch
   );
 }
 
-/** The shared look of a compact toolbar button (Filters), for a `button` or a trigger. */
+/** The shared look of a compact toolbar button (Filter, Card view layout), for a `button` or a trigger: white, outlined. */
 export const toolbarButton = cn(
-  "inline-flex h-9 shrink-0 items-center gap-1.5 rounded-sm bg-secondary px-3 text-sm font-semibold whitespace-nowrap text-on-secondary",
-  "hover:bg-secondary-hover active:bg-secondary-press data-[state=open]:bg-secondary-press pointer-coarse:min-h-11",
+  "inline-flex h-9 shrink-0 items-center gap-1.5 rounded-sm border border-border-strong bg-surface px-3 text-sm font-semibold whitespace-nowrap text-text-secondary",
+  "hover:bg-hover active:bg-press data-[state=open]:bg-press pointer-coarse:min-h-11",
   "[&_svg]:size-4 [&_svg]:shrink-0",
   focusRing,
 );

@@ -93,6 +93,26 @@ export const coolLight = {
   "warning-fg": "amber-700",
   "danger-fg": "red-700",
 
+  // Trade chips (the Kanban card, RP-410): a Trade in its own hue, by its code; any other Trade in blue.
+  "trade-cv-bg": "amber-50",
+  "trade-cv-fg": "amber-700",
+  "trade-ar-bg": "violet-50",
+  "trade-ar-fg": "violet-700",
+  "trade-el-bg": "cyan-50",
+  "trade-el-fg": "cyan-700",
+  "trade-me-bg": "green-50",
+  "trade-me-fg": "green-800",
+  "trade-su-bg": "orange-50",
+  "trade-su-fg": "orange-800",
+  "trade-other-bg": "blue-50",
+  "trade-other-fg": "blue-700",
+  // The Revision badge (R1, R2…) while no outcome is issued.
+  "revision-bg": "tomato-50",
+  "revision-fg": "tomato-750",
+  // Kanban card borders: an item 4+ weeks at its step (no wording, only this look and the red dots), and Code A's green card.
+  "card-aged-border": "tomato-300",
+  "card-approved-border": "green-200",
+
   // Stage: one colour set per default Stage, shared by every Module.
   "stage-draft-bg": "slate-100",
   "stage-draft-fg": "slate-700",

@@ -1,137 +1,187 @@
 import {
+  defaultBoardCardLayout,
   defaultOutcomeSets,
   workItemQuery,
   workItemSearchParams,
+  type BoardCardLayout,
   type WorkItemBoard as WorkItemBoardData,
   type WorkItemMove,
   type WorkItemQuery,
   type WorkItemRow,
 } from "@rabaed/domain";
 import type { Meta, StoryObj } from "@storybook/react-vite";
+import { useState } from "react";
 import { expect, fireEvent, fn, screen, userEvent, waitFor, within } from "storybook/test";
 import { expectLaidOutLeftToRight } from "../../storybook/bidi.ts";
 import { expectTouchTarget, phone } from "../../storybook/form.ts";
 import { storyLocale, storyText } from "../../storybook/locale.ts";
-import { viewSwitchLabels, workItemBoardLabels, workItemListLabels } from "../../storybook/views.ts";
+import { boardLayoutMenuLabels, viewSwitchLabels, workItemBoardLabels, workItemListLabels } from "../../storybook/views.ts";
+import { BoardLayoutMenu } from "./board-layout-menu.tsx";
 import { WorkItemBoard, WorkItemViewSwitch } from "./work-item-board.tsx";
 import { WorkItemList } from "./work-item-list.tsx";
 
-// The Submittals Kanban (RP-349, spec RP-344) as a Contractor engineer of
-// Tamkeen sees it: Stages as columns, Tamkeen's Steps as swimlanes, the
-// Consultant as one lane with its name only (V14). Story data only.
+// The Submittals Kanban (RP-349; rebuilt to the owner's Kanban Board Anatomy,
+// RP-410) as a Contractor engineer of Al Futtaim sees it: a column per Stage
+// but Drafts, Al Futtaim's Steps as groups, the Consultant as one group with
+// its name only (V5, V14), the closed items as "Mixed". Story data only.
 const b = (en: string, ar: string) => ({ en, ar });
 const copy = {
   board: b("Kanban", "كانبان"),
-  showAll: b("Show all", "عرض الكل"),
   empty: b("No items", "لا توجد عناصر"),
   view: b("View", "طريقة العرض"),
   list: b("List", "قائمة"),
   kanban: b("Kanban", "كانبان"),
-  stage: b("Stage", "المرحلة"),
   unclaimed: b("unclaimed", "لم تُستلَم"),
   moveItem: b("Move #", "نقل #"),
   moveTo: b("To #", "إلى #"),
+  mixed: b("Mixed", "مختلط"),
 };
 
 const stages = {
-  draft: { key: "draft", name: b("Draft", "مسودة"), category: "draft" as const },
+  draft: { key: "draft", name: b("Drafts", "المسودات"), category: "draft" as const },
   internal: { key: "internal_review", name: b("Internal Review", "مراجعة داخلية"), category: "in_progress" as const },
+  resubmitted: { key: "revise_resubmit", name: b("Revised & Resubmitted", "معدَّل ومعاد تقديمه"), category: "in_progress" as const },
   pending: { key: "pending_approval", name: b("Pending Approval", "بانتظار الاعتماد"), category: "in_progress" as const },
   approved: { key: "approved", name: b("Approved", "معتمد"), category: "closed_positive" as const },
-  revise: { key: "revise_resubmit", name: b("Revise and Resubmit", "تعديل وإعادة تقديم"), category: "closed_negative" as const },
+  rejected: { key: "rejected", name: b("Rejected", "مرفوض"), category: "closed_negative" as const },
+  cancelled: { key: "cancelled", name: b("Cancelled", "ملغى"), category: "cancelled" as const },
 };
-const electrical = { id: "00000000-0000-4000-8000-0000000000e1", code: "EL", name: b("Electrical", "كهرباء") };
-const ownCompany = b("Tamkeen Contracting", "تمكين للمقاولات");
-const consultant = b("Al Waha PMC", "الواحة لإدارة المشاريع");
+const trades = {
+  electrical: { id: "00000000-0000-4000-8000-0000000000e1", code: "EL", name: b("Electrical Works", "أعمال كهربائية") },
+  mechanical: { id: "00000000-0000-4000-8000-0000000000e2", code: "ME", name: b("Mechanical Works", "أعمال ميكانيكية") },
+  civil: { id: "00000000-0000-4000-8000-0000000000e3", code: "CV", name: b("Civil Works", "أعمال مدنية") },
+};
+const level = { zone: b("Zone", "المنطقة"), building: b("Building", "المبنى"), floor: b("Floor", "الطابق") };
+const loc = (n: number, depth: number, parentId: string | null, name: { en: string; ar: string }, levelName: { en: string; ar: string }) => ({
+  id: `00000000-0000-4000-8000-0000000001${String(n).padStart(2, "0")}`,
+  code: `L${n}`,
+  name,
+  parentId,
+  depth,
+  levelName,
+});
+const zoneA = loc(1, 1, null, b("Zone A", "المنطقة A"), level.zone);
+const zoneB = loc(2, 1, null, b("Zone B", "المنطقة B"), level.zone);
+const b1 = loc(3, 2, zoneA.id, b("Building 1", "المبنى 1"), level.building);
+const b2 = loc(4, 2, zoneA.id, b("Building 2", "المبنى 2"), level.building);
+const zb1 = loc(5, 2, zoneB.id, b("Building 1", "المبنى 1"), level.building);
+const f5 = loc(6, 3, b2.id, b("Floor 5", "الطابق 5"), level.floor);
+const fG = loc(7, 3, zb1.id, b("Floor G", "الطابق G"), level.floor);
+const locations = [zoneA, zoneB, b1, b2, zb1, f5, fG];
+const at = (l: (typeof locations)[number]) => ({ id: l.id, code: l.code, name: l.name });
+
+const ownCompany = b("Al Futtaim Contracting", "شركة الفطيم للمقاولات");
+const consultant = b("Design Consultants", "المستشارون للتصميم");
 const consultantId = "00000000-0000-4000-8000-0000000000c1";
-const otherConsultant = b("Saudi Design Group", "المجموعة السعودية للتصميم");
-const otherConsultantId = "00000000-0000-4000-8000-0000000000c2";
 const mar = { code: "MAR", name: b("Material Submittal", "اعتماد مواد") };
+const sar = { code: "SAR", name: b("Shop Drawing Submittal", "اعتماد مخططات") };
 const draftStep = { key: "draft", name: b("Draft", "مسودة") };
-const reviewStep = { key: "internal_review", name: b("Contractor review", "مراجعة المقاول") };
-const sara = b("Sara Al Qahtani", "سارة القحطاني");
+const engineerStep = { key: "engineer_review", name: b("Contractor Engineer", "مهندس المقاول") };
+const pmStep = { key: "pm_review", name: b("Contractor Project Manager", "مدير مشروع المقاول") };
+const person = (en: string, ar: string, isMe = false) => ({ name: b(en, ar), isMe });
+const own = (step: { key: string; name: { en: string; ar: string } }, claimer: ReturnType<typeof person> | null) =>
+  ({ kind: "own", companyName: ownCompany, step, claimer }) as const;
+const withConsultant = { kind: "company", companyName: consultant } as const;
 
 const card = (n: number, rest: Partial<WorkItemRow>): WorkItemRow => ({
   id: `00000000-0000-4000-8000-0000000000${String(n).padStart(2, "0")}`,
   projectId: "00000000-0000-4000-8000-000000000100",
   type: mar,
   title: "",
-  documentNumber: `TWR-TMC-EL-MAR-00${String(n).padStart(2, "0")}`,
+  documentNumber: `127893${String(n).padStart(2, "0")}`,
   revisionNo: 0,
-  stage: stages.pending,
-  trade: electrical,
-  location: null,
+  stage: stages.internal,
+  trade: trades.electrical,
+  location: at(f5),
   stepEnteredAt: "2026-09-01T00:00:00.000Z",
   stepAgeWeeks: 1,
   outcome: null,
-  submissionDate: null,
-  creationDate: null,
+  submissionDate: "2026-06-12T09:00:00.000Z",
+  creationDate: "2026-06-15T09:00:00.000Z",
   with: null,
+  raiserCompanyName: ownCompany,
   ...rest,
 });
 
-const withConsultant = { kind: "company", companyName: consultant } as const;
 const cards = {
-  draft: card(1, { title: "Fire alarm cables", documentNumber: null, stepEnteredAt: null, stepAgeWeeks: null, stage: stages.draft, with: { kind: "own", companyName: ownCompany, step: draftStep, claimer: { name: sara, isMe: true } } }),
-  revisionDraft: card(2, {
-    title: "Earthing rods, galvanised",
-    documentNumber: null,
-    stepEnteredAt: null,
-    stepAgeWeeks: null,
-    revisionNo: 1,
-    stage: stages.draft,
-    with: { kind: "own", companyName: ownCompany, step: draftStep, claimer: { name: sara, isMe: true } },
+  draft: card(1, { title: "Fire alarm cables", documentNumber: null, stepEnteredAt: null, stepAgeWeeks: null, stage: stages.draft, with: own(draftStep, person("Sara Al Qahtani", "سارة القحطاني", true)) }),
+  fire: card(28, { title: "Fire Suppression System", stepAgeWeeks: 2, with: own(engineerStep, person("Ahmed bin Said", "أحمد بن سعيد", true)) }),
+  hvac: card(19, {
+    title: "HVAC Ducting",
+    trade: trades.mechanical,
+    location: at(b1),
+    stepAgeWeeks: 5,
+    creationDate: "2026-06-12T09:00:00.000Z",
+    with: own(engineerStep, person("Abdullah Al Saadi", "عبدالله السعدي")),
   }),
-  review: card(3, { title: "Main LV switchboard", stage: stages.internal, stepAgeWeeks: 2, with: { kind: "own", companyName: ownCompany, step: reviewStep, claimer: null } }),
-  pending1: card(4, { title: "Cable tray support brackets", stepAgeWeeks: 4, with: withConsultant }),
-  pending2: card(5, { title: "LED downlights", documentNumber: "TWR-TMC-EL-MAR-0005 Rev 1", revisionNo: 1, stepAgeWeeks: 3, with: withConsultant }),
-  pending3: card(6, { title: "Smoke detectors", with: { kind: "company", companyName: otherConsultant } }),
-  approved: card(7, { title: "Busbar trunking", stage: stages.approved, outcome: "B" }),
-  approvedA: card(8, { title: "Distribution boards", stage: stages.approved, outcome: "A" }),
+  pool: card(33, { title: "Lighting Control Panels", location: at(zoneB), stepAgeWeeks: 1, with: own(pmStep, null) }),
+  r2: card(31, {
+    title: "Fire Suppression System",
+    stage: stages.resubmitted,
+    revisionNo: 2,
+    stepAgeWeeks: 3,
+    with: own(engineerStep, person("Nasser Al Kaabi", "ناصر الكعبي")),
+  }),
+  r3: card(35, { title: "Chilled Water Pipes", stage: stages.resubmitted, revisionNo: 3, trade: trades.mechanical, location: at(fG), with: own(pmStep, person("Khalid Al Dhaheri", "خالد الظاهري")) }),
+  pending1: card(40, { title: "Cable Tray Supports", stage: stages.pending, creationDate: null, stepAgeWeeks: 2, with: withConsultant, raiserCompanyName: ownCompany }),
+  pending2: card(41, { title: "Drainage System", type: sar, stage: stages.pending, trade: trades.civil, location: at(fG), revisionNo: 1, creationDate: null, with: withConsultant }),
+  codeA: card(20, { title: "Concrete Mix Design", type: sar, stage: stages.approved, trade: trades.civil, location: at(fG), outcome: "A", stepAgeWeeks: null }),
+  codeB: card(22, { title: "Busbar Trunking", stage: stages.approved, outcome: "B", stepAgeWeeks: null, location: at(b2) }),
+  codeD: card(24, { title: "Pump Sets", stage: stages.rejected, trade: trades.mechanical, outcome: "D", stepAgeWeeks: null, location: at(b1) }),
 };
 
 const board: WorkItemBoardData = {
   stages: [
-    { ...stages.draft, count: 2 },
-    { ...stages.internal, count: 1 },
-    { ...stages.pending, count: 3 },
+    { ...stages.draft, count: 1 },
+    { ...stages.internal, count: 3 },
+    { ...stages.resubmitted, count: 2 },
+    { ...stages.pending, count: 2 },
     { ...stages.approved, count: 14 },
-    { ...stages.revise, count: 3 },
+    { ...stages.rejected, count: 1 },
+    { ...stages.cancelled, count: 3 },
   ],
   filters: {
-    types: [mar],
-    outcomes: defaultOutcomeSets.review_code.map((o) => ({ ...o, type: mar.code })),
-    trades: [electrical],
-    locations: [],
-    with: {
-      steps: [draftStep, reviewStep],
-      companies: [
-        { participantId: consultantId, name: consultant },
-        { participantId: otherConsultantId, name: otherConsultant },
-      ],
-    },
+    types: [mar, sar],
+    outcomes: [...defaultOutcomeSets.review_code.map((o) => ({ ...o, type: mar.code })), ...defaultOutcomeSets.review_code.map((o) => ({ ...o, type: sar.code }))],
+    trades: Object.values(trades),
+    locations,
+    with: { steps: [draftStep, engineerStep, pmStep], companies: [{ participantId: consultantId, name: consultant }] },
+    owners: [],
   },
   columns: [
-    { stageKey: "draft", shown: 2, lanes: [{ kind: "step", step: draftStep, count: 2, cards: [cards.draft, cards.revisionDraft] }] },
-    { stageKey: "internal_review", shown: 1, lanes: [{ kind: "step", step: reviewStep, count: 1, cards: [cards.review] }] },
+    { stageKey: "draft", shown: 1, lanes: [{ kind: "step", step: draftStep, count: 1, cards: [cards.draft] }] },
     {
-      stageKey: "pending_approval",
+      stageKey: "internal_review",
       shown: 3,
       lanes: [
-        { kind: "company", participantId: consultantId, companyName: consultant, count: 2, cards: [cards.pending1, cards.pending2] },
-        { kind: "company", participantId: otherConsultantId, companyName: otherConsultant, count: 1, cards: [cards.pending3] },
+        { kind: "step", step: engineerStep, count: 2, cards: [cards.hvac, cards.fire] },
+        { kind: "step", step: pmStep, count: 1, cards: [cards.pool] },
       ],
     },
-    { stageKey: "approved", shown: 2, lanes: [{ kind: "closed", count: 2, cards: [cards.approved, cards.approvedA] }] },
-    // Three Code C items, all closed more than 30 days ago.
-    { stageKey: "revise_resubmit", shown: 0, lanes: [] },
+    {
+      stageKey: "revise_resubmit",
+      shown: 2,
+      lanes: [
+        { kind: "step", step: engineerStep, count: 1, cards: [cards.r2] },
+        { kind: "step", step: pmStep, count: 1, cards: [cards.r3] },
+      ],
+    },
+    {
+      stageKey: "pending_approval",
+      shown: 2,
+      lanes: [{ kind: "company", participantId: consultantId, companyName: consultant, count: 2, cards: [cards.pending1, cards.pending2] }],
+    },
+    { stageKey: "approved", shown: 2, lanes: [{ kind: "closed", count: 2, cards: [cards.codeA, cards.codeB] }] },
+    { stageKey: "rejected", shown: 1, lanes: [{ kind: "closed", count: 1, cards: [cards.codeD] }] },
+    // Three cancelled items, all closed more than 30 days ago.
+    { stageKey: "cancelled", shown: 0, lanes: [] },
   ],
   moves: {},
+  layout: defaultBoardCardLayout,
 };
 
-// What Sara may do with her Draft "Fire alarm cables" now (RP-350): two
-// Transitions lead to Pending Approval, so that Stage is no drop target. Her
-// Revision Draft has none, and nobody she may not act for has a card here.
+// What Ahmed may do with "Fire Suppression System" now (RP-350): two Transitions
+// lead to Pending Approval, so that Stage is no drop target.
 const move = (transition: string, label: { en: string; ar: string }, kind: WorkItemMove["kind"], stageKey: string): WorkItemMove => ({
   transition,
   label,
@@ -139,13 +189,13 @@ const move = (transition: string, label: { en: string; ar: string }, kind: WorkI
   stageKey,
   actionForm: null,
 });
-const sendForReview = move("send_for_review", b("Send for Review", "إرسال للمراجعة"), "send", "internal_review");
-const cancel = move("cancel", b("Cancel", "إلغاء"), "cancel", "revise_resubmit");
+const sendBack = move("return", b("Return", "إعادة"), "return", "revise_resubmit");
+const cancel = move("cancel", b("Cancel", "إلغاء"), "cancel", "cancelled");
 const boardWithMoves: WorkItemBoardData = {
   ...board,
   moves: {
-    [cards.draft.id]: [
-      sendForReview,
+    [cards.fire.id]: [
+      sendBack,
       move("submit_standard", b("Submit as standard", "تقديم عادي"), "submit", "pending_approval"),
       move("submit_fast", b("Submit fast track", "تقديم مستعجل"), "submit", "pending_approval"),
       cancel,
@@ -169,50 +219,83 @@ type PlayContext = Parameters<NonNullable<Story["play"]>>[0];
 
 const columnOf = (context: PlayContext, stage: { name: { en: string; ar: string } }) =>
   context.canvas.getByRole("listitem", { name: new RegExp(`^${storyText(context, stage.name)}`) });
+const cardOf = (context: PlayContext, row: WorkItemRow) =>
+  context.canvasElement.querySelector<HTMLElement>(`a[href="#${row.id}"]`)!.closest<HTMLElement>("[data-kanban-card]")!;
 
 /**
- * Wide: a column per Stage with its count, Tamkeen's Steps as lanes, and each
- * Consultant as one lane with its name only (V14). Cards show the Document
- * Number (left to right, in Arabic too), Subject, Step Age dots and the Review
- * Code badge.
+ * The board as the anatomy draws it: a column per Stage but Drafts (they stay
+ * on the List and Need My Action), each with its dot, name and count; inside,
+ * Al Futtaim's Steps as groups, the Consultant as one group by its name only
+ * (V14), the closed items as "Mixed". Cards show the number left to right, the
+ * Revision or Code badge in the left corner, the Trade in its hue, the plan
+ * location and the owner; Code A turns its card green; 4+ weeks shows only its look.
  */
 export const Wide: Story = {
   play: async (context) => {
     const locale = storyLocale(context);
     const region = context.canvas.getByRole("region", { name: storyText(context, copy.board) });
     const columns = within(region).getAllByRole("listitem").filter((li) => li.dataset.stage);
-    await expect(columns.map((c) => c.dataset.stage)).toEqual(board.stages.map((s) => s.key));
+    await expect(columns.map((c) => c.dataset.stage)).toEqual(board.stages.filter((s) => s.category !== "draft").map((s) => s.key));
+    await expect(context.canvasElement.querySelector(`a[href="#${cards.draft.id}"]`)).toBeNull();
+
+    const internal = columnOf(context, stages.internal);
+    const groups = within(internal).getAllByRole("region");
+    // In the viewer's alphabetical order.
+    const steps = [engineerStep.name[locale], pmStep.name[locale]].sort((x, y) => x.localeCompare(y, locale));
+    await expect(groups.map((g) => g.getAttribute("aria-label"))).toEqual(steps);
+    const pmGroup = groups.find((g) => g.getAttribute("aria-label") === pmStep.name[locale])!;
+    await expect(within(pmGroup).getByText(new RegExp(storyText(context, copy.unclaimed)))).toBeVisible();
 
     const pending = columnOf(context, stages.pending);
-    const lanes = within(pending).getAllByRole("region");
-    // In the viewer's alphabetical order: Al Waha before Saudi Design Group in English, المجموعة before الواحة in Arabic.
-    const alWahaFirst = locale === "en";
-    await expect(lanes.map((l) => l.getAttribute("aria-label"))).toEqual(
-      alWahaFirst ? [consultant.en, otherConsultant.en] : [otherConsultant.ar, consultant.ar],
-    );
-    await expect(within(lanes[alWahaFirst ? 0 : 1]!).getAllByRole("link")).toHaveLength(2);
-    // Another Company's lane: its name only, no Step and no person.
-    await expect(within(pending).queryByText(storyText(context, copy.unclaimed))).toBeNull();
+    await expect(within(pending).getAllByRole("region").map((g) => g.getAttribute("aria-label"))).toEqual([consultant[locale]]);
+    // Another Company: its name only, never a Step or a person.
+    await expect(within(pending).queryByText(engineerStep.name[locale])).toBeNull();
 
-    const review = columnOf(context, stages.internal);
-    await expect(within(review).getByRole("region", { name: reviewStep.name[locale] })).toHaveTextContent(storyText(context, copy.unclaimed));
+    await expect(within(columnOf(context, stages.approved)).getByRole("region")).toHaveAccessibleName(storyText(context, copy.mixed));
+    await expect(cardOf(context, cards.codeA)).toHaveAttribute("data-approved");
+    await expect(cardOf(context, cards.codeB)).not.toHaveAttribute("data-approved");
+    await expect(cardOf(context, cards.hvac)).toHaveAttribute("data-aged");
+    await expect(cardOf(context, cards.hvac)).not.toHaveTextContent(/overdue|late|متأخر/i);
 
-    const number = within(pending).getByText("TWR-TMC-EL-MAR-0005 Rev 1");
+    const r2 = cardOf(context, cards.r2);
+    const number = within(r2).getByText(cards.r2.documentNumber!);
     await expect(getComputedStyle(number).direction).toBe("ltr");
     await expectLaidOutLeftToRight(number);
-    const approved = columnOf(context, stages.approved);
-    await expect(approved.querySelectorAll("[data-outcome]")).toHaveLength(2);
-    await expect(within(approved).queryByRole("img")).toBeNull();
+    // The badge in the left corner, in both languages.
+    await expect(within(r2).getByText("R2").getBoundingClientRect().left).toBeLessThan(number.getBoundingClientRect().left);
   },
 };
 
 /** Columns run in the reading direction: right to left in Arabic. */
 export const ColumnsRunInReadingOrder: Story = {
   play: async (context) => {
-    const first = columnOf(context, stages.draft).getBoundingClientRect();
-    const second = columnOf(context, stages.internal).getBoundingClientRect();
+    const first = columnOf(context, stages.internal).getBoundingClientRect();
+    const second = columnOf(context, stages.resubmitted).getBoundingClientRect();
     if (storyLocale(context) === "ar") await expect(second.right).toBeLessThanOrEqual(first.left);
     else await expect(second.left).toBeGreaterThanOrEqual(first.right);
+  },
+};
+
+/** A group collapses from its chevron and opens again; its cards are hidden meanwhile. */
+export const CollapsedGroup: Story = {
+  play: async (context) => {
+    const internal = columnOf(context, stages.internal);
+    const toggle = within(internal).getByRole("button", { name: new RegExp(engineerStep.name[storyLocale(context)]) });
+    await expect(toggle).toHaveAttribute("aria-expanded", "true");
+    await userEvent.click(toggle);
+    await expect(toggle).toHaveAttribute("aria-expanded", "false");
+    await expect(within(internal).queryByRole("link", { name: cards.hvac.title })).toBeNull();
+    await expect(within(internal).getByRole("link", { name: cards.pool.title })).toBeVisible();
+  },
+};
+
+/** With the Contractor name switched on, and the plan location and date off (Card view layout). */
+export const OtherLayout: Story = {
+  args: { layout: { contractorName: true, location: false, creationDate: false } satisfies BoardCardLayout },
+  play: async (context) => {
+    const fire = cardOf(context, cards.fire);
+    await expect(within(fire).getByText(ownCompany[storyLocale(context)])).toBeVisible();
+    await expect(within(fire).queryByText(f5.name[storyLocale(context)])).toBeNull();
   },
 };
 
@@ -221,17 +304,17 @@ export const ColumnsRunInReadingOrder: Story = {
  * which opens the List with the same filters and that Stage.
  */
 export const ClosedColumns: Story = {
-  args: { query: { ...defaults, trade: [electrical.id], sort: "documentNumber" } },
+  args: { query: { ...defaults, trade: [trades.electrical.id], sort: "documentNumber" } },
   play: async (context) => {
     const approved = columnOf(context, stages.approved);
     await expect(within(approved).getByTestId("column-total")).toHaveTextContent("14");
     await expect(within(approved).getByRole("link", { name: new RegExp(storyText(context, stages.approved.name)) })).toHaveAttribute(
       "href",
-      `?stage=approved&trade=${electrical.id}&sort=documentNumber`,
+      `?stage=approved&trade=${trades.electrical.id}&sort=documentNumber`,
     );
-    const revise = columnOf(context, stages.revise);
-    await expect(within(revise).getByText(storyText(context, copy.empty))).toBeVisible();
-    await expect(within(revise).getByTestId("column-total")).toHaveTextContent("3");
+    const cancelled = columnOf(context, stages.cancelled);
+    await expect(within(cancelled).getByText(storyText(context, copy.empty))).toBeVisible();
+    await expect(within(cancelled).getByTestId("column-total")).toHaveTextContent("3");
   },
 };
 
@@ -242,10 +325,9 @@ export const ClosedColumns: Story = {
 export const ClosedColumnsUnderSearch: Story = {
   args: { query: { ...defaults, q: "busbar" } },
   play: async (context) => {
-    for (const stage of [stages.approved, stages.revise]) {
+    for (const stage of [stages.approved, stages.cancelled]) {
       const column = columnOf(context, stage);
       await expect(within(column).queryByTestId("column-total")).toBeNull();
-      await expect(within(column).queryByText(/in total|إجمالًا/)).toBeNull();
       await expect(within(column).getByRole("link", { name: new RegExp(storyText(context, stage.name)) })).toHaveAttribute(
         "href",
         `?stage=${stage.key}&q=busbar`,
@@ -254,7 +336,7 @@ export const ClosedColumnsUnderSearch: Story = {
   },
 };
 
-/** Narrow: the board scrolls sideways in its own region; every card is a 44px touch target. */
+/** Narrow: the board scrolls sideways in its own region; every card's link is a 44px touch target. */
 export const Narrow: Story = {
   parameters: phone,
   play: async (context) => {
@@ -265,7 +347,7 @@ export const Narrow: Story = {
 };
 
 // A Stage with many cards: the column holds them under its fixed header.
-const manyCards = Array.from({ length: 14 }, (_, i) => card(20 + i, { title: `Cable ladder section ${i + 1}`, stepAgeWeeks: (i % 4) + 1, with: withConsultant }));
+const manyCards = Array.from({ length: 14 }, (_, i) => card(50 + i, { title: `Cable ladder section ${i + 1}`, stage: stages.pending, stepAgeWeeks: (i % 4) + 1, with: withConsultant }));
 const crowded: WorkItemBoardData = {
   ...board,
   stages: board.stages.map((s) => (s.key === "pending_approval" ? { ...s, count: manyCards.length } : s)),
@@ -286,80 +368,76 @@ export const ColumnScrollsOnItsOwn: Story = {
     const column = columnOf(context, stages.pending);
     const list = [...column.querySelectorAll<HTMLElement>("div")].find((d) => getComputedStyle(d).overflowY === "auto")!;
     await expect(list.scrollHeight).toBeGreaterThan(list.clientHeight);
-    await expect(column.getBoundingClientRect().height).toBeLessThan(list.scrollHeight);
-    // The header stays where it is while the cards scroll.
     const header = within(column).getByRole("heading", { level: 2 });
     const top = header.getBoundingClientRect().top;
     list.scrollTop = list.scrollHeight;
     await expect(header.getBoundingClientRect().top).toBe(top);
-    // The board itself scrolls sideways; the page doesn't.
     const region = context.canvas.getByRole("region", { name: storyText(context, copy.board) });
     await expect(region.scrollWidth).toBeGreaterThanOrEqual(region.clientWidth);
     await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(document.documentElement.clientWidth);
   },
 };
 
-const draftCard = (context: PlayContext) => columnOf(context, stages.draft).querySelector<HTMLElement>(`li[data-movable]`)!;
+const movableCard = (context: PlayContext) => context.canvas.getAllByRole("listitem").find((li) => li.hasAttribute("data-movable"))!;
 const dragData = () => ({ dataTransfer: new DataTransfer() });
 const targetColumns = (context: PlayContext) =>
   context.canvas.getAllByRole("listitem").filter((li) => li.dataset.stage && li.hasAttribute("data-drop-target")).map((li) => li.dataset.stage);
 
 /**
- * Dragging a card Sara may act on highlights only the Stages one of its
- * Transitions alone leads to: Pending Approval, which two lead to, is not one,
- * nor is the Stage the card is in. Dropping on a target opens that
- * Transition's Action Form (here, `onMove`); dropping elsewhere does nothing.
- * A card she may not act on can't be dragged. Left mid-drag for the screenshot.
+ * Dragging a card the viewer may act on rings it in tomato and outlines only the
+ * Stages one of its Transitions alone leads to (the one under the card solid):
+ * Pending Approval, which two lead to, is not one. Dropping on a target opens
+ * that Transition's Action Form (here, `onMove`); dropping elsewhere does
+ * nothing. Left mid-drag, over a target, for the screenshot.
  */
 export const DraggingWithTargets: Story = {
   args: { board: boardWithMoves, onMove: fn() },
   play: async (context) => {
     const onMove = context.args.onMove as ReturnType<typeof fn>;
-    const card = draftCard(context);
-    await expect(card).toHaveAttribute("draggable", "true");
-    // The other Draft, the Consultant's cards and the closed ones have nothing to take.
+    const item = movableCard(context);
+    await expect(item).toHaveAttribute("draggable", "true");
     await expect(context.canvas.getAllByRole("listitem").filter((li) => li.hasAttribute("data-movable"))).toHaveLength(1);
     await expect(targetColumns(context)).toEqual([]);
 
-    fireEvent.dragStart(card, dragData());
-    await waitFor(() => expect(targetColumns(context)).toEqual(["internal_review", "revise_resubmit"]));
+    fireEvent.dragStart(item, dragData());
+    await waitFor(() => expect(targetColumns(context)).toEqual(["revise_resubmit", "cancelled"]));
+    await expect(item.querySelector("[data-kanban-card]")).toHaveClass("ring-2");
 
-    // Dropping on a Stage that is no target does nothing.
     fireEvent.drop(columnOf(context, stages.pending), dragData());
-    fireEvent.drop(columnOf(context, stages.draft), dragData());
+    fireEvent.drop(columnOf(context, stages.internal), dragData());
     await expect(onMove).not.toHaveBeenCalled();
 
-    fireEvent.drop(columnOf(context, stages.internal), dragData());
-    await expect(onMove).toHaveBeenCalledWith(cards.draft, sendForReview);
+    fireEvent.drop(columnOf(context, stages.resubmitted), dragData());
+    await expect(onMove).toHaveBeenCalledWith(cards.fire, sendBack);
     await waitFor(() => expect(targetColumns(context)).toEqual([]));
 
-    // Left dragging again, so the highlighted columns are what the screenshot shows.
-    fireEvent.dragStart(card, dragData());
-    await waitFor(() => expect(targetColumns(context)).toHaveLength(2));
+    // Left dragging again, over Revised & Resubmitted, for the screenshot.
+    fireEvent.dragStart(item, dragData());
+    fireEvent.dragOver(columnOf(context, stages.resubmitted), dragData());
+    await waitFor(() => expect(columnOf(context, stages.resubmitted)).toHaveAttribute("data-drop-over"));
   },
 };
 
-/** Dragging on a phone: the board scrolls sideways, the targets are still highlighted. */
+/** Dragging on a phone: the board scrolls sideways, the targets are still outlined. */
 export const DraggingNarrow: Story = { ...DraggingWithTargets, parameters: phone, play: undefined };
 
-/** The same moves from the card's menu, for the keyboard and screen readers: no drag needed. */
+/** The same moves from the card's Move menu, for the keyboard, screen readers and touch: no drag needed. */
 export const MovingFromTheMenu: Story = {
   args: { board: boardWithMoves, onMove: fn() },
   play: async (context) => {
     const onMove = context.args.onMove as ReturnType<typeof fn>;
-    const trigger = within(draftCard(context)).getByRole("button", { name: storyText(context, copy.moveItem).replace("#", cards.draft.title) });
+    const name = storyText(context, copy.moveItem).replace("#", cards.fire.title);
+    const trigger = within(movableCard(context)).getByRole("button", { name });
     trigger.focus();
     await userEvent.keyboard("{Enter}");
-    const menu = await screen.findByRole("dialog", { name: storyText(context, copy.moveItem).replace("#", cards.draft.title) });
-    // The same targets as dragging: the Stage two Transitions lead to is not offered.
-    const choices = within(menu).getAllByRole("button");
-    await expect(choices.map((c) => c.textContent)).toEqual([
-      `${sendForReview.label[storyLocale(context)]}${storyText(context, copy.moveTo).replace("#", stages.internal.name[storyLocale(context)])}`,
-      `${cancel.label[storyLocale(context)]}${storyText(context, copy.moveTo).replace("#", stages.revise.name[storyLocale(context)])}`,
+    const menu = await screen.findByRole("dialog", { name });
+    const locale = storyLocale(context);
+    await expect(within(menu).getAllByRole("button").map((c) => c.textContent)).toEqual([
+      `${sendBack.label[locale]}${storyText(context, copy.moveTo).replace("#", stages.resubmitted.name[locale])}`,
+      `${cancel.label[locale]}${storyText(context, copy.moveTo).replace("#", stages.cancelled.name[locale])}`,
     ]);
     await userEvent.keyboard("{Tab}{Enter}");
-    await expect(onMove).toHaveBeenCalledWith(cards.draft, cancel);
-    // A card with nothing to take has no menu.
+    await expect(onMove).toHaveBeenCalledWith(cards.fire, cancel);
     await expect(context.canvas.getAllByRole("button", { name: /^(Move|نقل)/ })).toHaveLength(1);
   },
 };
@@ -373,33 +451,95 @@ export const NoMoveHandler: Story = {
   },
 };
 
-/** With the toolbar and the List / Kanban switch, as the Submittals tab shows it. */
-export const WithToolbar: Story = {
-  render: (args, context) => {
-    const locale = storyLocale(context);
-    return (
-      <WorkItemList
-          list={{ ...board, items: [], nextCursor: null }}
-          query={args.query}
+/** The toolbar the List shares, the Card view layout menu and the Kanban / List switch, as the Submittals tab shows it. */
+function Toolbar({ args, locale }: { args: Story["args"]; locale: "en" | "ar" }) {
+  const [layout, setLayout] = useState<BoardCardLayout>(defaultBoardCardLayout);
+  const data = args?.board ?? board;
+  return (
+    <WorkItemList
+      list={{ ...data, items: [], nextCursor: null }}
+      query={args?.query ?? defaults}
+      locale={locale}
+      labels={workItemListLabels[locale]}
+      hrefFor={listHrefFor}
+      itemHref={(id) => `#${id}`}
+      onQueryChange={fn()}
+      action={
+        <a href="#new" className="inline-flex h-9 items-center rounded-sm bg-primary px-3.5 text-sm font-semibold text-on-primary pointer-coarse:min-h-11">
+          {locale === "en" ? "+ Add Submittal" : "+ إضافة اعتماد"}
+        </a>
+      }
+      viewSwitch={
+        <>
+          <BoardLayoutMenu
+            layout={layout}
+            onChange={(c) => setLayout((l) => ({ ...l, ...c }))}
+            labels={boardLayoutMenuLabels[locale]}
+            board={data}
+            boardLabels={workItemBoardLabels[locale]}
+            locale={locale}
+          />
+          <WorkItemViewSwitch view="kanban" labels={viewSwitchLabels[locale]} hrefFor={(v) => (v === "kanban" ? "?view=kanban" : "?")} />
+        </>
+      }
+      board={
+        <WorkItemBoard
+          board={data}
+          query={args?.query ?? defaults}
           locale={locale}
-          labels={workItemListLabels[locale]}
-          hrefFor={listHrefFor}
-          itemHref={args.itemHref}
-          onQueryChange={fn()}
-          viewSwitch={<WorkItemViewSwitch view="kanban" labels={viewSwitchLabels[locale]} hrefFor={(v) => (v === "kanban" ? "?view=kanban" : "?")} />}
-          board={<WorkItemBoard {...args} locale={locale} labels={workItemBoardLabels[locale]} />}
+          labels={workItemBoardLabels[locale]}
+          layout={layout}
+          listHrefFor={listHrefFor}
+          itemHref={(id) => `#${id}`}
         />
-    );
-  },
+      }
+    />
+  );
+}
+
+export const WithToolbar: Story = {
+  render: (args, context) => <Toolbar args={args} locale={storyLocale(context)} />,
   play: async (context) => {
     const views = context.canvas.getByRole("navigation", { name: storyText(context, copy.view) });
     await expect(within(views).getByRole("link", { name: storyText(context, copy.kanban) })).toHaveAttribute("aria-current", "page");
-    await expect(within(views).getByRole("link", { name: storyText(context, copy.list) })).not.toHaveAttribute("aria-current");
-    // The List's toolbar, Filters and all, sits above the board.
     await expect(context.canvas.getByRole("button", { name: workItemListLabels[storyLocale(context)].filters })).toBeVisible();
-    // The board replaces the List's table and pages.
+    await expect(context.canvas.getByRole("searchbox")).toHaveAttribute("placeholder", workItemListLabels[storyLocale(context)].searchPlaceholderBoard);
     await expect(context.canvas.queryByRole("table")).toBeNull();
-    await expect(context.canvas.getByRole("region", { name: storyText(context, copy.board) })).toBeVisible();
+  },
+};
+
+/** The Card view layout menu: Header, Subject, tags and owner always shown; the Contractor name switched on, previewed live. */
+export const CardViewLayoutMenu: Story = {
+  parameters: { overlay: true },
+  render: (args, context) => <Toolbar args={args} locale={storyLocale(context)} />,
+  play: async (context) => {
+    const labels = boardLayoutMenuLabels[storyLocale(context)];
+    await userEvent.click(context.canvas.getByRole("button", { name: labels.title }));
+    const menu = await screen.findByRole("dialog", { name: labels.title });
+    const contractor = within(menu).getByRole("switch", { name: labels.contractorName });
+    await expect(contractor).not.toBeChecked();
+    await expect(within(menu).getByRole("switch", { name: labels.location })).toBeChecked();
+    await userEvent.click(contractor);
+    await expect(contractor).toBeChecked();
+    // The board and the preview both show it at once.
+    await expect(within(cardOf(context, cards.hvac)).getByText(ownCompany[storyLocale(context)])).toBeVisible();
+    await expect(within(menu).getByText(ownCompany[storyLocale(context)])).toBeVisible();
+  },
+};
+
+/** The filter panel open over the board, two fields filtered: Stage (two values) and Trade. */
+export const FilterPanelOpen: Story = {
+  parameters: { overlay: true },
+  args: { query: { ...defaults, stage: ["internal_review", "pending_approval"], trade: [trades.electrical.id] } },
+  render: (args, context) => <Toolbar args={args} locale={storyLocale(context)} />,
+  play: async (context) => {
+    const labels = workItemListLabels[storyLocale(context)];
+    await userEvent.click(context.canvas.getByRole("button", { name: new RegExp(`^${labels.filters}`) }));
+    const panel = await screen.findByRole("dialog", { name: labels.filters });
+    await expect(within(panel).getByText(labels.filtersApplied("2", 2))).toBeVisible();
+    // The Kanban's Stage field has no Drafts.
+    await expect(within(panel).queryByRole("checkbox", { name: stages.draft.name[storyLocale(context)] })).toBeNull();
+    await expect(within(panel).getByRole("checkbox", { name: stages.internal.name[storyLocale(context)] })).toBeChecked();
   },
 };
 

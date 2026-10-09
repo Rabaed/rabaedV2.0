@@ -87,13 +87,13 @@
       "revisionNoNumber": "Revision {revision}: no number yet",
       "empty": "No items you can see match these filters.",
       "search": "Search",
-      "searchHelp": "Searches Document Number, Subject, Type, Trade, Location and Company",
+      "searchHelp": "Searches Document Number, Subject, Type, Trade, Location, Company and owner",
       "searchPlaceholder": "Search this list",
       "filters": "Filters",
       "clearAll": "Clear all",
       "done": "Done",
       "close": "Close",
-      "filtersApplied": "{count, plural, =0 {No filters applied} one {Filters applied: 1} other {Filters applied: {n}}}",
+      "filtersApplied": "{count, plural, =0 {No filters applied} one {Filters applied: 1} other {{n} filters applied}}",
       "noResults": "No items you can see match this search.",
       "pages": "Pages",
       "firstPage": "First page",
@@ -102,7 +102,18 @@
       "page": "Page {page}",
       "pageOf": "Page {page} of {pages}",
       "items": "{count, plural, one {1 item} other {{n} items}}",
-      "dashboardFigure": "From the Dashboard"
+      "dashboardFigure": "From the Dashboard",
+      "documentType": "Document type",
+      "owner": "Owner",
+      "role": "Step",
+      "createdDate": "Created date",
+      "withinDays": "{count, plural, one {Last day} other {Last {days} days}}",
+      "level": "Level {n}",
+      "clearField": "Clear",
+      "searchValues": "Search",
+      "noMatches": "No matches",
+      "searchPlaceholderBoard": "Search this board",
+      "revisions": "Revisions"
     },
     "buckets": {
       "pending": "Pending",
@@ -128,7 +139,12 @@
       "move": "Move",
       "moveItem": "Move {subject}",
       "moveTo": "To {stage}",
-      "dragging": "Drop on a highlighted column to move the item."
+      "dragging": "Drop on a highlighted column to move the item.",
+      "mixed": "Mixed",
+      "revision": "R{n}",
+      "code": "Code {code}",
+      "createdOn": "Created {date}",
+      "submittedOn": "Submitted {date}"
     },
     "viewSwitch": {
       "view": "View",
@@ -167,6 +183,16 @@
       "recommended": "recommended a Code on",
       "cancelled": "cancelled",
       "updated": "updated"
+    },
+    "layout": {
+      "title": "Card view layout",
+      "boardSettings": "Board settings",
+      "fixedParts": "Number, Subject, Trade and Type, owner",
+      "alwaysShown": "Always shown",
+      "contractorName": "Contractor name",
+      "location": "Location",
+      "creationDate": "Creation date",
+      "preview": "Preview"
     }
   },
   "health": {

@@ -1,4 +1,5 @@
 import type { Locale } from "@rabaed/domain";
+import type { BoardLayoutMenuLabels } from "../components/views/board-layout-menu.tsx";
 import type { WorkItemBoardLabels, WorkItemViewSwitchLabels } from "../components/views/work-item-board.tsx";
 import type { WorkItemListLabels } from "../components/views/work-item-list.tsx";
 import type { ProjectCardsLabels } from "../components/views/project-cards.tsx";
@@ -73,7 +74,7 @@ export const workItemListLabels: Record<Locale, WorkItemListLabels> = {
     clearAll: "Clear all",
     done: "Done",
     close: "Close",
-    filtersApplied: (n, count) => (count === 0 ? "No filters applied" : `Filters applied: ${n}`),
+    filtersApplied: (n, count) => (count === 0 ? "No filters applied" : count === 1 ? "Filters applied: 1" : `${n} filters applied`),
     noResults: "No items you can see match this search.",
     pages: "Pages",
     firstPage: "First page",
@@ -84,6 +85,17 @@ export const workItemListLabels: Record<Locale, WorkItemListLabels> = {
     items: (n, count) => (count === 1 ? "1 item" : `${n} items`),
     cancelled: "Cancelled",
     dashboardFigure: "From the Dashboard",
+    documentType: "Document type",
+    owner: "Owner",
+    role: "Step",
+    createdDate: "Created date",
+    withinDays: (days, count) => (count === 1 ? "Last day" : `Last ${days} days`),
+    level: (n) => `Level ${n}`,
+    clearField: "Clear",
+    searchValues: "Search",
+    noMatches: "No matches",
+    searchPlaceholderBoard: "Search this board",
+    revisions: "Revisions",
     buckets: { pending: "Pending", in_preparation: "In preparation", approved: "Approved", rejected: "Rejected", cancelled: "Cancelled" },
     codeCStates: { approvedOnRevision: "approved on revision", awaitingRevision: "awaiting revision", noRevisionYet: "no Revision yet", revisionInProgress: "Revision in progress", rejectedAfterC: "rejected after C" },
   },
@@ -133,6 +145,17 @@ export const workItemListLabels: Record<Locale, WorkItemListLabels> = {
     items: (n, count) => (count === 1 ? "عنصر واحد" : count === 2 ? "عنصران" : `${n} عناصر`),
     cancelled: "ملغى",
     dashboardFigure: "من لوحة المعلومات",
+    documentType: "نوع المستند",
+    owner: "المسؤول",
+    role: "الخطوة",
+    createdDate: "تاريخ الإنشاء",
+    withinDays: (days, count) => (count === 1 ? "آخر يوم" : count === 2 ? "آخر يومين" : `آخر ${days} يومًا`),
+    level: (n) => `المستوى ${n}`,
+    clearField: "مسح",
+    searchValues: "بحث",
+    noMatches: "لا نتائج",
+    searchPlaceholderBoard: "البحث في اللوحة",
+    revisions: "المراجعات",
     buckets: { pending: "قيد الانتظار", in_preparation: "قيد الإعداد", approved: "معتمد", rejected: "مرفوض", cancelled: "ملغى" },
     codeCStates: { approvedOnRevision: "معتمد بعد التعديل", awaitingRevision: "بانتظار التعديل", noRevisionYet: "لا تعديل بعد", revisionInProgress: "التعديل جارٍ", rejectedAfterC: "مرفوض بعد C" },
   },
@@ -154,6 +177,11 @@ export const workItemBoardLabels: Record<Locale, WorkItemBoardLabels> = {
     moveTo: (stage) => `To ${stage}`,
     dragging: "Drop on a highlighted column to move the item.",
     cancelled: "Cancelled",
+    mixed: "Mixed",
+    revision: (n) => `R${n}`,
+    code: (code) => `Code ${code}`,
+    createdOn: (date) => `Created ${date}`,
+    submittedOn: (date) => `Submitted ${date}`,
   },
   ar: {
     board: "كانبان",
@@ -170,6 +198,11 @@ export const workItemBoardLabels: Record<Locale, WorkItemBoardLabels> = {
     moveTo: (stage) => `إلى ${stage}`,
     dragging: "أفلت العنصر على عمود مظلَّل لنقله.",
     cancelled: "ملغى",
+    mixed: "مختلط",
+    revision: (n) => `R${n}`,
+    code: (code) => `Code ${code}`,
+    createdOn: (date) => `أُنشئ في ${date}`,
+    submittedOn: (date) => `قُدِّم في ${date}`,
   },
 };
 
@@ -243,5 +276,28 @@ export const activityFeedPanelLabels: Record<Locale, ActivityFeedPanelLabels> = 
     recommended: "أوصى برمز على",
     cancelled: "ألغى",
     updated: "حدّث",
+  },
+};
+
+export const boardLayoutMenuLabels: Record<Locale, BoardLayoutMenuLabels> = {
+  en: {
+    title: "Card view layout",
+    boardSettings: "Board settings",
+    fixedParts: "Number, Subject, Trade and Type, owner",
+    alwaysShown: "Always shown",
+    contractorName: "Contractor name",
+    location: "Location",
+    creationDate: "Creation date",
+    preview: "Preview",
+  },
+  ar: {
+    title: "تخطيط عرض البطاقة",
+    boardSettings: "إعدادات اللوحة",
+    fixedParts: "الرقم والموضوع والتخصص والنوع والمسؤول",
+    alwaysShown: "تظهر دائمًا",
+    contractorName: "اسم المقاول",
+    location: "الموقع",
+    creationDate: "تاريخ الإنشاء",
+    preview: "معاينة",
   },
 };

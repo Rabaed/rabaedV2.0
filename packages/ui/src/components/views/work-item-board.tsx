@@ -3,10 +3,14 @@
 import {
   closedColumnDays,
   dropTargets,
+  formatDate,
   formatNumber,
   isOpenStageCategory,
   lanesInLocale,
+  outcomeLabel,
+  outcomeLook,
   type BilingualText,
+  type BoardCardLayout,
   type Locale,
   type WorkItemBoard as WorkItemBoardData,
   type WorkItemBoardLane,
@@ -15,7 +19,7 @@ import {
   type WorkItemRow,
   type WorkItemView,
 } from "@rabaed/domain";
-import { useState, type ElementType } from "react";
+import { useEffect, useState, type ElementType } from "react";
 import { cn } from "../../lib/cn.ts";
 import { buttonVariants } from "../button/button.tsx";
 import { focusRing, touchBox } from "../form/control-styles.ts";
@@ -23,9 +27,8 @@ import { Icon } from "../icon/icon.tsx";
 import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "../overlay/popover.tsx";
 import { stageColour } from "../status/stage-colour.ts";
 import { StageDot } from "../status/stage-pill.tsx";
-import { WithChip } from "../status/with-chip.tsx";
-import { WorkItemCard, type WorkItemState } from "../status/work-item-card.tsx";
-import { Outcome, type ListOutcomes } from "./work-item-list.tsx";
+import { KanbanCard, type KanbanCardBadge, type KanbanCardOwner, type KanbanCardPlace } from "./kanban-card.tsx";
+import type { ListOutcomes } from "./work-item-list.tsx";
 
 /**
  * The board's words, in the viewer's language, from the app's messages: the
@@ -52,6 +55,16 @@ export type WorkItemBoardLabels = {
   dragging: string;
   /** The outcome of a cancelled item, as its badge; every other outcome is named by its Type's set (RP-429). */
   cancelled: string;
+  /** The lane of closed items, which nobody holds (the anatomy's "Mixed"). */
+  mixed: string;
+  /** The Revision badge, e.g. "R2". */
+  revision: (n: string) => string;
+  /** A letter outcome's pill, e.g. "Code A". */
+  code: (code: string) => string;
+  /** The card's date, spoken: the Creation Date on my own Company's items… */
+  createdOn: (date: string) => string;
+  /** …and the Submission Date on anyone else's. */
+  submittedOn: (date: string) => string;
 };
 
 export type WorkItemBoardProps = {
@@ -61,6 +74,10 @@ export type WorkItemBoardProps = {
   query: WorkItemQuery;
   locale: Locale;
   labels: WorkItemBoardLabels;
+  /** The viewer's Card view layout; the board's own (`board.layout`) when left out. */
+  layout?: BoardCardLayout;
+  /** Names this board in the browser, so the lanes the viewer collapsed stay collapsed, e.g. the Project and Module. */
+  storageKey?: string;
   /** The List's URL for `query`: where a closed column's "Show all" leads. */
   listHrefFor: (query: WorkItemQuery) => string;
   /** An item's page. */
@@ -77,40 +94,61 @@ export type WorkItemBoardProps = {
 
 type Dragging = { card: WorkItemRow; targets: Map<string, WorkItemMove> };
 
+/** The Stages the board shows: every one but Drafts, which stay on the List, Need My Action and its Stage filter (RP-410). */
+export function boardStages(board: Pick<WorkItemBoardData, "stages">): WorkItemBoardData["stages"] {
+  return board.stages.filter((s) => s.category !== "draft");
+}
+
 /**
- * The Kanban of a Module's Work Items (spec RP-344, RP-349): a column per
- * Stage, running in the reading direction (right to left in Arabic). Inside
- * a column, a swimlane per Step of the viewer's own Company and one per other
- * Company, by its name only (V14), each in the viewer's alphabetical order. A
- * closed column shows the items closed in the last 30 days, with its total and
- * "Show all", which opens the List with the same filters. Under a search the
- * total is left out: a search counts only what it shows. The board scrolls
- * sideways in its own region.
+ * The Kanban of a Module's Work Items (spec RP-344, RP-349; rebuilt to the
+ * owner's Kanban Board Anatomy, RP-410): a grey canvas with a white column per
+ * Stage (no Drafts), running in the reading direction. Inside a column, a
+ * collapsible group per Step of the viewer's own Company (its role), one per
+ * other Company by its name only (V5, V14), and the closed items. A closed
+ * column shows the items closed in the last 30 days, with its total and "Show
+ * all", which opens the List with the same filters. Under a search the total is
+ * left out: a search counts only what it shows. The board scrolls sideways in
+ * its own region; columns keep their width.
  *
  * A card the viewer may act on can be dragged (RP-350): only the Stages that
- * one of its Transitions alone leads to are highlighted and take a drop, which
+ * one of its Transitions alone leads to are outlined and take a drop, which
  * opens that Transition's Action Form; a drop anywhere else does nothing. The
  * card's Move menu offers the same moves to the keyboard, screen readers and touch.
  */
-export function WorkItemBoard({ board, query, locale, labels, listHrefFor, itemHref, linkAs: Link = "a", onMove }: WorkItemBoardProps) {
+export function WorkItemBoard({
+  board,
+  query,
+  locale,
+  labels,
+  layout = board.layout,
+  storageKey,
+  listHrefFor,
+  itemHref,
+  linkAs: Link = "a",
+  onMove,
+}: WorkItemBoardProps) {
   const columns = new Map(board.columns.map((c) => [c.stageKey, c]));
   const stageNames = new Map(board.stages.map((s) => [s.key, s.name]));
-  // The card being dragged, with the Stages it may be dropped on.
+  // The card being dragged, with the Stages it may be dropped on, and the one under it.
   const [dragging, setDragging] = useState<Dragging | null>(null);
+  const [over, setOver] = useState<string | null>(null);
+  const [collapsed, toggleLane] = useCollapsedLanes(storageKey);
+  const places = placesOf(board.filters.locations);
   return (
     <section
       aria-label={labels.board}
       // Focusable, so the board can be scrolled with the keyboard.
       tabIndex={0}
-      className={cn("relative overflow-x-auto rounded-md pb-3", focusRing)}
+      data-board=""
+      className={cn("relative -mx-4 overflow-x-auto bg-canvas px-4 pt-[18px] pb-[40px] sm:-mx-7 sm:px-7", focusRing)}
     >
       {dragging && (
         <p role="status" className="sr-only">
           {labels.dragging}
         </p>
       )}
-      <ol className="flex w-max items-start gap-4">
-        {board.stages.map((stage) => {
+      <ol className="flex w-max items-start gap-[18px]">
+        {boardStages(board).map((stage) => {
           const column = columns.get(stage.key);
           const shown = column?.shown ?? 0;
           const closed = !isOpenStageCategory(stage.category);
@@ -122,10 +160,12 @@ export function WorkItemBoard({ board, query, locale, labels, listHrefFor, itemH
               aria-labelledby={headingId}
               data-stage={stage.key}
               data-drop-target={dropMove ? "" : undefined}
+              data-drop-over={dropMove && over === stage.key ? "" : undefined}
               className={cn(
                 // The column scrolls up and down on its own, under its fixed header; the board scrolls sideways.
-                "flex max-h-[min(56rem,max(24rem,calc(100dvh_-_20rem)))] w-75 shrink-0 flex-col rounded-lg border border-border bg-surface",
-                dropMove && "bg-hover outline-2 outline-dashed outline-border-strong",
+                "flex max-h-[min(56rem,max(24rem,calc(100dvh_-_20rem)))] w-[318px] shrink-0 flex-col rounded-lg border border-border bg-surface transition-shadow",
+                dropMove && "outline-2 outline-offset-2 outline-brand outline-dashed",
+                dropMove && over === stage.key && "outline-solid",
               )}
               // Only a Stage one Transition alone leads to takes a drop; a drop elsewhere does nothing.
               onDragOver={
@@ -133,23 +173,28 @@ export function WorkItemBoard({ board, query, locale, labels, listHrefFor, itemH
                   ? (event) => {
                       event.preventDefault();
                       event.dataTransfer.dropEffect = "move";
+                      if (over !== stage.key) setOver(stage.key);
                     }
                   : undefined
               }
+              onDragLeave={dropMove ? () => setOver((o) => (o === stage.key ? null : o)) : undefined}
               onDrop={
                 dropMove
                   ? (event) => {
                       event.preventDefault();
                       onMove?.(dragging!.card, dropMove);
                       setDragging(null);
+                      setOver(null);
                     }
                   : undefined
               }
             >
-              <h2 id={headingId} className="flex items-center gap-2 border-b border-border-subtle px-4 py-3 text-body font-bold text-text">
+              <h2 id={headingId} className="flex items-center gap-2.5 border-b border-border-subtle px-4 py-[14px] text-lg leading-6 font-bold text-text">
                 <StageDot stage={stageColour(stage)} />
                 <span className="min-w-0 truncate">{stage.name[locale]}</span>
-                <span className="rounded-full bg-neutral-tint px-2 text-caption font-semibold text-neutral-fg tabular-nums">{formatNumber(shown, locale)}</span>
+                <span className="rounded-full bg-neutral-tint px-2 font-ui text-caption leading-5 font-semibold text-neutral-fg tabular-nums">
+                  {formatNumber(shown, locale)}
+                </span>
               </h2>
               {closed && (
                 <div className="flex flex-col gap-1 border-b border-border-subtle px-4 py-2 text-caption text-muted">
@@ -167,27 +212,38 @@ export function WorkItemBoard({ board, query, locale, labels, listHrefFor, itemH
                   </span>
                 </div>
               )}
-              <div className="flex min-h-16 flex-col gap-3 overflow-y-auto p-2.5">
-              {shown === 0 ? (
-                <p className="px-1 py-3 text-center text-caption text-muted">{labels.noItems}</p>
-              ) : (
-                lanesInLocale(column!.lanes, locale).map((lane) => (
-                  <Lane
-                    key={laneKey(lane)}
-                    lane={lane}
-                    locale={locale}
-                    labels={labels}
-                    itemHref={itemHref}
-                    linkAs={Link}
-                    moves={onMove ? board.moves : {}}
-                    stageNames={stageNames}
-                    outcomes={board.filters.outcomes}
-                    onMove={onMove}
-                    dragging={dragging?.card.id ?? null}
-                    onDragChange={setDragging}
-                  />
-                ))
-              )}
+              <div className="flex min-h-16 flex-col overflow-y-auto px-2 py-1.5">
+                {shown === 0 ? (
+                  <p className="px-1 py-4 text-center text-caption text-muted">{labels.noItems}</p>
+                ) : (
+                  lanesInLocale(column!.lanes, locale).map((lane, index) => {
+                    const key = `${stage.key}:${laneKey(lane)}`;
+                    return (
+                      <Lane
+                        key={key}
+                        lane={lane}
+                        index={index}
+                        open={!collapsed.has(key)}
+                        onToggle={() => toggleLane(key)}
+                        locale={locale}
+                        labels={labels}
+                        layout={layout}
+                        places={places}
+                        itemHref={itemHref}
+                        linkAs={Link}
+                        moves={onMove ? board.moves : {}}
+                        stageNames={stageNames}
+                        outcomes={board.filters.outcomes}
+                        onMove={onMove}
+                        dragging={dragging?.card.id ?? null}
+                        onDragChange={(d) => {
+                          setDragging(d);
+                          if (!d) setOver(null);
+                        }}
+                      />
+                    );
+                  })
+                )}
               </div>
             </li>
           );
@@ -201,11 +257,65 @@ function laneKey(lane: WorkItemBoardLane): string {
   return lane.kind === "step" ? `step:${lane.step.key}` : lane.kind === "company" ? `company:${lane.participantId}` : "closed";
 }
 
-/** One swimlane: its holder (a Step of mine, or another Company by name) and its cards. Closed items have no holder to show. */
+/** The lanes the viewer collapsed, kept in this browser per board; a convenience, so it works without storage too. */
+function useCollapsedLanes(storageKey: string | undefined): [Set<string>, (key: string) => void] {
+  const item = storageKey ? `rabaed:board-lanes:${storageKey}` : null;
+  const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
+  useEffect(() => {
+    if (!item) return;
+    try {
+      const saved = JSON.parse(window.localStorage.getItem(item) ?? "[]") as unknown;
+      if (Array.isArray(saved)) setCollapsed(new Set(saved.filter((k): k is string => typeof k === "string")));
+    } catch {
+      // No storage: every lane starts open.
+    }
+  }, [item]);
+  const toggle = (key: string) =>
+    setCollapsed((current) => {
+      const next = new Set(current);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      if (item) {
+        try {
+          window.localStorage.setItem(item, JSON.stringify([...next]));
+        } catch {
+          // Not kept: fine.
+        }
+      }
+      return next;
+    });
+  return [collapsed, toggle];
+}
+
+// A lane's dot: my own Steps in turn blue, violet, cyan, green; another Company amber; closed items grey.
+const stepDots = ["bg-stage-internal-dot", "bg-stage-pending-dot", "bg-trade-el-fg", "bg-stage-approved-dot"];
+
+/** Each Location's place: itself and the Locations above it, top level first, with each one's level. */
+function placesOf(locations: WorkItemBoardData["filters"]["locations"]): Map<string, { depth: number; name: BilingualText }[]> {
+  const byId = new Map(locations.map((l) => [l.id, l]));
+  const out = new Map<string, { depth: number; name: BilingualText }[]>();
+  for (const l of locations) {
+    const path: { depth: number; name: BilingualText }[] = [];
+    const seen = new Set<string>();
+    for (let at: typeof l | undefined = l; at && !seen.has(at.id); at = at.parentId ? byId.get(at.parentId) : undefined) {
+      seen.add(at.id);
+      path.unshift({ depth: at.depth, name: at.name });
+    }
+    out.set(l.id, path);
+  }
+  return out;
+}
+
+/** One group: its holder (a Step of mine, another Company by name, or the closed items) and its cards, collapsible. */
 function Lane({
   lane,
+  index,
+  open,
+  onToggle,
   locale,
   labels,
+  layout,
+  places,
   itemHref,
   linkAs,
   moves,
@@ -216,8 +326,13 @@ function Lane({
   onDragChange,
 }: {
   lane: WorkItemBoardLane;
+  index: number;
+  open: boolean;
+  onToggle: () => void;
   locale: Locale;
   labels: WorkItemBoardLabels;
+  layout: BoardCardLayout;
+  places: Map<string, { depth: number; name: BilingualText }[]>;
   itemHref: (id: string) => string;
   linkAs: ElementType;
   moves: Record<string, WorkItemMove[]>;
@@ -229,16 +344,31 @@ function Lane({
   dragging: string | null;
   onDragChange: (dragging: Dragging | null) => void;
 }) {
-  const name = lane.kind === "step" ? lane.step.name[locale] : lane.kind === "company" ? lane.companyName[locale] : null;
+  const name = lane.kind === "step" ? lane.step.name[locale] : lane.kind === "company" ? lane.companyName[locale] : labels.mixed;
+  const dot = lane.kind === "step" ? stepDots[index % stepDots.length] : lane.kind === "company" ? "bg-stage-resubmitted-dot" : "bg-stage-cancelled-dot";
+  const listId = `lane-${laneKey(lane).replace(/[^a-z0-9_-]/gi, "-")}-${index}`;
   return (
-    <section aria-label={name ?? undefined} data-lane={lane.kind} className="flex flex-col gap-2">
-      {name !== null && (
-        <h3 className="flex items-center justify-between gap-2 px-1 text-caption font-semibold text-muted">
-          {lane.kind === "company" ? <WithChip kind="company" inViewerCompany={false} companyName={name} /> : <span>{name}</span>}
-          <span className="tabular-nums">{formatNumber(lane.count, locale)}</span>
-        </h3>
-      )}
-      <ul className="flex flex-col gap-2">
+    <section aria-label={name} data-lane={lane.kind} className="flex flex-col border-border-subtle not-first:mt-1 not-first:border-t not-first:pt-1">
+      <h3>
+        <button
+          type="button"
+          aria-expanded={open}
+          aria-controls={listId}
+          onClick={onToggle}
+          className={cn(
+            "flex h-[34px] w-full items-center gap-2 rounded-sm px-2 text-start text-[13.5px] font-semibold text-text-secondary hover:bg-hover pointer-coarse:h-11",
+            focusRing,
+          )}
+        >
+          <span aria-hidden="true" className={cn("size-[7px] shrink-0 rounded-full", dot)} />
+          <span className="min-w-0 truncate">{name}</span>
+          <span className="rounded-full bg-neutral-tint px-[7px] font-ui text-notes leading-[18px] font-semibold text-neutral-fg tabular-nums">
+            {formatNumber(lane.count, locale)}
+          </span>
+          <Icon name="chevron-down" size={15} className={cn("ms-auto shrink-0 text-faint transition-transform", !open && "-rotate-90 rtl:rotate-90")} />
+        </button>
+      </h3>
+      <ul id={listId} hidden={!open} className="flex flex-col gap-[14px] px-1 pt-1.5 pb-[14px]">
         {lane.cards.map((card) => {
           const targets = dropTargets(moves[card.id] ?? [], card.stage.key);
           const movable = onMove !== undefined && targets.size > 0;
@@ -246,7 +376,7 @@ function Lane({
             <li
               key={card.id}
               data-movable={movable ? "" : undefined}
-              className={cn("flex flex-col gap-1", dragging === card.id && "rounded-md outline-2 outline-dashed outline-border-strong")}
+              className={cn(movable && "cursor-grab active:cursor-grabbing")}
               draggable={movable || undefined}
               onDragStart={
                 movable
@@ -259,18 +389,13 @@ function Lane({
               }
               onDragEnd={movable ? () => onDragChange(null) : undefined}
             >
-              <WorkItemCard
-                number={card.documentNumber}
-                noNumberLabel={card.revisionNo > 0 ? labels.revisionNoNumber(formatNumber(card.revisionNo, locale)) : labels.noNumber}
-                title={card.title}
-                state={cardState(card, locale, labels, outcomes)}
-                locale={locale}
-                trade={card.trade.name[locale]}
-                location={card.location?.name[locale]}
+              <KanbanCard
+                {...cardContent(card, locale, labels, outcomes, layout, places)}
                 href={itemHref(card.id)}
                 linkAs={linkAs}
+                selected={dragging === card.id}
+                actions={movable ? <MoveMenu card={card} targets={targets} stageNames={stageNames} locale={locale} labels={labels} onMove={onMove} /> : undefined}
               />
-              {movable && <MoveMenu card={card} targets={targets} stageNames={stageNames} locale={locale} labels={labels} onMove={onMove} />}
             </li>
           );
         })}
@@ -305,9 +430,10 @@ function MoveMenu({
         <button
           type="button"
           aria-label={labels.moveItem(card.title)}
-          className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "self-end", touchBox)}
+          title={labels.move}
+          className={cn("inline-flex size-6 items-center justify-center rounded-xs text-muted hover:bg-hover hover:text-text", focusRing, touchBox)}
         >
-          {labels.move}
+          <Icon name="arrows-move" size={15} />
         </button>
       </PopoverTrigger>
       <PopoverContent aria-label={labels.moveItem(card.title)} className="flex w-64 flex-col gap-1 p-2">
@@ -328,24 +454,60 @@ function MoveMenu({
   );
 }
 
-/** Open: its Step Age, and who in my own Company has claimed it (V14); closed: its outcome, from its Type's set. */
-function cardState(card: WorkItemRow, locale: Locale, labels: WorkItemBoardLabels, outcomes: ListOutcomes): WorkItemState | undefined {
-  if (isOpenStageCategory(card.stage.category)) {
-    const w = card.with;
-    const holder =
-      w?.kind === "own"
-        ? w.claimer
-          ? ({ kind: "person", inViewerCompany: true, name: w.claimer.name[locale], companyName: w.companyName[locale] } as const)
-          : ({ kind: "pool", inViewerCompany: true, stepName: w.step.name[locale], unclaimedLabel: labels.unclaimed, companyName: w.companyName[locale] } as const)
-        : undefined;
-    return { open: true, stepAgeWeeks: card.stepAgeWeeks, ...(holder ? { holder } : {}) };
+/** What a card shows, as the viewer may read it (V14) and as their Card view layout asks. */
+export function cardContent(
+  card: WorkItemRow,
+  locale: Locale,
+  labels: WorkItemBoardLabels,
+  outcomes: ListOutcomes,
+  layout: BoardCardLayout,
+  places: Map<string, { depth: number; name: BilingualText }[]>,
+) {
+  const open = isOpenStageCategory(card.stage.category);
+  // The Creation Date on my own Company's items (the API gives it to the raiser's Participant only), else the Submission Date.
+  const dateIso = card.creationDate ?? card.submissionDate;
+  const dateText = dateIso === null ? null : formatDate(new Date(dateIso), locale, { month: "short", day: "numeric" });
+  const place: KanbanCardPlace[] | undefined =
+    card.location === null ? [] : places.get(card.location.id)?.map((p) => ({ depth: p.depth, name: p.name[locale] })) ?? [{ depth: 1, name: card.location.name[locale] }];
+  return {
+    number: card.documentNumber,
+    noNumberLabel: card.revisionNo > 0 ? labels.revisionNoNumber(formatNumber(card.revisionNo, locale)) : labels.noNumber,
+    title: card.title,
+    badge: badgeOf(card, locale, labels, outcomes),
+    trade: { code: card.trade.code, name: card.trade.name[locale] },
+    typeCode: card.type.code,
+    contractorName: layout.contractorName ? card.raiserCompanyName?.[locale] : undefined,
+    place: layout.location ? place : undefined,
+    owner: ownerOf(card, locale, labels),
+    date:
+      layout.creationDate && dateText !== null
+        ? { text: dateText, label: card.creationDate !== null ? labels.createdOn(dateText) : labels.submittedOn(dateText) }
+        : undefined,
+    stepAgeWeeks: open ? card.stepAgeWeeks : null,
+    locale,
+  };
+}
+
+/** The outcome once issued, from its Type's set (RP-429); before that the Revision, from R1. */
+function badgeOf(card: WorkItemRow, locale: Locale, labels: WorkItemBoardLabels, outcomes: ListOutcomes): KanbanCardBadge | undefined {
+  if (card.outcome === "cancelled") return { kind: "plain", label: labels.cancelled };
+  if (card.outcome !== null) {
+    const set = outcomes.filter((o) => o.type === card.type.code);
+    const found = set.find((o) => o.code === card.outcome);
+    if (!found) return { kind: "plain", label: card.outcome };
+    const name = outcomeLabel(found, locale);
+    return { kind: "outcome", look: outcomeLook(found, set), label: found.code.length <= 3 ? labels.code(found.code) : found.name[locale], name };
   }
-  return card.outcome
-    ? {
-        open: false,
-        badge: <Outcome outcome={card.outcome} typeCode={card.type.code} outcomes={outcomes} locale={locale} cancelled={labels.cancelled} />,
-      }
-    : undefined;
+  return card.revisionNo > 0 ? { kind: "revision", label: labels.revision(formatNumber(card.revisionNo, locale)) } : undefined;
+}
+
+/** Who holds it (V14): my own Company's person or unclaimed Step; another Company by its name only. Nobody holds a closed item. */
+function ownerOf(card: WorkItemRow, locale: Locale, labels: WorkItemBoardLabels): KanbanCardOwner | undefined {
+  const w = card.with;
+  if (!w || !isOpenStageCategory(card.stage.category)) return undefined;
+  if (w.kind === "company") return { kind: "company", name: w.companyName[locale] };
+  if (w.claimer) return { kind: "person", name: w.claimer.name[locale] };
+  return { kind: "pool", name: `${w.step.name[locale]} · ${labels.unclaimed}` };
 }
 
 /** The View switch's words, from the app's messages. */
@@ -365,18 +527,18 @@ export type WorkItemViewSwitchProps = {
   linkAs?: ElementType;
 };
 
-/** List / Kanban, as two links: the View is part of the URL. */
+/** Kanban / List, as two links (the View is part of the URL): the active one filled tomato. */
 export function WorkItemViewSwitch({ view, labels, hrefFor, linkAs: Link = "a" }: WorkItemViewSwitchProps) {
   return (
-    <nav aria-label={labels.view} className="inline-flex gap-0.5 rounded-sm bg-surface-subtle p-0.5 ring-1 ring-border ring-inset">
-      {(["list", "kanban"] as const).map((v) => (
+    <nav aria-label={labels.view} className="inline-flex overflow-hidden rounded-sm border border-border-strong bg-surface">
+      {(["kanban", "list"] as const).map((v) => (
         <Link
           key={v}
           href={hrefFor(v)}
           aria-current={v === view ? "page" : undefined}
           className={cn(
-            "inline-flex h-8 items-center gap-1.5 rounded-xs px-3 text-sm font-semibold text-muted hover:text-text pointer-coarse:min-h-11",
-            "aria-[current=page]:bg-surface aria-[current=page]:text-text aria-[current=page]:shadow-xs aria-[current=page]:ring-1 aria-[current=page]:ring-border",
+            "inline-flex h-9 items-center gap-1.5 px-[14px] text-sm font-semibold text-text-secondary hover:bg-hover pointer-coarse:min-h-11",
+            "aria-[current=page]:bg-primary aria-[current=page]:text-on-primary aria-[current=page]:hover:bg-primary-hover",
             focusRing,
           )}
         >

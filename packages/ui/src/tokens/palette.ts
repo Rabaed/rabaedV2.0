@@ -51,6 +51,8 @@ export const palette = {
 
   // Tonal hues: 50 = tint, 500 = solid, 700+ = text on tint.
   "green-50": "#e6f7ee",
+  // Not in the design export: a light green line for Code A's card (RP-410).
+  "green-200": "#bde9d1",
   "green-500": "#27b86e",
   "green-700": "#16874f",
   "green-800": "#127043",

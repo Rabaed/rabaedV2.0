@@ -73,6 +73,9 @@ describe("cool light launch theme", () => {
       (s) => [`stage-${s}-fg`, `stage-${s}-bg`] as [SemanticRole, SemanticRole],
     ),
     ...reviewCodes.map((c) => [`code-${c}-fg`, `code-${c}-bg`] as [SemanticRole, SemanticRole]),
+    // Kanban card chips (RP-410).
+    ...["cv", "ar", "el", "me", "su", "other"].map((t) => [`trade-${t}-fg`, `trade-${t}-bg`] as [SemanticRole, SemanticRole]),
+    ["revision-fg", "revision-bg"],
   ];
 
   it.each(textPairs)("%s on %s meets 4.5:1", (fg, bg) => {

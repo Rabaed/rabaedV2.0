@@ -8,6 +8,7 @@ import {
   searchMaxLength,
   withoutFilters,
   stepAgeMinimums,
+  createdWithinDays,
   workItemPageSize,
   type BilingualText,
   offersRevision,
@@ -30,7 +31,10 @@ import { cn } from "../../lib/cn.ts";
 import { touchBox } from "../form/control-styles.ts";
 import { Field } from "../form/field.tsx";
 import { Input } from "../form/input.tsx";
-import { FilterChoices, FilterMenu, type FilterMenuField } from "../list/filter-menu.tsx";
+import { Avatar } from "../data/avatar.tsx";
+import { Icon } from "../icon/icon.tsx";
+import { FilterMenu, FilterValues, type FilterChoice, type FilterMenuField } from "../list/filter-menu.tsx";
+import { poolIcon, tradeChipClass } from "./kanban-card.tsx";
 import { ListToolbar, ToolbarSearch, ToolbarSwitch } from "../list/list-toolbar.tsx";
 import { Pager, TableCard } from "../list/table-card.tsx";
 import { AgeDots } from "../status/age-dots.tsx";
@@ -107,7 +111,28 @@ export type WorkItemListLabels = {
   buckets: Record<FixedChainBucket, string>;
   /** Each sub-state of the Dashboard's Code C line (codeCState). */
   codeCStates: Record<CodeCFilter, string>;
+  /** The filter panel's fields (RP-410): the Type as "Document type", who holds it, the role holding it, the card's date. */
+  documentType: string;
+  owner: string;
+  role: string;
+  createdDate: string;
+  /** "Last 7 days": `days` is `count` written for the locale. */
+  withinDays: (days: string, count: number) => string;
+  /** A Location level with no name of its own, e.g. "Level 2". */
+  level: (n: string) => string;
+  /** Clears one field of the filter panel. */
+  clearField: string;
+  /** The filter panel's value search. */
+  searchValues: string;
+  noMatches: string;
+  /** The search box's placeholder on the Kanban, e.g. "Search this board". */
+  searchPlaceholderBoard: string;
+  /** The filter panel's field for "Show all Revisions" (RP-410: the toolbar keeps the anatomy's five controls). */
+  revisions: string;
 };
+
+/** The filter fields' names in the other language, shown small after each (the anatomy's bilingual field list). */
+export type WorkItemFilterHints = Partial<Record<"stage" | "trade" | "documentType" | "owner" | "role" | "createdDate" | "stepAge" | "outcome" | "submissionDate" | "revisions", string>>;
 
 /** The labels that take no value, for `t`. */
 type TextLabel = { [K in keyof WorkItemListLabels]: WorkItemListLabels[K] extends string ? K : never }[keyof WorkItemListLabels];
@@ -177,6 +202,8 @@ export type WorkItemListProps = {
   linkAs?: ElementType;
   /** The Kanban (`WorkItemBoard`), shown under the toolbar in place of the Stage counts, table and pages. */
   board?: ReactNode;
+  /** The filter fields' names in the other language. */
+  hints?: WorkItemFilterHints;
 };
 
 /**
@@ -202,6 +229,7 @@ export function WorkItemList({
   viewSwitch,
   linkAs: Link = "a",
   board,
+  hints,
 }: WorkItemListProps) {
   const t = (key: TextLabel) => labels[key];
   const n = (value: number) => formatNumber(value, locale);
@@ -221,64 +249,184 @@ export function WorkItemList({
     },
   });
 
-  const choices = (
-    key: "type" | "stage" | "with" | "trade" | "location" | "outcome",
+  const valueLabels = { clear: t("clearField"), search: t("searchValues"), noMatches: t("noMatches") };
+  /** A field of several values, any of them (RP-410). */
+  const many = (
+    key: "type" | "stage" | "owner" | "role" | "trade" | "outcome",
     label: string,
-    options: { value: string; label: ReactNode; mark?: ReactNode }[],
+    hint: string | undefined,
+    group: string,
+    options: FilterChoice[],
   ): FilterMenuField => ({
     key,
     label,
+    hint,
+    group,
     count: query[key].length,
     content: (
-      <FilterChoices
+      <FilterValues
         label={label}
-        allLabel={t("all")}
-        value={query[key][0]}
+        hint={hint}
+        values={query[key]}
         choices={options}
-        onChange={(v) => change({ [key]: v ? [v] : [] })}
+        labels={valueLabels}
+        onChange={(values) => change({ [key]: values })}
       />
     ),
   });
+  // The Kanban has no Drafts column, so its Stage field leaves Drafts out; the List keeps them (RP-410).
+  const stageChoices = (board ? list.stages.filter((s) => s.category !== "draft") : list.stages).map((s) => ({
+    value: s.key,
+    label: s.name[locale],
+    mark: <StageDot stage={stageColour(s)} />,
+  }));
+  // Zone, Building, Floor…: one field per level of the Location tree, its values any of them; levels together, all of them.
+  const levels = locationLevels(list.filters.locations, locale, labels);
   const fields: FilterMenuField[] = [
-    choices("type", t("type"), list.filters.types.map((v) => ({ value: v.code, label: v.name[locale] }))),
-    choices(
-      "stage",
-      t("stage"),
-      list.stages.map((s) => ({ value: s.key, label: s.name[locale], mark: <StageDot stage={stageColour(s)} /> })),
+    many("stage", t("stage"), hints?.stage, "workflow", stageChoices),
+    many(
+      "trade",
+      t("trade"),
+      hints?.trade,
+      "workflow",
+      list.filters.trades.map((v) => ({
+        value: v.id,
+        text: `${v.name[locale]} ${v.code}`,
+        label: (
+          <span className={cn("inline-flex h-5 items-center rounded-[6px] px-1.5 text-notes font-semibold", tradeChipClass(v.code))}>
+            {v.name[locale]} (<bdi translate="no">{v.code}</bdi>)
+          </span>
+        ),
+      })),
     ),
-    choices("with", t("with"), [
-      { value: "me", label: t("withMe") },
-      { value: "unclaimed", label: t("anyUnclaimed") },
-      ...list.filters.with.steps.map((s) => ({ value: `step:${s.key}`, label: s.name[locale] })),
-      ...list.filters.with.companies.map((c) => ({ value: `company:${c.participantId}`, label: c.name[locale] })),
+    many(
+      "type",
+      t("documentType"),
+      hints?.documentType,
+      "workflow",
+      list.filters.types.map((v) => ({
+        value: v.code,
+        text: `${v.code} ${v.name[locale]}`,
+        label: v.name[locale],
+        mark: (
+          <span translate="no" className="font-ui text-notes font-bold text-muted">
+            {v.code}
+          </span>
+        ),
+      })),
+    ),
+    // My own Company's people, my unclaimed pool, and another Company by its name only (V14).
+    many("owner", t("owner"), hints?.owner, "workflow", [
+      ...list.filters.owners.map((o) => ({ value: `member:${o.memberId}`, label: o.name[locale], mark: <Avatar name={o.name[locale]} size="sm" decorative className="size-5" /> })),
+      {
+        value: "unclaimed",
+        label: t("anyUnclaimed"),
+        mark: (
+          <span className="inline-flex size-5 items-center justify-center rounded-full border border-dashed border-border-strong text-muted">
+            <Icon name={poolIcon} size={11} />
+          </span>
+        ),
+      },
+      ...list.filters.with.companies.map((c) => ({
+        value: `company:${c.participantId}`,
+        label: c.name[locale],
+        mark: <Avatar name={c.name[locale]} kind="company" size="sm" decorative className="size-5" />,
+      })),
     ]),
-    choices("trade", t("trade"), list.filters.trades.map((v) => ({ value: v.id, label: v.name[locale] }))),
-    choices("location", t("location"), locationOptions(list.filters.locations, locale)),
-    choices("outcome", t("outcome"), outcomeOptions(list.filters.outcomes, locale, labels.cancelled)),
+    // My own Company's Steps only: another Company is one lane, never its roles (V5).
+    many(
+      "role",
+      t("role"),
+      hints?.role,
+      "workflow",
+      list.filters.with.steps.map((s, i) => ({ value: s.key, label: s.name[locale], mark: <span className={cn("size-2 rounded-full", roleDots[i % roleDots.length])} /> })),
+    ),
+    ...levels.map(
+      (level): FilterMenuField => ({
+        key: `location-${level.depth}`,
+        label: level.label,
+        hint: level.hint,
+        group: "place",
+        count: query.location.filter((id) => level.ids.has(id)).length,
+        content: (
+          <FilterValues
+            label={level.label}
+            hint={level.hint}
+            values={query.location.filter((id) => level.ids.has(id))}
+            choices={level.choices}
+            labels={valueLabels}
+            onChange={(values) => change({ location: [...query.location.filter((id) => !level.ids.has(id)), ...values] })}
+          />
+        ),
+      }),
+    ),
+    {
+      key: "createdDate",
+      label: t("createdDate"),
+      hint: hints?.createdDate,
+      group: "time",
+      count: query.createdWithin === undefined ? 0 : 1,
+      content: (
+        <FilterValues
+          label={t("createdDate")}
+          hint={hints?.createdDate}
+          multiple={false}
+          values={query.createdWithin === undefined ? [] : [String(query.createdWithin)]}
+          choices={createdWithinDays.map((days) => ({ value: String(days), label: labels.withinDays(n(days), days) }))}
+          labels={valueLabels}
+          onChange={([v]) => change({ createdWithin: v ? (Number(v) as WorkItemQuery["createdWithin"]) : undefined })}
+        />
+      ),
+    },
     {
       key: "stepAge",
       label: t("stepAge"),
+      hint: hints?.stepAge,
+      group: "time",
       count: query.stepAgeMin === undefined ? 0 : 1,
       content: (
-        <FilterChoices
+        <FilterValues
           label={t("stepAge")}
-          allLabel={t("all")}
-          value={query.stepAgeMin === undefined ? undefined : String(query.stepAgeMin)}
+          hint={hints?.stepAge}
+          multiple={false}
+          values={query.stepAgeMin === undefined ? [] : [String(query.stepAgeMin)]}
           choices={stepAgeMinimums.map((weeks) => ({
             value: String(weeks),
             label: labels.weeksOrMore(n(weeks), weeks),
             mark: <AgeDots weeks={weeks} locale={locale} />,
           }))}
-          onChange={(v) => change({ stepAgeMin: v ? (Number(v) as WorkItemQuery["stepAgeMin"]) : undefined })}
+          labels={valueLabels}
+          onChange={([v]) => change({ stepAgeMin: v ? (Number(v) as WorkItemQuery["stepAgeMin"]) : undefined })}
+        />
+      ),
+    },
+    many("outcome", t("outcome"), hints?.outcome, "more", outcomeOptions(list.filters.outcomes, locale, labels.cancelled)),
+    {
+      // Every visible Revision, not only the latest of each chain: how the rows are shown, so not a filter of the query.
+      key: "revisions",
+      label: t("revisions"),
+      hint: hints?.revisions,
+      group: "more",
+      count: query.allRevisions ? 1 : 0,
+      content: (
+        <FilterValues
+          label={t("revisions")}
+          hint={hints?.revisions}
+          values={query.allRevisions ? ["all"] : []}
+          choices={[{ value: "all", label: t("allRevisions") }]}
+          labels={valueLabels}
+          onChange={(values) => change({ allRevisions: values.includes("all") })}
         />
       ),
     },
     {
       key: "submissionDate",
       label: t("submissionDate"),
+      hint: hints?.submissionDate,
+      group: "more",
       count: (query.submittedFrom ? 1 : 0) + (query.submittedTo ? 1 : 0),
       content: (
-        <div className="flex flex-col gap-3 p-1">
+        <div className="flex flex-col gap-3 px-[14px] py-1">
           <Field label={t("submittedFrom")}>
             <Input type="date" value={query.submittedFrom ?? ""} max={query.submittedTo} onChange={(e) => change({ submittedFrom: e.target.value || undefined })} />
           </Field>
@@ -292,14 +440,14 @@ export function WorkItemList({
 
   return (
     <div className="flex min-w-0 flex-col gap-4">
-      <ListToolbar label={t("toolbar")} end={viewSwitch}>
+      <ListToolbar label={t("toolbar")} end={viewSwitch} className="gap-3">
         {action}
         <ToolbarSearch
           // A new query (back button, a cleared filter) shows its own words.
           key={query.q ?? ""}
           value={query.q}
           label={t("search")}
-          placeholder={t("searchPlaceholder")}
+          placeholder={board ? t("searchPlaceholderBoard") : t("searchPlaceholder")}
           maxLength={searchMaxLength}
           description={t("searchHelp")}
           onSearch={(q) => change({ q })}
@@ -308,11 +456,24 @@ export function WorkItemList({
           fields={fields}
           labels={{ filters: t("filters"), clearAll: t("clearAll"), done: t("done"), close: t("close"), applied: labels.filtersApplied, number: n }}
           onClearAll={() =>
-            change({ type: [], stage: [], with: [], trade: [], location: [], outcome: [], stepAgeMin: undefined, submittedFrom: undefined, submittedTo: undefined })
+            change({
+              type: [],
+              stage: [],
+              with: [],
+              owner: [],
+              role: [],
+              trade: [],
+              location: [],
+              outcome: [],
+              stepAgeMin: undefined,
+              createdWithin: undefined,
+              submittedFrom: undefined,
+              submittedTo: undefined,
+              allRevisions: false,
+            })
           }
         />
         <ToolbarSwitch label={t("needMyAction")} checked={query.needMyAction} onCheckedChange={(on) => change({ needMyAction: on })} />
-        <ToolbarSwitch label={t("allRevisions")} checked={query.allRevisions} onCheckedChange={(on) => change({ allRevisions: on })} />
         {/* A Dashboard number's filter, which the toolbar has no control for: its buckets and Code C sub-states. */}
         {query.bucket.length + query.codeC.length > 0 && (
           <Badge tone="info" data-testid="bucket-filter">
@@ -483,18 +644,50 @@ function WorkItemPager({
   );
 }
 
-/** Each Location with the ones above it, so it reads in place (Tower 1 › Building A). */
-function locationOptions(locations: WorkItemListData["filters"]["locations"], locale: Locale) {
+// The Role field's dots, as the board's lanes have them: my own Steps in turn.
+const roleDots = ["bg-stage-internal-dot", "bg-stage-pending-dot", "bg-trade-el-fg", "bg-stage-approved-dot"];
+
+/**
+ * The Location tree's levels (Zone, Building, Floor…), each a filter field named
+ * by its level, its values the Locations at that level, each with the ones above
+ * it after its name so it reads in place (Floor 1 · Building 1).
+ */
+function locationLevels(locations: WorkItemListData["filters"]["locations"], locale: Locale, labels: WorkItemListLabels) {
   const byId = new Map(locations.map((l) => [l.id, l]));
-  const path = (id: string | null, seen = new Set<string>()): BilingualText[] => {
+  const above = (id: string | null, seen = new Set<string>()): BilingualText[] => {
     const l = id ? byId.get(id) : undefined;
     if (!l || seen.has(l.id)) return [];
     seen.add(l.id);
-    return [...path(l.parentId, seen), l.name];
+    return [...above(l.parentId, seen), l.name];
   };
-  return locations
-    .map((l) => ({ value: l.id, label: path(l.id).map((n) => n[locale]).join(" › ") }))
-    .sort((a, b) => a.label.localeCompare(b.label, locale));
+  const depths = [...new Set(locations.map((l) => l.depth))].sort((a, b) => a - b);
+  return depths.map((depth) => {
+    const at = locations.filter((l) => l.depth === depth);
+    const named = at.find((l) => l.levelName !== null)?.levelName;
+    return {
+      depth,
+      label: named ? named[locale] : labels.level(formatNumber(depth, locale)),
+      // The level's name in the other language, as the other fields have it.
+      hint: named ? named[locale === "en" ? "ar" : "en"] : undefined,
+      ids: new Set(at.map((l) => l.id)),
+      choices: at
+        .map((l): FilterChoice => {
+          const path = above(l.parentId).map((p) => p[locale]);
+          const where = path.reverse().join(" · ");
+          return {
+            value: l.id,
+            text: `${l.name[locale]} ${where}`,
+            label: (
+              <span className="flex flex-wrap items-baseline gap-x-1.5">
+                <span>{l.name[locale]}</span>
+                {where && <span className="text-caption text-muted">{where}</span>}
+              </span>
+            ),
+          };
+        })
+        .sort((a, b) => (a.text ?? "").localeCompare(b.text ?? "", locale)),
+    };
+  });
 }
 
 /** "With", as V14 has it. */

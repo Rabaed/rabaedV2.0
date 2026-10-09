@@ -87,7 +87,7 @@
       "revisionNoNumber": "المراجعة {revision}: بلا رقم بعد",
       "empty": "لا توجد عناصر يمكنك رؤيتها تطابق هذه التصفية.",
       "search": "بحث",
-      "searchHelp": "يبحث في رقم المستند والموضوع والنوع والتخصص والموقع والشركة",
+      "searchHelp": "يبحث في رقم المستند والموضوع والنوع والتخصص والموقع والشركة والمسؤول",
       "searchPlaceholder": "ابحث في القائمة",
       "filters": "التصفية",
       "clearAll": "مسح الكل",
@@ -102,7 +102,18 @@
       "page": "صفحة {page}",
       "pageOf": "صفحة {page} من {pages}",
       "items": "{count, plural, one {عنصر واحد} two {عنصران} few {{n} عناصر} many {{n} عنصرًا} other {{n} عنصر}}",
-      "dashboardFigure": "من لوحة المعلومات"
+      "dashboardFigure": "من لوحة المعلومات",
+      "documentType": "نوع المستند",
+      "owner": "المسؤول",
+      "role": "الخطوة",
+      "createdDate": "تاريخ الإنشاء",
+      "withinDays": "{count, plural, one {آخر يوم} two {آخر يومين} few {آخر {days} أيام} many {آخر {days} يومًا} other {آخر {days} يوم}}",
+      "level": "المستوى {n}",
+      "clearField": "مسح",
+      "searchValues": "بحث",
+      "noMatches": "لا نتائج",
+      "searchPlaceholderBoard": "البحث في اللوحة",
+      "revisions": "المراجعات"
     },
     "buckets": {
       "pending": "قيد الانتظار",
@@ -128,7 +139,12 @@
       "move": "نقل",
       "moveItem": "نقل {subject}",
       "moveTo": "إلى {stage}",
-      "dragging": "أفلت العنصر على عمود مظلَّل لنقله."
+      "dragging": "أفلت العنصر على عمود مظلَّل لنقله.",
+      "mixed": "مختلط",
+      "revision": "R{n}",
+      "code": "Code {code}",
+      "createdOn": "أُنشئ في {date}",
+      "submittedOn": "قُدِّم في {date}"
     },
     "viewSwitch": {
       "view": "طريقة العرض",
@@ -167,6 +183,16 @@
       "recommended": "أوصى برمز على",
       "cancelled": "ألغى",
       "updated": "حدّث"
+    },
+    "layout": {
+      "title": "تخطيط عرض البطاقة",
+      "boardSettings": "إعدادات اللوحة",
+      "fixedParts": "الرقم والموضوع والتخصص والنوع والمسؤول",
+      "alwaysShown": "تظهر دائمًا",
+      "contractorName": "اسم المقاول",
+      "location": "الموقع",
+      "creationDate": "تاريخ الإنشاء",
+      "preview": "معاينة"
     }
   },
   "health": {
