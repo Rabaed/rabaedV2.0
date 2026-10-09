@@ -15,9 +15,12 @@
 // a lane with another worktree, but only the lane owner's own implementer subagents use it:
 // a session whose lane another session holds takes --free or runs lanes:prune. Without --db
 // the .env is as before.
+// It also warns (never refuses) when another local branch, worktree or origin branch starts with the
+// same RP-nnn- key as this worktree's branch: another session may already have claimed that ticket (RP-499).
 // `pnpm lanes:prune` removes the compose projects old worktrees left behind;
 // `pnpm lanes:drop-dbs` drops the --db databases of worktrees that are gone.
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { claimWarnings, currentBranch, realClaimGit } from "./lane-claims.ts";
 import { firstFreeLane, isValidDbSuffix, laneClashes, laneEnv, laneHolders, lanePorts, laneProject, listContainers, takenLanePorts } from "./lanes.ts";
 import { samePath } from "./paths.ts";
 import { branchMerged, listWorktrees, refExists, type Worktree } from "./worktrees.ts";
@@ -44,6 +47,8 @@ if (existsSync(".env") && !force) {
   console.error(".env already exists. Re-run with --force to overwrite it.");
   process.exit(1);
 }
+
+for (const warning of claimWarnings(realClaimGit, process.cwd(), currentBranch())) console.warn(`Warning: ${warning}`);
 
 const containers = listContainers();
 if (!containers) console.warn("Docker is not running, so only the ports were checked, not the compose projects.");
