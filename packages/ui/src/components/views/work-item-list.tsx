@@ -10,8 +10,10 @@ import {
   stepAgeMinimums,
   workItemSorts,
   type BilingualText,
-  type ChainBucket,
+  offersRevision,
+  outcomeLabel,
   type CodeCFilter,
+  type FixedChainBucket,
   type Locale,
   type WorkItemList as WorkItemListData,
   type WorkItemOutcome,
@@ -31,7 +33,6 @@ import { Input } from "../form/input.tsx";
 import { Select } from "../form/select.tsx";
 import { Switch } from "../form/switch.tsx";
 import { AgeDots } from "../status/age-dots.tsx";
-import { CodeBadge } from "../status/code-badge.tsx";
 import { stageColour } from "../status/stage-colour.ts";
 import { StagePill } from "../status/stage-pill.tsx";
 import { WithChip } from "../status/with-chip.tsx";
@@ -84,12 +85,12 @@ export type WorkItemListLabels = {
   pages: string;
   firstPage: string;
   nextPage: string;
-  /** Each Review Code and Inspection Result, as its filter choice and its badge. */
-  outcomes: Record<WorkItemOutcome, string>;
+  /** The outcome of a cancelled item, as its filter choice and its badge; every other outcome is named by its Type's set (RP-429). */
+  cancelled: string;
   /** Before a Dashboard number's filter (its buckets and Code C sub-states), which the toolbar has no control for. */
   dashboardFigure: string;
-  /** Each Dashboard bucket (chainBucket), as the Dashboard names it. */
-  buckets: Record<ChainBucket, string>;
+  /** Each Dashboard bucket that isn't an outcome (chainBucket), as the Dashboard names it. */
+  buckets: Record<FixedChainBucket, string>;
   /** Each sub-state of the Dashboard's Code C line (codeCState). */
   codeCStates: Record<CodeCFilter, string>;
 };
@@ -97,21 +98,36 @@ export type WorkItemListLabels = {
 /** The labels that take no value, for `t`. */
 type TextLabel = { [K in keyof WorkItemListLabels]: WorkItemListLabels[K] extends string ? K : never }[keyof WorkItemListLabels];
 
-const outcomeTones: Record<WorkItemOutcome, Tone> = {
-  A: "success",
-  B: "success",
-  C: "warning",
-  D: "danger",
-  passed: "success",
-  passed_with_comments: "success",
-  failed: "danger",
-  cancelled: "neutral",
-  closed: "neutral",
-};
+/** Each Type's outcomes on the Project, as the List and the Kanban send them (RP-429). */
+export type ListOutcomes = WorkItemListData["filters"]["outcomes"];
+
+/**
+ * An outcome's badge tone, from its place in its Type's set, never its code:
+ * one offering a Revision (Code C) is back with the raiser, a positive one
+ * succeeded, a negative one didn't.
+ */
+function outcomeTone(outcome: ListOutcomes[number] | undefined): Tone {
+  if (!outcome) return "neutral";
+  if (offersRevision(outcome)) return "warning";
+  return outcome.polarity === "positive" ? "success" : "danger";
+}
+
+/** Each outcome code of the Types, once (the first Type's name), then Cancelled: the outcome filter's choices. */
+function outcomeOptions(outcomes: ListOutcomes, locale: Locale, cancelled: string) {
+  const byCode = new Map<string, string>();
+  for (const o of outcomes) if (!byCode.has(o.code)) byCode.set(o.code, outcomeLabel(o, locale));
+  return [...[...byCode].map(([value, label]) => ({ value, label })), { value: "cancelled", label: cancelled }];
+}
+
+/** A bucket's name: the app's word for a fixed one, else the outcome's from the Types' sets. */
+function bucketLabel(bucket: string, outcomes: ListOutcomes, locale: Locale, labels: WorkItemListLabels): string {
+  const fixed = (labels.buckets as Record<string, string>)[bucket];
+  if (fixed !== undefined) return fixed;
+  const outcome = outcomes.find((o) => o.code === bucket);
+  return outcome ? outcomeLabel(outcome, locale) : bucket;
+}
 
 const sortLabels = { stepAge: "sortStepAge", documentNumber: "sortDocumentNumber", submissionDate: "sortSubmissionDate" } as const satisfies Record<WorkItemQuery["sort"], TextLabel>;
-
-const reviewCodes = { A: "a", B: "b", C: "c", D: "d" } as const;
 
 /** A Select's value for "no filter": Radix Select takes no empty value. */
 const ALL = "all";
@@ -209,7 +225,7 @@ export function WorkItemList({ list, query, locale, labels, hrefFor, itemHref, o
             label={t("outcome")}
             allLabel={t("all")}
             value={query.outcome[0]}
-            options={Object.entries(labels.outcomes).map(([value, label]) => ({ value, label }))}
+            options={outcomeOptions(list.filters.outcomes, locale, labels.cancelled)}
             onChange={(v) => change({ outcome: v ? [v as WorkItemOutcome] : [] })}
           />
           <FilterSelect
@@ -245,7 +261,10 @@ export function WorkItemList({ list, query, locale, labels, hrefFor, itemHref, o
             {query.bucket.length + query.codeC.length > 0 && (
               <Badge tone="info" data-testid="bucket-filter">
                 {t("dashboardFigure")}:{" "}
-                {[...query.bucket.map((bucket) => labels.buckets[bucket]), ...query.codeC.map((codeC) => labels.codeCStates[codeC])].join(", ")}
+                {[
+                  ...query.bucket.map((bucket) => bucketLabel(bucket, list.filters.outcomes, locale, labels)),
+                  ...query.codeC.map((codeC) => labels.codeCStates[codeC]),
+                ].join(", ")}
               </Badge>
             )}
           </div>
@@ -316,7 +335,11 @@ export function WorkItemList({ list, query, locale, labels, hrefFor, itemHref, o
                 </TableCell>
                 <TableCell className="whitespace-nowrap">{item.trade.name[locale]}</TableCell>
                 <TableCell className="whitespace-nowrap">{item.location?.name[locale]}</TableCell>
-                <TableCell>{item.outcome ? <Outcome outcome={item.outcome} locale={locale} labels={labels.outcomes} /> : null}</TableCell>
+                <TableCell>
+                  {item.outcome ? (
+                    <Outcome outcome={item.outcome} typeCode={item.type.code} outcomes={list.filters.outcomes} locale={locale} cancelled={labels.cancelled} />
+                  ) : null}
+                </TableCell>
                 <TableCell className="whitespace-nowrap">{date(item.submissionDate)}</TableCell>
                 {showCreationDate && <TableCell className="whitespace-nowrap">{date(item.creationDate)}</TableCell>}
               </TableRow>
@@ -431,13 +454,34 @@ function WithCell({ row, locale, unclaimed }: { row: WorkItemRow; locale: Locale
 }
 
 /**
- * The Review Code or Inspection Result badge, the same on the List and the
- * Kanban. A Review Code says its meaning in the fixed product wording of
- * `CodeBadge`; anything else says its label.
+ * An item's outcome badge, the same on the List and the Kanban (RP-429): named
+ * and coloured from its Type's outcome set, never from fixed codes. A letter
+ * code (a Review Code) shows its letter, its name for screen readers and on
+ * hover; any other outcome shows its name.
  */
-export function Outcome({ outcome, locale, labels }: { outcome: WorkItemOutcome; locale: Locale; labels: Record<WorkItemOutcome, string> }) {
-  if (outcome in reviewCodes) {
-    return <CodeBadge code={reviewCodes[outcome as keyof typeof reviewCodes]} locale={locale} size="sm" variant="letter" />;
-  }
-  return <Badge tone={outcomeTones[outcome]}>{labels[outcome]}</Badge>;
+export function Outcome({
+  outcome,
+  typeCode,
+  outcomes,
+  locale,
+  cancelled,
+}: {
+  outcome: WorkItemOutcome;
+  typeCode: string;
+  outcomes: ListOutcomes;
+  locale: Locale;
+  cancelled: string;
+}) {
+  const found = outcomes.find((o) => o.type === typeCode && o.code === outcome);
+  if (!found) return <Badge tone="neutral">{outcome === "cancelled" ? cancelled : outcome}</Badge>;
+  const label = outcomeLabel(found, locale);
+  if (found.code.length > 3) return <Badge tone={outcomeTone(found)}>{label}</Badge>;
+  return (
+    <Badge tone={outcomeTone(found)} title={label}>
+      <span aria-hidden="true" translate="no">
+        {found.code}
+      </span>
+      <span className="sr-only">{label}</span>
+    </Badge>
+  );
 }

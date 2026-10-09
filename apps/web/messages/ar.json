@@ -70,13 +70,6 @@
     "buckets": {
       "pending": "قيد الانتظار",
       "in_preparation": "قيد الإعداد",
-      "A": "معتمد (A)",
-      "B": "معتمد (B)",
-      "C": "للتعديل (C)",
-      "D": "مرفوض (D)",
-      "passed": "ناجح",
-      "passed_with_comments": "ناجح مع ملاحظات",
-      "failed": "راسب",
       "approved": "معتمد",
       "rejected": "مرفوض",
       "cancelled": "ملغى"
@@ -105,13 +98,6 @@
       "list": "قائمة",
       "kanban": "كانبان"
     },
-    "outcomes": {
-      "A": "الرمز A",
-      "B": "الرمز B",
-      "C": "الرمز C",
-      "D": "الرمز D",
-      "closed": "مغلق"
-    },
     "dashboard": {
       "items": "عدد العناصر: {count}",
       "open": "مفتوحة",
@@ -121,6 +107,7 @@
       "approved": {
         "review_code": "المعتمد (A+B)",
         "inspection_result": "الناجح، مع ملاحظات أو بدونها",
+        "approval": "المعتمد",
         "none": "المعتمد"
       }
     },

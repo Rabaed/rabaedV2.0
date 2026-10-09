@@ -1,4 +1,5 @@
 import {
+  defaultOutcomeSets,
   workItemQuery,
   workItemSearchParams,
   type WorkItemBoard as WorkItemBoardData,
@@ -99,6 +100,7 @@ const board: WorkItemBoardData = {
   ],
   filters: {
     types: [mar],
+    outcomes: defaultOutcomeSets.review_code.map((o) => ({ ...o, type: mar.code })),
     trades: [electrical],
     locations: [],
     with: {

@@ -70,13 +70,6 @@
     "buckets": {
       "pending": "Pending",
       "in_preparation": "In preparation",
-      "A": "Approved (A)",
-      "B": "Approved (B)",
-      "C": "Revise (C)",
-      "D": "Rejected (D)",
-      "passed": "Passed",
-      "passed_with_comments": "Passed with Comments",
-      "failed": "Failed",
       "approved": "Approved",
       "rejected": "Rejected",
       "cancelled": "Cancelled"
@@ -105,13 +98,6 @@
       "list": "List",
       "kanban": "Kanban"
     },
-    "outcomes": {
-      "A": "Code A",
-      "B": "Code B",
-      "C": "Code C",
-      "D": "Code D",
-      "closed": "Closed"
-    },
     "dashboard": {
       "items": "{count} items",
       "open": "Open",
@@ -121,6 +107,7 @@
       "approved": {
         "review_code": "Approved (A+B)",
         "inspection_result": "Passed, with or without Comments",
+        "approval": "Approved",
         "none": "Approved"
       }
     },

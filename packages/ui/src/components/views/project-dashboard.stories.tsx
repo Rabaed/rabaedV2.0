@@ -1,4 +1,4 @@
-import { dashboardCard, formatNumber, workItemSearchParams, type ChainBucket, type CodeCState, type Dashboard } from "@rabaed/domain";
+import { dashboardCard, defaultOutcomeSets, formatNumber, workItemSearchParams, type ChainBucket, type CodeCState, type Dashboard } from "@rabaed/domain";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, within } from "storybook/test";
 import { phone } from "../../storybook/form.ts";
@@ -7,7 +7,7 @@ import { projectDashboardLabels } from "../../storybook/views.ts";
 import { ProjectDashboard } from "./project-dashboard.tsx";
 
 // The Dashboard's Type cards (RP-351, spec RP-344): one card per Work Item Type
-// under its Module, a card's bars by its Type's outcome kind, every number a
+// under its Module, a card's bars by its Type's outcome set (RP-429), every number a
 // link to the List; a Review Code card's Code C line (RP-352). Story data only.
 const b = (en: string, ar: string) => ({ en, ar });
 const copy = {
@@ -41,6 +41,7 @@ const marCard = (viewer: "raiser" | "other") =>
     type: { code: "MAR", name: copy.mar },
     moduleKey: "submittals",
     outcomeKind: "review_code",
+    outcomes: defaultOutcomeSets.review_code,
     counts: counts([["pending", 4], ...(viewer === "raiser" ? [["in_preparation", 3] as [ChainBucket, number]] : []), ["C", 2], ["A", 6], ["B", 4], ["D", 0]]),
     codeCCounts: codeCCounts(
       viewer === "raiser"
@@ -59,6 +60,7 @@ const contractor: Dashboard = {
           type: { code: "CMT", name: copy.cmt },
           moduleKey: "snag_list",
           outcomeKind: "none",
+          outcomes: defaultOutcomeSets.none,
           counts: counts([["pending", 6], ["approved", 11], ["cancelled", 1]]),
         }),
       ],
@@ -74,6 +76,7 @@ const contractor: Dashboard = {
           type: { code: "WIR", name: copy.wir },
           moduleKey: "inspections",
           outcomeKind: "inspection_result",
+          outcomes: defaultOutcomeSets.inspection_result,
           counts: counts([["pending", 2], ["passed", 7], ["passed_with_comments", 2], ["failed", 1]]),
         }),
       ],
@@ -85,6 +88,7 @@ const contractor: Dashboard = {
           type: { code: "DSR", name: copy.dsr },
           moduleKey: "site_reports",
           outcomeKind: "none",
+          outcomes: defaultOutcomeSets.none,
           counts: counts([["pending", 1], ["approved", 20], ["rejected", 1]]),
         }),
       ],
@@ -116,6 +120,7 @@ const withRejectedAfterC: Dashboard = {
           type: { code: "MAR", name: copy.mar },
           moduleKey: "submittals",
           outcomeKind: "review_code",
+          outcomes: defaultOutcomeSets.review_code,
           counts: counts([["A", 3], ["C", 1], ["D", 1]]),
           codeCCounts: codeCCounts([["approvedOnRevision", 3], ["awaitingRevision", 1], ["rejectedAfterC", 1]]),
         }),

@@ -2,13 +2,11 @@
 
 import {
   watchOutcomeNames,
-  workItemOutcomes,
   workItemSearchParams,
   type Locale,
   type WorkItemBoard as WorkItemBoardData,
   type WorkItemList as WorkItemListData,
   type WorkItemMove,
-  type WorkItemOutcome,
   type WorkItemQuery,
   type WorkItemRow,
   type WorkItemView,
@@ -24,27 +22,17 @@ import { WorkItemBoardMove } from "@/components/work-item-board-move";
 import { getPathname } from "@/i18n/navigation";
 import { chainLabels } from "@/lib/chain-labels";
 
-const sharedOutcomeNames = {
-  passed: watchOutcomeNames.passed,
-  passed_with_comments: watchOutcomeNames.passed_with_comments,
-  failed: watchOutcomeNames.failed,
-  cancelled: watchOutcomeNames.cancelled,
-} satisfies Partial<Record<WorkItemOutcome, Record<Locale, string>>>;
-
 /** The List's and the Kanban's words, from the app's messages. */
 function useViewLabels(tableLabel: string): { list: WorkItemListLabels; board: WorkItemBoardLabels } {
   const t = useTranslations("workItemViews");
   const l = (key: string) => t(`list.${key}`);
   const locale = useLocale() as Locale;
-  // Inspection Results and Cancelled are named once, with the notifications (watchOutcomeNames); a Review Code shows its letter.
-  const outcomes = Object.fromEntries(
-    workItemOutcomes.map((o) => [o, o in sharedOutcomeNames ? sharedOutcomeNames[o as keyof typeof sharedOutcomeNames][locale] : t(`outcomes.${o}`)]),
-  ) as Record<WorkItemOutcome, string>;
   const shared = {
     noNumber: l("noNumber"),
     revisionNoNumber: (revision: string) => t("list.revisionNoNumber", { revision }),
     unclaimed: l("unclaimed"),
-    outcomes,
+    // Cancelled is named once, with the notifications (watchOutcomeNames); every other outcome by its Type's set (RP-429).
+    cancelled: watchOutcomeNames.cancelled[locale],
   };
   const keys = [
     "toolbar", "all", "type", "stage", "with", "withMe", "anyUnclaimed", "trade", "location", "outcome", "stepAge", "sort",
