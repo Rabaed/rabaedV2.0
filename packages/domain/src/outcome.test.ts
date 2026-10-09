@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import outcomeCases from "./outcome-cases.json" with { type: "json" };
 import {
   addOutcomeRequest,
   changeOutcomeRequest,
@@ -7,6 +8,7 @@ import {
   itemsToCreate,
   offersReplacement,
   offersRevision,
+  outcomeActions,
   outcomeCode,
   outcomeLabel,
   outcomeSchema,
@@ -44,14 +46,16 @@ describe("the Rabaed Default outcome sets", () => {
   });
 });
 
-describe("an outcome code", () => {
-  it("is a letter then letters, digits or underscores, at most 32", () => {
-    for (const ok of ["A", "E", "passed_with_comments", "E2"]) expect(outcomeCode.safeParse(ok).success).toBe(true);
-    for (const bad of ["", "1A", "a-b", "A B", "x".repeat(33)]) expect(outcomeCode.safeParse(bad).success).toBe(false);
+// The cases app.is_outcome_code and app.is_outcome_actions run over too (seam-2 outcome-sets.test.ts).
+describe("an outcome code: a letter, then letters, digits or underscores, at most 32, never one the engine or the Dashboard keeps", () => {
+  it.each(outcomeCases.codes)("$code: $valid", ({ code, valid }) => {
+    expect(outcomeCode.safeParse(code).success).toBe(valid);
   });
+});
 
-  it("is never one the engine or the Dashboard keeps for itself", () => {
-    for (const reserved of ["cancelled", "pending", "in_preparation"]) expect(outcomeCode.safeParse(reserved).success).toBe(false);
+describe("an outcome's follow-up actions: each of the three kinds at most once, items of a Type code", () => {
+  it.each(outcomeCases.actions)("$name: $valid", ({ actions, valid }) => {
+    expect(outcomeActions.safeParse(actions).success).toBe(valid);
   });
 });
 

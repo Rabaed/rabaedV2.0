@@ -6,12 +6,16 @@
 // the Project reads its copy (project-rls.test.ts checks the table among every
 // Project table), and the app role writes none directly.
 import { randomInt, randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { defaultOutcomeSets, outcomeKinds, type Outcome } from "@rabaed/domain";
 import { sql } from "kysely";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb, withMember, type Db } from "../src/index.ts";
 import { testDatabaseUrls } from "../test-support/index.ts";
+
+type OutcomeCases = { codes: { code: string; valid: boolean }[]; actions: { name: string; actions: unknown; valid: boolean }[] };
+const cases = JSON.parse(readFileSync(new URL("../../domain/src/outcome-cases.json", import.meta.url), "utf8")) as OutcomeCases;
 
 const urls = testDatabaseUrls();
 const digits = (n: number) => Array.from({ length: n }, () => randomInt(10)).join("");
@@ -221,5 +225,20 @@ describe("who changes a set", () => {
     expect(await read(creator, projectId)).toBeGreaterThan(0);
     expect(await read(colleague, projectId)).toBe(0);
     expect(await read(colleague, null)).toBeGreaterThan(0);
+  });
+});
+
+// The same rule as @rabaed/domain's outcomeCode and outcomeActions, over the same cases.
+describe("app.is_outcome_code, the cases shared with @rabaed/domain", () => {
+  it.each(cases.codes)("$code: $valid", async ({ code, valid }) => {
+    const { rows } = await migrator.query<{ valid: boolean }>("select app.is_outcome_code($1) as valid", [code]);
+    expect(rows[0]!.valid).toBe(valid);
+  });
+});
+
+describe("app.is_outcome_actions, the cases shared with @rabaed/domain", () => {
+  it.each(cases.actions)("$name: $valid", async ({ actions, valid }) => {
+    const { rows } = await migrator.query<{ valid: boolean }>("select app.is_outcome_actions($1::jsonb) as valid", [JSON.stringify(actions)]);
+    expect(rows[0]!.valid).toBe(valid);
   });
 });

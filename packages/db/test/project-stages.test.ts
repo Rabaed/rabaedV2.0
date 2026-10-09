@@ -5,11 +5,18 @@
 // table); each change by its Project Admin is audited in project_event, which is
 // append-only and out of the app role's reach.
 import { randomInt, randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { moduleKeys } from "@rabaed/domain";
 import { sql } from "kysely";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb, withMember, type Db } from "../src/index.ts";
 import { testDatabaseUrls } from "../test-support/index.ts";
+
+const stageKeyCases = JSON.parse(readFileSync(new URL("../../domain/src/stage-key-cases.json", import.meta.url), "utf8")) as {
+  key: string;
+  valid: boolean;
+}[];
 
 const urls = testDatabaseUrls();
 const digits = (n: number) => Array.from({ length: n }, () => randomInt(10)).join("");
@@ -159,5 +166,20 @@ describe("the Project Admin's Stage commands", () => {
 
   it("can't be written around: the app role writes no Stage directly", async () => {
     await expect(withMember(app, creator, (trx) => sql`update stage set sort = 0`.execute(trx))).rejects.toThrow(/permission denied/);
+  });
+});
+
+// The same rules as @rabaed/domain's stageKey and moduleKeys, over the same cases.
+describe("app.is_stage_key, the cases shared with @rabaed/domain", () => {
+  it.each(stageKeyCases)("$key: $valid", async ({ key, valid }) => {
+    const { rows } = await migrator.query<{ valid: boolean }>("select app.is_stage_key($1) as valid", [key]);
+    expect(rows[0]!.valid).toBe(valid);
+  });
+});
+
+describe("app.module_keys", () => {
+  it("are @rabaed/domain's Modules, the one list the Stage commands and the tables' checks read", async () => {
+    const { rows } = await migrator.query<{ keys: string[] }>("select app.module_keys() as keys");
+    expect([...rows[0]!.keys].sort()).toEqual([...moduleKeys].sort());
   });
 });

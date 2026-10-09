@@ -37,6 +37,9 @@ const allow: GrantAllowList = {
   // The checks of outcome and workflow_transition.outcome (RP-429).
   "app.is_outcome_actions": both,
   "app.is_outcome_code": both,
+  // The module_key checks of stage, work_item_type and position_permission (RP-449 review).
+  "app.module_keys": both,
+  "app.is_module_key": both,
 };
 
 // Function names with more than one overload on purpose. Empty: a second

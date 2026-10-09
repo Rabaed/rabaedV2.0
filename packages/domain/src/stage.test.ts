@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { marRows } from "../test/support/mar-workflow.ts";
-import { addStageRequest, reorderStagesRequest, stageCopyProblems } from "./stage.ts";
+import stageKeyCases from "./stage-key-cases.json" with { type: "json" };
+import { addStageRequest, reorderStagesRequest, stageCopyProblems, stageKey } from "./stage.ts";
 import { definitionFromRows } from "./workflow-definition.ts";
 
 // Pure domain: a Project's Stages (RP-428, WF-5). Copying a Workflow into a
@@ -21,6 +22,13 @@ describe("copying a Workflow into a Project", () => {
     expect(problems[0]!.step).toBe("consultant_review");
     expect(problems[0]!.message.en).toBe('This Project has no Stage "pending_approval" (used by Consultant review). Add it in the Project\'s Stages first.');
     expect(problems[0]!.message.ar).toContain("pending_approval");
+  });
+});
+
+// The cases app.is_stage_key runs over too (seam-2 project-stages.test.ts).
+describe("a Stage key: snake_case, at most 63", () => {
+  it.each(stageKeyCases)("$key: $valid", ({ key, valid }) => {
+    expect(stageKey.safeParse(key).success).toBe(valid);
   });
 });
 

@@ -1,0 +1,37 @@
+{
+  "codes": [
+    { "code": "A", "valid": true },
+    { "code": "E", "valid": true },
+    { "code": "E2", "valid": true },
+    { "code": "passed_with_comments", "valid": true },
+    { "code": "abcdefghijklmnopqrstuvwxyzABCDEF", "valid": true },
+    { "code": "abcdefghijklmnopqrstuvwxyzABCDEFG", "valid": false },
+    { "code": "", "valid": false },
+    { "code": "1A", "valid": false },
+    { "code": "_A", "valid": false },
+    { "code": "a-b", "valid": false },
+    { "code": "A B", "valid": false },
+    { "code": "cancelled", "valid": false },
+    { "code": "pending", "valid": false },
+    { "code": "in_preparation", "valid": false }
+  ],
+  "actions": [
+    { "name": "none", "actions": [], "valid": true },
+    { "name": "a Revision", "actions": [{ "kind": "offer_revision" }], "valid": true },
+    { "name": "a replacement", "actions": [{ "kind": "offer_replacement" }], "valid": true },
+    { "name": "items of a Type", "actions": [{ "kind": "create_items", "type": "CMT" }], "valid": true },
+    {
+      "name": "every kind once",
+      "actions": [{ "kind": "create_items", "type": "CMT" }, { "kind": "offer_revision" }, { "kind": "offer_replacement" }],
+      "valid": true
+    },
+    { "name": "a kind twice", "actions": [{ "kind": "offer_revision" }, { "kind": "offer_revision" }], "valid": false },
+    { "name": "items of no Type code", "actions": [{ "kind": "create_items", "type": "comments" }], "valid": false },
+    { "name": "items of a code too long", "actions": [{ "kind": "create_items", "type": "ABCDEFG" }], "valid": false },
+    { "name": "items of no Type", "actions": [{ "kind": "create_items" }], "valid": false },
+    { "name": "an unknown kind", "actions": [{ "kind": "notify" }], "valid": false },
+    { "name": "an extra key", "actions": [{ "kind": "offer_revision", "to": "raiser" }], "valid": false },
+    { "name": "not an object", "actions": ["offer_revision"], "valid": false },
+    { "name": "not a list", "actions": { "kind": "offer_revision" }, "valid": false }
+  ]
+}
