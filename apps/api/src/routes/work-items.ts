@@ -4,6 +4,7 @@ import {
   addedLink,
   addLinkRequest,
   createdWorkItem,
+  createReplacementRequest,
   createRevisionRequest,
   createWorkItemRequest,
   dashboard,
@@ -36,7 +37,7 @@ import { getDashboard } from "../work-items/dashboard.ts";
 import { getLinkedFrom } from "../work-items/linked-from.ts";
 import { addWorkItemLink, getWorkItemLinks, removeWorkItemLink } from "../work-items/links.ts";
 import { boardWorkItems, listWorkItems, type QueryScope } from "../work-items/query.ts";
-import { createRevision, discardRevision, getRevisionChain } from "../work-items/revisions.ts";
+import { createReplacement, createRevision, discardRevision, getRevisionChain } from "../work-items/revisions.ts";
 import {
   claimStep,
   createWorkItem,
@@ -275,6 +276,21 @@ export const workItemRoutes =
         const memberId = ctx.requireMember(request);
         const id = idOrNotFound(request.params.workItemId);
         const result = await createRevision(ctx.db, ctx.files, memberId, id, request.body.idempotencyKey, ctx.now());
+        if (!result.ok) throw refusal(result);
+        return reply.code(201).send({ id: result.id });
+      },
+    );
+
+    // Create a replacement of a rejected item (workflow-engine.md §5.5): a new Draft of
+    // the raiser's with a new number, linked to it. Refused alike for every reason but a
+    // hidden item (404).
+    app.post(
+      "/v1/work-items/:workItemId/replacements",
+      { schema: { params: workItemParams, body: createReplacementRequest, response: { 201: createdWorkItem } } },
+      async (request, reply) => {
+        const memberId = ctx.requireMember(request);
+        const id = idOrNotFound(request.params.workItemId);
+        const result = await createReplacement(ctx.db, ctx.files, memberId, id, request.body.idempotencyKey, ctx.now());
         if (!result.ok) throw refusal(result);
         return reply.code(201).send({ id: result.id });
       },

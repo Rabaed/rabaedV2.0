@@ -1,4 +1,4 @@
-import { workItemQuery, workItemSearchParams, type WorkItemList as WorkItemListData, type WorkItemQuery, type WorkItemRow } from "@rabaed/domain";
+import { defaultOutcomeSets, workItemQuery, workItemSearchParams, type WorkItemList as WorkItemListData, type WorkItemQuery, type WorkItemRow } from "@rabaed/domain";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, fn, screen, userEvent, within } from "storybook/test";
 import { expectLaidOutLeftToRight } from "../../storybook/bidi.ts";
@@ -135,6 +135,7 @@ const list: WorkItemListData = {
   nextCursor: null,
   filters: {
     types: [mar],
+    outcomes: defaultOutcomeSets.review_code.map((o) => ({ ...o, type: mar.code })),
     trades: [electrical],
     locations: [
       { ...tower, parentId: null },

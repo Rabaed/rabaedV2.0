@@ -1,0 +1,13 @@
+[
+  { "key": "on_hold", "valid": true },
+  { "key": "a", "valid": true },
+  { "key": "a1_b2", "valid": true },
+  { "key": "abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijk", "valid": true },
+  { "key": "abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijkl", "valid": false },
+  { "key": "", "valid": false },
+  { "key": "On Hold", "valid": false },
+  { "key": "On_hold", "valid": false },
+  { "key": "1a", "valid": false },
+  { "key": "_a", "valid": false },
+  { "key": "on-hold", "valid": false }
+]

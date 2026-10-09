@@ -283,7 +283,7 @@ describe("who gets no report", () => {
   });
 
   it("follows the Weekly report group's email setting, Pause all email and the Project's mute", async () => {
-    await saveSettings(c1Lead.caller, { settings: { weekly_report: { inApp: false, email: "off" } } });
+    await saveSettings(c1Lead.caller, { settings: { weekly_report: { email: "off" } } });
     await saveSettings(c2Lead.caller, { emailPaused: true });
     await ok(orLead.caller.request("PUT", `/v1/projects/${at.projectId}/mute`));
     try {
@@ -294,7 +294,7 @@ describe("who gets no report", () => {
       expect(reportsTo(orLead)).toEqual([]);
       expect(reportsTo(k1Lead)).toHaveLength(1);
     } finally {
-      await saveSettings(c1Lead.caller, { settings: { weekly_report: { inApp: false, email: "immediate" } } });
+      await saveSettings(c1Lead.caller, { settings: { weekly_report: { email: "immediate" } } });
       await saveSettings(c2Lead.caller, { emailPaused: false });
       await ok(orLead.caller.request("DELETE", `/v1/projects/${at.projectId}/mute`));
     }

@@ -15,7 +15,6 @@ export const notificationSettingsLabels: Record<Locale, NotificationSettingsLabe
     mute: "Mute",
     noProjects: "You are not on any Project yet.",
     groups: "Notifications",
-    inApp: "In-app",
     emailChoice: { off: "Off", immediate: "Immediately", digest: "Daily digest" },
     group: {
       step_reached: "Step reached me or my pool",
@@ -39,7 +38,6 @@ export const notificationSettingsLabels: Record<Locale, NotificationSettingsLabe
     mute: "كتم",
     noProjects: "لست في أي مشروع بعد.",
     groups: "الإشعارات",
-    inApp: "داخل التطبيق",
     emailChoice: { off: "إيقاف", immediate: "فورًا", digest: "ملخص يومي" },
     group: {
       step_reached: "وصلتني خطوة أو وصلت مجموعتي",

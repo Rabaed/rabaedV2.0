@@ -8,6 +8,7 @@ import { WorkItemAnswers, WorkItemFormProvider } from "@/components/work-item-fo
 import { WorkItemHistory } from "@/components/work-item-history";
 import { WorkItemLinkedFrom } from "@/components/work-item-linked-from";
 import { WorkItemLinks } from "@/components/work-item-links";
+import { WorkItemReplacement } from "@/components/work-item-replacement";
 import { WorkItemRevision } from "@/components/work-item-revision";
 import { WorkItemRevisionPicker } from "@/components/work-item-revision-picker";
 import { WorkItemWatch } from "@/components/work-item-watch";
@@ -112,6 +113,7 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
           canCreate={item.actions.createRevision}
           canDiscard={item.actions.discardRevision}
         />
+        <WorkItemReplacement workItemId={item.id} canCreate={item.actions.createReplacement} />
         {item.versionsChanged && (
           <div role="note" className="flex flex-col gap-2 rounded-md border border-border bg-surface p-3 text-sm text-muted">
             <p>{t("versionsChanged")}</p>

@@ -48,6 +48,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ locale
                 approved: {
                   review_code: tViews("dashboard.approved.review_code"),
                   inspection_result: tViews("dashboard.approved.inspection_result"),
+                  approval: tViews("dashboard.approved.approval"),
                   none: tViews("dashboard.approved.none"),
                 },
               }}

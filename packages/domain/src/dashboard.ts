@@ -1,8 +1,9 @@
 import { z } from "zod";
-import { chainBucketSchema, chainBuckets, outcomeKinds, submittedBuckets, type ChainBucket, type OutcomeKind } from "./chain-bucket.ts";
+import { chainBucketSchema, fixedChainBuckets, openBuckets, type ChainBucket } from "./chain-bucket.ts";
 import { codeCFilterSchema, codeCFilterStates, type CodeCFilter, type CodeCState } from "./code-c.ts";
 import { bilingualText, type BilingualText } from "./company.ts";
 import { moduleKeySchema, type ModuleKey } from "./module.ts";
+import { dashboardBarOutcomes, offersRevision, outcomeKinds, type Outcome, type OutcomeKind } from "./outcome.ts";
 
 /**
  * The Dashboard (spec RP-344, design §5): one card per Work Item Type, grouped
@@ -11,24 +12,18 @@ import { moduleKeySchema, type ModuleKey } from "./module.ts";
  * nowhere. Every number carries the work item query (its Module and filter)
  * that reproduces it, so it opens the List of exactly the chains it counts.
  * Nothing here is measured against time.
+ *
+ * A card reads its Type's outcome set (RP-429): its bars, their names and
+ * colours, the Approved % and the Code C line come from the outcomes, their
+ * polarity and follow-up actions, never from fixed codes.
  */
 
-/** The bars of a card, by its Type's outcome kind. */
-export const dashboardBars: Record<OutcomeKind, readonly ChainBucket[]> = {
-  review_code: ["pending", "C", "A", "B", "D"],
-  inspection_result: ["pending", "passed", "passed_with_comments", "failed"],
-  none: ["pending", "approved", "rejected"],
-};
-
-/** What counts as approved for the Approved % (A+B, or Passed + Passed with Comments). */
-export const approvedBuckets: Record<OutcomeKind, readonly ChainBucket[]> = {
-  review_code: ["A", "B"],
-  inspection_result: ["passed", "passed_with_comments"],
-  none: ["approved"],
-};
-
-export const openBuckets: readonly ChainBucket[] = ["pending", "in_preparation"];
-export const closedBuckets: readonly ChainBucket[] = chainBuckets.filter((b) => !openBuckets.includes(b));
+/**
+ * A bar's colour: Pending; an outcome offering a Revision (back with the
+ * raiser); a positive one, or Approved; a negative one, or Rejected.
+ */
+export const dashboardBarTones = ["pending", "revision", "positive", "negative"] as const;
+export type DashboardBarTone = (typeof dashboardBarTones)[number];
 
 /** The List behind a number: the Module and Type, the buckets (none: every chain of the Type), and on the Code C line its sub-states. */
 const figureQuery = z.object({
@@ -60,6 +55,14 @@ const codeCLine = z.object({
 });
 export type DashboardCodeCLine = z.infer<typeof codeCLine>;
 
+const bar = figure.extend({
+  bucket: chainBucketSchema,
+  /** An outcome's name, in English and Arabic; null for Pending, Approved and Rejected, which the app names. */
+  name: bilingualText.nullable(),
+  tone: z.enum(dashboardBarTones),
+});
+export type DashboardBar = z.infer<typeof bar>;
+
 export const dashboardCardSchema = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("outcomes"),
@@ -67,12 +70,12 @@ export const dashboardCardSchema = z.discriminatedUnion("kind", [
     outcomeKind: z.enum(outcomeKinds),
     /** Every chain the viewer sees. */
     total: figure,
-    bars: z.array(figure.extend({ bucket: chainBucketSchema })),
+    bars: z.array(bar),
     /** The viewer's own Participant's chains not yet Submitted; null when it has none. */
     inPreparation: figure.nullable(),
     /** Its percent is of the Submitted chains only (In preparation left out), so it is the same for every Company that sees them. */
     approved: figure.extend({ percent: z.number().int().min(0).max(100) }),
-    /** Null on a Type without Review Codes, or when no chain the viewer sees has had a Code C. */
+    /** Null on a Type with no outcome offering a Revision, or when no chain the viewer sees has had one. */
     codeC: codeCLine.nullable(),
   }),
   z.object({
@@ -96,6 +99,8 @@ export type DashboardCardInput = {
   type: { code: string; name: BilingualText };
   moduleKey: ModuleKey;
   outcomeKind: OutcomeKind;
+  /** The Type's outcome set on the Project, in its order. */
+  outcomes: readonly Outcome[];
   /** How many of the Type's chains the viewer sees in each bucket; `null` for those in none, which count nowhere. */
   counts: ReadonlyMap<ChainBucket | null, number>;
   /** How many of the Type's chains the viewer sees in each Code C state (codeCState); `null` for those on no line. */
@@ -103,6 +108,21 @@ export type DashboardCardInput = {
 };
 
 const percentOf = (count: number, total: number) => (total === 0 ? 0 : Math.round((count / total) * 100));
+
+/** A bar of the card, in order: Pending, then the Type's bar outcomes, or Approved and Rejected by Stage when it has none. */
+type BarOf = { bucket: ChainBucket; name: BilingualText | null; tone: DashboardBarTone };
+
+function barsOf(outcomes: readonly Outcome[]): BarOf[] {
+  const fromOutcomes = dashboardBarOutcomes(outcomes);
+  const closed: BarOf[] =
+    fromOutcomes.length > 0
+      ? fromOutcomes.map((o) => ({ bucket: o.code, name: o.name, tone: offersRevision(o) ? "revision" : o.polarity }))
+      : [
+          { bucket: "approved", name: null, tone: "positive" },
+          { bucket: "rejected", name: null, tone: "negative" },
+        ];
+  return [{ bucket: "pending", name: null, tone: "pending" }, ...closed];
+}
 
 /** The Code C line from its state counts, or null when it has no chain. */
 function codeCLineOf(module: ModuleKey, typeCode: string, counts: ReadonlyMap<CodeCState | null, number>): DashboardCodeCLine | null {
@@ -126,21 +146,28 @@ function codeCLineOf(module: ModuleKey, typeCode: string, counts: ReadonlyMap<Co
 }
 
 /** A Type's card from its bucket counts. */
-export function dashboardCard({ type, moduleKey, outcomeKind, counts, codeCCounts = new Map() }: DashboardCardInput): DashboardCard {
+export function dashboardCard({ type, moduleKey, outcomeKind, outcomes, counts, codeCCounts = new Map() }: DashboardCardInput): DashboardCard {
   const countOf = (buckets: readonly ChainBucket[]) => buckets.reduce((sum, b) => sum + (counts.get(b) ?? 0), 0);
   const of = (buckets: readonly ChainBucket[]): DashboardFigure => ({ count: countOf(buckets), query: { module: moduleKey, type: [type.code], bucket: [...buckets] } });
+  // Every bucket a chain of this Type can count in: the fixed ones and its closing outcomes.
+  const closedBuckets = [
+    ...new Set([...outcomes.filter((o) => o.closing).map((o) => o.code), ...fixedChainBuckets.filter((b) => !openBuckets.includes(b))]),
+  ];
+  const everyBucket = [...openBuckets, ...closedBuckets];
   // Every chain in a bucket: the List of the Type lists no other (work item query).
-  const total: DashboardFigure = { count: countOf(chainBuckets), query: { module: moduleKey, type: [type.code], bucket: [] } };
+  const total: DashboardFigure = { count: countOf(everyBucket), query: { module: moduleKey, type: [type.code], bucket: [] } };
   const card = { type: { code: type.code, name: type.name }, outcomeKind, total };
   if (moduleKey === "snag_list") return { ...card, kind: "open_closed", open: of(openBuckets), closed: of(closedBuckets) };
   const inPreparation = of(["in_preparation"]);
-  const approved = of(approvedBuckets[outcomeKind]);
+  const bars = barsOf(outcomes);
+  const approved = of(bars.filter((b) => b.tone === "positive").map((b) => b.bucket));
+  const submitted = countOf(everyBucket.filter((b) => b !== "in_preparation"));
   return {
     ...card,
     kind: "outcomes",
-    bars: dashboardBars[outcomeKind].map((bucket) => ({ bucket, ...of([bucket]) })),
+    bars: bars.map((b) => ({ ...b, ...of([b.bucket]) })),
     inPreparation: inPreparation.count > 0 ? inPreparation : null,
-    approved: { ...approved, percent: percentOf(approved.count, countOf(submittedBuckets)) },
-    codeC: outcomeKind === "review_code" ? codeCLineOf(moduleKey, type.code, codeCCounts) : null,
+    approved: { ...approved, percent: percentOf(approved.count, submitted) },
+    codeC: outcomes.some(offersRevision) ? codeCLineOf(moduleKey, type.code, codeCCounts) : null,
   };
 }

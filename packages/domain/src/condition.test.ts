@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import conditionCases from "./condition-cases.json" with { type: "json" };
 import { condition, evaluateCondition } from "./condition.ts";
 
 const fields = {
@@ -98,6 +99,16 @@ describe("evaluateCondition: combining rules", () => {
   it("an empty all holds and an empty any doesn't", () => {
     expect(holds({ all: [] })).toBe(true);
     expect(holds({ any: [] })).toBe(false);
+  });
+});
+
+// The shared cases: the database's app.condition_holds runs the same file (seam 2,
+// packages/db/test/transition-rules-rls.test.ts), one definition per layer.
+describe("evaluateCondition: the cases shared with the database", () => {
+  type Case = { name: string; rule: unknown; fields: Record<string, unknown>; actionForm?: Record<string, unknown>; attrs?: Record<string, unknown>; holds: boolean };
+  it.each((conditionCases as Case[]).map((c) => [c.name, c] as const))("%s", (_, c) => {
+    const sources = { fields: c.fields, ...(c.attrs ? { attrs: c.attrs } : {}), ...(c.actionForm ? { actionForm: c.actionForm } : {}) };
+    expect(evaluateCondition(condition.parse(c.rule), sources)).toBe(c.holds);
   });
 });
 

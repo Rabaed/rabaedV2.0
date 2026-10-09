@@ -1,10 +1,11 @@
 import { workflowActionFormProblems } from "./action-form.ts";
-import type { OutcomeKind, StageCategory } from "./chain-bucket.ts";
+import type { StageCategory } from "./chain-bucket.ts";
 import type { BilingualText } from "./company.ts";
 import { evaluateCondition, type Comparison, type Condition } from "./condition.ts";
 import { formFields, formSchema, type FormField, type FormSchema } from "./form.ts";
 import { sectionSteps, type WorkflowStepHolder } from "./form-sections.ts";
-import { isOpenStageCategory, outcomeSets, type WorkItemOutcome } from "./work-item.ts";
+import type { Outcome } from "./outcome.ts";
+import { isOpenStageCategory } from "./work-item.ts";
 import type { WorkflowDefinition, WorkflowStep, WorkflowTransition } from "./workflow-definition.ts";
 import { workflowKindProblems } from "./workflow-publish.ts";
 
@@ -18,10 +19,11 @@ import { workflowKindProblems } from "./workflow-publish.ts";
 /** What the checks read besides the definition. */
 export type WorkflowPublishContext = {
   /**
-   * The Work Item Type's outcome kind: which outcome set its closing Transitions
-   * use. WF-6 (RP-429) replaces it with the Type's own, editable outcome set.
+   * The Work Item Type's outcome set (RP-429): the Project's copy for a Project's
+   * Workflow, the Rabaed Default set for a Rabaed Default or Library one. Its
+   * closing outcomes are the ones a closing Transition may set.
    */
-  outcomeKind: OutcomeKind;
+  outcomes: readonly Pick<Outcome, "code" | "closing">[];
   /** The Module's Stage set (the Project's, or the Rabaed Defaults'): Stages come from here, never from the definition. */
   stages: readonly { key: string; category: StageCategory }[];
   /** The latest published Version of the Type's Form; null when it has none. */
@@ -73,6 +75,7 @@ export const workflowProblemCodes = [
   "field_not_filled_at_step",
   "now_not_a_date_field",
   "names_person",
+  "copy_internal_answer",
   // Warnings (§4)
   "condition_overlap",
   "condition_gap",
@@ -174,13 +177,13 @@ function stageProblems({ steps, transitions, categoryOf, isTerminal }: CheckInpu
 }
 
 /**
- * Check 3: a close into a terminal Step sets an outcome of the Type's set
- * (`outcomeSets`, fixed until WF-6), from the Step that issues it; nothing else
- * sets one. A Cancel is checked on its own.
+ * Check 3: a close into a terminal Step sets a closing outcome of the Type's set
+ * (RP-429), from the Step that issues it when the set offers a choice (two or
+ * more closing outcomes); nothing else sets one. A Cancel is checked on its own.
  */
 function outcomeProblems({ steps, transitions, context, stepOf, isTerminal }: CheckInput): FoundProblem[] {
-  const issues = context.outcomeKind !== "none";
-  const set: readonly WorkItemOutcome[] = outcomeSets[context.outcomeKind];
+  const set: readonly string[] = context.outcomes.filter((o) => o.closing).map((o) => o.code);
+  const issues = set.length > 1;
   return [
     ...(issues && !steps.some((s) => s.outcomeMode === "issue_outcome") ? [{ code: "no_issuing_step" } as const] : []),
     ...transitions.flatMap((t): FoundProblem[] => {
@@ -193,7 +196,7 @@ function outcomeProblems({ steps, transitions, context, stepOf, isTerminal }: Ch
       }
       if (t.kind !== "close") return problemAt("ends_without_close");
       if (t.outcome === null) return problemAt("missing_outcome");
-      if (!(set as readonly string[]).includes(t.outcome)) return problemAt("outcome_not_in_set");
+      if (!set.includes(t.outcome)) return problemAt("outcome_not_in_set");
       return issues && from.outcomeMode !== "issue_outcome" ? problemAt("outcome_not_from_issuing_step") : [];
     }),
   ];
@@ -237,6 +240,8 @@ export const workflowRuleAttrs = ["trade", "location", "work_item_type", "revisi
 const documentFieldTypes: readonly string[] = ["attachments", "photos"];
 /** The field types a set field may set to the moment the Transition is taken. */
 const momentFieldTypes: readonly string[] = ["date", "datetime", "time"];
+/** The kinds of a move inside one Participant, whose event (with its Action Form answers) is internal to it (§5.1). */
+const internalKinds: readonly string[] = ["send", "return"];
 
 /** The comparisons of a condition, at any depth, in the order read. */
 function comparisons(rule: Condition): Comparison[] {
@@ -271,7 +276,9 @@ const sharingLabel = (transitions: readonly WorkflowTransition[], t: WorkflowTra
  * Actions write only fields the acting Participant fills at that Step (WF-8):
  * this Transition's Action Form, and the Form Sections changed at its source
  * Step (form-sections.ts); a copy reads from those fields only, never another
- * Participant's answers. Setting a Member field to a value would name a person.
+ * Participant's answers, and on a move inside one Participant never carries its
+ * Action Form answers (internal, V5) into the Form, which every Participant reads
+ * once the item leaves. Setting a Member field to a value would name a person.
  *
  * The Steps and Transitions a rule names exist, "been through" a Step names one
  * of the acting Participant's own (its source Step's role), and a Document rule
@@ -322,7 +329,11 @@ function ruleProblems({ steps, transitions, context, stepOf, categoryOf }: Check
         return documentFieldTypes.includes(named.type) ? [] : [problemAt("not_a_document_field", v.field)];
       }),
       ...(t.actions ?? []).flatMap((a): FoundProblem[] => {
-        if (a.type === "copy_field") return [...writeProblems(a.from), ...writeProblems(a.to)];
+        if (a.type === "copy_field") {
+          // A move inside one Participant keeps its Action Form answers internal (V5); the Form reaches everyone later.
+          const leaks = internalKinds.includes(t.kind) && ownActionForm.has(a.from) && !ownActionForm.has(a.to) && formFieldOf.has(a.to);
+          return [...writeProblems(a.from), ...writeProblems(a.to), ...(leaks ? [problemAt("copy_internal_answer", a.from)] : [])];
+        }
         if (a.type !== "set_field") return [];
         const problems = writeProblems(a.field);
         if (problems.length > 0) return problems;
@@ -568,6 +579,10 @@ const messages: Record<WorkflowProblemCode, (names: Names) => BilingualText> = {
   now_not_a_date_field: (names) => ({
     en: `${names.transition.en} sets field "${names.detail}" to now, but it isn't a date or time.`,
     ar: `${names.transition.ar} يضع الوقت الحالي في الحقل "${names.detail}"، وهو ليس تاريخًا ولا وقتًا.`,
+  }),
+  copy_internal_answer: (names) => ({
+    en: `${names.transition.en} copies its Action Form answer "${names.detail}" into the Form: on a move inside one Participant that answer stays internal, and the Form is read by every Participant once the item leaves it.`,
+    ar: `${names.transition.ar} ينسخ إجابة النموذج المنبثق "${names.detail}" إلى النموذج: في انتقال داخل المشارك نفسه تبقى هذه الإجابة داخلية، والنموذج يقرؤه كل مشارك بعد خروج العنصر منه.`,
   }),
   names_person: (names) => ({
     en: `${names.transition.en} sets Member field "${names.detail}" to one person: a Workflow uses Positions only.`,

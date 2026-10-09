@@ -66,6 +66,13 @@ export {
   type ParticipantCodesProps,
 } from "./components/numbering/participant-codes.tsx";
 export {
+  ReplacementActions,
+  type ReplacementActionsLabels,
+  type ReplacementActionsProps,
+  type ReplacementCall,
+  type ReplacementRefusal,
+} from "./components/revision/replacement-actions.tsx";
+export {
   RevisionActions,
   type RevisionActionsLabels,
   type RevisionActionsProps,

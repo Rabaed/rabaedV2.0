@@ -50,7 +50,9 @@ export const Defaults: Story = {
   play: async (context) => {
     const { canvas, args } = context;
     await expect(canvas.queryByRole("heading", { name: storyText(context, copy.weekly) })).toBeNull();
-    await expect(canvas.getAllByRole("switch", { name: storyText(context, copy.inApp) })).toHaveLength(4);
+    // In-app is always sent: no group has an In-app switch.
+    await expect(canvas.queryAllByRole("switch", { name: storyText(context, copy.inApp) })).toHaveLength(0);
+    await expect(canvas.getAllByRole("radio", { name: storyText(context, copy.off) })).toHaveLength(4);
     await userEvent.click(canvas.getByRole("switch", { name: storyText(context, copy.pauseAll) }));
     await expect(args.onSave).toHaveBeenCalledWith(expect.objectContaining({ emailPaused: true, settings: defaultNotificationSettings }));
   },
@@ -67,7 +69,7 @@ export const OutcomeTicks: Story = {
     await expect(args.onSave).toHaveBeenCalledWith(
       expect.objectContaining({
         settings: expect.objectContaining({
-          watched: { inApp: true, email: "digest", outcomes: ["A", "B", "D", "passed", "passed_with_comments", "failed", "approved", "rejected", "cancelled"] },
+          watched: { email: "digest", outcomes: ["A", "B", "D", "passed", "passed_with_comments", "failed", "approved", "rejected", "cancelled"] },
         }),
       }),
     );
@@ -106,7 +108,7 @@ export const WeeklyReport: Story = {
     await expect(email).toBeChecked();
     await userEvent.click(email);
     await expect(args.onSave).toHaveBeenCalledWith(
-      expect.objectContaining({ settings: expect.objectContaining({ weekly_report: { inApp: false, email: "off" } }) }),
+      expect.objectContaining({ settings: expect.objectContaining({ weekly_report: { email: "off" } }) }),
     );
     await expect(email).not.toBeChecked();
   },

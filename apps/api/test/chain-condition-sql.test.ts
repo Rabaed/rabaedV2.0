@@ -3,7 +3,7 @@
 // builds from the same rule lists (bucketOfRow, codeCOfRow, chainConditionSql), with
 // `closed` from closedStageCategory. Here the SQL runs over every combination of what the
 // rules read, as literal rows, and must give what the domain gives for each: so cancelled,
-// Inspection Results, outcome kind `none`, Sent Back (open and Submitted) and the fallbacks
+// outcome sets with one closing outcome, outcomes a Project Admin added (RP-429), Sent Back (open and Submitted) and the fallbacks
 // are all covered, the domain tests' own cases among them.
 import { createDb } from "@rabaed/db";
 import { testDatabaseUrls } from "@rabaed/db/test-support";
@@ -13,9 +13,8 @@ import {
   codeCState,
   holdsCodeCCondition,
   isOpenStageCategory,
-  outcomeKinds,
+  outcomePolarities,
   stageCategories,
-  workItemOutcomes,
   type ChainBucket,
   type CodeCCondition,
   type CodeCInput,
@@ -30,12 +29,24 @@ afterAll(() => db.destroy());
 
 const booleans = [true, false] as const;
 
-/** Every input the rules read. */
-const grid: CodeCInput[] = outcomeKinds.flatMap((outcomeKind) =>
-  stageCategories.flatMap((stageCategory) =>
-    [null, ...workItemOutcomes].flatMap((outcome) =>
-      booleans.flatMap((submitted) =>
-        booleans.flatMap((raisedByViewer) => booleans.map((hadCodeC) => ({ outcomeKind, stageCategory, outcome, submitted, raisedByViewer, hadCodeC }))),
+/**
+ * Outcomes of every sort: Review Codes, one a Project Admin added, a plain close, a
+ * cancel (what the rules read of each is its place in the set, taken separately below).
+ */
+const outcomes = ["A", "C", "E", "closed", "cancelled"] as const;
+
+/** Every input the rules read: an outcome's place in its Type's set (bar, polarity, Revision) taken in every combination. */
+const grid: CodeCInput[] = stageCategories.flatMap((stageCategory) =>
+  [null, ...outcomes].flatMap((outcome) =>
+    booleans.flatMap((outcomeBar) =>
+      [null, ...outcomePolarities].flatMap((polarity) =>
+        booleans.flatMap((offersRevision) =>
+          booleans.flatMap((submitted) =>
+            booleans.flatMap((raisedByViewer) =>
+              booleans.map((hadCodeC) => ({ stageCategory, outcome, outcomeBar, polarity, offersRevision, submitted, raisedByViewer, hadCodeC })),
+            ),
+          ),
+        ),
       ),
     ),
   ),
@@ -46,14 +57,15 @@ async function overGrid<T>(select: RawBuilder<T>): Promise<T[]> {
   const values = sql.join(
     grid.map(
       (g, i) =>
-        sql`(${i}::integer, ${g.outcomeKind}::text, ${g.stageCategory}::text, ${g.outcome}::text, ${g.submitted}::boolean, ${g.raisedByViewer}::boolean, ${g.hadCodeC}::boolean)`,
+        sql`(${i}::integer, ${g.stageCategory}::text, ${g.outcome}::text, ${g.outcomeBar}::boolean, ${g.polarity}::text,
+          ${g.offersRevision}::boolean, ${g.submitted}::boolean, ${g.raisedByViewer}::boolean, ${g.hadCodeC}::boolean)`,
     ),
   );
   const { rows } = await sql<{ value: T }>`
     select ${select} as value
     from (
       select v.*, ${closedStageCategory(sql.ref("v.stage_category"))} as closed
-      from (values ${values}) as v (i, outcome_kind, stage_category, outcome, submitted, raised_by_own, had_code_c)
+      from (values ${values}) as v (i, stage_category, outcome, outcome_bar, polarity, offers_revision, submitted, raised_by_own, had_code_c)
     ) r
     order by r.i
   `.execute(db);
@@ -84,9 +96,11 @@ describe("the work item query's SQL for the Dashboard's rules", () => {
       open: booleans,
       submitted: booleans,
       raisedByViewer: booleans,
-      outcomeKind: outcomeKinds,
-      outcome: workItemOutcomes,
+      outcome: outcomes,
       stageCategory: stageCategories,
+      outcomeBar: booleans,
+      polarity: outcomePolarities,
+      offersRevision: booleans,
       hadCodeC: booleans,
     };
     expect(Object.keys(valuesOf).toSorted()).toEqual([...codeCConditionKeys].toSorted());
