@@ -29,6 +29,9 @@ const allow: GrantAllowList = {
   // Rabaed Admin saves and publishes Rabaed Default Workflows (RP-427).
   "app.write_workflow_draft": ["rabaed_admin"],
   "app.mark_workflow_published": ["rabaed_admin"],
+  // Security invoker reads both roles' Workflow checks and reads share (RP-427 review).
+  "app.workflow_type": both,
+  "app.workflow_version_rows": both,
   "app.current_member_id": both,
   "app.is_bilingual": both,
 };

@@ -9,9 +9,9 @@
 --   Engineer's goes through Rabaed Admin's admin_action, with a reason (V9).
 -- - Who may: a Project's Workflows and bindings, its Project Admins; a Library's,
 --   its Company's Authorized Person (there is no Position permission for it yet);
---   a Rabaed Default, Rabaed Admin and the `workflow:publish` CLI, through the core
---   functions (app.write_workflow_draft, app.mark_workflow_published), which check
---   no caller and are granted to rabaed_admin alone. Anyone else is answered
+--   a Rabaed Default, Rabaed Admin and the `workflow:publish` CLI, through
+--   app.write_workflow_draft and app.mark_workflow_published, granted to rabaed_admin
+--   alone and refusing any Workflow but a Rabaed Default. Anyone else is answered
 --   `not_found`, as for a made-up id.
 -- - The publish checks (workflowPublishProblems, @rabaed/domain) run in the api
 --   or Rabaed Admin, in the transaction that publishes: app.workflow_draft_rows
@@ -26,7 +26,11 @@
 --   revises runs (app.revision_draft_step), no longer always the Type's Rabaed
 --   Default: once bindings change, the chain stays on its own Workflow (ADR 0016).
 -- - Drafts stay unread through the app role's row-level security; their authors
---   read them through app.workflow_draft.
+--   read them through app.workflow_draft. A draft's new name waits with the draft
+--   (workflow_version.draft_name) and becomes the Workflow's at publish; a Workflow
+--   with no published Version is read by its authors only (V20).
+-- - app.latest_draft_step (a Revision's start by the Type's Rabaed Default) is dropped:
+--   nothing calls it once app.revision_draft_step replaces it.
 
 -- The Type a Workflow is for ------------------------------------------------------------
 
@@ -40,9 +44,11 @@ update workflow_definition d set work_item_type_id = coalesce(
 create index workflow_definition_work_item_type_id on workflow_definition (work_item_type_id) where work_item_type_id is not null;
 
 -- The Type Workflow p_definition_id is for: its own, else (a definition made before it
--- had one) the Type whose Rabaed Default it is, else the first a binding names.
+-- had one) the Type whose Rabaed Default it is, else the first a binding names. The one
+-- rule: the commands below and the publish checks' context (readWorkflowCheckContext)
+-- use it. Security invoker: through the app role it reads only what the caller reads.
 create function app.workflow_type(p_definition_id uuid) returns uuid
-  language plpgsql stable security definer
+  language plpgsql stable
   set search_path = pg_catalog, public
   as $$
     #variable_conflict use_column
@@ -175,23 +181,56 @@ create function app.is_exception_workflow(p_definition_id uuid) returns boolean
     end
   $$;
 
--- The core: a draft, read and written; publishing it ---------------------------------------------
+-- Who reads a Workflow ------------------------------------------------------------------------
 
--- The draft of Workflow p_definition_id (its newest Version, while unpublished) as rows:
--- its layout, its Steps and its Transitions with their Steps by key, in the shape of
--- @rabaed/domain's WorkflowVersionRows. Locks the definition, so the caller's checks and
--- its publish see the draft no save changes in between. Nothing when it has no draft.
--- Checks no caller: app.workflow_draft does, for a Member.
-create function app.workflow_draft_rows(p_definition_id uuid)
-  returns table (workflow_version_id uuid, version_no integer, layout jsonb, steps jsonb, transitions jsonb)
-  language plpgsql volatile security definer
+-- Whether Workflow p_definition_id has a published Version. Security definer, for the
+-- policy below (workflow_version's own policy reads workflow_definition).
+create function app.workflow_is_published(p_definition_id uuid) returns boolean
+  language plpgsql stable security definer
   set search_path = pg_catalog, public
   as $$
     #variable_conflict use_column
     begin
-      perform 1 from workflow_definition d where d.id = p_definition_id for update;
+      return exists (
+        select 1 from workflow_version v where v.workflow_definition_id = p_definition_id and v.status = 'published');
+    end
+  $$;
+
+-- As in the workflow ownership migration (20261225000000), except that a Workflow with
+-- no published Version yet (a copy being drafted) is read by its authors only: its
+-- name is the draft's (V20).
+drop policy member_reads_workflow_definitions on workflow_definition;
+create policy member_reads_workflow_definitions on workflow_definition for select to rabaed_app
+  using (
+    (
+      (owner_kind = 'rabaed' and app.current_company_id() is not null)
+      or (owner_kind = 'project' and project_id in (select app.current_project_ids()))
+      or (owner_kind = 'company' and company_id = app.current_company_id())
+    )
+    and (app.workflow_is_published(id) or app.can_author_workflow(id))
+  );
+
+-- The core: a draft, read and written; publishing it ---------------------------------------------
+
+-- A draft's rename waits with the draft: the Workflow's name changes when it is
+-- published (app.publish_workflow_draft). Until then Members, and the items running
+-- the Workflow (app.work_item_workflow), read the name published last (V20).
+alter table workflow_version add column draft_name jsonb;
+
+-- Version p_version_id as rows: its layout, its Steps and its Transitions with their
+-- Steps by key, in the shape of @rabaed/domain's WorkflowVersionRows; what
+-- app.store_workflow_draft takes. The one shaping of a Version's rows: the draft read,
+-- the copy and the api's read of a published Version use it. Security invoker:
+-- through the app role it reads only the Versions the caller reads (published ones).
+create function app.workflow_version_rows(p_version_id uuid)
+  returns table (layout jsonb, steps jsonb, transitions jsonb)
+  language plpgsql stable
+  set search_path = pg_catalog, public
+  as $$
+    #variable_conflict use_column
+    begin
       return query
-        select v.id, v.version_no, v.layout,
+        select v.layout,
           coalesce((
             select jsonb_agg(jsonb_build_object(
               'key', s.key, 'name', s.name, 'stage_key', s.stage_key, 'actor_rule', s.actor_rule,
@@ -207,6 +246,28 @@ create function app.workflow_draft_rows(p_definition_id uuid)
             join workflow_step s on s.id = t.to_step_id
             where t.workflow_version_id = v.id), '[]'::jsonb)
         from workflow_version v
+        where v.id = p_version_id;
+    end
+  $$;
+
+-- The draft of Workflow p_definition_id (its newest Version, while unpublished) as rows
+-- (app.workflow_version_rows), with the name the Workflow takes when it is published.
+-- Locks the definition, so the caller's checks and its publish see the draft no save
+-- changes in between. Nothing when it has no draft. Checks no caller: app.workflow_draft
+-- does, for a Member.
+create function app.workflow_draft_rows(p_definition_id uuid)
+  returns table (workflow_version_id uuid, version_no integer, name jsonb, layout jsonb, steps jsonb, transitions jsonb)
+  language plpgsql volatile security definer
+  set search_path = pg_catalog, public
+  as $$
+    #variable_conflict use_column
+    begin
+      perform 1 from workflow_definition d where d.id = p_definition_id for update;
+      return query
+        select v.id, v.version_no, coalesce(v.draft_name, d.name), r.layout, r.steps, r.transitions
+        from workflow_version v
+        join workflow_definition d on d.id = v.workflow_definition_id
+        cross join lateral app.workflow_version_rows(v.id) r
         where v.workflow_definition_id = p_definition_id and v.status = 'draft'
           and v.version_no = (select max(o.version_no) from workflow_version o where o.workflow_definition_id = p_definition_id);
     end
@@ -214,11 +275,12 @@ create function app.workflow_draft_rows(p_definition_id uuid)
 
 -- Saves the draft of Workflow p_definition_id: its rows become p_layout, p_steps and
 -- p_transitions (as @rabaed/domain's definitionToRows writes them), in its draft
--- Version, or in a new one after its latest when it has none. p_name, when given,
--- renames the Workflow. Outcome: 'saved'; 'not_found' (no such Workflow);
--- 'invalid_name'; 'invalid_definition' (a Transition names a Step it doesn't have, or
--- two Steps or Transitions share a key). Checks no caller.
-create function app.write_workflow_draft(
+-- Version, or in a new one after its latest when it has none. p_name, when given, is
+-- the name the Workflow takes when this draft is published (null keeps the draft's).
+-- Outcome: 'saved'; 'not_found' (no such Workflow); 'invalid_name';
+-- 'invalid_definition' (a Transition names a Step it doesn't have, or two Steps or
+-- Transitions share a key). Checks no caller: for the commands below.
+create function app.store_workflow_draft(
   p_definition_id uuid, p_name jsonb, p_layout jsonb, p_steps jsonb, p_transitions jsonb, p_at timestamptz
 ) returns table (outcome text, workflow_version_id uuid, version_no integer)
   language plpgsql volatile security definer
@@ -259,10 +321,12 @@ create function app.write_workflow_draft(
         v_version_id := v_version.id;
         delete from workflow_transition t where t.workflow_version_id = v_version_id;
         delete from workflow_step s where s.workflow_version_id = v_version_id;
-        update workflow_version v set layout = coalesce(p_layout, '{}'), updated_at = p_at where v.id = v_version_id;
+        update workflow_version v
+        set layout = coalesce(p_layout, '{}'), draft_name = coalesce(p_name, v.draft_name), updated_at = p_at
+        where v.id = v_version_id;
       else
-        insert into workflow_version (workflow_definition_id, version_no, status, layout, created_at, updated_at)
-        values (p_definition_id, coalesce(v_version.version_no, 0) + 1, 'draft', coalesce(p_layout, '{}'), p_at, p_at)
+        insert into workflow_version (workflow_definition_id, version_no, status, layout, draft_name, created_at, updated_at)
+        values (p_definition_id, coalesce(v_version.version_no, 0) + 1, 'draft', coalesce(p_layout, '{}'), p_name, p_at, p_at)
         returning id into v_version_id;
       end if;
 
@@ -282,21 +346,18 @@ create function app.write_workflow_draft(
       join workflow_step s on s.workflow_version_id = v_version_id and s.key = e.t ->> 'to_step_key';
       get diagnostics v_count = row_count;
       if v_count <> jsonb_array_length(p_transitions) then
-        raise exception 'write_workflow_draft: a Transition lost its Steps';
-      end if;
-
-      if p_name is not null then
-        update workflow_definition d set name = p_name, updated_at = p_at where d.id = p_definition_id;
+        raise exception 'store_workflow_draft: a Transition lost its Steps';
       end if;
       return query select 'saved'::text, v_version_id, (select v.version_no from workflow_version v where v.id = v_version_id);
     end
   $$;
 
 -- Publishes the draft of Workflow p_definition_id: it becomes its newest published
--- Version, which never changes again (RP-424), and new items start on it. The caller
--- has run every publish check on app.workflow_draft_rows' rows in this transaction.
--- Outcome: 'published'; 'not_found'; 'no_draft'. Checks no caller.
-create function app.mark_workflow_published(p_definition_id uuid, p_at timestamptz)
+-- Version, which never changes again (RP-424), and new items start on it; the
+-- Workflow takes the draft's name, when it has one. The caller has run every publish
+-- check on app.workflow_draft_rows' rows in this transaction. Outcome: 'published';
+-- 'not_found'; 'no_draft'. Checks no caller: for the commands below.
+create function app.publish_workflow_draft(p_definition_id uuid, p_at timestamptz)
   returns table (outcome text, workflow_version_id uuid, version_no integer)
   language plpgsql volatile security definer
   set search_path = pg_catalog, public
@@ -310,15 +371,54 @@ create function app.mark_workflow_published(p_definition_id uuid, p_at timestamp
         return query select 'not_found'::text, null::uuid, null::integer;
         return;
       end if;
-      select v.id, v.version_no, v.status into v_version
+      select v.id, v.version_no, v.status, v.draft_name into v_version
       from workflow_version v where v.workflow_definition_id = p_definition_id
       order by v.version_no desc limit 1;
       if v_version.id is null or v_version.status <> 'draft' then
         return query select 'no_draft'::text, null::uuid, null::integer;
         return;
       end if;
-      update workflow_version v set status = 'published', published_at = p_at, updated_at = p_at where v.id = v_version.id;
+      update workflow_version v set status = 'published', published_at = p_at, draft_name = null, updated_at = p_at
+      where v.id = v_version.id;
+      if v_version.draft_name is not null then
+        update workflow_definition d set name = v_version.draft_name, updated_at = p_at where d.id = p_definition_id;
+      end if;
       return query select 'published'::text, v_version.id, v_version.version_no;
+    end
+  $$;
+
+-- Rabaed Admin's and the `workflow:publish` CLI's: a Rabaed Default's draft saved
+-- (app.store_workflow_draft, keeping its name) and published (app.publish_workflow_draft).
+-- Granted to rabaed_admin, so they refuse any other Workflow, a Project's or a
+-- Library's, as 'not_found' (V9: an Engineer changes no Company's data here).
+create function app.write_workflow_draft(
+  p_definition_id uuid, p_layout jsonb, p_steps jsonb, p_transitions jsonb, p_at timestamptz
+) returns table (outcome text, workflow_version_id uuid, version_no integer)
+  language plpgsql volatile security definer
+  set search_path = pg_catalog, public
+  as $$
+    #variable_conflict use_column
+    begin
+      if not exists (select 1 from workflow_definition d where d.id = p_definition_id and d.owner_kind = 'rabaed') then
+        return query select 'not_found'::text, null::uuid, null::integer;
+        return;
+      end if;
+      return query select * from app.store_workflow_draft(p_definition_id, null, p_layout, p_steps, p_transitions, p_at);
+    end
+  $$;
+
+create function app.mark_workflow_published(p_definition_id uuid, p_at timestamptz)
+  returns table (outcome text, workflow_version_id uuid, version_no integer)
+  language plpgsql volatile security definer
+  set search_path = pg_catalog, public
+  as $$
+    #variable_conflict use_column
+    begin
+      if not exists (select 1 from workflow_definition d where d.id = p_definition_id and d.owner_kind = 'rabaed') then
+        return query select 'not_found'::text, null::uuid, null::integer;
+        return;
+      end if;
+      return query select * from app.publish_workflow_draft(p_definition_id, p_at);
     end
   $$;
 
@@ -389,11 +489,14 @@ create function app.duplicate_workflow(p_source_id uuid, p_project_id uuid, p_na
           or (d.owner_kind = 'company' and d.company_id = app.current_company_id())
         );
       v_type_id := app.workflow_type(v_source.id);
-      select v.id, v.layout into v_rows
-      from workflow_version v
-      where v.workflow_definition_id = v_source.id and v.status = 'published'
-      order by v.version_no desc limit 1;
-      if v_source.id is null or v_rows.id is null or v_type_id is null
+      select r.* into v_rows
+      from (
+        select v.id from workflow_version v
+        where v.workflow_definition_id = v_source.id and v.status = 'published'
+        order by v.version_no desc limit 1
+      ) v
+      cross join lateral app.workflow_version_rows(v.id) r;
+      if v_source.id is null or v_rows.layout is null or v_type_id is null
         -- A Project's own Type is used on that Project only.
         or (p_project_id is not null and not exists (
           select 1 from work_item_type t where t.id = v_type_id and (t.project_id is null or t.project_id = p_project_id)))
@@ -414,23 +517,7 @@ create function app.duplicate_workflow(p_source_id uuid, p_project_id uuid, p_na
       insert into workflow_definition (owner_kind, project_id, company_id, name, work_item_type_id, created_at, updated_at)
       values (case when p_project_id is null then 'company' else 'project' end, p_project_id, v_company_id, p_name, v_type_id, v_at, v_at)
       returning id into v_id;
-      perform 1 from app.write_workflow_draft(
-        v_id, null, v_rows.layout,
-        coalesce((
-          select jsonb_agg(jsonb_build_object(
-            'key', s.key, 'name', s.name, 'stage_key', s.stage_key, 'actor_rule', s.actor_rule, 'outcome_mode', s.outcome_mode)
-            order by s.created_at, s.key)
-          from workflow_step s where s.workflow_version_id = v_rows.id), '[]'::jsonb),
-        coalesce((
-          select jsonb_agg(jsonb_build_object(
-            'key', t.key, 'from_step_key', f.key, 'to_step_key', s.key, 'label', t.label, 'kind', t.kind,
-            'outcome', t.outcome, 'permission', t.permission, 'sort', t.sort, 'action_form', t.action_form)
-            order by t.sort, t.key)
-          from workflow_transition t
-          join workflow_step f on f.id = t.from_step_id
-          join workflow_step s on s.id = t.to_step_id
-          where t.workflow_version_id = v_rows.id), '[]'::jsonb),
-        v_at);
+      perform 1 from app.store_workflow_draft(v_id, null, v_rows.layout, v_rows.steps, v_rows.transitions, v_at);
       perform app.write_workflow_event(v_id, p_project_id, v_company_id, 'duplicated',
         jsonb_build_object('from', v_source.owner_kind, 'name', p_name), v_at);
       return query select 'duplicated'::text, v_id;
@@ -441,7 +528,7 @@ create function app.duplicate_workflow(p_source_id uuid, p_project_id uuid, p_na
 -- nothing for anyone else, or when it has no draft. Locks the definition, so a publish
 -- in the same transaction publishes exactly the draft read.
 create function app.workflow_draft(p_definition_id uuid)
-  returns table (workflow_version_id uuid, version_no integer, layout jsonb, steps jsonb, transitions jsonb)
+  returns table (workflow_version_id uuid, version_no integer, name jsonb, layout jsonb, steps jsonb, transitions jsonb)
   language plpgsql volatile security definer
   set search_path = pg_catalog, public
   as $$
@@ -455,9 +542,10 @@ create function app.workflow_draft(p_definition_id uuid)
   $$;
 
 -- A Project Admin or Authorized Person saves the draft of a Workflow they author (as
--- app.write_workflow_draft). Outcome: 'saved'; 'not_found'; 'project_closed';
--- 'invalid_name'; 'invalid_definition'; 'workflow_name_names_participant' (a new name
--- naming a Participant, for a Workflow an exception binds).
+-- app.store_workflow_draft: a new name waits with the draft until it is published).
+-- Outcome: 'saved'; 'not_found'; 'project_closed'; 'invalid_name';
+-- 'invalid_definition'; 'workflow_name_names_participant' (a new name naming a
+-- Participant, for a Workflow an exception binds).
 create function app.save_workflow_draft(
   p_definition_id uuid, p_name jsonb, p_layout jsonb, p_steps jsonb, p_transitions jsonb, p_now timestamptz
 ) returns table (outcome text, workflow_version_id uuid, version_no integer)
@@ -482,7 +570,7 @@ create function app.save_workflow_draft(
         return query select 'workflow_name_names_participant'::text, null::uuid, null::integer;
         return;
       end if;
-      select * into v_saved from app.write_workflow_draft(p_definition_id, p_name, p_layout, p_steps, p_transitions, v_at);
+      select * into v_saved from app.store_workflow_draft(p_definition_id, p_name, p_layout, p_steps, p_transitions, v_at);
       if v_saved.outcome = 'saved' then
         perform app.write_workflow_event(p_definition_id, v_definition.project_id, v_definition.company_id, 'draft_saved',
           jsonb_build_object('version_no', v_saved.version_no) || case when p_name is null then '{}' else jsonb_build_object('name', p_name) end,
@@ -494,9 +582,9 @@ create function app.save_workflow_draft(
 
 -- A Project Admin or Authorized Person publishes the draft of a Workflow they author,
 -- after the api has run every publish check on app.workflow_draft's rows in this
--- transaction (as app.mark_workflow_published). Outcome: 'published'; 'not_found';
+-- transaction (as app.publish_workflow_draft). Outcome: 'published'; 'not_found';
 -- 'project_closed'; 'no_draft'; 'workflow_name_names_participant' (an exception
--- binds it, and its name names a Participant).
+-- binds it, and the name it takes, its draft's or its own, names a Participant).
 create function app.publish_workflow(p_definition_id uuid, p_now timestamptz)
   returns table (outcome text, workflow_version_id uuid, version_no integer)
   language plpgsql volatile security definer
@@ -513,12 +601,14 @@ create function app.publish_workflow(p_definition_id uuid, p_now timestamptz)
         return query select v_refusal, null::uuid, null::integer;
         return;
       end if;
-      select d.project_id, d.company_id, d.name into v_definition from workflow_definition d where d.id = p_definition_id;
+      select d.project_id, d.company_id,
+        coalesce((select v.draft_name from workflow_version v where v.workflow_definition_id = d.id and v.status = 'draft'), d.name) as name
+      into v_definition from workflow_definition d where d.id = p_definition_id;
       if app.is_exception_workflow(p_definition_id) and app.names_participant(v_definition.project_id, v_definition.name) then
         return query select 'workflow_name_names_participant'::text, null::uuid, null::integer;
         return;
       end if;
-      select * into v_published from app.mark_workflow_published(p_definition_id, v_at);
+      select * into v_published from app.publish_workflow_draft(p_definition_id, v_at);
       if v_published.outcome = 'published' then
         perform app.write_workflow_event(p_definition_id, v_definition.project_id, v_definition.company_id, 'published',
           jsonb_build_object('version_no', v_published.version_no), v_at);
@@ -826,9 +916,18 @@ create or replace function app.create_revision(p_work_item_id uuid, p_idempotenc
     end
   $$;
 
+drop function app.latest_draft_step(uuid);
+
 -- Grants ------------------------------------------------------------------------------------
 
 revoke all on function app.workflow_type(uuid) from public;
+grant execute on function app.workflow_type(uuid) to rabaed_app, rabaed_admin;
+revoke all on function app.workflow_is_published(uuid) from public;
+grant execute on function app.workflow_is_published(uuid) to rabaed_app;
+revoke all on function app.workflow_version_rows(uuid) from public;
+grant execute on function app.workflow_version_rows(uuid) to rabaed_app, rabaed_admin;
+revoke all on function app.store_workflow_draft(uuid, jsonb, jsonb, jsonb, jsonb, timestamptz) from public;
+revoke all on function app.publish_workflow_draft(uuid, timestamptz) from public;
 revoke all on function app.refuse_workflow_event_change() from public;
 revoke all on function app.write_workflow_event(uuid, uuid, uuid, text, jsonb, timestamptz) from public;
 revoke all on function app.can_author_workflow(uuid) from public;
@@ -836,8 +935,8 @@ grant execute on function app.can_author_workflow(uuid) to rabaed_app;
 revoke all on function app.names_participant(uuid, jsonb) from public;
 revoke all on function app.is_exception_workflow(uuid) from public;
 revoke all on function app.workflow_draft_rows(uuid) from public;
-revoke all on function app.write_workflow_draft(uuid, jsonb, jsonb, jsonb, jsonb, timestamptz) from public;
-grant execute on function app.write_workflow_draft(uuid, jsonb, jsonb, jsonb, jsonb, timestamptz) to rabaed_admin;
+revoke all on function app.write_workflow_draft(uuid, jsonb, jsonb, jsonb, timestamptz) from public;
+grant execute on function app.write_workflow_draft(uuid, jsonb, jsonb, jsonb, timestamptz) to rabaed_admin;
 revoke all on function app.mark_workflow_published(uuid, timestamptz) from public;
 grant execute on function app.mark_workflow_published(uuid, timestamptz) to rabaed_admin;
 revoke all on function app.workflow_command_refusal(uuid) from public;

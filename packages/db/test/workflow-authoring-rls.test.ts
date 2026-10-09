@@ -212,6 +212,83 @@ describe("the app role and the definition tables", () => {
   });
 });
 
+describe("a draft's name is read by its authors only (V20, scenario RP-427-5)", () => {
+  const FIRST = { en: "Night shift route", ar: "مسار الوردية الليلية" };
+  const RENAMED = { en: "Day shift route", ar: "مسار الوردية النهارية" };
+  let route = "";
+  const nameOf = (as: string) => call<{ name: unknown }>(as, sql`select name from workflow_definition where id = ${route}::uuid`);
+
+  beforeAll(async () => {
+    const [duplicated] = await call<{ outcome: string; workflow_definition_id: string }>(
+      admin,
+      sql`select * from app.duplicate_workflow(${rabaedDefault}::uuid, ${projectId}::uuid, ${JSON.stringify(FIRST)}::jsonb, now())`,
+    );
+    route = duplicated!.workflow_definition_id;
+  });
+
+  it("hides a Workflow with no published Version from everyone but its authors", async () => {
+    expect(await nameOf(engineer)).toEqual([]);
+    expect(await nameOf(admin)).toEqual([{ name: FIRST }]);
+    expect(await outcome(admin, sql`select outcome from app.publish_workflow(${route}::uuid, now())`)).toBe("published");
+    expect(await nameOf(engineer)).toEqual([{ name: FIRST }]);
+  });
+
+  it("keeps a rename with the draft until it is published", async () => {
+    const [published] = await migrator.query(
+      `select v.layout, (select jsonb_agg(jsonb_build_object('key', s.key, 'name', s.name, 'stage_key', s.stage_key,
+         'actor_rule', s.actor_rule, 'outcome_mode', s.outcome_mode) order by s.created_at, s.key) from workflow_step s where s.workflow_version_id = v.id) as steps,
+         (select jsonb_agg(jsonb_build_object('key', t.key, 'from_step_key', f.key, 'to_step_key', s.key, 'label', t.label, 'kind', t.kind,
+         'outcome', t.outcome, 'permission', t.permission, 'sort', t.sort, 'action_form', t.action_form) order by t.sort, t.key)
+         from workflow_transition t join workflow_step f on f.id = t.from_step_id join workflow_step s on s.id = t.to_step_id
+         where t.workflow_version_id = v.id) as transitions
+       from workflow_version v where v.workflow_definition_id = $1 and v.status = 'published'`,
+      [route],
+    ).then((r) => r.rows);
+    const saved = await outcome(
+      admin,
+      sql`select outcome from app.save_workflow_draft(${route}::uuid, ${JSON.stringify(RENAMED)}::jsonb, ${JSON.stringify(published.layout)}::jsonb,
+        ${JSON.stringify(published.steps)}::jsonb, ${JSON.stringify(published.transitions)}::jsonb, now())`,
+    );
+    expect(saved).toBe("saved");
+    // The live name, which items show, is still the published one, for authors and Members alike.
+    expect(await nameOf(engineer)).toEqual([{ name: FIRST }]);
+    expect(await nameOf(admin)).toEqual([{ name: FIRST }]);
+    expect(await call(admin, sql`select name from app.workflow_draft(${route}::uuid)`)).toEqual([{ name: RENAMED }]);
+    expect(await call(engineer, sql`select name from app.workflow_draft(${route}::uuid)`)).toEqual([]);
+
+    expect(await outcome(admin, sql`select outcome from app.publish_workflow(${route}::uuid, now())`)).toBe("published");
+    expect(await nameOf(engineer)).toEqual([{ name: RENAMED }]);
+  });
+});
+
+describe("Rabaed Admin's draft and publish functions (V9)", () => {
+  it("refuse a Project's or a Library's Workflow as not_found, changing nothing", async () => {
+    const adminDb = createDb(urls.admin, { max: 1 });
+    try {
+      const [project] = await call<{ workflow_definition_id: string }>(
+        admin,
+        sql`select workflow_definition_id from app.duplicate_workflow(${rabaedDefault}::uuid, ${projectId}::uuid, '{"en": "Admin-proof", "ar": "محمي"}'::jsonb, now())`,
+      );
+      const [library] = await call<{ workflow_definition_id: string }>(
+        admin,
+        sql`select workflow_definition_id from app.duplicate_workflow(${rabaedDefault}::uuid, null, '{"en": "Library proof", "ar": "مكتبة"}'::jsonb, now())`,
+      );
+      for (const id of [project!.workflow_definition_id, library!.workflow_definition_id]) {
+        const before = await migrator.query("select status, version_no, layout from workflow_version where workflow_definition_id = $1", [id]);
+        const written = await sql<{ outcome: string }>`
+          select outcome from app.write_workflow_draft(${id}::uuid, '{}'::jsonb, '[]'::jsonb, '[]'::jsonb, now())`.execute(adminDb);
+        expect(written.rows).toEqual([{ outcome: "not_found" }]);
+        const published = await sql<{ outcome: string }>`select outcome from app.mark_workflow_published(${id}::uuid, now())`.execute(adminDb);
+        expect(published.rows).toEqual([{ outcome: "not_found" }]);
+        const after = await migrator.query("select status, version_no, layout from workflow_version where workflow_definition_id = $1", [id]);
+        expect(after.rows).toEqual(before.rows);
+      }
+    } finally {
+      await adminDb.destroy();
+    }
+  });
+});
+
 describe("a Rabaed Default published by the workflow:publish CLI", () => {
   it("is the Version a Project's new item starts on at once", async () => {
     const before = await raise(engineer);

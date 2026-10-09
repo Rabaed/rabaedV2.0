@@ -82,7 +82,7 @@ describe("a Project Admin authors the Project's own Workflow", () => {
     const original = await read(c1.caller, marDefault);
     expect(copy).toMatchObject({ name: TOWER_ROUTE, owner: "project", projectId: at.projectId, workItemTypeId: marTypeId });
     expect(copy.publishedVersions).toEqual([]);
-    expect(copy.draft).toEqual({ versionNo: 1, definition: original.published!.definition });
+    expect(copy.draft).toEqual({ versionNo: 1, name: TOWER_ROUTE, definition: original.published!.definition });
     expect(copy.canAuthor).toBe(true);
   });
 
@@ -90,10 +90,10 @@ describe("a Project Admin authors the Project's own Workflow", () => {
     const definition = renamedDraftStep((await read(c1.caller, route)).draft!.definition, "Prepare");
     const res = await c1.caller.request("PUT", `/v1/workflows/${route}/draft`, { definition });
     expect(res.statusCode, res.body).toBe(200);
-    expect((await read(c1.caller, route)).draft).toEqual({ versionNo: 1, definition });
+    expect((await read(c1.caller, route)).draft).toEqual({ versionNo: 1, name: TOWER_ROUTE, definition });
+    // Never published, it is read by its authors only: its name is the draft's (scenario RP-427-5).
     for (const reader of [c1Member, k1Engineer, c2Engineer]) {
-      const seen = await read(reader, route);
-      expect(seen).toMatchObject({ draft: null, published: null, canAuthor: false });
+      await expectHidden(reader.get(`/v1/workflows/${route}`));
     }
   });
 
@@ -152,6 +152,18 @@ describe("a Project Admin authors the Project's own Workflow", () => {
     const onV2 = await draft(at, at.c1Engineer, "On Version 2");
     expect((await detail(at.c1Engineer, onV2)).workflow).toEqual({ name: TOWER_ROUTE, versionNo: 2 });
     expect((await detail(at.c1Engineer, onV1)).workflow).toEqual({ name: TOWER_ROUTE, versionNo: 1 });
+  });
+
+  it("keeps a draft's new name with the draft: items and Members read the published name until it is published (scenario RP-427-5)", async () => {
+    const renamedTo = { en: "Tower MAR route, renamed", ar: "مسار البرج المعدل" };
+    const definition = (await read(c1.caller, route)).published!.definition;
+    await ok(c1.caller.request("PUT", `/v1/workflows/${route}/draft`, { name: renamedTo, definition }), 200);
+    const id = await draft(at, at.c1Engineer, "While the rename is a draft");
+    expect((await detail(at.c1Engineer, id)).workflow.name).toEqual(TOWER_ROUTE);
+    expect((await read(k1Engineer, route)).name).toEqual(TOWER_ROUTE);
+    expect(await read(c1.caller, route)).toMatchObject({ name: TOWER_ROUTE, draft: { versionNo: 3, name: renamedTo } });
+    // Saved back under its name, the draft renames nothing.
+    await ok(c1.caller.request("PUT", `/v1/workflows/${route}/draft`, { name: TOWER_ROUTE, definition }), 200);
   });
 
   it("unbinds: new items run the Rabaed Default again", async () => {

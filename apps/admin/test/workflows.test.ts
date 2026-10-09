@@ -8,6 +8,7 @@ import { addTestWorkflow, testDatabaseUrls } from "@rabaed/db/test-support";
 import type { WorkflowDefinition } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { publishRabaedWorkflowAs } from "../src/workflows.ts";
 import { createTestAdmin, type Browser } from "./support/harness.ts";
 
 const admin = await createTestAdmin();
@@ -98,6 +99,19 @@ describe("a Rabaed Default Workflow in Rabaed Admin", () => {
     expect((await engineer.browser.post(`/v1/workflows/NOPE/publish`, { definition: before.definition, reason: "Try it" })).statusCode).toBe(404);
     expect((await readLatestPublishedDefinition(adminDb, definitionId))!.versionNo).toBe(before.versionNo);
     expect((await actionsOn(definitionId)).length).toBe(2);
+  });
+
+  it("is published by the workflow:publish CLI as a named Rabaed Engineer, logged with the reason (V9)", async () => {
+    const before = (await readLatestPublishedDefinition(adminDb, definitionId))!;
+    const { email } = await migrator.selectFrom("rabaed_engineer").select("email").where("id", "=", engineer.id).executeTakeFirstOrThrow();
+    const next = renamed(before.definition, "Prepare from the CLI");
+    const unknown = await publishRabaedWorkflowAs(migrator, { engineerEmail: "nobody@rabaed.test", typeCode: TYPE, definition: next, reason: "CLI" });
+    expect(unknown).toEqual({ ok: false, reason: "engineer_not_found" });
+    expect((await actionsOn(definitionId)).length).toBe(2);
+
+    const published = await publishRabaedWorkflowAs(migrator, { engineerEmail: email.toUpperCase(), typeCode: TYPE, definition: next, reason: "Publish from the CLI" });
+    expect(published).toMatchObject({ ok: true, versionNo: before.versionNo + 1 });
+    expect((await actionsOn(definitionId)).at(-1)).toEqual({ engineer_id: engineer.id, action: "publish_workflow", reason: "Publish from the CLI" });
   });
 
   it("is reached by a signed-in Rabaed Engineer only", async () => {

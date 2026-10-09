@@ -17,7 +17,8 @@ export type DuplicateWorkflowRequest = z.infer<typeof duplicateWorkflowRequest>;
 
 /**
  * Save a Workflow's draft: the definition document (parsed with
- * `parseWorkflowDefinition`, so its shape is checked there), and optionally a new name.
+ * `parseWorkflowDefinition`, so its shape is checked there), and optionally a new name,
+ * which the Workflow takes when the draft is published.
  */
 export const saveWorkflowDraftRequest = z.object({
   name: bilingualText.optional(),
@@ -67,7 +68,10 @@ export type WorkflowRead = {
   workItemTypeId: string | null;
   publishedVersions: number[];
   published: { versionNo: number; definition: WorkflowDefinition } | null;
-  /** Null for anyone who doesn't author it, and when it has no draft. */
-  draft: { versionNo: number; definition: WorkflowDefinition } | null;
+  /**
+   * Null for anyone who doesn't author it, and when it has no draft. `name` is the one
+   * the Workflow takes when the draft is published; until then `name` above is its name.
+   */
+  draft: { versionNo: number; name: { en: string; ar: string }; definition: WorkflowDefinition } | null;
   canAuthor: boolean;
 };

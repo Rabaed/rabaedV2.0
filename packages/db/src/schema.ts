@@ -360,6 +360,8 @@ export interface WorkflowVersionTable {
   version_no: number;
   status: "draft" | "published";
   layout: Generated<Json>;
+  /** A draft's new name for the Workflow, given to it at publish (RP-427); null otherwise. */
+  draft_name: ColumnType<Bilingual | null, string | null | undefined, string | null>;
   published_at: Timestamp | null;
   created_at: Generated<Timestamp>;
   updated_at: Generated<Timestamp>;

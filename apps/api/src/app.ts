@@ -97,7 +97,8 @@ export async function buildApp({
     }
     const status = (error as { statusCode?: number }).statusCode;
     if (status && status >= 400 && status < 500) return reply.code(status).send({ error: "invalid_request" });
-    request.log.error(error);    return reply.code(500).send({ error: "internal" });
+    request.log.error(error);
+    return reply.code(500).send({ error: "internal" });
   });
   app.setNotFoundHandler((_request, reply) => reply.code(404).send({ error: "not_found" }));
 

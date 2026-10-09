@@ -1,4 +1,4 @@
-import type { FieldError } from "@rabaed/domain";
+import type { DefinitionIssue, FieldError, WorkflowProblem } from "@rabaed/domain";
 import { forbidden, HttpError, notFound } from "./http-error.ts";
 
 // Every refusal the API's commands answer with, as the API's HTTP answer.
@@ -89,8 +89,22 @@ const answers = {
 
 export type RefusalReason = keyof typeof answers;
 
-/** A refused result as the HTTP error to throw, with the per-field errors of refused answers. */
-export function refusal(result: { reason: RefusalReason; errors?: FieldError[] }): HttpError {
+/**
+ * A refused result as the HTTP error to throw, with what the body says of it: the
+ * per-field errors of refused answers; where a Workflow document doesn't fit the
+ * format (`issues`) or every publish problem of a Workflow draft (`problems`).
+ */
+export function refusal(result: {
+  reason: RefusalReason;
+  errors?: FieldError[];
+  issues?: DefinitionIssue[];
+  problems?: WorkflowProblem[];
+}): HttpError {
   const error = answers[result.reason]();
-  return result.errors ? new HttpError(error.statusCode, error.code, { fields: result.errors }) : error;
+  const details = {
+    ...(result.errors ? { fields: result.errors } : {}),
+    ...(result.issues ? { issues: result.issues } : {}),
+    ...(result.problems ? { problems: result.problems } : {}),
+  };
+  return Object.keys(details).length > 0 ? new HttpError(error.statusCode, error.code, details) : error;
 }

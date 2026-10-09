@@ -10,6 +10,7 @@ import {
   type WorkflowDefinition,
   type WorkflowProblem,
   type WorkflowPublishContext,
+  type WorkflowValidation,
   type WorkflowVersionRows,
 } from "@rabaed/domain";
 import { sql } from "kysely";
@@ -38,9 +39,7 @@ export async function readWorkflowCheckContext(db: Db, definitionId: string): Pr
        where f.form_definition_id = t.form_definition_id and f.status = 'published'
        order by f.version_no desc limit 1) as form
     from workflow_definition d
-    join work_item_type t on t.id = coalesce(
-      d.work_item_type_id,
-      (select o.id from work_item_type o where o.workflow_definition_id = d.id order by o.created_at, o.id limit 1))
+    join work_item_type t on t.id = app.workflow_type(d.id)
     where d.id = ${definitionId}::uuid
   `.execute(db);
   const type = rows[0];
@@ -64,21 +63,41 @@ export async function readWorkflowCheckContext(db: Db, definitionId: string): Pr
   };
 }
 
-/** A definition document read and checked: where it doesn't fit the format, else its publish problems. */
-export type CheckedDefinition =
-  | { ok: false; issues: DefinitionIssue[] }
-  | { ok: true; definition: WorkflowDefinition; rows: WorkflowVersionRows; problems: WorkflowProblem[] };
+/** The rows' layout, Steps and Transitions as the app.* draft functions take them (jsonb text). */
+export type DraftArguments = { layout: string; steps: string; transitions: string };
 
-/** Parses `input` as a definition and runs every publish check on it in `check`'s context. */
-export function checkDefinition(input: unknown, check: WorkflowCheckContext): CheckedDefinition {
+/**
+ * A definition document prepared for saving: refused with `issues` where it doesn't fit
+ * the format or holds what the rows can't store yet (with its publish problems when it
+ * parsed), else its rows as the draft functions take them and its publish problems.
+ */
+export type PreparedDraft =
+  | { ok: false; issues: DefinitionIssue[]; problems: WorkflowProblem[] }
+  | { ok: true; definition: WorkflowDefinition; args: DraftArguments; problems: WorkflowProblem[] };
+
+/**
+ * Parses `input` as a definition, runs every publish check on it in `check`'s context
+ * and refuses what saving would lose: the one sequence every save, check and publish
+ * of a Workflow runs, in the api and in Rabaed Admin.
+ */
+export function prepareDraft(input: unknown, check: WorkflowCheckContext): PreparedDraft {
   const parsed = parseWorkflowDefinition(input);
-  if (!parsed.ok) return { ok: false, issues: parsed.issues };
+  if (!parsed.ok) return { ok: false, issues: parsed.issues, problems: [] };
+  const problems = workflowPublishProblems(parsed.definition, check.context);
+  const unstorable = unstorableParts(parsed.definition);
+  if (unstorable.length > 0) return { ok: false, issues: unstorable, problems };
+  const rows = definitionToRows(parsed.definition, check.outcomeKind);
   return {
     ok: true,
     definition: parsed.definition,
-    rows: definitionToRows(parsed.definition, check.outcomeKind),
-    problems: workflowPublishProblems(parsed.definition, check.context),
+    args: { layout: JSON.stringify(rows.layout), steps: JSON.stringify(rows.steps), transitions: JSON.stringify(rows.transitions) },
+    problems,
   };
+}
+
+/** What a check of a prepared document answers: where it doesn't fit, and every publish problem. */
+export function draftValidation(prepared: PreparedDraft): WorkflowValidation {
+  return { issues: prepared.ok ? [] : prepared.issues, problems: prepared.problems };
 }
 
 /**
@@ -86,7 +105,7 @@ export function checkDefinition(input: unknown, check: WorkflowCheckContext): Ch
  * notifications have no columns until WF-7, WF-8 and WF-9 add them. Saving them would
  * lose them, so a draft carrying them is refused, saying where.
  */
-export function unstorableParts(definition: WorkflowDefinition): DefinitionIssue[] {
+function unstorableParts(definition: WorkflowDefinition): DefinitionIssue[] {
   return definition.transitions.flatMap((t, index) =>
     (["rules", "actions", "notifications"] as const)
       .filter((part) => t[part] !== undefined)
@@ -94,57 +113,43 @@ export function unstorableParts(definition: WorkflowDefinition): DefinitionIssue
   );
 }
 
-type DraftRow = { workflow_version_id: string; version_no: number; layout: unknown; steps: unknown; transitions: unknown };
+/** A Version's rows as `app.workflow_version_rows` shapes them. */
+type VersionRows = { layout: unknown; steps: unknown; transitions: unknown };
 
-/** A draft as `app.workflow_draft` returns it. */
-export type StoredDraft = { versionId: string; versionNo: number; rows: WorkflowVersionRows; definition: WorkflowDefinition };
+const definitionOf = (row: VersionRows): WorkflowDefinition =>
+  definitionFromRows({
+    layout: row.layout,
+    steps: row.steps as WorkflowVersionRows["steps"],
+    transitions: row.transitions as WorkflowVersionRows["transitions"],
+  });
+
+/** A draft as `app.workflow_draft` returns it, with the name the Workflow takes when it is published. */
+export type StoredDraft = { versionId: string; versionNo: number; name: { en: string; ar: string }; definition: WorkflowDefinition };
 
 /**
  * The draft of Workflow `definitionId`, for its authors only (`app.workflow_draft`),
  * locking the definition until the transaction ends. Null when there is none to read.
  */
 export async function readWorkflowDraft(db: Db, definitionId: string): Promise<StoredDraft | null> {
-  const { rows } = await sql<DraftRow>`select * from app.workflow_draft(${definitionId}::uuid)`.execute(db);
+  const { rows } = await sql<VersionRows & { workflow_version_id: string; version_no: number; name: { en: string; ar: string } }>`
+    select * from app.workflow_draft(${definitionId}::uuid)
+  `.execute(db);
   const row = rows[0];
   if (!row) return null;
-  const stored: WorkflowVersionRows = {
-    layout: row.layout,
-    steps: row.steps as WorkflowVersionRows["steps"],
-    transitions: row.transitions as WorkflowVersionRows["transitions"],
-  };
-  return { versionId: row.workflow_version_id, versionNo: row.version_no, rows: stored, definition: definitionFromRows(stored) };
-}
-
-/** The rows' Steps and Transitions as the app.* draft functions take them. */
-export function draftArguments(rows: WorkflowVersionRows) {
-  return {
-    layout: JSON.stringify(rows.layout),
-    steps: JSON.stringify(rows.steps),
-    transitions: JSON.stringify(rows.transitions),
-  };
+  return { versionId: row.workflow_version_id, versionNo: row.version_no, name: row.name, definition: definitionOf(row) };
 }
 
 /** The published Version of Workflow `definitionId` new items would start on: the latest, as rows, if `db` reads it. */
 export async function readLatestPublishedDefinition(db: Db, definitionId: string): Promise<{ versionNo: number; definition: WorkflowDefinition } | null> {
-  const version = await sql<{ id: string; version_no: number; layout: unknown }>`
-    select id, version_no, layout from workflow_version
-    where workflow_definition_id = ${definitionId}::uuid and status = 'published'
-    order by version_no desc limit 1
+  const { rows } = await sql<VersionRows & { version_no: number }>`
+    select v.version_no, r.* from (
+      select id, version_no from workflow_version
+      where workflow_definition_id = ${definitionId}::uuid and status = 'published'
+      order by version_no desc limit 1
+    ) v cross join lateral app.workflow_version_rows(v.id) r
   `.execute(db);
-  const v = version.rows[0];
-  if (!v) return null;
-  const steps = await sql<WorkflowVersionRows["steps"][number]>`
-    select key, name, stage_key, actor_rule, is_signing, outcome_mode from workflow_step
-    where workflow_version_id = ${v.id}::uuid order by created_at, key
-  `.execute(db);
-  const transitions = await sql<WorkflowVersionRows["transitions"][number]>`
-    select t.key, f.key as from_step_key, s.key as to_step_key, t.label, t.kind, t.outcome, t.permission, t.sort, t.action_form
-    from workflow_transition t
-    join workflow_step f on f.id = t.from_step_id
-    join workflow_step s on s.id = t.to_step_id
-    where t.workflow_version_id = ${v.id}::uuid order by t.sort, t.key
-  `.execute(db);
-  return { versionNo: v.version_no, definition: definitionFromRows({ layout: v.layout, steps: steps.rows, transitions: transitions.rows }) };
+  const row = rows[0];
+  return row ? { versionNo: row.version_no, definition: definitionOf(row) } : null;
 }
 
 /** A Rabaed Default's draft saved or published, with the warnings its checks found; or why not. */
@@ -171,32 +176,31 @@ export async function writeRabaedDefaultWorkflow(
   const definitionId = await rabaedDefaultWorkflowId(trx, typeCode);
   const check = definitionId ? await readWorkflowCheckContext(trx, definitionId) : null;
   if (!definitionId || !check) return { ok: false, reason: "type_not_found" };
-  const checked = checkDefinition(input, check);
-  if (!checked.ok) return { ok: false, reason: "invalid_definition", issues: checked.issues };
-  const unstorable = unstorableParts(checked.definition);
-  if (unstorable.length > 0) return { ok: false, reason: "invalid_definition", issues: unstorable };
-  if (publish && checked.problems.some((p) => p.severity === "error")) return { ok: false, reason: "workflow_problems", problems: checked.problems };
-  const args = draftArguments(checked.rows);
+  const prepared = prepareDraft(input, check);
+  if (!prepared.ok) return { ok: false, reason: "invalid_definition", issues: prepared.issues };
+  if (publish && hasError(prepared.problems)) return { ok: false, reason: "workflow_problems", problems: prepared.problems };
+  const { args } = prepared;
   const saved = await sql<{ outcome: string; version_no: number }>`
     select outcome, version_no from app.write_workflow_draft(
-      ${definitionId}::uuid, null, ${args.layout}::jsonb, ${args.steps}::jsonb, ${args.transitions}::jsonb, now())
+      ${definitionId}::uuid, ${args.layout}::jsonb, ${args.steps}::jsonb, ${args.transitions}::jsonb, now())
   `.execute(trx);
   if (saved.rows[0]?.outcome !== "saved") throw new Error(`write_workflow_draft: ${saved.rows[0]?.outcome}`);
-  if (!publish) return { ok: true, definitionId, versionNo: saved.rows[0].version_no, warnings: checked.problems };
+  if (!publish) return { ok: true, definitionId, versionNo: saved.rows[0].version_no, warnings: prepared.problems };
   const published = await sql<{ outcome: string; version_no: number }>`
     select outcome, version_no from app.mark_workflow_published(${definitionId}::uuid, now())
   `.execute(trx);
   if (published.rows[0]?.outcome !== "published") throw new Error(`mark_workflow_published: ${published.rows[0]?.outcome}`);
-  return { ok: true, definitionId, versionNo: published.rows[0].version_no, warnings: checked.problems };
+  return { ok: true, definitionId, versionNo: published.rows[0].version_no, warnings: prepared.problems };
 }
 
+/** Whether any of `problems` refuses a publish (warnings don't). */
+export const hasError = (problems: WorkflowProblem[]): boolean => problems.some((p) => p.severity === "error");
+
 /** What a check of `input` against the Rabaed Default of `typeCode` finds; null for no such Type. */
-export async function validateRabaedDefaultWorkflow(db: Db, typeCode: string, input: unknown) {
+export async function validateRabaedDefaultWorkflow(db: Db, typeCode: string, input: unknown): Promise<WorkflowValidation | null> {
   const definitionId = await rabaedDefaultWorkflowId(db, typeCode);
   const check = definitionId ? await readWorkflowCheckContext(db, definitionId) : null;
-  if (!check) return null;
-  const checked = checkDefinition(input, check);
-  return checked.ok ? { issues: unstorableParts(checked.definition), problems: checked.problems } : { issues: checked.issues, problems: [] };
+  return check ? draftValidation(prepareDraft(input, check)) : null;
 }
 
 /** The Rabaed Default Workflow of the Rabaed Work Item Type `typeCode`, if there is one. */

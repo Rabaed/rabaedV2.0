@@ -1,10 +1,10 @@
 import {
-  checkDefinition,
-  draftArguments,
+  draftValidation,
+  hasError,
+  prepareDraft,
   readLatestPublishedDefinition,
   readWorkflowCheckContext,
   readWorkflowDraft,
-  unstorableParts,
   withMember,
   type Db,
 } from "@rabaed/db";
@@ -28,12 +28,12 @@ import { checkedOutcome, commandResult } from "../outcomes.ts";
 // transaction that publishes, on the draft app.workflow_draft has locked. Anyone who
 // may not author the Workflow gets 'not_found', exactly like a made-up id.
 
-/** A Workflow as the Member reads it (V18, V20); null when they don't. */
+/** A Workflow as the Member reads it (V18, V20); null when they don't, as for one only its authors read yet. */
 export function readWorkflow(db: Db, memberId: string, definitionId: string): Promise<WorkflowRead | null> {
   return withMember(db, memberId, async (trx) => {
     const definition = await trx
       .selectFrom("workflow_definition")
-      .select(["id", "name", "owner_kind", "project_id", "work_item_type_id"])
+      .select(["id", "name", "owner_kind", "project_id", sql<string | null>`app.workflow_type(id)`.as("work_item_type_id")])
       .where("id", "=", definitionId)
       .executeTakeFirst();
     if (!definition) return null;
@@ -44,19 +44,17 @@ export function readWorkflow(db: Db, memberId: string, definitionId: string): Pr
       .where("status", "=", "published")
       .orderBy("version_no")
       .execute();
-    const { rows } = await sql<{ can: boolean }>`select app.can_author_workflow(${definitionId}::uuid) as can`.execute(trx);
-    const canAuthor = rows[0]!.can;
+    const canAuthor = await authors(trx, definitionId);
     const draft = canAuthor ? await readWorkflowDraft(trx, definitionId) : null;
-    const typeId = definition.work_item_type_id ?? (await readWorkflowCheckContext(trx, definitionId))?.workItemTypeId ?? null;
     return {
       id: definition.id,
       name: definition.name,
       owner: definition.owner_kind,
       projectId: definition.project_id,
-      workItemTypeId: typeId,
+      workItemTypeId: definition.work_item_type_id,
       publishedVersions: versions.map((v) => v.version_no),
       published: await readLatestPublishedDefinition(trx, definitionId),
-      draft: draft && { versionNo: draft.versionNo, definition: draft.definition },
+      draft: draft && { versionNo: draft.versionNo, name: draft.name, definition: draft.definition },
       canAuthor,
     };
   });
@@ -94,11 +92,9 @@ export function saveWorkflowDraft(
   return withMember(db, memberId, async (trx): Promise<SaveWorkflowDraftResult> => {
     const check = await authoredCheckContext(trx, definitionId);
     if (!check) return { ok: false, reason: "not_found" };
-    const checked = checkDefinition(input.definition, check);
-    if (!checked.ok) return { ok: false, reason: "invalid_definition", issues: checked.issues };
-    const unstorable = unstorableParts(checked.definition);
-    if (unstorable.length > 0) return { ok: false, reason: "invalid_definition", issues: unstorable };
-    const args = draftArguments(checked.rows);
+    const prepared = prepareDraft(input.definition, check);
+    if (!prepared.ok) return { ok: false, reason: "invalid_definition", issues: prepared.issues };
+    const { args } = prepared;
     const name = input.name === undefined ? null : JSON.stringify(input.name);
     const { rows } = await sql<{ outcome: string; version_no: number | null }>`
       select outcome, version_no from app.save_workflow_draft(
@@ -120,8 +116,7 @@ export function validateWorkflow(db: Db, memberId: string, definitionId: string,
       if (!draft) return { issues: [], problems: [] };
       input = draft.definition;
     }
-    const checked = checkDefinition(input, check);
-    return checked.ok ? { issues: unstorableParts(checked.definition), problems: checked.problems } : { issues: checked.issues, problems: [] };
+    return draftValidation(prepareDraft(input, check));
   });
 }
 
@@ -139,9 +134,8 @@ export function publishWorkflow(db: Db, memberId: string, definitionId: string, 
     // Locks the definition: no save comes between these checks and the publish.
     const draft = await readWorkflowDraft(trx, definitionId);
     if (!draft) return { ok: false, reason: "no_draft" };
-    const checked = checkDefinition(draft.definition, check);
-    const problems = checked.ok ? checked.problems : [];
-    if (problems.some((p) => p.severity === "error")) return { ok: false, reason: "workflow_problems", problems };
+    const { problems } = prepareDraft(draft.definition, check);
+    if (hasError(problems)) return { ok: false, reason: "workflow_problems", problems };
     const { rows } = await sql<{ outcome: string; version_no: number | null }>`
       select outcome, version_no from app.publish_workflow(${definitionId}::uuid, ${now})
     `.execute(trx);
@@ -175,8 +169,13 @@ export function unbindWorkflow(db: Db, memberId: string, projectId: string, inpu
   });
 }
 
+/** Whether the acting Member authors Workflow `definitionId`. */
+async function authors(trx: Db, definitionId: string): Promise<boolean> {
+  const { rows } = await sql<{ can: boolean }>`select app.can_author_workflow(${definitionId}::uuid) as can`.execute(trx);
+  return rows[0]!.can;
+}
+
 /** The check context of a Workflow the Member authors; null for any other (hidden, a Rabaed Default, made up). */
 async function authoredCheckContext(trx: Db, definitionId: string) {
-  const { rows } = await sql<{ can: boolean }>`select app.can_author_workflow(${definitionId}::uuid) as can`.execute(trx);
-  return rows[0]!.can ? readWorkflowCheckContext(trx, definitionId) : null;
+  return (await authors(trx, definitionId)) ? readWorkflowCheckContext(trx, definitionId) : null;
 }

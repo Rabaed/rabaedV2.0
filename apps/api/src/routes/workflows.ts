@@ -2,7 +2,7 @@ import { bindWorkflowRequest, duplicateWorkflowRequest, saveWorkflowDraftRequest
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import type { AppContext } from "../app.ts";
-import { HttpError, idOrNotFound, visibleOrNotFound } from "../http-error.ts";
+import { idOrNotFound, visibleOrNotFound } from "../http-error.ts";
 import { bindWorkflow, duplicateWorkflow, publishWorkflow, readWorkflow, saveWorkflowDraft, unbindWorkflow, validateWorkflow } from "../projects/workflows.ts";
 import { refusal } from "../refusals.ts";
 
@@ -35,10 +35,7 @@ export const workflowRoutes =
     app.put("/v1/workflows/:workflowId/draft", { schema: { params: workflowParams, body: saveWorkflowDraftRequest } }, async (request) => {
       const memberId = ctx.requireMember(request);
       const result = await saveWorkflowDraft(ctx.db, memberId, idOrNotFound(request.params.workflowId), request.body, ctx.now());
-      if (!result.ok) {
-        if (result.issues) throw new HttpError(422, "invalid_definition", { issues: result.issues });
-        throw refusal(result);
-      }
+      if (!result.ok) throw refusal(result);
       return { versionNo: result.versionNo };
     });
 
@@ -50,10 +47,7 @@ export const workflowRoutes =
     app.post("/v1/workflows/:workflowId/publish", { schema: { params: workflowParams } }, async (request) => {
       const memberId = ctx.requireMember(request);
       const result = await publishWorkflow(ctx.db, memberId, idOrNotFound(request.params.workflowId), ctx.now());
-      if (!result.ok) {
-        if (result.reason === "workflow_problems") throw new HttpError(422, "workflow_problems", { problems: result.problems });
-        throw refusal(result);
-      }
+      if (!result.ok) throw refusal(result);
       return { versionNo: result.versionNo, warnings: result.warnings };
     });
 
