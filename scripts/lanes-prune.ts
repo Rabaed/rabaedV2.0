@@ -5,16 +5,22 @@
 // Each goes with its containers, volumes (its database) and network. The current
 // worktree's project is never removed.
 //
-//   pnpm lanes:prune [--merged] [--yes]     --yes skips the confirmation
+//   pnpm lanes:prune [--merged] [--lane N] [--yes]     --yes skips the confirmation
+//
+// --lane N limits the candidates (stale, plus merged with --merged) to rabaed-laneN, with the
+// same confirmation and the same keep rules, so one lane is freed without touching the others (RP-505).
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { confirmOrExit } from "./confirm.ts";
-import { composeProjectOfEnv, listContainers, listVolumes, mergedProjects, removeProject, staleProjects, type WorktreeLane } from "./lanes.ts";
+import { composeProjectOfEnv, listContainers, listVolumes, mergedProjects, onlyLane, removeProject, staleProjects, type WorktreeLane } from "./lanes.ts";
 import { branchMerged, listWorktrees, refExists } from "./worktrees.ts";
 
-const args = process.argv.slice(2);
-if (args.some((a) => a !== "--yes" && a !== "--merged")) {
-  console.error("Usage: pnpm lanes:prune [--merged] [--yes]");
+const usage = "Usage: pnpm lanes:prune [--merged] [--lane N] [--yes]   (--lane N: only rabaed-laneN, N = 0..9)";
+const laneAt = process.argv.slice(2).indexOf("--lane");
+const args = process.argv.slice(2).filter((_, i) => laneAt === -1 || (i !== laneAt && i !== laneAt + 1));
+const lane = laneAt === -1 ? undefined : Number(process.argv.slice(2)[laneAt + 1]);
+if (args.some((a) => a !== "--yes" && a !== "--merged") || (lane !== undefined && (!Number.isInteger(lane) || lane < 0 || lane > 9))) {
+  console.error(usage);
   process.exit(1);
 }
 const withMerged = args.includes("--merged");
@@ -52,12 +58,13 @@ if (withMerged) {
   stale.push(...mergedProjects({ containers, volumes, worktrees, cwd: process.cwd(), currentProject }).filter((m) => !known.has(m.project)));
 }
 
-if (stale.length === 0) {
-  console.log("Nothing to prune.");
+const candidates = onlyLane(stale, lane);
+if (candidates.length === 0) {
+  console.log(lane === undefined ? "Nothing to prune." : `Nothing to prune for lane ${lane}.`);
   process.exit(0);
 }
 console.log("Compose projects to prune:");
-for (const s of stale) {
+for (const s of candidates) {
   console.log(`  ${s.project}: ${s.reason}; containers: ${s.containers.join(", ") || "none"}; volumes: ${s.volumes.join(", ") || "none"}`);
 }
 
@@ -68,7 +75,7 @@ await confirmOrExit("Remove them with their volumes? Their databases are lost, i
 });
 
 let failed = 0;
-for (const s of stale) {
+for (const s of candidates) {
   try {
     removeProject(s);
     console.log(`Removed ${s.project}.`);
