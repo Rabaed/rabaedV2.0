@@ -13,6 +13,7 @@ Use the Atlassian MCP tools (`createJiraIssue`, `editJiraIssue`, `getJiraIssue`,
 - **Comment**: `addOrEditJiraIssueComment`.
 - **Labels**: edit the `labels` field with `editJiraIssue` (add/remove the triage labels in `docs/agents/triage-labels.md`).
 - **Close**: `transitionJiraIssue` to a Done-category status, with a comment saying why.
+- **Claim**: when an implementer starts a ticket, `/implement` and `/implement-spec` transition it to In Progress and assign it to the driving dev, as their first write. The lane frontier query excludes In Progress. `pnpm lane:env` also warns when another branch, worktree or `origin` branch starts with the same `RP-nnn-` (RP-499: two sessions built RP-451 and RP-459 twice while Jira showed To Do).
 - **Blocking edges**: Jira issue links of type **"Blocks"** (blocker *blocks* blocked). A ticket is unblocked when every issue that blocks it is Done.
 - **Specs** (`/to-spec`): one Jira issue (type Task, label `spec`) under the Epic, holding the spec in its description; tickets from `/to-tickets` are Tasks under the same Epic that link back to the spec.
 - **Code ↔ ticket**: branch names and commit messages start with the key, e.g. `RP-42-project-rls`; PRs in GitHub mention the key.

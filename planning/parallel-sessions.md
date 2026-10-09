@@ -11,10 +11,10 @@ Four lanes. **main** plans; **A, B and C** implement. Each implementing session 
 
 Each lane has its own ports, database and Docker Compose project: see "Several worktrees at once" in the README.
 
-**Which ticket is next** comes from Jira, not this file: a lane's frontier is its `lane-x` tickets that are `ready-for-agent` and have every "Blocks" blocker Done. The ticket gives a suggested model (Opus or Sonnet). To list a lane's open tickets:
+**Which ticket is next** comes from Jira, not this file: a lane's frontier is its `lane-x` tickets that are `ready-for-agent` and have every "Blocks" blocker Done, and that are not In Progress (an implementer claims a ticket by moving it to In Progress and assigning itself: `docs/agents/issue-tracker.md`, Claim). The ticket gives a suggested model (Opus or Sonnet). To list a lane's open tickets:
 
 ```
-project = RP AND labels = lane-a AND labels = ready-for-agent AND statusCategory != Done ORDER BY rank
+project = RP AND labels = lane-a AND labels = ready-for-agent AND statusCategory != Done AND status != "In Progress" ORDER BY rank
 ```
 
 A lane takes work in one of two ways: **one ticket per session** (below), or **a whole spec in one session** with `/implement-spec`.
