@@ -65,7 +65,7 @@ export const ownerFilterValue = z
   .string()
   .refine(
     (v) => v === "unclaimed" || (v.startsWith("member:") && uuid.safeParse(v.slice(7)).success) || (v.startsWith("company:") && uuid.safeParse(v.slice(8)).success),
-    "Not an Owner filter",
+    "Not an Owner value",
   )
   .transform((v) => v as OwnerFilterValue);
 

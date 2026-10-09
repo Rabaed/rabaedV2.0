@@ -224,8 +224,8 @@ describe("Card view layout (RP-410)", () => {
     const changed = (await ok(c1Engineer.request("PUT", path(), { contractorName: true }), 200)).json();
     expect(changed).toEqual({ ...defaultBoardCardLayout, contractorName: true });
     expect((await board(c1Engineer)).layout).toEqual({ ...defaultBoardCardLayout, contractorName: true });
-    await ok(c1Engineer.request("PUT", path(), { planLocation: false }), 200);
-    expect((await board(c1Engineer)).layout).toEqual({ contractorName: true, planLocation: false, creationDate: true });
+    await ok(c1Engineer.request("PUT", path(), { location: false }), 200);
+    expect((await board(c1Engineer)).layout).toEqual({ contractorName: true, location: false, creationDate: true });
     // Not my colleague's, nor another Company's.
     expect((await board(c1Pm)).layout).toEqual(defaultBoardCardLayout);
     expect((await board(k1Engineer)).layout).toEqual(defaultBoardCardLayout);

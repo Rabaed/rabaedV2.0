@@ -9,7 +9,7 @@ create table member_board_layout (
   project_id uuid not null references project (id),
   module_key text not null,
   contractor_name boolean not null,
-  plan_location boolean not null,
+  location boolean not null,
   creation_date boolean not null,
   updated_at timestamptz not null default now(),
   primary key (member_id, project_id, module_key)

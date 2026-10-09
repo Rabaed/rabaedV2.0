@@ -585,12 +585,12 @@ async function ownerChoices(trx: Trx, scope: QueryScope): Promise<WorkItemList["
 
 /** The Member's own Card view layout of the scope's board (RP-410), or the default. */
 async function readBoardLayout(trx: Trx, { projectId, moduleKey }: QueryScope): Promise<BoardCardLayout> {
-  const { rows } = await sql<{ contractor_name: boolean; plan_location: boolean; creation_date: boolean }>`
-    select contractor_name, plan_location, creation_date from member_board_layout
+  const { rows } = await sql<{ contractor_name: boolean; location: boolean; creation_date: boolean }>`
+    select contractor_name, location, creation_date from member_board_layout
     where member_id = app.current_member_id() and project_id = ${projectId}::uuid and module_key = ${moduleKey}
   `.execute(trx);
   const row = rows[0];
-  return row ? { contractorName: row.contractor_name, planLocation: row.plan_location, creationDate: row.creation_date } : defaultBoardCardLayout;
+  return row ? { contractorName: row.contractor_name, location: row.location, creationDate: row.creation_date } : defaultBoardCardLayout;
 }
 
 /**
@@ -603,10 +603,10 @@ export function changeBoardLayout(db: Db, memberId: string, scope: QueryScope, c
     if (!(await hasModuleTab(trx, scope))) return null;
     const next = { ...(await readBoardLayout(trx, scope)), ...change };
     await sql`
-      insert into member_board_layout (member_id, project_id, module_key, contractor_name, plan_location, creation_date)
-      values (app.current_member_id(), ${scope.projectId}::uuid, ${scope.moduleKey}, ${next.contractorName}, ${next.planLocation}, ${next.creationDate})
+      insert into member_board_layout (member_id, project_id, module_key, contractor_name, location, creation_date)
+      values (app.current_member_id(), ${scope.projectId}::uuid, ${scope.moduleKey}, ${next.contractorName}, ${next.location}, ${next.creationDate})
       on conflict (member_id, project_id, module_key) do update
-        set contractor_name = excluded.contractor_name, plan_location = excluded.plan_location,
+        set contractor_name = excluded.contractor_name, location = excluded.location,
           creation_date = excluded.creation_date, updated_at = now()
     `.execute(trx);
     return next;

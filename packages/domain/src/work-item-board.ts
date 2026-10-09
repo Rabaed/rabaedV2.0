@@ -75,14 +75,14 @@ export const boardCardLayout = z.object({
   /** The raising Company's name, between the tags and the plan location. */
   contractorName: z.boolean(),
   /** The Location as Zone → Building → Floor chips. */
-  planLocation: z.boolean(),
+  location: z.boolean(),
   /** The card's date: the Creation Date on my own Company's items, the Submission Date on others'. */
   creationDate: z.boolean(),
 });
 export type BoardCardLayout = z.infer<typeof boardCardLayout>;
 
 /** A Member's layout until they change it: the Contractor name off, the rest on. */
-export const defaultBoardCardLayout: BoardCardLayout = { contractorName: false, planLocation: true, creationDate: true };
+export const defaultBoardCardLayout: BoardCardLayout = { contractorName: false, location: true, creationDate: true };
 
 /** A change to the layout: the switches given; the others stay. */
 export const boardCardLayoutChange = boardCardLayout.partial().strict();
