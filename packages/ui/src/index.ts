@@ -159,7 +159,14 @@ export {
   type WorkItemViewSwitchLabels,
   type WorkItemViewSwitchProps,
 } from "./components/views/work-item-board.tsx";
-export { ProjectCards, type ProjectCardsLabels, type ProjectCardsProps } from "./components/views/project-cards.tsx";
+export { ProjectCard, ProjectCards, type ProjectCardProps, type ProjectCardsLabels, type ProjectCardsProps } from "./components/views/project-cards.tsx";
+export {
+  filterProjects,
+  ProjectsBrowser,
+  type ProjectsBrowserLabels,
+  type ProjectsBrowserProps,
+  type ProjectsFilter,
+} from "./components/views/projects-browser.tsx";
 export { ProjectDashboard, type ProjectDashboardLabels, type ProjectDashboardProps } from "./components/views/project-dashboard.tsx";
 export { moduleName } from "./lib/module-name.ts";
 export { ActivityFeedPanel, type ActivityFeedFilters, type ActivityFeedPanelLabels, type ActivityFeedPanelProps } from "./components/views/activity-feed-panel.tsx";

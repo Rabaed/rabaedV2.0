@@ -2,6 +2,7 @@ import type { Locale, WorkItemOutcome } from "@rabaed/domain";
 import type { WorkItemBoardLabels, WorkItemViewSwitchLabels } from "../components/views/work-item-board.tsx";
 import type { WorkItemListLabels } from "../components/views/work-item-list.tsx";
 import type { ProjectCardsLabels } from "../components/views/project-cards.tsx";
+import type { ProjectsBrowserLabels } from "../components/views/projects-browser.tsx";
 import type { ActivityFeedPanelLabels } from "../components/views/activity-feed-panel.tsx";
 import type { ProjectDashboardLabels } from "../components/views/project-dashboard.tsx";
 
@@ -9,8 +10,31 @@ import type { ProjectDashboardLabels } from "../components/views/project-dashboa
 // (apps/web/messages), in English and Arabic.
 
 export const projectCardsLabels: Record<Locale, ProjectCardsLabels> = {
-  en: { list: "Projects", needMyAction: "Need My Action", closed: "Closed", projectAdmin: "Project Admin" },
-  ar: { list: "المشاريع", needMyAction: "بحاجة لإجرائي", closed: "مغلق", projectAdmin: "مسؤول المشروع" },
+  en: { list: "Projects", needMyAction: "Need My Action", active: "Active", closed: "Closed", projectAdmin: "Project Admin" },
+  ar: { list: "المشاريع", needMyAction: "بحاجة لإجرائي", active: "نشط", closed: "مغلق", projectAdmin: "مسؤول المشروع" },
+};
+
+export const projectsBrowserLabels: Record<Locale, ProjectsBrowserLabels> = {
+  en: {
+    ...projectCardsLabels.en,
+    search: "Search by Project name or code",
+    filter: "Show",
+    all: "All",
+    emptyTitle: "No Projects yet",
+    empty: "You are not on any Project yet.",
+    noMatchesTitle: "No Projects match",
+    noMatches: "Try another Project name or code, or show All.",
+  },
+  ar: {
+    ...projectCardsLabels.ar,
+    search: "ابحث بالاسم أو الرمز",
+    filter: "عرض",
+    all: "الكل",
+    emptyTitle: "لا مشاريع بعد",
+    empty: "لست عضوًا في أي مشروع بعد.",
+    noMatchesTitle: "لا مشاريع مطابقة",
+    noMatches: "جرّب اسمًا أو رمزًا آخر، أو اعرض الكل.",
+  },
 };
 
 const outcomes: Record<Locale, Record<WorkItemOutcome, string>> = {
