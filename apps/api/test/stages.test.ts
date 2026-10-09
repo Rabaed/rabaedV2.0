@@ -90,7 +90,7 @@ describe("renaming a Stage", () => {
     const t = await buildTower(api, { c1, k1 }, "STN");
     await expectHidden(rename(t.k1Manager, t, "approved", bilingual("Done")));
     await expectHidden(rename(outsider.caller, t, "approved", bilingual("Done")));
-    expect((await rename(c1.caller, t, "no_such_stage", bilingual("Done"))).statusCode).toBe(404);
+    await expectHidden(rename(c1.caller, t, "no_such_stage", bilingual("Done")));
   });
 });
 

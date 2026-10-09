@@ -136,3 +136,8 @@ export function refusal(result: {
   };
   return Object.keys(details).length > 0 ? new HttpError(error.statusCode, error.code, details) : error;
 }
+
+/** Throws a refused command's HTTP answer (`refusal`); a done command passes. */
+export function throwIfRefused(result: { ok: true } | ({ ok: false } & Parameters<typeof refusal>[0])): void {
+  if (!result.ok) throw refusal(result);
+}

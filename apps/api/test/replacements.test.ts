@@ -219,7 +219,7 @@ describe("C1 creates a replacement of a MAR that got Code D", () => {
     }
     // Nor can the Link be removed like a free Link.
     const link = (await links(engineer, replacement)).links[0]!;
-    expect((await engineer.request("DELETE", `/v1/work-items/${replacement}/links/${link.id}`)).statusCode).toBe(404);
+    await expectHidden(engineer.request("DELETE", `/v1/work-items/${replacement}/links/${link.id}`));
   });
 
   it("is hidden from K1, the Owner Representative and strangers while it is a Draft (V1)", async () => {

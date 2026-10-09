@@ -8,8 +8,7 @@ import {
   type StageCategory,
 } from "@rabaed/domain";
 import { sql } from "kysely";
-import { commandResult } from "../outcomes.ts";
-import { isProjectAdmin } from "./project-admin.ts";
+import { isProjectAdmin, projectAdminCommand } from "./project-admin.ts";
 
 // A Project's Stages per Module (RP-428, WF-5; workflow-engine.md "Stages"). Every
 // Project Member reads them (stage's RLS: they are the Kanban columns everyone
@@ -37,34 +36,36 @@ export function getProjectStages(db: Db, memberId: string, projectId: string, mo
   });
 }
 
-const command = (db: Db, memberId: string, done: string, call: ReturnType<typeof sql<{ outcome: string }>>) =>
-  withMember(db, memberId, async (trx): Promise<StageCommandResult> => {
-    const { rows } = await call.execute(trx);
-    return commandResult(rows[0]!.outcome, done, stageRefusals);
-  });
-
 /** A Project Admin renames a Stage, in English and Arabic. */
-export const renameStage = (db: Db, memberId: string, projectId: string, moduleKey: ModuleKey, key: string, name: BilingualText) =>
-  command(
+export const renameStage = (db: Db, memberId: string, projectId: string, moduleKey: ModuleKey, key: string, name: BilingualText): Promise<StageCommandResult> =>
+  projectAdminCommand(
     db,
     memberId,
-    "renamed",
     sql`select app.rename_stage(${projectId}::uuid, ${moduleKey}, ${key}, ${JSON.stringify(name)}::jsonb) as outcome`,
+    "renamed",
+    stageRefusals,
   );
 
 /** A Project Admin adds a Stage, last in the Module's order. */
-export const addStage = (db: Db, memberId: string, projectId: string, moduleKey: ModuleKey, input: AddStageRequest) =>
-  command(
+export const addStage = (db: Db, memberId: string, projectId: string, moduleKey: ModuleKey, input: AddStageRequest): Promise<StageCommandResult> =>
+  projectAdminCommand(
     db,
     memberId,
-    "added",
     sql`select app.add_stage(${projectId}::uuid, ${moduleKey}, ${input.key}, ${JSON.stringify(input.name)}::jsonb, ${input.category}) as outcome`,
+    "added",
+    stageRefusals,
   );
 
 /** A Project Admin puts the Module's Stages in a new order: every key, each once. */
-export const reorderStages = (db: Db, memberId: string, projectId: string, moduleKey: ModuleKey, keys: readonly string[]) =>
-  command(db, memberId, "reordered", sql`select app.reorder_stages(${projectId}::uuid, ${moduleKey}, ${[...keys]}::text[]) as outcome`);
+export const reorderStages = (db: Db, memberId: string, projectId: string, moduleKey: ModuleKey, keys: readonly string[]): Promise<StageCommandResult> =>
+  projectAdminCommand(
+    db,
+    memberId,
+    sql`select app.reorder_stages(${projectId}::uuid, ${moduleKey}, ${[...keys]}::text[]) as outcome`,
+    "reordered",
+    stageRefusals,
+  );
 
 /** A Project Admin deletes a Stage no Step of the Project's Workflows uses. */
-export const deleteStage = (db: Db, memberId: string, projectId: string, moduleKey: ModuleKey, key: string) =>
-  command(db, memberId, "removed", sql`select app.delete_stage(${projectId}::uuid, ${moduleKey}, ${key}) as outcome`);
+export const deleteStage = (db: Db, memberId: string, projectId: string, moduleKey: ModuleKey, key: string): Promise<StageCommandResult> =>
+  projectAdminCommand(db, memberId, sql`select app.delete_stage(${projectId}::uuid, ${moduleKey}, ${key}) as outcome`, "removed", stageRefusals);

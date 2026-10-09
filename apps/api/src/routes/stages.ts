@@ -3,8 +3,8 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import type { AppContext } from "../app.ts";
 import { idOrNotFound, notFound, visibleOrNotFound } from "../http-error.ts";
-import { addStage, deleteStage, getProjectStages, renameStage, reorderStages, type StageCommandResult } from "../projects/stages.ts";
-import { refusal } from "../refusals.ts";
+import { addStage, deleteStage, getProjectStages, renameStage, reorderStages } from "../projects/stages.ts";
+import { throwIfRefused } from "../refusals.ts";
 
 const moduleParams = z.object({ projectId: z.string(), module: z.string() });
 const stageParams = moduleParams.extend({ key: z.string() });
@@ -15,10 +15,6 @@ function scopeOf(params: { projectId: string; module: string }): { projectId: st
   if (!moduleKey.success) throw notFound();
   return { projectId: idOrNotFound(params.projectId), moduleKey: moduleKey.data };
 }
-
-const done = (result: StageCommandResult) => {
-  if (!result.ok) throw refusal(result);
-};
 
 // A Project's Stages per Module (RP-428, WF-5). Every Project Member reads them;
 // only a Project Admin renames, adds, reorders or deletes one. Anyone else, or
@@ -42,7 +38,7 @@ export const stageRoutes =
       async (request, reply) => {
         const memberId = ctx.requireMember(request);
         const { projectId, moduleKey } = scopeOf(request.params);
-        done(await addStage(ctx.db, memberId, projectId, moduleKey, request.body));
+        throwIfRefused(await addStage(ctx.db, memberId, projectId, moduleKey, request.body));
         return reply.code(201).send({ key: request.body.key });
       },
     );
@@ -53,7 +49,7 @@ export const stageRoutes =
       async (request, reply) => {
         const memberId = ctx.requireMember(request);
         const { projectId, moduleKey } = scopeOf(request.params);
-        done(await reorderStages(ctx.db, memberId, projectId, moduleKey, request.body.keys));
+        throwIfRefused(await reorderStages(ctx.db, memberId, projectId, moduleKey, request.body.keys));
         return reply.code(204).send();
       },
     );
@@ -64,7 +60,7 @@ export const stageRoutes =
       async (request, reply) => {
         const memberId = ctx.requireMember(request);
         const { projectId, moduleKey } = scopeOf(request.params);
-        done(await renameStage(ctx.db, memberId, projectId, moduleKey, request.params.key, request.body.name));
+        throwIfRefused(await renameStage(ctx.db, memberId, projectId, moduleKey, request.params.key, request.body.name));
         return reply.code(204).send();
       },
     );
@@ -75,7 +71,7 @@ export const stageRoutes =
       async (request, reply) => {
         const memberId = ctx.requireMember(request);
         const { projectId, moduleKey } = scopeOf(request.params);
-        done(await deleteStage(ctx.db, memberId, projectId, moduleKey, request.params.key));
+        throwIfRefused(await deleteStage(ctx.db, memberId, projectId, moduleKey, request.params.key));
         return reply.code(204).send();
       },
     );

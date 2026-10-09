@@ -3,15 +3,11 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import type { AppContext } from "../app.ts";
 import { idOrNotFound, visibleOrNotFound } from "../http-error.ts";
-import { addOutcome, changeOutcome, getTypeOutcomes, reorderOutcomes, type OutcomeCommandResult } from "../projects/outcomes.ts";
-import { refusal } from "../refusals.ts";
+import { addOutcome, changeOutcome, getTypeOutcomes, reorderOutcomes } from "../projects/outcomes.ts";
+import { throwIfRefused } from "../refusals.ts";
 
 const typeParams = z.object({ projectId: z.string(), type: z.string() });
 const outcomeParams = typeParams.extend({ code: z.string() });
-
-const done = (result: OutcomeCommandResult) => {
-  if (!result.ok) throw refusal(result);
-};
 
 // A Work Item Type's outcome set on a Project (RP-429, WF-6). Every Project Member
 // reads it; only a Project Admin adds an outcome, changes one's names and follow-up
@@ -36,7 +32,7 @@ export const outcomeRoutes =
       async (request, reply) => {
         const memberId = ctx.requireMember(request);
         const projectId = idOrNotFound(request.params.projectId);
-        done(await addOutcome(ctx.db, memberId, projectId, request.params.type, request.body));
+        throwIfRefused(await addOutcome(ctx.db, memberId, projectId, request.params.type, request.body));
         return reply.code(201).send({ code: request.body.code });
       },
     );
@@ -47,7 +43,7 @@ export const outcomeRoutes =
       async (request, reply) => {
         const memberId = ctx.requireMember(request);
         const projectId = idOrNotFound(request.params.projectId);
-        done(await reorderOutcomes(ctx.db, memberId, projectId, request.params.type, request.body.codes));
+        throwIfRefused(await reorderOutcomes(ctx.db, memberId, projectId, request.params.type, request.body.codes));
         return reply.code(204).send();
       },
     );
@@ -58,7 +54,7 @@ export const outcomeRoutes =
       async (request, reply) => {
         const memberId = ctx.requireMember(request);
         const projectId = idOrNotFound(request.params.projectId);
-        done(await changeOutcome(ctx.db, memberId, projectId, request.params.type, request.params.code, request.body));
+        throwIfRefused(await changeOutcome(ctx.db, memberId, projectId, request.params.type, request.params.code, request.body));
         return reply.code(204).send();
       },
     );
