@@ -15,12 +15,16 @@
 // no upstream is kept: it may be a session just starting. A project a kept worktree
 // names in its .env stays. It lists everything and asks first.
 //
-//   pnpm worktrees:prune [--yes]     --yes skips the confirmation
+// Of the skipped worktrees it also lists, read-only, the stale ones: nothing committed
+// or changed for --stale-days (default 7), with age, branch and the lock's pid state (RP-506).
+//
+//   pnpm worktrees:prune [--stale-days <n>] [--yes]     --yes skips the confirmation
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { confirmOrExit } from "./confirm.ts";
 import { composeProjectOfEnv, listContainers, listVolumes, removeProject } from "./lanes.ts";
 import { samePath } from "./paths.ts";
+import { DEFAULT_STALE_DAYS, parseStaleDays, printStale } from "./worktrees-stale.ts";
 import { changedSinceListed, choosePrune, type PruneWorktree } from "./worktrees-pruning.ts";
 import {
   currentRoot,
@@ -40,10 +44,18 @@ import {
 } from "./worktrees.ts";
 
 const TARGET = "origin/main";
+const usage = "Usage: pnpm worktrees:prune [--stale-days <n>] [--yes]";
 const args = process.argv.slice(2);
-if (args.some((a) => a !== "--yes")) {
-  console.error("Usage: pnpm worktrees:prune [--yes]");
-  process.exit(1);
+let yes = false;
+let staleDays = DEFAULT_STALE_DAYS;
+for (let i = 0; i < args.length; i++) {
+  const a = args[i]!;
+  if (a === "--yes") yes = true;
+  else if (a === "--stale-days" && parseStaleDays(args[i + 1]) !== undefined && args[i + 1] !== undefined) staleDays = parseStaleDays(args[++i])!;
+  else {
+    console.error(usage);
+    process.exit(1);
+  }
 }
 
 const mainRoot = listWorktrees()[0]!.path;
@@ -83,6 +95,7 @@ const listed = chosen.skipped.filter((s) => !goesWithoutSaying(s.reason));
 if (listed.length > 0) {
   console.log("Skipped:");
   for (const s of listed) console.log(`  ${name(s.worktree)}: ${s.reason}`);
+  printStale(listed, staleDays);
 }
 if (!docker) console.log("Docker is not running: compose projects are not checked (run `pnpm lanes:prune` later).");
 if (chosen.remove.length + chosen.branches.length + chosen.projects.length === 0) {
@@ -102,7 +115,7 @@ if (chosen.branches.length > 0) {
   for (const b of chosen.branches) console.log(`  ${b}`);
 }
 
-await confirmOrExit("Remove them? Their databases are lost.", { yes: args.includes("--yes"), verb: "remove", done: "removed" });
+await confirmOrExit("Remove them? Their databases are lost.", { yes, verb: "remove", done: "removed" });
 
 let failed = 0;
 const attempt = (what: string, action: () => void) => {
