@@ -62,7 +62,7 @@ export function PatternNumber({ parts, separator, size = "inherit", nowrap = fal
       className={cn(
         "flex items-baseline font-bold tabular-nums rtl:justify-end",
         nowrap ? "flex-nowrap whitespace-nowrap" : "flex-wrap",
-        size === "lg" && "text-[24px] leading-[1.2] tracking-[0.01em] sm:text-[34px]",
+        size === "lg" && "text-[24px] leading-[1.2] tracking-[0.01em] sm:text-[30px] min-[1500px]:text-[34px]",
         size === "md" && "text-h4 leading-[1.2]",
         className,
       )}

@@ -104,6 +104,16 @@ export function DocumentNumbering({ t, canEdit, projectPattern, isRabaedDefault,
     ...types.flatMap((type) => (samePattern(customs[type.id] ?? null, saved.customs[type.id] ?? null) ? [] : [{ workItemTypeId: type.id, pattern: customs[type.id] ?? null }])),
   ];
   const dirty = canEdit && changes.length > 0;
+  // Room under the page while the floating bar shows, so it never covers the last card (the kit's padding under the page).
+  const floating = dirty || done;
+  useEffect(() => {
+    if (!floating) return;
+    const before = document.body.style.paddingBottom;
+    document.body.style.paddingBottom = "72px";
+    return () => {
+      document.body.style.paddingBottom = before;
+    };
+  }, [floating]);
   const needsAcceptance = changes.some((c) => c.pattern !== null && sharesCounter(c.pattern));
 
   const numberFor: NumberFor = (pattern, contexts, typeCode) => {
@@ -343,8 +353,6 @@ export function DocumentNumbering({ t, canEdit, projectPattern, isRabaedDefault,
         </p>
       </SettingsSection>
 
-      {/* Room under the last card, so the floating bar never covers it (the kit's padding under the page). */}
-      {(dirty || done) && <div aria-hidden="true" className="h-16 shrink-0" data-testid="unsaved-bar-room" />}
 
       {dirty && (
         <div
