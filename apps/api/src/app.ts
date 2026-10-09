@@ -26,6 +26,7 @@ import { participantRoutes } from "./routes/participants.ts";
 import { projectRoutes } from "./routes/projects.ts";
 import { scopeRoutes } from "./routes/scopes.ts";
 import { sessionRoutes } from "./routes/session.ts";
+import { outcomeRoutes } from "./routes/outcomes.ts";
 import { stageRoutes } from "./routes/stages.ts";
 import { visibilityRoutes } from "./routes/visibility.ts";
 import { watchRoutes } from "./routes/watch.ts";
@@ -137,5 +138,6 @@ export async function buildApp({
   await app.register(numberingRoutes(context));
   await app.register(numberingCounterRoutes(context));
   await app.register(stageRoutes(context));
+  await app.register(outcomeRoutes(context));
   return app;
 }

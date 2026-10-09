@@ -372,10 +372,16 @@ describe("an item closed otherwise than with Code C", () => {
     expect(await claim(k1.member, id)).toBe("claimed");
     expect(await take(k1.member, id, "revise_c")).toBe("applied");
     expect(await call(c1.member, sql`select app.can_create_revision(${id}::uuid) as can`)).toEqual([{ can: true }]);
-    // As an Inspection that failed would close.
-    await migrator.query("update work_item set outcome = 'failed' where id = $1", [id]);
+    // An outcome of its Type's set that offers no Revision (RP-429): Code D, which offers a replacement.
+    await migrator.query("update work_item set outcome = 'D' where id = $1", [id]);
     expect(await call(c1.member, sql`select app.can_create_revision(${id}::uuid) as can`)).toEqual([{ can: false }]);
     expect(await createRevision(c1.member, id)).toEqual({ outcome: "revision_not_allowed", work_item_id: null });
+    // Only an outcome of the item's Type's set closes it (RP-429): an Inspection Result isn't one of the MAR's.
+    await expect(migrator.query("update work_item set outcome = 'failed' where id = $1", [id])).rejects.toThrow(/not a closing outcome/);
+    // Its follow-up actions are read through the item, by whoever sees it.
+    expect(await call(c1.member, sql`select app.work_item_outcome_actions(${id}::uuid) as actions`)).toEqual([
+      { actions: [{ kind: "offer_replacement" }] },
+    ]);
   });
 });
 

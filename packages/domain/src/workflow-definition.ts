@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { bilingualText, type BilingualText } from "./company.ts";
-import type { OutcomeKind } from "./chain-bucket.ts";
+import type { OutcomeKind } from "./outcome.ts";
 import { condition } from "./condition.ts";
 import { baseRoles } from "./project.ts";
 import { transitionKinds, type TransitionKind } from "./work-item.ts";
@@ -221,7 +221,8 @@ export function definitionFromRows(rows: WorkflowVersionRows): WorkflowDefinitio
  * A definition as a Version's rows, for a Work Item Type of `outcomeKind`: an
  * issuing Step issues its Inspection Result for a Type with Inspection Results,
  * else its Review Code. Transitions are sorted as listed, from 1. The outcome
- * kind gives way to the Type's own outcome set when WF-6 (RP-429) adds it.
+ * kind only names the row's `outcome_mode` word: which outcomes a Transition may
+ * set is the Type's own outcome set (RP-429), checked at publish (check 3).
  */
 export function definitionToRows(definition: WorkflowDefinition, outcomeKind: OutcomeKind): WorkflowVersionRows {
   return {

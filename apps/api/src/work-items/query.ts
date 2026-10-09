@@ -101,15 +101,23 @@ type Row = {
 function visibleRows({ projectId, moduleKey }: QueryScope, allRevisions: boolean): RawBuilder<unknown> {
   return sql`
     select w.id, w.project_id, t.code as type_code, t.name as type_name, w.title, w.document_number,
-      w.revision_no, w.outcome, t.outcome_kind,
+      w.revision_no, w.outcome,
       -- For the Dashboard's buckets (chainBucket): Submitted, and raised by the viewer's own Participant.
       w.submitted_at is not null as submitted,
       coalesce(w.raised_by_participant_id in (select app.current_participant_ids()), false) as raised_by_own,
-      -- For the Code C line (codeCState): a Revision of the chain the viewer sees got Code C, this one
-      -- included. The chain is read only through app.revision_chain, which gives the Revisions the
-      -- viewer sees (V1 per Revision); their outcome is read through RLS like any item's.
-      t.outcome_kind = 'review_code' and exists (
-        select 1 from app.revision_chain(w.id) rc join work_item o on o.id = rc.work_item_id where o.outcome = 'C'
+      -- Its outcome in its Type's set on the Project (RP-429, chainOutcomeTraits): one of the card's
+      -- bars (a closing outcome of a set with two or more), its polarity, whether it offers a Revision.
+      coalesce(oc.closing and (
+        select count(*) from outcome x where x.project_id = w.project_id and x.work_item_type_id = t.id and x.closing
+      ) >= 2, false) as outcome_bar,
+      oc.polarity,
+      coalesce(oc.actions @> '[{"kind": "offer_revision"}]', false) as offers_revision,
+      -- For the Code C line (codeCState): a Revision of the chain the viewer sees got an outcome offering
+      -- a Revision (Code C), this one included. The chain is read only through app.revision_chain, which
+      -- gives the Revisions the viewer sees (V1 per Revision); their outcome is read through RLS like any item's.
+      exists (
+        select 1 from app.revision_chain(w.id) rc join work_item o on o.id = rc.work_item_id
+        where app.outcome_offers(o.project_id, o.work_item_type_id, o.outcome, 'offer_revision')
       ) as had_code_c,
       st.key as stage_key, st.name as stage_name, st.category as stage_category,
       tv.id as trade_id, tv.code as trade_code, tv.name as trade_name,
@@ -133,6 +141,8 @@ function visibleRows({ projectId, moduleKey }: QueryScope, allRevisions: boolean
     cross join lateral (select case when w.document_number is null then null else seen.entered_at end as step_entered_at) e
     join workflow_step s on s.id = seen.step_id
     join work_item_type t on t.id = w.work_item_type_id
+    -- Its outcome in the Project's copy of its Type's set (RP-429); none while open or cancelled.
+    left join outcome oc on oc.project_id = w.project_id and oc.work_item_type_id = t.id and oc.code = w.outcome
     -- The Project's own Stages (RP-428): their names, order and categories, never the Rabaed Defaults'.
     join stage st on st.project_id = w.project_id and st.module_key = t.module_key and st.key = seen.stage_key
     join visibility_dimension td on td.project_id = w.project_id and td.kind = 'trade'
@@ -168,10 +178,12 @@ const holdsSql: { [K in keyof CodeCCondition]-?: (value: NonNullable<CodeCCondit
   open: (open) => (open ? sql`not r.closed` : sql`r.closed`),
   submitted: (submitted) => sql`r.submitted = ${submitted}`,
   raisedByViewer: (raised) => sql`r.raised_by_own = ${raised}`,
-  outcomeKind: (kind) => sql`r.outcome_kind = ${kind}`,
   // An open item has no outcome: false, not null, as in the domain.
   outcome: (outcome) => sql`r.outcome is not distinct from ${outcome}`,
   stageCategory: (category) => sql`r.stage_category = ${category}`,
+  outcomeBar: (bar) => sql`r.outcome_bar = ${bar}`,
+  polarity: (polarity) => sql`r.polarity is not distinct from ${polarity}`,
+  offersRevision: (offers) => sql`r.offers_revision = ${offers}`,
 };
 
 /** One condition of the bucket or Code C rule, over a row of `visibleRows` (as `r`). */
@@ -190,7 +202,10 @@ export function chainConditionSql(when: CodeCCondition): RawBuilder<boolean> {
  * Dashboard's counts follow chainBucket's own rule.
  */
 export const bucketOfRow: RawBuilder<ChainBucket | null> = sql`(case ${sql.join(
-  chainBucketRules.map((rule) => sql`when ${chainConditionSql(rule.when)} then ${rule.bucket}::text`),
+  chainBucketRules.map(
+    ({ when, bucket }) =>
+      sql`when ${chainConditionSql(when)} then ${typeof bucket === "object" && bucket !== null ? sql.ref("r.outcome") : sql`${bucket}::text`}`,
+  ),
   sql` `,
 )} end)`;
 
@@ -571,6 +586,16 @@ async function stagesAndFilters(trx: Trx, scope: QueryScope, stageCounts: Map<st
     .where((eb) => eb.or([eb("project_id", "is", null), eb("project_id", "=", projectId)]))
     .orderBy("code")
     .execute();
+  // Each Type's outcomes on the Project (RP-429), for the "Review Code / Result" filter and the
+  // outcome badges: read like the Types themselves, the Project's copies.
+  const { rows: outcomes } = await sql<WorkItemList["filters"]["outcomes"][number]>`
+    select t.code as type, o.code, o.name, o.closing, o.polarity, o.actions
+    from outcome o
+    join work_item_type t on t.id = o.work_item_type_id
+    where o.project_id = ${projectId}::uuid and t.module_key = ${scope.moduleKey}
+      and (t.project_id is null or t.project_id = ${projectId}::uuid)
+    order by t.code, o.sort, o.code
+  `.execute(trx);
   const { rows: values } = await sql<{ kind: "trade" | "location"; id: string; code: string; name: BilingualText; parent_id: string | null }>`
     select d.kind, v.id, v.code, v.name, v.parent_id
     from dimension_value v
@@ -582,6 +607,7 @@ async function stagesAndFilters(trx: Trx, scope: QueryScope, stageCounts: Map<st
     stages: stages.map((s) => ({ ...s, count: stageCounts.get(s.key) ?? 0 })),
     filters: {
       types,
+      outcomes,
       trades: values.filter((v) => v.kind === "trade").map(({ id, code, name }) => ({ id, code, name })),
       locations: values.filter((v) => v.kind === "location").map(({ id, code, name, parent_id }) => ({ id, code, name, parentId: parent_id })),
       with: await withChoices(trx, scope),

@@ -1,14 +1,20 @@
 import { describe, expect, it } from "vitest";
+import { chainOutcomeTraits } from "./chain-bucket.ts";
 import { codeCFilterStates, codeCState, type CodeCInput } from "./code-c.ts";
+import { defaultOutcomeSets, type Outcome } from "./outcome.ts";
 
-/** A chain that has had a Code C, by its latest visible Revision: here a Code C original nobody has revised yet. */
-const chain = (over: Partial<CodeCInput> = {}): CodeCInput => ({
-  outcomeKind: "review_code",
+/**
+ * A chain that has had a Code C, by its latest visible Revision: here a Code C
+ * original nobody has revised yet. Its outcome is read from its Type's set (the
+ * Review Codes unless `set`).
+ */
+const chain = ({ set = defaultOutcomeSets.review_code, ...over }: Partial<CodeCInput> & { set?: readonly Outcome[] } = {}): CodeCInput => ({
   stageCategory: "closed_negative",
   outcome: "C",
   submitted: true,
   raisedByViewer: false,
   hadCodeC: true,
+  ...chainOutcomeTraits(set, over.outcome === undefined ? "C" : over.outcome),
   ...over,
 });
 
@@ -54,9 +60,17 @@ describe("codeCState", () => {
     expect(codeCState(chain({ hadCodeC: false, stageCategory: "closed_positive", outcome: "A" }))).toBeNull();
   });
 
-  it("counts nowhere a Type without Review Codes", () => {
-    expect(codeCState(chain({ outcomeKind: "inspection_result", outcome: "failed" }))).toBeNull();
-    expect(codeCState(chain({ outcomeKind: "none", outcome: "closed" }))).toBeNull();
+  it("counts nowhere a Type with no outcome offering a Revision", () => {
+    expect(codeCState(chain({ set: defaultOutcomeSets.inspection_result, outcome: "failed", hadCodeC: false }))).toBeNull();
+    expect(codeCState(chain({ set: defaultOutcomeSets.none, outcome: "closed", hadCodeC: false }))).toBeNull();
+  });
+
+  it("reads an outcome a Project Admin added by its polarity: a positive one is approved on revision", () => {
+    const set: Outcome[] = [
+      ...defaultOutcomeSets.review_code,
+      { code: "E", name: { en: "Approved for construction only", ar: "معتمد للتنفيذ فقط" }, closing: true, polarity: "positive", actions: [] },
+    ];
+    expect(codeCState(chain({ set, stageCategory: "closed_positive", outcome: "E" }))).toBe("approvedOnRevision");
   });
 
   it("counts nowhere a cancelled latest Revision", () => {

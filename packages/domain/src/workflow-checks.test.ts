@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { formSchema } from "./form.ts";
+import { defaultOutcomeSets } from "./outcome.ts";
 import { marRows } from "../test/support/mar-workflow.ts";
 import { workflowPublishProblems, type WorkflowPublishContext } from "./workflow-checks.ts";
 import { definitionFromRows, type WorkflowDefinition, type WorkflowStep, type WorkflowTransition } from "./workflow-definition.ts";
@@ -45,7 +46,7 @@ const marForm = formSchema.parse({
 });
 
 const context = (over: Partial<WorkflowPublishContext> = {}): WorkflowPublishContext => ({
-  outcomeKind: "review_code",
+  outcomes: defaultOutcomeSets.review_code,
   stages: submittalStages,
   form: marForm,
   ...over,
@@ -156,10 +157,34 @@ describe("workflowPublishProblems", () => {
       const d = mar();
       transition(d, "approve_a").outcome = "passed";
       expect(problems(d)).toEqual([{ code: "outcome_not_in_set", severity: "error", transition: "approve_a" }]);
-      expect(problems(mar(), context({ outcomeKind: "inspection_result" }))).toEqual([
+      expect(problems(mar(), context({ outcomes: defaultOutcomeSets.inspection_result }))).toEqual([
         { code: "outcome_not_in_set", severity: "error", transition: "approve_a" },
         { code: "outcome_not_in_set", severity: "error", transition: "revise_c" },
       ]);
+    });
+
+    it("passes an outcome the Project Admin added to the Type's set (RP-429)", () => {
+      const d = mar();
+      transition(d, "approve_a").outcome = "E";
+      expect(problems(d)).toEqual([{ code: "outcome_not_in_set", severity: "error", transition: "approve_a" }]);
+      const e = { code: "E", name: { en: "Approved for construction only", ar: "معتمد للتنفيذ فقط" }, closing: true, polarity: "positive", actions: [] } as const;
+      expect(problems(d, context({ outcomes: [...defaultOutcomeSets.review_code, e] }))).toEqual([]);
+    });
+
+    it("refuses an outcome of the set that doesn't close the item", () => {
+      const d = mar();
+      transition(d, "approve_a").outcome = "H";
+      const h = { code: "H", name: { en: "On hold", ar: "معلق" }, closing: false, polarity: "negative", actions: [] } as const;
+      expect(problems(d, context({ outcomes: [...defaultOutcomeSets.review_code, h] }))).toEqual([
+        { code: "outcome_not_in_set", severity: "error", transition: "approve_a" },
+      ]);
+    });
+
+    it("needs no issuing Step for a Type with one closing outcome", () => {
+      const d = mar();
+      step(d, "consultant_review").outcomeMode = "none";
+      for (const t of d.transitions) if (t.outcome !== null) t.outcome = "closed";
+      expect(problems(d, context({ outcomes: defaultOutcomeSets.none }))).toEqual([]);
     });
 
     it("refuses an outcome on a Transition to an open Step, and a close to an open Step", () => {

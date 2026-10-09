@@ -1,10 +1,11 @@
 import { workflowActionFormProblems } from "./action-form.ts";
-import type { OutcomeKind, StageCategory } from "./chain-bucket.ts";
+import type { StageCategory } from "./chain-bucket.ts";
 import type { BilingualText } from "./company.ts";
 import { evaluateCondition, type Comparison, type Condition } from "./condition.ts";
 import { formFields, formSchema, type FormField, type FormSchema } from "./form.ts";
 import { sectionSteps, type WorkflowStepHolder } from "./form-sections.ts";
-import { isOpenStageCategory, outcomeSets, type WorkItemOutcome } from "./work-item.ts";
+import type { Outcome } from "./outcome.ts";
+import { isOpenStageCategory } from "./work-item.ts";
 import type { WorkflowDefinition, WorkflowStep, WorkflowTransition } from "./workflow-definition.ts";
 import { workflowKindProblems } from "./workflow-publish.ts";
 
@@ -18,10 +19,11 @@ import { workflowKindProblems } from "./workflow-publish.ts";
 /** What the checks read besides the definition. */
 export type WorkflowPublishContext = {
   /**
-   * The Work Item Type's outcome kind: which outcome set its closing Transitions
-   * use. WF-6 (RP-429) replaces it with the Type's own, editable outcome set.
+   * The Work Item Type's outcome set (RP-429): the Project's copy for a Project's
+   * Workflow, the Rabaed Default set for a Rabaed Default or Library one. Its
+   * closing outcomes are the ones a closing Transition may set.
    */
-  outcomeKind: OutcomeKind;
+  outcomes: readonly Pick<Outcome, "code" | "closing">[];
   /** The Module's Stage set (the Project's, or the Rabaed Defaults'): Stages come from here, never from the definition. */
   stages: readonly { key: string; category: StageCategory }[];
   /** The latest published Version of the Type's Form; null when it has none. */
@@ -175,13 +177,13 @@ function stageProblems({ steps, transitions, categoryOf, isTerminal }: CheckInpu
 }
 
 /**
- * Check 3: a close into a terminal Step sets an outcome of the Type's set
- * (`outcomeSets`, fixed until WF-6), from the Step that issues it; nothing else
- * sets one. A Cancel is checked on its own.
+ * Check 3: a close into a terminal Step sets a closing outcome of the Type's set
+ * (RP-429), from the Step that issues it when the set offers a choice (two or
+ * more closing outcomes); nothing else sets one. A Cancel is checked on its own.
  */
 function outcomeProblems({ steps, transitions, context, stepOf, isTerminal }: CheckInput): FoundProblem[] {
-  const issues = context.outcomeKind !== "none";
-  const set: readonly WorkItemOutcome[] = outcomeSets[context.outcomeKind];
+  const set: readonly string[] = context.outcomes.filter((o) => o.closing).map((o) => o.code);
+  const issues = set.length > 1;
   return [
     ...(issues && !steps.some((s) => s.outcomeMode === "issue_outcome") ? [{ code: "no_issuing_step" } as const] : []),
     ...transitions.flatMap((t): FoundProblem[] => {
@@ -194,7 +196,7 @@ function outcomeProblems({ steps, transitions, context, stepOf, isTerminal }: Ch
       }
       if (t.kind !== "close") return problemAt("ends_without_close");
       if (t.outcome === null) return problemAt("missing_outcome");
-      if (!(set as readonly string[]).includes(t.outcome)) return problemAt("outcome_not_in_set");
+      if (!set.includes(t.outcome)) return problemAt("outcome_not_in_set");
       return issues && from.outcomeMode !== "issue_outcome" ? problemAt("outcome_not_from_issuing_step") : [];
     }),
   ];

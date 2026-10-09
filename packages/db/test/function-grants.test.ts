@@ -28,6 +28,9 @@ const allow: GrantAllowList = {
   "app.start_numbering_counter": ["rabaed_admin"],
   "app.current_member_id": both,
   "app.is_bilingual": both,
+  // The checks of outcome and workflow_transition.outcome (RP-429).
+  "app.is_outcome_actions": both,
+  "app.is_outcome_code": both,
 };
 
 // Function names with more than one overload on purpose. Empty: a second

@@ -374,9 +374,27 @@ export interface WorkItemTypeTable {
   code: string;
   name: ColumnType<Bilingual, string, string>;
   workflow_definition_id: string;
-  outcome_kind: "review_code" | "inspection_result" | "none";
+  /** Which Rabaed Default outcome set it starts with; its outcomes are then its own (`outcome`, RP-429). */
+  outcome_kind: "review_code" | "inspection_result" | "approval" | "none";
   /** Its Form; always set on a Rabaed Default. */
   form_definition_id: string | null;
+  created_at: Generated<Timestamp>;
+  updated_at: Generated<Timestamp>;
+}
+
+/** An outcome of a Work Item Type's set (RP-429): the Rabaed Default set, or a Project's copy. */
+export interface OutcomeTable {
+  id: Generated<string>;
+  owner_kind: OwnerKind;
+  project_id: string | null;
+  work_item_type_id: string;
+  code: string;
+  name: ColumnType<Bilingual, string, string>;
+  closing: boolean;
+  polarity: "positive" | "negative";
+  /** Its follow-up actions (outcome.ts `outcomeActions`). */
+  actions: ColumnType<unknown, string | undefined, string>;
+  sort: number;
   created_at: Generated<Timestamp>;
   updated_at: Generated<Timestamp>;
 }
@@ -625,6 +643,7 @@ export interface Database {
   workflow_step: WorkflowStepTable;
   workflow_transition: WorkflowTransitionTable;
   work_item_type: WorkItemTypeTable;
+  outcome: OutcomeTable;
   form_definition: FormDefinitionTable;
   form_version: FormVersionTable;
   option_list: OptionListTable;

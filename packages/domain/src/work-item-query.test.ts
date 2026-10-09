@@ -54,9 +54,9 @@ describe("workItemQuery", () => {
     }
   });
 
-  it("takes the Dashboard's buckets, and nothing else", () => {
-    expect(workItemQuery.parse({ bucket: "A,B" }).bucket).toEqual(["A", "B"]);
-    expect(workItemQuery.safeParse({ bucket: "late" }).success).toBe(false);
+  it("takes the Dashboard's buckets, an outcome a Project Admin added among them, and nothing else", () => {
+    expect(workItemQuery.parse({ bucket: "A,B,E,pending" }).bucket).toEqual(["A", "B", "E", "pending"]);
+    for (const bad of ["1A", "late-1", "A B"]) expect(workItemQuery.safeParse({ bucket: bad }).success, bad).toBe(false);
   });
 
   it("takes the Code C line's sub-states, and nothing else", () => {

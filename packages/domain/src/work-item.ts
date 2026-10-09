@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { bilingualText } from "./company.ts";
 import { formAnswers, formSchema, namedAnswers } from "./form.ts";
+import { outcomeCodePattern, outcomeSchema } from "./outcome.ts";
 
 /** A Work Item Type's short code, used in filters and Document Numbers (MAR, SAR…). */
 export const workItemTypeCode = z.string().regex(/^[A-Z]{2,6}$/);
@@ -79,21 +80,13 @@ export const workItemSummary = z.object({
 });
 export type WorkItemSummary = z.infer<typeof workItemSummary>;
 
-/** How a closed Work Item ended: its Issued Code, Inspection result, or cancelled (workflow-engine.md §1). */
-export const workItemOutcomes = ["A", "B", "C", "D", "passed", "passed_with_comments", "failed", "cancelled", "closed"] as const;
-
 /**
- * The outcomes a closing Transition may set, by the Work Item Type's outcome kind
- * (`work_item_type.outcome_kind`): the Review Codes, the Inspection Results, or
- * `closed` for a Type with neither. Fixed until WF-6 (RP-429) makes them per Type.
+ * How a closed Work Item ended (workflow-engine.md §1): the code of an outcome of
+ * its Type's set (outcome.ts, RP-429), such as an Issued Code or an Inspection
+ * Result, or `cancelled`.
  */
-export const outcomeSets = {
-  review_code: ["A", "B", "C", "D"],
-  inspection_result: ["passed", "passed_with_comments", "failed"],
-  none: ["closed"],
-} as const satisfies Record<string, readonly WorkItemOutcome[]>;
-export const workItemOutcome = z.enum(workItemOutcomes);
-export type WorkItemOutcome = z.infer<typeof workItemOutcome>;
+export const workItemOutcome = z.string().regex(outcomeCodePattern);
+export type WorkItemOutcome = string;
 
 /**
  * Who an open item is with, as the viewer may read it (V14): `own` when the
@@ -140,6 +133,8 @@ export const workItemList = z.object({
   nextCursor: z.string().nullable(),
   filters: z.object({
     types: z.array(z.object({ code: z.string(), name: bilingualText })),
+    /** Each Type's outcomes on the Project, by Type code, in their order (RP-429): the outcome filter and badges read them. */
+    outcomes: z.array(outcomeSchema.extend({ type: z.string() })),
     trades: z.array(dimensionValueRef),
     locations: z.array(dimensionValueRef.extend({ parentId: z.uuid().nullable() })),
     with: z.object({
