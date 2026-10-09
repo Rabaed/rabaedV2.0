@@ -341,9 +341,7 @@ export const WithToolbar: Story = {
   render: (args, context) => {
     const locale = storyLocale(context);
     return (
-      <div className="space-y-4">
-        <WorkItemViewSwitch view="kanban" labels={viewSwitchLabels[locale]} hrefFor={(v) => (v === "kanban" ? "?view=kanban" : "?")} />
-        <WorkItemList
+      <WorkItemList
           list={{ ...board, items: [], nextCursor: null }}
           query={args.query}
           locale={locale}
@@ -351,16 +349,17 @@ export const WithToolbar: Story = {
           hrefFor={listHrefFor}
           itemHref={args.itemHref}
           onQueryChange={fn()}
+          viewSwitch={<WorkItemViewSwitch view="kanban" labels={viewSwitchLabels[locale]} hrefFor={(v) => (v === "kanban" ? "?view=kanban" : "?")} />}
           board={<WorkItemBoard {...args} locale={locale} labels={workItemBoardLabels[locale]} />}
         />
-      </div>
     );
   },
   play: async (context) => {
     const views = context.canvas.getByRole("navigation", { name: storyText(context, copy.view) });
     await expect(within(views).getByRole("link", { name: storyText(context, copy.kanban) })).toHaveAttribute("aria-current", "page");
     await expect(within(views).getByRole("link", { name: storyText(context, copy.list) })).not.toHaveAttribute("aria-current");
-    await expect(context.canvas.getByRole("combobox", { name: storyText(context, copy.stage) })).toBeVisible();
+    // The List's toolbar, Filters and all, sits above the board.
+    await expect(context.canvas.getByRole("button", { name: workItemListLabels[storyLocale(context)].filters })).toBeVisible();
     // The board replaces the List's table and pages.
     await expect(context.canvas.queryByRole("table")).toBeNull();
     await expect(context.canvas.getByRole("region", { name: storyText(context, copy.board) })).toBeVisible();

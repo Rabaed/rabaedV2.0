@@ -1,8 +1,9 @@
 import { workItemQueryFromSearchParams, workItemViewFromSearchParams, type Locale, type ModuleKey } from "@rabaed/domain";
-import { buttonVariants } from "@rabaed/ui";
+import { Icon, buttonVariants } from "@rabaed/ui";
 import { getTranslations } from "next-intl/server";
 import { notFound } from "next/navigation";
 import { WorkItemListOrKanban } from "@/components/work-item-list-or-kanban";
+import { pageTrailFromSearchParams } from "@/lib/page-trail";
 import { Link, redirect } from "@/i18n/navigation";
 import { getMe, getProject, getWorkItemBoard, getWorkItems } from "@/lib/session";
 
@@ -41,28 +42,34 @@ export async function ModuleWorkItemsPage({
   if (!project || !(list ?? board)) notFound();
   const title = tabs(module);
 
-  return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div className="space-y-1">
-          <Link href={`/projects/${project.id}`} className="text-sm text-primary underline underline-offset-4">
-            {project.name[locale]}
-          </Link>
-          <h1 className="text-h4 font-semibold">{title}</h1>
-        </div>
-        {/* The MAR's Draft Step is held by Contractors; the API refuses anyone else too. */}
-        {module === "submittals" && project.projectRole.baseRole === "contractor" && (
-          <Link href={`/projects/${project.id}/work-items/new`} className={buttonVariants()}>
-            {t("newMar")}
-          </Link>
-        )}
-      </div>
+  // The MAR's Draft Step is held by Contractors; the API refuses anyone else too.
+  const action =
+    module === "submittals" && project.projectRole.baseRole === "contractor" ? (
+      <Link href={`/projects/${project.id}/work-items/new`} className={buttonVariants()}>
+        <Icon name="plus" />
+        {t("newMar")}
+      </Link>
+    ) : undefined;
 
+  return (
+    <>
+      {/* The top bar names the Project and its tabs the Module: the heading is for screen readers. */}
+      <h1 className="sr-only">{title}</h1>
       {board ? (
-        <WorkItemListOrKanban view="kanban" board={board} query={query} locale={locale} tableLabel={title} />
+        <WorkItemListOrKanban view="kanban" board={board} query={query} locale={locale} tableLabel={title} action={action} />
       ) : (
-        list && <WorkItemListOrKanban view="list" list={list} query={query} locale={locale} tableLabel={title} />
+        list && (
+          <WorkItemListOrKanban
+            view="list"
+            list={list}
+            pageTrail={pageTrailFromSearchParams(searchParams, query)}
+            query={query}
+            locale={locale}
+            tableLabel={title}
+            action={action}
+          />
+        )
       )}
-    </div>
+    </>
   );
 }
