@@ -118,6 +118,9 @@ export function listWorktrees(cwd?: string): Worktree[] {
   return parseWorktrees(git(["worktree", "list", "--porcelain"], cwd));
 }
 
+/** Whether the folder has uncommitted changes, untracked files outside ignored paths included. */
+export const gitDirty = (dir: string): boolean => git(["status", "--porcelain"], dir).trim() !== "";
+
 /** The current worktree's top folder. */
 export const currentRoot = (): string => git(["rev-parse", "--show-toplevel"]).trim();
 

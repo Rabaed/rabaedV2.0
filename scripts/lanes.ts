@@ -201,6 +201,63 @@ export function laneHolders(n: number, { containers, cwd, platform, ownDatabase 
   return [...new Set(holding.map((c) => c.workingDir).filter((dir) => dir !== "" && !samePath(dir, cwd, platform)))];
 }
 
+/** A worktree of this clone, as lane:env --force sees a holder of the lane (RP-500). */
+export type TakeoverWorktree = {
+  path: string;
+  branch: string | undefined;
+  /** Its branch is merged into origin/main (worktrees.ts branchMerged). */
+  merged: boolean;
+  /** Uncommitted changes, untracked files outside ignored paths included. */
+  dirty: boolean;
+  /** Its folder is still on disk. */
+  exists: boolean;
+};
+
+type TakeoverInput = {
+  containers: Container[];
+  worktrees: TakeoverWorktree[];
+  cwd: string;
+  /** Whether a folder exists; decides for a holder git does not list (default: none does, so it is gone). */
+  exists?: (dir: string) => boolean;
+  platform?: NodeJS.Platform;
+};
+
+/**
+ * What lane:env --force may take over for lane n: the containers of its compose project
+ * that belong to worktrees which are gone, or merged into origin/main and clean. The
+ * volumes stay: once these containers are removed the new worktree's `docker compose up`
+ * recreates them under its own folder in the same project and reuses the database.
+ * All or nothing: a holder that is not merged, has uncommitted changes, or is a folder
+ * git does not list refuses the whole takeover (refused names each, with why).
+ */
+export function chooseTakeover(n: number, { containers, worktrees, cwd, exists = () => false, platform }: TakeoverInput): { takeOver: Container[]; from: string[]; refused: string[] } {
+  const mine = containers.filter((c) => c.project === laneProject(n) && !samePath(c.workingDir, cwd, platform));
+  const from: string[] = [];
+  const refused: string[] = [];
+  for (const dir of new Set(mine.map((c) => c.workingDir))) {
+    const w = worktrees.find((x) => samePath(x.path, dir, platform));
+    if (!w) {
+      if (exists(dir)) refused.push(`${dir} is not a worktree of this clone.`);
+      else from.push(`${dir} (gone)`);
+    } else if (!w.exists) from.push(`${dir} (gone)`);
+    else if (w.dirty) refused.push(`${dir} is on ${w.branch ?? "a detached HEAD"} and has uncommitted changes.`);
+    else if (!w.merged) refused.push(`${dir} is on ${w.branch ?? "a detached HEAD"}, not merged into origin/main yet.`);
+    else from.push(`${dir} (${w.branch}, merged into origin/main)`);
+  }
+  return refused.length > 0 ? { takeOver: [], from: [], refused } : { takeOver: mine, from, refused };
+}
+
+/** Removes containers but not their volumes (docker rm -f, without -v): lane:env --force's takeover. */
+export function releaseContainers(containers: Container[], run: (args: string[]) => string = docker): void {
+  if (containers.length > 0) run(["rm", "-f", ...containers.map((c) => c.name)]);
+}
+
+/** lanes:prune's options, or undefined for an unknown argument. --dry-run only lists. */
+export function parsePruneArgs(args: string[]): { merged: boolean; yes: boolean; dryRun: boolean } | undefined {
+  if (args.some((a) => !["--merged", "--yes", "--dry-run"].includes(a))) return undefined;
+  return { merged: args.includes("--merged"), yes: args.includes("--yes"), dryRun: args.includes("--dry-run") };
+}
+
 /** Whether something holds the port on 127.0.0.1: it cannot be bound there, or something answers on it. */
 export async function isPortTaken(port: number): Promise<boolean> {
   const bindable = await new Promise<boolean>((resolve) => {

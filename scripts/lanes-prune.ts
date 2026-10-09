@@ -5,19 +5,19 @@
 // Each goes with its containers, volumes (its database) and network. The current
 // worktree's project is never removed.
 //
-//   pnpm lanes:prune [--merged] [--yes]     --yes skips the confirmation
+//   pnpm lanes:prune [--merged] [--yes] [--dry-run]     --yes skips the confirmation; --dry-run only lists (RP-500)
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { confirmOrExit } from "./confirm.ts";
-import { composeProjectOfEnv, listContainers, listVolumes, mergedProjects, removeProject, staleProjects, type WorktreeLane } from "./lanes.ts";
+import { composeProjectOfEnv, listContainers, listVolumes, mergedProjects, parsePruneArgs, removeProject, staleProjects, type WorktreeLane } from "./lanes.ts";
 import { branchMerged, listWorktrees, refExists } from "./worktrees.ts";
 
-const args = process.argv.slice(2);
-if (args.some((a) => a !== "--yes" && a !== "--merged")) {
-  console.error("Usage: pnpm lanes:prune [--merged] [--yes]");
+const options = parsePruneArgs(process.argv.slice(2));
+if (!options) {
+  console.error("Usage: pnpm lanes:prune [--merged] [--yes] [--dry-run]");
   process.exit(1);
 }
-const withMerged = args.includes("--merged");
+const withMerged = options.merged;
 
 const containers = listContainers();
 if (!containers) {
@@ -61,8 +61,13 @@ for (const s of stale) {
   console.log(`  ${s.project}: ${s.reason}; containers: ${s.containers.join(", ") || "none"}; volumes: ${s.volumes.join(", ") || "none"}`);
 }
 
+if (options.dryRun) {
+  console.log("Dry run: nothing removed.");
+  process.exit(0);
+}
+
 await confirmOrExit("Remove them with their volumes? Their databases are lost, including those of stopped worktrees that still exist.", {
-  yes: args.includes("--yes"),
+  yes: options.yes,
   verb: "remove",
   done: "removed",
 });
