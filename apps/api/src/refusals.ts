@@ -113,6 +113,8 @@ const answers = {
   workflow_name_names_participant: () => new HttpError(422, "workflow_name_names_participant"),
   // A Workflow copied into a Project whose Module lacks one of its Stages (WF-5): `problems` names each.
   stage_missing: () => new HttpError(422, "stage_missing"),
+  // A used outcome's code, closing or polarity (RP-429, decided 2026-10-09); the body has its message.
+  outcome_in_use: () => new HttpError(409, "outcome_in_use"),
 } satisfies Record<string, () => HttpError>;
 
 export type RefusalReason = keyof typeof answers;

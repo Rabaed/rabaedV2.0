@@ -106,13 +106,29 @@ describe("a Project's outcome sets", () => {
       polarity: "positive",
       actions: [{ kind: "create_items", type: "CMT" }, { kind: "offer_revision" }],
     });
-    // Its code, closing and polarity stay.
-    expect((await change(c1.caller, t, "B", { name, actions: [], polarity: "negative" })).statusCode).toBe(400);
+    // A is used (the Rabaed Default MAR closes items with it): its code, closing and polarity stay.
+    const inUse = await change(c1.caller, t, "A", { name, actions: [], polarity: "negative" });
+    expect(inUse.statusCode, inUse.body).toBe(409);
+    expect(inUse.json()).toEqual({
+      error: "outcome_in_use",
+      message: {
+        en: "A Workflow of this Project closes items with this outcome, so its code, and whether it closes and is positive or negative, can't change.",
+        ar: "يُغلق سير عمل في هذا المشروع العناصر بهذه النتيجة، فلا يتغيّر رمزها ولا كونها مُغلِقة أو إيجابية أو سلبية.",
+      },
+    });
     await expectHidden(change(t.k1Manager, t, "B", { name, actions: [] }));
     await expectHidden(change(c1.caller, t, "Z", { name, actions: [] }));
     await ok(reorder(c1.caller, t, ["D", "C", "B", "A"]));
     expect((await outcomesOf(c1.caller, t)).outcomes.map((o) => o.code)).toEqual(["D", "C", "B", "A"]);
     expect((await reorder(c1.caller, t, ["A"])).statusCode).toBe(422);
+  });
+
+  it("change an unused outcome's code, closing and polarity", async () => {
+    const t = await buildTower(api, { c1, k1 }, "OSU");
+    await ok(add(c1.caller, t, e), 201);
+    await ok(change(c1.caller, t, "E", { name: e.name, actions: [], code: "E1", closing: false, polarity: "negative" }));
+    expect((await outcomesOf(t.k1Manager, t)).outcomes.at(-1)).toEqual({ ...e, code: "E1", closing: false, polarity: "negative" });
+    expect((await change(c1.caller, t, "E1", { name: e.name, actions: [], code: "A" })).statusCode).toBe(409);
   });
 });
 
@@ -241,6 +257,14 @@ describe("an outcome the Project Admin added", () => {
     await ok(t.k1Manager.request("PUT", `/v1/work-items/${item}/answers`, { answers: { ...answers, sample_checked: true, matches_specification: true } }));
     await ok(t.k1Manager.post(`/v1/work-items/${item}/claim`));
     await ok(t.k1Manager.post(`/v1/work-items/${item}/transitions`, { transition: "approve_e", answers: {}, confirmed: true, idempotencyKey: randomUUID() }));
+  });
+
+  it("keeps its code, closing and polarity once the Project's published Workflow closes items with it", async () => {
+    const res = await c1.caller.request("PATCH", `${outcomesPath(t, code)}/E`, { name: e.name, actions: [], polarity: "negative" });
+    expect(res.statusCode, res.body).toBe(409);
+    expect(res.json()).toMatchObject({ error: "outcome_in_use" });
+    await ok(c1.caller.request("PATCH", `${outcomesPath(t, code)}/E`, { name: { en: "Approved for construction", ar: "معتمد للتنفيذ" }, actions: [] }));
+    await ok(c1.caller.request("PATCH", `${outcomesPath(t, code)}/E`, { name: e.name, actions: [] }));
   });
 
   it("closes the item with it, from the published Workflow", async () => {

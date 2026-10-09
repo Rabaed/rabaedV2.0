@@ -79,12 +79,18 @@ describe("a Project Admin's outcome", () => {
     expect(addOutcomeRequest.safeParse({ ...e, actions: [{ kind: "notify" }] }).success).toBe(false);
   });
 
-  it("is changed by its names and follow-up actions only: its code, closing and polarity stay", () => {
+  it("is changed by its names and follow-up actions, and may ask for a new code, closing and polarity (kept when left out)", () => {
     expect(changeOutcomeRequest.parse({ name: e.name, actions: [{ kind: "offer_replacement" }] })).toEqual({
       name: e.name,
       actions: [{ kind: "offer_replacement" }],
     });
-    expect(changeOutcomeRequest.safeParse({ name: e.name, actions: [], polarity: "negative" }).success).toBe(false);
+    expect(changeOutcomeRequest.parse({ name: e.name, actions: [], code: "E1", closing: false, polarity: "negative" })).toMatchObject({
+      code: "E1",
+      closing: false,
+      polarity: "negative",
+    });
+    expect(changeOutcomeRequest.safeParse({ name: e.name, actions: [], polarity: "neutral" }).success).toBe(false);
+    expect(changeOutcomeRequest.safeParse({ name: e.name, actions: [], code: "pending" }).success).toBe(false);
   });
 });
 

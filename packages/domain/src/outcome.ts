@@ -144,8 +144,14 @@ export type TypeOutcomes = z.infer<typeof typeOutcomes>;
 export const addOutcomeRequest = outcomeSchema.strict();
 export type AddOutcomeRequest = z.infer<typeof addOutcomeRequest>;
 
-/** A Project Admin changes an outcome's names and follow-up actions; its code, closing and polarity stay. */
-export const changeOutcomeRequest = z.object({ name: bilingualText, actions: outcomeActions }).strict();
+/**
+ * A Project Admin changes an outcome's names and follow-up actions, and, while it is
+ * unused (no published Workflow Version the Project's items can run names it), its code,
+ * closing and polarity (each left out: kept). Decided 2026-10-09.
+ */
+export const changeOutcomeRequest = z
+  .object({ name: bilingualText, actions: outcomeActions, code: outcomeCode.optional(), closing: z.boolean().optional(), polarity: z.enum(outcomePolarities).optional() })
+  .strict();
 export type ChangeOutcomeRequest = z.infer<typeof changeOutcomeRequest>;
 
 /** Every outcome code of the set, each once, in the new order. */
@@ -161,4 +167,10 @@ export const reorderOutcomesRequest = z
 export type ReorderOutcomesRequest = z.infer<typeof reorderOutcomesRequest>;
 
 /** The refusals of the outcome commands (app.add_outcome, app.change_outcome, app.reorder_outcomes). */
-export const outcomeRefusals = ["not_found", "project_closed", "invalid_outcome", "outcome_exists", "invalid_order"] as const;
+export const outcomeRefusals = ["not_found", "project_closed", "invalid_outcome", "outcome_exists", "invalid_order", "outcome_in_use"] as const;
+
+/** Why a used outcome's code, closing or polarity can't change (`outcome_in_use`). */
+export const outcomeInUseMessage: BilingualText = {
+  en: "A Workflow of this Project closes items with this outcome, so its code, and whether it closes and is positive or negative, can't change.",
+  ar: "يُغلق سير عمل في هذا المشروع العناصر بهذه النتيجة، فلا يتغيّر رمزها ولا كونها مُغلِقة أو إيجابية أو سلبية.",
+};

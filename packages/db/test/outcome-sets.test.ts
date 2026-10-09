@@ -195,6 +195,84 @@ describe("a Project's copy", () => {
   });
 });
 
+describe("an outcome's code, closing and polarity (decided 2026-10-09)", () => {
+  let project = "";
+  const change = (code: string, newCode: string | null, closing: boolean | null, polarity: string | null, name = e) =>
+    outcomeAs(
+      creator,
+      sql`select app.change_outcome(${project}::uuid, 'MAR', ${code}, ${JSON.stringify(name)}::jsonb, '[]'::jsonb,
+        ${newCode}, ${closing}, ${polarity}) as outcome`,
+    );
+
+  beforeAll(async () => {
+    project = await createProject(creator, "OUD");
+  });
+
+  it("change while unused, audited", async () => {
+    expect(await addE(creator, project, "F")).toBe("added");
+    expect(await change("F", "F2", false, "negative")).toBe("changed");
+    expect((await setOf(project)).find((o) => o.code === "F2")).toEqual({ code: "F2", name: e, closing: false, polarity: "negative", actions: [] });
+    expect((await setOf(project)).find((o) => o.code === "F")).toBeUndefined();
+    const { rows } = await migrator.query("select payload from project_event where project_id = $1 and type = 'outcome_changed'", [project]);
+    expect(rows).toEqual([
+      {
+        payload: {
+          type: "MAR",
+          code: "F",
+          from: { name: e, actions: [], code: "F", closing: true, polarity: "positive" },
+          to: { name: e, actions: [], code: "F2", closing: false, polarity: "negative" },
+        },
+      },
+    ]);
+    // A code the set has, or one it can't hold.
+    expect(await change("F2", "A", null, null)).toBe("outcome_exists");
+    expect(await change("F2", "pending", null, null)).toBe("invalid_outcome");
+    expect(await change("F2", null, null, "neutral")).toBe("invalid_outcome");
+  });
+
+  it("stay once a Workflow the Project can use names the outcome: a Rabaed Default's", async () => {
+    const before = await setOf(project);
+    expect(await change("A", null, false, null)).toBe("outcome_in_use");
+    expect(await change("A", "AA", null, null)).toBe("outcome_in_use");
+    expect(await change("A", null, null, "negative")).toBe("outcome_in_use");
+    expect(await setOf(project)).toEqual(before);
+    // Its name may still change, the other three given as they are.
+    expect(await change("A", "A", true, "positive", { en: "Approved as submitted", ar: "معتمد كما قُدّم" })).toBe("changed");
+  });
+
+  it("stay once the Project's own published Workflow names it", async () => {
+    expect(await addE(creator, project, "G")).toBe("added");
+    expect(await change("G", null, null, "negative")).toBe("changed");
+    await migrator.query(
+      `with type as (select id from work_item_type where code = 'MAR' and project_id is null),
+      definition as (
+        insert into workflow_definition (owner_kind, project_id, name, work_item_type_id)
+        select 'project', $1, '{"en": "Closes with G (test)", "ar": "يغلق بـ G"}', id from type returning id
+      ), version as (
+        insert into workflow_version (workflow_definition_id, version_no, status) select id, 1, 'draft' from definition returning id
+      ), steps as (
+        insert into workflow_step (workflow_version_id, key, name, stage_key, actor_rule, outcome_mode)
+        select version.id, s.key, '{"en": "S", "ar": "س"}', s.stage_key, s.actor_rule::jsonb, 'none'
+        from version, (values ('draft', 'draft', '{"base_role": "contractor", "permission": "create"}'), ('done', 'approved', '{}'))
+          as s (key, stage_key, actor_rule)
+        returning id, key, workflow_version_id
+      )
+      insert into workflow_transition (workflow_version_id, key, from_step_id, to_step_id, label, kind, outcome, permission, sort)
+      select f.workflow_version_id, 'close_g', f.id, t.id, '{"en": "G", "ar": "G"}', 'close', 'G', 'create', 1
+      from steps f, steps t where f.key = 'draft' and t.key = 'done'`,
+      [project],
+    );
+    expect(await change("G", null, null, "positive")).toBe("changed");
+    await migrator.query(
+      `update workflow_version set status = 'published', published_at = now()
+       where workflow_definition_id = (select id from workflow_definition where project_id = $1 and name ->> 'en' = 'Closes with G (test)')`,
+      [project],
+    );
+    expect(await change("G", null, null, "negative")).toBe("outcome_in_use");
+    expect(await change("G", null, false, null)).toBe("outcome_in_use");
+  });
+});
+
 describe("who changes a set", () => {
   it("answers not_found to a Member who isn't the Project's Admin, and to a Type the Project doesn't use", async () => {
     const before = await setOf(otherProjectId);

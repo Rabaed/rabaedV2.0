@@ -1,5 +1,6 @@
 import { withMember, type Db } from "@rabaed/db";
 import {
+  outcomeInUseMessage,
   outcomeRefusals,
   type AddOutcomeRequest,
   type BilingualText,
@@ -16,7 +17,7 @@ import { isProjectAdmin, projectAdminCommand } from "./project-admin.ts";
 // app.change_outcome and app.reorder_outcomes, each audited. Anyone else gets
 // 'not_found'. Rabaed Defaults never change here.
 
-export type OutcomeCommandResult = { ok: true } | { ok: false; reason: (typeof outcomeRefusals)[number] };
+export type OutcomeCommandResult = { ok: true } | { ok: false; reason: (typeof outcomeRefusals)[number]; message?: BilingualText };
 
 /** The outcome set of the Project's Type `typeCode`, in order, for its Project Members; null for anyone else or a Type it doesn't use. */
 export function getTypeOutcomes(db: Db, memberId: string, projectId: string, typeCode: string): Promise<TypeOutcomes | null> {
@@ -54,23 +55,28 @@ export const addOutcome = (db: Db, memberId: string, projectId: string, typeCode
     outcomeRefusals,
   );
 
-/** A Project Admin changes an outcome's names and follow-up actions. */
-export const changeOutcome = (
+/**
+ * A Project Admin changes an outcome's names and follow-up actions, and, while it is
+ * unused, its code, closing and polarity; refused `outcome_in_use` with its message otherwise.
+ */
+export async function changeOutcome(
   db: Db,
   memberId: string,
   projectId: string,
   typeCode: string,
   code: string,
   input: ChangeOutcomeRequest,
-): Promise<OutcomeCommandResult> =>
-  projectAdminCommand(
+): Promise<OutcomeCommandResult> {
+  const result = await projectAdminCommand(
     db,
     memberId,
     sql`select app.change_outcome(${projectId}::uuid, ${typeCode}, ${code}, ${JSON.stringify(input.name)}::jsonb,
-      ${JSON.stringify(input.actions)}::jsonb) as outcome`,
+      ${JSON.stringify(input.actions)}::jsonb, ${input.code ?? null}, ${input.closing ?? null}, ${input.polarity ?? null}) as outcome`,
     "changed",
     outcomeRefusals,
   );
+  return !result.ok && result.reason === "outcome_in_use" ? { ...result, message: outcomeInUseMessage } : result;
+}
 
 /** A Project Admin puts the set in a new order: every code, each once. */
 export const reorderOutcomes = (db: Db, memberId: string, projectId: string, typeCode: string, codes: readonly string[]): Promise<OutcomeCommandResult> =>
