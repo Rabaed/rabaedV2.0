@@ -25,10 +25,12 @@ export interface QueueSeam {
   fetchPull(pr: number): string;
   /** The commit HEAD points at. */
   head(): string;
-  /** True when `ancestor` is a strict ancestor of `commit` (HEAD is on the PR's branch but behind it). */
-  isBehind(ancestor: string, commit: string): boolean;
-  /** `gh pr view <pr> --json id,headRefOid` */
-  pullRequest(pr: number): { id: string; headRefOid: string };
+  /** The checked-out branch name; "HEAD" when detached. */
+  branch(): string;
+  /** True when `ancestor` is an ancestor of `commit` or the same commit (`git merge-base --is-ancestor`). */
+  isAncestor(ancestor: string, commit: string): boolean;
+  /** `gh pr view <pr> --json id,headRefOid,headRefName` */
+  pullRequest(pr: number): { id: string; headRefOid: string; headRefName: string };
   /** `git merge-tree --write-tree origin/main <commit>`: status 0 when it merges cleanly, 1 when it conflicts, anything else is an error. */
   mergeTree(commit: string): { status: number; output: string; stderr: string };
   /** Paths the PR changes against main (`git diff --name-only origin/main...<commit>`). */
@@ -39,8 +41,8 @@ export interface QueueSeam {
   enqueue(id: string, head: string): { position: number; state: string };
   /** The PR's `state` and `isInMergeQueue` (GraphQL; `gh pr view` has no such field). */
   status(id: string): PullStatus;
-  /** The reason of the PR's latest RemovedFromMergeQueueEvent (an enum, e.g. MERGE_CONFLICT); undefined when there is none. */
-  removalReason(id: string): string | undefined;
+  /** The reason of the PR's latest RemovedFromMergeQueueEvent created at or after `since` (an enum, e.g. MERGE_CONFLICT); undefined when there is none. */
+  removalReason(id: string, since: Date): string | undefined;
 }
 
 export interface QueueResult {
@@ -60,7 +62,10 @@ export function conflictedFiles(output: string): string[] {
   return [...paths];
 }
 
-const isRootShared = (file: string) => file === "package.json" || file === "pnpm-lock.yaml" || file.startsWith(".github/workflows/");
+/** Root shared files (rule 3): exact paths, then path prefixes. */
+const ROOT_SHARED = { files: ["package.json", "pnpm-lock.yaml"], prefixes: [".github/workflows/"] };
+const isRootShared = (file: string) => ROOT_SHARED.files.includes(file) || ROOT_SHARED.prefixes.some((prefix) => file.startsWith(prefix));
+const rootSharedList = [...ROOT_SHARED.files, ...ROOT_SHARED.prefixes.map((prefix) => `${prefix}*`)].join(", ");
 const isDoc = (file: string) => file.startsWith("docs/") || file.endsWith(".md");
 
 /** Rule 3 (planning/parallel-sessions.md): root shared files travel in their own PR, with at most docs. */
@@ -85,7 +90,8 @@ export function queuePr(pr: number, seam: QueueSeam): QueueResult {
   }
   const warnings: string[] = [];
   const checkout = seam.head();
-  if (checkout !== head && seam.isBehind(checkout, head)) {
+  // Only a checkout of the PR's own branch can be behind it; an old main is just another branch.
+  if (checkout !== head && seam.branch() === pull.headRefName && seam.isAncestor(checkout, head)) {
     warnings.push(`Warning: HEAD (${checkout}) is behind PR #${pr}'s head (${head}); checked and queued the PR's head. Pull to catch up.`);
   }
 
@@ -95,7 +101,7 @@ export function queuePr(pr: number, seam: QueueSeam): QueueResult {
       `PR #${pr} breaks planning/parallel-sessions.md rule 3: it changes root shared file(s) together with other files.`,
       ...shared.root.map((file) => `  shared: ${file}`),
       `  and ${shared.others} other file(s), e.g. ${shared.example}`,
-      "Fix: a change to root package.json, pnpm-lock.yaml or .github/workflows/* is its own PR (only those and docs). Split it out, then run `pnpm queue` again.",
+      `Fix: a change to root ${rootSharedList} is its own PR (only those and docs). Split it out, then run \`pnpm queue\` again.`,
     );
   }
 
@@ -140,7 +146,7 @@ const REMOVAL_TEXT: Record<RemovalKind, string> = {
 };
 
 /** Polls (GraphQL `state`, `isInMergeQueue`) until the PR merges (ok) or leaves the queue or closes (not ok, with the reason). */
-export async function waitForMerge(pr: number, seam: QueueSeam, sleep: (ms: number) => Promise<void> = (ms) => new Promise((done) => setTimeout(done, ms))): Promise<QueueResult> {
+export async function waitForMerge(pr: number, seam: QueueSeam, since: Date, sleep: (ms: number) => Promise<void> = (ms) => new Promise((done) => setTimeout(done, ms))): Promise<QueueResult> {
   const { id } = seam.pullRequest(pr);
   let outside = 0;
   for (;;) {
@@ -150,7 +156,7 @@ export async function waitForMerge(pr: number, seam: QueueSeam, sleep: (ms: numb
     // One poll outside the queue can be the merge landing; two in a row is a removal.
     outside = isInMergeQueue ? 0 : outside + 1;
     if (outside >= 2) {
-      const reason = seam.removalReason(id) ?? "unknown";
+      const reason = seam.removalReason(id, since) ?? "unknown";
       return fail(`PR #${pr} left the merge queue (reason: ${reason}): ${REMOVAL_TEXT[classify(reason)]}, then run \`pnpm queue ${pr} --wait\` again.`);
     }
     await sleep(POLL_MS);
@@ -171,7 +177,8 @@ export function realSeam(cwd: string = process.cwd(), spawn: typeof spawnSync = 
     return done.stdout;
   };
   const script = (name: string, args: string[]) => run(process.execPath, [join(import.meta.dirname, name), ...args]);
-  const graphql = (query: string, id: string) => JSON.parse(must("gh", ["api", "graphql", "-f", `query=${query}`, "-F", `id=${id}`])) as { data: { node: Record<string, unknown> } };
+  const graphql = (query: string, variables: Record<string, string>) =>
+    JSON.parse(must("gh", ["api", "graphql", "-f", `query=${query}`, ...Object.entries(variables).flatMap(([name, value]) => ["-F", `${name}=${value}`])])) as { data: Record<string, unknown> & { node: Record<string, unknown> } };
   return {
     fetchMain: () => run("git", ["fetch", "origin", "main"]).status === 0,
     fetchPull: (pr) => {
@@ -179,28 +186,34 @@ export function realSeam(cwd: string = process.cwd(), spawn: typeof spawnSync = 
       return must("git", ["rev-parse", "FETCH_HEAD"]).trim();
     },
     head: () => must("git", ["rev-parse", "HEAD"]).trim(),
-    isBehind: (ancestor, commit) => run("git", ["merge-base", "--is-ancestor", ancestor, commit]).status === 0,
-    pullRequest: (pr) => JSON.parse(must("gh", ["pr", "view", String(pr), "--json", "id,headRefOid"])) as { id: string; headRefOid: string },
+    branch: () => must("git", ["rev-parse", "--abbrev-ref", "HEAD"]).trim(),
+    isAncestor: (ancestor, commit) => run("git", ["merge-base", "--is-ancestor", ancestor, commit]).status === 0,
+    pullRequest: (pr) => JSON.parse(must("gh", ["pr", "view", String(pr), "--json", "id,headRefOid,headRefName"])) as { id: string; headRefOid: string; headRefName: string },
     mergeTree: (commit) => run("git", ["merge-tree", "--write-tree", "origin/main", commit]),
     changedFiles: (commit) =>
       must("git", ["diff", "--name-only", `origin/main...${commit}`])
         .split("\n")
         .filter(Boolean),
     check: (name, commit) => (name === "drift" ? script("check-migration-drift.ts", ["origin/main", commit]) : script("check-migrations-immutable.ts", ["origin/main", commit])),
-    status: (id) => graphql("query($id: ID!) { node(id: $id) { ... on PullRequest { state isInMergeQueue } } }", id).data.node as unknown as PullStatus,
-    removalReason: (id) => {
-      const node = graphql("query($id: ID!) { node(id: $id) { ... on PullRequest { timelineItems(last: 1, itemTypes: [REMOVED_FROM_MERGE_QUEUE_EVENT]) { nodes { ... on RemovedFromMergeQueueEvent { reason } } } } } }", id).data.node as {
-        timelineItems?: { nodes?: { reason?: string }[] };
+    status: (id) => graphql("query($id: ID!) { node(id: $id) { ... on PullRequest { state isInMergeQueue } } }", { id }).data.node as unknown as PullStatus,
+    removalReason: (id, since) => {
+      const node = graphql("query($id: ID!) { node(id: $id) { ... on PullRequest { timelineItems(last: 1, itemTypes: [REMOVED_FROM_MERGE_QUEUE_EVENT]) { nodes { ... on RemovedFromMergeQueueEvent { reason createdAt } } } } } }", { id }).data.node as {
+        timelineItems?: { nodes?: { reason?: string; createdAt?: string }[] };
       };
-      return node.timelineItems?.nodes?.[0]?.reason;
+      const latest = node.timelineItems?.nodes?.[0];
+      // An older removal (an earlier queue attempt) is not why this wait ended.
+      return latest?.createdAt !== undefined && Date.parse(latest.createdAt) >= since.getTime() ? latest.reason : undefined;
     },
     enqueue: (id, head) => {
-      const answer = JSON.parse(must("gh", ["api", "graphql", "-f", `query=${mutation}`, "-F", `id=${id}`, "-F", `head=${head}`])) as {
-        data: { enqueuePullRequest: { mergeQueueEntry: { position: number; state: string } } };
-      };
-      return answer.data.enqueuePullRequest.mergeQueueEntry;
+      const answer = graphql(mutation, { id, head }).data as unknown as { enqueuePullRequest: { mergeQueueEntry: { position: number; state: string } } };
+      return answer.enqueuePullRequest.mergeQueueEntry;
     },
   };
+}
+
+function print(result: QueueResult): QueueResult {
+  for (const line of result.lines) (result.ok ? console.log : console.error)(line);
+  return result;
 }
 
 if (import.meta.filename && resolve(process.argv[1] ?? "") === import.meta.filename) {
@@ -213,12 +226,11 @@ if (import.meta.filename && resolve(process.argv[1] ?? "") === import.meta.filen
   }
   try {
     const seam = realSeam();
-    let result = queuePr(pr, seam);
-    for (const line of result.lines) (result.ok ? console.log : console.error)(line);
+    const started = new Date();
+    let result = print(queuePr(pr, seam));
     if (result.ok && wait) {
       console.log(`Waiting for PR #${pr} to merge (polling every ${POLL_MS / 1000} s)...`);
-      result = await waitForMerge(pr, seam);
-      for (const line of result.lines) (result.ok ? console.log : console.error)(line);
+      result = print(await waitForMerge(pr, seam, started));
     }
     process.exit(result.ok ? 0 : 1);
   } catch (error) {

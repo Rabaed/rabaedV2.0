@@ -5,13 +5,10 @@ import { closeIssues, type Jira } from "./jira-close.ts";
 function fakeJira(tickets: Record<string, "new" | "indeterminate" | "done">, failing: string[] = [], labelled: Record<string, string[]> = {}) {
   const comments: [string, string][] = [];
   const jira: Jira = {
-    async labels(key) {
-      return labelled[key] ?? [];
-    },
-    async statusCategory(key) {
+    async issue(key) {
       const category = tickets[key];
       if (!category) throw new Error(`${key} not found`);
-      return category;
+      return { labels: labelled[key] ?? [], statusCategory: category };
     },
     async closeWithComment(key, comment) {
       if (failing.includes(key)) throw new Error(`no Done transition for ${key}`);
@@ -52,6 +49,12 @@ describe("closeIssues", () => {
     const result = await closeIssues(["RP-2"], 5, jira);
     expect(comments).toEqual([]);
     expect(result).toEqual({ closed: [], alreadyDone: ["RP-2"], skippedSpecs: [], failed: [] });
+  });
+
+  it("lists a spec already closed by hand as already Done, not as left open", async () => {
+    const { jira } = fakeJira({ "RP-448": "done" }, [], { "RP-448": ["spec"] });
+    const result = await closeIssues(["RP-448"], 159, jira);
+    expect(result).toEqual({ closed: [], alreadyDone: ["RP-448"], skippedSpecs: [], failed: [] });
   });
 
   it("reports a failed transition and still closes the others", async () => {

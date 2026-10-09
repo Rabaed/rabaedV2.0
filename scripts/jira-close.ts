@@ -18,10 +18,8 @@ const JIRA = "https://rabaedsa.atlassian.net";
 const SPEC_LABEL = "spec";
 
 export interface Jira {
-  /** Labels of the ticket. Throws if the ticket is missing. */
-  labels(key: string): Promise<string[]>;
-  /** Status category key of the ticket: "new", "indeterminate" or "done". Throws if the ticket is missing. */
-  statusCategory(key: string): Promise<string>;
+  /** Labels and status category key ("new", "indeterminate" or "done") of the ticket, in one read. Throws if the ticket is missing. */
+  issue(key: string): Promise<{ labels: string[]; statusCategory: string }>;
   /** Moves the ticket to a Done-category status and comments. Throws if it can't. */
   closeWithComment(key: string, comment: string): Promise<void>;
 }
@@ -38,12 +36,14 @@ export async function closeIssues(keys: string[], pullRequest: number, jira: Jir
   const result: CloseResult = { closed: [], alreadyDone: [], skippedSpecs: [], failed: [] };
   for (const key of keys) {
     try {
-      if ((await jira.labels(key)).includes(SPEC_LABEL)) {
-        result.skippedSpecs.push(key);
+      const { labels, statusCategory } = await jira.issue(key);
+      // Done first: a spec closed by hand is not reported as left open.
+      if (statusCategory === "done") {
+        result.alreadyDone.push(key);
         continue;
       }
-      if ((await jira.statusCategory(key)) === "done") {
-        result.alreadyDone.push(key);
+      if (labels.includes(SPEC_LABEL)) {
+        result.skippedSpecs.push(key);
         continue;
       }
       await jira.closeWithComment(key, `Closed by PR #${pullRequest} (merged)`);
@@ -64,13 +64,9 @@ export function jiraOverHttp(email: string, token: string, fetchImpl: typeof fet
     return response.status === 204 ? undefined : ((await response.json()) as unknown);
   };
   return {
-    async labels(key) {
-      const issue = (await call("GET", `issue/${key}?fields=labels`)) as { fields: { labels: string[] } };
-      return issue.fields.labels;
-    },
-    async statusCategory(key) {
-      const issue = (await call("GET", `issue/${key}?fields=status`)) as { fields: { status: { statusCategory: { key: string } } } };
-      return issue.fields.status.statusCategory.key;
+    async issue(key) {
+      const found = (await call("GET", `issue/${key}?fields=labels,status`)) as { fields: { labels: string[]; status: { statusCategory: { key: string } } } };
+      return { labels: found.fields.labels, statusCategory: found.fields.status.statusCategory.key };
     },
     async closeWithComment(key, comment) {
       const { transitions } = (await call("GET", `issue/${key}/transitions`)) as { transitions: { id: string; to: { statusCategory: { key: string } } }[] };

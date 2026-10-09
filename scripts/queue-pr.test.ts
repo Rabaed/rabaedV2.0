@@ -9,8 +9,9 @@ function fakeSeam(overrides: Partial<QueueSeam> = {}) {
     fetchMain: () => true,
     fetchPull: () => "abc123",
     head: () => "abc123",
-    isBehind: () => false,
-    pullRequest: () => ({ id: "PR_node", headRefOid: "abc123" }),
+    branch: () => "feature",
+    isAncestor: () => false,
+    pullRequest: () => ({ id: "PR_node", headRefOid: "abc123", headRefName: "feature" }),
     mergeTree: () => ({ status: 0, output: "treeoid\n", stderr: "" }),
     changedFiles: () => ["apps/api/src/a.ts"],
     check: () => ({ status: 0, output: "ok\n" }),
@@ -71,7 +72,7 @@ describe("queuePr", () => {
     const { seam, enqueued } = fakeSeam({
       head: () => "unrelated9",
       fetchPull: () => "prhead7",
-      pullRequest: () => ({ id: "PR_node", headRefOid: "prhead7" }),
+      pullRequest: () => ({ id: "PR_node", headRefOid: "prhead7", headRefName: "feature" }),
       mergeTree: (sha) => {
         checked.push(`merge-tree ${sha}`);
         return { status: 0, output: "", stderr: "" };
@@ -89,15 +90,23 @@ describe("queuePr", () => {
   });
 
   it("warns, and still queues the PR's head, when HEAD is on the PR's branch but behind it", () => {
-    const { seam, enqueued } = fakeSeam({ head: () => "old1", fetchPull: () => "new2", pullRequest: () => ({ id: "PR_node", headRefOid: "new2" }), isBehind: () => true });
+    const { seam, enqueued } = fakeSeam({ head: () => "old1", fetchPull: () => "new2", pullRequest: () => ({ id: "PR_node", headRefOid: "new2", headRefName: "feature" }), isAncestor: () => true });
     const result = queuePr(149, seam);
     expect(result.ok).toBe(true);
     expect(result.lines.join("\n")).toContain("behind");
     expect(enqueued).toEqual([["PR_node", "new2"]]);
   });
 
+  it("does not warn when an old main (another branch) is checked out and is an ancestor of the PR's head", () => {
+    const { seam, enqueued } = fakeSeam({ head: () => "oldmain", branch: () => "main", fetchPull: () => "new2", pullRequest: () => ({ id: "PR_node", headRefOid: "new2", headRefName: "feature" }), isAncestor: () => true });
+    const result = queuePr(149, seam);
+    expect(result.ok).toBe(true);
+    expect(result.lines.join("\n")).not.toContain("behind");
+    expect(enqueued).toEqual([["PR_node", "new2"]]);
+  });
+
   it("refuses when the PR's head moved between the API answer and the fetch", () => {
-    const { seam, enqueued } = fakeSeam({ fetchPull: () => "local1", pullRequest: () => ({ id: "x", headRefOid: "remote2" }) });
+    const { seam, enqueued } = fakeSeam({ fetchPull: () => "local1", pullRequest: () => ({ id: "x", headRefOid: "remote2", headRefName: "feature" }) });
     const result = queuePr(149, seam);
     expect(result.ok).toBe(false);
     const text = result.lines.join("\n");
@@ -163,10 +172,11 @@ describe("queuePr", () => {
 
 describe("waitForMerge", () => {
   // Plays the given statuses in order (the last repeats) and records the sleeps.
+  const since = new Date("2026-10-09T10:00:00Z");
   function waiting(statuses: PullStatus[], reason?: string) {
     let polls = 0;
     const sleeps: number[] = [];
-    const { seam } = fakeSeam({ status: () => statuses[Math.min(polls++, statuses.length - 1)] as PullStatus, removalReason: () => reason });
+    const { seam } = fakeSeam({ status: () => statuses[Math.min(polls++, statuses.length - 1)] as PullStatus, removalReason: (_id, from) => (from === since ? reason : undefined) });
     return { seam, sleeps, sleep: async (ms: number) => void sleeps.push(ms), polls: () => polls };
   }
 
@@ -176,7 +186,7 @@ describe("waitForMerge", () => {
       { state: "OPEN", isInMergeQueue: true },
       { state: "MERGED", isInMergeQueue: false },
     ]);
-    const result = await waitForMerge(149, w.seam, w.sleep);
+    const result = await waitForMerge(149, w.seam, since, w.sleep);
     expect(result.ok).toBe(true);
     expect(result.lines.join("\n")).toContain("merged");
     expect(w.sleeps).toEqual([60_000, 60_000]);
@@ -184,7 +194,7 @@ describe("waitForMerge", () => {
 
   it("fails with the classified reason when the PR leaves the queue", async () => {
     const w = waiting([{ state: "OPEN", isInMergeQueue: true }, { state: "OPEN", isInMergeQueue: false }], "MERGE_CONFLICT");
-    const result = await waitForMerge(149, w.seam, w.sleep);
+    const result = await waitForMerge(149, w.seam, since, w.sleep);
     expect(result.ok).toBe(false);
     const text = result.lines.join("\n");
     expect(text).toContain("left the merge queue");
@@ -197,19 +207,25 @@ describe("waitForMerge", () => {
       { state: "OPEN", isInMergeQueue: false },
       { state: "MERGED", isInMergeQueue: false },
     ]);
-    expect((await waitForMerge(149, w.seam, w.sleep)).ok).toBe(true);
+    expect((await waitForMerge(149, w.seam, since, w.sleep)).ok).toBe(true);
+  });
+
+  it("passes the wait's start to the seam, so an earlier removal's reason is not reported", async () => {
+    const w = waiting([{ state: "OPEN", isInMergeQueue: false }]);
+    const result = await waitForMerge(149, w.seam, new Date("2026-10-09T11:00:00Z"), w.sleep);
+    expect(result.lines.join("\n")).toContain("reason: unknown");
   });
 
   it("says a manual removal was manual, and a failed check failed", async () => {
     const manual = waiting([{ state: "OPEN", isInMergeQueue: false }], "MANUAL");
-    expect((await waitForMerge(149, manual.seam, manual.sleep)).lines.join("\n")).toContain("on purpose");
+    expect((await waitForMerge(149, manual.seam, since, manual.sleep)).lines.join("\n")).toContain("on purpose");
     const failed = waiting([{ state: "OPEN", isInMergeQueue: false }], "FAILED_CHECKS");
-    expect((await waitForMerge(149, failed.seam, failed.sleep)).lines.join("\n")).toContain("check failed");
+    expect((await waitForMerge(149, failed.seam, since, failed.sleep)).lines.join("\n")).toContain("check failed");
   });
 
   it("fails when the PR is closed without merging", async () => {
     const w = waiting([{ state: "CLOSED", isInMergeQueue: false }]);
-    const result = await waitForMerge(149, w.seam, w.sleep);
+    const result = await waitForMerge(149, w.seam, since, w.sleep);
     expect(result.ok).toBe(false);
     expect(result.lines.join("\n")).toContain("closed");
   });
@@ -229,7 +245,7 @@ describe("realSeam", () => {
   it("fetches main and the PR's own head ref, reads HEAD and the PR, and merge-trees origin/main with the PR's commit, all in the given directory", () => {
     const { calls, seam } = recorded((command, args) => {
       if (args[0] === "rev-parse") return { status: 0, stdout: "abc123\n" };
-      if (command === "gh") return { status: 0, stdout: '{"id":"PR_node","headRefOid":"abc123"}' };
+      if (command === "gh") return { status: 0, stdout: '{"id":"PR_node","headRefOid":"abc123","headRefName":"feature"}' };
       if (args[0] === "fetch") return { status: 0 };
       if (args[0] === "merge-base") return { status: 0 };
       return { status: 1, stdout: "treeoid\n", stderr: "warn" };
@@ -237,8 +253,8 @@ describe("realSeam", () => {
     expect(seam.fetchMain()).toBe(true);
     expect(seam.fetchPull(157)).toBe("abc123");
     expect(seam.head()).toBe("abc123");
-    expect(seam.isBehind("old1", "abc123")).toBe(true);
-    expect(seam.pullRequest(149)).toEqual({ id: "PR_node", headRefOid: "abc123" });
+    expect(seam.isAncestor("old1", "abc123")).toBe(true);
+    expect(seam.pullRequest(149)).toEqual({ id: "PR_node", headRefOid: "abc123", headRefName: "feature" });
     expect(seam.mergeTree("abc123")).toMatchObject({ status: 1, output: "treeoid\nwarn", stderr: "warn" });
     expect(calls.map(({ command, args }) => [command, ...args])).toEqual([
       ["git", "fetch", "origin", "main"],
@@ -246,20 +262,21 @@ describe("realSeam", () => {
       ["git", "rev-parse", "FETCH_HEAD"],
       ["git", "rev-parse", "HEAD"],
       ["git", "merge-base", "--is-ancestor", "old1", "abc123"],
-      ["gh", "pr", "view", "149", "--json", "id,headRefOid"],
+      ["gh", "pr", "view", "149", "--json", "id,headRefOid,headRefName"],
       ["git", "merge-tree", "--write-tree", "origin/main", "abc123"],
     ]);
     expect(calls.every((call) => call.cwd === "/work")).toBe(true);
   });
 
-  it("reads the PR's state and merge-queue flag, and the latest removal reason, through gh api graphql", () => {
+  it("reads the PR's state and merge-queue flag, and the latest removal reason made since the given time, through gh api graphql", () => {
     const { calls, seam } = recorded((_command, args) =>
       args.some((arg) => arg.includes("REMOVED_FROM_MERGE_QUEUE_EVENT"))
-        ? { status: 0, stdout: '{"data":{"node":{"timelineItems":{"nodes":[{"reason":"MERGE_CONFLICT"}]}}}}' }
+        ? { status: 0, stdout: '{"data":{"node":{"timelineItems":{"nodes":[{"reason":"MERGE_CONFLICT","createdAt":"2026-10-09T10:30:00Z"}]}}}}' }
         : { status: 0, stdout: '{"data":{"node":{"state":"OPEN","isInMergeQueue":true}}}' },
     );
     expect(seam.status("PR_node")).toEqual({ state: "OPEN", isInMergeQueue: true });
-    expect(seam.removalReason("PR_node")).toBe("MERGE_CONFLICT");
+    expect(seam.removalReason("PR_node", new Date("2026-10-09T10:00:00Z"))).toBe("MERGE_CONFLICT");
+    expect(seam.removalReason("PR_node", new Date("2026-10-09T11:00:00Z"))).toBeUndefined();
     expect(calls.every((call) => call.command === "gh" && call.args.slice(0, 2).join(" ") === "api graphql" && call.args.includes("id=PR_node"))).toBe(true);
   });
 

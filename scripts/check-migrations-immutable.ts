@@ -47,7 +47,7 @@ export function misorderedMigrations(repo: string, base: string, head: string = 
 if (import.meta.filename && resolve(process.argv[1] ?? "") === import.meta.filename) {
   const base = process.argv[2];
   if (!base) {
-    console.error("Usage: node scripts/check-migrations-immutable.ts <base-ref>");
+    console.error("Usage: node scripts/check-migrations-immutable.ts <base-ref> [head-ref]");
     process.exit(2);
   }
   const head = process.argv[3] ?? "HEAD";
