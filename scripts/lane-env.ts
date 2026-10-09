@@ -17,13 +17,17 @@
 // the .env is as before.
 // It also warns (never refuses) when another local branch, worktree or origin branch starts with the
 // same RP-nnn- key as this worktree's branch: another session may already have claimed that ticket (RP-499).
+// With --force, a lane whose compose project belongs only to worktrees that are gone, or merged into origin/main
+// and clean, is taken over instead of refused: their containers are removed, the volumes (the database) kept,
+// and the output says which worktree it came from. A worktree with uncommitted changes, or not merged, still
+// refuses (RP-500).
 // `pnpm lanes:prune` removes the compose projects old worktrees left behind;
 // `pnpm lanes:drop-dbs` drops the --db databases of worktrees that are gone.
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { claimWarnings, currentBranch, realClaimGit } from "./lane-claims.ts";
-import { firstFreeLane, isValidDbSuffix, laneClashes, laneEnv, laneHolders, lanePorts, laneProject, listContainers, takenLanePorts } from "./lanes.ts";
+import { firstFreeLane, isValidDbSuffix, laneClashes, laneEnv, laneHolders, lanePorts, laneProject, listContainers, chooseTakeover, releaseContainers, takenLanePorts } from "./lanes.ts";
 import { samePath } from "./paths.ts";
-import { branchMerged, listWorktrees, refExists, type Worktree } from "./worktrees.ts";
+import { branchMerged, gitDirty, listWorktrees, refExists, type Worktree } from "./worktrees.ts";
 
 const args = process.argv.slice(2);
 const force = args.includes("--force");
@@ -78,8 +82,46 @@ function holderStatus(lane: number): string[] {
   });
 }
 
+/**
+ * --force (RP-500): when only containers of worktrees that are gone, or merged into origin/main and
+ * clean, hold lane n, removes those containers (never the volumes) so this worktree's compose up
+ * recreates them in the same project with the database. Returns whether the lane is free now.
+ */
+function takeOverLane(lane: number, clashes: string[]): boolean {
+  let worktrees: Worktree[];
+  try {
+    worktrees = listWorktrees();
+  } catch {
+    return false;
+  }
+  const mainRoot = worktrees[0]?.path ?? ".";
+  const merged = refExists("origin/main", mainRoot);
+  const holders = laneHolders(lane, check);
+  const facts = worktrees.map((w) => ({
+    path: w.path,
+    branch: w.branch,
+    exists: existsSync(w.path),
+    merged: merged && w.branch !== undefined && w.branch !== "main" && !samePath(w.path, mainRoot) && branchMerged(w.branch, "origin/main", mainRoot),
+    dirty: holders.some((h) => samePath(h, w.path)) && existsSync(w.path) && gitDirty(w.path),
+  }));
+  const choice = chooseTakeover(lane, { containers: check.containers, worktrees: facts, cwd: check.cwd, exists: existsSync });
+  if (choice.refused.length > 0) {
+    for (const line of choice.refused) console.error(`  ${line}`);
+    return false;
+  }
+  if (choice.takeOver.length === 0) return false;
+  // The ports those containers hold are free once they are gone.
+  const freed = new Set(choice.takeOver.flatMap((c) => c.ports));
+  const after = { ...check, containers: check.containers.filter((c) => !choice.takeOver.includes(c)), takenPorts: new Set([...check.takenPorts].filter((p) => !freed.has(p))) };
+  if (laneClashes(lane, after).length > 0) return false;
+  releaseContainers(choice.takeOver);
+  console.log(`Took lane ${lane} over from ${choice.from.join(", ")}: removed its containers, kept the volumes (database) of ${laneProject(lane)}.`);
+  return clashes.length > 0;
+}
+
 let lane = n;
-const clashes = clashesOf(n);
+let clashes = clashesOf(n);
+if (clashes.length > 0 && force && takeOverLane(n, clashes)) clashes = [];
 if (clashes.length > 0) {
   const next = firstFreeLane(n, clashesOf);
   const prune = "`pnpm lanes:prune` removes rabaed-* compose projects whose worktree is gone or that are not running.";
