@@ -15,6 +15,7 @@ import {
   laneHolders,
   lanePorts,
   mergedProjects,
+  onlyLane,
   orphanDatabases,
   parseConnections,
   parseContainers,
@@ -23,6 +24,7 @@ import {
   chooseTakeover,
   clashesAfterRemoval,
   holdsLaneProject,
+  pruneCommand,
   releaseContainers,
   staleProjects,
   type Container,
@@ -361,6 +363,26 @@ describe("mergedProjects (lanes:prune --merged)", () => {
   });
 });
 
+describe("onlyLane (lanes:prune --lane N)", () => {
+  const prunable = ["rabaed-lane1", "rabaed-lane3", "rabaed-lane4"].map((project) => ({ project, reason: "not running", containers: [], volumes: [] }));
+
+  it("with three prunable projects, --lane 3 selects only rabaed-lane3", () => {
+    expect(onlyLane(prunable, 3).map((p) => p.project)).toEqual(["rabaed-lane3"]);
+  });
+
+  it("selects nothing when the lane is not among them, and everything without --lane", () => {
+    expect(onlyLane(prunable, 2)).toEqual([]);
+    expect(onlyLane(prunable, undefined)).toEqual(prunable);
+  });
+});
+
+describe("pruneCommand", () => {
+  it("names the targeted command for a lane, so the suggestion never reaches other lanes", () => {
+    expect(pruneCommand(3, { merged: true })).toBe("pnpm lanes:prune --merged --lane 3");
+    expect(pruneCommand(3, { merged: false })).toBe("pnpm lanes:prune --lane 3");
+  });
+});
+
 describe("laneHolders", () => {
   const cwd = "G:\\rabaed-wt\\current";
   const containers = [
@@ -519,13 +541,17 @@ describe("releaseContainers", () => {
 });
 
 describe("parsePruneArgs", () => {
-  it("reads --merged, --yes and --dry-run", () => {
+  it("reads --merged, --yes, --dry-run and --lane N", () => {
     expect(parsePruneArgs(["--merged", "--dry-run"])).toEqual({ merged: true, yes: false, dryRun: true });
     expect(parsePruneArgs([])).toEqual({ merged: false, yes: false, dryRun: false });
+    expect(parsePruneArgs(["--merged", "--lane", "3", "--dry-run"])).toEqual({ merged: true, yes: false, dryRun: true, lane: 3 });
   });
 
-  it("rejects anything else", () => {
+  it("rejects anything else, and a lane outside 0..9", () => {
     expect(parsePruneArgs(["--force"])).toBeUndefined();
+    expect(parsePruneArgs(["--lane"])).toBeUndefined();
+    expect(parsePruneArgs(["--lane", "10"])).toBeUndefined();
+    expect(parsePruneArgs(["--lane", "x"])).toBeUndefined();
   });
 });
 

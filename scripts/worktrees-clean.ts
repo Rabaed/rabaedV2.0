@@ -11,19 +11,24 @@
 // Of the skipped it also lists, read-only, the stale ones: nothing committed or changed
 // for --stale-days (default 7), with age, branch and the lock's pid state (RP-506).
 //
-//   pnpm worktrees:clean [--into <branch>] [--include-empty] [--stale-days <n>] [--yes]
+//   pnpm worktrees:clean [--into <branch>] [--include-empty] [--only <agent-id>...] [--stale-days <n>] [--yes]
+//
+// --only limits the run to the named agent-* worktrees (a session's own stopped
+// implementers), removed even with no commits; other sessions' worktrees are left
+// out of the run. Uncommitted changes or unmerged commits still skip a named one.
 //
 // The default branch is main; --yes skips the confirmation.
 import { confirmOrExit } from "./confirm.ts";
 import { DEFAULT_STALE_DAYS, printStale, staleDaysAt } from "./worktrees-stale.ts";
-import { CURRENT_WORKTREE, chooseWorktrees, currentRoot, gatherFacts, gitError, isAgentWorktree, listWorktrees, pruneWorktrees, refExists, removeWorktree, reportRemoval } from "./worktrees.ts";
+import { CURRENT_WORKTREE, chooseWorktrees, currentRoot, gatherFacts, gitError, isAgentWorktree, isNamed, listWorktrees, pruneWorktrees, refExists, removeWorktree, reportRemoval } from "./worktrees.ts";
 
-const usage = "Usage: pnpm worktrees:clean [--into <branch>] [--include-empty] [--stale-days <n>] [--yes]";
+const usage = "Usage: pnpm worktrees:clean [--into <branch>] [--include-empty] [--only <agent-id>...] [--stale-days <n>] [--yes]";
 const args = process.argv.slice(2);
 let staleDays = DEFAULT_STALE_DAYS;
 let target = "main";
 let yes = false;
 let includeEmpty = false;
+let only: string[] | undefined;
 for (let i = 0; i < args.length; i++) {
   const a = args[i]!;
   const next = args[i + 1];
@@ -33,6 +38,9 @@ for (let i = 0; i < args.length; i++) {
   else if (days !== undefined) {
     staleDays = days;
     i++;
+  } else if (a === "--only" && next && !next.startsWith("--")) {
+    only = [];
+    while (args[i + 1] && !args[i + 1]!.startsWith("--")) only.push(args[++i]!);
   } else if (a === "--into" && next && !next.startsWith("--")) {
     target = next;
     i++;
@@ -48,12 +56,12 @@ if (!refExists(target, mainRoot)) {
   console.error(`Branch ${target} not found; pass an existing branch with --into.`);
   process.exit(1);
 }
-const agents = gatherFacts(
-  all.filter((w) => isAgentWorktree(w.path, mainRoot)),
-  target,
-  mainRoot,
-);
-const { remove, skipped } = chooseWorktrees({ worktrees: agents, currentPath: currentRoot(), includeEmpty });
+const agentWorktrees = all.filter((w) => isAgentWorktree(w.path, mainRoot));
+for (const n of only ?? []) {
+  if (!agentWorktrees.some((w) => isNamed(w.path, [n]))) console.log(`Not an agent worktree here, ignored: ${n}`);
+}
+const agents = gatherFacts(agentWorktrees, target, mainRoot);
+const { remove, skipped } = chooseWorktrees({ worktrees: agents, currentPath: currentRoot(), includeEmpty, only });
 
 const name = (w: { path: string; branch: string | undefined }) => `${w.path} (${w.branch ?? "detached HEAD"})`;
 if (skipped.length > 0) {

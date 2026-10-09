@@ -189,6 +189,13 @@ export function mergedProjects({ containers, volumes, worktrees, cwd, currentPro
   return merged;
 }
 
+/** lanes:prune --lane N: only lane N's compose project among the candidates (all of them without --lane). */
+export const onlyLane = (projects: StaleProject[], lane: number | undefined): StaleProject[] =>
+  lane === undefined ? projects : projects.filter((p) => p.project === laneProject(lane));
+
+/** The lanes:prune command that frees lane n alone (RP-505), with --merged when the holder's branch is merged. */
+export const pruneCommand = (lane: number, { merged }: { merged: boolean }): string => `pnpm lanes:prune${merged ? " --merged" : ""} --lane ${lane}`;
+
 /**
  * The worktrees (other than cwd) holding lane n, as laneClashes counts them: its compose
  * project's containers, or a running container on one of its ports. With ownDatabase
@@ -300,9 +307,20 @@ export function releaseContainers(containers: Container[], run: (args: string[])
 }
 
 /** lanes:prune's options, or undefined for an unknown argument. --dry-run only lists. */
-export function parsePruneArgs(args: string[]): { merged: boolean; yes: boolean; dryRun: boolean } | undefined {
-  if (args.some((a) => !["--merged", "--yes", "--dry-run"].includes(a))) return undefined;
-  return { merged: args.includes("--merged"), yes: args.includes("--yes"), dryRun: args.includes("--dry-run") };
+export function parsePruneArgs(args: string[]): { merged: boolean; yes: boolean; dryRun: boolean; lane?: number } | undefined {
+  const options: { merged: boolean; yes: boolean; dryRun: boolean; lane?: number } = { merged: false, yes: false, dryRun: false };
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i]!;
+    if (a === "--merged") options.merged = true;
+    else if (a === "--yes") options.yes = true;
+    else if (a === "--dry-run") options.dryRun = true;
+    else if (a === "--lane") {
+      const lane = Number(args[++i]);
+      if (!Number.isInteger(lane) || lane < 0 || lane > 9) return undefined;
+      options.lane = lane;
+    } else return undefined;
+  }
+  return options;
 }
 
 /** Whether something holds the port on 127.0.0.1: it cannot be bound there, or something answers on it. */
