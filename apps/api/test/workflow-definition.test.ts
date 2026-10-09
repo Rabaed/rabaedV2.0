@@ -18,6 +18,7 @@ import {
 import { sql } from "kysely";
 import { isDeepStrictEqual } from "node:util";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { addActionsType, addRulesType } from "./support/rules.ts";
 import { addSendBackType } from "./support/send-back.ts";
 
 const migrator = createDb(testDatabaseUrls().migrator, { max: 1 });
@@ -33,6 +34,8 @@ type Version = {
   typeId: string | null;
   moduleKey: string | null;
   projectId: string | null;
+  /** The Project owning the Workflow; null for a Rabaed Default. */
+  ownerProjectId: string | null;
   outcomeKind: OutcomeKind | null;
   form: unknown;
 };
@@ -41,8 +44,11 @@ let versions: Version[] = [];
 let rows: Map<string, WorkflowVersionRows>;
 
 beforeAll(async () => {
-  // A Workflow with Send Backs is among them, whichever tests ran first.
-  await addSendBackType(migrator, "WFDEF", { en: "Workflow definition check", ar: "فحص تعريف سير العمل" }, {
+  // A Workflow with rules (WF-7) is among them, whichever tests ran first.
+  await addRulesType(migrator, "WFRUL");
+  // A Workflow with actions (WF-8) is among them, whichever tests ran first.
+  await addActionsType(migrator, "WFACT");
+  const sendBackForm = {
     sections: [
       { key: "material", title: { en: "Material", ar: "المادة" }, fields: [{ key: "model", type: "text", label: { en: "Model", ar: "الطراز" } }] },
       {
@@ -55,11 +61,16 @@ beforeAll(async () => {
         ],
       },
     ],
-  });
+  };
+  // A Workflow with Send Backs is among them, whichever tests ran first.
+  await addSendBackType(migrator, "WFDEF", { en: "Workflow definition check", ar: "فحص تعريف سير العمل" }, sendBackForm);
+  // And one with Cancels and a Step that Recommends a Code (RP-433).
+  await addSendBackType(migrator, "WFCNL", { en: "Cancel check", ar: "فحص الإلغاء" }, sendBackForm, { withCancel: true, recommendCode: true });
   versions = (
     await sql<Version>`
       select v.id, d.name ->> 'en' as name, v.version_no as "versionNo", v.layout,
-        t.id as "typeId", t.module_key as "moduleKey", coalesce(d.project_id, t.project_id) as "projectId", t.outcome_kind as "outcomeKind",
+        t.id as "typeId", t.module_key as "moduleKey", coalesce(d.project_id, t.project_id) as "projectId", d.project_id as "ownerProjectId",
+        t.outcome_kind as "outcomeKind",
         (select f.schema from form_version f
          where f.form_definition_id = t.form_definition_id and f.status = 'published'
          order by f.version_no desc limit 1) as form
@@ -91,7 +102,7 @@ beforeAll(async () => {
   `.execute(migrator);
   const transitions = await sql<WorkflowVersionRows["transitions"][number] & { version: string }>`
     select tr.workflow_version_id as version, tr.key, f.key as from_step_key, s.key as to_step_key, tr.label, tr.kind, tr.outcome,
-      tr.permission, tr.sort, tr.action_form
+      tr.permission, tr.sort, tr.action_form, tr.rules, tr.actions
     from workflow_transition tr
     join workflow_version v on v.id = tr.workflow_version_id
     join workflow_step f on f.id = tr.from_step_id
@@ -105,7 +116,10 @@ beforeAll(async () => {
       {
         layout: v.layout,
         steps: steps.rows.filter((s) => s.version === v.id).map(({ version: _, ...s }) => s),
-        transitions: transitions.rows.filter((t) => t.version === v.id).map(({ version: _, ...t }) => t),
+        // A Transition without rules or actions has a null column, and no such key as a row.
+        transitions: transitions.rows
+          .filter((t) => t.version === v.id)
+          .map(({ version: _, rules, actions, ...t }) => ({ ...t, ...(rules === null ? {} : { rules }), ...(actions === null ? {} : { actions }) })),
       },
     ]),
   );
@@ -133,10 +147,15 @@ describe("every published Workflow Version", () => {
       select module_key as "moduleKey", project_id as "projectId", key, category from stage order by sort
     `.execute(migrator);
     const lists = await sql<{ id: string }>`select id from option_list`.execute(migrator);
+    const outcomes = await sql<{ typeId: string; projectId: string | null; code: string; closing: boolean }>`
+      select work_item_type_id as "typeId", project_id as "projectId", code, closing from outcome order by sort
+    `.execute(migrator);
     const problems = versions.flatMap((v) =>
       workflowPublishProblems(definitionFromRows(rows.get(v.id)!), {
-        outcomeKind: v.outcomeKind!,
-        stages: stages.rows.filter((s) => s.moduleKey === v.moduleKey && (s.projectId === null || s.projectId === v.projectId)),
+        // The Type's outcome set it is published against (RP-429): its Project's copy for a Project's own Workflow, else the Rabaed Default set.
+        outcomes: outcomes.rows.filter((o) => o.typeId === v.typeId && o.projectId === v.ownerProjectId),
+        // The Stage set it is published against (RP-428): its Project's for a Project's own Workflow, else the Rabaed Defaults'.
+        stages: stages.rows.filter((s) => s.moduleKey === v.moduleKey && s.projectId === v.ownerProjectId),
         form: v.form === null ? null : formSchema.parse(v.form),
         optionListIds: new Set(lists.rows.map((l) => l.id)),
       }).map((p) => ({ version: `${v.name} v${v.versionNo}`, code: p.code, step: p.step, transition: p.transition, message: p.message.en })),

@@ -1,4 +1,4 @@
-import type { Locale, WorkItemOutcome } from "@rabaed/domain";
+import type { Locale } from "@rabaed/domain";
 import type { WorkItemBoardLabels, WorkItemViewSwitchLabels } from "../components/views/work-item-board.tsx";
 import type { WorkItemListLabels } from "../components/views/work-item-list.tsx";
 import type { ProjectCardsLabels } from "../components/views/project-cards.tsx";
@@ -34,31 +34,6 @@ export const projectsBrowserLabels: Record<Locale, ProjectsBrowserLabels> = {
     empty: "لست عضوًا في أي مشروع بعد.",
     noMatchesTitle: "لا مشاريع مطابقة",
     noMatches: "جرّب اسمًا أو رمزًا آخر، أو اعرض الكل.",
-  },
-};
-
-const outcomes: Record<Locale, Record<WorkItemOutcome, string>> = {
-  en: {
-    A: "Code A",
-    B: "Code B",
-    C: "Code C",
-    D: "Code D",
-    passed: "Passed",
-    passed_with_comments: "Passed with Comments",
-    failed: "Failed",
-    cancelled: "Cancelled",
-    closed: "Closed",
-  },
-  ar: {
-    A: "الرمز A",
-    B: "الرمز B",
-    C: "الرمز C",
-    D: "الرمز D",
-    passed: "ناجح",
-    passed_with_comments: "ناجح مع ملاحظات",
-    failed: "راسب",
-    cancelled: "ملغى",
-    closed: "مغلق",
   },
 };
 
@@ -107,9 +82,9 @@ export const workItemListLabels: Record<Locale, WorkItemListLabels> = {
     page: (page) => `Page ${page}`,
     pageOf: (page, pages) => `Page ${page} of ${pages}`,
     items: (n, count) => (count === 1 ? "1 item" : `${n} items`),
-    outcomes: outcomes.en,
+    cancelled: "Cancelled",
     dashboardFigure: "From the Dashboard",
-    buckets: { pending: "Pending", in_preparation: "In preparation", A: "Approved (A)", B: "Approved (B)", C: "Revise (C)", D: "Rejected (D)", passed: "Passed", passed_with_comments: "Passed with Comments", failed: "Failed", approved: "Approved", rejected: "Rejected", cancelled: "Cancelled" },
+    buckets: { pending: "Pending", in_preparation: "In preparation", approved: "Approved", rejected: "Rejected", cancelled: "Cancelled" },
     codeCStates: { approvedOnRevision: "approved on revision", awaitingRevision: "awaiting revision", noRevisionYet: "no Revision yet", revisionInProgress: "Revision in progress", rejectedAfterC: "rejected after C" },
   },
   ar: {
@@ -156,9 +131,9 @@ export const workItemListLabels: Record<Locale, WorkItemListLabels> = {
     page: (page) => `صفحة ${page}`,
     pageOf: (page, pages) => `صفحة ${page} من ${pages}`,
     items: (n, count) => (count === 1 ? "عنصر واحد" : count === 2 ? "عنصران" : `${n} عناصر`),
-    outcomes: outcomes.ar,
+    cancelled: "ملغى",
     dashboardFigure: "من لوحة المعلومات",
-    buckets: { pending: "قيد الانتظار", in_preparation: "قيد الإعداد", A: "معتمد (A)", B: "معتمد (B)", C: "للتعديل (C)", D: "مرفوض (D)", passed: "ناجح", passed_with_comments: "ناجح مع ملاحظات", failed: "راسب", approved: "معتمد", rejected: "مرفوض", cancelled: "ملغى" },
+    buckets: { pending: "قيد الانتظار", in_preparation: "قيد الإعداد", approved: "معتمد", rejected: "مرفوض", cancelled: "ملغى" },
     codeCStates: { approvedOnRevision: "معتمد بعد التعديل", awaitingRevision: "بانتظار التعديل", noRevisionYet: "لا تعديل بعد", revisionInProgress: "التعديل جارٍ", rejectedAfterC: "مرفوض بعد C" },
   },
 };
@@ -178,7 +153,7 @@ export const workItemBoardLabels: Record<Locale, WorkItemBoardLabels> = {
     moveItem: (subject) => `Move ${subject}`,
     moveTo: (stage) => `To ${stage}`,
     dragging: "Drop on a highlighted column to move the item.",
-    outcomes: outcomes.en,
+    cancelled: "Cancelled",
   },
   ar: {
     board: "كانبان",
@@ -194,7 +169,7 @@ export const workItemBoardLabels: Record<Locale, WorkItemBoardLabels> = {
     moveItem: (subject) => `نقل ${subject}`,
     moveTo: (stage) => `إلى ${stage}`,
     dragging: "أفلت العنصر على عمود مظلَّل لنقله.",
-    outcomes: outcomes.ar,
+    cancelled: "ملغى",
   },
 };
 
@@ -213,7 +188,7 @@ export const projectDashboardLabels: Record<Locale, ProjectDashboardLabels> = {
     codeC: "Code C",
     buckets: workItemListLabels.en.buckets,
     codeCStates: workItemListLabels.en.codeCStates,
-    approved: { review_code: "Approved (A+B)", inspection_result: "Passed, with or without Comments", none: "Approved" },
+    approved: { review_code: "Approved (A+B)", inspection_result: "Passed, with or without Comments", approval: "Approved", none: "Approved" },
   },
   ar: {
     items: (count) => `عدد العناصر: ${count}`,
@@ -224,7 +199,7 @@ export const projectDashboardLabels: Record<Locale, ProjectDashboardLabels> = {
     codeC: "الرمز C",
     buckets: workItemListLabels.ar.buckets,
     codeCStates: workItemListLabels.ar.codeCStates,
-    approved: { review_code: "المعتمد (A+B)", inspection_result: "الناجح، مع ملاحظات أو بدونها", none: "المعتمد" },
+    approved: { review_code: "المعتمد (A+B)", inspection_result: "الناجح، مع ملاحظات أو بدونها", approval: "المعتمد", none: "المعتمد" },
   },
 };
 

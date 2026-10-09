@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { bilingualText, type BilingualText } from "./company.ts";
-import type { OutcomeKind } from "./chain-bucket.ts";
+import type { OutcomeKind } from "./outcome.ts";
 import { condition } from "./condition.ts";
 import { baseRoles } from "./project.ts";
 import { transitionKinds, type TransitionKind } from "./work-item.ts";
@@ -86,6 +86,19 @@ const validation = z.discriminatedUnion("type", [
 ]);
 export type Validation = z.infer<typeof validation>;
 
+/** A Transition's rules, as stored in `workflow_transition.rules` (WF-7). */
+export const transitionRules = z.strictObject({ restrict: z.array(restriction).optional(), validate: z.array(validation).optional() });
+export type TransitionRules = z.infer<typeof transitionRules>;
+
+/**
+ * A Transition's rules as `workflow_transition.rules` stores them (null: none). They fit
+ * the format when they were published: rules that no longer do throw, never read as no
+ * rules (a skipped Validate would let the move through).
+ */
+export function storedTransitionRules(stored: unknown): TransitionRules {
+  return stored == null ? {} : transitionRules.parse(stored);
+}
+
 const scalar = z.union([z.string(), z.number(), z.boolean()]);
 
 /** The moment the Transition is taken, as a set field's value (not the text "now"). */
@@ -93,7 +106,11 @@ const setToNow =z.strictObject({ now: z.literal(true) });
 
 /** What taking the Transition does besides moving the item. */
 const transitionAction = z.discriminatedUnion("type", [
-  /** Offer "Assign to" among the acting Participant's own Members (WF-8): the actor picks; nothing is stored here. */
+  /**
+   * Offer "Assign to" (WF-8): the actor picks the next holder among their own
+   * Participant's Members who may hold the next Step (its Step Pool), so only when
+   * that Participant holds it; nothing is stored here.
+   */
   z.strictObject({ type: z.literal("offer_assign_to") }),
   z.strictObject({ type: z.literal("set_field"), field: key, value: z.union([scalar, setToNow]) }),
   z.strictObject({ type: z.literal("copy_field"), from: key, to: key }),
@@ -121,7 +138,7 @@ const transition = z.strictObject({
   permission: z.enum(functionPermissions),
   /** The Action Form's Form schema as stored, checked at publish (check 7); null: the Internal Note only. */
   actionForm: z.record(z.string(), z.unknown()).nullable(),
-  rules: z.strictObject({ restrict: z.array(restriction).optional(), validate: z.array(validation).optional() }).optional(),
+  rules: transitionRules.optional(),
   actions: z.array(transitionAction).optional(),
   notifications: z.array(recipient).optional(),
 });
@@ -160,9 +177,9 @@ export type WorkflowStepRow = {
 };
 
 /**
- * A `workflow_transition` row of a Version, its Steps by key. `rules`, `actions`
- * and `notifications` have no columns yet (WF-7, WF-8, WF-9 add them): they are
- * present only when the definition has them.
+ * A `workflow_transition` row of a Version, its Steps by key. `rules` (WF-7),
+ * `actions` (WF-8) and `notifications` (WF-9) are columns, null when it has none.
+ * Each is present only when the definition has it.
  */
 export type WorkflowTransitionRow = {
   key: string;
@@ -213,7 +230,8 @@ export function definitionFromRows(rows: WorkflowVersionRows): WorkflowDefinitio
  * A definition as a Version's rows, for a Work Item Type of `outcomeKind`: an
  * issuing Step issues its Inspection Result for a Type with Inspection Results,
  * else its Review Code. Transitions are sorted as listed, from 1. The outcome
- * kind gives way to the Type's own outcome set when WF-6 (RP-429) adds it.
+ * kind only names the row's `outcome_mode` word: which outcomes a Transition may
+ * set is the Type's own outcome set (RP-429), checked at publish (check 3).
  */
 export function definitionToRows(definition: WorkflowDefinition, outcomeKind: OutcomeKind): WorkflowVersionRows {
   return {

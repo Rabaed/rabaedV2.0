@@ -107,13 +107,6 @@
     "buckets": {
       "pending": "Pending",
       "in_preparation": "In preparation",
-      "A": "Approved (A)",
-      "B": "Approved (B)",
-      "C": "Revise (C)",
-      "D": "Rejected (D)",
-      "passed": "Passed",
-      "passed_with_comments": "Passed with Comments",
-      "failed": "Failed",
       "approved": "Approved",
       "rejected": "Rejected",
       "cancelled": "Cancelled"
@@ -142,13 +135,6 @@
       "list": "List",
       "kanban": "Kanban"
     },
-    "outcomes": {
-      "A": "Code A",
-      "B": "Code B",
-      "C": "Code C",
-      "D": "Code D",
-      "closed": "Closed"
-    },
     "dashboard": {
       "items": "{count} items",
       "open": "Open",
@@ -158,6 +144,7 @@
       "approved": {
         "review_code": "Approved (A+B)",
         "inspection_result": "Passed, with or without Comments",
+        "approval": "Approved",
         "none": "Approved"
       }
     },
@@ -644,7 +631,17 @@
       "forbidden": "Your Position doesn't allow this.",
       "noStepPool": "Nobody in your Company can hold the next step yet. Ask your Authorized Person to give someone the Position.",
       "nextStepUnavailable": "This can't be handed over yet: the next step has nobody to take it. Ask a Project Admin.",
+      "noRoute": "This can't go ahead: its answers match no route, or more than one. Review them, or ask a Project Admin.",
       "notAvailable": "This Transition isn't available any more.",
+      "assignTo": "Assign to",
+      "assignToHelp": "Who in your Company takes the next step. Leave it to the Step Pool and anyone who may take it can claim it.",
+      "assignToPool": "Step Pool: anyone who may take it",
+      "assigneeNotOffered": "That person can't take the next step. Choose someone from the list.",
+      "actionNotAllowed": "This Transition can't fill in those fields here. Ask a Project Admin to check the Workflow.",
+      "recommendCode": "Recommended Code",
+      "recommendCodeHelp": "Optional. Your advice to the next reviewer in your Company, with the Internal Note below. Only your Company sees it.",
+      "recommendCodeNone": "No Recommended Code",
+      "recommendedCodeNotOffered": "That Code can't be recommended here. Choose one from the list.",
       "projectClosed": "This Project is closed.",
       "formIncomplete": "Complete the Form first: the fields to fix are marked in it.",
       "saveFirst": "Your answers couldn't be saved, so nothing was sent. Check the Form.",
@@ -715,7 +712,8 @@
       "answersChanged": "Form changed",
       "emptyAnswer": "(empty)",
       "changedValue": "changed",
-      "linksField": "Links"
+      "linksField": "Links",
+      "recommendedCode": "Recommended Code"
     }
   },
   "revision": {
@@ -731,6 +729,18 @@
     "refusals": {
       "revision_not_allowed": "A Revision can't be created from this item now. Reload the page to see why.",
       "not_discardable": "This Revision has left Draft, so it can no longer be discarded.",
+      "project_closed": "The Project is closed.",
+      "not_found": "This item is no longer available to you.",
+      "idempotency_key_reused": "That didn't work. Try again.",
+      "unavailable": "That didn't work. Try again."
+    }
+  },
+  "replacement": {
+    "section": "Replacement",
+    "createIntro": "This item was rejected. Create a replacement: a new item with a new number, starting as a Draft with your answers and Documents.",
+    "create": "Create replacement",
+    "refusals": {
+      "replacement_not_allowed": "A replacement can't be created from this item now. Reload the page to see why.",
       "project_closed": "The Project is closed.",
       "not_found": "This item is no longer available to you.",
       "idempotency_key_reused": "That didn't work. Try again.",
@@ -766,7 +776,6 @@
     "mute": "Mute",
     "noProjects": "You are not on any Project yet.",
     "groups": "Notifications",
-    "inApp": "In-app",
     "emailChoice": {
       "off": "Off",
       "immediate": "Immediately",

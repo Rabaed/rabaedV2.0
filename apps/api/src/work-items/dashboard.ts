@@ -5,8 +5,10 @@ import {
   workItemQuery,
   type BilingualText,
   type Dashboard,
+  type Outcome,
   type OutcomeKind,
 } from "@rabaed/domain";
+import { sql } from "kysely";
 import { countWorkItemBuckets } from "./query.ts";
 
 // The Dashboard's Type cards (RP-351, spec RP-344; visibility.md "Dashboard and
@@ -31,10 +33,16 @@ export function getDashboard(db: Db, memberId: string, projectId: string, now: D
     if (!onProject) return null;
     const types = await trx
       .selectFrom("work_item_type")
-      .select(["module_key", "code", "name", "outcome_kind"])
+      .select(["id", "module_key", "code", "name", "outcome_kind"])
       .where((eb) => eb.or([eb("project_id", "is", null), eb("project_id", "=", projectId)]))
       .orderBy("code")
       .execute();
+    // Each Type's outcome set on the Project (RP-429): its bars, their names, the Approved % and the Code C line.
+    const { rows: outcomes } = await sql<Outcome & { type_id: string }>`
+      select o.work_item_type_id as type_id, o.code, o.name, o.closing, o.polarity, o.actions
+      from outcome o where o.project_id = ${projectId}::uuid
+      order by o.sort, o.code
+    `.execute(trx);
     const everything = workItemQuery.parse({});
     const modules: Dashboard["modules"] = [];
     for (const key of moduleKeys) {
@@ -49,6 +57,7 @@ export function getDashboard(db: Db, memberId: string, projectId: string, now: D
             type: { code: t.code, name: t.name as BilingualText },
             moduleKey: key,
             outcomeKind: t.outcome_kind as OutcomeKind,
+            outcomes: outcomes.filter((o) => o.type_id === t.id).map(({ type_id: _, ...o }) => o),
             counts: sumBy(ofType, (c) => c.bucket),
             codeCCounts: sumBy(ofType, (c) => c.codeC),
           });

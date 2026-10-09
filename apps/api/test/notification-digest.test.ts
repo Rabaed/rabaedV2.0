@@ -265,10 +265,10 @@ describe("checked again per entry at send time", () => {
     await drain();
     await issueCodeB(item.id, signer);
     await drain();
-    await saveSettings(raiser.caller, { settings: { watched: { inApp: true, email: "immediate", outcomes: ["A", "B", "C", "D", "cancelled"] } } });
+    await saveSettings(raiser.caller, { settings: { watched: { email: "immediate", outcomes: ["A", "B", "C", "D", "cancelled"] } } });
     await poll(SUNDAY);
     expect(itemsTo(raiser.email)).toEqual([]);
-    await saveSettings(raiser.caller, { settings: { watched: { inApp: true, email: "digest", outcomes: ["A", "B", "C", "D", "cancelled"] } } });
+    await saveSettings(raiser.caller, { settings: { watched: { email: "digest", outcomes: ["A", "B", "C", "D", "cancelled"] } } });
   });
 });
 

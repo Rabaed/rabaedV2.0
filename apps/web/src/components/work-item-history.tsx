@@ -43,6 +43,7 @@ export async function WorkItemHistory({
     if (e.type === "internal_note") {
       return e.transition ? t("internalNoteWith", { transition: e.transition[locale] }) : t("internalNote");
     }
+    if (e.type === "recommend_code") return t("recommendedCode");
     if (e.type === "created" || e.type === "claimed" || e.type === "released" || e.type === "answers_changed") {
       return t(e.type === "answers_changed" ? "answersChanged" : e.type);
     }
@@ -102,6 +103,11 @@ export async function WorkItemHistory({
             {e.remarks && (
               <p className="whitespace-pre-wrap" data-testid="history-remarks">
                 <span className="font-medium">{t("remarks")}:</span> {e.remarks}
+              </p>
+            )}
+            {e.recommendedCode && (
+              <p data-testid="history-recommended-code">
+                <span className="font-medium">{t("recommendedCode")}:</span> {e.recommendedCode}
               </p>
             )}
             {e.internalNote && <p className="whitespace-pre-wrap">{e.internalNote}</p>}

@@ -6,6 +6,8 @@ import { stepAgeReportHandler } from "../src/step-age-report.ts";
 
 export { addTestWorkflow, type TestWorkflowOptions } from "./test-workflow.ts";
 export { expectedContentSha256, jsonbText, type HashedDocument } from "./content-hash.ts";
+export { addRulesWorkflow, rulesFormSchema, type RulesTransition } from "./rules-workflow.ts";
+export { actionsFormSchema, addActionsWorkflow } from "./actions-workflow.ts";
 
 class Rollback extends Error {}
 

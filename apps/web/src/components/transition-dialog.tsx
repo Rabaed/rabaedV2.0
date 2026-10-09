@@ -1,15 +1,32 @@
 "use client";
 
 import { validateAnswers, type BilingualText, type FieldError, type FormSchema, type Locale } from "@rabaed/domain";
-import { ActionForm, Button } from "@rabaed/ui";
-import { useTranslations } from "next-intl";
+import { ActionForm, Button, Field, Select } from "@rabaed/ui";
+import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useWorkItemForm } from "@/components/work-item-form";
 import { useRouter } from "@/i18n/navigation";
 import { useActionFormLabels } from "@/lib/form-labels";
 
-/** A Transition as the pop-up needs it: the item's page and the Kanban's moves both have one. */
-export type TransitionChoice = { key: string; label: BilingualText; actionForm: FormSchema | null };
+/**
+ * A Transition as the pop-up needs it: the item's page and the Kanban's moves both
+ * have one. `assignTo`: the Members it offers as the next holder (WF-8), the
+ * taker's own Company's only; absent when it offers none. `recommendCode`: the
+ * outcomes it may recommend to the next reviewer of the taker's own Company
+ * (RP-433); absent when it offers none.
+ */
+export type TransitionChoice = {
+  key: string;
+  label: BilingualText;
+  actionForm: FormSchema | null;
+  assignTo?: { memberId: string; name: BilingualText }[];
+  recommendCode?: { code: string; name: BilingualText }[];
+};
+
+/** The "Assign to" choice that leaves the next Step to its Step Pool. */
+const TO_POOL = "pool";
+/** The Recommended Code choice that recommends none. */
+const NO_RECOMMENDED_CODE = "none";
 
 /** Why a call was refused, as the API said: its code and, for a Form, the fields to fix. */
 type Refusal = { code: string | undefined; fields?: FieldError[] };
@@ -23,6 +40,7 @@ type Refusal = { code: string | undefined; fields?: FieldError[] };
  */
 export function useWorkItemCalls(workItemId: string) {
   const t = useTranslations("workItems.actions");
+  const locale = useLocale() as Locale;
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -35,6 +53,10 @@ export function useWorkItemCalls(workItemId: string) {
     forbidden: t("forbidden"),
     no_step_pool: t("noStepPool"),
     next_step_unavailable: t("nextStepUnavailable"),
+    no_route: t("noRoute"),
+    assignee_not_offered: t("assigneeNotOffered"),
+    action_not_allowed: t("actionNotAllowed"),
+    recommended_code_not_offered: t("recommendedCodeNotOffered"),
     transition_not_available: t("notAvailable"),
     item_closed: t("notAvailable"),
     project_closed: t("projectClosed"),
@@ -57,8 +79,13 @@ export function useWorkItemCalls(workItemId: string) {
         router.refresh();
         return true;
       }
-      const { error: code, fields } = (await res.json().catch(() => ({}))) as { error?: string; fields?: FieldError[] };
-      setError(errors[code ?? ""] ?? t("unavailable"));
+      const { error: code, fields, message } = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        fields?: FieldError[];
+        message?: BilingualText;
+      };
+      // A Validate rule (WF-7) says why in its own words, in the viewer's language.
+      setError(code === "validation_failed" && message ? message[locale] : (errors[code ?? ""] ?? t("unavailable")));
       // The item moved or went away under us: show what is true now.
       if (res.status === 404 || res.status === 409) router.refresh();
       return { code, fields };
@@ -71,16 +98,31 @@ export function useWorkItemCalls(workItemId: string) {
   }
 
   /**
-   * Takes `transition` with its checked answers and Internal Note. Called only
-   * from the pop-up's confirm button, so the Transition goes as confirmed (ADR 0017).
+   * Takes `transition` with its checked answers, Internal Note and, if picked, the
+   * next holder and the Recommended Code. Called only from the pop-up's confirm
+   * button, so the Transition goes as confirmed (ADR 0017).
    */
-  async function take(transition: string, answers: Record<string, unknown>, internalNote: string): Promise<true | Refusal> {
+  async function take(
+    transition: string,
+    answers: Record<string, unknown>,
+    internalNote: string,
+    assignTo: string | null = null,
+    recommendedCode: string | null = null,
+  ): Promise<true | Refusal> {
     let idempotencyKey = keys.current.get(transition);
     if (!idempotencyKey) {
       idempotencyKey = crypto.randomUUID();
       keys.current.set(transition, idempotencyKey);
     }
-    const result = await send("transitions", { transition, answers, internalNote: internalNote.trim(), confirmed: true, idempotencyKey });
+    const result = await send("transitions", {
+      transition,
+      answers,
+      internalNote: internalNote.trim(),
+      assignTo,
+      recommendedCode,
+      confirmed: true,
+      idempotencyKey,
+    });
     if (result === true) keys.current.delete(transition);
     return result;
   }
@@ -125,6 +167,8 @@ export function TransitionDialog({
   const dialog = useRef<HTMLDialogElement>(null);
   const [answers, setAnswers] = useState<Record<string, unknown>>({});
   const [internalNote, setInternalNote] = useState("");
+  const [assignTo, setAssignTo] = useState(TO_POOL);
+  const [recommendedCode, setRecommendedCode] = useState(NO_RECOMMENDED_CODE);
   const [fieldErrors, setFieldErrors] = useState<FieldError[]>([]);
   const { pending, error, setError } = calls;
 
@@ -145,7 +189,13 @@ export function TransitionDialog({
     setFieldErrors([]);
     // What was typed in the item's Form goes with it: save it first.
     if (itemForm?.dirty && !(await itemForm.save())) return setError(t("saveFirst"));
-    const result = await calls.take(transition.key, checked.answers, internalNote);
+    const result = await calls.take(
+      transition.key,
+      checked.answers,
+      internalNote,
+      assignTo === TO_POOL ? null : assignTo,
+      recommendedCode === NO_RECOMMENDED_CODE ? null : recommendedCode,
+    );
     if (result === true) return dialog.current?.close();
     // The Action Form's own answers: the pop-up marks each field to fix.
     if (result.code === "invalid_action_form" && result.fields) setFieldErrors(result.fields);
@@ -177,6 +227,30 @@ export function TransitionDialog({
           onInternalNoteChange={setInternalNote}
           idPrefix={idPrefix}
         />
+        {transition.recommendCode && (
+          <Field label={t("recommendCode")} help={t("recommendCodeHelp")} id={`${idPrefix}-recommend-code`}>
+            <Select
+              value={recommendedCode}
+              onValueChange={setRecommendedCode}
+              options={[
+                { value: NO_RECOMMENDED_CODE, label: t("recommendCodeNone") },
+                ...transition.recommendCode.map((o) => ({ value: o.code, label: `${o.name[locale]} (${o.code})` })),
+              ]}
+            />
+          </Field>
+        )}
+        {transition.assignTo && (
+          <Field label={t("assignTo")} help={t("assignToHelp")} id={`${idPrefix}-assign-to`}>
+            <Select
+              value={assignTo}
+              onValueChange={setAssignTo}
+              options={[
+                { value: TO_POOL, label: t("assignToPool") },
+                ...transition.assignTo.map((m) => ({ value: m.memberId, label: m.name[locale] })),
+              ]}
+            />
+          </Field>
+        )}
         {error && (
           <p role="alert" className="text-sm text-danger">
             {error}

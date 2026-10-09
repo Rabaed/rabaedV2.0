@@ -23,11 +23,12 @@ import type { Db } from "./client.ts";
 // migration; the publish checks are @rabaed/domain's workflowPublishProblems, run here
 // in the transaction that publishes.
 
-/** What a Workflow's publish checks read: its Work Item Type's outcome kind, its Module's Stages, its Form. */
+/** What a Workflow's publish checks read: its Work Item Type's outcome kind and outcome set, its Module's Stages, its Form. */
 export type WorkflowCheckContext = { workItemTypeId: string; outcomeKind: OutcomeKind; context: WorkflowPublishContext };
 
 /**
- * The context Workflow `definitionId` is checked in: its Work Item Type's outcome kind,
+ * The context Workflow `definitionId` is checked in: its Work Item Type's outcome kind and
+ * outcome set (the Project's copy for a Project's own Workflow, else the Rabaed Default set),
  * the Stages of the Type's Module (the Project's own when it has them, else the Rabaed
  * Defaults'), the Type's latest published Form and the Option Lists. Null when `db`
  * doesn't read the Workflow, or it is made for no Type.
@@ -50,12 +51,19 @@ export async function readWorkflowCheckContext(db: Db, definitionId: string): Pr
     order by sort, key
   `.execute(db);
   const own = stages.rows.some((s) => s.own);
+  // The Type's outcome set (RP-429): the Project's copy for a Project's own Workflow, else the Rabaed Default set.
+  const outcomes = await sql<{ code: string; closing: boolean }>`
+    select code, closing from outcome
+    where work_item_type_id = ${type.type_id}::uuid
+      and case when ${type.project_id}::uuid is null then project_id is null else project_id = ${type.project_id}::uuid end
+    order by sort, code
+  `.execute(db);
   const lists = await sql<{ id: string }>`select id from option_list`.execute(db);
   return {
     workItemTypeId: type.type_id,
     outcomeKind: type.outcome_kind,
     context: {
-      outcomeKind: type.outcome_kind,
+      outcomes: outcomes.rows,
       stages: stages.rows.filter((s) => s.own === own).map(({ key, category }) => ({ key, category })),
       form: type.form === null ? null : formSchema.parse(type.form),
       optionListIds: new Set(lists.rows.map((l) => l.id)),
@@ -68,24 +76,22 @@ export type DraftArguments = { layout: string; steps: string; transitions: strin
 
 /**
  * A definition document prepared for saving: refused with `issues` where it doesn't fit
- * the format or holds what the rows can't store yet (with its publish problems when it
- * parsed), else its rows as the draft functions take them and its publish problems.
+ * the format, else its rows as the draft functions take them (a Transition's rules,
+ * actions and notifications included, WF-7 to WF-9) and its publish problems.
  */
 export type PreparedDraft =
   | { ok: false; issues: DefinitionIssue[]; problems: WorkflowProblem[] }
   | { ok: true; definition: WorkflowDefinition; args: DraftArguments; problems: WorkflowProblem[] };
 
 /**
- * Parses `input` as a definition, runs every publish check on it in `check`'s context
- * and refuses what saving would lose: the one sequence every save, check and publish
- * of a Workflow runs, in the api and in Rabaed Admin.
+ * Parses `input` as a definition and runs every publish check on it in `check`'s
+ * context: the one sequence every save, check and publish of a Workflow runs, in the
+ * api and in Rabaed Admin.
  */
 export function prepareDraft(input: unknown, check: WorkflowCheckContext): PreparedDraft {
   const parsed = parseWorkflowDefinition(input);
   if (!parsed.ok) return { ok: false, issues: parsed.issues, problems: [] };
   const problems = workflowPublishProblems(parsed.definition, check.context);
-  const unstorable = unstorableParts(parsed.definition);
-  if (unstorable.length > 0) return { ok: false, issues: unstorable, problems };
   const rows = definitionToRows(parsed.definition, check.outcomeKind);
   return {
     ok: true,
@@ -98,19 +104,6 @@ export function prepareDraft(input: unknown, check: WorkflowCheckContext): Prepa
 /** What a check of a prepared document answers: where it doesn't fit, and every publish problem. */
 export function draftValidation(prepared: PreparedDraft): WorkflowValidation {
   return { issues: prepared.ok ? [] : prepared.issues, problems: prepared.problems };
-}
-
-/**
- * Parts of a definition the rows can't hold yet: a Transition's rules, actions or
- * notifications have no columns until WF-7, WF-8 and WF-9 add them. Saving them would
- * lose them, so a draft carrying them is refused, saying where.
- */
-function unstorableParts(definition: WorkflowDefinition): DefinitionIssue[] {
-  return definition.transitions.flatMap((t, index) =>
-    (["rules", "actions", "notifications"] as const)
-      .filter((part) => t[part] !== undefined)
-      .map((part) => ({ path: `transitions.${index}.${part}`, message: "Not set up yet: this Workflow can't store it" })),
-  );
 }
 
 /** A Version's rows as `app.workflow_version_rows` shapes them. */
