@@ -162,7 +162,7 @@ export function NumberingCounters({
 
   return (
     <SettingsSection title={text.title} description={text.intro} className={className} bodyClassName="px-0 pt-[14px] pb-0 gap-0" data-testid="numbering-counters">
-      <div role="region" aria-label={text.title} tabIndex={0} className="overflow-x-auto">
+      <div role="region" aria-label={text.title} tabIndex={0} className="relative overflow-x-auto focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus">
         <table aria-label={text.title} className="w-full border-collapse text-[13.5px]">
           <thead>
             <tr className="bg-surface-subtle">

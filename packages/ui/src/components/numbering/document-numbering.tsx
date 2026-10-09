@@ -151,11 +151,11 @@ export function DocumentNumbering({ t, canEdit, projectPattern, isRabaedDefault,
             </p>
           </div>
           {counters && sampleNumbers.length > 0 && (
-            <div className="flex flex-col gap-2 rounded-md bg-surface-subtle px-[14px] py-3 shadow-[inset_0_0_0_1px_var(--border-subtle)]" data-testid="next-numbers">
+            <div className="flex min-w-0 flex-col gap-2 rounded-md bg-surface-subtle px-[14px] py-3 shadow-[inset_0_0_0_1px_var(--border-subtle)]" data-testid="next-numbers">
               <h3 className="text-[10.5px] font-bold text-muted uppercase ltr:tracking-[0.06em]">{t("nextNumbers")}</h3>
               <ul className="flex flex-col gap-2">
                 {sampleNumbers.map((n, i) => (
-                  <li key={i} className="flex items-center gap-2.5 text-[12.5px] text-text-secondary">
+                  <li key={i} className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[12.5px] text-text-secondary">
                     <span className="min-w-0 truncate">{samples[i]!.label}</span>
                     <bdi
                       dir="ltr"
@@ -199,7 +199,7 @@ export function DocumentNumbering({ t, canEdit, projectPattern, isRabaedDefault,
 
       {/* Per Work Item Type */}
       <SettingsSection title={t("typesTitle")} description={t("typesIntro")} bodyClassName="px-0 pt-[14px] pb-0" data-testid="numbering-types">
-        <div role="region" aria-label={t("typesTitle")} tabIndex={0} className="overflow-x-auto">
+        <div role="region" aria-label={t("typesTitle")} tabIndex={0} className="relative overflow-x-auto focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus">
           <table className="w-full border-collapse text-[13.5px]">
             <thead>
               <tr className="bg-surface-subtle">

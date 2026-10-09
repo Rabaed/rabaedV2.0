@@ -58,7 +58,7 @@ export function ParticipantCodes({ locale, participants, canEdit, labels, onSave
   const showOrder = participants.some((p) => p.ordinal !== null);
   return (
     <SettingsSection title={labels.title} description={labels.intro} className={className} bodyClassName="px-0 pt-[14px] pb-0" data-testid="participant-codes">
-      <div role="region" aria-label={labels.participants} tabIndex={0} className="overflow-x-auto">
+      <div role="region" aria-label={labels.participants} tabIndex={0} className="relative overflow-x-auto focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus">
         <table className="w-full border-collapse text-[13.5px]">
           <thead>
             <tr>

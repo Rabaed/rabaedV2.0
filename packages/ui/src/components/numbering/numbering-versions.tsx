@@ -64,7 +64,7 @@ export function NumberingVersions({ t, locale, versions, types, example }: Numbe
               {group.code !== undefined && <TypeCode code={group.code} />}
               {group.name}
             </h3>
-            <div role="region" aria-label={group.name} tabIndex={0} className="overflow-x-auto">
+            <div role="region" aria-label={group.name} tabIndex={0} className="relative overflow-x-auto focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus">
               <table className="w-full border-collapse text-[13.5px]">
                 <thead>
                   <tr className="bg-surface-subtle">
@@ -92,7 +92,7 @@ export function NumberingVersions({ t, locale, versions, types, example }: Numbe
                         </span>
                       </td>
                       <td className="px-5 py-3 whitespace-nowrap text-text-secondary">{date(v)}</td>
-                      <td className="px-5 py-3 whitespace-nowrap text-text-secondary">{savedBy(v)}</td>
+                      <td className="min-w-40 px-5 py-3 text-text-secondary">{savedBy(v)}</td>
                       <td className="px-5 py-3 whitespace-nowrap">
                         {v.pattern ? (
                           <bdi dir="ltr" translate="no" className="text-[12.5px] font-semibold text-text tabular-nums">
