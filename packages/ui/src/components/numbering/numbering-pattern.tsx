@@ -21,6 +21,7 @@ import { Input } from "../form/input.tsx";
 import { SegmentedControl } from "../form/segmented-control.tsx";
 import { Select } from "../form/select.tsx";
 import { Icon } from "../icon/icon.tsx";
+import { Dialog, DialogContent, DialogFooter } from "../overlay/dialog.tsx";
 
 // The Numbering Pattern builder and its read-only view (RP-313; GLOSSARY.md,
 // Numbering Pattern; workflow-engine.md §8 "Settled 2026-10-05 (Document
@@ -65,6 +66,8 @@ export type NumberingPatternLabels = {
   saving: string;
   afterChange: string;
   countedBadge: string;
+  /** The shared-counter dialog's close button. */
+  close: string;
 };
 
 type Text = NumberingPatternLabels;
@@ -158,6 +161,7 @@ export type NumberingPatternBuilderProps = {
 export function NumberingPatternBuilder({ locale, labels: text, pattern: initial, example, onSave, pending = false, error, className }: NumberingPatternBuilderProps) {
   const id = useId();
   const [pattern, setPattern] = useState<NumberingPattern>(initial);
+  const [confirming, setConfirming] = useState(false);
   const [accepted, setAccepted] = useState(false);
   const shared = !countsByParticipant(pattern);
   const valid = numberingPattern.safeParse(pattern).success;
@@ -195,7 +199,12 @@ export function NumberingPatternBuilder({ locale, labels: text, pattern: initial
       data-testid="numbering-pattern-builder"
       onSubmit={(e) => {
         e.preventDefault();
-        if (valid && (!shared || accepted)) void onSave(pattern, shared && accepted);
+        if (!valid) return;
+        // A shared count saves only once the Project Admin has accepted it, in a dialog.
+        if (shared) {
+          setAccepted(false);
+          setConfirming(true);
+        } else void onSave(pattern, false);
       }}
     >
       <Example text={text} pattern={pattern} example={example} />
@@ -276,15 +285,12 @@ export function NumberingPatternBuilder({ locale, labels: text, pattern: initial
       </div>
 
       {shared && (
-        <div role="group" aria-labelledby={`${id}-shared`} className="flex flex-col gap-3 rounded-md bg-warning-tint p-4" data-testid="shared-counter-warning">
+        <div role="group" aria-labelledby={`${id}-shared`} className="flex flex-col gap-1 rounded-md bg-warning-tint p-4" data-testid="shared-counter-warning">
           <p id={`${id}-shared`} className="flex items-center gap-2 font-semibold text-text">
             <Icon name="alert-triangle" size={18} className="shrink-0 text-warning-fg" />
             {text.sharedTitle}
           </p>
           <p className="text-sm text-text">{text.sharedBody}</p>
-          <Field label={text.sharedAccept} layout="inline" id={`${id}-accept`}>
-            <Checkbox checked={accepted} onCheckedChange={(c) => setAccepted(c === true)} />
-          </Field>
         </div>
       )}
 
@@ -294,9 +300,27 @@ export function NumberingPatternBuilder({ locale, labels: text, pattern: initial
           {error}
         </p>
       )}
-      <Button type="submit" className="w-fit" disabled={pending || !valid || (shared && !accepted)}>
+      <Button type="submit" className="w-fit" disabled={pending || !valid}>
         {pending ? text.saving : text.save}
       </Button>
+      <Dialog open={confirming} onOpenChange={setConfirming}>
+        <DialogContent title={text.sharedTitle} description={text.sharedBody} closeLabel={text.close}>
+          <Field label={text.sharedAccept} layout="inline" id={`${id}-accept`}>
+            <Checkbox checked={accepted} onCheckedChange={(c) => setAccepted(c === true)} />
+          </Field>
+          <DialogFooter>
+            <Button
+              disabled={pending || !accepted}
+              onClick={async () => {
+                await onSave(pattern, true);
+                setConfirming(false);
+              }}
+            >
+              {pending ? text.saving : text.save}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </form>
   );
 }

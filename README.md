@@ -32,6 +32,8 @@ pnpm demo
 
 It starts Postgres, drops and rebuilds the local database (`pnpm db:reset`, which refuses any database that isn't on this machine), seeds the demo (`pnpm demo:seed`) and runs web, api, worker and Rabaed Admin. The seed is built through the API itself, and the Rabaed Engineer onboards each Company through Rabaed Admin's onboarding service, so `admin_action` records each onboarding with its reason (V9). The names, emails (on the reserved `.test` domain), CR and VAT numbers are made up.
 
+`pnpm db:reset` under a running `pnpm dev` or `pnpm demo` no longer needs a restart: the api and worker log that an idle connection failed (class and code `57P01`, no message) and open a fresh one on the next query (`packages/db/src/client.ts`, RP-402).
+
 Everyone signs in with one password, generated on your machine the first time and kept in `.env.demo` (git-ignored; it stays the same across resets). The seed prints the list below.
 
 **Project:** Riyadh Gate Tower – Phase 2 (`TWR`). Trades Electrical Works (`EL`) and Mechanical Works (`ME`); Locations Main Zone › Tower 1 (Floors 01–03) and Tower 2 (Floor 01).

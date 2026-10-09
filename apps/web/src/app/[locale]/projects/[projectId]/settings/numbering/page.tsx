@@ -1,10 +1,11 @@
-import { participantSegment, type Locale } from "@rabaed/domain";
+import { documentNumbering, formatNumber, participantSegment, rabaedDefaultNumberingPattern, type Locale } from "@rabaed/domain";
+import { DocNo, SettingsHeader, SettingsSection } from "@rabaed/ui";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
 import { NumberingCountersSection } from "@/components/numbering-counters";
 import { NumberingPatterns } from "@/components/numbering-patterns";
 import { ParticipantCodesSection } from "@/components/participant-codes";
-import { Link, redirect } from "@/i18n/navigation";
+import { redirect } from "@/i18n/navigation";
 import { treeOrder } from "@/lib/dimension-tree";
 import {
   getMe,
@@ -32,6 +33,7 @@ export default async function NumberingPage({ params }: { params: Promise<{ loca
   const { locale, projectId } = await params;
   setRequestLocale(locale);
   const t = await getTranslations("numbering");
+  const ts = await getTranslations("settings");
   const [me, project, settings] = await Promise.all([getMe(), getProject(projectId), getNumberingSettings(projectId)]);
   if (!me) return redirect({ href: "/sign-in", locale });
   if (!project || !settings) notFound();
@@ -44,16 +46,19 @@ export default async function NumberingPage({ params }: { params: Promise<{ loca
     project.isProjectAdmin ? getProjectDimensions(projectId) : null,
   ]);
   const code = (value: string) => ` (${LRI}${value}${PDI})`;
+  // The first number a new item gets with the Project pattern, built for the viewer's own Participant (V3).
+  const projectPattern = settings.project?.pattern ?? rabaedDefaultNumberingPattern;
+  const previewNumber = documentNumbering(projectPattern, { ...settings.example, typeCode: settings.types[0]?.code ?? "MAR" }).number(1);
 
   return (
-    <div className="space-y-8">
-      <div className="space-y-1">
-        <Link href={`/projects/${project.id}`} className="text-sm text-primary underline underline-offset-4">
-          {project.name[locale]}
-        </Link>
-        <h1 className="text-h4 font-semibold">{t("title")}</h1>
-        <p className="text-muted">{t("intro")}</p>
-      </div>
+    <>
+      <SettingsHeader title={t("title")} description={t("intro")} readOnlyLabel={project.isProjectAdmin ? undefined : ts("readOnly")} />
+      <SettingsSection title={ts("previewTitle")} description={ts("previewHint")} data-testid="numbering-preview">
+        <p className="text-h3 font-bold break-all">
+          <DocNo value={previewNumber} className="font-bold" />
+        </p>
+        <p className="text-sm text-muted">{ts("length", { n: formatNumber(previewNumber.length, locale) })}</p>
+      </SettingsSection>
       <NumberingPatterns projectId={project.id} settings={settings} />
       {participants && <ParticipantCodesSection participants={participants.participants} canEdit={project.isProjectAdmin} />}
       {counters && participants && dimensions && (
@@ -73,6 +78,6 @@ export default async function NumberingPage({ params }: { params: Promise<{ loca
           }))}
         />
       )}
-    </div>
+    </>
   );
 }

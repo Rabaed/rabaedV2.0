@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { isOpenStageCategory, stageCategories, type WorkItemOutcome } from "./work-item.ts";
+import { isOpenStageCategory, outcomeSets, stageCategories, type WorkItemOutcome } from "./work-item.ts";
 
 /**
  * The bucket a Revision chain counts in on the Dashboard (spec RP-344,
@@ -96,8 +96,8 @@ export const chainBucketRules: readonly ChainBucketRule[] = [
   { when: { open: true, raisedByViewer: true }, bucket: "in_preparation" },
   { when: { outcome: "cancelled" }, bucket: "cancelled" },
   { when: { stageCategory: "cancelled" }, bucket: "cancelled" },
-  ...codeRules("review_code", ["A", "B", "C", "D"]),
-  ...codeRules("inspection_result", ["passed", "passed_with_comments", "failed"]),
+  ...codeRules("review_code", outcomeSets.review_code),
+  ...codeRules("inspection_result", outcomeSets.inspection_result),
   { when: { stageCategory: "closed_positive" }, bucket: "approved" },
   { when: { stageCategory: "closed_negative" }, bucket: "rejected" },
 ];
