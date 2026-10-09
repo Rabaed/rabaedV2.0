@@ -6,12 +6,12 @@ import { git, migrationsDir } from "./migrations.ts";
 // in a new migration; only new files are allowed (RP-287). Nothing is
 // exempt: ADR 0006's exception is a new migration, not an edit of an old one.
 //
-// Usage: node scripts/check-migrations-immutable.ts <base-ref>   (CI: origin/<base branch> on a pull request,
+// Usage: node scripts/check-migrations-immutable.ts <base-ref> [head-ref, default HEAD]   (CI: origin/<base branch> on a pull request,
 //        the merge group's base SHA in the merge queue (RP-398); needs its history)
 
 /** Changed files under the migrations directory since the merge base, as "<status>\t<path>". A rename counts as a delete plus an add. */
-export function changedMigrations(repo: string, base: string): { status: string; path: string }[] {
-  const diff = git(repo, "diff", "--name-status", "--no-renames", `${base}...HEAD`, "--", `${migrationsDir}/`);
+export function changedMigrations(repo: string, base: string, head: string = "HEAD"): { status: string; path: string }[] {
+  const diff = git(repo, "diff", "--name-status", "--no-renames", `${base}...${head}`, "--", `${migrationsDir}/`);
   return diff
     .split("\n")
     .filter(Boolean)
@@ -22,8 +22,8 @@ export function changedMigrations(repo: string, base: string): { status: string;
 }
 
 /** The migrations the change edited, renamed or deleted: everything but an added file. */
-export function alteredMigrations(repo: string, base: string): string[] {
-  return changedMigrations(repo, base)
+export function alteredMigrations(repo: string, base: string, head: string = "HEAD"): string[] {
+  return changedMigrations(repo, base, head)
     .filter(({ status }) => status !== "A")
     .map(({ status, path }) => `${path} (${status === "D" ? "deleted or renamed" : "edited"})`);
 }
@@ -34,12 +34,12 @@ export function alteredMigrations(repo: string, base: string): string[] {
  * file runs before migrations it was never written against, and a function it
  * re-defines can bring back an outdated copy (RP-311's take_transition, RP-342).
  */
-export function misorderedMigrations(repo: string, base: string): { path: string; latest: string }[] {
+export function misorderedMigrations(repo: string, base: string, head: string = "HEAD"): { path: string; latest: string }[] {
   const names = git(repo, "ls-tree", "--name-only", `${base}:${migrationsDir}`)
     .split("\n")
     .filter((name) => name.endsWith(".sql"));
   const latest = names.reduce((a, b) => (a > b ? a : b), "");
-  return changedMigrations(repo, base)
+  return changedMigrations(repo, base, head)
     .filter(({ status, path }) => status === "A" && path.slice(path.lastIndexOf("/") + 1) < latest)
     .map(({ path }) => ({ path, latest }));
 }
@@ -50,8 +50,9 @@ if (import.meta.filename && resolve(process.argv[1] ?? "") === import.meta.filen
     console.error("Usage: node scripts/check-migrations-immutable.ts <base-ref>");
     process.exit(2);
   }
-  const altered = alteredMigrations(process.cwd(), base);
-  const misordered = misorderedMigrations(process.cwd(), base);
+  const head = process.argv[3] ?? "HEAD";
+  const altered = alteredMigrations(process.cwd(), base, head);
+  const misordered = misorderedMigrations(process.cwd(), base, head);
   if (altered.length > 0) {
     console.error("Migrations that already exist on the base branch must not change. Put the change in a new migration:");
     for (const entry of altered) console.error(`  ${entry}`);
