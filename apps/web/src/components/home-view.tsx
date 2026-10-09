@@ -75,7 +75,7 @@ export function HomeView({ home, locale, greeting, canCreateProjects }: { home: 
         />
       </div>
 
-      <section aria-labelledby="home-your-projects" className="mt-3 flex flex-col gap-3.5">
+      <section aria-labelledby="home-your-projects" className="mt-3 flex flex-col gap-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 id="home-your-projects" className="font-display text-h6 font-bold">
             {t("yourProjects")}

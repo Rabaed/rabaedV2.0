@@ -110,7 +110,7 @@ export function WorkItemBoard({ board, query, locale, labels, listHrefFor, itemH
           {labels.dragging}
         </p>
       )}
-      <ol className="flex w-max items-start gap-3.5">
+      <ol className="flex w-max items-start gap-4">
         {board.stages.map((stage) => {
           const column = columns.get(stage.key);
           const shown = column?.shown ?? 0;
@@ -147,13 +147,13 @@ export function WorkItemBoard({ board, query, locale, labels, listHrefFor, itemH
                   : undefined
               }
             >
-              <h2 id={headingId} className="flex items-center gap-2 border-b border-border-subtle px-3.5 py-3 text-body font-bold text-text">
+              <h2 id={headingId} className="flex items-center gap-2 border-b border-border-subtle px-4 py-3 text-body font-bold text-text">
                 <StageDot stage={stageColour(stage)} />
                 <span className="min-w-0 truncate">{stage.name[locale]}</span>
                 <span className="rounded-full bg-neutral-tint px-2 text-caption font-semibold text-neutral-fg tabular-nums">{formatNumber(shown, locale)}</span>
               </h2>
               {closed && (
-                <div className="flex flex-col gap-1 border-b border-border-subtle px-3.5 py-2 text-caption text-muted">
+                <div className="flex flex-col gap-1 border-b border-border-subtle px-4 py-2 text-caption text-muted">
                   <span>{labels.closedSince(formatNumber(closedColumnDays, locale))}</span>
                   <span className="flex flex-wrap items-center justify-between gap-2">
                     {/* A search counts only what it shows, so it has no total to give. */}
