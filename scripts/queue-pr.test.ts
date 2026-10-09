@@ -12,6 +12,7 @@ function fakeSeam(overrides: Partial<QueueSeam> = {}) {
     isBehind: () => false,
     pullRequest: () => ({ id: "PR_node", headRefOid: "abc123" }),
     mergeTree: () => ({ status: 0, output: "treeoid\n", stderr: "" }),
+    changedFiles: () => ["apps/api/src/a.ts"],
     check: () => ({ status: 0, output: "ok\n" }),
     status: () => ({ state: "OPEN", isInMergeQueue: true }),
     removalReason: () => undefined,
@@ -32,6 +33,29 @@ describe("queuePr", () => {
     expect(enqueued).toEqual([["PR_node", "abc123"]]);
     expect(result.lines.join("\n")).toContain("position 3");
     expect(result.lines.join("\n")).toContain("QUEUED");
+  });
+
+  it("refuses a PR that changes root package.json among code files, naming rule 3 and the shared files", () => {
+    const { seam, enqueued } = fakeSeam({ changedFiles: () => ["package.json", "scripts/x.ts", ".github/workflows/ci.yml", "apps/api/src/a.ts"] });
+    const result = queuePr(163, seam);
+    expect(result.ok).toBe(false);
+    const text = result.lines.join("\n");
+    expect(text).toContain("rule 3");
+    expect(text).toContain("package.json");
+    expect(text).toContain(".github/workflows/ci.yml");
+    expect(text).not.toContain("apps/api/src/a.ts");
+    expect(enqueued).toEqual([]);
+  });
+
+  it("queues an own PR that touches only root shared files and docs", () => {
+    const { seam, enqueued } = fakeSeam({ changedFiles: () => ["package.json", "pnpm-lock.yaml", ".github/workflows/ci.yml", "docs/tech-stack.md"] });
+    expect(queuePr(163, seam).ok).toBe(true);
+    expect(enqueued).toHaveLength(1);
+  });
+
+  it("does not treat a nested package.json or lockfile as a root shared file", () => {
+    const { seam } = fakeSeam({ changedFiles: () => ["apps/api/package.json", "scripts/x.ts"] });
+    expect(queuePr(163, seam).ok).toBe(true);
   });
 
   it("refuses when origin/main cannot be fetched", () => {
