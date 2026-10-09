@@ -116,5 +116,11 @@ describe("a Rabaed Default Workflow in Rabaed Admin", () => {
 
   it("is reached by a signed-in Rabaed Engineer only", async () => {
     expect((await admin.browser().post(`/v1/workflows/${TYPE}/validate`, { definition: current.definition })).statusCode).toBe(401);
+    // Before the body is read: a stranger learns nothing of a route's schema.
+    for (const path of ["validate", "draft", "publish"]) {
+      const res = await admin.browser().post(`/v1/workflows/${TYPE}/${path}`, { definition: 1, reason: 7 });
+      expect(res.statusCode, path).toBe(401);
+      expect(res.json(), path).toEqual({ error: "not_signed_in" });
+    }
   });
 });
