@@ -30,13 +30,13 @@ const input = (over: Partial<RouteNotificationInput> & Pick<RouteNotificationInp
 });
 
 describe("the defaults", () => {
-  it("are in-app on, email immediately for Step reached and Sent Back, a digest for the rest, every outcome ticked, and the weekly report emailed", () => {
+  it("are email immediately for Step reached and Sent Back, a digest for the rest, every outcome ticked, and the weekly report emailed (there is no in-app setting: in-app is always sent)", () => {
     expect(defaultNotificationSettings).toEqual({
-      step_reached: { inApp: true, email: "immediate" },
-      watched: { inApp: true, email: "digest", outcomes: ["A", "B", "C", "D", "passed", "passed_with_comments", "failed", "approved", "rejected", "cancelled"] },
-      sent_back: { inApp: true, email: "immediate" },
-      vacancy: { inApp: true, email: "digest" },
-      weekly_report: { inApp: false, email: "immediate" },
+      step_reached: { email: "immediate" },
+      watched: { email: "digest", outcomes: ["A", "B", "C", "D", "passed", "passed_with_comments", "failed", "approved", "rejected", "cancelled"] },
+      sent_back: { email: "immediate" },
+      vacancy: { email: "digest" },
+      weekly_report: { email: "immediate" },
     });
   });
 
@@ -52,10 +52,10 @@ describe("the defaults", () => {
 });
 
 describe("a group's own setting", () => {
-  it("turns the bell off without touching email", () => {
-    expect(routeNotification(input({ kind: "step_reached", settings: withGroup("step_reached", { inApp: false }) }))).toEqual({
-      inApp: false,
-      email: "immediate",
+  it("never turns the bell off: in-app is sent even with email off", () => {
+    expect(routeNotification(input({ kind: "step_reached", settings: withGroup("step_reached", { email: "off" }) }))).toEqual({
+      inApp: true,
+      email: "none",
     });
   });
 
@@ -68,19 +68,18 @@ describe("a group's own setting", () => {
   });
 
   it("applies only to its own group", () => {
-    const settings = withGroup("sent_back", { inApp: false, email: "off" });
+    const settings = withGroup("sent_back", { email: "off" });
     expect(routeNotification(input({ kind: "step_reached", settings }))).toEqual({ inApp: true, email: "immediate" });
-    expect(routeNotification(input({ kind: "sent_back", settings }))).toEqual({ inApp: false, email: "none" });
+    expect(routeNotification(input({ kind: "sent_back", settings }))).toEqual({ inApp: true, email: "none" });
   });
 });
 
 describe("the weekly report", () => {
-  const weekly = (email: NotificationGroupSetting["email"], inApp = true) =>
-    routeNotification(input({ kind: "weekly_report", settings: withGroup("weekly_report", { inApp, email }) }));
+  const weekly = (email: NotificationGroupSetting["email"]) =>
+    routeNotification(input({ kind: "weekly_report", settings: withGroup("weekly_report", { email }) }));
 
-  it("is an email only: never the bell, whatever is stored", () => {
+  it("is an email only: never the bell", () => {
     expect(weekly("immediate").inApp).toBe(false);
-    expect(weekly("immediate", false).inApp).toBe(false);
   });
 
   it("is emailed when its email is on, on its own schedule (a stored digest counts as on), and not when off", () => {
@@ -134,32 +133,29 @@ describe("every combination", () => {
   const tickSets = [watchOutcomes, [], ["A", "B"]] as const;
   const cases = notificationKinds.flatMap((kind) =>
     outcomes.flatMap((outcome) =>
-      [true, false].flatMap((inApp) =>
-        notificationEmailChoices.flatMap((email) =>
-          tickSets.flatMap((outcomesTicked) =>
-            [true, false].flatMap((muted) =>
-              [true, false].map((emailPaused) => ({
-                kind,
-                outcome,
-                muted,
-                emailPaused,
-                inApp,
-                email,
-                ticks: outcomesTicked as readonly string[],
-                settings: withGroup(kind, { inApp, email, outcomes: [...outcomesTicked] }),
-              })),
-            ),
+      notificationEmailChoices.flatMap((email) =>
+        tickSets.flatMap((outcomesTicked) =>
+          [true, false].flatMap((muted) =>
+            [true, false].map((emailPaused) => ({
+              kind,
+              outcome,
+              muted,
+              emailPaused,
+              email,
+              ticks: outcomesTicked as readonly string[],
+              settings: withGroup(kind, { email, outcomes: [...outcomesTicked] }),
+            })),
           ),
         ),
       ),
     ),
   );
 
-  it("covers every kind, outcome, switch, email choice, tick set, mute and pause", () => {
-    expect(cases).toHaveLength(5 * 12 * 2 * 3 * 3 * 2 * 2);
+  it("covers every kind, outcome, email choice, tick set, mute and pause", () => {
+    expect(cases).toHaveLength(5 * 12 * 3 * 3 * 2 * 2);
   });
 
-  it.each(cases)("$kind $outcome inApp=$inApp email=$email ticks=$ticks muted=$muted paused=$emailPaused", (c) => {
+  it.each(cases)("$kind $outcome email=$email ticks=$ticks muted=$muted paused=$emailPaused", (c) => {
     const route = routeNotification(c);
     const heldBack = c.kind === "watched_event" && c.outcome !== null && c.outcome !== "closed" && !c.ticks.includes(c.outcome);
     // Nothing when muted or when the watcher didn't tick the outcome.
@@ -167,8 +163,8 @@ describe("every combination", () => {
     const emailed = !c.emailPaused && c.email !== "off";
     // The weekly report: never the bell; emailed on its schedule while on.
     if (c.kind === "weekly_report") return expect(route).toEqual({ inApp: false, email: emailed ? "immediate" : "none" });
-    // Otherwise the bell follows the switch, and email the choice unless paused.
-    expect(route.inApp).toBe(c.inApp);
+    // Otherwise the bell is always on, and email follows the choice unless paused.
+    expect(route.inApp).toBe(true);
     expect(route.email).toBe(emailed ? c.email : "none");
   });
 });

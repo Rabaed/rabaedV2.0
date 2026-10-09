@@ -130,8 +130,8 @@ describe("notification settings", () => {
     const member = await projectMember(api, c1, at.c1ParticipantId, ["engineer"]);
     const settings: NotificationSettings = {
       ...defaultNotificationSettings,
-      vacancy: { inApp: false, email: "off" },
-      watched: { inApp: true, email: "immediate", outcomes: ["A"] },
+      vacancy: { email: "off" },
+      watched: { email: "immediate", outcomes: ["A"] },
     };
     await saveSettings(member, { settings, emailPaused: true, preferredLanguage: "ar" });
     expect(await settingsOf(member)).toMatchObject({ settings, emailPaused: true, preferredLanguage: "ar" });
@@ -142,19 +142,19 @@ describe("notification settings", () => {
     const { settings } = await settingsOf(at.c1Engineer);
     const { outcomes: _, ...noTicks } = settings.watched;
     await ok(putSettings(at.c1Engineer, { settings: { ...settings, watched: noTicks }, emailPaused: false, preferredLanguage: "en" }), 400);
-    await ok(putSettings(at.c1Engineer, { settings: { ...settings, sent_back: { inApp: true, email: "weekly" } }, emailPaused: false, preferredLanguage: "en" }), 400);
+    await ok(putSettings(at.c1Engineer, { settings: { ...settings, sent_back: { email: "weekly" } }, emailPaused: false, preferredLanguage: "en" }), 400);
     expect((await settingsOf(at.c1Engineer)).settings).toEqual(defaultNotificationSettings);
   });
 
   it("keep the Weekly Step Age report an email turned on or off: never in-app, never a digest", async () => {
     const member = await projectMember(api, c1, at.c1ParticipantId, ["engineer"]);
     const { settings } = await settingsOf(member);
-    expect(settings.weekly_report).toEqual({ inApp: false, email: "immediate" });
-    for (const weekly of [{ inApp: true, email: "immediate" }, { inApp: false, email: "digest" }]) {
+    expect(settings.weekly_report).toEqual({ email: "immediate" });
+    for (const weekly of [{ email: "digest" }, { email: "weekly" }]) {
       await ok(putSettings(member, { settings: { ...settings, weekly_report: weekly }, emailPaused: false, preferredLanguage: "en" }), 400);
     }
-    await saveSettings(member, { settings: { ...settings, weekly_report: { inApp: false, email: "off" } }, emailPaused: false, preferredLanguage: "en" });
-    expect((await settingsOf(member)).settings.weekly_report).toEqual({ inApp: false, email: "off" });
+    await saveSettings(member, { settings: { ...settings, weekly_report: { email: "off" } }, emailPaused: false, preferredLanguage: "en" });
+    expect((await settingsOf(member)).settings.weekly_report).toEqual({ email: "off" });
   });
 
   it("take the language of emails from the browser at the first sign-in that tells it, and only then", async () => {
@@ -244,7 +244,7 @@ describe("watched items", () => {
 
   it("notify a watcher who ticked only A and B of Code A, not of Code C", async () => {
     const watcher = await projectMember(api, c1, at.c1ParticipantId, ["engineer"]);
-    await saveSettings(watcher, { settings: { watched: { inApp: true, email: "digest", outcomes: ["A", "B"] } } });
+    await saveSettings(watcher, { settings: { watched: { email: "digest", outcomes: ["A", "B"] } } });
     const a = await submitted(at, at.c1Engineer, at.c1Pm, "Luminaires");
     const c = await submitted(at, at.c1Engineer, at.c1Pm, "Sockets");
     await drainOutbox(worker);
@@ -330,24 +330,24 @@ describe("a move inside another Company (V5)", () => {
   });
 });
 
-describe("mute and the bell's switch", () => {
-  it("each silence the bell, and the item still waits on them (Need My Action is unaffected)", async () => {
+describe("mute and email off", () => {
+  it("a mute silences the bell, and the item still waits on them (Need My Action is unaffected); email off keeps the bell", async () => {
     const pmMuted = await projectMember(api, c1, at.c1ParticipantId, ["project_manager"]);
     const pmOff = await projectMember(api, c1, at.c1ParticipantId, ["project_manager"]);
     await ok(mute(pmMuted, at.projectId));
-    await saveSettings(pmOff, { settings: { step_reached: { inApp: false, email: "immediate" } } });
+    await saveSettings(pmOff, { settings: { step_reached: { email: "off" } } });
     const id = await inReview("Cable ladders");
     await drainOutbox(worker);
 
     expect(await kinds(at.c1Pm, id)).toEqual(["step_reached"]);
-    for (const who of [pmMuted, pmOff]) {
-      expect(await about(who, id)).toEqual([]);
-      expect((await detail(who, id)).actions.claim).toBe(true);
-    }
-    // The bell's switch off still emails; a mute sends nothing at all.
+    // In-app is always sent: a Member who turned email off still gets it in the bell.
+    expect(await kinds(pmOff, id)).toEqual(["step_reached"]);
+    expect(await about(pmMuted, id)).toEqual([]);
+    for (const who of [pmMuted, pmOff]) expect((await detail(who, id)).actions.claim).toBe(true);
+    // Email off routes no email; a mute sends nothing at all.
     const byMember = new Map((await routed(id)).map((r) => [r.member_id, { in_app: r.in_app, email: r.email }]));
     expect(byMember.get(await meOf(at.c1Pm))).toEqual({ in_app: true, email: "immediate" });
-    expect(byMember.get(await meOf(pmOff))).toEqual({ in_app: false, email: "immediate" });
+    expect(byMember.get(await meOf(pmOff))).toEqual({ in_app: true, email: "none" });
     expect(byMember.has(await meOf(pmMuted))).toBe(false);
   });
 

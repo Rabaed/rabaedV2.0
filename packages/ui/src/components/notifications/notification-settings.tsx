@@ -20,8 +20,8 @@ import { Switch } from "../form/switch.tsx";
 // The Member's notification settings, in their profile (RP-355; spec RP-344
 // "Notification settings"; design/prompts/views-dashboard-notifications.md §7).
 // At the top: Pause all email, the language of emails, and a mute per Project.
-// Then one row per group with an In-app switch and an Email choice; "Items I
-// watch" also ticks the outcomes that notify. The Weekly Step Age report row is
+// Then one row per group with an Email choice (in-app is always sent, so there is
+// no In-app switch, RP-432); "Items I watch" also ticks the outcomes that notify. The Weekly Step Age report row is
 // shown only to its recipients, with an Email switch only: it is an email on its
 // own schedule, never in the bell. Every change applies at once; a refused one is
 // undone and says so. Presentational: the page does the calls.
@@ -37,7 +37,6 @@ export type NotificationSettingsLabels = {
   mute: string;
   noProjects: string;
   groups: string;
-  inApp: string;
   emailChoice: Record<NotificationEmailChoice, string>;
   group: Record<NotificationGroup, string>;
   weeklyHelp: string;
@@ -171,18 +170,11 @@ export function NotificationSettingsForm({ locale, labels, value, onSave, onMute
                     <Switch
                       checked={setting.email !== "off"}
                       aria-describedby={`group-${group}`}
-                      onCheckedChange={(on) => void setGroup(group, { inApp: false, email: on ? "immediate" : "off" })}
+                      onCheckedChange={(on) => void setGroup(group, { email: on ? "immediate" : "off" })}
                     />
                   </Field>
                 ) : (
                   <div className="flex flex-wrap items-center gap-x-8 gap-y-3">
-                    <Field label={labels.inApp} layout="inline">
-                      <Switch
-                        checked={setting.inApp}
-                        aria-describedby={`group-${group}`}
-                        onCheckedChange={(inApp) => void setGroup(group, { inApp })}
-                      />
-                    </Field>
                     <Field label={labels.email} group>
                       <SegmentedControl
                         value={setting.email}
@@ -193,7 +185,7 @@ export function NotificationSettingsForm({ locale, labels, value, onSave, onMute
                     </Field>
                   </div>
                 )}
-                {/* Names the row's controls for a screen reader: "In-app" alone doesn't say which group. */}
+                {/* Names the row's controls for a screen reader: "Email" alone doesn't say which group. */}
                 <span id={`group-${group}`} hidden>
                   {labels.group[group]}
                 </span>
