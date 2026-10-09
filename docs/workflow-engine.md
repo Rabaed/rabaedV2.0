@@ -255,7 +255,12 @@ Effects, in order:
 
 ### 5.5 `replace_rejected(closed_item)` for Code D
 
-This creates a **new** item with a new Document Number and a `related` Link to the rejected one. Rejected items never get Revisions.
+This creates a **new** item with a new Document Number and a `replaces` Link to the rejected one. Rejected items never get Revisions.
+
+- **Allowed when** (`app.can_create_replacement`): the item is closed with an outcome whose follow-up actions in its Type's set include `offer_replacement` (Code D in the Rabaed Defaults; never a fixed code, RP-429 `app.outcome_offers`), and the caller may raise the item, as for a Revision: an active Member of the raiser's Participant whom the Workflow's Draft Step actor rule allows. At most one replacement stands per item: another is refused while one exists that is neither discarded nor Cancelled.
+- **Creates** a new Work Item (`app.create_replacement`, RP-435): not a Revision (`revision_no` 0, no `revision_of_id`, its own chain), with the source's Subject; the answers copied as for a Revision, except Form Sections filled by other Participants, which start empty (`app.fill_revision`, which now asks that the source's outcome offers a Revision or a replacement); Documents copied as new unfrozen rows; pinned to the latest published Form and Workflow versions; at Draft, "No number yet", and a new Document Number from the counter when it first leaves Draft (§8), no " Rev". It is visible like any new Draft: to the raiser's Participant only (V1).
+- **The Link** runs from the replacement to the rejected item (`kind = replaces`) and is made at creation, so `app.take_transition` isn't involved. It is read under the replacement's row-level security: nobody else reads it while the replacement is a Draft; the replacement lists the rejected item under its Links (E1), and the rejected item lists the replacement in Linked from (E3) once it has been Submitted. It isn't a free Link: Links can't remove it.
+- **The api** is `POST /v1/work-items/:id/replacements` (`{idempotencyKey}`, 201 `{id}`; 409 `replacement_not_allowed` for every refusal alike, 422 `idempotency_key_reused`, 404 for a hidden item); the same key again answers with the same replacement. `WorkItemDetail.actions.createReplacement` says when the item page offers its Create replacement card, beside the Create Revision card (`actions.createRevision`, the outcome's `offer_revision`); both read the outcome's follow-up actions. A replacement Draft is discarded like any new Draft, by the Workflow's own Cancel Transition when it has one.
 
 ### 5.6 Admin commands (Rabaed Admin only, `admin_action` + a shared event with a reason)
 
@@ -268,14 +273,14 @@ There is no admin path to `take_transition`, `recommend_code`, `issue_code`, or 
 
 ## 6. Outcome hooks
 
-As built (RP-429): what an outcome leads to is its follow-up actions in its Type's set (§1 "Outcomes"), never its code; the table gives the Rabaed Defaults. `app.work_item_outcome_actions(item)` gives a closed item's to whoever sees it: WF-11 builds B's Comments from `create_items`, WF-12 D's replacement from `offer_replacement`, and Create Revision reads `offer_revision` (`app.can_create_revision`).
+As built (RP-429): what an outcome leads to is its follow-up actions in its Type's set (§1 "Outcomes"), never its code; the table gives the Rabaed Defaults. `app.work_item_outcome_actions(item)` gives a closed item's to whoever sees it: WF-11 builds B's Comments from `create_items`, D's replacement reads `offer_replacement` (§5.5, as built, RP-435: `app.can_create_replacement`), and Create Revision reads `offer_revision` (`app.can_create_revision`).
 
 | Outcome | Effect |
 |---|---|
 | A | Approved. If the item is a supplier submittal, an Approved Supplier List entry is added. If it's a drawing submittal, its Drawing Revision becomes current and the previous one is superseded. |
 | B | As for A, plus one **Comment** Work Item per comment row (and per open Markup). Each is `raised_from`-linked, assigned per the Comment type's Workflow. "All comments closed" is tracked on the source item. |
 | C | Closed with a "Create Revision" action available to the raiser. |
-| D | Closed with a "Create replacement" action. |
+| D | Closed with a "Create replacement" action (`offer_replacement`, §5.5). |
 | passed / passed_with_comments | Like A / B, for Inspections. |
 | failed | Like C: re-inspection by Revision. |
 | cancelled | Closed. Open Subtasks are cancelled too. |
