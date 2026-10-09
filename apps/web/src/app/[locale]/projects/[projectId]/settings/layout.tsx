@@ -13,9 +13,10 @@ export default async function ProjectSettingsLayout({
   params,
 }: {
   children: ReactNode;
-  params: Promise<{ locale: Locale; projectId: string }>;
+  params: Promise<{ locale: string; projectId: string }>;
 }) {
-  const { locale, projectId } = await params;
+  const { locale: rawLocale, projectId } = await params;
+  const locale = rawLocale as Locale;
   setRequestLocale(locale);
   const [me, project, participants] = await Promise.all([getMe(), getProject(projectId), getProjectParticipants(projectId)]);
   if (!me) return redirect({ href: "/sign-in", locale });
