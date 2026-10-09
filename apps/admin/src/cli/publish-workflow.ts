@@ -1,5 +1,5 @@
 // Publishes the next Version of a Rabaed Default Workflow, after every publish check.
-// Usage: pnpm --filter @rabaed/admin run workflow:publish --type MAR --definition path/to/workflow.json
+// Usage: pnpm workflow:publish --type MAR --definition path/to/workflow.json
 //          --reason "Why it changes" --engineer you@rabaed.sa
 //
 // The file holds one Workflow definition document (workflow-engine.md §1 "Definition
