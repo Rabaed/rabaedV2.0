@@ -259,7 +259,7 @@ Need My Action reads these rows through `app.need_my_action(item)` (RP-346): `wa
 - Row-level security joins this table with the Member's own Visibility grant. This keeps "Contractor B never sees Contractor A's submittals" a cheap, indexable check instead of a runtime rule walk.
 
 **work_item_link**
-`id`, `project_id`, `from_id`, `to_id`, `kind {related, raised_from, relies_on}`, `field_key` (nullable; set for `relies_on`, the `work_item_ref` field that made it), `created_by_member_id`, `created_at`. One row per (from, to, field key); never from an item to itself.
+`id`, `project_id`, `from_id`, `to_id`, `kind {related, raised_from, relies_on, replaces}` (`replaces`: from a replacement to the rejected item it replaces, made at creation, RP-435), `field_key` (nullable; set for `relies_on`, the `work_item_ref` field that made it), `created_by_member_id`, `created_at`. One row per (from, to, field key); never from an item to itself.
 - Read under the _from_ item's row-level security, keyed by Project. The app role can't read `to_id` (nor `created_by_member_id`): the targets come through `app.work_item_links`, with the id only for a target the reader sees (as built, RP-291).
 - `created_at` is not granted to the app role: a Link added during the Draft keeps its real time. `app.work_item_links` returns it no earlier than the item's Creation Date once numbered; while it is a Draft, real times (RP-399, scenario 61).
 - Both items are in the same Project, and the target has been Submitted (`submitted_at` set).

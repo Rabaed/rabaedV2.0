@@ -550,12 +550,14 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
       versions_changed: boolean;
       can_create_revision: boolean;
       can_discard_revision: boolean;
+      can_create_replacement: boolean;
     }>`
       select app.work_item_answers(w.id) as data, w.form_version_id, app.work_item_creation_date(w.id) as creation_date,
         w.submitted_at, w.outcome, w.closed_at, s.key as step_key, s.name as step_name,
         raiser.legal_name as raised_by, holder.legal_name as held_by, m.full_name as holder_name,
         app.can_save_answers(w.id) as can_save_answers, w.revision_no, app.revision_versions_changed(w.id) as versions_changed,
-        app.can_create_revision(w.id) as can_create_revision, app.can_discard_revision(w.id) as can_discard_revision
+        app.can_create_revision(w.id) as can_create_revision, app.can_discard_revision(w.id) as can_discard_revision,
+        app.can_create_replacement(w.id) as can_create_replacement
       from work_item w
       cross join lateral app.step_as_seen(w.id) seen
       join workflow_step s on s.id = seen.step_id
@@ -608,6 +610,7 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
         ...(await actions(trx, workItemId)),
         saveAnswers: d.can_save_answers,
         createRevision: d.can_create_revision,
+        createReplacement: d.can_create_replacement,
         discardRevision: d.can_discard_revision,
       },
     };
@@ -683,7 +686,7 @@ async function actionRows(trx: Trx, workItemId: string, transitionKey?: string):
 }
 
 /** What the acting Member may press on a visible item now. */
-async function actions(trx: Trx, workItemId: string): Promise<Omit<WorkItemActions, "saveAnswers" | "createRevision" | "discardRevision">> {
+async function actions(trx: Trx, workItemId: string): Promise<Omit<WorkItemActions, "saveAnswers" | "createRevision" | "createReplacement" | "discardRevision">> {
   const rows = await actionRows(trx, workItemId);
   const transitions = rows.filter((r) => r.action === "transition");
   const offered = await Promise.all(transitions.map((r) => (r.offers_assign_to ? assignees(trx, workItemId, r.transition_key!) : [])));

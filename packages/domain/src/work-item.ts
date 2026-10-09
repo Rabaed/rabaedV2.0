@@ -172,9 +172,10 @@ export type LinkSearchResults = z.infer<typeof linkSearchResults>;
 
 /**
  * How a Link was made: `related` freely in the Links System Field, `relies_on`
- * by a link question (its field key says which), `raised_from` by the Snag List.
+ * by a link question (its field key says which), `raised_from` by the Snag List,
+ * `replaces` by Create replacement (from the replacement to the rejected item).
  */
-export const linkKinds = ["related", "relies_on", "raised_from"] as const;
+export const linkKinds = ["related", "relies_on", "raised_from", "replaces"] as const;
 export type LinkKind = (typeof linkKinds)[number];
 
 /**
@@ -255,6 +256,13 @@ export type RevisionChain = z.infer<typeof revisionChain>;
 /** The refusals of creating a Revision (app.create_revision). One word for every reason it isn't allowed, so it names nothing. */
 export const createRevisionRefusals = ["not_found", "project_closed", "idempotency_key_reused", "revision_not_allowed"] as const;
 
+/**
+ * The refusals of creating a replacement (app.create_replacement; workflow-engine.md §5.5).
+ * One word for every reason it isn't allowed, so it names nothing.
+ */
+export const createReplacementRefusals = ["not_found", "project_closed", "idempotency_key_reused", "replacement_not_allowed"] as const;
+export type ReplacementRefusal = (typeof createReplacementRefusals)[number];
+
 /** The refusals of discarding a Draft Revision (app.discard_revision). */
 export const discardRevisionRefusals = ["not_found", "project_closed", "not_discardable"] as const;
 
@@ -307,6 +315,13 @@ export type TakeTransitionRequest = z.input<typeof takeTransitionRequest>;
 export const createRevisionRequest = z.object({ idempotencyKey: z.uuid() });
 export type CreateRevisionRequest = z.infer<typeof createRevisionRequest>;
 
+/**
+ * Create a replacement of a rejected item (workflow-engine.md §5.5): a new Draft
+ * with a new number, linked to it. The key makes a repeated request apply once.
+ */
+export const createReplacementRequest = z.object({ idempotencyKey: z.uuid() });
+export type CreateReplacementRequest = z.infer<typeof createReplacementRequest>;
+
 /** Exactly what the viewer may press on the item now. */
 export const workItemActions = z.object({
   /** Take the pooled Step. */
@@ -321,6 +336,13 @@ export const workItemActions = z.object({
    * Company whom the Workflow's Draft Step allows.
    */
   createRevision: z.boolean(),
+  /**
+   * Create a replacement (workflow-engine.md §5.5): the item is closed with an
+   * outcome whose follow-up actions offer one (Code D in the Rabaed Defaults), no
+   * replacement of it stands, for a Member of the raiser's Company whom the
+   * Workflow's Draft Step allows.
+   */
+  createReplacement: z.boolean(),
   /** Discard this Revision: still in Draft, never numbered, for the raiser's Company. */
   discardRevision: z.boolean(),
   transitions: z.array(

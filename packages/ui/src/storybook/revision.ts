@@ -1,4 +1,5 @@
 import type { Locale } from "@rabaed/domain";
+import type { ReplacementActionsLabels } from "../components/revision/replacement-actions.tsx";
 import type { RevisionActionsLabels } from "../components/revision/revision-actions.tsx";
 import type { RevisionPickerLabels } from "../components/revision/revision-picker.tsx";
 
@@ -36,6 +37,33 @@ export const revisionActionsLabels: Record<Locale, RevisionActionsLabels> = {
     refusals: {
       revision_not_allowed: "لا يمكن إنشاء مراجعة من هذا البند الآن. أعد تحميل الصفحة لمعرفة السبب.",
       not_discardable: "غادرت هذه المراجعة مرحلة المسودة، فلم يعد حذفها ممكنًا.",
+      project_closed: "المشروع مغلق.",
+      not_found: "لم يعد هذا البند متاحًا لك.",
+      idempotency_key_reused: "لم ينجح ذلك. حاول مرة أخرى.",
+      unavailable: "لم ينجح ذلك. حاول مرة أخرى.",
+    },
+  },
+};
+
+export const replacementActionsLabels: Record<Locale, ReplacementActionsLabels> = {
+  en: {
+    section: "Replacement",
+    createIntro: "This item was rejected. Create a replacement: a new item with a new number, starting as a Draft with your answers and Documents.",
+    create: "Create replacement",
+    refusals: {
+      replacement_not_allowed: "A replacement can't be created from this item now. Reload the page to see why.",
+      project_closed: "The Project is closed.",
+      not_found: "This item is no longer available to you.",
+      idempotency_key_reused: "That didn't work. Try again.",
+      unavailable: "That didn't work. Try again.",
+    },
+  },
+  ar: {
+    section: "البديل",
+    createIntro: "رُفض هذا البند. أنشئ بديلًا له: بندًا جديدًا برقم جديد، يبدأ مسودةً فيها إجاباتك ومستنداتك.",
+    create: "إنشاء بديل",
+    refusals: {
+      replacement_not_allowed: "لا يمكن إنشاء بديل من هذا البند الآن. أعد تحميل الصفحة لمعرفة السبب.",
       project_closed: "المشروع مغلق.",
       not_found: "لم يعد هذا البند متاحًا لك.",
       idempotency_key_reused: "لم ينجح ذلك. حاول مرة أخرى.",

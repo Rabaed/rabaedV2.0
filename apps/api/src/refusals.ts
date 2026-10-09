@@ -82,6 +82,9 @@ const answers = {
   // outside the raiser learns whether a Draft Revision is open.
   revision_not_allowed: () => new HttpError(409, "revision_not_allowed"),
   not_discardable: () => new HttpError(409, "not_discardable"),
+  // Replacements (RP-435): one answer whatever the reason (the outcome offers none, one already
+  // stands, a Member the Draft Step doesn't allow), so nobody outside the raiser learns whether one stands.
+  replacement_not_allowed: () => new HttpError(409, "replacement_not_allowed"),
   // A Project's Stages (RP-428). The shapes are checked by the request schemas first.
   invalid_name: () => new HttpError(422, "invalid_name"),
   invalid_stage: () => new HttpError(422, "invalid_stage"),
