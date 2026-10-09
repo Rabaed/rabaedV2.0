@@ -187,6 +187,23 @@ describe("Owner and Role (scenario RP-410-1, V5, V14)", () => {
   });
 });
 
+describe("search on this board (RP-410, V14)", () => {
+  it("finds the owner as the viewer reads them: my own person, another Company by name only", async () => {
+    expect(cardIds(await board(c1Engineer, { q: "Sonour" }))).toEqual(ids(atA1f1, late));
+    // K1 never reads C1's PM, so can't find by them.
+    expect(cardIds(await board(k1Engineer, { q: "Sonour" }))).toEqual([]);
+    // C1 never reads K1's manager, though she holds C1's item.
+    expect(cardIds(await board(c1Engineer, { q: "Hessa" }))).toEqual([]);
+    expect(cardIds(await board(k1Engineer, { q: "Hessa" }))).toEqual([withK1]);
+  });
+
+  it("finds the items in a Zone, Building or Floor, under it too", async () => {
+    expect(cardIds(await board(c1Engineer, { q: "Zone A" }))).toEqual(ids(atA1f1, atA2));
+    expect(cardIds(await board(c1Engineer, { q: "Building 1" }))).toEqual([atA1f1]);
+    expect((await list(c1Engineer, { q: "Building 1" })).items.map((i) => i.id)).toEqual([atA1f1]);
+  });
+});
+
 describe("the card's Contractor name", () => {
   it("is the raising Company's, for everyone who sees the item", async () => {
     // C1's name, as C1 reads it on the item C1 holds.

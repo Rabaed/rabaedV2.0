@@ -233,7 +233,25 @@ function matching(q: WorkItemQuery, now: Date, scope: QueryScope): RawBuilder<bo
     // Search (RP-347): the Document Number, Subject, Type, Trade, Location and the
     // raiser's Company name, never answers or Documents (V19). The function answers
     // only with items the caller sees; the rows here are those already.
-    conditions.push(sql`r.id in (select app.search_work_items(${scope.projectId}::uuid, ${q.q}::text))`);
+    // The Kanban's search (RP-410) also finds the words, as one phrase of 3 letters or more, in what
+    // the card shows besides: its owner as the viewer may read it (my own Company's person; another
+    // Company's name only, V14) and the Zone, Building or Floor its Location is in.
+    const phrase = `%${q.q.replace(/[\\%_]/g, "\\$&")}%`;
+    const named = (name: RawBuilder<unknown>) => sql<boolean>`concat_ws(' ', ${name} ->> 'en', ${name} ->> 'ar') ilike ${phrase}`;
+    const onCard =
+      q.q.length < 3
+        ? sql<boolean>`false`
+        : sql<boolean>`(
+          (r.held_by_own and exists (select 1 from member o where o.id = r.assignee_member_id and ${named(sql.ref("o.full_name"))}))
+          or (not r.held_by_own and exists (
+            select 1 from app.work_item_companies(r.id) o where o.participant_id = r.holder_participant_id and ${named(sql.ref("o.legal_name"))}))
+          or exists (
+            with recursive up as (
+              select id, parent_id, name from dimension_value where id = r.location_id
+              union all
+              select v.id, v.parent_id, v.name from dimension_value v join up on v.id = up.parent_id
+            ) select 1 from up where ${named(sql.ref("up.name"))}))`;
+    conditions.push(sql`(r.id in (select app.search_work_items(${scope.projectId}::uuid, ${q.q}::text)) or ${onCard})`);
   }
   if (q.type.length > 0) conditions.push(sql`r.type_code = any(${q.type}::text[])`);
   if (q.stage.length > 0) conditions.push(sql`r.stage_key = any(${q.stage}::text[])`);
