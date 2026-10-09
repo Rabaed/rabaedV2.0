@@ -25,7 +25,7 @@ const code = (by: Caller, participantId: string, value: string) =>
   by.request("PUT", `/v1/participants/${participantId}/code`, { code: value });
 
 const sendForReview = (by: Caller, id: string) =>
-  ok(by.post(`/v1/work-items/${id}/transitions`, { transition: "send_for_review", idempotencyKey: randomUUID() }));
+  ok(by.post(`/v1/work-items/${id}/transitions`, { transition: "send_for_review", confirmed: true, idempotencyKey: randomUUID() }));
 
 const numberOf = async (by: Caller, id: string) => (await by.get(`/v1/work-items/${id}`)).json().documentNumber;
 

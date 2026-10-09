@@ -95,7 +95,7 @@ async function issueCodeB(id: string) {
   await ok(signer.caller.post(`/v1/work-items/${id}/claim`));
   await take(signer.caller, id, "send_to_manager");
   await ok(signer.caller.post(`/v1/work-items/${id}/claim`));
-  await ok(signer.caller.post(`/v1/work-items/${id}/transitions`, { transition: "approve_b", answers: {}, idempotencyKey: randomUUID() }));
+  await ok(signer.caller.post(`/v1/work-items/${id}/transitions`, { transition: "approve_b", answers: {}, confirmed: true, idempotencyKey: randomUUID() }));
 }
 
 let earlier = ""; // Submitted and delivered while the Project was active; Code B left in the outbox.
@@ -129,16 +129,7 @@ beforeAll(async () => {
         ],
       },
     ],
-  });
-  await sql`
-    insert into workflow_transition (workflow_version_id, key, from_step_id, to_step_id, label, kind, outcome, permission, sort)
-    select f.workflow_version_id, 'approve_b', f.id, t.id, '{"en": "Approve with Comments · B", "ar": "اعتماد مع ملاحظات · B"}', 'close', 'B', 'approve', 10
-    from work_item_type wt
-    join workflow_version v on v.workflow_definition_id = wt.workflow_definition_id
-    join workflow_step f on f.workflow_version_id = v.id and f.key = 'consultant_approval'
-    join workflow_step t on t.workflow_version_id = v.id and t.key = 'approved'
-    where wt.code = ${TYPE}
-  `.execute(migrator);
+  }, { withApproveB: true });
 
   const c1 = await api.projectCreator();
   const k1 = await api.authorizedPerson();

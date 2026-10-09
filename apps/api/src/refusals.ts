@@ -1,4 +1,4 @@
-import type { FieldError } from "@rabaed/domain";
+import type { DefinitionIssue, FieldError, WorkflowProblem } from "@rabaed/domain";
 import { forbidden, HttpError, notFound } from "./http-error.ts";
 
 // Every refusal the API's commands answer with, as the API's HTTP answer.
@@ -39,6 +39,8 @@ const answers = {
   // A Transition's Action Form answers (RP-300): the body lists each field's error.
   invalid_action_form: () => new HttpError(422, "invalid_action_form"),
   idempotency_key_reused: () => new HttpError(422, "idempotency_key_reused"),
+  // Every Transition is confirmed in its pop-up before it is taken (ADR 0017).
+  not_confirmed: () => new HttpError(422, "not_confirmed"),
   // Form answers (RP-262): the body lists each field's error (answersRefusal).
   invalid_answers: () => new HttpError(422, "invalid_answers"),
   form_incomplete: () => new HttpError(422, "form_incomplete"),
@@ -72,12 +74,37 @@ const answers = {
   // outside the raiser learns whether a Draft Revision is open.
   revision_not_allowed: () => new HttpError(409, "revision_not_allowed"),
   not_discardable: () => new HttpError(409, "not_discardable"),
+  // Workflow authoring (RP-427): a name that isn't English and Arabic; a document that
+  // isn't a definition (the body says where); a draft with an error (the body lists
+  // every problem); nothing to publish; a Workflow with no published Version or made
+  // for another Type; an exception's Workflow whose name names a Participant (V20).
+  invalid_name: () => new HttpError(422, "invalid_name"),
+  invalid_definition: () => new HttpError(422, "invalid_definition"),
+  workflow_problems: () => new HttpError(422, "workflow_problems"),
+  no_draft: () => new HttpError(409, "no_draft"),
+  workflow_not_published: () => new HttpError(409, "workflow_not_published"),
+  workflow_not_for_type: () => new HttpError(422, "workflow_not_for_type"),
+  workflow_name_names_participant: () => new HttpError(422, "workflow_name_names_participant"),
 } satisfies Record<string, () => HttpError>;
 
 export type RefusalReason = keyof typeof answers;
 
-/** A refused result as the HTTP error to throw, with the per-field errors of refused answers. */
-export function refusal(result: { reason: RefusalReason; errors?: FieldError[] }): HttpError {
+/**
+ * A refused result as the HTTP error to throw, with what the body says of it: the
+ * per-field errors of refused answers; where a Workflow document doesn't fit the
+ * format (`issues`) or every publish problem of a Workflow draft (`problems`).
+ */
+export function refusal(result: {
+  reason: RefusalReason;
+  errors?: FieldError[];
+  issues?: DefinitionIssue[];
+  problems?: WorkflowProblem[];
+}): HttpError {
   const error = answers[result.reason]();
-  return result.errors ? new HttpError(error.statusCode, error.code, { fields: result.errors }) : error;
+  const details = {
+    ...(result.errors ? { fields: result.errors } : {}),
+    ...(result.issues ? { issues: result.issues } : {}),
+    ...(result.problems ? { problems: result.problems } : {}),
+  };
+  return Object.keys(details).length > 0 ? new HttpError(error.statusCode, error.code, details) : error;
 }

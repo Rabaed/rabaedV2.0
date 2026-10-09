@@ -11,7 +11,8 @@
     "start": "tsx src/server.ts",
     "typecheck": "tsc -p tsconfig.json",
     "engineer:create": "tsx --env-file-if-exists=../../.env src/cli/create-engineer.ts",
-    "form:publish": "tsx --env-file-if-exists=../../.env src/cli/publish-form.ts"
+    "form:publish": "tsx --env-file-if-exists=../../.env src/cli/publish-form.ts",
+    "workflow:publish": "tsx --env-file-if-exists=../../.env src/cli/publish-workflow.ts"
   },
   "dependencies": {
     "@fastify/cookie": "^11.1.2",

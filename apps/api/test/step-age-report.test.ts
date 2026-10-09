@@ -157,16 +157,7 @@ beforeAll(async () => {
         ],
       },
     ],
-  });
-  await sql`
-    insert into workflow_transition (workflow_version_id, key, from_step_id, to_step_id, label, kind, outcome, permission, sort)
-    select f.workflow_version_id, 'approve_b', f.id, t.id, '{"en": "Approve with Comments · B", "ar": "اعتماد مع ملاحظات · B"}', 'close', 'B', 'approve', 10
-    from work_item_type wt
-    join workflow_version v on v.workflow_definition_id = wt.workflow_definition_id
-    join workflow_step f on f.workflow_version_id = v.id and f.key = 'consultant_approval'
-    join workflow_step t on t.workflow_version_id = v.id and t.key = 'approved'
-    where wt.code = ${TYPE}
-  `.execute(migrator);
+  }, { withApproveB: true });
 
   c1 = await api.projectCreator();
   k1 = await api.authorizedPerson();
@@ -194,7 +185,7 @@ beforeAll(async () => {
   await ok(k1Lead.caller.post(`/v1/work-items/${closed}/claim`));
   await take(k1Lead.caller, closed, "send_to_manager");
   await ok(k1Lead.caller.post(`/v1/work-items/${closed}/claim`));
-  await ok(k1Lead.caller.post(`/v1/work-items/${closed}/transitions`, { transition: "approve_b", answers: {}, idempotencyKey: randomUUID() }));
+  await ok(k1Lead.caller.post(`/v1/work-items/${closed}/transitions`, { transition: "approve_b", answers: {}, confirmed: true, idempotencyKey: randomUUID() }));
   await api.later(10 * DAY);
   pumps = await item(at.projectId, c1Engineer, "Pumps", at.mechanical, c1Pm);
   c2Item = await item(at.projectId, c2Engineer, "C2 lighting", at.electrical, c2Lead);

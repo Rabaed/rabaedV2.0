@@ -131,14 +131,30 @@ describe("publish checks 4 and 8", () => {
   });
 
   it("is backed by the database: a Send Back never sets an outcome", async () => {
-    const sendBack = await migrator
-      .selectFrom("workflow_transition")
-      .select(["id"])
-      .where("kind", "=", "send_back")
-      .executeTakeFirstOrThrow();
-    await expect(migrator.updateTable("workflow_transition").set({ outcome: "C" }).where("id", "=", sendBack.id).execute()).rejects.toThrow(
-      /workflow_transition_send_back_no_outcome/,
-    );
+    // On a draft Version: a published one takes no change at all (RP-424).
+    await expect(
+      sql`
+        do $$
+          declare
+            v_definition uuid;
+            v_version uuid;
+            v_from uuid;
+            v_to uuid;
+          begin
+            insert into workflow_definition (owner_kind, name) values ('rabaed', '{"en": "Scratch (test)", "ar": "تجريبي (اختبار)"}')
+            returning id into v_definition;
+            insert into workflow_version (workflow_definition_id, version_no, status) values (v_definition, 1, 'draft')
+            returning id into v_version;
+            insert into workflow_step (workflow_version_id, key, name, stage_key, actor_rule)
+            values (v_version, 'a', '{"en": "A", "ar": "أ"}', 'draft', '{}') returning id into v_from;
+            insert into workflow_step (workflow_version_id, key, name, stage_key, actor_rule)
+            values (v_version, 'b', '{"en": "B", "ar": "ب"}', 'draft', '{}') returning id into v_to;
+            insert into workflow_transition (workflow_version_id, key, from_step_id, to_step_id, label, kind, outcome, permission)
+            values (v_version, 'back', v_from, v_to, '{"en": "Back", "ar": "رجوع"}', 'send_back', 'C', 'review');
+          end
+        $$
+      `.execute(migrator),
+    ).rejects.toThrow(/workflow_transition_send_back_no_outcome/);
   });
 });
 

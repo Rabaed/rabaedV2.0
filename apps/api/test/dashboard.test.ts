@@ -124,6 +124,7 @@ async function code(by: Caller, id: string, transition: "approve_a" | "revise_c"
     by.post(`/v1/work-items/${id}/transitions`, {
       transition,
       answers: pass ? {} : { remarks: "Resubmit with 110 lm/W luminaires" },
+      confirmed: true,
       idempotencyKey: randomUUID(),
     }),
   );

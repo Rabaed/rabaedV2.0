@@ -184,7 +184,7 @@ describe("a section filled by another Participant, to the raiser", () => {
 
   it("stays read-only at the raiser's internal Step", async () => {
     const id = (await ok(create({ model: "FD-90" }), 201)).json().id as string;
-    await ok(engineer.post(`/v1/work-items/${id}/transitions`, { transition: "send_for_review", idempotencyKey: randomUUID() }));
+    await ok(engineer.post(`/v1/work-items/${id}/transitions`, { transition: "send_for_review", confirmed: true, idempotencyKey: randomUUID() }));
     const form: FormToFill = (await ok(engineer.get(`/v1/work-items/${id}/form`), 200)).json();
     expect(form.editableSections).toEqual(["material", "classification"]);
     const res = await save(id, { model: "FD-90", sample_checked: false });

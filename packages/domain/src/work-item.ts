@@ -81,6 +81,17 @@ export type WorkItemSummary = z.infer<typeof workItemSummary>;
 
 /** How a closed Work Item ended: its Issued Code, Inspection result, or cancelled (workflow-engine.md §1). */
 export const workItemOutcomes = ["A", "B", "C", "D", "passed", "passed_with_comments", "failed", "cancelled", "closed"] as const;
+
+/**
+ * The outcomes a closing Transition may set, by the Work Item Type's outcome kind
+ * (`work_item_type.outcome_kind`): the Review Codes, the Inspection Results, or
+ * `closed` for a Type with neither. Fixed until WF-6 (RP-429) makes them per Type.
+ */
+export const outcomeSets = {
+  review_code: ["A", "B", "C", "D"],
+  inspection_result: ["passed", "passed_with_comments", "failed"],
+  none: ["closed"],
+} as const satisfies Record<string, readonly WorkItemOutcome[]>;
 export const workItemOutcome = z.enum(workItemOutcomes);
 export type WorkItemOutcome = z.infer<typeof workItemOutcome>;
 
@@ -283,6 +294,11 @@ export const takeTransitionRequest = z.object({
    * when the Transition goes to another, such as Submit (visibility.md V5).
    */
   internalNote: z.string().trim().max(4000).default(""),
+  /**
+   * The Member confirmed the Transition in its pop-up (ADR 0017): every Transition
+   * is confirmed and recorded. Without it, refused with `not_confirmed`.
+   */
+  confirmed: z.boolean().default(false),
   idempotencyKey: z.uuid(),
 });
 export type TakeTransitionRequest = z.input<typeof takeTransitionRequest>;
@@ -329,6 +345,12 @@ export type WorkItemActions = z.infer<typeof workItemActions>;
 export const workItemDetail = workItemSummary.extend({
   /** The Form Version the item is pinned to, for good (ADR 0006). */
   formVersionId: z.uuid(),
+  /**
+   * The Workflow it runs and the Version it is pinned to, for good: the one bound
+   * for its Type and raiser when it was created (ADR 0016). Every Participant who
+   * sees the item reads the same (visibility.md V20).
+   */
+  workflow: z.object({ name: bilingualText, versionNo: z.number().int().positive() }),
   /** Its place in its chain of Revisions: 0 for the first submission, then 1, 2… (its number's " Rev n"). */
   revisionNo: z.number().int().nonnegative(),
   /** A Revision pinned to a newer Form or Workflow Version than the item it revises: the page says so. */

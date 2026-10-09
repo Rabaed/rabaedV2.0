@@ -8,6 +8,7 @@ import type { AdminConfig } from "./config.ts";
 import { companyRoutes } from "./routes/companies.ts";
 import { healthRoutes } from "./routes/health.ts";
 import { numberingRoutes } from "./routes/numbering.ts";
+import { workflowRoutes } from "./routes/workflows.ts";
 import { optionListRoutes } from "./routes/option-lists.ts";
 import { pageRoutes } from "./routes/pages.ts";
 import { sessionRoutes } from "./routes/session.ts";
@@ -140,5 +141,6 @@ export async function buildAdminApp({ db, config, mailer, now = () => new Date()
   await app.register(companyRoutes(context));
   await app.register(optionListRoutes(context));
   await app.register(numberingRoutes(context));
+  await app.register(workflowRoutes(context));
   return app;
 }
