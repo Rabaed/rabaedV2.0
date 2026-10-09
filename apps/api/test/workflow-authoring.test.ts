@@ -198,6 +198,54 @@ describe("a Project Admin authors the Project's own Workflow", () => {
   });
 });
 
+describe("copying a Workflow into a Project maps its Stages by key (WF-5)", () => {
+  it("is refused, naming the Stage and a Step in it in English and Arabic, when the Project's Module lacks one", async () => {
+    // A Project Workflow whose Consultant review is in a Stage only that Project has.
+    await ok(
+      c1.caller.post(`/v1/projects/${at.projectId}/modules/submittals/stages`, {
+        key: "on_hold",
+        name: { en: "On Hold", ar: "معلّق" },
+        category: "in_progress",
+      }),
+      201,
+    );
+    const held = await duplicate(c1.caller, marDefault, at.projectId, { en: "Held route", ar: "مسار معلّق" });
+    const saved = (await read(c1.caller, held)).draft!.definition;
+    const definition = { ...saved, steps: saved.steps.map((s) => (s.stage === "pending_approval" ? { ...s, stage: "on_hold" } : s)) };
+    await ok(c1.caller.request("PUT", `/v1/workflows/${held}/draft`, { definition }), 200);
+    await ok(c1.caller.post(`/v1/workflows/${held}/publish`), 200);
+    const step = definition.steps.find((s) => s.stage === "on_hold")!;
+
+    const third = await buildTower(api, { c1, k1 }, "WFS");
+    const res = await c1.caller.post(`/v1/workflows/${held}/duplicate`, { projectId: third.projectId, name: { en: "Copy", ar: "نسخة" } });
+    expect(res.statusCode, res.body).toBe(422);
+    expect(res.json()).toEqual({
+      error: "stage_missing",
+      problems: [
+        {
+          code: "stage_missing",
+          stage: "on_hold",
+          step: step.key,
+          message: {
+            en: `This Project has no Stage "on_hold" (used by ${step.name.en}). Add it in the Project's Stages first.`,
+            ar: `لا توجد في هذا المشروع مرحلة "on_hold" (تستخدمها الخطوة ${step.name.ar}). أضفها أولاً في مراحل المشروع.`,
+          },
+        },
+      ],
+    });
+    // Nothing was copied; once the Project has the Stage, the copy goes ahead.
+    await ok(
+      c1.caller.post(`/v1/projects/${third.projectId}/modules/submittals/stages`, {
+        key: "on_hold",
+        name: { en: "On Hold", ar: "معلّق" },
+        category: "in_progress",
+      }),
+      201,
+    );
+    await duplicate(c1.caller, held, third.projectId, { en: "Copy", ar: "نسخة" });
+  });
+});
+
 describe("scenario RP-427-4: an exception's Workflow never names its Participant", () => {
   it("refuses to bind C2's exception to a Workflow named after C2, and binds it once renamed", async () => {
     const named = await duplicate(c1.caller, marDefault, at.projectId, { en: "Gulf Cables Contracting MARs", ar: "طلبات المقاول" });

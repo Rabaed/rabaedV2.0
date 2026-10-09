@@ -8,15 +8,17 @@ import {
   withMember,
   type Db,
 } from "@rabaed/db";
-import type {
-  BindWorkflowRequest,
-  DefinitionIssue,
-  DuplicateWorkflowRequest,
-  SaveWorkflowDraftRequest,
-  UnbindWorkflowQuery,
-  WorkflowProblem,
-  WorkflowRead,
-  WorkflowValidation,
+import {
+  stageCopyProblems,
+  type BindWorkflowRequest,
+  type DefinitionIssue,
+  type DuplicateWorkflowRequest,
+  type SaveWorkflowDraftRequest,
+  type StageCopyProblem,
+  type UnbindWorkflowQuery,
+  type WorkflowProblem,
+  type WorkflowRead,
+  type WorkflowValidation,
 } from "@rabaed/domain";
 import { sql } from "kysely";
 import { checkedOutcome, commandResult } from "../outcomes.ts";
@@ -61,18 +63,62 @@ export function readWorkflow(db: Db, memberId: string, definitionId: string): Pr
 }
 
 const duplicateRefusals = ["not_found", "project_closed", "invalid_name"] as const;
-export type DuplicateWorkflowResult = { ok: true; id: string } | { ok: false; reason: (typeof duplicateRefusals)[number] };
+export type DuplicateWorkflowResult =
+  | { ok: true; id: string }
+  | { ok: false; reason: (typeof duplicateRefusals)[number] }
+  /** Copied into a Project whose Module lacks a Stage the Workflow uses: one problem per Stage. */
+  | { ok: false; reason: "stage_missing"; problems: StageCopyProblem[] };
 
-/** Copies a Workflow the Member reads into a Project they are a Project Admin of, or into their Company Library. */
-export function duplicateWorkflow(db: Db, memberId: string, sourceId: string, input: DuplicateWorkflowRequest, now: Date): Promise<DuplicateWorkflowResult> {
-  return withMember(db, memberId, async (trx): Promise<DuplicateWorkflowResult> => {
-    const { rows } = await sql<{ outcome: string; workflow_definition_id: string | null }>`
-      select outcome, workflow_definition_id from app.duplicate_workflow(
-        ${sourceId}::uuid, ${input.projectId}::uuid, ${JSON.stringify(input.name)}::jsonb, ${now})
-    `.execute(trx);
-    const outcome = checkedOutcome(rows[0]!.outcome, ["duplicated", ...duplicateRefusals]);
-    return outcome === "duplicated" ? { ok: true, id: rows[0]!.workflow_definition_id! } : { ok: false, reason: outcome };
-  });
+/** Thrown inside the copy's transaction to undo it, carrying why. */
+class StageMissing extends Error {
+  constructor(readonly problems: StageCopyProblem[]) {
+    super("stage_missing");
+  }
+}
+
+/**
+ * Copies a Workflow the Member reads into a Project they are a Project Admin of, or into
+ * their Company Library. Into a Project its Stages map by key (WF-5): refused, with
+ * nothing copied, when the Project's Module lacks one (stageCopyProblems).
+ */
+export async function duplicateWorkflow(
+  db: Db,
+  memberId: string,
+  sourceId: string,
+  input: DuplicateWorkflowRequest,
+  now: Date,
+): Promise<DuplicateWorkflowResult> {
+  try {
+    return await withMember(db, memberId, async (trx): Promise<DuplicateWorkflowResult> => {
+      const { rows } = await sql<{ outcome: string; workflow_definition_id: string | null }>`
+        select outcome, workflow_definition_id from app.duplicate_workflow(
+          ${sourceId}::uuid, ${input.projectId}::uuid, ${JSON.stringify(input.name)}::jsonb, ${now})
+      `.execute(trx);
+      const outcome = checkedOutcome(rows[0]!.outcome, ["duplicated", ...duplicateRefusals]);
+      if (outcome !== "duplicated") return { ok: false, reason: outcome };
+      const id = rows[0]!.workflow_definition_id!;
+      if (input.projectId !== null) {
+        const problems = await copyStageProblems(trx, id, input.projectId);
+        if (problems.length > 0) throw new StageMissing(problems);
+      }
+      return { ok: true, id };
+    });
+  } catch (error) {
+    if (error instanceof StageMissing) return { ok: false, reason: "stage_missing", problems: error.problems };
+    throw error;
+  }
+}
+
+/** The Stages copy `copyId` (a draft the Member authors) uses that Project `projectId` lacks in its Type's Module. */
+async function copyStageProblems(trx: Db, copyId: string, projectId: string): Promise<StageCopyProblem[]> {
+  const draft = await readWorkflowDraft(trx, copyId);
+  if (!draft) return [];
+  const { rows } = await sql<{ key: string }>`
+    select s.key from stage s
+    join work_item_type t on t.id = app.workflow_type(${copyId}::uuid)
+    where s.project_id = ${projectId}::uuid and s.module_key = t.module_key
+  `.execute(trx);
+  return stageCopyProblems(draft.definition, rows);
 }
 
 const saveRefusals = ["not_found", "project_closed", "invalid_name", "invalid_definition", "workflow_name_names_participant"] as const;

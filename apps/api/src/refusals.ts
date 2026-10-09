@@ -1,4 +1,4 @@
-import type { BilingualText, DefinitionIssue, FieldError, WorkflowProblem } from "@rabaed/domain";
+import type { BilingualText, DefinitionIssue, FieldError, StageCopyProblem, WorkflowProblem } from "@rabaed/domain";
 import { forbidden, HttpError, notFound } from "./http-error.ts";
 
 // Every refusal the API's commands answer with, as the API's HTTP answer.
@@ -111,6 +111,8 @@ const answers = {
   workflow_not_published: () => new HttpError(409, "workflow_not_published"),
   workflow_not_for_type: () => new HttpError(422, "workflow_not_for_type"),
   workflow_name_names_participant: () => new HttpError(422, "workflow_name_names_participant"),
+  // A Workflow copied into a Project whose Module lacks one of its Stages (WF-5): `problems` names each.
+  stage_missing: () => new HttpError(422, "stage_missing"),
 } satisfies Record<string, () => HttpError>;
 
 export type RefusalReason = keyof typeof answers;
@@ -119,14 +121,14 @@ export type RefusalReason = keyof typeof answers;
  * A refused result as the HTTP error to throw, with what the body says of it: the
  * per-field errors of refused answers, else the message of a refused Validate rule;
  * where a Workflow document doesn't fit the format (`issues`) or every publish
- * problem of a Workflow draft (`problems`).
+ * problem of a Workflow draft, or each Stage a Workflow copied into a Project lacks (`problems`).
  */
 export function refusal(result: {
   reason: RefusalReason;
   errors?: FieldError[];
   message?: BilingualText;
   issues?: DefinitionIssue[];
-  problems?: WorkflowProblem[];
+  problems?: (WorkflowProblem | StageCopyProblem)[];
 }): HttpError {
   const error = answers[result.reason]();
   const details = {
