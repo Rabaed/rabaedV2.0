@@ -90,7 +90,7 @@ export { Tooltip, type TooltipProps } from "./components/overlay/tooltip.tsx";
 export { AgeDots, type AgeDotsProps } from "./components/status/age-dots.tsx";
 export { CodeBadge, type CodeBadgeProps } from "./components/status/code-badge.tsx";
 export { SaveStatus, type SaveStatusProps } from "./components/status/save-status.tsx";
-export { StagePill, type StagePillProps } from "./components/status/stage-pill.tsx";
+export { StageDot, StagePill, type StagePillProps } from "./components/status/stage-pill.tsx";
 export { WithChip, type WithChipHolder, type WithChipProps } from "./components/status/with-chip.tsx";
 export { WorkItemCard, type WorkItemCardProps, type WorkItemState } from "./components/status/work-item-card.tsx";
 export { AppShell, TopBar, type AppShellProps, type TopBarProps } from "./components/shell/app-shell.tsx";
@@ -131,7 +131,26 @@ export {
   type Tone,
 } from "./tokens/themes.ts";
 export { stageColour } from "./components/status/stage-colour.ts";
-export { WorkItemList, type WorkItemListLabels, type WorkItemListProps } from "./components/views/work-item-list.tsx";
+export {
+  ListToolbar,
+  ToolbarSearch,
+  ToolbarSwitch,
+  toolbarButton,
+  type ListToolbarProps,
+  type ToolbarSearchProps,
+  type ToolbarSwitchProps,
+} from "./components/list/list-toolbar.tsx";
+export {
+  FilterChoices,
+  FilterMenu,
+  type FilterChoice,
+  type FilterChoicesProps,
+  type FilterMenuField,
+  type FilterMenuLabels,
+  type FilterMenuProps,
+} from "./components/list/filter-menu.tsx";
+export { Pager, TableCard, type PagerLabels, type PagerProps, type TableCardProps } from "./components/list/table-card.tsx";
+export { WorkItemList, type WorkItemListLabels, type WorkItemListProps, type WorkItemPageTrail } from "./components/views/work-item-list.tsx";
 export {
   WorkItemBoard,
   WorkItemViewSwitch,

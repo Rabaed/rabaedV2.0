@@ -153,7 +153,7 @@ The components that carry Rabaed's product rules, so every module shows status t
 
 | Component | Shows | Rule it keeps |
 |---|---|---|
-| `StagePill` | A Stage: `stage` (the colour category, one of `stageKeys`), its `label`, optional `count` (formatted for `locale`) | One colour per default Stage in every module; the name carries the meaning. |
+| `StagePill` | A Stage: `stage` (the colour category, one of `stageKeys`), its `label`, optional `count` (formatted for `locale`) | One colour per default Stage in every module; the name carries the meaning. `StageDot` is its dot alone, beside a Stage's name (a filter choice). |
 | `CodeBadge` | A Review Code: `code` (`a`–`d`), `locale`, `size` (`sm`, `md`), `variant` (`full`, or `letter` with the meaning for screen readers only) | Icon + colour + text, never colour alone. B always has the comment icon. |
 | `AgeDots` | Step Age: `weeks` (the week at the current Step, from 1), `locale` | 1–4 dots (4+), grey turning red, named "N weeks at this step". Age only: it takes nothing but weeks. |
 | `WithChip` | Who holds the Step, a `WithChipHolder`: `kind` (`person`, `company`), `inViewerCompany`, `companyName`, `logoSrc`, and only for a person in the viewer's Company, `name` and `photoSrc` | Visibility V14: the props are a union, so another company's holder carries its company only; passing their person's name or photo fails the typecheck. A name forced through with a cast is still dropped, so it shows the company name only. |
@@ -216,6 +216,39 @@ Every page sits in the same layout, in English and Arabic, on desktop and phone.
 
 The sidebar uses the light variant of the design (surface and brand tint); a dark sidebar would need its own theme roles first.
 
+## Data list page
+
+The template for a page that lists records (RP-409; reference `design/reference/claude-design/ui_kits/app/submittals-list.html`): a toolbar, then the table in a card with its pager. The Submittals List (`WorkItemList`) is the first page built on it; the Kanban keeps the same toolbar, and Members reuses the pieces. Presentational: the page owns the query (keep it in the URL) and passes every word. Story: `List/DataListPage`.
+
+| Component | Use for |
+|---|---|
+| `ListToolbar` | One wrapping row, a named region (`label`): `children` from the start (primary action, `ToolbarSearch`, `FilterMenu`, `ToolbarSwitch`es, a "Clear filters" link), `end` pushed to the inline end (a view switch). |
+| `ToolbarSearch` | The compact search box (`label`, `placeholder`, `description` read with it, `value`, `onSearch`). Enter searches with the trimmed words (undefined when emptied); "/" anywhere outside a text box puts the cursor in it. Full width on a phone, 240px from `sm`. Give it `key={query.q}` so a new query shows its own words. |
+| `FilterMenu` | The Filters button, tinted with the number of fields applied, opening the filters: from `md` a popover (fields as vertical tabs on the start side, each with its count, the chosen field's values beside them), below `md` a `Sheet` with every field one under the other. Each field is `{ key, label, count, content }`; choices apply at once, Done only closes, `onClearAll` adds "Clear all". `labels`: `FilterMenuLabels`. |
+| `FilterChoices` | One value from a list, or "All" (`allLabel`, `value` undefined): pressed / not pressed buttons with a round mark, an optional decorative `mark` per choice (`StageDot`, `AgeDots`). |
+| `ToolbarSwitch` | An on/off that applies at once (Need My Action): a `Switch` and its label. |
+| `toolbarButton` | The classes of a compact toolbar button, for any other trigger in the row. |
+| `TableCard` | The surface card around a `Table` (its region loses its own border inside) and a `footer`. The table scrolls sideways in its own region, so the page never does; give the `Table` `stickyHeader` and a height (`containerClassName`) to scroll rows under a fixed header. |
+| `Pager` | The card's last row: an optional `summary` ("Page 2 of 5 · 230 items") and First / Previous / Next links (`first`, `previous`, `next` hrefs; undefined shows the step without a link). `labels`: `PagerLabels`. |
+
+```tsx
+<ListToolbar label={t("toolbar")} end={<WorkItemViewSwitch … />}>
+  <Link href={newHref} className={buttonVariants()}><Icon name="plus" />{t("new")}</Link>
+  <ToolbarSearch key={q ?? ""} label={t("search")} placeholder={t("searchThisList")} value={q} onSearch={(q) => go({ q })} />
+  <FilterMenu labels={filterLabels} onClearAll={clearFilters} fields={[
+    { key: "stage", label: t("stage"), count: stage ? 1 : 0, content: <FilterChoices label={t("stage")} allLabel={t("all")} value={stage} choices={stages} onChange={(stage) => go({ stage })} /> },
+  ]} />
+  <ToolbarSwitch label={t("needMyAction")} checked={mine} onCheckedChange={(mine) => go({ mine })} />
+</ListToolbar>
+<TableCard footer={<Pager labels={pagerLabels} summary={summary} first={firstHref} previous={previousHref} next={nextHref} linkAs={Link} />}>
+  <Table label={t("drawings")} stickyHeader className="w-max min-w-full text-sm" containerClassName="min-h-64 lg:max-h-[calc(100dvh-20rem)]">…</Table>
+</TableCard>
+```
+
+- **Pages are cursors.** The work item query pages forward only (`nextCursor`). `WorkItemList` takes `pageTrail` (the cursors of the pages before this one, from the second) and passes the next page's trail to `hrefFor(query, trail)`, so the URL can carry it (`apps/web/src/lib/page-trail.ts`: `page` and `before`). With it the pager numbers the page and goes back; without it (a later page opened from a link elsewhere) it shows First and Next only. The total ("n items", "of y") is the sum of the Stage counts and is left out under a search, which counts no more than its page (visibility.md "Search and filters").
+- **Sort** is in the column headers (`TableHead sort onSort`), for the sorts the query has; each has one order, so the current one is announced with it and another column's button switches to it.
+- **Rows**: the whole row opens the item; its Subject stays the link, for the keyboard and screen readers.
+
 ## Views
 
 A Module's Work Items and the Member's Projects, as the API returns them. Presentational: the app passes the data, the URLs and every word (`labels`, from its messages; a label that takes a value is a function given the value already formatted for the locale). Each takes `linkAs` (e.g. Next.js `Link`) so navigation stays client-side.
@@ -223,20 +256,23 @@ A Module's Work Items and the Member's Projects, as the API returns them. Presen
 | Component | Use for |
 |---|---|
 | `ProjectCards` | The Projects page (the home page): one card per Project, a link with its code (left to right), name, the viewer's Project Role, "Project Admin", a Closed badge, and its Need My Action count. `labels`: `list`, `needMyAction`, `closed`, `projectAdmin`. The cards stack on a phone. |
-| `WorkItemList` | The List: the toolbar (search, filters, sort, the Need My Action and "Show all Revisions" switches), the Stage counts, one page of rows and the page links. Every choice is a new query (`onQueryChange`); `hrefFor` gives a query's URL. `labels`: `WorkItemListLabels` (`table` is the Module's name). Pass `board` to show the Kanban under the toolbar instead of the counts, table and pages. |
+| `WorkItemList` | The List, on the data list page template: the toolbar (`action`, search, Filters, the Need My Action and "Show all Revisions" switches, `viewSwitch` at the end), the Stage counts, one page of rows in a `TableCard` sorted from the column headers, and the `Pager`. Every choice is a new query (`onQueryChange`); `hrefFor(query, pageTrail?)` gives a query's URL; `pageTrail` and `linkAs` as above. `labels`: `WorkItemListLabels` (`table` is the Module's name). Pass `board` to show the Kanban under the toolbar instead of the counts, table and pages. |
 | `WorkItemBoard` | The Kanban: a column per Stage in the reading direction, inside each a swimlane per Step of the viewer's own Company and one per other Company by name only (V14), in the viewer's alphabetical order (`lanesInLocale`). A closed column holds the last 30 days with its total (none under a search, which counts only what it shows) and "Show all" (`listHrefFor`). With `onMove`, a card the viewer may act on can be dragged onto a Stage one of its Transitions alone leads to, or moved from its Move menu. `labels`: `WorkItemBoardLabels`. |
-| `WorkItemViewSwitch` | List / Kanban, two links (`hrefFor`), the current one `aria-current="page"`. `labels`: `view`, `list`, `kanban`. |
+| `WorkItemViewSwitch` | List / Kanban, two links with their icons in a segmented capsule (the toolbar's `end`) (`hrefFor`), the current one `aria-current="page"`. `labels`: `view`, `list`, `kanban`. |
 
 ```tsx
-<WorkItemViewSwitch view={view} labels={switchLabels} hrefFor={(v) => hrefIn(v, query)} linkAs={Link} />
 <WorkItemList
   list={list}
   query={query}
   locale={locale}
   labels={listLabels}
   hrefFor={hrefFor}
+  pageTrail={pageTrail}
   itemHref={itemHref}
+  linkAs={Link}
   onQueryChange={(q) => router.push(hrefFor(q))}
+  action={<Link href={newHref} className={buttonVariants()}>{t("newMar")}</Link>}
+  viewSwitch={<WorkItemViewSwitch view={view} labels={switchLabels} hrefFor={(v) => hrefIn(v, query)} linkAs={Link} />}
   board={view === "kanban" ? <WorkItemBoard board={board} query={query} locale={locale} labels={boardLabels} listHrefFor={listHrefFor} itemHref={itemHref} linkAs={Link} onMove={openActionForm} /> : undefined}
 />
 ```
