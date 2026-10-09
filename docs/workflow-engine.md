@@ -57,14 +57,14 @@ As built (RP-425): one JSON document per Workflow Version, `WorkflowDefinition` 
   - `actions`: offer "Assign to" (the actor picks among their own Participant's Members; nothing is stored), set a field to a value or to the moment taken (`{ "now": true }`, never the text "now"), copy a field;
   - `notifications`: the holder or Step Pool, the raiser, watchers, a Position of the acting Participant.
 
-  WF-7, WF-8 and WF-9 give them meaning at run time.
+  WF-7, WF-8 and WF-9 give them meaning at run time. As built (RP-430, WF-7): `rules` is stored in `workflow_transition.rules` and applied by `take_transition` (§4, §5.1).
 - `layout`: Step positions on the builder's canvas, by Step key.
 
 Stages are not in the definition: a Step names its Stage by key, and the Stages (with their categories) come from the Project and Module the Workflow runs in (the checks' `stages`).
 
 **Positions only.** No Workflow names a person, whoever owns it: a Rabaed Default is copied into other Companies' Projects, and every Project Workflow is read project-wide (ADR 0016). The format enforces it: an actor rule, an action and a notification have no field that holds a Member, and the one way left (setting a Member field to a value) is refused at publish (`names_person`).
 
-`parseWorkflowDefinition` refuses unknown keys at any depth. `definitionFromRows` / `definitionToRows` convert a Version's rows (`workflow_step`, `workflow_transition` with Steps by key, `workflow_version.layout`) without loss: `is_signing` is always written false (ADR 0017), and `rules`, `actions` and `notifications` have no columns yet, so a row carries them only when the definition has them.
+`parseWorkflowDefinition` refuses unknown keys at any depth. `definitionFromRows` / `definitionToRows` convert a Version's rows (`workflow_step`, `workflow_transition` with Steps by key, `workflow_version.layout`) without loss: `is_signing` is always written false (ADR 0017); `rules` is its column (null: none), and `actions` and `notifications` have no columns yet, so a row carries each only when the definition has it.
 
 ### Publish-time validation
 
@@ -139,6 +139,15 @@ A condition is a small JSON rule over three sources: the item's Form data, the c
 - Operators: `= != > >= < <= in not_in empty not_empty`, plus `all`, `any` and `not`. There is no code and no scripting.
 - When several Transitions share a label and source Step, exactly one must match at run time. Publish validation warns when conditions can overlap or leave a gap. If none matches at run time, the action is blocked with a clear message.
 
+### As built (RP-430, WF-7): Restrict and Validate at run time
+
+- **One rule, two layers.** `evaluateCondition` (`@rabaed/domain` `condition.ts`) and `app.condition_holds(rule, fields, action_form_answers, attrs)` are the same rule, run over the same cases (`condition-cases.json`; unit and seam-2 tests). A `field` reads the Action Form answer when the Action Form has that key, else the Form's; an `attr` reads `trade` and `location` (their codes), `work_item_type` (its code) and `revision_no` (`app.work_item_rule_attrs`).
+- **What a rule reads is what the acting Member may read**, so a refusal never differs by hidden data: the answers through `app.work_item_answers` (ADR 0012); "not the same person" and "has been through" only the item's events shared with every Participant or internal to the acting one (V5); "has been through" a Step only a Step the acting Participant held (`step_assignment`), never another Participant's internal route, even where its shared Submit left that Step (V14); "all Comments closed" only Comments the Member sees (`app.sees_work_item`), naming none; "a Document" only Documents the Member sees (`app.item_row_seen`). Visibility scenarios RP-430-1 to RP-430-3.
+- **Restrict** (`app.transition_conditions_hold`, `app.transition_restrictions_hold`): a condition; Positions (the acting Member holds one of them); not the Member who left a Step or took a Transition (their own events of the item); has been through a Step, or a shared fact (`sent_back`: a Send Back event; `revision`: `revision_no > 0`); all Comments closed (open items linked `raised_from` to it). Subtasks don't exist yet (no `work_item.parent_id`): "all Subtasks closed" holds until they do. A Transition whose Restrict doesn't hold isn't offered (`app.takeable_transitions`), and taking it is refused `transition_not_available`, exactly like a key that isn't there.
+- **One button per label.** Transitions sharing a label and source Step are offered once (the first by sort, whose other Restrict rules hold); taking any of their keys takes the one whose conditions hold with the Form, the attributes and the Action Form answers (`app.transition_routed`). None or several: `no_route` ("This can't go ahead: its answers match no route, or more than one."). A Transition with no label to share is offered only when its conditions hold before any pop-up.
+- **Validate** (`app.transition_validation_failed`): a condition with its message, at least one Document (on the item, or in the named field). Taking it is refused `validation_failed` (422) with the rule's message in English and Arabic (`validationMessage` in `@rabaed/domain`); the database answers `validation_failed:<n>`, the rule's place in `validate`, and the API gives its message. **The Form complete** is the Form engine's completeness (`validateAnswers`, with conditional required, tables, checklists and files), so the API checks it, over the whole Form as the Member reads it, before calling `take_transition`, as it checks the sections a Step leaves; the database doesn't.
+- **The rules step** is `app.transition_rules(item, transition, answers)`: route, Restrict, Validate, returning the Transition to take and the refusal. `take_transition` calls it once the Transition is found and goes on with the routed one; a later redefinition (WF-8) keeps the call. The API asks `app.transition_route` for the routed Transition first, to check its Action Form and "Form complete".
+
 ---
 
 ## 5. Commands
@@ -154,7 +163,7 @@ Checks, in order. Any failure aborts with nothing written.
 
 1. The item is open, the Project is Active, and the caller is an active Project Member who can see the item (visibility layers 2–4).
 2. The caller holds the current assignment (claimed, or default-assigned).
-3. The Transition starts from the current Step on the item's **pinned** Workflow version, and its condition matches.
+3. The Transition starts from the current Step on the item's **pinned** Workflow version, and its condition matches. As built (RP-430): its rules (§4, "Restrict and Validate at run time"): the route among Transitions sharing its label (`no_route`), its Restrict (`transition_not_available`) and its Validate (`validation_failed`).
 4. The caller holds the permission the Transition needs.
 5. The Action Form answers validate. With Code B, there is at least one comment.
 6. **Signing:** if the Transition is signing, the caller has an active `member_signature` and `confirm_signing = true` from the confirmation pop-up.

@@ -18,6 +18,7 @@ import {
 import { sql } from "kysely";
 import { isDeepStrictEqual } from "node:util";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { addRulesType } from "./support/rules.ts";
 import { addSendBackType } from "./support/send-back.ts";
 
 const migrator = createDb(testDatabaseUrls().migrator, { max: 1 });
@@ -41,6 +42,8 @@ let versions: Version[] = [];
 let rows: Map<string, WorkflowVersionRows>;
 
 beforeAll(async () => {
+  // A Workflow with rules (WF-7) is among them, whichever tests ran first.
+  await addRulesType(migrator, "WFRUL");
   // A Workflow with Send Backs is among them, whichever tests ran first.
   await addSendBackType(migrator, "WFDEF", { en: "Workflow definition check", ar: "فحص تعريف سير العمل" }, {
     sections: [
@@ -83,7 +86,7 @@ beforeAll(async () => {
   `.execute(migrator);
   const transitions = await sql<WorkflowVersionRows["transitions"][number] & { version: string }>`
     select tr.workflow_version_id as version, tr.key, f.key as from_step_key, s.key as to_step_key, tr.label, tr.kind, tr.outcome,
-      tr.permission, tr.sort, tr.action_form
+      tr.permission, tr.sort, tr.action_form, tr.rules
     from workflow_transition tr
     join workflow_version v on v.id = tr.workflow_version_id
     join workflow_step f on f.id = tr.from_step_id
@@ -97,7 +100,10 @@ beforeAll(async () => {
       {
         layout: v.layout,
         steps: steps.rows.filter((s) => s.version === v.id).map(({ version: _, ...s }) => s),
-        transitions: transitions.rows.filter((t) => t.version === v.id).map(({ version: _, ...t }) => t),
+        // A Transition without rules has a null `rules` column, and no `rules` as a row.
+        transitions: transitions.rows
+          .filter((t) => t.version === v.id)
+          .map(({ version: _, rules, ...t }) => (rules === null ? t : { ...t, rules })),
       },
     ]),
   );

@@ -86,6 +86,10 @@ const validation = z.discriminatedUnion("type", [
 ]);
 export type Validation = z.infer<typeof validation>;
 
+/** A Transition's rules, as stored in `workflow_transition.rules` (WF-7). */
+export const transitionRules = z.strictObject({ restrict: z.array(restriction).optional(), validate: z.array(validation).optional() });
+export type TransitionRules = z.infer<typeof transitionRules>;
+
 const scalar = z.union([z.string(), z.number(), z.boolean()]);
 
 /** The moment the Transition is taken, as a set field's value (not the text "now"). */
@@ -121,7 +125,7 @@ const transition = z.strictObject({
   permission: z.enum(functionPermissions),
   /** The Action Form's Form schema as stored, checked at publish (check 7); null: the Internal Note only. */
   actionForm: z.record(z.string(), z.unknown()).nullable(),
-  rules: z.strictObject({ restrict: z.array(restriction).optional(), validate: z.array(validation).optional() }).optional(),
+  rules: transitionRules.optional(),
   actions: z.array(transitionAction).optional(),
   notifications: z.array(recipient).optional(),
 });
@@ -160,9 +164,9 @@ export type WorkflowStepRow = {
 };
 
 /**
- * A `workflow_transition` row of a Version, its Steps by key. `rules`, `actions`
- * and `notifications` have no columns yet (WF-7, WF-8, WF-9 add them): they are
- * present only when the definition has them.
+ * A `workflow_transition` row of a Version, its Steps by key. `rules` is its
+ * column (WF-7), null when it has none; `actions` and `notifications` have no
+ * columns yet (WF-8, WF-9 add them). Each is present only when the definition has it.
  */
 export type WorkflowTransitionRow = {
   key: string;

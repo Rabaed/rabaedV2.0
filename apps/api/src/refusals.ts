@@ -1,4 +1,4 @@
-import type { FieldError } from "@rabaed/domain";
+import type { BilingualText, FieldError } from "@rabaed/domain";
 import { forbidden, HttpError, notFound } from "./http-error.ts";
 
 // Every refusal the API's commands answer with, as the API's HTTP answer.
@@ -36,6 +36,10 @@ const answers = {
   transition_not_available: () => new HttpError(409, "transition_not_available"),
   no_step_pool: () => new HttpError(409, "no_step_pool"),
   next_step_unavailable: () => new HttpError(409, "next_step_unavailable"),
+  // Transition rules (WF-7): the answers route to none, or to several, of the
+  // Transitions sharing a label; a Validate rule refuses, with its message.
+  no_route: () => new HttpError(409, "no_route"),
+  validation_failed: () => new HttpError(422, "validation_failed"),
   // A Transition's Action Form answers (RP-300): the body lists each field's error.
   invalid_action_form: () => new HttpError(422, "invalid_action_form"),
   idempotency_key_reused: () => new HttpError(422, "idempotency_key_reused"),
@@ -76,8 +80,12 @@ const answers = {
 
 export type RefusalReason = keyof typeof answers;
 
-/** A refused result as the HTTP error to throw, with the per-field errors of refused answers. */
-export function refusal(result: { reason: RefusalReason; errors?: FieldError[] }): HttpError {
+/**
+ * A refused result as the HTTP error to throw, with the per-field errors of
+ * refused answers, or the message of a refused Validate rule.
+ */
+export function refusal(result: { reason: RefusalReason; errors?: FieldError[]; message?: BilingualText }): HttpError {
   const error = answers[result.reason]();
-  return result.errors ? new HttpError(error.statusCode, error.code, { fields: result.errors }) : error;
+  if (result.errors) return new HttpError(error.statusCode, error.code, { fields: result.errors });
+  return result.message ? new HttpError(error.statusCode, error.code, { message: result.message }) : error;
 }

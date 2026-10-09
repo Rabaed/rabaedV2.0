@@ -5,6 +5,7 @@ import { databaseNameOf, databaseUrlsFromEnv, withDatabaseName, type DatabaseUrl
 import { stepAgeReportHandler } from "../src/step-age-report.ts";
 
 export { addSendBackWorkflow } from "./send-back-workflow.ts";
+export { addRulesWorkflow, rulesFormSchema, type RulesTransition } from "./rules-workflow.ts";
 
 class Rollback extends Error {}
 

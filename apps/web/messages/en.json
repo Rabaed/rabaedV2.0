@@ -584,6 +584,7 @@
       "forbidden": "Your Position doesn't allow this.",
       "noStepPool": "Nobody in your Company can hold the next step yet. Ask your Authorized Person to give someone the Position.",
       "nextStepUnavailable": "This can't be handed over yet: the next step has nobody to take it. Ask a Project Admin.",
+      "noRoute": "This can't go ahead: its answers match no route, or more than one. Review them, or ask a Project Admin.",
       "notAvailable": "This Transition isn't available any more.",
       "projectClosed": "This Project is closed.",
       "formIncomplete": "Complete the Form first: the fields to fix are marked in it.",

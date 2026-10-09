@@ -170,7 +170,8 @@ This is the shared set per Module. Workflows reference Stages by `key`, so libra
 **workflow_transition**
 `id`, `workflow_version_id`, `key` (stable within the version, e.g. `send_for_review`), `from_step_id`, `to_step_id`, `label i18n`, `kind {send, submit, return, close, cancel}`, `outcome` (nullable: `A, B, C, D, passed, passed_with_comments, failed, closed`; required when `to_step` is terminal), `permission`, `offers_assign_to bool`, `condition jsonb`, `action_form jsonb`, `notifications jsonb`.
 - `kind = submit` marks a hand-over between Participants.
-- `condition`: routing on Form field values, e.g. `cost_impact > 500000`.
+- `condition`: routing on Form field values, e.g. `cost_impact > 500000`. As built (RP-430, WF-7): there is no `condition` column; the routing condition is a Restrict rule in `rules`.
+- `rules` (RP-430, WF-7): `{ "restrict": [...], "validate": [...] }` as the definition format has them (`transitionRules`, `workflow-definition.ts`); null when the Transition has none. Read at run time by `app.transition_rules` (workflow-engine.md §4, §5.1). Every Member reads it with the Workflow (ADR 0016).
 - `action_form`: the pop-up form schema, e.g. pick a Review Code, comments, files.
 - `notifications`: who gets what, on which channel.
 

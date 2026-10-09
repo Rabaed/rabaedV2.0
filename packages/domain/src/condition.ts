@@ -2,8 +2,10 @@ import { z } from "zod";
 
 // The one rule language and evaluator (workflow-engine.md §4; form-engine.md §1).
 // Forms use it for `visible_if` and conditional `required`; Workflow Transitions
-// will use it for routing. A rule is JSON, never code. Pure, so the browser and
-// the server reach the same answer.
+// for their Restrict and Validate rules (WF-7). A rule is JSON, never code. Pure,
+// so the browser and the server reach the same answer. The database's
+// app.condition_holds is the same rule in SQL, run over the same cases
+// (condition-cases.json).
 
 export const conditionOps = ["=", "!=", ">", ">=", "<", "<=", "in", "not_in", "empty", "not_empty"] as const;
 export type ConditionOp = (typeof conditionOps)[number];
@@ -53,11 +55,19 @@ export const condition: z.ZodType<Condition> = z.lazy(() =>
 export const isUnanswered = (value: unknown): boolean =>
   value === undefined || value === null || value === "" || (Array.isArray(value) && value.length === 0);
 
-/** What a rule reads: the Form's answers by field key, and the item's attributes. */
+/**
+ * What a rule reads: the Form's answers by field key, the item's attributes, and
+ * (a Transition's rule, WF-7) the Action Form answers given with it. A `field` the
+ * Action Form has reads its answer there, else the Form's.
+ */
 export type ConditionSources = {
   fields: Readonly<Record<string, unknown>>;
   attrs?: Readonly<Record<string, unknown>>;
+  actionForm?: Readonly<Record<string, unknown>>;
 };
+
+const fieldValue = (field: string, sources: ConditionSources): unknown =>
+  sources.actionForm !== undefined && Object.hasOwn(sources.actionForm, field) ? sources.actionForm[field] : sources.fields[field];
 
 const sameOptions = (a: readonly unknown[], b: readonly unknown[]) =>
   a.length === b.length && a.every((v) => b.includes(v));
@@ -89,7 +99,7 @@ function order(actual: unknown, expected: unknown): number | null {
 }
 
 function compare(c: Comparison, sources: ConditionSources): boolean {
-  const actual = c.field !== undefined ? sources.fields[c.field] : sources.attrs?.[c.attr];
+  const actual = c.field !== undefined ? fieldValue(c.field, sources) : sources.attrs?.[c.attr];
   switch (c.op) {
     case "empty":
       return isUnanswered(actual);

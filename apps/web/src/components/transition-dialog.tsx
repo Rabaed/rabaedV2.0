@@ -2,7 +2,7 @@
 
 import { validateAnswers, type BilingualText, type FieldError, type FormSchema, type Locale } from "@rabaed/domain";
 import { ActionForm, Button } from "@rabaed/ui";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useWorkItemForm } from "@/components/work-item-form";
 import { useRouter } from "@/i18n/navigation";
@@ -23,6 +23,7 @@ type Refusal = { code: string | undefined; fields?: FieldError[] };
  */
 export function useWorkItemCalls(workItemId: string) {
   const t = useTranslations("workItems.actions");
+  const locale = useLocale() as Locale;
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -35,6 +36,7 @@ export function useWorkItemCalls(workItemId: string) {
     forbidden: t("forbidden"),
     no_step_pool: t("noStepPool"),
     next_step_unavailable: t("nextStepUnavailable"),
+    no_route: t("noRoute"),
     transition_not_available: t("notAvailable"),
     item_closed: t("notAvailable"),
     project_closed: t("projectClosed"),
@@ -56,8 +58,13 @@ export function useWorkItemCalls(workItemId: string) {
         router.refresh();
         return true;
       }
-      const { error: code, fields } = (await res.json().catch(() => ({}))) as { error?: string; fields?: FieldError[] };
-      setError(errors[code ?? ""] ?? t("unavailable"));
+      const { error: code, fields, message } = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        fields?: FieldError[];
+        message?: BilingualText;
+      };
+      // A Validate rule (WF-7) says why in its own words, in the viewer's language.
+      setError(code === "validation_failed" && message ? message[locale] : (errors[code ?? ""] ?? t("unavailable")));
       // The item moved or went away under us: show what is true now.
       if (res.status === 404 || res.status === 409) router.refresh();
       return { code, fields };

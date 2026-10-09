@@ -13,7 +13,11 @@ import {
   parseActionForm,
   stepAgeWeeks,
   checklistItemFilesKey,
+  transitionRules,
   validateAnswers,
+  validationMessage,
+  type TransitionRules,
+  type Validation,
   type BilingualText,
   type CreateWorkItemRequest,
   type FieldError,
@@ -700,12 +704,46 @@ const transitionRefusals = [
   "no_step_pool",
   "idempotency_key_reused",
   "form_not_checked",
+  "no_route",
 ] as const;
 export type TakeTransitionResult =
   | { ok: true }
   | AnswersRefused
   | { ok: false; reason: "invalid_action_form"; errors: FieldError[] }
+  | { ok: false; reason: "validation_failed"; message: BilingualText }
   | { ok: false; reason: (typeof transitionRefusals)[number] };
+
+/** A Transition of the item's pinned Workflow Version, as taking it checks it. */
+type TransitionToTake = { kind: WorkItemActions["transitions"][number]["kind"]; action_form: unknown; rules: TransitionRules };
+
+/**
+ * The Transition that taking `key` with `answers` takes on a visible item: itself,
+ * or among Transitions sharing its label and source Step, the one the answers
+ * route to (app.transition_route, §4). Null when they route to none, or to several.
+ */
+async function routedTransition(trx: Trx, workItemId: string, key: string, answers: unknown): Promise<TransitionToTake | null> {
+  const { rows } = await sql<{ kind: TransitionToTake["kind"]; action_form: unknown; rules: unknown }>`
+    select tr.kind, tr.action_form, tr.rules
+    from work_item w
+    join workflow_transition tr on tr.workflow_version_id = w.workflow_version_id
+      and tr.key = app.transition_route(w.id, ${key}, ${JSON.stringify(answers)}::jsonb)
+    where w.id = ${workItemId}
+  `.execute(trx);
+  const row = rows[0];
+  if (!row) return null;
+  const rules = transitionRules.safeParse(row.rules ?? {});
+  return { kind: row.kind, action_form: row.action_form, rules: rules.success ? rules.data : {} };
+}
+
+/** A refused Validate rule, with its message in English and Arabic (WF-7). */
+function validationRefused(rule: Validation, form: FormSchema, actionForm: FormSchema | null): TakeTransitionResult {
+  const fields = [...formFields(form), ...(actionForm ? formFields(actionForm) : [])];
+  const fieldLabel = (key: string) => {
+    const field = fields.find((f) => f.key === key);
+    return field && "label" in field ? field.label : null;
+  };
+  return { ok: false, reason: "validation_failed", message: validationMessage(rule, fieldLabel) };
+}
 
 /**
  * How many confirmed files each `attachments` or `photos` field of a visible
@@ -732,6 +770,12 @@ async function fieldFileCounts(trx: Trx, workItemId: string): Promise<Record<str
  * naming the Step being left complete, their `attachments` fields' files
  * included: otherwise it is refused with the per-field errors. Sections another
  * Participant fills later are not checked (RP-304).
+ *
+ * Its rules (WF-7): a label shared by several Transitions takes the one the
+ * answers route to, whose Action Form is the one checked; a Restrict that doesn't
+ * hold is refused like a Transition that isn't there, by the database; a Validate
+ * rule that doesn't hold is refused with its message. "Form complete" is checked
+ * here, over the whole Form as the Member reads it; the database checks the others.
  */
 export function takeTransition(
   db: Db,
@@ -746,11 +790,13 @@ export function takeTransition(
     // Only a Transition the Member may take is checked here, so anyone else is told why
     // they can't act (by the database), never what its Action Form or the Form lacks.
     const [taking] = await actionRows(trx, workItemId, input.transition);
+    const routed = taking ? await routedTransition(trx, workItemId, input.transition, input.answers) : null;
+    if (taking && !routed) return { ok: false, reason: "no_route" };
+    const actionForm = routed ? parseActionForm(routed.action_form) : null;
     // Its Action Form's answers, as the Form's are checked when leaving Draft. The
     // database takes only keys the schema has, with what it always requires.
     let answers: Record<string, unknown> = input.answers;
-    if (taking) {
-      const actionForm = parseActionForm(taking.action_form);
+    if (routed) {
       if (actionForm) {
         const checked = validateAnswers(actionForm, input.answers, "complete", { optionLists: await optionListsFor(trx, actionForm) });
         if (!checked.ok) return { ok: false, reason: "invalid_action_form", errors: checked.errors };
@@ -759,31 +805,45 @@ export function takeTransition(
         return { ok: false, reason: "invalid_action_form", errors: Object.keys(input.answers).map((key) => ({ key, code: "unknown_field" })) };
       }
     }
-    // Moving on by a Member who may save the answers now (other than a cancel or a Return)
-    // needs the required fields of the sections naming the Step being left (form-engine.md §4);
-    // the database refuses answers that weren't checked.
-    if (pinned.canSave) {
-      const scopes = await projectScopes(trx, pinned.projectId);
-      // What is saved is checked as it stands: a retired option it holds stays valid (held).
-      const checked = validateAnswers(pinned.form.schema, pinned.data, "complete", {
-        scopes,
+    // The Form's answers as they stand, checked as complete: a retired option they
+    // hold stays valid (held).
+    const checkFormComplete = async () =>
+      validateAnswers(pinned.form.schema, pinned.data, "complete", {
+        scopes: await projectScopes(trx, pinned.projectId),
         optionLists: await optionListsFor(trx, pinned.form.schema),
         held: pinned.data,
         files: await fieldFileCounts(trx, workItemId),
       });
+    // Moving on by a Member who may save the answers now (other than a cancel or a Return)
+    // needs the required fields of the sections naming the Step being left (form-engine.md §4);
+    // the database refuses answers that weren't checked.
+    if (pinned.canSave) {
+      const checked = await checkFormComplete();
       const missing = checked.ok ? [] : errorsInSections(pinned.form.schema, pinned.toFill.editableSections, checked.errors);
       // A cancel, a Return or a Send Back takes the item back: nothing has to be complete.
-      const kind = taking?.transition_kind;
+      const kind = routed?.kind;
       const back = kind === "cancel" || (kind != null && backwardKinds.includes(kind));
-      if (taking && !back && missing.length > 0) {
+      if (routed && !back && missing.length > 0) {
         return { ok: false, reason: "form_incomplete", errors: missing };
       }
+    }
+    // Validate "the Form is complete": the whole Form, as this Member reads it.
+    const validate = routed?.rules.validate ?? [];
+    const formComplete = validate.find((v) => v.type === "form_complete");
+    if (formComplete && !(await checkFormComplete()).ok) {
+      return validationRefused(formComplete, pinned.form.schema, actionForm);
     }
     const { rows } = await sql<{ outcome: string }>`
       select app.take_transition(
         ${workItemId}::uuid, ${input.transition}, ${JSON.stringify(answers)}::jsonb, ${input.internalNote},
         ${pinned.dataSha256}::bytea, ${input.idempotencyKey}::uuid, ${now}) as outcome
     `.execute(trx);
+    // A Validate rule the database found not holding, by its place in `validate`.
+    const failed = /^validation_failed:(\d+)$/.exec(rows[0]!.outcome);
+    if (failed) {
+      const rule = (routed ?? (await routedTransition(trx, workItemId, input.transition, answers)))?.rules.validate?.[Number(failed[1])];
+      if (rule) return validationRefused(rule, pinned.form.schema, actionForm);
+    }
     return commandResult(rows[0]!.outcome, "applied", transitionRefusals);
   });
 }
