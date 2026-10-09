@@ -10,12 +10,12 @@
 // it arrived (RP-299 review; ADR 0014).
 //
 // The Type is test-only (3-07 brings the MAR Form Version 4), on the test
-// Workflow with a Send Back (addSendBackWorkflow): Draft → Contractor review →
+// Workflow with a Send Back (addTestWorkflow): Draft → Contractor review →
 // Consultant review ⇄ (Send Back) Contractor review; Consultant review →
 // Consultant approval → Approved or Revise & Resubmit.
 import { publishFormVersion } from "@rabaed/admin/services";
 import { createDb } from "@rabaed/db";
-import { addSendBackWorkflow, testDatabaseUrls } from "@rabaed/db/test-support";
+import { addTestWorkflow, testDatabaseUrls } from "@rabaed/db/test-support";
 import type { FormToFill, WorkItemHistory } from "@rabaed/domain";
 import { sql } from "kysely";
 import type { LightMyRequestResponse } from "fastify";
@@ -85,7 +85,7 @@ async function addConsultantSectionType(): Promise<string> {
     .where("code", "=", TYPE)
     .executeTakeFirst();
   if (!existing) {
-    const workflowId = await addSendBackWorkflow((text) => sql.raw(text).execute(migrator));
+    const workflowId = await addTestWorkflow((text) => sql.raw(text).execute(migrator));
     await migrator
       .insertInto("work_item_type")
       .values({

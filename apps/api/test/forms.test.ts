@@ -54,7 +54,7 @@ const save = (by: Caller, id: string, answers: Record<string, unknown>) =>
   by.request("PUT", `/v1/work-items/${id}/answers`, { answers: { trade: electrical, ...answers } });
 
 const sendForReview = (by: Caller, id: string) =>
-  by.post(`/v1/work-items/${id}/transitions`, { transition: "send_for_review", idempotencyKey: randomUUID() });
+  by.post(`/v1/work-items/${id}/transitions`, { transition: "send_for_review", confirmed: true, idempotencyKey: randomUUID() });
 
 beforeAll(async () => {
   c1 = await api.projectCreator();

@@ -279,7 +279,13 @@ describe("reading the answers as another Company on the item", () => {
         sql`select id, project_id, work_item_type_id, raised_by_participant_id, created_by_member_id, title, workflow_version_id,
           form_version_id, document_number, outcome, closed_at, submitted_at from work_item where id = ${a.itemId}::uuid`,
       ),
-      await call(k.ap, sql`select * from work_item_event where work_item_id = ${a.itemId}::uuid`),
+      // Every column the app role reads: the hashes are not among them (RP-448 review).
+      await call(
+        k.ap,
+        sql`select id, project_id, work_item_id, seq, type, actor_member_id, actor_engineer_id, actor_participant_id, transition_id,
+          from_step_id, to_step_id, payload, audience, audience_participant_id, created_at
+          from work_item_event where work_item_id = ${a.itemId}::uuid`,
+      ),
       await call(
         k.ap,
         sql`select id, project_id, work_item_id, step_id, participant_id, assignee_member_id, status, done_at

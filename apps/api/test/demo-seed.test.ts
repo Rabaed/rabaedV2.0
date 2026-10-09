@@ -277,7 +277,7 @@ describe("the README walkthrough", () => {
   });
 
   it("2. Send for Review is refused while the Form is incomplete, with the list of what is missing", async () => {
-    const r = await hafiz.post(`/v1/work-items/${mar}/transitions`, { transition: "send_for_review", reason: "", idempotencyKey: randomUUID() });
+    const r = await hafiz.post(`/v1/work-items/${mar}/transitions`, { transition: "send_for_review", reason: "", confirmed: true, idempotencyKey: randomUUID() });
     expect(r.statusCode, r.body).toBe(422);
     expect(r.json()).toEqual({
       error: "form_incomplete",
@@ -440,13 +440,14 @@ describe("the README walkthrough", () => {
     const incomplete = await mohammed.post(`/v1/work-items/${mar}/transitions`, {
       transition: "revise_c",
       answers: { remarks: "Fix the specification mismatch" },
+      confirmed: true,
       idempotencyKey: randomUUID(),
     });
     expect(incomplete.statusCode, incomplete.body).toBe(422);
     expect(incomplete.json()).toMatchObject({ error: "form_incomplete", fields: [{ key: "verification_note", code: "required" }] });
     // ... and, once complete, Code C needs its Remarks.
     await verify(mohammed, { verification_note: "Lamp efficacy is below the specified 110 lm/W" });
-    const noRemarks = await mohammed.post(`/v1/work-items/${mar}/transitions`, { transition: "revise_c", answers: {}, idempotencyKey: randomUUID() });
+    const noRemarks = await mohammed.post(`/v1/work-items/${mar}/transitions`, { transition: "revise_c", answers: {}, confirmed: true, idempotencyKey: randomUUID() });
     expect(noRemarks.statusCode, noRemarks.body).toBe(422);
     await take(mohammed, mar, "revise_c", { remarks: "Replace with 110 lm/W luminaires. / استبدلها بوحدات 110 لومن/واط." });
     // Both Companies now read the answers and the Remarks (scenario 48).
