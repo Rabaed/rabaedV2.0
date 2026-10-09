@@ -5,7 +5,7 @@
 // 404 that names nothing; and items first leaving Draft are numbered under the
 // pattern in effect then.
 import { randomUUID } from "node:crypto";
-import type { NumberingSettings, SaveNumberingPatternRequest } from "@rabaed/domain";
+import type { NumberingSettings, SaveNumberingPatternRequest, SaveNumberingRequest } from "@rabaed/domain";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { attachDatasheet, createTestApi, expectHidden, type Caller, type TestApi } from "./support/harness.ts";
 import { all, bilingual, buildTower, ok, projectMember, type Company, type Tower } from "./support/tower.ts";
@@ -50,7 +50,7 @@ async function tower(code: string) {
 }
 
 const settingsOf = (by: Caller, at: Tower) => by.get(`/v1/projects/${at.projectId}/numbering`);
-const save = (by: Caller, at: Tower, body: Partial<SaveNumberingPatternRequest> & Pick<SaveNumberingPatternRequest, "pattern">) =>
+const save = (by: Caller, at: Tower, body: Partial<SaveNumberingRequest> & Pick<SaveNumberingRequest, "pattern">) =>
   by.request("PUT", `/v1/projects/${at.projectId}/numbering`, { workItemTypeId: null, sharedCounterAccepted: false, ...body });
 const pattern = (p: { segments: object[]; countedBy: number[]; separator?: string; seqDigits?: number }) =>
   ({ separator: "-", seqDigits: 4, ...p }) as SaveNumberingPatternRequest["pattern"];
@@ -79,15 +79,16 @@ describe("the Numbering page's settings", () => {
     expect(s.example).toEqual({ projectCode: "NDF", tradeCode: "EL", participant: { code: null, ordinal: 1 }, locationPath: ["BA"] });
   });
 
-  it("give the example the reader's own Participant Code once it is set", async () => {
+  it("give the example the reader's own Participant Code once it is set, its order on the Project only to a Project Admin", async () => {
     const t = await tower("NPC");
     await ok(c1.caller.request("PUT", `/v1/participants/${t.c1ParticipantId}/code`, { code: "CCM" }));
     const s = (await ok(settingsOf(t.c1Engineer, t), 200)).json() as NumberingSettings;
-    expect(s.example.participant).toEqual({ code: "CCM", ordinal: 1 });
+    expect(s.example.participant).toEqual({ code: "CCM", ordinal: null });
     expect(((await ok(settingsOf(t.c2Engineer, t), 200)).json() as NumberingSettings).example.participant).toEqual({
       code: null,
-      ordinal: 3,
+      ordinal: null,
     });
+    expect(((await ok(settingsOf(c1.caller, t), 200)).json() as NumberingSettings).example.participant).toEqual({ code: "CCM", ordinal: 1 });
   });
 
   it("are saved by the Project Admin, Project pattern and per-Type override, and read by every other Project Member", async () => {
@@ -234,5 +235,71 @@ describe("visibility.md, Document Numbers", () => {
       "NFF-MAR-03-0002",
       "NFF-MAR-01-0003",
     ]);
+  });
+
+  it("RP-412-1: every Project Member reads the versions of the patterns, the saver's Company only within it or as a Project Admin, the saver only within it", async () => {
+    const t = await tower("NVR");
+    const mar = ((await settingsOf(c1.caller, t)).json() as NumberingSettings).types.find((x) => x.code === "MAR")!.id;
+    const first = pattern({ segments: [project, type, participantCode], countedBy: [0, 1, 2] });
+    const second = pattern({ segments: [project, trade, type, participantCode], countedBy: [0, 1, 2, 3], separator: "/" });
+    const custom = pattern({ segments: [type, participantCode], countedBy: [0, 1], seqDigits: 5 });
+    await ok(save(c1.caller, t, { pattern: first }));
+    await ok(save(c1.caller, t, { pattern: second }));
+    await ok(save(c1.caller, t, { workItemTypeId: mar, pattern: custom }));
+    await ok(save(c1.caller, t, { workItemTypeId: mar, pattern: null }));
+
+    const c1Company = { en: "Test Constructions", ar: expect.any(String) };
+    for (const [who, own] of [
+      [c1.caller, true],
+      [t.c1Engineer, true],
+      [t.c2Engineer, false],
+      [t.k1Manager, false],
+    ] as const) {
+      const res = await ok(settingsOf(who, t), 200);
+      const s = res.json() as NumberingSettings;
+      // C1 is the Host Company, which earns it no exception: C2 and K1 read "a Project Admin" (V15).
+      const savedBy = { rabaed: false, company: own ? c1Company : null, member: own ? { en: "Test Person", ar: expect.any(String) } : null };
+      expect(s.versions.filter((v) => v.workItemTypeId === null)).toEqual([
+        { workItemTypeId: null, version: 2, effectiveFrom: expect.any(String), pattern: second, savedBy },
+        { workItemTypeId: null, version: 1, effectiveFrom: expect.any(String), pattern: first, savedBy },
+      ]);
+      expect(s.versions.filter((v) => v.workItemTypeId === mar).map((v) => [v.version, v.pattern])).toEqual([
+        [2, null],
+        [1, custom],
+      ]);
+      // Another Company never gets the saver's name or id (V14), nor the saver's Company (V15).
+      if (!own) expect(res.body).not.toContain(c1.company.authorizedPerson.id);
+      if (!own) expect(res.body).not.toContain("Test Constructions");
+      // The Custom pattern is gone: MAR uses the Project pattern again.
+      expect(s.types.find((x) => x.id === mar)!.override).toBeNull();
+    }
+    expect(await numbered(t, t.c1Engineer)).toBe("NVR/EL/MAR/01/0001");
+  });
+
+  it("RP-412-2: the page's examples reach a Member who isn't a Project Admin without any counter value", async () => {
+    const t = await tower("NEX");
+    await numbered(t, t.c1Engineer);
+    await numbered(t, t.c1Engineer);
+    for (const [label, who] of [
+      ["C1 engineer", t.c1Engineer],
+      ["C2 engineer", t.c2Engineer],
+      ["K1 manager", t.k1Manager],
+    ] as const) {
+      const res = await ok(settingsOf(who, t), 200);
+      expect(Object.keys(res.json()).sort(), label).toEqual(["canEdit", "example", "project", "types", "versions"]);
+      expect(res.body, label).not.toMatch(/lastValue|counterKey|0002/);
+      // Nor the reader's own order on the Project, which counts the other Participants (RP-381-1).
+      expect((res.json() as NumberingSettings).example.participant.ordinal, label).toBeNull();
+      await expectHidden(who.get(`/v1/projects/${t.projectId}/numbering/counters`), label);
+      await expectHidden(who.get(`/v1/projects/${t.projectId}/numbering/counter?workItemType=MAR`), label);
+    }
+    const counters = (await ok(c1.caller.get(`/v1/projects/${t.projectId}/numbering/counters`), 200)).json();
+    expect(counters.counters).toEqual([expect.objectContaining({ counterKey: "NEX-MAR-01", lastValue: 2 })]);
+  });
+
+  it("a Project's own pattern can't be set to 'use the Project pattern'", async () => {
+    const t = await tower("NUP");
+    const res = await save(c1.caller, t, { pattern: null });
+    expect([res.statusCode, res.json()]).toEqual([422, { error: "invalid_pattern" }]);
   });
 });

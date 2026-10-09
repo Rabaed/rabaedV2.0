@@ -62,6 +62,14 @@ export const saveNumberingPatternRequest = z.object({
 });
 export type SaveNumberingPatternRequest = z.infer<typeof saveNumberingPatternRequest>;
 
+/**
+ * The Numbering page's save: as `saveNumberingPatternRequest`, except that a Work
+ * Item Type's `pattern` may be null, "use the Project pattern" from now (its Custom
+ * pattern stays as a version). The Project's own pattern can't be null ('invalid_pattern').
+ */
+export const saveNumberingRequest = saveNumberingPatternRequest.extend({ pattern: numberingPattern.nullable() });
+export type SaveNumberingRequest = z.infer<typeof saveNumberingRequest>;
+
 /** The pattern of a Project that has none: Project, Type, Participant Code, 4 digits, counted by all three. */
 export const rabaedDefaultNumberingPattern: NumberingPattern = {
   segments: [{ kind: "project" }, { kind: "type" }, { kind: "participant" }],
@@ -76,8 +84,13 @@ export const numberingAttributes = z.object({
   typeCode: z.string(),
   /** Null without a Trade: the segment prints nothing. */
   tradeCode: z.string().nullable(),
-  /** The raiser's Participant: its Participant Code, null until set, and its position on the Project. */
-  participant: z.object({ code: z.string().nullable(), ordinal: z.number().int() }),
+  /**
+   * The raiser's Participant: its Participant Code, null until set, and its position
+   * on the Project. The position is null where the reader may not know it (anyone
+   * but a Project Admin, visibility.md RP-381-1): an example then prints
+   * `participantPlaceholder`. An issued number always has it.
+   */
+  participant: z.object({ code: z.string().nullable(), ordinal: z.number().int().nullable() }),
   /** The codes of the item's Location and its parents, from the Zone down; empty without a Location. */
   locationPath: z.array(z.string()),
 });
@@ -100,23 +113,72 @@ export const numberingTypeOverride = z.object({
 });
 export type NumberingTypeOverride = z.infer<typeof numberingTypeOverride>;
 
-/** A numbering_pattern row as the database stores it: `seq_scope` is the pattern's `countedBy`. */
+/**
+ * A numbering_pattern row as the database stores it: `seq_scope` is the pattern's
+ * `countedBy`. A Type's row that `follows_project` has no pattern: the Type uses the
+ * Project's again from then.
+ */
 export type StoredNumberingPattern = {
   work_item_type_id: string | null;
+  follows_project: boolean;
   segments: unknown;
-  separator: string;
-  seq_digits: number;
+  separator: string | null;
+  seq_digits: number | null;
   seq_scope: unknown;
   effective_from: Date;
   shared_counter_accepted_at: Date | null;
 };
 
-/** A stored pattern as the API returns it. */
-export function toSavedNumberingPattern(row: StoredNumberingPattern): SavedNumberingPattern {
+type StoredPatternColumns = Pick<StoredNumberingPattern, "segments" | "separator" | "seq_digits" | "seq_scope">;
+const storedPattern = (row: StoredPatternColumns): NumberingPattern =>
+  numberingPattern.parse({ segments: row.segments, separator: row.separator, seqDigits: row.seq_digits, countedBy: row.seq_scope });
+
+/** A stored pattern as the API returns it; null for a Type's row that follows the Project's. */
+export function toSavedNumberingPattern(row: StoredNumberingPattern): SavedNumberingPattern | null {
+  if (row.follows_project) return null;
   return {
-    pattern: numberingPattern.parse({ segments: row.segments, separator: row.separator, seqDigits: row.seq_digits, countedBy: row.seq_scope }),
+    pattern: storedPattern(row),
     effectiveFrom: row.effective_from.toISOString(),
     sharedCounterAcceptedAt: row.shared_counter_accepted_at?.toISOString() ?? null,
+  };
+}
+
+/**
+ * One version of the Project's pattern (`workItemTypeId` null) or of a Type's
+ * Custom pattern, numbered from 1 in the order they took effect. `pattern` null:
+ * from then the Type uses the Project pattern. `savedBy`: a Rabaed Engineer, or the
+ * saving Project Admin's Company by name where the reader may know it (null
+ * otherwise, V15), and the Project Admin's name only within the reader's own
+ * Company (V14). visibility.md RP-412-1, RP-412-3.
+ */
+export const numberingVersion = z.object({
+  workItemTypeId: z.uuid().nullable(),
+  version: z.number().int().min(1),
+  effectiveFrom: z.iso.datetime(),
+  pattern: numberingPattern.nullable(),
+  savedBy: z.object({ rabaed: z.boolean(), company: bilingualText.nullable(), member: bilingualText.nullable() }),
+});
+export type NumberingVersion = z.infer<typeof numberingVersion>;
+
+/** A row of app.numbering_pattern_versions. */
+export type StoredNumberingVersion = StoredPatternColumns & {
+  work_item_type_id: string | null;
+  follows_project: boolean;
+  effective_from: Date;
+  version_no: number;
+  by_rabaed: boolean;
+  company_name: z.infer<typeof bilingualText> | null;
+  member_name: z.infer<typeof bilingualText> | null;
+};
+
+/** A version as the API returns it. */
+export function toNumberingVersion(row: StoredNumberingVersion): NumberingVersion {
+  return {
+    workItemTypeId: row.work_item_type_id,
+    version: row.version_no,
+    effectiveFrom: row.effective_from.toISOString(),
+    pattern: row.follows_project ? null : storedPattern(row),
+    savedBy: { rabaed: row.by_rabaed, company: row.company_name, member: row.member_name },
   };
 }
 
@@ -142,14 +204,18 @@ export const numberingPatternRefusals = ["not_found", "project_closed", "type_no
  * A Project's numbering, as every Project Member reads it on the Numbering page.
  * `project` null: the Rabaed Default. A Type whose `override` is null follows the
  * Project's pattern. `example`: what the live example is built from, the Project's
- * code, its first Trade and Location, and the reader's own Participant. Only
- * `canEdit` (a Project Admin) may save.
+ * code, its first Trade and Location, and the reader's own Participant (its order on
+ * the Project for a Project Admin only, RP-381-1). Only
+ * `canEdit` (a Project Admin) may save. Never a counter's value: only Project Admins
+ * read those, from the counters (visibility.md scenario 55, RP-412-2).
  */
 export const numberingSettings = z.object({
   canEdit: z.boolean(),
   project: savedNumberingPattern.nullable(),
   types: z.array(numberingTypeOverride),
   example: numberingAttributes.omit({ typeCode: true }),
+  /** Every version of the Project's pattern and of each Type's Custom pattern, newest first. */
+  versions: z.array(numberingVersion),
 });
 export type NumberingSettings = z.infer<typeof numberingSettings>;
 
@@ -164,12 +230,20 @@ export function sequencedNumber(prefix: string, separator: string, seqDigits: nu
   return prefix + separator + padded(seq, seqDigits);
 }
 
-/** What the Participant segment prints: the Participant Code, or the Participant's order on the Project (01) until one is set. */
-export function participantSegment(participant: { code: string | null; ordinal: number }): string {
-  return participant.code ?? padded(participant.ordinal, 2);
+/** What an example prints for a Participant without a code whose order on the Project the reader may not know (RP-381-1). */
+export const participantPlaceholder = "XX";
+
+/**
+ * What the Participant segment prints: the Participant Code, or the Participant's
+ * order on the Project (01) until one is set; `participantPlaceholder` when the
+ * order is withheld from the reader, never a number.
+ */
+export function participantSegment(participant: { code: string | null; ordinal: number | null }): string {
+  return participant.code ?? (participant.ordinal === null ? participantPlaceholder : padded(participant.ordinal, 2));
 }
 
-function segmentValue(segment: NumberingSegment, item: NumberingAttributes): string | null {
+/** What one segment prints for an item; null when the item has no such value (an item without a Trade). */
+export function segmentValue(segment: NumberingSegment, item: NumberingAttributes): string | null {
   switch (segment.kind) {
     case "project":
       return item.projectCode;

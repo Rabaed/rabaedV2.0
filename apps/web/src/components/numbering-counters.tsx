@@ -1,7 +1,7 @@
 "use client";
 
 import type { CounterPreview, CounterStart, CounterStartRequest, CounterValues, Locale, NumberingCounter } from "@rabaed/domain";
-import { NumberingCounters, type ChoiceOption, type CounterCall, type NumberingCountersLabels } from "@rabaed/ui";
+import { NumberingCounters, type ChoiceOption, type CountedValues, type CounterCall, type NumberingCountersLabels } from "@rabaed/ui";
 import { useLocale, useTranslations } from "next-intl";
 import { useCallback } from "react";
 import { useRouter } from "@/i18n/navigation";
@@ -25,6 +25,8 @@ export function NumberingCountersSection(props: {
   participants: ChoiceOption[];
   trades: ChoiceOption[];
   locations: ChoiceOption[];
+  /** Per Work Item Type code, what the pattern in effect for it counts by. */
+  countedBy: Record<string, CountedValues>;
 }) {
   const { projectId, ...lists } = props;
   const locale = useLocale() as Locale;

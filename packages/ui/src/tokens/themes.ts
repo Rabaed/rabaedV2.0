@@ -11,6 +11,10 @@ export type StageKey = (typeof stageKeys)[number];
 export const reviewCodes = ["a", "b", "c", "d"] as const;
 export type ReviewCode = (typeof reviewCodes)[number];
 
+/** Numbering Pattern segment kinds with a colour of their own, and the sequence (RP-412). */
+export const segmentToneKeys = ["project", "participant", "trade", "type", "location", "text", "sequence"] as const;
+export type SegmentTone = (typeof segmentToneKeys)[number];
+
 /** Tones for Badge and Avatar: neutral, the brand, and the semantic feedback hues. Each has a `-tint` and a `-fg` role. */
 export const toneKeys = ["neutral", "brand", "info", "success", "warning", "danger"] as const;
 export type Tone = (typeof toneKeys)[number];
@@ -145,6 +149,30 @@ export const coolLight = {
   "code-c-fg": "orange-800",
   "code-d-bg": "red-700",
   "code-d-fg": "white",
+
+  // Numbering Pattern segments (RP-412): a tint, the text on it and a solid mark per segment kind,
+  // so a Document Number's parts read apart in the preview, chips and legend.
+  "segment-project-tint": "slate-100",
+  "segment-project-fg": "slate-700",
+  "segment-project-solid": "slate-600",
+  "segment-participant-tint": "tomato-50",
+  "segment-participant-fg": "tomato-750",
+  "segment-participant-solid": "tomato-600",
+  "segment-trade-tint": "cyan-50",
+  "segment-trade-fg": "cyan-700",
+  "segment-trade-solid": "cyan-500",
+  "segment-type-tint": "violet-50",
+  "segment-type-fg": "violet-700",
+  "segment-type-solid": "violet-500",
+  "segment-location-tint": "amber-50",
+  "segment-location-fg": "amber-700",
+  "segment-location-solid": "amber-500",
+  "segment-text-tint": "blue-50",
+  "segment-text-fg": "blue-700",
+  "segment-text-solid": "blue-500",
+  "segment-sequence-tint": "slate-100",
+  "segment-sequence-fg": "slate-900",
+  "segment-sequence-solid": "slate-900",
 
   // Step Age: whole weeks at the current step, grey turning red. age-0 is an empty dot.
   // Filled dots carry meaning, so they keep 3:1 against surfaces (WCAG 1.4.11).

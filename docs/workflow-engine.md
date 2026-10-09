@@ -341,7 +341,7 @@ Every Transition a Member takes is signed ([ADR 0017](adr/0017-the-documental-re
 ## 8. Document Numbers
 
 - The number is assigned inside `take_transition` at the first exit from Draft:
-  1. resolve the Project's **Numbering Pattern** for the Type (the Type's override, else the Project default, else the Rabaed Default), as in effect at that moment;
+  1. resolve the Project's **Numbering Pattern** for the Type (the Type's Custom pattern, else the Project pattern, else the Rabaed Default), as in effect at that moment;
   2. build the counter key from the segments the sequence counts separately for;
   3. increment `numbering_counter` in the same transaction.
 - A rollback releases nothing, because nothing was committed, so there are no gaps.
@@ -367,9 +367,10 @@ Database functions (`app.*`):
 | `is_numbering_pattern(segments, seq_scope)` | Whether a pattern is well formed: 1–6 known segments, `seq_scope` distinct positions among them. The table's check. |
 | `counts_by_participant(segments, seq_scope)` | Whether the sequence counts by the Participant Code; without it the shared-counter warning must be accepted. `countsByParticipant` in `@rabaed/domain` is its copy. |
 | `document_numbering(segments, separator, seq_scope, attributes)` | The pure builder: counter key and prefix. `sequenced_document_number(prefix, separator, digits, seq)` adds the zero-padded sequence (never cut). `documentNumbering` / `sequencedNumber` in `@rabaed/domain` are their copies; both run the cases in `packages/domain/src/numbering-cases.json`. |
-| `numbering_pattern_in_effect(project, type, at)` | The Type's pattern, else the Project's, else the Rabaed Default. |
+| `numbering_pattern_in_effect(project, type, at)` | The Type's Custom pattern, else the Project's, else the Rabaed Default. A Type whose newest row `follows_project` uses the Project's again (RP-412 rebuild). |
+| `numbering_pattern_versions(project, at)` | Every version of a Project's patterns (the Project's and each Type's, numbered from 1), for its Project Members: the pattern, when it took effect, and who saved it, the Company named only where the reader may know it (their own, or every Company for a Project Admin; not the Host Company as such; V15) and the person only within the reader's own Company (V14); a Rabaed Engineer's save says so. visibility.md RP-412-1, RP-412-3. |
 | `issue_document_number(item, at)` | Called only by `take_transition` at the first exit from Draft: the pattern in effect, fixing the Participant Code when the pattern prints it, the counter's next unused number. |
-| `apply_numbering_pattern(...)` / `set_numbering_pattern(...)` | Save a pattern (Rabaed Admin / the Project Admin, who is checked first). Outcomes `saved`, `not_found`, `project_closed`, `type_not_found`, `invalid_pattern`, `shared_counter_not_accepted`. |
+| `apply_numbering_pattern(...)` / `set_numbering_pattern(...)` | Save a pattern (Rabaed Admin / the Project Admin, who is checked first). A Type's save without segments writes a `follows_project` row: the Type uses the Project pattern again from then (RP-412 rebuild). Outcomes `saved`, `not_found`, `project_closed`, `type_not_found`, `invalid_pattern`, `shared_counter_not_accepted`. |
 | `assign_participant_code(participant, code)` / `set_participant_code(participant, code)` | Set a Participant Code (Rabaed Admin / the Project Admin; a Member who sees the Participant but isn't one gets 42501, so 403). Outcomes `set`, `not_found`, `project_closed`, `invalid_code`, `duplicate_code`, `code_in_use`. |
 | `numbering_counter_for(...)` / `numbering_counter(...)` | The counter some values fall under, with its prefix, last value and whether it issued. Outcomes `found`, `not_found`, `type_not_found`, `participant_required`, `trade_required`, `location_required`, `value_not_found`. |
 | `start_numbering_counter(...)` / `set_numbering_counter_start(...)` | Set a counter's starting number while it has issued nothing, fixing the Participant Code its key holds. Outcomes `set`, the refusals above, `project_closed`, `counter_used`. |
