@@ -25,6 +25,10 @@ export const workItemPageSize = 50;
 export const workItemPageSizes = [10, 25, 50] as const;
 export type WorkItemPageSize = (typeof workItemPageSizes)[number];
 export const workItemListPageSize: WorkItemPageSize = 25;
+/** The highest page number a query takes: no read, Export included, reaches further. */
+export const workItemPageMax = 1000;
+/** The most rows one Export gives (RP-409); the web says when it stopped there. */
+export const workItemExportMax = 5000;
 
 /**
  * The sorts a cursor pages through: by Step Age, the oldest first and closed items (which don't age) last, or by
@@ -215,7 +219,7 @@ const queryFields = {
   /** Where the page starts: the `nextCursor` of the page before. */
   cursor: z.string().max(1000).optional(),
   /** A numbered page (RP-409), from 1: the List's pager. Left out, the read pages by cursor. */
-  page: z.coerce.number().int().positive().max(100_000).optional(),
+  page: z.coerce.number().int().positive().max(workItemPageMax).optional(),
   /** Rows a numbered page holds: 10, 25 or 50; left out, 50. */
   pageSize: z.coerce
     .number()

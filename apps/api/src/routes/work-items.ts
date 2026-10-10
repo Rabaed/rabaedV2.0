@@ -10,6 +10,8 @@ import {
   createRevisionRequest,
   createWorkItemRequest,
   dashboard,
+  duplicateRequest,
+  sharedWorkItem,
   formChoices,
   formToFill,
   linkedFrom,
@@ -44,7 +46,9 @@ import { boardWorkItems, changeBoardLayout, exportWorkItems, listWorkItems, save
 import { createReplacement, createRevision, discardRevision, getRevisionChain } from "../work-items/revisions.ts";
 import {
   claimStep,
+  discardDraft,
   duplicateWorkItem,
+  getSharedWorkItem,
   createWorkItem,
   getNewWorkItemForm,
   getNewWorkItemFormChoices,
@@ -331,17 +335,35 @@ export const workItemRoutes =
     );
 
     // Duplicate (RP-409, the List's row menu): a new Draft of the same Type with only what the
-    // Member's own Company wrote (scenario RP-409-1). Refused alike for every reason but a hidden item (404).
+    // Member's own Participant wrote (scenario RP-409-1); the same key again answers with the same Draft.
+    // Refused alike for every reason but a hidden item (404).
     app.post(
       "/v1/work-items/:workItemId/duplicate",
-      { schema: { params: workItemParams, response: { 201: createdWorkItem } } },
+      { schema: { params: workItemParams, body: duplicateRequest, response: { 201: createdWorkItem } } },
       async (request, reply) => {
         const memberId = ctx.requireMember(request);
-        const result = await duplicateWorkItem(ctx.db, memberId, idOrNotFound(request.params.workItemId), ctx.now());
+        const id = idOrNotFound(request.params.workItemId);
+        const result = await duplicateWorkItem(ctx.db, memberId, id, request.body.idempotencyKey, ctx.now());
         if (!result.ok) throw refusal(result);
         return reply.code(201).send({ id: result.id });
       },
     );
+
+    // Delete (RP-409, the List's row menu): discard the Member's own Draft, an original or a
+    // Revision, while it has no Document Number (scenario RP-409-3). Afterwards nobody sees it.
+    app.post("/v1/work-items/:workItemId/discard-draft", { schema: { params: workItemParams } }, async (request, reply) => {
+      const memberId = ctx.requireMember(request);
+      const result = await discardDraft(ctx.db, memberId, idOrNotFound(request.params.workItemId), ctx.now());
+      if (!result.ok) throw refusal(result);
+      return reply.code(204).send();
+    });
+
+    // Download (RP-409, scenario RP-409-2): the item as it was shared, the same for every viewer.
+    // Before its first Submit, nothing is shared: the plain 404.
+    app.get("/v1/work-items/:workItemId/shared", { schema: { params: workItemParams, response: { 200: sharedWorkItem } } }, async (request) => {
+      const memberId = ctx.requireMember(request);
+      return visibleOrNotFound(getSharedWorkItem(ctx.db, memberId, idOrNotFound(request.params.workItemId)));
+    });
 
     // The Revision drop-down (workflow-engine.md §5.4): the Revisions of the item's
     // chain the Member sees, each by V1 on its own. A hidden item is the plain 404.

@@ -17,6 +17,7 @@ import {
   sortDirectionOf,
   stepAgeWeeks,
   workItemCursorSorts,
+  workItemExportMax,
   workItemPageSize,
   type BilingualText,
   type ListColumnLayout,
@@ -442,10 +443,16 @@ const columnSorts: Record<WorkItemSort, ColumnSort> = {
   locationLevel1: locationLevel(1),
   locationLevel2: locationLevel(2),
   locationLevel3: locationLevel(3),
-  // Who the row shows: my own Company's person who claimed it, else the holding Company; closed, who closed it.
+  // What the row shows: my own Company's person who claimed it, or my unclaimed Step by its name; another Company by
+  // its name; closed, who closed it.
   owner: {
     value: (lang) =>
-      named(sql`(case when r.closed then coalesce(cm.full_name, co.closer_company_name) else coalesce(m.full_name, co.holder_name) end)`, lang),
+      named(
+        sql`(case when r.closed then coalesce(cm.full_name, co.closer_company_name)
+          when r.held_by_own and r.assignee_member_id is null then r.step_name
+          else coalesce(m.full_name, co.holder_name) end)`,
+        lang,
+      ),
   },
   // The date the row shows: the Creation Date, which only the raiser's Participant reads, else the Submission Date.
   created: { value: () => sql`coalesce(r.creation_date, r.submitted_at)` },
@@ -463,11 +470,18 @@ function columnOrder(q: WorkItemQuery): RawBuilder<unknown> {
 const isCursorSort = (sort: WorkItemSort): sort is WorkItemCursorSort => (workItemCursorSorts as readonly string[]).includes(sort);
 
 /**
+ * Whether a read of `q` pages by cursor (`nextCursor`) to its end: a cursor's own sort in its own
+ * order, with no numbered page. Any other query is read one numbered page at a time, so a loop
+ * over `nextCursor` (Home's `everyRow`) would stop after its first page.
+ */
+export const pagesByCursor = (q: Pick<WorkItemQuery, "page" | "dir" | "sort">) => q.page === undefined && q.dir === undefined && isCursorSort(q.sort);
+
+/**
  * How a query pages: by number (`page`), or by cursor, which only the cursor's sorts in their own
  * order can do; any other read without a page is its first numbered page.
  */
 function pagingOf(q: WorkItemQuery) {
-  const cursor = q.page === undefined && q.dir === undefined && isCursorSort(q.sort) ? { ...q, sort: q.sort } : null;
+  const cursor = pagesByCursor(q) ? { ...q, sort: q.sort as WorkItemCursorSort } : null;
   const page = cursor ? null : (q.page ?? 1);
   const size = page === null ? workItemPageSize : (q.pageSize ?? workItemPageSize);
   return { cursor, page, size, orderBy: cursor ? sorts[cursor.sort].orderBy : columnOrder(q) };
@@ -607,14 +621,23 @@ export async function queryWorkItems(
 
 /**
  * Export (RP-409): the rows of the List as the viewer reads them, with its filters and order,
- * through the same read: every matching row, or under a search only the pages read so far.
- * Null as for the List.
+ * through the same read: every matching row, or under a search only the pages read so far (1 to
+ * the query's `page`, the last the client read), and never more than `max` rows: `capped` says
+ * when more matched. Null as for the List.
  */
-export function exportWorkItems(db: Db, memberId: string, scope: QueryScope, q: WorkItemQuery, now: Date): Promise<WorkItemExport | null> {
+export function exportWorkItems(
+  db: Db,
+  memberId: string,
+  scope: QueryScope,
+  q: WorkItemQuery,
+  now: Date,
+  max: number = workItemExportMax,
+): Promise<WorkItemExport | null> {
   return withMember(db, memberId, async (trx) => {
     if (!(await hasModuleTab(trx, scope))) return null;
-    const { page, size } = pagingOf({ ...q, page: q.page ?? 1 });
-    const limit = q.q === undefined ? null : (page ?? 1) * size;
+    const size = q.pageSize ?? workItemPageSize;
+    const read = q.q === undefined ? max : Math.min(max, (q.page ?? 1) * size);
+    // One row more than given, only to tell whether more matched.
     const { rows } = await sql<Row>`
       with r as (${visibleRows(scope, q.allRevisions)})
       select r.*, ${holderColumns}
@@ -622,9 +645,10 @@ export function exportWorkItems(db: Db, memberId: string, scope: QueryScope, q: 
       ${holderJoins}
       where ${matching(q, now, scope)}
       order by ${columnOrder(q)}
-      ${limit === null ? sql`` : sql`limit ${limit}`}
+      limit ${read + 1}
     `.execute(trx);
-    return { items: rows.map((r) => toRow(r, now)) };
+    // Stopped by the cap, not by the pages a search read so far.
+    return { items: rows.slice(0, read).map((r) => toRow(r, now)), capped: read === max && rows.length > read };
   });
 }
 
@@ -663,7 +687,7 @@ async function boardCards(trx: Trx, scope: QueryScope, q: WorkItemQuery, now: Da
     ${holderJoins}
     left join work_item cw on cw.id = r.id and r.closed
     where ${matching(q, now, scope)} and (not r.closed or coalesce(cw.closed_at, r.step_entered_at) >= ${closedSince}::timestamptz)
-    order by ${pagingOf({ ...q, cursor: undefined }).orderBy}
+    order by ${sorts[isCursorSort(q.sort) ? q.sort : "stepAge"].orderBy}
   `.execute(trx);
   const byStage = new Map<string, BoardCardInput[]>();
   for (const r of rows) {
