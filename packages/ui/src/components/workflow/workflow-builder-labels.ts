@@ -1,5 +1,6 @@
 import type { BilingualText } from "@rabaed/domain";
 import type { WorkflowLabels } from "./workflow-labels.ts";
+import type { WorkflowRuleLabels } from "./workflow-rule-labels.ts";
 
 /**
  * The Workflow builder's words (RP-439, WF-16), in the viewer's language, from the
@@ -9,6 +10,8 @@ import type { WorkflowLabels } from "./workflow-labels.ts";
  */
 export type WorkflowBuilderLabels = {
   map: WorkflowLabels;
+  /** The Transition's rules, actions and notifications (RP-440). */
+  rules: WorkflowRuleLabels;
   /** The back link to the Workflows, e.g. "Workflows". */
   back: string;
   /** The draft's badge, e.g. "Draft v4". */

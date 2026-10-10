@@ -1,4 +1,7 @@
-import type { BaseRole, FunctionPermission, Locale, TransitionKind, WorkflowDefinition, WorkflowProblem, WorkflowStep, WorkflowTransition } from "@rabaed/domain";
+import { conditionOpKey } from "@rabaed/domain";
+import type { BaseRole, FunctionPermission, Locale, RuleField, TransitionKind, WorkflowDefinition, WorkflowProblem, WorkflowStep, WorkflowTransition } from "@rabaed/domain";
+import { ruleMessages } from "./workflow-rule-messages.ts";
+import type { WorkflowRuleLabels } from "../components/workflow/workflow-rule-labels.ts";
 import type { WorkflowBuilderOutcome, WorkflowBuilderPosition } from "../components/workflow/workflow-builder.tsx";
 import type { WorkflowBuilderLabels, WorkflowCompareLabels } from "../components/workflow/workflow-builder-labels.ts";
 import type { WorkflowLabels } from "../components/workflow/workflow-labels.ts";
@@ -146,7 +149,19 @@ export const builderDraft: WorkflowDefinition = {
           }
         : tr,
     ),
-    move("send_to_owner", t("Send to Owner Rep", "إرسال لممثل المالك"), "submit", "consultant_manager", "owner_rep"),
+    {
+      ...move("send_to_owner", t("Send to Owner Rep", "إرسال لممثل المالك"), "submit", "consultant_manager", "owner_rep"),
+      // The rules the design's Condition shows (cost impact over 500,000), and one of each of the other groups.
+      rules: {
+        restrict: [
+          { type: "condition", condition: { field: "cost_impact", op: ">", value: 500000 } },
+          { type: "positions", positions: ["manager"] },
+        ],
+        validate: [{ type: "condition", condition: { field: "verification_note", op: "not_empty" }, message: t("Add a verification note.", "أضف ملاحظة تحقق.") }],
+      },
+      actions: [{ type: "offer_assign_to" }],
+      notifications: [{ to: "raiser" }],
+    },
     move("owner_approve", t("Owner Approve", "اعتماد المالك"), "close", "owner_rep", "approved", "A"),
   ],
 };
@@ -182,12 +197,143 @@ export const builderProblems: WorkflowProblem[] = [
   },
 ];
 
+/** The Form's fields a rule can name, as WF-4's builder read gives them (the MAR's, in short). */
+export const builderFields: RuleField[] = [
+  { key: "manufacturer", type: "text", label: t("Manufacturer", "الشركة المصنعة"), source: "form" },
+  { key: "cost_impact", type: "number", label: t("Cost impact (SAR)", "أثر التكلفة (ريال)"), source: "form" },
+  {
+    key: "category",
+    type: "select",
+    label: t("Category", "الفئة"),
+    options: [
+      { value: "civil", label: t("Civil", "مدني") },
+      { value: "mep", label: t("MEP", "ميكانيكا وكهرباء") },
+    ],
+    source: "form",
+  },
+  { key: "needed_by", type: "date", label: t("Needed by", "مطلوب قبل"), source: "form" },
+  { key: "datasheet", type: "attachments", label: t("Datasheet", "الورقة الفنية"), source: "form" },
+  { key: "sample_checked", type: "yes_no", label: t("Sample checked", "تم فحص العينة"), source: "form" },
+  { key: "verification_note", type: "textarea", label: t("Verification note", "ملاحظة التحقق"), source: "form" },
+];
+
+type Messages = Record<string, unknown>;
+
+/** `{name}` placeholders filled in, as the messages' ICU would. */
+const fmt = (template: string, values: Record<string, string> = {}) => template.replaceAll(/\{(\w+)\}/g, (_, name: string) => values[name] ?? "");
+
+/** The rules' and notifications' words, as the web's messages give them. */
+export function workflowRuleLabels(locale: Locale): WorkflowRuleLabels {
+  const m: Messages = ruleMessages[locale];
+  const text = (key: string) => m[key] as string;
+  const nested = (key: string, name: string) => (m[key] as Record<string, string>)[name]!;
+  return {
+    heading: text("heading"),
+    addRule: text("addRule"),
+    noRules: text("noRules"),
+    and: text("and"),
+    edit: (summary) => fmt(text("edit"), { summary }),
+    remove: (summary) => fmt(text("remove"), { summary }),
+    tabsName: text("tabsName"),
+    tabSettings: text("tabSettings"),
+    tabNotifications: text("tabNotifications"),
+    addTitle: (transition) => fmt(text("addTitle"), { transition }),
+    editTitle: (transition) => fmt(text("editTitle"), { transition }),
+    chooseKind: text("chooseKind"),
+    next: text("next"),
+    back: text("back"),
+    add: text("add"),
+    save: text("save"),
+    cancel: text("cancel"),
+    close: text("close"),
+    groupTitle: (g) => nested("groupTitle", g),
+    groupHelp: (g) => nested("groupHelp", g),
+    kindTitle: (k) => nested("kindTitle", k),
+    kindHelp: (k) => nested("kindHelp", k),
+    noFields: text("noFields"),
+    field: text("field"),
+    operator: text("operator"),
+    value: text("value"),
+    yes: text("yes"),
+    no: text("no"),
+    op: (o) => nested("op", conditionOpKey[o]),
+    missingField: (key) => fmt(text("missingField"), { key }),
+    positions: text("positions"),
+    positionsHelp: text("positionsHelp"),
+    noPositions: text("noPositions"),
+    notSamePersonOf: text("notSamePersonOf"),
+    heldStep: text("heldStep"),
+    tookTransition: text("tookTransition"),
+    step: text("step"),
+    transition: text("transition"),
+    beenThroughOf: text("beenThroughOf"),
+    ownStep: text("ownStep"),
+    fact: text("fact"),
+    sharedFact: (f) => nested("sharedFact", f),
+    items: text("items"),
+    itemsKind: (i) => nested("itemsKind", i),
+    messageHeading: text("messageHeading"),
+    messageEn: text("messageEn"),
+    messageAr: text("messageAr"),
+    messageHelp: text("messageHelp"),
+    documentField: text("documentField"),
+    anyDocument: text("anyDocument"),
+    documentHelp: text("documentHelp"),
+    setValue: text("setValue"),
+    setNow: text("setNow"),
+    copyFrom: text("copyFrom"),
+    copyTo: text("copyTo"),
+    assignHelp: text("assignHelp"),
+    conditionKind: text("conditionKind"),
+    conditionKindName: (k) => nested("conditionKindName", k),
+    conditionKindHelp: (k) => nested("conditionKindHelp", k),
+    editCondition: text("editCondition"),
+    addCondition: text("addCondition"),
+    addGroup: text("addGroup"),
+    removeCondition: text("removeCondition"),
+    emptyGroup: text("emptyGroup"),
+    attribute: (name) => fmt(text("attribute"), { name }),
+    summaryCondition: (field, op, value) => fmt(text("summaryCondition"), { field, op, value }),
+    summaryAll: (parts) => fmt(text("summaryAll"), { parts }),
+    summaryAny: (parts) => fmt(text("summaryAny"), { parts }),
+    summaryNot: (part) => fmt(text("summaryNot"), { part }),
+    summaryPositions: (names) => fmt(text("summaryPositions"), { names }),
+    summaryNotSameStep: (step) => fmt(text("summaryNotSameStep"), { step }),
+    summaryNotSameTransition: (transition) => fmt(text("summaryNotSameTransition"), { transition }),
+    summaryBeenStep: (step) => fmt(text("summaryBeenStep"), { step }),
+    summaryFact: (f) => nested("summaryFact", f),
+    summaryAllClosed: (i) => nested("summaryAllClosed", i),
+    summaryDocument: (field) => (field === null ? text("summaryDocumentAny") : fmt(text("summaryDocument"), { field })),
+    summaryMessage: (message) => fmt(text("summaryMessage"), { message }),
+    summarySet: (field, value) => fmt(text("summarySet"), { field, value }),
+    summarySetNow: (field) => fmt(text("summarySetNow"), { field }),
+    summaryCopy: (from, to) => fmt(text("summaryCopy"), { from, to }),
+    notificationsHeading: text("notificationsHeading"),
+    notificationsHelp: text("notificationsHelp"),
+    recipients: text("recipients"),
+    holder: text("holder"),
+    holderAlways: text("holderAlways"),
+    raiser: text("raiser"),
+    watchers: text("watchers"),
+    positionsOfActing: text("positionsOfActing"),
+    noActingPositions: text("noActingPositions"),
+    channels: text("channels"),
+    inApp: text("inApp"),
+    inAppHelp: text("inAppHelp"),
+    email: text("email"),
+    emailHelp: text("emailHelp"),
+    sms: text("sms"),
+    smsHelp: text("smsHelp"),
+  };
+}
+
 /** The builder's words, as the web's messages give them. */
 export function workflowBuilderLabels(locale: Locale): WorkflowBuilderLabels {
   const ar = locale === "ar";
   const l = (en: string, arabic: string) => (ar ? arabic : en);
   return {
     map: workflowLabels(locale),
+    rules: workflowRuleLabels(locale),
     back: l("Workflows", "سير العمل"),
     draft: (v) => l(`Draft v${v}`, `مسودة v${v}`),
     saved: (time) => l(`Saved ${time}`, `حُفظت ${time}`),

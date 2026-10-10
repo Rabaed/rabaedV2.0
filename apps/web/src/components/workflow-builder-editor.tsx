@@ -1,6 +1,6 @@
 "use client";
 
-import type { BilingualText, Locale, WorkflowBuilderRead, WorkflowDefinition, WorkflowProblem } from "@rabaed/domain";
+import { conditionOpKey, type BilingualText, type Locale, type WorkflowBuilderRead, type WorkflowDefinition, type WorkflowProblem } from "@rabaed/domain";
 import { WorkflowBuilder, type WorkflowBuilderLabels, type WorkflowPublishResult, type WorkflowSaveState } from "@rabaed/ui";
 import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
@@ -27,6 +27,7 @@ export function WorkflowBuilderEditor({ read, locale, backHref, names }: Props) 
   const router = useRouter();
   const t = useTranslations("workflowBuilder");
   const tMap = useTranslations("workflowMap");
+  const tRules = useTranslations("workflowRules");
   const tRoles = useTranslations("projects.roles");
   const { workflow } = read;
   const api = `/api/v1/workflows/${encodeURIComponent(workflow.id)}`;
@@ -150,6 +151,104 @@ export function WorkflowBuilderEditor({ read, locale, backHref, names }: Props) 
         zoomOut: tMap("zoomOut"),
         fit: tMap("fit"),
       },
+      rules: {
+        heading: tRules("heading"),
+        addRule: tRules("addRule"),
+        noRules: tRules("noRules"),
+        and: tRules("and"),
+        edit: (summary) => tRules("edit", { summary }),
+        remove: (summary) => tRules("remove", { summary }),
+        tabsName: tRules("tabsName"),
+        tabSettings: tRules("tabSettings"),
+        tabNotifications: tRules("tabNotifications"),
+        addTitle: (transition) => tRules("addTitle", { transition }),
+        editTitle: (transition) => tRules("editTitle", { transition }),
+        chooseKind: tRules("chooseKind"),
+        next: tRules("next"),
+        back: tRules("back"),
+        add: tRules("add"),
+        save: tRules("save"),
+        cancel: tRules("cancel"),
+        close: tRules("close"),
+        groupTitle: (group) => tRules(`groupTitle.${group}`),
+        groupHelp: (group) => tRules(`groupHelp.${group}`),
+        kindTitle: (kind) => tRules(`kindTitle.${kind}`),
+        kindHelp: (kind) => tRules(`kindHelp.${kind}`),
+        noFields: tRules("noFields"),
+        field: tRules("field"),
+        operator: tRules("operator"),
+        value: tRules("value"),
+        yes: tRules("yes"),
+        no: tRules("no"),
+        op: (op) => tRules(`op.${conditionOpKey[op]}`),
+        missingField: (key) => tRules("missingField", { key }),
+        positions: tRules("positions"),
+        positionsHelp: tRules("positionsHelp"),
+        noPositions: tRules("noPositions"),
+        notSamePersonOf: tRules("notSamePersonOf"),
+        heldStep: tRules("heldStep"),
+        tookTransition: tRules("tookTransition"),
+        step: tRules("step"),
+        transition: tRules("transition"),
+        beenThroughOf: tRules("beenThroughOf"),
+        ownStep: tRules("ownStep"),
+        fact: tRules("fact"),
+        sharedFact: (fact) => tRules(`sharedFact.${fact}`),
+        items: tRules("items"),
+        itemsKind: (items) => tRules(`itemsKind.${items}`),
+        messageHeading: tRules("messageHeading"),
+        messageEn: tRules("messageEn"),
+        messageAr: tRules("messageAr"),
+        messageHelp: tRules("messageHelp"),
+        documentField: tRules("documentField"),
+        anyDocument: tRules("anyDocument"),
+        documentHelp: tRules("documentHelp"),
+        setValue: tRules("setValue"),
+        setNow: tRules("setNow"),
+        copyFrom: tRules("copyFrom"),
+        copyTo: tRules("copyTo"),
+        assignHelp: tRules("assignHelp"),
+        conditionKind: tRules("conditionKind"),
+        conditionKindName: (kind) => tRules(`conditionKindName.${kind}`),
+        conditionKindHelp: (kind) => tRules(`conditionKindHelp.${kind}`),
+        editCondition: tRules("editCondition"),
+        addCondition: tRules("addCondition"),
+        addGroup: tRules("addGroup"),
+        removeCondition: tRules("removeCondition"),
+        emptyGroup: tRules("emptyGroup"),
+        attribute: (name) => tRules("attribute", { name }),
+        summaryCondition: (field, op, value) => tRules("summaryCondition", { field, op, value }),
+        summaryAll: (parts) => tRules("summaryAll", { parts }),
+        summaryAny: (parts) => tRules("summaryAny", { parts }),
+        summaryNot: (part) => tRules("summaryNot", { part }),
+        summaryPositions: (names) => tRules("summaryPositions", { names }),
+        summaryNotSameStep: (step) => tRules("summaryNotSameStep", { step }),
+        summaryNotSameTransition: (transition) => tRules("summaryNotSameTransition", { transition }),
+        summaryBeenStep: (step) => tRules("summaryBeenStep", { step }),
+        summaryFact: (fact) => tRules(`summaryFact.${fact}`),
+        summaryAllClosed: (items) => tRules(`summaryAllClosed.${items}`),
+        summaryDocument: (field) => (field === null ? tRules("summaryDocumentAny") : tRules("summaryDocument", { field })),
+        summaryMessage: (message) => tRules("summaryMessage", { message }),
+        summarySet: (field, value) => tRules("summarySet", { field, value }),
+        summarySetNow: (field) => tRules("summarySetNow", { field }),
+        summaryCopy: (from, to) => tRules("summaryCopy", { from, to }),
+        notificationsHeading: tRules("notificationsHeading"),
+        notificationsHelp: tRules("notificationsHelp"),
+        recipients: tRules("recipients"),
+        holder: tRules("holder"),
+        holderAlways: tRules("holderAlways"),
+        raiser: tRules("raiser"),
+        watchers: tRules("watchers"),
+        positionsOfActing: tRules("positionsOfActing"),
+        noActingPositions: tRules("noActingPositions"),
+        channels: tRules("channels"),
+        inApp: tRules("inApp"),
+        inAppHelp: tRules("inAppHelp"),
+        email: tRules("email"),
+        emailHelp: tRules("emailHelp"),
+        sms: tRules("sms"),
+        smsHelp: tRules("smsHelp"),
+      },
       back: t("back"),
       draft: (version) => t("draft", { version }),
       saved: (time) => t("saved", { time }),
@@ -233,7 +332,7 @@ export function WorkflowBuilderEditor({ read, locale, backHref, names }: Props) 
       close: t("close"),
       names,
     }),
-    [t, tMap, tRoles, read.positions, locale, names],
+    [t, tMap, tRoles, tRules, read.positions, locale, names],
   );
 
   const name: BilingualText = workflow.draft?.name ?? workflow.name;
@@ -248,6 +347,7 @@ export function WorkflowBuilderEditor({ read, locale, backHref, names }: Props) 
       stages={read.stages}
       outcomes={read.outcomes}
       positions={read.positions}
+      fields={read.fields}
       locale={locale}
       labels={labels}
       problems={problems}
