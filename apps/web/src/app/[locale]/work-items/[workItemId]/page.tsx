@@ -71,6 +71,7 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
     <WorkItemFormProvider
       workItemId={item.id}
       projectId={item.projectId}
+      documentNumber={item.documentNumber}
       linkTargets={linkTargetNames(links.links)}
       schema={form.schema}
       choices={choices}

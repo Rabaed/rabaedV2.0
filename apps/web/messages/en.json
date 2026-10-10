@@ -464,6 +464,8 @@
       "title": "Form",
       "toFix": "Fix these fields:",
       "saved": "Draft saved.",
+      "save": "Save",
+      "saveAndClose": "Save and close",
       "anotherMember": "another Member",
       "invalid": "Some answers aren't valid. Check the fields marked in the Form.",
       "notEditable": "These answers can't be changed any more.",
