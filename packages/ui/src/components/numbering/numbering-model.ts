@@ -1,13 +1,13 @@
 import {
   countsByParticipant,
   documentNumbering,
+  padded,
   segmentValue,
   type NumberingAttributes,
   type NumberingCounter,
   type NumberingPattern,
   type NumberingSegment,
 } from "@rabaed/domain";
-import type { SegmentTone } from "../../tokens/themes.ts";
 
 // The Numbering page's pattern edits and numbers (RP-412), pure. The numbers come
 // from @rabaed/domain's documentNumbering, the copy of the database's builder, so
@@ -24,9 +24,6 @@ export const comfortableLength = 30;
 
 /** The segments the scope chips offer: the ones whose values vary between items. */
 export const scopedKinds: ReadonlySet<SegmentKind> = new Set<SegmentKind>(["participant", "trade", "type", "location"]);
-
-/** The colour role of a segment kind (tokens `segment-<tone>-*`). */
-export const segmentTone = (kind: SegmentKind | "sequence"): SegmentTone => kind;
 
 /** A new segment of a kind: a Location at the Building level, fixed text SUB. */
 export function newSegment(kind: SegmentKind): NumberingSegment {
@@ -45,7 +42,7 @@ export function patternNumber(pattern: NumberingPattern, item: NumberingAttribut
     const text = segmentValue(s, item);
     return text === null ? [] : [{ kind: s.kind, text }];
   });
-  parts.push({ kind: "sequence", text: String(seq).padStart(pattern.seqDigits, "0") });
+  parts.push({ kind: "sequence", text: padded(seq, pattern.seqDigits) });
   return { parts, text: number(seq), counterKey };
 }
 

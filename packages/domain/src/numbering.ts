@@ -104,14 +104,14 @@ export const savedNumberingPattern = z.object({
 });
 export type SavedNumberingPattern = z.infer<typeof savedNumberingPattern>;
 
-/** A Work Item Type the Project can number, with its override (null: it follows the Project's pattern). */
-export const numberingTypeOverride = z.object({
+/** A Work Item Type the Project can number, with its Custom pattern (`override`; null: it follows the Project pattern). */
+export const numberingTypeCustomPattern = z.object({
   id: z.uuid(),
   code: z.string(),
   name: bilingualText,
   override: savedNumberingPattern.nullable(),
 });
-export type NumberingTypeOverride = z.infer<typeof numberingTypeOverride>;
+export type NumberingTypeCustomPattern = z.infer<typeof numberingTypeCustomPattern>;
 
 /**
  * A numbering_pattern row as the database stores it: `seq_scope` is the pattern's
@@ -189,7 +189,7 @@ export function toNumberingVersion(row: StoredNumberingVersion): NumberingVersio
 export function numberingPatternsInEffect(
   patterns: readonly StoredNumberingPattern[],
   types: readonly { id: string; code: string; name: z.infer<typeof bilingualText> }[],
-): { project: SavedNumberingPattern | null; types: NumberingTypeOverride[] } {
+): { project: SavedNumberingPattern | null; types: NumberingTypeCustomPattern[] } {
   const of = (typeId: string | null) => {
     const row = patterns.find((p) => p.work_item_type_id === typeId);
     return row ? toSavedNumberingPattern(row) : null;
@@ -212,7 +212,7 @@ export const numberingPatternRefusals = ["not_found", "project_closed", "type_no
 export const numberingSettings = z.object({
   canEdit: z.boolean(),
   project: savedNumberingPattern.nullable(),
-  types: z.array(numberingTypeOverride),
+  types: z.array(numberingTypeCustomPattern),
   example: numberingAttributes.omit({ typeCode: true }),
   /** Every version of the Project's pattern and of each Type's Custom pattern, newest first. */
   versions: z.array(numberingVersion),
@@ -220,7 +220,7 @@ export const numberingSettings = z.object({
 export type NumberingSettings = z.infer<typeof numberingSettings>;
 
 /** Zero-padded to `digits`, never cut. */
-const padded = (value: number, digits: number) => String(value).padStart(digits, "0");
+export const padded = (value: number, digits: number) => String(value).padStart(digits, "0");
 
 /**
  * A number from its prefix and its sequence value: the separator, then the value
