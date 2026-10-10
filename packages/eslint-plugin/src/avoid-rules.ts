@@ -138,7 +138,7 @@ const allowedMessages: Record<string, string> = {
   "workItemViews.list.columns.trade": "owner's anatomy (2026-10-10): the List's \"Discipline\" column, for the Trade",
   "workItemViews.list.columns.stage": "owner's anatomy (2026-10-10): the List's \"Status\" column, for the Stage",
   "home.recentActivity": "owner's kit choice (2026-10-10): Home's \"Recent activity\" card, which merges the Projects' Activity Feeds; not the Schedule's Activities",
-  "workItemViews.list.filtersApplied":"the filter panel's footer, \"1 filter applied\": the List's own filters, not a Visibility Dimension",
+  "workItemViews.list.filtersApplied": "the filter panel's footer, \"1 filter applied\": the List's own filters, not a Visibility Dimension",
 };
 
 const glossary = readFileSync(glossaryUrl, "utf8");
