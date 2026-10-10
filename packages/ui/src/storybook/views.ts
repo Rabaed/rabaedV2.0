@@ -117,6 +117,7 @@ export const workItemBoardLabels: Record<Locale, WorkItemBoardLabels> = {
     moveItem: (subject) => `Move ${subject}`,
     moveTo: (stage) => `To ${stage}`,
     dragging: "Drop on a highlighted column to move the item.",
+    showOnlyStep: (step) => `Show only ${step}`,
     cancelled: "Cancelled",
   },
   ar: {
@@ -133,6 +134,7 @@ export const workItemBoardLabels: Record<Locale, WorkItemBoardLabels> = {
     moveItem: (subject) => `نقل ${subject}`,
     moveTo: (stage) => `إلى ${stage}`,
     dragging: "أفلت العنصر على عمود مظلَّل لنقله.",
+    showOnlyStep: (step) => `عرض ${step} فقط`,
     cancelled: "ملغى",
   },
 };

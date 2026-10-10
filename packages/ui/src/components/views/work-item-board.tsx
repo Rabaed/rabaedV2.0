@@ -19,6 +19,7 @@ import { useState, type ElementType } from "react";
 import { cn } from "../../lib/cn.ts";
 import { buttonVariants } from "../button/button.tsx";
 import { focusRing, touchBox } from "../form/control-styles.ts";
+import { Icon } from "../icon/icon.tsx";
 import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "../overlay/popover.tsx";
 import { stageColour } from "../status/stage-colour.ts";
 import { StagePill } from "../status/stage-pill.tsx";
@@ -49,6 +50,8 @@ export type WorkItemBoardLabels = {
   moveTo: (stage: string) => string;
   /** Announced while a card is dragged. */
   dragging: string;
+  /** A Step button of a column's header, which shows only that Step's cards, e.g. "Show only Contractor PM". */
+  showOnlyStep: (step: string) => string;
   /** The outcome of a cancelled item, as its badge; every other outcome is named by its Type's set (RP-429). */
   cancelled: string;
 };
@@ -96,6 +99,8 @@ export function WorkItemBoard({ board, query, locale, labels, listHrefFor, itemH
   const stageNames = new Map(board.stages.map((s) => [s.key, s.name]));
   // The card being dragged, with the Stages it may be dropped on.
   const [dragging, setDragging] = useState<Dragging | null>(null);
+  // The Step each column is narrowed to by its header (RP-519), by Stage key.
+  const [onlyStep, setOnlyStep] = useState<Record<string, string | undefined>>({});
   return (
     <section
       aria-label={labels.board}
@@ -114,6 +119,8 @@ export function WorkItemBoard({ board, query, locale, labels, listHrefFor, itemH
           const shown = column?.shown ?? 0;
           const closed = !isOpenStageCategory(stage.category);
           const headingId = `board-column-${stage.key}`;
+          // The header names the viewer's own Steps with their counts, so a lane need not repeat them; a Stage with only its own Step has nothing to add (RP-519).
+          const stepsShown = column !== undefined && column.steps.length > 0 && !(column.steps.length === 1 && column.steps[0]!.key === stage.key);
           const dropMove = dragging?.targets.get(stage.key);
           return (
             <li
@@ -147,6 +154,15 @@ export function WorkItemBoard({ board, query, locale, labels, listHrefFor, itemH
               <h2 id={headingId} className="flex items-center justify-between gap-2 px-1 pt-1">
                 <StagePill stage={stageColour(stage)} label={stage.name[locale]} count={shown} locale={locale} />
               </h2>
+              {stepsShown && (
+                <StepFilter
+                  steps={column!.steps}
+                  active={onlyStep[stage.key]}
+                  locale={locale}
+                  labels={labels}
+                  onChange={(key) => setOnlyStep((prev) => ({ ...prev, [stage.key]: key }))}
+                />
+              )}
               {closed && (
                 <div className="flex flex-col gap-1 px-1 text-caption text-muted">
                   <span>{labels.closedSince(formatNumber(closedColumnDays, locale))}</span>
@@ -166,10 +182,13 @@ export function WorkItemBoard({ board, query, locale, labels, listHrefFor, itemH
               {shown === 0 ? (
                 <p className="px-1 pb-1 text-caption text-muted">{labels.noItems}</p>
               ) : (
-                lanesInLocale(column!.lanes, locale).map((lane) => (
+                lanesInLocale(column!.lanes, locale)
+                  .filter((lane) => onlyStep[stage.key] === undefined || (lane.kind === "step" && lane.step.key === onlyStep[stage.key]))
+                  .map((lane) => (
                   <Lane
                     key={laneKey(lane)}
                     lane={lane}
+                    nameInHeader={stepsShown}
                     locale={locale}
                     labels={labels}
                     itemHref={itemHref}
@@ -191,6 +210,57 @@ export function WorkItemBoard({ board, query, locale, labels, listHrefFor, itemH
   );
 }
 
+// A Step's dot, in turn, from the Stage colours; the name carries the meaning, so colour is never the only cue.
+const stepDots = ["bg-stage-internal-dot", "bg-stage-resubmitted-dot", "bg-stage-pending-dot", "bg-stage-approved-dot"];
+
+/**
+ * A column header's Steps (RP-519, V14): the Steps of the Stage the viewer's own Participant holds
+ * items at, each with its count and a chevron. Choosing one narrows the column to that Step; choosing
+ * it again shows them all. Another Participant's Steps are never in the data.
+ */
+function StepFilter({
+  steps,
+  active,
+  locale,
+  labels,
+  onChange,
+}: {
+  steps: WorkItemBoardData["columns"][number]["steps"];
+  active: string | undefined;
+  locale: Locale;
+  labels: WorkItemBoardLabels;
+  onChange: (key: string | undefined) => void;
+}) {
+  return (
+    <ul className="flex flex-col px-1">
+      {steps.map((step, i) => {
+        const name = step.name[locale];
+        const on = active === step.key;
+        return (
+          <li key={step.key}>
+            <button
+              type="button"
+              aria-pressed={on}
+              aria-label={labels.showOnlyStep(name)}
+              onClick={() => onChange(on ? undefined : step.key)}
+              className={cn(
+                "flex h-8 w-full items-center gap-2 rounded-md px-1.5 text-start text-caption font-semibold text-muted hover:bg-hover pointer-coarse:min-h-11",
+                on && "bg-hover text-foreground",
+                focusRing,
+              )}
+            >
+              <span aria-hidden="true" className={cn("size-1.5 shrink-0 rounded-full", stepDots[i % stepDots.length])} />
+              <span className="truncate">{name}</span>
+              <span className="font-normal tabular-nums">{formatNumber(step.count, locale)}</span>
+              <Icon name="chevron-down" size={16} className={cn("ms-auto shrink-0 transition-transform", !on && active !== undefined && "-rotate-90 rtl:rotate-90")} />
+            </button>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
 function laneKey(lane: WorkItemBoardLane): string {
   return lane.kind === "step" ? `step:${lane.step.key}` : lane.kind === "company" ? `company:${lane.participantId}` : "closed";
 }
@@ -198,6 +268,7 @@ function laneKey(lane: WorkItemBoardLane): string {
 /** One swimlane: its holder (a Step of mine, or another Company by name) and its cards. Closed items have no holder to show. */
 function Lane({
   lane,
+  nameInHeader,
   locale,
   labels,
   itemHref,
@@ -210,6 +281,8 @@ function Lane({
   onDragChange,
 }: {
   lane: WorkItemBoardLane;
+  /** The column's header already names the viewer's own Steps with their counts. */
+  nameInHeader: boolean;
   locale: Locale;
   labels: WorkItemBoardLabels;
   itemHref: (id: string) => string;
@@ -226,7 +299,7 @@ function Lane({
   const name = lane.kind === "step" ? lane.step.name[locale] : lane.kind === "company" ? lane.companyName[locale] : null;
   return (
     <section aria-label={name ?? undefined} data-lane={lane.kind} className="flex flex-col gap-2">
-      {name !== null && (
+      {name !== null && !(nameInHeader && lane.kind === "step") && (
         <h3 className="flex items-center justify-between gap-2 px-1 text-caption font-semibold text-muted">
           {lane.kind === "company" ? <WithChip kind="company" inViewerCompany={false} companyName={name} /> : <span>{name}</span>}
           <span className="tabular-nums">{formatNumber(lane.count, locale)}</span>

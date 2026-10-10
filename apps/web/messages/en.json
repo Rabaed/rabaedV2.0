@@ -95,7 +95,8 @@
       "move": "Move",
       "moveItem": "Move {subject}",
       "moveTo": "To {stage}",
-      "dragging": "Drop on a highlighted column to move the item."
+      "dragging": "Drop on a highlighted column to move the item.",
+      "showOnlyStep": "Show only {step}"
     },
     "viewSwitch": {
       "view": "View",

@@ -95,7 +95,8 @@
       "move": "نقل",
       "moveItem": "نقل {subject}",
       "moveTo": "إلى {stage}",
-      "dragging": "أفلت العنصر على عمود مظلَّل لنقله."
+      "dragging": "أفلت العنصر على عمود مظلَّل لنقله.",
+      "showOnlyStep": "عرض {step} فقط"
     },
     "viewSwitch": {
       "view": "طريقة العرض",

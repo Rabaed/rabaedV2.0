@@ -112,19 +112,20 @@ const board: WorkItemBoardData = {
     },
   },
   columns: [
-    { stageKey: "draft", shown: 2, lanes: [{ kind: "step", step: draftStep, count: 2, cards: [cards.draft, cards.revisionDraft] }] },
-    { stageKey: "internal_review", shown: 1, lanes: [{ kind: "step", step: reviewStep, count: 1, cards: [cards.review] }] },
+    { stageKey: "draft", shown: 2, steps: [{ ...draftStep, count: 2 }], lanes: [{ kind: "step", step: draftStep, count: 2, cards: [cards.draft, cards.revisionDraft] }] },
+    { stageKey: "internal_review", shown: 1, steps: [{ ...reviewStep, count: 1 }], lanes: [{ kind: "step", step: reviewStep, count: 1, cards: [cards.review] }] },
     {
       stageKey: "pending_approval",
       shown: 3,
+      steps: [],
       lanes: [
         { kind: "company", participantId: consultantId, companyName: consultant, count: 2, cards: [cards.pending1, cards.pending2] },
         { kind: "company", participantId: otherConsultantId, companyName: otherConsultant, count: 1, cards: [cards.pending3] },
       ],
     },
-    { stageKey: "approved", shown: 2, lanes: [{ kind: "closed", count: 2, cards: [cards.approved, cards.approvedA] }] },
+    { stageKey: "approved", shown: 2, steps: [], lanes: [{ kind: "closed", count: 2, cards: [cards.approved, cards.approvedA] }] },
     // Three Code C items, all closed more than 30 days ago.
-    { stageKey: "revise_resubmit", shown: 0, lanes: [] },
+    { stageKey: "revise_resubmit", shown: 0, steps: [], lanes: [] },
   ],
   moves: {},
 };

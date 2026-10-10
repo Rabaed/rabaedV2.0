@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { boardLanes, dropTargets, lanesInLocale, workItemViewFromSearchParams, type BoardCardInput, type WorkItemMove } from "./work-item-board.ts";
+import { boardLanes, dropTargets, lanesInLocale, ownStepCounts, workItemViewFromSearchParams, type BoardCardInput, type WorkItemMove } from "./work-item-board.ts";
 import type { WorkItemRow } from "./work-item.ts";
 
 const b = (en: string) => ({ en, ar: en });
@@ -113,5 +113,22 @@ describe("dropTargets", () => {
 
   it("has no targets without Transitions", () => {
     expect(dropTargets([], "draft").size).toBe(0);
+  });
+});
+
+describe("ownStepCounts (RP-519)", () => {
+  it("counts each of the viewer's own Steps and leaves another Company and the closed lane out", () => {
+    const lanes = boardLanes([
+      card(ownStep("engineer", "Contractor Engineer")),
+      card(ownStep("pm", "Contractor PM")),
+      card(ownStep("pm", "Contractor PM")),
+      card(company("Al Waha PMC"), k1),
+      card(null),
+    ]);
+    expect(ownStepCounts(lanes)).toEqual([
+      { key: "engineer", name: b("Contractor Engineer"), count: 1 },
+      { key: "pm", name: b("Contractor PM"), count: 2 },
+    ]);
+    expect(JSON.stringify(ownStepCounts(lanes))).not.toContain("Al Waha");
   });
 });

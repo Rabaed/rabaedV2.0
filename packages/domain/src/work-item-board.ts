@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { bilingualText } from "./company.ts";
+import { bilingualText, type BilingualText } from "./company.ts";
 import type { Locale } from "./locale.ts";
 import { formSchema } from "./form.ts";
 import { transitionKinds, workItemList, workItemRow, type WorkItemRow } from "./work-item.ts";
@@ -75,7 +75,18 @@ export function dropTargets(moves: readonly WorkItemMove[], currentStageKey: str
  * `closedColumnDays` days; an open one all of them). The cursor is not used.
  */
 export const workItemBoard = workItemList.pick({ stages: true, filters: true }).extend({
-  columns: z.array(z.object({ stageKey: z.string(), shown: z.number().int().nonnegative(), lanes: z.array(workItemBoardLane) })),
+  columns: z.array(
+    z.object({
+      stageKey: z.string(),
+      shown: z.number().int().nonnegative(),
+      /**
+       * The Steps of this Stage that the viewer's own Participant holds items at, each with how many
+       * (RP-519, V14): never another Participant's Steps. Only Steps holding an item are listed.
+       */
+      steps: z.array(z.object({ key: z.string(), name: bilingualText, count: z.number().int().positive() })),
+      lanes: z.array(workItemBoardLane),
+    }),
+  ),
   /**
    * What the viewer may do with a card now (RP-350), by item id: only the
    * Transitions they may take on it at this moment, as the item page's buttons
@@ -114,6 +125,11 @@ export function boardLanes(cards: readonly BoardCardInput[]): WorkItemBoardLane[
     lane.count += 1;
   }
   return lanesInLocale([...steps.values(), ...companies.values(), ...(closed.count > 0 ? [closed] : [])], "en");
+}
+
+/** A column's own Steps with their counts, from its lanes: the viewer's own Participant's Steps only (RP-519, V14). */
+export function ownStepCounts(lanes: readonly WorkItemBoardLane[]): { key: string; name: BilingualText; count: number }[] {
+  return lanes.flatMap((l) => (l.kind === "step" ? [{ key: l.step.key, name: l.step.name, count: l.count }] : []));
 }
 
 /**
