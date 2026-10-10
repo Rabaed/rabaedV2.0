@@ -366,7 +366,10 @@ describe("Waiting with others: my own Company's items another Participant holds 
     await coded(original, "revise_c");
     expect(await waitingFor(at.c1Pm)).toBe(before);
     // Code C is a revise-and-resubmit: "returned for revision", never "rejected".
-    expect((await home(at.c1Pm)).activity.find((e) => e.workItem.id === original && e.outcome === "C")?.verb).toBe("returnedForRevision");
+    const codeC = (await home(at.c1Pm)).activity.find((e) => e.workItem.id === original && e.outcome === "C");
+    expect(codeC?.verb).toBe("returnedForRevision");
+    // A Review Code reads "Code C": no name of its own (an Inspection Result would carry its name).
+    expect(codeC?.outcomeName).toBeNull();
     const revision = (await ok(at.c1Engineer.post(`/v1/work-items/${original}/revisions`, { idempotencyKey: randomUUID() }), 201)).json().id as string;
     // R1 is still a Draft after Code C: C1 holds it.
     expect(await waitingFor(at.c1Engineer)).toBe(before);

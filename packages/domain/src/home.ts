@@ -68,7 +68,17 @@ export const home = z.object({
   /** The items behind the Need My Action count, the newest-waiting first, up to `homeNeedsMyActionLimit`. */
   needsMyAction: z.array(workItemRow.extend({ project: homeProject, moduleKey: moduleKeySchema })),
   /** The newest Activity Feed entries across the active Projects, up to `homeActivityLimit`, each with what was done. */
-  activity: z.array(activityFeed.shape.entries.element.extend({ project: homeProject, verb: z.enum(homeActivityVerbs) })),
+  activity: z.array(
+    activityFeed.shape.entries.element.extend({
+      project: homeProject,
+      verb: z.enum(homeActivityVerbs),
+      /**
+       * The outcome's own name when its Type's outcomes are not Review Codes (an Inspection Result,
+       * an Approval…), so it never reads "Code …"; null for a Code ("Code B") or no outcome.
+       */
+      outcomeName: bilingualText.nullable(),
+    }),
+  ),
   /** The Member's Projects, as the Projects page lists them. */
   projects: z.array(projectSummary),
   /**

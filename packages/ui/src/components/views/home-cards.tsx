@@ -1,6 +1,6 @@
 "use client";
 
-import { cardNumber, type HomeActivityEntry, type HomeActivityVerb, type HomeWorkItem, type Locale } from "@rabaed/domain";
+import { cardNumber, outcomeLabel, type HomeActivityEntry, type HomeActivityVerb, type HomeWorkItem, type Locale } from "@rabaed/domain";
 import { useId, type ElementType, type ReactNode } from "react";
 import { cn } from "../../lib/cn.ts";
 import { Avatar } from "../data/avatar.tsx";
@@ -147,6 +147,8 @@ export type RecentActivityCardLabels = {
   verb: (verb: HomeActivityVerb) => string;
   /** The Code an entry issued, after its Subject: "(Code B)". */
   code: (outcome: string) => string;
+  /** Any other outcome an entry issued, by its own label (outcomeLabel): "(Failed)". */
+  outcome: (label: string) => string;
 };
 
 export type RecentActivityCardProps = {
@@ -194,7 +196,9 @@ export function RecentActivityCard({ entries, locale, labels, when, itemHref, li
                       {name}{" "}
                       <span className="text-muted">
                         {labels.verb(e.verb)} {e.workItem.title}
-                        {e.outcome && (e.verb === "approved" || e.verb === "rejected" || e.verb === "returnedForRevision") && ` ${labels.code(e.outcome)}`}
+                        {e.outcome &&
+                          (e.verb === "approved" || e.verb === "rejected" || e.verb === "returnedForRevision") &&
+                          ` ${e.outcomeName ? labels.outcome(outcomeLabel({ code: e.outcome, name: e.outcomeName }, locale)) : labels.code(e.outcome)}`}
                       </span>
                     </span>
                     <time dateTime={e.at} className="text-[12.5px] text-muted tabular-nums">

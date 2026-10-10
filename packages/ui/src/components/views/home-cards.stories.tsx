@@ -55,6 +55,7 @@ const entry = (n: number, at: string, over: Partial<HomeActivityEntry>): HomeAct
   by: { companyName: k1, memberName: null },
   transition: b("Return", "إعادة"),
   outcome: null,
+  outcomeName: null,
   workItem: { id: id(n), documentNumber: `TWR-C1-EL-MAR-000${n}`, title: "Lighting Fixtures", type: mar },
   project: tower,
   verb: "returned",
@@ -73,7 +74,16 @@ const entries: HomeActivityEntry[] = [
     workItem: { id: id(2), documentNumber: null, title: "Fire Suppression System", type: mar },
     project: villas,
   }),
-  entry(3, minutes(180), { type: "claimed", transition: null, verb: "claimed", by: { companyName: c1, memberName: b("Omar Fahad", "عمر فهد") }, workItem: { id: id(3), documentNumber: null, title: "LED fittings", type: mar } }),
+  // An Inspection Result is no Code: it reads by its own name.
+  entry(3, minutes(180), {
+    type: "issue_code",
+    transition: b("Fail", "رسوب"),
+    outcome: "failed",
+    outcomeName: b("Failed", "راسب"),
+    verb: "rejected",
+    by: { companyName: c1, memberName: b("Omar Fahad", "عمر فهد") },
+    workItem: { id: id(3), documentNumber: null, title: "LED fittings", type: { code: "WIR", name: b("Work Inspection", "فحص أعمال") } },
+  }),
   // A revise-and-resubmit Code: returned for revision, never rejected.
   entry(4, minutes(60 * 30), { type: "issue_code", outcome: "C", verb: "returnedForRevision", workItem: { id: id(4), documentNumber: null, title: "Non-compliant materials", type: mar } }),
 ];
@@ -83,12 +93,12 @@ const needsLabels: Record<Locale, NeedsMyActionCardLabels> = {
   ar: { title: "بحاجة لإجرائي", empty: "لا شيء بانتظارك.", noNumber: "بلا رقم بعد", revision: (n) => `R${n}`, otherBoards: "لوحات أخرى" },
 };
 const verbs: Record<Locale, Partial<Record<HomeActivityVerb, string>>> = {
-  en: { approved: "approved", submitted: "submitted", claimed: "claimed", returned: "returned", returnedForRevision: "returned for revision" },
-  ar: { approved: "اعتمد", submitted: "قدّم", claimed: "استلم", returned: "أعاد", returnedForRevision: "أعاد للتعديل" },
+  en: { approved: "approved", submitted: "submitted", claimed: "claimed", returned: "returned", returnedForRevision: "returned for revision", rejected: "rejected" },
+  ar: { approved: "اعتمد", submitted: "قدّم", claimed: "استلم", returned: "أعاد", returnedForRevision: "أعاد للتعديل", rejected: "رفض" },
 };
 const activityLabels: Record<Locale, RecentActivityCardLabels> = {
-  en: { title: "Recent activity", empty: "Nothing has happened on the items you can see yet.", verb: (v) => verbs.en[v] ?? "updated", code: (code) => `(Code ${code})` },
-  ar: { title: "آخر النشاطات", empty: "لم يحدث شيء بعد على العناصر التي يمكنك رؤيتها.", verb: (v) => verbs.ar[v] ?? "حدّث", code: (code) => `(Code ${code})` },
+  en: { title: "Recent activity", empty: "Nothing has happened on the items you can see yet.", verb: (v) => verbs.en[v] ?? "updated", code: (code) => `(Code ${code})`, outcome: (name) => `(${name})` },
+  ar: { title: "آخر النشاطات", empty: "لم يحدث شيء بعد على العناصر التي يمكنك رؤيتها.", verb: (v) => verbs.ar[v] ?? "حدّث", code: (code) => `(Code ${code})`, outcome: (name) => `(${name})` },
 };
 const boardLabel = b("Open board", "فتح اللوحة");
 
@@ -174,6 +184,9 @@ export const RecentActivity: Story = {
     await expect(lines[0]).toHaveTextContent(`${storyText(context, k1)} ${storyText(context, b("approved", "اعتمد"))} Lighting Fixtures (Code B)`);
     await expect(lines[0]).not.toHaveTextContent("· B");
     await expect(lines[1]).toHaveTextContent(`${storyText(context, sara)} ${storyText(context, b("submitted", "قدّم"))}`);
+    // An Inspection Result by its own name, never as a Code.
+    await expect(lines[2]).toHaveTextContent(`${storyText(context, b("rejected", "رفض"))} LED fittings (${storyText(context, b("Failed", "راسب"))})`);
+    await expect(lines[2]).not.toHaveTextContent("Code");
     // Code C is a revise-and-resubmit, worded from its own kind: never "rejected".
     await expect(lines[3]).toHaveTextContent(`${storyText(context, b("returned for revision", "أعاد للتعديل"))} Non-compliant materials (Code C)`);
     // Latin initials from the English names, in Arabic too.

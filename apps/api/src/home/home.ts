@@ -8,6 +8,7 @@ import {
   homeStepAgeWeeks,
   mergeActivity,
   workItemQuery,
+  type BilingualText,
   type Home,
   type HomeWorkItem,
   type HomeActivityOutcome,
@@ -107,17 +108,26 @@ export function getHome(db: Db, memberId: string, now: Date): Promise<Home> {
     const feeds = [];
     for (const p of active) feeds.push((await activityFeedPage(trx, p.id, page)).entries.map((e) => ({ ...e, project: ref(p) })));
     const shown = mergeActivity(feeds, homeActivityLimit);
-    const how = new Map<string, { kind: TransitionKind | null; outcome: HomeActivityOutcome | null }>();
+    const how = new Map<string, { kind: TransitionKind | null; outcome: HomeActivityOutcome | null; outcomeName: BilingualText | null }>();
     if (shown.length > 0) {
-      const { rows } = await sql<{ id: string; kind: TransitionKind | null; polarity: OutcomePolarity | null; actions: OutcomeAction[] | null }>`
-        select e.id, t.kind, o.polarity, o.actions
+      const { rows } = await sql<{
+        id: string;
+        kind: TransitionKind | null;
+        polarity: OutcomePolarity | null;
+        actions: OutcomeAction[] | null;
+        outcome_name: BilingualText | null;
+      }>`
+        -- A Review Code reads "Code B"; any other outcome by its own name.
+        select e.id, t.kind, o.polarity, o.actions, case when wt.outcome_kind <> 'review_code' then o.name end as outcome_name
         from work_item_event e
         join work_item w on w.id = e.work_item_id
+        join work_item_type wt on wt.id = w.work_item_type_id
         left join workflow_transition t on t.id = e.transition_id
         left join outcome o on o.project_id = e.project_id and o.work_item_type_id = w.work_item_type_id and o.code = e.payload ->> 'outcome'
         where e.id = any(${shown.map((e) => e.id)}::uuid[])
       `.execute(trx);
-      for (const r of rows) how.set(r.id, { kind: r.kind, outcome: r.polarity ? { polarity: r.polarity, actions: r.actions ?? [] } : null });
+      for (const r of rows)
+        how.set(r.id, { kind: r.kind, outcome: r.polarity ? { polarity: r.polarity, actions: r.actions ?? [] } : null, outcomeName: r.outcome_name });
     }
 
     return {
@@ -128,7 +138,11 @@ export function getHome(db: Db, memberId: string, now: Date): Promise<Home> {
         waitingWithOthers,
       },
       needsMyAction: needsMyAction.toSorted(byNewestWaiting).slice(0, homeNeedsMyActionLimit),
-      activity: shown.map((e) => ({ ...e, verb: homeActivityVerb(e.type, how.get(e.id)?.kind ?? null, e.outcome ? (how.get(e.id)?.outcome ?? null) : null) })),
+      activity: shown.map((e) => ({
+        ...e,
+        verb: homeActivityVerb(e.type, how.get(e.id)?.kind ?? null, e.outcome ? (how.get(e.id)?.outcome ?? null) : null),
+        outcomeName: e.outcome ? (how.get(e.id)?.outcomeName ?? null) : null,
+      })),
       projects,
       submittals,
     };

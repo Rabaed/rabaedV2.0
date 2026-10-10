@@ -105,6 +105,7 @@ export function HomeView({
             empty: t("noActivity"),
             verb: (verb) => t("verb", { verb }),
             code: (code) => `(${tBoard("code", { code })})`,
+            outcome: (label) => `(${label})`,
           }}
           when={when}
           itemHref={itemHref}
