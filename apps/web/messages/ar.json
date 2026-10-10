@@ -693,6 +693,49 @@
     "notFound": "لم يعد هذا البند متاحًا لك.",
     "unavailable": "لم ينجح ذلك. حاول مرة أخرى."
   },
+  "workflowMap": {
+    "line": "سير العمل: {name} · الإصدار {version}",
+    "view": "عرض سير العمل",
+    "title": "{name} · الإصدار {version}",
+    "close": "إغلاق",
+    "showAs": "عرض سير العمل",
+    "map": "خريطة",
+    "list": "قائمة",
+    "canvas": "خريطة سير العمل",
+    "listName": "الخطوات والانتقالات",
+    "outcome": "النتيجة",
+    "part": "مراجعة {role}",
+    "withCompany": "لدى {company}",
+    "current": "الحالية",
+    "to": "إلى",
+    "zoomIn": "تكبير",
+    "zoomOut": "تصغير",
+    "fit": "ملاءمة العرض",
+    "newerVersion": "يتبع هذا البند الإصدار {version}. تم تحديث سير العمل إلى الإصدار {latest}.",
+    "grouped": "بعض الخطوات مجمّعة لأنها داخلية لشركة أخرى.",
+    "outcomeModes": {
+      "recommend_code": "يوصي برمز",
+      "issue_outcome": "يصدر النتيجة"
+    },
+    "kinds": {
+      "send": "إرسال",
+      "submit": "تقديم",
+      "return": "إرجاع",
+      "send_back": "إرجاع إلى المُقدِّم",
+      "close": "إغلاق",
+      "cancel": "إلغاء"
+    },
+    "permissions": {
+      "view": "عرض",
+      "create": "إنشاء",
+      "submit": "تقديم",
+      "review": "مراجعة",
+      "approve": "اعتماد",
+      "assign": "تعيين",
+      "close": "إغلاق",
+      "attach": "إرفاق"
+    }
+  },
   "notifications": {
     "title": "الإشعارات",
     "bellUnread": "{count, plural, one {الإشعارات، إشعار غير مقروء} two {الإشعارات، إشعاران غير مقروءين} few {الإشعارات، {shown} إشعارات غير مقروءة} other {الإشعارات، {shown} إشعارًا غير مقروء}}",
