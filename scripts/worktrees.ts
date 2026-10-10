@@ -132,8 +132,13 @@ export function listWorktrees(cwd?: string): Worktree[] {
   return parseWorktrees(git(["worktree", "list", "--porcelain"], cwd));
 }
 
-/** Whether the folder has uncommitted changes, untracked files outside ignored paths included. */
-export const gitDirty = (dir: string): boolean => git(["--no-optional-locks", "status", "--porcelain"], dir).trim() !== "";
+/**
+ * Whether the folder has uncommitted changes, untracked files outside ignored paths included.
+ * A root .pnpm-store/ never counts: pnpm makes one when a sandboxed agent can't write to the
+ * drive root's store, and a branch from before RP-549 does not ignore it yet.
+ */
+export const gitDirty = (dir: string): boolean =>
+  git(["--no-optional-locks", "status", "--porcelain", "--", ":(top)", ":(top,exclude).pnpm-store"], dir).trim() !== "";
 
 /** The current worktree's top folder. */
 export const currentRoot = (): string => git(["rev-parse", "--show-toplevel"]).trim();
