@@ -45,6 +45,8 @@ export const palette = {
   "slate-450": "#868c98",
   "slate-500": "#9aa0ad",
   "slate-600": "#6a6e7a",
+  // Not in the design export: muted text a step darker than slate-600, so it keeps 4.5:1 on a pressed row too.
+  "slate-625": "#666a76",
   "slate-700": "#555a66",
   "slate-800": "#3a3f4b",
   "slate-900": "#1f2430",
@@ -123,6 +125,8 @@ export const palette = {
   "navy-disabled-fg": "#4f5870",
   "navy-faint": "#6b7488",
   "navy-muted": "#8c94a8",
+  // Not in the kit: muted text a step lighter, 4.5:1 on a pressed row too.
+  "navy-muted-text": "#9098ac",
   "navy-text-2": "#c5cad6",
   "navy-text": "#eef0f5",
   "navy-focus": "#6f97f0",
@@ -170,6 +174,8 @@ export const palette = {
   "warm-faint": "#a8998c",
   "warm-gray-solid": "#a3958a",
   "warm-muted": "#7a6d62",
+  // Not in the kit: muted text a step darker, 4.5:1 on a pressed row too.
+  "warm-muted-text": "#74675c",
   "warm-gray-fg": "#6f6258",
   "warm-text-2": "#4a403a",
   "warm-text": "#2a221d",
@@ -213,7 +219,7 @@ export const palette = {
   "espresso-gray-tint": "#d6c4b421",
   "espresso-overlay": "#0a06049e",
   // Not in the kit: the lightest espresso grey with 3:1 on the espresso canvas, surface and subtle surface.
-  "espresso-control": "#76685d",
+  "espresso-control": "#7c6e62",
 } as const;
 
 export type PaletteColour = keyof typeof palette;

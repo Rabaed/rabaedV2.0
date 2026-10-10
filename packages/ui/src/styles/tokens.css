@@ -36,6 +36,7 @@
   --palette-slate-450: #868c98;
   --palette-slate-500: #9aa0ad;
   --palette-slate-600: #6a6e7a;
+  --palette-slate-625: #666a76;
   --palette-slate-700: #555a66;
   --palette-slate-800: #3a3f4b;
   --palette-slate-900: #1f2430;
@@ -99,6 +100,7 @@
   --palette-navy-disabled-fg: #4f5870;
   --palette-navy-faint: #6b7488;
   --palette-navy-muted: #8c94a8;
+  --palette-navy-muted-text: #9098ac;
   --palette-navy-text-2: #c5cad6;
   --palette-navy-text: #eef0f5;
   --palette-navy-focus: #6f97f0;
@@ -140,6 +142,7 @@
   --palette-warm-faint: #a8998c;
   --palette-warm-gray-solid: #a3958a;
   --palette-warm-muted: #7a6d62;
+  --palette-warm-muted-text: #74675c;
   --palette-warm-gray-fg: #6f6258;
   --palette-warm-text-2: #4a403a;
   --palette-warm-text: #2a221d;
@@ -177,7 +180,7 @@
   --palette-espresso-text: #f4ede6;
   --palette-espresso-gray-tint: #d6c4b421;
   --palette-espresso-overlay: #0a06049e;
-  --palette-espresso-control: #76685d;
+  --palette-espresso-control: #7c6e62;
 }
 
 /* Layer 2: semantic roles, theme "grey-light". */
@@ -210,7 +213,7 @@
   --sidebar-current-text: var(--palette-white);
   --text: var(--palette-slate-900);
   --text-secondary: var(--palette-slate-800);
-  --muted: var(--palette-slate-600);
+  --muted: var(--palette-slate-625);
   --faint: var(--palette-slate-500);
   --brand: var(--palette-tomato-600);
   --brand-ink: var(--palette-delft-600);
@@ -370,7 +373,7 @@
   --sidebar-current-text: var(--palette-white);
   --text: var(--palette-navy-text);
   --text-secondary: var(--palette-navy-text-2);
-  --muted: var(--palette-navy-muted);
+  --muted: var(--palette-navy-muted-text);
   --faint: var(--palette-navy-faint);
   --brand: var(--palette-tomato-600);
   --brand-ink: var(--palette-navy-text-2);
@@ -531,7 +534,7 @@
     --sidebar-current-text: var(--palette-white);
     --text: var(--palette-navy-text);
     --text-secondary: var(--palette-navy-text-2);
-    --muted: var(--palette-navy-muted);
+    --muted: var(--palette-navy-muted-text);
     --faint: var(--palette-navy-faint);
     --brand: var(--palette-tomato-600);
     --brand-ink: var(--palette-navy-text-2);
@@ -693,7 +696,7 @@
   --sidebar-current-text: var(--palette-white);
   --text: var(--palette-warm-text);
   --text-secondary: var(--palette-warm-text-2);
-  --muted: var(--palette-warm-muted);
+  --muted: var(--palette-warm-muted-text);
   --faint: var(--palette-warm-faint);
   --brand: var(--palette-tomato-600);
   --brand-ink: var(--palette-delft-600);

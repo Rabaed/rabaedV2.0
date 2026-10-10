@@ -70,7 +70,7 @@ export const greyLight = {
   // Text
   text: "slate-900",
   "text-secondary": "slate-800",
-  muted: "slate-600",
+  muted: "slate-625",
   faint: "slate-500",
 
   // Brand (non-text accents: logo, highlights)
@@ -323,7 +323,7 @@ export const greyDark = {
   overlay: "navy-overlay",
   text: "navy-text",
   "text-secondary": "navy-text-2",
-  muted: "navy-muted",
+  muted: "navy-muted-text",
   faint: "navy-faint",
   "brand-ink": "navy-text-2",
   secondary: "navy-press",
@@ -361,7 +361,7 @@ export const warmLight = {
   "shadow-colour": "warm-text",
   text: "warm-text",
   "text-secondary": "warm-text-2",
-  muted: "warm-muted",
+  muted: "warm-muted-text",
   faint: "warm-faint",
   secondary: "warm-secondary",
   "secondary-hover": "warm-secondary-hover",

@@ -70,6 +70,8 @@ describe("the four themes (owner decision 2026-10-11)", () => {
     ["muted", "surface"],
     ["muted", "canvas"],
     ["muted", "surface-subtle"],
+    // A muted line in a pressed or open row, menu item or toggle.
+    ["muted", "press"],
     ["on-primary", "primary"],
     ["on-primary", "primary-hover"],
     ["on-primary", "primary-press"],
@@ -106,6 +108,8 @@ describe("the four themes (owner decision 2026-10-11)", () => {
     ["sidebar-label", "sidebar"],
     ["sidebar-text", "sidebar-hover"],
     ["sidebar-text", "sidebar-card"],
+    ["sidebar-text", "sidebar-press"],
+    ["sidebar-label", "sidebar-card"],
     ["sidebar-current-text", "sidebar-current"],
   ];
 
@@ -121,6 +125,10 @@ describe("the four themes (owner decision 2026-10-11)", () => {
     ["primary", "canvas"],
     ["danger-fg", "surface"],
     ["sidebar-icon", "sidebar"],
+    ["focus", "sidebar"],
+    // The current item's icon, on its tint.
+    ["brand", "sidebar-current"],
+    ["control-border", "hover"],
     ["brand", "sidebar"],
     // A Project's letter tile: a 19px / 800 letter is large text, so 3:1.
     ...(["1", "2", "3", "4", "5"] as const).map((n) => ["on-avatar", `project-tile-${n}`] as [SemanticRole, SemanticRole]),
