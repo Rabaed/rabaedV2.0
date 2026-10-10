@@ -32,7 +32,7 @@ const NO_RECOMMENDED_CODE = "none";
 type Refusal = { code: string | undefined; fields?: FieldError[] };
 
 /**
- * Claim, release and take-Transition calls on one Work Item, the same on its
+ * Pick up, Return to pool and take-Transition calls on one Work Item, the same on its
  * page and on the Kanban: one answer per refusal code (the "Refusals of a
  * Transition" channel: never why a Step can't be taken), the page refreshed
  * when the item moved or went away under us, and each Transition's idempotency
@@ -48,7 +48,7 @@ export function useWorkItemCalls(workItemId: string) {
 
   const errors: Record<string, string> = {
     not_holder: t("notHolder"),
-    already_claimed: t("alreadyClaimed"),
+    already_picked_up: t("alreadyPickedUp"),
     invalid_action_form: t("actionFormInvalid"),
     forbidden: t("forbidden"),
     no_step_pool: t("noStepPool"),

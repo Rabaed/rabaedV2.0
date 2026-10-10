@@ -47,7 +47,7 @@ const entries: ActivityFeedEntry[] = [
   entry(2, { minutesAgo: 20, by: { companyName: c1, memberName: b("Sara Al Harbi", "سارة الحربي") } }),
   entry(3, {
     minutesAgo: 45,
-    type: "claimed",
+    type: "picked_up",
     transition: null,
     audience: "internal",
     by: { companyName: c1, memberName: b("Omar Fahad", "عمر فهد") },

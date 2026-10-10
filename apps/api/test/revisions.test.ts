@@ -47,14 +47,14 @@ const counters = async () => (await ok(c1.caller.get(`/v1/projects/${projectId}/
 /** Sends a Draft (a new MAR or a Revision) for review and Submits it to K1. */
 async function submit(id: string) {
   await take(engineer, id, "send_for_review");
-  await ok(pm.post(`/v1/work-items/${id}/claim`));
+  await ok(pm.post(`/v1/work-items/${id}/pick-up`));
   await take(pm, id, "submit");
 }
 
 /** K1 verifies the submitted item and issues Code C. */
 async function codeC(id: string) {
   await saveOver(k1Engineer, id, { sample_checked: true, matches_specification: false, verification_note: "Below the specified efficacy" });
-  await ok(k1Manager.post(`/v1/work-items/${id}/claim`));
+  await ok(k1Manager.post(`/v1/work-items/${id}/pick-up`));
   await take(k1Manager, id, "revise_c", { remarks: "Resubmit with 110 lm/W luminaires" });
 }
 
@@ -233,7 +233,7 @@ describe("the Revision's Document Number", () => {
 
   it("reaches K1 when Submitted, with a related Link from the closed item", async () => {
     await expectHidden(k1Manager.get(`/v1/work-items/${rev1}`));
-    await ok(pm.post(`/v1/work-items/${rev1}/claim`));
+    await ok(pm.post(`/v1/work-items/${rev1}/pick-up`));
     await take(pm, rev1, "submit");
     expect(await detail(k1Manager, rev1)).toMatchObject({ documentNumber: `${base} Rev 1`, revisionNo: 1 });
     // Scenario 75: K1 sees the copied Documents with their original upload times.
@@ -268,7 +268,7 @@ describe("a Revision's answer times (RP-392-2)", () => {
     await take(engineer, rev, "send_for_review");
     const creationDate = Date.parse((await detail(engineer, rev)).creationDate!);
     expect(creationDate).toBeGreaterThan(started);
-    await ok(pm.post(`/v1/work-items/${rev}/claim`));
+    await ok(pm.post(`/v1/work-items/${rev}/pick-up`));
     const seen = await times(pm);
     expect(seen.length).toBeGreaterThan(0);
     for (const t of seen) expect(t).toBeGreaterThanOrEqual(creationDate);
@@ -298,7 +298,7 @@ describe("Documents added during the Draft (RP-399-1; scenarios 61, 74 and 75)",
     await take(engineer, id, "send_for_review");
     const created = await creationDate(id);
     for (const [, at] of real) expect(at).toBeLessThan(created);
-    await ok(pm.post(`/v1/work-items/${id}/claim`));
+    await ok(pm.post(`/v1/work-items/${id}/pick-up`));
     expect(await uploaded(pm, id)).toEqual(real.map(([name]) => [name, created]));
     await take(pm, id, "submit");
     for (const who of [engineer, pm, k1Manager]) expect(await uploaded(who, id)).toEqual(real.map(([name]) => [name, created]));
@@ -316,7 +316,7 @@ describe("Documents added during the Draft (RP-399-1; scenarios 61, 74 and 75)",
     await take(engineer, rev, "send_for_review");
     const created = await creationDate(rev);
     expect(draft.at(-1)![1]).toBeLessThan(created);
-    await ok(pm.post(`/v1/work-items/${rev}/claim`));
+    await ok(pm.post(`/v1/work-items/${rev}/pick-up`));
     await take(pm, rev, "submit");
     for (const who of [engineer, pm, k1Manager]) expect(await uploaded(who, rev)).toEqual([...original, ["revised.pdf", created]]);
   });

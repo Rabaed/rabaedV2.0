@@ -3,6 +3,7 @@
 import { Button, Checkbox, Field, Select } from "@rabaed/ui";
 import { useTranslations } from "next-intl";
 import { useState, type FormEvent } from "react";
+import { useHandover, type HandoverRequest } from "@/components/handover";
 import { Link, useRouter } from "@/i18n/navigation";
 
 type Person = { id: string; name: string };
@@ -26,41 +27,60 @@ export function ProjectMembersEditor({
 }) {
   const t = useTranslations("participants");
   const router = useRouter();
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const handover = useHandover();
+  const pending = adding || handover.pending;
   const canManage = candidates !== null;
 
-  async function send(method: "POST" | "PUT" | "DELETE", path: string, body?: unknown) {
-    setPending(true);
-    setError(false);
+  async function add(memberId: string) {
+    setAdding(true);
+    setError(null);
     try {
-      const res = await fetch(`/api/v1/participants/${participantId}/members${path}`, {
-        method,
-        headers: body ? { "content-type": "application/json" } : undefined,
-        body: body ? JSON.stringify(body) : undefined,
+      const res = await fetch(`/api/v1/participants/${participantId}/members`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ memberId }),
       });
-      if (!res.ok) return setError(true);
+      if (!res.ok) return setError(t("unavailable"));
       router.refresh();
     } catch {
-      setError(true);
+      setError(t("unavailable"));
     } finally {
-      setPending(false);
+      setAdding(false);
     }
   }
 
   function onAdd(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const memberId = new FormData(event.currentTarget).get("memberId");
-    if (memberId) void send("POST", "", { memberId });
+    if (typeof memberId === "string" && memberId) void add(memberId);
   }
+
+  /**
+   * A change that may take `member` out of a Step Pool: their Steps there are handed
+   * over first (RP-108), in the Handover dialog when the API asks.
+   */
+  function withHandover(change: Pick<HandoverRequest, "action" | "method" | "url" | "body">) {
+    setError(null);
+    void handover.run({
+      ...change,
+      done: (outcome) => {
+        if (outcome.kind === "done") return router.refresh();
+        setError(outcome.kind === "refused" ? outcome.message : t("unavailable"));
+      },
+    });
+  }
+
+  const memberUrl = (member: Person) => `/api/v1/participants/${participantId}/members/${member.id}`;
 
   function togglePosition(member: Person & { positions: string[] }, key: string, on: boolean) {
     const next = on ? [...member.positions, key] : member.positions.filter((p) => p !== key);
-    void send("PUT", `/${member.id}/positions`, { positions: next });
+    withHandover({ action: "save", method: "PUT", url: `${memberUrl(member)}/positions`, body: { positions: next } });
   }
 
   function remove(member: Person) {
-    if (window.confirm(t("confirmRemove", { name: member.name }))) void send("DELETE", `/${member.id}`);
+    if (window.confirm(t("confirmRemove", { name: member.name }))) withHandover({ action: "remove", method: "DELETE", url: memberUrl(member), body: {} });
   }
 
   return (
@@ -136,9 +156,10 @@ export function ProjectMembersEditor({
 
       {error && (
         <p role="alert" className="text-sm text-danger-fg">
-          {t("unavailable")}
+          {error}
         </p>
       )}
+      {handover.dialog}
     </div>
   );
 }

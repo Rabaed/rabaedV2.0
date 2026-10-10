@@ -24,8 +24,8 @@ export type ActivityFeedPanelLabels = {
   empty: string;
   internal: string;
   noNumber: string;
-  claimed: string;
-  released: string;
+  pickedUp: string;
+  returnedToPool: string;
   assigned: string;
   internalNote: string;
   recommended: string;
@@ -185,7 +185,7 @@ export function ActivityFeedPanel({
 }
 
 /** The labels `whatHappened` reads. */
-export type ActivityEventLabels = Pick<ActivityFeedPanelLabels, "claimed" | "released" | "assigned" | "internalNote" | "recommended" | "cancelled" | "updated">;
+export type ActivityEventLabels = Pick<ActivityFeedPanelLabels, "pickedUp" | "returnedToPool" | "assigned" | "internalNote" | "recommended" | "cancelled" | "updated">;
 
 /** "<did what>": the Transition taken, or what kind of event it was. Home's recent activity words its entries the same way. */
 export function whatHappened(e: ActivityFeedEntry, locale: Locale, labels: ActivityEventLabels): string {
@@ -196,10 +196,12 @@ export function whatHappened(e: ActivityFeedEntry, locale: Locale, labels: Activ
       return label ?? labels.updated;
     case "internal_note":
       return label ? `${labels.internalNote} ${label}` : labels.internalNote;
+    case "picked_up":
     case "claimed":
-      return labels.claimed;
+      return labels.pickedUp;
+    case "returned_to_pool":
     case "released":
-      return labels.released;
+      return labels.returnedToPool;
     case "assigned":
     case "admin_reassigned":
       return labels.assigned;

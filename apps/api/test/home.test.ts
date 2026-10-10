@@ -205,7 +205,7 @@ describe("4+ weeks at their Step (RP-407-4)", () => {
     expect((await home(pm)).counts.longAtStep).toBe(1);
     expect((await home(k1A)).counts.longAtStep).toBe(k1);
 
-    await ok(pm.post(`/v1/work-items/${id}/claim`));
+    await ok(pm.post(`/v1/work-items/${id}/pick-up`));
     await take(pm, id, "submit");
     // With K1 now: its age is from when it reached K1, not the five weeks at C1 (V14).
     expect((await home(pm)).counts.longAtStep).toBe(0);
@@ -269,7 +269,7 @@ describe("Waiting with others: my own Company's items another Participant holds 
     const res = await ok(at.c1Engineer.post(`/v1/projects/${at.projectId}/work-items`, { type: TYPE, title, answers: { model: "P1", trade, location: at.buildingA } }), 201);
     const id = res.json().id as string;
     await take(at.c1Engineer, id, "send_for_review");
-    await ok(at.c1Pm.post(`/v1/work-items/${id}/claim`));
+    await ok(at.c1Pm.post(`/v1/work-items/${id}/pick-up`));
     await take(at.c1Pm, id, "submit");
     return id;
   }
@@ -283,7 +283,7 @@ describe("Waiting with others: my own Company's items another Participant holds 
         answers: { ...answers, sample_checked: true, matches_specification: pass, ...(pass ? {} : { verification_note: "Not as specified" }) },
       }),
     );
-    await ok(at.k1Manager.post(`/v1/work-items/${id}/claim`));
+    await ok(at.k1Manager.post(`/v1/work-items/${id}/pick-up`));
     await take(at.k1Manager, id, code, pass ? {} : { remarks: "Resubmit as specified" });
   }
 
@@ -334,7 +334,7 @@ describe("Waiting with others: my own Company's items another Participant holds 
   it("counts an item K1 sent on to a third Company for its raiser only: K1 and the third Company count none", async () => {
     const before = await waitingFor(at.c1Pm);
     const id = await submittedTest("Waiting: sent on to the Owner Representative");
-    await ok(at.k1Manager.post(`/v1/work-items/${id}/claim`));
+    await ok(at.k1Manager.post(`/v1/work-items/${id}/pick-up`));
     await take(at.k1Manager, id, "forward");
     expect((await detail(orOnAt, id)).id).toBe(id);
     expect(await waitingFor(at.c1Pm)).toBe(before + 1);
@@ -346,7 +346,7 @@ describe("Waiting with others: my own Company's items another Participant holds 
     const before = await waitingFor(at.c1Pm);
     const id = await submittedTest("Waiting: soon sent back");
     expect(await waitingFor(at.c1Pm)).toBe(before + 1);
-    await ok(at.k1Manager.post(`/v1/work-items/${id}/claim`));
+    await ok(at.k1Manager.post(`/v1/work-items/${id}/pick-up`));
     await take(at.k1Manager, id, "send_back");
     // Back with C1's own review: C1 holds it.
     expect(await waitingFor(at.c1Pm)).toBe(before);
@@ -354,7 +354,7 @@ describe("Waiting with others: my own Company's items another Participant holds 
     const res = await ok(at.c1Engineer.post(`/v1/projects/${at.projectId}/work-items`, { type: TYPE, title: "Waiting: cancelled", answers: { model: "P1", trade: at.electrical, location: at.buildingA } }), 201);
     const cancelled = res.json().id as string;
     await take(at.c1Engineer, cancelled, "send_for_review");
-    await ok(at.c1Pm.post(`/v1/work-items/${cancelled}/claim`));
+    await ok(at.c1Pm.post(`/v1/work-items/${cancelled}/pick-up`));
     await take(at.c1Pm, cancelled, "cancel_review");
     expect(await waitingFor(at.c1Pm)).toBe(before);
   });
@@ -374,7 +374,7 @@ describe("Waiting with others: my own Company's items another Participant holds 
     // R1 is still a Draft after Code C: C1 holds it.
     expect(await waitingFor(at.c1Engineer)).toBe(before);
     await take(at.c1Engineer, revision, "send_for_review");
-    await ok(at.c1Pm.post(`/v1/work-items/${revision}/claim`));
+    await ok(at.c1Pm.post(`/v1/work-items/${revision}/pick-up`));
     await take(at.c1Pm, revision, "submit");
     expect(await waitingFor(at.c1Pm)).toBe(before + 1);
   });

@@ -24,7 +24,7 @@ const row: WorkItemRow = {
 const labels = {
   noNumber: "No number yet",
   revisionNoNumber: (r: string) => `Revision ${r}: no number yet`,
-  unclaimed: "unclaimed",
+  notPickedUp: "Not picked up",
   cancelled: "Cancelled",
   code: (c: string) => `Code ${c}`,
   revision: (n: string) => `R${n}`,

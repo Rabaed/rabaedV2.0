@@ -5,7 +5,7 @@
 // the language of their emails and a mute per Project; delivery routes every
 // notification through them. Watchers hear of a watched item's Transitions,
 // Codes, new Revisions and closing, if they still see it and may read the event;
-// never its actor. A claim withdraws the pool colleagues' unread "Step reached".
+// never its actor. A Pick up withdraws the pool colleagues' unread "Step reached".
 import { randomUUID } from "node:crypto";
 import { createDb } from "@rabaed/db";
 import { drainOutbox, testDatabaseUrls } from "@rabaed/db/test-support";
@@ -65,12 +65,12 @@ const about = async (by: Caller, id: string): Promise<Notification[]> =>
 const kinds = async (by: Caller, id: string) => (await about(by, id)).map((n) => n.kind).sort();
 const watched = async (by: Caller, id: string) => (await about(by, id)).filter((n) => n.kind === "watched_event");
 
-/** K1's manager claims the Submitted MAR and issues `code`. */
+/** K1's manager picks up the Submitted MAR and issues `code`. */
 async function issue(id: string, code: "approve_a" | "revise_c", by: Caller = at.k1Manager) {
   const verification = code === "approve_a" ? { matches_specification: true } : { matches_specification: false, verification_note: "Too dim" };
   const answers = { ...(await detail(by, id)).answers, sample_checked: true, ...verification };
   await ok(by.request("PUT", `/v1/work-items/${id}/answers`, { answers }));
-  await ok(by.post(`/v1/work-items/${id}/claim`));
+  await ok(by.post(`/v1/work-items/${id}/pick-up`));
   await ok(by.post(`/v1/work-items/${id}/transitions`, { transition: code, answers: { remarks: "Noted" }, confirmed: true, idempotencyKey: randomUUID() }));
 }
 
@@ -130,7 +130,7 @@ describe("notification settings", () => {
     const member = await projectMember(api, c1, at.c1ParticipantId, ["engineer"]);
     const settings: NotificationSettings = {
       ...defaultNotificationSettings,
-      vacancy: { email: "off" },
+      sent_back: { email: "off" },
       watched: { email: "immediate", outcomes: ["A"] },
     };
     await saveSettings(member, { settings, emailPaused: true, preferredLanguage: "ar" });
@@ -212,13 +212,13 @@ describe("watched items", () => {
 
   it("never tell a watcher of their own move, nor tell them twice when it waits on them", async () => {
     const id = await inReview("Busbars");
-    await ok(at.c1Pm.post(`/v1/work-items/${id}/claim`));
+    await ok(at.c1Pm.post(`/v1/work-items/${id}/pick-up`));
     await ok(at.c1Pm.post(`/v1/work-items/${id}/transitions`, { transition: "return", answers: { reason: "Wrong tray size" }, confirmed: true, idempotencyKey: randomUUID() }));
     await drainOutbox(worker);
     // The raiser watches, and the Return waits on them: one "Step reached", no more.
     expect(await kinds(at.c1Engineer, id)).toEqual(["step_reached"]);
     await take(at.c1Engineer, id, "send_for_review");
-    await ok(at.c1Pm.post(`/v1/work-items/${id}/claim`));
+    await ok(at.c1Pm.post(`/v1/work-items/${id}/pick-up`));
     await take(at.c1Pm, id, "submit");
     await drainOutbox(worker);
     // The PM's own Submit: nothing for the PM; the raiser hears of it as a watcher.
@@ -312,7 +312,7 @@ describe("a move inside another Company (V5)", () => {
     );
     item = res.json().id;
     await take(at.c1Engineer, item, "send_for_review");
-    await ok(at.c1Pm.post(`/v1/work-items/${item}/claim`));
+    await ok(at.c1Pm.post(`/v1/work-items/${item}/pick-up`));
     await take(at.c1Pm, item, "submit");
     await watch(k1Engineer, item);
     await drainOutbox(worker);
@@ -320,7 +320,7 @@ describe("a move inside another Company (V5)", () => {
 
   it("reaches only that Company's watchers: K1 sending it to its manager tells C1 nothing", async () => {
     const before = { engineer: (await about(at.c1Engineer, item)).length, pm: (await about(at.c1Pm, item)).length };
-    await ok(at.k1Manager.post(`/v1/work-items/${item}/claim`));
+    await ok(at.k1Manager.post(`/v1/work-items/${item}/pick-up`));
     await take(at.k1Manager, item, "send_to_manager");
     await drainOutbox(worker);
     expect((await about(at.c1Engineer, item)).length).toBe(before.engineer);
@@ -343,7 +343,7 @@ describe("mute and email off", () => {
     // In-app is always sent: a Member who turned email off still gets it in the bell.
     expect(await kinds(pmOff, id)).toEqual(["step_reached"]);
     expect(await about(pmMuted, id)).toEqual([]);
-    for (const who of [pmMuted, pmOff]) expect((await detail(who, id)).actions.claim).toBe(true);
+    for (const who of [pmMuted, pmOff]) expect((await detail(who, id)).actions.pickUp).toBe(true);
     // Email off routes no email; a mute sends nothing at all.
     const byMember = new Map((await routed(id)).map((r) => [r.member_id, { in_app: r.in_app, email: r.email }]));
     expect(byMember.get(await meOf(at.c1Pm))).toEqual({ in_app: true, email: "immediate" });
@@ -362,8 +362,8 @@ describe("mute and email off", () => {
   });
 });
 
-describe("a claim (scenario 70)", () => {
-  it("withdraws the pool colleagues' unread Step reached, and keeps the claimer's and a read one", async () => {
+describe("a Pick up (scenario 70)", () => {
+  it("withdraws the pool colleagues' unread Step reached, and keeps the holder's and a read one", async () => {
     const reader = await projectMember(api, k1, k1ParticipantId, ["manager"]);
     const id = await submitted(at, at.c1Engineer, at.c1Pm, "Cable tray covers");
     await drainOutbox(worker);
@@ -371,7 +371,7 @@ describe("a claim (scenario 70)", () => {
     const [read] = await about(reader, id);
     await ok(reader.post("/v1/notifications/read", { ids: [read!.id] }));
 
-    await ok(at.k1Manager.post(`/v1/work-items/${id}/claim`));
+    await ok(at.k1Manager.post(`/v1/work-items/${id}/pick-up`));
     expect(await kinds(at.k1Manager, id)).toEqual(["step_reached"]);
     expect(await about(k1Manager2, id)).toEqual([]);
     expect(await kinds(reader, id)).toEqual(["step_reached"]);

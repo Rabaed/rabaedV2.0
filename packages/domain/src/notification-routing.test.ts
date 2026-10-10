@@ -35,7 +35,6 @@ describe("the defaults", () => {
       step_reached: { email: "immediate" },
       watched: { email: "digest", outcomes: ["A", "B", "C", "D", "passed", "passed_with_comments", "failed", "approved", "rejected", "cancelled"] },
       sent_back: { email: "immediate" },
-      vacancy: { email: "digest" },
       weekly_report: { email: "immediate" },
     });
   });
@@ -45,7 +44,6 @@ describe("the defaults", () => {
       ["step_reached", { inApp: true, email: "immediate" }],
       ["watched_event", { inApp: true, email: "digest" }],
       ["sent_back", { inApp: true, email: "immediate" }],
-      ["vacancy", { inApp: true, email: "digest" }],
       ["weekly_report", { inApp: false, email: "immediate" }],
     ]);
   });
@@ -60,7 +58,7 @@ describe("a group's own setting", () => {
   });
 
   it("chooses the email: off is none, otherwise as chosen", () => {
-    expect(notificationEmailChoices.map((email) => routeNotification(input({ kind: "vacancy", settings: withGroup("vacancy", { email }) })).email)).toEqual([
+    expect(notificationEmailChoices.map((email) => routeNotification(input({ kind: "sent_back", settings: withGroup("sent_back", { email }) })).email)).toEqual([
       "none",
       "immediate",
       "digest",
@@ -152,7 +150,7 @@ describe("every combination", () => {
   );
 
   it("covers every kind, outcome, email choice, tick set, mute and pause", () => {
-    expect(cases).toHaveLength(5 * 12 * 3 * 3 * 2 * 2);
+    expect(cases).toHaveLength(4 * 12 * 3 * 3 * 2 * 2);
   });
 
   it.each(cases)("$kind $outcome email=$email ticks=$ticks muted=$muted paused=$emailPaused", (c) => {

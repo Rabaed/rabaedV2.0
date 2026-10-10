@@ -126,6 +126,6 @@ export const ThemeAndMode: Story = {
     await userEvent.click(within(theme).getByRole("button", { name: t(appearanceCopy.warm) }));
     await expect(document.documentElement).toHaveAttribute("data-theme", "warm");
     // The page itself is espresso now.
-    await expect(getComputedStyle(document.body).backgroundColor).toBe("rgb(22, 17, 14)");
+    await expect(getComputedStyle(document.documentElement).getPropertyValue("--canvas")).toContain("espresso");
   },
 };

@@ -85,7 +85,7 @@ async function draftOf(model: string, answers: Record<string, unknown> = {}): Pr
 
 async function submit(itemId: string) {
   await take(engineer, itemId, "send_for_review");
-  await ok(pm.post(`/v1/work-items/${itemId}/claim`));
+  await ok(pm.post(`/v1/work-items/${itemId}/pick-up`));
   await take(pm, itemId, "submit");
 }
 
@@ -121,7 +121,7 @@ beforeAll(async () => {
   before = [await uploadDocument(engineer, id, pdf("datasheet-1.pdf")), await uploadDocument(engineer, id, attachment("letter-1.txt"))].sort();
   await ok(engineer.post(`/v1/work-items/${id}/links`, { workItemId: x }), 201);
   await submit(id);
-  await ok(k1Engineer.post(`/v1/work-items/${id}/claim`));
+  await ok(k1Engineer.post(`/v1/work-items/${id}/pick-up`));
   await take(k1Engineer, id, "send_back_to_draft");
 
   // C1, holding it in its Draft again, changes it: none of this has arrived anywhere yet.

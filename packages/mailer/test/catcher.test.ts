@@ -76,7 +76,7 @@ describe("the mailer, against the local catcher", () => {
                   { kind: "sent_back", step: null, event: { type: "transition", transition: null, outcome: null, companyName: { en: "Khatib", ar: "الخطيب" }, signerName: null } },
                 ],
               },
-              { workItemId: randomUUID(), documentNumber: "TWR-MAR-01-0002", subject: "Pumps", entries: [{ kind: "vacancy", step: { en: "Review", ar: "المراجعة" }, event: null }] },
+              { workItemId: randomUUID(), documentNumber: "TWR-MAR-01-0002", subject: "Pumps", entries: [{ kind: "step_reached", step: { en: "Review", ar: "المراجعة" }, event: null }] },
             ],
           },
         ],

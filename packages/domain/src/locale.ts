@@ -29,6 +29,12 @@ export function intlLocaleOf(locale: Locale): string {
   return locale === "ar" ? "ar-SA-u-ca-gregory-nu-latn" : "en-SA";
 }
 
+/** `items` ordered by `name` (each one's name in `locale`) in that language's order. */
+export function sortedByName<T>(items: readonly T[], name: (item: T) => string, locale: Locale): T[] {
+  const collator = new Intl.Collator(intlLocaleOf(locale));
+  return items.toSorted((a, b) => collator.compare(name(a), name(b)));
+}
+
 /** Projects are in Saudi Arabia: dates and times read the same on the server and in any browser. */
 export const timeZone = "Asia/Riyadh";
 

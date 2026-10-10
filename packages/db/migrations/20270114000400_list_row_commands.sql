@@ -102,7 +102,7 @@ create function app.discard_draft(p_work_item_id uuid, p_now timestamptz) return
         jsonb_build_object('draft_discarded', true), 'internal', v_item.raised_by_participant_id, v_at
       );
       update step_assignment set status = 'done', done_at = v_at, updated_at = v_at
-      where work_item_id = p_work_item_id and status in ('pooled', 'claimed', 'vacant');
+      where work_item_id = p_work_item_id and status in ('pooled', 'picked_up', 'vacant');
       update work_item set outcome = 'cancelled', closed_at = v_at, discarded_at = v_at, updated_at = v_at
       where id = p_work_item_id;
       -- Nobody sees it again; it never left the raiser's Participant.

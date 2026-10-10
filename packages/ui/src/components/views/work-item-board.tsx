@@ -42,7 +42,7 @@ export type WorkItemBoardLabels = {
   noNumber: string;
   revisionNoNumber: (revision: string) => string;
   /** After a Step's name, when nobody in the viewer's Company has claimed it. */
-  unclaimed: string;
+  notPickedUp: string;
   /** A column with no cards. */
   noItems: string;
   closedSince: (days: string) => string;
@@ -543,11 +543,11 @@ export function outcomeBadge(
 }
 
 /**
- * Who holds it (V14): my own Company's person or unclaimed Step; another Company by
+ * Who holds it (V14): my own Company's person or Step not picked up; another Company by
  * its name only. A closed item, which nobody holds, shows who closed it, the same way.
  * Avatars take Latin initials from the English name.
  */
-export function ownerOf(card: WorkItemRow, locale: Locale, labels: Pick<WorkItemBoardLabels, "unclaimed">): KanbanCardOwner | undefined {
+export function ownerOf(card: WorkItemRow, locale: Locale, labels: Pick<WorkItemBoardLabels, "notPickedUp">): KanbanCardOwner | undefined {
   if (!isOpenStageCategory(card.stage.category)) {
     const c = card.closedBy;
     if (!c) return undefined;
@@ -558,8 +558,8 @@ export function ownerOf(card: WorkItemRow, locale: Locale, labels: Pick<WorkItem
   const w = card.with;
   if (!w) return undefined;
   if (w.kind === "company") return { kind: "company", name: w.companyName[locale], initialsFrom: w.companyName.en };
-  if (w.claimer) return { kind: "person", name: w.claimer.name[locale], initialsFrom: w.claimer.name.en };
-  return { kind: "pool", name: `${w.step.name[locale]} · ${labels.unclaimed}` };
+  if (w.holder) return { kind: "person", name: w.holder.name[locale], initialsFrom: w.holder.name.en };
+  return { kind: "pool", name: `${w.step.name[locale]} · ${labels.notPickedUp}` };
 }
 
 /** The View switch's words, from the app's messages. */

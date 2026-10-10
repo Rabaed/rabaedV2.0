@@ -245,7 +245,7 @@ describe("the README walkthrough", () => {
     const saved = await who.request("PUT", `/v1/work-items/${mar}/answers`, { answers: { ...(await detail(who, mar)).answers, ...verification } });
     expect(saved.statusCode, saved.body).toBe(204);
   };
-  const claim = async (who: Caller) => expect((await who.post(`/v1/work-items/${mar}/claim`)).statusCode).toBe(204);
+  const pickUp = async (who: Caller) => expect((await who.post(`/v1/work-items/${mar}/pick-up`)).statusCode).toBe(204);
   // The Form of a complete MAR; a function, as the Trade and Location ids come from beforeAll.
   const filled = () => ({
     manufacturer: "Philips",
@@ -308,12 +308,12 @@ describe("the README walkthrough", () => {
     for (const who of [ahmed, mohammed, faisal]) await hidden(who);
   });
 
-  it("4. Ali claims and Returns it with a reason; 5. Hafiz re-sends it", async () => {
-    await claim(ali);
+  it("4. Ali picks up and Returns it with a reason; 5. Hafiz re-sends it", async () => {
+    await pickUp(ali);
     await take(ali, mar, "return", { reason: "Add emergency duration" });
     expect((await detail(hafiz, mar)).stage.key).toBe("draft");
     await take(hafiz, mar, "send_for_review");
-    await claim(ali);
+    await pickUp(ali);
   });
 
   it("6. Ali Submits it: With Design Consultants LLC; the Consultant and Al Waha see it, Beta Build never does", async () => {
@@ -321,9 +321,12 @@ describe("the README walkthrough", () => {
     expect((await detail(hafiz, mar)).heldBy).toEqual({
       companyName: { en: "Design Consultants LLC", ar: "المصممون الاستشاريون ذ.م.م" },
       memberName: null,
+      pool: null,
     });
-    expect((await detail(ahmed, mar)).actions).toMatchObject({ claim: false, transitions: [] });
-    expect((await detail(mohammed, mar)).actions.claim).toBe(true);
+    expect((await detail(ahmed, mar)).actions).toMatchObject({ pickUp: false, transitions: [] });
+    // Mohammed is the Consultant's only Manager: he holds it at once, with no Pick up (§3.3 rule 4).
+    expect((await detail(mohammed, mar)).actions.pickUp).toBe(false);
+    expect((await detail(mohammed, mar)).heldBy?.memberName?.en).toBe("Mohammed Al Shamsi");
     expect((await detail(faisal, mar)).stage.key).toBe("pending_approval");
     await hidden(yousef, { countsZero: true });
     expect((await ahmed.get(`/v1/work-items/${mar}/history`)).body).not.toContain("Add emergency duration");
@@ -338,8 +341,8 @@ describe("the README walkthrough", () => {
     await expectHidden(yousef.get(`/v1/work-items/${mar}/documents`));
   });
 
-  it("8. Mohammed claims it and issues Code A; TMC and Al Waha see the Code and its signer", async () => {
-    await claim(mohammed);
+  it("8. Mohammed picks it up and issues Code A; TMC and Al Waha see the Code and its signer", async () => {
+    await pickUp(mohammed);
     await verify(mohammed, { sample_checked: true, matches_specification: true });
     await take(mohammed, mar, "approve_a");
     expect(await detail(hafiz, mar)).toMatchObject({ stage: { key: "approved" }, outcome: "A" });
@@ -354,9 +357,9 @@ describe("the README walkthrough", () => {
     mar = await raise("Cable tray layout – Level 2");
     await attachDatasheet(hafiz, "cable-tray-datasheet.pdf", "%PDF-1.4 Cable tray datasheet (demo)");
     await take(hafiz, mar, "send_for_review");
-    await claim(ali);
+    await pickUp(ali);
     await take(ali, mar, "submit");
-    await claim(mohammed);
+    await pickUp(mohammed);
     await verify(mohammed, { sample_checked: true, matches_specification: false, verification_note: "Wrong datasheet revision" });
     await take(mohammed, mar, "revise_c", { remarks: "Submit the 2020 revision of the datasheet" });
     expect(await detail(hafiz, mar)).toMatchObject({ stage: { key: "revise_resubmit" }, outcome: "C" });
@@ -394,7 +397,7 @@ describe("the README walkthrough", () => {
     // In TMC's internal review it isn't listed yet, whoever asks.
     expect((await linkedFrom(hafiz, linking)).items).toEqual([]);
     expect((await linkedFrom(omar, linking)).items).toEqual([]);
-    await claim(ali);
+    await pickUp(ali);
     await take(ali, mar, "submit");
     const documentNumber = (await detail(hafiz, mar)).documentNumber;
     const subject = "Lighting control wiring – Tower 1";
@@ -414,7 +417,7 @@ describe("the README walkthrough", () => {
     const refused = await hafiz.request("PUT", `/v1/work-items/${mar}/answers`, { answers: { ...filled(), sample_checked: true } });
     expect(refused.statusCode, refused.body).toBe(409);
     await take(hafiz, mar, "send_for_review");
-    await claim(ali);
+    await pickUp(ali);
     // Leaving Draft and the Contractor's review never needed the Consultant's answers.
     await take(ali, mar, "submit");
     for (const who of [hafiz, ali, faisal]) {
@@ -436,7 +439,7 @@ describe("the README walkthrough", () => {
       expect(history.events.filter((e) => e.type === "answers_changed")).toEqual([]);
     }
     // The Code is refused while the verification is incomplete (the note is required for No) ...
-    await claim(mohammed);
+    await pickUp(mohammed);
     const incomplete = await mohammed.post(`/v1/work-items/${mar}/transitions`, {
       transition: "revise_c",
       answers: { remarks: "Fix the specification mismatch" },

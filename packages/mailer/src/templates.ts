@@ -39,8 +39,6 @@ export interface EmailTemplateValues {
   "notification-watched-event": NotificationEmailValues;
   /** An item was Sent Back to the Member's Participant (RP-356). */
   "notification-sent-back": NotificationEmailValues;
-  /** A Step in the Member's Company has nobody to hold it (RP-356). */
-  "notification-vacancy": NotificationEmailValues;
   /** The daily digest of the notifications routed to it (RP-358). */
   "daily-digest": DailyDigestValues;
   /** The weekly Step Age report (RP-359). */
@@ -172,8 +170,6 @@ const notificationCopy = {
   en: {
     reached: (step: string) => `Reached you at ${step}`,
     sentBack: "Sent Back to you",
-    vacancy: (step: string) => `Vacancy at ${step}`,
-    vacancyHelp: "Whoever held it has left the Project. Assign someone to hold it.",
     revision: "New Revision",
     code: (code: string) => `Code ${code}`,
     closed: "Closed",
@@ -188,8 +184,6 @@ const notificationCopy = {
   ar: {
     reached: (step: string) => `وصلك في ${step}`,
     sentBack: "أُرجع إليكم",
-    vacancy: (step: string) => `شاغر في ${step}`,
-    vacancyHelp: "غادر المشروعَ من كان يتولاها. سمِّ من يتولاها.",
     revision: "مراجعة جديدة",
     code: (code: string) => `الرمز ${code}`,
     closed: "مغلق",
@@ -264,11 +258,6 @@ const notificationKinds = {
     template: "notification-sent-back",
     happened: (locale: Locale) => notificationCopy[locale].sentBack,
     details: (locale: Locale, { event }: Happening) => actedBy(locale, event),
-  },
-  vacancy: {
-    template: "notification-vacancy",
-    happened: (locale: Locale, { step }: Happening) => notificationCopy[locale].vacancy(stepName(locale, step)),
-    details: (locale: Locale): Paragraph[] => [[notificationCopy[locale].vacancyHelp]],
   },
 } as const satisfies Record<
   NotificationEmailKind,

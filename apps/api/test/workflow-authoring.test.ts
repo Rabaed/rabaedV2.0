@@ -348,11 +348,11 @@ describe("a Revision starts on its chain's own Workflow (ADR 0016)", () => {
     const id = await draft(at, at.c1Engineer, "Revised on its own route");
     expect((await detail(at.c1Engineer, id)).workflow.name).toEqual(TOWER_ROUTE);
     await take(at.c1Engineer, id, "send_for_review");
-    await ok(at.c1Pm.post(`/v1/work-items/${id}/claim`));
+    await ok(at.c1Pm.post(`/v1/work-items/${id}/pick-up`));
     await take(at.c1Pm, id, "submit");
     const answers = { ...(await detail(k1Engineer, id)).answers, sample_checked: true, matches_specification: false, verification_note: "Below spec" };
     await ok(k1Engineer.request("PUT", `/v1/work-items/${id}/answers`, { answers }));
-    await ok(at.k1Manager.post(`/v1/work-items/${id}/claim`));
+    await ok(at.k1Manager.post(`/v1/work-items/${id}/pick-up`));
     await take(at.k1Manager, id, "revise_c", { remarks: "Resubmit with the datasheet" });
     // The Project goes back to the Rabaed Default.
     await ok(c1.caller.delete(`/v1/projects/${at.projectId}/workflow-bindings?workItemTypeId=${marTypeId}`), 204);

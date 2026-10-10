@@ -11,7 +11,7 @@ type Transition = Actions["transitions"][number];
 /**
  * Exactly the buttons the viewer may press on a Work Item, as the API lists them.
  * Each Transition opens its pop-up first (`TransitionDialog`, the same one a
- * Kanban move opens); claim and release are taken at once.
+ * Kanban move opens); Pick up and Return to pool are taken at once.
  */
 export function WorkItemActions({
   workItemId,
@@ -26,7 +26,7 @@ export function WorkItemActions({
   const calls = useWorkItemCalls(workItemId);
   const [asking, setAsking] = useState<Transition | null>(null);
 
-  const none = !actions.claim && !actions.release && actions.transitions.length === 0;
+  const none = !actions.pickUp && !actions.returnToPool && actions.transitions.length === 0;
   if (none) return null;
 
   return (
@@ -42,14 +42,14 @@ export function WorkItemActions({
             {tr.label[locale]}
           </Button>
         ))}
-        {actions.claim && (
-          <Button disabled={calls.pending} onClick={() => void calls.send("claim")}>
-            {t("claim")}
+        {actions.pickUp && (
+          <Button disabled={calls.pending} onClick={() => void calls.send("pick-up")}>
+            {t("pickUp")}
           </Button>
         )}
-        {actions.release && (
-          <Button variant="ghost" disabled={calls.pending} onClick={() => void calls.send("release")}>
-            {t("release")}
+        {actions.returnToPool && (
+          <Button variant="ghost" disabled={calls.pending} onClick={() => void calls.send("return-to-pool")}>
+            {t("returnToPool")}
           </Button>
         )}
       </div>

@@ -34,7 +34,7 @@ const item = (n: number, over: Partial<HomeWorkItem>): HomeWorkItem => ({
   stepEnteredAt: "2026-10-05T08:00:00.000Z",
   stepAgeWeeks: 1,
   outcome: null,
-  with: { kind: "own", companyName: c1, step: { key: "pm_review", name: b("PM Review", "مراجعة مدير المشروع") }, claimer: null },
+  with: { kind: "own", companyName: c1, step: { key: "pm_review", name: b("PM Review", "مراجعة مدير المشروع") }, holder: null },
   submissionDate: null,
   creationDate: null,
   ...over,
@@ -93,8 +93,8 @@ const needsLabels: Record<Locale, NeedsMyActionCardLabels> = {
   ar: { title: "بحاجة لإجرائي", empty: "لا شيء بانتظارك.", noNumber: "بلا رقم بعد", revision: (n) => `R${n}`, otherBoards: "لوحات أخرى" },
 };
 const verbs: Record<Locale, Partial<Record<HomeActivityVerb, string>>> = {
-  en: { approved: "approved", submitted: "submitted", claimed: "claimed", returned: "returned", returnedForRevision: "returned for revision", rejected: "rejected" },
-  ar: { approved: "اعتمد", submitted: "قدّم", claimed: "استلم", returned: "أعاد", returnedForRevision: "أعاد للتعديل", rejected: "رفض" },
+  en: { approved: "approved", submitted: "submitted", pickedUp: "picked up", returned: "returned", returnedForRevision: "returned for revision", rejected: "rejected" },
+  ar: { approved: "اعتمد", submitted: "قدّم", pickedUp: "استلم", returned: "أعاد", returnedForRevision: "أعاد للتعديل", rejected: "رفض" },
 };
 const activityLabels: Record<Locale, RecentActivityCardLabels> = {
   en: { title: "Recent activity", empty: "Nothing has happened on the items you can see yet.", verb: (v) => verbs.en[v] ?? "updated", code: (code) => `(Code ${code})`, outcome: (name) => `(${name})` },

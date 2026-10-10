@@ -17,7 +17,7 @@ export type ExportColumn = { header: string; cell: (row: WorkItemRow) => ExportC
 
 export type ExportContext = {
   locale: Locale;
-  labels: Pick<WorkItemTableLabels, "noNumber" | "revisionNoNumber" | "unclaimed" | "cancelled" | "code" | "revision">;
+  labels: Pick<WorkItemTableLabels, "noNumber" | "revisionNoNumber" | "notPickedUp" | "cancelled" | "code" | "revision">;
   filters: WorkItemTableProps["filters"];
   headerOf: (key: ListColumnKey) => string;
   /** The file's and its sheet's name, without an extension, e.g. "Submittals". */

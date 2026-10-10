@@ -215,7 +215,7 @@ describe("another Company", () => {
   beforeAll(async () => {
     id = (await ok(createDraft({ items: rows }), 201)).json().id as string;
     await ok(tryTake(engineer, id, "send_for_review"));
-    await ok(pm.post(`/v1/work-items/${id}/claim`));
+    await ok(pm.post(`/v1/work-items/${id}/pick-up`));
     await ok(tryTake(pm, id, "submit"));
   });
 

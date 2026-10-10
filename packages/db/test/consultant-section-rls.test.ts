@@ -109,8 +109,8 @@ const save = (as: string, data: object, id = item) =>
     sql`select app.save_work_item_answers(${id}::uuid, ${JSON.stringify(data)}::jsonb, ${electrical}::uuid, ${buildingA}::uuid, '{}'::uuid[], now()) as outcome`,
   );
 const recordTimes = (as: string, id: string) => outcome(as, sql`select app.record_field_times(${id}::uuid, now()) as outcome`);
-const claim = (as: string, id: string) => outcome(as, sql`select app.claim_step(${id}::uuid, now()) as outcome`);
-/** A new item, Submitted to K1 and claimed by its engineer. */
+const pickUp = (as: string, id: string) => outcome(as, sql`select app.pick_up_step(${id}::uuid, now()) as outcome`);
+/** A new item, Submitted to K1 and picked up by its engineer. */
 async function atConsultantReview(model: string): Promise<string> {
   const [draft] = await call<{ outcome: string; work_item_id: string }>(
     c1.member,
@@ -122,9 +122,9 @@ async function atConsultantReview(model: string): Promise<string> {
   // As the API does after every save.
   expect(await recordTimes(c1.member, id)).toBe("recorded");
   expect(await take(c1.member, "send_for_review", sql`app.answers_sha256(${id}::uuid)`, id)).toBe("applied");
-  expect(await claim(c1Pm, id)).toBe("claimed");
+  expect(await pickUp(c1Pm, id)).toBe("picked_up");
   expect(await take(c1Pm, "submit", sql`app.answers_sha256(${id}::uuid)`, id)).toBe("applied");
-  expect(await claim(k1.member, id)).toBe("claimed");
+  expect(await pickUp(k1.member, id)).toBe("picked_up");
   return id;
 }
 const answers = (as: string, id = item) =>
@@ -209,9 +209,9 @@ beforeAll(async () => {
   expect(draft!.outcome).toBe("created");
   item = draft!.work_item_id;
   expect(await take(c1.member, "send_for_review")).toBe("applied");
-  expect(await outcome(c1Pm, sql`select app.claim_step(${item}::uuid, now()) as outcome`)).toBe("claimed");
+  expect(await outcome(c1Pm, sql`select app.pick_up_step(${item}::uuid, now()) as outcome`)).toBe("picked_up");
   expect(await take(c1Pm, "submit")).toBe("applied");
-  expect(await outcome(k1.member, sql`select app.claim_step(${item}::uuid, now()) as outcome`)).toBe("claimed");
+  expect(await outcome(k1.member, sql`select app.pick_up_step(${item}::uuid, now()) as outcome`)).toBe("picked_up");
 });
 
 afterAll(async () => {
@@ -237,10 +237,10 @@ describe("K1 at the Step its section names", () => {
     for (const k of [k1.member, k1Other]) {
       expect(await answers(k)).toEqual({ model: "FD-90", sample_checked: false });
       expect(await changes(k)).toMatchObject({ events: [{}, {}], history: [{}, {}] });
-      // The feed leaves answer changes out, even for K1; K1's own claim is there.
+      // The feed leaves answer changes out, even for K1; K1's own Pick up is there.
       const entries = await feed(k);
       expect(entries.map((e) => e.type)).not.toContain("answers_changed");
-      expect(entries).toContainEqual({ type: "claimed", audience: "internal", company: "K1" });
+      expect(entries).toContainEqual({ type: "picked_up", audience: "internal", company: "K1" });
     }
   });
 
@@ -262,7 +262,7 @@ describe("K1 at the Step its section names", () => {
   it("becomes everyone's when the item leaves K1, its events still K1's", async () => {
     expect(await take(k1.member, "send_to_manager")).toBe("applied");
     expect(await answers(c1.member)).toEqual({ model: "FD-90" });
-    expect(await outcome(k1Manager, sql`select app.claim_step(${item}::uuid, now()) as outcome`)).toBe("claimed");
+    expect(await outcome(k1Manager, sql`select app.pick_up_step(${item}::uuid, now()) as outcome`)).toBe("picked_up");
     expect(await take(k1Manager, "approve_a")).toBe("applied");
     for (const other of [c1.member, ow.member]) {
       expect(await answers(other)).toEqual({ model: "FD-90", sample_checked: false });

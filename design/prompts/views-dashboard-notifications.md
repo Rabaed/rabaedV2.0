@@ -52,7 +52,7 @@ These prototypes show UI intent only. Terms follow `GLOSSARY.md`. Every screen o
 
 ## 7. Notification settings (Member profile)
 
-- One row per group: Step reached me or my pool · Items I watch · Sent Back to my Participant · Vacancy in my Company · Weekly Step Age report. The last row is shown only to Members who receive the report.
+- One row per group: Step reached me or my pool · Items I watch · Sent Back to my Participant · Weekly Step Age report. The last row is shown only to Members who receive the report.
 - Each row has an **In-app** switch and an **Email** choice: Off, Immediately, or Daily digest. The Weekly Step Age report row has only an **Email** on/off switch: the report is an email sent on its own schedule (Sunday morning), never in the bell.
 - "Items I watch" expands to tick the outcomes that notify: A, B, C, D · Passed, Passed with Comments, Failed · Approved, Rejected, Cancelled.
 - At the top: **Pause all email**, the **preferred language** (Arabic or English) for emails, and a list of Projects with a mute switch each.

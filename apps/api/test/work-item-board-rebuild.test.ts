@@ -65,16 +65,16 @@ async function draft(title: string, answers: Record<string, unknown> = {}): Prom
   return id;
 }
 
-/** Sends a Draft for review, where C1's PM claims it. */
+/** Sends a Draft for review, where C1's PM picks it up. */
 async function inReview(id: string) {
   await take(c1Engineer, id, "send_for_review");
-  await ok(c1Pm.post(`/v1/work-items/${id}/claim`));
+  await ok(c1Pm.post(`/v1/work-items/${id}/pick-up`));
 }
 
-let atA1f1 = ""; // In review, claimed by C1's PM; Electrical; Zone A › A1 › Floor 1.
+let atA1f1 = ""; // In review, picked up by C1's PM; Electrical; Zone A › A1 › Floor 1.
 let atA2 = ""; // Draft; Mechanical; Zone A › A2.
-let atZoneB = ""; // In review, unclaimed; Electrical; Zone B.
-let withK1 = ""; // Submitted, claimed by K1's manager.
+let atZoneB = ""; // In review, not picked up; Electrical; Zone B.
+let withK1 = ""; // Submitted, picked up by K1's manager.
 let late = ""; // Numbered now, Submitted 20 days later.
 
 beforeAll(async () => {
@@ -99,6 +99,12 @@ beforeAll(async () => {
   await api.addProjectMember(c1.caller, own, pm.id);
   await ok(c1.caller.request("PUT", `/v1/participants/${own}/members/${pm.id}/visibility`, { trade: all, location: all }));
   await ok(c1.caller.request("PUT", `/v1/participants/${own}/members/${pm.id}/positions`, { positions: ["project_manager"] }));
+  // A second PM, so C1's review pool isn't a pool of one, which holds the Step at once (RP-513): "Busbars" stays not picked up.
+  const pm2 = await api.inviteMember(c1.caller, { fullName: { en: "Badr Alawi", ar: "بدر العلوي" } });
+  await api.acceptInvitation(pm2.invitationToken);
+  await api.addProjectMember(c1.caller, own, pm2.id);
+  await ok(c1.caller.request("PUT", `/v1/participants/${own}/members/${pm2.id}/visibility`, { trade: all, location: all }));
+  await ok(c1.caller.request("PUT", `/v1/participants/${own}/members/${pm2.id}/positions`, { positions: ["project_manager"] }));
 
   const k1 = await api.authorizedPerson();
   k1ParticipantId = await api.addParticipant(c1.caller, projectId, k1.company, "consultant");
@@ -120,7 +126,7 @@ beforeAll(async () => {
   withK1 = await draft("Fixtures", { location: loc.zoneB });
   await inReview(withK1);
   await take(c1Pm, withK1, "submit");
-  await ok(k1Manager.post(`/v1/work-items/${withK1}/claim`));
+  await ok(k1Manager.post(`/v1/work-items/${withK1}/pick-up`));
   late = await draft("Pumps", { trade: trade.mechanical, location: loc.zoneB });
   await inReview(late);
 });
@@ -163,13 +169,13 @@ describe("Owner and Role (scenario RP-410-1, V5, V14)", () => {
     expect(JSON.stringify(await board(k1Engineer))).not.toContain("Ali Sonour");
   });
 
-  it("filters by my people, my unclaimed pool or another Company, any of them", async () => {
+  it("filters by my people, my pool's Steps not picked up or another Company, any of them", async () => {
     expect(cardIds(await board(c1Engineer, { owner: [`member:${c1PmId}`] }))).toEqual(ids(atA1f1, late));
-    expect(cardIds(await board(c1Engineer, { owner: ["unclaimed"] }))).toEqual([atZoneB]);
-    expect(cardIds(await board(c1Engineer, { owner: [`company:${k1ParticipantId}`, "unclaimed"] }))).toEqual(ids(atZoneB, withK1));
+    expect(cardIds(await board(c1Engineer, { owner: ["not_picked_up"] }))).toEqual([atZoneB]);
+    expect(cardIds(await board(c1Engineer, { owner: [`company:${k1ParticipantId}`, "not_picked_up"] }))).toEqual(ids(atZoneB, withK1));
     // The List reads the same filter.
     expect(await listIds(c1Engineer, { owner: [`member:${c1PmId}`] })).toEqual(ids(atA1f1, late));
-    expect(await listIds(c1Engineer, { owner: [`company:${k1ParticipantId}`, "unclaimed"] })).toEqual(ids(atZoneB, withK1));
+    expect(await listIds(c1Engineer, { owner: [`company:${k1ParticipantId}`, "not_picked_up"] })).toEqual(ids(atZoneB, withK1));
   });
 
   it("matches nothing for another Company's person, though they hold one of my items", async () => {
@@ -223,7 +229,7 @@ describe("search on this board (RP-410, V14)", () => {
 describe("search on a closed item", () => {
   let closed = "";
   beforeAll(async () => {
-    // Submitted, claimed by K1's manager, who closes it with Code C: nobody holds it now.
+    // Submitted, picked up by K1's manager, who closes it with Code C: nobody holds it now.
     closed = await draft("Gaskets", { trade: trade.mechanical, location: loc.zoneA });
     await inReview(closed);
     await take(c1Pm, closed, "submit");
@@ -233,7 +239,7 @@ describe("search on a closed item", () => {
         answers: { ...answers, sample_checked: true, matches_specification: false, verification_note: "Wrong rating" },
       }),
     );
-    await ok(k1Manager.post(`/v1/work-items/${closed}/claim`));
+    await ok(k1Manager.post(`/v1/work-items/${closed}/pick-up`));
     await take(k1Manager, closed, "revise_c", { remarks: "Resubmit with the rated gaskets" });
   });
 

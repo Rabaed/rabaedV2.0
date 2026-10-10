@@ -61,7 +61,7 @@ const take = (as: string, id: string, transition: string, recommendedCode: strin
       ${id}::uuid, ${transition}, '{}'::jsonb, 'A note', app.answers_sha256(${id}::uuid), ${randomUUID()}::uuid, now(),
       null::uuid, ${recommendedCode}::text) as outcome`,
   );
-const claim = (as: string, id: string) => outcome(as, sql`select app.claim_step(${id}::uuid, now()) as outcome`);
+const pickUp = (as: string, id: string) => outcome(as, sql`select app.pick_up_step(${id}::uuid, now()) as outcome`);
 const takeable = async (as: string, id: string) =>
   (await call<{ key: string }>(as, sql`select transition_key as key from app.work_item_actions(${id}::uuid) where action = 'transition'`))
     .map((r) => r.key)
@@ -104,15 +104,15 @@ async function draft(model: string): Promise<string> {
 async function inReview(model: string): Promise<string> {
   const id = await draft(model);
   expect(await take(c1.member, id, "send_for_review")).toBe("applied");
-  expect(await claim(c1Pm, id)).toBe("claimed");
+  expect(await pickUp(c1Pm, id)).toBe("picked_up");
   return id;
 }
 
-/** Submitted to K1, claimed by K1's engineer at the Step that Recommends a Code. */
+/** Submitted to K1, picked up by K1's engineer at the Step that Recommends a Code. */
 async function atConsultantReview(model: string): Promise<string> {
   const id = await inReview(model);
   expect(await take(c1Pm, id, "submit")).toBe("applied");
-  expect(await claim(k1.member, id)).toBe("claimed");
+  expect(await pickUp(k1.member, id)).toBe("picked_up");
   return id;
 }
 
@@ -211,7 +211,7 @@ describe("Cancel", () => {
   it("is neither offered nor taken once the item has been Submitted, even back at the raiser's Steps", async () => {
     const id = await atConsultantReview("Sent back");
     expect(await take(k1.member, id, "send_back")).toBe("applied");
-    expect(await claim(c1Pm, id)).toBe("claimed");
+    expect(await pickUp(c1Pm, id)).toBe("picked_up");
     expect(await takeable(c1Pm, id)).not.toContain("cancel_review");
     expect(await take(c1Pm, id, "cancel_review")).toBe("transition_not_available");
     expect((await recorded(id)).closed).toBe(false);
@@ -241,7 +241,7 @@ describe("scenario RP-433-1: K1's engineer recommends Code A to their manager", 
     expect(rows).toEqual([{ audience: "internal", company_id: k1.id }]);
 
     // Once the Code is issued, C1 reads the Code and counts on with no gap.
-    expect(await claim(k1Manager, id)).toBe("claimed");
+    expect(await pickUp(k1Manager, id)).toBe("picked_up");
     expect(await take(k1Manager, id, "approve_a")).toBe("applied");
     const after = await eventsAsRead(c1Pm, id);
     expect(after.count).toBe(before.pm.count + 1);

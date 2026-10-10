@@ -58,7 +58,7 @@ export const projectSummary = z.object({
   isProjectAdmin: z.boolean(),
   /**
    * How many items need the viewer's action: the Steps they hold and the
-   * unclaimed Steps of their Step Pool, on items they can see; never their own
+   * not picked up Steps of their Step Pool, on items they can see; never their own
    * Drafts. 0 on a closed Project.
    */
   needMyAction: z.number().int().nonnegative(),

@@ -100,7 +100,7 @@ async function draft(title: string, answers: Record<string, unknown> = {}): Prom
 /** Sends a Draft for review and Submits it to K1, where it waits in the review Step's pool. */
 async function submit(id: string) {
   await take(c1Engineer, id, "send_for_review");
-  await ok(c1Pm.post(`/v1/work-items/${id}/claim`));
+  await ok(c1Pm.post(`/v1/work-items/${id}/pick-up`));
   await take(c1Pm, id, "submit");
 }
 
@@ -116,13 +116,13 @@ async function codeC(id: string) {
       },
     }),
   );
-  await ok(k1ManagerA.post(`/v1/work-items/${id}/claim`));
+  await ok(k1ManagerA.post(`/v1/work-items/${id}/pick-up`));
   await take(k1ManagerA, id, "revise_c", { remarks: "Resubmit with 110 lm/W luminaires" });
 }
 
 // The items, made before the clock moves (it spoils an upload's signature).
 let draftItem = "";
-let withK1 = ""; // Submitted, claimed by K1 manager A.
+let withK1 = ""; // Submitted, picked up by K1 manager A.
 let closedItem = ""; // Code C, no Revision.
 let chainRoot = ""; // Code C, then Rev 1 in C1's Draft.
 let revision = "";
@@ -168,7 +168,7 @@ beforeAll(async () => {
   mechanical = await draft("Chillers", { trade: trade.mechanical, location: loc.buildingB });
   withK1 = await draft("Cable trays");
   await submit(withK1);
-  await ok(k1ManagerA.post(`/v1/work-items/${withK1}/claim`));
+  await ok(k1ManagerA.post(`/v1/work-items/${withK1}/pick-up`));
   closedItem = await draft("Busbars");
   await submit(closedItem);
   await codeC(closedItem);
@@ -202,7 +202,7 @@ describe("columns and swimlanes (V14)", () => {
     // Drafts held by C1's engineer.
     expect(laneOf(b, draftItem)).toMatchObject({ kind: "role", position: { key: "engineer" }, projectRole: { en: "Contractor" } });
     expect(laneOf(b, mechanical)).toBe(laneOf(b, draftItem));
-    // K1's item claimed by its manager: the Manager lane; unclaimed in the pool it would be the pool's first Position.
+    // K1's item picked up by its manager: the Manager lane; not picked up, in the pool it would be the pool's first Position.
     const theirs = await board(k1ManagerB);
     expect(laneOf(theirs, withK1)).toMatchObject({ kind: "role", position: { key: "manager" }, projectRole: { en: "Consultant" } });
   });
@@ -211,9 +211,9 @@ describe("columns and swimlanes (V14)", () => {
     const theirs = await board(k1ManagerA);
     const k1Lane = laneOf(theirs, withK1);
     if (k1Lane?.kind !== "role") throw new Error("expected K1's own role lane");
-    const claimer = cardOf(theirs, withK1)!.with;
-    if (claimer?.kind !== "own" || !claimer.claimer) throw new Error("expected K1's claimer");
-    const k1Name = claimer.companyName.en;
+    const holder = cardOf(theirs, withK1)!.with;
+    if (holder?.kind !== "own" || !holder.holder) throw new Error("expected K1's holder");
+    const k1Name = holder.companyName.en;
 
     const mine = await board(c1Engineer);
     const lane = laneOf(mine, withK1)!;
@@ -221,8 +221,8 @@ describe("columns and swimlanes (V14)", () => {
     expect(Object.keys(lane).sort()).toEqual(["cards", "companyName", "count", "kind", "participantId"]);
     expect(cardOf(mine, withK1)!.with).toEqual({ kind: "company", companyName: expect.objectContaining({ en: k1Name }) });
     const json = JSON.stringify(mine);
-    const k1Step = claimer.step;
-    for (const secret of [claimer.claimer.name.en, claimer.claimer.name.ar, k1Step.name.en, k1Step.name.ar, "consultant_review"]) {
+    const k1Step = holder.step;
+    for (const secret of [holder.holder.name.en, holder.holder.name.ar, k1Step.name.en, k1Step.name.ar, "consultant_review"]) {
       expect(json).not.toContain(secret);
     }
     // K1's Positions never reach C1's answer: no lane or card names a role of another Company.
@@ -265,7 +265,7 @@ describe("filters apply to the board as to the List", () => {
     { trade: [trade.mechanical] },
     { location: [loc.buildingA] },
     { outcome: ["C"], allRevisions: true },
-    { with: ["unclaimed"] },
+    { with: ["not_picked_up"] },
     { with: ["step:draft"] },
     { needMyAction: true },
     { needMyAction: true, stage: ["pending_approval"] },
@@ -306,7 +306,7 @@ describe("a second Contractor (V3, scenario 17)", () => {
       { stage: ["pending_approval"] },
       { outcome: ["C"], allRevisions: true },
       { trade: [trade.electrical] },
-      { with: ["unclaimed", "me", "step:consultant_review", `company:${k1ParticipantId}`] },
+      { with: ["not_picked_up", "me", "step:consultant_review", `company:${k1ParticipantId}`] },
     ];
     for (const query of queries) {
       const b = await board(c2Engineer, query);

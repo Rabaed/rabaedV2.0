@@ -34,7 +34,7 @@ async function submitted(title: string) {
   const id = res.json().id as string;
   await attachDatasheet(at.c1Engineer, id);
   await take(at.c1Engineer, id, "send_for_review", { internalNote: "C1 only: price check" });
-  await ok(at.c1Pm.post(`/v1/work-items/${id}/claim`));
+  await ok(at.c1Pm.post(`/v1/work-items/${id}/pick-up`));
   await take(at.c1Pm, id, "submit", { internalNote: "C1 only: submitted early" });
   return id;
 }
@@ -50,7 +50,7 @@ beforeAll(async () => {
   stranger = (await api.authorizedPerson()).caller;
 
   open = await submitted("Busbar trunking");
-  await ok(at.k1Manager.post(`/v1/work-items/${open}/claim`));
+  await ok(at.k1Manager.post(`/v1/work-items/${open}/pick-up`));
   const d = await detail(at.k1Manager, open);
   // K1's in-progress answer: its own until the item leaves K1 (V19).
   await ok(at.k1Manager.request("PUT", `/v1/work-items/${open}/answers`, { answers: { ...d.answers, verification_note: "K1 still checking" } }));
@@ -62,7 +62,7 @@ beforeAll(async () => {
       answers: { ...c.answers, sample_checked: true, matches_specification: false, verification_note: "Below spec" },
     }),
   );
-  await ok(at.k1Manager.post(`/v1/work-items/${closed}/claim`));
+  await ok(at.k1Manager.post(`/v1/work-items/${closed}/pick-up`));
   await take(at.k1Manager, closed, "revise_c", { remarks: "Resubmit with the tested trays", internalNote: "K1 only: their price is high" });
 
   draft = (

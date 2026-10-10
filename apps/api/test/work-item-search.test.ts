@@ -66,7 +66,7 @@ beforeAll(async () => {
   item.c2 = c2Draft.json().id;
   await attachDatasheet(c2Engineer, item.c2);
   await take(c2Engineer, item.c2, "send_for_review");
-  await ok(c2Pm.post(`/v1/work-items/${item.c2}/claim`));
+  await ok(c2Pm.post(`/v1/work-items/${item.c2}/pick-up`));
   await take(c2Pm, item.c2, "submit");
 });
 

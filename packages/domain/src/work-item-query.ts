@@ -101,16 +101,16 @@ const stageKey = z.string().regex(/^[a-z][a-z0-9_]{0,62}$/);
 
 /**
  * Who an item is with (the "With" column, V14):
- * - `me`: a Step of my own Company that I have claimed;
- * - `unclaimed`: a Step of my own Company nobody has claimed yet;
- * - `step:<key>`: my own Company's Step `key`, claimed or not;
+ * - `me`: a Step of my own Company that I have picked up;
+ * - `not_picked_up`: a Step of my own Company nobody has picked up yet;
+ * - `step:<key>`: my own Company's Step `key`, picked up or not;
  * - `company:<participant id>`: another Company holds it, as one.
  */
-export type WithFilterValue = "me" | "unclaimed" | `step:${string}` | `company:${string}`;
+export type WithFilterValue = "me" | "not_picked_up" | `step:${string}` | `company:${string}`;
 export const withFilterValue = z
   .string()
   .refine(
-    (v) => v === "me" || v === "unclaimed" || (v.startsWith("step:") && stageKey.safeParse(v.slice(5)).success) || (v.startsWith("company:") && uuid.safeParse(v.slice(8)).success),
+    (v) => v === "me" || v === "not_picked_up" || (v.startsWith("step:") && stageKey.safeParse(v.slice(5)).success) || (v.startsWith("company:") && uuid.safeParse(v.slice(8)).success),
     "Not a With filter",
   )
   .transform((v) => v as WithFilterValue);
@@ -118,15 +118,15 @@ export const withFilterValue = z
 /**
  * Who holds an item, as the Owner filter has it (RP-410, V14):
  * - `member:<member id>`: one of my own Company's people has claimed it;
- * - `unclaimed`: my own Company's Step nobody has claimed yet;
+ * - `not_picked_up`: my own Company's Step nobody has picked up yet;
  * - `company:<participant id>`: another Company holds it, as one.
  * Another Company's people are never a value: the API never names them.
  */
-export type OwnerFilterValue = "unclaimed" | `member:${string}` | `company:${string}`;
+export type OwnerFilterValue = "not_picked_up" | `member:${string}` | `company:${string}`;
 export const ownerFilterValue = z
   .string()
   .refine(
-    (v) => v === "unclaimed" || (v.startsWith("member:") && uuid.safeParse(v.slice(7)).success) || (v.startsWith("company:") && uuid.safeParse(v.slice(8)).success),
+    (v) => v === "not_picked_up" || (v.startsWith("member:") && uuid.safeParse(v.slice(7)).success) || (v.startsWith("company:") && uuid.safeParse(v.slice(8)).success),
     "Not an Owner value",
   )
   .transform((v) => v as OwnerFilterValue);
@@ -160,7 +160,7 @@ const queryFields = {
   type: list(workItemTypeCode),
   stage: list(stageKey),
   with: list(withFilterValue),
-  /** Who holds it (RP-410): one of my people, my unclaimed pool, or another Company as one. */
+  /** Who holds it (RP-410): one of my people, my pool's Steps not picked up, or another Company as one. */
   owner: list(ownerFilterValue),
   /** The role holding it (RP-410): a Step of my own Company, by key; another Company's items match none (V5). */
   role: list(stageKey),
@@ -200,7 +200,7 @@ const queryFields = {
     z.string().trim().max(searchMaxLength).optional(),
   ),
   /**
-   * Need My Action: only the items waiting on me, Steps I hold and unclaimed
+   * Need My Action: only the items waiting on me, Steps I hold and not picked up
    * Steps in my Step Pool, plus my own Drafts (which are never counted).
    */
   needMyAction: flag,

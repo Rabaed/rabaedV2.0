@@ -57,7 +57,7 @@ async function code(id: string, transition: "approve_a" | "revise_c", manager: C
       answers: { ...item.answers, sample_checked: true, matches_specification: transition === "approve_a", verification_note: "Checked" },
     }),
   );
-  await ok(manager.post(`/v1/work-items/${id}/claim`));
+  await ok(manager.post(`/v1/work-items/${id}/pick-up`));
   await take(manager, id, transition, { remarks: "As noted" });
 }
 
@@ -212,17 +212,17 @@ describe("scenario RP-409-2: Export, the rows the viewer reads with the List's f
     }
     const forC1 = (await exported(at.c1Engineer, {})).items;
     for (const row of forC1.filter((r) => r.with?.kind === "own")) expect(row.with).toHaveProperty("role");
-    for (const row of forC1.filter((r) => r.with?.kind === "company")) expect(JSON.stringify(row.with)).not.toMatch(/claimer|step|role/);
+    for (const row of forC1.filter((r) => r.with?.kind === "company")) expect(JSON.stringify(row.with)).not.toMatch(/holder|step|role/);
   });
 
   it("names owners as V14 has it: the Consultant's own person to the Consultant, its Company only to the Contractor", async () => {
     const waiting = created.at(-2)!;
-    await ok(at.k1Manager.post(`/v1/work-items/${waiting}/claim`));
+    await ok(at.k1Manager.post(`/v1/work-items/${waiting}/pick-up`));
     const forK1 = (await exported(at.k1Manager, {})).items.find((i) => i.id === waiting)!;
     const forC1 = (await exported(at.c1Engineer, {})).items.find((i) => i.id === waiting)!;
-    expect(forK1.with).toMatchObject({ kind: "own", claimer: { isMe: true } });
+    expect(forK1.with).toMatchObject({ kind: "own", holder: { isMe: true } });
     expect(forC1.with?.kind).toBe("company");
-    expect(JSON.stringify(forC1)).not.toMatch(/claimer/);
+    expect(JSON.stringify(forC1)).not.toMatch(/holder/);
     // The Creation Date is the raiser's own: the Consultant reads none.
     expect(forK1.creationDate).toBeNull();
     expect(forC1.creationDate).not.toBeNull();
@@ -284,7 +284,7 @@ describe("every column's sort", () => {
       if (r.closedBy) return r.closedBy.kind === "own" ? r.closedBy.name.en : r.closedBy.companyName.en;
       if (!r.with) return null;
       if (r.with.kind === "company") return r.with.companyName.en;
-      return r.with.claimer ? r.with.claimer.name.en : r.with.step.name.en;
+      return r.with.holder ? r.with.holder.name.en : r.with.step.name.en;
     });
     const shown = owners.filter((o): o is string => o !== null).map((o) => o.toLowerCase());
     expect(shown).toEqual([...shown].sort());

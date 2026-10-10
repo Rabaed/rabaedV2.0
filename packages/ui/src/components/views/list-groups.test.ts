@@ -46,7 +46,7 @@ const filters = {
     { type: "MAR", code: "B", name: b("Approved as noted", "معتمد مع ملاحظات"), closing: true, polarity: "positive" as const, actions: [] },
   ],
 };
-const labels = { code: (c: string) => `Code ${c}`, cancelled: "Cancelled", unclaimed: "unclaimed", noNumber: "No number yet", revisionNoNumber: (n: string) => `Revision ${n}`, revision: (n: string) => `R${n}` };
+const labels = { code: (c: string) => `Code ${c}`, cancelled: "Cancelled", notPickedUp: "Not picked up", noNumber: "No number yet", revisionNoNumber: (n: string) => `Revision ${n}`, revision: (n: string) => `R${n}` };
 const shape = (by: Parameters<typeof groupRows>[1]) =>
   groupRows(rows, by, filters, "en", labels).map((g) => [g.label, g.rows.map((r) => r.title)]);
 

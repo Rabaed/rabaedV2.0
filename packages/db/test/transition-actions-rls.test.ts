@@ -133,7 +133,7 @@ const take = (as: string, id: string, transition: string, { answers = {}, assign
       ${id}::uuid, ${transition}, ${JSON.stringify(answers)}::jsonb, '', app.answers_sha256(${id}::uuid), ${randomUUID()}::uuid, now(),
       ${assignTo}::uuid) as outcome`,
   );
-const claim = (as: string, id: string) => outcome(as, sql`select app.claim_step(${id}::uuid, now()) as outcome`);
+const pickUp = (as: string, id: string) => outcome(as, sql`select app.pick_up_step(${id}::uuid, now()) as outcome`);
 const offeredAssignees = async (as: string, id: string, transition: string) =>
   (await call<{ member_id: string }>(as, sql`select member_id from app.transition_assignees(${id}::uuid, ${transition})`))
     .map((r) => r.member_id)
@@ -160,19 +160,19 @@ async function draft(by: string, model: string): Promise<string> {
   return created!.work_item_id;
 }
 
-/** A C1 item at the C1 PM's review, claimed by them. */
+/** A C1 item at the C1 PM's review, picked up by them. */
 async function inReview(model: string): Promise<string> {
   const id = await draft(c1.member, model);
   expect(await take(c1.member, id, "send_for_review")).toBe("applied");
-  expect(await claim(c1Pm, id)).toBe("claimed");
+  expect(await pickUp(c1Pm, id)).toBe("picked_up");
   return id;
 }
 
-/** A C1 item at K1's Consultant review, Submitted by the C1 PM, claimed by the K1 engineer. */
+/** A C1 item at K1's Consultant review, Submitted by the C1 PM, picked up by the K1 engineer. */
 async function submitted(model: string): Promise<string> {
   const id = await inReview(model);
   expect(await take(c1Pm, id, "submit")).toBe("applied");
-  expect(await claim(k1.member, id)).toBe("claimed");
+  expect(await pickUp(k1.member, id)).toBe("picked_up");
   return id;
 }
 
@@ -248,7 +248,7 @@ describe('"Assign to" (RP-431-2)', () => {
     expect(await stepOf(id)).toBe("internal_review");
     expect(await needMyAction(c1Pm2, id)).toBe("waiting");
     expect(await needMyAction(c1Pm, id)).toBeNull();
-    // Claimed for them: they take Submit without claiming it.
+    // Picked up for them: they take Submit without picking it up.
     expect(await take(c1Pm2, id, "submit")).toBe("applied");
   });
 
@@ -307,7 +307,7 @@ describe("set and copy", () => {
     expect(k1Changes.flatMap((e) => (e.payload.changes as { field: string }[]).map((c) => c.field)).sort()).toEqual(["reviewed_on", "verdict"]);
 
     // The Code: the Remarks copied into the Reviewer's note, and everyone reads the Review.
-    expect(await claim(k1Manager, id)).toBe("claimed");
+    expect(await pickUp(k1Manager, id)).toBe("picked_up");
     expect(await take(k1Manager, id, "approve_a", { answers: { remarks: "Fine as built." } })).toBe("applied");
     expect(await answers(c1Pm, id)).toMatchObject({ verdict: "Checked", reviewer_note: "Fine as built." });
   });

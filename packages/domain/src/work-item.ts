@@ -2,6 +2,7 @@ import { z } from "zod";
 import { bilingualText } from "./company.ts";
 import { documentSummary } from "./document.ts";
 import { formAnswers, formSchema, namedAnswers } from "./form.ts";
+import { handoverReasons } from "./handover.ts";
 import { listColumnLayout } from "./list-columns.ts";
 import { outcomeCodePattern, outcomeSchema } from "./outcome.ts";
 
@@ -92,18 +93,18 @@ export type WorkItemOutcome = string;
 
 /**
  * Who an open item is with, as the viewer may read it (V14): `own` when the
- * viewer's own Participant holds it, with the Step and who claimed it (null
- * while unclaimed); `company` when another Company holds it, by its name only.
+ * viewer's own Participant holds it, with the Step and who picked it up (null
+ * while not picked up); `company` when another Company holds it, by its name only.
  */
 export const workItemWith = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("own"),
     companyName: bilingualText,
     step: z.object({ key: z.string(), name: bilingualText }),
-    claimer: z.object({ name: bilingualText, isMe: z.boolean() }).nullable(),
+    holder: z.object({ name: bilingualText, isMe: z.boolean() }).nullable(),
     /**
-     * The role holding it (RP-410, the Kanban's lanes): the claimer's Position, or for an
-     * unclaimed Step the first Position of its Step Pool, with the viewer's own Project
+     * The role holding it (RP-410, the Kanban's lanes): the holder's Position, or for a
+     * Step not picked up the first Position of its Step Pool, with the viewer's own Project
      * Role. Only ever my own Company's (V5, V14); null when none can be named.
      */
     role: z
@@ -455,9 +456,9 @@ export type CreateReplacementRequest = z.infer<typeof createReplacementRequest>;
 /** Exactly what the viewer may press on the item now. */
 export const workItemActions = z.object({
   /** Take the pooled Step. */
-  claim: z.boolean(),
-  /** Give the Step they claimed back to its pool. */
-  release: z.boolean(),
+  pickUp: z.boolean(),
+  /** Give the Step they picked up back to its pool. */
+  returnToPool: z.boolean(),
   /** Save draft: change the Form's answers (the raiser's Company, in Draft). */
   saveAnswers: z.boolean(),
   /**
@@ -555,8 +556,18 @@ export const workItemDetail = workItemSummary.extend({
   /**
    * Who holds the current Step. Another Company is shown by its name only; a
    * person's name only within the viewer's own Company (visibility.md V14).
+   * `pool`: while it waits in a Step Pool of the viewer's own Participant, who it
+   * waits on: every name, which the page orders in the viewer's language and shows
+   * up to three of, then how many more (workflow-engine.md §3.4); null once someone
+   * holds it, and always for another Company.
    */
-  heldBy: z.object({ companyName: bilingualText, memberName: bilingualText.nullable() }).nullable(),
+  heldBy: z
+    .object({
+      companyName: bilingualText,
+      memberName: bilingualText.nullable(),
+      pool: z.object({ names: z.array(bilingualText) }).nullable(),
+    })
+    .nullable(),
   /** Set once closed: the Issued Code (A, C…). */
   outcome: workItemOutcome.nullable(),
   closedAt: z.iso.datetime().nullable(),
@@ -590,14 +601,18 @@ export const workItemEventTypes = [
   "recommend_code",
   "issue_code",
   "assigned",
-  "claimed",
-  "released",
+  "picked_up",
+  "returned_to_pool",
   "vacated",
   "admin_reassigned",
   "admin_reset",
   "internal_note",
   "cancelled",
   "answers_changed",
+  // Events written before RP-512 keep their old type (the audit trail is append-only and
+  // hash-chained); they read as Pick up and Return to pool.
+  "claimed",
+  "released",
 ] as const;
 
 /**
@@ -636,6 +651,14 @@ export const workItemHistory = z.object({
        * key, a missing answer as null. Internal to the raiser's Participant (V5).
        */
       changes: z.array(z.object({ field: z.string(), old: z.unknown(), new: z.unknown() })).nullable(),
+      /**
+       * Set on an `assigned` event of a Handover (RP-108): the Step's holder before and
+       * after, and the change that took the first out of its pool; `by` is whoever made
+       * it. Internal to the holding Participant (V5), so both are its own Members.
+       */
+      handover: z
+        .object({ from: bilingualText.nullable(), to: bilingualText.nullable(), because: z.enum(handoverReasons) })
+        .nullable(),
     }),
   ),
 });

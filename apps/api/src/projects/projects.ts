@@ -66,7 +66,7 @@ export async function waitingOnMember(trx: Transaction<Database>, projectIds: re
   const { rows } = await sql<{ project_id: string; id: string }>`
     select distinct w.project_id, w.id
     from work_item w
-    join step_assignment a on a.work_item_id = w.id and a.status in ('pooled', 'claimed')
+    join step_assignment a on a.work_item_id = w.id and a.status in ('pooled', 'picked_up')
     where w.project_id = any(${projectIds}::uuid[]) and app.need_my_action(w.id) = 'waiting'
       and app.latest_visible_revision(w.id)
   `.execute(trx);

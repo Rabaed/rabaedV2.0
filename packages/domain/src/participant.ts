@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { bilingualText, crNumber } from "./company.ts";
+import { withHandovers } from "./handover.ts";
 import { baseRoles } from "./project.ts";
 
 const projectRole = z.object({ baseRole: z.enum(baseRoles), name: bilingualText });
@@ -129,8 +130,14 @@ export type AddProjectMemberRequest = z.infer<typeof addProjectMemberRequest>;
  */
 export const setMemberPositionsRequest = z.object({
   positions: z.array(z.string().regex(/^[a-z][a-z0-9_]*$/)).max(10),
+  /** Each Step they hold whose pool the new Positions take them out of, handed over (RP-108). */
+  ...withHandovers,
 });
 export type SetMemberPositionsRequest = z.infer<typeof setMemberPositionsRequest>;
+
+/** The Participant's Authorized Person removes a Project Member, handing each Step they hold there over (RP-108). */
+export const removeProjectMemberRequest = z.object(withHandovers);
+export type RemoveProjectMemberRequest = z.infer<typeof removeProjectMemberRequest>;
 
 /**
  * A Project Admin sets a Participant's Participant Code: 2 to 6 letters or digits

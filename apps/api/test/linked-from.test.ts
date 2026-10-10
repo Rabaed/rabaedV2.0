@@ -46,7 +46,7 @@ async function draft(title: string, trade: string): Promise<string> {
 
 const sendForReview = (id: string) => take(c1Engineer, id, "send_for_review");
 async function submit(id: string) {
-  await ok(c1Pm.post(`/v1/work-items/${id}/claim`));
+  await ok(c1Pm.post(`/v1/work-items/${id}/pick-up`));
   await take(c1Pm, id, "submit");
 }
 

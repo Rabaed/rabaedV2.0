@@ -90,7 +90,7 @@ async function atConsultantReview(title: string): Promise<string> {
   const id = await created(title);
   await attachDatasheet(engineer, id);
   await ok(tryTake(engineer, id, "send_for_review"));
-  await ok(pm.post(`/v1/work-items/${id}/claim`));
+  await ok(pm.post(`/v1/work-items/${id}/pick-up`));
   await ok(tryTake(pm, id, "submit"));
   return id;
 }
@@ -174,7 +174,7 @@ describe("a new MAR, and one on an earlier Version", () => {
     expect(form.versionNo).toBe(3);
     expect(form.editableSections).toEqual([]);
     expect(form.filledBy).toEqual({});
-    await ok(k1Manager.post(`/v1/work-items/${id}/claim`));
+    await ok(k1Manager.post(`/v1/work-items/${id}/pick-up`));
     await ok(tryTake(k1Manager, id, "approve_a"));
     expect(await detail(engineer, id)).toMatchObject({ stage: { key: "approved" }, outcome: "A" });
   });
@@ -205,7 +205,7 @@ describe("a Draft MAR on Version 4 (scenario 46)", () => {
 describe("issuing a Code (scenario 48)", () => {
   it("is refused while the verification is incomplete, with what is missing", async () => {
     const id = await atConsultantReview("Fixtures, incomplete");
-    await ok(k1Manager.post(`/v1/work-items/${id}/claim`));
+    await ok(k1Manager.post(`/v1/work-items/${id}/pick-up`));
     const res = await tryTake(k1Manager, id, "approve_a");
     expect(res.statusCode, res.body).toBe(422);
     expect(res.json()).toEqual({
@@ -233,7 +233,7 @@ describe("issuing a Code (scenario 48)", () => {
       expect((await detail(other, id)).answers).not.toHaveProperty("verification_note");
       expect((await history(other, id)).events.filter((e) => e.type === "answers_changed")).toEqual([]);
     }
-    await ok(k1Manager.post(`/v1/work-items/${id}/claim`));
+    await ok(k1Manager.post(`/v1/work-items/${id}/pick-up`));
     await ok(tryTake(k1Manager, id, "revise_c", { answers: { remarks: "Resubmit with 110 lm/W luminaires" }, internalNote: "Internal: supplier is on probation" }));
     for (const other of [engineer, pm, orEngineer]) {
       expect(await detail(other, id)).toMatchObject({

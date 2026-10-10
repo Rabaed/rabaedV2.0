@@ -61,9 +61,9 @@ export type WorkItemListLabels = {
   with: string;
   withMe: string;
   /** After a Step's name, when nobody in the viewer's Company has claimed it. */
-  unclaimed: string;
-  /** The "With" filter's choice of every unclaimed Step. */
-  anyUnclaimed: string;
+  notPickedUp: string;
+  /** The "With" filter's choice of every Step not picked up. */
+  anyNotPickedUp: string;
   trade: string;
   location: string;
   outcome: string;
@@ -437,12 +437,12 @@ function WorkItemListBody({
         ),
       })),
     ),
-    // My own Company's people, my unclaimed pool, and another Company by its name only (V14).
+    // My own Company's people, my pool's Steps not picked up, and another Company by its name only (V14).
     many("owner", t("owner"), hints?.owner, "workflow", [
       ...list.filters.owners.map((o) => ({ value: `member:${o.memberId}`, label: o.name[locale], mark: <Avatar name={o.name[locale]} size="sm" decorative className="size-5" /> })),
       {
-        value: "unclaimed",
-        label: t("anyUnclaimed"),
+        value: "not_picked_up",
+        label: t("anyNotPickedUp"),
         mark: (
           <span className="inline-flex size-5 items-center justify-center rounded-full border border-dashed border-border-strong text-muted">
             <Icon name={poolIcon} size={11} />

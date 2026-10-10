@@ -40,7 +40,7 @@ export type KanbanCardBadge =
 export type KanbanCardOwner =
   /** One of my own Company's people. */
   | { kind: "person"; name: string; initialsFrom?: string }
-  /** My own Company's Step nobody has claimed yet: the Step and "unclaimed". */
+  /** My own Company's Step nobody has picked up yet: the Step and "Not picked up". */
   | { kind: "pool"; name: string }
   /** Another Company, by its name only. */
   | { kind: "company"; name: string; initialsFrom?: string };
@@ -106,7 +106,7 @@ const outcomeLooks: Record<OutcomeLook, { classes: string; icon: IconName }> = {
   d: { classes: "bg-code-d-bg text-code-d-fg", icon: "circle-x" },
 };
 
-/** An unclaimed Step's mark: its Step Pool, as a group of people. */
+/** The mark of a Step not picked up: its Step Pool, as a group of people. */
 // eslint-disable-next-line rabaed/no-avoid-terms -- the Tabler icon's own name, not a Member
 export const poolIcon: IconName = "users";
 

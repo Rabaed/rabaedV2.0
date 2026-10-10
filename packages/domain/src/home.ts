@@ -38,8 +38,8 @@ export const homeActivityVerbs = [
   "returnedForRevision",
   "closed",
   "cancelled",
-  "claimed",
-  "released",
+  "pickedUp",
+  "returnedToPool",
   "assigned",
   "recommended",
   "noted",
@@ -54,7 +54,7 @@ export const home = z.object({
   counts: z.object({
     /** The Member's Projects that are not closed. */
     activeProjects: z.number().int().nonnegative(),
-    /** The sum of each active Project's Need My Action count: Steps they hold and unclaimed Steps of their Step Pool; never a Draft. */
+    /** The sum of each active Project's Need My Action count: Steps they hold and Steps not picked up of their Step Pool; never a Draft. */
     needMyAction: z.number().int().nonnegative(),
     /** Open items the Member's own Participant holds, at their Step for `homeStepAgeWeeks`+ weeks as the Member sees it (V14); never a Draft. */
     longAtStep: z.number().int().nonnegative(),
@@ -147,10 +147,13 @@ export function homeActivityVerb(type: WorkItemEventType, kind: TransitionKind |
       }
     case "cancelled":
       return "cancelled";
+    // Events written before RP-512 keep their old type; they read as Pick up and Return to pool.
+    case "picked_up":
     case "claimed":
-      return "claimed";
+      return "pickedUp";
+    case "returned_to_pool":
     case "released":
-      return "released";
+      return "returnedToPool";
     case "assigned":
     case "admin_reassigned":
       return "assigned";
