@@ -139,6 +139,12 @@ As built (RP-427, `20261226000000_workflow_authoring.sql`): the commands, each o
 
 ---
 
+### Company defaults (RP-517)
+
+Settled 2026-10-10 (spec RP-511 decision 8, ADR 0019). As built (`20270202000000_company_defaults.sql`): a Company marks Library items as its **defaults**, one per Work Item Type and kind (`company_default`: kind `form`, `workflow` or `screen`). `PUT /v1/company-defaults {kind, workItemTypeId, itemId}` (`app.set_company_default`) and `DELETE /v1/company-defaults?kind=&workItemTypeId=` (`app.clear_company_default`) are for the Company's Authorized Person only; `GET /v1/company-defaults` lists them for any of its Members. Anyone else, another Company's item, a Rabaed Default and a made-up id are `not_found` (V18); an item with no published Version is `not_published` (409); a Workflow (or a Form with a Type of its own) made for another Type is `not_for_type` (422). Each change is a `workflow_event` (`default_set`, `default_cleared`) until RP-450's record of setup changes.
+
+`app.create_project` copies the creating Company's defaults into the new Project in its own transaction (`app.seed_project_from_company_defaults`), Type by Type: a default Form as the Project's own Form (its latest published Version as Version 1, `work_item_type_id` set); a default Screen as the Project's Screen of that key (unless it has one); a default Workflow as the Project's own Workflow, its latest published Version published again (so it pins the Project's Screens), and **bound as the Type's default binding**. A Library Screen a copied Workflow names that the Project does not have yet is copied too, so the copy pins what the Library's did. Where the Company has no default for a Type nothing is copied and the chain of §1 "Ownership and binding" is unchanged: exception, binding, the Type's Rabaed Default. The copies are independent (ADR 0016): later changes to the Library, or clearing the default, never reach a Project already created. A Company **joining** a Project gets nothing copied (ADR 0016): it runs the Project's copies, and a raising exception (V15) is only ever set up on purpose, with the binding command. One `defaults_applied` event is written on the Project. The Library screen that marks defaults is RP-442; Forms cannot yet be put in a Library through the api (the Form builder and Libraries), so only the migrator writes them for tests.
+
 ## 2. Run-time state
 
 The state lives on `work_item`:
