@@ -23,7 +23,7 @@ import { sql, type Transaction } from "kysely";
 import { myProjectSummaries, waitingOnMember } from "../projects/projects.ts";
 import { submittalCounts } from "../projects/submittal-counts.ts";
 import { activityFeedPage } from "../work-items/activity-feed.ts";
-import { countWorkItems, pagesByCursor, queryWorkItems, type QueryScope } from "../work-items/query.ts";
+import { countWorkItems, pagesByCursor, queryWorkItems, stageCountTotal, type QueryScope } from "../work-items/query.ts";
 
 // Home across my Projects (RP-407, spec RP-447; visibility.md "Home across
 // Projects"). Home has no read of its own: it runs the per-Project reads the
@@ -52,8 +52,6 @@ async function everyRow(trx: Trx, scope: QueryScope, q: WorkItemQueryInput, now:
 
 /** How many items match `q` in the scope, by Stage key: the List's `stages[].count`, no rows read. */
 const counted = (trx: Trx, scope: QueryScope, q: WorkItemQueryInput, now: Date) => countWorkItems(trx, scope, workItemQuery.parse(q), now);
-const total = (counts: Map<string, number>, keep: (stageKey: string) => boolean = () => true) =>
-  [...counts].reduce((n, [key, count]) => n + (keep(key) ? count : 0), 0);
 
 /** Each Module tab of each Project: where the work item query reads. */
 const scopesOf = (projects: readonly ProjectSummary[]) =>
@@ -98,8 +96,8 @@ export function getHome(db: Db, memberId: string, now: Date): Promise<Home> {
     const submittals = await submittalCounts(trx, projects, now);
     for (const { project, ...scope } of scopes) {
       const aged = await counted(trx, scope, { stepAgeMin: homeStepAgeWeeks, heldBy: "own" }, now);
-      longAtStep += total(aged, (key) => !draftStages.has(`${project.id}/${scope.moduleKey}/${key}`));
-      waitingWithOthers += total(await counted(trx, scope, { raisedByMe: true, heldBy: "others" }, now));
+      longAtStep += stageCountTotal(aged, (key) => !draftStages.has(`${project.id}/${scope.moduleKey}/${key}`));
+      waitingWithOthers += stageCountTotal(await counted(trx, scope, { raisedByMe: true, heldBy: "others" }, now));
     }
 
     // Recent activity: each Project's newest entries, merged, each with what was done (its Transition's

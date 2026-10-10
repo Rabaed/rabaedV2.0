@@ -1,7 +1,7 @@
 import type { Database } from "@rabaed/db";
 import { workItemQuery, type ProjectSummary } from "@rabaed/domain";
 import type { Transaction } from "kysely";
-import { countWorkItems } from "../work-items/query.ts";
+import { countWorkItems, stageCountTotal } from "../work-items/query.ts";
 
 /**
  * Each Project's Submittals the Member sees, for its card (Home and the Projects
@@ -15,7 +15,7 @@ export async function submittalCounts(trx: Transaction<Database>, projects: read
   for (const p of projects) {
     if (!p.modules.includes("submittals")) continue;
     const stages = await countWorkItems(trx, { projectId: p.id, moduleKey: "submittals" }, workItemQuery.parse({}), now);
-    counts[p.id] = [...stages.values()].reduce((n, c) => n + c, 0);
+    counts[p.id] = stageCountTotal(stages);
   }
   return counts;
 }

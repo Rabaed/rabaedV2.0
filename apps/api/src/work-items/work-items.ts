@@ -667,13 +667,15 @@ async function itemScopes(trx: Trx, workItemId: string): Promise<WorkItemDetail[
   return rows.map((s) => ({ id: s.id, parentId: s.parent_id, name: s.name }));
 }
 
+/** Whether item `w`'s Project is active (not closed). */
+const projectActive = (w: RawBuilder<unknown>) => sql<boolean>`exists (select 1 from project p where p.id = ${w}.project_id and p.status = 'active')`;
+
 /**
  * Whether the acting Member may duplicate a visible item `w` (RP-409): a Member of the
  * Participant that raised it, on an active Project. Creating the copy checks the rest.
  */
 const canDuplicate = (w: RawBuilder<unknown>) => sql<boolean>`(
-  coalesce(${w}.raised_by_participant_id in (select app.current_participant_ids()), false)
-  and exists (select 1 from project p where p.id = ${w}.project_id and p.status = 'active'))`;
+  coalesce(${w}.raised_by_participant_id in (select app.current_participant_ids()), false) and ${projectActive(w)})`;
 
 /** Field types that hold Documents: a Duplicate copies those its own Participant uploaded. */
 const documentFieldTypes: readonly string[] = ["attachments", "photos", "checklist"];
@@ -709,7 +711,7 @@ export async function duplicateWorkItem(
   const madeFor = (trx: Trx) =>
     sql<{ id: string | null }>`select app.duplicate_of_key(${idempotencyKey}::uuid) as id`.execute(trx).then((r) => r.rows[0]?.id ?? null);
   try {
-    return await duplicateIn(db, files, memberId, workItemId, idempotencyKey, now, maxFileBytes, madeFor);
+    return await duplicateIn({ db, files, memberId, workItemId, idempotencyKey, now, maxFileBytes, madeFor });
   } catch (error) {
     // Nothing was created, and no file copied: its files come to more than a Duplicate copies.
     if (error instanceof FilesTooLarge) return { ok: false, reason: "duplicate_files_too_large" };
@@ -731,16 +733,26 @@ const isDuplicateRequest = (error: unknown) =>
 /** Thrown inside the Duplicate's transaction, so its rows roll back, before any file is copied. */
 class FilesTooLarge extends Error {}
 
-function duplicateIn(
-  db: Db,
-  files: FileStore,
-  memberId: string,
-  workItemId: string,
-  idempotencyKey: string,
-  now: Date,
-  maxFileBytes: number,
-  madeFor: (trx: Trx) => Promise<string | null>,
-): Promise<DuplicateResult> {
+function duplicateIn({
+  db,
+  files,
+  memberId,
+  workItemId,
+  idempotencyKey,
+  now,
+  maxFileBytes,
+  madeFor,
+}: {
+  db: Db;
+  files: FileStore;
+  memberId: string;
+  workItemId: string;
+  idempotencyKey: string;
+  now: Date;
+  maxFileBytes: number;
+  /** The Draft this request already made, if any (app.duplicate_of_key). */
+  madeFor: (trx: Trx) => Promise<string | null>;
+}): Promise<DuplicateResult> {
   return refusedAsForbidden(() =>
     withFileCopies(files, (copy) => withMember(db, memberId, async (trx): Promise<DuplicateResult> => {
       const done = await madeFor(trx);
@@ -756,7 +768,7 @@ function duplicateIn(
       }>`
         select w.project_id, t.code as type_code, w.title, app.work_item_answers(w.id) as data, fv.schema,
           ${canDuplicate(sql.ref("w"))} as can_duplicate,
-          exists (select 1 from project p where p.id = w.project_id and p.status = 'active') as project_active
+          ${projectActive(sql.ref("w"))} as project_active
         from work_item w
         join work_item_type t on t.id = w.work_item_type_id
         join form_version fv on fv.id = w.form_version_id
@@ -825,7 +837,7 @@ export function discardDraft(db: Db, memberId: string, workItemId: string, now: 
  * with no Step. No Linked from: it differs between viewers. Null when the Member can't see it, or
  * before its first Submit.
  */
-export function getSharedWorkItem(db: Db, memberId: string, workItemId: string): Promise<SharedWorkItem | null> {
+export function getSharedWorkItem(db: Db, memberId: string, workItemId: string, now: Date): Promise<SharedWorkItem | null> {
   return withMember(db, memberId, async (trx) => {
     const [row] = await visibleItems(trx, sql`w.id = ${workItemId}`);
     if (!row) return null;
@@ -871,7 +883,7 @@ export function getSharedWorkItem(db: Db, memberId: string, workItemId: string):
     }>`select created_at, audience, company_name, transition_label, outcome, remarks, document_number from app.work_item_history(${workItemId}::uuid)`.execute(
       trx,
     );
-    const summary = toSummary(row, new Date());
+    const summary = toSummary(row, now);
     const schema = formSchema.parse(d.schema);
     // No `member` answer (the database leaves them out): the shared item names nobody, whoever reads it.
     const answers = answersFromDb(schema, d.answers);

@@ -664,6 +664,10 @@ function pageCounts(rows: Row[]): Map<string, number> {
  */
 export const countWorkItems = (trx: Trx, scope: QueryScope, q: WorkItemQuery, now: Date) => countByStage(trx, scope, q, now);
 
+/** The total of Stage counts (countWorkItems), of the Stages `keep` keeps: every one by default. */
+export const stageCountTotal = (counts: Map<string, number>, keep: (stageKey: string) => boolean = () => true) =>
+  [...counts].reduce((n, [key, count]) => n + (keep(key) ? count : 0), 0);
+
 /** How many of the scope's visible items match `q` in each Stage, by Stage key. */
 async function countByStage(trx: Trx, scope: QueryScope, q: WorkItemQuery, now: Date): Promise<Map<string, number>> {
   const { rows: counts } = await sql<{ stage_key: string; count: number }>`

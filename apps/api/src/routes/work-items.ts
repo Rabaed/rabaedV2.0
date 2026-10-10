@@ -388,7 +388,7 @@ export const workItemRoutes =
     // Before its first Submit, nothing is shared: the plain 404.
     app.get("/v1/work-items/:workItemId/shared", { schema: { params: workItemParams, response: { 200: sharedWorkItem } } }, async (request) => {
       const memberId = ctx.requireMember(request);
-      return visibleOrNotFound(getSharedWorkItem(ctx.db, memberId, idOrNotFound(request.params.workItemId)));
+      return visibleOrNotFound(getSharedWorkItem(ctx.db, memberId, idOrNotFound(request.params.workItemId), ctx.now()));
     });
 
     // The Revision drop-down (workflow-engine.md §5.4): the Revisions of the item's
