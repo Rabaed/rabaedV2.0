@@ -47,7 +47,7 @@ describe("workItemQuery", () => {
   });
 
   it("takes every With value, and nothing else", () => {
-    const values = ["me", "unclaimed", "step:k1_review", `company:${participant}`];
+    const values = ["me", "not_picked_up", "step:k1_review", `company:${participant}`];
     expect(workItemQuery.parse({ with: values.join(",") }).with).toEqual(values);
     for (const bad of ["someone", "step:", "company:not-an-id", "step:Bad Key"]) {
       expect(workItemQuery.safeParse({ with: bad }).success, bad).toBe(false);
@@ -90,7 +90,7 @@ describe("the query in the URL", () => {
     module: "inspections",
     type: ["MAR"],
     stage: ["submitted", "under_review"],
-    with: ["unclaimed", `company:${participant}`],
+    with: ["not_picked_up", `company:${participant}`],
     trade: [trade],
     location: [location],
     outcome: ["C", "passed_with_comments"],

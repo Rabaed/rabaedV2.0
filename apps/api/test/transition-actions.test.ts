@@ -43,7 +43,7 @@ async function newDraft(model: string): Promise<string> {
   return res.json().id as string;
 }
 
-const claim = (by: Caller, id: string) => ok(by.post(`/v1/work-items/${id}/claim`));
+const pickUp = (by: Caller, id: string) => ok(by.post(`/v1/work-items/${id}/pick-up`));
 const transitionOf = async (by: Caller, id: string, key: string) => (await detail(by, id)).actions.transitions.find((t) => t.key === key);
 const needMyAction = async (by: Caller) =>
   ((await ok(by.get(`/v1/projects/${projectId}/work-items?${workItemSearchParams({ needMyAction: true })}`), 200)).json() as WorkItemList).items.map(
@@ -87,7 +87,7 @@ describe('"Assign to"', () => {
     await take(engineer.caller, id, "send_for_review", { assignTo: pm2.id });
     expect(await needMyAction(pm2.caller)).toContain(id);
     expect(await needMyAction(pm.caller)).not.toContain(id);
-    // Theirs already: Submit is offered without a claim, and offers nobody (K1 holds the next Step).
+    // Theirs already: Submit is offered without a Pick up, and offers nobody (K1 holds the next Step).
     const submit = await transitionOf(pm2.caller, id, "submit");
     expect(submit).toBeDefined();
     expect(submit).not.toHaveProperty("assignTo");
@@ -109,9 +109,9 @@ describe('"Assign to"', () => {
   it("never offers another Company's Members: K1's manager is offered K1's, from K1's own Step", async () => {
     const id = await newDraft("To K1");
     await take(engineer.caller, id, "send_for_review");
-    await claim(pm.caller, id);
+    await pickUp(pm.caller, id);
     await take(pm.caller, id, "submit");
-    await claim(k1Engineer.caller, id);
+    await pickUp(k1Engineer.caller, id);
     const send = await transitionOf(k1Engineer.caller, id, "send_to_manager");
     expect(send?.assignTo?.map((m) => m.memberId)).toEqual([k1Manager.id]);
   });
@@ -127,9 +127,9 @@ describe("set and copy", () => {
   it("writes K1's Review at its own Step, on K1's record only, and copies the Remarks when the Code is issued", async () => {
     const id = await newDraft("Reviewed");
     await take(engineer.caller, id, "send_for_review");
-    await claim(pm.caller, id);
+    await pickUp(pm.caller, id);
     await take(pm.caller, id, "submit");
-    await claim(k1Engineer.caller, id);
+    await pickUp(k1Engineer.caller, id);
     await take(k1Engineer.caller, id, "send_to_manager", { assignTo: k1Manager.id });
     expect((await detail(k1Manager.caller, id)).answers).toMatchObject({ verdict: "Checked", reviewed_on: riyadhToday() });
     expect(await history(k1Manager.caller, id)).toContain("answers_changed");

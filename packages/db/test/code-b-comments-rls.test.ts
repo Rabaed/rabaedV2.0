@@ -62,7 +62,7 @@ const take = (as: string, id: string, transition: string, answers: object = {}) 
     as,
     sql`select app.take_transition(${id}::uuid, ${transition}, ${JSON.stringify(answers)}::jsonb, '', app.answers_sha256(${id}::uuid), ${randomUUID()}::uuid, now()) as outcome`,
   );
-const claim = (as: string, id: string) => outcome(as, sql`select app.claim_step(${id}::uuid, now()) as outcome`);
+const pickUp = (as: string, id: string) => outcome(as, sql`select app.pick_up_step(${id}::uuid, now()) as outcome`);
 
 /** The items `as` sees of `ids`. */
 const seen = async (as: string, ids: string[]) =>
@@ -81,11 +81,11 @@ async function closedAtB(model: string, rows: { comment: string }[]): Promise<{ 
   );
   const source = created!.work_item_id;
   expect(await take(c1.member, source, "send_for_review")).toBe("applied");
-  expect(await claim(c1Pm, source)).toBe("claimed");
+  expect(await pickUp(c1Pm, source)).toBe("picked_up");
   expect(await take(c1Pm, source, "submit")).toBe("applied");
-  expect(await claim(k1.member, source)).toBe("claimed");
+  expect(await pickUp(k1.member, source)).toBe("picked_up");
   expect(await take(k1.member, source, "send_to_manager")).toBe("applied");
-  expect(await claim(k1.ap, source)).toBe("claimed");
+  expect(await pickUp(k1.ap, source)).toBe("picked_up");
   expect(await take(k1.ap, source, "approve_b", { items_to_create: rows })).toBe("applied");
   const { rows: links } = await migrator.query<{ id: string }>(
     "select from_id as id from work_item_link where to_id = $1 and kind = 'raised_from' order by from_id",
@@ -224,12 +224,56 @@ describe("Code B's Comments reach exactly who sees the reviewed item", () => {
     expect(await seen(k1Mechanical, [source, ...comments])).toEqual([]);
     expect(await counts(k1Mechanical, source)).toEqual([]);
     // A Comment closed counts as closed, for everyone who sees it.
-    expect(await claim(c1Pm, comments[0]!)).toBe("claimed");
+    expect(await pickUp(c1Pm, comments[0]!)).toBe("picked_up");
     await migrator.query("update work_item set data = data || '{\"resolution_note\": \"Done\"}' where id = $1", [comments[0]]);
     expect(await take(c1Pm, comments[0]!, "resolve")).toBe("applied");
-    expect(await claim(k1.member, comments[0]!)).toBe("claimed");
+    expect(await pickUp(k1.member, comments[0]!)).toBe("picked_up");
     expect(await take(k1.member, comments[0]!, "close")).toBe("applied");
     expect(await counts(c1.member, source)).toEqual([{ open_count: 0, closed_count: 1 }]);
     expect(await counts(k1.member, source)).toEqual([{ open_count: 0, closed_count: 1 }]);
+  });
+});
+
+// Scenario RP-513-1 (RP-513; workflow-engine.md §3.3 rule 4, §3.4; V14), as the app role.
+describe("scenario RP-513-1: K1 never reads C1's pool or holder", () => {
+  const pool = (as: string, id: string) => call<{ names: unknown[] }>(as, sql`select names from app.work_item_pool(${id}::uuid)`);
+  const holder = (as: string, id: string) =>
+    call<{ assignee_member_id: string | null }>(as, sql`select assignee_member_id from app.work_item_holder(${id}::uuid)`);
+  /** C1's pool and holder events of item `id` that `as` reads. */
+  const c1Events = (as: string, id: string) =>
+    call<{ type: string }>(
+      as,
+      sql`select e.type from work_item_event e join participant p on p.id = e.actor_participant_id
+          where e.work_item_id = ${id}::uuid and p.company_id = ${c1.id}::uuid and e.type in ('assigned', 'picked_up')`,
+    );
+
+  it("C1's own Members read who its Comment waits on, then who holds it; K1 reads neither, by any function or table", async () => {
+    const { comments } = await closedAtB("Pooled", [{ comment: "Who has it" }]);
+    const comment = comments[0]!;
+    expect((await pool(c1.member, comment))[0]?.names.length).toBeGreaterThan(1);
+    for (const who of [k1.member, k1.ap]) {
+      expect(await pool(who, comment)).toEqual([]);
+      expect(await holder(who, comment)).toEqual([{ assignee_member_id: null }]);
+      expect(await c1Events(who, comment)).toEqual([]);
+    }
+    expect(await pickUp(c1Pm, comment)).toBe("picked_up");
+    expect(await holder(c1.member, comment)).toEqual([{ assignee_member_id: c1Pm }]);
+    expect(await pool(c1.member, comment)).toEqual([]);
+    for (const who of [k1.member, k1.ap]) {
+      expect(await pool(who, comment)).toEqual([]);
+      expect(await holder(who, comment)).toEqual([{ assignee_member_id: null }]);
+      expect(await c1Events(who, comment)).toEqual([]);
+      expect(await call(who, sql<{ id: string }>`select id from step_assignment where work_item_id = ${comment}::uuid and assignee_member_id is not null`)).toEqual([]);
+    }
+  });
+
+  it("C1's only PM holds the internal review at once; K1 and OR never read that event once the item is Submitted", async () => {
+    const { source } = await closedAtB("Held", [{ comment: "Held" }]);
+    const own = await call<{ type: string; actor_member_id: string }>(
+      c1Pm,
+      sql`select type, actor_member_id from work_item_event where work_item_id = ${source}::uuid and type = 'assigned'`,
+    );
+    expect(own).toContainEqual({ type: "assigned", actor_member_id: c1Pm });
+    for (const who of [k1.member, k1.ap, or.member]) expect(await c1Events(who, source)).toEqual([]);
   });
 });

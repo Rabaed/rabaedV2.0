@@ -1,4 +1,4 @@
-import type { BilingualText, DefinitionIssue, FieldError, StageCopyProblem, WorkflowProblem } from "@rabaed/domain";
+import type { BilingualText, DefinitionIssue, FieldError, HandoverStep, StageCopyProblem, WorkflowProblem } from "@rabaed/domain";
 import { forbidden, HttpError, notFound } from "./http-error.ts";
 
 // Every refusal the API's commands answer with, as the API's HTTP answer.
@@ -32,7 +32,9 @@ const answers = {
   position_not_found: () => new HttpError(422, "position_not_found"),
   item_closed: () => new HttpError(409, "item_closed"),
   not_holder: () => new HttpError(409, "not_holder"),
-  already_claimed: () => new HttpError(409, "already_claimed"),
+  already_picked_up: () => new HttpError(409, "already_picked_up"),
+  // Return to pool while the pool has one Member: nobody to give it back to (§3.3 rule 4).
+  pool_of_one: () => new HttpError(409, "pool_of_one"),
   transition_not_available: () => new HttpError(409, "transition_not_available"),
   no_step_pool: () => new HttpError(409, "no_step_pool"),
   next_step_unavailable: () => new HttpError(409, "next_step_unavailable"),
@@ -115,6 +117,15 @@ const answers = {
   stage_missing: () => new HttpError(422, "stage_missing"),
   // A used outcome's code, closing or polarity (RP-429, decided 2026-10-09); the body has its message.
   outcome_in_use: () => new HttpError(409, "outcome_in_use"),
+  // Handover (RP-108): a change that takes a Member out of a Step Pool, with a Step of
+  // theirs left without a pick (the body lists every Step, `handovers`), or with nobody
+  // else in a Step's pool (the body names that Step and its Project). Only ever the
+  // acting Authorized Person's own Company's Steps and Members (scenario RP-108-1).
+  handover_needed: () => new HttpError(409, "handover_needed"),
+  nobody_can_take: () => new HttpError(409, "nobody_can_take"),
+  // A Project Admin narrowing another Company's Participant that would take its Members off
+  // Steps: how many (`steps`) and whose (`company`), never which (V14; scenario RP-108-3).
+  other_company_handover: () => new HttpError(409, "other_company_handover"),
 } satisfies Record<string, () => HttpError>;
 
 export type RefusalReason = keyof typeof answers;
@@ -131,12 +142,20 @@ export function refusal(result: {
   message?: BilingualText;
   issues?: DefinitionIssue[];
   problems?: (WorkflowProblem | StageCopyProblem)[];
+  handovers?: HandoverStep[];
+  step?: BilingualText;
+  project?: BilingualText;
+  steps?: number;
+  company?: BilingualText;
 }): HttpError {
   const error = answers[result.reason]();
   const details = {
     ...(result.errors ? { fields: result.errors } : result.message ? { message: result.message } : {}),
     ...(result.issues ? { issues: result.issues } : {}),
     ...(result.problems ? { problems: result.problems } : {}),
+    ...(result.handovers ? { handovers: result.handovers } : {}),
+    ...(result.step && result.project ? { step: result.step, project: result.project } : {}),
+    ...(result.steps !== undefined && result.company ? { steps: result.steps, company: result.company } : {}),
   };
   return Object.keys(details).length > 0 ? new HttpError(error.statusCode, error.code, details) : error;
 }

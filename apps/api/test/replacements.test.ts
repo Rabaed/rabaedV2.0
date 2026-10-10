@@ -54,14 +54,14 @@ const counters = async () => (await ok(c1.caller.get(`/v1/projects/${projectId}/
 /** Sends a Draft for review and Submits it to K1. */
 async function submit(id: string) {
   await take(engineer, id, "send_for_review");
-  await ok(pm.post(`/v1/work-items/${id}/claim`));
+  await ok(pm.post(`/v1/work-items/${id}/pick-up`));
   await take(pm, id, "submit");
 }
 
 /** K1 verifies the submitted item and issues Code C. */
 async function codeC(id: string) {
   await saveOver(k1Engineer, id, { sample_checked: true, matches_specification: false, verification_note: "Below the specified efficacy" });
-  await ok(k1Manager.post(`/v1/work-items/${id}/claim`));
+  await ok(k1Manager.post(`/v1/work-items/${id}/pick-up`));
   await take(k1Manager, id, "revise_c", { remarks: "Resubmit with 110 lm/W luminaires" });
 }
 
@@ -262,7 +262,7 @@ describe("C1 creates a replacement of a MAR that got Code D", () => {
 
   it("shows the replacement and the rejected item to each other once it is Submitted (E1, E3)", async () => {
     await expectHidden(k1Manager.get(`/v1/work-items/${replacement}`));
-    await ok(pm.post(`/v1/work-items/${replacement}/claim`));
+    await ok(pm.post(`/v1/work-items/${replacement}/pick-up`));
     await take(pm, replacement, "submit");
     const number = (await detail(k1Manager, replacement)).documentNumber!;
     for (const who of [engineer, k1Manager, orEngineer]) {

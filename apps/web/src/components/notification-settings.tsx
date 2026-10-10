@@ -33,7 +33,6 @@ export function NotificationSettings({ value, locale }: { value: NotificationSet
       step_reached: t("group.step_reached"),
       watched: t("group.watched"),
       sent_back: t("group.sent_back"),
-      vacancy: t("group.vacancy"),
       weekly_report: t("group.weekly_report"),
     },
     weeklyHelp: t("weeklyHelp"),

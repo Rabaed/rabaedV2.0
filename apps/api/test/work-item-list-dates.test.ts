@@ -100,10 +100,10 @@ describe("Submission Date and Creation Date in the List (scenario 61)", () => {
     await api.later(2 * DAY);
     for (const id of [first, second, numbered]) await take(c1Engineer, id, "send_for_review");
     await api.later(10 * DAY);
-    await ok(c1Pm.post(`/v1/work-items/${first}/claim`));
+    await ok(c1Pm.post(`/v1/work-items/${first}/pick-up`));
     await take(c1Pm, first, "submit");
     await api.later(8 * DAY);
-    await ok(c1Pm.post(`/v1/work-items/${second}/claim`));
+    await ok(c1Pm.post(`/v1/work-items/${second}/pick-up`));
     await take(c1Pm, second, "submit");
     firstSubmitted = (await recorded(first)).submittedAt!;
     secondSubmitted = (await recorded(second)).submittedAt!;

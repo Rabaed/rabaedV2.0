@@ -66,7 +66,7 @@ async function summaries(trx: Transaction<Database>, rows: ProjectRow[]): Promis
   const { rows: counts } = await sql<{ project_id: string; count: number }>`
     select w.project_id, count(distinct w.id)::int as count
     from work_item w
-    join step_assignment a on a.work_item_id = w.id and a.status in ('pooled', 'claimed')
+    join step_assignment a on a.work_item_id = w.id and a.status in ('pooled', 'picked_up')
     where w.project_id = any(${projectIds}::uuid[]) and app.need_my_action(w.id) = 'waiting'
       and app.latest_visible_revision(w.id)
     group by w.project_id

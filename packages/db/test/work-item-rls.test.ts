@@ -282,7 +282,7 @@ describe("a Draft Work Item", () => {
       sql`select seen.stage_key as stage, a.assignee_member_id as holder, a.status
           from app.step_as_seen(${draft}::uuid) seen join step_assignment a on a.work_item_id = ${draft}`,
     );
-    expect(item).toEqual({ stage: "draft", holder: c1.member, status: "claimed" });
+    expect(item).toEqual({ stage: "draft", holder: c1.member, status: "picked_up" });
     const { rows } = await migrator.query("select seq, type, audience, audience_participant_id from work_item_event where work_item_id = $1", [
       draft,
     ]);
@@ -389,8 +389,8 @@ describe("Send for Review and Return", () => {
       as,
       sql`select app.take_transition(${item}::uuid, ${transition}, ${JSON.stringify(reason ? { reason } : {})}::jsonb, '', app.answers_sha256(${item}::uuid), ${randomUUID()}::uuid, now()) as outcome`,
     ).then((rows) => rows[0]!.outcome);
-  const claim = (as: string) =>
-    call<{ outcome: string }>(as, sql`select app.claim_step(${item}::uuid, now()) as outcome`).then((rows) => rows[0]!.outcome);
+  const pickUp = (as: string) =>
+    call<{ outcome: string }>(as, sql`select app.pick_up_step(${item}::uuid, now()) as outcome`).then((rows) => rows[0]!.outcome);
   const setPositions = (m: string, keys: string[]) =>
     call<{ outcome: string }>(
       c1.ap,
@@ -408,7 +408,7 @@ describe("Send for Review and Return", () => {
     await setPositions(pm, ["project_manager"]);
     item = (await createDraft(c1.member, { title: "Switchgear" })).work_item_id!;
     expect(await take(c1.member, "send_for_review")).toBe("applied");
-    expect(await claim(pm)).toBe("claimed");
+    expect(await pickUp(pm)).toBe("picked_up");
     expect(await take(pm, "return", "Wrong rating")).toBe("applied");
     expect(await take(c1.member, "send_for_review")).toBe("applied");
   });
@@ -425,7 +425,7 @@ describe("Send for Review and Return", () => {
     const before = await eventCount();
     for (const who of [c2.member, k1.member, or.member]) {
       expect(await take(who, "return", "x")).toBe("not_found");
-      expect(await claim(who)).toBe("not_found");
+      expect(await pickUp(who)).toBe("not_found");
     }
     expect(await eventCount()).toBe(before);
   });
@@ -435,7 +435,7 @@ describe("Send for Review and Return", () => {
       "select type, audience, audience_participant_id, payload from work_item_event where work_item_id = $1 order by seq",
       [item],
     );
-    expect(rows.map((r) => r.type)).toEqual(["created", "transition", "claimed", "transition", "transition"]);
+    expect(rows.map((r) => r.type)).toEqual(["created", "transition", "assigned", "transition", "transition", "assigned"]);
     expect(rows.every((r) => r.audience === "internal" && r.audience_participant_id === participant.c1)).toBe(true);
     expect(rows[3].payload).toEqual({ reason: "Wrong rating" });
     expect(rows[1].payload.document_number).toMatch(/^TWR-MAR-01-\d{4}$/);
@@ -464,7 +464,7 @@ describe("Send for Review and Return", () => {
   // RP-300: the Action Form answers are checked by the API; the database still
   // refuses what its schema can't hold, so the app role can't write them.
   it("refuses a Return without its reason, or with answers its Action Form doesn't ask for, and writes nothing", async () => {
-    expect(await claim(pm)).toBe("claimed");
+    expect(await pickUp(pm)).toBe("picked_up");
     const before = await eventCount();
     const takeWith = (answers: string) =>
       call<{ outcome: string }>(
@@ -503,8 +503,8 @@ describe("Submit and Code A", () => {
       as,
       sql`select app.take_transition(${item}::uuid, ${transition}, '{}', '', app.answers_sha256(${item}::uuid), ${randomUUID()}::uuid, now()) as outcome`,
     ).then((rows) => rows[0]!.outcome);
-  const claim = (as: string) =>
-    call<{ outcome: string }>(as, sql`select app.claim_step(${item}::uuid, now()) as outcome`).then((rows) => rows[0]!.outcome);
+  const pickUp = (as: string) =>
+    call<{ outcome: string }>(as, sql`select app.pick_up_step(${item}::uuid, now()) as outcome`).then((rows) => rows[0]!.outcome);
   const setPositions = (ap: string, p: string, m: string, keys: string[]) =>
     call<{ outcome: string }>(ap, sql`select app.set_project_member_positions(${p}::uuid, ${m}::uuid, ${keys}::text[]) as outcome`).then(
       (rows) => expect(rows[0]!.outcome).toBe("set"),
@@ -535,7 +535,7 @@ describe("Submit and Code A", () => {
     await setPositions(k1.ap, participant.k1, manager, ["manager"]);
     item = (await createDraft(c1.member, { title: "Busbars" })).work_item_id!;
     expect(await take(c1.member, "send_for_review")).toBe("applied");
-    expect(await claim(pm)).toBe("claimed");
+    expect(await pickUp(pm)).toBe("picked_up");
     expect(await take(pm, "submit")).toBe("applied");
   });
 
@@ -559,11 +559,12 @@ describe("Submit and Code A", () => {
       k1.member,
       sql`select type, audience from work_item_event where work_item_id = ${item}::uuid order by seq`,
     );
-    expect(visible).toEqual([{ type: "transition", audience: "shared" }]);
+    // And K1's own: a pool of one holds its review at once (§3.3 rule 4).
+    expect(visible).toEqual([{ type: "transition", audience: "shared" }, { type: "assigned", audience: "internal" }]);
   });
 
   it("closes the item with Code A in a shared issue_code event, still chained", async () => {
-    expect(await claim(manager)).toBe("claimed");
+    expect(await pickUp(manager)).toBe("picked_up");
     expect(await take(manager, "approve_a")).toBe("applied");
     const { rows } = await migrator.query(
       "select outcome, closed_at, current_stage_key from work_item where id = $1",
@@ -637,8 +638,8 @@ describe("Internal Note", () => {
       sql`select app.take_transition(
         ${item}::uuid, ${transition}, ${JSON.stringify(reason ? { reason } : {})}::jsonb, ${internalNote}, app.answers_sha256(${item}::uuid), ${randomUUID()}::uuid, now()) as outcome`,
     ).then((rows) => rows[0]!.outcome);
-  const claim = (as: string) =>
-    call<{ outcome: string }>(as, sql`select app.claim_step(${item}::uuid, now()) as outcome`).then((rows) => rows[0]!.outcome);
+  const pickUp = (as: string) =>
+    call<{ outcome: string }>(as, sql`select app.pick_up_step(${item}::uuid, now()) as outcome`).then((rows) => rows[0]!.outcome);
   const setPositions = (ap: string, p: string, m: string, keys: string[]) =>
     call<{ outcome: string }>(ap, sql`select app.set_project_member_positions(${p}::uuid, ${m}::uuid, ${keys}::text[]) as outcome`).then(
       (rows) => expect(rows[0]!.outcome).toBe("set"),
@@ -665,10 +666,10 @@ describe("Internal Note", () => {
     await setPositions(k1.ap, participant.k1, manager, ["manager"]);
     item = (await createDraft(c1.member, { title: "Transformers" })).work_item_id!;
     expect(await take(c1.member, "send_for_review", "sent note")).toBe("applied");
-    expect(await claim(pm)).toBe("claimed");
+    expect(await pickUp(pm)).toBe("picked_up");
     expect(await take(pm, "return", "returned note", "Wrong rating")).toBe("applied");
     expect(await take(c1.member, "send_for_review", "")).toBe("applied");
-    expect(await claim(pm)).toBe("claimed");
+    expect(await pickUp(pm)).toBe("picked_up");
     expect(await take(pm, "submit", "submitted note")).toBe("applied");
   });
 
@@ -697,7 +698,7 @@ describe("Internal Note", () => {
   });
 
   it("written with the Code, is read only by the Consultant (scenario 8)", async () => {
-    expect(await claim(manager)).toBe("claimed");
+    expect(await pickUp(manager)).toBe("picked_up");
     expect(await take(manager, "approve_a", "coded note")).toBe("applied");
     expect((await visible(k1.member)).map((e) => e.payload.internal_note).filter(Boolean)).toEqual(["coded note"]);
     for (const who of [c1.member, pm, or.member]) {
@@ -794,7 +795,7 @@ describe("a Draft's answers", () => {
       await call<{ outcome: string }>(c1.ap, sql`select app.add_project_member(${participant.c1}::uuid, ${pm}::uuid, now())`);
       for (const kind of ["trade", "location"]) await grant(c1.ap, "member", [participant.c1, pm], kind, "all");
       await call<{ outcome: string }>(c1.ap, sql`select app.set_project_member_positions(${participant.c1}::uuid, ${pm}::uuid, ${["project_manager"]}::text[])`);
-      expect(await call<{ outcome: string }>(pm, sql`select app.claim_step(${item}::uuid, now()) as outcome`)).toEqual([{ outcome: "claimed" }]);
+      expect(await call<{ outcome: string }>(pm, sql`select app.pick_up_step(${item}::uuid, now()) as outcome`)).toEqual([{ outcome: "picked_up" }]);
     });
 
     it("are saved by the raiser's Members at its internal Steps, each change a diff internal to the raiser", async () => {
@@ -854,7 +855,7 @@ describe("a Draft's answers", () => {
         payload: { changes: [{ field: "model", old: "CT-300", new: "CT-301" }] },
       });
       expect(await take(c1.member, "send_for_review")).toBe("applied");
-      expect(await call<{ outcome: string }>(pm, sql`select app.claim_step(${item}::uuid, now()) as outcome`)).toEqual([{ outcome: "claimed" }]);
+      expect(await call<{ outcome: string }>(pm, sql`select app.pick_up_step(${item}::uuid, now()) as outcome`)).toEqual([{ outcome: "picked_up" }]);
     });
 
     it("can't be Submitted except with the answers checked", async () => {

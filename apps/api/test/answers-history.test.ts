@@ -83,7 +83,7 @@ describe("answers after Draft", () => {
     await ok(save(engineer, id, { ...complete, model: DRAFT_MODEL }));
     await attachDatasheet(engineer, id);
     await ok(tryTake(engineer, id, "send_for_review"));
-    await ok(pm.post(`/v1/work-items/${id}/claim`));
+    await ok(pm.post(`/v1/work-items/${id}/pick-up`));
   });
 
   it("records nothing for the saves made in Draft", async () => {
@@ -151,7 +151,8 @@ describe("answers after Draft", () => {
     it("never shows the diffs to the Consultant or the Owner Representative (V5)", async () => {
       for (const who of [signer, orEngineer]) {
         const events = await history(who, id);
-        expect(events.map((e) => e.type)).toEqual(["transition"]);
+        // The signer also reads K1's own event: its only manager holds the review at once (§3.3 rule 4).
+        expect(events.map((e) => e.type)).toEqual(who === signer ? ["transition", "assigned"] : ["transition"]);
         // They see the Form as Submitted (V13), never what it said before.
         const body = (await who.get(`/v1/work-items/${id}/history`)).body + (await who.get(`/v1/work-items/${id}`)).body;
         expect(body).toContain(REVIEWED);

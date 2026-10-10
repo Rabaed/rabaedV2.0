@@ -75,18 +75,18 @@ async function closedAtB(title: string, rows: { comment: string; reference?: str
     )
   ).json().id as string;
   await take(at.c1Engineer, id, "send_for_review");
-  await ok(at.c1Pm.post(`/v1/work-items/${id}/claim`));
+  await ok(at.c1Pm.post(`/v1/work-items/${id}/pick-up`));
   await take(at.c1Pm, id, "submit");
-  await ok(at.k1Manager.post(`/v1/work-items/${id}/claim`));
+  await ok(at.k1Manager.post(`/v1/work-items/${id}/pick-up`));
   await take(at.k1Manager, id, "send_to_manager");
-  await ok(at.k1Manager.post(`/v1/work-items/${id}/claim`));
+  await ok(at.k1Manager.post(`/v1/work-items/${id}/pick-up`));
   await take(at.k1Manager, id, "approve_b", { answers: { remarks: "Approved with comments", items_to_create: rows } });
   return id;
 }
 
-/** C1's PM claims the Comment, writes the resolution note and resolves it. */
+/** C1's PM picks up the Comment, writes the resolution note and resolves it. */
 async function resolve(id: string, note: string) {
-  await ok(at.c1Pm.post(`/v1/work-items/${id}/claim`));
+  await ok(at.c1Pm.post(`/v1/work-items/${id}/pick-up`));
   const answers = (await detail(at.c1Pm, id)).answers;
   await ok(at.c1Pm.request("PUT", `/v1/work-items/${id}/answers`, { answers: { ...answers, resolution_note: note } }));
   await take(at.c1Pm, id, "resolve");
@@ -127,7 +127,7 @@ describe("Code B with three rows makes three Comments in the Snag List (seam 1)"
     expect(first.answers).toMatchObject({ comment: "Add the fire rating to the datasheet", reference: "Datasheet p.2", trade: at.electrical, location: at.buildingA });
     expect(first.workflow.name.en).toBe("Comment");
     expect(first.step.key).toBe("open");
-    expect(first.heldBy?.memberName).toBeNull(); // C1's Step Pool, unclaimed.
+    expect(first.heldBy?.memberName).toBeNull(); // C1's Step Pool, notPickedUp.
     expect(await counts(at.c1Pm, source)).toEqual({ open: 3, closed: 0 });
     expect(await counts(at.k1Manager, source)).toEqual({ open: 3, closed: 0 });
   });
@@ -139,22 +139,22 @@ describe("Code B with three rows makes three Comments in the Snag List (seam 1)"
     const emergency = byTitle.get("Add emergency fittings")!;
 
     // Resolving asks for the resolution note: the Form Section C1 fills at Open.
-    await ok(at.c1Pm.post(`/v1/work-items/${lux}/claim`));
+    await ok(at.c1Pm.post(`/v1/work-items/${lux}/pick-up`));
     const noNote = await tryTake(at.c1Pm, lux, "resolve");
     expect(noNote.statusCode, noNote.body).toBe(422);
-    await ok(at.c1Pm.post(`/v1/work-items/${lux}/release`));
+    await ok(at.c1Pm.post(`/v1/work-items/${lux}/return-to-pool`));
 
     await resolve(lux, "Lux levels recalculated");
     const resolved = await detail(at.k1Manager, lux);
     expect(resolved.step.key).toBe("resolved");
     expect(resolved.answers).toMatchObject({ resolution_note: "Lux levels recalculated" });
-    await ok(at.k1Manager.post(`/v1/work-items/${lux}/claim`));
+    await ok(at.k1Manager.post(`/v1/work-items/${lux}/pick-up`));
     await take(at.k1Manager, lux, "close");
     expect((await detail(at.c1Pm, lux)).outcome).toBe("closed");
     expect(await counts(at.c1Pm, source)).toEqual({ open: 2, closed: 1 });
 
     await resolve(emergency, "Added");
-    await ok(at.k1Manager.post(`/v1/work-items/${emergency}/claim`));
+    await ok(at.k1Manager.post(`/v1/work-items/${emergency}/pick-up`));
     await take(at.k1Manager, emergency, "return_to_open", { reason: "Not on the drawing yet" });
     const back = await detail(at.c1Pm, emergency);
     expect(back.step.key).toBe("open");

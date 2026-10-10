@@ -73,15 +73,15 @@ async function newDraft(title: string): Promise<string> {
 async function inReview(title: string): Promise<string> {
   const id = await newDraft(title);
   await take(at.c1Engineer, id, "send_for_review");
-  await ok(at.c1Pm.post(`/v1/work-items/${id}/claim`));
+  await ok(at.c1Pm.post(`/v1/work-items/${id}/pick-up`));
   return id;
 }
 
-/** Submitted to K1 and claimed by K1's engineer, at the Step that Recommends a Code. */
+/** Submitted to K1 and picked up by K1's engineer, at the Step that Recommends a Code. */
 async function atConsultantReview(title: string): Promise<string> {
   const id = await inReview(title);
   await take(at.c1Pm, id, "submit");
-  await ok(k1Engineer.post(`/v1/work-items/${id}/claim`));
+  await ok(k1Engineer.post(`/v1/work-items/${id}/pick-up`));
   return id;
 }
 
@@ -104,7 +104,7 @@ describe("Cancel is discard for a Revision (decided 2026-10-09)", () => {
   async function revisedAtC(title: string): Promise<string> {
     const id = await atConsultantReview(title);
     await take(k1Engineer, id, "send_to_manager");
-    await ok(at.k1Manager.post(`/v1/work-items/${id}/claim`));
+    await ok(at.k1Manager.post(`/v1/work-items/${id}/pick-up`));
     await take(at.k1Manager, id, "revise_c");
     return id;
   }
@@ -130,7 +130,7 @@ describe("Cancel is discard for a Revision (decided 2026-10-09)", () => {
   it("offers no Cancel at the raiser's own review either, so a chain never ends by Cancel", async () => {
     const rev = await createRevision(await revisedAtC("Gaskets"));
     await take(at.c1Engineer, rev, "send_for_review");
-    await ok(at.c1Pm.post(`/v1/work-items/${rev}/claim`));
+    await ok(at.c1Pm.post(`/v1/work-items/${rev}/pick-up`));
     expect((await actionsOf(at.c1Pm, rev)).map((t) => t.kind)).not.toContain("cancel");
     expect((await tryTake(at.c1Pm, rev, "cancel_review")).statusCode).toBe(409);
   });
@@ -166,11 +166,11 @@ describe("Cancel", () => {
   it("is not offered after Submit, even back at the raiser's Steps after a Send Back, and taking it is refused like a Transition that isn't there", async () => {
     const id = await inReview("Valves");
     await take(at.c1Pm, id, "submit");
-    await ok(k1Engineer.post(`/v1/work-items/${id}/claim`));
+    await ok(k1Engineer.post(`/v1/work-items/${id}/pick-up`));
     // K1's Steps never offer a Cancel.
     expect((await actionsOf(k1Engineer, id)).map((t) => t.kind)).not.toContain("cancel");
     await take(k1Engineer, id, "send_back");
-    await ok(at.c1Pm.post(`/v1/work-items/${id}/claim`));
+    await ok(at.c1Pm.post(`/v1/work-items/${id}/pick-up`));
 
     expect((await actionsOf(at.c1Pm, id)).map((t) => t.kind)).not.toContain("cancel");
     const refused = await tryTake(at.c1Pm, id, "cancel_review");
@@ -244,7 +244,7 @@ describe("scenario RP-433-1: K1's engineer recommends Code A to their manager", 
     expect((await feed(at.k1Manager)).some((e) => e.type === "recommend_code" && e.workItem.id === id)).toBe(true);
 
     // The manager issues Code A: C1 sees the Code, never the Recommended Code, and its history counts on from what it saw.
-    await ok(at.k1Manager.post(`/v1/work-items/${id}/claim`));
+    await ok(at.k1Manager.post(`/v1/work-items/${id}/pick-up`));
     await take(at.k1Manager, id, "approve_a");
     await drainOutbox(worker);
     const after = await history(at.c1Pm, id);

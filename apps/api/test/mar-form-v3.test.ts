@@ -75,7 +75,7 @@ async function submitted(title: string): Promise<string> {
   const id = await created(title);
   await attachDatasheet(engineer, id);
   await ok(tryTake(engineer, id, "send_for_review"));
-  await ok(pm.post(`/v1/work-items/${id}/claim`));
+  await ok(pm.post(`/v1/work-items/${id}/pick-up`));
   await ok(tryTake(pm, id, "submit"));
   return id;
 }

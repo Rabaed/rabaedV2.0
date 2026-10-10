@@ -12,7 +12,7 @@ Paste the shared brief from `design-requests-2026-10-07.md` first. The content i
 - **Notification settings:**
   - **Pause all email** at the top.
   - A list of Projects, each with a **mute** switch.
-  - One row per group: Step reached me or my pool · Items I watch · Sent Back to my Participant · Vacancy in my Company · Weekly Step Age report. Each row has **Email** only (in-app is always sent, so no In-app switch, RP-432): Off / Immediately / Daily digest. The Weekly Step Age report row has only an Email on/off and appears only for Members who receive it.
+  - One row per group: Step reached me or my pool · Items I watch · Sent Back to my Participant · Weekly Step Age report. Each row has **Email** only (in-app is always sent, so no In-app switch, RP-432): Off / Immediately / Daily digest. The Weekly Step Age report row has only an Email on/off and appears only for Members who receive it.
   - "Items I watch" expands to outcome ticks: A, B, C, D · Passed, Passed with Comments, Failed · Approved, Rejected, Cancelled.
   - A line explaining the daily digest: 07:00 Riyadh time, Sunday to Thursday, none on empty days.
 - Save behaviour: each change saves at once with a small "Saved" confirmation, or one Save button (choose one and show it).

@@ -52,7 +52,7 @@ export const Defaults: Story = {
     await expect(canvas.queryByRole("heading", { name: storyText(context, copy.weekly) })).toBeNull();
     // In-app is always sent: no group has an In-app switch.
     await expect(canvas.queryAllByRole("switch", { name: storyText(context, copy.inApp) })).toHaveLength(0);
-    await expect(canvas.getAllByRole("radio", { name: storyText(context, copy.off) })).toHaveLength(4);
+    await expect(canvas.getAllByRole("radio", { name: storyText(context, copy.off) })).toHaveLength(3);
     await userEvent.click(canvas.getByRole("switch", { name: storyText(context, copy.pauseAll) }));
     await expect(args.onSave).toHaveBeenCalledWith(expect.objectContaining({ emailPaused: true, settings: defaultNotificationSettings }));
   },

@@ -96,7 +96,7 @@ async function submittedItem(raiser: Person, pm: Person, title: string, trade = 
   );
   const id = res.json().id as string;
   await take(raiser.caller, id, "send_for_review");
-  await ok(pm.caller.post(`/v1/work-items/${id}/claim`));
+  await ok(pm.caller.post(`/v1/work-items/${id}/pick-up`));
   await take(pm.caller, id, "submit");
   const documentNumber = (await ok(raiser.caller.get(`/v1/work-items/${id}`), 200)).json().documentNumber as string;
   return { id, documentNumber };
@@ -104,9 +104,9 @@ async function submittedItem(raiser: Person, pm: Person, title: string, trade = 
 
 /** K1's `signer` takes the item through K1's internal review and issues Code B. */
 async function issueCodeB(id: string, signer: Person) {
-  await ok(signer.caller.post(`/v1/work-items/${id}/claim`));
+  await ok(signer.caller.post(`/v1/work-items/${id}/pick-up`));
   await take(signer.caller, id, "send_to_manager");
-  await ok(signer.caller.post(`/v1/work-items/${id}/claim`));
+  await ok(signer.caller.post(`/v1/work-items/${id}/pick-up`));
   await ok(signer.caller.post(`/v1/work-items/${id}/transitions`, { transition: "approve_b", answers: {}, confirmed: true, idempotencyKey: randomUUID() }));
 }
 
@@ -306,7 +306,7 @@ describe("a new Revision (scenario 75)", () => {
     const id = await submitted(at, raiser.caller, pm.caller, "Revised conduits");
     const answers = { ...(await detail(at.k1Manager, id)).answers, sample_checked: true, matches_specification: false, verification_note: "Too dim" };
     await ok(at.k1Manager.request("PUT", `/v1/work-items/${id}/answers`, { answers }));
-    await ok(at.k1Manager.post(`/v1/work-items/${id}/claim`));
+    await ok(at.k1Manager.post(`/v1/work-items/${id}/pick-up`));
     await ok(at.k1Manager.post(`/v1/work-items/${id}/transitions`, { transition: "revise_c", answers: { remarks: "Resubmit" }, confirmed: true, idempotencyKey: randomUUID() }));
     await drain();
     await poll(riyadh(14));

@@ -24,8 +24,8 @@ export type ActivityFeedPanelLabels = {
   empty: string;
   internal: string;
   noNumber: string;
-  claimed: string;
-  released: string;
+  pickedUp: string;
+  returnedToPool: string;
   assigned: string;
   internalNote: string;
   recommended: string;
@@ -193,10 +193,12 @@ function whatHappened(e: ActivityFeedEntry, locale: Locale, labels: ActivityFeed
       return label ?? labels.updated;
     case "internal_note":
       return label ? `${labels.internalNote} ${label}` : labels.internalNote;
+    case "picked_up":
     case "claimed":
-      return labels.claimed;
+      return labels.pickedUp;
+    case "returned_to_pool":
     case "released":
-      return labels.released;
+      return labels.returnedToPool;
     case "assigned":
     case "admin_reassigned":
       return labels.assigned;

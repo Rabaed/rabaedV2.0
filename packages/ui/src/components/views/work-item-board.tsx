@@ -36,8 +36,8 @@ export type WorkItemBoardLabels = {
   board: string;
   noNumber: string;
   revisionNoNumber: (revision: string) => string;
-  /** After a Step's name, when nobody in the viewer's Company has claimed it. */
-  unclaimed: string;
+  /** After a Step's name, when nobody in the viewer's Company has picked it up. */
+  notPickedUp: string;
   /** A column with no cards. */
   noItems: string;
   closedSince: (days: string) => string;
@@ -321,15 +321,15 @@ function MoveMenu({
   );
 }
 
-/** Open: its Step Age, and who in my own Company has claimed it (V14); closed: its outcome, from its Type's set. */
+/** Open: its Step Age, and who in my own Company has picked it up (V14); closed: its outcome, from its Type's set. */
 function cardState(card: WorkItemRow, locale: Locale, labels: WorkItemBoardLabels, outcomes: ListOutcomes): WorkItemState | undefined {
   if (isOpenStageCategory(card.stage.category)) {
     const w = card.with;
     const holder =
       w?.kind === "own"
-        ? w.claimer
-          ? ({ kind: "person", inViewerCompany: true, name: w.claimer.name[locale], companyName: w.companyName[locale] } as const)
-          : ({ kind: "pool", inViewerCompany: true, stepName: w.step.name[locale], unclaimedLabel: labels.unclaimed, companyName: w.companyName[locale] } as const)
+        ? w.holder
+          ? ({ kind: "person", inViewerCompany: true, name: w.holder.name[locale], companyName: w.companyName[locale] } as const)
+          : ({ kind: "pool", inViewerCompany: true, stepName: w.step.name[locale], notPickedUpLabel: labels.notPickedUp, companyName: w.companyName[locale] } as const)
         : undefined;
     return { open: true, stepAgeWeeks: card.stepAgeWeeks, ...(holder ? { holder } : {}) };
   }

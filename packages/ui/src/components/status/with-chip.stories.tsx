@@ -51,7 +51,7 @@ export const PersonInAnotherCompany: Story = {
   },
 };
 
-/** Held by a Company as a whole (nobody has claimed the Step yet): the Company's name, in either Company. */
+/** Held by a Company as a whole (nobody has picked up the Step yet): the Company's name, in either Company. */
 export const Company: Story = {
   render: (_args, context) => (
     <div className="flex flex-wrap gap-2">
@@ -65,19 +65,19 @@ export const Company: Story = {
   },
 };
 
-/** A Step of the viewer's own Company that nobody has claimed: the Step, then "unclaimed"; no person, no avatar. */
-export const UnclaimedOwnStep: Story = {
+/** A Step of the viewer's own Company that nobody has picked up: the Step, then "Not picked up"; no person, no avatar. */
+export const NotPickedUpOwnStep: Story = {
   render: (_args, context) => (
     <WithChip
       kind="pool"
       inViewerCompany
       companyName={storyText(context, ownCompany)}
       stepName={storyText(context, { en: "Contractor review", ar: "مراجعة المقاول" })}
-      unclaimedLabel={storyText(context, { en: "unclaimed", ar: "لم تُستلَم" })}
+      notPickedUpLabel={storyText(context, { en: "Not picked up", ar: "لم تُستلَم" })}
     />
   ),
   play: async (context) => {
-    await expect(context.canvasElement).toHaveTextContent(storyText(context, { en: "Contractor review · unclaimed", ar: "مراجعة المقاول · لم تُستلَم" }));
+    await expect(context.canvasElement).toHaveTextContent(storyText(context, { en: "Contractor review · Not picked up", ar: "مراجعة المقاول · لم تُستلَم" }));
     await expect(context.canvasElement.querySelector("img")).toBeNull();
   },
 };
