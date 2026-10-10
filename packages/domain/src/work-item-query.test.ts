@@ -219,6 +219,50 @@ describe("filters", () => {
   });
 });
 
+describe("numbered pages and every column's sort (RP-409)", () => {
+  it("takes a page and 10, 25 or 50 rows a page, and nothing else", () => {
+    expect(workItemQuery.parse({ page: "3", pageSize: "25" })).toMatchObject({ page: 3, pageSize: 25 });
+    for (const bad of [{ page: "0" }, { page: "-1" }, { page: "two" }, { pageSize: "20" }, { pageSize: "100" }]) {
+      expect(workItemQuery.safeParse(bad).success, JSON.stringify(bad)).toBe(false);
+    }
+  });
+
+  it("sorts by any List column, either way", () => {
+    for (const sort of ["subject", "revision", "trade", "type", "stage", "outcome", "locationLevel1", "locationLevel2", "locationLevel3", "owner", "created", "contractor"]) {
+      expect(workItemQuery.parse({ sort, dir: "desc", page: "1" })).toMatchObject({ sort, dir: "desc" });
+    }
+    expect(workItemQuery.safeParse({ dir: "sideways" }).success).toBe(false);
+  });
+
+  it("pages with a cursor only for the cursor's own sorts, in their own order, and never with a page", () => {
+    const cursor = encodeWorkItemCursor("stepAge", ["false", "2026-10-01T00:00:00.000000Z", "", row]);
+    expect(workItemQuery.safeParse({ cursor, page: "2" }).success).toBe(false);
+    expect(workItemQuery.safeParse({ cursor, dir: "asc" }).success).toBe(false);
+    expect(workItemQuery.safeParse({ cursor: encodeWorkItemCursor("subject" as never, ["false", "a", "", row]), sort: "subject" }).success).toBe(false);
+  });
+
+  it("keeps the page, its size and the order in the URL, and reads them back", () => {
+    const query: WorkItemQuery = { ...defaults, sort: "owner", dir: "desc", page: 4, pageSize: 10 };
+    const params = workItemSearchParams(query);
+    expect(params.toString()).toBe("sort=owner&dir=desc&page=4&pageSize=10");
+    expect(workItemQueryFromSearchParams(new URLSearchParams(params.toString()))).toEqual(query);
+    expect(workItemQueryFromSearchParams({ page: "x", pageSize: "7", dir: "up" })).toEqual(defaults);
+  });
+
+  it("clears the filters to the first page, keeping the order and the page size", () => {
+    expect(withoutFilters({ ...defaults, stage: ["draft"], sort: "subject", dir: "desc", page: 3, pageSize: 10 })).toEqual({
+      ...defaults,
+      sort: "subject",
+      dir: "desc",
+      pageSize: 10,
+    });
+  });
+
+  it("isn't narrowed by the page, its size or the order", () => {
+    expect(isFilteredWorkItemQuery({ ...defaults, page: 2, pageSize: 10, dir: "desc", sort: "trade" })).toBe(false);
+  });
+});
+
 describe("the Submission Date range and sort (RP-348)", () => {
   const rangeQuery: WorkItemQuery = { ...defaults, submittedFrom: "2026-03-01", submittedTo: "2026-03-31", sort: "submissionDate" };
 

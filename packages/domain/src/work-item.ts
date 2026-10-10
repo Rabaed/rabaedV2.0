@@ -158,6 +158,12 @@ export const workItemList = z.object({
   stages: z.array(stage.extend({ count: z.number().int().nonnegative() })),
   items: z.array(workItemRow),
   nextCursor: z.string().nullable(),
+  /**
+   * A numbered page (RP-409): its number, its size and whether a next page holds rows. Never how many
+   * pages or rows there are: the Stage counts say that, except under a search, where nothing does.
+   * Left out when the read pages by cursor.
+   */
+  page: z.object({ number: z.number().int().positive(), size: z.number().int().positive(), hasNext: z.boolean() }).optional(),
   filters: z.object({
     types: z.array(z.object({ code: z.string(), name: bilingualText })),
     /** Each Type's outcomes on the Project, by Type code, in their order (RP-429): the outcome filter and badges read them. */

@@ -12,9 +12,13 @@ import {
   isOpenStageCategory,
   parseActionForm,
   stageCategories,
+  sortDirectionOf,
   stepAgeWeeks,
+  workItemCursorSorts,
   workItemPageSize,
   type BilingualText,
+  type Locale,
+  type WorkItemCursorSort,
   type BoardCardLayout,
   type BoardCardLayoutChange,
   type BoardCardInput,
@@ -132,8 +136,8 @@ function visibleRows({ projectId, moduleKey }: QueryScope, allRevisions: boolean
         select 1 from app.revision_chain(w.id) rc join work_item o on o.id = rc.work_item_id
         where app.outcome_offers(o.project_id, o.work_item_type_id, o.outcome, 'offer_revision')
       ) as had_code_c,
-      st.key as stage_key, st.name as stage_name, st.category as stage_category,
-      tv.id as trade_id, tv.code as trade_code, tv.name as trade_name,
+      st.key as stage_key, st.name as stage_name, st.category as stage_category, st.sort as stage_sort,
+      tv.id as trade_id, tv.code as trade_code, tv.name as trade_name, tv.sort as trade_sort,
       lv.id as location_id, lv.code as location_code, lv.name as location_name,
       e.step_entered_at,
       -- Closed (or cancelled): it no longer ages, nor is it with anyone (isOpenStageCategory).
@@ -362,7 +366,7 @@ const pastTextThenId = (column: RawBuilder<unknown>, text: string, id: string) =
 /** A row's key: its Subject only when it has no value. */
 const keyOf = (last: boolean, value: string | null, r: Row): WorkItemCursorKey => [String(last), value ?? "", value === null ? r.title : "", r.id];
 
-const sorts: Record<WorkItemSort, SortDefinition> = {
+const sorts: Record<WorkItemCursorSort, SortDefinition> = {
   // The oldest Step Age first; closed items, which don't age, last, and within each the items with no Step Age
   // (a Draft with no number) last, by Subject.
   stepAge: {
@@ -394,9 +398,75 @@ const sorts: Record<WorkItemSort, SortDefinition> = {
 };
 
 /** Where the query's page starts: after its cursor's key, or at the start. */
-function afterCursor(q: WorkItemQuery): RawBuilder<boolean> {
+function afterCursor(q: WorkItemQuery & { sort: WorkItemCursorSort }): RawBuilder<boolean> {
   const key = q.cursor === undefined ? null : decodeWorkItemCursor(q.cursor, q.sort);
   return key ? sorts[q.sort].after(key) : noFilter;
+}
+
+/**
+ * A List column's sort (RP-409), paged by number: what it sorts by (`value`), which rows have nothing
+ * to sort by (`none`, last whichever way; by default those with no value), and whether the column reads
+ * the other way round from the value (Step Age: the oldest first is the earliest Step entry). Ties go by
+ * Subject, byte by byte, then id (ADR 0015). Names are sorted in the reader's language (`lang`), and only
+ * as the viewer may read them: another Company's people are never read (V14), so an owner sorts by the
+ * name the row shows. `value` may read `holderJoins`.
+ */
+type ColumnSort = { value: (lang: Locale) => RawBuilder<unknown>; none?: RawBuilder<boolean>; reversed?: boolean };
+
+/** The ancestor (or the Location itself) at `depth` of a row's Location: its place in the Project's order. */
+const locationLevel = (depth: number): ColumnSort => ({
+  value: () => sql`(
+    with recursive up as (
+      select id, parent_id, depth, sort, code from dimension_value where id = r.location_id
+      union all
+      select v.id, v.parent_id, v.depth, v.sort, v.code from dimension_value v join up on v.id = up.parent_id
+    ) select (up.sort, up.code collate "C") from up where up.depth = ${depth} limit 1)`,
+});
+
+const named = (name: RawBuilder<unknown>, lang: Locale) => sql`lower(${name} ->> ${lang})`;
+
+const columnSorts: Record<WorkItemSort, ColumnSort> = {
+  stepAge: { value: () => sql`r.step_entered_at`, none: sql`(r.closed or r.step_entered_at is null)`, reversed: true },
+  documentNumber: { value: () => sql`r.document_number collate "C"` },
+  submissionDate: { value: () => sql`r.submitted_at` },
+  subject: { value: () => sql`lower(r.title) collate "C"` },
+  revision: { value: () => sql`r.revision_no` },
+  trade: { value: () => sql`(r.trade_sort, r.trade_code collate "C")` },
+  type: { value: () => sql`r.type_code collate "C"` },
+  stage: { value: () => sql`r.stage_sort` },
+  outcome: { value: () => sql`r.outcome collate "C"` },
+  locationLevel1: locationLevel(1),
+  locationLevel2: locationLevel(2),
+  locationLevel3: locationLevel(3),
+  // Who the row shows: my own Company's person who claimed it, else the holding Company; closed, who closed it.
+  owner: {
+    value: (lang) =>
+      named(sql`(case when r.closed then coalesce(cm.full_name, co.closer_company_name) else coalesce(m.full_name, co.holder_name) end)`, lang),
+  },
+  // The date the row shows: the Creation Date, which only the raiser's Participant reads, else the Submission Date.
+  created: { value: () => sql`coalesce(r.creation_date, r.submitted_at)` },
+  contractor: { value: (lang) => named(sql`co.raiser_name`, lang) },
+};
+
+/** A numbered page's order: the column's sort in the query's direction, rows with nothing to sort by last. */
+function columnOrder(q: WorkItemQuery): RawBuilder<unknown> {
+  const { value, none, reversed } = columnSorts[q.sort];
+  const v = value(q.lang ?? "en");
+  const ascending = (sortDirectionOf(q) === "asc") !== (reversed ?? false);
+  return sql`${none ?? sql`${v} is null`}, ${v} ${ascending ? sql`asc` : sql`desc`}, r.title collate "C", r.id`;
+}
+
+const isCursorSort = (sort: WorkItemSort): sort is WorkItemCursorSort => (workItemCursorSorts as readonly string[]).includes(sort);
+
+/**
+ * How a query pages: by number (`page`), or by cursor, which only the cursor's sorts in their own
+ * order can do; any other read without a page is its first numbered page.
+ */
+function pagingOf(q: WorkItemQuery) {
+  const cursor = q.page === undefined && q.dir === undefined && isCursorSort(q.sort) ? { ...q, sort: q.sort } : null;
+  const page = cursor ? null : (q.page ?? 1);
+  const size = page === null ? workItemPageSize : (q.pageSize ?? workItemPageSize);
+  return { cursor, page, size, orderBy: cursor ? sorts[cursor.sort].orderBy : columnOrder(q) };
 }
 
 function toRow(r: Row, now: Date): WorkItemRow {
@@ -506,11 +576,11 @@ export async function queryWorkItems(
   scope: QueryScope,
   q: WorkItemQuery,
   now: Date,
-): Promise<{ rows: WorkItemRow[]; nextCursor: string | null; stageCounts: Map<string, number> }> {
+): Promise<{ rows: WorkItemRow[]; nextCursor: string | null; page?: NonNullable<WorkItemList["page"]>; stageCounts: Map<string, number> }> {
   const rows = visibleRows(scope, q.allRevisions);
   const where = matching(q, now, scope);
-  const { orderBy } = sorts[q.sort];
-  const after = afterCursor(q);
+  const { cursor, page: number, size, orderBy } = pagingOf(q);
+  const after = cursor ? afterCursor(cursor) : noFilter;
   const { rows: page } = await sql<Row>`
     with r as (${rows})
     select r.*, ${holderColumns}
@@ -518,12 +588,14 @@ export async function queryWorkItems(
     ${holderJoins}
     where ${where} and ${after}
     order by ${orderBy}
-    limit ${workItemPageSize + 1}
+    limit ${size + 1} offset ${number === null ? 0 : (number - 1) * size}
   `.execute(trx);
-  const shown = page.slice(0, workItemPageSize);
+  const shown = page.slice(0, size);
+  const more = page.length > size;
   return {
     rows: shown.map((r) => toRow(r, now)),
-    nextCursor: page.length > workItemPageSize ? encodeWorkItemCursor(q.sort, sorts[q.sort].keyOf(shown.at(-1)!)) : null,
+    nextCursor: cursor && more ? encodeWorkItemCursor(cursor.sort, sorts[cursor.sort].keyOf(shown.at(-1)!)) : null,
+    ...(number === null ? {} : { page: { number, size, hasNext: more } }),
     // A search counts no more than its page shows ("Search and filters": no totals beyond the page).
     stageCounts: q.q === undefined ? await countByStage(trx, scope, q, now) : pageCounts(shown),
   };
@@ -564,7 +636,7 @@ async function boardCards(trx: Trx, scope: QueryScope, q: WorkItemQuery, now: Da
     ${holderJoins}
     left join work_item cw on cw.id = r.id and r.closed
     where ${matching(q, now, scope)} and (not r.closed or coalesce(cw.closed_at, r.step_entered_at) >= ${closedSince}::timestamptz)
-    order by ${sorts[q.sort].orderBy}
+    order by ${pagingOf({ ...q, cursor: undefined }).orderBy}
   `.execute(trx);
   const byStage = new Map<string, BoardCardInput[]>();
   for (const r of rows) {
@@ -722,8 +794,8 @@ async function hasModuleTab(trx: Trx, { projectId, moduleKey }: QueryScope): Pro
 export function listWorkItems(db: Db, memberId: string, scope: QueryScope, q: WorkItemQuery, now: Date): Promise<WorkItemList | null> {
   return withMember(db, memberId, async (trx) => {
     if (!(await hasModuleTab(trx, scope))) return null;
-    const { rows, nextCursor, stageCounts } = await queryWorkItems(trx, scope, q, now);
-    return { ...(await stagesAndFilters(trx, scope, stageCounts)), items: rows, nextCursor };
+    const { rows, nextCursor, page, stageCounts } = await queryWorkItems(trx, scope, q, now);
+    return { ...(await stagesAndFilters(trx, scope, stageCounts)), items: rows, nextCursor, ...(page ? { page } : {}) };
   });
 }
 
