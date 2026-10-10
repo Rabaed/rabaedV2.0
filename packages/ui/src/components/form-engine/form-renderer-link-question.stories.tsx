@@ -51,7 +51,7 @@ const links = (locale: Locale, extra: Partial<FormLinks> = {}): FormLinks => ({
     };
   },
   workItemId: self,
-  hrefFor: (id) => `#/work-items/${id}`,
+  hrefFor: (choice) => (typeof choice === "string" ? `#/work-items/${choice}` : null),
   debounceMs: 0,
   ...extra,
 });

@@ -10,8 +10,9 @@ import { Icon, type IconName } from "../icon/icon.tsx";
 // One linked item in a list (form-engine.md part 2b; visibility.md E1, E3): the
 // other item's Document Number (left to right) and Subject. One the viewer can
 // see opens it; one they can't comes without an id, so opening it only says they
-// may not see its details, and asks nothing of the API. Shared by the Links
-// section, Linked from and the link question.
+// may not see its details: on the page of the Link to it, by the Link's own id,
+// when there is one (RP-521), else right here. Shared by the Links section,
+// Linked from and the link question.
 
 /** The row's words, from the app's messages. */
 export type LinkedItemRowLabels = {
@@ -23,8 +24,14 @@ export type LinkedItemRowProps = {
   labels: LinkedItemRowLabels;
   documentNumber: string;
   subject: string;
-  /** Where the item opens; null for one the viewer can't see. */
+  /**
+   * Where the row opens: the item, or for one the viewer can't see the page of
+   * the Link to it (RP-521), which says only that they may not see its details.
+   * Null: opening it shows that sentence here.
+   */
   href: string | null;
+  /** The viewer can't see the item (a lock marks it); by default, when there is nowhere to open. */
+  hidden?: boolean;
   /** The link component, e.g. the app's `Link`. */
   linkAs: ElementType;
   /** A button removing the item, when it may be removed. */
@@ -32,7 +39,7 @@ export type LinkedItemRowProps = {
 };
 
 /** A list item: the linked item, opening it or saying the viewer may not see it, and its remove button. */
-export function LinkedItemRow({ labels: text, documentNumber, subject, href, linkAs: Anchor, remove }: LinkedItemRowProps) {
+export function LinkedItemRow({ labels: text, documentNumber, subject, href, hidden = href === null, linkAs: Anchor, remove }: LinkedItemRowProps) {
   const messageId = useId();
   const [explained, setExplained] = useState(false);
   const target = cn(
@@ -60,7 +67,7 @@ export function LinkedItemRow({ labels: text, documentNumber, subject, href, lin
             {label}
           </button>
         )}
-        {href === null && <Icon name="lock" size={16} label={text.hidden} className="shrink-0 text-muted" />}
+        {hidden && <Icon name="lock" size={16} label={text.hidden} className="shrink-0 text-muted" />}
         {remove && (
           <IconButton label={remove.label} size="sm" disabled={remove.disabled} onClick={remove.onRemove}>
             <Icon name={remove.icon} size={16} />

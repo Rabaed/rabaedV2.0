@@ -22,6 +22,9 @@ export default defineConfig({
         test: {
           name: "unit",
           include: ["packages/*/src/**/*.test.ts", "packages/db/test-support/**/*.test.ts", "apps/*/src/**/*.test.ts", "scripts/**/*.test.ts"],
+          // next-intl's ESM imports `next/navigation` without an extension, which Node
+          // can't resolve; run through Vite it resolves, so web pages render in a test.
+          server: { deps: { inline: ["next-intl"] } },
         },
       },
       {

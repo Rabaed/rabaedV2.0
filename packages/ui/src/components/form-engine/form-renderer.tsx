@@ -351,7 +351,7 @@ type PhotosFieldSchema = Extract<AnswerField, { type: "photos" }>;
 type ChecklistFieldSchema = Extract<AnswerField, { type: "checklist" }>;
 
 /** Without `links`, a link question offers nothing to pick and names only the hidden items. */
-const noLinks: FormLinks = { targets: {}, search: async () => ({ links: [], nextPage: null }), hrefFor: () => "#" };
+const noLinks: FormLinks = { targets: {}, search: async () => ({ links: [], nextPage: null }), hrefFor: (choice) => (typeof choice === "string" ? "#" : null) };
 
 /** A select's options, with "None" first when the field is optional, so a choice can be taken back. */
 const withNone = (field: { required: unknown }, options: { value: string; label: string }[], text: FormRendererLabels) =>
