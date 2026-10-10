@@ -254,19 +254,27 @@ How many weeks a Work Item has sat at its current step (1, 2, 3, 4+), shown as d
 _Avoid_: Overdue, SLA, deadline
 
 **Vacancy**:
-A Workflow step whose assignee (a Member) has left the Project. The step waits, and the assignee's Company is notified to name a replacement.
+A Workflow step held by a Participant that was withdrawn from the Project. The step waits until a replacement Participant covering the Work Item is added, and passes to its Step Pool. A Member never leaves a Vacancy: their Steps are handed over first (Handover).
 _Avoid_: Orphaned task, unassigned
+
+**Handover**:
+Giving each open Step a Member holds, their Drafts included, to another Member of that Step's Step Pool, before the Member is deactivated, removed from the Project, or leaves the Step Pool through a change of Position or Visibility. The change waits until every Step has a new holder, so a Step is never left without one.
+_Avoid_: Reassignment (on its own), vacancy (for a Member)
 
 **Submittal Register Import**:
 Uploading the list of submittals a contract requires (as a spreadsheet now, later as a PDF read by an AI agent) and mapping each row to a Work Item Type and fields, which creates Draft Work Items.
 _Avoid_: Bulk upload, migration
 
 **Step Pool**:
-The group of Members who can pick up a Workflow step, such as all Consultant engineers on the Work Item's Trade. One of them claims it, unless the step already has a default assignee.
+The group of Members who can pick up a Workflow step, such as all Consultant engineers on the Work Item's Trade. One of them picks it up, unless the step already has a holder: the Member it came back to, the one picked with "Assign to", or the pool's only Member, who holds it at once.
 _Avoid_: Queue, group inbox
 
+**Pick up**:
+Taking a Work Item waiting in one's Step Pool, so that one holds its Step and it leaves the other pool Members' Need My Action. "Return to pool" undoes it, offered only while the pool has more than one Member.
+_Avoid_: Claim (that is a request for payment), take, assign to myself
+
 **Need My Action**:
-A toggle on a Project's views that keeps only the Work Items waiting on the viewer: Steps they hold, and Steps in their Step Pool that nobody has claimed yet. Their own Drafts stay in view but are never counted, since nobody is waiting on them. Each Project card shows the count.
+A toggle on a Project's views that keeps only the Work Items waiting on the viewer: Steps they hold, and Steps in their Step Pool that nobody has picked up yet. Their own Drafts stay in view but are never counted, since nobody is waiting on them. Each Project card shows the count.
 _Avoid_: Assigned to me, My tasks, Inbox
 
 **Watch**:
@@ -400,7 +408,7 @@ The Bill of Quantities: the priced list of every item of work in a Project.
 _Avoid_: POQ, price list
 
 **Claim**:
-A Contractor's request for payment for quantities done, built from the BOQ quantities recorded on passed WIRs.
+A Contractor's request for payment for quantities done, built from the BOQ quantities recorded on passed WIRs. Only this: taking a Step from one's Step Pool is Pick up.
 _Avoid_: Invoice (that belongs to the invoicing system), payment application
 
 **Executive Report**:

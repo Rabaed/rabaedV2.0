@@ -154,8 +154,11 @@ When an item enters a Step, the engine resolves the holder in three stages.
 **3.3 Default assignee.** The first rule that yields a pool member wins:
 1. The person who held this Step before, when coming back by `return` or `send_back`.
 2. A person the previous actor picked in the Action Form, if the Transition offers "Assign to". As built (RP-431, WF-8): only a Member of the actor's own Participant, from the next Step's Step Pool (Positions, Visibility), so only when that Participant holds the next Step; never another Company's Members (`app.assignees_offered`). The pick is `take_transition`'s `p_assign_to`; one it couldn't have offered is refused `assignee_not_offered`, whoever it names.
-3. The Participant's **default holder** for this Step, set in Project Settings by that Participant (e.g. "Contractor PM: Ali").
-4. Otherwise the item stays **pooled**. Everyone in the pool sees it under "Need My Action", and one of them **claims** it.
+3. The Participant's **default holder** for this Step, set in Project Settings by that Participant (e.g. "Contractor PM: Ali"). **Designed, parked** (settled 2026-10-10): not built until a Project needs two or more people in one pool to default to one of them; rule 4 covers the common case.
+4. **The pool's only Member** (settled 2026-10-10, UAT RP-467/RP-468): when the Step Pool for the Transition (after "not the same person", below) has exactly one Member, they hold it at once, with no Pick up. It is judged when the item arrives: a Member joining the pool later doesn't take it away. The Participant's history records it as an internal event ("Assigned to Ali Sonour, the only one who can take this Step"), and "Return to pool" isn't offered while the pool has one Member. The same at every Step of every Participant.
+5. Otherwise the item stays **pooled**. Everyone in the pool sees it under "Need My Action", and one of them **picks it up** (§5.2).
+
+**3.4 Who the holder's own Participant sees** (settled 2026-10-10). The item's "With" line names the holder for the holding Participant's own Members: "Ali Sonour · TMC Constructions". While it is pooled, it says so and names the pool, up to three names then "+n": "TMC Constructions · not picked up yet: Ali Sonour, Khalid …"; the List and Kanban show a short "Not picked up" chip ("لم تُستلَم"). Every other Participant sees the holding Company's name only (V14).
 
 ---
 
@@ -248,10 +251,12 @@ Effects, in order:
 
 **Cancel** (as built, RP-433, WF-10). A `cancel` Transition (publishing keeps it to the raiser's own Steps, into a Step in a cancelled Stage, with no outcome) is offered (`app.takeable_transitions`) and taken only until the item is first Submitted (`submitted_at`): after that it isn't there, even back at the raiser's Steps after a Send Back, and taking it is refused `transition_not_available` (one rule for both, `app.cancel_allowed`). **Cancel is discard for a Revision** (decided 2026-10-09): a Revision (`revision_no > 0`) is never offered a Cancel and can't take one, from its Draft or the raiser's other Steps; while it is a Draft its raiser discards it instead (§5.4), and the next Revision reuses its number, so a Revision chain never ends by Cancel. It needs no complete Form, closes the item with outcome `cancelled` (allowed outside every outcome set), and is recorded like any Transition: a `transition` event, `shared` (nobody outside the raiser's Participant sees an item before its first Submit). A Cancel issues no Document Number: a Draft cancelled keeps "No number yet"; one cancelled from Internal Review keeps the number it got leaving Draft. Open Subtasks are cancelled with it (§6) once Subtasks exist (no `work_item.parent_id` yet); Comments are raised only by a Code, so never before Submit. The Rabaed Default Stages of Submittals include **Cancelled** (category `cancelled`), copied into every Project. Seam 1 and 2: `cancel-recommended-code.test.ts`, `cancel-recommended-code-rls.test.ts` (the test Workflow's `withCancel`).
 
-### 5.2 `claim(item)` / `release(item)`
+### 5.2 Pick up and Return to pool (`claim(item)` / `release(item)` in the code)
 
-- Claim takes a pooled assignment. It uses a conditional update, so only one claimer wins.
-- Release returns it to the pool.
+**Pick up** is the word for taking a pooled Step (settled 2026-10-10): "Claim" is the payment request of the Financial module (GLOSSARY.md). The buttons are "Pick up" and "Return to pool" ("استلام", "إعادة إلى المجموعة"), and a rename ticket takes the code from `claim`/`release` to `pick_up`/`return_to_pool` (database functions, API routes, event types) before RP-437; until it lands, the as-built text below keeps the code's names.
+
+- Pick up takes a pooled assignment. It uses a conditional update, so only one Member wins.
+- Return to pool gives it back, offered only while the pool has more than one Member (§3.3 rule 4).
 - Both append internal events.
 - A claim withdraws the other pool Members' unread "Step reached" notification for that Step (RP-355, scenario 70: `app.withdraw_step_reached`, a trigger). A release doesn't bring it back.
 
@@ -382,11 +387,7 @@ Error codes, api (`/v1/projects/:id/numbering`, `/numbering/counters…`, `/v1/p
 
 ## 9. People and companies leaving
 
-- **Member removed from the Project:**
-  - their claimed or default assignments become `vacant`;
-  - the item waits at the same Step;
-  - their Company's Authorized Person is notified to name a replacement. As built (RP-356): a trigger on `step_assignment` becoming `vacant` writes an outbox row; `app.deliver_notification` delivers a `vacancy` notification to the Authorized Person of the assignment's Participant's Company, if the assignment is still vacant, the Project isn't closed and they see the item, routed by their "Vacancy" settings. Nothing makes an assignment vacant yet (RP-108).
-  - `assign_vacancy(item, member)` (Authorized Person or Rabaed Admin) fills it with a pool member.
+- **A Member leaves a Step Pool: Handover, never a Vacancy** (settled 2026-10-10, ADR 0018). Deactivating a Member's account, removing them from a Project, or changing their Position or Visibility so that they leave a Step Pool first lists every open Step they hold, their Drafts and Draft Revisions included (Project, Document Number or "No number yet", Step). Each needs a new holder from that Step's pool without them: the person making the change picks one; exactly one candidate is filled in (§3.3 rule 4) and shown to check; none refuses the change, naming the Step and Project with nobody left and offering to give someone the Position or Visibility first. The change and the Handovers are saved together. Each Handover is an internal event of the holding Participant ("Handed over from Ali Sonour to Khalid …: Ali deactivated"), and the new holder gets "Step reached". This replaces the member-level Vacancy: `assign_vacancy` and the "Vacancy in my Company" notification setting go (RP-108 is rewritten as the Handover ticket). As built until then (RP-356): a `vacant` assignment would notify the Company's Authorized Person, but nothing makes one vacant.
 - **Participant withdrawn:** every open item it raised gets a `cancelled` event, outcome `cancelled`, and a Documental Record. Its open assignments on other companies' items become Participant-level Vacancies. They pass to the replacement Participant's pool once one covering the item is added.
 
 ---
@@ -395,7 +396,7 @@ Error codes, api (`/v1/projects/:id/numbering`, `/numbering/counters…`, `/v1/p
 
 - **Step Age** = weeks since `step_entered_at`, shown as up to 4 dots, for the holding Participant's own Members. Every other Company counts it from `participant_entered_at` and sees the Step it arrived at, so internal moves never reset or reveal anything (visibility.md V14). `app.step_as_seen` is the one place that chooses.
 - A weekly job builds each Participant's ageing report from the items it can see, through `app.step_as_seen` too.
-- **"Need My Action"** = open assignments where the viewer is the assignee, or is in the pool and nobody has claimed it. It is a toggle on a Project's views (List, Kanban, later Plan, Floor and the Snag List), and each Project card shows its count. The viewer's own Drafts stay in view with the toggle on but are never counted (settled 2026-10-06).
+- **"Need My Action"** = open assignments where the viewer is the assignee, or is in the pool and nobody has picked it up. It is a toggle on a Project's views (List, Kanban, later Plan, Floor and the Snag List), and each Project card shows its count. The viewer's own Drafts stay in view with the toggle on but are never counted (settled 2026-10-06).
 - **Weekly Step Age report:** Sunday 07:00 Riyadh time, by email, to Members holding the Assign permission (their Participant's open items) and to the Owner's and Owner Representative's Members holding Assign (oversight items). It stops when the Project closes.
   As built (RP-359): the worker's scheduled job (`weeklyStepAgeReportSchedule`, RP-358's mechanism: a worker that was down makes it up within 12 hours, never a week late) queues one outbox row per active Project and Member holding `assign` there (any Module), and the outbox sends each one, checked again at send time: the Project still active, the Member still on it holding Assign, the "Weekly report" group's email not off, email not paused, the Project not muted. Its items are what the List shows the recipient with the open Stages filter and `stepAgeMin=1` (any Step Age): their visible open items with a Step Age, so never an un-numbered Draft (RP-393, scenario 76), the latest Revision of each chain they see, aged through `app.step_as_seen`. For an Owner or Owner Representative, whose only access is oversight, that is their oversight items. Grouped 4+, 3, 2 and 1 weeks; the email links to the List with that filter, and to the items 4 weeks or more (`stepAgeMin=4`). An empty report is not sent. Submittals only for now, as the List; a "Need My Action" link waits for that filter.
 
@@ -417,4 +418,4 @@ Error codes, api (`/v1/projects/:id/numbering`, `/numbering/counters…`, `/v1/p
 
 1. **Consultant withdrawn while holding a Contractor's item:** the item is not cancelled. The assignment becomes a Participant-level **Vacancy**. When a new Participant in that role covering the item's Visibility is added, the item goes to that Participant's Step Pool. Only items the withdrawn Participant *raised* are cancelled.
 2. **No parallel review in v1.** Workflows are sequential. Parallel branches ("all must approve") are a v2 engine feature.
-3. **Default holders are allowed.** Each Participant can set a default holder per Step in Project Settings (§3.3, rule 3).
+3. **Default holders are allowed.** Each Participant can set a default holder per Step in Project Settings (§3.3, rule 3). Parked on 2026-10-10: a pool of one is held by its only Member (rule 4), which covers the common case.
