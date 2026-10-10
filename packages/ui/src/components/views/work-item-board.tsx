@@ -582,7 +582,7 @@ export type WorkItemViewSwitchProps = {
 /** Kanban / List, as two links (the View is part of the URL): the active one filled tomato. */
 export function WorkItemViewSwitch({ view, labels, hrefFor, linkAs: Link = "a" }: WorkItemViewSwitchProps) {
   return (
-    <nav aria-label={labels.view} className="inline-flex overflow-hidden rounded-sm border border-border-strong bg-surface">
+    <nav aria-label={labels.view} className="inline-flex overflow-hidden rounded-sm border border-control-border bg-surface">
       {(["kanban", "list"] as const).map((v) => (
         <Link
           key={v}

@@ -303,7 +303,7 @@ export function FilterValues({ label, hint, values, multiple = true, choices, on
         )}
       </div>
       {choices.length > searchAbove && (
-        <label className="mx-3 mb-1.5 flex h-8 items-center gap-2 rounded-sm border border-border-strong px-2.5 text-muted focus-within:border-brand">
+        <label className="mx-3 mb-1.5 flex h-8 items-center gap-2 rounded-sm border border-control-border px-2.5 text-muted focus-within:border-brand">
           <Icon name="search" size={15} />
           <span className="sr-only">{labels.search}</span>
           <input

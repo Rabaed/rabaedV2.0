@@ -120,7 +120,7 @@ export function HomeView({
           {home.projects.length > 0 && (
             <Link
               href="/projects"
-              className="ms-auto inline-flex h-[34px] items-center rounded-[9px] border border-border-strong bg-surface px-3 text-[13px] font-semibold whitespace-nowrap text-text-secondary hover:bg-hover"
+              className="ms-auto inline-flex h-[34px] items-center rounded-[9px] border border-control-border bg-surface px-3 text-[13px] font-semibold whitespace-nowrap text-text-secondary hover:bg-hover"
             >
               {t("viewAll")}
             </Link>

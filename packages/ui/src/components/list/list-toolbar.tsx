@@ -159,7 +159,7 @@ export const toolbarFilled = "bg-secondary hover:bg-secondary-hover active:bg-se
 
 /** The shared look of a compact toolbar button (Filter, Card view layout), for a `button` or a trigger: 34px, white, outlined. */
 export const toolbarButton = cn(
-  "inline-flex h-[34px] shrink-0 items-center gap-1.5 rounded-sm border border-border-strong bg-surface px-2.5 text-[13.5px] font-semibold whitespace-nowrap text-text-secondary",
+  "inline-flex h-[34px] shrink-0 items-center gap-1.5 rounded-sm border border-control-border bg-surface px-2.5 text-[13.5px] font-semibold whitespace-nowrap text-text-secondary",
   "hover:bg-hover active:bg-press data-[state=open]:bg-press pointer-coarse:min-h-11",
   "[&_svg]:size-4 [&_svg]:shrink-0",
   focusRing,

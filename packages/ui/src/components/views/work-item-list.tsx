@@ -618,7 +618,7 @@ function WorkItemListBody({
             aria-label={t("clear")}
             title={t("clear")}
             className={cn(
-              "-ms-px inline-flex h-[34px] w-7 items-center justify-center rounded-e-sm border border-border-strong bg-surface text-muted hover:bg-hover hover:text-text pointer-coarse:min-h-11 pointer-coarse:w-11",
+              "-ms-px inline-flex h-[34px] w-7 items-center justify-center rounded-e-sm border border-control-border bg-surface text-muted hover:bg-hover hover:text-text pointer-coarse:min-h-11 pointer-coarse:w-11",
               focusRing,
             )}
           >
