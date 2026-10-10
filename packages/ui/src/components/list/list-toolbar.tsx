@@ -43,6 +43,10 @@ export type ToolbarSearchProps = {
   tall?: boolean;
   /** Asked for on Enter, with the trimmed words; undefined for an emptied box. */
   onSearch: (words: string | undefined) => void;
+  /** Leave out the "/" hint, e.g. in a card's top (kit Members list, RP-413); the "/" key still focuses the box. */
+  hideHint?: boolean;
+  /** Classes for the box itself, e.g. its height. */
+  boxClassName?: string;
   className?: string;
 };
 
@@ -50,7 +54,18 @@ export type ToolbarSearchProps = {
  * The list's search box: compact, with a "/" hint. Pressing "/" anywhere on the
  * page (outside a text box) puts the cursor in it; Enter searches.
  */
-export function ToolbarSearch({ label, placeholder, description, value, maxLength, tall = false, onSearch, className }: ToolbarSearchProps) {
+export function ToolbarSearch({
+  label,
+  placeholder,
+  description,
+  value,
+  maxLength,
+  tall = false,
+  onSearch,
+  hideHint = false,
+  boxClassName,
+  className,
+}: ToolbarSearchProps) {
   const input = useRef<HTMLInputElement>(null);
   const id = useId();
   useEffect(() => {
@@ -80,6 +95,7 @@ export function ToolbarSearch({ label, placeholder, description, value, maxLengt
           "flex items-center gap-2 rounded-sm border border-control-border bg-surface px-2.5 text-muted hover:border-control-border-hover",
           tall ? "h-[42px]" : "h-9",
           "focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-focus pointer-coarse:min-h-11",
+          boxClassName,
         )}
       >
         <Icon name="search" size={16} />
@@ -95,9 +111,11 @@ export function ToolbarSearch({ label, placeholder, description, value, maxLengt
           aria-describedby={description === undefined ? undefined : `${id}-help`}
           className="h-full min-w-0 flex-1 bg-transparent text-sm text-text outline-none placeholder:text-muted"
         />
-        <kbd aria-hidden="true" className="hidden rounded-xs border border-border px-1.5 font-ui text-micro font-semibold text-muted sm:inline">
-          /
-        </kbd>
+        {!hideHint && (
+          <kbd aria-hidden="true" className="hidden rounded-xs border border-border px-1.5 font-ui text-micro font-semibold text-muted sm:inline">
+            /
+          </kbd>
+        )}
       </label>
       {description !== undefined && (
         <span id={`${id}-help`} hidden>

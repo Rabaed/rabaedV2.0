@@ -79,6 +79,7 @@ import {
   IconTrash,
   IconUpload,
   IconUser,
+  IconUserPlus,
   IconUsers,
   IconX,
   type Icon as TablerIcon,
@@ -173,6 +174,7 @@ const icons = {
   trash: IconTrash,
   upload: IconUpload,
   user: IconUser,
+  "user-plus": IconUserPlus,
   users: IconUsers,
   x: IconX,
 } satisfies Record<string, TablerIcon>;
