@@ -45,13 +45,13 @@ export type MembersCardLabels = {
 };
 
 /**
- * The kit's search box for the card's top (`.fin`): 38px, 10px corners, a light border, 13.5px text, a paler icon,
+ * The kit's search box for the card's top (`.fin`): 38px, 10px corners, the accessible control border (3:1, on every page), 13.5px text, a paler icon,
  * tomato border on focus (the outline stays), at least 240px wide and as wide as its text needs. Spread into `ToolbarSearch`.
  */
 export const membersSearchStyle = {
   hideHint: true,
   boxClassName:
-    "h-[38px] rounded-[10px] border-border-strong px-3 text-faint hover:border-border-strong focus-within:border-primary",
+    "h-[38px] rounded-[10px] px-3 text-faint focus-within:border-primary",
   inputClassName: "text-[13.5px]",
   className: "sm:w-auto sm:min-w-60",
 } as const;
