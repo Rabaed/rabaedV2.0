@@ -40,7 +40,6 @@
       "with": "لدى",
       "withMe": "أنا",
       "unclaimed": "لم تُستلَم",
-      "codeWord": "الرمز",
       "anyUnclaimed": "لم تُستلَم",
       "trade": "التخصص",
       "location": "الموقع",
@@ -452,9 +451,7 @@
       "step": "الخطوة",
       "with": "لدى",
       "raisedBy": "أنشأه",
-      "issuedCode": "الرمز الصادر",
-      "codeWord": "الرمز",
-      "comments": "الملاحظات",
+      "issuedCode": "الرمز الصادر",      "comments": "الملاحظات",
       "commentCounts": "{open} مفتوحة / {closed} مغلقة"
     },
     "invalid": "أدخل موضوعًا واختر تخصصًا.",

@@ -199,10 +199,12 @@ export const Wide: Story = {
     const number = within(table).getByText("TWR-TMC-EL-MAR-0003 Rev 1");
     await expect(getComputedStyle(number).direction).toBe("ltr");
     await expectLaidOutLeftToRight(number);
-    // The Review Code column reads "Code B" ("الرمز B"), not a bare letter (RP-522); the letter stays left to right.
+    // The Review Code column reads "Code B" in Arabic too, whole badge left to right, with its icon (RP-522): B a check, C a refresh.
     const codeB = table.querySelector<HTMLElement>('[data-outcome="B"]')!;
-    await expect(codeB).toHaveTextContent(storyText(context, b("Code B", "الرمز B")));
-    await expect(getComputedStyle(within(codeB).getByText("B")).direction).toBe("ltr");
+    await expect(codeB).toHaveTextContent("Code B");
+    await expect(getComputedStyle(codeB).direction).toBe("ltr");
+    await expect(codeB.querySelector("svg.tabler-icon-circle-check")).not.toBeNull();
+    await expect(table.querySelector('[data-outcome="C"] svg.tabler-icon-refresh')).not.toBeNull();
   },
 };
 
