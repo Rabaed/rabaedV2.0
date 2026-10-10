@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { bilingualText } from "./company.ts";
 import { formAnswers, formSchema, namedAnswers } from "./form.ts";
+import { handoverReasons } from "./handover.ts";
 import { outcomeCodePattern, outcomeSchema } from "./outcome.ts";
 
 /** A Work Item Type's short code, used in filters and Document Numbers (MAR, SAR…). */
@@ -516,6 +517,14 @@ export const workItemHistory = z.object({
        * key, a missing answer as null. Internal to the raiser's Participant (V5).
        */
       changes: z.array(z.object({ field: z.string(), old: z.unknown(), new: z.unknown() })).nullable(),
+      /**
+       * Set on an `assigned` event of a Handover (RP-108): the Step's holder before and
+       * after, and the change that took the first out of its pool; `by` is whoever made
+       * it. Internal to the holding Participant (V5), so both are its own Members.
+       */
+      handover: z
+        .object({ from: bilingualText.nullable(), to: bilingualText.nullable(), because: z.enum(handoverReasons) })
+        .nullable(),
     }),
   ),
 });

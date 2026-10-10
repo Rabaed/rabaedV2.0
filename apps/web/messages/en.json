@@ -647,6 +647,7 @@
       "pickedUp": "Picked up",
       "returnedToPool": "Returned to pool",
       "assignedOnlyMember": "Assigned to {name}, the only one who can take this Step",
+      "handedOver": "Handed over from {from} to {to}: {from} {because, select, deactivated {deactivated} removed {removed from the Project} positions {Positions changed} other {Visibility changed}}",
       "other": "Updated",
       "numbered": "Document Number",
       "internalNote": "Internal Note",
@@ -750,8 +751,27 @@
     "unavailable": "Something went wrong. Try again.",
     "revisionCreated": "New Revision",
     "cancelled": "Cancelled",
-    "sentBack": "Sent Back to you by {company}",
-    "vacancy": "Vacancy at {step}: assign a replacement"
+    "sentBack": "Sent Back to you by {company}"
+  },
+  "handover": {
+    "title": "Hand over {name}'s Steps",
+    "description": {
+      "deactivate": "{name} holds these. Choose who takes each one before {name} is deactivated.",
+      "remove": "{name} holds these on this Project. Choose who takes each one before {name} is removed.",
+      "save": "This change takes {name} off these Steps. Choose who takes each one before it is saved."
+    },
+    "confirm": {
+      "deactivate": "Hand over and deactivate",
+      "remove": "Hand over and remove",
+      "save": "Hand over and save"
+    },
+    "noNumber": "No number yet",
+    "newHolder": "New holder",
+    "choose": "Choose who takes it",
+    "cancel": "Cancel",
+    "close": "Close",
+    "changed": "Something changed while you chose. Check the list and try again.",
+    "nobodyCanTake": "Nobody else can take {step} on {project}. Give someone the Position or Visibility first."
   },
   "notificationSettings": {
     "email": "Email",
@@ -772,7 +792,6 @@
       "step_reached": "Step reached me or my pool",
       "watched": "Items I watch",
       "sent_back": "Sent Back to my Participant",
-      "vacancy": "Vacancy in my Company",
       "weekly_report": "Weekly Step Age report"
     },
     "weeklyHelp": "Emailed on Sunday mornings.",

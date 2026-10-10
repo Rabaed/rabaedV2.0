@@ -341,50 +341,6 @@ describe("a Send Back (RP-356)", () => {
   });
 });
 
-describe("a Vacancy (RP-356)", () => {
-  const apEmail = () => c1.company.authorizedPerson.email;
-
-  /** A new item whose Contractor review `holder` picked up, then left the Project: its Step is vacant (as RP-108 will make it). */
-  async function vacated(title: string, beforeVacant: () => Promise<void> = async () => {}): Promise<string> {
-    const holder = await person(c1, at.c1ParticipantId, ["project_manager"]);
-    const id = (
-      await ok(raiser.caller.post(`/v1/projects/${at.projectId}/work-items`, { type: TYPE, title, answers: { model: "P1", trade: at.electrical, location: at.buildingA } }), 201)
-    ).json().id as string;
-    await take(raiser.caller, id, "send_for_review");
-    await ok(holder.caller.post(`/v1/work-items/${id}/pick-up`));
-    await drain();
-    await beforeVacant();
-    await ok(c1.caller.delete(`/v1/participants/${at.c1ParticipantId}/members/${holder.id}`));
-    await sql`
-      update step_assignment set status = 'vacant', updated_at = now()
-      where work_item_id = ${id}::uuid and assignee_member_id = ${holder.id}::uuid and status = 'picked_up'
-    `.execute(migrator);
-    return id;
-  }
-
-  beforeAll(async () => {
-    await ok(c1.caller.request("PUT", `/v1/participants/${at.c1ParticipantId}/members/${c1.company.authorizedPerson.id}/visibility`, { trade: all, location: all }));
-    await saveSettings(c1.caller, { settings: { vacancy: { email: "immediate" } } });
-  });
-
-  it("emails C1's Authorized Person which Step is vacant", async () => {
-    await vacated("Ducts");
-    await drain();
-    const [email, ...more] = about(apEmail(), "Ducts");
-    expect(more).toEqual([]);
-    expect(email!.message.template).toBe("notification-vacancy");
-    expect(email!.subject).toMatch(/ · Ducts · Vacancy at Contractor review$/);
-  });
-
-  it("sends nothing once the Step is no longer vacant at send time", async () => {
-    const id = await vacated("Grilles");
-    await deliverOnly();
-    await sql`update step_assignment set status = 'pooled', assignee_member_id = null where work_item_id = ${id}::uuid and status = 'vacant'`.execute(migrator);
-    await sendHeldEmails();
-    expect(about(apEmail(), "Grilles")).toEqual([]);
-  });
-});
-
 describe("the email job", () => {
   it("is the worker's only: a signed-in Member's session is refused", async () => {
     await expect(

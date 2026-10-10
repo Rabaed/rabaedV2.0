@@ -1058,6 +1058,7 @@ export function getWorkItemHistory(db: Db, memberId: string, workItemId: string)
       internal_note: string | null;
       recommended_code: string | null;
       changes: { field: string; old: unknown; new: unknown }[] | null;
+      handover: WorkItemHistory["events"][number]["handover"];
     }>`select * from app.work_item_history(${workItemId}::uuid)`.execute(trx);
     return {
       events: rows.map((r) => ({
@@ -1076,6 +1077,7 @@ export function getWorkItemHistory(db: Db, memberId: string, workItemId: string)
         internalNote: r.internal_note,
         recommendedCode: r.recommended_code,
         changes: r.changes,
+        handover: r.handover,
       })),
     };
   });

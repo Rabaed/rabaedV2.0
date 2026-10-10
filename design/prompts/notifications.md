@@ -12,7 +12,6 @@ Paste the shared brief from `design-requests-2026-10-07.md` first.
   - "Reached you at <Step>" (a Step reached me or my Step Pool).
   - From items I watch: a Transition, a Review Code or Inspection Result, a new Revision, Cancelled.
   - "Sent Back to you by <Company>".
-  - "Vacancy at <Step>: assign a replacement" (for the Authorized Person).
 - Another Company is named by its name only; never its people, its internal Steps or its Recommended Codes.
 - Actions: open the item (marks the row read), **Mark all as read**, filter Unread / All, and per-Project grouping or a Project filter.
 - The bell dropdown: the latest 5–8, "Mark all as read", "View all", link to Notification settings.

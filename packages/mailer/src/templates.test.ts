@@ -62,7 +62,6 @@ const examples: EmailTemplateValues = {
     ...item,
     event: { type: "transition", transition: { en: "Send Back", ar: "إرجاع" }, outcome: null, companyName: k1, signerName: null },
   },
-  "notification-vacancy": { ...item, step: { en: "Internal review", ar: "المراجعة الداخلية" } },
   "daily-digest": {
     projects: [
       {
@@ -95,7 +94,13 @@ const examples: EmailTemplateValues = {
             documentNumber: "CLN-SUB-02-0007",
             subject: "Doors",
             link: "https://rabaed.test/ar/work-items/0190a1b2-0000-7000-8000-000000000003",
-            entries: [{ kind: "vacancy", step: { en: "Internal review", ar: "المراجعة الداخلية" }, event: null }],
+            entries: [
+              {
+                kind: "sent_back",
+                step: null,
+                event: { type: "transition", transition: { en: "Send Back", ar: "إرجاع" }, outcome: null, companyName: k1, signerName: null },
+              },
+            ],
           },
         ],
       },
@@ -249,9 +254,8 @@ describe("notification emails", () => {
     expect(watched({ type: "cancelled", outcome: "cancelled", transition: null })).toBe("Cancelled");
   });
 
-  it("Sent Back and a Vacancy say what happened", () => {
+  it("Sent Back says what happened", () => {
     expect(renderEmail("notification-sent-back", "en", examples["notification-sent-back"]).subject.split(" · ")[2]).toBe("Sent Back to you");
-    expect(renderEmail("notification-vacancy", "en", examples["notification-vacancy"]).subject.split(" · ")[2]).toBe("Vacancy at Internal review");
   });
 });
 
@@ -274,7 +278,7 @@ describe("the daily digest (RP-358)", () => {
       locale === "en" ? "New Revision" : "مراجعة جديدة",
       locale === "en" ? "Clinic" : "العيادة",
       "CLN-SUB-02-0007",
-      locale === "en" ? "Vacancy at Internal review" : "شاغر في المراجعة الداخلية",
+      locale === "en" ? "Sent Back to you" : "أُرجع إليكم",
     ];
     const positions = order.map((part) => text.indexOf(part));
     expect(positions.every((p) => p >= 0)).toBe(true);

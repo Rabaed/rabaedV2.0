@@ -1,4 +1,4 @@
-import type { BilingualText, DefinitionIssue, FieldError, StageCopyProblem, WorkflowProblem } from "@rabaed/domain";
+import type { BilingualText, DefinitionIssue, FieldError, HandoverStep, StageCopyProblem, WorkflowProblem } from "@rabaed/domain";
 import { forbidden, HttpError, notFound } from "./http-error.ts";
 
 // Every refusal the API's commands answer with, as the API's HTTP answer.
@@ -117,6 +117,12 @@ const answers = {
   stage_missing: () => new HttpError(422, "stage_missing"),
   // A used outcome's code, closing or polarity (RP-429, decided 2026-10-09); the body has its message.
   outcome_in_use: () => new HttpError(409, "outcome_in_use"),
+  // Handover (RP-108): a change that takes a Member out of a Step Pool, with a Step of
+  // theirs left without a pick (the body lists every Step, `handovers`), or with nobody
+  // else in a Step's pool (the body names that Step and its Project). Only ever the
+  // acting Authorized Person's own Company's Steps and Members (scenario RP-108-1).
+  handover_needed: () => new HttpError(409, "handover_needed"),
+  nobody_can_take: () => new HttpError(409, "nobody_can_take"),
 } satisfies Record<string, () => HttpError>;
 
 export type RefusalReason = keyof typeof answers;
@@ -133,12 +139,17 @@ export function refusal(result: {
   message?: BilingualText;
   issues?: DefinitionIssue[];
   problems?: (WorkflowProblem | StageCopyProblem)[];
+  handovers?: HandoverStep[];
+  step?: BilingualText;
+  project?: BilingualText;
 }): HttpError {
   const error = answers[result.reason]();
   const details = {
     ...(result.errors ? { fields: result.errors } : result.message ? { message: result.message } : {}),
     ...(result.issues ? { issues: result.issues } : {}),
     ...(result.problems ? { problems: result.problems } : {}),
+    ...(result.handovers ? { handovers: result.handovers } : {}),
+    ...(result.step && result.project ? { step: result.step, project: result.project } : {}),
   };
   return Object.keys(details).length > 0 ? new HttpError(error.statusCode, error.code, details) : error;
 }

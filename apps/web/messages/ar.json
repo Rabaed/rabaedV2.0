@@ -647,6 +647,7 @@
       "pickedUp": "استُلم",
       "returnedToPool": "أُعيد إلى المجموعة",
       "assignedOnlyMember": "أُسند إلى {name}، فهو الوحيد الذي يمكنه تولّي هذه الخطوة",
+      "handedOver": "سُلّمت من {from} إلى {to}: {because, select, deactivated {أُوقف {from}} removed {أُزيل {from} من المشروع} positions {تغيّرت مناصب {from}} other {تغيّرت رؤية {from}}}",
       "other": "تحديث",
       "numbered": "رقم المستند",
       "internalNote": "ملاحظة داخلية",
@@ -750,8 +751,27 @@
     "unavailable": "حدث خطأ. حاول مرة أخرى.",
     "revisionCreated": "مراجعة جديدة",
     "cancelled": "ملغى",
-    "sentBack": "أرجعته إليكم {company}",
-    "vacancy": "شاغر في {step}: عيّن بديلًا"
+    "sentBack": "أرجعته إليكم {company}"
+  },
+  "handover": {
+    "title": "تسليم خطوات {name}",
+    "description": {
+      "deactivate": "هذه الخطوات لدى {name}. اختر من يتولى كل خطوة قبل إيقاف {name}.",
+      "remove": "هذه الخطوات لدى {name} في هذا المشروع. اختر من يتولى كل خطوة قبل إزالة {name}.",
+      "save": "هذا التغيير يُخرج {name} من هذه الخطوات. اختر من يتولى كل خطوة قبل الحفظ."
+    },
+    "confirm": {
+      "deactivate": "سلّم وأوقف",
+      "remove": "سلّم وأزل",
+      "save": "سلّم واحفظ"
+    },
+    "noNumber": "بلا رقم بعد",
+    "newHolder": "المتولّي الجديد",
+    "choose": "اختر من يتولاها",
+    "cancel": "إلغاء",
+    "close": "إغلاق",
+    "changed": "تغيّر شيء أثناء اختيارك. راجع القائمة وحاول مرة أخرى.",
+    "nobodyCanTake": "لا أحد غيره يمكنه تولّي {step} في {project}. امنح أحدًا المنصب أو الرؤية أولًا."
   },
   "notificationSettings": {
     "email": "البريد الإلكتروني",
@@ -772,7 +792,6 @@
       "step_reached": "وصلتني خطوة أو وصلت مجموعتي",
       "watched": "البنود التي أراقبها",
       "sent_back": "أُرجع إلى المشارك الذي أنتمي إليه",
-      "vacancy": "شاغر في شركتي",
       "weekly_report": "تقرير عمر الخطوة الأسبوعي"
     },
     "weeklyHelp": "يُرسل بالبريد صباح كل أحد.",

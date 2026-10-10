@@ -130,7 +130,7 @@ describe("notification settings", () => {
     const member = await projectMember(api, c1, at.c1ParticipantId, ["engineer"]);
     const settings: NotificationSettings = {
       ...defaultNotificationSettings,
-      vacancy: { email: "off" },
+      sent_back: { email: "off" },
       watched: { email: "immediate", outcomes: ["A"] },
     };
     await saveSettings(member, { settings, emailPaused: true, preferredLanguage: "ar" });

@@ -8,18 +8,21 @@ import { locales, type Locale } from "./locale.ts";
 // seam-2 test checks the two agree on every combination.
 
 /** What a notification is about. `weekly_report` is the weekly Step Age report, an email only. */
-export const notificationKinds = ["step_reached", "watched_event", "sent_back", "vacancy", "weekly_report"] as const;
+export const notificationKinds = ["step_reached", "watched_event", "sent_back", "weekly_report"] as const;
 export type NotificationKind = (typeof notificationKinds)[number];
 
-/** The rows of the settings page: Step reached me or my pool · Items I watch · Sent Back to my Participant · Vacancy in my Company · Weekly Step Age report. */
-export const notificationGroups = ["step_reached", "watched", "sent_back", "vacancy", "weekly_report"] as const;
+/**
+ * The rows of the settings page: Step reached me or my pool · Items I watch · Sent Back
+ * to my Participant · Weekly Step Age report. ("Vacancy in my Company" went with the
+ * member-level Vacancy: a Member hands their Steps over before leaving, RP-108.)
+ */
+export const notificationGroups = ["step_reached", "watched", "sent_back", "weekly_report"] as const;
 export type NotificationGroup = (typeof notificationGroups)[number];
 
 const groupOfKind = {
   step_reached: "step_reached",
   watched_event: "watched",
   sent_back: "sent_back",
-  vacancy: "vacancy",
   weekly_report: "weekly_report",
 } as const satisfies Record<NotificationKind, NotificationGroup>;
 
@@ -92,7 +95,6 @@ export const notificationSettings = z.object({
   step_reached: notificationGroupSetting,
   watched: notificationGroupSetting.required({ outcomes: true }),
   sent_back: notificationGroupSetting,
-  vacancy: notificationGroupSetting,
   weekly_report: weeklyReportSetting,
 });
 export type NotificationSettings = z.infer<typeof notificationSettings>;
@@ -102,7 +104,6 @@ export const defaultNotificationSettings: NotificationSettings = {
   step_reached: { email: "immediate" },
   watched: { email: "digest", outcomes: [...watchOutcomes] },
   sent_back: { email: "immediate" },
-  vacancy: { email: "digest" },
   weekly_report: { email: "immediate" },
 };
 

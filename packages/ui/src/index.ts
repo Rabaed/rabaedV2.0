@@ -39,6 +39,7 @@ export { LinkSearch, type LinkSearchLabels, type LinkSearchProps } from "./compo
 export { LinkedFromList, type LinkedFromLabels, type LinkedFromListProps } from "./components/form-engine/linked-from.tsx";
 export { LinksSection, type LinksSectionLabels, type LinksSectionProps } from "./components/form-engine/links-section.tsx";
 export type { LinkTargetNames } from "./components/form-engine/link-question-field.tsx";
+export { HandoverDialog, type HandoverDialogLabels, type HandoverDialogProps } from "./components/handover/handover-dialog.tsx";
 export { Input, type InputProps } from "./components/form/input.tsx";
 export {
   NumberingPatternBuilder,

@@ -1,13 +1,10 @@
-// Seam 1 for the Sent Back and Vacancy notifications (RP-356, spec RP-344
-// "Notifications"; visibility.md the Notifications row; workflow-engine.md §9).
-// A Send Back tells the Members of the Participant it is sent back to who still
-// see the item, routed by their "Sent Back" settings, with the Company that sent
-// it named only by its name (V14). A Step becoming vacant tells the Authorized
-// Person of its Company, routed by their "Vacancy" settings. Both follow the
-// bell's switch and a Project mute, and a closed Project hears nothing.
-//
-// Nothing makes a Step vacant yet (RP-108): these tests make the assignment of a
-// removed Member vacant as the migrator, as RP-108 will.
+// Seam 1 for the Sent Back notification (RP-356, spec RP-344 "Notifications";
+// visibility.md the Notifications row). A Send Back tells the Members of the
+// Participant it is sent back to who still see the item, routed by their "Sent
+// Back" settings, with the Company that sent it named only by its name (V14). It
+// follows the bell's switch and a Project mute, and a closed Project hears nothing.
+// (RP-356's Vacancy notification went with the member-level Vacancy: a Member's
+// Steps are handed over before they leave, RP-108, handover.test.ts.)
 import { randomUUID } from "node:crypto";
 import { createDb } from "@rabaed/db";
 import { drainOutbox, testDatabaseUrls } from "@rabaed/db/test-support";
@@ -166,62 +163,6 @@ describe("a Send Back", () => {
   });
 });
 
-/**
- * `holder`, a C1 Member holding Contractor review of a new item on `tower`'s
- * Project, is removed from it by C1's Authorized Person, and their Step becomes
- * vacant (as the migrator, as RP-108 will). Returns the item.
- */
-async function vacated(tower: Tower, title: string, holder: Caller): Promise<string> {
-  const res = await ok(
-    tower.c1Engineer.post(`/v1/projects/${tower.projectId}/work-items`, {
-      type: TYPE,
-      title,
-      answers: { model: "P1", trade: tower.electrical, location: tower.buildingA },
-    }),
-    201,
-  );
-  const id = res.json().id as string;
-  await take(tower.c1Engineer, id, "send_for_review");
-  await ok(holder.post(`/v1/work-items/${id}/pick-up`));
-  await drainOutbox(worker);
-  const holderId = await meOf(holder);
-  await ok(c1.caller.delete(`/v1/participants/${tower.c1ParticipantId}/members/${holderId}`));
-  await sql`
-    update step_assignment set status = 'vacant', updated_at = now()
-    where work_item_id = ${id}::uuid and assignee_member_id = ${holderId}::uuid and status = 'picked_up'
-  `.execute(migrator);
-  return id;
-}
-
-describe("a Vacancy", () => {
-  it("tells C1's Authorized Person which Step is vacant, and no other Company", async () => {
-    const holder = await projectMember(api, c1, at.c1ParticipantId, ["project_manager"]);
-    const id = await vacated(at, "Chillers", holder);
-    await drainOutbox(worker);
-
-    const [n, ...more] = await ofKind(c1.caller, id, "vacancy");
-    expect(more).toEqual([]);
-    expect(n).toMatchObject({ kind: "vacancy", title: "Chillers", step: { name: { en: "Contractor review", ar: "مراجعة المقاول" } }, event: null });
-    expect((await routed(id, "vacancy")).map((r) => r.member_id)).toEqual([c1.company.authorizedPerson.id]);
-    for (const who of [k1.caller, or.caller, at.k1Manager, orEngineer, c2Engineer]) expect(await about(who, id)).toEqual([]);
-  });
-
-  it("reaches no Authorized Person who doesn't see the item", async () => {
-    const holder = await projectMember(api, c1, at.c1ParticipantId, ["project_manager"]);
-    const apId = c1.company.authorizedPerson.id;
-    const narrow = (trade: typeof all) =>
-      ok(c1.caller.request("PUT", `/v1/participants/${at.c1ParticipantId}/members/${apId}/visibility`, { trade, location: all }));
-    await narrow(only(at.mechanical));
-    try {
-      const id = await vacated(at, "Fans", holder);
-      await drainOutbox(worker);
-      expect(await routed(id, "vacancy")).toEqual([]);
-    } finally {
-      await narrow(all);
-    }
-  });
-});
-
 describe("email off, a mute and a closed Project", () => {
   it("a Send Back: email off still shows in the bell; a mute sends nothing", async () => {
     const off = await projectMember(api, c1, at.c1ParticipantId, ["engineer"]);
@@ -240,40 +181,13 @@ describe("email off, a mute and a closed Project", () => {
     expect(byMember.get(await meOf(at.c1Pm))).toEqual({ in_app: true, email: "immediate" });
   });
 
-  it("a Vacancy: email off still shows in the bell; a mute sends nothing", async () => {
-    const apId = c1.company.authorizedPerson.id;
-    await saveSettings(c1.caller, { vacancy: { email: "off" } });
-    const switchedOff = await vacated(at, "Heaters", await projectMember(api, c1, at.c1ParticipantId, ["project_manager"]));
-    await drainOutbox(worker);
-    expect((await about(c1.caller, switchedOff)).length).toBe(1);
-    expect(await routed(switchedOff, "vacancy")).toEqual([{ member_id: apId, in_app: true, email: "none" }]);
-
-    await saveSettings(c1.caller, { vacancy: { email: "digest" } });
-    await mute(c1.caller, at.projectId);
-    try {
-      const muted = await vacated(at, "Coolers", await projectMember(api, c1, at.c1ParticipantId, ["project_manager"]));
-      await drainOutbox(worker);
-      expect(await routed(muted, "vacancy")).toEqual([]);
-    } finally {
-      await ok(c1.caller.delete(`/v1/projects/${at.projectId}/mute`));
-    }
-  });
-
-  it("a closed Project: neither reaches anyone", async () => {
+  it("a closed Project: it reaches nobody", async () => {
     const closing = await buildTower(api, { c1, k1 }, "SBC");
-    await ok(
-      c1.caller.request("PUT", `/v1/participants/${closing.c1ParticipantId}/members/${c1.company.authorizedPerson.id}/visibility`, {
-        trade: all,
-        location: all,
-      }),
-    );
     const sentBack = await atConsultant(closing, "Dampers");
-    const vacant = await vacated(closing, "Louvres", await projectMember(api, c1, closing.c1ParticipantId, ["project_manager"]));
     await sendBack(closing.k1Manager, sentBack);
-    // Closed before the worker delivers them.
+    // Closed before the worker delivers it.
     await sql`update project set status = 'closed', closed_at = now() where id = ${closing.projectId}::uuid`.execute(migrator);
     await drainOutbox(worker);
     expect(await routed(sentBack, "sent_back")).toEqual([]);
-    expect(await routed(vacant, "vacancy")).toEqual([]);
   });
 });

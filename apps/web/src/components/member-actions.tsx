@@ -4,6 +4,7 @@ import type { CompanyMember, Locale } from "@rabaed/domain";
 import { useLocale, useTranslations } from "next-intl";
 import { useState } from "react";
 import { Button } from "@rabaed/ui";
+import { useHandover } from "@/components/handover";
 import { InvitationLink } from "@/components/invitation-link";
 import { useRouter } from "@/i18n/navigation";
 import { requestReactivation } from "@/lib/member-invitations";
@@ -15,11 +16,13 @@ export function MemberActions({ member }: { member: CompanyMember }) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState(false);
+  const [refusal, setRefusal] = useState<string | null>(null);
   const [link, setLink] = useState<string | null>(null);
 
   async function send(path: string, method: "PATCH" | "POST", body?: unknown) {
     setPending(true);
     setError(false);
+    setRefusal(null);
     try {
       const res = await fetch(`/api/v1/members/${member.id}${path}`, {
         method,
@@ -35,8 +38,29 @@ export function MemberActions({ member }: { member: CompanyMember }) {
     }
   }
 
+  // Deactivating hands every open Step they hold over first (RP-108).
+  const handover = useHandover();
+
   function deactivate() {
-    if (window.confirm(t("confirmDeactivate", { name: member.fullName[locale] }))) void send("/deactivate", "POST");
+    if (!window.confirm(t("confirmDeactivate", { name: member.fullName[locale] }))) return;
+    setError(false);
+    setRefusal(null);
+    void handover.run({
+      name: member.fullName[locale],
+      change: "deactivate",
+      send: (handovers) =>
+        fetch(`/api/v1/members/${member.id}/deactivate`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(handovers ? { handovers } : {}),
+        }),
+      done: (outcome) => {
+        if (outcome.ok) return router.refresh();
+        // Nobody else can take one of their Steps: that says which; anything else, the usual.
+        if ("message" in outcome) setRefusal(outcome.message);
+        else setError(true);
+      },
+    });
   }
 
   async function reactivate() {
@@ -53,9 +77,9 @@ export function MemberActions({ member }: { member: CompanyMember }) {
     }
   }
 
-  const failed = error && (
+  const failed = (error || refusal) && (
     <span role="alert" className="text-sm text-danger">
-      {t("unavailable")}
+      {refusal ?? t("unavailable")}
     </span>
   );
 
@@ -84,11 +108,12 @@ export function MemberActions({ member }: { member: CompanyMember }) {
         {member.canCreateProjects ? t("removeProjectCreator") : t("makeProjectCreator")}
       </Button>
       {!member.isAuthorizedPerson && (
-        <Button variant="ghost" size="sm" className="text-danger" disabled={pending} onClick={deactivate}>
+        <Button variant="ghost" size="sm" className="text-danger" disabled={pending || handover.pending} onClick={deactivate}>
           {t("deactivate")}
         </Button>
       )}
       {failed}
+      {handover.dialog}
     </div>
   );
 }

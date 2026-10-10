@@ -206,10 +206,20 @@ describe("Return and Submit", () => {
 
   it("drops a delivered notification from the list and the count once the recipient no longer sees the item (V12)", async () => {
     expect((await notifications(manager)).unread).toBeGreaterThan(0);
-    await setVisibility(k1.company, k1.participantId, manager.id, only(mechanical));
+    // The manager holds its review: narrowed off it, they hand it to another manager first (RP-108).
+    const other = await memberOnProject(api, k1.company, k1.participantId, ["manager"]);
+    const path = `/v1/participants/${k1.participantId}/members/${manager.id}/visibility`;
+    const narrowed = { trade: only(mechanical), location: all };
+    const asked = await k1.company.caller.request("PUT", path, narrowed);
+    expect(asked.statusCode, asked.body).toBe(409);
+    const handovers = (asked.json().handovers as { assignmentId: string }[]).map((s) => ({ assignmentId: s.assignmentId, toMemberId: other.id }));
+    await ok(k1.company.caller.request("PUT", path, { ...narrowed, handovers }));
     expect(await notifications(manager)).toEqual({ unread: 0, notifications: [] });
     await setVisibility(k1.company, k1.participantId, manager.id, all);
-    expect(await about(manager, id)).toHaveLength(1);
+    // Seeing it again doesn't bring back its "Step reached": the Step was handed over, so it no longer waits for them.
+    expect(await about(manager, id)).toEqual([]);
+    await drainOutbox(worker);
+    expect((await about(other, id)).map((n) => n.kind)).toEqual(["step_reached"]);
   });
 });
 

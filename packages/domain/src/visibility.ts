@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { bilingualText } from "./company.ts";
+import { withHandovers } from "./handover.ts";
 
 /** The Visibility Dimensions every Project has (docs/data-model.md §3). */
 export const dimensionKinds = ["trade", "location"] as const;
@@ -55,6 +56,10 @@ const grantToSet = visibilityGrant.refine((g) => !g.isAll || g.valueIds.length =
 /** Sets Visibility in every dimension at once: saved whole, or not at all. */
 export const setVisibilityRequest = z.object({ trade: grantToSet, location: grantToSet });
 export type SetVisibilityRequest = z.infer<typeof setVisibilityRequest>;
+
+/** A Project Member's Visibility: each Step they hold whose pool it takes them out of, handed over (RP-108). */
+export const setMemberVisibilityRequest = setVisibilityRequest.extend(withHandovers);
+export type SetMemberVisibilityRequest = z.infer<typeof setMemberVisibilityRequest>;
 
 /** A Participant's Visibility and the values it covers (for narrowing its Members'). */
 export const participantVisibility = z.object({ visibility, covered: dimensionValues });

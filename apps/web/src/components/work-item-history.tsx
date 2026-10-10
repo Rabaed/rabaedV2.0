@@ -46,6 +46,10 @@ export async function WorkItemHistory({
     if (e.type === "recommend_code") return t("recommendedCode");
     if (e.type === "picked_up" || e.type === "claimed") return t("pickedUp");
     if (e.type === "returned_to_pool" || e.type === "released") return t("returnedToPool");
+    // A Handover (RP-108): from whom to whom and why, internal to the holding Participant.
+    if (e.type === "assigned" && e.handover) {
+      return t("handedOver", { from: e.handover.from?.[locale] ?? "", to: e.handover.to?.[locale] ?? "", because: e.handover.because });
+    }
     // A pool of one (§3.3 rule 4): its actor is the holder, internal to their own Participant.
     if (e.type === "assigned" && e.by.memberName) return t("assignedOnlyMember", { name: e.by.memberName[locale] });
     if (e.type === "created") return t("created");

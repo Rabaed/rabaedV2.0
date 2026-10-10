@@ -42,6 +42,7 @@ export default async function MemberVisibilityPage({
           me.member.isAuthorizedPerson ? `/api/v1/participants/${participantId}/members/${memberId}/visibility` : null
         }
         allLabel={{ trade: t("allOfCompanyTrades"), location: t("allOfCompanyLocations") }}
+        handoverName={data.member.fullName[locale]}
       />
     </div>
   );

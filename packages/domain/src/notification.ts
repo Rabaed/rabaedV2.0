@@ -5,11 +5,10 @@ import { workItemOutcome } from "./work-item.ts";
 
 /**
  * What an in-app notification is about: a Step reached the Member or their
- * pool, something happened on an item they watch, an item was Sent Back to
- * their Participant, or a Step of their Company became vacant (they are its
- * Authorized Person).
+ * pool, something happened on an item they watch, or an item was Sent Back to
+ * their Participant.
  */
-export const inAppNotificationKinds = ["step_reached", "watched_event", "sent_back", "vacancy"] as const;
+export const inAppNotificationKinds = ["step_reached", "watched_event", "sent_back"] as const;
 
 /** What happened on a watched item. */
 export const watchedEventTypes = ["transition", "issue_code", "revision_created", "cancelled"] as const;
@@ -26,7 +25,7 @@ export const notification = z.object({
   /** Null while the item has none (a Revision still in Draft). */
   documentNumber: z.string().nullable(),
   title: z.string(),
-  /** A Step reached them, or became vacant: the Step, their own Company's. */
+  /** A Step reached them: the Step, their own Company's. */
   step: z.object({ name: bilingualText }).nullable(),
   /**
    * Something happened on an item they watch, or it was Sent Back to them
@@ -49,10 +48,10 @@ export type Notification = z.infer<typeof notification>;
 
 /**
  * The kinds of notification that can be emailed one by one ("immediately"):
- * the in-app kinds, and Sent Back and Vacancy (RP-356). The weekly report is
- * an email of its own, never a notification row.
+ * the in-app kinds, Sent Back included (RP-356). The weekly report is an email
+ * of its own, never a notification row.
  */
-export const notificationEmailKinds = ["step_reached", "watched_event", "sent_back", "vacancy"] as const;
+export const notificationEmailKinds = ["step_reached", "watched_event", "sent_back"] as const;
 export type NotificationEmailKind = (typeof notificationEmailKinds)[number];
 
 /**
@@ -67,7 +66,7 @@ export interface NotificationEmailContent {
   /** Null while the item has none. */
   documentNumber: string | null;
   subject: string;
-  /** A Step reached them, or is vacant: the Step, their own Company's. */
+  /** A Step reached them: the Step, their own Company's. */
   step: BilingualText | null;
   event: {
     type: (typeof watchedEventTypes)[number];

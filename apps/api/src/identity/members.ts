@@ -1,9 +1,10 @@
 import { newToken, type Invitation } from "@rabaed/auth";
 import { withMember, type Database, type Db } from "@rabaed/db";
-import type { CompanyMember, InviteMemberRequest } from "@rabaed/domain";
+import type { CompanyMember, HandoverPick, InviteMemberRequest } from "@rabaed/domain";
 import { sql, type Transaction } from "kysely";
 import { refusedAsForbidden, type Forbidden } from "../db-error.ts";
 import { checkedOutcome } from "../outcomes.ts";
+import { handedOver, withHandovers, type HandoverRefusal } from "./handover.ts";
 
 // The Authorized Person's Member management. Every write goes through one of
 // the app.* functions in the member_management migration, which check that the
@@ -140,16 +141,30 @@ export function setProjectCreator(db: Db, memberId: string, targetId: string, va
   });
 }
 
-/** The Authorized Person deactivates a Member of their Company: their sessions end at once. */
-export function deactivateMember(db: Db, memberId: string, targetId: string, now: Date): Promise<UpdateResult> {
-  return asAuthorizedPerson(db, memberId, async (trx): Promise<UpdateResult> => {
-    // 'deactivated', 'authorized_person' (refused), or null when they are not in the Company.
-    const { rows } = await sql<{ outcome: string | null }>`
-      select app.deactivate_member(${targetId}::uuid, ${now}) as outcome
-    `.execute(trx);
-    if (rows[0]?.outcome == null) return { ok: false, reason: "not_found" };
-    const outcome = checkedOutcome(rows[0].outcome, ["deactivated", "authorized_person"]);
-    if (outcome === "authorized_person") return { ok: false, reason: "authorized_person" };
-    return { ok: true, member: await readMember(trx, targetId) };
-  });
+/**
+ * The Authorized Person deactivates a Member of their Company: their sessions end at
+ * once. Every open Step they hold is handed over first, to `picks` (RP-108), in the
+ * same transaction; otherwise nothing changes and the refusal lists them.
+ */
+export function deactivateMember(
+  db: Db,
+  memberId: string,
+  targetId: string,
+  now: Date,
+  picks?: HandoverPick[],
+): Promise<UpdateResult | HandoverRefusal> {
+  return withHandovers(() =>
+    asAuthorizedPerson(db, memberId, (trx) =>
+      handedOver(trx, { memberId: targetId, participantId: null, because: "deactivated", picks, now }, async (): Promise<UpdateResult> => {
+        // 'deactivated', 'authorized_person' (refused), or null when they are not in the Company.
+        const { rows } = await sql<{ outcome: string | null }>`
+          select app.deactivate_member(${targetId}::uuid, ${now}) as outcome
+        `.execute(trx);
+        if (rows[0]?.outcome == null) return { ok: false, reason: "not_found" };
+        const outcome = checkedOutcome(rows[0].outcome, ["deactivated", "authorized_person"]);
+        if (outcome === "authorized_person") return { ok: false, reason: "authorized_person" };
+        return { ok: true, member: await readMember(trx, targetId) };
+      }),
+    ),
+  );
 }
