@@ -47,7 +47,7 @@
     "minutesAgo": "{count, plural, other {{n}m ago}}",
     "hoursAgo": "{count, plural, other {{n}h ago}}",
     "submittals": "{count, plural, one {{n} submittal} other {{n} submittals}}",
-    "verb": "{verb, select, submitted {submitted} sentForReview {sent for review} returned {returned} sentBack {sent back} approved {approved} rejected {rejected} closed {closed} cancelled {cancelled} claimed {claimed} released {released to the pool} assigned {assigned} recommended {recommended a Code on} noted {wrote an Internal Note on} other {updated}}",
+    "verb": "{verb, select, submitted {submitted} sentForReview {sent for review} returned {returned} sentBack {sent back} approved {approved} rejected {rejected} returnedForRevision {returned for revision} closed {closed} cancelled {cancelled} claimed {claimed} released {released to the pool} assigned {assigned} recommended {recommended a Code on} noted {wrote an Internal Note on} other {updated}}",
     "noActivity": "Nothing has happened on the items you can see yet.",
     "yourProjects": "Your Projects",
     "viewAll": "View all",

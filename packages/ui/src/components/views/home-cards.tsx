@@ -194,7 +194,7 @@ export function RecentActivityCard({ entries, locale, labels, when, itemHref, li
                       {name}{" "}
                       <span className="text-muted">
                         {labels.verb(e.verb)} {e.workItem.title}
-                        {e.outcome && (e.verb === "approved" || e.verb === "rejected") && ` ${labels.code(e.outcome)}`}
+                        {e.outcome && (e.verb === "approved" || e.verb === "rejected" || e.verb === "returnedForRevision") && ` ${labels.code(e.outcome)}`}
                       </span>
                     </span>
                     <time dateTime={e.at} className="text-[12.5px] text-muted tabular-nums">

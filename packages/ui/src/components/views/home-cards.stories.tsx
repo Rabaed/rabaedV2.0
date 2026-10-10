@@ -74,7 +74,8 @@ const entries: HomeActivityEntry[] = [
     project: villas,
   }),
   entry(3, minutes(180), { type: "claimed", transition: null, verb: "claimed", by: { companyName: c1, memberName: b("Omar Fahad", "عمر فهد") }, workItem: { id: id(3), documentNumber: null, title: "LED fittings", type: mar } }),
-  entry(4, minutes(60 * 30), { workItem: { id: id(4), documentNumber: null, title: "Non-compliant materials", type: mar } }),
+  // A revise-and-resubmit Code: returned for revision, never rejected.
+  entry(4, minutes(60 * 30), { type: "issue_code", outcome: "C", verb: "returnedForRevision", workItem: { id: id(4), documentNumber: null, title: "Non-compliant materials", type: mar } }),
 ];
 
 const needsLabels: Record<Locale, NeedsMyActionCardLabels> = {
@@ -82,8 +83,8 @@ const needsLabels: Record<Locale, NeedsMyActionCardLabels> = {
   ar: { title: "بحاجة لإجرائي", empty: "لا شيء بانتظارك.", noNumber: "بلا رقم بعد", revision: (n) => `R${n}`, otherBoards: "لوحات أخرى" },
 };
 const verbs: Record<Locale, Partial<Record<HomeActivityVerb, string>>> = {
-  en: { approved: "approved", submitted: "submitted", claimed: "claimed", returned: "returned" },
-  ar: { approved: "اعتمد", submitted: "قدّم", claimed: "استلم", returned: "أعاد" },
+  en: { approved: "approved", submitted: "submitted", claimed: "claimed", returned: "returned", returnedForRevision: "returned for revision" },
+  ar: { approved: "اعتمد", submitted: "قدّم", claimed: "استلم", returned: "أعاد", returnedForRevision: "أعاد للتعديل" },
 };
 const activityLabels: Record<Locale, RecentActivityCardLabels> = {
   en: { title: "Recent activity", empty: "Nothing has happened on the items you can see yet.", verb: (v) => verbs.en[v] ?? "updated", code: (code) => `(Code ${code})` },
@@ -173,6 +174,8 @@ export const RecentActivity: Story = {
     await expect(lines[0]).toHaveTextContent(`${storyText(context, k1)} ${storyText(context, b("approved", "اعتمد"))} Lighting Fixtures (Code B)`);
     await expect(lines[0]).not.toHaveTextContent("· B");
     await expect(lines[1]).toHaveTextContent(`${storyText(context, sara)} ${storyText(context, b("submitted", "قدّم"))}`);
+    // Code C is a revise-and-resubmit, worded from its own kind: never "rejected".
+    await expect(lines[3]).toHaveTextContent(`${storyText(context, b("returned for revision", "أعاد للتعديل"))} Non-compliant materials (Code C)`);
     // Latin initials from the English names, in Arabic too.
     await expect(lines[0]).toHaveTextContent(/^DC/);
     await expect(lines[1]).toHaveTextContent(/^SA/);

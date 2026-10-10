@@ -27,9 +27,18 @@ describe("relativeAge", () => {
 });
 
 describe("homeActivityVerb", () => {
-  it("words a Code by its polarity, whatever its letter", () => {
-    expect(homeActivityVerb("issue_code", "close", "positive")).toBe("approved");
-    expect(homeActivityVerb("issue_code", "close", "negative")).toBe("rejected");
+  it("words an approval (Code A, Code B) as approved", () => {
+    expect(homeActivityVerb("issue_code", "close", { polarity: "positive", actions: [] })).toBe("approved");
+    expect(homeActivityVerb("issue_code", "close", { polarity: "positive", actions: [{ kind: "create_items", type: "CMT" }] })).toBe("approved");
+  });
+
+  it("words a revise-and-resubmit (Code C, which offers a Revision) as returned for revision, never rejected", () => {
+    expect(homeActivityVerb("issue_code", "close", { polarity: "negative", actions: [{ kind: "offer_revision" }] })).toBe("returnedForRevision");
+  });
+
+  it("words a rejection (Code D) as rejected", () => {
+    expect(homeActivityVerb("issue_code", "close", { polarity: "negative", actions: [{ kind: "offer_replacement" }] })).toBe("rejected");
+    expect(homeActivityVerb("issue_code", "close", { polarity: "negative", actions: [] })).toBe("rejected");
   });
 
   it("words a Transition by its kind", () => {

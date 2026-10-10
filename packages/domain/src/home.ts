@@ -2,7 +2,7 @@ import { z } from "zod";
 import { activityFeed } from "./activity-feed.ts";
 import { bilingualText } from "./company.ts";
 import { moduleKeySchema } from "./module.ts";
-import type { OutcomePolarity } from "./outcome.ts";
+import type { OutcomeAction, OutcomePolarity } from "./outcome.ts";
 import { projectSummary } from "./project.ts";
 import { workItemRow, type TransitionKind, type workItemEventTypes } from "./work-item.ts";
 
@@ -26,7 +26,7 @@ export const homeActivityLimit = 4;
 /**
  * What an activity entry says the person or Company did, in the past tense (the design kit's
  * "approved … (Code B)"): from the event's type, its Transition's kind and, for a Code, the
- * Code's polarity. The Code itself is the entry's `outcome`.
+ * Code's own kind (approval, revise and resubmit, rejection). The Code itself is the entry's `outcome`.
  */
 export const homeActivityVerbs = [
   "submitted",
@@ -35,6 +35,7 @@ export const homeActivityVerbs = [
   "sentBack",
   "approved",
   "rejected",
+  "returnedForRevision",
   "closed",
   "cancelled",
   "claimed",
@@ -101,12 +102,20 @@ export function byNewestWaiting<T extends { id: string; title: string; stepEnter
   return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
 }
 
+/** The outcome an event issued, as its Type's outcome set defines it (outcome.ts): its polarity and its actions. */
+export type HomeActivityOutcome = { polarity: OutcomePolarity; actions: readonly OutcomeAction[] };
+
 /**
- * What an Activity Feed event did, as Home words it: a Code by its polarity (approved or
- * rejected), a Transition by its kind, any other event by its type.
+ * What an Activity Feed event did, as Home words it: a Code by its own kind (a positive one
+ * approved; a negative one that offers a Revision, such as Code C, returned for revision; any
+ * other negative one, such as Code D, rejected), a Transition by its kind, any other event by
+ * its type.
  */
-export function homeActivityVerb(type: WorkItemEventType, kind: TransitionKind | null, polarity: OutcomePolarity | null): HomeActivityVerb {
-  if (polarity) return polarity === "positive" ? "approved" : "rejected";
+export function homeActivityVerb(type: WorkItemEventType, kind: TransitionKind | null, outcome: HomeActivityOutcome | null): HomeActivityVerb {
+  if (outcome) {
+    if (outcome.polarity === "positive") return "approved";
+    return outcome.actions.some((a) => a.kind === "offer_revision") ? "returnedForRevision" : "rejected";
+  }
   switch (type) {
     case "transition":
     case "issue_code":
