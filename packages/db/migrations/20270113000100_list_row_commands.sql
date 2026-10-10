@@ -328,7 +328,8 @@ create function app.work_item_shared_named_answers(p_work_item_id uuid) returns 
         cross join lateral jsonb_array_elements(s -> 'fields') f
         join participant p on p.id = app.uuid_or_null(a.src -> (f ->> 'key')) and p.project_id = w.project_id
         join company co on co.id = p.company_id
-        where w.id = p_work_item_id and f ->> 'type' = 'participant' and jsonb_typeof(a.src -> (f ->> 'key')) = 'string';
+        where w.id = p_work_item_id and app.sees_work_item(w.id)
+          and f ->> 'type' = 'participant' and jsonb_typeof(a.src -> (f ->> 'key')) = 'string';
     end
   $$;
 
