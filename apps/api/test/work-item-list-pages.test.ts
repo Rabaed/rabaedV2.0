@@ -3,13 +3,23 @@
 // by number, with the total from the Stage counts; under a search no total at all,
 // only whether a next page exists. Every sort, either way, lists each visible row
 // once across the pages, and rows with nothing to sort by come last either way.
-import { workItemSearchParams, workItemSorts, type WorkItemList, type WorkItemQueryInput } from "@rabaed/domain";
+import { createDb } from "@rabaed/db";
+import { testDatabaseUrls } from "@rabaed/db/test-support";
+import { workItemQuery, workItemSearchParams, workItemSorts, type WorkItemList, type WorkItemQueryInput } from "@rabaed/domain";
+import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { exportWorkItems } from "../src/work-items/query.ts";
 import { createTestApi, type Caller } from "./support/harness.ts";
 import { bilingual, buildTower, ok, submitted, take, type Company, type Tower } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
-afterAll(() => api.close());
+const migrator = createDb(testDatabaseUrls().migrator, { max: 1 });
+const appDb = createDb(testDatabaseUrls().app, { max: 2 });
+afterAll(async () => {
+  await api.close();
+  await migrator.destroy();
+  await appDb.destroy();
+});
 
 let at: Tower;
 let k1: Company;
@@ -163,8 +173,46 @@ describe("scenario RP-409-2: Export, the rows the viewer reads with the List's f
   it("under a search, gives only the pages read so far, and no total", async () => {
     const two = await exported(at.c1Engineer, { q: "Item", page: 2, pageSize: 10 });
     expect(two.items).toHaveLength(20);
-    expect(Object.keys(two)).toEqual(["items"]);
+    expect(two).toEqual({ items: expect.any(Array), capped: false });
     expect((await exported(at.c1Engineer, { q: "Item", page: 1, pageSize: 10 })).items).toHaveLength(10);
+  });
+
+  it("stops at its cap, and says so; under a search the cap holds too", async () => {
+    const [me] = (
+      await sql<{ id: string }>`
+        select pm.member_id as id from project_member pm
+        join project_member_position mp on mp.project_member_id = pm.id
+        join position p on p.id = mp.position_id and p.key = 'engineer'
+        join participant pt on pt.id = pm.participant_id and pt.company_id = (select host_company_id from project where id = ${at.projectId}::uuid)
+        where pm.project_id = ${at.projectId}::uuid
+      `.execute(migrator)
+    ).rows;
+    const scope = { projectId: at.projectId, moduleKey: "submittals" as const };
+    const capped = await exportWorkItems(appDb, me!.id, scope, workItemQuery.parse({}), new Date(), 3);
+    expect(capped).toMatchObject({ capped: true });
+    expect(capped!.items).toHaveLength(3);
+    const searched = await exportWorkItems(appDb, me!.id, scope, workItemQuery.parse({ q: "Item", page: "1000", pageSize: "50" }), new Date(), 3);
+    expect(searched!.items).toHaveLength(3);
+    expect((await exportWorkItems(appDb, me!.id, scope, workItemQuery.parse({}), new Date()))!.capped).toBe(false);
+  });
+
+  it("refuses a page past the thousandth, here as on the List", async () => {
+    for (const path of ["work-items", "work-items/export"]) {
+      expect((await at.c1Engineer.get(`/v1/projects/${at.projectId}/modules/submittals/${path}?page=1001`)).statusCode).toBe(400);
+    }
+  });
+
+  it("whole table: every field of every row is the viewer's own reading, nothing more (V5, V14, Creation Date)", async () => {
+    const forK1 = (await exported(at.k1Manager, {})).items;
+    for (const row of forK1) {
+      expect(row.creationDate).toBeNull();
+      // C1's items held at C1 name C1 by its name only.
+      if (row.with?.kind === "company") expect(Object.keys(row.with)).toEqual(["kind", "companyName"]);
+      if (row.closedBy?.kind === "company") expect(Object.keys(row.closedBy)).toEqual(["kind", "companyName"]);
+    }
+    const forC1 = (await exported(at.c1Engineer, {})).items;
+    for (const row of forC1.filter((r) => r.with?.kind === "own")) expect(row.with).toHaveProperty("role");
+    for (const row of forC1.filter((r) => r.with?.kind === "company")) expect(JSON.stringify(row.with)).not.toMatch(/claimer|step|role/);
   });
 
   it("names owners as V14 has it: the Consultant's own person to the Consultant, its Company only to the Contractor", async () => {
@@ -226,6 +274,28 @@ describe("every column's sort", () => {
     const level1 = ids(await list(at.c1Engineer, { sort: "locationLevel1", page: 1 }));
     expect(level1.indexOf(onFloor)).toBeLessThan(level1.indexOf(inZoneTwo));
     expect(level1.indexOf(approved)).toBeLessThan(level1.indexOf(onFloor));
+  });
+
+  it("for K1, sorts Created by the Submission Date, and the owner by the Company or person each row shows", async () => {
+    const rows = (await list(at.k1Manager, { sort: "created", dir: "asc", page: 1 })).items;
+    const dates = rows.map((r) => r.submissionDate!);
+    expect(dates).toEqual([...dates].sort());
+    const owners = (await list(at.k1Manager, { sort: "owner", dir: "asc", page: 1, lang: "en" })).items.map((r) => {
+      if (r.closedBy) return r.closedBy.kind === "own" ? r.closedBy.name.en : r.closedBy.companyName.en;
+      if (!r.with) return null;
+      if (r.with.kind === "company") return r.with.companyName.en;
+      return r.with.claimer ? r.with.claimer.name.en : r.with.step.name.en;
+    });
+    const shown = owners.filter((o): o is string => o !== null).map((o) => o.toLowerCase());
+    expect(shown).toEqual([...shown].sort());
+  });
+
+  it("is the List's own: the Kanban keeps its Step Age order whatever List sort it is given", async () => {
+    const board = async (query: string) =>
+      (await ok(at.c1Engineer.get(`/v1/projects/${at.projectId}/work-items/kanban?${query}`), 200))
+        .json()
+        .columns.flatMap((c: { lanes: { cards: { id: string }[] }[] }) => c.lanes.flatMap((l) => l.cards.map((card) => card.id)));
+    expect(await board("sort=subject&dir=desc")).toEqual(await board(""));
   });
 
   it("refuses a cursor with a numbered page, or with a sort no cursor pages", async () => {
