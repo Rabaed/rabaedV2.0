@@ -618,7 +618,7 @@ export function WorkItemList({
               </div>
             )}
             {/* The table scrolls sideways (and, on a wide screen, down) in its own region, so the page never does. */}
-            <div role="region" aria-label={t("table")} tabIndex={0} className={cn("min-h-64 overflow-auto lg:max-h-[calc(100dvh-17rem)]", focusRing)}>
+            <div role="region" aria-label={t("table")} tabIndex={0} className={cn("relative min-h-64 overflow-auto lg:max-h-[calc(100dvh-17rem)]", focusRing)}>
               <WorkItemTable
                 rows={list.items}
                 filters={list.filters}
