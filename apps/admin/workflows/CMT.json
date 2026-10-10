@@ -1,0 +1,85 @@
+{
+  "steps": [
+    {
+      "key": "draft",
+      "name": { "en": "Draft", "ar": "مسودة" },
+      "stage": "draft",
+      "actor": { "role": "consultant", "permission": "create" },
+      "outcomeMode": "none"
+    },
+    {
+      "key": "open",
+      "name": { "en": "Open", "ar": "مفتوحة" },
+      "stage": "open",
+      "actor": { "role": "contractor", "permission": "submit" },
+      "outcomeMode": "none"
+    },
+    {
+      "key": "resolved",
+      "name": { "en": "Resolved", "ar": "تمت معالجتها" },
+      "stage": "resolved",
+      "actor": { "role": "consultant", "permission": "close" },
+      "outcomeMode": "none"
+    },
+    {
+      "key": "closed",
+      "name": { "en": "Closed", "ar": "مغلقة" },
+      "stage": "closed",
+      "actor": null,
+      "outcomeMode": "none"
+    }
+  ],
+  "transitions": [
+    {
+      "key": "raise",
+      "label": { "en": "Raise", "ar": "إصدار" },
+      "kind": "submit",
+      "from": "draft",
+      "to": "open",
+      "outcome": null,
+      "permission": "create",
+      "actionForm": null
+    },
+    {
+      "key": "resolve",
+      "label": { "en": "Resolve", "ar": "تمت المعالجة" },
+      "kind": "submit",
+      "from": "open",
+      "to": "resolved",
+      "outcome": null,
+      "permission": "submit",
+      "actionForm": null
+    },
+    {
+      "key": "close",
+      "label": { "en": "Close", "ar": "إغلاق" },
+      "kind": "close",
+      "from": "resolved",
+      "to": "closed",
+      "outcome": "closed",
+      "permission": "close",
+      "actionForm": null
+    },
+    {
+      "key": "return_to_open",
+      "label": { "en": "Return to Open", "ar": "إعادة فتح" },
+      "kind": "send_back",
+      "from": "resolved",
+      "to": "open",
+      "outcome": null,
+      "permission": "close",
+      "actionForm": {
+        "sections": [
+          {
+            "key": "return",
+            "title": { "en": "Return to Open", "ar": "إعادة فتح" },
+            "fields": [
+              { "key": "reason", "type": "textarea", "required": true, "label": { "en": "Reason", "ar": "السبب" } }
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "layout": {}
+}

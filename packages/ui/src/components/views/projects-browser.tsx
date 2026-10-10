@@ -16,6 +16,10 @@ export type ProjectsBrowserLabels = ProjectCardsLabels & {
   /** The chips' group name, e.g. "Show". */
   filter: string;
   all: string;
+  /** The Active chip: the Projects that are active (plural in Arabic, unlike the card's own state). */
+  filterActive: string;
+  /** The Closed chip. */
+  filterClosed: string;
   /** Shown when the Member is on no Project. */
   empty: string;
   /** The title over `empty`. */
@@ -31,14 +35,17 @@ export type ProjectsBrowserProps = {
   labels: ProjectsBrowserLabels;
   href: (projectId: string) => string;
   linkAs?: ElementType;
+  /** Each Project's Submittals count by Project id, as the API gives them. */
+  submittals?: Record<string, number>;
   /** An action under the empty state, e.g. "New project" for someone who may create one. */
   emptyAction?: ReactNode;
 };
 
-/** The Projects that match a search (name in either language, or code) and a state chip. */
+/** The Projects that match a search (name in either language, or code) and a state chip, closed ones last. */
 export function filterProjects(projects: ProjectSummary[], search: string, filter: ProjectsFilter): ProjectSummary[] {
   const needle = search.trim().toLocaleLowerCase();
-  return projects.filter((p) => {
+  // Closed Projects last, as on Home and in the design kit; each group keeps the API's order (newest first).
+  return projects.toSorted((a, b) => Number(a.status === "closed") - Number(b.status === "closed")).filter((p) => {
     if (filter === "active" && p.status !== "active") return false;
     if (filter === "closed" && p.status !== "closed") return false;
     if (needle === "") return true;
@@ -51,7 +58,7 @@ export function filterProjects(projects: ProjectSummary[], search: string, filte
  * the card grid, filtered as the Member types. An empty state when the Member
  * is on no Project, another when the search leaves none.
  */
-export function ProjectsBrowser({ projects, locale, labels, href, linkAs, emptyAction }: ProjectsBrowserProps) {
+export function ProjectsBrowser({ projects, locale, labels, href, linkAs, submittals, emptyAction }: ProjectsBrowserProps) {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<ProjectsFilter>("all");
   const groupId = useId();
@@ -67,14 +74,14 @@ export function ProjectsBrowser({ projects, locale, labels, href, linkAs, emptyA
 
   const chips: { value: ProjectsFilter; label: string }[] = [
     { value: "all", label: labels.all },
-    { value: "active", label: labels.active },
-    { value: "closed", label: labels.closed },
+    { value: "active", label: labels.filterActive },
+    { value: "closed", label: labels.filterClosed },
   ];
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-[18px]">
       <div className="flex flex-wrap items-center gap-2.5">
-        <div className="relative min-w-60 flex-1 sm:w-80 sm:flex-none">
+        <div className="relative w-60 min-w-60 max-sm:w-full max-sm:flex-1">
           <Icon
             name="search"
             size={16}
@@ -87,7 +94,7 @@ export function ProjectsBrowser({ projects, locale, labels, href, linkAs, emptyA
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             className={cn(
-              "h-10 w-full rounded-md border border-control-border bg-surface ps-8 pe-3 text-body text-text",
+              "h-[38px] w-full rounded-[10px] border border-control-border bg-surface ps-8 pe-3 text-[13.5px] text-text",
               "placeholder:text-muted hover:border-control-border-hover",
               focusRing,
               "pointer-coarse:min-h-11",
@@ -105,10 +112,10 @@ export function ProjectsBrowser({ projects, locale, labels, href, linkAs, emptyA
               aria-pressed={filter === chip.value}
               onClick={() => setFilter(chip.value)}
               className={cn(
-                "h-9 rounded-full border px-4 text-sm font-semibold transition-colors duration-150",
+                "h-[34px] rounded-full border px-[14px] text-[13px] font-semibold transition-colors duration-150",
                 filter === chip.value
                   ? "border-inverse bg-inverse text-on-inverse"
-                  : "border-border bg-surface text-text-secondary hover:bg-hover",
+                  : "border-control-border bg-surface text-muted hover:border-control-border-hover hover:bg-hover",
                 touchArea,
                 focusRing,
               )}
@@ -124,7 +131,7 @@ export function ProjectsBrowser({ projects, locale, labels, href, linkAs, emptyA
           {labels.noMatches}
         </EmptyState>
       ) : (
-        <ProjectCards projects={shown} locale={locale} labels={labels} href={href} linkAs={linkAs} />
+        <ProjectCards projects={shown} locale={locale} labels={labels} href={href} linkAs={linkAs} submittals={submittals} />
       )}
     </div>
   );

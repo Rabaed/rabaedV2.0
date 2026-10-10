@@ -20,6 +20,7 @@ import {
 } from "@rabaed/domain";
 import { sql, type Transaction } from "kysely";
 import { myProjectSummaries, waitingOnMember } from "../projects/projects.ts";
+import { submittalCounts } from "../projects/submittal-counts.ts";
 import { activityFeedPage } from "../work-items/activity-feed.ts";
 import { countWorkItems, pagesByCursor, queryWorkItems, type QueryScope } from "../work-items/query.ts";
 
@@ -29,7 +30,7 @@ import { countWorkItems, pagesByCursor, queryWorkItems, type QueryScope } from "
 // query's counts and rows, the Activity Feed) over each of their active
 // Projects, inside one transaction as the Member, and sums or merges them here.
 // Whatever a per-Project read hides, Home can't show. A closed Project
-// contributes nothing.
+// contributes nothing to the counts and lists; its card still shows its Submittals count.
 
 type Trx = Transaction<Database>;
 
@@ -93,9 +94,8 @@ export function getHome(db: Db, memberId: string, now: Date): Promise<Home> {
     // Participant's open items another Participant holds now.
     let longAtStep = 0;
     let waitingWithOthers = 0;
-    const submittals: Record<string, number> = Object.fromEntries(active.map((p) => [p.id, 0]));
+    const submittals = await submittalCounts(trx, projects, now);
     for (const { project, ...scope } of scopes) {
-      if (scope.moduleKey === "submittals") submittals[project.id] = total(await counted(trx, scope, {}, now));
       const aged = await counted(trx, scope, { stepAgeMin: homeStepAgeWeeks, heldBy: "own" }, now);
       longAtStep += total(aged, (key) => !draftStages.has(`${project.id}/${scope.moduleKey}/${key}`));
       waitingWithOthers += total(await counted(trx, scope, { raisedByMe: true, heldBy: "others" }, now));

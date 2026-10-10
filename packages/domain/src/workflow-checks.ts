@@ -4,7 +4,7 @@ import type { BilingualText } from "./company.ts";
 import { evaluateCondition, type Comparison, type Condition } from "./condition.ts";
 import { formFields, formSchema, type FormField, type FormSchema } from "./form.ts";
 import { sectionSteps, type WorkflowStepHolder } from "./form-sections.ts";
-import type { Outcome } from "./outcome.ts";
+import { itemsToCreate, itemsToCreateKey, type Outcome, type OutcomeAction } from "./outcome.ts";
 import { isOpenStageCategory } from "./work-item.ts";
 import type { WorkflowDefinition, WorkflowStep, WorkflowTransition } from "./workflow-definition.ts";
 import { workflowKindProblems } from "./workflow-publish.ts";
@@ -23,7 +23,7 @@ export type WorkflowPublishContext = {
    * Workflow, the Rabaed Default set for a Rabaed Default or Library one. Its
    * closing outcomes are the ones a closing Transition may set.
    */
-  outcomes: readonly Pick<Outcome, "code" | "closing">[];
+  outcomes: readonly (Pick<Outcome, "code" | "closing"> & { actions: readonly OutcomeAction[] })[];
   /** The Module's Stage set (the Project's, or the Rabaed Defaults'): Stages come from here, never from the definition. */
   stages: readonly { key: string; category: StageCategory }[];
   /** The latest published Version of the Type's Form; null when it has none. */
@@ -53,6 +53,7 @@ export const workflowProblemCodes = [
   "outcome_on_open_step",
   "close_to_open_step",
   "ends_without_close",
+  "items_table_missing",
   // Check 4 and 8 (workflowKindProblems)
   "return_crosses_participants",
   "submit_stays_inside",
@@ -197,9 +198,24 @@ function outcomeProblems({ steps, transitions, context, stepOf, isTerminal }: Ch
       if (t.kind !== "close") return problemAt("ends_without_close");
       if (t.outcome === null) return problemAt("missing_outcome");
       if (!set.includes(t.outcome)) return problemAt("outcome_not_in_set");
-      return issues && from.outcomeMode !== "issue_outcome" ? problemAt("outcome_not_from_issuing_step") : [];
+      if (issues && from.outcomeMode !== "issue_outcome") return problemAt("outcome_not_from_issuing_step");
+      return itemsTableProblems(t, context);
     }),
   ];
+}
+
+/**
+ * A close setting an outcome that creates items (WF-11: Code B's Comments) asks for
+ * them in its Action Form's `items_to_create` table, with a text column for each
+ * item's Subject (its first). Whether a row is required is the Workflow's choice.
+ */
+function itemsTableProblems(t: WorkflowTransition, context: WorkflowPublishContext): FoundProblem[] {
+  const outcome = context.outcomes.find((o) => o.code === t.outcome);
+  const type = outcome === undefined ? null : itemsToCreate(outcome);
+  if (type === null) return [];
+  const table = actionFormFields(t.actionForm).get(itemsToCreateKey);
+  const fits = table?.type === "table" && table.columns.some((c) => c.type === "text");
+  return fits ? [] : [{ code: "items_table_missing", transition: t.key, detail: type }];
 }
 
 /** Checks 4 and 8 (workflowKindProblems) and 7 (workflowActionFormProblems), as built, on the definition. */
@@ -515,6 +531,10 @@ const messages: Record<WorkflowProblemCode, (names: Names) => BilingualText> = {
   ends_without_close: (names) => ({
     en: `${names.transition.en} goes to a closed Step, so it must be a close or a Cancel.`,
     ar: `${names.transition.ar} يذهب إلى خطوة مغلقة، لذا يجب أن يكون إغلاقًا أو إلغاءً.`,
+  }),
+  items_table_missing: (names) => ({
+    en: `${names.transition.en} sets an outcome whose rows become ${names.detail} items, so its Action Form needs an items_to_create table with a text column.`,
+    ar: `${names.transition.ar} يضع نتيجة تتحول صفوفها إلى عناصر ${names.detail}، لذا يحتاج نموذجه المنبثق إلى جدول items_to_create فيه عمود نصي.`,
   }),
   return_crosses_participants: (names) => ({
     en: `${names.transition.en} is a Return, so it must stay inside one Participant.`,

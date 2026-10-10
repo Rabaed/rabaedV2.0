@@ -78,7 +78,7 @@ const outcome = (code: string, en: string, ar: string, polarity: OutcomePolarity
 
 /**
  * The Rabaed Default sets, by outcome kind. `CMT` is the Snag List's Comment
- * Type (WF-11 adds it): Code B's action items become Comments.
+ * Type (RP-434, WF-11): Code B's action items become Comments.
  */
 export const defaultOutcomeSets: Record<OutcomeKind, readonly Outcome[]> = {
   review_code: [
@@ -118,8 +118,15 @@ export function outcomeLook<O extends Pick<Outcome, "code" | "polarity" | "actio
   return clean?.code === o.code ? "a" : "b";
 }
 
+/**
+ * The key of the closing Transition's Action Form `table` whose rows become the
+ * items of a `create_items` outcome (WF-11): one item per row, its answers the
+ * row's cells under the same keys, its Subject the row's first text cell.
+ */
+export const itemsToCreateKey = "items_to_create";
+
 /** The Type code its Action Form rows become items of (Code B's Comments), or null. */
-export function itemsToCreate(o: Pick<Outcome, "actions">): string | null {
+export function itemsToCreate(o: { actions: readonly OutcomeAction[] }): string | null {
   for (const a of o.actions) if (a.kind === "create_items") return a.type;
   return null;
 }

@@ -62,6 +62,11 @@
   --palette-violet-50: #f0ecfe;
   --palette-violet-500: #7a5af0;
   --palette-violet-700: #6547d6;
+  --palette-tile-tomato: #f8552f;
+  --palette-tile-blue: #3d6db5;
+  --palette-tile-green: #1ea762;
+  --palette-tile-purple: #6b5ad8;
+  --palette-tile-orange: #d27d3e;
   --palette-cyan-50: #e2f5f8;
   --palette-cyan-500: #1aa3b8;
   --palette-cyan-700: #0f7688;
@@ -195,6 +200,11 @@
   --avatar-6: var(--palette-red-700);
   --avatar-company: var(--palette-slate-600);
   --on-avatar: var(--palette-white);
+  --project-tile-1: var(--palette-tile-tomato);
+  --project-tile-2: var(--palette-tile-blue);
+  --project-tile-3: var(--palette-tile-green);
+  --project-tile-4: var(--palette-tile-purple);
+  --project-tile-5: var(--palette-tile-orange);
   --age-0: var(--palette-slate-350);
   --age-1: var(--palette-slate-600);
   --age-2: var(--palette-amber-700);
@@ -330,6 +340,11 @@
   --color-avatar-6: var(--avatar-6);
   --color-avatar-company: var(--avatar-company);
   --color-on-avatar: var(--on-avatar);
+  --color-project-tile-1: var(--project-tile-1);
+  --color-project-tile-2: var(--project-tile-2);
+  --color-project-tile-3: var(--project-tile-3);
+  --color-project-tile-4: var(--project-tile-4);
+  --color-project-tile-5: var(--project-tile-5);
   --color-age-0: var(--age-0);
   --color-age-1: var(--age-1);
   --color-age-2: var(--age-2);

@@ -211,6 +211,7 @@ export {
   type WorkItemViewSwitchProps,
 } from "./components/views/work-item-board.tsx";
 export { ProjectCard, ProjectCards, type ProjectCardProps, type ProjectCardsLabels, type ProjectCardsProps } from "./components/views/project-cards.tsx";
+export { projectTileIndexes } from "./components/views/project-tile.ts";
 export {
   filterProjects,
   ProjectsBrowser,

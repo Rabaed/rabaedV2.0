@@ -572,9 +572,13 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
       can_discard_draft: boolean;
       workflow_name: BilingualText;
       workflow_version_no: number;
+      open_comments: number;
+      closed_comments: number;
     }>`
       select app.work_item_answers(w.id) as data, w.form_version_id, app.work_item_creation_date(w.id) as creation_date,
         wf.name as workflow_name, wf.version_no as workflow_version_no,
+        -- Its Comments (WF-11), only those the viewer sees.
+        cc.open_count as open_comments, cc.closed_count as closed_comments,
         w.submitted_at, w.outcome, w.closed_at, s.key as step_key, s.name as step_name,
         raiser.legal_name as raised_by, holder.legal_name as held_by, m.full_name as holder_name,
         app.can_save_answers(w.id) as can_save_answers, w.revision_no, app.revision_versions_changed(w.id) as versions_changed,
@@ -586,6 +590,7 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
       join workflow_step s on s.id = seen.step_id
       -- Its Workflow's name and Version, for whoever sees the item, whatever Workflow rows they read (V20).
       left join lateral app.work_item_workflow(w.id) wf on true
+      cross join lateral app.work_item_comment_counts(w.id) cc
       join app.work_item_companies(w.id) raiser on raiser.participant_id = w.raised_by_participant_id
       left join app.work_item_holder(w.id) a on true
       left join app.work_item_companies(w.id) holder on holder.participant_id = a.participant_id
@@ -624,6 +629,7 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
       // When the Draft was started is audit only, shown to nobody (visibility.md "Creation Date", scenario 61).
       creationDate: d.creation_date?.toISOString() ?? null,
       submissionDate: d.submitted_at?.toISOString() ?? null,
+      comments: { open: d.open_comments, closed: d.closed_comments },
       actions: {
         ...(await actions(trx, workItemId)),
         saveAnswers: d.can_save_answers,

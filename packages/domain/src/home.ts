@@ -72,8 +72,8 @@ export const home = z.object({
   /** The Member's Projects, as the Projects page lists them. */
   projects: z.array(projectSummary),
   /**
-   * Each active Project's Submittals the Member sees: the count of its Submittals List (the latest Revision of
-   * each chain, open and closed), so never an item the List hides. A closed Project has none (it contributes nothing).
+   * Each of the Member's Projects' Submittals they see: the count of its Submittals List (the latest Revision of
+   * each chain, open and closed), so never an item the List hides. A closed Project's card shows its count too (its List is still theirs to read); it adds to no other Home figure.
    */
   submittals: z.record(z.uuid(), z.number().int().nonnegative()),
 });

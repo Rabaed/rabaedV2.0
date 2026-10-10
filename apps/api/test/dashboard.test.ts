@@ -353,9 +353,9 @@ describe("the Approved %", () => {
 });
 
 describe("a Type of another Module: the Snag List", () => {
-  // No Rabaed Default lives outside the Submittals yet (the MAR is the only one), so a
-  // test-only Rabaed Type in the Snag List runs on the MAR's Workflow and Form, its
-  // Stages the Submittals' under the Snag List.
+  // A test-only Rabaed Type in the Snag List runs on the MAR's Workflow and Form, its
+  // Stages the Submittals' under the Snag List, beside the Comment (CMT, RP-434), the
+  // Snag List's one Rabaed Default, which has no item here.
   const SNAG = "SNT";
   let tower: Tower;
   let c1Items: string[] = [];
@@ -449,7 +449,7 @@ describe("a Type of another Module: the Snag List", () => {
     expect(submittals.items.map((i) => i.type.code)).toEqual(["MAR"]);
     const snags: WorkItemList = (await ok(tower.c1Pm.get(`/v1/projects/${tower.projectId}/work-items?module=snag_list`), 200)).json();
     expect(snags.items.map((i) => i.type.code)).toEqual([SNAG, SNAG, SNAG]);
-    expect(snags.filters.types.map((t) => t.code)).toEqual([SNAG]);
+    expect(snags.filters.types.map((t) => t.code).sort()).toEqual(["CMT", SNAG].sort());
     expect(snags.stages.reduce((sum, s) => sum + s.count, 0)).toBe(3);
   });
 });

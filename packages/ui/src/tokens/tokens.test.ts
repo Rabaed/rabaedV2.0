@@ -94,6 +94,8 @@ describe("cool light launch theme", () => {
     ["control-border", "surface-subtle"],
     ["control-border-hover", "surface"],
     ["primary", "surface"],
+    // A Project's letter tile: a 19px / 800 letter is large text, so 3:1.
+    ...(["1", "2", "3", "4", "5"] as const).map((n) => ["on-avatar", `project-tile-${n}`] as [SemanticRole, SemanticRole]),
     ...([1, 2, 3, 4] as const).flatMap((age) => [
       [`age-${age}`, "surface"] as [SemanticRole, SemanticRole],
       [`age-${age}`, "canvas"] as [SemanticRole, SemanticRole],

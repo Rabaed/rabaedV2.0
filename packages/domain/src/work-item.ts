@@ -560,6 +560,11 @@ export const workItemDetail = workItemSummary.extend({
   creationDate: z.iso.datetime().nullable(),
   /** The Submission Date: its first Submit out of the raiser's Participant, kept after a Send Back. Null until then. */
   submissionDate: z.iso.datetime().nullable(),
+  /**
+   * Its Comments (WF-11: the items raised from it, such as Code B's), open and closed,
+   * counting only those the viewer sees (visibility.md, Lists and counts).
+   */
+  comments: z.object({ open: z.number().int().nonnegative(), closed: z.number().int().nonnegative() }),
   /** What the viewer may press now. */
   actions: workItemActions,
 });

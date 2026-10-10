@@ -75,9 +75,8 @@ export function getHome(): Promise<Home | null> {
   return apiGet<Home>("/v1/home");
 }
 
-export function getMyProjects(): Promise<MyProjects | null> {
-  return apiGet<MyProjects>("/v1/projects");
-}
+/** Read once per request: the top bar's "n Projects" and the page both ask. */
+export const getMyProjects = cache((): Promise<MyProjects | null> => apiGet<MyProjects>("/v1/projects"));
 
 /**
  * One of the signed-in Member's Projects; null if it isn't one of theirs (or doesn't exist).
