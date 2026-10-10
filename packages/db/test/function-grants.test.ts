@@ -32,6 +32,8 @@ const allow: GrantAllowList = {
   // Security invoker reads both roles' Workflow checks and reads share (RP-427 review).
   "app.workflow_type": both,
   "app.workflow_version_rows": both,
+  // The Screens a Workflow may show, read by both roles' publish checks (RP-516).
+  "app.workflow_screens": both,
   "app.current_member_id": both,
   "app.is_bilingual": both,
   // The checks of outcome and workflow_transition.outcome (RP-429).

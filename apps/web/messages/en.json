@@ -663,6 +663,7 @@
       "internalNote": "Internal Note",
       "remarks": "Remarks",
       "internalNoteWith": "Internal Note · {transition}",
+      "internalAnswersWith": "Internal reply · {transition}",
       "internal": "Internal: only your Company sees this.",
       "answersChanged": "Form changed",
       "emptyAnswer": "(empty)",

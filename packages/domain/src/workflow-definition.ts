@@ -149,6 +149,12 @@ const transition = z.strictObject({
   permission: z.enum(functionPermissions),
   /** The Action Form's Form schema as stored, checked at publish (check 7); null: the Internal Note only. */
   actionForm: z.record(z.string(), z.unknown()).nullable(),
+  /**
+   * The Screen it shows instead, by key (ADR 0019, RP-516): the owner's Screen with that
+   * key, else the Rabaed Default one. Publishing pins its latest published Version; the
+   * Transition's `actionForm` is then null.
+   */
+  screen: key.optional(),
   rules: transitionRules.optional(),
   actions: z.array(transitionAction).optional(),
   notifications: z.array(recipient).optional(),
@@ -206,6 +212,11 @@ export type WorkflowTransitionRow = {
   permission: FunctionPermission;
   sort: number;
   action_form: unknown;
+  /**
+   * The Screen it shows, by key (RP-516). On a published Version `action_form` holds the
+   * pinned Screen Version's schema, a copy: the definition reads the Screen alone.
+   */
+  screen_key?: string;
   rules?: unknown;
   actions?: unknown;
   notifications?: unknown;
@@ -236,7 +247,7 @@ export function definitionFromRows(rows: WorkflowVersionRows): WorkflowDefinitio
         to: t.to_step_key,
         outcome: t.outcome,
         permission: t.permission,
-        actionForm: t.action_form ?? null,
+        ...(t.screen_key == null ? { actionForm: t.action_form ?? null } : { actionForm: null, screen: t.screen_key }),
         ...transitionParts(t),
       })),
     layout: rows.layout,
@@ -273,6 +284,7 @@ export function definitionToRows(definition: WorkflowDefinition, outcomeKind: Ou
       permission: t.permission,
       sort: index + 1,
       action_form: t.actionForm,
+      ...(t.screen === undefined ? {} : { screen_key: t.screen }),
       ...transitionParts(t),
     })),
   };

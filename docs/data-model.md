@@ -182,6 +182,13 @@ As built (RP-428, WF-5): `owner_kind {rabaed, project}`. Every Project has its o
 - `actions` (`jsonb` array, null for none; RP-431, WF-8): what taking the Transition does besides moving the item, as the definition format has them (`transitionAction`, `workflow-definition.ts`): `{"type": "offer_assign_to"}`, `{"type": "set_field", "field": "<key>", "value": <text, number, yes/no> | {"now": true}}`, `{"type": "copy_field", "from": "<key>", "to": "<key>"}`. Applied at run time by `take_transition` (`app.assignees_offered`, `app.transition_actions`; workflow-engine.md §3.3, §5.1). Every Member reads it with the Workflow (ADR 0016).
 - `notifications` (`jsonb` array, null for none; RP-432): whom the Transition notifies besides the next holder or Step Pool, in-app always and email by each Member's own settings: `{"to": "holder"}`, `{"to": "raiser"}`, `{"to": "watchers"}`, `{"to": "position", "position": "<key>"}` (a Position of the acting Participant). Never a person, a group or an email address. Delivered by the watched-item path (`app.transition_notice_members`) for every move the Transition makes, whatever its event's type (`transition`, or `issue_code` for a Code issued); each recipient is checked again at send time.
 - `notifications`: who gets what, on which channel.
+- `screen_key`, `screen_version_id` (RP-516, ADR 0019): the Screen the Transition shows, by key (null: its own `action_form`), and the Screen Version publishing pinned (`app.workflow_screens`: the owner's Screen with that key, else the Rabaed Default's), whose schema is copied into `action_form` and frozen with the Version (workflow-engine.md §5.7).
+
+**screen** / **screen_version** (RP-516, ADR 0019)
+- `screen`: a named, reusable Action Form. `id`, `owner_kind {rabaed, project, company}` with `project_id` or `company_id` (the library pattern, like `workflow_definition`, ADR 0016), `key` (snake_case, unique per owner: what a Transition names), `name i18n`, `created_at`, `updated_at`. A Project's Screens are edited by its Project Admins; a Company keeps them in its Library.
+- `screen_version`: `id`, `screen_id`, `version_no`, `status {draft, published}` (at most one draft), `schema jsonb` (an Action Form schema, checked as `action_form` is), `internal_fields text[]` (the keys of the answer fields internal to the acting Participant; every other field is shared), `published_at`. A published Version never changes (`screen_version_published_frozen`).
+- Read like the Workflows that use them (visibility.md V20, V18): published only, a Screen with none by its authors only. The app role writes neither table; the commands are `app.create_screen`, `app.save_screen_draft`, `app.publish_screen`, audited in `workflow_event` until RP-450's setup-change record.
+- A reply's internal answers are a `work_item_event` of type `internal_answers` (payload `{"answers": {...}}`), internal to the acting Participant and carrying the Transition's id; its shared answers stay in the Transition event's payload (V5).
 
 **work_item_type**
 `id`, `project_id`, `module_key`, `code` (MAR, SAR, DAR…), `name i18n`, `form_definition_id`, `workflow_definition_id`, `outcome_kind {review_code, inspection_result, approval, none}`, `expected_frequency {none, daily, weekly, monthly}`, `allows_subtasks bool`, `copied_from_id`.
@@ -353,7 +360,7 @@ Each created Draft carries `import_id` for traceability.
 | column | notes |
 |---|---|
 | `id`, `work_item_id`, `seq` | `seq` is gap-free per item |
-| `type` | `created, transition, recommend_code, issue_code, assigned, picked_up, returned_to_pool, vacated, admin_reassigned, admin_reset, internal_note, cancelled, answers_changed; events written before RP-512 keep `claimed` and `released`) (field-level diffs of the answers after Draft: `payload.changes`) |
+| `type` | `created, transition, recommend_code, issue_code, assigned, picked_up, returned_to_pool, vacated, admin_reassigned, admin_reset, internal_note, cancelled, answers_changed, internal_answers` (a reply's internal answers, RP-516; `payload.answers`); events written before RP-512 keep `claimed` and `released`) (field-level diffs of the answers after Draft: `payload.changes`) |
 | `actor_member_id` / `actor_engineer_id` | exactly one |
 | `actor_participant_id` | |
 | `transition_id`, `from_step_id`, `to_step_id` | |

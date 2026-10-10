@@ -126,6 +126,15 @@ export async function addTestWorkflow(
       where key = 'draft' and workflow_version_id = '${row.version_id}'
     `);
   }
+  // The Screen a Transition shows, pinned as publishing pins it (RP-516): its key, its
+  // Version and that Version's schema as the Transition's Action Form.
+  for (const [key, screenVersionId] of Object.entries(options.screens ?? {})) {
+    await run(`
+      update workflow_transition t set screen_key = s.key, screen_version_id = v.id, action_form = v.schema
+      from screen_version v join screen s on s.id = v.screen_id
+      where v.id = '${screenVersionId}' and t.key = '${key}' and t.workflow_version_id = '${row.version_id}'
+    `);
+  }
   if (publish) await run(`update workflow_version set status = 'published', published_at = now() where id = '${row.version_id}'`);
   return row.id;
 }
@@ -172,4 +181,30 @@ export type TestWorkflowOptions = {
   notifications?: Record<string, unknown[]>;
   /** The Draft Step's "Drafts visible to" (RP-514): the author only, or (left out) the author's whole Company. */
   draftsVisibleTo?: "company" | "author";
+  /** The published Screen Version a Transition shows, by the Transition's key (RP-516; addTestScreen). */
+  screens?: Record<string, string>;
 };
+
+/**
+ * Adds a Rabaed Default Screen keyed `key` with one published Version of `schema`, its
+ * `internalFields` internal to the acting Participant (RP-516). `run` executes SQL as the
+ * migrator; the result is the Screen Version's id, for addTestWorkflow's `screens`.
+ */
+export async function addTestScreen(
+  run: (text: string) => Promise<{ rows: unknown[] }>,
+  key: string,
+  schema: unknown,
+  internalFields: readonly string[],
+): Promise<string> {
+  const { rows } = await run(`
+    with screen as (
+      insert into screen (owner_kind, key, name) values ('rabaed', '${key}', '{"en": "${key}", "ar": "${key}"}') returning id
+    )
+    insert into screen_version (screen_id, version_no, status, schema, internal_fields, published_at)
+    select id, 1, 'published', $json$${JSON.stringify(schema)}$json$::jsonb, '{${internalFields.join(",")}}'::text[], now() from screen
+    returning id
+  `);
+  const id = (rows[0] as { id?: string } | undefined)?.id;
+  if (!id) throw new Error("addTestScreen: nothing inserted");
+  return id;
+}

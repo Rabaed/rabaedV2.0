@@ -633,4 +633,51 @@ describe("workflowPublishProblems", () => {
       expect(problems(d)).toContainEqual({ code: "loop_across_participants", severity: "error", transition: "back_to_contractor" });
     });
   });
+
+  describe("a Transition showing a Screen (ADR 0019, RP-516)", () => {
+    const withScreen = (screen: string, actionForm: Record<string, unknown> | null = null) => {
+      const d = mar();
+      add(d, {
+        key: "approve_b",
+        label: { en: "Approve with Comments · B", ar: "اعتماد مع ملاحظات · B" },
+        from: "consultant_review",
+        to: "approved",
+        kind: "close",
+        outcome: "B",
+        permission: "approve",
+        actionForm,
+        screen,
+      });
+      return d;
+    };
+    const screens = (schema: unknown) => new Map([["code_b_reply", formSchema.parse(schema)]]);
+
+    it("is checked with its Screen's Action Form: Code B's Screen holds the table of items", () => {
+      expect(problems(withScreen("code_b_reply"), context({ screens: screens(itemsForm()) }))).toEqual([]);
+      const remarksOnly = {
+        sections: [{ key: "code", title: { en: "Code", ar: "الرمز" }, fields: [{ key: "remarks", type: "textarea", label: { en: "Remarks", ar: "ملاحظات" } }] }],
+      };
+      expect(problems(withScreen("code_b_reply"), context({ screens: screens(remarksOnly) }))).toEqual([
+        { code: "items_table_missing", severity: "error", transition: "approve_b" },
+      ]);
+    });
+
+    it("refuses a Screen with no published Version the Workflow's owner uses, and one beside an Action Form of its own", () => {
+      expect(problems(withScreen("missing_reply"), context({ screens: screens(itemsForm()) }))).toEqual([
+        { code: "screen_not_found", severity: "error", transition: "approve_b" },
+        { code: "items_table_missing", severity: "error", transition: "approve_b" },
+      ]);
+      expect(problems(withScreen("code_b_reply", itemsForm()), context({ screens: screens(itemsForm()) }))).toEqual([
+        { code: "screen_with_action_form", severity: "error", transition: "approve_b" },
+      ]);
+    });
+
+    it("says so in English and Arabic, naming the Transition and the Screen", () => {
+      const [found] = workflowPublishProblems(withScreen("missing_reply"), context({ screens: screens(itemsForm()) }));
+      expect(found?.message).toEqual({
+        en: `"Approve with Comments · B" shows Screen "missing_reply", which has no published Version this Workflow can use.`,
+        ar: `يعرض "اعتماد مع ملاحظات · B" الشاشة "missing_reply"، وليس لها إصدار منشور يمكن لسير العمل هذا استخدامه.`,
+      });
+    });
+  });
 });

@@ -30,6 +30,13 @@ export type WorkflowPublishContext = {
   form: FormSchema | null;
   /** The Option Lists an Action Form may name (check 7). */
   optionListIds?: ReadonlySet<string>;
+  /**
+   * The Screens a Transition may show (ADR 0019, RP-516), by key: the latest published
+   * Version's schema of the owner's Screen with that key, else the Rabaed Default one.
+   * Given, a Transition naming a Screen is checked with that Action Form; without it
+   * (the builder), Screens aren't checked.
+   */
+  screens?: ReadonlyMap<string, FormSchema>;
 };
 
 export const workflowProblemCodes = [
@@ -63,6 +70,9 @@ export const workflowProblemCodes = [
   "loop_across_participants",
   // Check 7 (workflowActionFormProblems)
   "invalid_action_form",
+  // Screens (ADR 0019, RP-516)
+  "screen_not_found",
+  "screen_with_action_form",
   // Cancel (spec RP-423)
   "cancel_not_by_raiser",
   "cancel_not_to_cancelled_stage",
@@ -120,7 +130,7 @@ export function workflowPublishProblems(definition: WorkflowDefinition, context:
   const categories = new Map(context.stages.map((s) => [s.key, s.category]));
   const categoryOf = (stage: string) => categories.get(stage);
   const input: CheckInput = {
-    ...definition,
+    ...withScreenForms(definition, context.screens),
     context,
     stepOf: new Map(definition.steps.map((s) => [s.key, s])),
     categoryOf,
@@ -130,6 +140,7 @@ export function workflowPublishProblems(definition: WorkflowDefinition, context:
     },
   };
   const found = [
+    ...screenProblems(definition, context.screens),
     ...structureProblems(input),
     ...graphProblems(input),
     ...stageProblems(input),
@@ -141,6 +152,32 @@ export function workflowPublishProblems(definition: WorkflowDefinition, context:
     ...routingWarnings(input),
   ];
   return found.map(({ reason, ...p }) => ({ ...p, severity: p.severity ?? "error", message: message({ ...p, reason }, definition) }));
+}
+
+/**
+ * The definition as its Transitions' Screens make it (ADR 0019, RP-516): a Transition
+ * naming a Screen has that Screen's Action Form, so every other check reads it. Without
+ * `screens` (the builder), it is left as it is.
+ */
+function withScreenForms(definition: WorkflowDefinition, screens: WorkflowPublishContext["screens"]): WorkflowDefinition {
+  if (screens === undefined) return definition;
+  return {
+    ...definition,
+    transitions: definition.transitions.map((t) => {
+      const schema = t.screen === undefined || t.actionForm !== null ? undefined : screens.get(t.screen);
+      return schema === undefined ? t : { ...t, actionForm: schema as unknown as Record<string, unknown> };
+    }),
+  };
+}
+
+/** A Transition shows a Screen with a published Version its owner uses, and then has no Action Form of its own. */
+function screenProblems({ transitions }: WorkflowDefinition, screens: WorkflowPublishContext["screens"]): FoundProblem[] {
+  if (screens === undefined) return [];
+  return transitions.flatMap((t): FoundProblem[] => {
+    if (t.screen === undefined) return [];
+    if (t.actionForm !== null) return [{ code: "screen_with_action_form", transition: t.key, detail: t.screen }];
+    return screens.has(t.screen) ? [] : [{ code: "screen_not_found", transition: t.key, detail: t.screen }];
+  });
 }
 
 function structureProblems({ steps, transitions, stepOf }: CheckInput): FoundProblem[] {
@@ -606,6 +643,14 @@ const messages: Record<WorkflowProblemCode, (names: Names) => BilingualText> = {
   invalid_action_form: (names) => ({
     en: `The Action Form of ${names.transition.en} isn't a valid Form: "${names.detail}" (${names.reason}).`,
     ar: `النموذج المنبثق لـ ${names.transition.ar} ليس نموذجًا صالحًا: "${names.detail}".`,
+  }),
+  screen_not_found: (names) => ({
+    en: `${names.transition.en} shows Screen "${names.detail}", which has no published Version this Workflow can use.`,
+    ar: `يعرض ${names.transition.ar} الشاشة "${names.detail}"، وليس لها إصدار منشور يمكن لسير العمل هذا استخدامه.`,
+  }),
+  screen_with_action_form: (names) => ({
+    en: `${names.transition.en} shows Screen "${names.detail}" and has an Action Form of its own: it takes one or the other.`,
+    ar: `يعرض ${names.transition.ar} الشاشة "${names.detail}" وله نموذج منبثق خاص به: يأخذ أحدهما فقط.`,
   }),
   cancel_not_by_raiser: (names) => ({
     en: `${names.transition.en} is a Cancel, which only the raiser's own Steps offer.`,
