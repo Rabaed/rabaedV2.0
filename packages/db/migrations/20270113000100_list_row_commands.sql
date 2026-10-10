@@ -34,17 +34,19 @@ create unique index work_item_event_duplicate_key on work_item_event (actor_memb
 -- Whether the acting Member may discard a visible Draft: never numbered, still at its
 -- Draft Step, on an active Project, by an active Member of the raiser's Participant.
 create function app.can_discard_draft(p_work_item_id uuid) returns boolean
-  language sql stable security definer
+  language plpgsql stable security definer
   set search_path = pg_catalog, public
   as $$
-    select app.sees_work_item(p_work_item_id) and exists (
-      select 1
-      from work_item w
-      join project pr on pr.id = w.project_id and pr.status = 'active'
-      join app.acting_project_member(w.id) me on me.participant_id = w.raised_by_participant_id
-      where w.id = p_work_item_id
-        and w.closed_at is null and w.document_number is null and app.is_draft_step(w.current_step_id)
-    )
+    begin
+      return app.sees_work_item(p_work_item_id) and exists (
+        select 1
+        from work_item w
+        join project pr on pr.id = w.project_id and pr.status = 'active'
+        join app.acting_project_member(w.id) me on me.participant_id = w.raised_by_participant_id
+        where w.id = p_work_item_id
+          and w.closed_at is null and w.document_number is null and app.is_draft_step(w.current_step_id)
+      );
+    end
   $$;
 
 -- Discards a Draft: 'discarded', 'not_found', 'project_closed' or 'not_discardable'.
@@ -94,14 +96,18 @@ create function app.discard_draft(p_work_item_id uuid, p_now timestamptz) return
 
 -- The Draft a Member already made for this Duplicate request, if one stands and they see it.
 create function app.duplicate_of_key(p_idempotency_key uuid) returns uuid
-  language sql stable security definer
+  language plpgsql stable security definer
   set search_path = pg_catalog, public
   as $$
-    select e.work_item_id from work_item_event e
-    where e.type = 'duplicated' and e.actor_member_id = app.current_member_id()
-      and e.payload ->> 'idempotency_key' = p_idempotency_key::text
-      and app.sees_work_item(e.work_item_id)
-    limit 1
+    begin
+      return (
+        select e.work_item_id from work_item_event e
+        where e.type = 'duplicated' and e.actor_member_id = app.current_member_id()
+          and e.payload ->> 'idempotency_key' = p_idempotency_key::text
+          and app.sees_work_item(e.work_item_id)
+        limit 1
+      );
+    end
   $$;
 
 -- Records on a new Draft the item it was duplicated from: its own `duplicated` event,
@@ -140,15 +146,18 @@ create function app.record_duplicate(p_work_item_id uuid, p_source_id uuid, p_id
 -- Participant on its Project (work_item.field_times, never granted). Nothing else of
 -- the times or writers leaves the database.
 create function app.own_written_fields(p_work_item_id uuid) returns setof text
-  language sql stable security definer
+  language plpgsql stable security definer
   set search_path = pg_catalog, public
   as $$
-    select t.key
-    from work_item w
-    cross join lateral jsonb_each(w.field_times) t
-    join project_member pm on pm.project_id = w.project_id and pm.member_id = app.uuid_or_null(t.value -> 'by')
-    where w.id = p_work_item_id and app.sees_work_item(w.id)
-      and pm.participant_id in (select app.current_participant_ids())
+    begin
+      return query
+        select t.key
+        from work_item w
+        cross join lateral jsonb_each(w.field_times) t
+        join project_member pm on pm.project_id = w.project_id and pm.member_id = app.uuid_or_null(t.value -> 'by')
+        where w.id = p_work_item_id and app.sees_work_item(w.id)
+          and pm.participant_id in (select app.current_participant_ids());
+    end
   $$;
 
 -- A Submitted item's answers as last shared: as they arrived at the Participant holding
