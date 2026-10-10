@@ -2,7 +2,7 @@
 
 import {
   cardNumber,
-  formatDate,
+  formatDayMonthYear,
   formatNumber,
   isOpenStageCategory,
   lockedListColumns,
@@ -455,9 +455,5 @@ export function cellText(
   }
 }
 
-/** A date as the List writes it: "01 Aug 2026", Latin digits in both languages. */
-export const listDate = (iso: string, locale: Locale) => {
-  const date = new Date(iso);
-  // Day, month, year in that order in both languages, as the design writes it (English's own order puts the month first).
-  return [formatDate(date, locale, { day: "2-digit" }), formatDate(date, locale, { month: "short" }), formatDate(date, locale, { year: "numeric" })].join(" ");
-};
+/** A date as the List, its Export and Download write it: "10 Oct 2026", Arabic in its own order, Latin digits. */
+export const listDate = (iso: string, locale: Locale) => formatDayMonthYear(new Date(iso), locale, { month: "short" });
