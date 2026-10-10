@@ -45,6 +45,9 @@ export function hasOwnCommit(subjects: string[]): boolean {
 
 export type Skipped = { worktree: Worktree; reason: string };
 
+/** The skip reason for the worktree the script runs from (worktrees:clean and worktrees:prune leave it unlisted). */
+export const CURRENT_WORKTREE = "this is the current worktree";
+
 /** Parses `git worktree list --porcelain`. */
 export function parseWorktrees(out: string): Worktree[] {
   const worktrees: Worktree[] = [];
@@ -78,8 +81,17 @@ type ChooseInput = {
   currentPath: string;
   /** Also remove worktrees with no commits yet (--include-empty). */
   includeEmpty?: boolean;
+  /** Folder names (agent-*) to limit the run to (--only); they count as includeEmpty, the rest are left out of the run. */
+  only?: string[];
   platform?: NodeJS.Platform;
 };
+
+/** The last segment of a worktree path. */
+export const worktreeName = (path: string): string => path.replace(/[\\/]+$/, "").split(/[\\/]/).pop() ?? "";
+
+/** Whether the worktree's folder name is one of `names`; case-insensitive on Windows, like paths. */
+export const isNamed = (path: string, names: string[], platform?: NodeJS.Platform): boolean =>
+  names.some((n) => normalPath(n, platform) === normalPath(worktreeName(path), platform));
 
 /**
  * Which agent worktrees to remove: those whose commits are all in the target
@@ -88,17 +100,19 @@ type ChooseInput = {
  * (unless includeEmpty). Everything else is skipped with its reason.
  * The caller passes agent worktrees only.
  */
-export function chooseWorktrees({ worktrees, currentPath, includeEmpty = false, platform }: ChooseInput): { remove: Worktree[]; skipped: Skipped[] } {
+export function chooseWorktrees({ worktrees, currentPath, includeEmpty = false, only, platform }: ChooseInput): { remove: Worktree[]; skipped: Skipped[] } {
   const remove: Worktree[] = [];
   const skipped: Skipped[] = [];
+  const keepEmpty = includeEmpty || only !== undefined;
   for (const { ahead, dirty, noCommitsYet, ...w } of worktrees) {
+    if (only && !isNamed(w.path, only, platform)) continue;
     const reason = samePath(w.path, currentPath, platform)
-      ? "this is the current worktree"
+      ? CURRENT_WORKTREE
       : dirty
         ? "uncommitted changes"
         : ahead > 0
           ? `${ahead} unmerged commit${ahead === 1 ? "" : "s"}${w.branch ? ` on ${w.branch}` : " (detached HEAD)"}`
-          : noCommitsYet && !includeEmpty
+          : noCommitsYet && !keepEmpty
             ? "no commits yet, may still be running (--include-empty removes it)"
             : w.locked !== undefined && !lockedByApp(w.locked)
               ? `locked by hand (${w.locked || "no reason"})`
@@ -117,6 +131,9 @@ export const gitError = (error: unknown) => (error as { stderr?: string }).stder
 export function listWorktrees(cwd?: string): Worktree[] {
   return parseWorktrees(git(["worktree", "list", "--porcelain"], cwd));
 }
+
+/** Whether the folder has uncommitted changes, untracked files outside ignored paths included. */
+export const gitDirty = (dir: string): boolean => git(["--no-optional-locks", "status", "--porcelain"], dir).trim() !== "";
 
 /** The current worktree's top folder. */
 export const currentRoot = (): string => git(["rev-parse", "--show-toplevel"]).trim();
@@ -156,7 +173,7 @@ export function gatherFacts(worktrees: Worktree[], target: string, mainRoot: str
   return worktrees.map((w) => {
     // A folder deleted by hand is still listed; it has nothing uncommitted, and no subagent runs in it.
     const exists = existsSync(w.path);
-    const dirty = exists && git(["status", "--porcelain"], w.path).trim() !== "";
+    const dirty = exists && gitDirty(w.path);
     const ahead = Number(git(["rev-list", "--count", `${target}..${w.head}`], mainRoot).trim());
     // A branch's reflog is shared by every worktree; a detached HEAD's is the worktree's own.
     const subjects = w.branch ? reflogSubjects(`refs/heads/${w.branch}`, mainRoot) : exists ? reflogSubjects("HEAD", w.path) : [];

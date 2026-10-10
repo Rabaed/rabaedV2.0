@@ -15,6 +15,7 @@ import {
   workflowPublishProblems,
   workItemSearchParams,
   type Dashboard,
+  type Outcome,
   type StageCategory,
   type TypeOutcomes,
   type WorkflowVersionRows,
@@ -200,7 +201,7 @@ async function draftWithE(definitionId: string): Promise<string> {
 }
 
 /** The publish checks of `versionId` against Type `code`'s outcome set as its Project's Admin reads it, the Project's Stages and the MAR's Form. */
-async function publishProblems(at: Tower, versionId: string, code: string, outcomes: readonly { code: string; closing: boolean }[]) {
+async function publishProblems(at: Tower, versionId: string, code: string, outcomes: readonly Pick<Outcome, "code" | "closing" | "actions">[]) {
   const steps = await sql<WorkflowVersionRows["steps"][number]>`
     select key, name, stage_key, actor_rule, is_signing, outcome_mode from workflow_step where workflow_version_id = ${versionId}::uuid order by key
   `.execute(migrator);

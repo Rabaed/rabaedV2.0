@@ -8,19 +8,47 @@
 //
 // It refuses a lane whose ports are taken, or whose compose project another worktree
 // already uses, and names the holder, saying whether that worktree's branch is already merged
-// into origin/main (then `pnpm lanes:prune --merged` frees it). --free takes the next lane that is free instead.
+// into origin/main (then `pnpm lanes:prune --merged --lane N` frees just that lane). --free takes the next lane that is free instead.
 // --db <suffix> (e.g. rp322) names the three database URLs rabaed_<suffix>, so the seam suites
 // use rabaed_<suffix>_test: several worktrees of one lane (e.g. /implement-spec's implementer
 // subagents) can share its Postgres without migrating the same database. A --db run may share
 // a lane with another worktree, but only the lane owner's own implementer subagents use it:
 // a session whose lane another session holds takes --free or runs lanes:prune. Without --db
 // the .env is as before.
+// It also refuses, even with --force, a worktree locked by another live `claude session` (RP-501).
+// It also warns (never refuses) when another local branch, worktree or origin branch starts with the
+// same RP-nnn- key as this worktree's branch: another session may already have claimed that ticket (RP-499).
+// With --force, a lane whose compose project belongs only to worktrees that are gone, or merged into origin/main
+// and clean, is taken over instead of refused: their containers are removed, the volumes (the database) kept,
+// and the output says which worktree it came from. A worktree with uncommitted changes, not merged, locked by a
+// session that still runs, or sharing the lane through its .env still refuses; so does any --db run (RP-500).
 // `pnpm lanes:prune` removes the compose projects old worktrees left behind;
 // `pnpm lanes:drop-dbs` drops the --db databases of worktrees that are gone.
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { firstFreeLane, isValidDbSuffix, laneClashes, laneEnv, laneHolders, lanePorts, laneProject, listContainers, takenLanePorts } from "./lanes.ts";
+import { join } from "node:path";
+import { claimWarnings, currentBranch, realClaimGit } from "./lane-claims.ts";
+import {
+  chooseTakeover,
+  clashesAfterRemoval,
+  composeProjectOfEnv,
+  firstFreeLane,
+  holdsLaneProject,
+  isValidDbSuffix,
+  laneClashes,
+  laneEnv,
+  laneHolders,
+  lanePorts,
+  laneProject,
+  listContainers,
+  pruneCommand,
+  releaseContainers,
+  takenLanePorts,
+  type TakeoverWorktree,
+} from "./lanes.ts";
 import { samePath } from "./paths.ts";
-import { branchMerged, listWorktrees, refExists, type Worktree } from "./worktrees.ts";
+import { foreignSessionLock, parseSessionLock, readProcessList } from "./session-lock.ts";
+import { isRunning } from "./worktrees-stale.ts";
+import { branchMerged, currentRoot, gitDirty, gitError, listWorktrees, refExists, type Worktree } from "./worktrees.ts";
 
 const args = process.argv.slice(2);
 const force = args.includes("--force");
@@ -40,10 +68,31 @@ if (
   console.error("Usage: pnpm lane:env <n> [--force] [--free] [--db <suffix>]   (n = 0..9, one per worktree; suffix: lowercase letters and digits, e.g. rp322)");
   process.exit(1);
 }
+// A worktree locked by another live Claude session belongs to that session; --force does not override this (RP-501).
+let locked: string | undefined;
+try {
+  locked = listWorktrees().find((w) => samePath(w.path, currentRoot()))?.locked;
+} catch {
+  // Not a git checkout, or git is missing: nothing to check.
+}
+if (parseSessionLock(locked)) {
+  let refusal: string | undefined;
+  try {
+    refusal = foreignSessionLock(locked, process.pid, readProcessList());
+  } catch (e) {
+    console.warn(`Session-lock check skipped (${e instanceof Error ? e.message.split("\n")[0] : String(e)}), so a live Claude session holding this worktree would not be noticed.`);
+  }
+  if (refusal) {
+    console.error(refusal);
+    process.exit(1);
+  }
+}
 if (existsSync(".env") && !force) {
   console.error(".env already exists. Re-run with --force to overwrite it.");
   process.exit(1);
 }
+
+for (const warning of claimWarnings(realClaimGit, process.cwd(), currentBranch())) console.warn(`Warning: ${warning}`);
 
 const containers = listContainers();
 if (!containers) console.warn("Docker is not running, so only the ports were checked, not the compose projects.");
@@ -64,17 +113,78 @@ function holderStatus(lane: number): string[] {
   const hasOriginMain = refExists("origin/main", mainRoot);
   return holders.map((dir) => {
     const w = worktrees.find((x) => samePath(x.path, dir));
-    if (!w) return `  ${dir} is not a worktree of this clone (or is gone): \`pnpm lanes:prune\` frees the lane.`;
+    if (!w) return `  ${dir} is not a worktree of this clone (or is gone): \`${pruneCommand(lane, { merged: false })}\` frees the lane.`;
     if (!w.branch) return `  ${dir} has a detached HEAD.`;
     if (!hasOriginMain) return `  ${dir} is on ${w.branch}; run \`git fetch origin main\` to see whether it is merged.`;
     return branchMerged(w.branch, "origin/main", mainRoot)
-      ? `  ${dir} is on ${w.branch}, already merged into origin/main: free the lane with \`pnpm lanes:prune --merged\`, then re-run.`
+      ? `  ${dir} is on ${w.branch}, already merged into origin/main: free the lane with \`${pruneCommand(lane, { merged: true })}\`, then re-run.`
       : `  ${dir} is on ${w.branch}, not merged into origin/main yet: its session may still need the lane.`;
   });
 }
 
+/**
+ * --force (RP-500): when only containers of worktrees that are gone, or merged into origin/main and
+ * clean, hold lane n, removes those containers (never the volumes) so this worktree's compose up
+ * recreates them in the same project with the database. Returns whether the lane is free now.
+ */
+function takeOverLane(lane: number): boolean {
+  let worktrees: Worktree[];
+  try {
+    worktrees = listWorktrees();
+  } catch {
+    return false;
+  }
+  const mainRoot = worktrees[0]?.path ?? ".";
+  const merged = refExists("origin/main", mainRoot);
+  const readEnv = (dir: string) => {
+    const file = join(dir, ".env");
+    return existsSync(file) ? readFileSync(file, "utf8") : "";
+  };
+  const facts = worktrees.map((w): TakeoverWorktree => {
+    const exists = existsSync(w.path);
+    let dirty = false;
+    let statusError: string | undefined;
+    // Every worktree with a container of the lane's project, whether or not laneHolders counts it.
+    if (exists && holdsLaneProject(lane, check.containers, w.path)) {
+      try {
+        dirty = gitDirty(w.path);
+      } catch (error) {
+        dirty = true;
+        statusError = gitError(error);
+      }
+    }
+    return {
+      path: w.path,
+      branch: w.branch,
+      exists,
+      merged: merged && w.branch !== undefined && w.branch !== "main" && !samePath(w.path, mainRoot) && branchMerged(w.branch, "origin/main", mainRoot),
+      dirty,
+      ...(statusError === undefined ? {} : { statusError }),
+      locked: w.locked,
+      project: exists ? composeProjectOfEnv(readEnv(w.path)) : undefined,
+    };
+  });
+  const choice = chooseTakeover(lane, { containers: check.containers, worktrees: facts, cwd: check.cwd, exists: existsSync, pidRunning: isRunning });
+  if (choice.refused.length > 0) {
+    for (const line of choice.refused) console.error(`  ${line}`);
+    return false;
+  }
+  if (choice.takeOver.length === 0) return false;
+  if (clashesAfterRemoval(lane, check, choice.takeOver).length > 0) return false;
+  try {
+    releaseContainers(choice.takeOver);
+  } catch (error) {
+    console.error((error as Error).message);
+    process.exit(1);
+  }
+  console.log(`Took lane ${lane} over from ${choice.from.join(", ")}: removed its containers, kept the volumes (database) of ${laneProject(lane)}.`);
+  return true;
+}
+
 let lane = n;
-const clashes = clashesOf(n);
+let clashes = clashesOf(n);
+// Not with --db: an implementer subagent shares its session's lane and must not take one.
+if (clashes.length > 0 && force && db === undefined && takeOverLane(n)) clashes = [];
 if (clashes.length > 0) {
   const next = firstFreeLane(n, clashesOf);
   const prune = "`pnpm lanes:prune` removes rabaed-* compose projects whose worktree is gone or that are not running.";

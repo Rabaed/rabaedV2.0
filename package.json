@@ -19,6 +19,7 @@
     "db:reset": "node scripts/pnpm.ts --filter @rabaed/db run reset",
     "check:migrations": "node scripts/check-migrations.ts",
     "queue": "node scripts/queue-pr.ts",
+    "verify": "node scripts/verify.ts",
     "lint": "eslint .",
     "typecheck": "node scripts/pnpm.ts -r run typecheck",
     "test": "vitest run",

@@ -618,7 +618,9 @@
       "step": "Step",
       "with": "With",
       "raisedBy": "Raised by",
-      "issuedCode": "Issued Code"
+      "issuedCode": "Issued Code",
+      "comments": "Comments",
+      "commentCounts": "{open} open / {closed} closed"
     },
     "invalid": "Give a Subject and a Trade.",
     "notContractor": "Only a Contractor can raise a Material Submittal.",

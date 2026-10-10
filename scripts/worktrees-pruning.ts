@@ -1,6 +1,6 @@
 import { mergedProjects, staleProjects, type Container, type StaleProject, type Volume, type WorktreeLane } from "./lanes.ts";
 import { normalPath, samePath } from "./paths.ts";
-import { lockedByApp, type LocalBranch, type Skipped, type Worktree, type WorktreeFacts } from "./worktrees.ts";
+import { CURRENT_WORKTREE, lockedByApp, type LocalBranch, type Skipped, type Worktree, type WorktreeFacts } from "./worktrees.ts";
 
 // What `pnpm worktrees:prune` removes once PRs have merged (RP-308): every worktree
 // merged into origin/main, with its rabaed-* compose project and branch, then the
@@ -105,7 +105,7 @@ export function changedSinceListed(now: PruneWorktree | undefined): string | und
 /** Why a worktree stays, or undefined when it goes. */
 function skipReason(w: PruneWorktree, mainRoot: string, currentPath: string, platform: NodeJS.Platform | undefined): string | undefined {
   if (samePath(w.path, mainRoot, platform)) return "the main checkout";
-  if (samePath(w.path, currentPath, platform)) return "this is the current worktree";
+  if (samePath(w.path, currentPath, platform)) return CURRENT_WORKTREE;
   if (w.branch === "main") return "on main";
   if (w.locked !== undefined && /^claude session\b/i.test(w.locked)) return `its Claude desktop session is open (${w.locked}); archive it first`;
   if (w.locked !== undefined && !lockedByApp(w.locked)) return `locked by hand (${w.locked || "no reason"})`;
