@@ -8,7 +8,8 @@
 //
 // It refuses a lane whose ports are taken, or whose compose project another worktree
 // already uses, and names the holder, saying whether that worktree's branch is already merged
-// into origin/main (then `pnpm lanes:prune --merged --lane N` frees just that lane). --free takes the next lane that is free instead.
+// into origin/main (then `pnpm lanes:prune --merged --lane N` frees just that lane, unless a worktree that is not
+// merged names the lane in its .env: prune keeps it, so that worktree is named instead). --free takes the next lane that is free instead.
 // --db <suffix> (e.g. rp322) names the three database URLs rabaed_<suffix>, so the seam suites
 // use rabaed_<suffix>_test: several worktrees of one lane (e.g. /implement-spec's implementer
 // subagents) can share its Postgres without migrating the same database. A --db run may share
@@ -32,6 +33,7 @@ import {
   clashesAfterRemoval,
   composeProjectOfEnv,
   firstFreeLane,
+  holderAdvice,
   holdsLaneProject,
   isValidDbSuffix,
   laneClashes,
@@ -40,13 +42,12 @@ import {
   lanePorts,
   laneProject,
   listContainers,
-  pruneCommand,
   releaseContainers,
   takenLanePorts,
   type TakeoverWorktree,
 } from "./lanes.ts";
 import { samePath } from "./paths.ts";
-import { foreignSessionLock, parseSessionLock, readProcessList } from "./session-lock.ts";
+import { foreignSessionLock, parseSessionLock, readProcessList, sessionPidOf } from "./session-lock.ts";
 import { isRunning } from "./worktrees-stale.ts";
 import { branchMerged, currentRoot, gitDirty, gitError, listWorktrees, refExists, type Worktree } from "./worktrees.ts";
 
@@ -78,7 +79,7 @@ try {
 if (parseSessionLock(locked)) {
   let refusal: string | undefined;
   try {
-    refusal = foreignSessionLock(locked, process.pid, readProcessList());
+    refusal = foreignSessionLock(locked, process.pid, readProcessList(), sessionPidOf(process.env));
   } catch (e) {
     console.warn(`Session-lock check skipped (${e instanceof Error ? e.message.split("\n")[0] : String(e)}), so a live Claude session holding this worktree would not be noticed.`);
   }
@@ -103,7 +104,7 @@ const clashesOf = (lane: number) => laneClashes(lane, check);
 function holderStatus(lane: number): string[] {
   const holders = laneHolders(lane, check);
   if (holders.length === 0) return [];
-  let worktrees: Worktree[] = [];
+  let worktrees: Worktree[];
   try {
     worktrees = listWorktrees();
   } catch {
@@ -111,15 +112,17 @@ function holderStatus(lane: number): string[] {
   }
   const mainRoot = worktrees[0]?.path ?? ".";
   const hasOriginMain = refExists("origin/main", mainRoot);
-  return holders.map((dir) => {
-    const w = worktrees.find((x) => samePath(x.path, dir));
-    if (!w) return `  ${dir} is not a worktree of this clone (or is gone): \`${pruneCommand(lane, { merged: false })}\` frees the lane.`;
-    if (!w.branch) return `  ${dir} has a detached HEAD.`;
-    if (!hasOriginMain) return `  ${dir} is on ${w.branch}; run \`git fetch origin main\` to see whether it is merged.`;
-    return branchMerged(w.branch, "origin/main", mainRoot)
-      ? `  ${dir} is on ${w.branch}, already merged into origin/main: free the lane with \`${pruneCommand(lane, { merged: true })}\`, then re-run.`
-      : `  ${dir} is on ${w.branch}, not merged into origin/main yet: its session may still need the lane.`;
-  });
+  // Only the holders and the worktrees whose .env names the lane: lanes:prune --merged keeps the lane for the latter.
+  const relevant = worktrees
+    .map((w) => ({ w, project: existsSync(join(w.path, ".env")) ? composeProjectOfEnv(readFileSync(join(w.path, ".env"), "utf8")) : undefined }))
+    .filter(({ w, project }) => project === laneProject(lane) || holders.some((dir) => samePath(w.path, dir)))
+    .map(({ w, project }) => ({
+      path: w.path,
+      branch: w.branch,
+      merged: hasOriginMain && w.branch !== undefined && w.branch !== "main" && !samePath(w.path, mainRoot) && branchMerged(w.branch, "origin/main", mainRoot),
+      project,
+    }));
+  return holderAdvice(lane, holders, { worktrees: relevant, hasOriginMain, cwd: check.cwd });
 }
 
 /**

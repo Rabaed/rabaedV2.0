@@ -209,6 +209,38 @@ export function laneHolders(n: number, { containers, cwd, platform, ownDatabase 
   return [...new Set(holding.map((c) => c.workingDir).filter((dir) => dir !== "" && !samePath(dir, cwd, platform)))];
 }
 
+type AdviceInput = {
+  /** The worktrees of this clone: at least the holders and those whose .env names lane n's project. merged is only read when hasOriginMain. */
+  worktrees: WorktreeLane[];
+  /** origin/main is fetched, so merged can be trusted. */
+  hasOriginMain: boolean;
+  cwd: string;
+  platform?: NodeJS.Platform;
+};
+
+/**
+ * lane:env's line for each worktree holding lane n (laneHolders): whether its branch is merged
+ * into origin/main, and how to free the lane. A merged holder's lane is freed by
+ * `lanes:prune --merged --lane n`, unless a worktree that is not merged names the lane's
+ * project in its .env: mergedProjects keeps the project then, so prune would free nothing.
+ * The line then names that worktree and does not suggest prune.
+ */
+export function holderAdvice(n: number, holders: string[], { worktrees, hasOriginMain, cwd, platform }: AdviceInput): string[] {
+  const claimants = worktrees.filter((w) => !w.merged && w.project === laneProject(n));
+  return holders.map((dir) => {
+    const w = worktrees.find((x) => samePath(x.path, dir, platform));
+    if (!w) return `  ${dir} is not a worktree of this clone (or is gone): \`${pruneCommand(n, { merged: false })}\` frees the lane.`;
+    if (!w.branch) return `  ${dir} has a detached HEAD.`;
+    if (!hasOriginMain) return `  ${dir} is on ${w.branch}; run \`git fetch origin main\` to see whether it is merged.`;
+    if (!w.merged) return `  ${dir} is on ${w.branch}, not merged into origin/main yet: its session may still need the lane.`;
+    if (claimants.length === 0) return `  ${dir} is on ${w.branch}, already merged into origin/main: free the lane with \`${pruneCommand(n, { merged: true })}\`, then re-run.`;
+    const kept = `  ${dir} is on ${w.branch}, already merged into origin/main, but lanes:prune keeps ${laneProject(n)}`;
+    if (claimants.some((c) => samePath(c.path, cwd, platform))) return `${kept}: this worktree's own .env has it. \`pnpm lane:env ${n} --force\` takes the lane over.`;
+    const sharers = claimants.map((c) => `${c.path} (on ${c.branch ?? "a detached HEAD"}, not merged)`).join(", ");
+    return `${kept} while ${sharers} has it in its .env: that worktree still shares the lane. Take a free lane instead.`;
+  });
+}
+
 /** A worktree of this clone, as lane:env --force sees a holder of the lane (RP-500). */
 export type TakeoverWorktree = {
   path: string;

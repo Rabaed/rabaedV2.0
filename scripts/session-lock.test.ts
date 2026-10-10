@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { foreignSessionLock, parseProcessTable, parseSessionLock } from "./session-lock.ts";
+import { foreignSessionLock, parseProcessTable, parseSessionLock, sessionPidOf } from "./session-lock.ts";
 
 const lock = "claude session RP-461-retro-tooling (pid 1700)";
 // Process list injected: pid -> [parent pid, name]. Pid 1700 is a live foreign claude.exe; 50 -> 40 -> 30 is this process's chain.
@@ -45,6 +45,19 @@ describe("foreignSessionLock", () => {
   });
   it("passes when the lock's pid is this process itself", () => {
     expect(foreignSessionLock("claude session mine (pid 50)", 50, processes)).toBeUndefined();
+  });
+  it("passes from Git Bash, whose detached chain (parent pid 1) misses the session's claude.exe, when CLAUDE_PID names the lock's pid", () => {
+    const bash = new Map(table).set(70, [1, "bash.exe"]).set(71, [70, "node.exe"]);
+    const fromBash = { parentOf: (pid: number) => bash.get(pid)?.[0], nameOf: (pid: number) => bash.get(pid)?.[1], isAlive: (pid: number) => bash.has(pid) };
+    expect(foreignSessionLock("claude session mine (pid 30)", 71, fromBash)).toContain("30");
+    expect(foreignSessionLock("claude session mine (pid 30)", 71, fromBash, sessionPidOf({ CLAUDE_PID: "30" }))).toBeUndefined();
+    expect(foreignSessionLock(lock, 71, fromBash, sessionPidOf({ CLAUDE_PID: "30" }))).toContain("1700");
+  });
+  it("reads CLAUDE_PID, and nothing when it is missing or not a pid", () => {
+    expect(sessionPidOf({ CLAUDE_PID: "31676" })).toBe(31676);
+    expect(sessionPidOf({})).toBeUndefined();
+    expect(sessionPidOf({ CLAUDE_PID: "" })).toBeUndefined();
+    expect(sessionPidOf({ CLAUDE_PID: "abc" })).toBeUndefined();
   });
   it("passes for agent locks and unlocked worktrees", () => {
     expect(foreignSessionLock("claude agent agent-1 (pid 1700)", 50, processes)).toBeUndefined();
