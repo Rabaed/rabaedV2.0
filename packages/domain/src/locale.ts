@@ -36,6 +36,25 @@ export function formatNumber(value: number, locale: Locale, options?: Intl.Numbe
   return new Intl.NumberFormat(intlLocaleOf(locale), options).format(value);
 }
 
+/**
+ * A date as the design kit writes it: day, month and year, "10 October 2026", with the weekday first
+ * when asked, "Saturday, 10 October 2026" (Home's top bar and recent activity). Arabic keeps its own
+ * order, in Latin digits; Saudi time.
+ */
+export function formatDayMonthYear(value: Date, locale: Locale, { weekday = false }: { weekday?: boolean } = {}): string {
+  const format = new Intl.DateTimeFormat(intlLocaleOf(locale), {
+    timeZone,
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    ...(weekday ? { weekday: "long" as const } : {}),
+  });
+  if (locale === "ar") return format.format(value);
+  const part = (type: Intl.DateTimeFormatPartTypes) => format.formatToParts(value).find((p) => p.type === type)?.value ?? "";
+  const date = `${part("day")} ${part("month")} ${part("year")}`;
+  return weekday ? `${part("weekday")}, ${date}` : date;
+}
+
 /** A date (medium style by default) or, with `timeStyle`, a time, in Latin digits and Saudi time. */
 export function formatDate(
   value: Date,

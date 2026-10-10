@@ -8,8 +8,8 @@ const b = (en: string, ar: string) => ({ en, ar });
 const tiles = [
   { icon: "buildings", tone: "brand", value: 3, label: b("Active Projects", "المشاريع النشطة") },
   { icon: "user-circle", tone: "info", value: 12, label: b("Need My Action", "بحاجة لإجرائي") },
-  { icon: "clock", tone: "danger", value: 940, label: b("Your Company's items at their step for 4+ weeks", "عناصر شركتك في خطوتها منذ 4 أسابيع أو أكثر") },
-  { icon: "hourglass", tone: "warning", value: 7, label: b("Submitted by my Company, waiting with others", "قدّمتها شركتي، بانتظار الآخرين") },
+  { icon: "clock", tone: "danger", value: 940, label: b("My Company: 4+ weeks at step", "عناصر شركتي في خطوتها 4 أسابيع أو أكثر") },
+  { icon: "hourglass", tone: "warning", value: 7, label: b("My Company: waiting with others", "عناصر قدّمتها شركتي، لدى جهات أخرى") },
 ] as const;
 
 const meta = {

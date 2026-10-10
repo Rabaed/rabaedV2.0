@@ -1,6 +1,6 @@
 "use client";
 
-import { busiestProjectId, formatDate, formatNumber, relativeAge, workItemListHref, type Home, type Locale } from "@rabaed/domain";
+import { formatDayMonthYear, formatNumber, relativeAge, workItemListHref, type Home, type Locale } from "@rabaed/domain";
 import { NeedsMyActionCard, ProjectCard, RecentActivityCard, StatTile } from "@rabaed/ui";
 import { useTranslations } from "next-intl";
 import { Link } from "@/i18n/navigation";
@@ -42,15 +42,6 @@ export function HomeView({
     label: i === 0 ? t("openBoard") : t("openBoardOf", { code: p.code }),
     href: `${workItemListHref(p.id, { module: moduleOf(p.id), needMyAction: true })}&view=kanban`,
   }));
-  const busiest = waiting[0];
-  // "View all" where more wait than the card shows: the busiest Project's List with its Need My Action.
-  const needsViewAll = busiest && home.counts.needMyAction > home.needsMyAction.length ? workItemListHref(busiest.id, { module: moduleOf(busiest.id), needMyAction: true }) : undefined;
-  // Recent activity's "View all": the Activity Feed of the Project with the most entries shown.
-  const feedProject = busiestProjectId(
-    [...new Set(home.activity.map((e) => e.project.id))].map((id) => [id, home.activity.filter((e) => e.project.id === id).length] as const),
-  );
-  const activityViewAll = home.moreActivity && feedProject ? `/projects/${feedProject}/activity` : undefined;
-
   const at = new Date(now);
   const when = (time: string) => {
     const age = relativeAge(time, at);
@@ -62,7 +53,7 @@ export function HomeView({
       case "hours":
         return t("hoursAgo", { count: age.count, n: formatNumber(age.count, locale) });
       case "date":
-        return formatDate(new Date(time), locale);
+        return formatDayMonthYear(new Date(time), locale);
     }
   };
   const itemHref = (id: string) => `/work-items/${id}`;
@@ -99,12 +90,10 @@ export function HomeView({
             empty: t("nothingWaiting"),
             noNumber: tFeed("noNumber"),
             revision: (n) => tBoard("revision", { n: formatNumber(n, locale) }),
-            viewAll: t("viewAll"),
             otherBoards: t("otherBoards"),
           }}
           itemHref={itemHref}
           boards={boards}
-          {...(needsViewAll ? { viewAllHref: needsViewAll } : {})}
           linkAs={Link}
         />
         <RecentActivityCard
@@ -113,19 +102,11 @@ export function HomeView({
           labels={{
             title: t("recentActivity"),
             empty: t("noActivity"),
-            viewAll: t("viewAll"),
+            verb: (verb) => t("verb", { verb }),
             code: (code) => `(${tBoard("code", { code })})`,
-            claimed: tFeed("claimed"),
-            released: tFeed("released"),
-            assigned: tFeed("assigned"),
-            internalNote: tFeed("internalNote"),
-            recommended: tFeed("recommended"),
-            cancelled: tFeed("cancelled"),
-            updated: tFeed("updated"),
           }}
           when={when}
           itemHref={itemHref}
-          {...(activityViewAll ? { viewAllHref: activityViewAll } : {})}
           linkAs={Link}
         />
       </div>
