@@ -11,6 +11,7 @@ import {
   definitionToRows,
   formSchema,
   workflowPublishProblems,
+  type Outcome,
   type OutcomeKind,
   type StageCategory,
   type WorkflowVersionRows,
@@ -147,8 +148,8 @@ describe("every published Workflow Version", () => {
       select module_key as "moduleKey", project_id as "projectId", key, category from stage order by sort
     `.execute(migrator);
     const lists = await sql<{ id: string }>`select id from option_list`.execute(migrator);
-    const outcomes = await sql<{ typeId: string; projectId: string | null; code: string; closing: boolean }>`
-      select work_item_type_id as "typeId", project_id as "projectId", code, closing from outcome order by sort
+    const outcomes = await sql<{ typeId: string; projectId: string | null; code: string; closing: boolean; actions: Outcome["actions"] }>`
+      select work_item_type_id as "typeId", project_id as "projectId", code, closing, actions from outcome order by sort
     `.execute(migrator);
     const problems = versions.flatMap((v) =>
       workflowPublishProblems(definitionFromRows(rows.get(v.id)!), {

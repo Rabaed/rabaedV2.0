@@ -2,6 +2,7 @@ import {
   definitionFromRows,
   definitionToRows,
   formSchema,
+  outcomeActions,
   parseWorkflowDefinition,
   workflowPublishProblems,
   type DefinitionIssue,
@@ -52,8 +53,8 @@ export async function readWorkflowCheckContext(db: Db, definitionId: string): Pr
   `.execute(db);
   const own = stages.rows.some((s) => s.own);
   // The Type's outcome set (RP-429): the Project's copy for a Project's own Workflow, else the Rabaed Default set.
-  const outcomes = await sql<{ code: string; closing: boolean }>`
-    select code, closing from outcome
+  const outcomes = await sql<{ code: string; closing: boolean; actions: unknown }>`
+    select code, closing, actions from outcome
     where work_item_type_id = ${type.type_id}::uuid
       and case when ${type.project_id}::uuid is null then project_id is null else project_id = ${type.project_id}::uuid end
     order by sort, code
@@ -63,7 +64,8 @@ export async function readWorkflowCheckContext(db: Db, definitionId: string): Pr
     workItemTypeId: type.type_id,
     outcomeKind: type.outcome_kind,
     context: {
-      outcomes: outcomes.rows,
+      // Stored follow-up actions that no longer fit fail loudly, never read as none.
+      outcomes: outcomes.rows.map((o) => ({ ...o, actions: outcomeActions.parse(o.actions) })),
       stages: stages.rows.filter((s) => s.own === own).map(({ key, category }) => ({ key, category })),
       form: type.form === null ? null : formSchema.parse(type.form),
       optionListIds: new Set(lists.rows.map((l) => l.id)),

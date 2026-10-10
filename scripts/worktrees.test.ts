@@ -135,6 +135,34 @@ describe("chooseWorktrees", () => {
     expect(remove).toEqual([]);
   });
 
+  it("with only, considers just the named worktrees: an empty named one goes, an empty unnamed one is left alone", () => {
+    const { remove, skipped } = chooseWorktrees({
+      worktrees: [wt("agent-a", { noCommitsYet: true }), wt("agent-b", { noCommitsYet: true }), wt("agent-c", { ahead: 2 })],
+      currentPath: here,
+      only: ["agent-a"],
+      platform: "linux",
+    });
+    expect(remove.map((w) => w.path)).toEqual([`${main}/.claude/worktrees/agent-a`]);
+    expect(skipped).toEqual([]);
+  });
+
+  it("with only, matches names case-insensitively on win32 and exactly elsewhere", () => {
+    const input = { worktrees: [wt("agent-a", { noCommitsYet: true })], currentPath: here, only: ["Agent-A"] };
+    expect(chooseWorktrees({ ...input, platform: "win32" }).remove).toHaveLength(1);
+    expect(chooseWorktrees({ ...input, platform: "linux" }).remove).toEqual([]);
+  });
+
+  it("with only, still skips and names a named worktree holding changes or unmerged commits", () => {
+    const { remove, skipped } = chooseWorktrees({
+      worktrees: [wt("agent-a", { noCommitsYet: true, dirty: true }), wt("agent-b", { noCommitsYet: true, ahead: 1 })],
+      currentPath: here,
+      only: ["agent-a", "agent-b"],
+      platform: "linux",
+    });
+    expect(remove).toEqual([]);
+    expect(skipped.map((s) => s.reason)).toEqual(["uncommitted changes", "1 unmerged commit on worktree-agent-b"]);
+  });
+
   it("returns the worktrees without the facts used to choose", () => {
     expect(choose([wt("agent-a")]).remove[0]).toEqual({ path: `${main}/.claude/worktrees/agent-a`, head: "abc123", branch: "worktree-agent-a", locked: undefined });
   });
