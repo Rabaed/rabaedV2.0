@@ -142,6 +142,13 @@ const queryFields = {
    * Steps in my Step Pool, plus my own Drafts (which are never counted).
    */
   needMyAction: flag,
+  /** Only the items my own Participant raised (Home's "waiting with others", RP-407). */
+  raisedByMe: flag,
+  /**
+   * Who holds an open item now (Home, RP-407): `own` my own Participant, `others` any other
+   * Participant, even one since withdrawn. A closed item, which nobody holds, matches neither.
+   */
+  heldBy: z.enum(["own", "others"]).optional(),
   /** Every visible Revision, not only the latest of each chain. */
   allRevisions: flag,
   sort: z.enum(workItemSorts).default("stepAge"),
@@ -152,7 +159,7 @@ const queryFields = {
 /** The filters that take a list of values; every other key takes one. */
 const listKeys = ["type", "stage", "with", "owner", "role", "trade", "location", "outcome", "bucket", "codeC"] as const satisfies readonly (keyof typeof queryFields)[];
 /** The keys that narrow the rows, as opposed to how they are shown (sort, Revisions, page). */
-const filterKeys = [...listKeys, "stepAgeMin", "createdWithin", "q", "needMyAction", "submittedFrom", "submittedTo"] as const;
+const filterKeys = [...listKeys, "stepAgeMin", "createdWithin", "q", "needMyAction", "raisedByMe", "heldBy", "submittedFrom", "submittedTo"] as const;
 
 /** The query as the API takes it; a cursor must be one made for its sort. */
 export const workItemQuery = z.object(queryFields).superRefine((q, ctx) => {
@@ -209,6 +216,8 @@ export function workItemSearchParams(query: Partial<WorkItemQuery>): URLSearchPa
   if (query.submittedFrom) params.set("submittedFrom", query.submittedFrom);
   if (query.submittedTo) params.set("submittedTo", query.submittedTo);
   if (query.needMyAction) params.set("needMyAction", "true");
+  if (query.raisedByMe) params.set("raisedByMe", "true");
+  if (query.heldBy) params.set("heldBy", query.heldBy);
   if (query.allRevisions) params.set("allRevisions", "true");
   if (query.sort && query.sort !== "stepAge") params.set("sort", query.sort);
   if (query.cursor) params.set("cursor", query.cursor);
