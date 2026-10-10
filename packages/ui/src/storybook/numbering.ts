@@ -37,6 +37,11 @@ function plural(message: string, locale: Locale, values: Record<string, string |
   return branches.get(`=${count}`) ?? branches.get(new Intl.PluralRules(intlLocaleOf(locale)).select(count)) ?? branches.get("other") ?? message;
 }
 
+/** Any of the app's ICU messages as next-intl words it: plural branch chosen, `{name}` placeholders filled in. */
+export function icuMessage(message: string, locale: Locale, values: Record<string, string | number> = {}): string {
+  return plural(message, locale, values).replace(/\{(\w+)\}/g, (all, name: string) => (name in values ? String(values[name]) : all));
+}
+
 /** The app's `numbering.page` messages as next-intl gives them: a key, plural branches chosen, `{name}` placeholders filled in. */
 export function numberingText(locale: Locale): NumberingText {
   const page = messages[locale].numbering.page as Record<string, unknown>;

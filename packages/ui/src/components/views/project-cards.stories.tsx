@@ -8,11 +8,11 @@ import { projectCardsLabels } from "../../storybook/views.ts";
 import { ProjectCard, ProjectCards } from "./project-cards.tsx";
 
 // The Projects page, the home page (RP-346), as a Contractor engineer of
-// Tamkeen sees it: each Project card with its Need My Action count. Story data only.
+// Tamkeen sees it: each Project card with its Submittals and Need My Action
+// counts. Story data only.
 const b = (en: string, ar: string) => ({ en, ar });
 const copy = {
   list: b("Projects", "المشاريع"),
-  needMyAction: b("Need My Action", "بحاجة لإجرائي"),
   closed: b("Closed", "مغلق"),
   projectAdmin: b("Project Admin", "مسؤول المشروع"),
 };
@@ -38,10 +38,13 @@ const projects: ProjectSummary[] = [
   project(4, { code: "DMM", name: b("Dammam Logistics Hub", "مركز الدمام اللوجستي"), status: "closed", needMyAction: 0 }),
 ];
 
+// Each Project's Submittals the Member sees (the Projects answer's `submittals`).
+const counts: Record<string, number> = Object.fromEntries(projects.map((p, i) => [p.id, [48, 31, 0, 204][i]!]));
+
 const meta = {
   title: "Views/ProjectCards",
   component: ProjectCards,
-  args: { projects, locale: "en", labels: projectCardsLabels.en, href: (id: string) => `#/projects/${id}` },
+  args: { projects, locale: "en", labels: projectCardsLabels.en, href: (id: string) => `#/projects/${id}`, submittals: counts },
   render: (args, context) => <ProjectCards {...args} locale={storyLocale(context)} labels={projectCardsLabels[storyLocale(context)]} />,
 } satisfies Meta<typeof ProjectCards>;
 
@@ -49,55 +52,78 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 type PlayContext = Parameters<NonNullable<Story["play"]>>[0];
 
-const cardOf = (context: PlayContext, name: { en: string; ar: string }) =>
+/** The app's own words for the cards, in the story's language (Arabic plurals included). */
+const wordsOf = (context: PlayContext) => projectCardsLabels[storyLocale(context)];
+
+const cardOf =(context: PlayContext, name: { en: string; ar: string }) =>
   context.canvas.getByRole("link", { name: new RegExp(storyText(context, name).replace(/[.,]/g, "\\$&")) });
 
 /**
- * Wide: one card per Project, each a link with its Need My Action count. A
- * Project with nothing waiting on me says 0; a closed Project says Closed.
- * Project codes read left to right, in Arabic too.
+ * Wide: one card per Project, each a link with its Submittals and Need My
+ * Action counts. A Project with nothing waiting on me says 0; a closed Project
+ * says Closed. Project codes read left to right, in Arabic too. No date, no
+ * progress, no health chip.
  */
 export const Wide: Story = {
   play: async (context) => {
     const list = context.canvas.getByRole("list", { name: storyText(context, copy.list) });
     await expect(within(list).getAllByRole("listitem")).toHaveLength(projects.length);
-    const needMyAction = storyText(context, copy.needMyAction);
     const tower = cardOf(context, projects[0]!.name);
     await expect(tower).toHaveAttribute("href", `#/projects/${projects[0]!.id}`);
-    await expect(tower).toHaveAccessibleDescription(expect.stringContaining(`${needMyAction}: 12`));
-    await expect(cardOf(context, projects[2]!.name)).toHaveAccessibleDescription(expect.stringContaining(`${needMyAction}: 0`));
+    await expect(within(tower).getByText(wordsOf(context).needMyAction(12, "12"))).toBeVisible();
+    await expect(within(tower).getByText(wordsOf(context).submittals(48, "48"))).toBeVisible();
+    await expect(within(cardOf(context, projects[2]!.name)).getByText(wordsOf(context).needMyAction(0, "0"))).toBeVisible();
     const closed = cardOf(context, projects[3]!.name);
     await expect(closed).toHaveAccessibleDescription(expect.stringContaining(storyText(context, copy.closed)));
     await expect(within(tower).getByText(storyText(context, b("Tamkeen Contracting", "تمكين للمقاولات")))).toBeInTheDocument();
+    // No date, no progress, no health chip (Rabaed has no time axis).
+    await expect(within(tower).queryByText(/%|on track|at risk|overdue/i)).toBeNull();
     const code = within(tower).getByText("TWR");
     await expect(getComputedStyle(code).direction).toBe("ltr");
     await expectLaidOutLeftToRight(within(cardOf(context, projects[1]!.name)).getByText("KAFD2"));
   },
 };
 
-/** On Home (RP-407): the same card, with how many Submittals the Member sees there in its footer. */
+/** On Home (RP-407): the same card, with how many Submittals the Member sees there. */
 export const OnHome: Story = {
   render: (args, context) => {
     const locale = storyLocale(context);
-    const counts = [48, 1, 0];
     return (
       <ul className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-[18px]">
         {projects.slice(0, 3).map((p, i) => (
           <li key={p.id} className="flex">
-            <ProjectCard
-              project={p}
-              locale={locale}
-              labels={projectCardsLabels[locale]}
-              href={args.href(p.id)}
-              submittals={storyText(context, b(`${counts[i]} submittals`, `${counts[i]} تقديمات`))}
-            />
+            <ProjectCard project={p} locale={locale} labels={projectCardsLabels[locale]} href={args.href(p.id)} submittals={[48, 1, 0][i]} />
           </li>
         ))}
       </ul>
     );
   },
   play: async (context) => {
-    await expect(within(cardOf(context, projects[0]!.name)).getByText(storyText(context, b("48 submittals", "48 تقديمات")))).toBeVisible();
+    await expect(within(cardOf(context, projects[0]!.name)).getByText(wordsOf(context).submittals(48, "48"))).toBeVisible();
+  },
+};
+
+const longRole = b("Owner Representative of the Eastern Region Programme", "ممثل المالك لبرنامج المنطقة الشرقية");
+
+/**
+ * A closed Project is the Active card with a grey chip. Its Company's role sits
+ * on a line of its own, never cut short, however long.
+ */
+export const ClosedWithALongRole: Story = {
+  args: {
+    projects: [
+      project(5, { code: "CLOSED1", status: "closed", projectRole: { baseRole: "owner_representative", name: longRole }, isProjectAdmin: true }),
+    ],
+    submittals: { [project(5, {}).id]: 7 },
+  },
+  play: async (context) => {
+    const card = context.canvas.getByRole("link");
+    const role = within(card).getByText(new RegExp(storyText(context, longRole)));
+    await expect(role.scrollWidth).toBeLessThanOrEqual(role.clientWidth);
+    await expect(getComputedStyle(role).textOverflow).not.toBe("ellipsis");
+    await expect(within(card).getByText(storyText(context, copy.closed))).toBeVisible();
+    await expect(within(card).getByText(wordsOf(context).submittals(7, "7"))).toBeVisible();
+    await expectLaidOutLeftToRight(within(card).getByText("CLOSED1"));
   },
 };
 

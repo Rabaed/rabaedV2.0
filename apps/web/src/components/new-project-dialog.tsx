@@ -15,7 +15,7 @@ export function NewProjectDialog({ className }: { className?: string } = {}) {
           {t("newProject")}
         </Button>
       </DialogTrigger>
-      <DialogContent title={t("createTitle")} closeLabel={t("close")}>
+      <DialogContent title={t("newProject")} closeLabel={t("close")}>
         <CreateProjectForm />
       </DialogContent>
     </Dialog>

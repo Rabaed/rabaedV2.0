@@ -235,11 +235,20 @@ describe("a closed Project (RP-407-3)", () => {
     await sql`update project set status = 'closed', closed_at = now() where id = ${closing.projectId}::uuid`.execute(migrator);
     const after = await home(closing.c1Pm);
     expect(after.counts).toEqual({ activeProjects: 0, needMyAction: 0, longAtStep: 0, waitingWithOthers: 0 });
-    expect(after.submittals).toEqual({});
+    // Its card still shows its Submittals count: the List is still the Member's to read (RP-408-1).
+    expect(after.submittals).toEqual({ [closing.projectId]: 1 });
     expect(after.needsMyAction).toEqual([]);
     expect(after.activity).toEqual([]);
     // Still on the Projects list, as closed.
     expect(after.projects.map((p) => [p.code, p.status])).toEqual([["HCL", "closed"]]);
+    // The Projects page too counts its Submittals List as each Member reads it; K1 never counts C1's internal item (RP-408-1).
+    expect((await ok(closing.c1Pm.get("/v1/projects"), 200)).json().submittals).toEqual({ [closing.projectId]: 1 });
+    const listOf = async (by: Caller) =>
+      ((await ok(by.get(`/v1/projects/${closing.projectId}/work-items`), 200)).json() as WorkItemList).stages.reduce((n, s) => n + s.count, 0);
+    const k1Page = (await ok(closing.k1Manager.get("/v1/projects"), 200)).json().submittals;
+    expect(k1Page).toEqual({ [closing.projectId]: 0 });
+    expect(k1Page[closing.projectId]).toBe(await listOf(closing.k1Manager));
+    expect((await home(closing.k1Manager)).submittals).toEqual(k1Page);
   });
 });
 
@@ -395,6 +404,27 @@ describe("Waiting with others: my own Company's items another Participant holds 
     expect((await home(at.c1Engineer)).submittals[at.projectId]).toBeGreaterThanOrEqual(k1Count + 2);
     expect((await ok(at.k1Manager.get(`/v1/work-items/${internal}`), 404))).toBeTruthy();
     expect((await home(c2OnAt)).submittals[at.projectId]).toBe(0);
+  });
+
+  it("gives the Projects page the same counts as Home's cards, never another Company's internal items (RP-408-1)", async () => {
+    const listed = async (by: Caller) =>
+      ((await ok(by.get(`/v1/projects/${at.projectId}/work-items`), 200)).json() as WorkItemList).stages.reduce((n, s) => n + s.count, 0);
+    const page = async (by: Caller) => (await ok(by.get("/v1/projects"), 200)).json() as { submittals: Record<string, number>; projects: ProjectSummary[] };
+    for (const who of [at.c1Engineer, at.c1Pm, at.k1Manager, c2OnAt, orOnAt]) {
+      const answer = await page(who);
+      expect(answer.submittals[at.projectId]).toBe(await listed(who));
+      expect(answer.submittals[at.projectId]).toBe((await home(who)).submittals[at.projectId]);
+      expect(Object.keys(answer.submittals).sort()).toEqual(answer.projects.map((p) => p.id).sort());
+    }
+    // K1 never counts C1's Draft or internal review; C2 none of C1's.
+    const k1Count = (await page(at.k1Manager)).submittals[at.projectId]!;
+    expect((await page(at.c1Engineer)).submittals[at.projectId]).toBeGreaterThanOrEqual(k1Count + 2);
+    expect((await page(c2OnAt)).submittals[at.projectId]).toBe(0);
+    // A Member who sees Mechanical only counts only what their List shows, fewer than the Engineer who sees all.
+    const mechanicalOnly = await projectMember(api, c1, at.c1ParticipantId, ["engineer"], { trade: only(at.mechanical) });
+    const mine = (await page(mechanicalOnly)).submittals[at.projectId]!;
+    expect(mine).toBe(await listed(mechanicalOnly));
+    expect(mine).toBeLessThan((await page(at.c1Engineer)).submittals[at.projectId]!);
   });
 
   it("still counts an item held by a Participant that has since withdrawn: it is still waiting with others", async () => {

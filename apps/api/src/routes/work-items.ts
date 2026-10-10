@@ -27,6 +27,7 @@ import {
   workItemLinks,
   workItemList,
   workItemQuery,
+  workItemWorkflowMap,
   type WorkItemQuery,
 } from "@rabaed/domain";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
@@ -54,6 +55,7 @@ import {
   searchLinkTargets,
   takeTransition,
 } from "../work-items/work-items.ts";
+import { readWorkItemWorkflowMap } from "../work-items/workflow-map.ts";
 
 const projectParams = z.object({ projectId: z.string() });
 const workItemParams = z.object({ workItemId: z.string() });
@@ -221,6 +223,17 @@ export const workItemRoutes =
       async (request) => {
         const memberId = ctx.requireMember(request);
         return visibleOrNotFound(getWorkItemHistory(ctx.db, memberId, idOrNotFound(request.params.workItemId)));
+      },
+    );
+
+    // The item's Workflow map (RP-438): its pinned Version whole (V20), and where the
+    // item is as the viewer may know it (V14). The response schema drops anything else.
+    app.get(
+      "/v1/work-items/:workItemId/workflow",
+      { schema: { params: workItemParams, response: { 200: workItemWorkflowMap } } },
+      async (request) => {
+        const memberId = ctx.requireMember(request);
+        return visibleOrNotFound(readWorkItemWorkflowMap(ctx.db, memberId, idOrNotFound(request.params.workItemId)));
       },
     );
 

@@ -67,5 +67,9 @@ export const projectSummary = z.object({
 });
 export type ProjectSummary = z.infer<typeof projectSummary>;
 
-export const myProjects = z.object({ projects: z.array(projectSummary) });
+export const myProjects = z.object({
+  projects: z.array(projectSummary),
+  /** Each Project's Submittals the Member sees: the count of their Submittals List there (open and closed), by Project id. */
+  submittals: z.record(z.uuid(), z.number().int().nonnegative()),
+});
 export type MyProjects = z.infer<typeof myProjects>;
