@@ -32,7 +32,7 @@ export type MembersCardLabels = {
   /** Names the table, e.g. "Members". */
   table: string;
   name: string;
-  /** The marks column, e.g. "Authority". */
+  /** The marks column, e.g. "Role". */
   marks: string;
   projects: string;
   status: string;
@@ -61,6 +61,9 @@ const statusClasses: Record<MemberStatus, string> = {
   deactivated: "bg-neutral-tint text-neutral-fg",
 };
 
+// The menu column stays at the row's end while the table scrolls sideways (on a phone), as the List's last column.
+const pinned = "sticky end-0 max-sm:border-s max-sm:border-border-subtle";
+
 const head = "h-auto px-5 py-3";
 // The kit's 70px row: 36px avatar and 15px above and below, plus the line.
 const cell = "h-auto px-5 py-[15px]";
@@ -79,7 +82,7 @@ export function MembersCard({ rows, labels, search, hasMenu = false, empty }: Me
               <TableHead className={head}>{labels.projects}</TableHead>
               <TableHead className={head}>{labels.status}</TableHead>
               {hasMenu && (
-                <TableHead className={head}>
+                <TableHead className={cn(head, pinned, "bg-surface-subtle")}>
                   <span className="sr-only">{labels.actions}</span>
                 </TableHead>
               )}
@@ -87,7 +90,7 @@ export function MembersCard({ rows, labels, search, hasMenu = false, empty }: Me
           </TableHeader>
           <TableBody>
             {rows.map((row) => (
-              <TableRow key={row.id}>
+              <TableRow key={row.id} className="group/row">
                 <TableCell className={cell}>
                   <div className="flex items-center gap-2.5">
                     <Avatar name={row.name} solidFrom={row.colourKey} decorative className="size-9 text-body" />
@@ -132,7 +135,7 @@ export function MembersCard({ rows, labels, search, hasMenu = false, empty }: Me
                   </span>
                 </TableCell>
                 {hasMenu && (
-                  <TableCell className={cn(cell, "w-px text-end")}>
+                  <TableCell className={cn(cell, pinned, "w-px bg-surface text-end group-hover/row:bg-hover")}>
                     {row.menu}
                   </TableCell>
                 )}

@@ -14,7 +14,7 @@ const b = (en: string, ar: string) => ({ en, ar });
 const copy = {
   table: b("Members", "الأعضاء"),
   name: b("Name", "الاسم"),
-  marks: b("Authority", "الصلاحية"),
+  marks: b("Role", "الدور"),
   projects: b("Projects", "المشاريع"),
   status: b("Status", "الحالة"),
   actions: b("Actions", "الإجراءات"),

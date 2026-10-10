@@ -44,24 +44,11 @@ function asAuthorizedPerson<T>(
 export async function listMembers(db: Db, memberId: string): Promise<ListedMember[]> {
   return withMember(db, memberId, async (trx) => {
     const members = await selectMembers(trx).orderBy("m.created_at").orderBy("m.id").execute();
-    // The Project Members rows RLS lets this Member read: all of the Company's for its Authorized
-    // Person, otherwise only those of Projects they are on. So a plain Member's count is right for
-    // themself only, and a colleague's stays null rather than a number that undercounts.
-    const counts = await trx
-      .selectFrom("project_member as pm")
-      .innerJoin("participant as p", "p.id", "pm.participant_id")
-      .select(["pm.member_id as memberId", sql<string>`count(*)`.as("projects")])
-      .where("pm.status", "=", "active")
-      .where("p.status", "=", "active")
-      .where("pm.member_id", "in", members.map((m) => m.id))
-      .groupBy("pm.member_id")
-      .execute();
-    const projects = new Map(counts.map((c) => [c.memberId, Number(c.projects)]));
-    const readsAll = members.some((m) => m.id === memberId && m.isAuthorizedPerson);
-    return members.map((m) => ({
-      ...m,
-      projectCount: readsAll || m.id === memberId ? (projects.get(m.id) ?? 0) : null,
-    }));
+    // How many active Projects each is on, from one function that reads nothing but the count and
+    // only for the acting Member's own Company (V15): every Member may know it of a colleague.
+    const { rows } = await sql<{ member_id: string; project_count: number }>`select * from app.member_project_counts()`.execute(trx);
+    const projects = new Map(rows.map((r) => [r.member_id, r.project_count]));
+    return members.map((m) => ({ ...m, projectCount: projects.get(m.id) ?? 0 }));
   });
 }
 

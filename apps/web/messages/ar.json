@@ -231,7 +231,7 @@
     "subtitle": "جميع أعضاء {company} على ربائد. لا يرى هذه القائمة إلا شركتك.",
     "name": "الاسم",
     "status": "الحالة",
-    "marks": "الصلاحية",
+    "marks": "الدور",
     "projects": "المشاريع",
     "none": "—",
     "headerSubtitle": "{company} · {count, plural, one {عضو واحد} two {عضوان} few {{n} أعضاء} many {{n} عضوًا} other {{n} عضو}}",

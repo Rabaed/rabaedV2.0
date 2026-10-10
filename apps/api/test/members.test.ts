@@ -212,7 +212,7 @@ describe("the Members list", () => {
 
 // RP-413-1: the Projects column counts the Projects of the Member's own Company only.
 describe("the Projects count", () => {
-  type Row = { id: string; projectCount: number | null };
+  type Row = { id: string; projectCount: number };
   const rows = async (by: Caller) => (await by.get("/v1/members")).json().members as Row[];
   const countOf = (list: Row[], id: string) => list.find((m) => m.id === id)?.projectCount;
 
@@ -240,11 +240,12 @@ describe("the Projects count", () => {
     expect(countOf(list, idle.member.id)).toBe(0);
   });
 
-  it("gives a plain Member their own count and none for a colleague (they cannot see colleagues' Projects)", async () => {
-    const { busy, light } = await twoProjects();
+  it("gives a plain Member the counts of their colleagues too, and only their own Company's", async () => {
+    const { busy, light, idle } = await twoProjects();
     const list = await rows(busy.caller);
     expect(countOf(list, busy.member.id)).toBe(2);
-    expect(countOf(list, light.member.id)).toBeNull();
+    expect(countOf(list, light.member.id)).toBe(1);
+    expect(countOf(list, idle.member.id)).toBe(0);
   });
 
   it("never counts another Company's people or Projects, and another Company never reads it", async () => {

@@ -33,7 +33,7 @@ export function MembersTable({ members, canManage }: { members: ListedMember[]; 
     email: m.email,
     colourKey: m.id,
     marks: [...(m.isAuthorizedPerson ? [t("authorizedPerson")] : []), ...(m.canCreateProjects ? [t("projectCreator")] : [])],
-    projects: m.projectCount === null ? null : formatNumber(m.projectCount, locale),
+    projects: formatNumber(m.projectCount, locale),
     status: m.status,
     statusLabel: t(`statuses.${m.status}`),
     menu: canManage ? <MemberActions member={m} /> : undefined,
