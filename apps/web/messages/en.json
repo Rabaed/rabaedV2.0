@@ -119,6 +119,21 @@
       "excel": "Excel",
       "exportSelected": "Export selected",
       "exported": "Exported {what} ({format})",
+      "rowMenu": {
+        "open": "Open",
+        "edit": "Edit",
+        "duplicate": "Duplicate",
+        "resubmit": "Resubmit",
+        "download": "Download",
+        "delete": "Delete",
+        "more": "More for {subject}",
+        "loading": "Loading…",
+        "deleteTitle": "Delete this Draft?",
+        "deleteBody": "“{subject}” will be gone for everyone. This can't be undone.",
+        "cancel": "Cancel",
+        "discarded": "Draft discarded",
+        "failed": "That didn't work. Refresh the page and try again."
+      },
       "columnSettings": {
         "settings": "Table settings",
         "title": "Columns",

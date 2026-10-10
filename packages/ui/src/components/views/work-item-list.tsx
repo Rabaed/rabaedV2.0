@@ -26,7 +26,8 @@ import { ListToast } from "../list/list-toast.tsx";
 import { Button } from "../button/button.tsx";
 import { ColumnSettings, type ColumnSettingsLabels } from "./column-settings.tsx";
 import { groupRows, listGroupings, type ListGrouping } from "./list-groups.ts";
-import { ExportMenu, GroupMenu, type ExportFormat } from "./list-menus.tsx";
+import { ExportMenu, GroupMenu, RowMenu, type ExportFormat, type RowAction, type RowMenuLabels, type RowPermissions } from "./list-menus.tsx";
+import { Dialog, DialogClose, DialogContent, DialogFooter } from "../overlay/dialog.tsx";
 import { exportFile, saveFile } from "./work-item-export.ts";
 import { Badge } from "../data/badge.tsx";
 import { cn } from "../../lib/cn.ts";
@@ -108,6 +109,8 @@ export type WorkItemListLabels = {
   exportSelected: string;
   /** "Exported 42 submittals (CSV)": `n` is `count` written for the locale. */
   exported: (n: string, count: number, format: string) => string;
+  /** A row's ⋯ menu, and Delete's question. */
+  rowMenu: RowMenuLabels & { deleteTitle: string; deleteBody: (subject: string) => string; cancel: string };
   noNumber: string;
   revisionNoNumber: (revision: string) => string;
   empty: string;
@@ -219,6 +222,14 @@ export type WorkItemListProps = {
   onSaveColumns?: (columns: ListColumnLayout) => Promise<boolean>;
   /** Export: every row the viewer reads with the List's query (null when it couldn't be read). Without it, the List has no Export. */
   loadExportRows?: () => Promise<WorkItemRow[] | null>;
+  /**
+   * The rows' ⋯ menus (RP-409): `load` asks what the viewer may do with a row now; `run` does it,
+   * answering with a toast's words, or nothing. Without it, rows have no menu.
+   */
+  rowActions?: {
+    load: (row: WorkItemRow) => Promise<RowPermissions | null>;
+    run: (row: WorkItemRow, action: RowAction) => Promise<string | null | void>;
+  };
 };
 
 /**
@@ -247,7 +258,13 @@ export function WorkItemList({
   columns: initialColumns,
   onSaveColumns,
   loadExportRows,
+  rowActions,
 }: WorkItemListProps) {
+  const [deleting, setDeleting] = useState<WorkItemRow | null>(null);
+  const runRowAction = async (row: WorkItemRow, action: RowAction) => {
+    const said = await rowActions?.run(row, action);
+    if (said) setToast(said);
+  };
   const t = (key: TextLabel) => labels[key];
   const n = (value: number) => formatNumber(value, locale);
   // A new filter, sort or page size starts again from the first page.
@@ -615,6 +632,17 @@ export function WorkItemList({
                 onColumnsChange={onSaveColumns ? setColumns : undefined}
                 selection={{ selected, onChange: select, selectAll: labels.selectAll, selectRow: labels.selectRow }}
                 groups={groups}
+                rowEnd={
+                  rowActions &&
+                  ((row) => (
+                    <RowMenu
+                      subject={row.title}
+                      load={() => rowActions.load(row)}
+                      onAction={(action) => (action === "delete" ? setDeleting(row) : void runRowAction(row, action))}
+                      labels={labels.rowMenu}
+                    />
+                  ))
+                }
                 groupHeader={(group, colSpan) => (
                   <tr key={`group:${group.key}`}>
                     <td colSpan={colSpan} className="h-11 border-b border-border-subtle bg-surface-subtle px-0">
@@ -661,6 +689,29 @@ export function WorkItemList({
             </div>
           </TableCard>
           <ListToast message={toast} onDone={clearToast} />
+          {rowActions && (
+            // Delete asks first: a Draft deleted is gone for everyone.
+            <Dialog open={deleting !== null} onOpenChange={(open) => !open && setDeleting(null)}>
+              <DialogContent title={labels.rowMenu.deleteTitle} description={deleting ? labels.rowMenu.deleteBody(deleting.title) : undefined} closeLabel={t("close")}>
+                <DialogFooter>
+                  <DialogClose asChild>
+                    <Button variant="secondary">{labels.rowMenu.cancel}</Button>
+                  </DialogClose>
+                  <Button
+                    variant="danger"
+                    onClick={() => {
+                      const row = deleting;
+                      setDeleting(null);
+                      if (row) void runRowAction(row, "delete");
+                    }}
+                  >
+                    <Icon name="trash" />
+                    {labels.rowMenu.delete}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          )}
         </>
       )}
     </div>

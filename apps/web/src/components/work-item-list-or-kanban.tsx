@@ -10,6 +10,7 @@ import {
   type Locale,
   type WorkItemBoard as WorkItemBoardData,
   type WorkItemExport,
+  type WorkItemDetail,
   type WorkItemList as WorkItemListData,
   type WorkItemMove,
   type WorkItemQuery,
@@ -22,6 +23,8 @@ import {
   WorkItemList,
   WorkItemViewSwitch,
   type BoardLayoutMenuLabels,
+  type RowAction,
+  type RowPermissions,
   type WorkItemBoardLabels,
   type WorkItemFilterHints,
   type WorkItemListLabels,
@@ -36,6 +39,33 @@ import { WorkItemBoardMove } from "@/components/work-item-board-move";
 import { getPathname } from "@/i18n/navigation";
 import { chainLabels } from "@/lib/chain-labels";
 import { listSearchParams } from "@/lib/list-url";
+
+/** An item as the viewer reads it, with what they may press now; null when it can't be read. */
+async function readItem(id: string): Promise<WorkItemDetail | null> {
+  const res = await fetch(`/api/v1/work-items/${id}`);
+  return res.ok ? ((await res.json()) as WorkItemDetail) : null;
+}
+
+/** The Workflow's own Cancel of an original Draft with no number, when it offers one with nothing to fill: how such a Draft is discarded. */
+const draftCancel = (item: WorkItemDetail) =>
+  item.stage.category === "draft" && item.documentNumber === null ? item.actions.transitions.find((tr) => tr.kind === "cancel" && tr.actionForm === null) : undefined;
+
+/**
+ * A row's ⋯ menu: Edit an own Draft the viewer may change; Duplicate, Resubmit (create a Revision) and
+ * Delete (discard a Draft Revision, or Cancel an original Draft the Workflow lets them) as the item's
+ * actions say; Download for whoever reads the item.
+ */
+async function rowPermissions(row: WorkItemRow): Promise<RowPermissions | null> {
+  const item = await readItem(row.id);
+  if (!item) return null;
+  return {
+    edit: item.stage.category === "draft" && item.actions.saveAnswers,
+    duplicate: item.actions.duplicate,
+    resubmit: item.actions.createRevision,
+    download: true,
+    delete: item.actions.discardRevision || draftCancel(item) !== undefined,
+  };
+}
 
 /** The List's and the Kanban's words, from the app's messages. */
 function useViewLabels(tableLabel: string, module: string): { list: WorkItemListLabels; board: WorkItemBoardLabels; layout: BoardLayoutMenuLabels } {
@@ -83,6 +113,14 @@ function useViewLabels(tableLabel: string, module: string): { list: WorkItemList
       excel: l("excel"),
       exportSelected: l("exportSelected"),
       exported: (n, count, format) => t("list.exported", { what: t(module === "submittals" ? "list.submittals" : "list.items", { n, count }), format }),
+      rowMenu: {
+        ...(Object.fromEntries((["open", "edit", "duplicate", "resubmit", "download", "delete", "loading", "deleteTitle", "cancel"] as const).map((key) => [key, t(`list.rowMenu.${key}`)])) as Record<
+          "open" | "edit" | "duplicate" | "resubmit" | "download" | "delete" | "loading" | "deleteTitle" | "cancel",
+          string
+        >),
+        more: (subject) => t("list.rowMenu.more", { subject }),
+        deleteBody: (subject) => t("list.rowMenu.deleteBody", { subject }),
+      },
       columnSettings: {
         ...(Object.fromEntries((["settings", "title", "locked", "reset", "saveDefault", "saved"] as const).map((key) => [key, t(`list.columnSettings.${key}`)])) as Record<
           "settings" | "title" | "locked" | "reset" | "saveDefault" | "saved",
@@ -176,6 +214,42 @@ export function WorkItemListOrKanban(
   };
   const hrefFor = (q: WorkItemQuery) => hrefIn(view, q);
   const itemHref = (id: string) => getPathname({ href: `/work-items/${id}`, locale });
+  const post = (path: string, body: unknown) =>
+    fetch(`/api/v1${path}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  const runRowAction = async (row: WorkItemRow, action: RowAction): Promise<string | null> => {
+    const failed = t("list.rowMenu.failed");
+    switch (action) {
+      case "open":
+      case "edit":
+        router.push(itemHref(row.id));
+        return null;
+      case "download":
+        // The item page as the viewer reads it, printed to PDF by their browser.
+        window.open(getPathname({ href: `/work-items/${row.id}/print`, locale }), "_blank", "noopener");
+        return null;
+      case "resubmit":
+      case "duplicate": {
+        const res = await post(`/work-items/${row.id}/${action === "resubmit" ? "revisions" : "duplicate"}`, action === "resubmit" ? { idempotencyKey: crypto.randomUUID() } : {});
+        if (!res.ok) return failed;
+        router.push(itemHref(((await res.json()) as { id: string }).id));
+        return null;
+      }
+      case "delete": {
+        const item = await readItem(row.id);
+        const cancel = item ? draftCancel(item) : undefined;
+        const res = !item
+          ? null
+          : item.actions.discardRevision
+            ? await post(`/work-items/${row.id}/discard`, {})
+            : cancel
+              ? await post(`/work-items/${row.id}/transitions`, { transition: cancel.key, confirmed: true, idempotencyKey: crypto.randomUUID() })
+              : null;
+        if (!res?.ok) return failed;
+        router.refresh();
+        return t("list.rowMenu.discarded");
+      }
+    }
+  };
   return (
     <WorkItemList
       list={props.view === "list" ? props.list : { ...props.board, items: [], nextCursor: null }}
@@ -196,6 +270,9 @@ export function WorkItemListOrKanban(
             }
           : undefined
       }
+      // Each row's ⋯ menu (RP-409): what the viewer may do, from the item as the API gives it (the same
+      // actions as the item page); every command is checked again by the API when it is taken.
+      rowActions={props.view === "list" ? { load: rowPermissions, run: (row, action) => runRowAction(row, action) } : undefined}
       // The Member's own columns of the Module, kept by the API (RP-409).
       onSaveColumns={
         props.view === "list"

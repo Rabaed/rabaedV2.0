@@ -119,6 +119,21 @@
       "excel": "Excel",
       "exportSelected": "تصدير المحدد",
       "exported": "تم تصدير {what} ({format})",
+      "rowMenu": {
+        "open": "فتح",
+        "edit": "تعديل",
+        "duplicate": "تكرار",
+        "resubmit": "إعادة تقديم",
+        "download": "تنزيل",
+        "delete": "حذف",
+        "more": "المزيد لـ {subject}",
+        "loading": "جارٍ التحميل…",
+        "deleteTitle": "حذف هذه المسودة؟",
+        "deleteBody": "ستُحذف «{subject}» للجميع. لا يمكن التراجع عن ذلك.",
+        "cancel": "إلغاء",
+        "discarded": "تم تجاهل المسودة",
+        "failed": "لم ينجح ذلك. حدّث الصفحة وحاول مرة أخرى."
+      },
       "columnSettings": {
         "settings": "إعدادات الجدول",
         "title": "الأعمدة",

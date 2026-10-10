@@ -182,6 +182,15 @@ export { WorkItemList, type WorkItemFilterHints, type WorkItemListLabels, type W
 export { WorkItemTable, type WorkItemTableLabels, type WorkItemTableProps } from "./components/views/work-item-table.tsx";
 export { ColumnSettings, type ColumnSettingsLabels, type ColumnSettingsProps } from "./components/views/column-settings.tsx";
 export {
+  ExportMenu,
+  GroupMenu,
+  RowMenu,
+  type ExportFormat,
+  type RowAction,
+  type RowMenuLabels,
+  type RowPermissions,
+} from "./components/views/list-menus.tsx";
+export {
   KanbanCard,
   tradeChipClass,
   type KanbanCardBadge,
