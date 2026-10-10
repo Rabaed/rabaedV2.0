@@ -150,6 +150,7 @@ export {
   type WorkflowSaveState,
 } from "./components/workflow/workflow-builder.tsx";
 export type { WorkflowBuilderLabels, WorkflowCompareLabels } from "./components/workflow/workflow-builder-labels.ts";
+export { workflowBuilderLabels, type MessageLookup } from "./components/workflow/workflow-builder-labels-from.ts";
 export { WorkflowChangeList, WorkflowCompareDialog, type WorkflowCompareDialogProps } from "./components/workflow/workflow-changes.tsx";
 export { WorkflowStepList, type WorkflowStepListProps } from "./components/workflow/workflow-step-list.tsx";
 export type { WorkflowLabels } from "./components/workflow/workflow-labels.ts";

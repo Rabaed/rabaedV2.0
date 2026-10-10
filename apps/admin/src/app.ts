@@ -8,6 +8,7 @@ import type { AdminConfig } from "./config.ts";
 import { companyRoutes } from "./routes/companies.ts";
 import { healthRoutes } from "./routes/health.ts";
 import { numberingRoutes } from "./routes/numbering.ts";
+import { workflowDefaultRoutes } from "./routes/workflow-defaults.ts";
 import { workflowRoutes } from "./routes/workflows.ts";
 import { optionListRoutes } from "./routes/option-lists.ts";
 import { pageRoutes } from "./routes/pages.ts";
@@ -68,7 +69,7 @@ export interface AdminContext {
 // The pages load only their own script and styles, and are never framed.
 const securityHeaders = {
   "content-security-policy":
-    "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
+    "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self'; font-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
   "x-content-type-options": "nosniff",
   "x-frame-options": "DENY",
   "referrer-policy": "no-referrer",
@@ -142,5 +143,6 @@ export async function buildAdminApp({ db, config, mailer, now = () => new Date()
   await app.register(optionListRoutes(context));
   await app.register(numberingRoutes(context));
   await app.register(workflowRoutes(context));
+  await app.register(workflowDefaultRoutes(context));
   return app;
 }
