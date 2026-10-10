@@ -356,7 +356,7 @@ export function WorkflowBuilder(props: WorkflowBuilderProps) {
                 key={s.key}
                 item={`end:${s.key}`}
                 onAdd={() => addItem(`end:${s.key}`, null)}
-                swatch={<i aria-hidden="true" className="size-3.5 shrink-0 rounded-full" style={{ background: colour.bg, boxShadow: `inset 0 0 0 2px ${colour.dot}` }} />}
+                swatch={<i aria-hidden="true" className="size-[14px] shrink-0 rounded-full" style={{ background: colour.bg, boxShadow: `inset 0 0 0 2px ${colour.dot}` }} />}
               >
                 {labels.end(s.name[locale])}
               </PaletteItem>
@@ -406,7 +406,7 @@ export function WorkflowBuilder(props: WorkflowBuilderProps) {
           </WorkflowCanvas>
         </section>
 
-        <aside aria-label={labels.editor} className="flex flex-col gap-2.5 overflow-auto rounded-xl border border-border bg-surface px-3.5 py-3 lg:col-start-3 lg:row-span-2 lg:row-start-1">
+        <aside aria-label={labels.editor} className="flex flex-col gap-2.5 overflow-auto rounded-xl border border-border bg-surface px-4 py-3 lg:col-start-3 lg:row-span-2 lg:row-start-1">
           <SideEditor
             definition={definition}
             selection={selection}
