@@ -87,6 +87,8 @@ export type WorkItemListLabels = {
   nextPage: string;
   /** The outcome of a cancelled item, as its filter choice and its badge; every other outcome is named by its Type's set (RP-429). */
   cancelled: string;
+  /** The word before a Review Code's letter in its badge: "Code" for "Code A" (RP-522). */
+  codeWord: string;
   /** Before a Dashboard number's filter (its buckets and Code C sub-states), which the toolbar has no control for. */
   dashboardFigure: string;
   /** Each Dashboard bucket that isn't an outcome (chainBucket), as the Dashboard names it. */
@@ -337,7 +339,7 @@ export function WorkItemList({ list, query, locale, labels, hrefFor, itemHref, o
                 <TableCell className="whitespace-nowrap">{item.location?.name[locale]}</TableCell>
                 <TableCell>
                   {item.outcome ? (
-                    <Outcome outcome={item.outcome} typeCode={item.type.code} outcomes={list.filters.outcomes} locale={locale} cancelled={labels.cancelled} />
+                    <Outcome outcome={item.outcome} typeCode={item.type.code} outcomes={list.filters.outcomes} locale={locale} cancelled={labels.cancelled} codeWord={labels.codeWord} />
                   ) : null}
                 </TableCell>
                 <TableCell className="whitespace-nowrap">{date(item.submissionDate)}</TableCell>
@@ -456,8 +458,8 @@ function WithCell({ row, locale, unclaimed }: { row: WorkItemRow; locale: Locale
 /**
  * An item's outcome badge, the same on the List and the Kanban (RP-429): named
  * and coloured from its Type's outcome set, never from fixed codes. A letter
- * code (a Review Code) shows its letter, its name for screen readers and on
- * hover; any other outcome shows its name.
+ * code (a Review Code) shows "Code A" ("الرمز A"), its name for screen readers
+ * and on hover (RP-522); any other outcome shows its name.
  */
 export function Outcome({
   outcome,
@@ -465,12 +467,14 @@ export function Outcome({
   outcomes,
   locale,
   cancelled,
+  codeWord,
 }: {
   outcome: WorkItemOutcome;
   typeCode: string;
   outcomes: ListOutcomes;
   locale: Locale;
   cancelled: string;
+  codeWord: string;
 }) {
   const found = outcomes.find((o) => o.type === typeCode && o.code === outcome);
   if (!found)
@@ -488,8 +492,11 @@ export function Outcome({
     );
   return (
     <Badge tone={outcomeTone(found)} title={label} data-outcome={found.code}>
-      <span aria-hidden="true" translate="no">
-        {found.code}
+      <span aria-hidden="true">
+        {codeWord}{" "}
+        <bdi dir="ltr" translate="no">
+          {found.code}
+        </bdi>
       </span>
       <span className="sr-only">{label}</span>
     </Badge>

@@ -193,9 +193,11 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
             <>
               <dt className="text-muted">{t("fields.issuedCode")}</dt>
               <dd>
-                <bdi dir="ltr" className="font-semibold" data-testid="issued-code">
-                  {item.outcome}
-                </bdi>
+                {/* A Review Code reads "Code A" ("الرمز A"), its letter left to right (RP-522); any other outcome as it is. */}
+                <span className="font-semibold" data-testid="issued-code">
+                  {item.outcome.length <= 3 ? `${t("fields.codeWord")} ` : null}
+                  <bdi dir="ltr">{item.outcome}</bdi>
+                </span>
               </dd>
             </>
           )}

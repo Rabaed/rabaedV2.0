@@ -199,6 +199,10 @@ export const Wide: Story = {
     const number = within(table).getByText("TWR-TMC-EL-MAR-0003 Rev 1");
     await expect(getComputedStyle(number).direction).toBe("ltr");
     await expectLaidOutLeftToRight(number);
+    // The Review Code column reads "Code B" ("الرمز B"), not a bare letter (RP-522); the letter stays left to right.
+    const codeB = table.querySelector<HTMLElement>('[data-outcome="B"]')!;
+    await expect(codeB).toHaveTextContent(storyText(context, b("Code B", "الرمز B")));
+    await expect(getComputedStyle(within(codeB).getByText("B")).direction).toBe("ltr");
   },
 };
 

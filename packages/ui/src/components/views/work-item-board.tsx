@@ -51,6 +51,8 @@ export type WorkItemBoardLabels = {
   dragging: string;
   /** The outcome of a cancelled item, as its badge; every other outcome is named by its Type's set (RP-429). */
   cancelled: string;
+  /** The word before a Review Code's letter in its badge: "Code" for "Code A" (RP-522). */
+  codeWord: string;
 };
 
 export type WorkItemBoardProps = {
@@ -336,7 +338,7 @@ function cardState(card: WorkItemRow, locale: Locale, labels: WorkItemBoardLabel
   return card.outcome
     ? {
         open: false,
-        badge: <Outcome outcome={card.outcome} typeCode={card.type.code} outcomes={outcomes} locale={locale} cancelled={labels.cancelled} />,
+        badge: <Outcome outcome={card.outcome} typeCode={card.type.code} outcomes={outcomes} locale={locale} cancelled={labels.cancelled} codeWord={labels.codeWord} />,
       }
     : undefined;
 }

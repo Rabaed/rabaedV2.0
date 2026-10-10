@@ -36,6 +36,7 @@
       "with": "لدى",
       "withMe": "أنا",
       "unclaimed": "لم تُستلَم",
+      "codeWord": "الرمز",
       "anyUnclaimed": "لم تُستلَم",
       "trade": "التخصص",
       "location": "الموقع",
@@ -448,6 +449,7 @@
       "with": "لدى",
       "raisedBy": "أنشأه",
       "issuedCode": "الرمز الصادر",
+      "codeWord": "الرمز",
       "comments": "الملاحظات",
       "commentCounts": "{open} مفتوحة / {closed} مغلقة"
     },

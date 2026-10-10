@@ -31,6 +31,7 @@ function useViewLabels(tableLabel: string): { list: WorkItemListLabels; board: W
     noNumber: l("noNumber"),
     revisionNoNumber: (revision: string) => t("list.revisionNoNumber", { revision }),
     unclaimed: l("unclaimed"),
+    codeWord: l("codeWord"),
     // Cancelled is named once, with the notifications (watchOutcomeNames); every other outcome by its Type's set (RP-429).
     cancelled: watchOutcomeNames.cancelled[locale],
   };

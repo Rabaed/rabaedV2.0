@@ -36,6 +36,7 @@
       "with": "With",
       "withMe": "Me",
       "unclaimed": "unclaimed",
+      "codeWord": "Code",
       "anyUnclaimed": "Unclaimed",
       "trade": "Trade",
       "location": "Location",
@@ -448,6 +449,7 @@
       "with": "With",
       "raisedBy": "Raised by",
       "issuedCode": "Issued Code",
+      "codeWord": "Code",
       "comments": "Comments",
       "commentCounts": "{open} open / {closed} closed"
     },

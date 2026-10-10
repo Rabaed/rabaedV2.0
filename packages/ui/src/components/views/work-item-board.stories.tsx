@@ -202,6 +202,10 @@ export const Wide: Story = {
     await expectLaidOutLeftToRight(number);
     const approved = columnOf(context, stages.approved);
     await expect(approved.querySelectorAll("[data-outcome]")).toHaveLength(2);
+    // The Review Code badge reads "Code A" ("الرمز A"), not a bare letter (RP-522); the letter stays left to right.
+    const codeA = approved.querySelector<HTMLElement>('[data-outcome="A"]')!;
+    await expect(codeA).toHaveTextContent(storyText(context, b("Code A", "الرمز A")));
+    await expect(getComputedStyle(within(codeA).getByText("A")).direction).toBe("ltr");
     await expect(within(approved).queryByRole("img")).toBeNull();
   },
 };

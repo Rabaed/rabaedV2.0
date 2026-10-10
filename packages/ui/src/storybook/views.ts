@@ -53,6 +53,7 @@ export const workItemListLabels: Record<Locale, WorkItemListLabels> = {
     firstPage: "First page",
     nextPage: "Next page",
     cancelled: "Cancelled",
+    codeWord: "Code",
     dashboardFigure: "From the Dashboard",
     buckets: { pending: "Pending", in_preparation: "In preparation", approved: "Approved", rejected: "Rejected", cancelled: "Cancelled" },
     codeCStates: { approvedOnRevision: "approved on revision", awaitingRevision: "awaiting revision", noRevisionYet: "no Revision yet", revisionInProgress: "Revision in progress", rejectedAfterC: "rejected after C" },
@@ -96,6 +97,7 @@ export const workItemListLabels: Record<Locale, WorkItemListLabels> = {
     firstPage: "الصفحة الأولى",
     nextPage: "الصفحة التالية",
     cancelled: "ملغى",
+    codeWord: "الرمز",
     dashboardFigure: "من لوحة المعلومات",
     buckets: { pending: "قيد الانتظار", in_preparation: "قيد الإعداد", approved: "معتمد", rejected: "مرفوض", cancelled: "ملغى" },
     codeCStates: { approvedOnRevision: "معتمد بعد التعديل", awaitingRevision: "بانتظار التعديل", noRevisionYet: "لا تعديل بعد", revisionInProgress: "التعديل جارٍ", rejectedAfterC: "مرفوض بعد C" },
@@ -118,6 +120,7 @@ export const workItemBoardLabels: Record<Locale, WorkItemBoardLabels> = {
     moveTo: (stage) => `To ${stage}`,
     dragging: "Drop on a highlighted column to move the item.",
     cancelled: "Cancelled",
+    codeWord: "Code",
   },
   ar: {
     board: "كانبان",
@@ -134,6 +137,7 @@ export const workItemBoardLabels: Record<Locale, WorkItemBoardLabels> = {
     moveTo: (stage) => `إلى ${stage}`,
     dragging: "أفلت العنصر على عمود مظلَّل لنقله.",
     cancelled: "ملغى",
+    codeWord: "الرمز",
   },
 };
 
