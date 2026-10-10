@@ -1,18 +1,27 @@
 "use client";
 
 import type { CompanyMember, Locale } from "@rabaed/domain";
+import { Button, Dialog, DialogClose, DialogContent, DialogFooter, RowMenu, type RowMenuItem } from "@rabaed/ui";
 import { useLocale, useTranslations } from "next-intl";
 import { useState } from "react";
-import { Button } from "@rabaed/ui";
 import { InvitationLink } from "@/components/invitation-link";
 import { useRouter } from "@/i18n/navigation";
 import { requestReactivation } from "@/lib/member-invitations";
 
-/** The Authorized Person's buttons on one row of the Members list. */
+type Asking = "deactivate" | "reactivate" | "link";
+
+/**
+ * The Authorized Person's commands on one row of the Members list: a "⋯" menu with
+ * Make or Remove Project Creator, Deactivate (after a confirmation) or, for a
+ * deactivated Member, Reactivate (also confirmed). A Member who never accepted
+ * their first invitation gets a new one when reactivated, shown once.
+ */
 export function MemberActions({ member }: { member: CompanyMember }) {
   const t = useTranslations("members");
   const locale = useLocale() as Locale;
   const router = useRouter();
+  const name = member.fullName[locale];
+  const [asking, setAsking] = useState<Asking | null>(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState(false);
   const [link, setLink] = useState<string | null>(null);
@@ -27,25 +36,24 @@ export function MemberActions({ member }: { member: CompanyMember }) {
         body: JSON.stringify(body ?? {}),
       });
       if (!res.ok) return setError(true);
+      setAsking(null);
       router.refresh();
     } catch {
       setError(true);
     } finally {
       setPending(false);
     }
-  }
-
-  function deactivate() {
-    if (window.confirm(t("confirmDeactivate", { name: member.fullName[locale] }))) void send("/deactivate", "POST");
   }
 
   async function reactivate() {
-    if (!window.confirm(t("confirmReactivate", { name: member.fullName[locale] }))) return;
     setPending(true);
     setError(false);
     try {
-      setLink((await requestReactivation(member.id)).link);
+      const { link: invitation } = await requestReactivation(member.id);
       router.refresh();
+      // Never accepted their first invitation: the new one, shown once.
+      setAsking(invitation ? "link" : null);
+      setLink(invitation ?? null);
     } catch {
       setError(true);
     } finally {
@@ -53,42 +61,62 @@ export function MemberActions({ member }: { member: CompanyMember }) {
     }
   }
 
-  const failed = error && (
-    <span role="alert" className="text-sm text-danger">
-      {t("unavailable")}
-    </span>
-  );
+  const items: RowMenuItem[] =
+    member.status === "deactivated"
+      ? [{ key: "reactivate", label: t("reactivate"), onSelect: () => setAsking("reactivate") }]
+      : [
+          {
+            key: "creator",
+            label: member.canCreateProjects ? t("removeProjectCreator") : t("makeProjectCreator"),
+            onSelect: () => void send("", "PATCH", { canCreateProjects: !member.canCreateProjects }),
+          },
+          ...(member.isAuthorizedPerson
+            ? []
+            : [{ key: "deactivate", label: t("deactivate"), tone: "danger" as const, onSelect: () => setAsking("deactivate") }]),
+        ];
 
-  // Reactivated just now, never having accepted their first invitation: the new one, shown once.
-  if (link) return <InvitationLink id={`invitation-link-${member.id}`} link={link} />;
-
-  if (member.status === "deactivated") {
-    return (
-      <div className="flex flex-wrap items-center gap-2">
-        <Button variant="secondary" size="sm" disabled={pending} onClick={reactivate}>
-          {t("reactivate")}
-        </Button>
-        {failed}
-      </div>
-    );
-  }
+  const confirming = asking === "deactivate" || asking === "reactivate";
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <Button
-        variant="secondary"
-        size="sm"
-        disabled={pending}
-        onClick={() => send("", "PATCH", { canCreateProjects: !member.canCreateProjects })}
-      >
-        {member.canCreateProjects ? t("removeProjectCreator") : t("makeProjectCreator")}
-      </Button>
-      {!member.isAuthorizedPerson && (
-        <Button variant="ghost" size="sm" className="text-danger" disabled={pending} onClick={deactivate}>
-          {t("deactivate")}
-        </Button>
+    <div className="flex items-center justify-end gap-2">
+      {error && !confirming && (
+        <span role="alert" className="text-sm text-danger-fg">
+          {t("unavailable")}
+        </span>
       )}
-      {failed}
+      <RowMenu label={t("menuFor", { name })} items={items} />
+      <Dialog open={asking !== null} onOpenChange={(open) => !open && !pending && setAsking(null)}>
+        <DialogContent
+          title={asking === "link" ? t("linkTitle") : asking === "reactivate" ? t("reactivateTitle") : t("deactivateTitle")}
+          description={
+            asking === "link" ? undefined : t(asking === "reactivate" ? "confirmReactivate" : "confirmDeactivate", { name })
+          }
+          closeLabel={t("close")}
+        >
+          {asking === "link" && link && <InvitationLink id={`invitation-link-${member.id}`} link={link} />}
+          {confirming && error && (
+            <p role="alert" className="text-sm text-danger-fg">
+              {t("unavailable")}
+            </p>
+          )}
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="secondary" disabled={pending}>
+                {asking === "link" ? t("close") : t("cancel")}
+              </Button>
+            </DialogClose>
+            {confirming && (
+              <Button
+                variant={asking === "deactivate" ? "danger" : "primary"}
+                disabled={pending}
+                onClick={() => (asking === "deactivate" ? void send("/deactivate", "POST") : void reactivate())}
+              >
+                {asking === "deactivate" ? t("deactivate") : t("reactivate")}
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

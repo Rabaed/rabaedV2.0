@@ -11,19 +11,28 @@ export default async function MembersPage({ params }: { params: Promise<{ locale
   const t = await getTranslations("members");
   const [me, list] = await Promise.all([getMe(), getMembers()]);
   if (!me) return redirect({ href: "/sign-in", locale });
-  if (!list) {
-    return (
-      <p role="alert" className="text-danger">
-        {t("unavailable")}
-      </p>
-    );
-  }
   const canManage = me.member.isAuthorizedPerson;
 
   return (
-    <div className="space-y-5">
-      <p className="text-body text-muted">{t("subtitle", { company: me.company.legalName[locale] })}</p>
-      <MembersTable members={list.members} canManage={canManage} invite={canManage ? <InviteMemberDialog /> : undefined} />
+    <div>
+      <div className="mb-5.5 flex flex-wrap items-end gap-4">
+        <div className="flex min-w-0 flex-col gap-1">
+          <h1 className="font-display text-h4 font-extrabold text-text rtl:font-bold">{t("title")}</h1>
+          <p className="text-body text-muted">{t("subtitle", { company: me.company.legalName[locale] })}</p>
+        </div>
+        {canManage && (
+          <div className="ms-auto">
+            <InviteMemberDialog />
+          </div>
+        )}
+      </div>
+      {list ? (
+        <MembersTable members={list.members} canManage={canManage} />
+      ) : (
+        <p role="alert" className="text-danger">
+          {t("unavailable")}
+        </p>
+      )}
     </div>
   );
 }

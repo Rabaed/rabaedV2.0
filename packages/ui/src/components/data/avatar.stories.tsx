@@ -52,7 +52,7 @@ export const Solid: Story = {
   play: async (context) => {
     const [first, again] = context.canvas.getAllByRole("img", { name: storyText(context, people.faisal) });
     await expect(getComputedStyle(first!).backgroundColor).toBe(getComputedStyle(again!).backgroundColor);
-    await expect(getComputedStyle(first!).color).toBe("rgb(255, 255, 255)");
+    await expect(first).toHaveClass("text-on-primary");
   },
 };
 

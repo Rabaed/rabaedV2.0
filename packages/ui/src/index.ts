@@ -176,6 +176,14 @@ export {
   type FilterValuesProps,
 } from "./components/list/filter-menu.tsx";
 export { Pager, TableCard, type PagerLabels, type PagerProps, type TableCardProps } from "./components/list/table-card.tsx";
+export { RowMenu, type RowMenuItem, type RowMenuProps } from "./components/list/row-menu.tsx";
+export {
+  MembersCard,
+  type MemberRow,
+  type MemberStatus as MemberRowStatus,
+  type MembersCardLabels,
+  type MembersCardProps,
+} from "./components/members/members-card.tsx";
 export {
   WorkItemList,
   type WorkItemFilterHints,

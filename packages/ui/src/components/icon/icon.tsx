@@ -174,7 +174,7 @@ const icons = {
   trash: IconTrash,
   upload: IconUpload,
   user: IconUser,
-  "user-plus": IconUserPlus,
+  "person-add": IconUserPlus,
   users: IconUsers,
   x: IconX,
 } satisfies Record<string, TablerIcon>;
