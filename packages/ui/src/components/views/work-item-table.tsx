@@ -243,8 +243,9 @@ export function WorkItemTable({
       <tbody>
         {rows.length === 0 ? (
           <tr>
-            <td colSpan={colSpan} className="h-32 text-center text-muted">
-              {labels.empty}
+            <td colSpan={colSpan} className="h-32 text-muted">
+              {/* Held at the start of the scrolling table, so it is read where the rows would be. */}
+              <span className="sticky start-0 inline-block px-4">{labels.empty}</span>
             </td>
           </tr>
         ) : (

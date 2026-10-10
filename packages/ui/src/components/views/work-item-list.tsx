@@ -536,7 +536,7 @@ export function WorkItemList({
             {viewSwitch}
           </>
         }
-        className={board ? "gap-3" : "gap-2.5"}
+        className={board ? "gap-3" : "gap-2"}
       >
         {action}
         <ToolbarSearch
@@ -550,7 +550,7 @@ export function WorkItemList({
           description={t("searchHelp")}
           onSearch={(q) => change({ q })}
           // The List's toolbar also holds Group and Export, so its search is a little narrower until the screen is wide.
-          className={board ? undefined : "sm:w-48 2xl:w-60"}
+          className={board ? undefined : "sm:w-40 2xl:w-60"}
         />
         <span className="inline-flex shrink-0 items-center">
         <FilterMenu
