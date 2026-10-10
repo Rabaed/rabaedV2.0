@@ -10,6 +10,8 @@ import {
   encodeWorkItemCursor,
   enteredStepBy,
   isOpenStageCategory,
+  listColumnLayout,
+  listColumns,
   parseActionForm,
   stageCategories,
   sortDirectionOf,
@@ -17,6 +19,7 @@ import {
   workItemCursorSorts,
   workItemPageSize,
   type BilingualText,
+  type ListColumnLayout,
   type Locale,
   type WorkItemCursorSort,
   type BoardCardLayout,
@@ -770,6 +773,31 @@ export function changeBoardLayout(db: Db, memberId: string, scope: QueryScope, c
   });
 }
 
+/** The Member's own List columns of the scope's Module (RP-409), or undefined when they saved none. */
+async function readListColumns(trx: Trx, { moduleKey }: QueryScope): Promise<ListColumnLayout | undefined> {
+  const { rows } = await sql<{ columns: unknown }>`
+    select columns from member_list_columns where member_id = app.current_member_id() and module_key = ${moduleKey}
+  `.execute(trx);
+  const saved = listColumnLayout.safeParse(rows[0]?.columns);
+  return rows[0] && saved.success ? listColumns(saved.data) : undefined;
+}
+
+/**
+ * Saves the Member's own List columns of a Module (RP-409, "Save as my default"), as the List
+ * will show them. Null when the Module has no tab on the Project or it isn't one of theirs.
+ * app.set_list_columns writes the Member's own row only.
+ */
+export function saveListColumns(db: Db, memberId: string, scope: QueryScope, columns: ListColumnLayout): Promise<ListColumnLayout | null> {
+  return withMember(db, memberId, async (trx) => {
+    if (!(await hasModuleTab(trx, scope))) return null;
+    const layout = listColumns(columns);
+    const { rows } = await sql<{ outcome: string }>`
+      select app.set_list_columns(${scope.moduleKey}, ${JSON.stringify(layout)}::jsonb) as outcome
+    `.execute(trx);
+    return rows[0]?.outcome === "set" ? layout : null;
+  });
+}
+
 /**
  * Whether the Member is on the scope's Project (RLS on project) and it has a
  * Work Item Type in the scope's Module, so the Module has a tab there (RP-346).
@@ -795,7 +823,14 @@ export function listWorkItems(db: Db, memberId: string, scope: QueryScope, q: Wo
   return withMember(db, memberId, async (trx) => {
     if (!(await hasModuleTab(trx, scope))) return null;
     const { rows, nextCursor, page, stageCounts } = await queryWorkItems(trx, scope, q, now);
-    return { ...(await stagesAndFilters(trx, scope, stageCounts)), items: rows, nextCursor, ...(page ? { page } : {}) };
+    const columnLayout = await readListColumns(trx, scope);
+    return {
+      ...(await stagesAndFilters(trx, scope, stageCounts)),
+      items: rows,
+      nextCursor,
+      ...(page ? { page } : {}),
+      ...(columnLayout ? { columnLayout } : {}),
+    };
   });
 }
 

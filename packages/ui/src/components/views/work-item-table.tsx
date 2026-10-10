@@ -5,6 +5,7 @@ import {
   formatDate,
   formatNumber,
   isOpenStageCategory,
+  lockedListColumns,
   sortDirectionOf,
   workItemSortOrders,
   type BilingualText,
@@ -15,7 +16,8 @@ import {
   type WorkItemQuery,
   type WorkItemRow,
 } from "@rabaed/domain";
-import type { ElementType, ReactNode } from "react";
+import { useState, type ElementType, type ReactNode } from "react";
+import { moveColumn } from "./column-settings.tsx";
 import { cn } from "../../lib/cn.ts";
 import { Avatar } from "../data/avatar.tsx";
 import { DocNo } from "../doc-no/doc-no.tsx";
@@ -70,6 +72,8 @@ export type WorkItemTableProps = {
   linkAs?: ElementType;
   /** In the last header cell, pinned at the reading end: the column settings. */
   settings?: ReactNode;
+  /** A column dragged by its header to another place. */
+  onColumnsChange?: (columns: ListColumnLayout) => void;
   className?: string;
 };
 
@@ -107,7 +111,22 @@ const head =
 const pinnedStart = "sticky start-0 z-[2]";
 const dash = <span className="text-faint">—</span>;
 
-export function WorkItemTable({ rows, filters, columns, query, locale, labels, onSort, itemHref, linkAs: Link = "a", settings, className }: WorkItemTableProps) {
+export function WorkItemTable({
+  rows,
+  filters,
+  columns,
+  query,
+  locale,
+  labels,
+  onSort,
+  onColumnsChange,
+  itemHref,
+  linkAs: Link = "a",
+  settings,
+  className,
+}: WorkItemTableProps) {
+  const [dragging, setDragging] = useState<ListColumnKey | null>(null);
+  const [over, setOver] = useState<ListColumnKey | null>(null);
   const shown = columns.filter((c) => c.shown).map((c) => c.key);
   const places = placesOf(filters.locations);
   const direction = sortDirectionOf(query);
@@ -125,7 +144,36 @@ export function WorkItemTable({ rows, filters, columns, query, locale, labels, o
                 key={key}
                 scope="col"
                 aria-sort={sorted ? (direction === "asc" ? "ascending" : "descending") : "none"}
-                className={cn(head, widths[key], i === 0 && cn(pinnedStart, "z-[4]"))}
+                // Dragged by its header to another place (the column settings do the same by keyboard).
+                draggable={onColumnsChange !== undefined && !lockedListColumns.includes(key)}
+                onDragStart={(event) => {
+                  setDragging(key);
+                  event.dataTransfer.effectAllowed = "move";
+                  event.dataTransfer.setData("text/plain", key);
+                }}
+                onDragOver={(event) => {
+                  if (dragging === null || lockedListColumns.includes(key)) return;
+                  event.preventDefault();
+                  setOver(key);
+                }}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  const at = (k: ListColumnKey | null) => columns.findIndex((c) => c.key === k);
+                  if (dragging !== null && onColumnsChange) onColumnsChange(moveColumn(columns, at(dragging), at(key)));
+                  setDragging(null);
+                  setOver(null);
+                }}
+                onDragEnd={() => {
+                  setDragging(null);
+                  setOver(null);
+                }}
+                className={cn(
+                  head,
+                  widths[key],
+                  i === 0 && cn(pinnedStart, "z-[4]"),
+                  dragging === key && "opacity-40",
+                  over === key && dragging !== key && "shadow-[inset_3px_0_0_var(--color-primary)] rtl:shadow-[inset_-3px_0_0_var(--color-primary)]",
+                )}
               >
                 <span className="flex items-center gap-1.5">
                   <Icon name="grid-dots" size={13} className="shrink-0 text-faint opacity-70" />

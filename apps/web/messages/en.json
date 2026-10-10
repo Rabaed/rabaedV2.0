@@ -104,6 +104,16 @@
         "stepAge": "Step Age"
       },
       "sortBy": "Sort by {column}",
+      "columnSettings": {
+        "settings": "Table settings",
+        "title": "Columns",
+        "shown": "{shown} / {total} shown",
+        "locked": "Always shown",
+        "move": "Move {column}",
+        "reset": "Reset",
+        "saveDefault": "Save as my default",
+        "saved": "Saved as your default columns"
+      },
       "documentNumber": "Document Number",
       "subject": "Subject",
       "noNumber": "No number yet",

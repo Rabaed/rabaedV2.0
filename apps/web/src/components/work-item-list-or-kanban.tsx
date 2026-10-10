@@ -67,6 +67,14 @@ function useViewLabels(tableLabel: string, module: string): { list: WorkItemList
         ...(module === "submittals" ? {} : { documentNumber: l("documentNumber") }),
       },
       sortBy: (column) => t("list.sortBy", { column }),
+      columnSettings: {
+        ...(Object.fromEntries((["settings", "title", "locked", "reset", "saveDefault", "saved"] as const).map((key) => [key, t(`list.columnSettings.${key}`)])) as Record<
+          "settings" | "title" | "locked" | "reset" | "saveDefault" | "saved",
+          string
+        >),
+        shown: (shown, total) => t("list.columnSettings.shown", { shown, total }),
+        move: (column) => t("list.columnSettings.move", { column }),
+      },
       code: (code) => t("board.code", { code }),
       revision: (n) => t("board.revision", { n }),
       weeksOrMore: (weeks, count) => t("list.weeksOrMore", { weeks, count }),
@@ -159,6 +167,19 @@ export function WorkItemListOrKanban(
       itemHref={itemHref}
       linkAs={NextLink}
       onQueryChange={(q) => router.push(hrefFor(q))}
+      // The Member's own columns of the Module, kept by the API (RP-409).
+      onSaveColumns={
+        props.view === "list"
+          ? async (columns) =>
+              (
+                await fetch(`/api/v1/projects/${projectId}/modules/${module}/work-items/list/columns`, {
+                  method: "PUT",
+                  headers: { "content-type": "application/json" },
+                  body: JSON.stringify(columns),
+                })
+              ).ok
+          : undefined
+      }
       action={action}
       hints={hints}
       viewSwitch={

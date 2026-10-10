@@ -19,7 +19,9 @@ import {
   type WorkItemList as WorkItemListData,
   type WorkItemQuery,
 } from "@rabaed/domain";
-import { type ElementType, type ReactNode } from "react";
+import { useCallback, useState, type ElementType, type ReactNode } from "react";
+import { ListToast } from "../list/list-toast.tsx";
+import { ColumnSettings, type ColumnSettingsLabels } from "./column-settings.tsx";
 import { Badge } from "../data/badge.tsx";
 import { cn } from "../../lib/cn.ts";
 import { focusRing } from "../form/control-styles.ts";
@@ -34,7 +36,7 @@ import { Pager, TableCard } from "../list/table-card.tsx";
 import { AgeDots } from "../status/age-dots.tsx";
 import { stageColour } from "../status/stage-colour.ts";
 import { StageDot } from "../status/stage-pill.tsx";
-import { WorkItemTable } from "./work-item-table.tsx";
+import { columnHeader, WorkItemTable } from "./work-item-table.tsx";
 
 /**
  * The List's words, in the viewer's language, from the app's messages: the
@@ -76,6 +78,8 @@ export type WorkItemListLabels = {
   code: (code: string) => string;
   /** The Revision chip, e.g. "R2". */
   revision: (n: string) => string;
+  /** The column settings, and the toast once they are saved, e.g. "Saved as your default columns". */
+  columnSettings: ColumnSettingsLabels & { saved: string };
   noNumber: string;
   revisionNoNumber: (revision: string) => string;
   empty: string;
@@ -188,8 +192,10 @@ export type WorkItemListProps = {
   board?: ReactNode;
   /** The filter fields' names in the other language. */
   hints?: WorkItemFilterHints;
-  /** The table's columns in order, each shown or not; by default the Member's own (`list.columnLayout`), else the design's. */
+  /** The table's columns at first, in order, each shown or not; by default the Member's own (`list.columnLayout`), else the design's. */
   columns?: ListColumnLayout;
+  /** "Save as my default": keeps the columns for the Member; true once kept. Without it, the table has no column settings. */
+  onSaveColumns?: (columns: ListColumnLayout) => Promise<boolean>;
 };
 
 /**
@@ -216,14 +222,21 @@ export function WorkItemList({
   linkAs: Link = "a",
   board,
   hints,
-  columns = listColumns(list.columnLayout),
+  columns: initialColumns,
+  onSaveColumns,
 }: WorkItemListProps) {
   const t = (key: TextLabel) => labels[key];
   const n = (value: number) => formatNumber(value, locale);
+  // A new filter, sort or page size starts again from the first page.
   const change = (next: Partial<WorkItemQuery>) => {
-    const { cursor: _cursor, ...rest } = query;
+    const { cursor: _cursor, page: _page, ...rest } = query;
     onQueryChange({ ...rest, ...next });
   };
+  // The columns as the Member arranges them now; "Save as my default" keeps them.
+  const [columns, setColumns] = useState(() => initialColumns ?? listColumns(list.columnLayout));
+  const [toast, setToast] = useState<string | null>(null);
+  const clearToast = useCallback(() => setToast(null), []);
+  const headerOf = (key: ListColumnKey) => columnHeader(key, labels, list.filters.locations, locale);
   const filtered = isFilteredWorkItemQuery(query);
 
   const valueLabels = { clear: t("clearField"), search: t("searchValues"), noMatches: t("noMatches") };
@@ -497,9 +510,28 @@ export function WorkItemList({
                 onSort={(sort) => change(sort)}
                 itemHref={itemHref}
                 linkAs={Link}
+                onColumnsChange={onSaveColumns ? setColumns : undefined}
+                settings={
+                  onSaveColumns && (
+                    <ColumnSettings
+                      columns={columns}
+                      headerOf={headerOf}
+                      labels={labels.columnSettings}
+                      number={n}
+                      onChange={setColumns}
+                      onReset={() => setColumns(listColumns(null))}
+                      onSave={() => {
+                        void onSaveColumns(columns).then((saved) => {
+                          if (saved) setToast(labels.columnSettings.saved);
+                        });
+                      }}
+                    />
+                  )
+                }
               />
             </div>
           </TableCard>
+          <ListToast message={toast} onDone={clearToast} />
         </>
       )}
     </div>

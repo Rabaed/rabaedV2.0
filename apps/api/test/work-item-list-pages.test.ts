@@ -75,6 +75,41 @@ beforeAll(async () => {
   await code(revise, "revise_c", at.k1Manager);
 });
 
+describe("the Member's own columns (Save as my default)", () => {
+  const path = () => `/v1/projects/${at.projectId}/modules/submittals/work-items/list/columns`;
+  const mine = [
+    { key: "owner", shown: true },
+    { key: "stepAge", shown: true },
+    { key: "revision", shown: false },
+  ];
+
+  it("start as the design's, and are kept for the Member who saved them, the locked columns first", async () => {
+    expect((await list(at.c1Engineer, { page: 1 })).columnLayout).toBeUndefined();
+    const saved = (await ok(at.c1Engineer.request("PUT", path(), mine), 200)).json();
+    expect(saved.slice(0, 3)).toEqual([
+      { key: "documentNumber", shown: true },
+      { key: "subject", shown: true },
+      { key: "owner", shown: true },
+    ]);
+    expect((await list(at.c1Engineer, { page: 1 })).columnLayout).toEqual(saved);
+  });
+
+  it("are nobody else's: a colleague and another Company still see the design's", async () => {
+    expect((await list(at.c1Pm, { page: 1 })).columnLayout).toBeUndefined();
+    expect((await list(at.k1Manager, { page: 1 })).columnLayout).toBeUndefined();
+  });
+
+  it("refuse a column twice, or one that isn't the List's", async () => {
+    expect((await at.c1Engineer.request("PUT", path(), [...mine, { key: "owner", shown: false }])).statusCode).toBe(400);
+    expect((await at.c1Engineer.request("PUT", path(), [{ key: "dueDate", shown: true }])).statusCode).toBe(400);
+  });
+
+  it("are not found on a Project the Member isn't on", async () => {
+    const stranger = await api.authorizedPerson();
+    expect((await stranger.caller.request("PUT", path(), mine)).statusCode).toBe(404);
+  });
+});
+
 describe("numbered pages", () => {
   it("pages 10 rows at a time, each row once, and says when there is a next page", async () => {
     const { rows, sizes } = await allPages(at.c1Engineer, { pageSize: 10 });

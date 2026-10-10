@@ -104,6 +104,16 @@
         "stepAge": "عمر الخطوة"
       },
       "sortBy": "الترتيب حسب {column}",
+      "columnSettings": {
+        "settings": "إعدادات الجدول",
+        "title": "الأعمدة",
+        "shown": "{shown} / {total} معروض",
+        "locked": "معروض دائمًا",
+        "move": "نقل {column}",
+        "reset": "إعادة ضبط",
+        "saveDefault": "حفظ كافتراضي",
+        "saved": "تم الحفظ كأعمدة افتراضية"
+      },
       "documentNumber": "رقم المستند",
       "subject": "الموضوع",
       "noNumber": "بلا رقم بعد",
