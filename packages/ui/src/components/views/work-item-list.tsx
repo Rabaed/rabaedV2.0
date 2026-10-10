@@ -21,8 +21,8 @@ import {
   type WorkItemQuery,
   type WorkItemRow,
 } from "@rabaed/domain";
-import { useCallback, useState, type ElementType, type ReactNode } from "react";
-import { ListToast } from "../list/list-toast.tsx";
+import { useState, type ElementType, type ReactNode } from "react";
+import { ToastProvider, useToast } from "../overlay/toast.tsx";
 import { Button } from "../button/button.tsx";
 import { ColumnSettings, type ColumnSettingsLabels } from "./column-settings.tsx";
 import { groupRows, listGroupings, type ListGrouping } from "./list-groups.ts";
@@ -135,6 +135,8 @@ export type WorkItemListLabels = {
   clearAll: string;
   done: string;
   close: string;
+  /** Names the place its confirmations are read out from, e.g. "Notifications". */
+  notifications: string;
   /** The filter panel's footer: `n` is `count` written for the locale; `count` chooses the plural. */
   filtersApplied: (n: string, count: number) => string;
   pages: string;
@@ -260,7 +262,16 @@ export type WorkItemListProps = {
  */
 const scrollClear = "scroll-pt-[42px] scroll-ps-11 scroll-pe-[60px] pointer-coarse:scroll-pt-12 pointer-coarse:scroll-ps-16";
 
-export function WorkItemList({
+/** The List, with its own place for the short confirmations it shows (the shared toast). */
+export function WorkItemList(props: WorkItemListProps) {
+  return (
+    <ToastProvider label={props.labels.notifications} closeLabel={props.labels.close}>
+      <WorkItemListBody {...props} />
+    </ToastProvider>
+  );
+}
+
+function WorkItemListBody({
   list,
   query,
   locale,
@@ -293,8 +304,8 @@ export function WorkItemList({
   };
   // The columns as the Member arranges them now; "Save as my default" keeps them.
   const [columns, setColumns] = useState(() => initialColumns ?? listColumns(list.columnLayout));
-  const [toast, setToast] = useState<string | null>(null);
-  const clearToast = useCallback(() => setToast(null), []);
+  const showToast = useToast();
+  const setToast = (title: string) => showToast({ title, tone: "success" });
   const headerOf = (key: ListColumnKey) => columnHeader(key, labels, list.filters.locations, locale);
   // Rows chosen on this page (RP-409): a new page, filter or sort starts with none.
   const pageKey = list.items.map((i) => i.id).join(",");
@@ -716,7 +727,6 @@ export function WorkItemList({
               />
             </div>
           </TableCard>
-          <ListToast message={toast} onDone={clearToast} />
           {rowActions && (
             // Delete asks first: a Draft deleted is gone for everyone.
             <Dialog open={deleting !== null} onOpenChange={(open) => !open && setDeleting(null)}>

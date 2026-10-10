@@ -464,12 +464,34 @@ export const RowMenuOpen: Story = {
   parameters: overlay,
   play: async (context) => {
     await userEvent.click(context.canvas.getByRole("button", { name: storyText(context, b("More for Earthing rods, galvanised", "المزيد لـ Earthing rods, galvanised")) }));
-    const menu = await screen.findByRole("dialog");
+    const menu = await screen.findByRole("menu", { name: storyText(context, b("More for Earthing rods, galvanised", "المزيد لـ Earthing rods, galvanised")) });
     await waitFor(() =>
-      expect(within(menu).getAllByRole("button").map((b) => b.textContent)).toEqual(
+      expect(within(menu).getAllByRole("menuitem").map((b) => b.textContent)).toEqual(
         [b("Open", "فتح"), b("Edit", "تعديل"), b("Duplicate", "تكرار"), b("Download", "تنزيل"), b("Delete", "حذف")].map((c) => storyText(context, c)),
       ),
     );
+  },
+};
+
+/** The row menu by keyboard: Enter opens it on its first command; the arrows, Home and End move; Escape returns to the button. */
+export const RowMenuByKeyboard: Story = {
+  parameters: overlay,
+  play: async (context) => {
+    const more = context.canvas.getByRole("button", { name: storyText(context, b("More for Earthing rods, galvanised", "المزيد لـ Earthing rods, galvanised")) });
+    more.focus();
+    await userEvent.keyboard("{Enter}");
+    const menu = await screen.findByRole("menu");
+    await waitFor(() => expect(within(menu).getAllByRole("menuitem")).toHaveLength(5));
+    const item = (name: { en: string; ar: string }) => within(menu).getByRole("menuitem", { name: storyText(context, name) });
+    await waitFor(() => expect(item(b("Open", "فتح"))).toHaveFocus());
+    await userEvent.keyboard("{ArrowDown}");
+    await expect(item(b("Edit", "تعديل"))).toHaveFocus();
+    await userEvent.keyboard("{End}");
+    await expect(item(b("Delete", "حذف"))).toHaveFocus();
+    await userEvent.keyboard("{ArrowDown}");
+    await expect(item(b("Open", "فتح"))).toHaveFocus();
+    await userEvent.keyboard("{Escape}");
+    await waitFor(() => expect(more).toHaveFocus());
   },
 };
 
@@ -478,8 +500,8 @@ export const DeleteAsksFirst: Story = {
   parameters: overlay,
   play: async (context) => {
     await userEvent.click(context.canvas.getByRole("button", { name: storyText(context, b("More for Earthing rods, galvanised", "المزيد لـ Earthing rods, galvanised")) }));
-    const menu = await screen.findByRole("dialog");
-    await userEvent.click(await within(menu).findByRole("button", { name: storyText(context, b("Delete", "حذف")) }));
+    const menu = await screen.findByRole("menu");
+    await userEvent.click(await within(menu).findByRole("menuitem", { name: storyText(context, b("Delete", "حذف")) }));
     const ask = await screen.findByRole("dialog", { name: storyText(context, b("Delete this Draft?", "حذف هذه المسودة؟")) });
     await expect(context.args.rowActions!.run).not.toHaveBeenCalled();
     await userEvent.click(within(ask).getByRole("button", { name: storyText(context, b("Delete", "حذف")) }));

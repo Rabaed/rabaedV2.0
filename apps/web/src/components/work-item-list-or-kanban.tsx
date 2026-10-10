@@ -80,7 +80,7 @@ function useViewLabels(tableLabel: string, module: string): { list: WorkItemList
     "toolbar", "all", "type", "stage", "with", "withMe", "anyUnclaimed", "trade", "location", "outcome", "stepAge",
     "submissionDate", "creationDate", "submittedFrom", "submittedTo", "allRevisions", "needMyAction", "clear",
     "empty", "search", "searchPlaceholder", "searchHelp", "noResults", "filters", "clearAll", "done",
-    "close", "pages", "firstPage", "previousPage", "nextPage", "lastPage", "rowsPerPage", "documentType", "owner", "role", "createdDate", "clearField",
+    "close", "notifications", "pages", "firstPage", "previousPage", "nextPage", "lastPage", "rowsPerPage", "documentType", "owner", "role", "createdDate", "clearField",
     "searchValues", "noMatches", "searchPlaceholderBoard", "revisions", "statusField",
   ] as const;
   const layoutKeys = ["title", "boardSettings", "fixedParts", "alwaysShown", "contractorName", "location", "creationDate", "preview"] as const;

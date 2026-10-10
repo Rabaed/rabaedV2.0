@@ -2,9 +2,10 @@
 
 import { useId, useState, type ReactNode } from "react";
 import { cn } from "../../lib/cn.ts";
-import { focusRing, touchBox } from "../form/control-styles.ts";
+import { focusRing } from "../form/control-styles.ts";
 import { Icon, type IconName } from "../icon/icon.tsx";
 import { toolbarButton, toolbarFilled } from "../list/list-toolbar.tsx";
+import { RowActionsMenu, type RowActionsItem } from "../list/row-menu.tsx";
 import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "../overlay/popover.tsx";
 
 // The List's toolbar menus (RP-409, the owner's design): Group (GROUP BY Status, Discipline,
@@ -111,55 +112,34 @@ export type RowMenuProps = {
 const rowIcons: Record<RowAction, IconName> = { open: "eye", edit: "edit", duplicate: "copy", resubmit: "refresh", download: "download", delete: "trash" };
 
 /**
- * A row's ⋯ menu: Open, Edit, Duplicate, Resubmit, Download, then Delete apart. Each but Open
- * only where the viewer may take it, as the API answers when the menu opens; the API checks
- * again when it is taken.
+ * A row's ⋯ menu (the shared RowActionsMenu): Open, Edit, Duplicate, Resubmit, Download, then
+ * Delete apart. Each but Open only where the viewer may take it, as the API answers when the menu
+ * opens; the API checks again when it is taken.
  */
 export function RowMenu({ subject, load, onAction, labels }: RowMenuProps) {
   const [permitted, setPermitted] = useState<RowPermissions | null | "loading">(null);
-  const item = (action: RowAction) => (
-    <PopoverClose asChild key={action}>
-      <button type="button" onClick={() => onAction(action)} className={cn(menuItem, action === "delete" && "text-danger-fg [&_svg]:text-danger-fg")}>
-        <Icon name={rowIcons[action]} size={16} />
-        {labels[action]}
-      </button>
-    </PopoverClose>
-  );
   const allowed = permitted !== null && permitted !== "loading" ? permitted : null;
+  const item = (action: RowAction): RowActionsItem => ({
+    key: action,
+    label: labels[action],
+    icon: rowIcons[action],
+    onSelect: () => onAction(action),
+    ...(action === "delete" ? { tone: "danger" as const, separated: true } : {}),
+  });
+  const shown: RowAction[] = ["open", ...(["edit", "duplicate", "resubmit", "download", "delete"] as const).filter((a) => allowed?.[a])];
   return (
-    <Popover
+    <RowActionsMenu
+      label={labels.more(subject)}
+      // The design's 28px button, so the table's last column stays narrow.
+      className="h-7 w-7 text-text-secondary"
+      items={shown.map(item)}
+      status={permitted === "loading" ? labels.loading : undefined}
       onOpenChange={(open) => {
         if (!open) return;
         setPermitted("loading");
         void load().then(setPermitted, () => setPermitted(null));
       }}
-    >
-      <PopoverTrigger asChild>
-        <button
-          type="button"
-          aria-label={labels.more(subject)}
-          title={labels.more(subject)}
-          className={cn(
-            "inline-flex size-7 items-center justify-center rounded-xs text-text-secondary hover:bg-hover hover:text-text data-[state=open]:bg-brand-tint data-[state=open]:text-brand-fg",
-            focusRing,
-            touchBox,
-          )}
-        >
-          <Icon name="dots" size={17} />
-        </button>
-      </PopoverTrigger>
-      <PopoverContent aria-label={labels.more(subject)} align="end" className="w-52 rounded-md p-1 shadow-lg">
-        {item("open")}
-        {(["edit", "duplicate", "resubmit", "download"] as const).filter((a) => allowed?.[a]).map(item)}
-        {permitted === "loading" && <p className="px-2.5 py-2 text-caption text-muted">{labels.loading}</p>}
-        {allowed?.delete && (
-          <>
-            <div className="m-1 h-px bg-border-subtle" />
-            {item("delete")}
-          </>
-        )}
-      </PopoverContent>
-    </Popover>
+    />
   );
 }
 

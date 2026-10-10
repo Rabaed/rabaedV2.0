@@ -171,6 +171,7 @@
       "clearAll": "Clear all",
       "done": "Done",
       "close": "Close",
+      "notifications": "Notifications",
       "filtersApplied": "{count, plural, =0 {No filters applied} one {1 filter applied} other {{n} filters applied}}",
       "noResults": "No items you can see match this search.",
       "pages": "Pages",
