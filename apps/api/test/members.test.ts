@@ -34,6 +34,8 @@ describe("inviting a Member", () => {
         canCreateProjects: false,
       },
       company: { id: a.company.companyId, legalName: { en: "Test Constructions", ar: "إنشاءات الاختبار" } },
+      // A new Member's Theme and Mode: Warm, following the device.
+      appearance: { theme: "warm", mode: "system" },
     });
     // And signs in again later with that password.
     await api.signIn(invited.email, DEFAULT_PASSWORD);
