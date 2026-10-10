@@ -356,7 +356,7 @@ export const workItemRoutes =
       async (request, reply) => {
         const memberId = ctx.requireMember(request);
         const id = idOrNotFound(request.params.workItemId);
-        const result = await duplicateWorkItem(ctx.db, memberId, id, request.body.idempotencyKey, ctx.now());
+        const result = await duplicateWorkItem(ctx.db, ctx.files, memberId, id, request.body.idempotencyKey, ctx.now());
         if (!result.ok) throw refusal(result);
         return reply.code(201).send({ id: result.id });
       },

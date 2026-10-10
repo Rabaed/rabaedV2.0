@@ -50,6 +50,7 @@ import {
 } from "@rabaed/domain";
 import { sql, type RawBuilder, type Transaction } from "kysely";
 import { refusedAsForbidden, type Forbidden } from "../db-error.ts";
+import type { FileStore } from "../documents/file-store.ts";
 import { isUuid } from "../http-error.ts";
 import { readOptionLists } from "../option-lists/option-lists.ts";
 import { checkedOutcome, commandResult } from "../outcomes.ts";
@@ -672,7 +673,7 @@ const canDuplicate = (w: RawBuilder<unknown>) => sql<boolean>`(
   coalesce(${w}.raised_by_participant_id in (select app.current_participant_ids()), false)
   and exists (select 1 from project p where p.id = ${w}.project_id and p.status = 'active'))`;
 
-/** Field types whose answers are Documents: Duplicate never copies them. */
+/** Field types that hold Documents: a Duplicate copies those its own Participant uploaded. */
 const documentFieldTypes: readonly string[] = ["attachments", "photos", "checklist"];
 
 export type DuplicateResult = CreateWorkItemResult | { ok: false; reason: (typeof duplicateRefusals)[number] };
@@ -683,15 +684,20 @@ export type DuplicateResult = CreateWorkItemResult | { ok: false; reason: (typeo
  * Version, the raiser's Draft Step, every check), with its Subject and only what the Member's own
  * Participant wrote: the answers of the sections editable at the Draft, as the Member reads them
  * (app.work_item_answers), whose last writer is of their own Participant (app.own_written_fields,
- * the Built-in Fields too), and whose field the latest Form still has with the same type. Never
- * another Company's writes, even in a section both may change, nor a Document, an Internal Note
- * or the history: the new Draft keeps only which item it came from, with no time
- * (app.record_duplicate). The same `idempotencyKey` again, or twice at once, answers with the same
- * Draft while it stands; once it is discarded, a new one. Refused alike, `duplicate_not_allowed`,
- * to anyone but a Member of the raiser's Participant; not found for an item they can't see.
+ * the Built-in Fields and checklists too), and whose field the latest Form still has with the
+ * same type; and the Documents and photos their own Participant uploaded, of the Attachments
+ * System Field and of those file, photo and checklist fields (app.copy_duplicate_documents: new
+ * rows, uploaded now, whose files are copied here in the same transaction, so discarding either
+ * item never touches the other's files). Never another Company's writes or files, even in a
+ * section both may change, nor an Internal Note or the history: the new Draft keeps only which
+ * item it came from, with no time (app.record_duplicate). The same `idempotencyKey` again, or
+ * twice at once, answers with the same Draft while it stands; once it is discarded, a new one.
+ * Refused alike, `duplicate_not_allowed`, to anyone but a Member of the raiser's Participant; not
+ * found for an item they can't see.
  */
 export async function duplicateWorkItem(
   db: Db,
+  files: FileStore,
   memberId: string,
   workItemId: string,
   idempotencyKey: string,
@@ -700,7 +706,7 @@ export async function duplicateWorkItem(
   const madeFor = (trx: Trx) =>
     sql<{ id: string | null }>`select app.duplicate_of_key(${idempotencyKey}::uuid) as id`.execute(trx).then((r) => r.rows[0]?.id ?? null);
   try {
-    return await duplicateIn(db, memberId, workItemId, idempotencyKey, now, madeFor);
+    return await duplicateIn(db, files, memberId, workItemId, idempotencyKey, now, madeFor);
   } catch (error) {
     if (!isDuplicateRequest(error)) throw error;
     // The same request, at the same time, made its Draft first: answer with that one.
@@ -719,6 +725,7 @@ const isDuplicateRequest = (error: unknown) =>
 
 function duplicateIn(
   db: Db,
+  files: FileStore,
   memberId: string,
   workItemId: string,
   idempotencyKey: string,
@@ -759,17 +766,13 @@ function duplicateIn(
       const atDraft = formToFillAt(latest, ...(await draftOf(trx, item.project_id, item.type_code)));
       const editable = new Set(atDraft.editableSections);
       const wasType = new Map(answerFields(pinned).map((f) => [f.key, f.type]));
-      const kept = latest.schema.sections
+      const atDraftFields = latest.schema.sections
         .filter((s) => editable.has(s.key))
         .flatMap((s) => s.fields)
-        .filter(
-          (f) =>
-            isAnswerField(f) &&
-            !documentFieldTypes.includes(f.type) &&
-            wasType.get(f.key) === f.type &&
-            answers[f.key] !== undefined &&
-            ownWritten.has(f.key),
-        );
+        .filter((f) => isAnswerField(f) && wasType.get(f.key) === f.type);
+      // A file or photo field has no answer, only Documents; a checklist both.
+      const kept = atDraftFields.filter((f) => answers[f.key] !== undefined && ownWritten.has(f.key));
+      const fileKeys = atDraftFields.filter((f) => documentFieldTypes.includes(f.type)).map((f) => f.key);
       const created = await createWorkItemIn(
         trx,
         item.project_id,
@@ -782,6 +785,11 @@ function duplicateIn(
       `.execute(trx);
       // The Member made the Draft and sees both: anything else is a bug, and nothing is created.
       checkedOutcome(recorded[0]!.outcome, ["recorded"]);
+      const { rows: copies } = await sql<{ storage_key: string; source_storage_key: string }>`
+        select storage_key, source_storage_key from app.copy_duplicate_documents(${created.id}::uuid, ${workItemId}::uuid, ${fileKeys}::text[], ${now})
+      `.execute(trx);
+      // If a file can't be copied, this throws and nothing is created.
+      for (const c of copies) await files.copy(c.source_storage_key, c.storage_key);
       return created;
     }),
   );

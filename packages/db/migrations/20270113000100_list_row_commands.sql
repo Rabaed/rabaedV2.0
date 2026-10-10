@@ -18,7 +18,8 @@
 --   to the raiser's Participant only. A discarded Draft frees its key: the same request
 --   again makes a new Draft. app.own_written_fields gives the fields of an item whose
 --   last writer is of the acting Member's own Participant, so a Duplicate copies only
---   those, the Built-in Fields too.
+--   those, the Built-in Fields too. app.copy_duplicate_documents copies the Documents
+--   and photos the Member's own Participant uploaded (owner decision 2026-10-10).
 -- * Download (owner decision B): the item as shared, the same for every viewer, the
 --   holder's own Company and the raiser included. app.work_item_shared_answers: the
 --   answers as they last arrived (never anyone's in-progress answers), a `participant`
@@ -145,6 +146,58 @@ create function app.record_duplicate(p_work_item_id uuid, p_source_id uuid, p_id
         return 'not_found';
       end if;
       return 'recorded';
+    end
+  $$;
+
+-- Copies to a new Duplicate's Draft the Documents of its source that the acting
+-- Member's own Participant uploaded, as the Member reads them (app.item_row_seen):
+-- of the Attachments System Field, and of the file, photo and checklist fields
+-- `p_field_keys` (those the Draft's Form still has, with the same type). Never
+-- another Company's file. New rows with new storage keys, uploaded now by the acting
+-- Member, so they tell no earlier time and nothing records where they came from; the
+-- api copies each file (storage_key, source_storage_key), so discarding either item
+-- never touches the other's files. Only for the Draft app.record_duplicate tied to
+-- that source, while the Member may change its Documents; nothing otherwise.
+create function app.copy_duplicate_documents(p_work_item_id uuid, p_source_id uuid, p_field_keys text[], p_now timestamptz)
+  returns table (storage_key text, source_storage_key text)
+  language plpgsql volatile security definer
+  set search_path = pg_catalog, public
+  as $$
+    #variable_conflict use_column
+    declare
+      v_at timestamptz := greatest(p_now, now());
+    begin
+      if not app.sees_work_item(p_source_id) or not app.can_change_documents(p_work_item_id)
+        or not exists (
+          select 1 from work_item w
+          where w.id = p_work_item_id and w.duplicated_from_id = p_source_id and w.duplicate_member_id = app.current_member_id()
+        )
+      then
+        return;
+      end if;
+      return query
+        with source as materialized (
+          select gen_random_uuid() as new_id, d.*
+          from document d
+          where d.work_item_id = p_source_id and d.confirmed_at is not null and d.removed_at is null
+            and app.item_row_seen(d.work_item_id, d.arrival, false)
+            and d.uploaded_by_participant_id in (select app.current_participant_ids())
+            and (d.field_key is null or d.field_key = any (p_field_keys))
+          order by d.confirmed_at, d.id
+        ), copied as (
+          insert into document (
+            id, project_id, work_item_id, file_name, size_bytes, content_type, storage_key,
+            uploaded_by_member_id, uploaded_by_participant_id, created_at, confirmed_at,
+            field_key, item_key, taken_at, taken_latitude, taken_longitude
+          )
+          select s.new_id, s.project_id, p_work_item_id, s.file_name, s.size_bytes, s.content_type,
+            app.document_storage_key(s.project_id, p_work_item_id, s.new_id),
+            app.current_member_id(), s.uploaded_by_participant_id, v_at, v_at,
+            s.field_key, s.item_key, s.taken_at, s.taken_latitude, s.taken_longitude
+          from source s
+          returning document.id, document.storage_key
+        )
+        select c.storage_key, s.storage_key from copied c join source s on s.new_id = c.id order by c.id;
     end
   $$;
 
@@ -342,6 +395,7 @@ revoke all on function
   app.discard_draft(uuid, timestamptz),
   app.duplicate_of_key(uuid),
   app.record_duplicate(uuid, uuid, uuid),
+  app.copy_duplicate_documents(uuid, uuid, text[], timestamptz),
   app.work_item_duplicated_from(uuid),
   app.own_written_fields(uuid),
   app.work_item_shared_answers(uuid),
@@ -355,6 +409,7 @@ grant execute on function
   app.discard_draft(uuid, timestamptz),
   app.duplicate_of_key(uuid),
   app.record_duplicate(uuid, uuid, uuid),
+  app.copy_duplicate_documents(uuid, uuid, text[], timestamptz),
   app.work_item_duplicated_from(uuid),
   app.own_written_fields(uuid),
   app.work_item_shared_answers(uuid),

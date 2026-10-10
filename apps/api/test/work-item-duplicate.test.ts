@@ -67,6 +67,18 @@ beforeAll(async () => {
   );
   await ok(at.k1Manager.post(`/v1/work-items/${closed}/claim`));
   await take(at.k1Manager, closed, "revise_c", { remarks: "Resubmit", internalNote: "K1 only: their price is high" });
+  // A file K1 uploaded to the item (as if its Form let K1 attach one): never C1's to copy.
+  await sql`
+      with k1 as (
+        select p.id from participant p
+        where p.project_id = ${at.projectId}::uuid and p.company_id = (select company_id from member where id = ${k1.company.authorizedPerson.id}::uuid)
+      ), doc as (select gen_random_uuid() as id)
+      insert into document (id, project_id, work_item_id, file_name, size_bytes, content_type, storage_key,
+        uploaded_by_member_id, uploaded_by_participant_id, confirmed_at)
+      select doc.id, ${at.projectId}::uuid, ${closed}::uuid, 'k1-sample-report.pdf', 10, 'application/pdf',
+        app.document_storage_key(${at.projectId}::uuid, ${closed}::uuid, doc.id), ${k1.company.authorizedPerson.id}::uuid, k1.id, now()
+      from k1, doc
+  `.execute(migrator);
 });
 
 describe("scenario RP-409-1: C1 duplicates a MAR K1 verified and closed with Code C", () => {
@@ -93,11 +105,32 @@ describe("scenario RP-409-1: C1 duplicates a MAR K1 verified and closed with Cod
     expect((await ok(duplicate(at.c1Engineer, closed, key), 201)).json().id).toBe(copy);
   });
 
-  it("never copies K1's answers, an Internal Note, a Document or the history", async () => {
+  it("copies the Documents C1 uploaded, never K1's, as new files only the new Draft's readers read", async () => {
+    const documents: DocumentList = (await ok(at.c1Engineer.get(`/v1/work-items/${copy}/documents`), 200)).json();
+    expect(documents.documents.map((d) => [d.fileName, d.fieldKey])).toEqual([["datasheet.pdf", "datasheet"]]);
+    const [copied] = documents.documents;
+    const source: DocumentList = (await ok(at.c1Engineer.get(`/v1/work-items/${closed}/documents`), 200)).json();
+    expect(source.documents.map((d) => d.id)).not.toContain(copied!.id);
+    expect(source.documents.map((d) => d.fileName)).toContain("k1-sample-report.pdf");
+    // Its own file: readable to C1, not to K1, another Contractor or a stranger, while it is C1's Draft.
+    expect((await ok(at.c1Engineer.get(`/v1/work-items/${copy}/documents/${copied!.id}/download`), 200)).json()).toHaveProperty("url");
+    for (const who of [at.k1Manager, c2Engineer, stranger]) {
+      await expectHidden(who.get(`/v1/work-items/${copy}/documents`));
+      await expectHidden(who.get(`/v1/work-items/${copy}/documents/${copied!.id}/download`));
+    }
+  });
+
+  it("keeps the original's files when the copy is deleted", async () => {
+    const extra = (await ok(duplicate(at.c1Engineer, closed), 201)).json().id as string;
+    await ok(at.c1Engineer.post(`/v1/work-items/${extra}/discard-draft`));
+    const source: DocumentList = (await ok(at.c1Engineer.get(`/v1/work-items/${closed}/documents`), 200)).json();
+    const datasheet = source.documents.find((d) => d.fileName === "datasheet.pdf")!;
+    expect((await ok(at.c1Engineer.get(`/v1/work-items/${closed}/documents/${datasheet.id}/download`), 200)).json()).toHaveProperty("url");
+  });
+
+  it("never copies K1's answers, an Internal Note or the history", async () => {
     const d = await detail(at.c1Engineer, copy);
     for (const field of ["sample_checked", "matches_specification", "verification_note"]) expect(d.answers).not.toHaveProperty(field);
-    const documents: DocumentList = (await ok(at.c1Engineer.get(`/v1/work-items/${copy}/documents`), 200)).json();
-    expect(documents.documents).toEqual([]);
     const events = await history(at.c1Engineer, copy);
     expect(events.events.every((e) => e.internalNote === null && e.remarks === null && e.transition === null)).toBe(true);
     expect(JSON.stringify(events)).not.toMatch(/C1 only|K1 only|Resubmit/);
