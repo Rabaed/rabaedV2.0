@@ -1,6 +1,6 @@
 "use client";
 
-import type { DimensionKind, DimensionValue, DimensionValues, HandoverPick, Locale, Visibility } from "@rabaed/domain";
+import type { DimensionKind, DimensionValue, DimensionValues, Locale, Visibility } from "@rabaed/domain";
 import { dimensionKinds } from "@rabaed/domain";
 import { Button, Checkbox, Field } from "@rabaed/ui";
 import { useLocale, useTranslations } from "next-intl";
@@ -26,15 +26,12 @@ export function VisibilityEditor({
   visibility,
   endpoint,
   allLabel,
-  handoverName,
 }: {
   /** What can be chosen: the Project's values, or (for a Member) what their Participant covers. */
   options: DimensionValues;
   visibility: Visibility;
   endpoint: string | null;
   allLabel: Record<DimensionKind, string>;
-  /** A Project Member's Visibility: their name, for the Handover of the Steps a save takes them off (RP-108). */
-  handoverName?: string;
 }) {
   const t = useTranslations("visibility");
   const locale = useLocale() as Locale;
@@ -70,32 +67,26 @@ export function VisibilityEditor({
         const implied = impliedBySelection(options[kind], selected);
         return { isAll, valueIds: isAll ? [] : [...selected].filter((id) => !implied.has(id)) };
       };
-      const body = Object.fromEntries(dimensionKinds.map((kind) => [kind, grantOf(kind)]));
-      const put = (handovers?: HandoverPick[]) =>
-        fetch(endpoint, {
-          method: "PUT",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify(handovers ? { ...body, handovers } : body),
-        });
       const errors: Record<string, string> = {
         exceeds_participant: t("exceedsParticipant"),
         forbidden: t("notAllowed"),
         project_closed: t("projectClosed"),
       };
-      const done = (outcome: HandoverOutcome) => {
-        if (outcome.ok) {
-          setMessage({ kind: "saved", text: t("saved") });
-          return router.refresh();
-        }
-        setMessage({ kind: "error", text: "message" in outcome ? outcome.message : (errors[outcome.code ?? ""] ?? t("unavailable")) });
-      };
-      // A Member's Visibility: the Steps it takes them off are handed over first (RP-108).
-      if (handoverName) return await handover.run({ name: handoverName, change: "save", send: put, done });
-      const res = await put();
-      const { error } = res.ok ? { error: undefined } : ((await res.json().catch(() => ({}))) as { error?: string });
-      done(res.ok ? { ok: true } : { ok: false, code: error ?? null });
-    } catch {
-      setMessage({ kind: "error", text: t("unavailable") });
+      // The Steps it takes Members off are handed over first (RP-108), whether the
+      // Visibility is a Member's or their whole Participant's.
+      await handover.run({
+        action: "save",
+        method: "PUT",
+        url: endpoint,
+        body: Object.fromEntries(dimensionKinds.map((kind) => [kind, grantOf(kind)])),
+        done: (outcome: HandoverOutcome) => {
+          if (outcome.kind === "done") {
+            setMessage({ kind: "saved", text: t("saved") });
+            return router.refresh();
+          }
+          setMessage({ kind: "error", text: outcome.kind === "refused" ? outcome.message : (errors[outcome.code ?? ""] ?? t("unavailable")) });
+        },
+      });
     } finally {
       setPending(false);
     }

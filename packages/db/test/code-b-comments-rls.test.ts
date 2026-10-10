@@ -236,7 +236,7 @@ describe("Code B's Comments reach exactly who sees the reviewed item", () => {
 
 // Scenario RP-513-1 (RP-513; workflow-engine.md §3.3 rule 4, §3.4; V14), as the app role.
 describe("scenario RP-513-1: K1 never reads C1's pool or holder", () => {
-  const pool = (as: string, id: string) => call<{ names: unknown[]; more: number }>(as, sql`select names, more from app.work_item_pool(${id}::uuid)`);
+  const pool = (as: string, id: string) => call<{ names: unknown[] }>(as, sql`select names from app.work_item_pool(${id}::uuid)`);
   const holder = (as: string, id: string) =>
     call<{ assignee_member_id: string | null }>(as, sql`select assignee_member_id from app.work_item_holder(${id}::uuid)`);
   /** C1's pool and holder events of item `id` that `as` reads. */

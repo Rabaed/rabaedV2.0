@@ -61,6 +61,13 @@ export type SetVisibilityRequest = z.infer<typeof setVisibilityRequest>;
 export const setMemberVisibilityRequest = setVisibilityRequest.extend(withHandovers);
 export type SetMemberVisibilityRequest = z.infer<typeof setMemberVisibilityRequest>;
 
+/**
+ * A Participant's Visibility: each Step its Members hold whose pool it takes them out
+ * of, handed over by their own Company (RP-108, scenario RP-108-3).
+ */
+export const setParticipantVisibilityRequest = setVisibilityRequest.extend(withHandovers);
+export type SetParticipantVisibilityRequest = z.infer<typeof setParticipantVisibilityRequest>;
+
 /** A Participant's Visibility and the values it covers (for narrowing its Members'). */
 export const participantVisibility = z.object({ visibility, covered: dimensionValues });
 export type ParticipantVisibility = z.infer<typeof participantVisibility>;

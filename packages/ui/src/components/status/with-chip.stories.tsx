@@ -65,7 +65,7 @@ export const Company: Story = {
   },
 };
 
-/** A Step of the viewer's own Company that nobody has picked up: the Step, then "not picked up"; no person, no avatar. */
+/** A Step of the viewer's own Company that nobody has picked up: the Step, then "Not picked up"; no person, no avatar. */
 export const NotPickedUpOwnStep: Story = {
   render: (_args, context) => (
     <WithChip
@@ -73,11 +73,11 @@ export const NotPickedUpOwnStep: Story = {
       inViewerCompany
       companyName={storyText(context, ownCompany)}
       stepName={storyText(context, { en: "Contractor review", ar: "مراجعة المقاول" })}
-      notPickedUpLabel={storyText(context, { en: "not picked up", ar: "لم تُستلَم" })}
+      notPickedUpLabel={storyText(context, { en: "Not picked up", ar: "لم تُستلَم" })}
     />
   ),
   play: async (context) => {
-    await expect(context.canvasElement).toHaveTextContent(storyText(context, { en: "Contractor review · not picked up", ar: "مراجعة المقاول · لم تُستلَم" }));
+    await expect(context.canvasElement).toHaveTextContent(storyText(context, { en: "Contractor review · Not picked up", ar: "مراجعة المقاول · لم تُستلَم" }));
     await expect(context.canvasElement.querySelector("img")).toBeNull();
   },
 };

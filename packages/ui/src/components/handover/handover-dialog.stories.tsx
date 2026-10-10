@@ -15,6 +15,7 @@ const labels: Record<Locale, HandoverDialogLabels> = {
     title: "Hand over Ali Sonour's Steps",
     description: "Ali Sonour holds these. Choose who takes each one before Ali Sonour is deactivated.",
     noNumber: "No number yet",
+    hiddenItem: (step, project) => `An item at ${step} on ${project}`,
     newHolder: "New holder",
     choose: "Choose who takes it",
     cancel: "Cancel",
@@ -25,6 +26,7 @@ const labels: Record<Locale, HandoverDialogLabels> = {
     title: "تسليم خطوات Ali Sonour",
     description: "هذه الخطوات لدى Ali Sonour. اختر من يتولى كل خطوة قبل إيقاف Ali Sonour.",
     noNumber: "بلا رقم بعد",
+    hiddenItem: (step, project) => `بند في ${step} ضمن ${project}`,
     newHolder: "المتولّي الجديد",
     choose: "اختر من يتولاها",
     cancel: "إلغاء",
@@ -36,24 +38,23 @@ const labels: Record<Locale, HandoverDialogLabels> = {
 const project = { id: "00000000-0000-4000-8000-0000000000a1", name: { en: "Riyadh Gate Tower", ar: "برج بوابة الرياض" } };
 const khalid = { id: "00000000-0000-4000-8000-0000000000b1", fullName: { en: "Khalid Bakr", ar: "خالد بكر" } };
 const badr = { id: "00000000-0000-4000-8000-0000000000b2", fullName: { en: "Badr Alawi", ar: "بدر العلوي" } };
+const ali = { id: "00000000-0000-4000-8000-0000000000b4", fullName: { en: "Ali Sonour", ar: "علي سنور" } };
 const saad = { id: "00000000-0000-4000-8000-0000000000b3", fullName: { en: "Saad Harbi", ar: "سعد الحربي" } };
 const steps: HandoverDialogProps["steps"] = [
   {
     assignmentId: "00000000-0000-4000-8000-0000000000c1",
-    workItemId: "00000000-0000-4000-8000-0000000000d1",
     project,
-    documentNumber: "TWR-MAR-CCM-0007",
-    title: "Cable trays, Level 2",
     step: { en: "Contractor review", ar: "مراجعة المقاول" },
+    item: { id: "00000000-0000-4000-8000-0000000000d1", documentNumber: "TWR-MAR-CCM-0007", title: "Cable trays, Level 2" },
+    holder: ali,
     candidates: [badr, khalid],
   },
   {
     assignmentId: "00000000-0000-4000-8000-0000000000c2",
-    workItemId: "00000000-0000-4000-8000-0000000000d2",
     project,
-    documentNumber: null,
-    title: "Chillers",
     step: { en: "Draft", ar: "مسودة" },
+    item: { id: "00000000-0000-4000-8000-0000000000d2", documentNumber: null, title: "Chillers" },
+    holder: ali,
     candidates: [saad],
   },
 ];
@@ -114,6 +115,34 @@ export const Refused: Story = {
   play: async (context) => {
     const panel = await dialog(context);
     await expect(within(panel).getByRole("alert")).toHaveTextContent("Something changed");
+  },
+};
+
+const heldBy: Record<Locale, (name: string) => string> = { en: (name) => `Held by ${name}`, ar: (name) => `لدى ${name}` };
+
+/**
+ * A Participant's Visibility narrowed (scenario RP-108-3): Steps of two holders, each
+ * named; one item out of the viewer's sight reads by its Step and Project only, with
+ * no Subject or Document Number (scenario RP-108-2). Left open for the screenshot.
+ */
+export const HiddenItemAndSeveralHolders: Story = {
+  args: {
+    steps: [
+      steps[0]!,
+      { assignmentId: "00000000-0000-4000-8000-0000000000c3", project, step: steps[0]!.step, item: null, holder: khalid, candidates: [badr] },
+    ],
+  },
+  render: (args, context) => (
+    <HandoverDialog {...args} locale={storyLocale(context)} labels={{ ...labels[storyLocale(context)], heldBy: heldBy[storyLocale(context)] }} />
+  ),
+  play: async (context) => {
+    const locale = storyLocale(context);
+    const panel = await dialog(context);
+    const hidden = labels[locale].hiddenItem(steps[0]!.step[locale], project.name[locale]);
+    await expect(within(panel).getByText(hidden)).toBeVisible();
+    await expect(within(panel).getByText(heldBy[locale](khalid.fullName[locale]))).toBeVisible();
+    await expect(within(panel).getByText(heldBy[locale](ali.fullName[locale]))).toBeVisible();
+    await expect(within(panel).getAllByText(/TWR-MAR-CCM-/)).toHaveLength(1);
   },
 };
 

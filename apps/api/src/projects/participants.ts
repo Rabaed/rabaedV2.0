@@ -13,7 +13,7 @@ import {
 } from "@rabaed/domain";
 import { sql, type RawBuilder } from "kysely";
 import { refusedAsForbidden, type Forbidden } from "../db-error.ts";
-import { handedOver, withHandovers, type HandoverRefusal } from "../identity/handover.ts";
+import { handedOver, type HandoverRefusal } from "../identity/handover.ts";
 import { checkedOutcome, commandResult } from "../outcomes.ts";
 
 // Participants and Project Members. Writes go through the app.* functions of the
@@ -327,18 +327,12 @@ export function removeProjectMember(
   now: Date,
   picks?: HandoverPick[],
 ): Promise<ProjectMemberResult | HandoverRefusal> {
-  return withHandovers(() =>
-    refusedAsForbidden(() =>
-      withMember(db, memberId, (trx) =>
-        handedOver(trx, { memberId: targetId, participantId, because: "removed", picks, now }, async () => {
-          const { rows } = await sql<{ outcome: string }>`
-            select app.remove_project_member(${participantId}::uuid, ${targetId}::uuid, ${now}) as outcome
-          `.execute(trx);
-          return commandResult(rows[0]!.outcome, "removed", projectMemberRefusals);
-        }),
-      ),
-    ),
-  );
+  return handedOver(db, memberId, { memberId: targetId, participantId, because: "removed", picks, now }, async (trx) => {
+    const { rows } = await sql<{ outcome: string }>`
+      select app.remove_project_member(${participantId}::uuid, ${targetId}::uuid, ${now}) as outcome
+    `.execute(trx);
+    return commandResult(rows[0]!.outcome, "removed", projectMemberRefusals);
+  });
 }
 
 /**
@@ -354,18 +348,12 @@ export function setMemberPositions(
   now: Date,
   picks?: HandoverPick[],
 ): Promise<ProjectMemberResult | HandoverRefusal> {
-  return withHandovers(() =>
-    refusedAsForbidden(() =>
-      withMember(db, memberId, (trx) =>
-        handedOver(trx, { memberId: targetId, participantId, because: "positions", picks, now }, async () => {
-          const { rows } = await sql<{ outcome: string }>`
-            select app.set_project_member_positions(${participantId}::uuid, ${targetId}::uuid, ${positions}::text[]) as outcome
-          `.execute(trx);
-          return commandResult(rows[0]!.outcome, "set", projectMemberRefusals);
-        }),
-      ),
-    ),
-  );
+  return handedOver(db, memberId, { memberId: targetId, participantId, because: "positions", picks, now }, async (trx) => {
+    const { rows } = await sql<{ outcome: string }>`
+      select app.set_project_member_positions(${participantId}::uuid, ${targetId}::uuid, ${positions}::text[]) as outcome
+    `.execute(trx);
+    return commandResult(rows[0]!.outcome, "set", projectMemberRefusals);
+  });
 }
 
 /**

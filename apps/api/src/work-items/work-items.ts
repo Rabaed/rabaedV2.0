@@ -554,7 +554,6 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
       held_by: BilingualText | null;
       holder_name: BilingualText | null;
       pool_names: BilingualText[] | null;
-      pool_more: number | null;
       outcome: WorkItemOutcome | null;
       closed_at: Date | null;
       can_save_answers: boolean;
@@ -574,7 +573,7 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
         cc.open_count as open_comments, cc.closed_count as closed_comments,
         w.submitted_at, w.outcome, w.closed_at, s.key as step_key, s.name as step_name,
         raiser.legal_name as raised_by, holder.legal_name as held_by, m.full_name as holder_name,
-        pool.names as pool_names, pool.more as pool_more,
+        pool.names as pool_names,
         app.can_save_answers(w.id) as can_save_answers, w.revision_no, app.revision_versions_changed(w.id) as versions_changed,
         app.can_create_revision(w.id) as can_create_revision, app.can_discard_revision(w.id) as can_discard_revision,
         app.can_create_replacement(w.id) as can_create_replacement
@@ -630,7 +629,7 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
         ? {
             companyName: d.held_by,
             memberName: d.holder_name,
-            pool: d.pool_names === null ? null : { names: d.pool_names, more: d.pool_more ?? 0 },
+            pool: d.pool_names === null ? null : { names: d.pool_names },
           }
         : null,
       outcome: d.outcome,

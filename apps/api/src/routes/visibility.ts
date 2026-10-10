@@ -5,7 +5,7 @@ import {
   memberVisibility,
   participantVisibility,
   setMemberVisibilityRequest,
-  setVisibilityRequest,
+  setParticipantVisibilityRequest,
 } from "@rabaed/domain";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
@@ -83,7 +83,7 @@ export const visibilityRoutes =
     // never reveals that a Participant exists (RP-233).
     app.put(
       "/v1/participants/:participantId/visibility",
-      { schema: { params: participantParams, body: setVisibilityRequest } },
+      { schema: { params: participantParams, body: setParticipantVisibilityRequest } },
       async (request, reply) => {
         const memberId = ctx.requireMember(request);
         const participantId = idOrNotFound(request.params.participantId);

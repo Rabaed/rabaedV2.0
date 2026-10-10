@@ -69,6 +69,12 @@ async function tower(code: string) {
   const engineer = await memberOnProject(api, c1, c1ParticipantId, ["engineer"], { name: "Omar Engineer" });
   const ali = await memberOnProject(api, c1, c1ParticipantId, ["project_manager"], { name: "Ali Sonour" });
   const hafiz = await memberOnProject(api, k1, k1ParticipantId, ["manager"], { name: "Hafiz Manager" });
+  // Each Authorized Person is on the Project and sees every item of their Participant's
+  // (scenario RP-108-2 narrows C1's).
+  for (const [co, p] of [[c1, c1ParticipantId], [k1, k1ParticipantId]] as const) {
+    await api.addProjectMember(co.caller, p, co.company.authorizedPerson.id);
+    await ok(co.caller.request("PUT", `/v1/participants/${p}/members/${co.company.authorizedPerson.id}/visibility`, { trade: all, location: all }));
+  }
   const at: Tower = {
     projectId,
     c1ParticipantId,
@@ -106,11 +112,10 @@ describe("deactivating a Member who holds a Step (seam 1)", () => {
     expect(one).toEqual([
       {
         assignmentId: expect.any(String),
-        workItemId: id,
         project: { id: t.at.projectId, name: expect.anything() },
-        documentNumber: expect.any(String),
-        title: "Cable trays",
         step: expect.objectContaining({ en: "Contractor review" }),
+        item: { id, documentNumber: expect.any(String), title: "Cable trays" },
+        holder: { id: t.ali.id, fullName: bilingual("Ali Sonour") },
         candidates: [{ id: khalid.id, fullName: bilingual("Khalid Bakr") }],
       },
     ]);
@@ -160,7 +165,7 @@ describe("removing a Member from a Project, and changing their Positions or Visi
     const saad = await memberOnProject(api, t.c1, t.at.c1ParticipantId, ["engineer"], { name: "Saad Engineer" });
     const id = await draft(t.at, t.at.c1Engineer, "Draft trays");
     const [step] = await needed(removeFromProject(t.c1, t.at.c1ParticipantId, t.engineer.id));
-    expect(step).toMatchObject({ workItemId: id, documentNumber: null, title: "Draft trays" });
+    expect(step).toMatchObject({ item: { id, documentNumber: null, title: "Draft trays" } });
     expect(step!.candidates.map((c) => c.id)).toContain(saad.id);
 
     const res = await removeFromProject(t.c1, t.at.c1ParticipantId, t.engineer.id, [{ assignmentId: step!.assignmentId, toMemberId: saad.id }]);
@@ -195,7 +200,7 @@ describe("removing a Member from a Project, and changing their Positions or Visi
     const narrowed = { trade: only(t.at.mechanical), location: all };
 
     const [step] = await needed(t.c1.caller.request("PUT", path, narrowed));
-    expect(step).toMatchObject({ workItemId: id, candidates: [{ id: khalid.id }] });
+    expect(step).toMatchObject({ item: { id }, candidates: [{ id: khalid.id }] });
     // Refused: Ali's Visibility is as it was.
     expect((await ok(t.c1.caller.get(path), 200)).json().visibility.trade.isAll).toBe(true);
     await ok(t.c1.caller.request("PUT", path, { ...narrowed, handovers: [{ assignmentId: step!.assignmentId, toMemberId: khalid.id }] }));
@@ -231,12 +236,12 @@ describe("scenario RP-108-1: the Handover never lists another Company's items or
     await memberOnProject(api, t.c1, t.at.c1ParticipantId, ["project_manager"], { name: "Khalid Bakr" });
 
     const k1Steps = await needed(deactivate(t.k1, t.hafiz.id));
-    expect(k1Steps.map((s) => s.workItemId)).toEqual([atK1]);
+    expect(k1Steps.map((s) => s.item?.id)).toEqual([atK1]);
     expect(k1Steps[0]!.candidates).toEqual([{ id: nadia.id, fullName: bilingual("Nadia Reviewer") }]);
     expect(JSON.stringify(k1Steps)).not.toMatch(/Ali Sonour|Khalid Bakr|Omar Engineer|Still with C1/);
 
     const c1Steps = await needed(deactivate(t.c1, t.ali.id));
-    expect(c1Steps.map((s) => s.workItemId)).toEqual([atC1]);
+    expect(c1Steps.map((s) => s.item?.id)).toEqual([atC1]);
     expect(JSON.stringify(c1Steps)).not.toMatch(/Hafiz Manager|Nadia Reviewer|Raised by C1/);
 
     // C1 can't hand K1's Step over, nor name K1's Members; K1's AP can't deactivate C1's Ali.
@@ -253,5 +258,75 @@ describe("scenario RP-108-1: the Handover never lists another Company's items or
     expect(refused.json().error).toBe("nobody_can_take");
     expect(Object.keys(refused.json()).sort()).toEqual(["error", "project", "step"]);
     expect(refused.body).not.toMatch(/Ali Sonour|Khalid Bakr|Omar Engineer|Raised by C1|Still with C1/);
+  });
+});
+
+describe("scenario RP-108-2: an item the Authorized Person doesn't see is listed by its Step and Project only", () => {
+  it("names no Subject, Document Number or item id, and the Handover still works", async () => {
+    const t = await tower("HO7");
+    const khalid = await memberOnProject(api, t.c1, t.at.c1ParticipantId, ["project_manager"], { name: "Khalid Bakr" });
+    const seen = await inInternalReview(t.at, t.at.c1Engineer, "Seen trays");
+    const hidden = await draft(t.at, t.at.c1Engineer, "Hidden chillers", t.at.mechanical);
+    await take(t.at.c1Engineer, hidden, "send_for_review");
+    for (const id of [seen, hidden]) await ok(t.at.c1Pm.post(`/v1/work-items/${id}/pick-up`));
+    const hiddenNumber = (await detail(t.at.c1Pm, hidden)).documentNumber;
+
+    // C1's Authorized Person is narrowed to Electrical: Mechanical's item is out of their sight.
+    const apId = t.c1.company.authorizedPerson.id;
+    await ok(t.c1.caller.request("PUT", `/v1/participants/${t.at.c1ParticipantId}/members/${apId}/visibility`, { trade: only(t.at.electrical), location: all }));
+    expect((await t.c1.caller.get(`/v1/work-items/${hidden}`)).statusCode).toBe(404);
+
+    const res = await deactivate(t.c1, t.ali.id);
+    expect(res.statusCode, res.body).toBe(409);
+    const steps = res.json().handovers as HandoverStep[];
+    expect(steps.map((s) => s.item?.id ?? null)).toEqual(expect.arrayContaining([seen, null]));
+    expect(steps.find((s) => s.item === null)).toEqual({
+      assignmentId: expect.any(String),
+      project: { id: t.at.projectId, name: expect.anything() },
+      step: expect.objectContaining({ en: "Contractor review" }),
+      item: null,
+      holder: { id: t.ali.id, fullName: bilingual("Ali Sonour") },
+      candidates: [{ id: khalid.id, fullName: bilingual("Khalid Bakr") }],
+    });
+    expect(res.body).not.toContain(hidden);
+    expect(res.body).not.toContain("Hidden chillers");
+    if (hiddenNumber) expect(res.body).not.toContain(hiddenNumber);
+
+    // Picked like any other: Khalid holds both, and Ali is deactivated.
+    const picks = steps.map((s) => ({ assignmentId: s.assignmentId, toMemberId: khalid.id }));
+    const done = await deactivate(t.c1, t.ali.id, picks);
+    expect(done.statusCode, done.body).toBe(200);
+    expect((await detail(khalid.caller, hidden)).heldBy?.memberName).toEqual(bilingual("Khalid Bakr"));
+  });
+});
+
+describe("scenario RP-108-3: narrowing a whole Participant's Visibility hands its Members' Steps over first", () => {
+  it("the Participant's own Admin gets the Handover flow; another Company's Admin is refused with a count only", async () => {
+    const t = await tower("HO8");
+    // Held by Ali, C1's only PM; and one held by Hafiz, K1's only manager.
+    const own = await inInternalReview(t.at, t.at.c1Engineer, "Own trays");
+    const atK1 = await inInternalReview(t.at, t.at.c1Engineer, "At K1 trays");
+    await take(t.at.c1Pm, atK1, "submit");
+    const offElectrical = { trade: only(t.at.mechanical), location: all };
+
+    // C1's Project Admin, a Member of C1's Participant: nobody else at C1 can take Ali's Step.
+    const c1Path = `/v1/participants/${t.at.c1ParticipantId}/visibility`;
+    const refusedOwn = await t.c1.caller.request("PUT", c1Path, offElectrical);
+    expect(refusedOwn.statusCode, refusedOwn.body).toBe(409);
+    expect(refusedOwn.json()).toMatchObject({ error: "nobody_can_take", step: { en: "Contractor review" } });
+    expect((await detail(t.at.c1Pm, own)).heldBy?.memberName).toEqual(bilingual("Ali Sonour"));
+
+    // K1's Steps, from C1's Admin: refused by how many and whose, naming no Step, item or Member (V14).
+    const k1Path = `/v1/participants/${t.k1ParticipantId}/visibility`;
+    const refused = await t.c1.caller.request("PUT", k1Path, offElectrical);
+    expect(refused.statusCode, refused.body).toBe(409);
+    expect(refused.json()).toEqual({ error: "other_company_handover", steps: 1, company: expect.objectContaining({ en: expect.any(String) }) });
+    expect(refused.body).not.toMatch(/Hafiz Manager|At K1 trays|Own trays/);
+    expect(refused.body).not.toContain(atK1);
+    // Nothing changed: Hafiz still holds it, and still sees it.
+    expect((await detail(t.at.k1Manager, atK1)).heldBy?.memberName).toEqual(bilingual("Hafiz Manager"));
+
+    // A narrowing that takes nobody off a Step is made at once.
+    await ok(t.c1.caller.request("PUT", k1Path, { trade: all, location: only(t.at.buildingA) }));
   });
 });

@@ -3,7 +3,7 @@
 import { Button, Checkbox, Field, Select } from "@rabaed/ui";
 import { useTranslations } from "next-intl";
 import { useState, type FormEvent } from "react";
-import { useHandover } from "@/components/handover";
+import { useHandover, type HandoverRequest } from "@/components/handover";
 import { Link, useRouter } from "@/i18n/navigation";
 
 type Person = { id: string; name: string };
@@ -61,31 +61,26 @@ export function ProjectMembersEditor({
    * A change that may take `member` out of a Step Pool: their Steps there are handed
    * over first (RP-108), in the Handover dialog when the API asks.
    */
-  function withHandover(member: Person, change: "remove" | "save", method: "PUT" | "DELETE", path: string, body: object) {
+  function withHandover(change: Pick<HandoverRequest, "action" | "method" | "url" | "body">) {
     setError(null);
     void handover.run({
-      name: member.name,
-      change,
-      send: (handovers) =>
-        fetch(`/api/v1/participants/${participantId}/members${path}`, {
-          method,
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify(handovers ? { ...body, handovers } : body),
-        }),
+      ...change,
       done: (outcome) => {
-        if (outcome.ok) return router.refresh();
-        setError("message" in outcome ? outcome.message : t("unavailable"));
+        if (outcome.kind === "done") return router.refresh();
+        setError(outcome.kind === "refused" ? outcome.message : t("unavailable"));
       },
     });
   }
 
+  const memberUrl = (member: Person) => `/api/v1/participants/${participantId}/members/${member.id}`;
+
   function togglePosition(member: Person & { positions: string[] }, key: string, on: boolean) {
     const next = on ? [...member.positions, key] : member.positions.filter((p) => p !== key);
-    withHandover(member, "save", "PUT", `/${member.id}/positions`, { positions: next });
+    withHandover({ action: "save", method: "PUT", url: `${memberUrl(member)}/positions`, body: { positions: next } });
   }
 
   function remove(member: Person) {
-    if (window.confirm(t("confirmRemove", { name: member.name }))) withHandover(member, "remove", "DELETE", `/${member.id}`, {});
+    if (window.confirm(t("confirmRemove", { name: member.name }))) withHandover({ action: "remove", method: "DELETE", url: memberUrl(member), body: {} });
   }
 
   return (

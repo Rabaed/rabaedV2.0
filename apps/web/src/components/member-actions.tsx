@@ -46,18 +46,14 @@ export function MemberActions({ member }: { member: CompanyMember }) {
     setError(false);
     setRefusal(null);
     void handover.run({
-      name: member.fullName[locale],
-      change: "deactivate",
-      send: (handovers) =>
-        fetch(`/api/v1/members/${member.id}/deactivate`, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify(handovers ? { handovers } : {}),
-        }),
+      action: "deactivate",
+      method: "POST",
+      url: `/api/v1/members/${member.id}/deactivate`,
+      body: {},
       done: (outcome) => {
-        if (outcome.ok) return router.refresh();
+        if (outcome.kind === "done") return router.refresh();
         // Nobody else can take one of their Steps: that says which; anything else, the usual.
-        if ("message" in outcome) setRefusal(outcome.message);
+        if (outcome.kind === "refused") setRefusal(outcome.message);
         else setError(true);
       },
     });

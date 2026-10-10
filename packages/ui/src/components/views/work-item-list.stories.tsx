@@ -13,7 +13,7 @@ const b = (en: string, ar: string) => ({ en, ar });
 const copy = {
   stage: b("Stage", "المرحلة"),
   with: b("With", "لدى"),
-  notPickedUp: b("not picked up", "لم تُستلَم"),
+  notPickedUp: b("Not picked up", "لم تُستلَم"),
   allRevisions: b("Show all Revisions", "عرض كل المراجعات"),
   needMyAction: b("Need My Action", "بحاجة لإجرائي"),
   nextPage: b("Next page", "الصفحة التالية"),
@@ -180,7 +180,7 @@ const cellsOf = (context: PlayContext, title: string) => {
 
 /**
  * Wide: every column, one row per chain. "With" names the holder in the
- * viewer's own Company, shows "<Step> · not picked up", and another Company by its
+ * viewer's own Company, shows "<Step> · Not picked up", and another Company by its
  * name only (V14). Document Numbers read left to right, in Arabic too.
  */
 export const Wide: Story = {

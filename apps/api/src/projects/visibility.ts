@@ -7,12 +7,13 @@ import {
   type MemberVisibility,
   type ParticipantVisibility,
   type SetMemberVisibilityRequest,
+  type SetParticipantVisibilityRequest,
   type SetVisibilityRequest,
   type Visibility,
 } from "@rabaed/domain";
 import { sql, type Transaction } from "kysely";
 import { refusedAsForbidden, type Forbidden } from "../db-error.ts";
-import { handedOver, withHandovers, type HandoverChange, type HandoverRefusal } from "../identity/handover.ts";
+import { handedOver, type HandoverChange, type HandoverRefusal } from "../identity/handover.ts";
 import { checkedOutcome } from "../outcomes.ts";
 
 // Trades, Locations and Visibility grants. Writes go through the app.* functions
@@ -148,53 +149,56 @@ class Refused extends Error {
 }
 
 /**
- * Sets every dimension with `setOne` in one transaction: all of them, or none. With
- * `handover`, a Project Member's Steps their new Visibility takes them out of the pool
- * of are handed over in it too (RP-108).
+ * Sets every dimension with `setOne` in one transaction: all of them, or none, with
+ * the Handovers of the Steps the new Visibility takes Members out of the pool of (RP-108).
  */
 async function setEveryDimension(
   db: Db,
   memberId: string,
   request: SetVisibilityRequest,
   setOne: (trx: Trx, kind: DimensionKind, grant: SetVisibilityRequest[DimensionKind]) => Promise<string>,
-  handover?: HandoverChange,
+  handover: HandoverChange,
 ): Promise<SetVisibilityResult | HandoverRefusal> {
   try {
-    return await withHandovers(() =>
-      refusedAsForbidden(() =>
-        withMember(db, memberId, async (trx) => {
-          const setAll = async () => {
-            for (const kind of dimensionKinds) {
-              const outcome = checkedOutcome(await setOne(trx, kind, request[kind]), ["set", ...setVisibilityRefusals]);
-              if (outcome !== "set") throw new Refused(outcome);
-            }
-            return { ok: true } as const;
-          };
-          return handover ? handedOver(trx, handover, setAll) : setAll();
-        }),
-      ),
-    );
+    return await handedOver(db, memberId, handover, async (trx) => {
+      for (const kind of dimensionKinds) {
+        const outcome = checkedOutcome(await setOne(trx, kind, request[kind]), ["set", ...setVisibilityRefusals]);
+        if (outcome !== "set") throw new Refused(outcome);
+      }
+      return { ok: true } as const;
+    });
   } catch (error) {
     if (error instanceof Refused) return { ok: false, reason: error.reason };
     throw error;
   }
 }
 
-/** A Project Admin sets a Participant's Visibility; `not_found` for anyone else, as for a made-up id. */
+/**
+ * A Project Admin sets a Participant's Visibility; `not_found` for anyone else, as for
+ * a made-up id. A Step one of its Members holds whose pool it takes them out of is
+ * handed over first, to `request.handovers`, by the Participant's own Company; another
+ * Company's Admin is refused with how many Steps wait (RP-108, scenario RP-108-3).
+ */
 export function setParticipantVisibility(
   db: Db,
   memberId: string,
   participantId: string,
-  request: SetVisibilityRequest,
+  request: SetParticipantVisibilityRequest,
   now: Date,
 ): Promise<SetVisibilityResult | HandoverRefusal> {
-  return setEveryDimension(db, memberId, request, async (trx, kind, grant) => {
-    const { rows } = await sql<{ outcome: string }>`
-      select app.set_participant_visibility(
-        ${participantId}::uuid, ${kind}, ${grant.isAll}, ${grant.valueIds}::uuid[], ${now}) as outcome
-    `.execute(trx);
-    return rows[0]!.outcome;
-  });
+  return setEveryDimension(
+    db,
+    memberId,
+    request,
+    async (trx, kind, grant) => {
+      const { rows } = await sql<{ outcome: string }>`
+        select app.set_participant_visibility(
+          ${participantId}::uuid, ${kind}, ${grant.isAll}, ${grant.valueIds}::uuid[], ${now}) as outcome
+      `.execute(trx);
+      return rows[0]!.outcome;
+    },
+    { memberId: null, participantId, because: "visibility", picks: request.handovers, now },
+  );
 }
 
 /**

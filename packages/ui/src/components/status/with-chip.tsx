@@ -30,12 +30,12 @@ export type WithChipHolder =
   | (HolderCompany & NoPerson & { kind: "company"; inViewerCompany: boolean })
   | (HolderCompany &
       NoPerson & {
-        /** A Step of the viewer's own Company that nobody has picked up yet: "<Step> · not picked up". */
+        /** A Step of the viewer's own Company that nobody has picked up yet: "<Step> · Not picked up". */
         kind: "pool";
         inViewerCompany: true;
         /** The Step's name. */
         stepName: string;
-        /** "not picked up", in the viewer's language. */
+        /** "Not picked up", in the viewer's language. */
         notPickedUpLabel: string;
       });
 

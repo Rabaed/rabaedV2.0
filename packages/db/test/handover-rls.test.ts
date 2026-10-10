@@ -145,6 +145,9 @@ beforeAll(async () => {
     [c1, participant.c1, khalid, ["project_manager"]],
     [k1, participant.k1, k1.member, ["engineer"]],
     [k1, participant.k1, nadia, ["engineer"]],
+    // The Authorized Persons are on the Project too, seeing every item (RP-108-2 narrows C1's).
+    [c1, participant.c1, c1.ap, []],
+    [k1, participant.k1, k1.ap, []],
   ];
   for (const [co, p, m, positions] of people) {
     await call(co.ap, sql<{ outcome: string }>`select app.add_project_member(${p}::uuid, ${m}::uuid, now())`);
@@ -215,5 +218,65 @@ describe("scenario RP-108-1: a Handover reads and moves only the Authorized Pers
     expect(await names(nadia, atK1)).toHaveLength(1);
     expect(JSON.stringify(await names(nadia, atK1))).not.toMatch(/Ali Sonour|Khalid Bakr/);
     expect(await names(c1.member, atK1)).toEqual([]);
+  });
+});
+
+/** Runs `fn` as `as` in a transaction that is rolled back. */
+async function rolledBack(as: string, fn: (trx: Parameters<Parameters<typeof withMember>[2]>[0]) => Promise<void>): Promise<void> {
+  const rollBack = new Error("roll back");
+  await withMember(app, as, async (trx) => {
+    await fn(trx);
+    throw rollBack;
+  }).catch((error: unknown) => {
+    if (error !== rollBack) throw error;
+  });
+}
+
+describe("scenario RP-108-2: an item the Authorized Person doesn't see is its Step and Project only", () => {
+  it("names no item id, Document Number or Subject, but its holder and Step", async () => {
+    // Ali is an engineer by now: Khalid, the only PM, holds it on arrival.
+    const id = await inReview("Unseen by the AP");
+    if ((await migrator.query("select status from step_assignment where work_item_id = $1 and status = 'pooled'", [id])).rowCount) {
+      expect(await pickUp(khalid, id)).toBe("picked_up");
+    }
+    await rolledBack(c1.ap, async (trx) => {
+      // C1's Authorized Person narrowed off every Trade: the item is out of their sight.
+      expect((await sql<{ outcome: string }>`select app.set_member_visibility(${participant.c1}::uuid, ${c1.ap}::uuid, 'trade', false, '{}'::uuid[], now()) as outcome`.execute(trx)).rows[0]!.outcome).toBe("set");
+      expect((await sql<{ sees: boolean }>`select app.sees_work_item(${id}::uuid) as sees`.execute(trx)).rows[0]!.sees).toBe(false);
+      await sql`select app.set_project_member_positions(${participant.c1}::uuid, ${khalid}::uuid, '{engineer}')`.execute(trx);
+      const rows = (
+        await sql<{ work_item_id: string | null; document_number: string | null; title: string | null; step_name: unknown; holder: { id: string } }>`
+          select * from app.handovers_needed(${khalid}::uuid, null, '{}')`.execute(trx)
+      ).rows;
+      // This one and the one handed to Khalid above: neither in the AP's sight now.
+      expect(rows).toHaveLength(2);
+      for (const row of rows) {
+        expect(row).toMatchObject({ work_item_id: null, document_number: null, title: null, holder: { id: khalid } });
+        expect(row.step_name).toBeTruthy();
+      }
+    });
+  });
+});
+
+describe("scenario RP-108-3: another Company's Participant narrowed reads how many Steps wait, and whose, only", () => {
+  it("C1's Admin reads K1's count and name, never its Steps or Members; nobody else reads even that", async () => {
+    await rolledBack(c1.ap, async (trx) => {
+      // K1 narrowed off Electrical: Nadia leaves the pool of the Step she holds.
+      expect((await sql<{ outcome: string }>`select app.set_participant_visibility(${participant.k1}::uuid, 'trade', false, '{}'::uuid[], now()) as outcome`.execute(trx)).rows[0]!.outcome).toBe("set");
+      const waiting = (await sql<Record<string, unknown>>`select * from app.handovers_waiting(${participant.k1}::uuid)`.execute(trx)).rows;
+      expect(waiting).toEqual([{ steps: expect.any(Number), company_name: { en: "K1", ar: "K1" } }]);
+      expect(waiting[0]!.steps).toBeGreaterThan(0);
+      // Nothing of which: no Step, item or Member, and no Handover of K1's Step.
+      expect((await sql`select * from app.handovers_needed(null, ${participant.k1}::uuid, '{}')`.execute(trx)).rows).toEqual([]);
+      expect((await sql<{ ids: string[] }>`select app.handover_pooled_before(null, ${participant.k1}::uuid) as ids`.execute(trx)).rows[0]!.ids).toEqual([]);
+      const held = (await migrator.query("select id from step_assignment where participant_id = $1 and status = 'picked_up' and assignee_member_id = $2", [participant.k1, nadia])).rows[0].id as string;
+      expect((await sql<{ outcome: string }>`select app.hand_over_step(${held}::uuid, ${nadia}::uuid, ${k1.member}::uuid, 'visibility', now()) as outcome`.execute(trx)).rows[0]!.outcome).toBe("not_offered");
+      // Its own Participant: no count (it gets the Handover list instead).
+      expect((await sql`select * from app.handovers_waiting(${participant.c1}::uuid)`.execute(trx)).rows).toEqual([]);
+    });
+    // Not a Project Admin: nothing at all.
+    for (const who of [k1.ap, nadia, c1.member]) {
+      expect(await call(who, sql<{ steps: number }>`select * from app.handovers_waiting(${participant.k1}::uuid)`)).toEqual([]);
+    }
   });
 });

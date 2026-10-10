@@ -1,4 +1,4 @@
-import { answerFields, formatNumber, isOpenStageCategory, stepAgeLabel, type Locale } from "@rabaed/domain";
+import { answerFields, formatNumber, isOpenStageCategory, sortedByName, stepAgeLabel, type Locale } from "@rabaed/domain";
 import { AgeDots, DocNo, StagePill, stageColour } from "@rabaed/ui";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
@@ -207,11 +207,15 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
                 {item.heldBy.memberName
                   ? `${item.heldBy.memberName[locale]} · ${item.heldBy.companyName[locale]}`
                   : item.heldBy.pool && item.heldBy.pool.names.length > 0
-                    ? // Pooled at the viewer's own Participant: who it waits on (§3.4).
+                    ? // Pooled at the viewer's own Participant: who it waits on (§3.4), three
+                      // names in the viewer's language's order, then how many more.
                       t("fields.notPickedUpYet", {
                         company: item.heldBy.companyName[locale],
-                        names: item.heldBy.pool.names.map((n) => n[locale]).join(locale === "ar" ? "، " : ", "),
-                        more: item.heldBy.pool.more,
+                        names: sortedByName(item.heldBy.pool.names, (n) => n[locale], locale)
+                          .slice(0, 3)
+                          .map((n) => n[locale])
+                          .join(locale === "ar" ? "، " : ", "),
+                        more: Math.max(item.heldBy.pool.names.length - 3, 0),
                       })
                     : item.heldBy.companyName[locale]}
               </dd>

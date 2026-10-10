@@ -89,6 +89,8 @@ describe("a pool of one holds the Step at once (seam 1)", () => {
     const events = await history(at.c1Pm, id);
     const assigned = events.find((e) => e.type === "assigned");
     expect(assigned).toMatchObject({ audience: "internal", by: { memberName: bilingual("Ali Sonour") }, toStep: expect.anything() });
+    // Its stored reason ("only_member") is the label's, never shown as a Transition's reason text.
+    expect(assigned?.reason).toBeNull();
     expect(events.map((e) => e.type).slice(-2)).toEqual(["transition", "assigned"]);
 
     expect(await needMyAction(at.c1Pm, at.projectId)).toContain(id);
@@ -119,7 +121,7 @@ describe("a pool of one holds the Step at once (seam 1)", () => {
     for (const by of [at.c1Pm, at.c1Engineer]) {
       const d = await detail(by, id);
       expect(d.heldBy?.memberName).toBeNull();
-      expect(d.heldBy?.pool).toEqual({ names: [bilingual("Ali Sonour"), bilingual("Khalid Bakr")], more: 0 });
+      expect(d.heldBy?.pool).toEqual({ names: [bilingual("Ali Sonour"), bilingual("Khalid Bakr")] });
     }
     expect((await detail(at.c1Pm, id)).actions.pickUp).toBe(true);
     expect((await history(at.c1Pm, id)).map((e) => e.type)).not.toContain("assigned");
@@ -130,14 +132,12 @@ describe("a pool of one holds the Step at once (seam 1)", () => {
     expect((await detail(at.c1Pm, id)).actions.returnToPool).toBe(true);
     await ok(at.c1Pm.post(`/v1/work-items/${id}/return-to-pool`));
 
-    // A Member joining later doesn't take a held Step away; four in the pool read three and "+1".
+    // A Member joining later doesn't take a held Step away; four in the pool are all named
+    // (the page shows three in the viewer's language, then "+1").
     await memberOnProject(api, c1, at.c1ParticipantId, ["project_manager"], { name: "Badr Alawi" });
     await memberOnProject(api, c1, at.c1ParticipantId, ["project_manager"], { name: "Zaid Harbi" });
     const four = await inInternalReview(at, at.c1Engineer, "Four PMs");
-    expect((await detail(at.c1Engineer, four)).heldBy?.pool).toEqual({
-      names: [bilingual("Ali Sonour"), bilingual("Badr Alawi"), bilingual("Khalid Bakr")],
-      more: 1,
-    });
+    expect((await detail(at.c1Engineer, four)).heldBy?.pool?.names).toHaveLength(4);
     void khalid;
   });
 });

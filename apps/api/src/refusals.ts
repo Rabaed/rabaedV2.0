@@ -123,6 +123,9 @@ const answers = {
   // acting Authorized Person's own Company's Steps and Members (scenario RP-108-1).
   handover_needed: () => new HttpError(409, "handover_needed"),
   nobody_can_take: () => new HttpError(409, "nobody_can_take"),
+  // A Project Admin narrowing another Company's Participant that would take its Members off
+  // Steps: how many (`steps`) and whose (`company`), never which (V14; scenario RP-108-3).
+  other_company_handover: () => new HttpError(409, "other_company_handover"),
 } satisfies Record<string, () => HttpError>;
 
 export type RefusalReason = keyof typeof answers;
@@ -142,6 +145,8 @@ export function refusal(result: {
   handovers?: HandoverStep[];
   step?: BilingualText;
   project?: BilingualText;
+  steps?: number;
+  company?: BilingualText;
 }): HttpError {
   const error = answers[result.reason]();
   const details = {
@@ -150,6 +155,7 @@ export function refusal(result: {
     ...(result.problems ? { problems: result.problems } : {}),
     ...(result.handovers ? { handovers: result.handovers } : {}),
     ...(result.step && result.project ? { step: result.step, project: result.project } : {}),
+    ...(result.steps !== undefined && result.company ? { steps: result.steps, company: result.company } : {}),
   };
   return Object.keys(details).length > 0 ? new HttpError(error.statusCode, error.code, details) : error;
 }

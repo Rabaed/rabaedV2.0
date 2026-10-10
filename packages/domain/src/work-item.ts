@@ -430,14 +430,15 @@ export const workItemDetail = workItemSummary.extend({
    * Who holds the current Step. Another Company is shown by its name only; a
    * person's name only within the viewer's own Company (visibility.md V14).
    * `pool`: while it waits in a Step Pool of the viewer's own Participant, who it
-   * waits on: up to three names, then how many more (workflow-engine.md §3.4); null
-   * once someone holds it, and always for another Company.
+   * waits on: every name, which the page orders in the viewer's language and shows
+   * up to three of, then how many more (workflow-engine.md §3.4); null once someone
+   * holds it, and always for another Company.
    */
   heldBy: z
     .object({
       companyName: bilingualText,
       memberName: bilingualText.nullable(),
-      pool: z.object({ names: z.array(bilingualText).max(3), more: z.number().int().nonnegative() }).nullable(),
+      pool: z.object({ names: z.array(bilingualText) }).nullable(),
     })
     .nullable(),
   /** Set once closed: the Issued Code (A, C…). */

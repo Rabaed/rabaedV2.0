@@ -35,7 +35,7 @@
       "stage": "Stage",
       "with": "With",
       "withMe": "Me",
-      "notPickedUp": "not picked up",
+      "notPickedUp": "Not picked up",
       "anyNotPickedUp": "Not picked up",
       "trade": "Trade",
       "location": "Location",
@@ -755,23 +755,28 @@
   },
   "handover": {
     "title": "Hand over {name}'s Steps",
+    "titleSeveral": "Hand over these Steps",
     "description": {
       "deactivate": "{name} holds these. Choose who takes each one before {name} is deactivated.",
       "remove": "{name} holds these on this Project. Choose who takes each one before {name} is removed.",
       "save": "This change takes {name} off these Steps. Choose who takes each one before it is saved."
     },
+    "descriptionSeveral": "This change takes these Members off these Steps. Choose who takes each one before it is saved.",
     "confirm": {
       "deactivate": "Hand over and deactivate",
       "remove": "Hand over and remove",
       "save": "Hand over and save"
     },
     "noNumber": "No number yet",
+    "hiddenItem": "An item at {step} on {project}",
+    "heldBy": "Held by {name}",
     "newHolder": "New holder",
     "choose": "Choose who takes it",
     "cancel": "Cancel",
     "close": "Close",
     "changed": "Something changed while you chose. Check the list and try again.",
-    "nobodyCanTake": "Nobody else can take {step} on {project}. Give someone the Position or Visibility first."
+    "nobodyCanTake": "Nobody else can take {step} on {project}. Give someone the Position or Visibility first.",
+    "otherCompany": "{count, plural, one {# Step of {company} needs} other {# Steps of {company} need}} a new holder first. Ask {company} to hand them over."
   },
   "notificationSettings": {
     "email": "Email",

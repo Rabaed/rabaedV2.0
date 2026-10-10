@@ -77,11 +77,11 @@ async function participant(
   return { company, participantId };
 }
 
-async function createDraft(by: Caller, title: string): Promise<string> {
+async function createDraft(by: Caller, title: string, location = buildingA): Promise<string> {
   const res = await by.post(`/v1/projects/${projectId}/work-items`, {
     type: "MAR",
     title,
-    answers: { manufacturer: "ACME Cables", description: "Galvanised, 300 mm", trade: electrical, location: buildingA },
+    answers: { manufacturer: "ACME Cables", description: "Galvanised, 300 mm", trade: electrical, location },
   });
   expect(res.statusCode, res.body).toBe(201);
   // The MAR Form Version 2 needs its Datasheet to leave Draft.
@@ -135,8 +135,8 @@ async function everything(by: Caller, id: string) {
 }
 
 /** A Draft, sent, Returned once with a reason, sent again and picked up by the PM: ready to Submit. */
-async function readyToSubmit(title: string) {
-  const id = await createDraft(engineer, title);
+async function readyToSubmit(title: string, location = buildingA) {
+  const id = await createDraft(engineer, title, location);
   await ok(takeVerifying(engineer, id, "send_for_review"));
   await ok(pm.post(`/v1/work-items/${id}/pick-up`));
   await ok(takeVerifying(pm, id, "return", { reason: "Wrong tray size" }));
@@ -453,7 +453,7 @@ describe("Submit with no single Consultant to take it (scenario 37)", () => {
   const SECOND_CONSULTANT = "Second Consultants";
   /** The one answer, byte for byte, whichever case it is. */
   const ANSWER = JSON.stringify({ error: "next_step_unavailable" });
-  const NEVER_IN_REFUSAL = [CONSULTANT, SECOND_CONSULTANT, "Electrical", "Building A", "Mechanical"];
+  const NEVER_IN_REFUSAL = [CONSULTANT, SECOND_CONSULTANT, "Electrical", "Building A", "Building B", "Mechanical"];
 
   /** Submit isn't offered, and taking it gets the one answer, naming nobody and nothing. */
   async function expectRefused(id: string) {
@@ -466,18 +466,20 @@ describe("Submit with no single Consultant to take it (scenario 37)", () => {
   }
 
   it("is not offered, and refused without saying why, when no Consultant covers the item (a Visibility Gap)", async () => {
-    const setK1Trade = async (trade: Coverage) =>
-      ok(c1.caller.request("PUT", `/v1/participants/${k1ParticipantId}/visibility`, { trade, location: all }));
-    await setK1Trade(only(mechanical));
+    // K1 narrowed to Building A, where the Steps it holds are (narrowing it off them would
+    // need K1 to hand them over first, RP-108-3); the item is in Building B.
+    const setK1Location = async (location: Coverage) =>
+      ok(c1.caller.request("PUT", `/v1/participants/${k1ParticipantId}/visibility`, { trade: all, location }));
+    await setK1Location(only(buildingA));
     try {
-      const id = await readyToSubmit("Cable glands");
+      const id = await readyToSubmit("Cable glands", buildingB);
       await expectRefused(id);
-      // Give the Consultant Electrical again: Submit comes back.
-      await setK1Trade(all);
+      // Give the Consultant Building B again: Submit comes back.
+      await setK1Location(all);
       expect(buttons(await detail(pm, id))).toEqual(["return", "submit"]);
     } finally {
       // K1 is every other test's Consultant.
-      await setK1Trade(all);
+      await setK1Location(all);
     }
   });
 

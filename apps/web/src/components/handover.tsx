@@ -5,34 +5,46 @@ import { HandoverDialog } from "@rabaed/ui";
 import { useLocale, useTranslations } from "next-intl";
 import { useState, type ReactNode } from "react";
 
-/** The change being made: its confirm button says so. */
-export type HandoverChange = "deactivate" | "remove" | "save";
+/** What the change does: its confirm button says so. */
+export type HandoverAction = "deactivate" | "remove" | "save";
 
 /**
- * What a change that may need Handovers answered: done; refused because nobody else
- * can take one of the Steps (`message`, worded, naming it); or another refusal's
- * code, for the caller to word (null when the API couldn't be reached).
+ * How a change that may need Handovers ended: `done`; `refused` with a worded message
+ * (nobody else can take one of the Steps, or another Company's Steps wait); or
+ * `failed` with another refusal's code, for the caller to word (null when the API
+ * couldn't be reached).
  */
-export type HandoverOutcome = { ok: true } | { ok: false; message: string } | { ok: false; code: string | null };
+export type HandoverOutcome = { kind: "done" } | { kind: "refused"; message: string } | { kind: "failed"; code: string | null };
 
-/** One change: whose, which, how to send it (with the picks, once chosen) and who hears how it ended. */
+/** One change: what it does, where it is sent (its body, with the picks once chosen), and who hears how it ended. */
 export type HandoverRequest = {
-  /** The Member the change is about, by name. */
-  name: string;
-  change: HandoverChange;
-  send: (handovers?: HandoverPick[]) => Promise<Response>;
+  action: HandoverAction;
+  method: "POST" | "PUT" | "DELETE";
+  /** The web app's API path, e.g. `/api/v1/members/<id>/deactivate`. */
+  url: string;
+  body: Record<string, unknown>;
   /** How it ended; not called while the dialog asks, nor when it is closed without sending. */
   done: (outcome: HandoverOutcome) => void;
 };
 
+type RefusalBody = {
+  error?: string;
+  handovers?: HandoverStep[];
+  step?: BilingualText;
+  project?: BilingualText;
+  steps?: number;
+  company?: BilingualText;
+};
+
 /**
- * Handover (RP-108): a change that takes a Member out of a Step Pool (deactivating
- * them, removing them from a Project, a Position or Visibility change). `run` sends
- * it; when the API lists Steps of theirs that need a new holder (409
- * handover_needed), `dialog` asks who takes each, then sends it again with the
- * picks. With nobody else to take one (409 nobody_can_take), the refusal names that
- * Step and Project, the viewer's own Company's only. Other refusals are the
- * caller's to word.
+ * Handover (RP-108): a change that takes Members out of a Step Pool (deactivating
+ * one, removing them from a Project, a Position or Visibility change, theirs or
+ * their Participant's). `run` sends it; when the API lists Steps that need a new
+ * holder (409 handover_needed), `dialog` asks who takes each, then sends it again
+ * with the picks. With nobody else to take one (409 nobody_can_take), the refusal
+ * names that Step and Project, the viewer's own Company's only; another Company's
+ * Steps (409 other_company_handover) by how many and whose only. Other refusals
+ * are the caller's to word.
  */
 export function useHandover() {
   const t = useTranslations("handover");
@@ -41,21 +53,30 @@ export function useHandover() {
   const [pending, setPending] = useState(false);
   const [dialogError, setDialogError] = useState<string | null>(null);
 
+  function refusedMessage(body: RefusalBody): string | null {
+    if (body.error === "nobody_can_take" && body.step && body.project) {
+      return t("nobodyCanTake", { step: body.step[locale], project: body.project[locale] });
+    }
+    if (body.error === "other_company_handover" && body.steps && body.company) {
+      return t("otherCompany", { count: body.steps, company: body.company[locale] });
+    }
+    return null;
+  }
+
   async function attempt(request: HandoverRequest, picks?: HandoverPick[]): Promise<void> {
     setPending(true);
     setDialogError(null);
     try {
-      const res = await request.send(picks);
+      const res = await fetch(request.url, {
+        method: request.method,
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(picks ? { ...request.body, handovers: picks } : request.body),
+      });
       if (res.ok) {
         setAsking(null);
-        return request.done({ ok: true });
+        return request.done({ kind: "done" });
       }
-      const body = (await res.json().catch(() => ({}))) as {
-        error?: string;
-        handovers?: HandoverStep[];
-        step?: BilingualText;
-        project?: BilingualText;
-      };
+      const body = (await res.json().catch(() => ({}))) as RefusalBody;
       if (body.error === "handover_needed" && body.handovers) {
         setAsking({ request, steps: body.handovers });
         // Sent with picks and still asked: something changed while they chose.
@@ -63,17 +84,19 @@ export function useHandover() {
         return;
       }
       setAsking(null);
-      if (body.error === "nobody_can_take" && body.step && body.project) {
-        return request.done({ ok: false, message: t("nobodyCanTake", { step: body.step[locale], project: body.project[locale] }) });
-      }
-      return request.done({ ok: false, code: body.error ?? null });
+      const message = refusedMessage(body);
+      return request.done(message ? { kind: "refused", message } : { kind: "failed", code: body.error ?? null });
     } catch {
       setAsking(null);
-      return request.done({ ok: false, code: null });
+      return request.done({ kind: "failed", code: null });
     } finally {
       setPending(false);
     }
   }
+
+  // One holder: the dialog is about them, by name; several (a Participant's Visibility): each Step names its own.
+  const holders = asking ? [...new Map(asking.steps.map((s) => [s.holder.id, s.holder.fullName[locale]])).values()] : [];
+  const one = holders.length === 1 ? holders[0]! : null;
 
   const dialog: ReactNode = asking && (
     <HandoverDialog
@@ -88,13 +111,15 @@ export function useHandover() {
       pending={pending}
       error={dialogError}
       labels={{
-        title: t("title", { name: asking.request.name }),
-        description: t(`description.${asking.request.change}`, { name: asking.request.name }),
+        title: one ? t("title", { name: one }) : t("titleSeveral"),
+        description: one ? t(`description.${asking.request.action}`, { name: one }) : t("descriptionSeveral"),
         noNumber: t("noNumber"),
+        hiddenItem: (step, project) => t("hiddenItem", { step, project }),
+        ...(one ? {} : { heldBy: (name: string) => t("heldBy", { name }) }),
         newHolder: t("newHolder"),
         choose: t("choose"),
         cancel: t("cancel"),
-        confirm: t(`confirm.${asking.request.change}`),
+        confirm: t(`confirm.${asking.request.action}`),
         close: t("close"),
       }}
       onConfirm={(picks) => void attempt(asking.request, picks)}

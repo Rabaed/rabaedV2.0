@@ -4,7 +4,7 @@ import type { CompanyMember, HandoverPick, InviteMemberRequest } from "@rabaed/d
 import { sql, type Transaction } from "kysely";
 import { refusedAsForbidden, type Forbidden } from "../db-error.ts";
 import { checkedOutcome } from "../outcomes.ts";
-import { handedOver, withHandovers, type HandoverRefusal } from "./handover.ts";
+import { handedOver, type HandoverRefusal } from "./handover.ts";
 
 // The Authorized Person's Member management. Every write goes through one of
 // the app.* functions in the member_management migration, which check that the
@@ -153,18 +153,15 @@ export function deactivateMember(
   now: Date,
   picks?: HandoverPick[],
 ): Promise<UpdateResult | HandoverRefusal> {
-  return withHandovers(() =>
-    asAuthorizedPerson(db, memberId, (trx) =>
-      handedOver(trx, { memberId: targetId, participantId: null, because: "deactivated", picks, now }, async (): Promise<UpdateResult> => {
-        // 'deactivated', 'authorized_person' (refused), or null when they are not in the Company.
-        const { rows } = await sql<{ outcome: string | null }>`
-          select app.deactivate_member(${targetId}::uuid, ${now}) as outcome
-        `.execute(trx);
-        if (rows[0]?.outcome == null) return { ok: false, reason: "not_found" };
-        const outcome = checkedOutcome(rows[0].outcome, ["deactivated", "authorized_person"]);
-        if (outcome === "authorized_person") return { ok: false, reason: "authorized_person" };
-        return { ok: true, member: await readMember(trx, targetId) };
-      }),
-    ),
-  );
+  const handover = { memberId: targetId, participantId: null, because: "deactivated", picks, now } as const;
+  return handedOver(db, memberId, handover, async (trx): Promise<UpdateResult> => {
+    // 'deactivated', 'authorized_person' (refused), or null when they are not in the Company.
+    const { rows } = await sql<{ outcome: string | null }>`
+      select app.deactivate_member(${targetId}::uuid, ${now}) as outcome
+    `.execute(trx);
+    if (rows[0]?.outcome == null) return { ok: false, reason: "not_found" };
+    const outcome = checkedOutcome(rows[0].outcome, ["deactivated", "authorized_person"]);
+    if (outcome === "authorized_person") return { ok: false, reason: "authorized_person" };
+    return { ok: true, member: await readMember(trx, targetId) };
+  });
 }

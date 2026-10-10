@@ -106,7 +106,8 @@ export async function WorkItemHistory({
                 {t("numbered")} <DocNo value={e.documentNumber} />
               </p>
             )}
-            {e.reason && <p className="whitespace-pre-wrap">{e.reason}</p>}
+            {/* A Transition's reason text; an `assigned` event's label already says why (never "only_member"). */}
+            {e.reason && e.type !== "assigned" && <p className="whitespace-pre-wrap">{e.reason}</p>}
             {e.remarks && (
               <p className="whitespace-pre-wrap" data-testid="history-remarks">
                 <span className="font-medium">{t("remarks")}:</span> {e.remarks}
