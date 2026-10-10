@@ -566,8 +566,8 @@ export function WorkItemList({
           maxLength={searchMaxLength}
           description={t("searchHelp")}
           onSearch={(q) => change({ q })}
-          // 240px, as the design draws it, so "Search this list" fits.
-          className={board ? undefined : "sm:w-60"}
+          // 240px as the design draws it from 1440 wide; a little narrower below, where the row is full but "Search this list" still fits.
+          className={board ? undefined : cn(filtered ? "sm:w-44" : "sm:w-[196px]", "min-[1440px]:w-60")}
         />
         <span className="inline-flex shrink-0 items-center">
         <FilterMenu
@@ -599,7 +599,7 @@ export function WorkItemList({
             aria-label={t("clear")}
             title={t("clear")}
             className={cn(
-              "-ms-px inline-flex h-[34px] w-9 items-center justify-center rounded-e-sm border border-border-strong bg-surface text-muted hover:bg-hover hover:text-text pointer-coarse:min-h-11 pointer-coarse:w-11",
+              "-ms-px inline-flex h-[34px] w-7 items-center justify-center rounded-e-sm border border-border-strong bg-surface text-muted hover:bg-hover hover:text-text pointer-coarse:min-h-11 pointer-coarse:w-11",
               focusRing,
             )}
           >

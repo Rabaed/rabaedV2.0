@@ -96,7 +96,7 @@ export type WorkItemTableProps = {
 /** Each column's least width, as the design draws it (px). */
 const widths: Record<ListColumnKey, string> = {
   documentNumber: "min-w-[120px]",
-  subject: "min-w-[200px]",
+  subject: "min-w-[150px]",
   revision: "min-w-[56px]",
   trade: "min-w-[150px]",
   type: "min-w-[64px]",
@@ -105,7 +105,7 @@ const widths: Record<ListColumnKey, string> = {
   locationLevel1: "min-w-[80px]",
   locationLevel2: "min-w-[90px]",
   locationLevel3: "min-w-[80px]",
-  owner: "min-w-[230px]",
+  owner: "min-w-[200px]",
   contractor: "min-w-[220px]",
   created: "min-w-[104px]",
   stepAge: "min-w-[110px]",
@@ -120,9 +120,9 @@ export function columnHeader(key: ListColumnKey, labels: Pick<WorkItemTableLabel
   return named ? named[locale] : labels.columns[key];
 }
 
-const cell = "h-12 border-b border-border-subtle bg-surface px-3 align-middle whitespace-nowrap group-hover/row:bg-hover group-data-selected/row:bg-brand-tint";
+const cell = "h-12 border-b border-border-subtle bg-surface px-2.5 align-middle whitespace-nowrap group-hover/row:bg-hover group-data-selected/row:bg-brand-tint";
 const head =
-  "sticky top-0 z-[3] h-[42px] pointer-coarse:h-12 border-b border-border-subtle bg-surface-subtle px-3 text-start text-[12.5px] font-semibold whitespace-nowrap text-text-secondary";
+  "sticky top-0 z-[3] h-[42px] pointer-coarse:h-12 border-b border-border-subtle bg-surface-subtle px-2.5 text-start text-[12.5px] font-semibold whitespace-nowrap text-text-secondary";
 /** The pinned first column (the Document Number), above the cells that scroll under it. */
 const pinnedStart = "sticky start-0 z-[2]";
 const dash = <span className="text-faint">—</span>;
@@ -210,8 +210,8 @@ export function WorkItemTable({
                   over === key && dragging !== key && "shadow-[inset_3px_0_0_var(--color-primary)] rtl:shadow-[inset_-3px_0_0_var(--color-primary)]",
                 )}
               >
-                <span className="flex items-center gap-1.5">
-                  <Icon name="grid-dots" size={13} className="shrink-0 text-faint opacity-70" />
+                <span className="flex items-center gap-1">
+                  <Icon name="grid-dots" size={12} className="shrink-0 text-faint opacity-70" />
                   <span>{header}</span>
                   <button
                     type="button"
@@ -227,14 +227,14 @@ export function WorkItemTable({
                       touchBox,
                     )}
                   >
-                    <Icon name={!sorted ? "arrows-sort" : direction === "asc" ? "sort-ascending" : "sort-descending"} size={15} />
+                    <Icon name={!sorted ? "arrows-sort" : direction === "asc" ? "sort-ascending" : "sort-descending"} size={14} />
                   </button>
                 </span>
               </th>
             );
           })}
           {end && (
-            <th scope="col" className={cn(head, "sticky end-0 z-[4] w-[52px] border-s px-2 text-center")}>
+            <th scope="col" className={cn(head, "sticky end-0 z-[4] w-11 border-s px-1.5 text-center")}>
               {settings}
             </th>
           )}
@@ -287,7 +287,7 @@ export function WorkItemTable({
                           <Cell column={key} row={row} locale={locale} labels={labels} filters={filters} places={places} itemHref={itemHref} linkAs={Link} />
                         </td>
                       ))}
-                      {end && <td className={cn(cell, "sticky end-0 z-[2] border-s px-2 text-center")}>{rowEnd?.(row)}</td>}
+                      {end && <td className={cn(cell, "sticky end-0 z-[2] border-s px-1.5 text-center")}>{rowEnd?.(row)}</td>}
                     </tr>
                   );
                 })}
@@ -344,7 +344,7 @@ function Cell({ column, row, locale, labels, filters, places, itemHref, linkAs: 
           data-item-link=""
           dir="auto"
           title={row.title}
-          className={cn("block max-w-[200px] truncate font-semibold text-text hover:text-brand-fg", focusRing, touchBox)}
+          className={cn("block max-w-[150px] truncate font-semibold text-text hover:text-brand-fg", focusRing, touchBox)}
         >
           {row.title}
         </Link>
@@ -399,7 +399,7 @@ function Cell({ column, row, locale, labels, filters, places, itemHref, linkAs: 
           ) : (
             <Avatar name={owner.name} initialsFrom={owner.initialsFrom} kind={owner.kind === "company" ? "company" : "person"} size="sm" solid decorative />
           )}
-          <span className="truncate">{owner.name}</span>
+          <span className="max-w-[150px] truncate" title={owner.name}>{owner.name}</span>
         </span>
       );
     }

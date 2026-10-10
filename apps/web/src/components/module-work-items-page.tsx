@@ -54,7 +54,7 @@ export async function ModuleWorkItemsPage({
   // The MAR's Draft Step is held by Contractors; the API refuses anyone else too.
   const action =
     module === "submittals" && project.projectRole.baseRole === "contractor" ? (
-      <Link href={`/projects/${project.id}/work-items/new`} className={cn(buttonVariants(), "h-[34px]")}>
+      <Link href={`/projects/${project.id}/work-items/new`} className={cn(buttonVariants(), "h-[34px] px-3.5")}>
         <Icon name="plus" />
         {t("addSubmittal")}
       </Link>
