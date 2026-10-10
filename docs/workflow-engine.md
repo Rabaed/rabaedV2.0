@@ -23,17 +23,20 @@ A Workflow version is a directed graph.
   - a `kind`: `send` (within the Participant), `submit` (to another Participant), `return` (back within the Participant), `send_back` (back to the Participant that Submitted it, with no outcome; ADR 0014), `close` or `cancel`;
   - an optional `condition` (§4);
   - an optional `outcome` it sets: a closing outcome of the Work Item Type's outcome set ("Outcomes" below; the Rabaed Defaults' `A`, `B`, `C`, `D`, `passed`, `passed_with_comments`, `failed`, `approved`, `rejected`, `closed`);
-  - an `action_form`: the pop-up schema;
+  - an `action_form`: the pop-up schema (to change: the **Screen** it shows, whose Version the Workflow Version pins; §5.7, ADR 0019);
   - `notifications`.
 - **Start:** every Workflow has exactly one **Draft** Step (Stage category `draft`) where items are created.
 - **End:** terminal Steps sit in Stages of category `closed_positive`, `closed_negative` or `cancelled`. Reaching one closes the item.
 
 ### Example: Rabaed Default "Material Submittal (MAR)"
 
+Settled 2026-10-10 (ADR 0020), to build as a new Version of the Rabaed Default:
+
 ```mermaid
 flowchart LR
-  D[Draft<br/>Contractor Engineer] -- "Send for Review" --> PM[Internal Review<br/>Contractor PM]
-  PM -- "Return" --> D
+  D[Drafts<br/>Draft · Contractor Engineer] -- "Send for Review" --> PM[Internal Review<br/>Contractor PM]
+  PM -- "Return" --> CE[Internal Review<br/>Contractor Engineer]
+  CE -- "Send for Review" --> PM
   PM -- "Submit" --> KE[Pending Approval<br/>Consultant Engineer<br/>recommend_code]
   KE -- "Send to Manager" --> KM[Pending Approval<br/>Consultant Manager<br/>issue_code]
   KM -- "Return to Engineer" --> KE
@@ -42,6 +45,13 @@ flowchart LR
   KM -- "Revise & Resubmit · C" --> RR((Revise & Resubmit))
   KM -- "Reject · D" --> RJ((Rejected))
 ```
+
+- **Internal Review is a Stage holding two Steps,** Contractor Engineer and Contractor PM. **A Return never goes back to the Draft Step** or the Drafts Stage: the PM's Return goes to the Contractor Engineer Step, and the engineer sends it for review again. The Drafts Stage holds only items never sent, so a Draft never has a Document Number (§8) or a Step Age (§10). As built (MAR Workflow Version 2): the Return goes back to the Draft Step; to change. Open: §3.3 rule 1 gives a Step back to whoever held *that* Step before, and at the first Return nobody has held the Contractor Engineer Step, so the item would go to the pool (or its only Member) rather than to the Draft's author; whether the first Return goes to the author is to be settled with the ticket.
+- **Who edits the Form:** the Member holding the Draft Step or the Contractor Engineer Step, before the Submit (form-engine.md §4, ADR 0019). A Company's own Workflow may also allow its PM Step. At the Contractor Engineer Step the holder may also add, replace and remove Documents: they freeze at the Submit (§5.1).
+- **The Consultant answers in its replies,** never in the Form (§5.7): the Engineer's reply ("Send to Manager") holds the verification, the Recommended Code and the Internal Note, internal to the Consultant; the Manager's reply (the Code Transition) holds the Code, the Remarks, the Comments (Code B) and the final verification, pre-filled from the Engineer's, shared once the Code is issued.
+- **The Contractor's Submit** shows a shared, optional Cover Note beside the Internal Note (§5.7).
+- **Cancel** stays as built: from the raiser's own Steps (the Draft and both Internal Review Steps), until the first Submit (§5.1 "Cancel").
+- **The Kanban** shows, for the viewer's own Participant, each Stage's Steps with their counts (Internal Review 7: Contractor Engineer 3, Contractor PM 4); other Participants see the Stage only (V14).
 
 The MAR has no Send Back: the Consultant sends work back to the Contractor only with Code C, and the Contractor resubmits it as a Revision (§5.4). Send Back is for Workflows such as the Site Report's "Return for Comment" (ADR 0014).
 
@@ -81,7 +91,7 @@ A draft Workflow version can't be published unless all of these hold. `workflowP
 4. A `return` goes only to an earlier Step held by the **same** Participant role. A `submit` always crosses to a different role. A `send_back` goes from a Step of the role the item was Submitted to, back to a Step of the role that Submitted it, which the Workflow chooses; it sets no outcome. `workflowKindProblems` (`workflow-publish.ts`, RP-334).
 5. ~~Every `submit` Transition and every Transition from an `issue_code` Step is signing.~~ Dropped by ADR 0017: every Transition is confirmed and recorded.
 6. Conditions reference only fields that exist in the Form (checked against the Form's latest published version). Conditions read the Form and item attributes (`workflowRuleAttrs`: `trade`, `location`, `work_item_type`, `revision_no`); a Validate also reads the Transition's Action Form answers. A Restrict reads Action Form answers (WF-7) only where it picks among Transitions sharing a label and source Step, once the pop-up is filled, and then only fields every one of their Action Forms asks; a Restrict that hides a button is read before any pop-up. Actions write only fields the acting Participant fills at that Step (WF-8): the Transition's Action Form and the Form Sections changed at its source Step (`sectionSteps`); a copy reads only from those, never another Participant's answers (`field_not_filled_at_step`), and on a move inside one Participant (`send`, `return`) never from its Action Form into the Form (`copy_internal_answer`: those answers are Internal Communication, V5, such as a Recommended Code, and the Form is read by every Participant once the item leaves); "now" goes only into a date or time field. The Steps and Transitions a rule names exist, "has been through" a Step names one of the acting Participant's own, and a Document rule names a Document field (`attachments`, `photos`). `workflow-checks.ts`.
-7. Action Forms are valid Form schemas. `workflowActionFormProblems` (`action-form.ts`, RP-300).
+7. Action Forms are valid Form schemas. `workflowActionFormProblems` (`action-form.ts`, RP-300). To change (ADR 0019): every Transition names a published Screen Version, which the Workflow Version pins.
 8. No cycle is possible without a `return` or a `send_back`. A loop across Participants always goes through a `send_back`, never through Submit alone. `workflowKindProblems` (`workflow-publish.ts`, RP-334).
 
 And, from spec RP-423 (`workflow-checks.ts`):
@@ -89,6 +99,12 @@ And, from spec RP-423 (`workflow-checks.ts`):
 - No Workflow names a person: Positions only. The format enforces it (see "Definition format"); an action setting a Member field to a value is `names_person`.
 - A Cancel leaves only the raiser's own Steps (the Draft Step's role), goes to a Step in a cancelled Stage, and sets no outcome. At run time it is offered only until the first Submit, and never on a Revision (§5.1 "Cancel", §5.4).
 - Among Transitions sharing a label and source Step, conditions that can overlap or leave a gap are a **warning** (§4): `condition_overlap`, `condition_gap`, found by trying the answers on each condition's edges.
+
+And, settled 2026-10-10 (ADR 0019, ADR 0020), to build:
+
+- **No editing of the raiser's Form at or after a Submit.** The Form's `editable_at` names only the raiser's own Steps that come before a Submit; a Workflow with a Step at or after a Submit that would edit it is refused. Whether a Send Back back to the raiser's Steps reopens the Form is open (form-engine.md §4). Actions follow (check 6): they write into the Form only at those Steps.
+- **Screens are pinned.** Each Transition names a published Screen Version; publishing records the Versions the Workflow Version uses, and they never change for it.
+- A `return` into a Step in a `draft` Stage is refused, so the Drafts Stage holds only items never sent (to confirm when the ticket is written).
 
 As built (RP-334): checks 4 and 8 are `workflowKindProblems`, which `workflowPublishProblems` runs. A Step's role is its actor rule's `base_role`; a `send_back` is valid from a Step of role A to a Step of role B when some `submit` goes from a Step of B to a Step of A. The database also refuses a `send_back` with an outcome (`workflow_transition_send_back_no_outcome`), and `take_transition` raises on a `return` that would cross Participants. The seam suites' test Workflow with a Send Back is `addTestWorkflow` (`packages/db/test-support`).
 
@@ -110,7 +126,7 @@ As built (RP-426): `app.new_item_workflow_version(project, type, participant)` r
 
 As built (RP-427, `20261226000000_workflow_authoring.sql`): the commands, each one transaction, each audited. The app role writes no definition table directly (seam 2 `workflow-authoring-rls.test.ts`).
 
-- **Who may:** a Project's own Workflows and its bindings, its Project Admins; a Library Workflow, its Company's Authorized Person (no Position permission for it yet); a Rabaed Default, Rabaed Engineers in Rabaed Admin (with a reason, in `admin_action`: `save_workflow_draft`, `publish_workflow`) and the `pnpm workflow:publish --type <code> --definition <file.json> --reason <why> --engineer <email>` CLI (the migrator, as `form:publish`, writing the same `admin_action` row as Rabaed Admin: the active Engineer `--engineer` names, since the CLI signs nobody in). Anyone else gets `not_found`, the plain 404 (visibility.md scenario RP-427-1). A Member's command writes a `workflow_event` (who, when, what), read by nobody through the app role.
+- **Who may:** a Project's own Workflows and its bindings, its Project Admins; a Library Workflow, its Company's Authorized Person (no Position permission for it yet); a Rabaed Default, Rabaed Engineers in Rabaed Admin (with a reason, in `admin_action`: `save_workflow_draft`, `publish_workflow`) and the `pnpm workflow:publish --type <code> --definition <file.json> --reason <why> --engineer <email>` CLI (the migrator, as `form:publish`, writing the same `admin_action` row as Rabaed Admin: the active Engineer `--engineer` names, since the CLI signs nobody in). Anyone else gets `not_found`, the plain 404 (visibility.md scenario RP-427-1). A Member's command writes a `workflow_event` (who, when, what), read by nobody through the app role. To change (settled 2026-10-10, RP-450): one append-only record of setup changes replaces `workflow_event` and `project_event` (data-model.md §9).
 - **A Workflow is for one Work Item Type:** `workflow_definition.work_item_type_id` (backfilled from the Types and bindings), copied with it; `app.workflow_type` is the one rule for reading it (its own, else the Type whose Rabaed Default it is, else the first binding's), for the commands and the publish checks alike. Its publish checks run in that Type's context: its `outcome_kind` and outcome set (RP-429: the Project's copy for a Project's own Workflow, else the Rabaed Default set), the Stages of its Module (the Project's own when it has them, else the Rabaed Defaults'), its latest published Form, the Option Lists (`readWorkflowCheckContext`, `packages/db/src/workflow-authoring.ts`). Every save, check and publish, in the api and Rabaed Admin, runs one sequence on a document (`prepareDraft`: parse, publish checks); a Transition's rules, actions and notifications (WF-7 to WF-9) are saved, read and copied with it (`app.store_workflow_draft`, `app.workflow_version_rows`).
 - **Duplicate** (`app.duplicate_workflow(source, project, name, now)`, `POST /v1/workflows/:id/duplicate {projectId, name}`): copies the latest published Version of a Workflow the Member reads (a Rabaed Default, a Workflow of a Project they are on, their Library's) as draft Version 1 of a new Workflow of the Project (`projectId`) or of their Company's Library (`projectId: null`). Copy to Library and copy from Library into a Project are this command. Nothing records the original (ADR 0016). Refusals: `not_found`; `project_closed` (409); `invalid_name` (422, a name that isn't English and Arabic).
 - **Read** (`GET /v1/workflows/:id`, `WorkflowRead`): the published Versions and the latest one's definition, for whoever reads the Workflow (V18, V20); its draft, with the name it publishes under, only for its authors (`app.workflow_draft`). A Workflow with no published Version yet is read by its authors only: anyone else gets the plain 404 (row-level security on `workflow_definition`, scenario RP-427-5).
@@ -155,8 +171,11 @@ When an item enters a Step, the engine resolves the holder in three stages.
 **3.3 Default assignee.** The first rule that yields a pool member wins:
 1. The person who held this Step before, when coming back by `return` or `send_back`.
 2. A person the previous actor picked in the Action Form, if the Transition offers "Assign to". As built (RP-431, WF-8): only a Member of the actor's own Participant, from the next Step's Step Pool (Positions, Visibility), so only when that Participant holds the next Step; never another Company's Members (`app.assignees_offered`). The pick is `take_transition`'s `p_assign_to`; one it couldn't have offered is refused `assignee_not_offered`, whoever it names.
-3. The Participant's **default holder** for this Step, set in Project Settings by that Participant (e.g. "Contractor PM: Ali").
-4. Otherwise the item stays **pooled**. Everyone in the pool sees it under "Need My Action", and one of them **claims** it.
+3. The Participant's **default holder** for this Step, set in Project Settings by that Participant (e.g. "Contractor PM: Ali"). **Designed, parked** (settled 2026-10-10): not built until a Project needs two or more people in one pool to default to one of them; rule 4 covers the common case.
+4. **The pool's only Member** (settled 2026-10-10, UAT RP-467/RP-468): when the Step Pool for the Transition (after "not the same person", below) has exactly one Member, they hold it at once, with no Pick up. It is judged when the item arrives: a Member joining the pool later doesn't take it away. The Participant's history records it as an internal event ("Assigned to Ali Sonour, the only one who can take this Step"), and "Return to pool" isn't offered while the pool has one Member. The same at every Step of every Participant.
+5. Otherwise the item stays **pooled**. Everyone in the pool sees it under "Need My Action", and one of them **picks it up** (§5.2).
+
+**3.4 Who the holder's own Participant sees** (settled 2026-10-10). The item's "With" line names the holder for the holding Participant's own Members: "Ali Sonour · TMC Constructions". While it is pooled, it says so and names the pool, up to three names then "+n": "TMC Constructions · not picked up yet: Ali Sonour, Khalid …"; the List and Kanban show a short "Not picked up" chip ("لم تُستلَم"). Every other Participant sees the holding Company's name only (V14).
 
 ---
 
@@ -211,7 +230,7 @@ Effects, in order:
 
 1. **First exit from Draft:**
    - the Document Number is assigned (§8), and `numbered_at` (the Creation Date) set with it;
-   - all Documents are frozen (`frozen_at`, content hashed).
+   - all Documents are frozen (`frozen_at`, content hashed). To change (settled 2026-10-10, ADR 0020): Documents freeze for good at the **first Submit** instead, so the holder of the Contractor Engineer Step can add, replace and remove them after a Return. Nobody outside the raiser's Participant has seen them before the Submit (V1).
 2. The event is appended. It records:
    - type `transition` (or `recommend_code` / `issue_code`);
    - the Action Form payload;
@@ -225,7 +244,7 @@ Effects, in order:
 3. The current assignment is closed (`done`).
 4. The item moves: `current_step_id`, `current_stage_key` and `step_entered_at` are set. If it leaves the acting Participant (handed to another, or closed), `participant_entered_at` and `participant_entered_step_id` are set too. The event is `shared` when the item leaves the acting Participant (a Submit or a close always does); a move inside one Participant is `internal`, even from a Step that issues Codes.
 5. **If the new Step is non-terminal:** a new assignment is created (§3), and `work_item_access` is granted to the holder's Participant (`handling`). On the first `submit`, oversight access is granted to Owner and Owner Representative Participants whose Visibility covers the item, and `submitted_at` (the Submission Date) is set when the raiser's Participant takes it; a later Submit, after a Send Back, leaves it. While a Sent Back item is at its raiser's Steps, everyone with access still sees it, as it was at the Send Back (visibility.md V1, V19; RP-309). Every move to another Participant, and every close, adds one to `work_item.arrivals`, which marks what the next holder adds as its own until the item leaves it.
-   A `send_back` out of a Step of a Participant other than the raiser first puts the Form Sections other Participants fill back as they arrived (ADR 0013), and needs no complete Form.
+   A `send_back` out of a Step of a Participant other than the raiser first puts the Form Sections other Participants fill back as they arrived (ADR 0013), and needs no complete Form. (To retire with ADR 0019: no Participant but the raiser fills the Form, and a reply is in its Transition's event.)
 6. **If the new Step is terminal:**
    - `outcome` and `closed_at` are set;
    - outcome hooks run (§6);
@@ -250,10 +269,12 @@ Effects, in order:
 
 **Cancel** (as built, RP-433, WF-10). A `cancel` Transition (publishing keeps it to the raiser's own Steps, into a Step in a cancelled Stage, with no outcome) is offered (`app.takeable_transitions`) and taken only until the item is first Submitted (`submitted_at`): after that it isn't there, even back at the raiser's Steps after a Send Back, and taking it is refused `transition_not_available` (one rule for both, `app.cancel_allowed`). **Cancel is discard for a Revision** (decided 2026-10-09): a Revision (`revision_no > 0`) is never offered a Cancel and can't take one, from its Draft or the raiser's other Steps; while it is a Draft its raiser discards it instead (§5.4), and the next Revision reuses its number, so a Revision chain never ends by Cancel. It needs no complete Form, closes the item with outcome `cancelled` (allowed outside every outcome set), and is recorded like any Transition: a `transition` event, `shared` (nobody outside the raiser's Participant sees an item before its first Submit). A Cancel issues no Document Number: a Draft cancelled keeps "No number yet"; one cancelled from Internal Review keeps the number it got leaving Draft. Open Subtasks are cancelled with it (§6) once Subtasks exist (no `work_item.parent_id` yet); Comments are raised only by a Code, so never before Submit. The Rabaed Default Stages of Submittals include **Cancelled** (category `cancelled`), copied into every Project. Seam 1 and 2: `cancel-recommended-code.test.ts`, `cancel-recommended-code-rls.test.ts` (the test Workflow's `withCancel`).
 
-### 5.2 `claim(item)` / `release(item)`
+### 5.2 Pick up and Return to pool (`claim(item)` / `release(item)` in the code)
 
-- Claim takes a pooled assignment. It uses a conditional update, so only one claimer wins.
-- Release returns it to the pool.
+**Pick up** is the word for taking a pooled Step (settled 2026-10-10): "Claim" is the payment request of the Financial module (GLOSSARY.md). The buttons are "Pick up" and "Return to pool" ("استلام", "إعادة إلى المجموعة"), and a rename ticket takes the code from `claim`/`release` to `pick_up`/`return_to_pool` (database functions, API routes, event types) before RP-437; until it lands, the as-built text below keeps the code's names.
+
+- Pick up takes a pooled assignment. It uses a conditional update, so only one Member wins.
+- Return to pool gives it back, offered only while the pool has more than one Member (§3.3 rule 4).
 - Both append internal events.
 - A claim withdraws the other pool Members' unread "Step reached" notification for that Step (RP-355, scenario 70: `app.withdraw_step_reached`, a trigger). A release doesn't bring it back.
 
@@ -269,7 +290,7 @@ Effects, in order:
 - **Allowed when:** the item is the **latest** Revision of its chain, its outcome offers a Revision in its Type's set (Code C in the Rabaed Defaults; RP-429: `app.outcome_offers`; Inspection Revisions after `failed` are out of this scope; RP-311 review, `20261107000300_revision_code_c_only.sql`), no other Revision of the chain is open, and the caller may raise the item: an active Member of the raiser's Participant whom the Workflow's Draft Step actor rule allows (for the MAR, the Contractor's engineers). When the Workflow engine gains "assign to", the Workflow may name one person instead (settled 2026-10-05).
 - **Creates** a new item:
   - `revision_of_id` = the closed item, `root_id` kept, `revision_no + 1`;
-  - Form data copied, except Form Sections filled by other Participants, which start empty (form-engine.md §4); Documents copied as new unfrozen rows;
+  - Form data copied, except Form Sections filled by other Participants, which start empty (form-engine.md §4; to change with ADR 0019: there are none, so the whole Form is copied, and the replies stay on the closed item's history); Documents copied as new unfrozen rows;
   - pinned to the **latest published** Form and Workflow versions, with a notice if they changed;
   - starts at Draft, showing "No number yet" like any new item;
   - gets the base Document Number with the revision suffix when it first leaves Draft (§8);
@@ -281,7 +302,7 @@ Effects, in order:
   - `work_item.revision_no`, `revision_of_id`, `root_id` (an original's own id, set on insert) and `discarded_at`; one `revision_no` per chain among the rows not discarded. The app role reads `revision_no` only, never the chain's ids (an Owner Representative whose Visibility widened may see Rev 1 but not the original, V2).
   - `app.can_create_revision(item)` is the rule above, with the Draft Step of the **latest** published Version of the Workflow the item runs (role and permission; `app.revision_draft_step`, RP-427). `app.create_revision(item, idempotency_key, now)` locks the chain's original row, so two requests never open two Revisions, and answers `created`, `applied` (the same key again: the same Revision), `not_found` (hidden), `project_closed`, `idempotency_key_reused`, or `revision_not_allowed` for every other reason alike: nobody outside the raiser learns whether a Draft Revision is open. The api is `POST /v1/work-items/:id/revisions` (409 `revision_not_allowed`).
   - The answers come from `app.fill_revision` (form-engine.md §4), only for fields the Revision's Form Version still has with the same type; `WorkItemDetail.versionsChanged` says when the Form or Workflow Version differs from the revised item's, and the page shows a notice. Documents are copied as new, confirmed, unfrozen rows keeping their original upload times (`document_copy` records the source, never granted; RP-393), and the api copies their files in the same transaction, since a storage key names its item.
-  - **Discard** (`app.discard_revision`, `POST /v1/work-items/:id/discard`): only while the Revision has no Document Number (it never left Draft), by an active Member of the raiser's Participant. It closes as `cancelled`, is marked `discarded_at`, its assignment is done and its `work_item_access` rows go, so nobody, the raiser included, sees it again. Outcomes `discarded`, `not_found`, `project_closed`, `not_discardable` (409). A Revision Returned to Draft after it was numbered can't be discarded: its number was issued.
+  - **Discard** (`app.discard_revision`, `POST /v1/work-items/:id/discard`): only while the Revision has no Document Number (it never left Draft), by an active Member of the raiser's Participant. It closes as `cancelled`, is marked `discarded_at`, its assignment is done and its `work_item_access` rows go, so nobody, the raiser included, sees it again. Outcomes `discarded`, `not_found`, `project_closed`, `not_discardable` (409). A Revision Returned to Draft after it was numbered can't be discarded: its number was issued. (Settled 2026-10-10, ADR 0020: a Return stays in Internal Review, so with the Rabaed Defaults a numbered Revision is never back in Draft.)
   - The `related` Link from the revised item is added at the Revision's **first Submit**, not at creation: the closed item's Links are read by everyone who sees it, and a Draft Revision must not reach them (V1, scenario 51).
   - `WorkItemDetail` has `revisionNo`, `versionsChanged`, `droppedFields` (form-engine.md §7, `app.revision_dropped_fields`), and `actions.createRevision` / `actions.discardRevision`.
   - Database functions: `app.revision_draft_step(item)` (the Draft Step of the latest published Version of the Workflow the item runs, RP-427: a chain stays on its own Workflow whatever the Project binds later; it replaced `app.latest_draft_step(type)`, the Type's Rabaed Default's, dropped in the same migration), `app.can_create_revision(item)`, `app.can_discard_revision(item)`, `app.revision_versions_changed(item)`, `app.revision_dropped_fields(item)`, `app.form_field_type(form_version, key)`, `app.create_revision(item, key, now)`, `app.fill_revision(revision, closed_item, now)` (only `app.create_revision` calls it), `app.revision_document_copies(item)` (the storage keys the api copies), `app.discard_revision(item, now)`, `app.revision_chain(item)` and `app.set_work_item_root()` (the trigger setting an original's `root_id`).
@@ -294,7 +315,7 @@ Effects, in order:
 This creates a **new** item with a new Document Number and a `replaces` Link to the rejected one. Rejected items never get Revisions.
 
 - **Allowed when** (`app.can_create_replacement`): the item is closed with an outcome whose follow-up actions in its Type's set include `offer_replacement` (Code D in the Rabaed Defaults; never a fixed code, RP-429 `app.outcome_offers`), and the caller may raise the item, as for a Revision: an active Member of the raiser's Participant whom the Workflow's Draft Step actor rule allows. At most one replacement stands per item: another is refused while one exists that is neither discarded nor Cancelled.
-- **Creates** a new Work Item (`app.create_replacement`, RP-435): not a Revision (`revision_no` 0, no `revision_of_id`, its own chain), with the source's Subject; the answers copied as for a Revision, except Form Sections filled by other Participants, which start empty (`app.fill_revision`, which now asks that the source's outcome offers a Revision or a replacement); Documents copied as new unfrozen rows; pinned to the latest published Form version and to the latest published Version of the Workflow a new item of its Type raised by its raiser runs (`app.new_item_workflow_version`, RP-426: the raiser's exception, else the Project's binding, else the Rabaed Default; not the source's), at its Draft Step; at Draft, "No number yet", and a new Document Number from the counter when it first leaves Draft (§8), no " Rev". It is visible like any new Draft: to the raiser's Participant only (V1).
+- **Creates** a new Work Item (`app.create_replacement`, RP-435): not a Revision (`revision_no` 0, no `revision_of_id`, its own chain), with the source's Subject; the answers copied as for a Revision, except Form Sections filled by other Participants, which start empty (to change with ADR 0019, as for a Revision) (`app.fill_revision`, which now asks that the source's outcome offers a Revision or a replacement); Documents copied as new unfrozen rows; pinned to the latest published Form version and to the latest published Version of the Workflow a new item of its Type raised by its raiser runs (`app.new_item_workflow_version`, RP-426: the raiser's exception, else the Project's binding, else the Rabaed Default; not the source's), at its Draft Step; at Draft, "No number yet", and a new Document Number from the counter when it first leaves Draft (§8), no " Rev". It is visible like any new Draft: to the raiser's Participant only (V1).
 - **The Link** runs from the replacement to the rejected item (`kind = replaces`) and is made at creation, so `app.take_transition` isn't involved. It is read under the replacement's row-level security: nobody else reads it while the replacement is a Draft; the replacement lists the rejected item under its Links (E1), and the rejected item lists the replacement in Linked from (E3) once it has been Submitted. It isn't a free Link: Links can't remove it.
 - **The api** is `POST /v1/work-items/:id/replacements` (`{idempotencyKey}`, 201 `{id}`; 409 `replacement_not_allowed` for every refusal alike, 422 `idempotency_key_reused`, 404 for a hidden item); the same key again answers with the same replacement. `WorkItemDetail.actions.createReplacement` says when the item page offers its Create replacement card, beside the Create Revision card (`actions.createRevision`, the outcome's `offer_revision`); both read the outcome's follow-up actions. A replacement Draft is discarded like any new Draft, by the Workflow's own Cancel Transition when it has one.
 
@@ -304,6 +325,14 @@ This creates a **new** item with a new Document Number and a `replaces` Link to 
 - `admin_reset_step(item)`: re-creates the current Step's assignment and clears a stuck claim. The Step, Stage and outcome don't change.
 
 There is no admin path to `take_transition`, `recommend_code`, `issue_code`, or changing the Workflow version.
+
+### 5.7 Screens and replies (settled 2026-10-10, ADR 0019, to build)
+
+- **The reply.** The Form belongs to the raiser (form-engine.md §4). Every other Participant answers in the Action Form of the Transition it takes, its reply, never in the Form. Its answers are in that Transition's event payload, with the event's audience (§5.1 effect 2): a move inside the Participant (the Consultant Engineer's "Send to Manager") is internal to it, a Code is shared.
+- **Screens.** A Transition's Action Form comes from a **Screen**: a named, reusable, versioned Action Form schema (fields, checklists, which are required), validated by the Form engine as `action_form` is today. Screens are kept per Project in Project → Settings → Screens, edited by its Project Admins, copied from the Rabaed Default Screens, and kept in a Company's Library like Workflows (ADR 0016); a Company may mark one as its default for a Work Item Type (form-engine.md §10). A Transition names the Screen it shows, and a published Workflow Version pins the Screen Versions it uses, so editing a Screen never changes a running item. Who reads a Screen follows the Workflows that use it: every Member of the Project (V20); a Library's by its Company only (V18).
+- **Pre-filled answers.** The Consultant Manager's Code Screen holds the final verification, pre-filled from the Engineer's reply, which the Manager may correct. The pre-fill reads only the acting Participant's own events (V5), as a copy action does (§5.1 "Actions").
+- **Cover Note.** The Contractor's Submit Screen has a shared, optional **Cover Note** ("ملاحظة الإحالة") next to the Internal Note, a fixed element like it. It is in the Submit's event, read by everyone who sees the item from the Submit on, in its history (visibility.md, next to V5). It is not Remarks (the Consultant's shared text with a Code) and not an Internal Note, which stays its own internal event.
+- As built until then (RP-300): the schema is `workflow_transition.action_form`, part of the Workflow Version, with no name or Version of its own.
 
 ---
 
@@ -390,11 +419,7 @@ Error codes, api (`/v1/projects/:id/numbering`, `/numbering/counters…`, `/v1/p
 
 ## 9. People and companies leaving
 
-- **Member removed from the Project:**
-  - their claimed or default assignments become `vacant`;
-  - the item waits at the same Step;
-  - their Company's Authorized Person is notified to name a replacement. As built (RP-356): a trigger on `step_assignment` becoming `vacant` writes an outbox row; `app.deliver_notification` delivers a `vacancy` notification to the Authorized Person of the assignment's Participant's Company, if the assignment is still vacant, the Project isn't closed and they see the item, routed by their "Vacancy" settings. Nothing makes an assignment vacant yet (RP-108).
-  - `assign_vacancy(item, member)` (Authorized Person or Rabaed Admin) fills it with a pool member.
+- **A Member leaves a Step Pool: Handover, never a Vacancy** (settled 2026-10-10, ADR 0018). Deactivating a Member's account, removing them from a Project, or changing their Position or Visibility so that they leave a Step Pool first lists every open Step they hold, their Drafts and Draft Revisions included (Project, Document Number or "No number yet", Step). Each needs a new holder from that Step's pool without them: the person making the change picks one; exactly one candidate is filled in (§3.3 rule 4) and shown to check; none refuses the change, naming the Step and Project with nobody left and offering to give someone the Position or Visibility first. The change and the Handovers are saved together. Each Handover is an internal event of the holding Participant ("Handed over from Ali Sonour to Khalid …: Ali deactivated"), and the new holder gets "Step reached". This replaces the member-level Vacancy: `assign_vacancy` and the "Vacancy in my Company" notification setting go (RP-108 is rewritten as the Handover ticket). As built until then (RP-356): a `vacant` assignment would notify the Company's Authorized Person, but nothing makes one vacant.
 - **Participant withdrawn:** every open item it raised gets a `cancelled` event, outcome `cancelled`, and a Documental Record. Its open assignments on other companies' items become Participant-level Vacancies. They pass to the replacement Participant's pool once one covering the item is added.
 
 ---
@@ -402,8 +427,9 @@ Error codes, api (`/v1/projects/:id/numbering`, `/numbering/counters…`, `/v1/p
 ## 10. Step Age and "Need My Action"
 
 - **Step Age** = weeks since `step_entered_at`, shown as up to 4 dots, for the holding Participant's own Members. Every other Company counts it from `participant_entered_at` and sees the Step it arrived at, so internal moves never reset or reveal anything (visibility.md V14). `app.step_as_seen` is the one place that chooses.
+- **A Draft shows no Step Age** (settled 2026-10-10, ADR 0020; settles RP-364): the time a Draft was started reaches nobody, its own author included. A Return stays in Internal Review (§1), so a Returned item's Step Age counts from the Return, as at any Step. As built, an un-numbered Draft already has none in the List, the Kanban and the weekly report (RP-393, visibility.md Creation Date row).
 - A weekly job builds each Participant's ageing report from the items it can see, through `app.step_as_seen` too.
-- **"Need My Action"** = open assignments where the viewer is the assignee, or is in the pool and nobody has claimed it. It is a toggle on a Project's views (List, Kanban, later Plan, Floor and the Snag List), and each Project card shows its count. The viewer's own Drafts stay in view with the toggle on but are never counted (settled 2026-10-06).
+- **"Need My Action"** = open assignments where the viewer is the assignee, or is in the pool and nobody has picked it up. It is a toggle on a Project's views (List, Kanban, later Plan, Floor and the Snag List), and each Project card shows its count. The viewer's own Drafts stay in view with the toggle on but are never counted (settled 2026-10-06).
 - **Weekly Step Age report:** Sunday 07:00 Riyadh time, by email, to Members holding the Assign permission (their Participant's open items) and to the Owner's and Owner Representative's Members holding Assign (oversight items). It stops when the Project closes.
   As built (RP-359): the worker's scheduled job (`weeklyStepAgeReportSchedule`, RP-358's mechanism: a worker that was down makes it up within 12 hours, never a week late) queues one outbox row per active Project and Member holding `assign` there (any Module), and the outbox sends each one, checked again at send time: the Project still active, the Member still on it holding Assign, the "Weekly report" group's email not off, email not paused, the Project not muted. Its items are what the List shows the recipient with the open Stages filter and `stepAgeMin=1` (any Step Age): their visible open items with a Step Age, so never an un-numbered Draft (RP-393, scenario 76), the latest Revision of each chain they see, aged through `app.step_as_seen`. For an Owner or Owner Representative, whose only access is oversight, that is their oversight items. Grouped 4+, 3, 2 and 1 weeks; the email links to the List with that filter, and to the items 4 weeks or more (`stepAgeMin=4`). An empty report is not sent. Submittals only for now, as the List; a "Need My Action" link waits for that filter.
 
@@ -416,7 +442,7 @@ Error codes, api (`/v1/projects/:id/numbering`, `/numbering/counters…`, `/v1/p
   - `workflow_step` rows;
   - `workflow_transition` rows.
 - Stages appear as horizontal swim-bands, and Steps are dropped into a band.
-- The side panel edits the selected Step or Transition: actor rule and outcome mode (Steps; no signing option, ADR 0017); label, kind, condition, outcome, Action Form (using the Form builder component) and notifications (Transitions).
+- The side panel edits the selected Step or Transition: actor rule and outcome mode (Steps; no signing option, ADR 0017); label, kind, condition, outcome, Action Form (using the Form builder component; to change: pick the Screen it shows, §5.7) and notifications (Transitions).
 - "Validate" runs the §1 checks live, and "Publish" runs them again server-side.
 
 As built (RP-438, WF-15): `WorkflowCanvas` in `@rabaed/ui`, on React Flow (`@xyflow/react`), draws a definition with the Project's Stages: a band per open Stage that holds a Step, side by side in the Stages' order (right to left in Arabic), then one Outcome band for the terminal Steps; Steps as cards (name, Participant role, Function Permission, Positions, outcome mode); Transitions as labelled arrows coloured by kind (a Return or Send Back dashed, under the Steps). Steps sit where `layout` puts them when it places every Step; otherwise (the Rabaed Defaults have no layout) each sits in its Stage's band, a later Step of the band beside the earlier one (`workflowMap`, `workflow-map.ts`). `mode="edit"` lets Steps be dragged and hands back the layout in left-to-right units, for WF-16. `WorkflowStepList` is the same map as a list, for keyboard and screen-reader users and phones.
@@ -429,4 +455,12 @@ On the item page, "Workflow: <name> · Version n" opens "View workflow", a drawe
 
 1. **Consultant withdrawn while holding a Contractor's item:** the item is not cancelled. The assignment becomes a Participant-level **Vacancy**. When a new Participant in that role covering the item's Visibility is added, the item goes to that Participant's Step Pool. Only items the withdrawn Participant *raised* are cancelled.
 2. **No parallel review in v1.** Workflows are sequential. Parallel branches ("all must approve") are a v2 engine feature.
-3. **Default holders are allowed.** Each Participant can set a default holder per Step in Project Settings (§3.3, rule 3).
+3. **Default holders are allowed.** Each Participant can set a default holder per Step in Project Settings (§3.3, rule 3). Parked on 2026-10-10: a pool of one is held by its only Member (rule 4), which covers the common case.
+
+## Settled (2026-10-10, UAT RP-463)
+
+1. **A Step is never left without a holder** (ADR 0018): a pool of one holds the Step at once; Pick up, not Claim; a Handover before a Member leaves a pool (§3.3, §3.4, §5.2, §9).
+2. **The Form belongs to the raiser** (ADR 0019): only the Member holding one of the raiser's Steps the Workflow allows edits it, before the first Submit; publishing refuses a Workflow that lets it be edited at or after a Submit (§1); other Members of the Company read a Draft, and a Handover passes it on. A Draft Step setting "Drafts visible to": the author's whole Company (the default) or the author only (visibility.md V1).
+3. **A Return stays in Internal Review** (ADR 0020): Internal Review holds the Contractor Engineer and Contractor PM Steps; the Drafts Stage holds only items never sent; a Draft has no Step Age (§10); Documents freeze at the first Submit (§5.1); the Kanban shows a Stage's Steps with counts to their own Participant only; Cancel as built.
+4. **Replies, Screens, Cover Note** (ADR 0019): every other Participant answers in its reply Screen; Screens are versioned and pinned by the Workflow Version; the Submit Screen has a shared Cover Note (§5.7). Company defaults choose what a new Project starts from (form-engine.md §10).
+5. **One record of setup changes** (RP-450): Workflows, Forms, Screens, Stages, outcome sets and Company defaults, in one append-only record scoped to a Project or a Company, never read by the app role; a Rabaed Engineer's change also keeps its `admin_action` with a reason. It replaces `workflow_event` and `project_event` (data-model.md §9).

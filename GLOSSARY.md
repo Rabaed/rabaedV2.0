@@ -106,7 +106,7 @@ _Avoid_: Sub-package
 
 **View**:
 A way of displaying Work Items: List, Kanban, Floor (by building and floor), Plan (pinned on a floor plan Drawing) or Map (zones on the site map). Floor, Plan and Map show Work Items from several Modules together and live in the Project's Views tab.
-_Avoid_: Layout, screen, Multiple View
+_Avoid_: Layout, screen (a Screen is what a Transition asks), Multiple View
 
 **Pin**:
 The optional point where a Work Item sits on a plan Drawing of its Location, used by the Plan View.
@@ -174,11 +174,11 @@ _Avoid_: Deleted, voided
 
 
 **Form**:
-The customisable middle of a Work Item, built in the form builder: the fields a Work Item Type captures between the System Fields above and below it. Field labels are in Arabic and English. A Form is a Rabaed Default, kept in a Company's Library, or copied into a Project.
+The customisable middle of a Work Item, built in the form builder: the fields a Work Item Type captures between the System Fields above and below it. Field labels are in Arabic and English. A Form is a Rabaed Default, kept in a Company's Library, or copied into a Project. The Form belongs to the raiser: only the raiser's Member holding the current Step edits it, at the Steps its Workflow allows, before the first Submit; after that a change needs a Revision. Every other Participant answers in its reply Screen, never in the Form.
 _Avoid_: Template (on its own), general template
 
 **Form Section**:
-A titled group of fields in a Form, filled in by one Participant at the Steps the Form names. A Form Section filled in by a Participant other than the raiser, such as the Consultant's verification on a submittal, is read-only to the raiser.
+A titled group of fields in a Form. Every Form Section is the raiser's: a Participant other than the raiser, such as the Consultant verifying a sample, answers in its reply Screen instead (ADR 0019).
 _Avoid_: Section (on its own), panel, tab
 
 **System Field**:
@@ -206,31 +206,42 @@ The part of a Library that holds Saved Fields and Option Lists.
 _Avoid_: Field management (the screen, not the thing)
 
 **Library**:
-A Company's own collection of Forms, its Field Library, its Trade and Scope lists, and its Workflows and Work Item Types, built or copied. A Project copies a Company's Trade and Scope lists when it is set up, and takes later changes only when its Project Admin pulls them in. A Project takes its Forms and Workflows from the Rabaed Defaults or from any of its Participants' Libraries, as the Project Admin chooses. Taking or copying one always makes an independent copy that notes where it came from: later changes to the original never reach it.
+A Company's own collection of Forms, its Field Library, its Trade and Scope lists, and its Workflows, Screens and Work Item Types, built or copied. A Project copies a Company's Trade and Scope lists when it is set up, and takes later changes only when its Project Admin pulls them in. A Project takes its Forms, Workflows and Screens from the Rabaed Defaults or from any of its Participants' Libraries, as the Project Admin chooses. Taking or copying one always makes an independent copy that notes where it came from: later changes to the original never reach it.
 _Avoid_: Template library, catalogue
+
+**Company default**:
+A Library Form, Workflow or Screen that its Company marks as the one to start from for a Work Item Type. A Project the Company creates starts from its Company defaults, Type by Type, else from the Rabaed Defaults. Companies that join the Project use the Project's copies; an exception for one joining Company's items is only set up on purpose.
+_Avoid_: Company template, preset
 
 **Workflow**:
 The versioned graph of Steps and Transitions, drawn in the visual workflow builder, that a Work Item passes through. A Work Item stays on the Workflow version it started with. A Project runs its own copy for each Work Item Type, sometimes a different one for one raising Participant; everyone on the Project can read its map (ADR 0016).
 
 **Version**:
-A published, unchangeable edition of a Form or a Workflow. A Work Item stays on the Versions it started with; later Versions apply only to new Work Items.
+A published, unchangeable edition of a Form, a Workflow or a Screen. A Work Item stays on the Versions it started with (its Workflow Version pins the Screen Versions it uses); later Versions apply only to new Work Items.
 _Avoid_: Revision (reserved for Work Items), edition
 
 **Stage**:
-A named phase that shows where a Work Item is overall, such as Drafts, Internal Review, Revised & Resubmitted, Pending Approval, Approved, Rejected or Cancelled. Each Module has one shared set of Stages (Rabaed Defaults the Project can rename or extend), and every Workflow places its Steps into them. Stages are the Kanban columns.
+A named phase that shows where a Work Item is overall, such as Drafts, Internal Review, Revised & Resubmitted, Pending Approval, Approved, Rejected or Cancelled. Each Module has one shared set of Stages (Rabaed Defaults the Project can rename or extend), and every Workflow places its Steps into them; a Stage can hold several Steps, such as Internal Review's Contractor Engineer and Contractor PM. Stages are the Kanban columns. A Participant sees its own Steps inside a Stage, with their counts; other Participants see the Stage only.
 _Avoid_: Status, state, phase
 
 **Step**:
 One point in a Workflow where a Work Item waits for a person or Step Pool to act, such as "Contractor Project Manager review". A Step belongs to one Stage.
 _Avoid_: Node, task, state
 
+**Draft**:
+A Work Item that has never been sent: it sits at its Workflow's Draft Step, in the Drafts Stage, with no Document Number and no Step Age. Only its holder edits it; by the Draft Step's setting, the rest of the author's Company reads it, or nobody but the author. Other Companies never see it. A Return never makes an item a Draft again: it stays in Internal Review.
+
 **Transition**:
 A move of a Work Item from one Step to another, shown as a button whose label the Workflow sets, such as "Send for Review", "Request More Information" or "Submit". Each Transition has its own Action Form and notifications.
 _Avoid_: Action, button
 
 **Action Form**:
-The pop-up form a Member fills in when taking a Transition, such as choosing a Review Code, writing a reason or an Internal Note, attaching files, or, with Code B, writing the reviewer's Comments, each of which becomes its own Comment in the Snag List; each Transition defines its own.
+The pop-up form a Member fills in when taking a Transition, such as choosing a Review Code, writing a reason or an Internal Note, attaching files, or, with Code B, writing the reviewer's Comments, each of which becomes its own Comment in the Snag List. Its fields come from the Screen the Transition names. For a Participant other than the raiser it is the reply: where it answers, since it never edits the Form.
 _Avoid_: Dialog, modal
+
+**Screen**:
+A named, reusable, versioned set of fields and checklists, with the ones that are required, that a Transition shows as its Action Form, such as the Consultant Engineer's verification. A Project keeps its Screens in Project Settings, edited by its Project Admins and copied from the Rabaed Default Screens; a Company keeps them in its Library. A published Workflow Version pins the Screen Versions it uses, so editing a Screen never changes a running Work Item.
+_Avoid_: Template (on its own), form (for the pop-up)
 
 **Submit**:
 The Transition that hands a Work Item from one Participant to another, such as from the Contractor to the Consultant.
@@ -254,19 +265,27 @@ How many weeks a Work Item has sat at its current step (1, 2, 3, 4+), shown as d
 _Avoid_: Overdue, SLA, deadline
 
 **Vacancy**:
-A Workflow step whose assignee (a Member) has left the Project. The step waits, and the assignee's Company is notified to name a replacement.
+A Workflow step held by a Participant that was withdrawn from the Project. The step waits until a replacement Participant covering the Work Item is added, and passes to its Step Pool. A Member never leaves a Vacancy: their Steps are handed over first (Handover).
 _Avoid_: Orphaned task, unassigned
+
+**Handover**:
+Giving each open Step a Member holds, their Drafts included, to another Member of that Step's Step Pool, before the Member is deactivated, removed from the Project, or leaves the Step Pool through a change of Position or Visibility. The change waits until every Step has a new holder, so a Step is never left without one.
+_Avoid_: Reassignment (on its own), vacancy (for a Member)
 
 **Submittal Register Import**:
 Uploading the list of submittals a contract requires (as a spreadsheet now, later as a PDF read by an AI agent) and mapping each row to a Work Item Type and fields, which creates Draft Work Items.
 _Avoid_: Bulk upload, migration
 
 **Step Pool**:
-The group of Members who can pick up a Workflow step, such as all Consultant engineers on the Work Item's Trade. One of them claims it, unless the step already has a default assignee.
+The group of Members who can pick up a Workflow step, such as all Consultant engineers on the Work Item's Trade. One of them picks it up, unless the step already has a holder: the Member it came back to, the one picked with "Assign to", or the pool's only Member, who holds it at once.
 _Avoid_: Queue, group inbox
 
+**Pick up**:
+Taking a Work Item waiting in one's Step Pool, so that one holds its Step and it leaves the other pool Members' Need My Action. "Return to pool" undoes it, offered only while the pool has more than one Member.
+_Avoid_: Claim (that is a request for payment), take from the pool, assign to myself
+
 **Need My Action**:
-A toggle on a Project's views that keeps only the Work Items waiting on the viewer: Steps they hold, and Steps in their Step Pool that nobody has claimed yet. Their own Drafts stay in view but are never counted, since nobody is waiting on them. Each Project card shows the count.
+A toggle on a Project's views that keeps only the Work Items waiting on the viewer: Steps they hold, and Steps in their Step Pool that nobody has picked up yet. Their own Drafts stay in view but are never counted, since nobody is waiting on them. Each Project card shows the count.
 _Avoid_: Assigned to me, My tasks, Inbox
 
 **Watch**:
@@ -274,7 +293,7 @@ A Member's choice to be told what happens on one Work Item they can see, and on 
 _Avoid_: Follow, Subscribe
 
 **Rabaed Default**:
-The Forms, Workflows and Work Item Types that Rabaed supplies ready-made, which Companies can use or copy into their own.
+The Forms, Workflows, Screens and Work Item Types that Rabaed supplies ready-made, which Companies can use or copy into their own. A Project starts from them for each Work Item Type its creating Company has no Company default for.
 _Avoid_: System template, built-in
 
 **Review Code**:
@@ -294,7 +313,7 @@ The Review Code given at the Workflow's final review step, which is the one that
 _Avoid_: Final status
 
 **Remarks**:
-The shared text the Consultant writes with a Review Code, a field of the Code Transitions' Action Form: optional with A, required with C. Unlike an Internal Note, everyone who can see the Work Item reads it, in the item's history.
+The shared text the Consultant writes with a Review Code, a field of the Code Transitions' Action Form: optional with A, required with C. Unlike an Internal Note, everyone who can see the Work Item reads it, in the item's history. The raiser's shared text with its Submit is the Cover Note.
 _Avoid_: Comments (reserved for the Snag List), note, recommendation (too close to Recommended Code), highlights
 
 **Revision**:
@@ -330,8 +349,12 @@ The part of a Work Item's history (Internal Notes, Step changes, Returns, approv
 _Avoid_: Private log
 
 **Internal Note**:
-Free text a Member writes in the Action Form when taking a Transition, recorded with it in Internal Communication. It is never posted on its own, and it stays inside the writer's Participant even when the Transition goes to another Participant.
+Free text a Member writes in the Action Form when taking a Transition, recorded with it in Internal Communication. It is never posted on its own, and it stays inside the writer's Participant even when the Transition goes to another Participant. Text meant for the other side goes in the Cover Note (with a Submit) or the Remarks (with a Code).
 _Avoid_: Note, remark (shared text written with a Code is Remarks), comment
+
+**Cover Note**:
+Optional shared text ("ملاحظة الإحالة") the raiser writes in its Submit's Action Form, next to the Internal Note, such as what the submittal covers. Everyone who sees the Work Item from the Submit on reads it, in the item's history. Not Remarks, which the Consultant writes with a Code, and not an Internal Note, which stays inside the writer's Participant.
+_Avoid_: Remark, comment, transmittal letter, covering letter
 
 **Activity Feed**:
 The Project-level log of what happened across the Project, filtered by each viewer's Visibility and Internal Communication rules.
@@ -400,7 +423,7 @@ The Bill of Quantities: the priced list of every item of work in a Project.
 _Avoid_: POQ, price list
 
 **Claim**:
-A Contractor's request for payment for quantities done, built from the BOQ quantities recorded on passed WIRs.
+A Contractor's request for payment for quantities done, built from the BOQ quantities recorded on passed WIRs. Only this: taking a Step from one's Step Pool is Pick up.
 _Avoid_: Invoice (that belongs to the invoicing system), payment application
 
 **Executive Report**:
