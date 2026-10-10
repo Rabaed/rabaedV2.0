@@ -34,7 +34,7 @@ import NextLink from "next/link";
 import { WorkItemBoardMove } from "@/components/work-item-board-move";
 import { getPathname } from "@/i18n/navigation";
 import { chainLabels } from "@/lib/chain-labels";
-import { workItemListSearchParams } from "@/lib/page-trail";
+import { listSearchParams } from "@/lib/list-url";
 
 /** The List's and the Kanban's words, from the app's messages. */
 function useViewLabels(tableLabel: string, module: string): { list: WorkItemListLabels; board: WorkItemBoardLabels; layout: BoardLayoutMenuLabels } {
@@ -52,7 +52,7 @@ function useViewLabels(tableLabel: string, module: string): { list: WorkItemList
     "toolbar", "all", "type", "stage", "with", "withMe", "anyUnclaimed", "trade", "location", "outcome", "stepAge",
     "submissionDate", "creationDate", "submittedFrom", "submittedTo", "allRevisions", "needMyAction", "clear",
     "empty", "search", "searchPlaceholder", "searchHelp", "noResults", "filters", "clearAll", "done",
-    "close", "pages", "firstPage", "previousPage", "nextPage", "documentType", "owner", "role", "createdDate", "clearField",
+    "close", "pages", "firstPage", "previousPage", "nextPage", "lastPage", "rowsPerPage", "documentType", "owner", "role", "createdDate", "clearField",
     "searchValues", "noMatches", "searchPlaceholderBoard", "revisions", "statusField",
   ] as const;
   const layoutKeys = ["title", "boardSettings", "fixedParts", "alwaysShown", "contractorName", "location", "creationDate", "preview"] as const;
@@ -81,7 +81,8 @@ function useViewLabels(tableLabel: string, module: string): { list: WorkItemList
       filtersApplied: (n, count) => t("list.filtersApplied", { n, count }),
       page: (page) => t("list.page", { page }),
       pageOf: (page, pages) => t("list.pageOf", { page, pages }),
-      items: (n, count) => t("list.items", { n, count }),
+      // "42 submittals" on the Submittals, as the owner's design has it; "42 items" elsewhere.
+      items: (n, count) => t(module === "submittals" ? "list.submittals" : "list.items", { n, count }),
       dashboardFigure: l("dashboardFigure"),
       withinDays: (days, count) => t("list.withinDays", { days, count }),
       level: (n) => t("list.level", { n }),
@@ -114,7 +115,7 @@ function useViewLabels(tableLabel: string, module: string): { list: WorkItemList
  * A Module tab's items as the List or the Kanban, with the toolbar and the
  * View switch: every filter, sort, page and the View are the page's own URL,
  * so a view can be bookmarked or shared and the back button undoes a filter.
- * The List's URL also keeps the pages before the one it shows (`page-trail`).
+ * The List's URL keeps its numbered page and rows per page (`list-url`).
  */
 export function WorkItemListOrKanban(
   props: {
@@ -128,7 +129,7 @@ export function WorkItemListOrKanban(
     module: string;
     /** The filter fields' names in the other language. */
     hints?: WorkItemFilterHints;
-  } & ({ view: "list"; list: WorkItemListData; pageTrail?: readonly string[] } | { view: "kanban"; board: WorkItemBoardData }),
+  } & ({ view: "list"; list: WorkItemListData } | { view: "kanban"; board: WorkItemBoardData }),
 ) {
   const { query, locale, view, action, projectId, module, hints } = props;
   const t = useTranslations("workItemViews");
@@ -147,14 +148,17 @@ export function WorkItemListOrKanban(
   };
   // The path with its locale, as the browser shows it.
   const pathname = usePathname();
-  const hrefIn = (v: WorkItemView, q: WorkItemQuery, trail?: readonly string[]) => {
+  const hrefIn = (v: WorkItemView, q: WorkItemQuery) => {
     // The tab's path names the Module, so the query string doesn't. The Kanban has no pages.
-    const params = v === "list" ? workItemListSearchParams({ ...q, module: undefined }, trail) : workItemSearchParams({ ...q, module: undefined });
+    const params =
+      v === "list"
+        ? listSearchParams({ ...q, module: undefined })
+        : workItemSearchParams({ ...q, module: undefined, cursor: undefined, page: undefined, pageSize: undefined, lang: undefined });
     if (v === "kanban") params.set("view", "kanban");
     const search = params.toString();
     return search ? `${pathname}?${search}` : pathname;
   };
-  const hrefFor = (q: WorkItemQuery, trail?: readonly string[]) => hrefIn(view, q, trail);
+  const hrefFor = (q: WorkItemQuery) => hrefIn(view, q);
   const itemHref = (id: string) => getPathname({ href: `/work-items/${id}`, locale });
   return (
     <WorkItemList
@@ -163,7 +167,6 @@ export function WorkItemListOrKanban(
       locale={locale}
       labels={labels.list}
       hrefFor={hrefFor}
-      pageTrail={props.view === "list" ? props.pageTrail : undefined}
       itemHref={itemHref}
       linkAs={NextLink}
       onQueryChange={(q) => router.push(hrefFor(q))}
@@ -198,7 +201,8 @@ export function WorkItemListOrKanban(
           <WorkItemViewSwitch
             view={view}
             labels={{ view: t("viewSwitch.view"), list: t("viewSwitch.list"), kanban: t("viewSwitch.kanban") }}
-            hrefFor={(v) => hrefIn(v, { ...query, cursor: undefined })}
+            // Each View in its own order: the List by Submittal No., the Kanban by Step Age.
+            hrefFor={(v) => hrefIn(v, { ...query, cursor: undefined, page: undefined, sort: v === "list" ? "documentNumber" : "stepAge", dir: undefined })}
             linkAs={NextLink}
           />
         </>

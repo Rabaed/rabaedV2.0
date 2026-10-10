@@ -176,13 +176,11 @@ export {
   type FilterValuesProps,
 } from "./components/list/filter-menu.tsx";
 export { Pager, TableCard, type PagerLabels, type PagerProps, type TableCardProps } from "./components/list/table-card.tsx";
-export {
-  WorkItemList,
-  type WorkItemFilterHints,
-  type WorkItemListLabels,
-  type WorkItemListProps,
-  type WorkItemPageTrail,
-} from "./components/views/work-item-list.tsx";
+export { NumberedPager, type NumberedPagerLabels, type NumberedPagerProps } from "./components/list/numbered-pager.tsx";
+export { ListToast, type ListToastProps } from "./components/list/list-toast.tsx";
+export { WorkItemList, type WorkItemFilterHints, type WorkItemListLabels, type WorkItemListProps } from "./components/views/work-item-list.tsx";
+export { WorkItemTable, type WorkItemTableLabels, type WorkItemTableProps } from "./components/views/work-item-table.tsx";
+export { ColumnSettings, type ColumnSettingsLabels, type ColumnSettingsProps } from "./components/views/column-settings.tsx";
 export {
   KanbanCard,
   tradeChipClass,

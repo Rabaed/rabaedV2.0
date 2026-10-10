@@ -9,6 +9,7 @@ import {
   stepAgeMinimums,
   createdWithinDays,
   workItemPageSize,
+  workItemPageSizes,
   type BilingualText,
   outcomeLabel,
   type CodeCFilter,
@@ -32,7 +33,8 @@ import { Icon } from "../icon/icon.tsx";
 import { FilterMenu, FilterValues, type FilterChoice, type FilterMenuField } from "../list/filter-menu.tsx";
 import { poolIcon, tradeChipClass } from "./kanban-card.tsx";
 import { ListToolbar, ToolbarSearch, ToolbarSwitch } from "../list/list-toolbar.tsx";
-import { Pager, TableCard } from "../list/table-card.tsx";
+import { NumberedPager } from "../list/numbered-pager.tsx";
+import { TableCard } from "../list/table-card.tsx";
 import { AgeDots } from "../status/age-dots.tsx";
 import { stageColour } from "../status/stage-colour.ts";
 import { StageDot } from "../status/stage-pill.tsx";
@@ -100,6 +102,8 @@ export type WorkItemListLabels = {
   firstPage: string;
   previousPage: string;
   nextPage: string;
+  lastPage: string;
+  rowsPerPage: string;
   /** "Page 3", when the number of pages can't be said (a search). */
   page: (page: string) => string;
   /** "Page 3 of 5". */
@@ -160,13 +164,6 @@ function bucketLabel(bucket: string, outcomes: ListOutcomes, locale: Locale, lab
   return outcome ? outcomeLabel(outcome, locale) : bucket;
 }
 
-/**
- * The pages before this one, as the List keeps them to go back: the cursor of
- * each page from the second to the one before this, oldest first. Empty on the
- * second page; undefined when not known (a link from elsewhere into a later page).
- */
-export type WorkItemPageTrail = readonly string[];
-
 export type WorkItemListProps = {
   /** One page of the work item query, as the API returns it. */
   list: WorkItemListData;
@@ -174,10 +171,8 @@ export type WorkItemListProps = {
   query: WorkItemQuery;
   locale: Locale;
   labels: WorkItemListLabels;
-  /** The List's URL for `query`: a filter link, a page; `pageTrail` is the pages before it, to keep in the URL. */
-  hrefFor: (query: WorkItemQuery, pageTrail?: WorkItemPageTrail) => string;
-  /** The pages before this one (from the URL), so the pager can go back and number the page. */
-  pageTrail?: WorkItemPageTrail;
+  /** The List's URL for `query`: a filter link, a page. */
+  hrefFor: (query: WorkItemQuery) => string;
   /** An item's page. */
   itemHref: (id: string) => string;
   /** Shows the List for `query` (the web navigates to `hrefFor(query)`). */
@@ -214,7 +209,6 @@ export function WorkItemList({
   locale,
   labels,
   hrefFor,
-  pageTrail,
   itemHref,
   onQueryChange,
   action,
@@ -497,7 +491,7 @@ export function WorkItemList({
 
       {board ?? (
         <>
-          <TableCard footer={<WorkItemPager list={list} query={query} labels={labels} locale={locale} hrefFor={hrefFor} pageTrail={pageTrail} linkAs={Link} />}>
+          <TableCard footer={<WorkItemPager list={list} query={query} labels={labels} locale={locale} hrefFor={hrefFor} linkAs={Link} onQueryChange={change} />}>
             {/* The table scrolls sideways (and, on a wide screen, down) in its own region, so the page never does. */}
             <div role="region" aria-label={t("table")} tabIndex={0} className={cn("min-h-64 overflow-auto lg:max-h-[calc(100dvh-17rem)]", focusRing)}>
               <WorkItemTable
@@ -539,9 +533,10 @@ export function WorkItemList({
 }
 
 /**
- * The List's pager: First / Previous / Next over the cursor pages, and "Page x
- * of y · n items". Under a search there is no total ("Search and filters": a
- * search counts no more than its page), so the line says the page alone.
+ * The List's numbered pager (RP-409): "Page x of y · n submittals" from the Stage counts.
+ * Under a search there is no total ("Search and filters": a search counts no more than its
+ * page), so the line says the page alone, there is no last page, and the numbers grow as the
+ * pages are read.
  */
 function WorkItemPager({
   list,
@@ -549,34 +544,37 @@ function WorkItemPager({
   labels,
   locale,
   hrefFor,
-  pageTrail,
   linkAs,
-}: Pick<WorkItemListProps, "list" | "query" | "labels" | "locale" | "hrefFor" | "pageTrail" | "linkAs">) {
+  onQueryChange,
+}: Pick<WorkItemListProps, "list" | "query" | "labels" | "locale" | "hrefFor" | "linkAs"> & { onQueryChange: (next: Partial<WorkItemQuery>) => void }) {
   const n = (value: number) => formatNumber(value, locale);
-  const onFirst = query.cursor === undefined;
-  // The page's number: 1 without a cursor; from the trail when it is known.
-  const page = onFirst ? 1 : pageTrail === undefined ? null : pageTrail.length + 2;
-  const first = onFirst ? undefined : hrefFor({ ...query, cursor: undefined });
-  const previous =
-    onFirst || pageTrail === undefined
-      ? undefined
-      : pageTrail.length === 0
-        ? first
-        : hrefFor({ ...query, cursor: pageTrail.at(-1) }, pageTrail.slice(0, -1));
-  const nextTrail = onFirst ? [] : pageTrail === undefined ? undefined : [...pageTrail, query.cursor!];
-  const next = list.nextCursor === null ? undefined : hrefFor({ ...query, cursor: list.nextCursor }, nextTrail);
-
+  const page = list.page?.number ?? query.page ?? 1;
+  const size = list.page?.size ?? query.pageSize ?? workItemPageSize;
   const total = query.q === undefined ? list.stages.reduce((sum, s) => sum + s.count, 0) : null;
-  const pages = total === null ? null : Math.max(1, Math.ceil(total / workItemPageSize));
-  const pageLine = page === null ? null : pages === null ? labels.page(n(page)) : labels.pageOf(n(page), n(pages));
-  const parts = [pageLine, total === null ? null : labels.items(n(total), total)].filter((p) => p !== null);
+  const lastPage = total === null ? null : Math.max(1, Math.ceil(total / size));
+  const summary = [lastPage === null ? labels.page(n(page)) : labels.pageOf(n(page), n(lastPage)), total === null ? null : labels.items(n(total), total)]
+    .filter((p) => p !== null)
+    .join(" · ");
   return (
-    <Pager
-      labels={{ pages: labels.pages, first: labels.firstPage, previous: labels.previousPage, next: labels.nextPage }}
-      summary={parts.length > 0 ? parts.join(" · ") : undefined}
-      first={first}
-      previous={previous}
-      next={next}
+    <NumberedPager
+      page={page}
+      lastPage={lastPage}
+      hasNext={list.page?.hasNext ?? (lastPage !== null && page < lastPage)}
+      pageSize={size}
+      pageSizes={workItemPageSizes}
+      summary={summary}
+      labels={{
+        pages: labels.pages,
+        rowsPerPage: labels.rowsPerPage,
+        first: labels.firstPage,
+        previous: labels.previousPage,
+        next: labels.nextPage,
+        last: labels.lastPage,
+        page: labels.page,
+      }}
+      number={n}
+      hrefFor={(p) => hrefFor({ ...query, page: p })}
+      onPageSize={(pageSize) => onQueryChange({ pageSize: pageSize as WorkItemQuery["pageSize"] })}
       linkAs={linkAs}
     />
   );
