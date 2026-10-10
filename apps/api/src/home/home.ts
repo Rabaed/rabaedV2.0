@@ -30,7 +30,7 @@ import { countWorkItems, queryWorkItems, type QueryScope } from "../work-items/q
 // query's counts and rows, the Activity Feed) over each of their active
 // Projects, inside one transaction as the Member, and sums or merges them here.
 // Whatever a per-Project read hides, Home can't show. A closed Project
-// contributes nothing.
+// contributes nothing to the counts and lists; its card still shows its Submittals count.
 
 type Trx = Transaction<Database>;
 
@@ -91,7 +91,7 @@ export function getHome(db: Db, memberId: string, now: Date): Promise<Home> {
     // Participant's open items another Participant holds now.
     let longAtStep = 0;
     let waitingWithOthers = 0;
-    const submittals = await submittalCounts(trx, active, now);
+    const submittals = await submittalCounts(trx, projects, now);
     for (const { project, ...scope } of scopes) {
       const aged = await counted(trx, scope, { stepAgeMin: homeStepAgeWeeks, heldBy: "own" }, now);
       longAtStep += total(aged, (key) => !draftStages.has(`${project.id}/${scope.moduleKey}/${key}`));

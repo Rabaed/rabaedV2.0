@@ -16,6 +16,10 @@ export type ProjectsBrowserLabels = ProjectCardsLabels & {
   /** The chips' group name, e.g. "Show". */
   filter: string;
   all: string;
+  /** The Active chip: the Projects that are active (plural in Arabic, unlike the card's own state). */
+  filterActive: string;
+  /** The Closed chip. */
+  filterClosed: string;
   /** Shown when the Member is on no Project. */
   empty: string;
   /** The title over `empty`. */
@@ -37,10 +41,11 @@ export type ProjectsBrowserProps = {
   emptyAction?: ReactNode;
 };
 
-/** The Projects that match a search (name in either language, or code) and a state chip. */
+/** The Projects that match a search (name in either language, or code) and a state chip, closed ones last. */
 export function filterProjects(projects: ProjectSummary[], search: string, filter: ProjectsFilter): ProjectSummary[] {
   const needle = search.trim().toLocaleLowerCase();
-  return projects.filter((p) => {
+  // Closed Projects last, as on Home and in the design kit; each group keeps the API's order (newest first).
+  return projects.toSorted((a, b) => Number(a.status === "closed") - Number(b.status === "closed")).filter((p) => {
     if (filter === "active" && p.status !== "active") return false;
     if (filter === "closed" && p.status !== "closed") return false;
     if (needle === "") return true;
@@ -69,8 +74,8 @@ export function ProjectsBrowser({ projects, locale, labels, href, linkAs, submit
 
   const chips: { value: ProjectsFilter; label: string }[] = [
     { value: "all", label: labels.all },
-    { value: "active", label: labels.active },
-    { value: "closed", label: labels.closed },
+    { value: "active", label: labels.filterActive },
+    { value: "closed", label: labels.filterClosed },
   ];
 
   return (
@@ -110,7 +115,7 @@ export function ProjectsBrowser({ projects, locale, labels, href, linkAs, submit
                 "h-[34px] rounded-full border px-[14px] text-[13px] font-semibold transition-colors duration-150",
                 filter === chip.value
                   ? "border-inverse bg-inverse text-on-inverse"
-                  : "border-border-strong bg-surface text-muted hover:bg-hover",
+                  : "border-control-border bg-surface text-muted hover:border-control-border-hover hover:bg-hover",
                 touchArea,
                 focusRing,
               )}

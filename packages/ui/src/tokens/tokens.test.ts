@@ -79,8 +79,6 @@ describe("cool light launch theme", () => {
     ...segmentToneKeys.map((s) => [`segment-${s}-fg`, `segment-${s}-tint`] as [SemanticRole, SemanticRole]),
     // Solid avatars' initials (RP-407).
     ...["1", "2", "3", "4", "5", "6", "company"].map((a) => ["on-avatar", `avatar-${a}`] as [SemanticRole, SemanticRole]),
-    // A Project's letter tile.
-    ...["1", "2", "3", "4", "5"].map((n) => ["on-avatar", `project-tile-${n}`] as [SemanticRole, SemanticRole]),
   ];
 
   it.each(textPairs)("%s on %s meets 4.5:1", (fg, bg) => {
@@ -96,6 +94,8 @@ describe("cool light launch theme", () => {
     ["control-border", "surface-subtle"],
     ["control-border-hover", "surface"],
     ["primary", "surface"],
+    // A Project's letter tile: a 19px / 800 letter is large text, so 3:1.
+    ...(["1", "2", "3", "4", "5"] as const).map((n) => ["on-avatar", `project-tile-${n}`] as [SemanticRole, SemanticRole]),
     ...([1, 2, 3, 4] as const).flatMap((age) => [
       [`age-${age}`, "surface"] as [SemanticRole, SemanticRole],
       [`age-${age}`, "canvas"] as [SemanticRole, SemanticRole],

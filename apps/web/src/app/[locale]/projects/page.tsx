@@ -17,7 +17,7 @@ export default async function ProjectsPage({ params }: { params: Promise<{ local
     <div className="flex flex-col">
       <div className="mb-[22px] flex flex-wrap items-end gap-4">
         <div className="flex min-w-0 flex-col gap-1">
-          <h1 className="font-display text-h4 leading-tight font-bold tracking-[-0.01em] ltr:font-extrabold">{t("title")}</h1>
+          <h1 className="font-display text-h4 leading-[1.2] font-bold tracking-[-0.01em] ltr:font-extrabold">{t("title")}</h1>
           <p className="text-body text-muted">{t("subtitle")}</p>
         </div>
         {canCreate && (
@@ -36,7 +36,7 @@ export default async function ProjectsPage({ params }: { params: Promise<{ local
           projects={list.projects}
           submittals={list.submittals}
           locale={locale}
-          emptyAction={canCreate ? <NewProjectDialog /> : undefined}
+          emptyAction={canCreate ? <NewProjectDialog className="h-[42px] rounded-[11px] px-4 font-semibold" /> : undefined}
         />
       )}
     </div>

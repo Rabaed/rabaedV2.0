@@ -1,4 +1,7 @@
 import type { Locale } from "@rabaed/domain";
+import ar from "../../../../apps/web/messages/ar.json" with { type: "json" };
+import en from "../../../../apps/web/messages/en.json" with { type: "json" };
+import { icuMessage } from "./numbering.ts";
 import type { BoardLayoutMenuLabels } from "../components/views/board-layout-menu.tsx";
 import type { WorkItemBoardLabels, WorkItemViewSwitchLabels } from "../components/views/work-item-board.tsx";
 import type { WorkItemListLabels } from "../components/views/work-item-list.tsx";
@@ -10,47 +13,48 @@ import type { ProjectDashboardLabels } from "../components/views/project-dashboa
 // Story copy for the views: the labels the app passes from its messages
 // (apps/web/messages), in English and Arabic.
 
-export const projectCardsLabels: Record<Locale, ProjectCardsLabels> = {
-  en: {
-    list: "Projects",
-    needMyAction: (_count, n) => `${n} need my action`,
-    submittals: (count, n) => (count === 1 ? `${n} submittal` : `${n} submittals`),
-    active: "Active",
-    closed: "Closed",
-    projectAdmin: "Project Admin",
-  },
-  ar: {
-    list: "المشاريع",
-    needMyAction: (_count, n) => `${n} بحاجة لإجرائي`,
-    submittals: (_count, n) => `${n} تقديمات`,
-    active: "نشط",
-    closed: "مغلق",
-    projectAdmin: "مسؤول المشروع",
-  },
-};
+// The Projects page's words are read from the app's message files themselves
+// (`projects.*`), plural branches chosen as next-intl does, so the stories show
+// exactly the app's copy, Arabic plurals included.
+const projectMessages = { en: en.projects, ar: ar.projects } as const;
 
-export const projectsBrowserLabels: Record<Locale, ProjectsBrowserLabels> = {
-  en: {
-    ...projectCardsLabels.en,
-    search: "Search Projects",
-    filter: "Show",
-    all: "All",
-    emptyTitle: "No Projects yet",
-    empty: "You are not on any Project yet.",
-    noMatchesTitle: "No Projects match",
-    noMatches: "Try another Project name or code, or show All.",
-  },
-  ar: {
-    ...projectCardsLabels.ar,
-    search: "ابحث في المشاريع",
-    filter: "عرض",
-    all: "الكل",
-    emptyTitle: "لا مشاريع بعد",
-    empty: "لست عضوًا في أي مشروع بعد.",
-    noMatchesTitle: "لا مشاريع مطابقة",
-    noMatches: "جرّب اسمًا أو رمزًا آخر، أو اعرض الكل.",
-  },
-};
+export const projectCardsLabels: Record<Locale, ProjectCardsLabels> = Object.fromEntries(
+  (["en", "ar"] as const).map((locale) => {
+    const m = projectMessages[locale];
+    return [
+      locale,
+      {
+        list: m.title,
+        needMyAction: (_count, n) => icuMessage(m.cardNeedMyAction, locale, { n }),
+        submittals: (count, n) => icuMessage(m.cardSubmittals, locale, { count, n }),
+        active: m.active,
+        closed: m.closed,
+        projectAdmin: m.projectAdmin,
+      } satisfies ProjectCardsLabels,
+    ];
+  }),
+) as Record<Locale, ProjectCardsLabels>;
+
+export const projectsBrowserLabels: Record<Locale, ProjectsBrowserLabels> = Object.fromEntries(
+  (["en", "ar"] as const).map((locale) => {
+    const m = projectMessages[locale];
+    return [
+      locale,
+      {
+        ...projectCardsLabels[locale],
+        search: m.search,
+        filter: m.filter,
+        all: m.all,
+        filterActive: m.filterActive,
+        filterClosed: m.filterClosed,
+        emptyTitle: m.emptyTitle,
+        empty: m.empty,
+        noMatchesTitle: m.noMatchesTitle,
+        noMatches: m.noMatches,
+      } satisfies ProjectsBrowserLabels,
+    ];
+  }),
+) as Record<Locale, ProjectsBrowserLabels>;
 
 export const workItemListLabels: Record<Locale, WorkItemListLabels> = {
   en: {

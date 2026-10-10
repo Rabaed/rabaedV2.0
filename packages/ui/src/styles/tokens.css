@@ -62,6 +62,11 @@
   --palette-violet-50: #f0ecfe;
   --palette-violet-500: #7a5af0;
   --palette-violet-700: #6547d6;
+  --palette-tile-tomato: #f8552f;
+  --palette-tile-blue: #3d6db5;
+  --palette-tile-green: #1ea762;
+  --palette-tile-purple: #6b5ad8;
+  --palette-tile-orange: #d27d3e;
   --palette-cyan-50: #e2f5f8;
   --palette-cyan-500: #1aa3b8;
   --palette-cyan-700: #0f7688;
@@ -195,11 +200,11 @@
   --avatar-6: var(--palette-red-700);
   --avatar-company: var(--palette-slate-600);
   --on-avatar: var(--palette-white);
-  --project-tile-1: var(--palette-tomato-750);
-  --project-tile-2: var(--palette-blue-700);
-  --project-tile-3: var(--palette-green-700);
-  --project-tile-4: var(--palette-violet-700);
-  --project-tile-5: var(--palette-orange-700);
+  --project-tile-1: var(--palette-tile-tomato);
+  --project-tile-2: var(--palette-tile-blue);
+  --project-tile-3: var(--palette-tile-green);
+  --project-tile-4: var(--palette-tile-purple);
+  --project-tile-5: var(--palette-tile-orange);
   --age-0: var(--palette-slate-350);
   --age-1: var(--palette-slate-600);
   --age-2: var(--palette-amber-700);

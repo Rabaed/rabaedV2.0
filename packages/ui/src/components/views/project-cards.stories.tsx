@@ -52,7 +52,10 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 type PlayContext = Parameters<NonNullable<Story["play"]>>[0];
 
-const cardOf = (context: PlayContext, name: { en: string; ar: string }) =>
+/** The app's own words for the cards, in the story's language (Arabic plurals included). */
+const wordsOf = (context: PlayContext) => projectCardsLabels[storyLocale(context)];
+
+const cardOf =(context: PlayContext, name: { en: string; ar: string }) =>
   context.canvas.getByRole("link", { name: new RegExp(storyText(context, name).replace(/[.,]/g, "\\$&")) });
 
 /**
@@ -67,9 +70,9 @@ export const Wide: Story = {
     await expect(within(list).getAllByRole("listitem")).toHaveLength(projects.length);
     const tower = cardOf(context, projects[0]!.name);
     await expect(tower).toHaveAttribute("href", `#/projects/${projects[0]!.id}`);
-    await expect(within(tower).getByText(storyText(context, b("12 need my action", "12 بحاجة لإجرائي")))).toBeVisible();
-    await expect(within(tower).getByText(storyText(context, b("48 submittals", "48 تقديمات")))).toBeVisible();
-    await expect(within(cardOf(context, projects[2]!.name)).getByText(storyText(context, b("0 need my action", "0 بحاجة لإجرائي")))).toBeVisible();
+    await expect(within(tower).getByText(wordsOf(context).needMyAction(12, "12"))).toBeVisible();
+    await expect(within(tower).getByText(wordsOf(context).submittals(48, "48"))).toBeVisible();
+    await expect(within(cardOf(context, projects[2]!.name)).getByText(wordsOf(context).needMyAction(0, "0"))).toBeVisible();
     const closed = cardOf(context, projects[3]!.name);
     await expect(closed).toHaveAccessibleDescription(expect.stringContaining(storyText(context, copy.closed)));
     await expect(within(tower).getByText(storyText(context, b("Tamkeen Contracting", "تمكين للمقاولات")))).toBeInTheDocument();
@@ -96,7 +99,7 @@ export const OnHome: Story = {
     );
   },
   play: async (context) => {
-    await expect(within(cardOf(context, projects[0]!.name)).getByText(storyText(context, b("48 submittals", "48 تقديمات")))).toBeVisible();
+    await expect(within(cardOf(context, projects[0]!.name)).getByText(wordsOf(context).submittals(48, "48"))).toBeVisible();
   },
 };
 
@@ -119,7 +122,7 @@ export const ClosedWithALongRole: Story = {
     await expect(role.scrollWidth).toBeLessThanOrEqual(role.clientWidth);
     await expect(getComputedStyle(role).textOverflow).not.toBe("ellipsis");
     await expect(within(card).getByText(storyText(context, copy.closed))).toBeVisible();
-    await expect(within(card).getByText(storyText(context, b("7 submittals", "7 تقديمات")))).toBeVisible();
+    await expect(within(card).getByText(wordsOf(context).submittals(7, "7"))).toBeVisible();
     await expectLaidOutLeftToRight(within(card).getByText("CLOSED1"));
   },
 };

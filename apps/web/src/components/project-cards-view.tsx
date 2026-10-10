@@ -36,6 +36,8 @@ export function ProjectCardsView({
         search: t("search"),
         filter: t("filter"),
         all: t("all"),
+        filterActive: t("filterActive"),
+        filterClosed: t("filterClosed"),
         emptyTitle: t("emptyTitle"),
         empty: emptyAction ? t("emptyCreator") : t("empty"),
         noMatchesTitle: t("noMatchesTitle"),

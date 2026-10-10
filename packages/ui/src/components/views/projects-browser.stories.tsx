@@ -55,12 +55,24 @@ export const Filtering: Story = {
   play: async ({ canvas, globals }) => {
     const labels = projectsBrowserLabels[globals.locale === "ar" ? "ar" : "en"];
     await expect(within(canvas.getByRole("list", { name: labels.list })).getAllByRole("listitem")).toHaveLength(4);
-    await userEvent.click(canvas.getByRole("button", { name: labels.closed }));
-    await expect(canvas.getByRole("button", { name: labels.closed })).toHaveAttribute("aria-pressed", "true");
+    await userEvent.click(canvas.getByRole("button", { name: labels.filterClosed }));
+    await expect(canvas.getByRole("button", { name: labels.filterClosed })).toHaveAttribute("aria-pressed", "true");
     await expect(within(canvas.getByRole("list", { name: labels.list })).getAllByRole("listitem")).toHaveLength(1);
     await userEvent.click(canvas.getByRole("button", { name: labels.all }));
     await userEvent.type(canvas.getByRole("searchbox", { name: labels.search }), "kafd");
     await expect(within(canvas.getByRole("list", { name: labels.list })).getAllByRole("listitem")).toHaveLength(1);
+  },
+};
+
+/** Closed Projects come last, whatever order the API gave them in. */
+export const ClosedLast: Story = {
+  args: { projects: [projects[3]!, projects[0]!, projects[1]!] },
+  play: async ({ canvas, globals }) => {
+    const labels = projectsBrowserLabels[globals.locale === "ar" ? "ar" : "en"];
+    const items = within(canvas.getByRole("list", { name: labels.list })).getAllByRole("listitem");
+    await expect(items).toHaveLength(3);
+    await expect(within(items[2]!).getByText(labels.closed)).toBeVisible();
+    await expect(within(items[0]!).queryByText(labels.closed)).toBeNull();
   },
 };
 
