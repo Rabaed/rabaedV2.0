@@ -106,19 +106,19 @@ describe("K1 moves the Submitted item internally (scenario 35)", () => {
     id = res.json().id;
     await attachDatasheet(engineer, id);
     await ok(tryTake(engineer, id, "send_for_review"));
-    await ok(pm.post(`/v1/work-items/${id}/claim`));
+    await ok(pm.post(`/v1/work-items/${id}/pick-up`));
     await ok(tryTake(pm, id, "submit"));
     atSubmit = { pm: await seenBy(pm, id), owner: await seenBy(owner, id) };
     submittedAt = atSubmit.pm.detail.stepEnteredAt!;
 
     // Two weeks later the K1 Engineer sends it to the K1 Manager…
     await api.later(15 * DAY);
-    await ok(k1Engineer.post(`/v1/work-items/${id}/claim`));
+    await ok(k1Engineer.post(`/v1/work-items/${id}/pick-up`));
     await ok(tryTake(k1Engineer, id, "send_to_manager"));
     withManager = { pm: await seenBy(pm, id), owner: await seenBy(owner, id) };
     // …who, a week later, Returns it to the Engineer.
     await api.later(8 * DAY);
-    await ok(k1Manager.post(`/v1/work-items/${id}/claim`));
+    await ok(k1Manager.post(`/v1/work-items/${id}/pick-up`));
     await ok(tryTake(k1Manager, id, "return_to_engineer", { reason: RETURN_REASON }));
   });
 
@@ -160,7 +160,7 @@ describe("K1 moves the Submitted item internally (scenario 35)", () => {
 
   it("counts again from the Code for everyone once K1 closes the item", async () => {
     await ok(tryTake(k1Engineer, id, "send_to_manager"));
-    await ok(k1Manager.post(`/v1/work-items/${id}/claim`));
+    await ok(k1Manager.post(`/v1/work-items/${id}/pick-up`));
     await ok(tryTake(k1Manager, id, "approve_a"));
     for (const caller of [pm, owner, k1Engineer, k1Manager]) {
       const { detail } = await seenBy(caller, id);

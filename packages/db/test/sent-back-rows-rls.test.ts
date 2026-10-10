@@ -104,7 +104,7 @@ const take = (as: string, id: string, transition: string) =>
     as,
     sql`select app.take_transition(${id}::uuid, ${transition}, '{}'::jsonb, '', app.answers_sha256(${id}::uuid), ${randomUUID()}::uuid, now()) as outcome`,
   );
-const claim = (as: string, id: string) => outcome(as, sql`select app.claim_step(${id}::uuid, now()) as outcome`);
+const pickUp = (as: string, id: string) => outcome(as, sql`select app.pick_up_step(${id}::uuid, now()) as outcome`);
 const save = (as: string, id: string, data: object) =>
   outcome(
     as,
@@ -126,7 +126,7 @@ async function draft(model: string, data: object = {}): Promise<string> {
 
 async function submit(id: string) {
   expect(await take(c1.member, id, "send_for_review")).toBe("applied");
-  expect(await claim(c1Pm, id)).toBe("claimed");
+  expect(await pickUp(c1Pm, id)).toBe("picked_up");
   expect(await take(c1Pm, id, "submit")).toBe("applied");
 }
 
@@ -242,7 +242,7 @@ describe("C1 changes an item K1 Sent Back to its Draft", () => {
     first = [await document(id, "datasheet-1.pdf", "datasheet"), await document(id, "letter-1.pdf")];
     const freeToX = await addLink(id, x);
     await submit(id);
-    expect(await claim(k1.member, id)).toBe("claimed");
+    expect(await pickUp(k1.member, id)).toBe("picked_up");
     expect(await take(k1.member, id, "send_back_to_draft")).toBe("applied");
     atSendBack = await reads(k1.member, id);
 
@@ -360,7 +360,7 @@ describe("a Link C1 adds and removes again while it holds the Sent Back item", (
     const id = await draft("F2");
     const toX = await addLink(id, x);
     await submit(id);
-    expect(await claim(k1.member, id)).toBe("claimed");
+    expect(await pickUp(k1.member, id)).toBe("picked_up");
     expect(await take(k1.member, id, "send_back_to_draft")).toBe("applied");
 
     const toY = await addLink(id, y);
@@ -407,7 +407,7 @@ describe("the Steps of an item, as the app role reads them (V5, V14; RP-309 revi
   it("never shows K1 or the Owner the raiser's internal Steps of an item Sent Back to it, nor who holds them", async () => {
     const id = await draft("SB");
     await submit(id);
-    expect(await claim(k1.member, id)).toBe("claimed");
+    expect(await pickUp(k1.member, id)).toBe("picked_up");
     expect(await take(k1.member, id, "send_back_to_draft")).toBe("applied");
     for (const [as, own] of [
       [k1.member, participant.k1],
@@ -419,7 +419,7 @@ describe("the Steps of an item, as the app role reads them (V5, V14; RP-309 revi
     expect(await assignments(ow.member, id)).toEqual([]);
     // C1 reads its own, the open Draft Step its engineer holds again included.
     const mine = await assignments(c1.member, id);
-    expect(mine.filter((r) => r.status === "claimed")).toEqual([
+    expect(mine.filter((r) => r.status === "picked_up")).toEqual([
       expect.objectContaining({ participant_id: participant.c1, assignee_member_id: c1.member }),
     ]);
   });
@@ -427,7 +427,7 @@ describe("the Steps of an item, as the app role reads them (V5, V14; RP-309 revi
   it("never shows C1 or the Owner K1's internal Steps, nor who holds them", async () => {
     const id = await draft("KI");
     await submit(id);
-    expect(await claim(k1.member, id)).toBe("claimed");
+    expect(await pickUp(k1.member, id)).toBe("picked_up");
     expect(await take(k1.member, id, "send_to_manager")).toBe("applied");
     for (const [as, own] of [
       [c1.member, participant.c1],
@@ -437,8 +437,8 @@ describe("the Steps of an item, as the app role reads them (V5, V14; RP-309 revi
       expect(await call(as, sql<{ id: string }>`select id from work_item where id = ${id}`)).toHaveLength(1);
       for (const row of await assignments(as, id)) expect(row.participant_id, as).toBe(own);
     }
-    expect((await assignments(k1.member, id)).map((r) => r.status).sort()).toEqual(["done", "pooled"]);
-    expect(await claim(k1Manager, id)).toBe("claimed");
+    expect((await assignments(k1.member, id)).map((r) => r.status).sort()).toEqual(["done", "picked_up"]);
+    expect(await pickUp(k1Manager, id)).toBe("picked_up");
     for (const as of [c1.member, ow.member]) {
       for (const row of await assignments(as, id)) expect(row.assignee_member_id, as).not.toBe(k1Manager);
     }
@@ -446,12 +446,12 @@ describe("the Steps of an item, as the app role reads them (V5, V14; RP-309 revi
 });
 
 describe("when a Draft was started, through the app role (scenario 61; RP-334 review)", () => {
-  it("is in no column anyone reads: not a Step's claim or creation, nor the raiser's access", async () => {
+  it("is in no column anyone reads: not a Step's Pick up or creation, nor the raiser's access", async () => {
     const id = await draft("DS");
     await submit(id);
     for (const as of [c1.member, c1Pm, k1.member, ow.member]) {
       for (const query of [
-        sql<object>`select claimed_at from step_assignment where work_item_id = ${id}`,
+        sql<object>`select picked_up_at from step_assignment where work_item_id = ${id}`,
         sql<object>`select created_at from step_assignment where work_item_id = ${id}`,
         sql<object>`select updated_at from step_assignment where work_item_id = ${id}`,
         sql<object>`select since from work_item_access where work_item_id = ${id}`,
@@ -500,7 +500,7 @@ describe("Documents and Links added during the Draft, through the app role (scen
       }
     };
     await check();
-    expect(await claim(k1.member, id)).toBe("claimed");
+    expect(await pickUp(k1.member, id)).toBe("picked_up");
     expect(await take(k1.member, id, "send_back_to_draft")).toBe("applied");
     await check();
     // The stored times stay for audit.

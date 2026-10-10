@@ -31,7 +31,7 @@ const copy = {
   view: b("View", "طريقة العرض"),
   list: b("List", "قائمة"),
   kanban: b("Kanban", "كانبان"),
-  unclaimed: b("unclaimed", "لم تُستلَم"),
+  notPickedUp: b("Not picked up", "لم تُستلَم"),
   moveItem: b("Move #", "نقل #"),
   moveTo: b("To #", "إلى #"),
   mixed: b("Mixed", "مختلط"),
@@ -84,8 +84,8 @@ const pm = { key: "project_manager", name: b("Project Manager", "مدير الم
 const engineerLane = b("Contractor Engineer", "مهندس المقاول");
 const pmLane = b("Contractor Project Manager", "مدير المشروع المقاول");
 const person = (en: string, ar: string, isMe = false) => ({ name: b(en, ar), isMe });
-const own = (position: typeof engineer, claimer: ReturnType<typeof person> | null, step = reviewStep) =>
-  ({ kind: "own", companyName: ownCompany, step, claimer, role: { position, projectRole: contractor } }) as const;
+const own = (position: typeof engineer, holder: ReturnType<typeof person> | null, step = reviewStep) =>
+  ({ kind: "own", companyName: ownCompany, step, holder, role: { position, projectRole: contractor } }) as const;
 const withConsultant = { kind: "company", companyName: consultant } as const;
 
 const card = (n: number, rest: Partial<WorkItemRow>): WorkItemRow => ({
@@ -251,7 +251,7 @@ export const Wide: Story = {
     // My own roles, in their Positions' order: Engineer, then Project Manager.
     await expect(groups.map((g) => g.getAttribute("aria-label"))).toEqual([engineerLane[locale], pmLane[locale]]);
     const pmGroup = groups[1]!;
-    await expect(within(pmGroup).getByText(new RegExp(storyText(context, copy.unclaimed)))).toBeVisible();
+    await expect(within(pmGroup).getByText(new RegExp(storyText(context, copy.notPickedUp)))).toBeVisible();
 
     const pending = columnOf(context, stages.pending);
     await expect(within(pending).getAllByRole("region").map((g) => g.getAttribute("aria-label"))).toEqual([consultant[locale]]);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { browserLocale, directionOf, formatDate, formatDayMonthYear, formatNumber, isLocale } from "./locale.ts";
+import { browserLocale, directionOf, formatDate, formatDayMonthYear, formatNumber, isLocale, sortedByName } from "./locale.ts";
 
 describe("locale", () => {
   it("knows English and Arabic only", () => {
@@ -59,6 +59,16 @@ describe("locale", () => {
   it("keeps percentages and decimals Latin in Arabic", () => {
     expect(formatNumber(0.25, "ar", { style: "percent" })).not.toMatch(/[٠-٩۰-۹]/);
     expect(formatNumber(0.25, "en", { style: "percent" })).toBe("25%");
+  });
+
+  it("orders names in the viewer's language, not always by the English one", () => {
+    const people = [
+      { en: "Badr Alawi", ar: "بدر العلوي" },
+      { en: "Saad Harbi", ar: "سعد الحربي" },
+      { en: "Ali Sonour", ar: "علي سنور" },
+    ];
+    expect(sortedByName(people, (p) => p.en, "en").map((p) => p.en)).toEqual(["Ali Sonour", "Badr Alawi", "Saad Harbi"]);
+    expect(sortedByName(people, (p) => p.ar, "ar").map((p) => p.ar)).toEqual(["بدر العلوي", "سعد الحربي", "علي سنور"]);
   });
 });
 

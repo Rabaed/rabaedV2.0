@@ -51,8 +51,11 @@ describe("homeActivityVerb", () => {
   });
 
   it("words any other event by its type", () => {
-    expect(homeActivityVerb("claimed", null, null)).toBe("claimed");
-    expect(homeActivityVerb("released", null, null)).toBe("released");
+    expect(homeActivityVerb("picked_up", null, null)).toBe("pickedUp");
+    expect(homeActivityVerb("returned_to_pool", null, null)).toBe("returnedToPool");
+    // Events written before RP-512 keep their old type.
+    expect(homeActivityVerb("claimed", null, null)).toBe("pickedUp");
+    expect(homeActivityVerb("released", null, null)).toBe("returnedToPool");
     expect(homeActivityVerb("admin_reassigned", null, null)).toBe("assigned");
     expect(homeActivityVerb("recommend_code", null, null)).toBe("recommended");
     expect(homeActivityVerb("internal_note", "send", null)).toBe("noted");

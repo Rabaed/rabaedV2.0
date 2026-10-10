@@ -72,12 +72,12 @@ function useViewLabels(tableLabel: string, module: string): { list: WorkItemList
   const shared = {
     noNumber: l("noNumber"),
     revisionNoNumber: (revision: string) => t("list.revisionNoNumber", { revision }),
-    unclaimed: l("unclaimed"),
+    notPickedUp: l("notPickedUp"),
     // Cancelled is named once, with the notifications (watchOutcomeNames); every other outcome by its Type's set (RP-429).
     cancelled: watchOutcomeNames.cancelled[locale],
   };
   const keys = [
-    "toolbar", "all", "type", "stage", "with", "withMe", "anyUnclaimed", "trade", "location", "outcome", "stepAge",
+    "toolbar", "all", "type", "stage", "with", "withMe", "anyNotPickedUp", "trade", "location", "outcome", "stepAge",
     "submissionDate", "creationDate", "submittedFrom", "submittedTo", "allRevisions", "needMyAction", "clear",
     "empty", "search", "searchPlaceholder", "searchHelp", "noResults", "filters", "clearAll", "done",
     "close", "pages", "firstPage", "previousPage", "nextPage", "lastPage", "rowsPerPage", "documentType", "owner", "role", "createdDate", "clearField",

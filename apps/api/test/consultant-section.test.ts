@@ -134,9 +134,9 @@ async function atConsultantReview(model: string): Promise<string> {
   const res = await ok(engineer.post(`/v1/projects/${projectId}/work-items`, { type: TYPE, title: model, answers: { ...builtIns(), model } }), 201);
   const id = res.json().id as string;
   await ok(tryTake(engineer, id, "send_for_review"));
-  await ok(pm.post(`/v1/work-items/${id}/claim`));
+  await ok(pm.post(`/v1/work-items/${id}/pick-up`));
   await ok(tryTake(pm, id, "submit"));
-  await ok(k1Engineer.post(`/v1/work-items/${id}/claim`));
+  await ok(k1Engineer.post(`/v1/work-items/${id}/pick-up`));
   return id;
 }
 
@@ -233,7 +233,7 @@ describe("K1 fills its section and saves twice, without issuing a Code (scenario
   });
 
   it("is everyone's once K1 issues the Code, its changes still K1's", async () => {
-    await ok(k1Manager.post(`/v1/work-items/${id}/claim`));
+    await ok(k1Manager.post(`/v1/work-items/${id}/pick-up`));
     await ok(tryTake(k1Manager, id, "revise_c"));
     for (const other of [engineer, pm, orEngineer, owner]) {
       expect(await answersOf(other, id)).toEqual({ model: "FD-90", sample_checked: true, verification_note: "Matches the sample" });
@@ -299,7 +299,7 @@ describe("K1 fills in part of its section, then Sends the item Back to C1 (scena
 
   // OR and OW see the item again once it is Submitted (V2).
   it("shows OR and OW the section as it arrived once C1 Submits again", async () => {
-    await ok(pm.post(`/v1/work-items/${id}/claim`));
+    await ok(pm.post(`/v1/work-items/${id}/pick-up`));
     await ok(tryTake(pm, id, "submit"));
     for (const other of [orEngineer, owner, engineer]) await unseen(other);
   });
@@ -311,7 +311,7 @@ describe("K1 fills in part of its section, then Sends the item Back to C1 (scena
   });
 
   it("starts K1 from the section as it arrived, with no field times for it, its earlier changes still in K1's history", async () => {
-    await ok(k1Engineer.post(`/v1/work-items/${id}/claim`));
+    await ok(k1Engineer.post(`/v1/work-items/${id}/pick-up`));
     expect(await answersOf(k1Engineer, id)).toEqual({ model: "FD-50" });
     const times = (await detail(k1Engineer, id)).fieldTimes;
     expect(Object.keys(times)).not.toContain("sample_checked");

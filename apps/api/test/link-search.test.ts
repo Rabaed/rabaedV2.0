@@ -66,7 +66,7 @@ beforeAll(async () => {
   item.c1Internal = await inInternalReview(tower, c1Engineer, "Cable trays, in internal review");
   item.c1Submitted = await submitted(tower, c1Engineer, c1Pm, "Cable trays, submitted");
   item.c1Approved = await submitted(tower, c1Engineer, c1Pm, "Cable trays, approved");
-  await ok(k1Manager.post(`/v1/work-items/${item.c1Approved}/claim`));
+  await ok(k1Manager.post(`/v1/work-items/${item.c1Approved}/pick-up`));
   await verified(k1Manager, item.c1Approved);
   await take(k1Manager, item.c1Approved, "approve_a");
   item.c1Mechanical = await submitted(tower, c1Engineer, c1Pm, "Cable trays, mechanical", tower.mechanical);
@@ -107,7 +107,7 @@ describe("Link search (scenario 79)", () => {
     const { c1Engineer, c1Pm, k1Manager } = tower;
     const startedFirst = await inInternalReview(tower, c1Engineer, "Ordering, started first");
     const submittedFirst = await submitted(tower, c1Engineer, c1Pm, "Ordering, submitted first");
-    await ok(c1Pm.post(`/v1/work-items/${startedFirst}/claim`));
+    await ok(c1Pm.post(`/v1/work-items/${startedFirst}/pick-up`));
     await take(c1Pm, startedFirst, "submit");
     for (const by of [c1Engineer, k1Manager]) expect(ids(await search(by, "ordering"))).toEqual([startedFirst, submittedFirst]);
   });

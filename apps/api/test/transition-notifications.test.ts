@@ -77,7 +77,7 @@ const routed = async (id: string) =>
     `.execute(migrator)
   ).rows;
 
-/** A raised item, sent to C1's review and claimed by its Project Manager, who is about to Submit it. */
+/** A raised item, sent to C1's review and picked up by its Project Manager, who is about to Submit it. */
 async function inReview(title: string): Promise<string> {
   const res = await ok(
     at.c1Engineer.post(`/v1/projects/${at.projectId}/work-items`, {
@@ -89,7 +89,7 @@ async function inReview(title: string): Promise<string> {
   );
   const id = res.json().id as string;
   await take(at.c1Engineer, id, "send_for_review");
-  await ok(at.c1Pm.post(`/v1/work-items/${id}/claim`));
+  await ok(at.c1Pm.post(`/v1/work-items/${id}/pick-up`));
   return id;
 }
 
@@ -166,9 +166,9 @@ describe("a Code issued", () => {
     const id = await inReview("Pipes");
     await ok(at.c1Engineer.delete(`/v1/work-items/${id}/watch`));
     await take(at.c1Pm, id, "submit");
-    await ok(at.k1Manager.post(`/v1/work-items/${id}/claim`));
+    await ok(at.k1Manager.post(`/v1/work-items/${id}/pick-up`));
     await take(at.k1Manager, id, "send_to_manager");
-    await ok(at.k1Manager.post(`/v1/work-items/${id}/claim`));
+    await ok(at.k1Manager.post(`/v1/work-items/${id}/pick-up`));
     await take(at.k1Manager, id, "approve_a");
     await drainOutbox(worker);
     const issued = (await about(at.c1Engineer, id)).filter((n) => n.kind === "watched_event" && n.event?.transition?.en === "Approve · A");

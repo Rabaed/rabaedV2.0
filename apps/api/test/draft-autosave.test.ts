@@ -141,7 +141,7 @@ describe("history", () => {
     await ok(tryTake(engineer, id, "send_for_review"));
     // After Draft the web doesn't autosave.
     expect((await detail(engineer, id)).autosave).toBe(false);
-    await ok(pm.post(`/v1/work-items/${id}/claim`));
+    await ok(pm.post(`/v1/work-items/${id}/pick-up`));
     await ok(save(pm, id, { manufacturer: "ACME", description: "d3" }));
     expect(await diffs(pm, id)).toHaveLength(1);
     await ok(save(pm, id, { manufacturer: "ACME", description: "d4" }));

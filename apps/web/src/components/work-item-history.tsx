@@ -44,9 +44,16 @@ export async function WorkItemHistory({
       return e.transition ? t("internalNoteWith", { transition: e.transition[locale] }) : t("internalNote");
     }
     if (e.type === "recommend_code") return t("recommendedCode");
-    if (e.type === "created" || e.type === "claimed" || e.type === "released" || e.type === "answers_changed") {
-      return t(e.type === "answers_changed" ? "answersChanged" : e.type);
+    if (e.type === "picked_up" || e.type === "claimed") return t("pickedUp");
+    if (e.type === "returned_to_pool" || e.type === "released") return t("returnedToPool");
+    // A Handover (RP-108): from whom to whom and why, internal to the holding Participant.
+    if (e.type === "assigned" && e.handover) {
+      return t("handedOver", { from: e.handover.from?.[locale] ?? "", to: e.handover.to?.[locale] ?? "", because: e.handover.because });
     }
+    // A pool of one (§3.3 rule 4): its actor is the holder, internal to their own Participant.
+    if (e.type === "assigned" && e.by.memberName) return t("assignedOnlyMember", { name: e.by.memberName[locale] });
+    if (e.type === "created") return t("created");
+    if (e.type === "answers_changed") return t("answersChanged");
     return t("other");
   };
   const fields = new Map(answerFields(schema).map((f) => [f.key, f]));
@@ -99,7 +106,8 @@ export async function WorkItemHistory({
                 {t("numbered")} <DocNo value={e.documentNumber} />
               </p>
             )}
-            {e.reason && <p className="whitespace-pre-wrap">{e.reason}</p>}
+            {/* A Transition's reason text; an `assigned` event's label already says why (never "only_member"). */}
+            {e.reason && e.type !== "assigned" && <p className="whitespace-pre-wrap">{e.reason}</p>}
             {e.remarks && (
               <p className="whitespace-pre-wrap" data-testid="history-remarks">
                 <span className="font-medium">{t("remarks")}:</span> {e.remarks}

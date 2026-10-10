@@ -51,15 +51,15 @@ describe("workItemQuery", () => {
   });
 
   it("takes every With value, and nothing else", () => {
-    const values = ["me", "unclaimed", "step:k1_review", `company:${participant}`];
+    const values = ["me", "not_picked_up", "step:k1_review", `company:${participant}`];
     expect(workItemQuery.parse({ with: values.join(",") }).with).toEqual(values);
     for (const bad of ["someone", "step:", "company:not-an-id", "step:Bad Key"]) {
       expect(workItemQuery.safeParse({ with: bad }).success, bad).toBe(false);
     }
   });
 
-  it("takes every Owner value (one of my people, my unclaimed pool, another Company), and nothing else (RP-410)", () => {
-    const values = [`member:${row}`, "unclaimed", `company:${participant}`];
+  it("takes every Owner value (one of my people, my pool's Steps not picked up, another Company), and nothing else (RP-410)", () => {
+    const values = [`member:${row}`, "not_picked_up", `company:${participant}`];
     expect(workItemQuery.parse({ owner: values.join(",") }).owner).toEqual(values);
     for (const bad of ["me", "member:", "member:someone", "company:x", "step:k1"]) {
       expect(workItemQuery.safeParse({ owner: bad }).success, bad).toBe(false);
@@ -74,8 +74,8 @@ describe("workItemQuery", () => {
   it("takes a Created date window of 7, 30 or 90 days, and keeps it in the URL (RP-410)", () => {
     expect(workItemQuery.parse({ createdWithin: "30" }).createdWithin).toBe(30);
     expect(workItemQuery.safeParse({ createdWithin: "10" }).success).toBe(false);
-    const q = workItemQuery.parse({ createdWithin: 7, owner: "unclaimed", role: "draft" });
-    expect(workItemSearchParams(q).toString()).toBe("owner=unclaimed&role=draft&createdWithin=7");
+    const q = workItemQuery.parse({ createdWithin: 7, owner: "not_picked_up", role: "draft" });
+    expect(workItemSearchParams(q).toString()).toBe("owner=not_picked_up&role=draft&createdWithin=7");
     expect(workItemQueryFromSearchParams(workItemSearchParams(q))).toEqual(q);
     expect(isFilteredWorkItemQuery(q)).toBe(true);
     expect(withoutFilters(q)).toEqual(defaults);
@@ -117,7 +117,7 @@ describe("the query in the URL", () => {
     module: "inspections",
     type: ["MAR"],
     stage: ["submitted", "under_review"],
-    with: ["unclaimed", `company:${participant}`],
+    with: ["not_picked_up", `company:${participant}`],
     owner: [`member:${row}`, `company:${participant}`],
     role: ["internal_review"],
     trade: [trade],

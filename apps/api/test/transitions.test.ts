@@ -1,6 +1,6 @@
 // Seam 1: Send for Review and Return inside the Contractor (RP-193; workflow-engine.md
 // §5.1, §5.2, §8; visibility.md V1, V5; spec scenarios 2, 7 and 11).
-// The Engineer sends a Draft to the Contractor PM pool; a PM claims it and
+// The Engineer sends a Draft to the Contractor PM pool; a PM picks it up and
 // returns it with a reason. Nobody outside the Contractor sees any of it.
 import { randomUUID } from "node:crypto";
 import type { WorkItemDetail, WorkItemHistory } from "@rabaed/domain";
@@ -60,10 +60,10 @@ async function history(by: Caller, id: string): Promise<WorkItemHistory["events"
   return res.json().events;
 }
 
-/** The buttons the viewer gets, as a flat list: "claim", "release", or a Transition's key. */
+/** The buttons the viewer gets, as a flat list: "pick_up", "return_to_pool", or a Transition's key. */
 const buttons = (d: WorkItemDetail) => [
-  ...(d.actions.claim ? ["claim"] : []),
-  ...(d.actions.release ? ["release"] : []),
+  ...(d.actions.pickUp ? ["pick_up"] : []),
+  ...(d.actions.returnToPool ? ["return_to_pool"] : []),
   ...d.actions.transitions.map((t) => t.key),
 ];
 
@@ -112,7 +112,7 @@ describe("Send for Review", () => {
     });
     expect(d.documentNumber).toBe("TWR-MAR-01-0001");
     expect(buttons(d)).toEqual([]);
-    expect(buttons(await detail(pm1, id))).toEqual(["claim"]);
+    expect(buttons(await detail(pm1, id))).toEqual(["pick_up"]);
   });
 
   it("keeps the item invisible to the Consultant, the Owner Representative and the second Contractor (V1)", async () => {
@@ -124,7 +124,7 @@ describe("Send for Review", () => {
       await expectHidden(caller.get(`/v1/work-items/${id}/history`));
       const res = await tryTake(caller, id, "return", { reason: "x" });
       await expectHidden(res);
-      await expectHidden(caller.post(`/v1/work-items/${id}/claim`));
+      await expectHidden(caller.post(`/v1/work-items/${id}/pick-up`));
     }
   });
 
@@ -135,25 +135,25 @@ describe("Send for Review", () => {
   });
 });
 
-describe("Claim, Return and re-send", () => {
+describe("Pick up, Return and re-send", () => {
   let id = "";
   beforeAll(async () => {
     id = await createDraft(engineer, "Lighting fixtures");
     await ok(tryTake(engineer, id, "send_for_review"));
   });
 
-  it("lets only one of two simultaneous Claims win", async () => {
-    const [a, b] = await Promise.all([pm1.post(`/v1/work-items/${id}/claim`), pm2.post(`/v1/work-items/${id}/claim`)]);
+  it("lets only one of two simultaneous Pick ups win", async () => {
+    const [a, b] = await Promise.all([pm1.post(`/v1/work-items/${id}/pick-up`), pm2.post(`/v1/work-items/${id}/pick-up`)]);
     expect([a.statusCode, b.statusCode].sort()).toEqual([204, 409]);
-    expect([a, b].find((r) => r.statusCode === 409)!.json()).toEqual({ error: "already_claimed" });
+    expect([a, b].find((r) => r.statusCode === 409)!.json()).toEqual({ error: "already_picked_up" });
     // Whoever lost holds nothing; whoever won holds the Step. Continue with pm1 holding it.
     if (a.statusCode === 409) {
-      await ok(pm2.post(`/v1/work-items/${id}/release`));
-      await ok(pm1.post(`/v1/work-items/${id}/claim`));
+      await ok(pm2.post(`/v1/work-items/${id}/return-to-pool`));
+      await ok(pm1.post(`/v1/work-items/${id}/pick-up`));
     }
     const d = await detail(pm1, id);
     expect(d.heldBy?.memberName).toEqual({ en: "Test Member", ar: "عضو الاختبار" });
-    expect(buttons(d)).toEqual(["release", "return"]);
+    expect(buttons(d)).toEqual(["return_to_pool", "return"]);
     expect(d.actions.transitions[0]).toMatchObject({
       label: { en: "Return" },
       actionForm: { sections: [{ fields: [{ key: "reason", type: "textarea", required: true }] }] },
@@ -168,7 +168,7 @@ describe("Claim, Return and re-send", () => {
       expect(res.statusCode, res.body).toBe(409);
       expect(res.json()).toEqual({ error: "not_holder" });
     }
-    expect((await pm2.post(`/v1/work-items/${id}/release`)).json()).toEqual({ error: "not_holder" });
+    expect((await pm2.post(`/v1/work-items/${id}/return-to-pool`)).json()).toEqual({ error: "not_holder" });
     expect(await history(engineer, id)).toEqual(before);
     expect((await detail(engineer, id)).stage.key).toBe("internal_review");
   });
@@ -209,7 +209,7 @@ describe("Claim, Return and re-send", () => {
     // Not the Draft's `created` event: when it was started is shown to nobody (scenario 61).
     expect(events.map((e) => [e.type, e.transition?.en ?? null, e.audience])).toEqual([
       ["transition", "Send for Review", "internal"],
-      ["claimed", null, "internal"],
+      ["picked_up", null, "internal"],
       ["transition", "Return", "internal"],
       ["transition", "Send for Review", "internal"],
     ]);
@@ -301,7 +301,7 @@ describe("a Transition", () => {
     const id = await createDraft(engineer, "Trunking");
     expect((await engineer.post(`/v1/work-items/${id}/transitions`, { transition: "send_for_review" })).statusCode).toBe(400);
     expect((await tryTake(api.anonymous(), id, "send_for_review")).statusCode).toBe(401);
-    await expectHidden(engineer.post(`/v1/work-items/${randomUUID()}/claim`));
+    await expectHidden(engineer.post(`/v1/work-items/${randomUUID()}/pick-up`));
   });
 });
 

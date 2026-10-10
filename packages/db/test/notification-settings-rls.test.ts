@@ -70,13 +70,13 @@ afterAll(async () => {
 
 describe("notification_setting and member_notification_preference", () => {
   beforeAll(async () => {
-    await rowsAs(a.member, sql`insert into notification_setting (member_id, notification_group, email) values (${a.member}::uuid, 'vacancy', 'off')`);
+    await rowsAs(a.member, sql`insert into notification_setting (member_id, notification_group, email) values (${a.member}::uuid, 'sent_back', 'off')`);
     await rowsAs(a.member, sql`insert into member_notification_preference (member_id, email_paused, preferred_language) values (${a.member}::uuid, true, 'ar')`);
   });
 
   it("are read by their own Member", async () => {
     expect(await rowsAs(a.member, sql`select notification_group, email from notification_setting`)).toEqual([
-      { notification_group: "vacancy", email: "off" },
+      { notification_group: "sent_back", email: "off" },
     ]);
     expect(await rowsAs(a.member, sql`select email_paused, preferred_language from member_notification_preference`)).toEqual([
       { email_paused: true, preferred_language: "ar" },
@@ -190,12 +190,12 @@ describe("the routing rule in the database", () => {
         routeNotification({ kind, outcome: null, settings: defaultNotificationSettings, muted: false, emailPaused: false }),
       );
     }
-    // A turned Vacancy's email off, paused email, and muted their Project.
+    // A turned Sent Back's email off, paused email, and muted their Project.
     expect(await route(a.member, a.projectId, "step_reached", null)).toEqual({ inApp: false, email: "none" });
     await rowsAs(a.member, sql`select app.set_project_mute(${a.projectId}::uuid, false)`);
     expect(await route(a.member, a.projectId, "step_reached", null)).toEqual({ inApp: true, email: "none" });
     // In-app is always sent, even for a group whose email they turned off.
-    expect(await route(a.member, a.projectId, "vacancy", null)).toEqual({ inApp: true, email: "none" });
+    expect(await route(a.member, a.projectId, "sent_back", null)).toEqual({ inApp: true, email: "none" });
     await rowsAs(
       a.member,
       sql`insert into notification_setting (member_id, notification_group, email, outcomes) values (${a.member}::uuid, 'watched', 'immediate', '{A,B}')`,

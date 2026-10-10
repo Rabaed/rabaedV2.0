@@ -73,7 +73,7 @@ async function inReview(id: string) {
 
 let atA1f1 = ""; // In review, claimed by C1's PM; Electrical; Zone A › A1 › Floor 1.
 let atA2 = ""; // Draft; Mechanical; Zone A › A2.
-let atZoneB = ""; // In review, unclaimed; Electrical; Zone B.
+let atZoneB = ""; // In review, not picked up; Electrical; Zone B.
 let withK1 = ""; // Submitted, claimed by K1's manager.
 let late = ""; // Numbered now, Submitted 20 days later.
 
@@ -163,13 +163,13 @@ describe("Owner and Role (scenario RP-410-1, V5, V14)", () => {
     expect(JSON.stringify(await board(k1Engineer))).not.toContain("Ali Sonour");
   });
 
-  it("filters by my people, my unclaimed pool or another Company, any of them", async () => {
+  it("filters by my people, my pool's Steps not picked up or another Company, any of them", async () => {
     expect(cardIds(await board(c1Engineer, { owner: [`member:${c1PmId}`] }))).toEqual(ids(atA1f1, late));
-    expect(cardIds(await board(c1Engineer, { owner: ["unclaimed"] }))).toEqual([atZoneB]);
-    expect(cardIds(await board(c1Engineer, { owner: [`company:${k1ParticipantId}`, "unclaimed"] }))).toEqual(ids(atZoneB, withK1));
+    expect(cardIds(await board(c1Engineer, { owner: ["not_picked_up"] }))).toEqual([atZoneB]);
+    expect(cardIds(await board(c1Engineer, { owner: [`company:${k1ParticipantId}`, "not_picked_up"] }))).toEqual(ids(atZoneB, withK1));
     // The List reads the same filter.
     expect(await listIds(c1Engineer, { owner: [`member:${c1PmId}`] })).toEqual(ids(atA1f1, late));
-    expect(await listIds(c1Engineer, { owner: [`company:${k1ParticipantId}`, "unclaimed"] })).toEqual(ids(atZoneB, withK1));
+    expect(await listIds(c1Engineer, { owner: [`company:${k1ParticipantId}`, "not_picked_up"] })).toEqual(ids(atZoneB, withK1));
   });
 
   it("matches nothing for another Company's person, though they hold one of my items", async () => {

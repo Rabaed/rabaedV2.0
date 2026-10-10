@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { bilingualText, email } from "./company.ts";
+import { withHandovers } from "./handover.ts";
 import { locales } from "./locale.ts";
 
 export const memberStatuses = ["invited", "active", "locked", "deactivated"] as const;
@@ -43,6 +44,10 @@ export const invitedMember = z.object({ memberId: z.uuid(), invitation });
  * who never accepted their first invitation gets a new one.
  */
 export const reactivatedMember = z.object({ member: companyMember, invitation: invitation.optional() });
+
+/** The Authorized Person deactivates a Member, handing each Step they hold to a new holder (RP-108). */
+export const deactivateMemberRequest = z.object(withHandovers);
+export type DeactivateMemberRequest = z.infer<typeof deactivateMemberRequest>;
 
 /** The Authorized Person marks a Member as a Project Creator, or not. */
 export const updateMemberRequest = z.object({ canCreateProjects: z.boolean() });

@@ -1,6 +1,7 @@
 import {
   companyMember,
   companyMembers,
+  deactivateMemberRequest,
   invitedMember,
   inviteMemberRequest,
   reactivatedMember,
@@ -63,13 +64,17 @@ export const memberRoutes =
       },
     );
 
+    // Their open Steps are handed over first (RP-108): 409 handover_needed lists them,
+    // 409 nobody_can_take names one with nobody else in its pool; then nothing changed.
     app.post(
       "/v1/members/:memberId/deactivate",
-      { schema: { params: memberParams, response: { 200: companyMember } } },
+      { schema: { params: memberParams, body: deactivateMemberRequest.nullish(), response: { 200: companyMember } } },
       async (request) => {
         const memberId = ctx.requireMember(request);
         const target = idOrNotFound(request.params.memberId);
-        return unwrap(await deactivateMember(ctx.db, memberId, target, ctx.now()));
+        const result = await deactivateMember(ctx.db, memberId, target, ctx.now(), request.body?.handovers);
+        if (!result.ok) throw refusal(result);
+        return result.member;
       },
     );
 

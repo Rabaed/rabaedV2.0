@@ -56,11 +56,11 @@ async function history(by: Caller, id: string): Promise<WorkItemHistory["events"
   return res.json().events;
 }
 
-/** An item sent for review and claimed by the PM, at Internal Review. */
+/** An item sent for review and picked up by the PM, at Internal Review. */
 async function atInternalReview(title: string) {
   const id = await createDraft(title);
   await ok(tryTake(engineer, id, "send_for_review"));
-  await ok(pm.post(`/v1/work-items/${id}/claim`));
+  await ok(pm.post(`/v1/work-items/${id}/pick-up`));
   return id;
 }
 
@@ -184,7 +184,8 @@ describe("taking a Transition with its Action Form", () => {
     const id = await atInternalReview("Noted");
     await ok(tryTake(pm, id, "submit", { internalNote: "Checked against the drawings" }));
     const { rows } = await sql<{ type: string; audience: string; payload: Record<string, unknown> }>`
-      select type, audience, payload from work_item_event where work_item_id = ${id}::uuid order by seq desc limit 2
+      -- Leaving out K1's own: its only manager holding the review at once (§3.3 rule 4).
+      select type, audience, payload from work_item_event where work_item_id = ${id}::uuid and type <> 'assigned' order by seq desc limit 2
     `.execute(migrator);
     expect(rows.map((r) => [r.type, r.audience])).toEqual([
       ["transition", "shared"],

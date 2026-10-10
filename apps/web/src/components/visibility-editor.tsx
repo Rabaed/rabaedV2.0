@@ -5,6 +5,7 @@ import { dimensionKinds } from "@rabaed/domain";
 import { Button, Checkbox, Field } from "@rabaed/ui";
 import { useLocale, useTranslations } from "next-intl";
 import { useState } from "react";
+import { useHandover, type HandoverOutcome } from "@/components/handover";
 import { useRouter } from "@/i18n/navigation";
 import { impliedBySelection, treeOrder } from "@/lib/dimension-tree";
 
@@ -35,6 +36,7 @@ export function VisibilityEditor({
   const t = useTranslations("visibility");
   const locale = useLocale() as Locale;
   const router = useRouter();
+  const handover = useHandover();
   const [draft, setDraft] = useState(() => draftOf(visibility));
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState<{ kind: "saved" | "error"; text: string } | null>(null);
@@ -65,25 +67,26 @@ export function VisibilityEditor({
         const implied = impliedBySelection(options[kind], selected);
         return { isAll, valueIds: isAll ? [] : [...selected].filter((id) => !implied.has(id)) };
       };
-      const res = await fetch(endpoint, {
+      const errors: Record<string, string> = {
+        exceeds_participant: t("exceedsParticipant"),
+        forbidden: t("notAllowed"),
+        project_closed: t("projectClosed"),
+      };
+      // The Steps it takes Members off are handed over first (RP-108), whether the
+      // Visibility is a Member's or their whole Participant's.
+      await handover.run({
+        action: "save",
         method: "PUT",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(Object.fromEntries(dimensionKinds.map((kind) => [kind, grantOf(kind)]))),
+        url: endpoint,
+        body: Object.fromEntries(dimensionKinds.map((kind) => [kind, grantOf(kind)])),
+        done: (outcome: HandoverOutcome) => {
+          if (outcome.kind === "done") {
+            setMessage({ kind: "saved", text: t("saved") });
+            return router.refresh();
+          }
+          setMessage({ kind: "error", text: outcome.kind === "refused" ? outcome.message : (errors[outcome.code ?? ""] ?? t("unavailable")) });
+        },
       });
-      if (!res.ok) {
-        const { error } = (await res.json().catch(() => ({}))) as { error?: string };
-        const errors: Record<string, string> = {
-          exceeds_participant: t("exceedsParticipant"),
-          forbidden: t("notAllowed"),
-          project_closed: t("projectClosed"),
-        };
-        setMessage({ kind: "error", text: errors[error ?? ""] ?? t("unavailable") });
-        return;
-      }
-      setMessage({ kind: "saved", text: t("saved") });
-      router.refresh();
-    } catch {
-      setMessage({ kind: "error", text: t("unavailable") });
     } finally {
       setPending(false);
     }
@@ -110,7 +113,7 @@ export function VisibilityEditor({
       </div>
       {!readOnly && (
         <div className="flex flex-wrap items-center gap-4">
-          <Button onClick={() => void save()} disabled={pending}>
+          <Button onClick={() => void save()} disabled={pending || handover.pending}>
             {t("save")}
           </Button>
           {message && (
@@ -120,6 +123,7 @@ export function VisibilityEditor({
           )}
         </div>
       )}
+      {handover.dialog}
     </div>
   );
 }

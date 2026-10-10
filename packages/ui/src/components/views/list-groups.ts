@@ -9,7 +9,7 @@ export type ListGrouping = (typeof listGroupings)[number];
 export type ListGroup = { key: string; label: string | null; rows: WorkItemRow[] };
 
 type Filters = Pick<WorkItemListData, "stages"> & Pick<WorkItemListData["filters"], "trades" | "locations" | "outcomes">;
-type Labels = { code: (code: string) => string; cancelled: string; unclaimed: string };
+type Labels = { code: (code: string) => string; cancelled: string; notPickedUp: string };
 
 /**
  * The page's rows in groups, each in its own order: Stages, Trades and Locations as the Project

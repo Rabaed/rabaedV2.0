@@ -117,7 +117,7 @@ async function draftOf(model: string, answers: Record<string, unknown> = {}): Pr
 
 async function submit(id: string) {
   await take(engineer, id, "send_for_review");
-  await ok(pm.post(`/v1/work-items/${id}/claim`));
+  await ok(pm.post(`/v1/work-items/${id}/pick-up`));
   await take(pm, id, "submit");
 }
 
@@ -175,7 +175,7 @@ describe("C1 changes an item Sent Back to its Draft (scenarios 58, 59 and 71)", 
     ].sort();
     freeToX = (await ok(engineer.post(`/v1/work-items/${id}/links`, { workItemId: x }), 201)).json().id;
     await submit(id);
-    await ok(k1Engineer.post(`/v1/work-items/${id}/claim`));
+    await ok(k1Engineer.post(`/v1/work-items/${id}/pick-up`));
     await take(k1Engineer, id, "send_back_to_draft");
     await drainOutbox(worker);
     k1Notified = (await notificationsAbout(k1Pm, id)).length;
@@ -262,7 +262,7 @@ describe("C1 changes an item Sent Back to its Draft (scenarios 58, 59 and 71)", 
   });
 
   it("makes everything C1 changed everyone's once C1 Submits it again", async () => {
-    await ok(pm.post(`/v1/work-items/${id}/claim`));
+    await ok(pm.post(`/v1/work-items/${id}/pick-up`));
     await take(pm, id, "submit");
     for (const viewer of [engineer, k1Pm, orEngineer, owner]) {
       expect(await documentIds(viewer, id)).toEqual([...before, ...added].sort());
@@ -283,7 +283,7 @@ describe("C2 searches for an item to link, before and after C1's item is Sent Ba
   it("is never offered C1's item, nor can it open it", async () => {
     const id = await submitted("SBR-60");
     expect(await linkSearch(c2Engineer, "SBR-60")).toEqual([]);
-    await ok(k1Engineer.post(`/v1/work-items/${id}/claim`));
+    await ok(k1Engineer.post(`/v1/work-items/${id}/pick-up`));
     await take(k1Engineer, id, "send_back");
     expect(await linkSearch(c2Engineer, "SBR-60")).toEqual([]);
     await expectHidden(c2Engineer.get(`/v1/work-items/${id}`));

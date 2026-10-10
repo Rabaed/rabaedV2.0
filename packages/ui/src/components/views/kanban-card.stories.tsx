@@ -106,7 +106,7 @@ function argsFor(args: StoryArgs, locale: Locale): Partial<KanbanCardProps> {
     case "company":
       return { ...civil, title: text.drainage[locale], owner: { kind: "company", name: text.consultant[locale], initialsFrom: text.consultant.en }, badge: { kind: "revision", label: "R1" } };
     case "pool":
-      return { owner: { kind: "pool", name: locale === "en" ? "Contractor review · unclaimed" : "مراجعة المقاول · لم تُستلَم" } };
+      return { owner: { kind: "pool", name: locale === "en" ? "Contractor review · Not picked up" : "مراجعة المقاول · لم تُستلَم" } };
     case "contractor":
       return { ...shared, badge: { kind: "revision", label: "R2" }, contractorName: text.contractor[locale] };
     case "noNumber":
@@ -199,8 +199,8 @@ export const CodeD: Story = {
 /** Another Company holds it: the Company's avatar and name only, never its people (V14). */
 export const HeldByAnotherCompany: Story = { args: { variant: "company" } };
 
-/** My own Company's Step nobody has claimed yet. */
-export const Unclaimed: Story = { args: { variant: "pool" } };
+/** My own Company's Step nobody has picked up yet. */
+export const NotPickedUp: Story = { args: { variant: "pool" } };
 
 /** With the Contractor name switched on: one muted line with the company icon, between the tags and the plan location. */
 export const WithContractorName: Story = {

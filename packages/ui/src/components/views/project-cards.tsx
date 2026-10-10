@@ -53,7 +53,7 @@ export type ProjectCardsProps = {
 /**
  * A grid of Project cards as the design kit lays them out, one link per Project,
  * with how many items need the Member's action there (the Steps they hold and
- * the unclaimed Steps of their pool; never their own Drafts). As many 300px
+ * the not picked up Steps of their pool; never their own Drafts). As many 300px
  * columns as fit, 18px apart; one on a phone.
  */
 export function ProjectCards({ projects, locale, labels, href, linkAs, submittals }: ProjectCardsProps) {

@@ -47,7 +47,7 @@ import { addWorkItemLink, getWorkItemLink, getWorkItemLinks, removeWorkItemLink 
 import { boardWorkItems, changeBoardLayout, exportWorkItems, listWorkItems, saveListColumns, type QueryScope } from "../work-items/query.ts";
 import { createReplacement, createRevision, discardRevision, getRevisionChain } from "../work-items/revisions.ts";
 import {
-  claimStep,
+  pickUpStep,
   discardDraft,
   duplicateWorkItem,
   getSharedWorkItem,
@@ -58,7 +58,7 @@ import {
   getWorkItemForm,
   getWorkItemFormChoices,
   getWorkItemHistory,
-  releaseStep,
+  returnToPoolStep,
   saveAnswers,
   searchLinkTargets,
   takeTransition,
@@ -410,16 +410,16 @@ export const workItemRoutes =
       return reply.code(204).send();
     });
 
-    app.post("/v1/work-items/:workItemId/claim", { schema: { params: workItemParams } }, async (request, reply) => {
+    app.post("/v1/work-items/:workItemId/pick-up", { schema: { params: workItemParams } }, async (request, reply) => {
       const memberId = ctx.requireMember(request);
-      const result = await claimStep(ctx.db, memberId, idOrNotFound(request.params.workItemId), ctx.now());
+      const result = await pickUpStep(ctx.db, memberId, idOrNotFound(request.params.workItemId), ctx.now());
       if (!result.ok) throw refusal(result);
       return reply.code(204).send();
     });
 
-    app.post("/v1/work-items/:workItemId/release", { schema: { params: workItemParams } }, async (request, reply) => {
+    app.post("/v1/work-items/:workItemId/return-to-pool", { schema: { params: workItemParams } }, async (request, reply) => {
       const memberId = ctx.requireMember(request);
-      const result = await releaseStep(ctx.db, memberId, idOrNotFound(request.params.workItemId), ctx.now());
+      const result = await returnToPoolStep(ctx.db, memberId, idOrNotFound(request.params.workItemId), ctx.now());
       if (!result.ok) throw refusal(result);
       return reply.code(204).send();
     });

@@ -13,7 +13,7 @@ import { WorkItemList, type WorkItemListProps } from "./work-item-list.tsx";
 // Story data only.
 const b = (en: string, ar: string) => ({ en, ar });
 const copy = {
-  unclaimed: b("unclaimed", "لم تُستلَم"),
+  notPickedUp: b("Not picked up", "لم تُستلَم"),
   allRevisions: b("Show all Revisions", "عرض كل المراجعات"),
   needMyAction: b("Need My Action", "بحاجة لإجرائي"),
   nextPage: b("Next page", "الصفحة التالية"),
@@ -91,7 +91,7 @@ const items: WorkItemRow[] = [
     title: "Main LV switchboard",
     stage: stages.internal,
     stepAgeWeeks: 2,
-    with: { kind: "own", companyName: ownCompany, step: { key: "internal_review", name: b("Contractor review", "مراجعة المقاول") }, claimer: null },
+    with: { kind: "own", companyName: ownCompany, step: { key: "internal_review", name: b("Contractor review", "مراجعة المقاول") }, holder: null },
   }),
   row(3, {
     title: "LED downlights",
@@ -102,7 +102,7 @@ const items: WorkItemRow[] = [
       kind: "own",
       companyName: ownCompany,
       step: { key: "internal_review", name: b("Contractor review", "مراجعة المقاول") },
-      claimer: { name: b("Faisal Al Harbi", "فيصل الحربي"), isMe: false },
+      holder: { name: b("Faisal Al Harbi", "فيصل الحربي"), isMe: false },
     },
   }),
   row(4, { title: "Busbar trunking", stage: stages.approved, outcome: "A", location: tower, closedBy: { kind: "company", companyName: consultant } }),
@@ -120,7 +120,7 @@ const items: WorkItemRow[] = [
       kind: "own",
       companyName: ownCompany,
       step: { key: "draft", name: b("Draft", "مسودة") },
-      claimer: { name: b("Sara Al Qahtani", "سارة القحطاني"), isMe: true },
+      holder: { name: b("Sara Al Qahtani", "سارة القحطاني"), isMe: true },
     },
   }),
   row(7, {
@@ -136,7 +136,7 @@ const items: WorkItemRow[] = [
       kind: "own",
       companyName: ownCompany,
       step: { key: "draft", name: b("Draft", "مسودة") },
-      claimer: { name: b("Sara Al Qahtani", "سارة القحطاني"), isMe: true },
+      holder: { name: b("Sara Al Qahtani", "سارة القحطاني"), isMe: true },
     },
   }),
 ];
@@ -240,7 +240,7 @@ export const FocusedSortButtonInView: Story = {
 /**
  * Wide: the owner's design's columns, 12 shown of 14 (no Due date; Contractor and
  * Step Age off), a checkbox first and the settings last. The Current owner is my
- * own Company's person or unclaimed Step, another Company by its name only, and on
+ * own Company's person or Step not picked up, another Company by its name only, and on
  * a closed item who closed it (V14). The Rev is its own chip, the number left
  * without its " Rev n"; numbers read left to right, in Arabic too.
  */
@@ -252,7 +252,7 @@ export const Wide: Story = {
     await expect(within(table).getAllByRole("row")).toHaveLength(items.length + 1);
     const locale = storyLocale(context);
     await expect(cellOf(context, "Cable tray support brackets", copy.currentOwner)).toHaveTextContent(consultant[locale]);
-    await expect(cellOf(context, "Main LV switchboard", copy.currentOwner)).toHaveTextContent(storyText(context, copy.unclaimed));
+    await expect(cellOf(context, "Main LV switchboard", copy.currentOwner)).toHaveTextContent(storyText(context, copy.notPickedUp));
     await expect(cellOf(context, "LED downlights", copy.currentOwner)).toHaveTextContent(b("Faisal Al Harbi", "فيصل الحربي")[locale]);
     await expect(cellOf(context, "Busbar trunking", copy.currentOwner)).toHaveTextContent(consultant[locale]);
     await expect(cellOf(context, "Busbar trunking", b("Code", "الرمز"))).toHaveTextContent("Code A");
@@ -511,14 +511,14 @@ export const SeveralValues: Story = {
   },
 };
 
-/** Owner offers my own Company's people, my unclaimed pool and the other Companies holding my items, by name only (V14). */
+/** Owner offers my own Company's people, my pool's Steps not picked up and the other Companies holding my items, by name only (V14). */
 export const OwnerChoices: Story = {
   play: async (context) => {
     const panel = await openFilters(context, copy.owner);
     const choices = within(within(panel).getByRole("group", { name: storyText(context, copy.owner) })).getAllByRole("checkbox");
     await expect(choices).toHaveLength(3);
     await expect(choices[0]).toHaveAccessibleName(storyText(context, b("Sara Al Qahtani", "سارة القحطاني")));
-    await expect(choices[1]).toHaveAccessibleName(storyText(context, b("Unclaimed", "لم تُستلَم")));
+    await expect(choices[1]).toHaveAccessibleName(storyText(context, b("Not picked up", "لم تُستلَم")));
     await expect(choices[2]).toHaveAccessibleName(storyText(context, consultant));
     await userEvent.click(choices[2]!);
     await expect(context.args.onQueryChange).toHaveBeenCalledWith({ ...defaults, owner: [`company:${consultantId}`] });
@@ -600,7 +600,7 @@ export const NeedMyActionOff: Story = {
 };
 
 /**
- * Need My Action on: the Steps I hold, the unclaimed Steps of my pool, and my
+ * Need My Action on: the Steps I hold, the Steps not picked up of my pool, and my
  * own Drafts. Turning it off shows every item again; clearing the filters does too.
  */
 export const NeedMyActionOn: Story = {

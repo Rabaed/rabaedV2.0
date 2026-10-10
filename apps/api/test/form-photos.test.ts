@@ -190,9 +190,9 @@ describe("a photo's time and place", () => {
 
   it("are never taken from the browser", async () => {
     const id = await draft();
-    const claimed = { takenAt: "2020-01-01T00:00:00.000Z", takenWhere: { latitude: 1, longitude: 2 }, latitude: 1, longitude: 2 };
-    const withExif = await uploaded(engineer, id, { body: jpegWithExif(inRiyadh), extra: claimed });
-    const without = await uploaded(engineer, id, { extra: claimed });
+    const reported = { takenAt: "2020-01-01T00:00:00.000Z", takenWhere: { latitude: 1, longitude: 2 }, latitude: 1, longitude: 2 };
+    const withExif = await uploaded(engineer, id, { body: jpegWithExif(inRiyadh), extra: reported });
+    const without = await uploaded(engineer, id, { extra: reported });
     expect(await documentOf(engineer, id, withExif)).toMatchObject({
       takenAt: "2026-10-03T11:22:05.000Z",
       takenWhere: { latitude: 24.7136, longitude: 46.6753 },
@@ -221,7 +221,7 @@ describe("once Submitted", () => {
     id = await draft();
     photo = await uploaded(engineer, id, { body: jpegWithExif(inRiyadh) });
     await ok(tryTake(engineer, id, "send_for_review"));
-    await ok(pm.post(`/v1/work-items/${id}/claim`));
+    await ok(pm.post(`/v1/work-items/${id}/pick-up`));
     await ok(tryTake(pm, id, "submit"));
   });
 

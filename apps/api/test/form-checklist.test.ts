@@ -274,7 +274,7 @@ describe("once Submitted", () => {
     id = await createDraft({ pour_check: { rebar_cover: { answer: "fail", comment: "Cover 15 mm" }, formwork: { answer: "pass" } } });
     photo = await uploaded(engineer, id, { itemKey: "rebar_cover" });
     await ok(tryTake(engineer, id, "send_for_review"));
-    await ok(pm.post(`/v1/work-items/${id}/claim`));
+    await ok(pm.post(`/v1/work-items/${id}/pick-up`));
     await ok(tryTake(pm, id, "submit"));
   });
 

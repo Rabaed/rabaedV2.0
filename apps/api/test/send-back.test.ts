@@ -75,7 +75,7 @@ async function newDraft(model: string): Promise<string> {
 }
 
 async function submit(id: string) {
-  await ok(pm.post(`/v1/work-items/${id}/claim`));
+  await ok(pm.post(`/v1/work-items/${id}/pick-up`));
   await take(pm, id, "submit");
 }
 
@@ -166,7 +166,7 @@ describe("a Send Back", () => {
     await take(engineer, id, "send_for_review");
     await submit(id);
     number = (await detail(pm, id)).documentNumber;
-    await ok(k1Engineer.post(`/v1/work-items/${id}/claim`));
+    await ok(k1Engineer.post(`/v1/work-items/${id}/pick-up`));
     await take(k1Engineer, id, "send_back");
   });
 
@@ -181,7 +181,7 @@ describe("a Send Back", () => {
     await take(engineer, other, "send_for_review");
     await submit(other);
     const issued = (await detail(pm, other)).documentNumber;
-    await ok(k1Engineer.post(`/v1/work-items/${other}/claim`));
+    await ok(k1Engineer.post(`/v1/work-items/${other}/pick-up`));
     await take(k1Engineer, other, "send_back_to_draft");
     expect(await detail(engineer, other)).toMatchObject({ documentNumber: issued, step: { key: "draft" } });
   });
@@ -198,7 +198,7 @@ describe("the Submission Date", () => {
     expect(first).not.toBeNull();
     for (const viewer of [engineer, pm, k1Engineer, orEngineer]) expect((await dates(viewer, id)).submissionDate).toBe(first);
 
-    await ok(k1Engineer.post(`/v1/work-items/${id}/claim`));
+    await ok(k1Engineer.post(`/v1/work-items/${id}/pick-up`));
     await take(k1Engineer, id, "send_back");
     await api.later(3 * DAY);
     await submit(id);
@@ -240,7 +240,7 @@ describe("answer times never earlier than the Creation Date once numbered (RP-39
   it("reads none for the raiser after a Send Back either", async () => {
     await api.later(DAY);
     await submit(id);
-    await ok(k1Engineer.post(`/v1/work-items/${id}/claim`));
+    await ok(k1Engineer.post(`/v1/work-items/${id}/pick-up`));
     await take(k1Engineer, id, "send_back_to_draft");
     const { numberedAt } = await recorded(id);
     expect(await detail(engineer, id)).toMatchObject({ step: { key: "draft" } });

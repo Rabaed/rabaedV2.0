@@ -45,7 +45,7 @@ export type WorkItemTableLabels = {
   noNumber: string;
   revisionNoNumber: (revision: string) => string;
   /** After a Step's name, when nobody in the viewer's Company has claimed it. */
-  unclaimed: string;
+  notPickedUp: string;
   /** The outcome of a cancelled item. */
   cancelled: string;
   /** A letter outcome's pill, e.g. "Code A". */
@@ -406,7 +406,7 @@ export function cellText(
   column: ListColumnKey,
   row: WorkItemRow,
   locale: Locale,
-  labels: Pick<WorkItemTableLabels, "noNumber" | "revisionNoNumber" | "unclaimed" | "cancelled" | "code" | "revision">,
+  labels: Pick<WorkItemTableLabels, "noNumber" | "revisionNoNumber" | "notPickedUp" | "cancelled" | "code" | "revision">,
   filters: WorkItemTableProps["filters"],
   places = placesOf(filters.locations),
 ): string {
