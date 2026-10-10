@@ -181,6 +181,15 @@ async function fillProject(projectId: string, creator: string) {
     type,
     definition,
   ]);
+  // A Project's Screen, read by its Members once published (RP-516).
+  const screen = await one("insert into screen (owner_kind, project_id, key, name) values ('project', $1, 'own_reply', $2) returning id", [
+    projectId,
+    name,
+  ]);
+  await migrator.query(
+    "insert into screen_version (screen_id, version_no, status, schema, published_at) values ($1, 1, 'published', '{\"sections\": []}', now())",
+    [screen],
+  );
   // Nothing writes Numbering Patterns yet (RP-313).
   await migrator.query(
     `insert into numbering_pattern (project_id, segments, separator, seq_digits, seq_scope, set_by_member_id)

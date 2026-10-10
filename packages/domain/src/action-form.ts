@@ -1,4 +1,4 @@
-import { formFields, formSchema, type FormFieldType, type FormSchema } from "./form.ts";
+import { formFields, formSchema, type FormField, type FormFieldType, type FormSchema } from "./form.ts";
 import { formSchemaProblems, type PublishContext, type SchemaProblem } from "./form-publish.ts";
 
 // Action Forms built from Forms (form-engine.md §4, "Settled 2026-10-05 (part 3)";
@@ -23,8 +23,13 @@ export const notInActionForm = [
   "work_item_ref",
   "attachments",
   "photos",
-  "checklist",
 ] as const satisfies readonly FormFieldType[];
+
+/**
+ * A checklist is taken (Screens, RP-516) while none of its items asks for photos: a
+ * photo is a Document, and an Action Form holds no files.
+ */
+const takesPhotos = (field: FormField): boolean => field.type === "checklist" && field.items.some((i) => i.photo !== "off");
 
 /** Keys the engine itself writes in a Transition's event, or beside it: no Action Form field takes them. */
 export const actionFormReservedKeys = ["document_number", "outcome", "internal_note"] as const;
@@ -39,7 +44,7 @@ export function actionFormProblems(schema: FormSchema, context: PublishContext =
   return [
     ...formSchemaProblems(schema, context).filter((p) => !p.code.startsWith("built_in_")),
     ...fields
-      .filter((f) => (notInActionForm as readonly string[]).includes(f.type))
+      .filter((f) => (notInActionForm as readonly string[]).includes(f.type) || takesPhotos(f))
       .map((f): SchemaProblem => ({ key: f.key, code: "not_in_action_form" })),
     ...[...schema.sections, ...fields]
       .filter((item) => (actionFormReservedKeys as readonly string[]).includes(item.key))

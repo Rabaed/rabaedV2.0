@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { formSchema } from "./form.ts";
 import { defaultOutcomeSets } from "./outcome.ts";
 import { marRows } from "../test/support/mar-workflow.ts";
-import { workflowPublishProblems, type WorkflowPublishContext } from "./workflow-checks.ts";
+import { stepEditsForm, workflowPublishProblems, type WorkflowPublishContext } from "./workflow-checks.ts";
 import { definitionFromRows, type WorkflowDefinition, type WorkflowStep, type WorkflowTransition } from "./workflow-definition.ts";
 
 // Pure domain: every publish check of workflow-engine.md §1 (but check 5, dropped
@@ -307,6 +307,71 @@ describe("workflowPublishProblems", () => {
     });
   });
 
+  describe("the raiser's Form is edited only before a Submit, or at a Step a Send Back leads to (ADR 0019)", () => {
+    it("by default the Draft Step edits the Form, and the raiser's internal reviewer doesn't", () => {
+      const d = mar();
+      expect(d.steps.filter((s) => stepEditsForm(d, s, submittalStages)).map((s) => s.key)).toEqual(["draft"]);
+      // A raiser's Step held with the Draft Step's Function Permission (the author's) does too.
+      addStep(d, { key: "contractor_engineer", stage: "internal_review", actor: { role: "contractor", permission: "create" } });
+      expect(stepEditsForm(d, step(d, "contractor_engineer"), submittalStages)).toBe(true);
+      // Set on the Step, it is what the Step says.
+      step(d, "internal_review").editsForm = true;
+      step(d, "draft").editsForm = false;
+      expect(stepEditsForm(d, step(d, "internal_review"), submittalStages)).toBe(true);
+      expect(stepEditsForm(d, step(d, "draft"), submittalStages)).toBe(false);
+    });
+
+    it("passes the raiser's internal reviewer editing before the Submit", () => {
+      const d = mar();
+      step(d, "internal_review").editsForm = true;
+      expect(problems(d)).toEqual([]);
+    });
+
+    it("refuses a Step at or after a Submit that edits the Form", () => {
+      const d = mar();
+      step(d, "consultant_review").editsForm = true;
+      expect(problems(d)).toEqual([{ code: "form_edited_after_submit", severity: "error", step: "consultant_review" }]);
+      expect(workflowPublishProblems(d, context())[0]!.message).toEqual({
+        en: `"Consultant review" edits the raiser's Form, but an item reaches it after a Submit. Only the raiser's Steps an item is Sent Back to may.`,
+        ar: `"مراجعة الاستشاري" تعدّل نموذج مُنشئ العنصر، لكن العنصر يصلها بعد التقديم. لا يجوز ذلك إلا لخطوات مُنشئ العنصر بعد الإرجاع إلى المقدّم.`,
+      });
+    });
+
+    it("passes the raiser's Steps an item is Sent Back to, until the next Submit", () => {
+      const d = mar();
+      add(d, { key: "send_back", from: "consultant_review", to: "internal_review", kind: "send_back" });
+      // Back at the PM, a Return to the Draft reopens it for the engineer holding it.
+      step(d, "internal_review").editsForm = true;
+      expect(problems(d)).toEqual([]);
+    });
+
+    it("refuses a raiser's Step an item reaches after a Submit without a Send Back", () => {
+      const d = mar();
+      addStep(d, { key: "site_check", stage: "internal_review", actor: { role: "contractor", permission: "create" } });
+      add(d, { key: "to_site", from: "consultant_review", to: "site_check" });
+      add(d, { key: "back_to_consultant", from: "site_check", to: "consultant_review", kind: "submit" });
+      add(d, { key: "send_back", from: "consultant_review", to: "internal_review", kind: "send_back" });
+      expect(problems(d)).toContainEqual({ code: "form_edited_after_submit", severity: "error", step: "site_check" });
+    });
+
+    it("passes a Return that stays in Internal Review, to the Contractor Engineer Step, which edits the Form (ADR 0020)", () => {
+      const d = mar();
+      addStep(d, { key: "contractor_engineer", stage: "internal_review", actor: { role: "contractor", permission: "create" } });
+      transition(d, "return").to = "contractor_engineer";
+      add(d, { key: "send_for_review_again", from: "contractor_engineer", to: "internal_review", permission: "create" });
+      expect(problems(d)).toEqual([]);
+      expect(d.steps.filter((s) => stepEditsForm(d, s, submittalStages)).map((s) => s.key)).toEqual(["draft", "contractor_engineer"]);
+    });
+
+    it("refuses \"Drafts visible to\" on a Step that isn't the Draft Step", () => {
+      const d = mar();
+      step(d, "draft").draftsVisibleTo = "author";
+      expect(problems(d)).toEqual([]);
+      step(d, "internal_review").draftsVisibleTo = "company";
+      expect(problems(d)).toEqual([{ code: "drafts_visible_to_not_on_draft", severity: "error", step: "internal_review" }]);
+    });
+  });
+
   describe("no Workflow names a person: Positions only (a Rabaed Default is copied across Companies too)", () => {
     it("refuses an action setting a Member field to a value", () => {
       const d = mar();
@@ -566,6 +631,53 @@ describe("workflowPublishProblems", () => {
       const d = mar();
       add(d, { key: "back_to_contractor", from: "consultant_review", to: "internal_review", kind: "submit" });
       expect(problems(d)).toContainEqual({ code: "loop_across_participants", severity: "error", transition: "back_to_contractor" });
+    });
+  });
+
+  describe("a Transition showing a Screen (ADR 0019, RP-516)", () => {
+    const withScreen = (screen: string, actionForm: Record<string, unknown> | null = null) => {
+      const d = mar();
+      add(d, {
+        key: "approve_b",
+        label: { en: "Approve with Comments · B", ar: "اعتماد مع ملاحظات · B" },
+        from: "consultant_review",
+        to: "approved",
+        kind: "close",
+        outcome: "B",
+        permission: "approve",
+        actionForm,
+        screen,
+      });
+      return d;
+    };
+    const screens = (schema: unknown) => new Map([["code_b_reply", formSchema.parse(schema)]]);
+
+    it("is checked with its Screen's Action Form: Code B's Screen holds the table of items", () => {
+      expect(problems(withScreen("code_b_reply"), context({ screens: screens(itemsForm()) }))).toEqual([]);
+      const remarksOnly = {
+        sections: [{ key: "code", title: { en: "Code", ar: "الرمز" }, fields: [{ key: "remarks", type: "textarea", label: { en: "Remarks", ar: "ملاحظات" } }] }],
+      };
+      expect(problems(withScreen("code_b_reply"), context({ screens: screens(remarksOnly) }))).toEqual([
+        { code: "items_table_missing", severity: "error", transition: "approve_b" },
+      ]);
+    });
+
+    it("refuses a Screen with no published Version the Workflow's owner uses, and one beside an Action Form of its own", () => {
+      expect(problems(withScreen("missing_reply"), context({ screens: screens(itemsForm()) }))).toEqual([
+        { code: "screen_not_found", severity: "error", transition: "approve_b" },
+        { code: "items_table_missing", severity: "error", transition: "approve_b" },
+      ]);
+      expect(problems(withScreen("code_b_reply", itemsForm()), context({ screens: screens(itemsForm()) }))).toEqual([
+        { code: "screen_with_action_form", severity: "error", transition: "approve_b" },
+      ]);
+    });
+
+    it("says so in English and Arabic, naming the Transition and the Screen", () => {
+      const [found] = workflowPublishProblems(withScreen("missing_reply"), context({ screens: screens(itemsForm()) }));
+      expect(found?.message).toEqual({
+        en: `"Approve with Comments · B" shows Screen "missing_reply", which has no published Version this Workflow can use.`,
+        ar: `يعرض "اعتماد مع ملاحظات · B" الشاشة "missing_reply"، وليس لها إصدار منشور يمكن لسير العمل هذا استخدامه.`,
+      });
     });
   });
 });

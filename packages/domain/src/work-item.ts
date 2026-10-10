@@ -480,6 +480,8 @@ export const workItemEventTypes = [
   // hash-chained); they read as Pick up and Return to pool.
   "claimed",
   "released",
+  // A reply's answers internal to the acting Participant (its Screen's internal fields, RP-516; V5).
+  "internal_answers",
 ] as const;
 
 /**
@@ -526,6 +528,12 @@ export const workItemHistory = z.object({
       handover: z
         .object({ from: bilingualText.nullable(), to: bilingualText.nullable(), because: z.enum(handoverReasons) })
         .nullable(),
+      /**
+       * The Action Form answers, by field key (RP-516): on a Transition or Code event its
+       * shared ones, read by everyone who sees the event; on an internal_answers event its
+       * Screen's internal ones, internal to the acting Participant (V5). Null otherwise.
+       */
+      answers: z.record(z.string(), z.unknown()).nullable(),
     }),
   ),
 });

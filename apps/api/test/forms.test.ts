@@ -135,9 +135,9 @@ describe("Save draft", () => {
     id = await created();
   });
 
-  it("is offered to the raiser's Company on its Draft", async () => {
+  it("is offered on its Draft to the Member holding it only (RP-514)", async () => {
     expect((await detail(engineer, id)).actions.saveAnswers).toBe(true);
-    expect((await detail(pm, id)).actions.saveAnswers).toBe(true);
+    expect((await detail(pm, id)).actions.saveAnswers).toBe(false);
   });
 
   it("succeeds with required fields still empty", async () => {
@@ -206,10 +206,13 @@ describe("Send for Review", () => {
     });
   });
 
-  it("keeps the answers open to the raiser's Company at Internal Review (RP-268)", async () => {
-    await ok(save(engineer, id, { ...complete, location: buildingA, model: "Later" }));
-    expect((await detail(pm, id)).answers.model).toBe("Later");
-    expect((await detail(engineer, id)).actions.saveAnswers).toBe(true);
+  it("closes the answers at Internal Review, to the engineer and the PM alike (RP-514; was open, RP-268)", async () => {
+    for (const by of [engineer, pm]) {
+      const res = await save(by, id, { ...complete, location: buildingA, model: "Later" });
+      expect({ status: res.statusCode, body: res.json() }).toEqual({ status: 409, body: { error: "not_editable" } });
+      expect((await detail(by, id)).actions.saveAnswers).toBe(false);
+    }
+    expect((await detail(pm, id)).answers.model).toBe("CT-300");
   });
 });
 

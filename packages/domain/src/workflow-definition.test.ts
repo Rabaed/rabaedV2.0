@@ -71,6 +71,33 @@ describe("the Workflow definition format", () => {
     };
     expect(definitionFromRows(definitionToRows(definition, "review_code"))).toEqual(definition);
   });
+
+  it("keeps a Step's \"edits the Form\" and the Draft Step's \"Drafts visible to\" through the rows, only when set (RP-514)", () => {
+    const definition = definitionFromRows(marRows(2));
+    definition.steps[0] = { ...definition.steps[0]!, draftsVisibleTo: "author" };
+    definition.steps[1] = { ...definition.steps[1]!, editsForm: true };
+    const rows = definitionToRows(definition, "review_code");
+    expect(rows.steps[0]).toMatchObject({ drafts_visible_to: "author" });
+    expect(rows.steps[1]).toMatchObject({ edits_form: true });
+    expect(rows.steps[2]).not.toHaveProperty("edits_form");
+    expect(rows.steps[2]).not.toHaveProperty("drafts_visible_to");
+    expect(definitionFromRows(rows)).toEqual(definition);
+  });
+
+  it("keeps the Screen a Transition shows through the rows, only when it names one (ADR 0019, RP-516)", () => {
+    const definition = definitionFromRows(marRows(2));
+    definition.transitions[3] = { ...definition.transitions[3]!, actionForm: null, screen: "code_reply" };
+    const rows = definitionToRows(definition, "review_code");
+    expect(rows.transitions[3]).toMatchObject({ screen_key: "code_reply", action_form: null });
+    expect(rows.transitions[2]).not.toHaveProperty("screen_key");
+    expect(definitionFromRows(rows)).toEqual(definition);
+  });
+
+  it("reads a published Transition's pinned Screen as the Screen alone: its Action Form is the Screen Version's copy", () => {
+    const rows = definitionToRows(definitionFromRows(marRows(2)), "review_code");
+    rows.transitions[3] = { ...rows.transitions[3]!, screen_key: "code_reply" };
+    expect(definitionFromRows(rows).transitions[3]).toMatchObject({ screen: "code_reply", actionForm: null });
+  });
 });
 
 describe("parseWorkflowDefinition", () => {
@@ -115,6 +142,12 @@ describe("parseWorkflowDefinition", () => {
     const now = mar();
     (now.transitions as Record<string, unknown>[])[2]!.actions = [{ type: "set_field", field: "model", value: { now: false } }];
     expect(parseWorkflowDefinition(now)).toMatchObject({ ok: false });
+  });
+
+  it("takes a Screen by its key only", () => {
+    const named = mar();
+    (named.transitions as Record<string, unknown>[])[3]!.screen = "Code reply";
+    expect(parseWorkflowDefinition(named)).toMatchObject({ ok: false, issues: [{ path: "transitions.3.screen" }] });
   });
 
   it("refuses an unknown Transition kind and an outcome mode the format doesn't have", () => {

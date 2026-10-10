@@ -43,6 +43,8 @@ export async function WorkItemHistory({
     if (e.type === "internal_note") {
       return e.transition ? t("internalNoteWith", { transition: e.transition[locale] }) : t("internalNote");
     }
+    // A reply's answers internal to the viewer's own Participant (RP-516, V5).
+    if (e.type === "internal_answers" && e.transition) return t("internalAnswersWith", { transition: e.transition[locale] });
     if (e.type === "recommend_code") return t("recommendedCode");
     if (e.type === "picked_up" || e.type === "claimed") return t("pickedUp");
     if (e.type === "returned_to_pool" || e.type === "released") return t("returnedToPool");

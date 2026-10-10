@@ -30,6 +30,13 @@ export type WorkflowPublishContext = {
   form: FormSchema | null;
   /** The Option Lists an Action Form may name (check 7). */
   optionListIds?: ReadonlySet<string>;
+  /**
+   * The Screens a Transition may show (ADR 0019, RP-516), by key: the latest published
+   * Version's schema of the owner's Screen with that key, else the Rabaed Default one.
+   * Given, a Transition naming a Screen is checked with that Action Form; without it
+   * (the builder), Screens aren't checked.
+   */
+  screens?: ReadonlyMap<string, FormSchema>;
 };
 
 export const workflowProblemCodes = [
@@ -63,10 +70,16 @@ export const workflowProblemCodes = [
   "loop_across_participants",
   // Check 7 (workflowActionFormProblems)
   "invalid_action_form",
+  // Screens (ADR 0019, RP-516)
+  "screen_not_found",
+  "screen_with_action_form",
   // Cancel (spec RP-423)
   "cancel_not_by_raiser",
   "cancel_not_to_cancelled_stage",
   "cancel_sets_outcome",
+  // Who edits the raiser's Form (ADR 0019, RP-514)
+  "form_edited_after_submit",
+  "drafts_visible_to_not_on_draft",
   // Check 6, and what rules and actions name
   "unknown_field",
   "unknown_attribute",
@@ -117,7 +130,7 @@ export function workflowPublishProblems(definition: WorkflowDefinition, context:
   const categories = new Map(context.stages.map((s) => [s.key, s.category]));
   const categoryOf = (stage: string) => categories.get(stage);
   const input: CheckInput = {
-    ...definition,
+    ...withScreenForms(definition, context.screens),
     context,
     stepOf: new Map(definition.steps.map((s) => [s.key, s])),
     categoryOf,
@@ -127,16 +140,44 @@ export function workflowPublishProblems(definition: WorkflowDefinition, context:
     },
   };
   const found = [
+    ...screenProblems(definition, context.screens),
     ...structureProblems(input),
     ...graphProblems(input),
     ...stageProblems(input),
     ...outcomeProblems(input),
     ...builtCheckProblems(input),
     ...cancelProblems(input),
+    ...formEditingProblems(input),
     ...ruleProblems(input),
     ...routingWarnings(input),
   ];
   return found.map(({ reason, ...p }) => ({ ...p, severity: p.severity ?? "error", message: message({ ...p, reason }, definition) }));
+}
+
+/**
+ * The definition as its Transitions' Screens make it (ADR 0019, RP-516): a Transition
+ * naming a Screen has that Screen's Action Form, so every other check reads it. Without
+ * `screens` (the builder), it is left as it is.
+ */
+function withScreenForms(definition: WorkflowDefinition, screens: WorkflowPublishContext["screens"]): WorkflowDefinition {
+  if (screens === undefined) return definition;
+  return {
+    ...definition,
+    transitions: definition.transitions.map((t) => {
+      const schema = t.screen === undefined || t.actionForm !== null ? undefined : screens.get(t.screen);
+      return schema === undefined ? t : { ...t, actionForm: schema as unknown as Record<string, unknown> };
+    }),
+  };
+}
+
+/** A Transition shows a Screen with a published Version its owner uses, and then has no Action Form of its own. */
+function screenProblems({ transitions }: WorkflowDefinition, screens: WorkflowPublishContext["screens"]): FoundProblem[] {
+  if (screens === undefined) return [];
+  return transitions.flatMap((t): FoundProblem[] => {
+    if (t.screen === undefined) return [];
+    if (t.actionForm !== null) return [{ code: "screen_with_action_form", transition: t.key, detail: t.screen }];
+    return screens.has(t.screen) ? [] : [{ code: "screen_not_found", transition: t.key, detail: t.screen }];
+  });
 }
 
 function structureProblems({ steps, transitions, stepOf }: CheckInput): FoundProblem[] {
@@ -247,6 +288,45 @@ function cancelProblems({ steps, transitions, stepOf, categoryOf }: CheckInput):
       if (t.outcome !== null) codes.push("cancel_sets_outcome");
       return codes.map((code) => ({ code, transition: t.key }));
     });
+}
+
+/**
+ * Whether the raiser's Form is edited at `step` of `definition` (ADR 0019; RP-514), by
+ * the Member holding it: its `editsForm`, else the default, a Step of the Draft Step's
+ * Participant role held with the Draft Step's Function Permission (the author's: the
+ * Draft, and the Contractor Engineer Step), never the internal reviewer's.
+ * app.step_edits_form says the same in the database.
+ */
+export function stepEditsForm(
+  definition: Pick<WorkflowDefinition, "steps">,
+  step: WorkflowStep,
+  stages: WorkflowPublishContext["stages"],
+): boolean {
+  if (step.editsForm !== undefined) return step.editsForm;
+  const draftStages = new Set(stages.filter((s) => s.category === "draft").map((s) => s.key));
+  return definition.steps.some(
+    (d) => draftStages.has(d.stage) && d.actor !== null && step.actor !== null && d.actor.role === step.actor.role && d.actor.permission === step.actor.permission,
+  );
+}
+
+/**
+ * Nobody edits the raiser's Form at or after a Submit (ADR 0019), but where a Send Back
+ * leads (ADR 0014, as built RP-309): a Step reached from a Submit's target without a
+ * Send Back may not edit it. Back at the raiser by a Send Back, its Steps may, until the
+ * next Submit. "Drafts visible to" is set on the Draft Step only.
+ */
+function formEditingProblems({ steps, transitions, context, categoryOf }: CheckInput): FoundProblem[] {
+  const forward = transitions.filter((t) => t.kind !== "send_back");
+  const afterSubmit = new Set<string>();
+  for (const t of transitions.filter((t) => t.kind === "submit")) for (const key of reachable(forward, t.to)) afterSubmit.add(key);
+  return [
+    ...steps
+      .filter((s) => afterSubmit.has(s.key) && stepEditsForm({ steps }, s, context.stages))
+      .map((s): FoundProblem => ({ code: "form_edited_after_submit", step: s.key })),
+    ...steps
+      .filter((s) => s.draftsVisibleTo !== undefined && categoryOf(s.stage) !== "draft")
+      .map((s): FoundProblem => ({ code: "drafts_visible_to_not_on_draft", step: s.key })),
+  ];
 }
 
 /** The item attributes a rule may read (`attr`, §4). */
@@ -564,6 +644,14 @@ const messages: Record<WorkflowProblemCode, (names: Names) => BilingualText> = {
     en: `The Action Form of ${names.transition.en} isn't a valid Form: "${names.detail}" (${names.reason}).`,
     ar: `النموذج المنبثق لـ ${names.transition.ar} ليس نموذجًا صالحًا: "${names.detail}".`,
   }),
+  screen_not_found: (names) => ({
+    en: `${names.transition.en} shows Screen "${names.detail}", which has no published Version this Workflow can use.`,
+    ar: `يعرض ${names.transition.ar} الشاشة "${names.detail}"، وليس لها إصدار منشور يمكن لسير العمل هذا استخدامه.`,
+  }),
+  screen_with_action_form: (names) => ({
+    en: `${names.transition.en} shows Screen "${names.detail}" and has an Action Form of its own: it takes one or the other.`,
+    ar: `يعرض ${names.transition.ar} الشاشة "${names.detail}" وله نموذج منبثق خاص به: يأخذ أحدهما فقط.`,
+  }),
   cancel_not_by_raiser: (names) => ({
     en: `${names.transition.en} is a Cancel, which only the raiser's own Steps offer.`,
     ar: `${names.transition.ar} إلغاء، ولا تتيحه إلا خطوات مُنشئ العنصر.`,
@@ -575,6 +663,14 @@ const messages: Record<WorkflowProblemCode, (names: Names) => BilingualText> = {
   cancel_sets_outcome: (names) => ({
     en: `${names.transition.en} is a Cancel, which sets no outcome.`,
     ar: `${names.transition.ar} إلغاء، ولا يضع أي نتيجة.`,
+  }),
+  form_edited_after_submit: (names) => ({
+    en: `${names.step.en} edits the raiser's Form, but an item reaches it after a Submit. Only the raiser's Steps an item is Sent Back to may.`,
+    ar: `${names.step.ar} تعدّل نموذج مُنشئ العنصر، لكن العنصر يصلها بعد التقديم. لا يجوز ذلك إلا لخطوات مُنشئ العنصر بعد الإرجاع إلى المقدّم.`,
+  }),
+  drafts_visible_to_not_on_draft: (names) => ({
+    en: `${names.step.en} sets who reads a Draft, which only the Draft Step does.`,
+    ar: `${names.step.ar} تحدد من يقرأ المسودة، ولا يحدد ذلك إلا خطوة المسودة.`,
   }),
   unknown_field: (names) => ({
     en: `${names.transition.en} reads field "${names.detail}", which the Form doesn't have where the rule is checked.`,

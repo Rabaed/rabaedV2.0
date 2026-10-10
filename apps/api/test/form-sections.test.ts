@@ -186,7 +186,8 @@ describe("a section filled by another Participant, to the raiser", () => {
     const id = (await ok(create({ model: "FD-90" }), 201)).json().id as string;
     await ok(engineer.post(`/v1/work-items/${id}/transitions`, { transition: "send_for_review", confirmed: true, idempotencyKey: randomUUID() }));
     const form: FormToFill = (await ok(engineer.get(`/v1/work-items/${id}/form`), 200)).json();
-    expect(form.editableSections).toEqual(["material", "classification"]);
+    // Nothing is editable there: the engineer no longer holds it, and the PM's Step doesn't edit the Form (RP-514).
+    expect(form.editableSections).toEqual([]);
     const res = await save(id, { model: "FD-90", sample_checked: false });
     expect(res.statusCode).toBe(409);
     expect(await answersOf(id)).toEqual({ model: "FD-90" });
