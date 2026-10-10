@@ -2,7 +2,8 @@
 // form-engine.md §8, "Settled 2026-10-05 (part 3)"): each save stamps the fields
 // it changed; a save carrying the times it was based on keeps a field another
 // Member changed since as theirs and says who; Draft saves write no
-// answers_changed events, and after Draft each button save writes one.
+// answers_changed events, and after Draft each button save writes one. Only the
+// Member holding the Draft saves it (RP-514).
 import type { SavedAnswers, WorkItemHistory } from "@rabaed/domain";
 import type { LightMyRequestResponse } from "fastify";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -73,58 +74,40 @@ describe("per-field times", () => {
     expect(Object.keys(await times(engineer, id)).sort()).toEqual(["location", "manufacturer", "trade"]);
   });
 
-  it("shows them to a Member who may save", async () => {
+  it("shows them to a Member who may save: the one holding the Draft", async () => {
     const id = await newDraft();
     expect(Object.keys((await detail(engineer, id)).fieldTimes).length).toBeGreaterThan(0);
-    expect((await detail(colleague, id)).fieldTimes.manufacturer).toMatchObject({ byMe: false, memberName: { en: "Test Member" } });
-    expect((await detail(engineer, id)).fieldTimes.manufacturer!.byMe).toBe(true);
+    expect((await detail(engineer, id)).fieldTimes.manufacturer).toMatchObject({ byMe: true, memberName: { en: "Test Member" } });
+    expect((await detail(colleague, id)).fieldTimes).toEqual({});
   });
 });
 
-describe("two Members saving one Draft", () => {
-  it("merges different fields: both changes stand, nothing is kept from the other", async () => {
+describe("one Draft, saved by its holder only (RP-514)", () => {
+  // Two Members never save one Draft at once: the later save would win field by field
+  // (ADR 0019). How a save keeps another Member's newer change (after a Handover) is
+  // mergeFieldAnswers' (field-times.test.ts).
+  it("refuses another Member's save, times or not, and changes nothing", async () => {
+    const id = await newDraft({ manufacturer: "ACME", description: "d0" });
+    const based = await times(engineer, id);
+    for (const res of [await save(colleague, id, { manufacturer: "theirs" }, based), await save(colleague, id, { manufacturer: "theirs" })]) {
+      expect({ status: res.statusCode, body: res.json() }).toEqual({ status: 409, body: { error: "not_editable" } });
+    }
+    expect((await detail(engineer, id)).answers).toMatchObject({ manufacturer: "ACME", description: "d0" });
+  });
+
+  it("lets the holder's later save, from an older page, overwrite their own earlier one", async () => {
     const id = await newDraft({ manufacturer: "ACME", description: "d0" });
     const based = await times(engineer, id);
     await pause();
-    await ok(save(colleague, id, { manufacturer: "ACME", description: "d0", model: "M-1" }, based), 200);
-    const res = await ok(save(engineer, id, { manufacturer: "ACME 2", description: "d0" }, based), 200);
-    const body = res.json() as SavedAnswers;
-    // The engineer's save left `model` out, but it was changed by the colleague since: it stays.
-    expect(body.keptFromOthers.map((k) => k.field)).toEqual(["model"]);
-    expect((await detail(engineer, id)).answers).toMatchObject({ manufacturer: "ACME 2", description: "d0", model: "M-1" });
-  });
-
-  it("keeps the newer save of the same field, and names the other editor", async () => {
-    const id = await newDraft({ manufacturer: "ACME", description: "d0" });
-    const based = await times(engineer, id);
-    await pause();
-    await ok(save(colleague, id, { manufacturer: "ACME", description: "colleague's" }, based), 200);
-    const res = await ok(save(engineer, id, { manufacturer: "ACME", description: "engineer's" }, based), 200);
-    const body = res.json() as SavedAnswers;
-    expect(body.keptFromOthers).toEqual([
-      { field: "description", value: "colleague's", at: expect.any(String), memberName: { en: "Test Member", ar: expect.any(String) } },
-    ]);
-    expect(body.fieldTimes.description!.byMe).toBe(false);
-    expect((await detail(engineer, id)).answers.description).toBe("colleague's");
-    // Having seen it, the engineer may change it.
-    await pause();
-    const again = await ok(save(engineer, id, { manufacturer: "ACME", description: "engineer's" }, Object.fromEntries(Object.entries(body.fieldTimes).map(([k, v]) => [k, v.at]))), 200);
-    expect((again.json() as SavedAnswers).keptFromOthers).toEqual([]);
-    expect((await detail(colleague, id)).answers.description).toBe("engineer's");
-  });
-
-  it("is no conflict when the other editor left the same value", async () => {
-    const id = await newDraft({ manufacturer: "ACME" });
-    const based = await times(engineer, id);
-    await pause();
-    await ok(save(colleague, id, { manufacturer: "Same" }, based), 200);
-    const res = await ok(save(engineer, id, { manufacturer: "Same" }, based), 200);
+    await ok(save(engineer, id, { manufacturer: "ACME", description: "first tab" }, based), 200);
+    const res = await ok(save(engineer, id, { manufacturer: "ACME", description: "second tab" }, based), 200);
     expect((res.json() as SavedAnswers).keptFromOthers).toEqual([]);
+    expect((await detail(engineer, id)).answers.description).toBe("second tab");
   });
 
   it("replaces as it always did when the save carries no times", async () => {
     const id = await newDraft({ manufacturer: "ACME" });
-    await ok(save(colleague, id, { manufacturer: "theirs" }));
+    await ok(save(engineer, id, { manufacturer: "theirs" }));
     await ok(save(engineer, id, { manufacturer: "mine" }));
     expect((await detail(colleague, id)).answers.manufacturer).toBe("mine");
   });
@@ -135,16 +118,17 @@ describe("history", () => {
     const id = await newDraft({ manufacturer: "ACME", description: "d0" });
     expect((await detail(engineer, id)).autosave).toBe(true);
     await ok(save(engineer, id, { manufacturer: "ACME", description: "d1" }, await times(engineer, id)), 200);
-    await ok(save(colleague, id, { manufacturer: "ACME", description: "d2" }, await times(colleague, id)), 200);
+    await ok(save(engineer, id, { manufacturer: "ACME", description: "d2" }, await times(engineer, id)), 200);
     expect(await diffs(engineer, id)).toEqual([]);
     await attachDatasheet(engineer, id);
     await ok(tryTake(engineer, id, "send_for_review"));
     // After Draft the web doesn't autosave.
     expect((await detail(engineer, id)).autosave).toBe(false);
-    await ok(pm.post(`/v1/work-items/${id}/pick-up`));
-    await ok(save(pm, id, { manufacturer: "ACME", description: "d3" }));
+    // The PM holding Internal Review doesn't edit the Form (RP-514); Returned, the engineer does.
+    await ok(tryTake(pm, id, "return", { reason: "Change the description" }));
+    await ok(save(engineer, id, { manufacturer: "ACME", description: "d3" }));
     expect(await diffs(pm, id)).toHaveLength(1);
-    await ok(save(pm, id, { manufacturer: "ACME", description: "d4" }));
+    await ok(save(engineer, id, { manufacturer: "ACME", description: "d4" }));
     expect(await diffs(pm, id)).toHaveLength(2);
   });
 });

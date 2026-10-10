@@ -1,7 +1,8 @@
 // Seam 1: free Links in the Links System Field (RP-291, spec RP-289;
 // form-engine.md part 2b; visibility.md E1, the Links row, scenarios 11, 12 and
-// 30). The raiser's Company adds and removes `related` Links while it can still
-// edit the answers (Draft and its internal Steps); from Submit they are frozen.
+// 30). The raiser's Member holding a Step that edits the Form (the Draft, RP-514)
+// adds and removes `related` Links while they can edit the answers; from Submit
+// they are frozen.
 // Only an item Link search could have offered can be linked: anything else is
 // refused alike. Everyone who sees the item reads its Links as Document Number
 // and Subject, with the linked item's id only when they can see it too.
@@ -157,12 +158,17 @@ describe("free Links", () => {
     await expectHidden(removeLink(tower.c1Engineer, mar, "not-an-id"));
   });
 
-  it("change in the raiser's internal review, each change on its history after Draft, notifying nobody", async () => {
+  it("change after a Return to the Draft, by its holder, each change on its history after Draft, notifying nobody", async () => {
     await take(tower.c1Engineer, mar, "send_for_review");
+    // The PM holding Internal Review doesn't change them (RP-514).
+    const byPm = await addLink(tower.c1Pm, mar, item.c1Approved);
+    expect({ status: byPm.statusCode, body: byPm.json() }).toEqual({ status: 409, body: { error: "not_editable" } });
+    await take(tower.c1Pm, mar, "return", { reason: "Link the approved trays" });
     const outboxBefore = await outboxRowsAbout(item.c1Submitted, item.c1Approved, mar);
-    toApproved = (await ok(addLink(tower.c1Pm, mar, item.c1Approved), 201)).json().id;
+    toApproved = (await ok(addLink(tower.c1Engineer, mar, item.c1Approved), 201)).json().id;
     await ok(removeLink(tower.c1Engineer, mar, toSubmitted));
     expect(await outboxRowsAbout(item.c1Submitted, item.c1Approved, mar)).toBe(outboxBefore);
+    await take(tower.c1Engineer, mar, "send_for_review");
 
     const submittedLink = { documentNumber: numbers.c1Submitted, subject: "Cable trays, submitted" };
     const approvedLink = { documentNumber: numbers.c1Approved, subject: "Cable trays, approved" };

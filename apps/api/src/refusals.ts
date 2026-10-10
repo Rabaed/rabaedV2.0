@@ -1,4 +1,4 @@
-import type { BilingualText, DefinitionIssue, FieldError, HandoverStep, StageCopyProblem, WorkflowProblem } from "@rabaed/domain";
+import type { BilingualText, DefinitionIssue, FieldError, HandoverStep, ScreenProblem, StageCopyProblem, WorkflowProblem } from "@rabaed/domain";
 import { forbidden, HttpError, notFound } from "./http-error.ts";
 
 // Every refusal the API's commands answer with, as the API's HTTP answer.
@@ -126,6 +126,11 @@ const answers = {
   // A Project Admin narrowing another Company's Participant that would take its Members off
   // Steps: how many (`steps`) and whose (`company`), never which (V14; scenario RP-108-3).
   other_company_handover: () => new HttpError(409, "other_company_handover"),
+  // Screens (RP-516): a key the Project's Screens already have; a schema that isn't a Form
+  // schema (the body says where); a draft with a problem (the body lists every problem).
+  key_taken: () => new HttpError(409, "key_taken"),
+  invalid_screen: () => new HttpError(422, "invalid_screen"),
+  screen_problems: () => new HttpError(422, "screen_problems"),
 } satisfies Record<string, () => HttpError>;
 
 export type RefusalReason = keyof typeof answers;
@@ -141,7 +146,7 @@ export function refusal(result: {
   errors?: FieldError[];
   message?: BilingualText;
   issues?: DefinitionIssue[];
-  problems?: (WorkflowProblem | StageCopyProblem)[];
+  problems?: (WorkflowProblem | StageCopyProblem | ScreenProblem)[];
   handovers?: HandoverStep[];
   step?: BilingualText;
   project?: BilingualText;

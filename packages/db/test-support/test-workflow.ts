@@ -15,6 +15,13 @@
  * review) to a Cancelled Step (RP-433); `recommendCode` makes Consultant review a
  * Step that Recommends a Code to the manager (§5.3, RP-433).
  *
+ * `engineerStep` gives Internal Review its Contractor Engineer Step (ADR 0020,
+ * RP-515), as the Rabaed Default MAR's next Version will: the Return goes there,
+ * never back to the Draft, and the engineer Sends it for Review again:
+ *
+ *   Contractor review ─return→ Contractor Engineer (Stage internal_review, permission create)
+ *   Contractor Engineer ─send_for_review_again→ Contractor review
+ *
  * It passes publish checks 4 and 8, as every published Version must. `run`
  * executes SQL as the migrator (a pg client's or Kysely's query); the result is
  * the new Workflow definition's id, for a test Type to use.
@@ -28,7 +35,9 @@ export async function addTestWorkflow(
   run: (text: string) => Promise<{ rows: unknown[] }>,
   options: TestWorkflowOptions = {},
 ): Promise<string> {
-  const { withApproveB = false, withCancel = false, recommendCode = false, publish = true } = options;
+  const { withApproveB = false, withCancel = false, recommendCode = false, engineerStep = false, publish = true } = options;
+  // The Contractor Engineer Step's Transitions sort after the rest (sorts stay 1, 2, 3…).
+  const engineerSort = 10 + (withApproveB ? 1 : 0) + (withCancel ? 2 : 0);
   const name = JSON.stringify(options.name ?? { en: "Send Back (test)", ar: "الإرجاع (اختبار)" }).replaceAll("'", "''");
   const owner = options.owner;
   const definition = options.version
@@ -58,6 +67,8 @@ export async function addTestWorkflow(
         ('approved', '{"en": "Approved", "ar": "معتمد"}', 'approved', '{}', 'none'),
         ('revise_resubmit', '{"en": "Revise & Resubmit", "ar": "مراجعة وإعادة تقديم"}', 'revise_resubmit', '{}', 'none')
         ${withCancel ? `, ('cancelled', '{"en": "Cancelled", "ar": "ملغى"}', 'cancelled', '{}', 'none')` : ""}
+        ${engineerStep ? `, ('contractor_engineer', '{"en": "Contractor Engineer", "ar": "مهندس المقاول"}', 'internal_review',
+          '{"base_role": "contractor", "permission": "create"}', 'none')` : ""}
       ) as s (key, name, stage_key, actor_rule, outcome_mode)
       returning id, key, workflow_version_id
     ), transitions as (
@@ -65,7 +76,7 @@ export async function addTestWorkflow(
       select f.workflow_version_id, t.key, f.id, s.id, t.label::jsonb, t.kind, t.outcome, t.permission, t.sort
       from (values
         ('send_for_review', 'draft', 'internal_review', '{"en": "Send for Review", "ar": "إرسال للمراجعة"}', 'send', null, 'create', 1),
-        ('return', 'internal_review', 'draft', '{"en": "Return", "ar": "إعادة"}', 'return', null, 'review', 2),
+        ('return', 'internal_review', '${engineerStep ? "contractor_engineer" : "draft"}', '{"en": "Return", "ar": "إعادة"}', 'return', null, 'review', 2),
         ('submit', 'internal_review', 'consultant_review', '{"en": "Submit", "ar": "تقديم"}', 'submit', null, 'submit', 3),
         ('send_back', 'consultant_review', 'internal_review', '{"en": "Send Back", "ar": "إرجاع إلى المقدّم"}', 'send_back', null, 'review', 4),
         ('send_back_to_draft', 'consultant_review', 'draft', '{"en": "Send Back to Draft", "ar": "إرجاع إلى المسودة"}',
@@ -80,6 +91,9 @@ export async function addTestWorkflow(
           'close', 'B', 'approve', 10)` : ""}
         ${withCancel ? `, ('cancel', 'draft', 'cancelled', '{"en": "Cancel", "ar": "إلغاء"}', 'cancel', null, 'create', ${withApproveB ? 11 : 10}),
           ('cancel_review', 'internal_review', 'cancelled', '{"en": "Cancel", "ar": "إلغاء"}', 'cancel', null, 'review', ${withApproveB ? 12 : 11})` : ""}
+        ${engineerStep ? `, ('send_for_review_again', 'contractor_engineer', 'internal_review', '{"en": "Send for Review", "ar": "إرسال للمراجعة"}',
+          'send', null, 'create', ${engineerSort})` : ""}
+        ${engineerStep && withCancel ? `, ('cancel_engineer', 'contractor_engineer', 'cancelled', '{"en": "Cancel", "ar": "إلغاء"}', 'cancel', null, 'create', ${engineerSort + 1})` : ""}
       ) as t (key, from_key, to_key, label, kind, outcome, permission, sort)
       join steps f on f.key = t.from_key
       join steps s on s.key = t.to_key
@@ -103,6 +117,22 @@ export async function addTestWorkflow(
     await run(`
       update workflow_transition set notifications = '${JSON.stringify(recipients)}'::jsonb
       where key = '${key}' and workflow_version_id = '${row.version_id}'
+    `);
+  }
+  // "Drafts visible to" on the Draft Step (RP-514); `company` when left out.
+  if (options.draftsVisibleTo) {
+    await run(`
+      update workflow_step set drafts_visible_to = '${options.draftsVisibleTo}'
+      where key = 'draft' and workflow_version_id = '${row.version_id}'
+    `);
+  }
+  // The Screen a Transition shows, pinned as publishing pins it (RP-516): its key, its
+  // Version and that Version's schema as the Transition's Action Form.
+  for (const [key, screenVersionId] of Object.entries(options.screens ?? {})) {
+    await run(`
+      update workflow_transition t set screen_key = s.key, screen_version_id = v.id, action_form = v.schema
+      from screen_version v join screen s on s.id = v.screen_id
+      where v.id = '${screenVersionId}' and t.key = '${key}' and t.workflow_version_id = '${row.version_id}'
     `);
   }
   if (publish) await run(`update workflow_version set status = 'published', published_at = now() where id = '${row.version_id}'`);
@@ -138,6 +168,8 @@ export type TestWorkflowOptions = {
   withCancel?: boolean;
   /** Consultant review Recommends a Code (RP-433). */
   recommendCode?: boolean;
+  /** Internal Review's Contractor Engineer Step, where the Return goes (ADR 0020, RP-515). */
+  engineerStep?: boolean;
   name?: { en: string; ar: string };
   /** A Project's own Workflow, or one in a Company's Library; a Rabaed Default when left out. */
   owner?: { kind: "project"; projectId: string } | { kind: "company"; companyId: string };
@@ -147,4 +179,32 @@ export type TestWorkflowOptions = {
   publish?: boolean;
   /** A Transition's extra recipients (RP-432), by its key. */
   notifications?: Record<string, unknown[]>;
+  /** The Draft Step's "Drafts visible to" (RP-514): the author only, or (left out) the author's whole Company. */
+  draftsVisibleTo?: "company" | "author";
+  /** The published Screen Version a Transition shows, by the Transition's key (RP-516; addTestScreen). */
+  screens?: Record<string, string>;
 };
+
+/**
+ * Adds a Rabaed Default Screen keyed `key` with one published Version of `schema`, its
+ * `internalFields` internal to the acting Participant (RP-516). `run` executes SQL as the
+ * migrator; the result is the Screen Version's id, for addTestWorkflow's `screens`.
+ */
+export async function addTestScreen(
+  run: (text: string) => Promise<{ rows: unknown[] }>,
+  key: string,
+  schema: unknown,
+  internalFields: readonly string[],
+): Promise<string> {
+  const { rows } = await run(`
+    with screen as (
+      insert into screen (owner_kind, key, name) values ('rabaed', '${key}', '{"en": "${key}", "ar": "${key}"}') returning id
+    )
+    insert into screen_version (screen_id, version_no, status, schema, internal_fields, published_at)
+    select id, 1, 'published', $json$${JSON.stringify(schema)}$json$::jsonb, '{${internalFields.join(",")}}'::text[], now() from screen
+    returning id
+  `);
+  const id = (rows[0] as { id?: string } | undefined)?.id;
+  if (!id) throw new Error("addTestScreen: nothing inserted");
+  return id;
+}

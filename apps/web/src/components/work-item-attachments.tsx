@@ -8,8 +8,8 @@ import { useDocuments } from "./use-documents";
 
 // The Attachments System Field, below the Form (form-engine.md §1): the item's
 // Documents that belong to no Form field, to open, and to upload and remove
-// while the viewer may change them (the raiser's Company, in Draft, with
-// Attach). Sent or submitted, the Documents are frozen. The Form's own
+// while the viewer may change them (the Member holding a raiser's Step that
+// edits the Form, with Attach). Submitted, the Documents are frozen (ADR 0020). The Form's own
 // `attachments` fields show theirs inside the Form (RP-281).
 
 export function WorkItemAttachments({ workItemId, list, locale }: { workItemId: string; list: DocumentList; locale: Locale }) {

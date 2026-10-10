@@ -17,7 +17,7 @@ import type { LightMyRequestResponse } from "fastify";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestApi, expectHidden, type Caller } from "./support/harness.ts";
-import { all, bilingual, buildTower, detail, draft, inInternalReview, ok, only, projectMember, submitted, tryTake, type Company, type Tower } from "./support/tower.ts";
+import { all, bilingual, buildTower, detail, draft, inInternalReview, memberOnProject, ok, only, projectMember, submitted, tryTake, type Company, type Tower } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
 const migrator = createDb(testDatabaseUrls().migrator, { max: 1 });
@@ -88,6 +88,7 @@ let c2Engineer: Caller;
 let c2Pm: Caller;
 let k1Mechanical: Caller; // A K1 manager covering Mechanical only.
 let c1Mechanical: Caller; // A C1 engineer covering Mechanical only.
+let c1MechanicalId = "";
 
 /** The answers of a link-question item on the Tower, Mechanical: the C1 Mechanical engineer sees it. */
 const lqAnswers = (answers: Record<string, unknown>) => ({ trade: tower.mechanical, location: tower.buildingA, ...answers });
@@ -132,7 +133,7 @@ beforeAll(async () => {
     .json()
     .participants.find((p: { isOwnCompany: boolean }) => p.isOwnCompany).id;
   k1Mechanical = await projectMember(api, k1, k1ParticipantId, ["manager"], { trade: only(tower.mechanical) });
-  c1Mechanical = await projectMember(api, c1, tower.c1ParticipantId, ["engineer"], { trade: only(tower.mechanical) });
+  ({ id: c1MechanicalId, caller: c1Mechanical } = await memberOnProject(api, c1, tower.c1ParticipantId, ["engineer"], { trade: only(tower.mechanical) }));
 
   const { c1Engineer, c1Pm, k1Manager } = tower;
   item.c1Draft = await draft(tower, c1Engineer, "Cable trays, draft");
@@ -201,8 +202,14 @@ describe("a link question", () => {
     await ok(tryTake(tower.c1Engineer, lq, "send_for_review"));
   });
 
-  it("changes in the raiser's internal review, each change in the field-level history as numbers and Subjects, never ids", async () => {
-    await ok(save(tower.c1Pm, lq, { relies: true, related: [item.c1Submitted, item.c1Approved] }));
+  it("changes after a Return to the Draft, each change in the field-level history as numbers and Subjects, never ids", async () => {
+    // The PM holding Internal Review doesn't change it (RP-514); Returned, the engineer does.
+    expect(refusal(await save(tower.c1Pm, lq, { relies: true, related: [item.c1Submitted, item.c1Approved] }))).toEqual({
+      status: 409,
+      body: { error: "not_editable" },
+    });
+    await ok(tryTake(tower.c1Pm, lq, "return", { reason: "Add the approved trays" }));
+    await ok(save(tower.c1Engineer, lq, { relies: true, related: [item.c1Submitted, item.c1Approved] }));
     const submittedItem = { documentNumber: numbers.c1Submitted, subject: "Cable trays, submitted" };
     const approvedItem = { documentNumber: numbers.c1Approved, subject: "Cable trays, approved" };
     expect(await answerChanges(tower.c1Engineer, lq)).toEqual([[{ field: "related", old: [submittedItem], new: [submittedItem, approvedItem] }]]);
@@ -211,20 +218,30 @@ describe("a link question", () => {
   });
 
   it("keeps an item the saver can't see when the answers come back as read, and lets them remove it", async () => {
-    // The C1 Mechanical engineer sees the item, not the Electrical MARs it links to.
-    const read = (await detail(c1Mechanical, lq)).answers;
+    // Chosen by an engineer who sees both Electrical MARs, then handed over (the only way to
+    // another Member, RP-514) to the C1 Mechanical engineer, who sees the item but not them.
+    const chooser = await memberOnProject(api, c1, tower.c1ParticipantId, ["engineer"]);
+    const handed = (await ok(createLq(chooser.caller, { relies: true, related: [item.c1Submitted, item.c1Approved] }), 201)).json().id as string;
+    const asked = await c1.caller.post(`/v1/members/${chooser.id}/deactivate`, {});
+    expect(asked.statusCode, asked.body).toBe(409);
+    const picks = (asked.json().handovers as { assignmentId: string }[]).map((h) => ({ assignmentId: h.assignmentId, toMemberId: c1MechanicalId }));
+    await ok(c1.caller.post(`/v1/members/${chooser.id}/deactivate`, { handovers: picks }), 200);
+
+    const read = (await detail(c1Mechanical, handed)).answers;
     expect(read.related).toEqual([
       { documentNumber: numbers.c1Submitted, subject: "Cable trays, submitted" },
       { documentNumber: numbers.c1Approved, subject: "Cable trays, approved" },
     ]);
-    await ok(save(c1Mechanical, lq, read));
-    expect((await detail(tower.c1Engineer, lq)).answers).toMatchObject({ related: [item.c1Submitted, item.c1Approved] });
-    await ok(save(c1Mechanical, lq, { ...read, related: [(read.related as unknown[])[1]] }));
-    expect((await detail(tower.c1Engineer, lq)).answers).toMatchObject({ related: [item.c1Approved] });
-    expect(await questionLinks(tower.c1Engineer, lq)).toEqual([["related", item.c1Approved]]);
-    // Nor can they choose it anew by its id, which they never got.
-    expect(refusal(await save(c1Mechanical, lq, { relies: true, related: [item.c1Submitted] }))).toEqual(unknownRelated);
-    await ok(save(tower.c1Engineer, lq, { relies: true, related: [item.c1Submitted, item.c1Approved] }));
+    await ok(save(c1Mechanical, handed, read));
+    expect((await detail(tower.c1Engineer, handed)).answers).toMatchObject({ related: [item.c1Submitted, item.c1Approved] });
+    // Not even an item still chosen, by its id, which they never got.
+    expect(refusal(await save(c1Mechanical, handed, { relies: true, related: [item.c1Submitted, item.c1Approved] }))).toEqual(unknownRelated);
+    await ok(save(c1Mechanical, handed, { ...read, related: [(read.related as unknown[])[1]] }));
+    expect((await detail(tower.c1Engineer, handed)).answers).toMatchObject({ related: [item.c1Approved] });
+    expect(await questionLinks(tower.c1Engineer, handed)).toEqual([["related", item.c1Approved]]);
+    // Nor can they choose it anew by its id.
+    expect(refusal(await save(c1Mechanical, handed, { relies: true, related: [item.c1Submitted] }))).toEqual(unknownRelated);
+    await ok(tryTake(tower.c1Engineer, lq, "send_for_review"));
   });
 
   it("is frozen with the answers from Submit", async () => {
@@ -282,10 +299,11 @@ describe("an item already chosen that goes back to its raiser's Draft (Sent Back
     expect(await questionLinks(tower.c1Engineer, lq)).toEqual([["related", target]]);
   });
 
-  it("is refused by its id to a saver who can't see it, even while chosen", async () => {
+  it("is never saved by a Member not holding the Draft, chosen or not (RP-514)", async () => {
+    // A holder who can't see a chosen item is refused its id: "keeps an item the saver can't see", above.
     const approved = await submitted(tower, tower.c1Engineer, tower.c1Pm, "Cable trays, chosen and hidden");
     await ok(save(tower.c1Engineer, lq, { relies: true, related: [approved] }));
-    expect(refusal(await save(c1Mechanical, lq, { relies: true, related: [approved] }))).toEqual(unknownRelated);
+    expect(refusal(await save(c1Mechanical, lq, { relies: true, related: [approved] }))).toEqual({ status: 409, body: { error: "not_editable" } });
   });
 });
 

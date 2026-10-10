@@ -25,6 +25,7 @@ import { optionListRoutes } from "./routes/option-lists.ts";
 import { participantRoutes } from "./routes/participants.ts";
 import { projectRoutes } from "./routes/projects.ts";
 import { scopeRoutes } from "./routes/scopes.ts";
+import { screenRoutes } from "./routes/screens.ts";
 import { sessionRoutes } from "./routes/session.ts";
 import { outcomeRoutes } from "./routes/outcomes.ts";
 import { stageRoutes } from "./routes/stages.ts";
@@ -141,5 +142,6 @@ export async function buildApp({
   await app.register(numberingCounterRoutes(context));
   await app.register(stageRoutes(context));
   await app.register(outcomeRoutes(context));
+  await app.register(screenRoutes(context));
   return app;
 }
