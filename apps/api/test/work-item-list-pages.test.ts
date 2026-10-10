@@ -147,6 +147,51 @@ describe("numbered pages", () => {
   });
 });
 
+describe("Export (the rows the viewer reads, with the List's filters)", () => {
+  const exported = async (by: Caller, query: WorkItemQueryInput, project = at.projectId) =>
+    (await ok(by.get(`/v1/projects/${project}/modules/submittals/work-items/export?${workItemSearchParams(query)}`), 200)).json() as {
+      items: WorkItemList["items"];
+    };
+
+  it("gives every matching row, not only the page, in the List's order", async () => {
+    const all = await exported(at.c1Engineer, { sort: "subject", page: 1, pageSize: 10 });
+    expect(all.items).toHaveLength(created.length);
+    expect(all.items.map((i) => i.title)).toEqual((await list(at.c1Engineer, { sort: "subject", page: 1 })).items.map((i) => i.title));
+    expect((await exported(at.c1Engineer, { stage: ["draft"] })).items).toHaveLength(21);
+  });
+
+  it("under a search, gives only the pages read so far, and no total", async () => {
+    const two = await exported(at.c1Engineer, { q: "Item", page: 2, pageSize: 10 });
+    expect(two.items).toHaveLength(20);
+    expect(Object.keys(two)).toEqual(["items"]);
+    expect((await exported(at.c1Engineer, { q: "Item", page: 1, pageSize: 10 })).items).toHaveLength(10);
+  });
+
+  it("names owners as V14 has it: the Consultant's own person to the Consultant, its Company only to the Contractor", async () => {
+    const waiting = created.at(-2)!;
+    await ok(at.k1Manager.post(`/v1/work-items/${waiting}/claim`));
+    const forK1 = (await exported(at.k1Manager, {})).items.find((i) => i.id === waiting)!;
+    const forC1 = (await exported(at.c1Engineer, {})).items.find((i) => i.id === waiting)!;
+    expect(forK1.with).toMatchObject({ kind: "own", claimer: { isMe: true } });
+    expect(forC1.with?.kind).toBe("company");
+    expect(JSON.stringify(forC1)).not.toMatch(/claimer/);
+    // The Creation Date is the raiser's own: the Consultant reads none.
+    expect(forK1.creationDate).toBeNull();
+    expect(forC1.creationDate).not.toBeNull();
+  });
+
+  it("gives another Company only what it sees: never the Contractor's Drafts or internal review", async () => {
+    const forK1 = await exported(at.k1Manager, {});
+    expect(forK1.items.map((i) => i.title).some((t) => t.startsWith("Item"))).toBe(false);
+    expect(forK1.items.every((i) => i.submissionDate !== null)).toBe(true);
+  });
+
+  it("is not found on a Project the Member isn't on", async () => {
+    const stranger = await api.authorizedPerson();
+    expect((await stranger.caller.get(`/v1/projects/${at.projectId}/modules/submittals/work-items/export`)).statusCode).toBe(404);
+  });
+});
+
 describe("every column's sort", () => {
   for (const sort of workItemSorts) {
     for (const dir of ["asc", "desc"] as const) {

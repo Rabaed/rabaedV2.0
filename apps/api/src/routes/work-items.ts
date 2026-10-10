@@ -24,6 +24,7 @@ import {
   workItemTypeCode,
   workItemBoard,
   workItemDetail,
+  workItemExport,
   workItemHistory,
   workItemLinks,
   workItemList,
@@ -39,7 +40,7 @@ import { getActivityFeed } from "../work-items/activity-feed.ts";
 import { getDashboard } from "../work-items/dashboard.ts";
 import { getLinkedFrom } from "../work-items/linked-from.ts";
 import { addWorkItemLink, getWorkItemLinks, removeWorkItemLink } from "../work-items/links.ts";
-import { boardWorkItems, changeBoardLayout, listWorkItems, saveListColumns, type QueryScope } from "../work-items/query.ts";
+import { boardWorkItems, changeBoardLayout, exportWorkItems, listWorkItems, saveListColumns, type QueryScope } from "../work-items/query.ts";
 import { createReplacement, createRevision, discardRevision, getRevisionChain } from "../work-items/revisions.ts";
 import {
   claimStep,
@@ -100,6 +101,13 @@ export const workItemRoutes =
       app.get(path, { schema: { params, querystring: workItemQuery, response: { 200: workItemList } } }, async (request) => {
         const memberId = ctx.requireMember(request);
         return visibleOrNotFound(listWorkItems(ctx.db, memberId, ...scoped(request.params, request.query), ctx.now()));
+      });
+
+      // Export (RP-409): the List's rows the Member reads, with its filters and order; under a search
+      // only the pages read so far. The web writes them as CSV or Excel, with the columns shown.
+      app.get(`${path}/export`, { schema: { params, querystring: workItemQuery, response: { 200: workItemExport } } }, async (request) => {
+        const memberId = ctx.requireMember(request);
+        return visibleOrNotFound(exportWorkItems(ctx.db, memberId, ...scoped(request.params, request.query), ctx.now()));
       });
 
       // The Kanban (RP-349): the same query as a board, Stages as columns and V14

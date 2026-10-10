@@ -191,6 +191,14 @@ export const workItemList = z.object({
 export type WorkItemList = z.infer<typeof workItemList>;
 
 /**
+ * Export (RP-409): the rows of the List the viewer reads, with its filters and order, from the same
+ * read as the List: every matching row, but under a search only the pages read so far (1 to the
+ * query's page), and never a count beyond them (visibility.md "Search and filters").
+ */
+export const workItemExport = z.object({ items: z.array(workItemRow) });
+export type WorkItemExport = z.infer<typeof workItemExport>;
+
+/**
  * Link search (form-engine.md part 2b; visibility.md "Link search"): part of a
  * Document Number or Subject, matched case-insensitively, and the page wanted.
  * A page holds at most `linkSearchPageMax` items.

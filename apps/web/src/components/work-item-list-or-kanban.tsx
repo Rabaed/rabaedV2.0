@@ -9,6 +9,7 @@ import {
   type BoardCardLayoutChange,
   type Locale,
   type WorkItemBoard as WorkItemBoardData,
+  type WorkItemExport,
   type WorkItemList as WorkItemListData,
   type WorkItemMove,
   type WorkItemQuery,
@@ -76,6 +77,12 @@ function useViewLabels(tableLabel: string, module: string): { list: WorkItemList
       groupedBy: (by) => t("list.groupedBy", { by }),
       clearGrouping: l("clearGrouping"),
       groupNone: l("groupNone"),
+      export: l("export"),
+      exportOptions: l("exportOptions"),
+      csv: l("csv"),
+      excel: l("excel"),
+      exportSelected: l("exportSelected"),
+      exported: (n, count, format) => t("list.exported", { what: t(module === "submittals" ? "list.submittals" : "list.items", { n, count }), format }),
       columnSettings: {
         ...(Object.fromEntries((["settings", "title", "locked", "reset", "saveDefault", "saved"] as const).map((key) => [key, t(`list.columnSettings.${key}`)])) as Record<
           "settings" | "title" | "locked" | "reset" | "saveDefault" | "saved",
@@ -179,6 +186,16 @@ export function WorkItemListOrKanban(
       itemHref={itemHref}
       linkAs={NextLink}
       onQueryChange={(q) => router.push(hrefFor(q))}
+      // Export: the rows the Member reads with this query, through the List's own read (RP-409).
+      loadExportRows={
+        props.view === "list"
+          ? async () => {
+              const params = workItemSearchParams({ ...query, module: undefined, cursor: undefined, lang: locale });
+              const res = await fetch(`/api/v1/projects/${projectId}/modules/${module}/work-items/export?${params}`);
+              return res.ok ? ((await res.json()) as WorkItemExport).items : null;
+            }
+          : undefined
+      }
       // The Member's own columns of the Module, kept by the API (RP-409).
       onSaveColumns={
         props.view === "list"

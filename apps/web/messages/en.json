@@ -113,6 +113,12 @@
       "groupedBy": "Group: {by}",
       "clearGrouping": "Clear grouping",
       "groupNone": "None",
+      "export": "Export",
+      "exportOptions": "Export options",
+      "csv": "CSV",
+      "excel": "Excel",
+      "exportSelected": "Export selected",
+      "exported": "Exported {what} ({format})",
       "columnSettings": {
         "settings": "Table settings",
         "title": "Columns",

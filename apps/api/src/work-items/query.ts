@@ -22,6 +22,7 @@ import {
   type ListColumnLayout,
   type Locale,
   type WorkItemCursorSort,
+  type WorkItemExport,
   type BoardCardLayout,
   type BoardCardLayoutChange,
   type BoardCardInput,
@@ -602,6 +603,29 @@ export async function queryWorkItems(
     // A search counts no more than its page shows ("Search and filters": no totals beyond the page).
     stageCounts: q.q === undefined ? await countByStage(trx, scope, q, now) : pageCounts(shown),
   };
+}
+
+/**
+ * Export (RP-409): the rows of the List as the viewer reads them, with its filters and order,
+ * through the same read: every matching row, or under a search only the pages read so far.
+ * Null as for the List.
+ */
+export function exportWorkItems(db: Db, memberId: string, scope: QueryScope, q: WorkItemQuery, now: Date): Promise<WorkItemExport | null> {
+  return withMember(db, memberId, async (trx) => {
+    if (!(await hasModuleTab(trx, scope))) return null;
+    const { page, size } = pagingOf({ ...q, page: q.page ?? 1 });
+    const limit = q.q === undefined ? null : (page ?? 1) * size;
+    const { rows } = await sql<Row>`
+      with r as (${visibleRows(scope, q.allRevisions)})
+      select r.*, ${holderColumns}
+      from r
+      ${holderJoins}
+      where ${matching(q, now, scope)}
+      order by ${columnOrder(q)}
+      ${limit === null ? sql`` : sql`limit ${limit}`}
+    `.execute(trx);
+    return { items: rows.map((r) => toRow(r, now)) };
+  });
 }
 
 function pageCounts(rows: Row[]): Map<string, number> {

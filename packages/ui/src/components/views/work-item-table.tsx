@@ -404,5 +404,59 @@ function Cell({ column, row, locale, labels, filters, places, itemHref, linkAs: 
   }
 }
 
+/**
+ * A cell as text, for Export (RP-409): what the cell shows, as the viewer may read it (the owner
+ * per V14, the Creation Date only to the raiser's Participant). Empty where the cell shows "—".
+ */
+export function cellText(
+  column: ListColumnKey,
+  row: WorkItemRow,
+  locale: Locale,
+  labels: Pick<WorkItemTableLabels, "noNumber" | "revisionNoNumber" | "unclaimed" | "cancelled" | "code" | "revision">,
+  filters: WorkItemTableProps["filters"],
+  places = placesOf(filters.locations),
+): string {
+  const n = (value: number) => formatNumber(value, locale);
+  switch (column) {
+    case "documentNumber":
+      return cardNumber(row.documentNumber, row.revisionNo) ?? (row.revisionNo > 0 ? labels.revisionNoNumber(n(row.revisionNo)) : labels.noNumber);
+    case "subject":
+      return row.title;
+    case "revision":
+      return labels.revision(n(row.revisionNo));
+    case "trade":
+      return `${row.trade.name[locale]} (${row.trade.code})`;
+    case "type":
+      return row.type.code;
+    case "stage":
+      return row.stage.name[locale];
+    case "outcome": {
+      const badge = row.outcome === null ? undefined : badgeOf(row, locale, labels, filters.outcomes);
+      return badge?.label ?? "";
+    }
+    case "locationLevel1":
+    case "locationLevel2":
+    case "locationLevel3": {
+      const depth = levelOf[column]!;
+      const place = row.location === null ? undefined : (places.get(row.location.id) ?? [{ depth: 1, name: row.location.name }]).find((p) => p.depth === depth);
+      return place?.name[locale] ?? "";
+    }
+    case "owner":
+      return ownerOf(row, locale, labels)?.name ?? "";
+    case "contractor":
+      return row.raiserCompanyName?.[locale] ?? "";
+    case "created": {
+      const iso = row.creationDate ?? row.submissionDate;
+      return iso === null ? "" : listDate(iso, locale);
+    }
+    case "stepAge":
+      return isOpenStageCategory(row.stage.category) && row.stepAgeWeeks !== null ? n(row.stepAgeWeeks) : "";
+  }
+}
+
 /** A date as the List writes it: "01 Aug 2026", Latin digits in both languages. */
-export const listDate = (iso: string, locale: Locale) => formatDate(new Date(iso), locale, { day: "2-digit", month: "short", year: "numeric" });
+export const listDate = (iso: string, locale: Locale) => {
+  const date = new Date(iso);
+  // Day, month, year in that order in both languages, as the design writes it (English's own order puts the month first).
+  return [formatDate(date, locale, { day: "2-digit" }), formatDate(date, locale, { month: "short" }), formatDate(date, locale, { year: "numeric" })].join(" ");
+};

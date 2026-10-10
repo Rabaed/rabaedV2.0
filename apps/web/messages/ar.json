@@ -113,6 +113,12 @@
       "groupedBy": "تجميع: {by}",
       "clearGrouping": "إلغاء التجميع",
       "groupNone": "بلا قيمة",
+      "export": "تصدير",
+      "exportOptions": "خيارات التصدير",
+      "csv": "CSV",
+      "excel": "Excel",
+      "exportSelected": "تصدير المحدد",
+      "exported": "تم تصدير {what} ({format})",
       "columnSettings": {
         "settings": "إعدادات الجدول",
         "title": "الأعمدة",

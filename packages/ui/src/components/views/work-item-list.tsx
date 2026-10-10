@@ -19,13 +19,15 @@ import {
   type Locale,
   type WorkItemList as WorkItemListData,
   type WorkItemQuery,
+  type WorkItemRow,
 } from "@rabaed/domain";
 import { useCallback, useState, type ElementType, type ReactNode } from "react";
 import { ListToast } from "../list/list-toast.tsx";
 import { Button } from "../button/button.tsx";
 import { ColumnSettings, type ColumnSettingsLabels } from "./column-settings.tsx";
 import { groupRows, listGroupings, type ListGrouping } from "./list-groups.ts";
-import { GroupMenu } from "./list-menus.tsx";
+import { ExportMenu, GroupMenu, type ExportFormat } from "./list-menus.tsx";
+import { exportFile, saveFile } from "./work-item-export.ts";
 import { Badge } from "../data/badge.tsx";
 import { cn } from "../../lib/cn.ts";
 import { focusRing } from "../form/control-styles.ts";
@@ -98,6 +100,14 @@ export type WorkItemListLabels = {
   groupedBy: (by: string) => string;
   clearGrouping: string;
   groupNone: string;
+  /** Export: the button, its arrow's name, the two formats, the bulk bar's button. */
+  export: string;
+  exportOptions: string;
+  csv: string;
+  excel: string;
+  exportSelected: string;
+  /** "Exported 42 submittals (CSV)": `n` is `count` written for the locale. */
+  exported: (n: string, count: number, format: string) => string;
   noNumber: string;
   revisionNoNumber: (revision: string) => string;
   empty: string;
@@ -207,6 +217,8 @@ export type WorkItemListProps = {
   columns?: ListColumnLayout;
   /** "Save as my default": keeps the columns for the Member; true once kept. Without it, the table has no column settings. */
   onSaveColumns?: (columns: ListColumnLayout) => Promise<boolean>;
+  /** Export: every row the viewer reads with the List's query (null when it couldn't be read). Without it, the List has no Export. */
+  loadExportRows?: () => Promise<WorkItemRow[] | null>;
 };
 
 /**
@@ -234,6 +246,7 @@ export function WorkItemList({
   hints,
   columns: initialColumns,
   onSaveColumns,
+  loadExportRows,
 }: WorkItemListProps) {
   const t = (key: TextLabel) => labels[key];
   const n = (value: number) => formatNumber(value, locale);
@@ -252,7 +265,39 @@ export function WorkItemList({
   const [selection, setSelection] = useState<{ page: string; ids: ReadonlySet<string> }>({ page: pageKey, ids: new Set() });
   const selected = selection.page === pageKey ? selection.ids : new Set<string>();
   const select = (ids: ReadonlySet<string>) => setSelection({ page: pageKey, ids });
-  const bulkActions: ReactNode = null;
+  // Export (RP-409): the rows the viewer reads with these filters (the web reads them through the
+  // List's own read; under a search only the pages read so far), or the rows chosen on this page;
+  // the columns shown, in their order.
+  const [exporting, setExporting] = useState(false);
+  const exportRows = async (format: ExportFormat, rows: () => Promise<WorkItemRow[] | null>) => {
+    setExporting(true);
+    try {
+      const got = await rows();
+      if (got === null) return;
+      saveFile(exportFile(got, columns, format, { locale, labels, filters: list.filters, headerOf, name: labels.table }));
+      setToast(labels.exported(n(got.length), got.length, format === "csv" ? t("csv") : t("excel")));
+    } finally {
+      setExporting(false);
+    }
+  };
+  const exportMenu = !board && loadExportRows && (
+    <ExportMenu
+      busy={exporting}
+      onExport={(format) => void exportRows(format, loadExportRows)}
+      labels={{ export: t("export"), options: t("exportOptions"), csv: t("csv"), excel: t("excel") }}
+    />
+  );
+  const bulkActions: ReactNode = (
+    <Button
+      variant="secondary"
+      size="sm"
+      disabled={exporting}
+      onClick={() => void exportRows("csv", async () => list.items.filter((i) => selected.has(i.id)))}
+    >
+      <Icon name="file-download" />
+      {t("exportSelected")}
+    </Button>
+  );
   // Group by (RP-409): the page's rows under a header per value, each folded on a click.
   const [groupBy, setGroupBy] = useState<ListGrouping | null>(null);
   const [folded, setFolded] = useState<ReadonlySet<string>>(new Set());
@@ -470,10 +515,11 @@ export function WorkItemList({
         end={
           <>
             {groupMenu}
+            {exportMenu}
             {viewSwitch}
           </>
         }
-        className="gap-3"
+        className={board ? "gap-3" : "gap-2.5"}
       >
         {action}
         <ToolbarSearch
@@ -486,6 +532,8 @@ export function WorkItemList({
           maxLength={searchMaxLength}
           description={t("searchHelp")}
           onSearch={(q) => change({ q })}
+          // The List's toolbar also holds Group and Export, so its search is a little narrower until the screen is wide.
+          className={board ? undefined : "sm:w-48 2xl:w-60"}
         />
         <span className="inline-flex shrink-0 items-center">
         <FilterMenu
