@@ -8,7 +8,7 @@
 // The seeded MAR has one Transition to each Stage, so this file adds a test-only
 // Work Item Type whose Consultant Step has two Transitions into Approved.
 import { createDb } from "@rabaed/db";
-import { testDatabaseUrls } from "@rabaed/db/test-support";
+import { approveBActionForm, testDatabaseUrls } from "@rabaed/db/test-support";
 import { dropTargets, workItemSearchParams, type WorkItemBoard, type WorkItemDetail } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -61,6 +61,10 @@ async function addTwoApprovalsType() {
         ) as t (key, from_key, to_key, label, kind, outcome, permission, sort)
         join workflow_step f on f.workflow_version_id = v_version and f.key = t.from_key
         join workflow_step s on s.workflow_version_id = v_version and s.key = t.to_key;
+
+        -- Code B's table of items, each row a Comment (RP-434).
+        update workflow_transition set action_form = ${sql.lit(JSON.stringify(approveBActionForm))}::jsonb
+        where workflow_version_id = v_version and key = 'approve_b';
 
         -- Published once its parts are in: a published Version takes none (RP-424).
         update workflow_version set status = 'published', published_at = now() where id = v_version;

@@ -195,11 +195,17 @@ describe("Code B's Comments reach exactly who sees the reviewed item", () => {
     ]);
   });
 
+  it("takes from a row only the fields the reviewer fills at the Draft, never the Contractor's Resolution (WF-8)", async () => {
+    const { comments } = await closedAtB("Pre-filled", [{ comment: "Mine", resolution_note: "Already done" } as { comment: string }]);
+    const { rows } = await migrator.query<{ data: Record<string, unknown> }>("select data from work_item where id = $1", [comments[0]]);
+    expect(rows[0]!.data).toEqual({ comment: "Mine" });
+  });
+
   it("RP-434-1: C2, another Contractor of the same Trade, reads none of them, their Links or their count", async () => {
     const { source, comments } = await closedAtB("Hidden from C2", [{ comment: "Only C1's" }]);
     expect(await seen(c2.member, comments)).toEqual([]);
-    expect(await call(c2.member, sql`select id from work_item_link where from_id = any(${comments}::uuid[])`)).toEqual([]);
-    expect(await call(c2.member, sql`select id from work_item_event where work_item_id = any(${comments}::uuid[])`)).toEqual([]);
+    expect(await call(c2.member, sql<{ id: string }>`select id from work_item_link where from_id = any(${comments}::uuid[])`)).toEqual([]);
+    expect(await call(c2.member, sql<{ id: string }>`select id from work_item_event where work_item_id = any(${comments}::uuid[])`)).toEqual([]);
     expect(await counts(c2.member, source)).toEqual([]);
   });
 
@@ -209,7 +215,7 @@ describe("Code B's Comments reach exactly who sees the reviewed item", () => {
       expect(await seen(who, comments)).toEqual(comments);
       expect(await counts(who, source)).toEqual([{ open_count: 1, closed_count: 0 }]);
       // Its history starts at the Raise, shared; its `created` event is nobody's (Creation Date).
-      expect(await call(who, sql`select type from work_item_event where work_item_id = ${comments[0]}::uuid order by seq`)).toEqual([{ type: "transition" }]);
+      expect(await call(who, sql<{ type: string }>`select type from work_item_event where work_item_id = ${comments[0]}::uuid order by seq`)).toEqual([{ type: "transition" }]);
     }
   });
 

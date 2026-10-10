@@ -174,10 +174,11 @@ create function app.transition_follow_up_items(
       v_source record;
       v_type record;
       v_version_id uuid;
-      v_start record;
+      v_route record;
       v_form_version_id uuid;
       v_fields text[];
       v_subject_key text;
+      v_subject text;
       v_row jsonb;
       v_data jsonb;
       v_id uuid;
@@ -215,29 +216,33 @@ create function app.transition_follow_up_items(
       -- Its Workflow as a new item of that raiser starts (RP-426), and the Step its
       -- Draft's Submit leads to: the item is raised already, at the source's raiser.
       v_version_id := app.new_item_workflow_version(v_source.project_id, v_type.id, p_participant_id);
-      select s.id, s.stage_key, s.actor_rule ->> 'base_role' as base_role, d.actor_rule ->> 'base_role' as draft_role,
-        tr.id as transition_id
-      into strict v_start
+      -- v_route: the Draft Step (key, role), its Submit, and the Step it leads to.
+      select s.id, s.stage_key, s.actor_rule ->> 'base_role' as base_role, d.key as draft_key,
+        d.actor_rule ->> 'base_role' as draft_role, tr.id as transition_id
+      into strict v_route
       from workflow_step d
       join workflow_transition tr on tr.from_step_id = d.id and tr.kind = 'submit'
       join workflow_step s on s.id = tr.to_step_id
       where d.workflow_version_id = v_version_id and app.is_draft_step(d.id);
-      if v_start.draft_role is distinct from v_source.actor_base_role then
+      if v_route.draft_role is distinct from v_source.actor_base_role then
         raise exception 'a % does not raise % items', v_source.actor_base_role, v_type.code;
       end if;
-      if v_start.base_role is distinct from v_source.raiser_base_role then
+      if v_route.base_role is distinct from v_source.raiser_base_role then
         raise exception '% items do not start with the raiser''s role %', v_type.code, v_source.raiser_base_role;
       end if;
 
       v_form_version_id := app.latest_form_version(v_type.code);
-      -- The answers a row gives: its cells of the fields the Type's Form has (the
-      -- Built-in Fields come from the source, never from a row).
+      -- The answers a row gives: its cells of the fields the raiser fills at the Draft
+      -- (sections with no `editable_at`, or naming the Draft Step), never a section
+      -- another Participant fills later, such as the Comment's Resolution (WF-8). The
+      -- Built-in Fields come from the source, never from a row.
       v_fields := array(
         select f ->> 'key'
         from form_version v
         cross join lateral jsonb_array_elements(v.schema -> 'sections') s
         cross join lateral jsonb_array_elements(s -> 'fields') f
-        where v.id = v_form_version_id and f ->> 'key' not in ('trade', 'location', 'scopes'));
+        where v.id = v_form_version_id and f ->> 'key' not in ('trade', 'location', 'scopes')
+          and (s -> 'editable_at' is null or s -> 'editable_at' ? v_route.draft_key));
       -- Each row's Subject: its first text cell (publishing asks the table for one).
       select c ->> 'key' into v_subject_key
       from workflow_transition tr
@@ -250,15 +255,16 @@ create function app.transition_follow_up_items(
       for v_row in select r from jsonb_array_elements(p_answers -> 'items_to_create') r loop
         select coalesce(jsonb_object_agg(k, v), '{}') into v_data
         from jsonb_each(v_row) as cell (k, v) where k = any (v_fields);
+        v_subject := left(btrim(coalesce(v_row ->> v_subject_key, '')), 200);
         insert into work_item (
           project_id, work_item_type_id, raised_by_participant_id, created_by_member_id, title, data, field_times,
           workflow_version_id, form_version_id, current_step_id, current_stage_key, step_entered_at,
           submitted_at, arrivals, created_at, updated_at
         ) values (
           v_source.project_id, v_type.id, p_participant_id, v_member_id,
-          left(btrim(coalesce(v_row ->> v_subject_key, '')), 200),
+          v_subject,
           v_data, (select coalesce(jsonb_object_agg(k, to_jsonb(p_at)), '{}') from jsonb_object_keys(v_data) k),
-          v_version_id, v_form_version_id, v_start.id, v_start.stage_key, p_at,
+          v_version_id, v_form_version_id, v_route.id, v_route.stage_key, p_at,
           -- It has left its raiser: shared from the start, like an item Submitted (V1).
           p_at, 1, p_at, p_at
         ) returning id into v_id;
@@ -284,14 +290,14 @@ create function app.transition_follow_up_items(
 
         -- Held by the source's raiser's Step Pool, which claims it.
         insert into step_assignment (project_id, work_item_id, step_id, participant_id, status, created_at, updated_at)
-        values (v_source.project_id, v_id, v_start.id, v_source.raised_by_participant_id, 'pooled', p_at, p_at);
+        values (v_source.project_id, v_id, v_route.id, v_source.raised_by_participant_id, 'pooled', p_at, p_at);
 
         insert into work_item_event (
           project_id, work_item_id, type, actor_member_id, actor_participant_id, to_step_id, payload,
           audience, audience_participant_id, created_at
         ) values (
-          v_source.project_id, v_id, 'created', v_member_id, p_participant_id, v_start.id,
-          jsonb_build_object('title', left(btrim(coalesce(v_row ->> v_subject_key, '')), 200)),
+          v_source.project_id, v_id, 'created', v_member_id, p_participant_id, v_route.id,
+          jsonb_build_object('title', v_subject),
           'internal', p_participant_id, p_at
         );
         -- Raised: its Draft's Submit, taken with the outcome by the same Member, shared.
@@ -299,11 +305,11 @@ create function app.transition_follow_up_items(
           project_id, work_item_id, type, actor_member_id, actor_participant_id, transition_id,
           from_step_id, to_step_id, payload, audience, content_sha256, created_at
         ) select
-          v_source.project_id, v_id, 'transition', v_member_id, p_participant_id, v_start.transition_id,
-          tr.from_step_id, v_start.id, jsonb_build_object('document_number', v_number), 'shared',
+          v_source.project_id, v_id, 'transition', v_member_id, p_participant_id, v_route.transition_id,
+          tr.from_step_id, v_route.id, jsonb_build_object('document_number', v_number), 'shared',
           app.work_item_content_sha256(v_id, w.title, w.data, null), p_at
         from workflow_transition tr, work_item w
-        where tr.id = v_start.transition_id and w.id = v_id;
+        where tr.id = v_route.transition_id and w.id = v_id;
 
         insert into work_item_link (project_id, from_id, to_id, kind, created_by_member_id, created_at)
         values (v_source.project_id, v_id, p_work_item_id, 'raised_from', v_member_id, p_at);
