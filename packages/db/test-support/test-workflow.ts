@@ -89,6 +89,14 @@ export async function addTestWorkflow(
   `);
   const row = rows[0] as { id?: string; version_id?: string } | undefined;
   if (!row?.id) throw new Error("addTestWorkflow: nothing inserted");
+  // Code B's Action Form: its table of items, each row a Comment (WF-11). No row is
+  // required, so a test may take B without them.
+  if (withApproveB) {
+    await run(`
+      update workflow_transition set action_form = '${JSON.stringify(approveBActionForm).replaceAll("'", "''")}'::jsonb
+      where key = 'approve_b' and workflow_version_id = '${row.version_id}'
+    `);
+  }
   // Built as a draft, then published: a published Version takes no new parts (RP-424).
   // `notifications` names a Transition's extra recipients by its key (RP-432).
   for (const [key, recipients] of Object.entries(options.notifications ?? {})) {
@@ -101,7 +109,30 @@ export async function addTestWorkflow(
   return row.id;
 }
 
+/** Code B's Action Form on the test Workflow: Remarks and the table of items (`items_to_create`), each row a Comment. */
+export const approveBActionForm = {
+  sections: [
+    {
+      key: "code_b",
+      title: { en: "Approve with Comments", ar: "اعتماد مع ملاحظات" },
+      fields: [
+        { key: "remarks", type: "textarea", label: { en: "Remarks", ar: "ملاحظات" } },
+        {
+          key: "items_to_create",
+          type: "table",
+          label: { en: "Comments", ar: "الملاحظات" },
+          columns: [
+            { key: "comment", type: "text", required: true, label: { en: "Comment", ar: "الملاحظة" } },
+            { key: "reference", type: "text", label: { en: "Reference", ar: "المرجع" } },
+          ],
+        },
+      ],
+    },
+  ],
+};
+
 export type TestWorkflowOptions = {
+  /** Code B from Consultant approval, with its table of items (approveBActionForm). */
   withApproveB?: boolean;
   /** A Cancel from Draft and from Contractor review, to a Cancelled Step (RP-433). */
   withCancel?: boolean;

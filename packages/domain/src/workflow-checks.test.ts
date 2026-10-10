@@ -52,6 +52,22 @@ const context = (over: Partial<WorkflowPublishContext> = {}): WorkflowPublishCon
   ...over,
 });
 
+/** An Action Form with Code B's table of items (WF-11), of `columns`: by default a comment and a reference. */
+const itemsForm = (
+  columns: unknown[] = [
+    { key: "comment", type: "text", required: true, label: { en: "Comment", ar: "الملاحظة" } },
+    { key: "reference", type: "text", label: { en: "Reference", ar: "المرجع" } },
+  ],
+) => ({
+  sections: [
+    {
+      key: "comments",
+      title: { en: "Comments", ar: "الملاحظات" },
+      fields: [{ key: "items_to_create", type: "table", minRows: 1, columns, label: { en: "Comments", ar: "الملاحظات" } }],
+    },
+  ],
+});
+
 /** MAR Workflow Version 2, a fresh copy to break. */
 const mar = (): WorkflowDefinition => definitionFromRows(marRows(2));
 
@@ -142,9 +158,51 @@ describe("workflowPublishProblems", () => {
     it("passes Codes B and D beside A and C", () => {
       const d = mar();
       addStep(d, { key: "rejected", stage: "rejected" });
-      add(d, { key: "approve_b", from: "consultant_review", to: "approved", kind: "close", outcome: "B", permission: "approve" });
+      add(d, { key: "approve_b", from: "consultant_review", to: "approved", kind: "close", outcome: "B", permission: "approve", actionForm: itemsForm() });
       add(d, { key: "reject_d", from: "consultant_review", to: "rejected", kind: "close", outcome: "D", permission: "approve" });
       expect(problems(d)).toEqual([]);
+    });
+
+    describe("an outcome that creates items (Code B's Comments, WF-11) needs its Action Form's table of items", () => {
+      const withB = (actionForm: Record<string, unknown> | null) => {
+        const d = mar();
+        add(d, {
+          key: "approve_b",
+          label: { en: "Approve with Comments · B", ar: "اعتماد مع ملاحظات · B" },
+          from: "consultant_review",
+          to: "approved",
+          kind: "close",
+          outcome: "B",
+          permission: "approve",
+          actionForm,
+        });
+        return d;
+      };
+
+      it("refuses B with no Action Form, or one without an items_to_create table", () => {
+        const missing = [{ code: "items_table_missing", severity: "error", transition: "approve_b" }];
+        expect(problems(withB(null))).toEqual(missing);
+        const remarksOnly = {
+          sections: [{ key: "code", title: { en: "Code", ar: "الرمز" }, fields: [{ key: "remarks", type: "textarea", label: { en: "Remarks", ar: "ملاحظات" } }] }],
+        };
+        expect(problems(withB(remarksOnly))).toEqual(missing);
+      });
+
+      it("refuses a table with no text column: each row's first text cell is its item's Subject", () => {
+        const numbersOnly = itemsForm([{ key: "count", type: "number", label: { en: "Count", ar: "العدد" } }]);
+        expect(problems(withB(numbersOnly))).toEqual([{ code: "items_table_missing", severity: "error", transition: "approve_b" }]);
+      });
+
+      it("asks nothing of an outcome that creates no items, nor of B when the Project's set dropped its action", () => {
+        expect(problems(withB(null), context({ outcomes: defaultOutcomeSets.review_code.map((o) => ({ ...o, actions: [] })) }))).toEqual([]);
+      });
+
+      it("says so in English and Arabic, naming the Transition and the Type", () => {
+        const [problem] = workflowPublishProblems(withB(null), context());
+        expect(problem?.message.en).toContain('"Approve with Comments · B"');
+        expect(problem?.message.en).toContain("CMT");
+        expect(problem?.message.ar).toContain("CMT");
+      });
     });
 
     it("refuses a closing Transition with no outcome", () => {
