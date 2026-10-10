@@ -73,7 +73,7 @@ export function ProjectDashboard({ dashboard, locale, labels, hrefFor, linkAs: L
           <h2 id={`dashboard-${m.key}`} className="text-h6 font-semibold">
             {moduleName(m.key, locale)}
           </h2>
-          <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          <ul className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,18rem),1fr))] gap-4">
             {m.cards.map((card) => (
               <li key={card.type.code}>
                 <TypeCard card={card} {...ctx} />

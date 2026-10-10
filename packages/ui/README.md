@@ -21,7 +21,7 @@ Next.js apps also list `@rabaed/ui` in `transpilePackages`.
 Three layers, all in `src/tokens/`:
 
 1. **Base palette** (`palette.ts`): raw colours such as `tomato-600`. Only themes read it.
-2. **Semantic roles** (`themes.ts`): `canvas`, `primary`, `stage-*`, `code-a..d-*`, `age-0..4`, `shadow-colour` (the tint of every shadow) and so on, mapped to palette colours. The only layer a new theme changes. Launch theme: cool light.
+2. **Semantic roles** (`themes.ts`): `canvas`, `primary`, `stage-*`, `code-a..d-*`, `age-0..4`, `shadow-colour` (the tint of every shadow) and so on, mapped to palette colours. The only layer a theme changes. Four themes (owner decision 2026-10-11): Grey and Warm, each Light and Dark (`grey-light`, `grey-dark`, `warm-light`, `warm-dark`), from the kit's exact sets; `<html data-theme="grey|warm" data-mode="light|dark|system">` picks one, and Mode `system` follows the device (`prefers-color-scheme`). No Theme on the page is Grey, Light. A translucent role (a dark tint, the sidebar's hover) is `#rrggbbaa`; `tokens.test.ts` checks every text and control pair in all four, laid on what it sits on. A fill (`primary`, `danger`) carries white text; text in a hue reads its `-fg` role (`text-brand-fg`, `text-danger-fg`). Stories take a theme with `parameters: themed("warm-dark")` (`src/storybook/theme.ts`); `Shell/Themes` shows the shell around Home, the Kanban, the List and Settings in all four.
 3. **Component usage**: components use Tailwind classes for semantic roles (`bg-primary`, `text-muted`). The Tailwind theme exposes semantic roles only, so the base palette is unreachable from a class.
 
 `src/styles/tokens.css` is generated. After editing `src/tokens/`, run `pnpm --filter @rabaed/ui tokens`; a unit test fails if you forget. Another unit test keeps every text/background pair at WCAG AA contrast.
@@ -113,7 +113,8 @@ Every control sits in a `Field`, which gives it a label, optional help text, the
 | `Table` + `TableHeader`, `TableBody`, `TableRow`, `TableHead`, `TableCell`, `TableEmpty` | Lists of records. Real table roles, in a named region that scrolls (and takes keyboard focus) when the table doesn't fit. |
 | `Tabs` + `TabsList`, `TabsTrigger`, `TabsContent` | Switching between views of one area. The ARIA tabs pattern; arrow keys follow the reading direction. |
 | `Badge` | A short label in a tint: `neutral` (default), `brand`, `info`, `success`, `warning`, `danger`; optional `dot`. Not for Stages or Review Codes, which have their own components. |
-| `Avatar` | A person's photo or initials (a circle), or with `kind="company"` a company's logo or initials (a rounded square). Named after them; `decorative` when the name is beside it. |
+| `StatTile` | One count on a card, as the design kit's Home tiles (RP-407): a 40px icon square on its tone's tint (`tone`), the number large in Latin digits, and what it counts below; always a column. Keep labels short enough for one line in a four-tile row. |
+| `Avatar` | A person's photo or initials (a circle), or with `kind="company"` a company's logo or initials (a rounded square). Named after them; `decorative` when the name is beside it. `solid`: white initials on a colour from the name (a Company on slate), as the kit's Home; `initialsFrom` gives Latin initials in Arabic. |
 | `CompanyChip` | Another company as one block: its mark and name in a pill. Takes no person, so it can't show another company's people. |
 
 ```tsx
@@ -153,7 +154,7 @@ The components that carry Rabaed's product rules, so every module shows status t
 
 | Component | Shows | Rule it keeps |
 |---|---|---|
-| `StagePill` | A Stage: `stage` (the colour category, one of `stageKeys`), its `label`, optional `count` (formatted for `locale`) | One colour per default Stage in every module; the name carries the meaning. |
+| `StagePill` | A Stage: `stage` (the colour category, one of `stageKeys`), its `label`, optional `count` (formatted for `locale`) | One colour per default Stage in every module; the name carries the meaning. `StageDot` is its dot alone, beside a Stage's name (a filter choice). |
 | `CodeBadge` | A Review Code: `code` (`a`–`d`), `locale`, `size` (`sm`, `md`), `variant` (`full`, or `letter` with the meaning for screen readers only) | Icon + colour + text, never colour alone. B always has the comment icon. |
 | `AgeDots` | Step Age: `weeks` (the week at the current Step, from 1), `locale` | 1–4 dots (4+), grey turning red, named "N weeks at this step". Age only: it takes nothing but weeks. |
 | `WithChip` | Who holds the Step, a `WithChipHolder`: `kind` (`person`, `company`), `inViewerCompany`, `companyName`, `logoSrc`, and only for a person in the viewer's Company, `name` and `photoSrc` | Visibility V14: the props are a union, so another company's holder carries its company only; passing their person's name or photo fails the typecheck. A name forced through with a cast is still dropped, so it shows the company name only. |
@@ -176,33 +177,80 @@ const chip: WithChipHolder =
 
 ## Shell
 
-Every page sits in the same layout, in English and Arabic, on desktop and phone. Presentational only: the app passes the navigation targets, labels and data.
+Every page sits in the same layout, in English and Arabic, on desktop and phone. Presentational only: the app passes the navigation targets, labels and data. Reference: `design/reference/claude-design/ui_kits/app/saas-shell.html` (RP-406). In `apps/web` the shell is wired once, in `src/components/app-frame.tsx` (used by `app/[locale]/layout.tsx`; the top bar's title and a Project's tabs come from the `@heading` and `@tabs` slots there), so a page renders only its content.
 
 | Component | Use for |
 |---|---|
-| `AppShell` | The page layout: `Sidebar` on the inline-start side (the right in Arabic), `TopBar` and the page beside it. Below `md` the sidebar becomes a `Sheet` from the start side, opened by a menu button in the top bar; choosing a page closes it. |
-| `Sidebar` / `SidebarNav` | The main navigation: sections of items (`key`, `label`, `icon`, `href`, optional `count`), the `current` one marked `aria-current="page"`. Collapses to icons with a button (mouse or keyboard); collapsed, each item shows its name in a tooltip and each section stays a named group. `brandCollapsed` (e.g. the logo mark) shows when collapsed; `defaultCollapsed` and `onCollapsedChange` let the app remember the choice. |
-| `TopBar` | The banner landmark, with slots for `search`, `notifications` and `member`. |
-| `MemberMenu` | The signed-in Member's avatar and name, opening a menu with the language switch (each language named in itself, the current one pressed) and any extra items, e.g. Sign out. |
-| `PageHeader` | A page's one `h1`, with an optional `eyebrow`, `description`, `actions` and `tabs`. |
-| `ProjectTabs` | A Project's tabs, always in the agreed order (`projectTabKeys`): Dashboard · Submittals · Inspections · Snag List · Site Reports · Drawings · Settings; a Module's tab key is its Module key (`snag_list`). Dashboard, Submittals and Settings always; another Module's tab only when the Project has a Work Item Type in it (`modules`, from the Project's summary; `visibleProjectTabs`). No empty tab and no placeholder for what isn't built. Page navigation, so links in a named `nav` (not ARIA tabs); `current` is optional. They scroll sideways on a phone. |
+| `AppShell` | The page layout: `Sidebar` on the inline-start side (the right in Arabic), `TopBar` and the page beside it. Below `lg` (1024px) the sidebar becomes a `Sheet` from the start side, opened by a menu button in the top bar; choosing a page closes it. Its `main` has no padding: an optional `TabsBar`, then the page in `PageContent`. |
+| `Sidebar` / `SidebarNav` | The main navigation, 264px wide (72px collapsed): `brand` at the top, sections of items (`key`, `label`, `icon`, `href`, optional `count`; a line between sections) with the `current` one marked `aria-current="page"`, tinted and with an accent bar on the edge, and at the bottom `footer` (the Member's card; a function receives `collapsed`) beside the collapse button. Collapses to an icon rail (mouse or keyboard); collapsed, each item shows its name in a tooltip and each section stays a named group. `brandCollapsed` shows when collapsed; `defaultCollapsed` and `onCollapsedChange` let the app remember the choice. |
+| `SidebarBrand` / `RabaedLogoTile` / `RabaedMark` | The top of the sidebar (logo tile, product name, the Member's Company; never a switcher); the logo on its tile (the collapsed brand); the logo mark alone, in the current colour. |
+| `TopBar` | The banner landmark, 72px tall: `title` at the start, then slots for `search` (not used yet), `notifications` and `member`. |
+| `TopBarTitle` / `ProjectMark` | The top bar's `title`: where the Member is, not the page's `h1` (the page keeps its own). A page name; inside a Project, `back` (a link to the Projects page, its arrow mirrored in Arabic), `mark` (`ProjectMark`: the name's first letter on a tile), the Project's name and a `subtitle` (its Host Company). |
+| `TabsBar` | The band under the top bar holding a page's tabs (`ProjectTabs`), edge to edge. |
+| `PageContent` | The content area: side padding and the whole width beside the sidebar (tables, boards); `narrow` for a reading width (forms, text). |
+| `MemberMenu` | The signed-in Member's avatar and name, opening a menu with the language switch (each language named in itself, the current one pressed) and any extra items, e.g. Profile and Sign out. `placement="topBar"` (default), or `"sidebar"`: a card with the name and Company that opens upwards, the avatar only when `collapsed`. `appearance` adds the Theme (Grey / Warm) and Mode (Light / Dark / System) switches under the language (`value`, `onChange`, `labels`). |
+| `PageHeader` | A page's one `h1` in a surface band, with an optional `eyebrow`, `description`, `actions` and `tabs`. |
+| `ProjectTabs` | A Project's tabs, always in the agreed order (`projectTabKeys`): Dashboard · Submittals · Inspections · Snag List · Site Reports · Drawings · Activity Feed · Settings; a Module's tab key is its Module key (`snag_list`). Dashboard, Submittals, Activity Feed and Settings always; another Module's tab only when the Project has a Work Item Type in it (`modules`, from the Project's summary; `visibleProjectTabs`). No empty tab and no placeholder for what isn't built. Page navigation, so links in a named `nav` (not ARIA tabs); `current` is optional. They scroll sideways on a phone. |
 
 ```tsx
 <AppShell
-  sidebar={{ brand: "Rabaed", label: t("main"), sections, current: "projects", collapseLabel: t("collapse"), expandLabel: t("expand"), linkAs: Link }}
-  topBar={{ search: <SearchButton />, notifications: <NotificationsButton />, member: <MemberMenu … /> }}
+  sidebar={{
+    brand: <SidebarBrand name="Rabaed" companyName={company} />,
+    brandCollapsed: <RabaedLogoTile />,
+    footer: (collapsed) => <MemberMenu placement="sidebar" collapsed={collapsed} … />,
+    label: t("main"), sections, current: "projects", collapseLabel: t("collapse"), expandLabel: t("expand"), linkAs: Link,
+  }}
+  topBar={{
+    title: <TopBarTitle back={{ href: "/projects", label: t("back") }} mark={<ProjectMark name={name} />} title={name} subtitle={host} linkAs={Link} />,
+    notifications: <NotificationsButton />,
+    member: <MemberMenu … />,
+  }}
   menuLabel={t("menu")}
   closeLabel={t("close")}
 >
-  <PageHeader
-    title={project.name}
-    tabs={<ProjectTabs label={t("project")} labels={tabLabels} modules={project.modules} href={(key) => pathOf(project.id, key)} current="submittals" linkAs={Link} />}
-  />
-  …
+  <TabsBar>
+    <ProjectTabs label={t("project")} labels={tabLabels} modules={project.modules} href={(key) => pathOf(project.id, key)} current="submittals" linkAs={Link} />
+  </TabsBar>
+  <PageContent>…</PageContent>
 </AppShell>
 ```
 
-The sidebar uses the light variant of the design (surface and brand tint); a dark sidebar would need its own theme roles first.
+The sidebar is dark in every theme and mode (owner decision 2026-10-11): navy in Grey, espresso in Warm, with its own roles (`sidebar`, `sidebar-text`, `sidebar-current`…). The phone's navigation sheet is the same.
+
+## Data list page
+
+The template for a page that lists records (RP-409; reference `design/reference/claude-design/ui_kits/app/submittals-list.html`): a toolbar, then the table in a card with its pager. The Submittals List (`WorkItemList`) is the first page built on it; the Kanban keeps the same toolbar, and Members reuses the pieces. Presentational: the page owns the query (keep it in the URL) and passes every word. Story: `List/DataListPage`.
+
+| Component | Use for |
+|---|---|
+| `ListToolbar` | One wrapping row, a named region (`label`): `children` from the start (primary action, `ToolbarSearch`, `FilterMenu`, `ToolbarSwitch`es, a "Clear filters" link), `end` pushed to the inline end (a view switch). |
+| `ToolbarSearch` | The compact search box (`label`, `placeholder`, `description` read with it, `value`, `onSearch`). Enter searches with the trimmed words (undefined when emptied); "/" anywhere outside a text box puts the cursor in it. Full width on a phone, 240px from `sm`. Give it `key={query.q}` so a new query shows its own words. |
+| `FilterMenu` | The Filters button, tinted with the number of fields applied, opening the filters: from `md` a popover (fields as vertical tabs on the start side, each with its count, the chosen field's values beside them), below `md` a `Sheet` with every field one under the other. Each field is `{ key, label, count, content }`; choices apply at once, Done only closes, `onClearAll` adds "Clear all". `labels`: `FilterMenuLabels`. |
+| `FilterChoices` | One value from a list, or "All" (`allLabel`, `value` undefined): pressed / not pressed buttons with a round mark, an optional decorative `mark` per choice (`StageDot`, `AgeDots`). |
+| `ToolbarSwitch` | An on/off that applies at once (Need My Action): a `Switch` and its label. |
+| `toolbarButton` | The classes of a compact toolbar button, for any other trigger in the row. |
+| `TableCard` | The surface card around a `Table` (its region loses its own border inside) and a `footer`. The table scrolls sideways in its own region, so the page never does; give the `Table` `stickyHeader` and a height (`containerClassName`) to scroll rows under a fixed header. |
+| `Pager` | The card's last row: an optional `summary` ("Page 2 of 5 · 230 items") and First / Previous / Next links (`first`, `previous`, `next` hrefs; undefined shows the step without a link). `labels`: `PagerLabels`. |
+| `NumberedPager` | The List's pager (RP-409, the owner's design): rows per page (`pageSizes`, `onPageSize`) at the start, the `summary` in the middle, « ‹ 1 2 … › » at the end (`hrefFor(page)`). With `lastPage` null (a search, which has no total) there is no last page and the numbers grow as the pages are read (`hasNext`). `labels`: `NumberedPagerLabels`. Story: `List/NumberedPager`. |
+| `RowActionsMenu` | The one row ⋯ menu of every list (Members, the Work Item List): a `role="menu"` of `items` (`label`, `icon`, `onSelect`, `tone: "danger"`, `separated`), Up / Down / Home / End between them, Escape back to the button; `onOpenChange` to ask what the viewer may do as it opens, `status` ("Loading…") meanwhile, beside the menu (which is `aria-busy`), `busy` while a change is saved, `width="narrow"` for the List's. |
+
+```tsx
+<ListToolbar label={t("toolbar")} end={<WorkItemViewSwitch … />}>
+  <Link href={newHref} className={buttonVariants()}><Icon name="plus" />{t("new")}</Link>
+  <ToolbarSearch key={q ?? ""} label={t("search")} placeholder={t("searchThisList")} value={q} onSearch={(q) => go({ q })} />
+  <FilterMenu labels={filterLabels} onClearAll={clearFilters} fields={[
+    { key: "stage", label: t("stage"), count: stage ? 1 : 0, content: <FilterChoices label={t("stage")} allLabel={t("all")} value={stage} choices={stages} onChange={(stage) => go({ stage })} /> },
+  ]} />
+  <ToolbarSwitch label={t("needMyAction")} checked={mine} onCheckedChange={(mine) => go({ mine })} />
+</ListToolbar>
+<TableCard footer={<Pager labels={pagerLabels} summary={summary} first={firstHref} previous={previousHref} next={nextHref} linkAs={Link} />}>
+  <Table label={t("drawings")} stickyHeader className="w-max min-w-full text-sm" containerClassName="min-h-64 lg:max-h-[calc(100dvh-20rem)]">…</Table>
+</TableCard>
+```
+
+- **Pages are numbered** (RP-409): the work item query's `page` and `pageSize` (10, 25 or 50); the List's URL keeps them (`apps/web/src/lib/list-url.ts`). The total ("n submittals", "of y") is the sum of the Stage counts and is left out under a search, which counts no more than its page (visibility.md "Search and filters"); the API's `page.hasNext` says whether a next page holds rows. Reads that page by cursor (Home) keep `nextCursor`.
+- **Sort** is on every column (`WorkItemTable`): a column's sort button sorts by it in its own order (`workItemSortOrders`), then the other way (`dir`); `aria-sort` says the current one.
+- **Rows**: the whole row opens the item; its Subject stays the link, for the keyboard and screen readers.
 
 ## Views
 
@@ -210,13 +258,17 @@ A Module's Work Items and the Member's Projects, as the API returns them. Presen
 
 | Component | Use for |
 |---|---|
-| `ProjectCards` | The Projects page (the home page): one card per Project, a link with its code (left to right), name, the viewer's Project Role, "Project Admin", a Closed badge, and its Need My Action count. `labels`: `list`, `needMyAction`, `closed`, `projectAdmin`. The cards stack on a phone. |
-| `WorkItemList` | The List: the toolbar (search, filters, sort, the Need My Action and "Show all Revisions" switches), the Stage counts, one page of rows and the page links. Every choice is a new query (`onQueryChange`); `hrefFor` gives a query's URL. `labels`: `WorkItemListLabels` (`table` is the Module's name). Pass `board` to show the Kanban under the toolbar instead of the counts, table and pages. |
+| `ProjectCard` / `ProjectCards` | One Project as a card and a link, and a grid of them (three columns, two at `md`, one on a phone). The card shows the Project's mark (first letter), name, code (left to right), Host Company, its state (Active / Closed) and, in the footer, the viewer's Company's Project Role ("Project Admin") and its Need My Action count. No progress or due date (Rabaed has no time axis). Reuse `ProjectCard` wherever Projects are listed (e.g. Home). `labels` (`ProjectCardsLabels`): `list`, `needMyAction`, `active`, `closed`, `projectAdmin`. |
+| `ProjectsBrowser` | The Projects page's body: search (Project name in either language, or code), the All / Active / Closed chips, the card grid, an empty state when the Member is on no Project (`emptyAction` for "New project") and one when a search leaves none. Filters in the browser (`filterProjects`). `labels`: `ProjectsBrowserLabels` (the card labels plus `search`, `filter`, `all`, `emptyTitle`, `empty`, `noMatchesTitle`, `noMatches`). |
+| `NeedsMyActionCard` / `RecentActivityCard` | Home's two cards (RP-407): the items waiting on the Member across their Projects (Subject, Document Number, Project, `StagePill`, `AgeDots`; `boards` gives the "Open board" links), and the newest Activity Feed entries across them, worded as `ActivityFeedPanel` words them (`whatHappened`), each with its Project. `labels`: `NeedsMyActionCardLabels`, `RecentActivityCardLabels`. |
+| `WorkItemList` | The List (RP-409, the owner's design), on the data list page template: the toolbar (`action`, search, Filters, Need My Action, then Group and Export, List only, and `viewSwitch` at the end), one page of rows in a `TableCard` (`WorkItemTable`) with its checkboxes and bulk bar (n selected, Export selected, Clear selection), Group by (the page's rows), and the `NumberedPager`. Every choice is a new query (`onQueryChange`); `hrefFor(query)` gives a query's URL. `columns` / `onSaveColumns` (the Member's own columns, "Save as my default"), `loadExportRows` (Export: the rows the viewer reads with the query, written as CSV or Excel with the columns shown), `rowActions` (`load` what the viewer may do with a row, `run` it: the ⋯ menu). `labels`: `WorkItemListLabels` (`table` is the Module's name). Pass `board` to show the Kanban under the toolbar instead. |
+| `WorkItemTable` | The List's table: the shown columns in the Member's order, each sortable and dragged by its header, the Document Number (and the checkboxes) pinned at the reading start and the settings / ⋯ column at the end; 48px rows. Cells as the viewer may read them: the Current owner per V14, Created the Creation Date only for the raiser's Participant (`cellText` gives the same as text, for Export). |
+| `ColumnSettings` | The table's gear: the columns in order with switches, Submittal No. and Subject locked, "n / 14 shown", Reset and "Save as my default"; a row moves by dragging or the arrow keys on its handle (`moveColumn`). |
+| `GroupMenu` / `ExportMenu` | The List's Group by menu and Export with its arrow (CSV, Excel). A row's ⋯ menu is the shared `RowActionsMenu` (Open, Edit, Duplicate, Resubmit, Download, then Delete apart), each action shown only where `rowActions.load` says the viewer may take it. Its confirmations are the shared toast (`ToastProvider`, inside `WorkItemList`; `labels.notifications` names the region). |
 | `WorkItemBoard` | The Kanban: a column per Stage in the reading direction, inside each a swimlane per Step of the viewer's own Company and one per other Company by name only (V14), in the viewer's alphabetical order (`lanesInLocale`). A closed column holds the last 30 days with its total (none under a search, which counts only what it shows) and "Show all" (`listHrefFor`). With `onMove`, a card the viewer may act on can be dragged onto a Stage one of its Transitions alone leads to, or moved from its Move menu. `labels`: `WorkItemBoardLabels`. |
-| `WorkItemViewSwitch` | List / Kanban, two links (`hrefFor`), the current one `aria-current="page"`. `labels`: `view`, `list`, `kanban`. |
+| `WorkItemViewSwitch` | List / Kanban, two links with their icons in a segmented capsule (the toolbar's `end`) (`hrefFor`), the current one `aria-current="page"`. `labels`: `view`, `list`, `kanban`. |
 
 ```tsx
-<WorkItemViewSwitch view={view} labels={switchLabels} hrefFor={(v) => hrefIn(v, query)} linkAs={Link} />
 <WorkItemList
   list={list}
   query={query}
@@ -224,7 +276,10 @@ A Module's Work Items and the Member's Projects, as the API returns them. Presen
   labels={listLabels}
   hrefFor={hrefFor}
   itemHref={itemHref}
+  linkAs={Link}
   onQueryChange={(q) => router.push(hrefFor(q))}
+  action={<Link href={newHref} className={buttonVariants()}>{t("newMar")}</Link>}
+  viewSwitch={<WorkItemViewSwitch view={view} labels={switchLabels} hrefFor={(v) => hrefIn(v, query)} linkAs={Link} />}
   board={view === "kanban" ? <WorkItemBoard board={board} query={query} locale={locale} labels={boardLabels} listHrefFor={listHrefFor} itemHref={itemHref} linkAs={Link} onMove={openActionForm} /> : undefined}
 />
 ```

@@ -40,7 +40,7 @@ export function WithdrawInvitationButton({ projectId, invitationId }: { projectI
         {t("withdraw")}
       </Button>
       {error && (
-        <span role="alert" className="text-sm text-danger">
+        <span role="alert" className="text-sm text-danger-fg">
           {t("unavailable")}
         </span>
       )}

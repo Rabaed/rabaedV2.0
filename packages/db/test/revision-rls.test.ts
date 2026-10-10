@@ -482,3 +482,90 @@ describe("a replacement of a rejected item (RP-435-1)", () => {
     }
   });
 });
+
+// RP-409 (the List's row commands; visibility.md scenarios RP-409-1, RP-409-2, RP-409-3).
+describe("the List's row commands (RP-409)", () => {
+  const newDraft = async (title: string) =>
+    (
+      await call<{ work_item_id: string }>(
+        c1.member,
+        sql`select work_item_id from app.create_work_item(
+          ${projectId}::uuid, ${TYPE}, ${title}, app.latest_form_version(${TYPE}), '{"model": "D-1"}'::jsonb,
+          ${electrical}::uuid, ${buildingA}::uuid, now())`,
+      )
+    )[0]!.work_item_id;
+
+  it("discards an original Draft for the raiser's Participant only; then nobody sees it, C1 included (scenario RP-409-3)", async () => {
+    const draft = await newDraft("Gaskets");
+    expect(await call(c1Pm, sql`select app.can_discard_draft(${draft}::uuid) as can`)).toEqual([{ can: true }]);
+    expect(await outcome(k1.member, sql`select app.discard_draft(${draft}::uuid, now()) as outcome`)).toBe("not_found");
+    expect(await outcome(c1.member, sql`select app.discard_draft(${draft}::uuid, now()) as outcome`)).toBe("discarded");
+    for (const who of [c1.member, c1Pm, k1.member]) expect(await everythingOf(who, draft)).toEqual(nothing);
+    // The row stays, with when it was started, for audit.
+    const kept = await migrator.query("select created_at, discarded_at, document_number from work_item where id = $1", [draft]);
+    expect(kept.rows[0]).toMatchObject({ document_number: null });
+    expect(kept.rows[0].created_at).not.toBeNull();
+    expect(kept.rows[0].discarded_at).not.toBeNull();
+  });
+
+  it("never discards an item that was numbered", async () => {
+    expect(await outcome(c1.member, sql`select app.discard_draft(${closed}::uuid, now()) as outcome`)).toBe("not_discardable");
+  });
+
+  it("names only the fields last written by the acting Member's own Participant", async () => {
+    await migrator.query(
+      `update work_item set field_times = jsonb_build_object('model', jsonb_build_object('at', now(), 'by', $2::text),
+        'verdict', jsonb_build_object('at', now(), 'by', $3::text)) where id = $1`,
+      [closed, c1.member, k1.member],
+    );
+    expect(await call(c1Pm, sql`select app.own_written_fields(${closed}::uuid) as key`)).toEqual([{ key: "model" }]);
+    expect(await call(k1.member, sql`select app.own_written_fields(${closed}::uuid) as key`)).toEqual([{ key: "verdict" }]);
+    expect(await call(ow.member, sql`select app.own_written_fields(${closed}::uuid) as key`)).toEqual([]);
+  });
+
+  it("keeps a Duplicate's source on the new Draft, named to C1 only, with no time, and finds it again by its key", async () => {
+    const copy = await newDraft("Fire doors");
+    const key = randomUUID();
+    expect(await outcome(k1.member, sql`select app.record_duplicate(${copy}::uuid, ${closed}::uuid, ${key}::uuid) as outcome`)).toBe("not_found");
+    expect(await outcome(c1.member, sql`select app.record_duplicate(${copy}::uuid, ${closed}::uuid, ${key}::uuid) as outcome`)).toBe("recorded");
+    expect(await call(c1.member, sql`select app.duplicate_of_key(${key}::uuid) as id`)).toEqual([{ id: copy }]);
+    expect(await call(c1Pm, sql`select app.duplicate_of_key(${key}::uuid) as id`)).toEqual([{ id: null }]);
+    expect(await call(k1.member, sql`select app.duplicate_of_key(${key}::uuid) as id`)).toEqual([{ id: null }]);
+    // Recorded once: a second source is refused.
+    expect(await outcome(c1.member, sql`select app.record_duplicate(${copy}::uuid, ${closed}::uuid, ${randomUUID()}::uuid) as outcome`)).toBe("not_found");
+    // A second live Draft for the same request breaks the key.
+    const other = await newDraft("Fire doors again");
+    await expect(call(c1.member, sql`select app.record_duplicate(${other}::uuid, ${closed}::uuid, ${key}::uuid)`)).rejects.toThrow(/duplicate key/);
+    const source = sql`select work_item_id, document_number, subject from app.work_item_duplicated_from(${copy}::uuid)`;
+    for (const who of [c1.member, c1Pm]) expect(await call(who, source)).toEqual([expect.objectContaining({ work_item_id: closed })]);
+    expect(await call(k1.member, source)).toEqual([]);
+    // Nothing of it is an event, so nothing has a time.
+    const events = await migrator.query("select type from work_item_event where work_item_id = $1", [copy]);
+    expect(events.rows).toEqual([{ type: "created" }]);
+    // The app role can't read the columns that keep it.
+    await expect(call(c1.member, sql`select duplicated_from_id from work_item where id = ${copy}`)).rejects.toThrow(/permission denied/);
+    // Once discarded, the key is free again.
+    expect(await outcome(c1.member, sql`select app.discard_draft(${copy}::uuid, now()) as outcome`)).toBe("discarded");
+    expect(await call(c1.member, sql`select app.duplicate_of_key(${key}::uuid) as id`)).toEqual([{ id: null }]);
+    expect(await outcome(c1.member, sql`select app.record_duplicate(${other}::uuid, ${closed}::uuid, ${key}::uuid) as outcome`)).toBe("recorded");
+  });
+
+  it("lets only a Member who may edit a Draft discard it (app.can_save_answers)", async () => {
+    const draft = await newDraft("Seals");
+    for (const who of [c1.member, c1Pm, k1.member]) {
+      const [row] = await call<{ discard: boolean; save: boolean }>(
+        who,
+        sql`select app.can_discard_draft(${draft}::uuid) as discard, app.can_save_answers(${draft}::uuid) as save`,
+      );
+      expect(row!.discard).toBe(row!.save);
+    }
+  });
+
+  it("gives an item's answers as shared, the same to every viewer, and nothing before the first Submit (scenario RP-409-2)", async () => {
+    const shared = async (who: string, id: string) => (await call<{ a: unknown }>(who, sql`select app.work_item_shared_answers(${id}::uuid) as a`))[0]!.a;
+    expect(await shared(c1.member, closed)).toMatchObject({ model: "FD-90" });
+    expect(await shared(k1.member, closed)).toEqual(await shared(c1.member, closed));
+    expect(await shared(c1.member, revision)).toBeNull();
+    expect(await shared(orB.member, closed)).toBeNull();
+  });
+});

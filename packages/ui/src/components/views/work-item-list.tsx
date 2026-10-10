@@ -1,42 +1,51 @@
 "use client";
 
 import {
-  formatDate,
   formatNumber,
   isFilteredWorkItemQuery,
-  isOpenStageCategory,
+  listColumns,
   searchMaxLength,
   withoutFilters,
   stepAgeMinimums,
-  workItemSorts,
+  createdWithinDays,
+  workItemPageSize,
+  workItemPageSizes,
   type BilingualText,
-  offersRevision,
   outcomeLabel,
   type CodeCFilter,
   type FixedChainBucket,
+  type ListColumnKey,
+  type ListColumnLayout,
   type Locale,
   type WorkItemList as WorkItemListData,
-  type WorkItemOutcome,
   type WorkItemQuery,
   type WorkItemRow,
 } from "@rabaed/domain";
-import type { ReactNode } from "react";
-import type { Tone } from "../../tokens/themes.ts";
-import { Button, buttonVariants } from "../button/button.tsx";
+import { useState, type ElementType, type ReactNode } from "react";
+import { ToastProvider, useToast } from "../overlay/toast.tsx";
+import { Button } from "../button/button.tsx";
+import { ColumnSettings, type ColumnSettingsLabels } from "./column-settings.tsx";
+import { groupRows, listGroupings, type ListGrouping } from "./list-groups.ts";
+import { ExportMenu, GroupMenu, RowMenu, type ExportFormat, type ExportScope, type RowAction, type RowMenuLabels, type RowPermissions } from "./list-menus.tsx";
+import { Dialog, DialogClose, DialogContent, DialogFooter } from "../overlay/dialog.tsx";
+import { exportFile, saveFile, shownColumns, wholeTableColumns, type WholeTableLabels } from "./work-item-export.ts";
 import { Badge } from "../data/badge.tsx";
-import { Table, TableBody, TableCell, TableEmpty, TableHead, TableHeader, TableRow } from "../data/table.tsx";
-import { DocNo } from "../doc-no/doc-no.tsx";
 import { cn } from "../../lib/cn.ts";
-import { touchBox } from "../form/control-styles.ts";
-import { Icon, type IconName } from "../icon/icon.tsx";
+import { focusRing } from "../form/control-styles.ts";
 import { Field } from "../form/field.tsx";
 import { Input } from "../form/input.tsx";
-import { Select } from "../form/select.tsx";
-import { Switch } from "../form/switch.tsx";
+import { Avatar } from "../data/avatar.tsx";
+import { Icon } from "../icon/icon.tsx";
+import { FilterMenu, FilterValues, type FilterChoice, type FilterMenuField } from "../list/filter-menu.tsx";
+import { HeaderBadge, poolIcon, tradeChipClass } from "./kanban-card.tsx";
+import { outcomeBadge } from "./work-item-board.tsx";
+import { ListToolbar, ToolbarSearch, ToolbarSwitch } from "../list/list-toolbar.tsx";
+import { NumberedPager } from "../list/numbered-pager.tsx";
+import { TableCard } from "../list/table-card.tsx";
 import { AgeDots } from "../status/age-dots.tsx";
 import { stageColour } from "../status/stage-colour.ts";
-import { StagePill } from "../status/stage-pill.tsx";
-import { WithChip } from "../status/with-chip.tsx";
+import { StageDot } from "../status/stage-pill.tsx";
+import { columnHeader, GroupValue, WorkItemTable } from "./work-item-table.tsx";
 
 /**
  * The List's words, in the viewer's language, from the app's messages: the
@@ -51,9 +60,9 @@ export type WorkItemListLabels = {
   stage: string;
   with: string;
   withMe: string;
-  /** After a Step's name, when nobody in the viewer's Company has picked it up. */
+  /** After a Step's name, when nobody in the viewer's Company has claimed it. */
   notPickedUp: string;
-  /** The "With" filter's choice of every not picked up Step. */
+  /** The "With" filter's choice of every Step not picked up. */
   anyNotPickedUp: string;
   trade: string;
   location: string;
@@ -61,10 +70,6 @@ export type WorkItemListLabels = {
   stepAge: string;
   /** `weeks` is `count` written in the reader's digits; `count` chooses the plural. */
   weeksOrMore: (weeks: string, count: number) => string;
-  sort: string;
-  sortStepAge: string;
-  sortDocumentNumber: string;
-  sortSubmissionDate: string;
   submissionDate: string;
   creationDate: string;
   submittedFrom: string;
@@ -72,20 +77,80 @@ export type WorkItemListLabels = {
   allRevisions: string;
   needMyAction: string;
   clear: string;
-  stageCounts: string;
   /** The table's name: the Module's, e.g. "Submittals". */
   table: string;
-  documentNumber: string;
-  subject: string;
+  /** Each column's header (RP-409, the owner's design). */
+  columns: Record<ListColumnKey, string>;
+  /** A column's sort button, e.g. "Sort by Title". */
+  sortBy: (column: string) => string;
+  /** A letter outcome's pill, e.g. "Code A". */
+  code: (code: string) => string;
+  /** The Revision chip, e.g. "R2". */
+  revision: (n: string) => string;
+  /** The column settings, and the toast once they are saved, e.g. "Saved as your default columns". */
+  columnSettings: ColumnSettingsLabels & { saved: string };
+  /** The header checkbox, e.g. "Select all on this page". */
+  selectAll: string;
+  /** A row's checkbox, e.g. "Select Fire Suppression System". */
+  selectRow: (subject: string) => string;
+  /** The bulk bar's count: `n` is `count` written for the locale. */
+  selected: (n: string, count: number) => string;
+  clearSelection: string;
+  /** Group by (RP-409): the button, its menu's heading, the button once grouped ("Group: Status"), ending it, and a group with no value. */
+  group: string;
+  groupBy: string;
+  groupedBy: (by: string) => string;
+  clearGrouping: string;
+  groupNone: string;
+  /** Export: the button, its arrow's name, the two formats, the bulk bar's button. */
+  export: string;
+  exportOptions: string;
+  csv: string;
+  excel: string;
+  exportSelected: string;
+  /** "Exported 42 submittals (CSV)": `n` is `count` written for the locale. */
+  exported: (n: string, count: number, format: string) => string;
+  /** The toast when the Export stopped at its cap: "Exported the first 5,000 submittals (CSV)". */
+  exportedCapped: (n: string, count: number, format: string) => string;
+  /** The arrow menu's two kinds: "Export what you see", "Export the whole table". */
+  exportShown: string;
+  exportWhole: string;
+  /** The whole table's fields beyond the List's columns. */
+  wholeTable: WholeTableLabels;
+  /** A group header's count: "3 on this page". */
+  groupCount: (n: string, count: number) => string;
+  /** A row's ⋯ menu, and Delete's question. */
+  rowMenu: RowMenuLabels & { deleteTitle: string; deleteBody: (subject: string) => string; cancel: string };
   noNumber: string;
   revisionNoNumber: (revision: string) => string;
   empty: string;
   search: string;
+  /** The search box's placeholder, e.g. "Search this list". */
+  searchPlaceholder: string;
+  /** What the search looks in, read with the box. */
   searchHelp: string;
   noResults: string;
+  /** The Filters button and its panel. */
+  filters: string;
+  clearAll: string;
+  done: string;
+  close: string;
+  /** Names the place its confirmations are read out from, e.g. "Notifications". */
+  notifications: string;
+  /** The filter panel's footer: `n` is `count` written for the locale; `count` chooses the plural. */
+  filtersApplied: (n: string, count: number) => string;
   pages: string;
   firstPage: string;
+  previousPage: string;
   nextPage: string;
+  lastPage: string;
+  rowsPerPage: string;
+  /** "Page 3", when the number of pages can't be said (a search). */
+  page: (page: string) => string;
+  /** "Page 3 of 5". */
+  pageOf: (page: string, pages: string) => string;
+  /** "230 items": `n` is `count` written for the locale; `count` chooses the plural. */
+  items: (n: string, count: number) => string;
   /** The outcome of a cancelled item, as its filter choice and its badge; every other outcome is named by its Type's set (RP-429). */
   cancelled: string;
   /** Before a Dashboard number's filter (its buckets and Code C sub-states), which the toolbar has no control for. */
@@ -94,30 +159,36 @@ export type WorkItemListLabels = {
   buckets: Record<FixedChainBucket, string>;
   /** Each sub-state of the Dashboard's Code C line (codeCState). */
   codeCStates: Record<CodeCFilter, string>;
+  /** The filter panel's fields (RP-410): the Type as "Document type", who holds it, the role holding it, the card's date. */
+  documentType: string;
+  owner: string;
+  role: string;
+  createdDate: string;
+  /** "Last 7 days": `days` is `count` written for the locale. */
+  withinDays: (days: string, count: number) => string;
+  /** A Location level with no name of its own, e.g. "Level 2". */
+  level: (n: string) => string;
+  /** Clears one field of the filter panel. */
+  clearField: string;
+  /** The filter panel's value search. */
+  searchValues: string;
+  noMatches: string;
+  /** The filter panel's name for the Stage field: "Status", as the owner's anatomy has it. */
+  statusField: string;
+  /** The search box's placeholder on the Kanban, e.g. "Search this board". */
+  searchPlaceholderBoard: string;
+  /** The filter panel's field for "Show all Revisions" (RP-410: the toolbar keeps the anatomy's five controls). */
+  revisions: string;
 };
+
+/** The filter fields' names in the other language, shown small after each (the anatomy's bilingual field list). */
+export type WorkItemFilterHints = Partial<Record<"stage" | "trade" | "documentType" | "owner" | "role" | "createdDate" | "stepAge" | "outcome" | "submissionDate" | "revisions", string>>;
 
 /** The labels that take no value, for `t`. */
 type TextLabel = { [K in keyof WorkItemListLabels]: WorkItemListLabels[K] extends string ? K : never }[keyof WorkItemListLabels];
 
 /** Each Type's outcomes on the Project, as the List and the Kanban send them (RP-429). */
 export type ListOutcomes = WorkItemListData["filters"]["outcomes"];
-
-/**
- * An outcome's badge tone, from its place in its Type's set, never its code:
- * one offering a Revision (Code C) is back with the raiser, a positive one
- * succeeded, a negative one didn't.
- */
-function outcomeTone(outcome: ListOutcomes[number] | undefined): Tone {
-  if (!outcome) return "neutral";
-  if (offersRevision(outcome)) return "warning";
-  return outcome.polarity === "positive" ? "success" : "danger";
-}
-
-/** A Review Code badge's icon, chosen like its tone: a refresh for one offering a Revision, else a check or a cross by its polarity (RP-522). */
-function outcomeIcon(outcome: ListOutcomes[number]): IconName {
-  if (offersRevision(outcome)) return "refresh";
-  return outcome.polarity === "positive" ? "circle-check" : "circle-x";
-}
 
 /** Each outcome code of the Types, once (the first Type's name), then Cancelled: the outcome filter's choices. */
 function outcomeOptions(outcomes: ListOutcomes, locale: Locale, cancelled: string) {
@@ -134,11 +205,6 @@ function bucketLabel(bucket: string, outcomes: ListOutcomes, locale: Locale, lab
   return outcome ? outcomeLabel(outcome, locale) : bucket;
 }
 
-const sortLabels = { stepAge: "sortStepAge", documentNumber: "sortDocumentNumber", submissionDate: "sortSubmissionDate" } as const satisfies Record<WorkItemQuery["sort"], TextLabel>;
-
-/** A Select's value for "no filter": Radix Select takes no empty value. */
-const ALL = "all";
-
 export type WorkItemListProps = {
   /** One page of the work item query, as the API returns it. */
   list: WorkItemListData;
@@ -146,326 +212,652 @@ export type WorkItemListProps = {
   query: WorkItemQuery;
   locale: Locale;
   labels: WorkItemListLabels;
-  /** The List's URL for `query`: a filter link, the next page. */
+  /** The List's URL for `query`: a filter link, a page. */
   hrefFor: (query: WorkItemQuery) => string;
   /** An item's page. */
   itemHref: (id: string) => string;
   /** Shows the List for `query` (the web navigates to `hrefFor(query)`). */
   onQueryChange: (query: WorkItemQuery) => void;
+  /** The toolbar's primary action, at its start, e.g. "New Material Submittal". */
+  action?: ReactNode;
+  /** At the toolbar's end: the List / Kanban switch. */
+  viewSwitch?: ReactNode;
+  /** The link component for items and pages, e.g. Next.js `Link`. Defaults to `<a>`. */
+  linkAs?: ElementType;
   /** The Kanban (`WorkItemBoard`), shown under the toolbar in place of the Stage counts, table and pages. */
   board?: ReactNode;
+  /** The filter fields' names in the other language. */
+  hints?: WorkItemFilterHints;
+  /** The table's columns at first, in order, each shown or not; by default the Member's own (`list.columnLayout`), else the design's. */
+  columns?: ListColumnLayout;
+  /** "Save as my default": keeps the columns for the Member; true once kept. Without it, the table has no column settings. */
+  onSaveColumns?: (columns: ListColumnLayout) => Promise<boolean>;
+  /** Export: every row the viewer reads with the List's query (null when it couldn't be read). Without it, the List has no Export. */
+  loadExportRows?: () => Promise<{ items: WorkItemRow[]; capped: boolean } | null>;
+  /** The Project's name, a column of "the whole table". */
+  projectName?: string;
+  /**
+   * The rows' ⋯ menus (RP-409): `load` asks what the viewer may do with a row now; `run` does it,
+   * answering with a toast's words, or nothing. Without it, rows have no menu.
+   */
+  rowActions?: {
+    load: (row: WorkItemRow) => Promise<RowPermissions | null>;
+    run: (row: WorkItemRow, action: RowAction) => Promise<string | null | void>;
+  };
 };
 
 /**
- * The List of a Module's Work Items (spec RP-344): a toolbar of filters and
- * sort with the Need My Action and "Show all Revisions" switches, the Stage counts of the matching
- * items, and one page of them, 50 rows. Every choice is a new query, which the
- * page keeps in its URL. "With" follows V14: the Step and who picked it up in the
- * viewer's own Company, another Company's name only, as the API sends it.
- * The table scrolls sideways on a narrow screen.
+ * The List of a Module's Work Items (spec RP-344), on the data list page
+ * template (RP-409): a toolbar (action, search, Filters, the Need My Action and
+ * "Show all Revisions" switches, the view switch), the Stage counts of the
+ * matching items, and one page of them, 50 rows, in a card with its pager.
+ * Every choice is a new query, which the page keeps in its URL. "With" follows
+ * V14: the Step and who claimed it in the viewer's own Company, another
+ * Company's name only, as the API sends it. The table scrolls sideways in its
+ * own region on a narrow screen.
  */
-export function WorkItemList({ list, query, locale, labels, hrefFor, itemHref, onQueryChange, board }: WorkItemListProps) {
+/**
+ * The table's scroll padding: what has keyboard focus scrolls clear of the pinned header row,
+ * the pinned checkbox column at the start and the pinned settings column at the end (WCAG 2.4.11).
+ */
+const scrollClear = "scroll-pt-[42px] scroll-ps-11 scroll-pe-[60px] pointer-coarse:scroll-pt-12 pointer-coarse:scroll-ps-16";
+
+/** The List, with its own place for the short confirmations it shows (the shared toast). */
+export function WorkItemList(props: WorkItemListProps) {
+  return (
+    <ToastProvider label={props.labels.notifications} closeLabel={props.labels.close}>
+      <WorkItemListBody {...props} />
+    </ToastProvider>
+  );
+}
+
+function WorkItemListBody({
+  list,
+  query,
+  locale,
+  labels,
+  hrefFor,
+  itemHref,
+  onQueryChange,
+  action,
+  viewSwitch,
+  linkAs: Link = "a",
+  board,
+  hints,
+  columns: initialColumns,
+  onSaveColumns,
+  loadExportRows,
+  projectName,
+  rowActions,
+}: WorkItemListProps) {
+  const [deleting, setDeleting] = useState<WorkItemRow | null>(null);
+  const runRowAction = async (row: WorkItemRow, action: RowAction) => {
+    const said = await rowActions?.run(row, action);
+    if (said) setToast(said);
+  };
   const t = (key: TextLabel) => labels[key];
+  const n = (value: number) => formatNumber(value, locale);
+  // A new filter, sort or page size starts again from the first page.
   const change = (next: Partial<WorkItemQuery>) => {
-    const { cursor: _cursor, ...rest } = query;
+    const { cursor: _cursor, page: _page, ...rest } = query;
     onQueryChange({ ...rest, ...next });
   };
-  const filtered = isFilteredWorkItemQuery(query);
-  // The Creation Date is the raiser's Company's alone: the API sends it to no one else, so without one in the rows the column is left out.
-  const showCreationDate = list.items.some((i) => i.creationDate !== null);
-  const columns = showCreationDate ? 11 : 10;
-  const date = (iso: string | null) => (iso === null ? null : formatDate(new Date(iso), locale));
+  // The columns as the Member arranges them now; "Save as my default" keeps them.
+  const [columns, setColumns] = useState(() => initialColumns ?? listColumns(list.columnLayout));
+  const showToast = useToast();
+  const setToast = (title: string) => showToast({ title, tone: "success" });
+  const headerOf = (key: ListColumnKey) => columnHeader(key, labels, list.filters.locations, locale);
+  // Rows chosen on this page (RP-409): a new page, filter or sort starts with none.
+  const pageKey = list.items.map((i) => i.id).join(",");
+  const [selection, setSelection] = useState<{ page: string; ids: ReadonlySet<string> }>({ page: pageKey, ids: new Set() });
+  const selected = selection.page === pageKey ? selection.ids : new Set<string>();
+  const select = (ids: ReadonlySet<string>) => setSelection({ page: pageKey, ids });
+  // Export (RP-409): the rows the viewer reads with these filters (the web reads them through the
+  // List's own read; under a search only the pages read so far), or the rows chosen on this page;
+  // the columns shown, in their order.
+  const [exporting, setExporting] = useState(false);
+  const exportRows = async (format: ExportFormat, scope: ExportScope, rows: () => Promise<{ items: WorkItemRow[]; capped: boolean } | null>) => {
+    setExporting(true);
+    try {
+      const got = await rows();
+      if (got === null) return;
+      const context = { locale, labels, filters: list.filters, headerOf, name: labels.table };
+      const exportColumns = scope === "shown" ? shownColumns(columns, context) : wholeTableColumns(context, labels.wholeTable, projectName ?? "");
+      saveFile(exportFile(got.items, exportColumns, format, context));
+      const formatName = format === "csv" ? t("csv") : t("excel");
+      const count = got.items.length;
+      setToast(got.capped ? labels.exportedCapped(n(count), count, formatName) : labels.exported(n(count), count, formatName));
+    } finally {
+      setExporting(false);
+    }
+  };
+  const exportMenu = !board && loadExportRows && (
+    <ExportMenu
+      busy={exporting}
+      onExport={(format, scope) => void exportRows(format, scope, loadExportRows)}
+      labels={{ export: t("export"), options: t("exportOptions"), shown: t("exportShown"), whole: t("exportWhole"), csv: t("csv"), excel: t("excel") }}
+    />
+  );
+  const bulkActions: ReactNode = (
+    <Button
+      variant="secondary"
+      size="sm"
+      disabled={exporting}
+      onClick={() => void exportRows("csv", "shown", async () => ({ items: list.items.filter((i) => selected.has(i.id)), capped: false }))}
+    >
+      <Icon name="file-download" />
+      {t("exportSelected")}
+    </Button>
+  );
 
-  return (
-    <div className="space-y-4">
-      <section aria-label={t("toolbar")} className="space-y-3">
-        <SearchBox
-          // A new query (back button, a cleared filter) shows its own words.
-          key={query.q ?? ""}
-          value={query.q}
-          label={t("search")}
-          placeholder={t("searchHelp")}
-          onSearch={(q) => change({ q })}
+  // Group by (RP-409): the page's rows under a header per value, each folded on a click.
+  const [groupBy, setGroupBy] = useState<ListGrouping | null>(null);
+  const [folded, setFolded] = useState<ReadonlySet<string>>(new Set());
+  const groups =
+    groupBy === null
+      ? undefined
+      : groupRows(list.items, groupBy, { stages: list.stages, ...list.filters }, locale, labels).map((g) => ({ ...g, collapsed: folded.has(g.key) }));
+  const groupMenu = !board && (
+    <GroupMenu
+      choices={listGroupings.map((key) => ({ key, label: headerOf(key) }))}
+      value={groupBy}
+      onChange={(by) => {
+        setGroupBy(by);
+        setFolded(new Set());
+      }}
+      labels={{ group: t("group"), groupBy: t("groupBy"), groupedBy: labels.groupedBy, clear: t("clearGrouping") }}
+    />
+  );
+  const filtered = isFilteredWorkItemQuery(query);
+
+  const valueLabels = { clear: t("clearField"), search: t("searchValues"), noMatches: t("noMatches") };
+  /** A field of several values, any of them (RP-410). */
+  const many = (
+    key: "type" | "stage" | "owner" | "role" | "trade" | "outcome",
+    label: string,
+    hint: string | undefined,
+    group: string,
+    options: FilterChoice[],
+  ): FilterMenuField => ({
+    key,
+    label,
+    hint,
+    group,
+    count: query[key].length,
+    content: (
+      <FilterValues
+        label={label}
+        hint={hint}
+        values={query[key]}
+        choices={options}
+        labels={valueLabels}
+        onChange={(values) => change({ [key]: values })}
+      />
+    ),
+  });
+  // The Kanban has no Drafts column, so its Stage field leaves Drafts out; the List keeps them (RP-410).
+  const stageChoices = (board ? list.stages.filter((s) => s.category !== "draft") : list.stages).map((s) => ({
+    value: s.key,
+    label: s.name[locale],
+    mark: <StageDot stage={stageColour(s)} />,
+  }));
+  // Zone, Building, Floor…: one field per level of the Location tree, its values any of them; levels together, all of them.
+  const levels = locationLevels(list.filters.locations, locale, labels);
+  const fields: FilterMenuField[] = [
+    // The filter panel names the Stage "Status" and the Step "Role", as the owner's anatomy does (2026-10-10).
+    many("stage", t("statusField"), hints?.stage, "workflow", stageChoices),
+    many(
+      "trade",
+      t("trade"),
+      hints?.trade,
+      "workflow",
+      list.filters.trades.map((v) => ({
+        value: v.id,
+        text: `${v.name[locale]} ${v.code}`,
+        label: (
+          <span className={cn("inline-flex h-5 items-center rounded-[6px] px-1.5 text-notes font-semibold", tradeChipClass(v.code))}>
+            {v.name[locale]} (<bdi translate="no">{v.code}</bdi>)
+          </span>
+        ),
+      })),
+    ),
+    many(
+      "type",
+      t("documentType"),
+      hints?.documentType,
+      "workflow",
+      list.filters.types.map((v) => ({
+        value: v.code,
+        text: `${v.code} ${v.name[locale]}`,
+        label: v.name[locale],
+        mark: (
+          <span translate="no" className="font-ui text-notes font-bold text-muted">
+            {v.code}
+          </span>
+        ),
+      })),
+    ),
+    // My own Company's people, my pool's Steps not picked up, and another Company by its name only (V14).
+    many("owner", t("owner"), hints?.owner, "workflow", [
+      ...list.filters.owners.map((o) => ({ value: `member:${o.memberId}`, label: o.name[locale], mark: <Avatar name={o.name[locale]} size="sm" decorative className="size-5" /> })),
+      {
+        value: "not_picked_up",
+        label: t("anyNotPickedUp"),
+        mark: (
+          <span className="inline-flex size-5 items-center justify-center rounded-full border border-dashed border-border-strong text-muted">
+            <Icon name={poolIcon} size={11} />
+          </span>
+        ),
+      },
+      ...list.filters.with.companies.map((c) => ({
+        value: `company:${c.participantId}`,
+        label: c.name[locale],
+        mark: <Avatar name={c.name[locale]} kind="company" size="sm" decorative className="size-5" />,
+      })),
+    ]),
+    // My own Company's Steps only: another Company is one lane, never its roles (V5).
+    many(
+      "role",
+      t("role"),
+      hints?.role,
+      "workflow",
+      list.filters.with.steps.map((s, i) => ({ value: s.key, label: s.name[locale], mark: <span className={cn("size-2 rounded-full", roleDots[i % roleDots.length])} /> })),
+    ),
+    ...levels.map(
+      (level): FilterMenuField => ({
+        key: `location-${level.key}`,
+        label: level.label,
+        hint: level.hint,
+        group: "place",
+        count: query.location.filter((id) => level.ids.has(id)).length,
+        content: (
+          <FilterValues
+            label={level.label}
+            hint={level.hint}
+            values={query.location.filter((id) => level.ids.has(id))}
+            choices={level.choices}
+            labels={valueLabels}
+            onChange={(values) => change({ location: [...query.location.filter((id) => !level.ids.has(id)), ...values] })}
+          />
+        ),
+      }),
+    ),
+    {
+      key: "createdDate",
+      label: t("createdDate"),
+      hint: hints?.createdDate,
+      group: "time",
+      count: query.createdWithin === undefined ? 0 : 1,
+      content: (
+        <FilterValues
+          label={t("createdDate")}
+          hint={hints?.createdDate}
+          multiple={false}
+          values={query.createdWithin === undefined ? [] : [String(query.createdWithin)]}
+          choices={createdWithinDays.map((days) => ({ value: String(days), label: labels.withinDays(n(days), days) }))}
+          labels={valueLabels}
+          onChange={([v]) => change({ createdWithin: v ? (Number(v) as WorkItemQuery["createdWithin"]) : undefined })}
         />
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <FilterSelect
-            label={t("type")}
-            allLabel={t("all")}
-            value={query.type[0]}
-            options={list.filters.types.map((v) => ({ value: v.code, label: v.name[locale] }))}
-            onChange={(v) => change({ type: v ? [v] : [] })}
-          />
-          <FilterSelect
-            label={t("stage")}
-            allLabel={t("all")}
-            value={query.stage[0]}
-            options={list.stages.map((s) => ({ value: s.key, label: s.name[locale] }))}
-            onChange={(v) => change({ stage: v ? [v] : [] })}
-          />
-          <FilterSelect
-            label={t("with")}
-            allLabel={t("all")}
-            value={query.with[0]}
-            options={[
-              { value: "me", label: t("withMe") },
-              { value: "not_picked_up", label: t("anyNotPickedUp") },
-              ...list.filters.with.steps.map((s) => ({ value: `step:${s.key}`, label: s.name[locale] })),
-              ...list.filters.with.companies.map((c) => ({ value: `company:${c.participantId}`, label: c.name[locale] })),
-            ]}
-            onChange={(v) => change({ with: v ? [v as WorkItemQuery["with"][number]] : [] })}
-          />
-          <FilterSelect
-            label={t("trade")}
-            allLabel={t("all")}
-            value={query.trade[0]}
-            options={list.filters.trades.map((v) => ({ value: v.id, label: v.name[locale] }))}
-            onChange={(v) => change({ trade: v ? [v] : [] })}
-          />
-          <FilterSelect
-            label={t("location")}
-            allLabel={t("all")}
-            value={query.location[0]}
-            options={locationOptions(list.filters.locations, locale)}
-            onChange={(v) => change({ location: v ? [v] : [] })}
-          />
-          <FilterSelect
-            label={t("outcome")}
-            allLabel={t("all")}
-            value={query.outcome[0]}
-            options={outcomeOptions(list.filters.outcomes, locale, labels.cancelled)}
-            onChange={(v) => change({ outcome: v ? [v as WorkItemOutcome] : [] })}
-          />
-          <FilterSelect
-            label={t("stepAge")}
-            allLabel={t("all")}
-            value={query.stepAgeMin === undefined ? undefined : String(query.stepAgeMin)}
-            options={stepAgeMinimums.map((n) => ({ value: String(n), label: labels.weeksOrMore(formatNumber(n, locale), n) }))}
-            onChange={(v) => change({ stepAgeMin: v ? (Number(v) as WorkItemQuery["stepAgeMin"]) : undefined })}
-          />
+      ),
+    },
+    {
+      key: "stepAge",
+      label: t("stepAge"),
+      hint: hints?.stepAge,
+      group: "time",
+      count: query.stepAgeMin === undefined ? 0 : 1,
+      content: (
+        <FilterValues
+          label={t("stepAge")}
+          hint={hints?.stepAge}
+          multiple={false}
+          values={query.stepAgeMin === undefined ? [] : [String(query.stepAgeMin)]}
+          choices={stepAgeMinimums.map((weeks) => ({
+            value: String(weeks),
+            label: labels.weeksOrMore(n(weeks), weeks),
+            mark: <AgeDots weeks={weeks} locale={locale} />,
+          }))}
+          labels={valueLabels}
+          onChange={([v]) => change({ stepAgeMin: v ? (Number(v) as WorkItemQuery["stepAgeMin"]) : undefined })}
+        />
+      ),
+    },
+    many("outcome", t("outcome"), hints?.outcome, "more", outcomeOptions(list.filters.outcomes, locale, labels.cancelled)),
+    {
+      // Every visible Revision, not only the latest of each chain: how the rows are shown, so not a filter of the query.
+      key: "revisions",
+      label: t("revisions"),
+      hint: hints?.revisions,
+      group: "more",
+      count: query.allRevisions ? 1 : 0,
+      content: (
+        <FilterValues
+          label={t("revisions")}
+          hint={hints?.revisions}
+          values={query.allRevisions ? ["all"] : []}
+          choices={[{ value: "all", label: t("allRevisions") }]}
+          labels={valueLabels}
+          onChange={(values) => change({ allRevisions: values.includes("all") })}
+        />
+      ),
+    },
+    {
+      key: "submissionDate",
+      label: t("submissionDate"),
+      hint: hints?.submissionDate,
+      group: "more",
+      count: (query.submittedFrom ? 1 : 0) + (query.submittedTo ? 1 : 0),
+      content: (
+        <div className="flex flex-col gap-3 px-[14px] py-1">
           <Field label={t("submittedFrom")}>
             <Input type="date" value={query.submittedFrom ?? ""} max={query.submittedTo} onChange={(e) => change({ submittedFrom: e.target.value || undefined })} />
           </Field>
           <Field label={t("submittedTo")}>
             <Input type="date" value={query.submittedTo ?? ""} min={query.submittedFrom} onChange={(e) => change({ submittedTo: e.target.value || undefined })} />
           </Field>
-          <Field label={t("sort")}>
-            <Select
-              value={query.sort}
-              options={workItemSorts.map((s) => ({ value: s, label: t(sortLabels[s]) }))}
-              onValueChange={(v) => change({ sort: v as WorkItemQuery["sort"] })}
-            />
-          </Field>
         </div>
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
-            <Field label={t("needMyAction")} layout="inline">
-              <Switch checked={query.needMyAction} onCheckedChange={(on) => change({ needMyAction: on })} />
-            </Field>
-            <Field label={t("allRevisions")} layout="inline">
-              <Switch checked={query.allRevisions} onCheckedChange={(on) => change({ allRevisions: on })} />
-            </Field>
-            {/* A Dashboard number's filter, which the toolbar has no control for: its buckets and Code C sub-states. */}
-            {query.bucket.length + query.codeC.length > 0 && (
-              <Badge tone="info" data-testid="bucket-filter">
-                {t("dashboardFigure")}:{" "}
-                {[
-                  ...query.bucket.map((bucket) => bucketLabel(bucket, list.filters.outcomes, locale, labels)),
-                  ...query.codeC.map((codeC) => labels.codeCStates[codeC]),
-                ].join(", ")}
-              </Badge>
+      ),
+    },
+  ];
+
+  return (
+    <div className="flex min-w-0 flex-col gap-4">
+      <ListToolbar
+        label={t("toolbar")}
+        end={
+          <>
+            {groupMenu}
+            {exportMenu}
+            {viewSwitch}
+          </>
+        }
+        className={board ? "gap-3" : "gap-1.5"}
+      >
+        {action}
+        <ToolbarSearch
+          tall
+          // A new query (back button, a cleared filter) shows its own words.
+          key={query.q ?? ""}
+          value={query.q}
+          label={t("search")}
+          placeholder={board ? t("searchPlaceholderBoard") : t("searchPlaceholder")}
+          maxLength={searchMaxLength}
+          description={t("searchHelp")}
+          onSearch={(q) => change({ q })}
+          // 240px as the design draws it from 1440 wide; narrower below (without the "/" hint), so the row stays one with a filter or grouping on.
+          hintWide={!board}
+          className={board ? undefined : cn(filtered || groupBy !== null ? "sm:w-[148px]" : "sm:w-[196px]", "min-[1440px]:w-60")}
+        />
+        <span className="inline-flex shrink-0 items-center">
+        <FilterMenu
+          // With filters on, the button carries a small × that clears them (search and Need My Action too), so the toolbar keeps one row.
+          triggerClassName={filtered ? "rounded-e-none" : undefined}
+          fields={fields}
+          labels={{ filters: t("filters"), clearAll: t("clearAll"), done: t("done"), close: t("close"), applied: labels.filtersApplied, number: n }}
+          onClearAll={() =>
+            change({
+              type: [],
+              stage: [],
+              with: [],
+              owner: [],
+              role: [],
+              trade: [],
+              location: [],
+              outcome: [],
+              stepAgeMin: undefined,
+              createdWithin: undefined,
+              submittedFrom: undefined,
+              submittedTo: undefined,
+              allRevisions: false,
+            })
+          }
+        />
+        {filtered && (
+          <Link
+            href={hrefFor(withoutFilters(query))}
+            aria-label={t("clear")}
+            title={t("clear")}
+            className={cn(
+              "-ms-px inline-flex h-[34px] w-7 items-center justify-center rounded-e-sm border border-control-border bg-surface text-muted hover:bg-hover hover:text-text pointer-coarse:min-h-11 pointer-coarse:w-11",
+              focusRing,
             )}
-          </div>
-          {filtered && (
-            <a href={hrefFor(withoutFilters(query))} className={buttonVariants({ variant: "ghost", size: "sm" })}>
-              {t("clear")}
-            </a>
-          )}
-        </div>
-      </section>
+          >
+            <Icon name="x" size={16} />
+          </Link>
+        )}
+        </span>
+        <ToolbarSwitch label={t("needMyAction")} checked={query.needMyAction} onCheckedChange={(on) => change({ needMyAction: on })} />
+        {/* A Dashboard number's filter, which the toolbar has no control for: its buckets and Code C sub-states. */}
+        {query.bucket.length + query.codeC.length > 0 && (
+          <Badge tone="info" data-testid="bucket-filter">
+            {t("dashboardFigure")}:{" "}
+            {[
+              ...query.bucket.map((bucket) => bucketLabel(bucket, list.filters.outcomes, locale, labels)),
+              ...query.codeC.map((codeC) => labels.codeCStates[codeC]),
+            ].join(", ")}
+          </Badge>
+        )}
+      </ListToolbar>
 
-      {board ?? <>
-      <ul aria-label={t("stageCounts")} className="flex flex-wrap gap-2" data-testid="stage-counts">
-        {list.stages.map((s) => (
-          <li key={s.key}>
-            <StagePill stage={stageColour(s)} label={s.name[locale]} count={s.count} locale={locale} />
-          </li>
-        ))}
-      </ul>
-
-      <Table label={t("table")}>
-        <TableHeader>
-          <TableRow>
-            <TableHead>{t("documentNumber")}</TableHead>
-            <TableHead>{t("subject")}</TableHead>
-            <TableHead>{t("type")}</TableHead>
-            <TableHead>{t("stage")}</TableHead>
-            <TableHead>{t("with")}</TableHead>
-            <TableHead>{t("stepAge")}</TableHead>
-            <TableHead>{t("trade")}</TableHead>
-            <TableHead>{t("location")}</TableHead>
-            <TableHead>{t("outcome")}</TableHead>
-            <TableHead>{t("submissionDate")}</TableHead>
-            {showCreationDate && <TableHead>{t("creationDate")}</TableHead>}
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {list.items.length === 0 ? (
-            <TableEmpty colSpan={columns}>{t(query.q === undefined ? "empty" : "noResults")}</TableEmpty>
-          ) : (
-            list.items.map((item) => (
-              <TableRow key={item.id}>
-                <TableCell className="whitespace-nowrap">
-                  {/* A Revision's number carries its " Rev n"; one with no number yet says which Revision it is. */}
-                  {item.documentNumber ? (
-                    <DocNo value={item.documentNumber} locale={locale} />
-                  ) : (
-                    <span className="text-muted">
-                      {item.revisionNo > 0 ? labels.revisionNoNumber(formatNumber(item.revisionNo, locale)) : t("noNumber")}
-                    </span>
-                  )}
-                </TableCell>
-                <TableCell className="min-w-48">
-                  <a href={itemHref(item.id)} className={cn("font-medium text-primary underline underline-offset-4", touchBox)}>
-                    {item.title}
-                  </a>
-                </TableCell>
-                <TableCell className="whitespace-nowrap">{item.type.code}</TableCell>
-                <TableCell>
-                  <StagePill stage={stageColour(item.stage)} label={item.stage.name[locale]} locale={locale} />
-                </TableCell>
-                <TableCell className="whitespace-nowrap">
-                  <WithCell row={item} locale={locale} notPickedUp={t("notPickedUp")} />
-                </TableCell>
-                <TableCell>
-                  {/* A closed item doesn't age. */}
-                  {isOpenStageCategory(item.stage.category) && item.stepAgeWeeks !== null ? <AgeDots weeks={item.stepAgeWeeks} locale={locale} /> : null}
-                </TableCell>
-                <TableCell className="whitespace-nowrap">{item.trade.name[locale]}</TableCell>
-                <TableCell className="whitespace-nowrap">{item.location?.name[locale]}</TableCell>
-                <TableCell>
-                  {item.outcome ? (
-                    <Outcome outcome={item.outcome} typeCode={item.type.code} outcomes={list.filters.outcomes} locale={locale} cancelled={labels.cancelled} />
-                  ) : null}
-                </TableCell>
-                <TableCell className="whitespace-nowrap">{date(item.submissionDate)}</TableCell>
-                {showCreationDate && <TableCell className="whitespace-nowrap">{date(item.creationDate)}</TableCell>}
-              </TableRow>
-            ))
+      {board ?? (
+        <>
+          <TableCard footer={<WorkItemPager list={list} query={query} labels={labels} locale={locale} hrefFor={hrefFor} linkAs={Link} onQueryChange={change} />}>
+            {selected.size > 0 && (
+              // The bulk bar: what can be done with the rows chosen on this page.
+              <div className="flex flex-wrap items-center gap-2.5 border-b border-border-subtle bg-brand-tint px-[14px] py-2 text-[13px] font-semibold text-brand-fg">
+                <span role="status">{labels.selected(n(selected.size), selected.size)}</span>
+                <span className="flex-1" />
+                {bulkActions}
+                <Button variant="ghost" size="sm" onClick={() => select(new Set())}>
+                  {labels.clearSelection}
+                </Button>
+              </div>
+            )}
+            {/* The table scrolls sideways (and, on a wide screen, down) in its own region, so the page never does. */}
+            <div role="region" aria-label={t("table")} tabIndex={0} className={cn("relative min-h-64 overflow-auto lg:max-h-[calc(100dvh-17rem)]", scrollClear, focusRing)}>
+              <WorkItemTable
+                rows={list.items}
+                filters={list.filters}
+                columns={columns}
+                query={query}
+                locale={locale}
+                labels={{ ...labels, empty: t(query.q === undefined ? "empty" : "noResults") }}
+                onSort={(sort) => change(sort)}
+                itemHref={itemHref}
+                linkAs={Link}
+                onColumnsChange={onSaveColumns ? setColumns : undefined}
+                selection={{ selected, onChange: select, selectAll: labels.selectAll, selectRow: labels.selectRow }}
+                groups={groups}
+                rowEnd={
+                  rowActions &&
+                  ((row) => (
+                    <RowMenu
+                      subject={row.title}
+                      load={() => rowActions.load(row)}
+                      onAction={(action) => (action === "delete" ? setDeleting(row) : void runRowAction(row, action))}
+                      labels={labels.rowMenu}
+                    />
+                  ))
+                }
+                groupHeader={(group, colSpan) => (
+                  <tr key={`group:${group.key}`}>
+                    <td colSpan={colSpan} className="h-11 border-b border-border-subtle bg-surface-subtle px-0">
+                      <button
+                        type="button"
+                        aria-expanded={!group.collapsed}
+                        onClick={() =>
+                          setFolded((now) => {
+                            const next = new Set(now);
+                            if (next.has(group.key)) next.delete(group.key);
+                            else next.add(group.key);
+                            return next;
+                          })
+                        }
+                        className={cn("sticky start-0 flex h-11 w-max items-center gap-2.5 ps-4 pe-3 hover:text-text", focusRing)}
+                      >
+                        <Icon name={group.collapsed ? "chevron-right" : "chevron-down"} size={16} className="text-muted" />
+                        {/* The value in its own pill (a Status pill, a Discipline chip…), as its rows show it. */}
+                        {group.label === null || groupBy === null ? (
+                          <span className="text-[13px] text-muted">{t("groupNone")}</span>
+                        ) : (
+                          <GroupValue column={groupBy} row={group.rows[0]!} locale={locale} labels={labels} filters={list.filters} />
+                        )}
+                        <span className="text-[13px] text-muted">{labels.groupCount(n(group.rows.length), group.rows.length)}</span>
+                      </button>
+                    </td>
+                  </tr>
+                )}
+                settings={
+                  onSaveColumns && (
+                    <ColumnSettings
+                      columns={columns}
+                      headerOf={headerOf}
+                      labels={labels.columnSettings}
+                      number={n}
+                      onChange={setColumns}
+                      onReset={() => setColumns(listColumns(null))}
+                      onSave={() => {
+                        void onSaveColumns(columns).then((saved) => {
+                          if (saved) setToast(labels.columnSettings.saved);
+                        });
+                      }}
+                    />
+                  )
+                }
+              />
+            </div>
+          </TableCard>
+          {rowActions && (
+            // Delete asks first: a Draft deleted is gone for everyone.
+            <Dialog open={deleting !== null} onOpenChange={(open) => !open && setDeleting(null)}>
+              <DialogContent title={labels.rowMenu.deleteTitle} description={deleting ? labels.rowMenu.deleteBody(deleting.title) : undefined} closeLabel={t("close")}>
+                <DialogFooter>
+                  <DialogClose asChild>
+                    <Button variant="secondary">{labels.rowMenu.cancel}</Button>
+                  </DialogClose>
+                  <Button
+                    variant="danger"
+                    onClick={() => {
+                      const row = deleting;
+                      setDeleting(null);
+                      if (row) void runRowAction(row, "delete");
+                    }}
+                  >
+                    <Icon name="trash" />
+                    {labels.rowMenu.delete}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
           )}
-        </TableBody>
-      </Table>
-
-      {(query.cursor !== undefined || list.nextCursor !== null) && (
-        <nav aria-label={t("pages")} className="flex flex-wrap justify-end gap-2">
-          {query.cursor !== undefined && (
-            <a href={hrefFor({ ...query, cursor: undefined })} className={buttonVariants({ variant: "secondary", size: "sm" })}>
-              {t("firstPage")}
-            </a>
-          )}
-          {list.nextCursor !== null && (
-            <a href={hrefFor({ ...query, cursor: list.nextCursor })} className={buttonVariants({ variant: "secondary", size: "sm" })}>
-              {t("nextPage")}
-            </a>
-          )}
-        </nav>
+        </>
       )}
-      </>}
     </div>
   );
 }
 
 /**
- * Search (RP-347): words to find in the Project's items the viewer sees, by
- * Document Number, Subject, Type, Trade, Location or the raiser's Company,
- * never in answers or Documents. Asked for on Enter or the button; an empty
- * box asks for no search.
+ * The List's numbered pager (RP-409): "Page x of y · n submittals" from the Stage counts.
+ * Under a search there is no total ("Search and filters": a search counts no more than its
+ * page), so the line says the page alone, there is no last page, and the numbers grow as the
+ * pages are read.
  */
-function SearchBox({
-  value,
-  label,
-  placeholder,
-  onSearch,
-}: {
-  value: string | undefined;
-  label: string;
-  placeholder: string;
-  onSearch: (q: string | undefined) => void;
-}) {
+function WorkItemPager({
+  list,
+  query,
+  labels,
+  locale,
+  hrefFor,
+  linkAs,
+  onQueryChange,
+}: Pick<WorkItemListProps, "list" | "query" | "labels" | "locale" | "hrefFor" | "linkAs"> & { onQueryChange: (next: Partial<WorkItemQuery>) => void }) {
+  const n = (value: number) => formatNumber(value, locale);
+  const page = list.page?.number ?? query.page ?? 1;
+  const size = list.page?.size ?? query.pageSize ?? workItemPageSize;
+  const total = query.q === undefined ? list.stages.reduce((sum, s) => sum + s.count, 0) : null;
+  const lastPage = total === null ? null : Math.max(1, Math.ceil(total / size));
+  const summary = [lastPage === null ? labels.page(n(page)) : labels.pageOf(n(page), n(lastPage)), total === null ? null : labels.items(n(total), total)]
+    .filter((p) => p !== null)
+    .join(" · ");
   return (
-    <form
-      role="search"
-      className="flex items-end gap-2"
-      onSubmit={(event) => {
-        event.preventDefault();
-        const words = String(new FormData(event.currentTarget).get("q") ?? "").trim();
-        onSearch(words === "" ? undefined : words);
+    <NumberedPager
+      page={page}
+      lastPage={lastPage}
+      hasNext={list.page?.hasNext ?? (lastPage !== null && page < lastPage)}
+      pageSize={size}
+      pageSizes={workItemPageSizes}
+      summary={summary}
+      labels={{
+        pages: labels.pages,
+        rowsPerPage: labels.rowsPerPage,
+        first: labels.firstPage,
+        previous: labels.previousPage,
+        next: labels.nextPage,
+        last: labels.lastPage,
+        page: labels.page,
       }}
-    >
-      <Field label={label} className="min-w-0 flex-1">
-        <Input type="search" name="q" defaultValue={value ?? ""} placeholder={placeholder} maxLength={searchMaxLength} />
-      </Field>
-      <Button type="submit" variant="secondary">
-        {label}
-      </Button>
-    </form>
+      number={n}
+      hrefFor={(p) => hrefFor({ ...query, page: p })}
+      onPageSize={(pageSize) => onQueryChange({ pageSize: pageSize as WorkItemQuery["pageSize"] })}
+      linkAs={linkAs}
+    />
   );
 }
 
-function FilterSelect({
-  label,
-  allLabel,
-  value,
-  options,
-  onChange,
-}: {
-  label: string;
-  allLabel: string;
-  value: string | undefined;
-  options: { value: string; label: ReactNode }[];
-  onChange: (value: string | undefined) => void;
-}) {
-  return (
-    <Field label={label}>
-      <Select
-        value={value ?? ALL}
-        options={[{ value: ALL, label: allLabel }, ...options]}
-        onValueChange={(v) => onChange(v === ALL ? undefined : v)}
-      />
-    </Field>
-  );
-}
+// The Role field's dots, as the board's lanes have them: my own Steps in turn.
+const roleDots = ["bg-stage-internal-dot", "bg-stage-pending-dot", "bg-trade-el-fg", "bg-stage-approved-dot"];
 
-/** Each Location with the ones above it, so it reads in place (Tower 1 › Building A). */
-function locationOptions(locations: WorkItemListData["filters"]["locations"], locale: Locale) {
+/**
+ * The Location tree's levels (Zone, Building, Floor…), each a filter field named
+ * by its level, its values the Locations at that level, each with the ones above
+ * it after its name so it reads in place (Floor 1 · Building 1).
+ */
+function locationLevels(locations: WorkItemListData["filters"]["locations"], locale: Locale, labels: WorkItemListLabels) {
   const byId = new Map(locations.map((l) => [l.id, l]));
-  const path = (id: string | null, seen = new Set<string>()): BilingualText[] => {
+  const above = (id: string | null, seen = new Set<string>()): BilingualText[] => {
     const l = id ? byId.get(id) : undefined;
     if (!l || seen.has(l.id)) return [];
     seen.add(l.id);
-    return [...path(l.parentId, seen), l.name];
+    return [...above(l.parentId, seen), l.name];
   };
-  return locations
-    .map((l) => ({ value: l.id, label: path(l.id).map((n) => n[locale]).join(" › ") }))
-    .sort((a, b) => a.label.localeCompare(b.label, locale));
-}
-
-/** "With", as V14 has it. */
-function WithCell({ row, locale, notPickedUp }: { row: WorkItemRow; locale: Locale; notPickedUp: string }) {
-  const w = row.with;
-  if (!w) return null;
-  if (w.kind === "company") return <WithChip kind="company" inViewerCompany={false} companyName={w.companyName[locale]} />;
-  if (!w.holder) {
-    return <WithChip kind="pool" inViewerCompany companyName={w.companyName[locale]} stepName={w.step.name[locale]} notPickedUpLabel={notPickedUp} />;
-  }
-  return <WithChip kind="person" inViewerCompany name={w.holder.name[locale]} companyName={w.companyName[locale]} />;
+  // A level is its name (its depth where it has none), as the API groups it, so an uneven tree
+  // (a Floor right under a Zone) still puts every Floor in one field; levels in the order they first appear.
+  const levelOf = (l: (typeof locations)[number]) => (l.levelName ? `name:${l.levelName.en}` : `depth:${l.depth}`);
+  const firstDepth = new Map<string, number>();
+  for (const l of locations) firstDepth.set(levelOf(l), Math.min(firstDepth.get(levelOf(l)) ?? l.depth, l.depth));
+  const levels = [...firstDepth].sort((a, b) => a[1] - b[1]);
+  return levels.map(([key, depth]) => {
+    const at = locations.filter((l) => levelOf(l) === key);
+    const named = at.find((l) => l.levelName !== null)?.levelName;
+    return {
+      key,
+      label: named ? named[locale] : labels.level(formatNumber(depth, locale)),
+      // The level's name in the other language, as the other fields have it.
+      hint: named ? named[locale === "en" ? "ar" : "en"] : undefined,
+      ids: new Set(at.map((l) => l.id)),
+      choices: at
+        .map((l): FilterChoice => {
+          const path = above(l.parentId).map((p) => p[locale]);
+          const where = path.reverse().join(" · ");
+          return {
+            value: l.id,
+            text: `${l.name[locale]} ${where}`,
+            label: (
+              <span className="flex flex-wrap items-baseline gap-x-1.5">
+                <span>{l.name[locale]}</span>
+                {where && <span className="text-caption text-muted">{where}</span>}
+              </span>
+            ),
+          };
+        })
+        .sort((a, b) => (a.text ?? "").localeCompare(b.text ?? "", locale)),
+    };
+  });
 }
 
 /**
- * An item's outcome badge, the same on the List and the Kanban (RP-429): named
- * and coloured from its Type's outcome set, never from fixed codes. A letter
- * code (a Review Code) shows "Code A" with its icon, in Arabic too and the whole
- * badge left to right (the card anatomy, RP-522), its name for screen readers
- * and on hover; any other outcome shows its name.
+ * An item's outcome pill outside the List and the Kanban (the item page's Issued
+ * Code, RP-522): the same pill they show (`outcomeBadge`), "Code A" with its icon.
  */
 export function Outcome({
   outcome,
@@ -474,31 +866,11 @@ export function Outcome({
   locale,
   cancelled,
 }: {
-  outcome: WorkItemOutcome;
+  outcome: NonNullable<WorkItemRow["outcome"]>;
   typeCode: string;
   outcomes: ListOutcomes;
   locale: Locale;
   cancelled: string;
 }) {
-  const found = outcomes.find((o) => o.type === typeCode && o.code === outcome);
-  if (!found)
-    return (
-      <Badge tone="neutral" data-outcome={outcome}>
-        {outcome === "cancelled" ? cancelled : outcome}
-      </Badge>
-    );
-  const label = outcomeLabel(found, locale);
-  if (found.code.length > 3)
-    return (
-      <Badge tone={outcomeTone(found)} data-outcome={found.code}>
-        {label}
-      </Badge>
-    );
-  return (
-    <Badge tone={outcomeTone(found)} title={label} data-outcome={found.code} dir="ltr" translate="no">
-      <Icon name={outcomeIcon(found)} size={14} />
-      <span aria-hidden="true">Code {found.code}</span>
-      <span className="sr-only">{label}</span>
-    </Badge>
-  );
+  return <HeaderBadge badge={outcomeBadge(outcome, typeCode, outcomes, locale, { cancelled, code: (code) => `Code ${code}` })} />;
 }

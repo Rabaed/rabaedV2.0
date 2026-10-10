@@ -42,7 +42,7 @@ export function TabsTrigger({ icon, count, className, children, ...props }: Tabs
       className={cn(
         "group inline-flex h-12 shrink-0 items-center gap-2 border-b-2 border-transparent text-body font-medium whitespace-nowrap text-muted",
         "hover:text-text",
-        "data-[state=active]:border-primary data-[state=active]:font-semibold data-[state=active]:text-primary",
+        "data-[state=active]:border-primary data-[state=active]:font-semibold data-[state=active]:text-brand-fg",
         "disabled:cursor-not-allowed disabled:text-on-disabled disabled:hover:text-on-disabled",
         // Touch targets of at least 44px on phones (gloved hands on site).
         "pointer-coarse:min-w-11",

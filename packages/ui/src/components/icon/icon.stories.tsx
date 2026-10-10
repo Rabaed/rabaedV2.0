@@ -26,7 +26,7 @@ function iconIn(context: PlayContext, testId: string) {
 /** Decorative by default: hidden from assistive tech, painted in the text colour. */
 export const Decorative: Story = {
   render: (args) => (
-    <span data-testid="icon" className="text-primary">
+    <span data-testid="icon" className="text-brand-fg">
       <Icon {...args} />
     </span>
   ),

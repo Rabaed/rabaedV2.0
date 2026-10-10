@@ -134,7 +134,7 @@ export function LinksSection({
         />
       )}
       {message && (
-        <p role="alert" className="text-sm text-danger">
+        <p role="alert" className="text-sm text-danger-fg">
           {message}
         </p>
       )}

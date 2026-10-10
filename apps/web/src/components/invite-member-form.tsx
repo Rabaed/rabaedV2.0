@@ -9,7 +9,7 @@ import { useRouter } from "@/i18n/navigation";
 import { invitationLink, requestReactivation } from "@/lib/member-invitations";
 
 /**
- * The Authorized Person invites a Member. Until email delivery exists, the
+ * The Authorized Person invites a Member (the form, shown by `InviteMemberDialog`). Until email delivery exists, the
  * invitation link is shown once here for them to pass on. A taken email is
  * answered as visibility.md V17 says: another Company is never named, and a
  * deactivated Member of their own Company is reactivated once they confirm.
@@ -67,8 +67,7 @@ export function InviteMemberForm() {
   }
 
   return (
-    <section className="space-y-4 rounded-md border border-border p-4">
-      <h2 className="text-h6 font-semibold">{t("inviteTitle")}</h2>
+    <div className="space-y-4">
       <form onSubmit={onSubmit} className="grid gap-4 sm:grid-cols-2" noValidate>
         <Field label={t("email")} id="invite-email" required className="sm:col-span-2">
           <Input name="email" type="email" autoComplete="off" dir="ltr" />
@@ -79,7 +78,7 @@ export function InviteMemberForm() {
         <Field label={t("nameAr")} id="invite-name-ar" required>
           <Input name="nameAr" dir="rtl" lang="ar" />
         </Field>
-        <Field label={t("language")} id="invite-locale">
+        <Field label={t("language")} id="invite-locale" className="sm:col-span-2">
           {/* Each language named in itself. */}
           <Select
             name="locale"
@@ -90,14 +89,14 @@ export function InviteMemberForm() {
             ]}
           />
         </Field>
-        <div className="flex items-end">
+        <div className="flex justify-end sm:col-span-2">
           <Button type="submit" disabled={pending}>
             {t("invite")}
           </Button>
         </div>
       </form>
       {error && (
-        <p role="alert" className="text-sm text-danger">
+        <p role="alert" className="text-sm text-danger-fg">
           {error}
         </p>
       )}
@@ -107,6 +106,6 @@ export function InviteMemberForm() {
         </p>
       )}
       {link && <InvitationLink id="invitation-link" link={link} />}
-    </section>
+    </div>
   );
 }

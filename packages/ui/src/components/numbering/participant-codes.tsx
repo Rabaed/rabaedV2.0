@@ -1,34 +1,40 @@
 "use client";
 
-import { participantSegment, type BilingualText, type Locale } from "@rabaed/domain";
-import { useId, useState, type FormEvent } from "react";
+import { formatNumber, type BilingualText, type Locale } from "@rabaed/domain";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { cn } from "../../lib/cn.ts";
-import { Button } from "../button/button.tsx";
-import { Field } from "../form/field.tsx";
-import { Input } from "../form/input.tsx";
+import { IconButton } from "../button/button.tsx";
+import { focusRing } from "../form/control-styles.ts";
+import { Icon } from "../icon/icon.tsx";
+import { SettingsSection } from "../settings/settings-layout.tsx";
 
-// Participant Codes on Project Settings → Numbering (RP-381, spec RP-311). Each
-// Participant with what its Document Numbers print: its Participant Code, or its
-// order on the Project (01) until one is set. A Project Admin sets the codes here;
-// every other Project Member reads them. The page passes only the Participants the
-// API lists for the viewer (V15: a Project Admin gets every one, anyone else only
-// their own Company's), so this shows nothing beyond that; and the API gives the
-// order on the Project only to Project Admins (RP-381-1), so anyone else reads a
-// plain "no code yet" in its place. Presentational: the page does
-// the calls, and the API keeps its refusals (2-6 letters or digits with at least
-// one letter, unique in the Project, fixed once used).
+// Participant Codes on Project Settings → Document Numbering (RP-381, spec RP-311;
+// restyled to the kit's cards in the RP-412 rebuild): a table of the Participants
+// with their order on the Project and their code, edited in place by a Project
+// Admin; a code a Document Number fixed shows a lock. Every other Project Member
+// reads the codes of the Participants the API lists for them (V15: only their own
+// Company's), and the order on the Project is given to Project Admins only
+// (RP-381-1), so its column is theirs alone. Presentational: the page does the
+// calls; the API keeps its refusals (2-6 letters or digits with at least one
+// letter, unique in the Project, fixed once used).
 
 export type ParticipantCodesLabels = {
   title: string;
   intro: string;
-  /** The list's name. */
+  /** The table's name. */
   participants: string;
-  code: string;
-  /** Beside the order on the Project, shown to a Project Admin in place of a code. */
-  order: string;
-  /** In place of a code, for a viewer the order on the Project isn't given to. */
+  colParticipant: string;
+  colOrder: string;
+  colCode: string;
+  /** The code input's name, for one Participant. */
+  codeOf: (company: string) => string;
+  /** Beside a code a Document Number fixed. */
+  locked: string;
+  /** In place of a code not set yet. */
   noCode: string;
-  save: string;
+  /** The button that edits one Participant's code in place. */
+  editOf: (company: string) => string;
+  saving: string;
   saved: string;
   refusals: Record<ParticipantCodeRefusal, string>;
 };
@@ -37,8 +43,8 @@ export type ParticipantCodeRefusal = "invalid" | "duplicate_code" | "code_in_use
 
 export type ParticipantCodesProps = {
   locale: Locale;
-  participants: readonly { id: string; company: { legalName: BilingualText }; code: string | null; ordinal: number | null }[];
-  /** A Project Admin: each row is a form. */
+  participants: readonly { id: string; company: { legalName: BilingualText }; code: string | null; ordinal: number | null; codeLocked: boolean }[];
+  /** A Project Admin: each code is edited in place. */
   canEdit: boolean;
   labels: ParticipantCodesLabels;
   /** Sets the code (PUT /v1/participants/:id/code); the page refreshes on success. */
@@ -46,62 +52,82 @@ export type ParticipantCodesProps = {
   className?: string;
 };
 
-/** Project Settings → Numbering: each Participant's Participant Code, set by a Project Admin. */
+const cell = "px-5 py-3 align-middle";
+const head = "border-b border-border-subtle bg-surface-subtle px-5 py-2.5 text-start text-caption font-semibold whitespace-nowrap text-muted";
+
+/** Project Settings → Document Numbering: each Participant's Participant Code. */
 export function ParticipantCodes({ locale, participants, canEdit, labels, onSave, className }: ParticipantCodesProps) {
-  const titleId = useId();
+  const showOrder = participants.some((p) => p.ordinal !== null);
   return (
-    <section aria-labelledby={titleId} className={cn("flex flex-col gap-2", className)} data-testid="participant-codes">
-      <h2 id={titleId} className="text-h6 font-semibold text-text">
-        {labels.title}
-      </h2>
-      <p className="text-sm text-muted">{labels.intro}</p>
-      <ul aria-label={labels.participants} className="divide-y divide-border border-y border-border">
-        {participants.map((p) => (
-          <li key={p.id} className="py-3">
-            {canEdit ? (
-              <CodeForm participant={p} locale={locale} labels={labels} onSave={onSave} />
-            ) : (
-              <div className="flex flex-wrap items-baseline justify-between gap-4">
-                <span className="font-medium text-text">{p.company.legalName[locale]}</span>
-                <Printed participant={p} labels={labels} />
-              </div>
-            )}
-          </li>
-        ))}
-      </ul>
-    </section>
+    <SettingsSection title={labels.title} description={labels.intro} className={className} bodyClassName="px-0 pt-[14px] pb-0" data-testid="participant-codes">
+      <div role="region" aria-label={labels.participants} tabIndex={0} className="relative overflow-x-auto focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus">
+        <table className="w-full border-collapse text-[13.5px]">
+          <thead>
+            <tr>
+              <th scope="col" className={head}>
+                {labels.colParticipant}
+              </th>
+              {showOrder && (
+                <th scope="col" className={head}>
+                  {labels.colOrder}
+                </th>
+              )}
+              <th scope="col" className={cn(head, "w-full")}>
+                {labels.colCode}
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {participants.map((p) => (
+              <tr key={p.id} className="border-b border-border-subtle last:border-b-0" data-testid="participant-code-row">
+                <td className={cn(cell, "min-w-32 font-semibold text-text sm:whitespace-nowrap")}>{p.company.legalName[locale]}</td>
+                {showOrder && (
+                  <td className={cn(cell, "text-muted tabular-nums")}>
+                    {p.ordinal === null ? "—" : <bdi dir="ltr">{formatNumber(p.ordinal, locale, { minimumIntegerDigits: 2, useGrouping: false })}</bdi>}
+                  </td>
+                )}
+                <td className={cell}>
+                  {canEdit && !p.codeLocked ? (
+                    <InlineCode participant={p} locale={locale} labels={labels} onSave={onSave} />
+                  ) : (
+                    <Printed code={p.code} locked={p.codeLocked} labels={labels} />
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </SettingsSection>
   );
 }
 
-/**
- * What the Participant's numbers print, always left to right; the order on the
- * Project says so. Without a code or an order, a plain "no code yet".
- */
-function Printed({
-  participant: { code, ordinal },
-  labels,
-}: {
-  participant: { code: string | null; ordinal: number | null };
-  labels: ParticipantCodesLabels;
-}) {
-  const printed = ordinal === null ? code : participantSegment({ code, ordinal });
-  if (printed === null) return <span className="text-sm text-muted">{labels.noCode}</span>;
+function Printed({ code, locked, labels }: { code: string | null; locked: boolean; labels: ParticipantCodesLabels }) {
   return (
-    <span className="text-sm">
-      <bdi dir="ltr" translate="no" className="font-medium tabular-nums">
-        {printed}
-      </bdi>
-      {code === null && (
-        <span className="text-muted">
-          {" · "}
-          <span>{labels.order}</span>
+    <span className="inline-flex items-center gap-2">
+      {code === null ? (
+        <span className="text-sm text-muted">{labels.noCode}</span>
+      ) : (
+        <bdi dir="ltr" translate="no" className="rounded-[5px] bg-segment-participant-tint px-1.5 py-px text-caption font-bold text-segment-participant-fg">
+          {code}
+        </bdi>
+      )}
+      {locked && (
+        <span className="inline-flex items-center gap-1 text-caption text-muted">
+          <Icon name="lock" size={14} />
+          {labels.locked}
         </span>
       )}
     </span>
   );
 }
 
-function CodeForm({
+/**
+ * A Participant's code, edited in place: the code (or "no code yet") with a pencil;
+ * the pencil turns it into a box. Enter or leaving the box saves a changed code,
+ * Escape puts it back; while it saves the box says so, and a refusal stays on the row.
+ */
+function InlineCode({
   participant,
   locale,
   labels,
@@ -113,20 +139,51 @@ function CodeForm({
   onSave: ParticipantCodesProps["onSave"];
 }) {
   const name = participant.company.legalName[locale];
+  const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(participant.code ?? "");
   const [pending, setPending] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const input = useRef<HTMLInputElement>(null);
+  const edit = useRef<HTMLButtonElement>(null);
+  // Escape and a finished save close the box without saving on the blur that follows.
+  const closing = useRef(false);
+  // Where focus goes once the box closes: back to the pencil when the keyboard closed it.
+  const refocus = useRef(false);
 
-  async function submit(event: FormEvent) {
-    event.preventDefault();
+  useEffect(() => {
+    if (editing) input.current?.select();
+    else if (refocus.current) {
+      refocus.current = false;
+      edit.current?.focus();
+    }
+  }, [editing]);
+  useEffect(() => {
+    if (!editing) setValue(participant.code ?? "");
+  }, [participant.code, editing]);
+
+  const close = (focusEdit: boolean) => {
+    closing.current = true;
+    setEditing(false);
+    setError(null);
+    refocus.current = focusEdit;
+  };
+
+  async function save(focusEdit: boolean) {
+    const code = value.trim();
+    if (code === (participant.code ?? "")) return close(focusEdit);
     setPending(true);
     setSaved(false);
     setError(null);
     try {
-      const result = await onSave(participant.id, value.trim());
-      if (result.ok) setSaved(true);
-      else setError(labels.refusals[result.reason]);
+      const result = await onSave(participant.id, code);
+      if (result.ok) {
+        setSaved(true);
+        close(focusEdit);
+      } else {
+        setError(labels.refusals[result.reason]);
+        input.current?.focus();
+      }
     } catch {
       setError(labels.refusals.unavailable);
     } finally {
@@ -134,40 +191,85 @@ function CodeForm({
     }
   }
 
+  const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      void save(true);
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      setValue(participant.code ?? "");
+      close(true);
+    }
+  };
+
+  if (!editing) {
+    return (
+      <span className="inline-flex items-center gap-1.5">
+        <Printed code={participant.code} locked={false} labels={labels} />
+        <IconButton
+          ref={edit}
+          size="sm"
+          label={labels.editOf(name)}
+          onClick={() => {
+            closing.current = false;
+            setSaved(false);
+            setEditing(true);
+          }}
+        >
+          <Icon name="edit" size={15} />
+        </IconButton>
+        {saved && (
+          <span role="status" className="inline-flex items-center gap-1 text-caption text-success-fg">
+            <Icon name="circle-check" size={14} />
+            {labels.saved}
+          </span>
+        )}
+      </span>
+    );
+  }
+
   return (
-    <form aria-label={name} onSubmit={submit} className="flex flex-col gap-2" noValidate>
-      <div className="flex flex-wrap items-baseline justify-between gap-4">
-        <span className="font-medium text-text">{name}</span>
-        <Printed participant={participant} labels={labels} />
-      </div>
-      <div className="flex flex-wrap items-end gap-4">
-        <Field label={labels.code}>
-          <Input
-            dir="ltr"
-            maxLength={6}
-            autoCapitalize="characters"
-            value={value}
-            onChange={(e) => {
-              // Codes are stored in capitals; show them so while typing.
-              setValue(e.target.value.toUpperCase());
-              setSaved(false);
-            }}
-          />
-        </Field>
-        <Button type="submit" disabled={pending}>
-          {labels.save}
-        </Button>
-      </div>
-      {saved && (
-        <p role="status" className="text-sm text-text">
-          {labels.saved}
-        </p>
-      )}
+    <span className="flex flex-col gap-1">
+      <span className="flex items-center gap-2">
+        <input
+          ref={input}
+          aria-label={labels.codeOf(name)}
+          aria-invalid={error ? true : undefined}
+          aria-busy={pending || undefined}
+          readOnly={pending}
+          dir="ltr"
+          maxLength={6}
+          autoCapitalize="characters"
+          value={value}
+          placeholder={labels.noCode}
+          onChange={(e) => {
+            // Codes are stored in capitals; show them so while typing.
+            setValue(e.target.value.toUpperCase());
+            setError(null);
+          }}
+          onKeyDown={onKeyDown}
+          onBlur={() => {
+            if (closing.current || pending) return;
+            void save(false);
+          }}
+          className={cn(
+            "h-8 w-24 rounded-sm bg-surface px-2.5 text-sm font-semibold text-text shadow-[inset_0_0_0_1px_var(--border-strong)] pointer-coarse:h-11",
+            "placeholder:font-normal placeholder:text-muted hover:shadow-[inset_0_0_0_1px_var(--control-border)]",
+            "aria-invalid:shadow-[inset_0_0_0_1px_var(--danger)] read-only:bg-surface-subtle",
+            focusRing,
+          )}
+        />
+        {pending && (
+          <span role="status" className="text-caption text-muted">
+            {labels.saving}
+          </span>
+        )}
+      </span>
       {error && (
-        <p role="alert" className="text-sm text-danger">
+        <span role="alert" className="text-caption text-danger-fg">
           {error}
-        </p>
+        </span>
       )}
-    </form>
+    </span>
   );
 }

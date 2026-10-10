@@ -130,7 +130,7 @@ describe("a Contractor engineer's Draft MAR", () => {
       type: { code: "MAR" },
       title: "Cable trays",
       documentNumber: null,
-      stage: { key: "draft", name: { en: "Drafts" }, category: "draft" },
+      stage: { key: "draft", name: { en: "Draft" }, category: "draft" },
       trade: { id: trade.electrical, code: "EL" },
       location: { id: loc.buildingA, code: "BA" },
       // A Draft with no number: its Step began when it was started, which nobody sees.

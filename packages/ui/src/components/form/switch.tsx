@@ -23,7 +23,7 @@ export function Switch({ className, checked, defaultChecked, onCheckedChange, ..
       className={cn(
         "group inline-flex h-5 w-9 shrink-0 items-center rounded-full border-2 border-transparent bg-control-border transition-colors",
         "hover:bg-control-border-hover data-[state=checked]:bg-primary data-[state=checked]:hover:bg-primary-hover",
-        "aria-invalid:border-danger",
+        "aria-invalid:border-danger-fg",
         "aria-readonly:bg-muted aria-readonly:data-[state=checked]:bg-muted",
         "disabled:cursor-not-allowed disabled:bg-disabled disabled:data-[state=checked]:bg-disabled",
         focusRing,

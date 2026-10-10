@@ -1,5 +1,6 @@
 import "server-only";
 import type {
+  SharedWorkItem,
   ActivityFeed,
   ActivityFeedQuery,
   CompanyInvitations,
@@ -10,6 +11,7 @@ import type {
   DocumentList,
   FormChoices,
   FormToFill,
+  Home,
   LinkedFrom,
   MemberVisibility,
   MyProjects,
@@ -40,6 +42,7 @@ import type {
 } from "@rabaed/domain";
 import { activityFeedSearchParams, workItemSearchParams } from "@rabaed/domain";
 import { cookies } from "next/headers";
+import { cache } from "react";
 import { apiUrl } from "./api-url.ts";
 
 /** GETs an API path with the browser's session cookie; null if signed out or it fails. */
@@ -58,25 +61,32 @@ async function apiGet<T>(path: string): Promise<T | null> {
   }
 }
 
-/** The signed-in Member, read from the API with the browser's session cookie; null if signed out. */
-export function getMe(): Promise<SignedInMember | null> {
-  return apiGet<SignedInMember>("/v1/me");
-}
+/**
+ * The signed-in Member, read from the API with the browser's session cookie; null if signed out.
+ * Read once per request: the layout and the page both ask.
+ */
+export const getMe = cache((): Promise<SignedInMember | null> => apiGet<SignedInMember>("/v1/me"));
 
 /** The signed-in Member's Company's Members; null if signed out. */
-export function getMembers(): Promise<CompanyMembers | null> {
-  return apiGet<CompanyMembers>("/v1/members");
-}
+/** Once per request: the page and the top bar title both read it. */
+export const getMembers = cache((): Promise<CompanyMembers | null> => apiGet<CompanyMembers>("/v1/members"));
 
 /** The signed-in Member's Projects; null if signed out. */
-export function getMyProjects(): Promise<MyProjects | null> {
-  return apiGet<MyProjects>("/v1/projects");
+/** Home across the signed-in Member's Projects (RP-407); null when signed out or unavailable. */
+export function getHome(): Promise<Home | null> {
+  return apiGet<Home>("/v1/home");
 }
 
-/** One of the signed-in Member's Projects; null if it isn't one of theirs (or doesn't exist). */
-export function getProject(projectId: string): Promise<ProjectSummary | null> {
-  return apiGet<ProjectSummary>(`/v1/projects/${encodeURIComponent(projectId)}`);
-}
+/** Read once per request: the top bar's "n Projects" and the page both ask. */
+export const getMyProjects = cache((): Promise<MyProjects | null> => apiGet<MyProjects>("/v1/projects"));
+
+/**
+ * One of the signed-in Member's Projects; null if it isn't one of theirs (or doesn't exist).
+ * Read once per request: the top bar, the Project tabs and the page all ask.
+ */
+export const getProject = cache(
+  (projectId: string): Promise<ProjectSummary | null> => apiGet<ProjectSummary>(`/v1/projects/${encodeURIComponent(projectId)}`),
+);
 
 /** The Participants of one of the signed-in Member's Projects; null if it isn't one of theirs. */
 export function getProjectParticipants(projectId: string): Promise<ProjectParticipants | null> {
@@ -175,6 +185,11 @@ export function getActivityFeed(projectId: string, query: Partial<ActivityFeedQu
 /** One Work Item; null if the signed-in Member can't see it (exactly as if it didn't exist). */
 export function getWorkItem(workItemId: string): Promise<WorkItemDetail | null> {
   return apiGet<WorkItemDetail>(`/v1/work-items/${encodeURIComponent(workItemId)}`);
+}
+
+/** Download (RP-409): a Work Item as it was shared, the same for every viewer; null before its first Submit or when unseen. */
+export function getSharedWorkItem(workItemId: string): Promise<SharedWorkItem | null> {
+  return apiGet<SharedWorkItem>(`/v1/work-items/${encodeURIComponent(workItemId)}/shared`);
 }
 
 /** A Type's outcome set on a Project (the badges read it, RP-429); null when the Member can't see the Project. */

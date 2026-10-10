@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { appearance } from "./appearance.ts";
 import { bilingualText, email } from "./company.ts";
 import { locales } from "./locale.ts";
 
@@ -34,5 +35,7 @@ export const signedInMember = z.object({
     canCreateProjects: z.boolean(),
   }),
   company: z.object({ id: z.uuid(), legalName: bilingualText }),
+  /** Their own Theme and Mode (the default until they choose), so the app paints in it from the first byte. */
+  appearance,
 });
 export type SignedInMember = z.infer<typeof signedInMember>;

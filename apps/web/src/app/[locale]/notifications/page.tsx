@@ -59,7 +59,7 @@ export default async function NotificationsPage({ params }: { params: Promise<{ 
                     numberingSystem: "latn",
                   })}
                 </time>
-                {!n.readAt && <p className="font-semibold text-primary">{t("unread")}</p>}
+                {!n.readAt && <p className="font-semibold text-brand-fg">{t("unread")}</p>}
               </div>
             </li>
           ))}

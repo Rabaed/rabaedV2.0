@@ -10,11 +10,12 @@ const pathOf = (projectId: string, key: ProjectTabKey) => {
   const base = `/projects/${projectId}`;
   if (key === "dashboard") return base;
   if (key === "settings") return `${base}/settings`;
+  if (key === "activity") return `${base}/activity`;
   return `${base}/${moduleTabPaths[key]}`;
 };
 
 /**
- * The Project shell's tabs (RP-346): Dashboard, Submittals and Settings always,
+ * The Project tabs (RP-346, RP-406): Dashboard, Submittals, Activity and Settings always,
  * and a Module's tab only when the Project has a Work Item Type in it.
  */
 export function ProjectTabsNav({ projectId, modules }: { projectId: string; modules: ModuleKey[] }) {

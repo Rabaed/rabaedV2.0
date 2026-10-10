@@ -6,14 +6,26 @@ import {
   codeCFilterStates,
   codeCRules,
   decodeWorkItemCursor,
+  defaultBoardCardLayout,
   encodeWorkItemCursor,
   enteredStepBy,
   isOpenStageCategory,
+  listColumnLayout,
+  listColumns,
   parseActionForm,
   stageCategories,
+  sortDirectionOf,
   stepAgeWeeks,
+  workItemCursorSorts,
+  workItemExportMax,
   workItemPageSize,
   type BilingualText,
+  type ListColumnLayout,
+  type Locale,
+  type WorkItemCursorSort,
+  type WorkItemExport,
+  type BoardCardLayout,
+  type BoardCardLayoutChange,
   type BoardCardInput,
   type ChainBucket,
   type CodeCCondition,
@@ -91,6 +103,16 @@ type Row = {
   holder_name: BilingualText | null;
   holder_member_name: BilingualText | null;
   held_by_me: boolean;
+  /** The raising Company's name: everyone who sees the item reads it (Search finds it too). */
+  raiser_name: BilingualText | null;
+  /** The role holding it, my own Company's only (RP-410): its Position and my Project Role. */
+  role_position_key: string | null;
+  role_position_name: BilingualText | null;
+  role_position_sort: number | null;
+  role_project_role: BilingualText | null;
+  /** Who closed it: my own Company's person by name, else the closing Company only (V14). */
+  closer_name: BilingualText | null;
+  closer_company_name: BilingualText | null;
 };
 
 /**
@@ -119,8 +141,8 @@ function visibleRows({ projectId, moduleKey }: QueryScope, allRevisions: boolean
         select 1 from app.revision_chain(w.id) rc join work_item o on o.id = rc.work_item_id
         where app.outcome_offers(o.project_id, o.work_item_type_id, o.outcome, 'offer_revision')
       ) as had_code_c,
-      st.key as stage_key, st.name as stage_name, st.category as stage_category,
-      tv.id as trade_id, tv.code as trade_code, tv.name as trade_name,
+      st.key as stage_key, st.name as stage_name, st.category as stage_category, st.sort as stage_sort,
+      tv.id as trade_id, tv.code as trade_code, tv.name as trade_name, tv.sort as trade_sort,
       lv.id as location_id, lv.code as location_code, lv.name as location_name,
       e.step_entered_at,
       -- Closed (or cancelled): it no longer ages, nor is it with anyone (isOpenStageCategory).
@@ -130,9 +152,9 @@ function visibleRows({ projectId, moduleKey }: QueryScope, allRevisions: boolean
       -- numbered_at, which app.work_item_creation_date gives to the raiser's own Participant only.
       w.submitted_at, to_char(w.submitted_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as submitted_key,
       app.work_item_creation_date(w.id) as creation_date,
-      h.participant_id as holder_participant_id, h.assignee_member_id,
+      h.participant_id as holder_participant_id, h.assignee_member_id, w.raised_by_participant_id as raiser_participant_id,
       coalesce(h.participant_id in (select app.current_participant_ids()), false) as held_by_own,
-      s.key as step_key, s.name as step_name
+      s.key as step_key, s.name as step_name, s.id as step_id, s.actor_rule, t.module_key
     from work_item w
     cross join lateral app.step_as_seen(w.id) seen
     -- A Draft with no number has never moved, so its Step began when it was started: nobody sees that (visibility.md
@@ -228,19 +250,47 @@ function matching(q: WorkItemQuery, now: Date, scope: QueryScope): RawBuilder<bo
     // Search (RP-347): the Document Number, Subject, Type, Trade, Location and the
     // raiser's Company name, never answers or Documents (V19). The function answers
     // only with items the caller sees; the rows here are those already.
-    conditions.push(sql`r.id in (select app.search_work_items(${scope.projectId}::uuid, ${q.q}::text))`);
+    // The Kanban's search (RP-410) also finds the words, as one phrase of 3 letters or more, in what
+    // the card shows besides: its owner as the viewer may read it (my own Company's person; another
+    // Company's name only, V14), only while the card shows one (an open item: a closed one has no
+    // owner, so it is never found by its last holder), and the Zone, Building or Floor its Location is in.
+    // The holder's name is read only for another Company's items, and only under a search.
+    const phrase = `%${q.q.replace(/[\\%_]/g, "\\$&")}%`;
+    const named = (name: RawBuilder<unknown>) => sql<boolean>`concat_ws(' ', ${name} ->> 'en', ${name} ->> 'ar') ilike ${phrase}`;
+    const onCard =
+      q.q.length < 3
+        ? sql<boolean>`false`
+        : sql<boolean>`(
+          (not r.closed and r.held_by_own and exists (select 1 from member o where o.id = r.assignee_member_id and ${named(sql.ref("o.full_name"))}))
+          or (not r.closed and not r.held_by_own and r.holder_participant_id is not null and exists (
+            select 1 from app.work_item_companies(r.id) o where o.participant_id = r.holder_participant_id and ${named(sql.ref("o.legal_name"))}))
+          or exists (
+            with recursive up as (
+              select id, parent_id, name from dimension_value where id = r.location_id
+              union all
+              select v.id, v.parent_id, v.name from dimension_value v join up on v.id = up.parent_id
+            ) select 1 from up where ${named(sql.ref("up.name"))}))`;
+    conditions.push(sql`(r.id in (select app.search_work_items(${scope.projectId}::uuid, ${q.q}::text)) or ${onCard})`);
   }
   if (q.type.length > 0) conditions.push(sql`r.type_code = any(${q.type}::text[])`);
   if (q.stage.length > 0) conditions.push(sql`r.stage_key = any(${q.stage}::text[])`);
   if (q.trade.length > 0) conditions.push(sql`r.trade_id = any(${q.trade}::uuid[])`);
   if (q.location.length > 0) {
-    // A Location takes in the ones under it.
-    conditions.push(sql`r.location_id in (
-      with recursive under as (
-        select id from dimension_value where id = any(${q.location}::uuid[])
-        union all
-        select v.id from dimension_value v join under u on v.parent_id = u.id
-      ) select id from under)`);
+    // A Location takes in the ones under it. The Zone, Building and Floor filters are levels of one
+    // tree (RP-410), grouped by the level's name (its depth where it has none), so an uneven tree
+    // (a Floor right under a Zone) still groups with the other Floors: values of one level are any of
+    // them, and the levels chosen must all hold (AND), so "Zone A and Floor 5" is Floor 5 of Zone A.
+    // One level only, as every earlier link holds, is the old "any of them". An item with no Location
+    // matches none.
+    conditions.push(sql`(r.location_id is not null and not exists (
+      select 1 from dimension_value chosen where chosen.id = any(${q.location}::uuid[])
+      group by coalesce(chosen.level_name ->> 'en', chosen.depth::text)
+      having not bool_or(chosen.id in (
+        with recursive up as (
+          select id, parent_id from dimension_value where id = r.location_id
+          union all
+          select v.id, v.parent_id from dimension_value v join up on v.id = up.parent_id
+        ) select id from up))))`);
   }
   if (q.outcome.length > 0) conditions.push(sql`r.outcome = any(${q.outcome}::text[])`);
   if (q.bucket.length > 0) conditions.push(sql`${bucketOfRow} = any(${q.bucket}::text[])`);
@@ -249,11 +299,24 @@ function matching(q: WorkItemQuery, now: Date, scope: QueryScope): RawBuilder<bo
     // A closed item doesn't age.
     conditions.push(sql`not r.closed and r.step_entered_at <= ${enteredStepBy(q.stepAgeMin, now)}::timestamptz`);
   }
+  if (q.createdWithin !== undefined) {
+    // The date the card shows (RP-410): the Creation Date, which app.work_item_creation_date gives the
+    // raiser's own Participant only, else the Submission Date everyone who sees the item reads. So
+    // another Company filters by nothing but the Submission Date (visibility.md "Creation Date").
+    // The last N Saudi days, today included.
+    conditions.push(sql`(coalesce(r.creation_date, r.submitted_at) at time zone 'Asia/Riyadh')::date
+      > (${now}::timestamptz at time zone 'Asia/Riyadh')::date - ${q.createdWithin}::int`);
+  }
   // The Submission Date range, in Saudi days, both days included; an item not yet Submitted has none and is left out.
   if (q.submittedFrom !== undefined) conditions.push(sql`(r.submitted_at at time zone 'Asia/Riyadh')::date >= ${q.submittedFrom}::date`);
   if (q.submittedTo !== undefined) conditions.push(sql`(r.submitted_at at time zone 'Asia/Riyadh')::date <= ${q.submittedTo}::date`);
   // Steps I hold, not picked up Steps of my pool, and my own Drafts (app.need_my_action).
   if (q.needMyAction) conditions.push(sql`app.need_my_action(r.id) is not null`);
+  // Home (RP-407): my own Participant's items, and who holds an open item now. Another Participant
+  // holds it whenever my own doesn't, even one since withdrawn; a closed item is held by nobody.
+  if (q.raisedByMe) conditions.push(sql`r.raised_by_own`);
+  if (q.heldBy === "own") conditions.push(sql`(not r.closed and r.held_by_own)`);
+  if (q.heldBy === "others") conditions.push(sql`(not r.closed and not r.held_by_own)`);
   if (q.with.length > 0) {
     const steps = q.with.flatMap((v) => (v.startsWith("step:") ? [v.slice(5)] : []));
     const companies = q.with.flatMap((v) => (v.startsWith("company:") ? [v.slice(8)] : []));
@@ -264,6 +327,20 @@ function matching(q: WorkItemQuery, now: Date, scope: QueryScope): RawBuilder<bo
     if (companies.length > 0) any.push(sql`(not r.held_by_own and r.holder_participant_id = any(${companies}::uuid[]))`);
     conditions.push(sql`(${sql.join(any, sql` or `)})`);
   }
+  if (q.owner.length > 0) {
+    // Who holds it (RP-410). Only my own Company's people are named: app.work_item_holder gives
+    // nobody else's Member, so another Company's Member id matches nothing (V14).
+    const members = q.owner.flatMap((v) => (v.startsWith("member:") ? [v.slice(7)] : []));
+    const companies = q.owner.flatMap((v) => (v.startsWith("company:") ? [v.slice(8)] : []));
+    const any: RawBuilder<boolean>[] = [];
+    if (members.length > 0) any.push(sql`(r.held_by_own and r.assignee_member_id = any(${members}::uuid[]))`);
+    if (q.owner.includes("not_picked_up")) any.push(sql`(r.held_by_own and r.assignee_member_id is null)`);
+    if (companies.length > 0) any.push(sql`(not r.held_by_own and r.holder_participant_id = any(${companies}::uuid[]))`);
+    conditions.push(sql`(${sql.join(any, sql` or `)})`);
+  }
+  // The role holding it (RP-410): a Step of my own Company. Another Company's items match none,
+  // as it is one lane, never split into its roles (V5).
+  if (q.role.length > 0) conditions.push(sql`(r.held_by_own and r.step_key = any(${q.role}::text[]))`);
   return sql`(${sql.join(conditions, sql` and `)})`;
 }
 
@@ -294,7 +371,7 @@ const pastTextThenId = (column: RawBuilder<unknown>, text: string, id: string) =
 /** A row's key: its Subject only when it has no value. */
 const keyOf = (last: boolean, value: string | null, r: Row): WorkItemCursorKey => [String(last), value ?? "", value === null ? r.title : "", r.id];
 
-const sorts: Record<WorkItemSort, SortDefinition> = {
+const sorts: Record<WorkItemCursorSort, SortDefinition> = {
   // The oldest Step Age first; closed items, which don't age, last, and within each the items with no Step Age
   // (a Draft with no number) last, by Subject.
   stepAge: {
@@ -326,9 +403,88 @@ const sorts: Record<WorkItemSort, SortDefinition> = {
 };
 
 /** Where the query's page starts: after its cursor's key, or at the start. */
-function afterCursor(q: WorkItemQuery): RawBuilder<boolean> {
+function afterCursor(q: WorkItemQuery & { sort: WorkItemCursorSort }): RawBuilder<boolean> {
   const key = q.cursor === undefined ? null : decodeWorkItemCursor(q.cursor, q.sort);
   return key ? sorts[q.sort].after(key) : noFilter;
+}
+
+/**
+ * A List column's sort (RP-409), paged by number: what it sorts by (`value`), which rows have nothing
+ * to sort by (`none`, last whichever way; by default those with no value), and whether the column reads
+ * the other way round from the value (Step Age: the oldest first is the earliest Step entry). Ties go by
+ * Subject, byte by byte, then id (ADR 0015). Names are sorted in the reader's language (`lang`), and only
+ * as the viewer may read them: another Company's people are never read (V14), so an owner sorts by the
+ * name the row shows. `value` may read `holderJoins`.
+ */
+type ColumnSort = { value: (lang: Locale) => RawBuilder<unknown>; none?: RawBuilder<boolean>; reversed?: boolean };
+
+/** The ancestor (or the Location itself) at `depth` of a row's Location: its place in the Project's order. */
+const locationLevel = (depth: number): ColumnSort => ({
+  value: () => sql`(
+    with recursive up as (
+      select id, parent_id, depth, sort, code from dimension_value where id = r.location_id
+      union all
+      select v.id, v.parent_id, v.depth, v.sort, v.code from dimension_value v join up on v.id = up.parent_id
+    ) select (up.sort, up.code collate "C") from up where up.depth = ${depth} limit 1)`,
+});
+
+const named = (name: RawBuilder<unknown>, lang: Locale) => sql`lower(${name} ->> ${lang})`;
+
+const columnSorts: Record<WorkItemSort, ColumnSort> = {
+  stepAge: { value: () => sql`r.step_entered_at`, none: sql`(r.closed or r.step_entered_at is null)`, reversed: true },
+  documentNumber: { value: () => sql`r.document_number collate "C"` },
+  submissionDate: { value: () => sql`r.submitted_at` },
+  subject: { value: () => sql`lower(r.title) collate "C"` },
+  revision: { value: () => sql`r.revision_no` },
+  trade: { value: () => sql`(r.trade_sort, r.trade_code collate "C")` },
+  type: { value: () => sql`r.type_code collate "C"` },
+  stage: { value: () => sql`r.stage_sort` },
+  outcome: { value: () => sql`r.outcome collate "C"` },
+  locationLevel1: locationLevel(1),
+  locationLevel2: locationLevel(2),
+  locationLevel3: locationLevel(3),
+  // What the row shows: my own Company's person who picked it up, or my Step not picked up by its name; another Company by
+  // its name; closed, who closed it.
+  owner: {
+    value: (lang) =>
+      named(
+        sql`(case when r.closed then coalesce(cm.full_name, co.closer_company_name)
+          when r.held_by_own and r.assignee_member_id is null then r.step_name
+          else coalesce(m.full_name, co.holder_name) end)`,
+        lang,
+      ),
+  },
+  // The date the row shows: the Creation Date, which only the raiser's Participant reads, else the Submission Date.
+  created: { value: () => sql`coalesce(r.creation_date, r.submitted_at)` },
+  contractor: { value: (lang) => named(sql`co.raiser_name`, lang) },
+};
+
+/** A numbered page's order: the column's sort in the query's direction, rows with nothing to sort by last. */
+function columnOrder(q: WorkItemQuery): RawBuilder<unknown> {
+  const { value, none, reversed } = columnSorts[q.sort];
+  const v = value(q.lang ?? "en");
+  const ascending = (sortDirectionOf(q) === "asc") !== (reversed ?? false);
+  return sql`${none ?? sql`${v} is null`}, ${v} ${ascending ? sql`asc` : sql`desc`}, r.title collate "C", r.id`;
+}
+
+const isCursorSort = (sort: WorkItemSort): sort is WorkItemCursorSort => (workItemCursorSorts as readonly string[]).includes(sort);
+
+/**
+ * Whether a read of `q` pages by cursor (`nextCursor`) to its end: a cursor's own sort in its own
+ * order, with no numbered page. Any other query is read one numbered page at a time, so a loop
+ * over `nextCursor` (Home's `everyRow`) would stop after its first page.
+ */
+export const pagesByCursor = (q: Pick<WorkItemQuery, "page" | "dir" | "sort">) => q.page === undefined && q.dir === undefined && isCursorSort(q.sort);
+
+/**
+ * How a query pages: by number (`page`), or by cursor, which only the cursor's sorts in their own
+ * order can do; any other read without a page is its first numbered page.
+ */
+function pagingOf(q: WorkItemQuery) {
+  const cursor = pagesByCursor(q) ? { ...q, sort: q.sort as WorkItemCursorSort } : null;
+  const page = cursor ? null : (q.page ?? 1);
+  const size = page === null ? workItemPageSize : (q.pageSize ?? workItemPageSize);
+  return { cursor, page, size, orderBy: cursor ? sorts[cursor.sort].orderBy : columnOrder(q) };
 }
 
 function toRow(r: Row, now: Date): WorkItemRow {
@@ -348,6 +504,15 @@ function toRow(r: Row, now: Date): WorkItemRow {
     outcome: r.outcome,
     submissionDate: r.submitted_at?.toISOString() ?? null,
     creationDate: r.creation_date?.toISOString() ?? null,
+    ...(r.raiser_name ? { raiserCompanyName: r.raiser_name } : {}),
+    // Who closed it (RP-410): my own Company's person, or the Company only (V14).
+    closedBy: open
+      ? null
+      : r.closer_name && r.closer_company_name
+        ? { kind: "own", name: r.closer_name, companyName: r.closer_company_name }
+        : r.closer_company_name
+          ? { kind: "company", companyName: r.closer_company_name }
+          : null,
     with:
       !open || r.holder_name === null
         ? null
@@ -357,6 +522,10 @@ function toRow(r: Row, now: Date): WorkItemRow {
               companyName: r.holder_name,
               step: { key: r.step_key, name: r.step_name },
               holder: r.holder_member_name ? { name: r.holder_member_name, isMe: r.held_by_me } : null,
+              role:
+                r.role_position_key && r.role_position_name && r.role_project_role
+                  ? { position: { key: r.role_position_key, name: r.role_position_name, sort: r.role_position_sort ?? 0 }, projectRole: r.role_project_role }
+                  : null,
             }
           : { kind: "company", companyName: r.holder_name },
   };
@@ -365,10 +534,59 @@ function toRow(r: Row, now: Date): WorkItemRow {
 // Who holds a row of `visibleRows` (as `r`), by name: only the viewer's own
 // Participant's holder is named (app.work_item_holder), and member's own RLS
 // shows only their own Company's people (V14).
-const holderColumns = sql`hc.legal_name as holder_name,
-  m.full_name as holder_member_name, coalesce(r.assignee_member_id = app.current_member_id(), false) as held_by_me`;
-const holderJoins = sql`left join lateral app.work_item_companies(r.id) hc on hc.participant_id = r.holder_participant_id
-  left join member m on m.id = r.assignee_member_id`;
+const holderColumns = sql`co.holder_name, co.raiser_name, co.closer_company_name, cm.full_name as closer_name,
+  m.full_name as holder_member_name, coalesce(r.assignee_member_id = app.current_member_id(), false) as held_by_me,
+  hr.key as role_position_key, hr.name as role_position_name, hr.sort as role_position_sort, hr.project_role as role_project_role`;
+// RP-410:
+// - The closing move of a closed item: the latest event, as RLS lets the viewer read it (the
+//   closing Transition is shared), that brought it to the Step it is at. Its actor is named only
+//   when they are of the viewer's own Participant; anyone else's Company by name only (V14).
+// - The holder's, the raiser's (the card's Contractor name) and the closer's Companies, from one read
+//   of the Companies on the item that everyone who sees it may name.
+// - The role holding an open item of my own Company: the holder's Position on the Project, or for an
+//   Step not picked up the Positions its Step Pool holds (the Step's permission, narrowed to the Step's
+//   Positions where it names them), the first in the Positions' order where it spans several; with
+//   my own Project Role. project_member_position is read only for my own Participant (RLS), and
+//   nothing here is asked of another Company's items (V5, V14).
+const holderJoins = sql`left join lateral (
+    select e.actor_participant_id, e.actor_member_id
+    from work_item_event e
+    where r.closed and e.work_item_id = r.id and e.to_step_id = r.step_id
+    order by e.seq desc
+    limit 1
+  ) ce on true
+  left join lateral (
+    select
+      (max(x.legal_name::text) filter (where x.participant_id = r.holder_participant_id))::jsonb as holder_name,
+      (max(x.legal_name::text) filter (where x.participant_id = r.raiser_participant_id))::jsonb as raiser_name,
+      (max(x.legal_name::text) filter (where x.participant_id = ce.actor_participant_id))::jsonb as closer_company_name
+    from app.work_item_companies(r.id) x
+  ) co on true
+  left join member cm on cm.id = ce.actor_member_id and ce.actor_participant_id in (select app.current_participant_ids())
+  left join member m on m.id = r.assignee_member_id
+  left join lateral (
+    select p.key, p.name, p.sort, pr.name as project_role
+    from participant hp
+    join project_role pr on pr.id = hp.project_role_id
+    join position p on p.base_role = pr.base_role
+    where r.held_by_own and not r.closed and hp.id = r.holder_participant_id
+      and (not (r.actor_rule ? 'positions') or p.key in (select jsonb_array_elements_text(r.actor_rule -> 'positions')))
+      and (
+        case when r.assignee_member_id is null
+          then exists (
+            select 1 from position_permission pp
+            where pp.position_id = p.id and pp.module_key = r.module_key and pp.permission = r.actor_rule ->> 'permission')
+          else p.id in (
+            select mp.position_id from project_member_position mp
+            join project_member pm on pm.id = mp.project_member_id
+            where pm.member_id = r.assignee_member_id and pm.project_id = r.project_id and pm.status = 'active')
+        end)
+    order by exists (
+        select 1 from position_permission pp
+        where pp.position_id = p.id and pp.module_key = r.module_key and pp.permission = r.actor_rule ->> 'permission') desc,
+      p.sort, p.key
+    limit 1
+  ) hr on true`;
 
 /** One page of the scope's visible items matching `q`, and how many match in each Stage. */
 export async function queryWorkItems(
@@ -376,11 +594,11 @@ export async function queryWorkItems(
   scope: QueryScope,
   q: WorkItemQuery,
   now: Date,
-): Promise<{ rows: WorkItemRow[]; nextCursor: string | null; stageCounts: Map<string, number> }> {
+): Promise<{ rows: WorkItemRow[]; nextCursor: string | null; page?: NonNullable<WorkItemList["page"]>; stageCounts: Map<string, number> }> {
   const rows = visibleRows(scope, q.allRevisions);
   const where = matching(q, now, scope);
-  const { orderBy } = sorts[q.sort];
-  const after = afterCursor(q);
+  const { cursor, page: number, size, orderBy } = pagingOf(q);
+  const after = cursor ? afterCursor(cursor) : noFilter;
   const { rows: page } = await sql<Row>`
     with r as (${rows})
     select r.*, ${holderColumns}
@@ -388,15 +606,50 @@ export async function queryWorkItems(
     ${holderJoins}
     where ${where} and ${after}
     order by ${orderBy}
-    limit ${workItemPageSize + 1}
+    limit ${size + 1} offset ${number === null ? 0 : (number - 1) * size}
   `.execute(trx);
-  const shown = page.slice(0, workItemPageSize);
+  const shown = page.slice(0, size);
+  const more = page.length > size;
   return {
     rows: shown.map((r) => toRow(r, now)),
-    nextCursor: page.length > workItemPageSize ? encodeWorkItemCursor(q.sort, sorts[q.sort].keyOf(shown.at(-1)!)) : null,
+    nextCursor: cursor && more ? encodeWorkItemCursor(cursor.sort, sorts[cursor.sort].keyOf(shown.at(-1)!)) : null,
+    ...(number === null ? {} : { page: { number, size, hasNext: more } }),
     // A search counts no more than its page shows ("Search and filters": no totals beyond the page).
     stageCounts: q.q === undefined ? await countByStage(trx, scope, q, now) : pageCounts(shown),
   };
+}
+
+/**
+ * Export (RP-409): the rows of the List as the viewer reads them, with its filters and order,
+ * through the same read: every matching row, or under a search only the pages read so far (1 to
+ * the query's `page`, the last the client read), and never more than `max` rows: `capped` says
+ * when more matched. Null as for the List.
+ */
+export function exportWorkItems(
+  db: Db,
+  memberId: string,
+  scope: QueryScope,
+  q: WorkItemQuery,
+  now: Date,
+  max: number = workItemExportMax,
+): Promise<WorkItemExport | null> {
+  return withMember(db, memberId, async (trx) => {
+    if (!(await hasModuleTab(trx, scope))) return null;
+    const size = q.pageSize ?? workItemPageSize;
+    const read = q.q === undefined ? max : Math.min(max, (q.page ?? 1) * size);
+    // One row more than given, only to tell whether more matched.
+    const { rows } = await sql<Row>`
+      with r as (${visibleRows(scope, q.allRevisions)})
+      select r.*, ${holderColumns}
+      from r
+      ${holderJoins}
+      where ${matching(q, now, scope)}
+      order by ${columnOrder(q)}
+      limit ${read + 1}
+    `.execute(trx);
+    // Stopped by the cap, not by the pages a search read so far.
+    return { items: rows.slice(0, read).map((r) => toRow(r, now)), capped: read === max && rows.length > read };
+  });
 }
 
 function pageCounts(rows: Row[]): Map<string, number> {
@@ -404,6 +657,16 @@ function pageCounts(rows: Row[]): Map<string, number> {
   for (const r of rows) counts.set(r.stage_key, (counts.get(r.stage_key) ?? 0) + 1);
   return counts;
 }
+
+/**
+ * How many of the scope's visible items match `q` in each Stage, by Stage key: the List's
+ * `stages[].count`, with no rows read (Home's counts, RP-407).
+ */
+export const countWorkItems = (trx: Trx, scope: QueryScope, q: WorkItemQuery, now: Date) => countByStage(trx, scope, q, now);
+
+/** The total of Stage counts (countWorkItems), of the Stages `keep` keeps: every one by default. */
+export const stageCountTotal = (counts: Map<string, number>, keep: (stageKey: string) => boolean = () => true) =>
+  [...counts].reduce((n, [key, count]) => n + (keep(key) ? count : 0), 0);
 
 /** How many of the scope's visible items match `q` in each Stage, by Stage key. */
 async function countByStage(trx: Trx, scope: QueryScope, q: WorkItemQuery, now: Date): Promise<Map<string, number>> {
@@ -428,7 +691,7 @@ async function boardCards(trx: Trx, scope: QueryScope, q: WorkItemQuery, now: Da
     ${holderJoins}
     left join work_item cw on cw.id = r.id and r.closed
     where ${matching(q, now, scope)} and (not r.closed or coalesce(cw.closed_at, r.step_entered_at) >= ${closedSince}::timestamptz)
-    order by ${sorts[q.sort].orderBy}
+    order by ${sorts[isCursorSort(q.sort) ? q.sort : "stepAge"].orderBy}
   `.execute(trx);
   const byStage = new Map<string, BoardCardInput[]>();
   for (const r of rows) {
@@ -489,29 +752,102 @@ export async function countWorkItemBuckets(
 }
 
 /**
- * What the "With" filter offers: the Steps of the viewer's own Participant and
- * the other Companies that hold one of the viewer's visible open items, each by
- * name only (V14). Nothing that isn't in a row the viewer could list.
+ * What the "With", Owner and Step filters offer, from one read of the viewer's
+ * visible open items: the Steps of the viewer's own Participant, the other
+ * Companies that hold one of them, each by name only (V14), and my own
+ * Company's Members who have picked one up (RP-410). app.work_item_holder gives
+ * no other Company's Member, and member's own RLS shows only my own Company's
+ * people. Nothing that isn't in a row the viewer could list.
  */
-async function withChoices(trx: Trx, scope: QueryScope): Promise<WorkItemList["filters"]["with"]> {
-  const { rows } = await sql<{ held_by_own: boolean; step_key: string; step_name: BilingualText; participant_id: string; name: BilingualText }>`
+async function holderChoices(
+  trx: Trx,
+  scope: QueryScope,
+): Promise<Pick<WorkItemList["filters"], "with" | "owners">> {
+  const { rows } = await sql<{
+    held_by_own: boolean;
+    step_key: string;
+    step_name: BilingualText;
+    participant_id: string;
+    name: BilingualText;
+    member_id: string | null;
+    member_name: BilingualText | null;
+  }>`
     with r as (${visibleRows(scope, false)})
-    select distinct r.held_by_own, r.step_key, r.step_name, r.holder_participant_id as participant_id, hc.legal_name as name
+    select distinct r.held_by_own, r.step_key, r.step_name, r.holder_participant_id as participant_id, hc.legal_name as name,
+      m.id as member_id, m.full_name as member_name
     from r
     join lateral app.work_item_companies(r.id) hc on hc.participant_id = r.holder_participant_id
+    left join member m on m.id = r.assignee_member_id and r.held_by_own
     where not r.closed
   `.execute(trx);
   const steps = new Map<string, BilingualText>();
   const companies = new Map<string, BilingualText>();
+  const owners = new Map<string, BilingualText>();
   for (const r of rows) {
-    if (r.held_by_own) steps.set(r.step_key, r.step_name);
-    else companies.set(r.participant_id, r.name);
+    if (r.held_by_own) {
+      steps.set(r.step_key, r.step_name);
+      if (r.member_id && r.member_name) owners.set(r.member_id, r.member_name);
+    } else companies.set(r.participant_id, r.name);
   }
   const byName = <T extends { name: BilingualText }>(a: T, b: T) => a.name.en.localeCompare(b.name.en);
   return {
-    steps: [...steps].map(([key, name]) => ({ key, name })).sort(byName),
-    companies: [...companies].map(([participantId, name]) => ({ participantId, name })).sort(byName),
+    with: {
+      steps: [...steps].map(([key, name]) => ({ key, name })).sort(byName),
+      companies: [...companies].map(([participantId, name]) => ({ participantId, name })).sort(byName),
+    },
+    owners: [...owners].map(([memberId, name]) => ({ memberId, name })).sort(byName),
   };
+}
+
+/** The Member's own Card view layout of the scope's board (RP-410), or the default. */
+async function readBoardLayout(trx: Trx, { projectId, moduleKey }: QueryScope): Promise<BoardCardLayout> {
+  const { rows } = await sql<{ contractor_name: boolean; location: boolean; creation_date: boolean }>`
+    select contractor_name, location, creation_date from member_board_layout
+    where member_id = app.current_member_id() and project_id = ${projectId}::uuid and module_key = ${moduleKey}
+  `.execute(trx);
+  const row = rows[0];
+  return row ? { contractorName: row.contractor_name, location: row.location, creationDate: row.creation_date } : defaultBoardCardLayout;
+}
+
+/**
+ * Changes the Member's own Card view layout of a board (RP-410): the switches
+ * given, the others kept. Null when the Module has no tab on one of their
+ * Projects, as for the board itself. app.set_board_layout writes the Member's own row only.
+ */
+export function changeBoardLayout(db: Db, memberId: string, scope: QueryScope, change: BoardCardLayoutChange): Promise<BoardCardLayout | null> {
+  return withMember(db, memberId, async (trx) => {
+    if (!(await hasModuleTab(trx, scope))) return null;
+    const next = { ...(await readBoardLayout(trx, scope)), ...change };
+    const { rows } = await sql<{ outcome: string }>`
+      select app.set_board_layout(${scope.projectId}::uuid, ${scope.moduleKey}, ${next.contractorName}, ${next.location}, ${next.creationDate}) as outcome
+    `.execute(trx);
+    return rows[0]?.outcome === "set" ? next : null;
+  });
+}
+
+/** The Member's own List columns of the scope's Module (RP-409), or undefined when they saved none. */
+async function readListColumns(trx: Trx, { moduleKey }: QueryScope): Promise<ListColumnLayout | undefined> {
+  const { rows } = await sql<{ columns: unknown }>`
+    select columns from member_list_columns where member_id = app.current_member_id() and module_key = ${moduleKey}
+  `.execute(trx);
+  const saved = listColumnLayout.safeParse(rows[0]?.columns);
+  return rows[0] && saved.success ? listColumns(saved.data) : undefined;
+}
+
+/**
+ * Saves the Member's own List columns of a Module (RP-409, "Save as my default"), as the List
+ * will show them. Null when the Module has no tab on the Project or it isn't one of theirs.
+ * app.set_list_columns writes the Member's own row only.
+ */
+export function saveListColumns(db: Db, memberId: string, scope: QueryScope, columns: ListColumnLayout): Promise<ListColumnLayout | null> {
+  return withMember(db, memberId, async (trx) => {
+    if (!(await hasModuleTab(trx, scope))) return null;
+    const layout = listColumns(columns);
+    const { rows } = await sql<{ outcome: string }>`
+      select app.set_list_columns(${scope.moduleKey}, ${JSON.stringify(layout)}::jsonb) as outcome
+    `.execute(trx);
+    return rows[0]?.outcome === "set" ? layout : null;
+  });
 }
 
 /**
@@ -538,8 +874,15 @@ async function hasModuleTab(trx: Trx, { projectId, moduleKey }: QueryScope): Pro
 export function listWorkItems(db: Db, memberId: string, scope: QueryScope, q: WorkItemQuery, now: Date): Promise<WorkItemList | null> {
   return withMember(db, memberId, async (trx) => {
     if (!(await hasModuleTab(trx, scope))) return null;
-    const { rows, nextCursor, stageCounts } = await queryWorkItems(trx, scope, q, now);
-    return { ...(await stagesAndFilters(trx, scope, stageCounts)), items: rows, nextCursor };
+    const { rows, nextCursor, page, stageCounts } = await queryWorkItems(trx, scope, q, now);
+    const columnLayout = await readListColumns(trx, scope);
+    return {
+      ...(await stagesAndFilters(trx, scope, stageCounts)),
+      items: rows,
+      nextCursor,
+      ...(page ? { page } : {}),
+      ...(columnLayout ? { columnLayout } : {}),
+    };
   });
 }
 
@@ -560,7 +903,7 @@ export function boardWorkItems(db: Db, memberId: string, scope: QueryScope, q: W
       return { stageKey: s.key, shown: lanes.reduce((sum, l) => sum + l.count, 0), lanes };
     });
     const moves = await boardMoves(trx, [...cards.values()].flatMap((c) => c.map((i) => i.card)));
-    return { stages, filters, columns, moves };
+    return { stages, filters, columns, moves, layout: await readBoardLayout(trx, scope) };
   });
 }
 
@@ -596,8 +939,16 @@ async function stagesAndFilters(trx: Trx, scope: QueryScope, stageCounts: Map<st
       and (t.project_id is null or t.project_id = ${projectId}::uuid)
     order by t.code, o.sort, o.code
   `.execute(trx);
-  const { rows: values } = await sql<{ kind: "trade" | "location"; id: string; code: string; name: BilingualText; parent_id: string | null }>`
-    select d.kind, v.id, v.code, v.name, v.parent_id
+  const { rows: values } = await sql<{
+    kind: "trade" | "location";
+    id: string;
+    code: string;
+    name: BilingualText;
+    parent_id: string | null;
+    depth: number;
+    level_name: BilingualText | null;
+  }>`
+    select d.kind, v.id, v.code, v.name, v.parent_id, v.depth, v.level_name
     from dimension_value v
     join visibility_dimension d on d.id = v.dimension_id
     where v.project_id = ${projectId} and d.kind in ('trade', 'location')
@@ -609,8 +960,10 @@ async function stagesAndFilters(trx: Trx, scope: QueryScope, stageCounts: Map<st
       types,
       outcomes,
       trades: values.filter((v) => v.kind === "trade").map(({ id, code, name }) => ({ id, code, name })),
-      locations: values.filter((v) => v.kind === "location").map(({ id, code, name, parent_id }) => ({ id, code, name, parentId: parent_id })),
-      with: await withChoices(trx, scope),
+      locations: values
+        .filter((v) => v.kind === "location")
+        .map(({ id, code, name, parent_id, depth, level_name }) => ({ id, code, name, parentId: parent_id, depth, levelName: level_name })),
+      ...(await holderChoices(trx, scope)),
     },
   };
 }

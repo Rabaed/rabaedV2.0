@@ -51,6 +51,8 @@ export const projectSummary = z.object({
   code: z.string(),
   name: bilingualText,
   status: z.enum(["active", "closed"]),
+  /** The Company that created the Project: its name, which every Member of the Project sees (V15). */
+  hostCompany: z.object({ legalName: bilingualText }),
   /** The Project Role the viewer's Company plays on it. */
   projectRole: z.object({ baseRole: z.enum(baseRoles), name: bilingualText }),
   isProjectAdmin: z.boolean(),
@@ -65,5 +67,9 @@ export const projectSummary = z.object({
 });
 export type ProjectSummary = z.infer<typeof projectSummary>;
 
-export const myProjects = z.object({ projects: z.array(projectSummary) });
+export const myProjects = z.object({
+  projects: z.array(projectSummary),
+  /** Each Project's Submittals the Member sees: the count of their Submittals List there (open and closed), by Project id. */
+  submittals: z.record(z.uuid(), z.number().int().nonnegative()),
+});
 export type MyProjects = z.infer<typeof myProjects>;

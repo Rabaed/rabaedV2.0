@@ -1,6 +1,6 @@
 import { newToken, type Invitation } from "@rabaed/auth";
 import { withMember, type Database, type Db } from "@rabaed/db";
-import type { CompanyMember, HandoverPick, InviteMemberRequest } from "@rabaed/domain";
+import type { CompanyMember, HandoverPick, InviteMemberRequest, ListedMember } from "@rabaed/domain";
 import { sql, type Transaction } from "kysely";
 import { refusedAsForbidden, type Forbidden } from "../db-error.ts";
 import { checkedOutcome } from "../outcomes.ts";
@@ -42,8 +42,15 @@ function asAuthorizedPerson<T>(
 }
 
 /** The Company's Members, as RLS lets the acting Member see them: their own Company only. */
-export async function listMembers(db: Db, memberId: string): Promise<CompanyMember[]> {
-  return withMember(db, memberId, (trx) => selectMembers(trx).orderBy("m.created_at").orderBy("m.id").execute());
+export async function listMembers(db: Db, memberId: string): Promise<ListedMember[]> {
+  return withMember(db, memberId, async (trx) => {
+    const members = await selectMembers(trx).orderBy("m.created_at").orderBy("m.id").execute();
+    // How many active Projects each is on, from one function that reads nothing but the count and
+    // only for the acting Member's own Company (V15): every Member may know it of a colleague.
+    const { rows } = await sql<{ member_id: string; project_count: number }>`select * from app.member_project_counts()`.execute(trx);
+    const projects = new Map(rows.map((r) => [r.member_id, r.project_count]));
+    return members.map((m) => ({ ...m, projectCount: projects.get(m.id) ?? 0 }));
+  });
 }
 
 function selectMembers(trx: Transaction<Database>) {

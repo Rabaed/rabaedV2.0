@@ -13,6 +13,11 @@ const colours: Record<StageKey, { pill: string; dot: string }> = {
   cancelled: { pill: "bg-stage-cancelled-bg text-stage-cancelled-fg", dot: "bg-stage-cancelled-dot" },
 };
 
+/** A Stage's dot alone, beside its name (e.g. a filter choice). Decorative. */
+export function StageDot({ stage, className }: { stage: StageKey; className?: string }) {
+  return <span aria-hidden="true" className={cn("size-2 shrink-0 rounded-full", colours[stage].dot, className)} />;
+}
+
 export type StagePillProps = {
   /** The Stage's colour category: one of the Rabaed Default Stages. */
   stage: StageKey;

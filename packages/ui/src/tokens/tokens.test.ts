@@ -4,7 +4,7 @@ import { contrastRatio } from "./contrast.ts";
 import { generateTokensCss } from "./generate.ts";
 import { palette } from "./palette.ts";
 import { shadows, spacing } from "./scales.ts";
-import { coolLight, resolveRole, reviewCodes, stageKeys, toneKeys, type SemanticRole } from "./themes.ts";
+import { composite, greyDark, greyLight, resolveRole, reviewCodes, segmentToneKeys, stageKeys, themes, toneKeys, warmDark, warmLight, type SemanticRole, type Theme } from "./themes.ts";
 
 describe("contrastRatio", () => {
   it("is 21 for black on white and 1 for a colour on itself", () => {
@@ -17,19 +17,29 @@ describe("contrastRatio", () => {
   });
 });
 
-describe("cool light launch theme", () => {
-  it("uses the approved canvas, brand Tomato and Delft", () => {
-    expect(resolveRole(coolLight, "canvas")).toBe("#f6f7f9");
-    expect(resolveRole(coolLight, "brand")).toBe("#f95738");
-    expect(resolveRole(coolLight, "brand-ink")).toBe("#3d405b");
+describe("the four themes (owner decision 2026-10-11)", () => {
+  it("use the kit's canvas, surface and sidebar of each Theme and Mode", () => {
+    const of = (theme: Theme) => [resolveRole(theme, "canvas"), resolveRole(theme, "surface"), resolveRole(theme, "sidebar")];
+    expect(of(greyLight)).toEqual(["#f6f7f9", "#ffffff", "#131b2e"]);
+    expect(of(greyDark)).toEqual(["#0f1524", "#161e31", "#131b2e"]);
+    expect(of(warmLight)).toEqual(["#fdf9f5", "#ffffff", "#231b16"]);
+    expect(of(warmDark)).toEqual(["#16110e", "#1f1814", "#110d0a"]);
   });
 
-  it("maps every role to a colour in the base palette", () => {
-    for (const ref of Object.values(coolLight)) expect(Object.keys(palette)).toContain(ref);
+  it("keep the brand Tomato and Delft", () => {
+    for (const theme of Object.values(themes)) expect(resolveRole(theme, "brand")).toBe("#f95738");
+    expect(resolveRole(greyLight, "brand-ink")).toBe("#3d405b");
   });
 
-  it("has a role for every Stage, Review Code and Step Age", () => {
-    const roles = Object.keys(coolLight);
+  it("map every role to a colour in the base palette, in all four", () => {
+    for (const theme of Object.values(themes)) {
+      expect(Object.keys(theme).sort()).toEqual(Object.keys(greyLight).sort());
+      for (const ref of Object.values(theme)) expect(Object.keys(palette)).toContain(ref);
+    }
+  });
+
+  it("have a role for every Stage, Review Code and Step Age", () => {
+    const roles = Object.keys(greyLight);
     for (const stage of stageKeys) {
       for (const part of ["bg", "fg", "dot"]) expect(roles).toContain(`stage-${stage}-${part}`);
     }
@@ -44,13 +54,24 @@ describe("cool light launch theme", () => {
     }
   });
 
-  // WCAG 2.2 AA: 4.5:1 for text (1.4.3), 3:1 for focus indicators (1.4.11).
+  it("lay a translucent colour on the one under it", () => {
+    expect(composite("#ffffff80", "#000000")).toBe("#808080");
+    expect(resolveRole(greyDark, "success-tint", "surface")).toBe(composite("#27b86e29", "#161e31"));
+    expect(() => resolveRole(greyDark, "success-tint")).toThrow();
+  });
+
+  // WCAG 2.2 AA: 4.5:1 for text (1.4.3), 3:1 for focus indicators and controls (1.4.11). A fill
+  // (primary, danger) carries white text; text in a hue is its `-fg` role.
   const textPairs: [fg: SemanticRole, bg: SemanticRole][] = [
     ["text", "canvas"],
     ["text", "surface"],
+    ["text", "surface-subtle"],
     ["text-secondary", "surface"],
     ["muted", "surface"],
     ["muted", "canvas"],
+    ["muted", "surface-subtle"],
+    // A muted line in a pressed or open row, menu item or toggle.
+    ["muted", "press"],
     ["on-primary", "primary"],
     ["on-primary", "primary-hover"],
     ["on-primary", "primary-press"],
@@ -63,21 +84,36 @@ describe("cool light launch theme", () => {
     ["on-danger", "danger"],
     ["on-danger", "danger-hover"],
     ["on-danger", "danger-press"],
-    ["danger", "surface"],
+    ["danger-fg", "surface"],
+    ["danger-fg", "canvas"],
     ["success", "surface"],
-    ["primary", "surface"],
+    ["brand-fg", "surface"],
+    ["brand-fg", "canvas"],
     ["on-inverse", "inverse"],
+    // The member menu's switches: a choice on its track, the chosen one inverse (the kit's .lang button.on).
+    ["neutral-fg", "field-fill"],
     // Badge tones (and Avatar initials): text on its tint.
     ...toneKeys.map((tone) => [`${tone}-fg`, `${tone}-tint`] as [SemanticRole, SemanticRole]),
-    ...stageKeys.map(
-      (s) => [`stage-${s}-fg`, `stage-${s}-bg`] as [SemanticRole, SemanticRole],
-    ),
+    ...stageKeys.map((s) => [`stage-${s}-fg`, `stage-${s}-bg`] as [SemanticRole, SemanticRole]),
     ...reviewCodes.map((c) => [`code-${c}-fg`, `code-${c}-bg`] as [SemanticRole, SemanticRole]),
+    // Kanban card chips (RP-410).
+    ...["cv", "ar", "el", "me", "su", "other"].map((t) => [`trade-${t}-fg`, `trade-${t}-bg`] as [SemanticRole, SemanticRole]),
+    ["revision-fg", "revision-bg"],
+    // Code A's green card: its muted lines and the Trade chip's text.
+    ["muted", "card-approved-bg"],
+    ["text-secondary", "card-approved-bg"],
+    ...segmentToneKeys.map((s) => [`segment-${s}-fg`, `segment-${s}-tint`] as [SemanticRole, SemanticRole]),
+    // Solid avatars' initials (RP-407).
+    ...["1", "2", "3", "4", "5", "6", "company"].map((a) => ["on-avatar", `avatar-${a}`] as [SemanticRole, SemanticRole]),
+    // The dark sidebar, in every theme and mode.
+    ["sidebar-text", "sidebar"],
+    ["sidebar-label", "sidebar"],
+    ["sidebar-text", "sidebar-hover"],
+    ["sidebar-text", "sidebar-card"],
+    ["sidebar-text", "sidebar-press"],
+    ["sidebar-label", "sidebar-card"],
+    ["sidebar-current-text", "sidebar-current"],
   ];
-
-  it.each(textPairs)("%s on %s meets 4.5:1", (fg, bg) => {
-    expect(contrastRatio(resolveRole(coolLight, fg), resolveRole(coolLight, bg))).toBeGreaterThanOrEqual(4.5);
-  });
 
   // Form control boundaries must be visible too (1.4.11), unlike decorative borders.
   const graphicPairs: [fg: SemanticRole, bg: SemanticRole][] = [
@@ -88,14 +124,39 @@ describe("cool light launch theme", () => {
     ["control-border", "surface-subtle"],
     ["control-border-hover", "surface"],
     ["primary", "surface"],
+    ["primary", "canvas"],
+    ["danger-fg", "surface"],
+    ["sidebar-icon", "sidebar"],
+    ["focus", "sidebar"],
+    // The current item's icon, on its tint.
+    ["brand", "sidebar-current"],
+    ["control-border", "hover"],
+    ["brand", "sidebar"],
+    // A Project's letter tile: a 19px / 800 letter is large text, so 3:1.
+    ...(["1", "2", "3", "4", "5"] as const).map((n) => ["on-avatar", `project-tile-${n}`] as [SemanticRole, SemanticRole]),
     ...([1, 2, 3, 4] as const).flatMap((age) => [
       [`age-${age}`, "surface"] as [SemanticRole, SemanticRole],
       [`age-${age}`, "canvas"] as [SemanticRole, SemanticRole],
     ]),
   ];
 
-  it.each(graphicPairs)("%s on %s meets 3:1", (fg, bg) => {
-    expect(contrastRatio(resolveRole(coolLight, fg), resolveRole(coolLight, bg))).toBeGreaterThanOrEqual(3);
+  /** A pair as the page shows it: a translucent background on the surface (or the sidebar), a translucent text on that background. */
+  const contrastOf = (theme: Theme, fg: SemanticRole, bg: SemanticRole) => {
+    const under: SemanticRole = bg.startsWith("sidebar-") ? "sidebar" : "surface";
+    const back = resolveRole(theme, bg, under);
+    const front: string = palette[theme[fg]];
+    return contrastRatio(front.length === 9 ? composite(front, back) : front, back);
+  };
+
+  const cases = (pairs: [SemanticRole, SemanticRole][]) =>
+    Object.entries(themes).flatMap(([name, theme]) => pairs.map(([fg, bg]) => [name, fg, bg, theme] as const));
+
+  it.each(cases(textPairs))("%s: %s on %s meets 4.5:1", (_name, fg, bg, theme) => {
+    expect(contrastOf(theme, fg, bg)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it.each(cases(graphicPairs))("%s: %s on %s meets 3:1", (_name, fg, bg, theme) => {
+    expect(contrastOf(theme, fg, bg)).toBeGreaterThanOrEqual(3);
   });
 });
 
@@ -107,7 +168,17 @@ describe("generated tokens.css", () => {
   });
 
   it("declares semantic roles that point at the palette, not at raw colours", () => {
-    expect(css).toMatch(/\[data-theme="cool-light"\][^{]*\{[^}]*--canvas: var\(--palette-slate-50\);/);
+    expect(css).toMatch(/\[data-theme="grey"\]\[data-mode="light"\][^{]*\{[^}]*--canvas: var\(--palette-slate-50\);/);
+    expect(css).toMatch(/\[data-theme="warm"\]\[data-mode="dark"\] \{[^}]*--canvas: var\(--palette-espresso-canvas\);/);
+  });
+
+  it("gives a page with no Theme Grey Light, and Mode System the device's light or dark", () => {
+    expect(css).toMatch(/:root,\n\[data-theme="grey"\]\[data-mode="light"\],\n\[data-theme="grey"\]\[data-mode="system"\] \{\n {2}color-scheme: light;/);
+    expect(css).toMatch(/\[data-theme="warm"\]\[data-mode="light"\],\n\[data-theme="warm"\]\[data-mode="system"\] \{[^}]*--canvas: var\(--palette-warm-canvas\);/);
+    expect(css).toMatch(
+      /@media \(prefers-color-scheme: dark\) \{\n {2}\[data-theme="warm"\]\[data-mode="system"\] \{\n {4}color-scheme: dark;[^}]*--canvas: var\(--palette-espresso-canvas\);/,
+    );
+    expect(css).toMatch(/@media \(prefers-color-scheme: dark\) \{\n {2}\[data-theme="grey"\]\[data-mode="system"\] \{[^}]*--canvas: var\(--palette-navy-canvas\);/);
   });
 
   it("exposes only semantic roles as Tailwind colours", () => {
@@ -127,7 +198,7 @@ describe("generated tokens.css", () => {
   });
 
   it("tints every shadow with the shadow-colour role, so a theme can change it", () => {
-    expect(css).toMatch(/:root,\n\[data-theme="cool-light"\] \{[^}]*--shadow-colour: var\(--palette-slate-900\);/);
+    expect(css).toMatch(/:root,\n\[data-theme="grey"\]\[data-mode="light"\],[^{]*\{[^}]*--shadow-colour: var\(--palette-slate-900\);/);
     const shadowLines = css.split("\n").filter((line) => /^\s*--shadow-(xs|sm|md|lg):/.test(line));
     expect(shadowLines).toHaveLength(Object.keys(shadows).length);
     for (const line of shadowLines) {

@@ -1,8 +1,9 @@
 import type { Locale } from "@rabaed/domain";
+import { SettingsHeader, SettingsSection } from "@rabaed/ui";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
 import { VisibilityEditor } from "@/components/visibility-editor";
-import { Link, redirect } from "@/i18n/navigation";
+import { redirect } from "@/i18n/navigation";
 import {
   getMe,
   getParticipantVisibility,
@@ -37,22 +38,21 @@ export default async function VisibilitySettingsPage({
   const grants = await Promise.all(participants.participants.map((p) => getParticipantVisibility(p.id)));
 
   return (
-    <div className="space-y-8">
-      <div className="space-y-1">
-        <Link href={`/projects/${project.id}`} className="text-sm text-primary underline underline-offset-4">
-          {project.name[locale]}
-        </Link>
-        <h1 className="text-h4 font-semibold">{t("title")}</h1>
-        <p className="text-muted">{t("participantsHint")}</p>
-      </div>
+    <>
+      <SettingsHeader title={t("title")} description={t("participantsHint")} />
       {participants.participants.map((p, i) => {
         const grant = grants[i];
         return (
-          <section key={p.id} className="space-y-3" data-testid="participant-visibility">
-            <h2 className="text-h6 font-semibold">
-              {p.company.legalName[locale]}{" "}
-              <span className="font-normal text-muted">· {p.projectRole.name[locale]}</span>
-            </h2>
+          <SettingsSection
+            key={p.id}
+            title={
+              <>
+                {p.company.legalName[locale]}{" "}
+                <span className="font-normal text-muted">· {p.projectRole.name[locale]}</span>
+              </>
+            }
+            data-testid="participant-visibility"
+          >
             {grant ? (
               <VisibilityEditor
                 options={dimensions}
@@ -61,13 +61,13 @@ export default async function VisibilitySettingsPage({
                 allLabel={{ trade: t("allTrades"), location: t("allLocations") }}
               />
             ) : (
-              <p role="alert" className="text-danger">
+              <p role="alert" className="text-danger-fg">
                 {t("unavailable")}
               </p>
             )}
-          </section>
+          </SettingsSection>
         );
       })}
-    </div>
+    </>
   );
 }

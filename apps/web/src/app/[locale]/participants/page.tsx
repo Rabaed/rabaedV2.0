@@ -45,7 +45,7 @@ export default async function ParticipationsPage({ params }: { params: Promise<{
         </section>
       )}
       {!list ? (
-        <p role="alert" className="text-danger">
+        <p role="alert" className="text-danger-fg">
           {t("unavailable")}
         </p>
       ) : list.participants.length === 0 ? (

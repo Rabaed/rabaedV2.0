@@ -1,85 +1,86 @@
-import type { Locale } from "@rabaed/domain";
+import { intlLocaleOf, type Locale } from "@rabaed/domain";
+import ar from "../../../../apps/web/messages/ar.json" with { type: "json" };
+import en from "../../../../apps/web/messages/en.json" with { type: "json" };
 import type { NumberingCountersLabels } from "../components/numbering/numbering-counters.tsx";
-import type { NumberingPatternLabels } from "../components/numbering/numbering-pattern.tsx";
+import type { NumberingText } from "../components/numbering/numbering-text.tsx";
 import type { ParticipantCodesLabels } from "../components/numbering/participant-codes.tsx";
 
-// Story copy for Numbering: the labels the app passes from its messages
-// (apps/web/messages), in English and Arabic.
+// Story copy for Document Numbering: the labels the app passes from its messages
+// (apps/web/messages), in English and Arabic. The page's words (RP-412) are read
+// from the app's message files themselves, so the stories show exactly its copy.
 
-export const numberingPatternLabels: Record<Locale, NumberingPatternLabels> = {
-  en: {
-    kinds: {
-      project: "Project",
-      type: "Work Item Type",
-      trade: "Trade",
-      participant: "Participant Code",
-      location: "Location level",
-      text: "Fixed text",
-    },
-    levels: ["Zone", "Building", "Floor"],
-    segments: "Segments",
-    segment: (n) => `Segment ${n}`,
-    level: "Level",
-    text: "Text",
-    textHint: "1 to 10 capital letters or digits.",
-    textInvalid: "Use 1 to 10 capital letters or digits.",
-    counted: "Counted separately",
-    countedHint: "The sequence runs on its own for each value of a ticked segment.",
-    moveUp: (n) => `Move segment ${n} up`,
-    moveDown: (n) => `Move segment ${n} down`,
-    remove: (n) => `Remove segment ${n}`,
-    add: "Add segment",
-    separator: "Separator",
-    digits: "Sequence digits",
-    example: "Example",
-    exampleHint: "The first number this pattern gives.",
-    sharedTitle: "One shared count",
-    sharedBody:
-      "The sequence doesn't count separately for the Participant Code, so every Company's items share one count. Each Company can then tell how many items the others numbered from the gaps in its own numbers.",
-    sharedAccept: "I accept that every Company can tell the others' volume from the gaps",
-    sharedReadOnly: "Every Company's items share one count, accepted by the Project Admin.",
-    save: "Save pattern",
-    saving: "Saving…",
-    afterChange: "A change applies only to items numbered after it; issued numbers never change.",
-    countedBadge: "Counted",
-  },
-  ar: {
-    kinds: {
-      project: "المشروع",
-      type: "نوع البند",
-      trade: "التخصص",
-      participant: "رمز المشارك",
-      location: "مستوى الموقع",
-      text: "نص ثابت",
-    },
-    levels: ["المنطقة", "المبنى", "الطابق"],
-    segments: "الأجزاء",
-    segment: (n) => `الجزء ${n}`,
-    level: "المستوى",
-    text: "النص",
-    textHint: "من 1 إلى 10 أحرف إنجليزية كبيرة أو أرقام.",
-    textInvalid: "استخدم من 1 إلى 10 أحرف إنجليزية كبيرة أو أرقام.",
-    counted: "يُعدّ منفصلًا",
-    countedHint: "يبدأ التسلسل عدًّا مستقلًا لكل قيمة من قيم الجزء المحدد.",
-    moveUp: (n) => `نقل الجزء ${n} إلى الأعلى`,
-    moveDown: (n) => `نقل الجزء ${n} إلى الأسفل`,
-    remove: (n) => `إزالة الجزء ${n}`,
-    add: "إضافة جزء",
-    separator: "الفاصل",
-    digits: "عدد خانات التسلسل",
-    example: "مثال",
-    exampleHint: "أول رقم يعطيه هذا النمط.",
-    sharedTitle: "عدّ مشترك واحد",
-    sharedBody:
-      "لا يُعدّ التسلسل منفصلًا حسب رمز المشارك، لذا تشترك بنود كل الشركات في عدّ واحد. وعندها تستطيع كل شركة أن تعرف من الفجوات في أرقامها عدد البنود التي رقّمتها الشركات الأخرى.",
-    sharedAccept: "أقبل أن كل شركة تستطيع معرفة حجم عمل الشركات الأخرى من الفجوات",
-    sharedReadOnly: "تشترك بنود كل الشركات في عدّ واحد، بقبول مسؤول المشروع.",
-    save: "حفظ النمط",
-    saving: "جارٍ الحفظ…",
-    afterChange: "يسري التغيير على البنود التي تُرقَّم بعده فقط، ولا تتغير الأرقام الصادرة أبدًا.",
-    countedBadge: "يُعدّ",
-  },
-};
+const messages = { en, ar } as const;
+
+/**
+ * An ICU `{count, plural, …}` message's branch for a count, as next-intl picks it: an
+ * exact `=n`, else the locale's plural category (Arabic: zero, one, two, few, many, other).
+ */
+function plural(message: string, locale: Locale, values: Record<string, string | number>): string {
+  const head = /^\{(\w+), plural,/.exec(message);
+  if (!head) return message;
+  const count = Number(values[head[1]!]);
+  const branches = new Map<string, string>();
+  let i = head[0].length;
+  while (i < message.length - 1) {
+    const key = /^\s*(=?\w+)\s*\{/.exec(message.slice(i));
+    if (!key) break;
+    i += key[0].length;
+    let depth = 1;
+    const start = i;
+    while (depth > 0) {
+      if (message[i] === "{") depth += 1;
+      else if (message[i] === "}") depth -= 1;
+      i += 1;
+    }
+    branches.set(key[1]!, message.slice(start, i - 1));
+  }
+  return branches.get(`=${count}`) ?? branches.get(new Intl.PluralRules(intlLocaleOf(locale)).select(count)) ?? branches.get("other") ?? message;
+}
+
+/** Any of the app's ICU messages as next-intl words it: plural branch chosen, `{name}` placeholders filled in. */
+export function icuMessage(message: string, locale: Locale, values: Record<string, string | number> = {}): string {
+  return plural(message, locale, values).replace(/\{(\w+)\}/g, (all, name: string) => (name in values ? String(values[name]) : all));
+}
+
+/** The app's `numbering.page` messages as next-intl gives them: a key, plural branches chosen, `{name}` placeholders filled in. */
+export function numberingText(locale: Locale): NumberingText {
+  const page = messages[locale].numbering.page as Record<string, unknown>;
+  return (key, values = {}) => {
+    const found = key.split(".").reduce<unknown>((at, part) => (at as Record<string, unknown> | undefined)?.[part], page);
+    if (typeof found !== "string") throw new Error(`No numbering.page message ${key}`);
+    return plural(found, locale, values).replace(/\{(\w+)\}/g, (all, name: string) => (name in values ? String(values[name]) : all));
+  };
+}
+
+export const participantCodesLabels: Record<Locale, ParticipantCodesLabels> = Object.fromEntries(
+  (["en", "ar"] as const).map((locale) => {
+    const m = messages[locale].numbering.participantCodes;
+    return [
+      locale,
+      {
+        title: m.title,
+        intro: m.intro,
+        participants: m.participants,
+        colParticipant: m.colParticipant,
+        colOrder: m.colOrder,
+        colCode: m.colCode,
+        codeOf: (company: string) => m.codeOf.replace("{company}", company),
+        locked: m.locked,
+        noCode: m.noCode,
+        editOf: (company: string) => m.editOf.replace("{company}", company),
+        saving: m.saving,
+        saved: m.saved,
+        refusals: {
+          invalid: m.invalid,
+          duplicate_code: m.duplicateCode,
+          code_in_use: m.codeInUse,
+          forbidden: m.forbidden,
+          unavailable: m.unavailable,
+        },
+      },
+    ];
+  }),
+) as Record<Locale, ParticipantCodesLabels>;
 
 export const numberingCountersLabels: Record<Locale, NumberingCountersLabels> = {
   en: {
@@ -149,45 +150,6 @@ export const numberingCountersLabels: Record<Locale, NumberingCountersLabels> = 
       not_found: "لا يمكنك تغيير الترقيم في هذا المشروع.",
       invalid: "أدخل عددًا صحيحًا من 1 إلى 9,999,999.",
       unavailable: "لم ينجح ذلك. حاول مرة أخرى.",
-    },
-  },
-};
-
-export const participantCodesLabels: Record<Locale, ParticipantCodesLabels> = {
-  en: {
-    title: "Participant Codes",
-    intro:
-      "Each Participant's code in Document Numbers: 2 to 6 letters or digits, at least one a letter. Until a code is set, numbers show the Participant's order on the Project. A code is fixed once a number uses it.",
-    participants: "Participants",
-    code: "Participant Code",
-    order: "Order on the Project, until a code is set",
-    noCode: "No code yet",
-    save: "Save code",
-    saved: "Participant Code saved.",
-    refusals: {
-      invalid: "Use 2 to 6 letters or digits, with at least one letter.",
-      duplicate_code: "Another Participant on this Project already has that code.",
-      code_in_use: "A Document Number already uses this code, so it can no longer change.",
-      forbidden: "Only a Project Admin can set Participant Codes.",
-      unavailable: "Something went wrong. Try again.",
-    },
-  },
-  ar: {
-    title: "رموز المشاركين",
-    intro:
-      "رمز كل مشارك في أرقام المستندات: من حرفين إلى 6 أحرف أو أرقام، على أن يكون بينها حرف واحد على الأقل. ما لم يُحدَّد الرمز، تعرض الأرقام ترتيب المشارك في المشروع. ويُثبَّت الرمز بمجرد أن يستخدمه رقم.",
-    participants: "المشاركون",
-    code: "رمز المشارك",
-    order: "الترتيب في المشروع، إلى أن يُحدَّد رمز",
-    noCode: "لا رمز بعد",
-    save: "حفظ الرمز",
-    saved: "تم حفظ رمز المشارك.",
-    refusals: {
-      invalid: "استخدم من حرفين إلى 6 أحرف أو أرقام، مع حرف واحد على الأقل.",
-      duplicate_code: "يوجد مشارك آخر في هذا المشروع يستخدم هذا الرمز.",
-      code_in_use: "يستخدم رقم مستند هذا الرمز بالفعل، فلم يعد قابلًا للتغيير.",
-      forbidden: "لا يحدد رموز المشاركين إلا مسؤول المشروع.",
-      unavailable: "حدث خطأ. حاول مرة أخرى.",
     },
   },
 };

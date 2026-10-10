@@ -1,7 +1,9 @@
 import { z } from "zod";
 import { bilingualText } from "./company.ts";
+import { documentSummary } from "./document.ts";
 import { formAnswers, formSchema, namedAnswers } from "./form.ts";
 import { handoverReasons } from "./handover.ts";
+import { listColumnLayout } from "./list-columns.ts";
 import { outcomeCodePattern, outcomeSchema } from "./outcome.ts";
 
 /** A Work Item Type's short code, used in filters and Document Numbers (MAR, SAR…). */
@@ -100,6 +102,15 @@ export const workItemWith = z.discriminatedUnion("kind", [
     companyName: bilingualText,
     step: z.object({ key: z.string(), name: bilingualText }),
     holder: z.object({ name: bilingualText, isMe: z.boolean() }).nullable(),
+    /**
+     * The role holding it (RP-410, the Kanban's lanes): the holder's Position, or for a
+     * Step not picked up the first Position of its Step Pool, with the viewer's own Project
+     * Role. Only ever my own Company's (V5, V14); null when none can be named.
+     */
+    role: z
+      .object({ position: z.object({ key: z.string(), name: bilingualText, sort: z.number().int() }), projectRole: bilingualText })
+      .nullable()
+      .optional(),
   }),
   z.object({ kind: z.literal("company"), companyName: bilingualText }),
 ]);
@@ -117,6 +128,24 @@ export const workItemRow = workItemSummary.extend({
   submissionDate: z.iso.datetime().nullable(),
   /** Only for a Member of the raiser's Participant (visibility.md "Creation Date"); null for everyone else. Never the time the Draft was started. */
   creationDate: z.iso.datetime().nullable(),
+  /**
+   * The raising Company's name, for everyone who sees the item (the Kanban card's
+   * "Contractor name", RP-410; Search already finds it, visibility.md "Search and
+   * filters"). Left out by reads that don't give it.
+   */
+  raiserCompanyName: bilingualText.optional(),
+  /**
+   * Who closed it (RP-410, a closed Kanban card's footer), by the Transition that
+   * closed it: my own Company's person who took it, or another Company by its name
+   * only, never its people (V14). Null while open; left out by reads that don't give it.
+   */
+  closedBy: z
+    .discriminatedUnion("kind", [
+      z.object({ kind: z.literal("own"), name: bilingualText, companyName: bilingualText }),
+      z.object({ kind: z.literal("company"), companyName: bilingualText }),
+    ])
+    .nullable()
+    .optional(),
 });
 export type WorkItemRow = z.infer<typeof workItemRow>;
 
@@ -132,19 +161,48 @@ export const workItemList = z.object({
   stages: z.array(stage.extend({ count: z.number().int().nonnegative() })),
   items: z.array(workItemRow),
   nextCursor: z.string().nullable(),
+  /**
+   * A numbered page (RP-409): its number, its size and whether a next page holds rows. Never how many
+   * pages or rows there are: the Stage counts say that, except under a search, where nothing does.
+   * Left out when the read pages by cursor.
+   */
+  page: z.object({ number: z.number().int().positive(), size: z.number().int().positive(), hasNext: z.boolean() }).optional(),
+  /** The Member's own List columns for the Module (RP-409), when they saved some; else the design's. */
+  columnLayout: listColumnLayout.optional(),
   filters: z.object({
     types: z.array(z.object({ code: z.string(), name: bilingualText })),
     /** Each Type's outcomes on the Project, by Type code, in their order (RP-429): the outcome filter and badges read them. */
     outcomes: z.array(outcomeSchema.extend({ type: z.string() })),
     trades: z.array(dimensionValueRef),
-    locations: z.array(dimensionValueRef.extend({ parentId: z.uuid().nullable() })),
+    /** Each Location with its place in the tree: its level (1 the top) and the level's name, e.g. Zone, Building, Floor (RP-410). */
+    locations: z.array(
+      dimensionValueRef.extend({ parentId: z.uuid().nullable(), depth: z.number().int().positive(), levelName: bilingualText.nullable() }),
+    ),
     with: z.object({
       steps: z.array(z.object({ key: z.string(), name: bilingualText })),
       companies: z.array(z.object({ participantId: z.uuid(), name: bilingualText })),
     }),
+    /**
+     * The Owner filter's people (RP-410): my own Company's Members who have claimed
+     * one of my visible open items, by name. Another Company is offered by its name
+     * only, from `with.companies` (V14).
+     */
+    owners: z.array(z.object({ memberId: z.uuid(), name: bilingualText })),
   }),
 });
 export type WorkItemList = z.infer<typeof workItemList>;
+
+/**
+ * Export (RP-409): the rows of the List the viewer reads, with its filters and order, from the same
+ * read as the List: every matching row, but under a search only the pages read so far (1 to the
+ * query's page), and never a count beyond them (visibility.md "Search and filters").
+ */
+export const workItemExport = z.object({
+  items: z.array(workItemRow),
+  /** More rows matched than one Export gives (`workItemExportMax`): these are the first of them. */
+  capped: z.boolean(),
+});
+export type WorkItemExport = z.infer<typeof workItemExport>;
 
 /**
  * Link search (form-engine.md part 2b; visibility.md "Link search"): part of a
@@ -264,6 +322,65 @@ export const createRevisionRefusals = ["not_found", "project_closed", "idempoten
 export const createReplacementRefusals = ["not_found", "project_closed", "idempotency_key_reused", "replacement_not_allowed"] as const;
 export type ReplacementRefusal = (typeof createReplacementRefusals)[number];
 
+/** The refusal of Duplicate (RP-409): one word for every reason it isn't allowed, so it names nothing. */
+export const duplicateRefusals = ["not_found", "project_closed", "duplicate_not_allowed", "duplicate_files_too_large"] as const;
+
+/** The most a Duplicate copies of its own Company's files, in all (RP-409): 200 MB. */
+export const duplicateMaxFileBytes = 200 * 1024 * 1024;
+
+/** Duplicate: the key makes a repeated request (a double-click, a retry) answer with the same Draft. */
+export const duplicateRequest = z.object({ idempotencyKey: z.uuid() });
+export type DuplicateRequest = z.infer<typeof duplicateRequest>;
+
+/** The refusals of discarding a Draft (app.discard_draft, RP-409). */
+export const discardDraftRefusals = ["not_found", "project_closed", "not_discardable"] as const;
+
+/**
+ * Download (RP-409; visibility.md scenario RP-409-2): a Submitted item as it was shared, the
+ * same for every viewer who sees it, the raiser's own Company included. Its outcome, its
+ * answers as last shared (never anyone's in-progress answers), and the shared moves of its
+ * history by Company only: no Step, no person, no Internal Note, no internal move. Null
+ * (404) before the first Submit, when nothing is shared yet.
+ */
+export const sharedWorkItem = z.object({
+  id: z.uuid(),
+  projectId: z.uuid(),
+  formVersionId: z.uuid(),
+  title: z.string(),
+  documentNumber: z.string().nullable(),
+  revisionNo: z.number().int().nonnegative(),
+  type: z.object({ code: z.string(), name: bilingualText }),
+  stage: z.object({ key: z.string(), name: bilingualText, category: z.enum(stageCategories) }),
+  outcome: workItemOutcome.nullable(),
+  /** The outcome's name in its Type's set, e.g. "Approved as noted". */
+  outcomeName: bilingualText.nullable(),
+  trade: dimensionValueRef,
+  location: dimensionValueRef.nullable(),
+  /** Its Scopes and Sub-scopes, each Scope before its Sub-scopes. */
+  scopes: z.array(z.object({ id: z.uuid(), parentId: z.uuid().nullable(), name: bilingualText })),
+  raisedBy: z.object({ companyName: bilingualText }),
+  submissionDate: z.iso.datetime(),
+  closedAt: z.iso.datetime().nullable(),
+  answers: formAnswers,
+  /** A `participant` answer by its Company's name; a `member` answer names nobody (no people). */
+  namedAnswers,
+  /** Its Documents as of its last arrival, never one added since; the uploader by Company only. */
+  documents: z.array(documentSummary),
+  /** Its Links as of its last arrival, each linked item by Document Number and Subject only. */
+  links: z.array(workItemLink.omit({ workItemId: true })),
+  history: z.array(
+    z.object({
+      at: z.iso.datetime(),
+      transition: bilingualText.nullable(),
+      companyName: bilingualText.nullable(),
+      outcome: workItemOutcome.nullable(),
+      remarks: z.string().nullable(),
+      documentNumber: z.string().nullable(),
+    }),
+  ),
+});
+export type SharedWorkItem = z.infer<typeof sharedWorkItem>;
+
 /** The refusals of discarding a Draft Revision (app.discard_revision). */
 export const discardRevisionRefusals = ["not_found", "project_closed", "not_discardable"] as const;
 
@@ -359,6 +476,16 @@ export const workItemActions = z.object({
   createReplacement: z.boolean(),
   /** Discard this Revision: still in Draft, never numbered, for the raiser's Company. */
   discardRevision: z.boolean(),
+  /**
+   * Duplicate (RP-409, the List's row menu): a new Draft of the same Type with only what the
+   * viewer's own Company wrote, for a Member of the raiser's Company on an active Project.
+   */
+  duplicate: z.boolean(),
+  /**
+   * Delete (RP-409, the List's row menu): discard the viewer's own Draft, an original or a
+   * Revision, while it has no Document Number, for a Member of the raiser's Participant.
+   */
+  discardDraft: z.boolean(),
   transitions: z.array(
     z.object({
       key: z.string(),
@@ -450,6 +577,12 @@ export const workItemDetail = workItemSummary.extend({
    * the Draft was started is never shown (visibility.md "Creation Date").
    */
   creationDate: z.iso.datetime().nullable(),
+  /**
+   * The item a Duplicate made this Draft from (RP-409), only for the raiser's
+   * Participant and only while they see it: its Document Number (null for a Draft)
+   * and Subject. It has no time, so it never tells when the Draft was started.
+   */
+  duplicatedFrom: z.object({ workItemId: z.uuid(), documentNumber: z.string().nullable(), subject: z.string() }).nullable(),
   /** The Submission Date: its first Submit out of the raiser's Participant, kept after a Send Back. Null until then. */
   submissionDate: z.iso.datetime().nullable(),
   /**

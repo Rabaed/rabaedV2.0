@@ -105,6 +105,20 @@ export const offersRevision = (o: Pick<Outcome, "actions">): boolean => hasActio
 export const offersReplacement = (o: Pick<Outcome, "actions">): boolean => hasAction(o, "offer_replacement");
 
 /**
+ * How a card shows an outcome (RP-410, the Kanban card anatomy), from its place in
+ * its Type's set, never its code: `a` the set's first positive outcome with no
+ * follow-up (the clean approval, the only one that turns a card green), `b` any
+ * other positive one, `c` one offering a Revision, `d` any other negative one.
+ */
+export type OutcomeLook = "a" | "b" | "c" | "d";
+export function outcomeLook<O extends Pick<Outcome, "code" | "polarity" | "actions">>(o: O, set: readonly O[]): OutcomeLook {
+  if (offersRevision(o)) return "c";
+  if (o.polarity === "negative") return "d";
+  const clean = set.find((x) => x.polarity === "positive" && x.actions.length === 0);
+  return clean?.code === o.code ? "a" : "b";
+}
+
+/**
  * The key of the closing Transition's Action Form `table` whose rows become the
  * items of a `create_items` outcome (WF-11): one item per row, its answers the
  * row's cells under the same keys, its Subject the row's first text cell.

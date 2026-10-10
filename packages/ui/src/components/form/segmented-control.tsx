@@ -30,7 +30,7 @@ export function SegmentedControl({ options, className, value, defaultValue, onVa
       orientation="horizontal"
       className={cn(
         "inline-flex w-fit gap-0.5 rounded-sm border border-control-border bg-surface-subtle p-0.5",
-        "aria-invalid:border-danger",
+        "aria-invalid:border-danger-fg",
         className,
       )}
       {...state}

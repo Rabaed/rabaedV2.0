@@ -123,11 +123,11 @@ export function ProjectMembersEditor({
                 <span className="flex items-center gap-2">
                   <Link
                     href={`/participants/${participantId}/members/${m.id}/visibility`}
-                    className="text-sm text-primary underline underline-offset-4"
+                    className="text-sm text-brand-fg underline underline-offset-4"
                   >
                     {t("visibility")}
                   </Link>
-                  <Button variant="ghost" size="sm" className="text-danger" disabled={pending} onClick={() => remove(m)}>
+                  <Button variant="ghost" size="sm" className="text-danger-fg" disabled={pending} onClick={() => remove(m)}>
                     {t("remove")}
                   </Button>
                 </span>
@@ -155,7 +155,7 @@ export function ProjectMembersEditor({
       )}
 
       {error && (
-        <p role="alert" className="text-sm text-danger">
+        <p role="alert" className="text-sm text-danger-fg">
           {error}
         </p>
       )}

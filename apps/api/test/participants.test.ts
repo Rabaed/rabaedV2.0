@@ -44,6 +44,7 @@ describe("adding a Participant", () => {
         projectRole: { baseRole: "contractor", name: { en: "Contractor", ar: "المقاول" } },
         code: null,
         ordinal: 1,
+        codeLocked: false,
         isOwnCompany: true,
       },
       {
@@ -52,6 +53,7 @@ describe("adding a Participant", () => {
         projectRole: { baseRole: "consultant", name: { en: "Consultant", ar: "الاستشاري" } },
         code: null,
         ordinal: 2,
+        codeLocked: false,
         isOwnCompany: false,
       },
     ]);
@@ -313,6 +315,7 @@ describe("the Participants of a Project", () => {
           code: null,
           // Not even its own order on the Project, which would count the others (RP-381-1).
           ordinal: null,
+          codeLocked: false,
           isOwnCompany: true,
         },
       ],
