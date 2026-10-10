@@ -24,6 +24,8 @@ import { useCallback, useState, type ElementType, type ReactNode } from "react";
 import { ListToast } from "../list/list-toast.tsx";
 import { Button } from "../button/button.tsx";
 import { ColumnSettings, type ColumnSettingsLabels } from "./column-settings.tsx";
+import { groupRows, listGroupings, type ListGrouping } from "./list-groups.ts";
+import { GroupMenu } from "./list-menus.tsx";
 import { Badge } from "../data/badge.tsx";
 import { cn } from "../../lib/cn.ts";
 import { focusRing } from "../form/control-styles.ts";
@@ -90,6 +92,12 @@ export type WorkItemListLabels = {
   /** The bulk bar's count: `n` is `count` written for the locale. */
   selected: (n: string, count: number) => string;
   clearSelection: string;
+  /** Group by (RP-409): the button, its menu's heading, the button once grouped ("Group: Status"), ending it, and a group with no value. */
+  group: string;
+  groupBy: string;
+  groupedBy: (by: string) => string;
+  clearGrouping: string;
+  groupNone: string;
   noNumber: string;
   revisionNoNumber: (revision: string) => string;
   empty: string;
@@ -245,6 +253,24 @@ export function WorkItemList({
   const selected = selection.page === pageKey ? selection.ids : new Set<string>();
   const select = (ids: ReadonlySet<string>) => setSelection({ page: pageKey, ids });
   const bulkActions: ReactNode = null;
+  // Group by (RP-409): the page's rows under a header per value, each folded on a click.
+  const [groupBy, setGroupBy] = useState<ListGrouping | null>(null);
+  const [folded, setFolded] = useState<ReadonlySet<string>>(new Set());
+  const groups =
+    groupBy === null
+      ? undefined
+      : groupRows(list.items, groupBy, { stages: list.stages, ...list.filters }, locale, labels).map((g) => ({ ...g, collapsed: folded.has(g.key) }));
+  const groupMenu = !board && (
+    <GroupMenu
+      choices={listGroupings.map((key) => ({ key, label: headerOf(key) }))}
+      value={groupBy}
+      onChange={(by) => {
+        setGroupBy(by);
+        setFolded(new Set());
+      }}
+      labels={{ group: t("group"), groupBy: t("groupBy"), groupedBy: labels.groupedBy, clear: t("clearGrouping") }}
+    />
+  );
   const filtered = isFilteredWorkItemQuery(query);
 
   const valueLabels = { clear: t("clearField"), search: t("searchValues"), noMatches: t("noMatches") };
@@ -439,7 +465,16 @@ export function WorkItemList({
 
   return (
     <div className="flex min-w-0 flex-col gap-4">
-      <ListToolbar label={t("toolbar")} end={viewSwitch} className="gap-3">
+      <ListToolbar
+        label={t("toolbar")}
+        end={
+          <>
+            {groupMenu}
+            {viewSwitch}
+          </>
+        }
+        className="gap-3"
+      >
         {action}
         <ToolbarSearch
           tall
@@ -531,6 +566,32 @@ export function WorkItemList({
                 linkAs={Link}
                 onColumnsChange={onSaveColumns ? setColumns : undefined}
                 selection={{ selected, onChange: select, selectAll: labels.selectAll, selectRow: labels.selectRow }}
+                groups={groups}
+                groupHeader={(group, colSpan) => (
+                  <tr key={`group:${group.key}`}>
+                    <td colSpan={colSpan} className="h-11 border-b border-border-subtle bg-surface-subtle px-0">
+                      <button
+                        type="button"
+                        aria-expanded={!group.collapsed}
+                        onClick={() =>
+                          setFolded((now) => {
+                            const next = new Set(now);
+                            if (next.has(group.key)) next.delete(group.key);
+                            else next.add(group.key);
+                            return next;
+                          })
+                        }
+                        className={cn("sticky start-0 flex h-11 w-max items-center gap-2.5 ps-4 pe-3 hover:text-text", focusRing)}
+                      >
+                        <Icon name={group.collapsed ? "chevron-right" : "chevron-down"} size={16} className="text-muted" />
+                        <span className="inline-flex h-[22px] items-center rounded-xs px-1.5 text-[11.5px] font-bold text-text-secondary ring-1 ring-border-strong ring-inset">
+                          {group.label ?? t("groupNone")}
+                        </span>
+                        <span className="text-[13px] text-muted">{labels.items(n(group.rows.length), group.rows.length)}</span>
+                      </button>
+                    </td>
+                  </tr>
+                )}
                 settings={
                   onSaveColumns && (
                     <ColumnSettings

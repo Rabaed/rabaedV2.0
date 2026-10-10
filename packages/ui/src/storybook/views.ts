@@ -82,6 +82,11 @@ export const workItemListLabels: Record<Locale, WorkItemListLabels> = {
     selectRow: (subject) => `Select ${subject}`,
     selected: (n) => `${n} selected`,
     clearSelection: "Clear selection",
+    group: "Group",
+    groupBy: "Group by",
+    groupedBy: (by) => `Group: ${by}`,
+    clearGrouping: "Clear grouping",
+    groupNone: "None",
     columnSettings: {
       settings: "Table settings",
       title: "Columns",
@@ -175,6 +180,11 @@ export const workItemListLabels: Record<Locale, WorkItemListLabels> = {
     selectRow: (subject) => `تحديد ${subject}`,
     selected: (n, count) => (count === 1 ? "عنصر محدد" : `${n} محدد`),
     clearSelection: "مسح التحديد",
+    group: "تجميع",
+    groupBy: "تجميع حسب",
+    groupedBy: (by) => `تجميع: ${by}`,
+    clearGrouping: "إلغاء التجميع",
+    groupNone: "بلا قيمة",
     columnSettings: {
       settings: "إعدادات الجدول",
       title: "الأعمدة",

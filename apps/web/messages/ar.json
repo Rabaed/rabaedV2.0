@@ -108,6 +108,11 @@
       "selectRow": "تحديد {subject}",
       "selected": "{count, plural, one {عنصر محدد} other {{n} محدد}}",
       "clearSelection": "مسح التحديد",
+      "group": "تجميع",
+      "groupBy": "تجميع حسب",
+      "groupedBy": "تجميع: {by}",
+      "clearGrouping": "إلغاء التجميع",
+      "groupNone": "بلا قيمة",
       "columnSettings": {
         "settings": "إعدادات الجدول",
         "title": "الأعمدة",

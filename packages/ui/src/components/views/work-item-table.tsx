@@ -248,10 +248,10 @@ export function WorkItemTable({
             </td>
           </tr>
         ) : (
-          (groups ?? [{ key: "", label: null, rows }]).map((group) => (
+          (groups ?? [{ key: "", label: null, rows } satisfies TableGroup]).map((group) => (
             <Fragment key={group.key}>
-              {group.label !== null && groupHeader?.(group, colSpan)}
-              {(group.label === null || !group.collapsed) &&
+              {groups && groupHeader?.(group, colSpan)}
+              {!group.collapsed &&
                 group.rows.map((row) => {
                   const selected = selection?.selected.has(row.id) ?? false;
                   return (
@@ -299,7 +299,7 @@ export function WorkItemTable({
 }
 
 /** A group of the page's rows (RP-409, Group by): its key, its header's words, its rows, whether it is folded. */
-export type TableGroup = { key: string; label: ReactNode; rows: WorkItemRow[]; collapsed?: boolean };
+export type TableGroup = { key: string; label: string | null; rows: WorkItemRow[]; collapsed?: boolean };
 
 type CellProps = {
   column: ListColumnKey;

@@ -108,6 +108,11 @@
       "selectRow": "Select {subject}",
       "selected": "{count, plural, one {1 selected} other {{n} selected}}",
       "clearSelection": "Clear selection",
+      "group": "Group",
+      "groupBy": "Group by",
+      "groupedBy": "Group: {by}",
+      "clearGrouping": "Clear grouping",
+      "groupNone": "None",
       "columnSettings": {
         "settings": "Table settings",
         "title": "Columns",
