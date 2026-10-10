@@ -95,6 +95,9 @@ describe("the four themes (owner decision 2026-10-11)", () => {
     // Kanban card chips (RP-410).
     ...["cv", "ar", "el", "me", "su", "other"].map((t) => [`trade-${t}-fg`, `trade-${t}-bg`] as [SemanticRole, SemanticRole]),
     ["revision-fg", "revision-bg"],
+    // Code A's green card: its muted lines and the Trade chip's text.
+    ["muted", "card-approved-bg"],
+    ["text-secondary", "card-approved-bg"],
     ...segmentToneKeys.map((s) => [`segment-${s}-fg`, `segment-${s}-tint`] as [SemanticRole, SemanticRole]),
     // Solid avatars' initials (RP-407).
     ...["1", "2", "3", "4", "5", "6", "company"].map((a) => ["on-avatar", `avatar-${a}`] as [SemanticRole, SemanticRole]),

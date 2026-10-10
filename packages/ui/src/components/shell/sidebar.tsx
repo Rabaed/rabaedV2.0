@@ -41,9 +41,9 @@ export function SidebarNav({ label, sections, current, linkAs: Link = "a", onNav
     <nav aria-label={label} className="flex flex-col gap-4">
       {sections.map((section, i) => (
         // A line between sections, as in the design.
-        <div key={section.label ?? i} className={cn("flex flex-col gap-1", i > 0 && "border-t border-border pt-4")}>
+        <div key={section.label ?? i} className={cn("flex flex-col gap-1", i > 0 && "border-t border-sidebar-divider pt-4")}>
           {section.label !== undefined && !collapsed && (
-            <h2 className="px-3 pb-1 text-notes font-bold text-muted uppercase ltr:tracking-wider rtl:text-caption">{section.label}</h2>
+            <h2 className="px-3 pb-1 text-notes font-bold text-sidebar-label uppercase ltr:tracking-wider rtl:text-caption">{section.label}</h2>
           )}
           {/* Named after its section, so the grouping survives when the heading is hidden. */}
           <ul aria-label={section.label} className="flex flex-col gap-1">
@@ -63,15 +63,15 @@ export function SidebarNav({ label, sections, current, linkAs: Link = "a", onNav
                     focusRing,
                     isCurrent
                       ? // The current page: tinted, with an accent bar on the sidebar's inline-start edge.
-                        "bg-brand-tint font-semibold text-brand-fg before:absolute before:inset-y-2 before:-start-3 before:w-0.75 before:rounded-e-xs before:bg-brand"
-                      : "text-text-secondary hover:bg-hover",
+                        "bg-sidebar-current font-semibold text-sidebar-current-text before:absolute before:inset-y-2 before:-start-3 before:w-0.75 before:rounded-e-xs before:bg-brand"
+                      : "text-sidebar-text hover:bg-sidebar-hover hover:text-sidebar-current-text active:bg-sidebar-press",
                     collapsed && "justify-center px-0 before:-start-2",
                   )}
                 >
-                  <Icon name={item.icon} className={isCurrent ? undefined : "text-muted"} />
+                  <Icon name={item.icon} className={isCurrent ? "text-brand" : "text-sidebar-icon"} />
                   {!collapsed && <span className="min-w-0 flex-1 truncate">{item.label}</span>}
                   {!collapsed && item.count !== undefined && (
-                    <span className="rounded-full bg-neutral-tint px-2 text-caption font-semibold text-neutral-fg">
+                    <span className="rounded-full bg-sidebar-press px-2 text-caption font-semibold text-sidebar-text">
                       {/* A space, so the name reads "Projects 3", not "Projects3". */}
                       <span className="sr-only"> </span>
                       {item.count}
@@ -150,20 +150,21 @@ export function Sidebar({
       data-collapsed={collapsed || undefined}
       className={cn(
         // The column runs the page's full height; its contents stay in view as the page scrolls.
-        "flex shrink-0 flex-col border-e border-border bg-surface",
+        // Dark in every theme and mode (owner decision 2026-10-11): navy in Grey, espresso in Warm.
+        "flex shrink-0 flex-col border-e border-sidebar-border bg-sidebar text-sidebar-text",
         "transition-[width] duration-200 motion-reduce:transition-none",
         collapsed ? "w-18" : "w-66",
         className,
       )}
     >
       <div className="sticky top-0 flex h-dvh flex-col">
-        <div className={cn("flex h-18 shrink-0 items-center border-b border-border", collapsed ? "justify-center px-2" : "px-4")}>
+        <div className={cn("flex h-18 shrink-0 items-center border-b border-sidebar-divider", collapsed ? "justify-center px-2" : "px-4")}>
           {collapsed ? brandCollapsed : <div className="min-w-0 flex-1">{brand}</div>}
         </div>
         <div className={cn("min-h-0 flex-1 overflow-y-auto py-3", collapsed ? "px-2" : "px-3")}>
           <SidebarNav {...nav} collapsed={collapsed} />
         </div>
-        <div className={cn("flex shrink-0 items-center gap-2 border-t border-border p-3", collapsed && "flex-col")}>
+        <div className={cn("flex shrink-0 items-center gap-2 border-t border-sidebar-divider p-3", collapsed && "flex-col")}>
           {footer !== undefined && <div className="min-w-0 flex-1">{typeof footer === "function" ? footer(collapsed) : footer}</div>}
           <button
             type="button"
@@ -222,8 +223,8 @@ export function SidebarBrand({ name, companyName }: SidebarBrandProps) {
     <div className="flex min-w-0 items-center gap-3">
       <RabaedLogoTile />
       <div className="flex min-w-0 flex-col">
-        <span className="truncate font-display text-body font-bold text-text">{name}</span>
-        {companyName !== undefined && <span className="truncate text-caption text-muted">{companyName}</span>}
+        <span className="truncate font-display text-body font-bold text-sidebar-current-text">{name}</span>
+        {companyName !== undefined && <span className="truncate text-caption text-sidebar-label">{companyName}</span>}
       </div>
     </div>
   );

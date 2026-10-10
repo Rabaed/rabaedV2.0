@@ -152,6 +152,7 @@ export const palette = {
   "dark-tomato-fg": "#ff9580",
   // Not in the kit: Code A's card line and an aged card's line on a dark page.
   "dark-green-line": "#27b86e66",
+  "dark-green-card": "#27b86e1a",
   "dark-tomato-line": "#f9573880",
 
   // Theme 2, Warm, Light (the kit's shell.js `?bg=warm` :root override): warm neutrals, white surfaces.

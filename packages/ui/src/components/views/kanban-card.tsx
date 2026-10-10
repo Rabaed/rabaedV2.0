@@ -146,7 +146,7 @@ export function KanbanCard({
         "group/card relative flex flex-col rounded-md border bg-surface px-3 py-[11px] shadow-xs transition-[box-shadow,translate] duration-150",
         "hover:-translate-y-px hover:shadow-[0_6px_16px_color-mix(in_srgb,var(--shadow-colour)_10%,transparent)]",
         "data-hovered:-translate-y-px data-hovered:shadow-[0_6px_16px_color-mix(in_srgb,var(--shadow-colour)_10%,transparent)]",
-        approved ? "border-card-approved-border bg-success-tint" : aged ? "border-card-aged-border" : "border-border",
+        approved ? "border-card-approved-border bg-card-approved-bg" : aged ? "border-card-aged-border" : "border-border",
         selected && "ring-2 ring-brand",
         className,
       )}

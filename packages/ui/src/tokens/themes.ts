@@ -138,6 +138,7 @@ export const greyLight = {
   // Kanban card borders: an item 4+ weeks at its step (no wording, only this look and the red dots), and Code A's green card.
   "card-aged-border": "tomato-300",
   "card-approved-border": "green-200",
+  "card-approved-bg": "green-50",
 
   // Stage: one colour set per default Stage, shared by every Module.
   "stage-draft-bg": "slate-100",
@@ -267,6 +268,8 @@ const darkTones = {
   "revision-fg": "dark-tomato-fg",
   "card-aged-border": "dark-tomato-line",
   "card-approved-border": "dark-green-line",
+  // Lighter than the kit's green tint, so the card's muted text keeps 4.5:1 on it.
+  "card-approved-bg": "dark-green-card",
   "stage-draft-bg": "dark-gray-tint",
   "stage-draft-fg": "dark-gray-fg",
   "stage-internal-bg": "dark-blue-tint",

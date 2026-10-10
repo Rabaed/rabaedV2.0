@@ -124,6 +124,7 @@
   --palette-dark-tomato-tint: #f957382e;
   --palette-dark-tomato-fg: #ff9580;
   --palette-dark-green-line: #27b86e66;
+  --palette-dark-green-card: #27b86e1a;
   --palette-dark-tomato-line: #f9573880;
   --palette-warm-canvas: #fdf9f5;
   --palette-warm-surface-2: #fcf7f2;
@@ -263,6 +264,7 @@
   --revision-fg: var(--palette-tomato-750);
   --card-aged-border: var(--palette-tomato-300);
   --card-approved-border: var(--palette-green-200);
+  --card-approved-bg: var(--palette-green-50);
   --stage-draft-bg: var(--palette-slate-100);
   --stage-draft-fg: var(--palette-slate-700);
   --stage-draft-dot: var(--palette-slate-500);
@@ -422,6 +424,7 @@
   --revision-fg: var(--palette-dark-tomato-fg);
   --card-aged-border: var(--palette-dark-tomato-line);
   --card-approved-border: var(--palette-dark-green-line);
+  --card-approved-bg: var(--palette-dark-green-card);
   --stage-draft-bg: var(--palette-dark-gray-tint);
   --stage-draft-fg: var(--palette-dark-gray-fg);
   --stage-draft-dot: var(--palette-slate-500);
@@ -582,6 +585,7 @@
     --revision-fg: var(--palette-dark-tomato-fg);
     --card-aged-border: var(--palette-dark-tomato-line);
     --card-approved-border: var(--palette-dark-green-line);
+    --card-approved-bg: var(--palette-dark-green-card);
     --stage-draft-bg: var(--palette-dark-gray-tint);
     --stage-draft-fg: var(--palette-dark-gray-fg);
     --stage-draft-dot: var(--palette-slate-500);
@@ -743,6 +747,7 @@
   --revision-fg: var(--palette-tomato-750);
   --card-aged-border: var(--palette-tomato-300);
   --card-approved-border: var(--palette-green-200);
+  --card-approved-bg: var(--palette-green-50);
   --stage-draft-bg: var(--palette-warm-gray-tint);
   --stage-draft-fg: var(--palette-warm-gray-fg);
   --stage-draft-dot: var(--palette-warm-gray-solid);
@@ -902,6 +907,7 @@
   --revision-fg: var(--palette-dark-tomato-fg);
   --card-aged-border: var(--palette-dark-tomato-line);
   --card-approved-border: var(--palette-dark-green-line);
+  --card-approved-bg: var(--palette-dark-green-card);
   --stage-draft-bg: var(--palette-espresso-gray-tint);
   --stage-draft-fg: var(--palette-espresso-gray-fg);
   --stage-draft-dot: var(--palette-espresso-gray-solid);
@@ -1062,6 +1068,7 @@
     --revision-fg: var(--palette-dark-tomato-fg);
     --card-aged-border: var(--palette-dark-tomato-line);
     --card-approved-border: var(--palette-dark-green-line);
+    --card-approved-bg: var(--palette-dark-green-card);
     --stage-draft-bg: var(--palette-espresso-gray-tint);
     --stage-draft-fg: var(--palette-espresso-gray-fg);
     --stage-draft-dot: var(--palette-espresso-gray-solid);
@@ -1222,6 +1229,7 @@
   --color-revision-fg: var(--revision-fg);
   --color-card-aged-border: var(--card-aged-border);
   --color-card-approved-border: var(--card-approved-border);
+  --color-card-approved-bg: var(--card-approved-bg);
   --color-stage-draft-bg: var(--stage-draft-bg);
   --color-stage-draft-fg: var(--stage-draft-fg);
   --color-stage-draft-dot: var(--stage-draft-dot);

@@ -21,7 +21,7 @@ Next.js apps also list `@rabaed/ui` in `transpilePackages`.
 Three layers, all in `src/tokens/`:
 
 1. **Base palette** (`palette.ts`): raw colours such as `tomato-600`. Only themes read it.
-2. **Semantic roles** (`themes.ts`): `canvas`, `primary`, `stage-*`, `code-a..d-*`, `age-0..4`, `shadow-colour` (the tint of every shadow) and so on, mapped to palette colours. The only layer a new theme changes. Launch theme: cool light.
+2. **Semantic roles** (`themes.ts`): `canvas`, `primary`, `stage-*`, `code-a..d-*`, `age-0..4`, `shadow-colour` (the tint of every shadow) and so on, mapped to palette colours. The only layer a theme changes. Four themes (owner decision 2026-10-11): Grey and Warm, each Light and Dark (`grey-light`, `grey-dark`, `warm-light`, `warm-dark`), from the kit's exact sets; `<html data-theme="grey|warm" data-mode="light|dark|system">` picks one, and Mode `system` follows the device (`prefers-color-scheme`). No Theme on the page is Grey, Light. A translucent role (a dark tint, the sidebar's hover) is `#rrggbbaa`; `tokens.test.ts` checks every text and control pair in all four, laid on what it sits on. A fill (`primary`, `danger`) carries white text; text in a hue reads its `-fg` role (`text-brand-fg`, `text-danger-fg`). Stories take a theme with `parameters: themed("warm-dark")` (`src/storybook/theme.ts`); `Shell/Themes` shows the shell around Home, the Kanban, the List and Settings in all four.
 3. **Component usage**: components use Tailwind classes for semantic roles (`bg-primary`, `text-muted`). The Tailwind theme exposes semantic roles only, so the base palette is unreachable from a class.
 
 `src/styles/tokens.css` is generated. After editing `src/tokens/`, run `pnpm --filter @rabaed/ui tokens`; a unit test fails if you forget. Another unit test keeps every text/background pair at WCAG AA contrast.
@@ -188,7 +188,7 @@ Every page sits in the same layout, in English and Arabic, on desktop and phone.
 | `TopBarTitle` / `ProjectMark` | The top bar's `title`: where the Member is, not the page's `h1` (the page keeps its own). A page name; inside a Project, `back` (a link to the Projects page, its arrow mirrored in Arabic), `mark` (`ProjectMark`: the name's first letter on a tile), the Project's name and a `subtitle` (its Host Company). |
 | `TabsBar` | The band under the top bar holding a page's tabs (`ProjectTabs`), edge to edge. |
 | `PageContent` | The content area: side padding and the whole width beside the sidebar (tables, boards); `narrow` for a reading width (forms, text). |
-| `MemberMenu` | The signed-in Member's avatar and name, opening a menu with the language switch (each language named in itself, the current one pressed) and any extra items, e.g. Profile and Sign out. `placement="topBar"` (default), or `"sidebar"`: a card with the name and Company that opens upwards, the avatar only when `collapsed`. |
+| `MemberMenu` | The signed-in Member's avatar and name, opening a menu with the language switch (each language named in itself, the current one pressed) and any extra items, e.g. Profile and Sign out. `placement="topBar"` (default), or `"sidebar"`: a card with the name and Company that opens upwards, the avatar only when `collapsed`. `appearance` adds the Theme (Grey / Warm) and Mode (Light / Dark / System) switches under the language (`value`, `onChange`, `labels`). |
 | `PageHeader` | A page's one `h1` in a surface band, with an optional `eyebrow`, `description`, `actions` and `tabs`. |
 | `ProjectTabs` | A Project's tabs, always in the agreed order (`projectTabKeys`): Dashboard · Submittals · Inspections · Snag List · Site Reports · Drawings · Activity Feed · Settings; a Module's tab key is its Module key (`snag_list`). Dashboard, Submittals, Activity Feed and Settings always; another Module's tab only when the Project has a Work Item Type in it (`modules`, from the Project's summary; `visibleProjectTabs`). No empty tab and no placeholder for what isn't built. Page navigation, so links in a named `nav` (not ARIA tabs); `current` is optional. They scroll sideways on a phone. |
 
@@ -215,7 +215,7 @@ Every page sits in the same layout, in English and Arabic, on desktop and phone.
 </AppShell>
 ```
 
-The sidebar uses the light variant of the design (surface and brand tint); a dark sidebar would need its own theme roles first.
+The sidebar is dark in every theme and mode (owner decision 2026-10-11): navy in Grey, espresso in Warm, with its own roles (`sidebar`, `sidebar-text`, `sidebar-current`…). The phone's navigation sheet is the same.
 
 ## Data list page
 

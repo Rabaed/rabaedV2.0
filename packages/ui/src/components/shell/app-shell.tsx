@@ -71,7 +71,14 @@ export function AppShell({ sidebar, topBar, menuLabel, closeLabel, children }: A
           <Icon name="menu" />
         </IconButton>
       </SheetTrigger>
-      <SheetContent side="start" title={sidebar.brand} closeLabel={closeLabel} className="max-w-xs p-4">
+      <SheetContent
+        side="start"
+        title={sidebar.brand}
+        closeLabel={closeLabel}
+        // The phone's navigation is the sidebar: dark in every theme and mode, as on a wide screen.
+        className="max-w-xs border-sidebar-border bg-sidebar p-4 text-sidebar-text"
+        closeClassName="text-sidebar-icon hover:bg-sidebar-hover hover:text-sidebar-current-text active:bg-sidebar-press"
+      >
         <SidebarNav
           {...nav}
           onNavigate={() => {
