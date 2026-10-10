@@ -11,7 +11,8 @@ import { stageColour } from "../status/stage-colour.ts";
 // Stage's band, a later Step of the same band beside the earlier one.
 //
 // An item's map (`viewerRole` given) folds every other Participant role's Steps
-// into one part, and draws nothing inside it or leaving it: the viewer learns
+// into one part, and draws nothing inside it, nor from it but into one of the
+// viewer's own Steps (how the item reaches them): the viewer learns
 // where the item is only as the API's position says (V14), so another
 // Participant's part is marked as a whole, never one of its Steps.
 
@@ -134,8 +135,9 @@ export function workflowMap({ definition, stages, dir, viewerRole, position }: W
   const edges = definition.transitions.flatMap((t): MapEdge[] => {
     const source = box.get(nodeId(t.from));
     const target = box.get(nodeId(t.to));
-    // Nothing inside another Participant's part, or leaving it, is drawn.
-    if (!source || !target || source.kind === "group") return [];
+    // From another Participant's part, only how the item reaches one of the viewer's own Steps:
+    // nothing inside the part, or from it to another part or an outcome.
+    if (!source || !target || (source.kind === "group" && target.kind !== "step")) return [];
     const dx = target.x + target.width / 2 - (source.x + source.width / 2);
     const to = steps.get(t.to);
     return [

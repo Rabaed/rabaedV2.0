@@ -122,6 +122,12 @@ describe("workflowMap: an item's map, as the viewer may know it (V14)", () => {
     expect(byKey(map.nodes, "approved").kind).toBe("end");
   });
 
+  it("draws how the item reaches the viewer's own Steps from another role's part", () => {
+    const map = workflowMap({ definition: mar, stages, dir: "ltr", viewerRole: "consultant", position: null });
+    expect(map.edges.find((e) => e.id === "submit")).toMatchObject({ source: "role:contractor", target: "consultant_engineer" });
+    for (const hidden of ["send", "return", "cancel"]) expect(map.edges.map((e) => e.id)).not.toContain(hidden);
+  });
+
   it("marks the viewer's own current Step", () => {
     const map = workflowMap({ definition: mar, stages, dir: "ltr", viewerRole: "contractor", position: { kind: "own", stepKey: "internal_review" } });
     expect(map.nodes.filter((n) => n.current).map((n) => n.id)).toEqual(["internal_review"]);
