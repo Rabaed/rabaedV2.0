@@ -15,6 +15,24 @@ function toneFor(name: string): Tone {
   return personTones[sum % personTones.length]!;
 }
 
+// The kit's Members list: round, a solid colour behind white initials. Dark enough for white text; the
+// same key always gets the same fill.
+const solidFills = [
+  "bg-segment-type-fg",
+  "bg-info-fg",
+  "bg-warning-fg",
+  "bg-danger-fg",
+  "bg-success-fg",
+  "bg-segment-sequence-solid",
+  "bg-segment-trade-fg",
+];
+
+function solidFor(key: string): string {
+  let hash = 0;
+  for (const char of key) hash = (hash * 31 + char.codePointAt(0)!) >>> 0;
+  return solidFills[hash % solidFills.length]!;
+}
+
 const sizes = {
   sm: "size-6 text-notes",
   md: "size-8 text-caption",
@@ -34,11 +52,16 @@ export type AvatarProps = {
   decorative?: boolean;
   /** The name the initials come from, when not `name`: e.g. the English one, for Latin initials on an Arabic card. */
   initialsFrom?: string;
+  /**
+   * A stable key of the person (their id): the initials sit on a solid colour picked from it, in white,
+   * as in the kit's Members list. Without it, a pale tint picked from the name.
+   */
+  solidFrom?: string;
   className?: string;
 };
 
 /** A person's photo or initials, or a company's logo or initials, named after them. */
-export function Avatar({ name, src, kind = "person", size = "md", decorative = false, initialsFrom, className }: AvatarProps) {
+export function Avatar({ name, src, kind = "person", size = "md", decorative = false, initialsFrom, solidFrom, className }: AvatarProps) {
   const [failedSrc, setFailedSrc] = useState<string>();
   const showImage = src !== undefined && src !== failedSrc;
   return (
@@ -47,7 +70,11 @@ export function Avatar({ name, src, kind = "person", size = "md", decorative = f
       className={cn(
         "inline-flex shrink-0 items-center justify-center overflow-hidden font-semibold select-none",
         kind === "company" ? "rounded-xs" : "rounded-full",
-        showImage ? "bg-surface-subtle" : toneClasses[kind === "company" ? "neutral" : toneFor(name)],
+        showImage
+          ? "bg-surface-subtle"
+          : solidFrom !== undefined && kind === "person"
+            ? cn("text-on-primary", solidFor(solidFrom))
+            : toneClasses[kind === "company" ? "neutral" : toneFor(name)],
         sizes[size],
         className,
       )}
