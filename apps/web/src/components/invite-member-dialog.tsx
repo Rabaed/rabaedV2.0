@@ -10,7 +10,7 @@ export function InviteMemberDialog() {
   return (
     <Dialog>
       <DialogTrigger asChild>
-        <Button className="h-[42px] rounded-md px-4 text-body font-semibold">
+        <Button className="h-[42px] rounded-[11px] px-4 text-body font-semibold">
           <Icon name="person-add" size={16} />
           {t("inviteMember")}
         </Button>

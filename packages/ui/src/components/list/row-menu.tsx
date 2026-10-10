@@ -4,7 +4,7 @@ import { useRef, type KeyboardEvent } from "react";
 import { cn } from "../../lib/cn.ts";
 import { IconButton } from "../button/button.tsx";
 import { focusRing } from "../form/control-styles.ts";
-import { Icon } from "../icon/icon.tsx";
+import { Icon, type IconName } from "../icon/icon.tsx";
 import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "../overlay/popover.tsx";
 
 // The "⋯" at the end of a list row: the row's commands in a small menu (RP-413).
@@ -13,6 +13,8 @@ import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "../overla
 export type RowMenuItem = {
   key: string;
   label: string;
+  /** Before the label, as the kit's menus. */
+  icon?: IconName;
   /** Runs after the menu closes. A command that needs a confirmation opens its own dialog here. */
   onSelect: () => void;
   /** `danger` for a command that cannot be taken back lightly, e.g. Deactivate. */
@@ -23,6 +25,8 @@ export type RowMenuProps = {
   /** Names the button and the menu, e.g. "Actions for Hafiz Hamdan". */
   label: string;
   items: RowMenuItem[];
+  /** A change is being saved: the button and every command are disabled until it is done. */
+  busy?: boolean;
   className?: string;
 };
 
@@ -31,7 +35,7 @@ export type RowMenuProps = {
  * puts focus on the first command; Up, Down, Home and End move between them;
  * Escape closes it and returns focus to the button.
  */
-export function RowMenu({ label, items, className }: RowMenuProps) {
+export function RowMenu({ label, items, busy = false, className }: RowMenuProps) {
   const list = useRef<HTMLDivElement>(null);
 
   function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
@@ -51,23 +55,25 @@ export function RowMenu({ label, items, className }: RowMenuProps) {
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <IconButton label={label} size="sm" aria-haspopup="menu" className={className}>
+        <IconButton label={label} size="sm" aria-haspopup="menu" disabled={busy} aria-busy={busy || undefined} className={className}>
           <Icon name="dots" size={18} />
         </IconButton>
       </PopoverTrigger>
-      <PopoverContent ref={list} role="menu" aria-label={label} align="end" onKeyDown={onKeyDown} className="w-auto min-w-48 p-1">
+      <PopoverContent ref={list} role="menu" aria-label={label} align="end" onKeyDown={onKeyDown} className="w-auto min-w-60 rounded-md border-border-strong p-1.5 shadow-lg">
         {items.map((item) => (
           <PopoverClose asChild key={item.key}>
             <button
               type="button"
               role="menuitem"
+              disabled={busy}
               onClick={item.onSelect}
               className={cn(
-                "flex w-full items-center rounded-xs px-3 py-2 text-start text-sm font-medium whitespace-nowrap hover:bg-hover pointer-coarse:min-h-11",
-                item.tone === "danger" ? "text-danger-fg" : "text-text",
+                "flex w-full items-center gap-2.5 rounded-sm px-2.5 py-[9px] text-start text-[13.5px] font-medium whitespace-nowrap hover:bg-canvas disabled:cursor-not-allowed disabled:opacity-60 pointer-coarse:min-h-11",
+                item.tone === "danger" ? "text-danger-fg" : "text-text-secondary",
                 focusRing,
               )}
             >
+              {item.icon !== undefined && <Icon name={item.icon} size={17} className={item.tone === "danger" ? "text-danger-fg" : "text-muted"} />}
               {item.label}
             </button>
           </PopoverClose>

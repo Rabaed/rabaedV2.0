@@ -78,7 +78,7 @@ export function InviteMemberForm() {
         <Field label={t("nameAr")} id="invite-name-ar" required>
           <Input name="nameAr" dir="rtl" lang="ar" />
         </Field>
-        <Field label={t("language")} id="invite-locale">
+        <Field label={t("language")} id="invite-locale" className="sm:col-span-2">
           {/* Each language named in itself. */}
           <Select
             name="locale"
@@ -89,7 +89,7 @@ export function InviteMemberForm() {
             ]}
           />
         </Field>
-        <div className="flex items-end">
+        <div className="flex justify-end sm:col-span-2">
           <Button type="submit" disabled={pending}>
             {t("invite")}
           </Button>

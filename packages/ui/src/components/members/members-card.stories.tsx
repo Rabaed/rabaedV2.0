@@ -6,7 +6,7 @@ import { overlay } from "../../storybook/overlay.ts";
 import { EmptyState } from "../feedback/states.tsx";
 import { RowMenu } from "../list/row-menu.tsx";
 import { ToolbarSearch } from "../list/list-toolbar.tsx";
-import { MembersCard, type MemberRow } from "./members-card.tsx";
+import { MembersCard, membersSearchStyle, type MemberRow } from "./members-card.tsx";
 
 // The Members page's card (RP-413, kit `RP.users`) with plain story data.
 
@@ -51,6 +51,7 @@ function rowsFor(context: StoryContext, { menu, counts }: { menu: boolean; count
     name: t(p.name),
     email: p.email,
     colourKey: p.id,
+    initialsFrom: p.name.en,
     marks: p.marks.map((mark) => t(copy[mark])),
     projects: counts || p.id === "m1" ? p.projects : null,
     status: p.status,
@@ -59,8 +60,8 @@ function rowsFor(context: StoryContext, { menu, counts }: { menu: boolean; count
       <RowMenu
         label={copy.menuFor(t(p.name), locale)}
         items={[
-          { key: "creator", label: t(copy.makeCreator), onSelect: fn() },
-          { key: "deactivate", label: t(copy.deactivate), tone: "danger", onSelect: fn() },
+          { key: "creator", icon: "person-add", label: t(copy.makeCreator), onSelect: fn() },
+          { key: "deactivate", icon: "logout", label: t(copy.deactivate), tone: "danger", onSelect: fn() },
         ]}
       />
     ) : undefined,
@@ -88,9 +89,7 @@ function Card({ context, menu = true, counts = true, none = false }: { context: 
             label={t(copy.search)}
             placeholder={t(copy.search)}
             value={undefined}
-            hideHint
-            boxClassName="h-[38px]"
-            className="sm:w-60"
+            {...membersSearchStyle}
             onSearch={fn()}
           />
         }

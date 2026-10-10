@@ -77,6 +77,16 @@ export const palette = {
   "cyan-50": "#e2f5f8",
   "cyan-500": "#1aa3b8",
   "cyan-700": "#0f7688",
+
+  // Mid tones behind a person's initials (the kit's Members list, RP-413): bright enough to tell people apart.
+  // Orange and green are the kit's hues in the shade that keeps white initials at 4.5:1 (axe).
+  "person-violet": "#6b5ad8",
+  "person-blue": "#3d6db5",
+  "person-brown": "#7a5c3a",
+  "person-orange": "#b8560f",
+  "person-rose": "#b5455a",
+  "person-green": "#16874f",
+  "person-plum": "#9a4f9e",
 } as const;
 
 export type PaletteColour = keyof typeof palette;

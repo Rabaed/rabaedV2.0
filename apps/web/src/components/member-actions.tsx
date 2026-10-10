@@ -1,7 +1,7 @@
 "use client";
 
 import type { CompanyMember, Locale } from "@rabaed/domain";
-import { Button, Dialog, DialogClose, DialogContent, DialogFooter, RowMenu, type RowMenuItem } from "@rabaed/ui";
+import { Button, Dialog, DialogClose, DialogContent, DialogFooter, RowMenu, useToast, type RowMenuItem } from "@rabaed/ui";
 import { useLocale, useTranslations } from "next-intl";
 import { useState } from "react";
 import { InvitationLink } from "@/components/invitation-link";
@@ -20,10 +20,15 @@ export function MemberActions({ member }: { member: CompanyMember }) {
   const t = useTranslations("members");
   const locale = useLocale() as Locale;
   const router = useRouter();
+  const toast = useToast();
   const name = member.fullName[locale];
   const [asking, setAsking] = useState<Asking | null>(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState(false);
+  const failed = () => {
+    setError(true);
+    toast({ title: t("unavailable"), tone: "danger" });
+  };
   const [link, setLink] = useState<string | null>(null);
 
   async function send(path: string, method: "PATCH" | "POST", body?: unknown) {
@@ -35,11 +40,12 @@ export function MemberActions({ member }: { member: CompanyMember }) {
         headers: { "content-type": "application/json" },
         body: JSON.stringify(body ?? {}),
       });
-      if (!res.ok) return setError(true);
+      if (!res.ok) return failed();
       setAsking(null);
+      toast({ title: t("saved", { name }), tone: "success" });
       router.refresh();
     } catch {
-      setError(true);
+      failed();
     } finally {
       setPending(false);
     }
@@ -51,11 +57,12 @@ export function MemberActions({ member }: { member: CompanyMember }) {
     try {
       const { link: invitation } = await requestReactivation(member.id);
       router.refresh();
+      toast({ title: t("saved", { name }), tone: "success" });
       // Never accepted their first invitation: the new one, shown once.
       setAsking(invitation ? "link" : null);
       setLink(invitation ?? null);
     } catch {
-      setError(true);
+      failed();
     } finally {
       setPending(false);
     }
@@ -63,28 +70,24 @@ export function MemberActions({ member }: { member: CompanyMember }) {
 
   const items: RowMenuItem[] =
     member.status === "deactivated"
-      ? [{ key: "reactivate", label: t("reactivate"), onSelect: () => setAsking("reactivate") }]
+      ? [{ key: "reactivate", icon: "refresh" as const, label: t("reactivate"), onSelect: () => setAsking("reactivate") }]
       : [
           {
             key: "creator",
+            icon: member.canCreateProjects ? ("circle-x" as const) : ("person-add" as const),
             label: member.canCreateProjects ? t("removeProjectCreator") : t("makeProjectCreator"),
             onSelect: () => void send("", "PATCH", { canCreateProjects: !member.canCreateProjects }),
           },
           ...(member.isAuthorizedPerson
             ? []
-            : [{ key: "deactivate", label: t("deactivate"), tone: "danger" as const, onSelect: () => setAsking("deactivate") }]),
+            : [{ key: "deactivate", icon: "logout" as const, label: t("deactivate"), tone: "danger" as const, onSelect: () => setAsking("deactivate") }]),
         ];
 
   const confirming = asking === "deactivate" || asking === "reactivate";
 
   return (
     <div className="flex items-center justify-end gap-2">
-      {error && !confirming && (
-        <span role="alert" className="text-sm text-danger-fg">
-          {t("unavailable")}
-        </span>
-      )}
-      <RowMenu label={t("menuFor", { name })} items={items} />
+      <RowMenu label={t("menuFor", { name })} items={items} busy={pending} />
       <Dialog open={asking !== null} onOpenChange={(open) => !open && !pending && setAsking(null)}>
         <DialogContent
           title={asking === "link" ? t("linkTitle") : asking === "reactivate" ? t("reactivateTitle") : t("deactivateTitle")}

@@ -17,8 +17,8 @@ export default async function MembersPage({ params }: { params: Promise<{ locale
     <div>
       <div className="mb-5.5 flex flex-wrap items-end gap-4">
         <div className="flex min-w-0 flex-col gap-1">
-          <h1 className="font-display text-h4 font-extrabold text-text rtl:font-bold">{t("title")}</h1>
-          <p className="text-body text-muted">{t("subtitle", { company: me.company.legalName[locale] })}</p>
+          <h1 className="font-display text-h4 leading-[1.2] font-extrabold tracking-[-0.01em] text-text rtl:font-bold rtl:tracking-normal">{t("title")}</h1>
+          <p className="text-body text-muted">{t("subtitle")}</p>
         </div>
         {canManage && (
           <div className="ms-auto">

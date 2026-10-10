@@ -64,9 +64,8 @@ async function apiGet<T>(path: string): Promise<T | null> {
 export const getMe = cache((): Promise<SignedInMember | null> => apiGet<SignedInMember>("/v1/me"));
 
 /** The signed-in Member's Company's Members; null if signed out. */
-export function getMembers(): Promise<CompanyMembers | null> {
-  return apiGet<CompanyMembers>("/v1/members");
-}
+/** Once per request: the page and the top bar title both read it. */
+export const getMembers = cache((): Promise<CompanyMembers | null> => apiGet<CompanyMembers>("/v1/members"));
 
 /** The signed-in Member's Projects; null if signed out. */
 /** Home across the signed-in Member's Projects (RP-407); null when signed out or unavailable. */

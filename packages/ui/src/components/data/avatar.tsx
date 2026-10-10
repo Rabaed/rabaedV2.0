@@ -15,17 +15,8 @@ function toneFor(name: string): Tone {
   return personTones[sum % personTones.length]!;
 }
 
-// The kit's Members list: round, a solid colour behind white initials. Dark enough for white text; the
-// same key always gets the same fill.
-const solidFills = [
-  "bg-segment-type-fg",
-  "bg-info-fg",
-  "bg-warning-fg",
-  "bg-danger-fg",
-  "bg-success-fg",
-  "bg-segment-sequence-solid",
-  "bg-segment-trade-fg",
-];
+// The kit's Members list: round, a mid-tone solid colour behind white initials; the same key always gets the same fill.
+const solidFills = ["bg-avatar-1", "bg-avatar-2", "bg-avatar-3", "bg-avatar-4", "bg-avatar-5", "bg-avatar-6", "bg-avatar-7"];
 
 function solidFor(key: string): string {
   let hash = 0;

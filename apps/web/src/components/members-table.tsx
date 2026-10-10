@@ -1,7 +1,7 @@
 "use client";
 
 import { formatNumber, type ListedMember, type Locale } from "@rabaed/domain";
-import { EmptyState, MembersCard, ToolbarSearch, type MemberRow } from "@rabaed/ui";
+import { EmptyState, MembersCard, membersSearchStyle, ToastProvider, ToolbarSearch, type MemberRow } from "@rabaed/ui";
 import { useLocale, useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
 import { MemberActions } from "@/components/member-actions";
@@ -32,6 +32,7 @@ export function MembersTable({ members, canManage }: { members: ListedMember[]; 
     name: m.fullName[locale],
     email: m.email,
     colourKey: m.id,
+    initialsFrom: m.fullName.en,
     marks: [...(m.isAuthorizedPerson ? [t("authorizedPerson")] : []), ...(m.canCreateProjects ? [t("projectCreator")] : [])],
     projects: formatNumber(m.projectCount, locale),
     status: m.status,
@@ -40,6 +41,7 @@ export function MembersTable({ members, canManage }: { members: ListedMember[]; 
   }));
 
   return (
+    <ToastProvider label={t("toastLabel")} closeLabel={t("close")}>
     <MembersCard
       rows={rows}
       hasMenu={canManage}
@@ -60,9 +62,7 @@ export function MembersTable({ members, canManage }: { members: ListedMember[]; 
           description={t("searchHelp")}
           value={words}
           maxLength={100}
-          hideHint
-          boxClassName="h-[38px]"
-          className="sm:w-60"
+          {...membersSearchStyle}
           onSearch={setWords}
         />
       }
@@ -74,5 +74,6 @@ export function MembersTable({ members, canManage }: { members: ListedMember[]; 
         ) : undefined
       }
     />
+    </ToastProvider>
   );
 }

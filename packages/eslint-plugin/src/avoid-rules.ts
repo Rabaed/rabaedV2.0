@@ -119,6 +119,7 @@ const allowedInNames: string[] = [
 const allowedMessages: Record<string, string> = {
   "members.name": "a Member's name column; Subject replaces name only for a Work Item",
   "members.status": "a Member's active or deactivated column, not a Stage or a Review Code",
+  "members.search": "owner's kit (2026-10-10): the Members search box reads \"Search by name or email\"",
   "members.marks": "owner's kit (2026-10-10): the Members list's \"Role\" column, which shows the Authorized Person and Project Creator marks",
   "members.actions": "the column of a Member's row buttons (Deactivate, Reactivate), not Transitions",
   "scopes.invalid": "a Scope's name in both languages, not a Work Item's Subject",

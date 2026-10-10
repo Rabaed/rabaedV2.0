@@ -179,6 +179,7 @@ export { Pager, TableCard, type PagerLabels, type PagerProps, type TableCardProp
 export { RowMenu, type RowMenuItem, type RowMenuProps } from "./components/list/row-menu.tsx";
 export {
   MembersCard,
+  membersSearchStyle,
   type MemberRow,
   type MemberStatus as MemberRowStatus,
   type MembersCardLabels,

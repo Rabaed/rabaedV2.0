@@ -47,6 +47,8 @@ export type ToolbarSearchProps = {
   hideHint?: boolean;
   /** Classes for the box itself, e.g. its height. */
   boxClassName?: string;
+  /** Classes for the text field inside it, e.g. its size. */
+  inputClassName?: string;
   className?: string;
 };
 
@@ -64,6 +66,7 @@ export function ToolbarSearch({
   onSearch,
   hideHint = false,
   boxClassName,
+  inputClassName,
   className,
 }: ToolbarSearchProps) {
   const input = useRef<HTMLInputElement>(null);
@@ -109,7 +112,7 @@ export function ToolbarSearch({
           placeholder={placeholder}
           maxLength={maxLength}
           aria-describedby={description === undefined ? undefined : `${id}-help`}
-          className="h-full min-w-0 flex-1 bg-transparent text-sm text-text outline-none placeholder:text-muted"
+          className={cn("h-full min-w-0 flex-1 bg-transparent text-sm text-text outline-none placeholder:text-muted", inputClassName)}
         />
         {!hideHint && (
           <kbd aria-hidden="true" className="hidden rounded-xs border border-border px-1.5 font-ui text-micro font-semibold text-muted sm:inline">

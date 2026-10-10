@@ -16,6 +16,8 @@ export type MemberRow = {
   /** In the page's language. */
   name: string;
   email: string;
+  /** The name the initials come from: the English one, so an Arabic page shows two Latin letters too. */
+  initialsFrom: string;
   /** The same for a Member in every language and session, so their colour never changes (their id). */
   colourKey: string;
   /** "Authorized Person", "Project Creator", as words; none for a plain Member. */
@@ -42,6 +44,18 @@ export type MembersCardLabels = {
   none: string;
 };
 
+/**
+ * The kit's search box for the card's top (`.fin`): 38px, 10px corners, a light border, 13.5px text, a paler icon,
+ * tomato border on focus (the outline stays), at least 240px wide and as wide as its text needs. Spread into `ToolbarSearch`.
+ */
+export const membersSearchStyle = {
+  hideHint: true,
+  boxClassName:
+    "h-[38px] rounded-[10px] border-border-strong px-3 text-faint hover:border-border-strong focus-within:border-primary",
+  inputClassName: "text-[13.5px]",
+  className: "sm:w-auto sm:min-w-60",
+} as const;
+
 export type MembersCardProps = {
   rows: MemberRow[];
   labels: MembersCardLabels;
@@ -61,8 +75,8 @@ const statusClasses: Record<MemberStatus, string> = {
   deactivated: "bg-neutral-tint text-neutral-fg",
 };
 
-// The menu column stays at the row's end while the table scrolls sideways (on a phone), as the List's last column.
-const pinned = "sticky end-0 max-sm:border-s max-sm:border-border-subtle";
+// Below `sm` the menu column stays at the row's end while the table scrolls sideways, as the List's last column.
+const pinned = "max-sm:sticky max-sm:end-0 max-sm:border-s max-sm:border-border-subtle";
 
 const head = "h-auto px-5 py-3";
 // The kit's 70px row: 36px avatar and 15px above and below, plus the line.
@@ -90,10 +104,10 @@ export function MembersCard({ rows, labels, search, hasMenu = false, empty }: Me
           </TableHeader>
           <TableBody>
             {rows.map((row) => (
-              <TableRow key={row.id} className="group/row">
+              <TableRow key={row.id} className="group/row [tbody_&]:hover:bg-surface-subtle">
                 <TableCell className={cell}>
                   <div className="flex items-center gap-2.5">
-                    <Avatar name={row.name} solidFrom={row.colourKey} decorative className="size-9 text-body" />
+                    <Avatar name={row.name} initialsFrom={row.initialsFrom} solidFrom={row.colourKey} decorative className="size-9 text-body" />
                     <div className="min-w-0">
                       <div className="font-semibold text-text">{row.name}</div>
                       <bdi dir="ltr" className="block text-[12.5px] text-muted">
@@ -106,9 +120,9 @@ export function MembersCard({ rows, labels, search, hasMenu = false, empty }: Me
                   {row.marks.length === 0 ? (
                     <span className="text-muted">{labels.none}</span>
                   ) : (
-                    <ul className="flex items-center gap-x-2 whitespace-nowrap text-text">
+                    <ul className="flex flex-wrap items-center gap-x-2 text-text">
                       {row.marks.map((mark, at) => (
-                        <li key={mark} className="flex items-center gap-2">
+                        <li key={mark} className="flex items-center gap-2 whitespace-nowrap">
                           {at > 0 && (
                             <span aria-hidden="true" className="text-faint">
                               ·
@@ -126,7 +140,7 @@ export function MembersCard({ rows, labels, search, hasMenu = false, empty }: Me
                 <TableCell className={cell}>
                   <span
                     className={cn(
-                      "inline-flex h-6 items-center gap-1.5 rounded-sm px-2.5 text-caption font-semibold whitespace-nowrap",
+                      "inline-flex h-6 items-center gap-[5px] rounded-[7px] px-2.5 text-caption font-semibold whitespace-nowrap",
                       statusClasses[row.status],
                     )}
                   >
@@ -135,7 +149,7 @@ export function MembersCard({ rows, labels, search, hasMenu = false, empty }: Me
                   </span>
                 </TableCell>
                 {hasMenu && (
-                  <TableCell className={cn(cell, pinned, "w-px bg-surface text-end group-hover/row:bg-hover")}>
+                  <TableCell className={cn(cell, pinned, "w-px bg-surface text-end group-hover/row:bg-surface-subtle")}>
                     {row.menu}
                   </TableCell>
                 )}

@@ -65,6 +65,13 @@
   --palette-cyan-50: #e2f5f8;
   --palette-cyan-500: #1aa3b8;
   --palette-cyan-700: #0f7688;
+  --palette-person-violet: #6b5ad8;
+  --palette-person-blue: #3d6db5;
+  --palette-person-brown: #7a5c3a;
+  --palette-person-orange: #b8560f;
+  --palette-person-rose: #b5455a;
+  --palette-person-green: #16874f;
+  --palette-person-plum: #9a4f9e;
 }
 
 /* Layer 2: semantic roles, theme "cool-light". */
@@ -187,6 +194,13 @@
   --segment-sequence-tint: var(--palette-slate-100);
   --segment-sequence-fg: var(--palette-slate-900);
   --segment-sequence-solid: var(--palette-slate-900);
+  --avatar-1: var(--palette-person-violet);
+  --avatar-2: var(--palette-person-blue);
+  --avatar-3: var(--palette-person-brown);
+  --avatar-4: var(--palette-person-orange);
+  --avatar-5: var(--palette-person-rose);
+  --avatar-6: var(--palette-person-green);
+  --avatar-7: var(--palette-person-plum);
   --age-0: var(--palette-slate-350);
   --age-1: var(--palette-slate-600);
   --age-2: var(--palette-amber-700);
@@ -314,6 +328,13 @@
   --color-segment-sequence-tint: var(--segment-sequence-tint);
   --color-segment-sequence-fg: var(--segment-sequence-fg);
   --color-segment-sequence-solid: var(--segment-sequence-solid);
+  --color-avatar-1: var(--avatar-1);
+  --color-avatar-2: var(--avatar-2);
+  --color-avatar-3: var(--avatar-3);
+  --color-avatar-4: var(--avatar-4);
+  --color-avatar-5: var(--avatar-5);
+  --color-avatar-6: var(--avatar-6);
+  --color-avatar-7: var(--avatar-7);
   --color-age-0: var(--age-0);
   --color-age-1: var(--age-1);
   --color-age-2: var(--age-2);
