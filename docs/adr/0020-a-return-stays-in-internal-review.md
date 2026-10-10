@@ -5,6 +5,7 @@ In the Rabaed Default MAR Workflow, the Contractor PM's Return went back to the 
 We decided (2026-10-10, from the UAT of the workflow engine, RP-463):
 
 - **Internal Review is a Stage holding Steps.** In the Rabaed Default MAR, "Contractor Engineer" and "Contractor PM". The route: Draft (no number) → Send for Review → Internal Review / Contractor PM; Contractor PM → Return → Internal Review / Contractor Engineer; Contractor Engineer → Send for Review → Contractor PM; Contractor PM → Submit → Consultant. **A Return never goes back to the Draft Step** or the Drafts Stage.
+- **The first Return goes to the author.** A Return to the Contractor Engineer Step goes to the person who held it before (§3.3 rule 1) and, the first time, when nobody has, to the item's author: the Member who sent it from the Draft, if they are still in the Step Pool. Otherwise it goes to the pool, or to its only Member (ADR 0018). With two engineers, the correction never lands with the one who didn't write it.
 - **A Draft is an item never sent.** The Drafts Stage holds only items that never left Draft, so a Draft never has a Document Number.
 - **No Step Age in a Draft.** This settles RP-364: the time a Draft was started reaches nobody. A Returned item's Step Age counts from the Return, as at any Step.
 - **Documents freeze at Submit.** At the Contractor Engineer Step the holder may change the answers and add, replace or remove Documents. Documents freeze for good at the first Submit, not at Send for Review as today. Nobody outside the raiser's Participant has seen them before the Submit, so unfreezing them inside it leaks nothing (V1).
@@ -24,3 +25,5 @@ We decided (2026-10-10, from the UAT of the workflow engine, RP-463):
 - The Document freeze moves from the first exit from Draft to the first Submit (`frozen_at`, the freeze trigger, workflow-engine.md §5.1 effect 1). The content hash at Send for Review still covers the Documents as they are then (ADR 0017).
 - The Kanban gains Step counts inside a Stage for the viewer's own Participant.
 - "A Revision Returned to Draft can't be discarded" (§5.4) no longer arises with the Rabaed Defaults.
+- The default-holder order (§3.3) gains "the item's author" after rule 1, for a Return.
+- The design docs (workflow-engine.md §1, §3.3, §5.1, §10, visibility.md's Creation Date row and Kanban channel, data-model.md) are updated by the PRs that build this (spec RP-511), not by the planning session (CODING_STANDARDS.md, Docs). Draft wording for them is in commit 9ba3aaa54.

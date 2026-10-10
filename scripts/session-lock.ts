@@ -21,17 +21,28 @@ export function parseSessionLock(locked: string | undefined): { name: string; pi
   return m ? { name: m[1], pid: Number(m[2]) } : undefined;
 }
 
-/** The refusal text when a live session other than this one holds the worktree lock; undefined when lane:env may go on. */
-export function foreignSessionLock(locked: string | undefined, ownPid: number, processes: ProcessList): string | undefined {
+/**
+ * The refusal text when a live session other than this one holds the worktree lock; undefined when lane:env may go on.
+ * sessionPid is this session's own claude pid (CLAUDE_PID, which Claude Code sets for its tools): Git Bash on Windows
+ * detaches its processes (parent pid 1), so from the Bash tool the ancestor chain never reaches the session's claude.exe.
+ */
+export function foreignSessionLock(locked: string | undefined, ownPid: number, processes: ProcessList, sessionPid?: number): string | undefined {
   const lock = parseSessionLock(locked);
   if (!lock || !processes.isAlive(lock.pid)) return undefined;
   if (!/^claude(\.exe)?$/i.test(processes.nameOf(lock.pid) ?? "")) return undefined;
+  if (lock.pid === sessionPid) return undefined;
   const seen = new Set<number>();
   for (let p: number | undefined = ownPid; p !== undefined && !seen.has(p); p = processes.parentOf(p)) {
     if (p === lock.pid) return undefined;
     seen.add(p);
   }
   return `This worktree is locked by another live Claude session: ${lock.name} (pid ${lock.pid}). That session owns it, and its spec; do not set up a lane here, even with --force. Stop, or start your own session.`;
+}
+
+/** This session's claude pid from CLAUDE_PID, or undefined when it is not set (not run by Claude Code). */
+export function sessionPidOf(env: Record<string, string | undefined>): number | undefined {
+  const pid = Number(env.CLAUDE_PID);
+  return Number.isInteger(pid) && pid > 0 ? pid : undefined;
 }
 
 /** Reads lines of `pid ppid name` into a process list. */
