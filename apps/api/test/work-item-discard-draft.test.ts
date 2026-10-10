@@ -38,9 +38,10 @@ beforeAll(async () => {
 });
 
 describe("scenario RP-409-3: Delete discards C1's own original Draft", () => {
-  it("is offered to the raiser's Participant for a Draft with no number, never once numbered", async () => {
+  it("is offered to the Member holding a Draft with no number, never once numbered", async () => {
     expect((await detail(at.c1Engineer, draft)).actions.discardDraft).toBe(true);
-    expect((await detail(at.c1Pm, draft)).actions.discardDraft).toBe(true);
+    // Only the Member holding the Draft edits it (RP-514), so C1's PM, who sees it, may not delete it either.
+    expect((await detail(at.c1Pm, draft)).actions.discardDraft).toBe(false);
     expect((await detail(at.c1Engineer, numbered)).actions.discardDraft).toBe(false);
   });
 
