@@ -30,6 +30,7 @@ import type {
   WorkItemDetail,
   WorkItemLinks,
   WorkItemHistory,
+  WorkItemWorkflowMap,
   WorkItemBoard,
   WorkItemList,
   ModuleKey,
@@ -242,6 +243,11 @@ export function getWatchState(workItemId: string): Promise<WatchState | null> {
 /** A Work Item's history as the signed-in Member may see it; null if they can't see the item. */
 export function getWorkItemHistory(workItemId: string): Promise<WorkItemHistory | null> {
   return apiGet<WorkItemHistory>(`/v1/work-items/${encodeURIComponent(workItemId)}/history`);
+}
+
+/** The item's Workflow map (RP-438): its pinned Version and where the item is, as the viewer may know; null if they can't read it. */
+export function getWorkItemWorkflow(workItemId: string): Promise<WorkItemWorkflowMap | null> {
+  return apiGet<WorkItemWorkflowMap>(`/v1/work-items/${encodeURIComponent(workItemId)}/workflow`);
 }
 
 /** The signed-in Member's notification settings and Project mutes; null if signed out. */

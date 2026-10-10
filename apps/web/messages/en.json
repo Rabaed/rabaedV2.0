@@ -869,6 +869,49 @@
     "notFound": "This item is no longer available to you.",
     "unavailable": "That didn't work. Try again."
   },
+  "workflowMap": {
+    "line": "Workflow: {name} · Version {version}",
+    "view": "View workflow",
+    "title": "{name} · Version {version}",
+    "close": "Close",
+    "showAs": "Show the workflow as",
+    "map": "Map",
+    "list": "Steps",
+    "canvas": "Workflow map",
+    "listName": "Steps and Transitions",
+    "outcome": "Outcome",
+    "part": "{role} review",
+    "withCompany": "With {company}",
+    "current": "Current",
+    "to": "to",
+    "zoomIn": "Zoom in",
+    "zoomOut": "Zoom out",
+    "fit": "Fit to view",
+    "newerVersion": "This item runs on Version {version}. The workflow was updated to Version {latest}.",
+    "grouped": "Some Steps are grouped because they are internal to another company.",
+    "outcomeModes": {
+      "recommend_code": "Recommends a code",
+      "issue_outcome": "Issues the outcome"
+    },
+    "kinds": {
+      "send": "Send",
+      "submit": "Submit",
+      "return": "Return",
+      "send_back": "Send Back",
+      "close": "Close",
+      "cancel": "Cancel"
+    },
+    "permissions": {
+      "view": "View",
+      "create": "Create",
+      "submit": "Submit",
+      "review": "Review",
+      "approve": "Approve",
+      "assign": "Assign",
+      "close": "Close",
+      "attach": "Attach"
+    }
+  },
   "notifications": {
     "title": "Notifications",
     "bellUnread": "{count, plural, other {Notifications, {shown} unread}}",
