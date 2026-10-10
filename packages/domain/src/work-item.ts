@@ -322,7 +322,10 @@ export const createReplacementRefusals = ["not_found", "project_closed", "idempo
 export type ReplacementRefusal = (typeof createReplacementRefusals)[number];
 
 /** The refusal of Duplicate (RP-409): one word for every reason it isn't allowed, so it names nothing. */
-export const duplicateRefusals = ["not_found", "project_closed", "duplicate_not_allowed"] as const;
+export const duplicateRefusals = ["not_found", "project_closed", "duplicate_not_allowed", "duplicate_files_too_large"] as const;
+
+/** The most a Duplicate copies of its own Company's files, in all (RP-409): 200 MB. */
+export const duplicateMaxFileBytes = 200 * 1024 * 1024;
 
 /** Duplicate: the key makes a repeated request (a double-click, a retry) answer with the same Draft. */
 export const duplicateRequest = z.object({ idempotencyKey: z.uuid() });

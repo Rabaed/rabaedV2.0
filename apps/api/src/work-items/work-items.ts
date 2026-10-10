@@ -3,6 +3,7 @@ import {
   answerFields,
   backwardKinds,
   discardDraftRefusals,
+  duplicateMaxFileBytes,
   duplicateRefusals,
   type SharedWorkItem,
   isAnswerField,
@@ -50,6 +51,7 @@ import {
 } from "@rabaed/domain";
 import { sql, type RawBuilder, type Transaction } from "kysely";
 import { refusedAsForbidden, type Forbidden } from "../db-error.ts";
+import { withFileCopies } from "../documents/copy-files.ts";
 import type { FileStore } from "../documents/file-store.ts";
 import { isUuid } from "../http-error.ts";
 import { readOptionLists } from "../option-lists/option-lists.ts";
@@ -702,12 +704,15 @@ export async function duplicateWorkItem(
   workItemId: string,
   idempotencyKey: string,
   now: Date,
+  maxFileBytes: number = duplicateMaxFileBytes,
 ): Promise<DuplicateResult> {
   const madeFor = (trx: Trx) =>
     sql<{ id: string | null }>`select app.duplicate_of_key(${idempotencyKey}::uuid) as id`.execute(trx).then((r) => r.rows[0]?.id ?? null);
   try {
-    return await duplicateIn(db, files, memberId, workItemId, idempotencyKey, now, madeFor);
+    return await duplicateIn(db, files, memberId, workItemId, idempotencyKey, now, maxFileBytes, madeFor);
   } catch (error) {
+    // Nothing was created, and no file copied: its files come to more than a Duplicate copies.
+    if (error instanceof FilesTooLarge) return { ok: false, reason: "duplicate_files_too_large" };
     if (!isDuplicateRequest(error)) throw error;
     // The same request, at the same time, made its Draft first: answer with that one.
     const id = await withMember(db, memberId, madeFor);
@@ -723,6 +728,9 @@ const isDuplicateRequest = (error: unknown) =>
   (error as { code?: unknown }).code === "23505" &&
   (error as { constraint?: unknown }).constraint === "work_item_duplicate_key";
 
+/** Thrown inside the Duplicate's transaction, so its rows roll back, before any file is copied. */
+class FilesTooLarge extends Error {}
+
 function duplicateIn(
   db: Db,
   files: FileStore,
@@ -730,10 +738,11 @@ function duplicateIn(
   workItemId: string,
   idempotencyKey: string,
   now: Date,
+  maxFileBytes: number,
   madeFor: (trx: Trx) => Promise<string | null>,
 ): Promise<DuplicateResult> {
   return refusedAsForbidden(() =>
-    withMember(db, memberId, async (trx): Promise<DuplicateResult> => {
+    withFileCopies(files, (copy) => withMember(db, memberId, async (trx): Promise<DuplicateResult> => {
       const done = await madeFor(trx);
       if (done !== null) return { ok: true, id: done };
       const { rows } = await sql<{
@@ -785,13 +794,15 @@ function duplicateIn(
       `.execute(trx);
       // The Member made the Draft and sees both: anything else is a bug, and nothing is created.
       checkedOutcome(recorded[0]!.outcome, ["recorded"]);
-      const { rows: copies } = await sql<{ storage_key: string; source_storage_key: string }>`
-        select storage_key, source_storage_key from app.copy_duplicate_documents(${created.id}::uuid, ${workItemId}::uuid, ${fileKeys}::text[], ${now})
+      const { rows: copies } = await sql<{ storage_key: string; source_storage_key: string; size_bytes: string }>`
+        select storage_key, source_storage_key, size_bytes
+        from app.copy_duplicate_documents(${created.id}::uuid, ${workItemId}::uuid, ${fileKeys}::text[], ${now})
       `.execute(trx);
-      // If a file can't be copied, this throws and nothing is created.
-      for (const c of copies) await files.copy(c.source_storage_key, c.storage_key);
+      if (copies.reduce((sum, c) => sum + Number(c.size_bytes), 0) > maxFileBytes) throw new FilesTooLarge();
+      // If a file can't be copied, or the transaction then fails, the copies made are deleted and nothing is created.
+      await copy(copies);
       return created;
-    }),
+    })),
   );
 }
 

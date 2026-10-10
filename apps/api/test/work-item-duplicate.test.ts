@@ -14,6 +14,8 @@ import { testDatabaseUrls } from "@rabaed/db/test-support";
 import type { DocumentList, WorkItemHistory } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { createFileStore, fileStoreSettingsFromEnv, type FileStore } from "../src/documents/file-store.ts";
+import { duplicateWorkItem } from "../src/work-items/work-items.ts";
 import { attachDatasheet, createTestApi, expectHidden, type Caller } from "./support/harness.ts";
 import { buildTower, detail, ok, projectMember, take, type Company, type Tower } from "./support/tower.ts";
 
@@ -211,5 +213,49 @@ describe("scenario RP-409-1: C1 duplicates a MAR K1 verified and closed with Cod
     expect(refused.statusCode).toBe(409);
     expect(refused.json()).toEqual({ error: "duplicate_not_allowed" });
     for (const who of [c2Engineer, stranger]) await expectHidden(duplicate(who, closed));
+  });
+});
+
+// The files a Duplicate copies live outside the database transaction (RP-409 review).
+describe("a Duplicate's file copies", () => {
+  const appDb = createDb(testDatabaseUrls().app, { max: 1 });
+  const files = createFileStore(fileStoreSettingsFromEnv());
+  afterAll(() => appDb.destroy());
+
+  const c1EngineerId = async () =>
+    (
+      await sql<{ id: string }>`
+        select pm.member_id as id from project_member pm
+        join project_member_position mp on mp.project_member_id = pm.id
+        join position p on p.id = mp.position_id and p.key = 'engineer'
+        where pm.project_id = ${at.projectId}::uuid and pm.participant_id = ${at.c1ParticipantId}::uuid
+        limit 1
+      `.execute(migrator)
+    ).rows[0]!.id;
+  const madeFor = async (requestKey: string) =>
+    (await sql<{ n: number }>`select count(*)::int as n from work_item where duplicate_key = ${requestKey}::uuid`.execute(migrator)).rows[0]!.n;
+
+  it("refuses a Duplicate whose files come to more than the cap, creating nothing", async () => {
+    const requestKey = randomUUID();
+    const result = await duplicateWorkItem(appDb, files, await c1EngineerId(), closed, requestKey, new Date(), 10);
+    expect(result).toEqual({ ok: false, reason: "duplicate_files_too_large" });
+    expect(await madeFor(requestKey)).toBe(0);
+  });
+
+  it("deletes the files it copied when a copy fails, creating nothing", async () => {
+    const copied: string[] = [];
+    const failing: FileStore = {
+      ...files,
+      copy: async (from, to) => {
+        await files.copy(from, to);
+        copied.push(to);
+        throw new Error("the store failed after writing");
+      },
+    };
+    const requestKey = randomUUID();
+    await expect(duplicateWorkItem(appDb, failing, await c1EngineerId(), closed, requestKey, new Date())).rejects.toThrow("the store failed");
+    expect(copied).toHaveLength(1);
+    expect(await files.stat(copied[0]!)).toBeNull();
+    expect(await madeFor(requestKey)).toBe(0);
   });
 });

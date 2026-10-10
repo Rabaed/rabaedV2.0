@@ -235,7 +235,10 @@ export function WorkItemListOrKanban(
       case "duplicate": {
         // A key per request, so a double-click makes one Revision or one Draft.
         const res = await post(`/work-items/${row.id}/${action === "resubmit" ? "revisions" : "duplicate"}`, { idempotencyKey: crypto.randomUUID() });
-        if (!res.ok) return failed;
+        if (!res.ok) {
+          const { error } = (await res.json().catch(() => ({}))) as { error?: string };
+          return error === "duplicate_files_too_large" ? t("list.rowMenu.duplicateTooLarge") : failed;
+        }
         router.push(itemHref(((await res.json()) as { id: string }).id));
         return null;
       }

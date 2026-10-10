@@ -142,7 +142,8 @@
         "deleteBody": "Nobody will see “{subject}” again, you included. It never had a number, so none is lost.",
         "cancel": "Cancel",
         "discarded": "Draft discarded",
-        "failed": "That didn't work. Refresh the page and try again."
+        "failed": "That didn't work. Refresh the page and try again.",
+        "duplicateTooLarge": "Its files come to more than 200 MB, more than a Duplicate copies. Start a new Draft and attach the files you need."
       },
       "columnSettings": {
         "settings": "Table settings",

@@ -159,7 +159,7 @@ create function app.record_duplicate(p_work_item_id uuid, p_source_id uuid, p_id
 -- never touches the other's files. Only for the Draft app.record_duplicate tied to
 -- that source, while the Member may change its Documents; nothing otherwise.
 create function app.copy_duplicate_documents(p_work_item_id uuid, p_source_id uuid, p_field_keys text[], p_now timestamptz)
-  returns table (storage_key text, source_storage_key text)
+  returns table (storage_key text, source_storage_key text, size_bytes bigint)
   language plpgsql volatile security definer
   set search_path = pg_catalog, public
   as $$
@@ -197,7 +197,7 @@ create function app.copy_duplicate_documents(p_work_item_id uuid, p_source_id uu
           from source s
           returning document.id, document.storage_key
         )
-        select c.storage_key, s.storage_key from copied c join source s on s.new_id = c.id order by c.id;
+        select c.storage_key, s.storage_key, s.size_bytes from copied c join source s on s.new_id = c.id order by c.id;
     end
   $$;
 
