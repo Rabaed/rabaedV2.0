@@ -20,6 +20,7 @@ import {
 import { directionOf, type BaseRole, type Locale, type WorkItemMapPosition, type WorkflowDefinition } from "@rabaed/domain";
 import { useMemo, type ReactNode } from "react";
 import { cn } from "../../lib/cn.ts";
+import { IconButton } from "../button/button.tsx";
 import { Icon } from "../icon/icon.tsx";
 import type { WorkflowLabels } from "./workflow-labels.ts";
 import { workflowMap, type MapBand, type MapEdge, type MapNode, type MapStage, type WorkflowMapModel } from "./workflow-map.ts";
@@ -152,13 +153,14 @@ function toFlow(model: WorkflowMapModel, ctx: Ctx, edit: boolean): { nodes: Canv
   }));
   // Transitions between the same two Steps (Approve · A and · B) get their own label lanes.
   const seen = new Map<string, number>();
+  const byId = new Map(model.nodes.map((n) => [n.id, n]));
   const edges: CanvasEdge[] = model.edges.map((edge) => {
     const pair = [edge.source, edge.target].toSorted().join("|");
     const lane = seen.get(pair) ?? 0;
     seen.set(pair, lane + 1);
     const { colour } = edgeLook(edge);
     const [sourceHandle, targetHandle] = edge.vertical
-      ? (model.nodes.find((n) => n.id === edge.target)!.y > model.nodes.find((n) => n.id === edge.source)!.y ? ["bottom-out", "top-in"] : ["top-out", "bottom-in"])
+      ? (byId.get(edge.target)!.y > byId.get(edge.source)!.y ? ["bottom-out", "top-in"] : ["top-out", "bottom-in"])
       : edge.backwards
         ? ["bottom-out", "bottom-in"]
         : ["out", "in"];
@@ -352,7 +354,6 @@ function TransitionEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition
 /** Zoom in, zoom out and fit, at the canvas's end corner as in the design. */
 function Zoom({ labels, rtl }: { labels: WorkflowLabels; rtl: boolean }) {
   const flow = useReactFlow();
-  const button = "flex size-8 items-center justify-center rounded-md text-text-secondary hover:bg-hover focus-visible:outline-2 focus-visible:outline-focus";
   return (
     <div
       className={cn(
@@ -361,15 +362,15 @@ function Zoom({ labels, rtl }: { labels: WorkflowLabels; rtl: boolean }) {
         rtl ? "start-3" : "end-3",
       )}
     >
-      <button type="button" className={button} aria-label={labels.zoomOut} onClick={() => flow.zoomOut()}>
-        <Icon name="zoom-out" size={17} />
-      </button>
-      <button type="button" className={button} aria-label={labels.zoomIn} onClick={() => flow.zoomIn()}>
-        <Icon name="zoom-in" size={17} />
-      </button>
-      <button type="button" className={button} aria-label={labels.fit} onClick={() => flow.fitView({ padding: 0.04 })}>
-        <Icon name="maximize" size={17} />
-      </button>
+      <IconButton label={labels.zoomOut} size="sm" onClick={() => flow.zoomOut()}>
+        <Icon name="zoom-out" />
+      </IconButton>
+      <IconButton label={labels.zoomIn} size="sm" onClick={() => flow.zoomIn()}>
+        <Icon name="zoom-in" />
+      </IconButton>
+      <IconButton label={labels.fit} size="sm" onClick={() => flow.fitView({ padding: 0.04 })}>
+        <Icon name="maximize" />
+      </IconButton>
     </div>
   );
 }

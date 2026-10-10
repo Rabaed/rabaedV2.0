@@ -50,6 +50,7 @@ export function WorkItemWorkflow({ map, locale, documentNumber, stepAgeWeeks }: 
       permission: (permission) => t(`permissions.${permission}`),
       outcomeMode: (mode) => t(`outcomeModes.${mode}`),
       kind: (kind) => t(`kinds.${kind}`),
+      position: (key, role) => map.positions.find((p) => p.key === key && p.role === role)?.name[locale] ?? key,
       part: (role) => t("part", { role }),
       withCompany: (company) => t("withCompany", { company }),
       current: t("current"),
@@ -58,7 +59,7 @@ export function WorkItemWorkflow({ map, locale, documentNumber, stepAgeWeeks }: 
       zoomOut: t("zoomOut"),
       fit: t("fit"),
     }),
-    [t, tRoles],
+    [t, tRoles, map.positions, locale],
   );
   const version = formatNumber(map.versionNo, locale);
   const name = map.name[locale];

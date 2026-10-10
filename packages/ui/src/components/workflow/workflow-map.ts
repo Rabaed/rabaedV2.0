@@ -68,10 +68,10 @@ export type WorkflowMapInput = {
   position?: WorkItemMapPosition | null;
 };
 
-export const STEP_WIDTH = 200;
-export const STEP_HEIGHT = 92;
-export const END_WIDTH = 170;
-export const END_HEIGHT = 46;
+const STEP_WIDTH = 200;
+const STEP_HEIGHT = 92;
+const END_WIDTH = 170;
+const END_HEIGHT = 46;
 const LANE = 310; // One column of Steps in a band: room between cards for a Transition's label.
 const TOP = 56; // Room for the band's name.
 const ROW = STEP_HEIGHT + 48;
@@ -98,7 +98,9 @@ export function workflowMap({ definition, stages, dir, viewerRole, position }: W
   const groups: MapNode[] = [];
   if (viewerRole !== undefined) {
     const roles = [...new Set(definition.steps.flatMap((s) => (s.actor && !terminal(s) ? [s.actor.role] : [])))];
-    for (const role of roles.filter((r) => r !== viewerRole)) {
+    // Another Participant of the viewer's own role holding the item (a second Contractor's) is folded too.
+    const held = position?.kind === "company" ? position.role : null;
+    for (const role of roles.filter((r) => r !== viewerRole || r === held)) {
       const steps = definition.steps.filter((s) => s.actor?.role === role && !terminal(s));
       const own = steps.map((s) => boxes.get(s.key)!);
       const x = Math.min(...own.map((b) => b.x)) - GROUP_PAD;

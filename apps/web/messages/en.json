@@ -95,7 +95,7 @@
     },
     "viewSwitch": {
       "view": "View",
-      "list": "Steps",
+      "list": "List",
       "kanban": "Kanban"
     },
     "dashboard": {

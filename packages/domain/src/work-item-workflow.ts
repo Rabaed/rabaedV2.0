@@ -34,6 +34,8 @@ export const workItemWorkflowMap = z.object({
   definition: workflowDefinition,
   /** The Stages of the item's Project and Module, in their order: the canvas's bands. */
   stages: z.array(z.object({ key: z.string(), name: bilingualText, category: z.enum(stageCategories) })),
+  /** The names of the Positions the definition's Steps are narrowed to, by role and key. */
+  positions: z.array(z.object({ role: z.enum(baseRoles), key: z.string(), name: bilingualText })),
   /** The viewer's own Participant's role on the Project: its Steps are shown one by one. Null for a reader who has none. */
   viewerRole: z.enum(baseRoles).nullable(),
   /** Null while an open item has no holder the viewer may know of. */

@@ -119,6 +119,10 @@ describe("the map of an item moving through C1 and K1", () => {
     expect(m.stages.map((s) => s.key)).toEqual(expect.arrayContaining(["draft", "internal_review", "pending_approval", "approved"]));
   });
 
+  it("names no Position the definition doesn't narrow a Step to", () => {
+    expect(atK1Manager.pm.positions).toEqual([]);
+  });
+
   it("names each viewer's own Participant role", () => {
     expect(atK1Manager.pm.viewerRole).toBe("contractor");
     expect(atK1Manager.k1Manager.viewerRole).toBe("consultant");

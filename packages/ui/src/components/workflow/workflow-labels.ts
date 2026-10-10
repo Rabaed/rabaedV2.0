@@ -15,14 +15,14 @@ export type WorkflowLabels = {
   role: (role: BaseRole) => string;
   /** A Function Permission, e.g. "Approve". */
   permission: (permission: FunctionPermission) => string;
-  /** What a Step does about the outcome, e.g. "Issues the final code"; not called for `none`. */
+  /** What a Step does about the outcome, e.g. "Issues the outcome"; not called for `none`. */
   outcomeMode: (mode: Exclude<OutcomeMode, "none">) => string;
   /** A Transition's kind, e.g. "Return". */
   kind: (kind: TransitionKind) => string;
-  /** A Position, by its key; the key itself when left out. */
-  position?: (key: string) => string;
-  /** Another Participant's folded part, e.g. "Consultant review". */
-  part: (role: string) => string;
+  /** A Position of a role, by its key, e.g. "Project Manager". */
+  position: (key: string, role: BaseRole) => string;
+  /** Another Participant's folded part, by the role's name already in the viewer's language, e.g. "Consultant review". */
+  part: (roleName: string) => string;
   /** The part holding the item, e.g. "With Design Consultants LLC". */
   withCompany: (company: string) => string;
   /** Marks where the item is, e.g. "Current". */

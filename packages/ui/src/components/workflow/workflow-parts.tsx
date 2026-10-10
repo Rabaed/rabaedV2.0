@@ -17,7 +17,8 @@ export const stageVars = (colour: StageKey) => ({
 /** "Contractor · Review · Engineer": the Step's role, Function Permission and Positions. */
 export function stepMeta(step: WorkflowStep, labels: WorkflowLabels): string {
   if (!step.actor) return "";
-  const positions = (step.actor.positions ?? []).map((p) => labels.position?.(p) ?? p);
+  const { role } = step.actor;
+  const positions = (step.actor.positions ?? []).map((p) => labels.position(p, role));
   return [labels.role(step.actor.role), labels.permission(step.actor.permission), ...positions].join(" · ");
 }
 

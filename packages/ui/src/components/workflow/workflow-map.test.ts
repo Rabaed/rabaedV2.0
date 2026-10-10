@@ -139,6 +139,13 @@ describe("workflowMap: an item's map, as the viewer may know it (V14)", () => {
     expect(map.nodes.filter((n) => n.current)).toEqual([expect.objectContaining({ id: "role:consultant", companyName })]);
   });
 
+  it("folds the viewer's own role too when another Participant of that role holds the item", () => {
+    const companyName = name("Beta Build");
+    const map = workflowMap({ definition: mar, stages, dir: "ltr", viewerRole: "contractor", position: { kind: "company", role: "contractor", companyName } });
+    expect(map.nodes.filter((n) => n.kind === "step")).toEqual([]);
+    expect(map.nodes.filter((n) => n.current)).toEqual([expect.objectContaining({ id: "role:contractor", companyName })]);
+  });
+
   it("marks the terminal Step a closed item reached", () => {
     const map = workflowMap({ definition: mar, stages, dir: "ltr", viewerRole: "consultant", position: { kind: "closed", stepKey: "approved" } });
     expect(map.nodes.filter((n) => n.current).map((n) => n.id)).toEqual(["approved"]);

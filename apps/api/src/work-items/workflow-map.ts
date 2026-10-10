@@ -65,6 +65,11 @@ export function readWorkItemWorkflowMap(db: Db, memberId: string, workItemId: st
       .orderBy("sort")
       .orderBy("key")
       .execute();
+    const used = [...new Set(definition.steps.flatMap((s) => s.actor?.positions ?? []))];
+    const positions =
+      used.length === 0
+        ? []
+        : await trx.selectFrom("position").select(["base_role", "key", "name"]).where("key", "in", used).orderBy("sort").execute();
     const viewer = await trx
       .selectFrom("participant as p")
       .innerJoin("project_role as r", "r.id", "p.project_role_id")
@@ -79,6 +84,7 @@ export function readWorkItemWorkflowMap(db: Db, memberId: string, workItemId: st
       latestVersionNo: latest[0]?.version_no ?? item.version_no,
       definition,
       stages: stages.map((s) => ({ key: s.key, name: s.name as BilingualText, category: s.category as StageCategory })),
+      positions: positions.map((p) => ({ role: p.base_role, key: p.key, name: p.name as BilingualText })),
       viewerRole: (viewer?.base_role as BaseRole | undefined) ?? null,
       position: position(item, definition),
     };
