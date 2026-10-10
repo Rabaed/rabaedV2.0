@@ -23,6 +23,7 @@ import { createContext, useContext, useEffect, useRef, useState, type ReactNode 
 import { Link, useRouter } from "@/i18n/navigation";
 import { useFormRendererLabels } from "@/lib/form-labels";
 import { linkSearch } from "@/lib/link-search";
+import { saveButton } from "@/lib/save-button";
 import { useDocuments, useImageUrls } from "./use-documents";
 
 // A Work Item's Form on its page: the answers being edited, their errors, and
@@ -51,8 +52,12 @@ type WorkItemFormState = {
   optionLists: readonly OptionList[];
   /** Its Project, which a link question's Link search searches. */
   projectId: string;
+  /** The item's Document Number; none while it is a Draft (a Revision Draft included). */
+  documentNumber: string | null;
   /** The number and Subject of each item its link questions chose that the viewer sees. */
   linkTargets: LinkTargetNames;
+  /** Where each chosen item the viewer can't see opens, by its Document Number: its Link's page (RP-521). */
+  hiddenLinks: Readonly<Record<string, string>>;
   errors: readonly FieldError[];
   editable: boolean;
   /** The Form Sections the viewer may change now; the others read (form-engine.md §4). */
@@ -87,7 +92,9 @@ export function useWorkItemForm(): WorkItemFormState | null {
 export function WorkItemFormProvider({
   workItemId,
   projectId,
+  documentNumber,
   linkTargets,
+  hiddenLinks,
   schema,
   choices,
   answers: saved,
@@ -103,7 +110,9 @@ export function WorkItemFormProvider({
 }: {
   workItemId: string;
   projectId: string;
+  documentNumber: string | null;
   linkTargets: LinkTargetNames;
+  hiddenLinks: Readonly<Record<string, string>>;
   schema: FormSchema;
   choices: BuiltInChoices;
   answers: Record<string, unknown>;
@@ -236,7 +245,9 @@ export function WorkItemFormProvider({
         people,
         optionLists,
         projectId,
+        documentNumber,
         linkTargets,
+        hiddenLinks,
         answers,
         named,
         errors,
@@ -261,7 +272,6 @@ export function WorkItemFormProvider({
 /** The Form itself: to fill in while the viewer may edit it, otherwise to read. */
 export function WorkItemAnswers({ locale, workItemId, documents }: { locale: Locale; workItemId: string; documents: DocumentList }) {
   const t = useTranslations("workItems.form");
-  const tItems = useTranslations("workItems");
   const formLabels = useFormRendererLabels();
   const form = useWorkItemForm();
   // The Form's `attachments`, `photos` and `checklist` fields upload as the Attachments System Field does (RP-281, RP-284, RP-285).
@@ -271,7 +281,13 @@ export function WorkItemAnswers({ locale, workItemId, documents }: { locale: Loc
     workItemId,
     documents.documents.filter((d) => d.fieldKey !== null && photoKeys.has(d.fieldKey)),
   );
+  const router = useRouter();
   if (!form) return null;
+  const button = saveButton({ documentNumber: form.documentNumber, dirty: form.dirty, pending: form.pending });
+  /** Saves anything pending (quietly: the page is left), then goes to the Project's Submittals list. A refused save stays. */
+  async function saveAndClose() {
+    if (form && (await form.save(true))) router.push(`/projects/${form.projectId}/work-items`);
+  }
   // The fields the last check marked, by their labels in the viewer's language, in Form order.
   const marked = new Set(form.errors.map((e) => e.key));
   const toFix = form.schema.sections.flatMap((section) =>
@@ -297,7 +313,7 @@ export function WorkItemAnswers({ locale, workItemId, documents }: { locale: Loc
         links={{
           targets: form.linkTargets,
           search: linkSearch(form.projectId),
-          hrefFor: (id) => `/work-items/${id}`,
+          hrefFor: (choice) => (typeof choice === "string" ? `/work-items/${choice}` : (form.hiddenLinks[choice.documentNumber] ?? null)),
           linkAs: Link,
           workItemId,
         }}
@@ -340,9 +356,15 @@ export function WorkItemAnswers({ locale, workItemId, documents }: { locale: Loc
         </div>
       )}
       {form.editable && (
-        <Button variant="secondary" disabled={form.pending || !form.dirty} onClick={() => void form.save(false)}>
-          {tItems("saveDraft")}
-        </Button>
+        <div className="flex justify-end border-t border-border pt-4">
+          <Button
+            variant={button.closes ? "primary" : "secondary"}
+            disabled={button.disabled}
+            onClick={() => void (button.closes ? saveAndClose() : form.save(false))}
+          >
+            {t(button.label)}
+          </Button>
+        </div>
       )}
     </section>
   );

@@ -548,4 +548,23 @@ describe("a second Project: Beta Build's Jeddah Corniche Villas, which no other 
     await expectHidden(nasser.get(`/v1/projects/${projectId}/work-items`));
     await expectHidden(nasser.get(`/v1/work-items/${twrItem}`));
   });
+
+  // Scenario RP-520-1, seam 1: what the web's one not-found page stands on. The api
+  // answers Nasser's Riyadh Gate Tower Project and item, and made-up ones, with the
+  // same bytes, so nothing downstream can tell them apart.
+  it("gives Nasser byte-identical 404s for a Riyadh Gate Tower Project or item and a made-up one (RP-520-1)", async () => {
+    const answers = await Promise.all(
+      [
+        `/v1/projects/${projectId}`,
+        `/v1/projects/${randomUUID()}`,
+        `/v1/projects/${projectId}/work-items`,
+        `/v1/projects/${randomUUID()}/work-items`,
+        `/v1/work-items/${twrItem}`,
+        `/v1/work-items/${randomUUID()}`,
+      ].map((url) => nasser.get(url)),
+    );
+    const [first, ...rest] = answers.map((res) => ({ status: res.statusCode, type: res.headers["content-type"], body: res.body }));
+    expect(first).toEqual({ status: 404, type: expect.stringContaining("application/json"), body: JSON.stringify({ error: "not_found" }) });
+    for (const other of rest) expect(other).toEqual(first);
+  });
 });

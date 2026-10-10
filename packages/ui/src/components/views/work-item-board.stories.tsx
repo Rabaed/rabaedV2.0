@@ -202,6 +202,12 @@ export const Wide: Story = {
     await expectLaidOutLeftToRight(number);
     const approved = columnOf(context, stages.approved);
     await expect(approved.querySelectorAll("[data-outcome]")).toHaveLength(2);
+    // The Review Code badge reads "Code A" in Arabic too, not a bare letter, whole badge left to right, with its icon (RP-522).
+    const codeA = approved.querySelector<HTMLElement>('[data-outcome="A"]')!;
+    await expect(codeA).toHaveTextContent("Code A");
+    await expect(getComputedStyle(codeA).direction).toBe("ltr");
+    await expect(codeA.querySelector("svg.tabler-icon-circle-check")).not.toBeNull();
+    await expect(approved.querySelector('[data-outcome="B"] svg.tabler-icon-circle-check')).not.toBeNull();
     await expect(within(approved).queryByRole("img")).toBeNull();
   },
 };
