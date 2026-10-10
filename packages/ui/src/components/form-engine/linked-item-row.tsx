@@ -24,14 +24,14 @@ export type LinkedItemRowProps = {
   labels: LinkedItemRowLabels;
   documentNumber: string;
   subject: string;
-  /** Where the item opens; null for one the viewer can't see. */
-  href: string | null;
   /**
-   * For one the viewer can't see: the page of the Link to it, by the Link's own
-   * id (RP-521), which says only that they may not see its details. Without it,
-   * opening the item shows that sentence here.
+   * Where the row opens: the item, or for one the viewer can't see the page of
+   * the Link to it (RP-521), which says only that they may not see its details.
+   * Null: opening it shows that sentence here.
    */
-  hiddenHref?: string | null;
+  href: string | null;
+  /** The viewer can't see the item (a lock marks it); by default, when there is nowhere to open. */
+  hidden?: boolean;
   /** The link component, e.g. the app's `Link`. */
   linkAs: ElementType;
   /** A button removing the item, when it may be removed. */
@@ -39,7 +39,7 @@ export type LinkedItemRowProps = {
 };
 
 /** A list item: the linked item, opening it or saying the viewer may not see it, and its remove button. */
-export function LinkedItemRow({ labels: text, documentNumber, subject, href, hiddenHref, linkAs: Anchor, remove }: LinkedItemRowProps) {
+export function LinkedItemRow({ labels: text, documentNumber, subject, href, hidden = href === null, linkAs: Anchor, remove }: LinkedItemRowProps) {
   const messageId = useId();
   const [explained, setExplained] = useState(false);
   const target = cn(
@@ -57,8 +57,8 @@ export function LinkedItemRow({ labels: text, documentNumber, subject, href, hid
   return (
     <li className="flex flex-col">
       <div className="flex items-center gap-1 pe-1">
-        {href !== null || hiddenHref ? (
-          <Anchor href={href ?? hiddenHref} className={target}>
+        {href !== null ? (
+          <Anchor href={href} className={target}>
             {label}
           </Anchor>
         ) : (
@@ -67,14 +67,14 @@ export function LinkedItemRow({ labels: text, documentNumber, subject, href, hid
             {label}
           </button>
         )}
-        {href === null && <Icon name="lock" size={16} label={text.hidden} className="shrink-0 text-muted" />}
+        {hidden && <Icon name="lock" size={16} label={text.hidden} className="shrink-0 text-muted" />}
         {remove && (
           <IconButton label={remove.label} size="sm" disabled={remove.disabled} onClick={remove.onRemove}>
             <Icon name={remove.icon} size={16} />
           </IconButton>
         )}
       </div>
-      {href === null && !hiddenHref && (
+      {href === null && (
         <p id={messageId} className={cn("px-3 pb-2 text-sm text-muted", !explained && "hidden")}>
           {text.hidden}
         </p>

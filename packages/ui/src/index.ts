@@ -127,6 +127,7 @@ export {
 } from "./tokens/themes.ts";
 export { stageColour } from "./components/status/stage-colour.ts";
 export { Outcome, WorkItemList, type WorkItemListLabels, type WorkItemListProps } from "./components/views/work-item-list.tsx";
+export { outcomesOfType } from "./components/views/outcomes-of-type.ts";
 export {
   WorkItemBoard,
   WorkItemViewSwitch,

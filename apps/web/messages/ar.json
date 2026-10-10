@@ -451,7 +451,8 @@
       "step": "الخطوة",
       "with": "لدى",
       "raisedBy": "أنشأه",
-      "issuedCode": "الرمز الصادر",      "comments": "الملاحظات",
+      "issuedCode": "الرمز الصادر",
+      "comments": "الملاحظات",
       "commentCounts": "{open} مفتوحة / {closed} مغلقة"
     },
     "invalid": "أدخل موضوعًا واختر تخصصًا.",
