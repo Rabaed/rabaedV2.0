@@ -76,13 +76,13 @@ function stepOf(definition: WorkflowDefinition, key: string): WorkflowStep {
 /** Whether the item can already go from Step `start` to Step `target` along the definition's Transitions. */
 function leadsTo(definition: WorkflowDefinition, start: string, target: string): boolean {
   const seen = new Set([start]);
-  for (const queue = [start]; queue.length > 0; ) {
-    const at = queue.shift()!;
+  for (const toVisit = [start]; toVisit.length > 0; ) {
+    const at = toVisit.shift()!;
     if (at === target) return true;
     for (const t of definition.transitions) {
       if (t.from === at && !seen.has(t.to)) {
         seen.add(t.to);
-        queue.push(t.to);
+        toVisit.push(t.to);
       }
     }
   }
