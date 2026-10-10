@@ -11,7 +11,7 @@ const t = (en: string, ar: string) => ({ en, ar });
 export const sameInBoth = (text: string) => t(text, text);
 
 export const workflowStages: MapStage[] = [
-  { key: "draft", name: t("Drafts", "المسودات"), category: "draft" },
+  { key: "draft", name: t("Draft", "مسودة"), category: "draft" },
   { key: "internal_review", name: t("Internal Review", "مراجعة داخلية"), category: "in_progress" },
   { key: "pending_approval", name: t("Pending Approval", "بانتظار الاعتماد"), category: "in_progress" },
   { key: "approved", name: t("Approved", "معتمد"), category: "closed_positive" },

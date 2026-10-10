@@ -242,7 +242,7 @@ export function KanbanCard({
   );
 }
 
-function HeaderBadge({ badge }: { badge: KanbanCardBadge }) {
+export function HeaderBadge({ badge }: { badge: KanbanCardBadge }) {
   if (badge.kind === "revision") {
     return (
       <span translate="no" className="inline-flex h-[22px] items-center rounded-[6px] bg-revision-bg px-2 font-ui text-caption font-bold text-revision-fg">

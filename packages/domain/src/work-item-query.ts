@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { chainBucketSchema } from "./chain-bucket.ts";
 import { codeCFilterSchema } from "./code-c.ts";
+import { locales } from "./locale.ts";
 import { moduleKeySchema } from "./module.ts";
 import { moduleTabPaths } from "./project.ts";
 import { workItemOutcome, workItemTypeCode } from "./work-item.ts";
@@ -17,12 +18,73 @@ import { workItemOutcome, workItemTypeCode } from "./work-item.ts";
  * changes when they come.
  */
 
-/** The List's page size. */
+/** The page size of a read a cursor at a time (Home, the Dashboard's links); the List numbers its pages (`page`, `pageSize`). */
 export const workItemPageSize = 50;
 
-/** Sort by Step Age, the oldest first and closed items (which don't age) last, or by Document Number, items with no number yet last, or by Submission Date, the latest first and items not yet Submitted last. */
-export const workItemSorts = ["stepAge", "documentNumber", "submissionDate"] as const;
+/** The List's rows per page (RP-409, the owner's design), and the one it opens with. */
+export const workItemPageSizes = [10, 25, 50] as const;
+export type WorkItemPageSize = (typeof workItemPageSizes)[number];
+export const workItemListPageSize: WorkItemPageSize = 25;
+/** The highest page number a query takes: no read, Export included, reaches further. */
+export const workItemPageMax = 1000;
+/** The most rows one Export gives (RP-409); the web says when it stopped there. */
+export const workItemExportMax = 5000;
+
+/**
+ * The sorts a cursor pages through: by Step Age, the oldest first and closed items (which don't age) last, or by
+ * Document Number, items with no number yet last, or by Submission Date, the latest first and items not yet
+ * Submitted last.
+ */
+export const workItemCursorSorts = ["stepAge", "documentNumber", "submissionDate"] as const;
+/**
+ * Every sort: the cursor's, and one per List column (RP-409), which pages by number only. Each has its own
+ * order (`workItemSortOrders`) that `dir` may turn round; rows with nothing to sort by come last either way.
+ * `locationLevel1`…`3` are the Zone, Building and Floor: the item's Location's place at that level of the tree.
+ */
+export const workItemSorts = [
+  ...workItemCursorSorts,
+  "subject",
+  "revision",
+  "trade",
+  "type",
+  "stage",
+  "outcome",
+  "locationLevel1",
+  "locationLevel2",
+  "locationLevel3",
+  "owner",
+  "created",
+  "contractor",
+] as const;
 export type WorkItemSort = (typeof workItemSorts)[number];
+export type WorkItemCursorSort = (typeof workItemCursorSorts)[number];
+export const sortDirections = ["asc", "desc"] as const;
+export type SortDirection = (typeof sortDirections)[number];
+
+/**
+ * Each sort's own order, as the column reads: Step Age the oldest first, dates the latest first, the rest
+ * ascending (A to Z, R0 first, the Project's own order of Trades, Stages and Locations).
+ */
+export const workItemSortOrders: Record<WorkItemSort, SortDirection> = {
+  stepAge: "desc",
+  documentNumber: "asc",
+  submissionDate: "desc",
+  subject: "asc",
+  revision: "asc",
+  trade: "asc",
+  type: "asc",
+  stage: "asc",
+  outcome: "asc",
+  locationLevel1: "asc",
+  locationLevel2: "asc",
+  locationLevel3: "asc",
+  owner: "asc",
+  created: "desc",
+  contractor: "asc",
+};
+
+/** The direction a query sorts in: its `dir`, else its sort's own. */
+export const sortDirectionOf = (q: { sort: WorkItemSort; dir?: SortDirection }): SortDirection => q.dir ?? workItemSortOrders[q.sort];
 
 /** The longest search the List takes. */
 export const searchMaxLength = 200;
@@ -152,8 +214,19 @@ const queryFields = {
   /** Every visible Revision, not only the latest of each chain. */
   allRevisions: flag,
   sort: z.enum(workItemSorts).default("stepAge"),
+  /** The sort turned round, or kept (RP-409): left out, the sort's own order (`workItemSortOrders`). */
+  dir: z.enum(sortDirections).optional(),
   /** Where the page starts: the `nextCursor` of the page before. */
   cursor: z.string().max(1000).optional(),
+  /** A numbered page (RP-409), from 1: the List's pager. Left out, the read pages by cursor. */
+  page: z.coerce.number().int().positive().max(workItemPageMax).optional(),
+  /** Rows a numbered page holds: 10, 25 or 50; left out, 50. */
+  pageSize: z.coerce
+    .number()
+    .pipe(z.union(workItemPageSizes.map((n) => z.literal(n))))
+    .optional(),
+  /** The language names are sorted in (a Trade's, an owner's, a Company's): the reader's. Not kept in the web's URL. */
+  lang: z.enum(locales).optional(),
 };
 
 /** The filters that take a list of values; every other key takes one. */
@@ -161,12 +234,19 @@ const listKeys = ["type", "stage", "with", "owner", "role", "trade", "location",
 /** The keys that narrow the rows, as opposed to how they are shown (sort, Revisions, page). */
 const filterKeys = [...listKeys, "stepAgeMin", "createdWithin", "q", "needMyAction", "raisedByMe", "heldBy", "submittedFrom", "submittedTo"] as const;
 
-/** The query as the API takes it; a cursor must be one made for its sort. */
+/** The query as the API takes it; a cursor must be one made for its sort, in its own order, and never with a numbered page. */
 export const workItemQuery = z.object(queryFields).superRefine((q, ctx) => {
-  if (q.cursor !== undefined && decodeWorkItemCursor(q.cursor, q.sort) === null) {
-    ctx.addIssue({ code: "custom", path: ["cursor"], message: "Not a cursor of this sort" });
-  }
+  if (!cursorFits(q)) ctx.addIssue({ code: "custom", path: ["cursor"], message: "Not a cursor of this sort" });
 });
+
+const isCursorSort = (sort: string): sort is WorkItemCursorSort => (workItemCursorSorts as readonly string[]).includes(sort);
+
+/** Whether the query's cursor may page it: one made for its sort, in the sort's own order, with no numbered page. */
+function cursorFits(q: { cursor?: string; sort: WorkItemSort; dir?: SortDirection; page?: number }): boolean {
+  if (q.cursor === undefined) return true;
+  if (q.page !== undefined || (q.dir !== undefined && q.dir !== workItemSortOrders[q.sort])) return false;
+  return decodeWorkItemCursor(q.cursor, q.sort) !== null;
+}
 export type WorkItemQuery = z.infer<typeof workItemQuery>;
 /** A query as code builds one: any key left out takes its default. */
 export type WorkItemQueryInput = Partial<WorkItemQuery>;
@@ -198,7 +278,7 @@ export function workItemQueryFromSearchParams(params: SearchParamsLike): WorkIte
     return [key, parsed.success ? parsed.data : schema.parse(undefined)] as const;
   });
   const query = Object.fromEntries(entries) as WorkItemQuery;
-  if (query.cursor !== undefined && decodeWorkItemCursor(query.cursor, query.sort) === null) delete query.cursor;
+  if (!cursorFits(query)) delete query.cursor;
   return query;
 }
 
@@ -220,7 +300,11 @@ export function workItemSearchParams(query: Partial<WorkItemQuery>): URLSearchPa
   if (query.heldBy) params.set("heldBy", query.heldBy);
   if (query.allRevisions) params.set("allRevisions", "true");
   if (query.sort && query.sort !== "stepAge") params.set("sort", query.sort);
+  if (query.dir) params.set("dir", query.dir);
   if (query.cursor) params.set("cursor", query.cursor);
+  if (query.page !== undefined) params.set("page", String(query.page));
+  if (query.pageSize !== undefined) params.set("pageSize", String(query.pageSize));
+  if (query.lang) params.set("lang", query.lang);
   return params;
 }
 
@@ -243,16 +327,23 @@ export function isFilteredWorkItemQuery(query: WorkItemQuery): boolean {
   });
 }
 
-/** `query` with no filters, from the first page: its Module, sort and "Show all Revisions" kept. */
+/** `query` with no filters, from the first page: its Module, sort, order, page size and "Show all Revisions" kept. */
 export function withoutFilters(query: WorkItemQuery): WorkItemQuery {
-  return { ...workItemQuery.parse({}), module: query.module, allRevisions: query.allRevisions, sort: query.sort };
+  return {
+    ...workItemQuery.parse({}),
+    module: query.module,
+    allRevisions: query.allRevisions,
+    sort: query.sort,
+    ...(query.dir ? { dir: query.dir } : {}),
+    ...(query.pageSize ? { pageSize: query.pageSize } : {}),
+  };
 }
 
 /**
  * A cursor: the sort it was made for and the last row's sort key, opaque to the
  * client. The key is what the API sorts by, as text, ending with the row's id.
  */
-export function encodeWorkItemCursor(sort: WorkItemSort, key: readonly string[]): string {
+export function encodeWorkItemCursor(sort: WorkItemCursorSort, key: readonly string[]): string {
   return toBase64Url(JSON.stringify([sort, ...key]));
 }
 
@@ -278,7 +369,7 @@ const isFlag = (v: string) => v === "true" || v === "false";
 // A row's value, or its Subject when it has none: never both.
 const valueOrSubject = (value: string, subject: string, isValue: (v: string) => boolean) =>
   value === "" || (isValue(value) && subject === "");
-const cursorKeyValid: Record<WorkItemSort, (key: WorkItemCursorKey) => boolean> = {
+const cursorKeyValid: Record<WorkItemCursorSort, (key: WorkItemCursorKey) => boolean> = {
   // `last` is closed; any item, closed or not, may have no Step Age (a Draft with no number).
   stepAge: ([last, at, subject]) => isFlag(last) && valueOrSubject(at, subject, (v) => enteredAt.test(v)),
   // `last` is no number yet, which then has no number.
@@ -295,7 +386,7 @@ export function decodeWorkItemCursor(cursor: string, sort: WorkItemSort): WorkIt
   } catch {
     return null;
   }
-  if (!Array.isArray(decoded) || decoded[0] !== sort || !decoded.every((v) => typeof v === "string")) return null;
+  if (!isCursorSort(sort) || !Array.isArray(decoded) || decoded[0] !== sort || !decoded.every((v) => typeof v === "string")) return null;
   const key = decoded.slice(1) as string[];
   if (key.length !== 4) return null;
   const [last, value, subject, id] = key as [string, string, string, string];

@@ -71,6 +71,11 @@ describe("formatDayMonthYear", () => {
     expect(formatDayMonthYear(at, "en", { weekday: true })).toBe("Saturday, 10 October 2026");
   });
 
+  it("writes the month short for the List, its Export and Download (RP-409)", () => {
+    expect(formatDayMonthYear(at, "en", { month: "short" })).toBe("10 Oct 2026");
+    expect(formatDayMonthYear(at, "ar", { month: "short" })).toMatch(/^10 .+ 2026$/);
+  });
+
   it("keeps Arabic's own order, in Latin digits", () => {
     const ar = formatDayMonthYear(at, "ar", { weekday: true });
     expect(ar).toContain("السبت");

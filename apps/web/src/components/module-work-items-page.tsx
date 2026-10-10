@@ -3,7 +3,7 @@ import { Icon, buttonVariants, cn } from "@rabaed/ui";
 import { getTranslations } from "next-intl/server";
 import { notFound } from "next/navigation";
 import { WorkItemListOrKanban } from "@/components/work-item-list-or-kanban";
-import { pageTrailFromSearchParams } from "@/lib/page-trail";
+import { listQueryFromSearchParams } from "@/lib/list-url";
 import { Link, redirect } from "@/i18n/navigation";
 import { getMe, getProject, getWorkItemBoard, getWorkItems } from "@/lib/session";
 
@@ -37,13 +37,14 @@ export async function ModuleWorkItemsPage({
   };
   // A filter the URL holds that isn't valid is left out, so an old or edited link still opens.
   // The tab's path names the Module, whatever the query string says.
-  const query = { ...workItemQueryFromSearchParams(searchParams), module };
-  // List or Kanban, kept in the URL as `view`.
+  // List or Kanban, kept in the URL as `view`. The List pages by number, sorted by Submittal No. unless the URL says.
   const view = workItemViewFromSearchParams(searchParams);
+  const query = { ...(view === "list" ? listQueryFromSearchParams(searchParams) : workItemQueryFromSearchParams(searchParams)), module };
   const [me, project, list, board] = await Promise.all([
     getMe(),
     getProject(projectId),
-    view === "list" ? getWorkItems(projectId, module, query) : null,
+    // Names sort in the reader's language.
+    view === "list" ? getWorkItems(projectId, module, { ...query, lang: locale }) : null,
     view === "kanban" ? getWorkItemBoard(projectId, module, query) : null,
   ]);
   if (!me) return redirect({ href: "/sign-in", locale });
@@ -53,7 +54,7 @@ export async function ModuleWorkItemsPage({
   // The MAR's Draft Step is held by Contractors; the API refuses anyone else too.
   const action =
     module === "submittals" && project.projectRole.baseRole === "contractor" ? (
-      <Link href={`/projects/${project.id}/work-items/new`} className={cn(buttonVariants(), "h-[42px]")}>
+      <Link href={`/projects/${project.id}/work-items/new`} className={cn(buttonVariants(), "h-[34px] px-3.5")}>
         <Icon name="plus" />
         {t("addSubmittal")}
       </Link>
@@ -80,13 +81,13 @@ export async function ModuleWorkItemsPage({
           <WorkItemListOrKanban
             view="list"
             list={list}
-            pageTrail={pageTrailFromSearchParams(searchParams, query)}
             query={query}
             locale={locale}
             tableLabel={title}
             action={action}
             projectId={project.id}
             module={module}
+            projectName={project.name[locale]}
             hints={hints}
           />
         )

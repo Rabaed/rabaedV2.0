@@ -47,7 +47,7 @@ describe("a new Project's Stages", () => {
     const byAdmin = await stagesOf(c1.caller, t);
     expect(byAdmin.canEdit).toBe(true);
     expect(byAdmin.stages.map((s) => s.key)).toEqual(rabaedDefaultKeys);
-    expect(byAdmin.stages[0]).toEqual({ key: "draft", name: { en: "Drafts", ar: "المسودات" }, category: "draft", inUse: true });
+    expect(byAdmin.stages[0]).toEqual({ key: "draft", name: { en: "Draft", ar: "مسودة" }, category: "draft", inUse: true });
     const byConsultant = await stagesOf(t.k1Manager, t);
     expect(byConsultant.canEdit).toBe(false);
     expect(byConsultant.stages).toEqual(byAdmin.stages);

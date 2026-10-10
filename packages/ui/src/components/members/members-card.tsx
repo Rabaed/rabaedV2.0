@@ -26,7 +26,7 @@ export type MemberRow = {
   projects: string | null;
   status: MemberStatus;
   statusLabel: string;
-  /** The row's menu (`RowMenu`), for the Authorized Person. */
+  /** The row's menu (`RowActionsMenu`), for the Authorized Person. */
   menu?: ReactNode;
 };
 

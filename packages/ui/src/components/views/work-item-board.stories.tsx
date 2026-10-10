@@ -38,7 +38,7 @@ const copy = {
 };
 
 const stages = {
-  draft: { key: "draft", name: b("Drafts", "المسودات"), category: "draft" as const },
+  draft: { key: "draft", name: b("Draft", "مسودة"), category: "draft" as const },
   internal: { key: "internal_review", name: b("Internal Review", "مراجعة داخلية"), category: "in_progress" as const },
   resubmitted: { key: "revise_resubmit", name: b("Revised & Resubmitted", "معدَّل ومعاد تقديمه"), category: "in_progress" as const },
   pending: { key: "pending_approval", name: b("Pending Approval", "بانتظار الاعتماد"), category: "in_progress" as const },

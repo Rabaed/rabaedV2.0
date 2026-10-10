@@ -231,6 +231,8 @@ The template for a page that lists records (RP-409; reference `design/reference/
 | `toolbarButton` | The classes of a compact toolbar button, for any other trigger in the row. |
 | `TableCard` | The surface card around a `Table` (its region loses its own border inside) and a `footer`. The table scrolls sideways in its own region, so the page never does; give the `Table` `stickyHeader` and a height (`containerClassName`) to scroll rows under a fixed header. |
 | `Pager` | The card's last row: an optional `summary` ("Page 2 of 5 · 230 items") and First / Previous / Next links (`first`, `previous`, `next` hrefs; undefined shows the step without a link). `labels`: `PagerLabels`. |
+| `NumberedPager` | The List's pager (RP-409, the owner's design): rows per page (`pageSizes`, `onPageSize`) at the start, the `summary` in the middle, « ‹ 1 2 … › » at the end (`hrefFor(page)`). With `lastPage` null (a search, which has no total) there is no last page and the numbers grow as the pages are read (`hasNext`). `labels`: `NumberedPagerLabels`. Story: `List/NumberedPager`. |
+| `ListToast` | A list page's short confirmation, a dark pill at the bottom centre read out politely ("Exported 42 submittals (CSV)"). |
 
 ```tsx
 <ListToolbar label={t("toolbar")} end={<WorkItemViewSwitch … />}>
@@ -246,8 +248,8 @@ The template for a page that lists records (RP-409; reference `design/reference/
 </TableCard>
 ```
 
-- **Pages are cursors.** The work item query pages forward only (`nextCursor`). `WorkItemList` takes `pageTrail` (the cursors of the pages before this one, from the second) and passes the next page's trail to `hrefFor(query, trail)`, so the URL can carry it (`apps/web/src/lib/page-trail.ts`: `page` and `before`). With it the pager numbers the page and goes back; without it (a later page opened from a link elsewhere) it shows First and Next only. The total ("n items", "of y") is the sum of the Stage counts and is left out under a search, which counts no more than its page (visibility.md "Search and filters").
-- **Sort** is in the column headers (`TableHead sort onSort`), for the sorts the query has; each has one order, so the current one is announced with it and another column's button switches to it.
+- **Pages are numbered** (RP-409): the work item query's `page` and `pageSize` (10, 25 or 50); the List's URL keeps them (`apps/web/src/lib/list-url.ts`). The total ("n submittals", "of y") is the sum of the Stage counts and is left out under a search, which counts no more than its page (visibility.md "Search and filters"); the API's `page.hasNext` says whether a next page holds rows. Reads that page by cursor (Home) keep `nextCursor`.
+- **Sort** is on every column (`WorkItemTable`): a column's sort button sorts by it in its own order (`workItemSortOrders`), then the other way (`dir`); `aria-sort` says the current one.
 - **Rows**: the whole row opens the item; its Subject stays the link, for the keyboard and screen readers.
 
 ## Views
@@ -259,7 +261,10 @@ A Module's Work Items and the Member's Projects, as the API returns them. Presen
 | `ProjectCard` / `ProjectCards` | One Project as a card and a link, and a grid of them (three columns, two at `md`, one on a phone). The card shows the Project's mark (first letter), name, code (left to right), Host Company, its state (Active / Closed) and, in the footer, the viewer's Company's Project Role ("Project Admin") and its Need My Action count. No progress or due date (Rabaed has no time axis). Reuse `ProjectCard` wherever Projects are listed (e.g. Home). `labels` (`ProjectCardsLabels`): `list`, `needMyAction`, `active`, `closed`, `projectAdmin`. |
 | `ProjectsBrowser` | The Projects page's body: search (Project name in either language, or code), the All / Active / Closed chips, the card grid, an empty state when the Member is on no Project (`emptyAction` for "New project") and one when a search leaves none. Filters in the browser (`filterProjects`). `labels`: `ProjectsBrowserLabels` (the card labels plus `search`, `filter`, `all`, `emptyTitle`, `empty`, `noMatchesTitle`, `noMatches`). |
 | `NeedsMyActionCard` / `RecentActivityCard` | Home's two cards (RP-407): the items waiting on the Member across their Projects (Subject, Document Number, Project, `StagePill`, `AgeDots`; `boards` gives the "Open board" links), and the newest Activity Feed entries across them, worded as `ActivityFeedPanel` words them (`whatHappened`), each with its Project. `labels`: `NeedsMyActionCardLabels`, `RecentActivityCardLabels`. |
-| `WorkItemList` | The List, on the data list page template: the toolbar (`action`, search, Filters, the Need My Action and "Show all Revisions" switches, `viewSwitch` at the end), the Stage counts, one page of rows in a `TableCard` sorted from the column headers, and the `Pager`. Every choice is a new query (`onQueryChange`); `hrefFor(query, pageTrail?)` gives a query's URL; `pageTrail` and `linkAs` as above. `labels`: `WorkItemListLabels` (`table` is the Module's name). Pass `board` to show the Kanban under the toolbar instead of the counts, table and pages. |
+| `WorkItemList` | The List (RP-409, the owner's design), on the data list page template: the toolbar (`action`, search, Filters, Need My Action, then Group and Export, List only, and `viewSwitch` at the end), one page of rows in a `TableCard` (`WorkItemTable`) with its checkboxes and bulk bar (n selected, Export selected, Clear selection), Group by (the page's rows), and the `NumberedPager`. Every choice is a new query (`onQueryChange`); `hrefFor(query)` gives a query's URL. `columns` / `onSaveColumns` (the Member's own columns, "Save as my default"), `loadExportRows` (Export: the rows the viewer reads with the query, written as CSV or Excel with the columns shown), `rowActions` (`load` what the viewer may do with a row, `run` it: the ⋯ menu). `labels`: `WorkItemListLabels` (`table` is the Module's name). Pass `board` to show the Kanban under the toolbar instead. |
+| `WorkItemTable` | The List's table: the shown columns in the Member's order, each sortable and dragged by its header, the Document Number (and the checkboxes) pinned at the reading start and the settings / ⋯ column at the end; 48px rows. Cells as the viewer may read them: the Current owner per V14, Created the Creation Date only for the raiser's Participant (`cellText` gives the same as text, for Export). |
+| `ColumnSettings` | The table's gear: the columns in order with switches, Submittal No. and Subject locked, "n / 14 shown", Reset and "Save as my default"; a row moves by dragging or the arrow keys on its handle (`moveColumn`). |
+| `GroupMenu` / `ExportMenu` / `RowMenu` | The List's Group by menu, Export with its arrow (CSV, Excel), and a row's ⋯ menu (Open, Edit, Duplicate, Resubmit, Download, Delete), each action shown only where `load` says the viewer may take it. |
 | `WorkItemBoard` | The Kanban: a column per Stage in the reading direction, inside each a swimlane per Step of the viewer's own Company and one per other Company by name only (V14), in the viewer's alphabetical order (`lanesInLocale`). A closed column holds the last 30 days with its total (none under a search, which counts only what it shows) and "Show all" (`listHrefFor`). With `onMove`, a card the viewer may act on can be dragged onto a Stage one of its Transitions alone leads to, or moved from its Move menu. `labels`: `WorkItemBoardLabels`. |
 | `WorkItemViewSwitch` | List / Kanban, two links with their icons in a segmented capsule (the toolbar's `end`) (`hrefFor`), the current one `aria-current="page"`. `labels`: `view`, `list`, `kanban`. |
 
@@ -270,7 +275,6 @@ A Module's Work Items and the Member's Projects, as the API returns them. Presen
   locale={locale}
   labels={listLabels}
   hrefFor={hrefFor}
-  pageTrail={pageTrail}
   itemHref={itemHref}
   linkAs={Link}
   onQueryChange={(q) => router.push(hrefFor(q))}

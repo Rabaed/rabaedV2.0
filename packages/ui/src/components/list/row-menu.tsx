@@ -10,7 +10,7 @@ import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "../overla
 // The "⋯" at the end of a list row: the row's commands in a small menu (RP-413).
 // Presentational; the page owns what each command does.
 
-export type RowMenuItem = {
+export type RowActionsItem = {
   key: string;
   label: string;
   /** Before the label, as the kit's menus. */
@@ -21,10 +21,10 @@ export type RowMenuItem = {
   tone?: "danger";
 };
 
-export type RowMenuProps = {
+export type RowActionsMenuProps = {
   /** Names the button and the menu, e.g. "Actions for Hafiz Hamdan". */
   label: string;
-  items: RowMenuItem[];
+  items: RowActionsItem[];
   /** A change is being saved: the button and every command are disabled until it is done. */
   busy?: boolean;
   className?: string;
@@ -35,7 +35,7 @@ export type RowMenuProps = {
  * puts focus on the first command; Up, Down, Home and End move between them;
  * Escape closes it and returns focus to the button.
  */
-export function RowMenu({ label, items, busy = false, className }: RowMenuProps) {
+export function RowActionsMenu({ label, items, busy = false, className }: RowActionsMenuProps) {
   const list = useRef<HTMLDivElement>(null);
 
   function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {

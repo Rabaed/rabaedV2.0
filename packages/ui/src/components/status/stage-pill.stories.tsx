@@ -6,7 +6,7 @@ import { StagePill } from "./stage-pill.tsx";
 
 // The Rabaed Default Stages (GLOSSARY.md).
 const stages = {
-  draft: { en: "Drafts", ar: "المسودات" },
+  draft: { en: "Draft", ar: "مسودة" },
   internal: { en: "Internal Review", ar: "مراجعة داخلية" },
   resubmitted: { en: "Revised & Resubmitted", ar: "مُعدَّل ومُعاد تقديمه" },
   pending: { en: "Pending Approval", ar: "بانتظار الاعتماد" },

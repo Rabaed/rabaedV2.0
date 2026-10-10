@@ -76,6 +76,7 @@ export function FilterMenu({ fields, labels, onClearAll, initialField, triggerCl
           {labels.number(applied)}
         </span>
       )}
+      <Icon name="chevron-down" />
     </button>
   );
   const footerLine = <span className="text-sm text-muted">{labels.applied(labels.number(applied), applied)}</span>;

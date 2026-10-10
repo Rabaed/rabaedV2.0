@@ -22,7 +22,7 @@ import { sql, type Transaction } from "kysely";
 import { myProjectSummaries, waitingOnMember } from "../projects/projects.ts";
 import { submittalCounts } from "../projects/submittal-counts.ts";
 import { activityFeedPage } from "../work-items/activity-feed.ts";
-import { countWorkItems, queryWorkItems, type QueryScope } from "../work-items/query.ts";
+import { countWorkItems, pagesByCursor, queryWorkItems, type QueryScope } from "../work-items/query.ts";
 
 // Home across my Projects (RP-407, spec RP-447; visibility.md "Home across
 // Projects"). Home has no read of its own: it runs the per-Project reads the
@@ -37,6 +37,9 @@ type Trx = Transaction<Database>;
 /** Every row of the work item query for `scope` and `q`, page after page: only for Need My Action, a few rows. */
 async function everyRow(trx: Trx, scope: QueryScope, q: WorkItemQueryInput, now: Date): Promise<WorkItemRow[]> {
   const rows: WorkItemRow[] = [];
+  const query = workItemQuery.parse(q);
+  // Only a cursor pages to the end: a numbered page or a List-only sort would give one page, silently (RP-409).
+  if (!pagesByCursor(query)) throw new Error("everyRow reads every row by cursor: give it a cursor sort in its own order, and no page");
   let cursor: string | undefined;
   do {
     const page = await queryWorkItems(trx, scope, workItemQuery.parse({ ...q, ...(cursor ? { cursor } : {}) }), now);

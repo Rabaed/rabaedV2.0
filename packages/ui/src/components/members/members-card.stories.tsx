@@ -4,7 +4,7 @@ import { phone } from "../../storybook/form.ts";
 import { storyText } from "../../storybook/locale.ts";
 import { overlay } from "../../storybook/overlay.ts";
 import { EmptyState } from "../feedback/states.tsx";
-import { RowMenu } from "../list/row-menu.tsx";
+import { RowActionsMenu } from "../list/row-menu.tsx";
 import { ToolbarSearch } from "../list/list-toolbar.tsx";
 import { MembersCard, membersSearchStyle, type MemberRow } from "./members-card.tsx";
 
@@ -57,7 +57,7 @@ function rowsFor(context: StoryContext, { menu, counts }: { menu: boolean; count
     status: p.status,
     statusLabel: t(copy.statuses[p.status]),
     menu: menu ? (
-      <RowMenu
+      <RowActionsMenu
         label={copy.menuFor(t(p.name), locale)}
         items={[
           { key: "creator", icon: "person-add", label: t(copy.makeCreator), onSelect: fn() },

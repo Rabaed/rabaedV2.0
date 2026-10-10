@@ -39,13 +39,17 @@ export function formatNumber(value: number, locale: Locale, options?: Intl.Numbe
 /**
  * A date as the design kit writes it: day, month and year, "10 October 2026", with the weekday first
  * when asked, "Saturday, 10 October 2026" (Home's top bar and recent activity). Arabic keeps its own
- * order, in Latin digits; Saudi time.
+ * order, in Latin digits; Saudi time. `month: "short"` gives "10 Oct 2026": the List, its Export and Download (RP-409).
  */
-export function formatDayMonthYear(value: Date, locale: Locale, { weekday = false }: { weekday?: boolean } = {}): string {
+export function formatDayMonthYear(
+  value: Date,
+  locale: Locale,
+  { weekday = false, month = "long" }: { weekday?: boolean; month?: "long" | "short" } = {},
+): string {
   const format = new Intl.DateTimeFormat(intlLocaleOf(locale), {
     timeZone,
     day: "numeric",
-    month: "long",
+    month,
     year: "numeric",
     ...(weekday ? { weekday: "long" as const } : {}),
   });

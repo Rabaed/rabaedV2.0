@@ -1,7 +1,7 @@
 "use client";
 
 import type { CompanyMember, Locale } from "@rabaed/domain";
-import { Button, Dialog, DialogClose, DialogContent, DialogFooter, RowMenu, useToast, type RowMenuItem } from "@rabaed/ui";
+import { Button, Dialog, DialogClose, DialogContent, DialogFooter, RowActionsMenu, useToast, type RowActionsItem } from "@rabaed/ui";
 import { useLocale, useTranslations } from "next-intl";
 import { useState } from "react";
 import { InvitationLink } from "@/components/invitation-link";
@@ -68,7 +68,7 @@ export function MemberActions({ member }: { member: CompanyMember }) {
     }
   }
 
-  const items: RowMenuItem[] =
+  const items: RowActionsItem[] =
     member.status === "deactivated"
       ? [{ key: "reactivate", icon: "refresh" as const, label: t("reactivate"), onSelect: () => setAsking("reactivate") }]
       : [
@@ -87,7 +87,7 @@ export function MemberActions({ member }: { member: CompanyMember }) {
 
   return (
     <div className="flex items-center justify-end gap-2">
-      <RowMenu label={t("menuFor", { name })} items={items} busy={pending} />
+      <RowActionsMenu label={t("menuFor", { name })} items={items} busy={pending} />
       <Dialog open={asking !== null} onOpenChange={(open) => !open && !pending && setAsking(null)}>
         <DialogContent
           title={asking === "link" ? t("linkTitle") : asking === "reactivate" ? t("reactivateTitle") : t("deactivateTitle")}
