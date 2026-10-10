@@ -43,7 +43,8 @@ export async function ModuleWorkItemsPage({
   const [me, project, list, board] = await Promise.all([
     getMe(),
     getProject(projectId),
-    view === "list" ? getWorkItems(projectId, module, query) : null,
+    // Names sort in the reader's language.
+    view === "list" ? getWorkItems(projectId, module, { ...query, lang: locale }) : null,
     view === "kanban" ? getWorkItemBoard(projectId, module, query) : null,
   ]);
   if (!me) return redirect({ href: "/sign-in", locale });

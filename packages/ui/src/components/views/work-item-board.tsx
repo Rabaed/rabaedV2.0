@@ -303,7 +303,7 @@ function useCollapsedLanes(storageKey: string | undefined): [Set<string>, (key: 
 const stepDots = ["bg-stage-internal-dot", "bg-stage-pending-dot", "bg-trade-el-fg", "bg-stage-approved-dot"];
 
 /** Each Location's place: itself and the Locations above it, top level first, with each one's level. */
-function placesOf(locations: WorkItemBoardData["filters"]["locations"]): Map<string, { depth: number; name: BilingualText }[]> {
+export function placesOf(locations: WorkItemBoardData["filters"]["locations"]): Map<string, { depth: number; name: BilingualText }[]> {
   const byId = new Map(locations.map((l) => [l.id, l]));
   const out = new Map<string, { depth: number; name: BilingualText }[]>();
   for (const l of locations) {
@@ -518,7 +518,7 @@ export function cardContent(
 }
 
 /** The outcome once issued, from its Type's set (RP-429); before that the Revision, from R1. */
-function badgeOf(card: WorkItemRow, locale: Locale, labels: WorkItemBoardLabels, outcomes: ListOutcomes): KanbanCardBadge | undefined {
+export function badgeOf(card: WorkItemRow, locale: Locale, labels: Pick<WorkItemBoardLabels, "cancelled" | "code" | "revision">, outcomes: ListOutcomes): KanbanCardBadge | undefined {
   if (card.outcome === "cancelled") return { kind: "plain", label: labels.cancelled };
   if (card.outcome !== null) {
     const set = outcomes.filter((o) => o.type === card.type.code);
@@ -535,7 +535,7 @@ function badgeOf(card: WorkItemRow, locale: Locale, labels: WorkItemBoardLabels,
  * its name only. A closed item, which nobody holds, shows who closed it, the same way.
  * Avatars take Latin initials from the English name.
  */
-function ownerOf(card: WorkItemRow, locale: Locale, labels: WorkItemBoardLabels): KanbanCardOwner | undefined {
+export function ownerOf(card: WorkItemRow, locale: Locale, labels: Pick<WorkItemBoardLabels, "unclaimed">): KanbanCardOwner | undefined {
   if (!isOpenStageCategory(card.stage.category)) {
     const c = card.closedBy;
     if (!c) return undefined;

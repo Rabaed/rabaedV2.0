@@ -33,6 +33,7 @@ export * from "./numbering-counter.ts";
 export * from "./numbering-admin.ts";
 export * from "./notification-routing.ts";
 export * from "./work-item-query.ts";
+export * from "./list-columns.ts";
 export * from "./work-item-board.ts";
 export * from "./outcome.ts";
 export * from "./chain-bucket.ts";

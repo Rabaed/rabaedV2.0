@@ -1,33 +1,28 @@
 "use client";
 
 import {
-  formatDate,
   formatNumber,
   isFilteredWorkItemQuery,
-  isOpenStageCategory,
+  listColumns,
   searchMaxLength,
   withoutFilters,
   stepAgeMinimums,
   createdWithinDays,
   workItemPageSize,
   type BilingualText,
-  offersRevision,
   outcomeLabel,
   type CodeCFilter,
   type FixedChainBucket,
+  type ListColumnKey,
+  type ListColumnLayout,
   type Locale,
   type WorkItemList as WorkItemListData,
-  type WorkItemOutcome,
   type WorkItemQuery,
-  type WorkItemRow,
 } from "@rabaed/domain";
 import { type ElementType, type ReactNode } from "react";
-import type { Tone } from "../../tokens/themes.ts";
 import { Badge } from "../data/badge.tsx";
-import { Table, TableBody, TableCell, TableEmpty, TableHead, TableHeader, TableRow, type TableSort } from "../data/table.tsx";
-import { DocNo } from "../doc-no/doc-no.tsx";
 import { cn } from "../../lib/cn.ts";
-import { focusRing, touchBox } from "../form/control-styles.ts";
+import { focusRing } from "../form/control-styles.ts";
 import { Field } from "../form/field.tsx";
 import { Input } from "../form/input.tsx";
 import { Avatar } from "../data/avatar.tsx";
@@ -38,8 +33,8 @@ import { ListToolbar, ToolbarSearch, ToolbarSwitch } from "../list/list-toolbar.
 import { Pager, TableCard } from "../list/table-card.tsx";
 import { AgeDots } from "../status/age-dots.tsx";
 import { stageColour } from "../status/stage-colour.ts";
-import { StageDot, StagePill } from "../status/stage-pill.tsx";
-import { WithChip } from "../status/with-chip.tsx";
+import { StageDot } from "../status/stage-pill.tsx";
+import { WorkItemTable } from "./work-item-table.tsx";
 
 /**
  * The List's words, in the viewer's language, from the app's messages: the
@@ -71,11 +66,16 @@ export type WorkItemListLabels = {
   allRevisions: string;
   needMyAction: string;
   clear: string;
-  stageCounts: string;
   /** The table's name: the Module's, e.g. "Submittals". */
   table: string;
-  documentNumber: string;
-  subject: string;
+  /** Each column's header (RP-409, the owner's design). */
+  columns: Record<ListColumnKey, string>;
+  /** A column's sort button, e.g. "Sort by Title". */
+  sortBy: (column: string) => string;
+  /** A letter outcome's pill, e.g. "Code A". */
+  code: (code: string) => string;
+  /** The Revision chip, e.g. "R2". */
+  revision: (n: string) => string;
   noNumber: string;
   revisionNoNumber: (revision: string) => string;
   empty: string;
@@ -141,17 +141,6 @@ type TextLabel = { [K in keyof WorkItemListLabels]: WorkItemListLabels[K] extend
 /** Each Type's outcomes on the Project, as the List and the Kanban send them (RP-429). */
 export type ListOutcomes = WorkItemListData["filters"]["outcomes"];
 
-/**
- * An outcome's badge tone, from its place in its Type's set, never its code:
- * one offering a Revision (Code C) is back with the raiser, a positive one
- * succeeded, a negative one didn't.
- */
-function outcomeTone(outcome: ListOutcomes[number] | undefined): Tone {
-  if (!outcome) return "neutral";
-  if (offersRevision(outcome)) return "warning";
-  return outcome.polarity === "positive" ? "success" : "danger";
-}
-
 /** Each outcome code of the Types, once (the first Type's name), then Cancelled: the outcome filter's choices. */
 function outcomeOptions(outcomes: ListOutcomes, locale: Locale, cancelled: string) {
   const byCode = new Map<string, string>();
@@ -166,12 +155,6 @@ function bucketLabel(bucket: string, outcomes: ListOutcomes, locale: Locale, lab
   const outcome = outcomes.find((o) => o.code === bucket);
   return outcome ? outcomeLabel(outcome, locale) : bucket;
 }
-
-/** Each sort's column order, as `aria-sort` says it: Step Age oldest first, Document Number A to Z, Submission Date latest first. */
-const sortOrders = { stepAge: "descending", documentNumber: "ascending", submissionDate: "descending" } as const satisfies Record<
-  WorkItemQuery["sort"],
-  TableSort
->;
 
 /**
  * The pages before this one, as the List keeps them to go back: the cursor of
@@ -205,6 +188,8 @@ export type WorkItemListProps = {
   board?: ReactNode;
   /** The filter fields' names in the other language. */
   hints?: WorkItemFilterHints;
+  /** The table's columns in order, each shown or not; by default the Member's own (`list.columnLayout`), else the design's. */
+  columns?: ListColumnLayout;
 };
 
 /**
@@ -231,6 +216,7 @@ export function WorkItemList({
   linkAs: Link = "a",
   board,
   hints,
+  columns = listColumns(list.columnLayout),
 }: WorkItemListProps) {
   const t = (key: TextLabel) => labels[key];
   const n = (value: number) => formatNumber(value, locale);
@@ -239,16 +225,6 @@ export function WorkItemList({
     onQueryChange({ ...rest, ...next });
   };
   const filtered = isFilteredWorkItemQuery(query);
-  // The Creation Date is the raiser's Company's alone: the API sends it to no one else, so without one in the rows the column is left out.
-  const showCreationDate = list.items.some((i) => i.creationDate !== null);
-  const columns = showCreationDate ? 11 : 10;
-  const date = (iso: string | null) => (iso === null ? null : formatDate(new Date(iso), locale));
-  const sortHead = (sort: WorkItemQuery["sort"]) => ({
-    sort: query.sort === sort ? sortOrders[sort] : ("none" as const),
-    onSort: () => {
-      if (query.sort !== sort) change({ sort });
-    },
-  });
 
   const valueLabels = { clear: t("clearField"), search: t("searchValues"), noMatches: t("noMatches") };
   /** A field of several values, any of them (RP-410). */
@@ -508,106 +484,21 @@ export function WorkItemList({
 
       {board ?? (
         <>
-          <ul aria-label={t("stageCounts")} className="flex flex-wrap gap-2" data-testid="stage-counts">
-            {list.stages.map((s) => (
-              <li key={s.key}>
-                <StagePill stage={stageColour(s)} label={s.name[locale]} count={s.count} locale={locale} />
-              </li>
-            ))}
-          </ul>
-
           <TableCard footer={<WorkItemPager list={list} query={query} labels={labels} locale={locale} hrefFor={hrefFor} pageTrail={pageTrail} linkAs={Link} />}>
-            <Table
-              label={t("table")}
-              stickyHeader
-              className="w-max min-w-full text-sm [&_td]:whitespace-nowrap"
-              containerClassName="min-h-64 lg:max-h-[calc(100dvh-20rem)]"
-            >
-              <TableHeader>
-                <TableRow>
-                  <TableHead {...sortHead("documentNumber")}>{t("documentNumber")}</TableHead>
-                  <TableHead>{t("subject")}</TableHead>
-                  <TableHead>{t("type")}</TableHead>
-                  <TableHead>{t("stage")}</TableHead>
-                  <TableHead>{t("with")}</TableHead>
-                  <TableHead {...sortHead("stepAge")}>{t("stepAge")}</TableHead>
-                  <TableHead>{t("trade")}</TableHead>
-                  <TableHead>{t("location")}</TableHead>
-                  <TableHead className="min-w-28 whitespace-normal">{t("outcome")}</TableHead>
-                  <TableHead {...sortHead("submissionDate")}>{t("submissionDate")}</TableHead>
-                  {showCreationDate && <TableHead>{t("creationDate")}</TableHead>}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {list.items.length === 0 ? (
-                  <TableEmpty colSpan={columns}>
-                    <p className="px-4 py-12 text-center text-muted">{t(query.q === undefined ? "empty" : "noResults")}</p>
-                  </TableEmpty>
-                ) : (
-                  list.items.map((item) => (
-                    <TableRow
-                      key={item.id}
-                      className="cursor-pointer"
-                      // The whole row opens the item; the Subject is its link, for the keyboard and screen readers.
-                      onClick={(event) => {
-                        if ((event.target as Element).closest("a")) return;
-                        event.currentTarget.querySelector<HTMLAnchorElement>("a[data-item-link]")?.click();
-                      }}
-                    >
-                      <TableCell className="tabular-nums">
-                        {/* A Revision's number carries its " Rev n"; one with no number yet says which Revision it is. */}
-                        {item.documentNumber ? (
-                          <DocNo value={item.documentNumber} locale={locale} />
-                        ) : (
-                          <span className="text-muted">
-                            {item.revisionNo > 0 ? labels.revisionNoNumber(n(item.revisionNo)) : t("noNumber")}
-                          </span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <Link
-                          href={itemHref(item.id)}
-                          data-item-link=""
-                          dir="auto"
-                          title={item.title}
-                          className={cn("block w-fit max-w-64 truncate font-semibold text-text hover:text-brand-fg hover:underline", touchBox)}
-                        >
-                          {item.title}
-                        </Link>
-                      </TableCell>
-                      <TableCell>
-                        <span className="inline-flex h-5 items-center rounded-xs px-1.5 font-ui text-notes font-bold tracking-wide text-text-secondary ring-1 ring-border-strong ring-inset">
-                          {item.type.code}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <StagePill stage={stageColour(item.stage)} label={item.stage.name[locale]} locale={locale} />
-                      </TableCell>
-                      <TableCell>
-                        <WithCell row={item} locale={locale} unclaimed={t("unclaimed")} />
-                      </TableCell>
-                      <TableCell>
-                        {/* A closed item doesn't age. */}
-                        {isOpenStageCategory(item.stage.category) && item.stepAgeWeeks !== null ? <AgeDots weeks={item.stepAgeWeeks} locale={locale} /> : null}
-                      </TableCell>
-                      <TableCell>
-                        <Badge>
-                          {item.trade.name[locale]}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-text-secondary">{item.location?.name[locale]}</TableCell>
-                      <TableCell>
-                        {item.outcome ? (
-                          <Outcome outcome={item.outcome} typeCode={item.type.code} outcomes={list.filters.outcomes} locale={locale} cancelled={labels.cancelled} />
-                        ) : null}
-                      </TableCell>
-                      <TableCell className="text-text-secondary">{date(item.submissionDate)}</TableCell>
-                      {showCreationDate && <TableCell className="text-text-secondary">{date(item.creationDate)}</TableCell>}
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
+            {/* The table scrolls sideways (and, on a wide screen, down) in its own region, so the page never does. */}
+            <div role="region" aria-label={t("table")} tabIndex={0} className={cn("min-h-64 overflow-auto lg:max-h-[calc(100dvh-17rem)]", focusRing)}>
+              <WorkItemTable
+                rows={list.items}
+                filters={list.filters}
+                columns={columns}
+                query={query}
+                locale={locale}
+                labels={{ ...labels, empty: t(query.q === undefined ? "empty" : "noResults") }}
+                onSort={(sort) => change(sort)}
+                itemHref={itemHref}
+                linkAs={Link}
+              />
+            </div>
           </TableCard>
         </>
       )}
@@ -710,56 +601,3 @@ function locationLevels(locations: WorkItemListData["filters"]["locations"], loc
   });
 }
 
-/** "With", as V14 has it. */
-function WithCell({ row, locale, unclaimed }: { row: WorkItemRow; locale: Locale; unclaimed: string }) {
-  const w = row.with;
-  if (!w) return null;
-  if (w.kind === "company") return <WithChip kind="company" inViewerCompany={false} companyName={w.companyName[locale]} />;
-  if (!w.claimer) {
-    return <WithChip kind="pool" inViewerCompany companyName={w.companyName[locale]} stepName={w.step.name[locale]} unclaimedLabel={unclaimed} />;
-  }
-  return <WithChip kind="person" inViewerCompany name={w.claimer.name[locale]} companyName={w.companyName[locale]} />;
-}
-
-/**
- * An item's outcome badge, the same on the List and the Kanban (RP-429): named
- * and coloured from its Type's outcome set, never from fixed codes. A letter
- * code (a Review Code) shows its letter, its name for screen readers and on
- * hover; any other outcome shows its name.
- */
-export function Outcome({
-  outcome,
-  typeCode,
-  outcomes,
-  locale,
-  cancelled,
-}: {
-  outcome: WorkItemOutcome;
-  typeCode: string;
-  outcomes: ListOutcomes;
-  locale: Locale;
-  cancelled: string;
-}) {
-  const found = outcomes.find((o) => o.type === typeCode && o.code === outcome);
-  if (!found)
-    return (
-      <Badge tone="neutral" data-outcome={outcome}>
-        {outcome === "cancelled" ? cancelled : outcome}
-      </Badge>
-    );
-  const label = outcomeLabel(found, locale);
-  if (found.code.length > 3)
-    return (
-      <Badge tone={outcomeTone(found)} data-outcome={found.code}>
-        {label}
-      </Badge>
-    );
-  return (
-    <Badge tone={outcomeTone(found)} title={label} data-outcome={found.code}>
-      <span aria-hidden="true" translate="no">
-        {found.code}
-      </span>
-      <span className="sr-only">{label}</span>
-    </Badge>
-  );
-}

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { bilingualText } from "./company.ts";
 import { formAnswers, formSchema, namedAnswers } from "./form.ts";
+import { listColumnLayout } from "./list-columns.ts";
 import { outcomeCodePattern, outcomeSchema } from "./outcome.ts";
 
 /** A Work Item Type's short code, used in filters and Document Numbers (MAR, SAR…). */
@@ -164,6 +165,8 @@ export const workItemList = z.object({
    * Left out when the read pages by cursor.
    */
   page: z.object({ number: z.number().int().positive(), size: z.number().int().positive(), hasNext: z.boolean() }).optional(),
+  /** The Member's own List columns for the Module (RP-409), when they saved some; else the design's. */
+  columnLayout: listColumnLayout.optional(),
   filters: z.object({
     types: z.array(z.object({ code: z.string(), name: bilingualText })),
     /** Each Type's outcomes on the Project, by Type code, in their order (RP-429): the outcome filter and badges read them. */

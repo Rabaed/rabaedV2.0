@@ -1,7 +1,9 @@
 "use client";
 
 import {
+  listColumnKeys,
   watchOutcomeNames,
+  type ListColumnKey,
   workItemSearchParams,
   type BoardCardLayout,
   type BoardCardLayoutChange,
@@ -35,7 +37,7 @@ import { chainLabels } from "@/lib/chain-labels";
 import { workItemListSearchParams } from "@/lib/page-trail";
 
 /** The List's and the Kanban's words, from the app's messages. */
-function useViewLabels(tableLabel: string): { list: WorkItemListLabels; board: WorkItemBoardLabels; layout: BoardLayoutMenuLabels } {
+function useViewLabels(tableLabel: string, module: string): { list: WorkItemListLabels; board: WorkItemBoardLabels; layout: BoardLayoutMenuLabels } {
   const t = useTranslations("workItemViews");
   const l = (key: string) => t(`list.${key}`);
   const locale = useLocale() as Locale;
@@ -48,8 +50,8 @@ function useViewLabels(tableLabel: string): { list: WorkItemListLabels; board: W
   };
   const keys = [
     "toolbar", "all", "type", "stage", "with", "withMe", "anyUnclaimed", "trade", "location", "outcome", "stepAge",
-    "submissionDate", "creationDate", "submittedFrom", "submittedTo", "allRevisions", "needMyAction", "clear", "stageCounts",
-    "documentNumber", "subject", "empty", "search", "searchPlaceholder", "searchHelp", "noResults", "filters", "clearAll", "done",
+    "submissionDate", "creationDate", "submittedFrom", "submittedTo", "allRevisions", "needMyAction", "clear",
+    "empty", "search", "searchPlaceholder", "searchHelp", "noResults", "filters", "clearAll", "done",
     "close", "pages", "firstPage", "previousPage", "nextPage", "documentType", "owner", "role", "createdDate", "clearField",
     "searchValues", "noMatches", "searchPlaceholderBoard", "revisions", "statusField",
   ] as const;
@@ -59,6 +61,14 @@ function useViewLabels(tableLabel: string): { list: WorkItemListLabels; board: W
       ...(Object.fromEntries(keys.map((key) => [key, l(key)])) as Record<(typeof keys)[number], string>),
       ...shared,
       table: tableLabel,
+      // The owner's design names the Submittals' number "Submittal No."; any other Module's is its Document Number.
+      columns: {
+        ...(Object.fromEntries(listColumnKeys.map((key) => [key, t(`list.columns.${key}`)])) as Record<ListColumnKey, string>),
+        ...(module === "submittals" ? {} : { documentNumber: l("documentNumber") }),
+      },
+      sortBy: (column) => t("list.sortBy", { column }),
+      code: (code) => t("board.code", { code }),
+      revision: (n) => t("board.revision", { n }),
       weeksOrMore: (weeks, count) => t("list.weeksOrMore", { weeks, count }),
       filtersApplied: (n, count) => t("list.filtersApplied", { n, count }),
       page: (page) => t("list.page", { page }),
@@ -114,7 +124,7 @@ export function WorkItemListOrKanban(
 ) {
   const { query, locale, view, action, projectId, module, hints } = props;
   const t = useTranslations("workItemViews");
-  const labels = useViewLabels(props.tableLabel);
+  const labels = useViewLabels(props.tableLabel, module);
   const router = useRouter();
   const [moving, setMoving] = useState<{ card: WorkItemRow; move: WorkItemMove } | null>(null);
   // The viewer's own Card view layout: shown at once, kept for them by the API (RP-410).
