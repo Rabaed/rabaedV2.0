@@ -24,12 +24,18 @@ export type Tone = (typeof toneKeys)[number];
  * This is the only layer that changes per theme; components (layer 3) read
  * roles only, so a new theme is a new map here and nothing else.
  *
- * Launch theme: cool light (canvas #f6f7f9), per design change requests §7.
- * Where the Claude Design export's text/fill pairs fall below WCAG AA contrast,
- * the role points at a darker step of the same hue (e.g. primary fill is
- * tomato-750, not the brand tomato-600, so white button text reads at 4.5:1).
+ * Four themes (owner decision 2026-10-11, the kit's background comparison): Theme 1 Grey
+ * (light canvas #f6f7f9, dark navy) and Theme 2 Warm (light #fdf9f5, dark espresso), each
+ * with a Light and a Dark mode, every role taken from the kit (theme.css, forms.css,
+ * shell.css and the warm override in shell/shell.js). Both keep the dark sidebar in Light.
+ * Where the kit's text/fill pairs fall below WCAG AA contrast, the role points at a
+ * darker step of the same hue (e.g. primary fill is tomato-750, not the brand tomato-600,
+ * so white button text reads at 4.5:1); tokens.test.ts checks every pair in every theme.
+ * Fills (primary, danger) carry white text; text in a hue reads its `-fg` role.
+ *
+ * Grey Light, the launch theme (canvas #f6f7f9), per design change requests §7.
  */
-export const coolLight = {
+export const greyLight = {
   // Surfaces and lines
   canvas: "slate-50",
   surface: "white",
@@ -44,6 +50,22 @@ export const coolLight = {
   "control-border-hover": "slate-600",
   // The tint of every shadow; scales.ts sets each shadow's opacity.
   "shadow-colour": "slate-900",
+  // The scrim behind a dialog or drawer, with its own opacity.
+  overlay: "overlay-grey",
+
+  // The sidebar: dark in every theme and mode (owner decision 2026-10-11), navy in Grey.
+  sidebar: "navy-sidebar",
+  "sidebar-border": "navy-ghost-hover",
+  "sidebar-divider": "navy-sidebar-divider",
+  "sidebar-card": "navy-sidebar-card",
+  "sidebar-text": "navy-text-2",
+  // The kit's section labels (#6b7488) read below 4.5:1 on the sidebar: they take the icon colour.
+  "sidebar-label": "navy-muted",
+  "sidebar-icon": "navy-muted",
+  "sidebar-hover": "white-6",
+  "sidebar-press": "white-10",
+  "sidebar-current": "tomato-16",
+  "sidebar-current-text": "white",
 
   // Text
   text: "slate-900",
@@ -210,13 +232,259 @@ export const coolLight = {
   "age-4": "red-700",
 } as const satisfies Record<string, PaletteColour>;
 
-export type SemanticRole = keyof typeof coolLight;
+export type SemanticRole = keyof typeof greyLight;
 export type Theme = Record<SemanticRole, PaletteColour>;
 
-export const themes = { "cool-light": coolLight } as const satisfies Record<string, Theme>;
-export type ThemeName = keyof typeof themes;
-export const defaultTheme: ThemeName = "cool-light";
+/** What every dark mode shares: the kit's tones on a dark page (`.theme-dark` --tone-*); solid fills keep white text, as in Light. */
+const darkTones = {
+  "shadow-colour": "black",
+  "brand-tint": "dark-tomato-tint",
+  "brand-fg": "dark-tomato-fg",
+  success: "dark-green-fg",
+  "success-tint": "dark-green-tint",
+  "success-fg": "dark-green-fg",
+  "danger-tint": "dark-red-tint",
+  "danger-fg": "dark-red-fg",
+  "neutral-tint": "dark-gray-tint",
+  "neutral-fg": "dark-gray-fg",
+  "info-tint": "dark-blue-tint",
+  "info-fg": "dark-blue-fg",
+  "warning-tint": "dark-amber-tint",
+  "warning-fg": "dark-amber-fg",
+  "trade-cv-bg": "dark-amber-tint",
+  "trade-cv-fg": "dark-amber-fg",
+  "trade-ar-bg": "dark-violet-tint",
+  "trade-ar-fg": "dark-violet-fg",
+  "trade-el-bg": "dark-cyan-tint",
+  "trade-el-fg": "dark-cyan-fg",
+  "trade-me-bg": "dark-green-tint",
+  "trade-me-fg": "dark-green-fg",
+  "trade-su-bg": "dark-orange-tint",
+  "trade-su-fg": "dark-orange-fg",
+  "trade-other-bg": "dark-blue-tint",
+  "trade-other-fg": "dark-blue-fg",
+  "revision-bg": "dark-tomato-tint",
+  "revision-fg": "dark-tomato-fg",
+  "card-aged-border": "dark-tomato-line",
+  "card-approved-border": "dark-green-line",
+  "stage-draft-bg": "dark-gray-tint",
+  "stage-draft-fg": "dark-gray-fg",
+  "stage-internal-bg": "dark-blue-tint",
+  "stage-internal-fg": "dark-blue-fg",
+  "stage-resubmitted-bg": "dark-amber-tint",
+  "stage-resubmitted-fg": "dark-amber-fg",
+  "stage-pending-bg": "dark-violet-tint",
+  "stage-pending-fg": "dark-violet-fg",
+  "stage-approved-bg": "dark-green-tint",
+  "stage-approved-fg": "dark-green-fg",
+  "stage-rejected-bg": "dark-red-tint",
+  "stage-rejected-fg": "dark-red-fg",
+  "stage-cancelled-bg": "dark-gray-tint",
+  "stage-cancelled-fg": "dark-gray-fg",
+  "code-b-bg": "dark-green-tint",
+  "code-b-fg": "dark-green-fg",
+  "code-c-bg": "dark-amber-tint",
+  "code-c-fg": "dark-amber-fg",
+  "segment-project-tint": "dark-gray-tint",
+  "segment-project-fg": "dark-gray-fg",
+  "segment-participant-tint": "dark-tomato-tint",
+  "segment-participant-fg": "dark-tomato-fg",
+  "segment-trade-tint": "dark-cyan-tint",
+  "segment-trade-fg": "dark-cyan-fg",
+  "segment-type-tint": "dark-violet-tint",
+  "segment-type-fg": "dark-violet-fg",
+  "segment-location-tint": "dark-amber-tint",
+  "segment-location-fg": "dark-amber-fg",
+  "segment-text-tint": "dark-blue-tint",
+  "segment-text-fg": "dark-blue-fg",
+  "segment-sequence-tint": "dark-gray-tint",
+  "age-2": "dark-amber-fg",
+  "age-3": "dark-orange-fg",
+  "age-4": "dark-red-fg",
+} as const satisfies Partial<Theme>;
 
-export function resolveRole(theme: Theme, role: SemanticRole): string {
-  return palette[theme[role]];
+/** Theme 1, Grey, Dark: navy (the kit's theme.css and forms.css `.theme-dark`), the same navy sidebar. */
+export const greyDark = {
+  ...greyLight,
+  ...darkTones,
+  canvas: "navy-canvas",
+  surface: "navy-surface",
+  "surface-subtle": "navy-surface-2",
+  hover: "navy-hover",
+  press: "navy-press",
+  border: "navy-border",
+  "border-subtle": "navy-border-subtle",
+  "border-strong": "navy-border-strong",
+  "control-border": "navy-control",
+  "control-border-hover": "navy-muted",
+  overlay: "navy-overlay",
+  text: "navy-text",
+  "text-secondary": "navy-text-2",
+  muted: "navy-muted",
+  faint: "navy-faint",
+  "brand-ink": "navy-text-2",
+  secondary: "navy-press",
+  "secondary-hover": "navy-secondary-hover",
+  "secondary-press": "navy-secondary-press",
+  "on-secondary": "navy-text",
+  "ghost-hover": "navy-ghost-hover",
+  "ghost-press": "navy-ghost-press",
+  "on-ghost": "navy-text-2",
+  disabled: "navy-hover",
+  "on-disabled": "navy-disabled-fg",
+  focus: "navy-focus",
+  "focus-offset": "navy-surface",
+  // Tooltips and short confirmations: light on the dark page, as the kit's chosen chips.
+  inverse: "navy-text",
+  "on-inverse": "navy-canvas",
+  "segment-sequence-fg": "navy-text",
+  "segment-sequence-solid": "navy-text",
+  "age-0": "navy-border-strong",
+  "age-1": "navy-muted",
+} as const satisfies Theme;
+
+/** Theme 2, Warm, Light (the kit's `?bg=warm` override): warm neutrals, white surfaces, the espresso sidebar. */
+export const warmLight = {
+  ...greyLight,
+  canvas: "warm-canvas",
+  "surface-subtle": "warm-surface-2",
+  hover: "warm-hover",
+  press: "warm-press",
+  border: "warm-border",
+  "border-subtle": "warm-border-subtle",
+  "border-strong": "warm-border-strong",
+  "control-border": "warm-control",
+  "control-border-hover": "warm-muted",
+  "shadow-colour": "warm-text",
+  text: "warm-text",
+  "text-secondary": "warm-text-2",
+  muted: "warm-muted",
+  faint: "warm-faint",
+  secondary: "warm-secondary",
+  "secondary-hover": "warm-secondary-hover",
+  "secondary-press": "warm-border-strong",
+  "on-secondary": "warm-text",
+  "ghost-hover": "warm-secondary",
+  "ghost-press": "warm-secondary-hover",
+  "on-ghost": "warm-text-2",
+  disabled: "warm-secondary",
+  "on-disabled": "warm-disabled-fg",
+  inverse: "warm-text",
+  "neutral-tint": "warm-gray-tint",
+  "neutral-fg": "warm-gray-fg",
+  "stage-draft-bg": "warm-gray-tint",
+  "stage-draft-fg": "warm-gray-fg",
+  "stage-draft-dot": "warm-gray-solid",
+  "stage-cancelled-bg": "warm-gray-tint",
+  "stage-cancelled-fg": "warm-gray-fg",
+  "stage-cancelled-dot": "warm-muted",
+  "segment-project-tint": "warm-gray-tint",
+  "segment-project-fg": "warm-gray-fg",
+  "segment-project-solid": "warm-muted",
+  "segment-sequence-tint": "warm-gray-tint",
+  "segment-sequence-fg": "warm-text",
+  "segment-sequence-solid": "warm-text",
+  "avatar-company": "warm-muted",
+  "age-0": "warm-border-strong",
+  "age-1": "warm-muted",
+  sidebar: "espresso-sidebar",
+  "sidebar-border": "espresso-sidebar-border",
+  "sidebar-divider": "espresso-sidebar-divider",
+  "sidebar-card": "espresso-sidebar-card",
+  "sidebar-text": "espresso-sidebar-text",
+  "sidebar-label": "espresso-sidebar-icon",
+  "sidebar-icon": "espresso-sidebar-icon",
+  "sidebar-hover": "cream-6",
+  "sidebar-press": "cream-10",
+  "sidebar-current": "tomato-18",
+} as const satisfies Theme;
+
+/** Theme 2, Warm, Dark: espresso (`html .theme-dark` and `html .rs.theme-dark` of the same override). */
+export const warmDark = {
+  ...greyDark,
+  canvas: "espresso-canvas",
+  surface: "espresso-surface",
+  "surface-subtle": "espresso-surface-2",
+  hover: "espresso-hover",
+  press: "espresso-press",
+  border: "espresso-border",
+  "border-subtle": "espresso-border-subtle",
+  "border-strong": "espresso-border-strong",
+  "control-border": "espresso-control",
+  "control-border-hover": "espresso-muted",
+  overlay: "espresso-overlay",
+  text: "espresso-text",
+  "text-secondary": "espresso-text-2",
+  muted: "espresso-muted",
+  faint: "espresso-faint",
+  "brand-ink": "espresso-text-2",
+  secondary: "espresso-secondary",
+  "secondary-hover": "espresso-secondary-hover",
+  "secondary-press": "espresso-secondary-press",
+  "on-secondary": "espresso-text",
+  "ghost-hover": "espresso-ghost-hover",
+  "ghost-press": "espresso-ghost-press",
+  "on-ghost": "espresso-text-2",
+  disabled: "espresso-hover",
+  "on-disabled": "espresso-disabled-fg",
+  "focus-offset": "espresso-surface",
+  inverse: "espresso-text",
+  "on-inverse": "espresso-canvas",
+  "neutral-tint": "espresso-gray-tint",
+  "neutral-fg": "espresso-gray-fg",
+  "stage-draft-bg": "espresso-gray-tint",
+  "stage-draft-fg": "espresso-gray-fg",
+  "stage-draft-dot": "espresso-gray-solid",
+  "stage-cancelled-bg": "espresso-gray-tint",
+  "stage-cancelled-fg": "espresso-gray-fg",
+  "stage-cancelled-dot": "espresso-gray-solid",
+  "segment-project-tint": "espresso-gray-tint",
+  "segment-project-fg": "espresso-gray-fg",
+  "segment-project-solid": "espresso-gray-solid",
+  "segment-sequence-tint": "espresso-gray-tint",
+  "segment-sequence-fg": "espresso-text",
+  "segment-sequence-solid": "espresso-text",
+  "avatar-company": "warm-muted",
+  "age-0": "espresso-border-strong",
+  "age-1": "espresso-muted",
+  sidebar: "espresso-sidebar-dark",
+  "sidebar-border": "espresso-ghost-hover",
+  "sidebar-divider": "espresso-ghost-hover",
+  "sidebar-card": "espresso-surface",
+  "sidebar-text": "espresso-sidebar-text",
+  "sidebar-label": "espresso-muted",
+  "sidebar-icon": "espresso-muted",
+  "sidebar-hover": "cream-6",
+  "sidebar-press": "cream-10",
+  "sidebar-current": "tomato-20",
+} as const satisfies Theme;
+
+/** The four themes, by Theme and Mode (`<html data-theme data-mode>`). */
+export const themes = {
+  "grey-light": greyLight,
+  "grey-dark": greyDark,
+  "warm-light": warmLight,
+  "warm-dark": warmDark,
+} as const satisfies Record<string, Theme>;
+export type ThemeName = keyof typeof themes;
+/** A page with no Theme on it (the stories, unless they choose one): Grey, Light. */
+export const defaultTheme: ThemeName = "grey-light";
+
+/**
+ * A role's colour as #rrggbb. A translucent one (#rrggbbaa: a dark tint, the sidebar's hover) is
+ * laid on `under`, the colour it sits on, as the browser shows it.
+ */
+export function resolveRole(theme: Theme, role: SemanticRole, under?: SemanticRole): string {
+  const colour: string = palette[theme[role]];
+  if (colour.length === 7) return colour;
+  if (under === undefined) throw new Error(`${role} is translucent: say what it sits on`);
+  return composite(colour, resolveRole(theme, under));
+}
+
+/** A #rrggbbaa colour laid on an opaque #rrggbb one. */
+export function composite(top: string, bottom: string): string {
+  const channel = (hex: string, i: number) => parseInt(hex.slice(1 + 2 * i, 3 + 2 * i), 16);
+  const alpha = channel(top, 3) / 255;
+  const mixed = [0, 1, 2].map((i) => Math.round(channel(top, i) * alpha + channel(bottom, i) * (1 - alpha)));
+  return `#${mixed.map((c) => c.toString(16).padStart(2, "0")).join("")}`;
 }
