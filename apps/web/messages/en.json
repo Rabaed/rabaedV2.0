@@ -10,6 +10,10 @@
     "signedInAs": "Signed in as {name}, {company}",
     "profile": "Profile"
   },
+  "notFoundPage": {
+    "message": "We can't find this page. It may not exist, or you may not have access to it. Ask the person who sent you the link.",
+    "projects": "Projects"
+  },
   "home": {
     "title": "Rabaed",
     "tagline": "Construction projects, one place, each company sees only its own work.",
