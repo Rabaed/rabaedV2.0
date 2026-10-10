@@ -57,7 +57,7 @@ async function code(id: string, transition: "approve_a" | "revise_c", manager: C
       answers: { ...item.answers, sample_checked: true, matches_specification: transition === "approve_a", verification_note: "Checked" },
     }),
   );
-  await ok(manager.post(`/v1/work-items/${id}/claim`));
+  await ok(manager.post(`/v1/work-items/${id}/pick-up`));
   await take(manager, id, transition, { remarks: "As noted" });
 }
 
@@ -217,7 +217,7 @@ describe("scenario RP-409-2: Export, the rows the viewer reads with the List's f
 
   it("names owners as V14 has it: the Consultant's own person to the Consultant, its Company only to the Contractor", async () => {
     const waiting = created.at(-2)!;
-    await ok(at.k1Manager.post(`/v1/work-items/${waiting}/claim`));
+    await ok(at.k1Manager.post(`/v1/work-items/${waiting}/pick-up`));
     const forK1 = (await exported(at.k1Manager, {})).items.find((i) => i.id === waiting)!;
     const forC1 = (await exported(at.c1Engineer, {})).items.find((i) => i.id === waiting)!;
     expect(forK1.with).toMatchObject({ kind: "own", holder: { isMe: true } });

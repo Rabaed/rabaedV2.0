@@ -59,7 +59,7 @@ beforeAll(async () => {
   closed = res.json().id;
   await attachDatasheet(at.c1Engineer, closed);
   await take(at.c1Engineer, closed, "send_for_review", { internalNote: "C1 only: check the price" });
-  await ok(at.c1Pm.post(`/v1/work-items/${closed}/claim`));
+  await ok(at.c1Pm.post(`/v1/work-items/${closed}/pick-up`));
   await take(at.c1Pm, closed, "submit", { internalNote: "C1 only: submitted early" });
   const item = await detail(at.k1Manager, closed);
   await ok(
@@ -67,7 +67,7 @@ beforeAll(async () => {
       answers: { ...item.answers, sample_checked: true, matches_specification: false, verification_note: "Below the specified efficacy" },
     }),
   );
-  await ok(at.k1Manager.post(`/v1/work-items/${closed}/claim`));
+  await ok(at.k1Manager.post(`/v1/work-items/${closed}/pick-up`));
   await take(at.k1Manager, closed, "revise_c", { remarks: "Resubmit", internalNote: "K1 only: their price is high" });
   // A file K1 uploaded to the item (as if its Form let K1 attach one): never C1's to copy.
   await sql`
