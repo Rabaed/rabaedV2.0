@@ -5,7 +5,7 @@ import { expectLaidOutLeftToRight } from "../../storybook/bidi.ts";
 import { expectTouchTarget, phone } from "../../storybook/form.ts";
 import { storyLocale, storyText } from "../../storybook/locale.ts";
 import { projectCardsLabels } from "../../storybook/views.ts";
-import { ProjectCards } from "./project-cards.tsx";
+import { ProjectCard, ProjectCards } from "./project-cards.tsx";
 
 // The Projects page, the home page (RP-346), as a Contractor engineer of
 // Tamkeen sees it: each Project card with its Need My Action count. Story data only.
@@ -72,6 +72,32 @@ export const Wide: Story = {
     const code = within(tower).getByText("TWR");
     await expect(getComputedStyle(code).direction).toBe("ltr");
     await expectLaidOutLeftToRight(within(cardOf(context, projects[1]!.name)).getByText("KAFD2"));
+  },
+};
+
+/** On Home (RP-407): the same card, with how many Submittals the Member sees there in its footer. */
+export const OnHome: Story = {
+  render: (args, context) => {
+    const locale = storyLocale(context);
+    const counts = [48, 1, 0];
+    return (
+      <ul className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-[18px]">
+        {projects.slice(0, 3).map((p, i) => (
+          <li key={p.id} className="flex">
+            <ProjectCard
+              project={p}
+              locale={locale}
+              labels={projectCardsLabels[locale]}
+              href={args.href(p.id)}
+              submittals={storyText(context, b(`${counts[i]} submittals`, `${counts[i]} تقديمات`))}
+            />
+          </li>
+        ))}
+      </ul>
+    );
+  },
+  play: async (context) => {
+    await expect(within(cardOf(context, projects[0]!.name)).getByText(storyText(context, b("48 submittals", "48 تقديمات")))).toBeVisible();
   },
 };
 
