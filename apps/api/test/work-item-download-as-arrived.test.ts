@@ -10,6 +10,7 @@
 import { createDb } from "@rabaed/db";
 import { testDatabaseUrls } from "@rabaed/db/test-support";
 import type { SharedWorkItem } from "@rabaed/domain";
+import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestApi, expectHidden, uploadDocument, type Caller, type TestFile } from "./support/harness.ts";
 import { addSendBackType } from "./support/send-back.ts";
@@ -166,5 +167,24 @@ describe("scenario RP-409-2: Download is the item as it last arrived, whoever ho
 
   it("is nothing for another Contractor", async () => {
     await expectHidden(c2Engineer.get(`/v1/work-items/${id}/shared`));
+  });
+
+  it("leaves out a Link to an item never numbered, and still downloads", async () => {
+    const draft = await draftOf("DLA-D");
+    // As if the item had arrived linked to a Draft (free Link and link question both).
+    await sql`
+      insert into work_item_link (project_id, from_id, to_id, kind, created_by_member_id, created_at, arrival)
+      select w.project_id, w.id, ${draft}::uuid, 'related', d.created_by_member_id, now(), 0
+      from work_item w, work_item d where w.id = ${id}::uuid and d.id = ${draft}::uuid
+    `.execute(migrator);
+    await sql`
+      update work_item set data_as_arrived = jsonb_set(data_as_arrived, '{related}', (data_as_arrived -> 'related') || to_jsonb(${draft}::text))
+      where id = ${id}::uuid
+    `.execute(migrator);
+    for (const viewer of [engineer, k1Pm]) {
+      const item = await shared(viewer, id);
+      expect(JSON.stringify(item)).not.toContain("DLA-D");
+      expect(item.links.every((l) => l.documentNumber.length > 0)).toBe(true);
+    }
   });
 });

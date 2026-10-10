@@ -273,7 +273,8 @@ create function app.chain_item_unshared(p_work_item_id uuid, p_other_id uuid) re
 -- viewer: never a `member` answer (no person), a `participant` answer only for a
 -- Company everyone who sees the item reads (app.shared_company), a link question's
 -- items by Document Number and Subject only, never an id (whose item not every
--- viewer sees), leaving out an unshared item of its own chain. Null before the first
+-- viewer sees), leaving out an item never numbered (never shared) and an unshared item
+-- of its own chain. Null before the first
 -- Submit: nothing is shared yet.
 create function app.work_item_shared_answers(p_work_item_id uuid) returns jsonb
   language plpgsql stable security definer
@@ -300,7 +301,7 @@ create function app.work_item_shared_answers(p_work_item_id uuid) returns jsonb
             select coalesce(jsonb_agg(jsonb_build_object('document_number', t.document_number, 'subject', t.title) order by e.n), '[]')
             from jsonb_array_elements(a.src -> k) with ordinality e (v, n)
             join work_item t on t.id = app.uuid_or_null(e.v) and t.project_id = w.project_id
-            where not app.chain_item_unshared(w.id, t.id)
+            where t.document_number is not null and not app.chain_item_unshared(w.id, t.id)
           ))
           from app.link_question_keys(w.form_version_id) k
           where jsonb_typeof(a.src -> k) = 'array'
@@ -367,7 +368,7 @@ create function app.work_item_shared_documents(p_work_item_id uuid) returns seto
 -- A visible Submitted item's Links as of its last arrival, as everyone but its holder
 -- reads them (app.item_row_as_arrived: one removed since included, one added since
 -- not), by the linked item's Document Number and Subject only, leaving out an unshared
--- item of its own chain.
+-- item of its own chain and an item never numbered, so every Link has a Document Number.
 create function app.work_item_shared_links(p_work_item_id uuid)
   returns table (id uuid, kind text, field_key text, document_number text, subject text)
   language plpgsql stable security definer
@@ -382,7 +383,7 @@ create function app.work_item_shared_links(p_work_item_id uuid)
         join work_item t on t.id = l.to_id
         where l.from_id = p_work_item_id and app.sees_work_item(f.id) and f.submitted_at is not null
           and (l.arrival < f.arrivals or f.closed_at is not null)
-          and not app.chain_item_unshared(f.id, t.id)
+          and t.document_number is not null and not app.chain_item_unshared(f.id, t.id)
         order by l.created_at, t.document_number collate "C", l.id;
     end
   $$;
