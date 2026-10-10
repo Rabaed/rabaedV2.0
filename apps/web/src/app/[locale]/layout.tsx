@@ -1,4 +1,4 @@
-import { directionOf, isLocale } from "@rabaed/domain";
+import { appearanceCookie, appearanceFromCookie, directionOf, isLocale } from "@rabaed/domain";
 import { DirectionProvider } from "@rabaed/ui";
 import type { Metadata } from "next";
 import { NextIntlClientProvider } from "next-intl";
@@ -42,10 +42,14 @@ export default async function LocaleLayout({
   const t = await getTranslations("shell");
   const me = await getMe();
   const notifications = me ? await getNotifications() : null;
-  const collapsed = (await cookies()).get(sidebarCookie)?.value === "collapsed";
+  const jar = await cookies();
+  const collapsed = jar.get(sidebarCookie)?.value === "collapsed";
+  // The Member's Theme and Mode, painted by the server so the first paint is right (no flash); signed
+  // out, the browser's mirror of the last Member's, else Warm, System.
+  const appearance = me?.appearance ?? appearanceFromCookie(jar.get(appearanceCookie)?.value);
 
   return (
-    <html lang={locale} dir={directionOf(locale)}>
+    <html lang={locale} dir={directionOf(locale)} data-theme={appearance.theme} data-mode={appearance.mode}>
       <body className="min-h-dvh bg-canvas text-text antialiased">
         <NextIntlClientProvider>
           <DirectionProvider dir={directionOf(locale)}>
@@ -57,6 +61,7 @@ export default async function LocaleLayout({
                 isAuthorizedPerson={me.member.isAuthorizedPerson}
                 unread={notifications?.unread ?? null}
                 defaultCollapsed={collapsed}
+                appearance={appearance}
                 heading={heading}
                 tabs={tabs}
               >

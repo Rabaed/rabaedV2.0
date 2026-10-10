@@ -18,7 +18,11 @@
     "memberMenu": "Your menu",
     "profileSettings": "Profile & notification settings",
     "backToProjects": "Back to Projects",
-    "hostCompany": "Host Company: {company}"
+    "hostCompany": "Host Company: {company}",
+    "theme": "Theme",
+    "mode": "Mode",
+    "themes": { "grey": "Grey", "warm": "Warm" },
+    "modes": { "light": "Light", "dark": "Dark", "system": "System" }
   },
   "notFoundPage": {
     "message": "We can't find this page. It may not exist, or you may not have access to it. Ask the person who sent you the link.",
