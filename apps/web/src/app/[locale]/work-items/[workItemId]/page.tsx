@@ -12,6 +12,7 @@ import { WorkItemReplacement } from "@/components/work-item-replacement";
 import { WorkItemRevision } from "@/components/work-item-revision";
 import { WorkItemRevisionPicker } from "@/components/work-item-revision-picker";
 import { WorkItemWatch } from "@/components/work-item-watch";
+import { WorkItemWorkflow } from "@/components/work-item-workflow";
 import { Link, redirect } from "@/i18n/navigation";
 import { fillingChoices, readingChoices } from "@/lib/built-in-choices";
 import { linkTargetNames } from "@/lib/link-search";
@@ -29,6 +30,7 @@ import {
   getWorkItemFormChoices,
   getWorkItemHistory,
   getWorkItemLinks,
+  getWorkItemWorkflow,
 } from "@/lib/session";
 
 /**
@@ -41,7 +43,7 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
   setRequestLocale(locale);
   const t = await getTranslations("workItems");
   const tViews = await getTranslations("workItemViews");
-  const [me, item, form, people, documents, links, linkedFrom, history, optionLists, chain, watch] = await Promise.all([
+  const [me, item, form, people, documents, links, linkedFrom, history, optionLists, chain, watch, workflowMap] = await Promise.all([
     getMe(),
     getWorkItem(workItemId),
     getWorkItemForm(workItemId),
@@ -53,6 +55,7 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
     getOptionLists(),
     getRevisionChain(workItemId),
     getWatchState(workItemId),
+    getWorkItemWorkflow(workItemId),
   ]);
   if (!me) return redirect({ href: "/sign-in", locale });
   if (!item || !form || !people || !documents || !links || !linkedFrom) notFound();
@@ -104,6 +107,15 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
               </>
             )}
           </div>
+          {/* The Workflow and Version it runs, for everyone who sees it (V20); its map as they may know it (V14). */}
+          {workflowMap && (
+            <WorkItemWorkflow
+              map={workflowMap}
+              locale={locale}
+              documentNumber={item.documentNumber}
+              stepAgeWeeks={isOpenStageCategory(item.stage.category) ? item.stepAgeWeeks : null}
+            />
+          )}
         </div>
 
         <WorkItemActions workItemId={item.id} actions={item.actions} locale={locale} />

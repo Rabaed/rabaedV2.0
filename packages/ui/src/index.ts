@@ -222,6 +222,10 @@ export {
 export { ProjectDashboard, type ProjectDashboardLabels, type ProjectDashboardProps } from "./components/views/project-dashboard.tsx";
 export { moduleName } from "./lib/module-name.ts";
 export { ActivityFeedPanel, type ActivityFeedFilters, type ActivityFeedPanelLabels, type ActivityFeedPanelProps } from "./components/views/activity-feed-panel.tsx";
+export { WorkflowCanvas, type WorkflowCanvasProps } from "./components/workflow/workflow-canvas.tsx";
+export { WorkflowStepList, type WorkflowStepListProps } from "./components/workflow/workflow-step-list.tsx";
+export type { WorkflowLabels } from "./components/workflow/workflow-labels.ts";
+export type { MapStage } from "./components/workflow/workflow-map.ts";
 export {
   NeedsMyActionCard,
   RecentActivityCard,
