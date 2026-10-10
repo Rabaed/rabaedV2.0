@@ -28,7 +28,7 @@ const copy = {
   list: b("List", "قائمة"),
   kanban: b("Kanban", "كانبان"),
   stage: b("Stage", "المرحلة"),
-  notPickedUp: b("notPickedUp", "لم تُستلَم"),
+  notPickedUp: b("not picked up", "لم تُستلَم"),
   moveItem: b("Move #", "نقل #"),
   moveTo: b("To #", "إلى #"),
 };
