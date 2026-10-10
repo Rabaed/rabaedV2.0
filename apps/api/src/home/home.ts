@@ -5,6 +5,7 @@ import {
   homeActivityLimit,
   homeNeedsMyActionLimit,
   homeStepAgeWeeks,
+  isWaitingWithOthers,
   mergeActivity,
   workItemQuery,
   type Home,
@@ -68,20 +69,38 @@ export function getHome(db: Db, memberId: string, now: Date): Promise<Home> {
       longAtStep += aged.filter((r) => r.with?.kind === "own" && r.stage.category !== "draft").length;
     }
 
+    // Every row of each Module's List as the Member sees it (the latest Revision of each chain, open and
+    // closed): my own Company's items another Participant holds now, and the card's count of Submittals.
+    let waitingWithOthers = 0;
+    const submittals: Record<string, number> = Object.fromEntries(active.map((p) => [p.id, 0]));
+    for (const { project, ...scope } of scopes) {
+      const rows = await everyRow(trx, scope, {}, now);
+      waitingWithOthers += rows.filter(isWaitingWithOthers).length;
+      if (scope.moduleKey === "submittals") submittals[project.id] = rows.length;
+    }
+
     // Recent activity: each Project's newest entries, merged.
     const page = activityFeedQuery.parse({ limit: homeActivityLimit });
     const feeds = [];
-    for (const p of active) feeds.push((await activityFeedPage(trx, p.id, page)).entries.map((e) => ({ ...e, project: ref(p) })));
+    let moreActivity = false;
+    for (const p of active) {
+      const feed = await activityFeedPage(trx, p.id, page);
+      moreActivity ||= feed.nextCursor !== null;
+      feeds.push(feed.entries.map((e) => ({ ...e, project: ref(p) })));
+    }
 
     return {
       counts: {
         activeProjects: active.length,
         needMyAction: active.reduce((n, p) => n + p.needMyAction, 0),
         longAtStep,
+        waitingWithOthers,
       },
       needsMyAction: needsMyAction.toSorted(byNewestWaiting).slice(0, homeNeedsMyActionLimit),
       activity: mergeActivity(feeds, homeActivityLimit),
+      moreActivity: moreActivity || feeds.flat().length > homeActivityLimit,
       projects,
+      submittals,
     };
   });
 }

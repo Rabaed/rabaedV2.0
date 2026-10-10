@@ -1,6 +1,6 @@
 // Seam 1 for Home across my Projects (RP-407, spec RP-447; visibility.md "Home
 // across Projects", the Need My Action and Activity Feed channels, V3, V14,
-// scenarios RP-407-1 to RP-407-6). Home adds no read of its own: its counts are
+// scenarios RP-407-1 to RP-407-8). Home adds no read of its own: its counts are
 // sums of each Project's, its lists merges of each Project's List and Activity
 // Feed, over the Member's active Projects only. So C2 never counts C1's items, a
 // Draft is never counted for anyone, a closed Project contributes nothing, and a
@@ -30,6 +30,7 @@ let twr: Tower; // the first Project: K1's two managers, A and B, are on it
 let jcv: Tower; // the second: only K1 manager A is on it
 let k1A: Caller;
 let k1B: Caller;
+let c2: Company;
 let c2Engineer: Caller;
 
 const onboard = async (legalName: string): Promise<Company> => {
@@ -83,7 +84,7 @@ beforeAll(async () => {
   await ok(k1.caller.request("PUT", `/v1/participants/${onJcv}/members/${a.id}/visibility`, { trade: all, location: all }));
   await ok(k1.caller.request("PUT", `/v1/participants/${onJcv}/members/${a.id}/positions`, { positions: ["manager"] }));
   k1B = await projectMember(api, k1, await participantOf(twr, K1_NAME), ["manager"]);
-  const c2 = await onboard("Home Second Contractor");
+  c2 = await onboard("Home Second Contractor");
   const c2Participant = await api.addParticipant(c1.caller, twr.projectId, c2.company, "contractor");
   await ok(c1.caller.request("PUT", `/v1/participants/${c2Participant}/visibility`, { trade: all, location: all }));
   c2Engineer = await projectMember(api, c2, c2Participant, ["engineer"]);
@@ -141,6 +142,9 @@ describe("a Member on two Projects (RP-407-6)", () => {
     const everything = feeds.flatMap((f) => f.entries).toSorted((x, y) => (x.at < y.at ? 1 : x.at > y.at ? -1 : 0));
     expect(a.activity.map((e) => e.id)).toEqual(everything.slice(0, a.activity.length).map((e) => e.id));
     expect(a.activity.length).toBeGreaterThan(0);
+    // At most five entries, and "View all" only when the feeds hold more.
+    expect(a.activity.length).toBeLessThanOrEqual(5);
+    expect(a.moreActivity).toBe(everything.length > a.activity.length);
     expect(new Set(a.activity.map((e) => e.project.code))).toEqual(new Set(["HJV", "HOM"]));
     // C1 by its name only, never its people (V14); C1's internal review never reaches K1 (V5).
     for (const e of a.activity) {
@@ -220,16 +224,73 @@ describe("a closed Project (RP-407-3)", () => {
     const id = await inInternalReview(closing, closing.c1Engineer, "Closing pumps");
     await aged(id, 5);
     const before = await home(closing.c1Pm);
-    expect(before.counts).toEqual({ activeProjects: 1, needMyAction: 1, longAtStep: 1 });
+    expect(before.counts).toEqual({ activeProjects: 1, needMyAction: 1, longAtStep: 1, waitingWithOthers: 0 });
+    expect(before.submittals).toEqual({ [closing.projectId]: 1 });
     expect(listed(before)).toEqual([id]);
     expect(before.activity.length).toBeGreaterThan(0);
 
     await sql`update project set status = 'closed', closed_at = now() where id = ${closing.projectId}::uuid`.execute(migrator);
     const after = await home(closing.c1Pm);
-    expect(after.counts).toEqual({ activeProjects: 0, needMyAction: 0, longAtStep: 0 });
+    expect(after.counts).toEqual({ activeProjects: 0, needMyAction: 0, longAtStep: 0, waitingWithOthers: 0 });
+    expect(after.submittals).toEqual({});
     expect(after.needsMyAction).toEqual([]);
     expect(after.activity).toEqual([]);
     // Still on the Projects list, as closed.
     expect(after.projects.map((p) => [p.code, p.status])).toEqual([["HCL", "closed"]]);
+  });
+});
+
+describe("Submitted by my Company, waiting with others (RP-407-7)", () => {
+  let at: Tower;
+  let c2OnAt: Caller;
+  let sent = "";
+  let internal = "";
+  let mine = "";
+  beforeAll(async () => {
+    at = await buildTower(api, { c1, k1 }, "HWO");
+    const c2Participant = await api.addParticipant(c1.caller, at.projectId, c2.company, "contractor");
+    await ok(c1.caller.request("PUT", `/v1/participants/${c2Participant}/visibility`, { trade: all, location: all }));
+    c2OnAt = await projectMember(api, c2, c2Participant, ["engineer"]);
+    mine = await draft(at, at.c1Engineer, "Waiting: still a Draft");
+    internal = await inInternalReview(at, at.c1Engineer, "Waiting: at our review");
+    sent = await submitted(at, at.c1Engineer, at.c1Pm, "Waiting: with the Consultant");
+  });
+
+  it("counts my own Company's open items another Participant holds, never a Draft or one we hold", async () => {
+    // C1 raised all three; only the Submitted one is with another Participant (K1).
+    expect((await home(at.c1Engineer)).counts.waitingWithOthers).toBe(1);
+    expect((await home(at.c1Pm)).counts.waitingWithOthers).toBe(1);
+  });
+
+  it("never counts another Company's items, even the ones its holder sees", async () => {
+    // K1 holds C1's item: not K1's own, so not K1's to count as waiting with others.
+    expect((await home(at.k1Manager)).counts.waitingWithOthers).toBe(0);
+    // C2 sees none of C1's items, and counts none.
+    const h = await home(c2OnAt);
+    expect(h.counts.waitingWithOthers).toBe(0);
+    for (const id of [sent, internal, mine]) expect(h.body).not.toContain(id);
+  });
+
+  it("stops counting an item once it is closed", async () => {
+    const id = await submitted(at, at.c1Engineer, at.c1Pm, "Waiting: soon approved");
+    expect((await home(at.c1Pm)).counts.waitingWithOthers).toBe(2);
+    // K1's manager verifies it and issues Code A, which closes it.
+    const answers = (await ok(at.k1Manager.get(`/v1/work-items/${id}`), 200)).json().answers as Record<string, unknown>;
+    await ok(at.k1Manager.request("PUT", `/v1/work-items/${id}/answers`, { answers: { ...answers, sample_checked: true, matches_specification: true } }));
+    await ok(at.k1Manager.post(`/v1/work-items/${id}/claim`));
+    await take(at.k1Manager, id, "approve_a");
+    expect((await home(at.c1Pm)).counts.waitingWithOthers).toBe(1);
+  });
+
+  it("gives each Project card the number of items its Member sees there, never another Company's internal ones (RP-407-8)", async () => {
+    const shown = async (by: Caller) => ((await ok(by.get(`/v1/projects/${at.projectId}/work-items`), 200)).json() as WorkItemList).items.length;
+    for (const who of [at.c1Engineer, at.c1Pm, at.k1Manager, c2OnAt]) {
+      expect((await home(who)).submittals[at.projectId]).toBe(await shown(who));
+    }
+    // The raiser: his Draft, the internal review, the waiting and the approved item.
+    expect((await home(at.c1Engineer)).submittals[at.projectId]).toBe(4);
+    // K1: the two Submitted items only, never C1's Draft or internal review. C2: none of C1's.
+    expect((await home(at.k1Manager)).submittals[at.projectId]).toBe(2);
+    expect((await home(c2OnAt)).submittals[at.projectId]).toBe(0);
   });
 });

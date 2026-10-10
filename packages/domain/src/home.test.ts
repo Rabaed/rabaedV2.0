@@ -1,5 +1,55 @@
 import { describe, expect, it } from "vitest";
-import { byNewestWaiting, homeGreeting, mergeActivity } from "./home.ts";
+import { busiestProjectId, byNewestWaiting, homeGreeting, isWaitingWithOthers, mergeActivity, relativeAge } from "./home.ts";
+
+describe("relativeAge", () => {
+  const now = new Date("2026-10-10T12:00:00.000Z");
+  const ago = (ms: number) => new Date(now.getTime() - ms).toISOString();
+  const minute = 60_000;
+  const hour = 60 * minute;
+
+  it("is 'now' under a minute, and for a time a skewed clock puts ahead", () => {
+    expect(relativeAge(ago(59_000), now)).toEqual({ unit: "now" });
+    expect(relativeAge(new Date(now.getTime() + 5_000).toISOString(), now)).toEqual({ unit: "now" });
+  });
+
+  it("counts whole minutes under an hour, then whole hours under a day", () => {
+    expect(relativeAge(ago(minute), now)).toEqual({ unit: "minutes", count: 1 });
+    expect(relativeAge(ago(10 * minute + 59_000), now)).toEqual({ unit: "minutes", count: 10 });
+    expect(relativeAge(ago(hour), now)).toEqual({ unit: "hours", count: 1 });
+    expect(relativeAge(ago(3 * hour + 59 * minute), now)).toEqual({ unit: "hours", count: 3 });
+    expect(relativeAge(ago(24 * hour - 1), now)).toEqual({ unit: "hours", count: 23 });
+  });
+
+  it("gives the date from a day on", () => {
+    expect(relativeAge(ago(24 * hour), now)).toEqual({ unit: "date" });
+    expect(relativeAge(ago(40 * 24 * hour), now)).toEqual({ unit: "date" });
+  });
+});
+
+describe("isWaitingWithOthers", () => {
+  const own = { kind: "own" as const, companyName: { en: "C1", ar: "C1" }, step: { key: "s", name: { en: "S", ar: "S" } }, claimer: null };
+  const other = { kind: "company" as const, companyName: { en: "K1", ar: "K1" } };
+  const created = "2026-09-01T08:00:00.000Z";
+
+  it("is an item my own Participant raised (its Creation Date is mine to read) that another Company holds", () => {
+    expect(isWaitingWithOthers({ with: other, creationDate: created })).toBe(true);
+  });
+
+  it("is never an item we hold, a closed one, or another Company's item", () => {
+    expect(isWaitingWithOthers({ with: own, creationDate: created })).toBe(false);
+    expect(isWaitingWithOthers({ with: null, creationDate: created })).toBe(false);
+    // Another Company raised it: I never read its Creation Date (visibility.md "Creation Date").
+    expect(isWaitingWithOthers({ with: other, creationDate: null })).toBe(false);
+  });
+});
+
+describe("busiestProjectId", () => {
+  it("is the Project with the most, the first listed on a tie, none when all are zero", () => {
+    expect(busiestProjectId([["a", 1], ["b", 3], ["c", 3]])).toBe("b");
+    expect(busiestProjectId([["a", 0], ["b", 0]])).toBeUndefined();
+    expect(busiestProjectId([])).toBeUndefined();
+  });
+});
 
 const item = (id: string, title: string, stepEnteredAt: string | null) => ({ id, title, stepEnteredAt });
 
