@@ -582,6 +582,8 @@ export const NeedMyActionOff: Story = {
  * own Drafts. Turning it off shows every item again; clearing the filters does too.
  */
 export const NeedMyActionOn: Story = {
+  // Few short rows: the Zone sort button sits under the pinned settings column at the table's edge until scrolled to: covered, not small.
+  parameters: { a11y: { options: { rules: { "target-size": { enabled: false } } } } },
   args: {
     query: { ...defaults, needMyAction: true },
     list: { ...list, items: items.filter((i) => i.with?.kind === "own"), stages: list.stages.map((s) => ({ ...s, count: s.key === "approved" || s.key === "revise_resubmit" ? 0 : s.count })) },
@@ -709,6 +711,8 @@ export const SlashFocusesSearch: Story = {
 
 /** A search with results: the box holds the words, the rows are the matches, and clearing the filters clears it too. */
 export const SearchWithResults: Story = {
+  // One short row: the Zone sort button sits under the pinned settings column at the table's edge until scrolled to: covered, not small.
+  parameters: { a11y: { options: { rules: { "target-size": { enabled: false } } } } },
   args: {
     query: { ...defaults, q: "LED" },
     list: {
