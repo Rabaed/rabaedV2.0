@@ -36,6 +36,7 @@ import type {
   ModuleKey,
   WorkItemQuery,
   OptionList,
+  TypeOutcomes,
 } from "@rabaed/domain";
 import { activityFeedSearchParams, workItemSearchParams } from "@rabaed/domain";
 import { cookies } from "next/headers";
@@ -174,6 +175,11 @@ export function getActivityFeed(projectId: string, query: Partial<ActivityFeedQu
 /** One Work Item; null if the signed-in Member can't see it (exactly as if it didn't exist). */
 export function getWorkItem(workItemId: string): Promise<WorkItemDetail | null> {
   return apiGet<WorkItemDetail>(`/v1/work-items/${encodeURIComponent(workItemId)}`);
+}
+
+/** A Type's outcome set on a Project (the badges read it, RP-429); null when the Member can't see the Project. */
+export function getTypeOutcomes(projectId: string, typeCode: string): Promise<TypeOutcomes | null> {
+  return apiGet<TypeOutcomes>(`/v1/projects/${encodeURIComponent(projectId)}/work-item-types/${encodeURIComponent(typeCode)}/outcomes`);
 }
 
 /** The Form Version a Work Item is pinned to; null if the signed-in Member can't see the item. */

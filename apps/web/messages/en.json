@@ -10,6 +10,10 @@
     "signedInAs": "Signed in as {name}, {company}",
     "profile": "Profile"
   },
+  "notFoundPage": {
+    "message": "We can't find this page. It may not exist, or you may not have access to it. Ask the person who sent you the link.",
+    "projects": "Projects"
+  },
   "home": {
     "title": "Rabaed",
     "tagline": "Construction projects, one place, each company sees only its own work.",
@@ -447,8 +451,7 @@
       "step": "Step",
       "with": "With",
       "raisedBy": "Raised by",
-      "issuedCode": "Issued Code",
-      "comments": "Comments",
+      "issuedCode": "Issued Code",      "comments": "Comments",
       "commentCounts": "{open} open / {closed} closed"
     },
     "invalid": "Give a Subject and a Trade.",
@@ -460,6 +463,8 @@
       "title": "Form",
       "toFix": "Fix these fields:",
       "saved": "Draft saved.",
+      "save": "Save",
+      "saveAndClose": "Save and close",
       "anotherMember": "another Member",
       "invalid": "Some answers aren't valid. Check the fields marked in the Form.",
       "notEditable": "These answers can't be changed any more.",
