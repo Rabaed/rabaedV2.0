@@ -6,6 +6,7 @@ import {
   participantMembers,
   projectInvitations,
   projectParticipants,
+  removeProjectMemberRequest,
   setMemberPositionsRequest,
   setParticipantCodeRequest,
 } from "@rabaed/domain";
@@ -156,12 +157,13 @@ export const participantRoutes =
 
     app.delete(
       "/v1/participants/:participantId/members/:memberId",
-      { schema: { params: participantParams.extend({ memberId: z.string() }) } },
+      { schema: { params: participantParams.extend({ memberId: z.string() }), body: removeProjectMemberRequest.nullish() } },
       async (request, reply) => {
         const actorId = ctx.requireMember(request);
         const participantId = idOrNotFound(request.params.participantId);
         const target = idOrNotFound(request.params.memberId);
-        const result = await removeProjectMember(ctx.db, actorId, participantId, target, ctx.now());
+        // Their Steps there are handed over first (RP-108): 409 handover_needed or nobody_can_take otherwise.
+        const result = await removeProjectMember(ctx.db, actorId, participantId, target, ctx.now(), request.body?.handovers);
         if (!result.ok) throw refusal(result);
         return reply.code(204).send();
       },
@@ -174,7 +176,15 @@ export const participantRoutes =
         const actorId = ctx.requireMember(request);
         const participantId = idOrNotFound(request.params.participantId);
         const target = idOrNotFound(request.params.memberId);
-        const result = await setMemberPositions(ctx.db, actorId, participantId, target, request.body.positions);
+        const result = await setMemberPositions(
+          ctx.db,
+          actorId,
+          participantId,
+          target,
+          request.body.positions,
+          ctx.now(),
+          request.body.handovers,
+        );
         if (!result.ok) throw refusal(result);
         return reply.code(204).send();
       },

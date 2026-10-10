@@ -6,9 +6,9 @@ import type { Database } from "./schema.ts";
 // The worker's scheduled jobs (RP-358): the daily digest, and the weekly Step
 // Age report (RP-359). On each poll the worker asks every job whether a run is
 // due (the pure schedule, @rabaed/domain `dueRun`); a due run is claimed in the
-// database (app.claim_scheduled_run) and the job runs in the claim's
+// database (app.claim_scheduled_run) and the job runs in that
 // transaction. So each run time runs once, however many workers poll, and a job
-// that throws is rolled back with its claim and runs again at the next poll.
+// that throws is rolled back with the run's lock and runs again at the next poll.
 // A job should only write outbox rows, so the sending gets the outbox's retries
 // and dead letters, one recipient at a time.
 

@@ -3,7 +3,7 @@
 // and 70). One row per Revision chain, the latest Revision the viewer sees, or
 // every visible Revision; every filter and both sorts, combined; cursor paging
 // with Stage counts from the same filtered, visible items; and "With" as V14
-// has it: the Step and who claimed it inside the holding Company, its name only
+// has it: the Step and who picked it up inside the holding Company, its name only
 // for everyone else.
 import { randomUUID } from "node:crypto";
 import { encodeWorkItemCursor, isOpenStageCategory, workItemSearchParams, type WorkItemList, type WorkItemQueryInput, type WorkItemRow } from "@rabaed/domain";
@@ -62,7 +62,7 @@ async function draft(title: string, answers: Record<string, unknown> = {}): Prom
 /** Sends a Draft for review and Submits it to K1, where it waits in the review Step's pool. */
 async function submit(id: string) {
   await take(c1Engineer, id, "send_for_review");
-  await ok(c1Pm.post(`/v1/work-items/${id}/claim`));
+  await ok(c1Pm.post(`/v1/work-items/${id}/pick-up`));
   await take(c1Pm, id, "submit");
 }
 
@@ -78,7 +78,7 @@ async function codeC(id: string) {
       },
     }),
   );
-  await ok(k1ManagerA.post(`/v1/work-items/${id}/claim`));
+  await ok(k1ManagerA.post(`/v1/work-items/${id}/pick-up`));
   await take(k1ManagerA, id, "revise_c", { remarks: "Resubmit with 110 lm/W luminaires" });
 }
 
@@ -215,24 +215,24 @@ describe('"With" (V14, scenario 70)', () => {
     await submit(item);
   });
 
-  it("shows the holding Company's own Members the Step, unclaimed, and everyone else the Company's name only", async () => {
+  it("shows the holding Company's own Members the Step, notPickedUp, and everyone else the Company's name only", async () => {
     const theirs = row(await list(k1ManagerA), item)!;
-    expect(theirs.with).toMatchObject({ kind: "own", step: { key: "consultant_review" }, claimer: null });
+    expect(theirs.with).toMatchObject({ kind: "own", step: { key: "consultant_review" }, holder: null });
     const mine = row(await list(c1Engineer), item)!;
     expect(mine.with).toEqual({ kind: "company", companyName: expect.any(Object) });
     k1Name = theirs.with!.companyName.en;
     expect(mine.with!.companyName.en).toBe(k1Name);
   });
 
-  it("names the claimer to their own Company only, once one claims it", async () => {
-    await ok(k1ManagerA.post(`/v1/work-items/${item}/claim`));
-    const claimer = row(await list(k1ManagerA), item)!.with;
-    expect(claimer).toMatchObject({ kind: "own", claimer: { isMe: true } });
+  it("names the holder to their own Company only, once one picks it up", async () => {
+    await ok(k1ManagerA.post(`/v1/work-items/${item}/pick-up`));
+    const holder = row(await list(k1ManagerA), item)!.with;
+    expect(holder).toMatchObject({ kind: "own", holder: { isMe: true } });
     const colleague = row(await list(k1ManagerB), item)!.with;
-    expect(colleague).toMatchObject({ kind: "own", claimer: { isMe: false } });
-    if (claimer?.kind !== "own" || !claimer.claimer) throw new Error("expected K1's claimer");
-    const name = claimer.claimer.name;
-    expect(colleague).toMatchObject({ claimer: { name } });
+    expect(colleague).toMatchObject({ kind: "own", holder: { isMe: false } });
+    if (holder?.kind !== "own" || !holder.holder) throw new Error("expected K1's holder");
+    const name = holder.holder.name;
+    expect(colleague).toMatchObject({ holder: { name } });
 
     const c1List = await list(c1Engineer);
     expect(row(c1List, item)!.with).toEqual({ kind: "company", companyName: expect.objectContaining({ en: k1Name }) });
@@ -240,10 +240,10 @@ describe('"With" (V14, scenario 70)', () => {
     expect(JSON.stringify(await list(c1Engineer, { with: [`company:${k1ParticipantId}`] }))).not.toContain(name.en);
   });
 
-  it("filters by who has it: me, unclaimed, a Step of my own, another Company", async () => {
+  it("filters by who has it: me, notPickedUp, a Step of my own, another Company", async () => {
     expect(ids(await list(k1ManagerA, { with: ["me"] }))).toContain(item);
     expect(ids(await list(k1ManagerB, { with: ["me"] }))).not.toContain(item);
-    expect(ids(await list(k1ManagerB, { with: ["unclaimed"] }))).not.toContain(item);
+    expect(ids(await list(k1ManagerB, { with: ["not_picked_up"] }))).not.toContain(item);
     expect(ids(await list(k1ManagerB, { with: ["step:consultant_review"] }))).toContain(item);
     const c1List = await list(c1Engineer, { with: [`company:${k1ParticipantId}`] });
     expect(ids(c1List)).toContain(item);
@@ -362,7 +362,7 @@ describe("a second Contractor (V3, scenario 17)", () => {
       { outcome: ["C"] },
       { trade: [trade.electrical] },
       { location: [loc.tower1] },
-      { with: ["unclaimed", "me", "step:consultant_review", `company:${k1ParticipantId}`] },
+      { with: ["not_picked_up", "me", "step:consultant_review", `company:${k1ParticipantId}`] },
       { stepAgeMin: 2 },
       { sort: "documentNumber", allRevisions: true },
     ];

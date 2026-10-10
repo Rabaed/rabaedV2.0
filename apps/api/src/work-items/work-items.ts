@@ -553,6 +553,7 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
       raised_by: BilingualText;
       held_by: BilingualText | null;
       holder_name: BilingualText | null;
+      pool_names: BilingualText[] | null;
       outcome: WorkItemOutcome | null;
       closed_at: Date | null;
       can_save_answers: boolean;
@@ -572,6 +573,7 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
         cc.open_count as open_comments, cc.closed_count as closed_comments,
         w.submitted_at, w.outcome, w.closed_at, s.key as step_key, s.name as step_name,
         raiser.legal_name as raised_by, holder.legal_name as held_by, m.full_name as holder_name,
+        pool.names as pool_names,
         app.can_save_answers(w.id) as can_save_answers, w.revision_no, app.revision_versions_changed(w.id) as versions_changed,
         app.can_create_revision(w.id) as can_create_revision, app.can_discard_revision(w.id) as can_discard_revision,
         app.can_create_replacement(w.id) as can_create_replacement
@@ -586,6 +588,8 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
       left join app.work_item_companies(w.id) holder on holder.participant_id = a.participant_id
       -- Only the viewer's own Participant's holder is named, and member's own RLS shows only their own Company's people (V14).
       left join member m on m.id = a.assignee_member_id
+      -- While it waits in a pool of the viewer's own Participant: who it waits on (§3.4, V14).
+      left join lateral app.work_item_pool(w.id) pool on true
       where w.id = ${workItemId}
     `.execute(trx);
     const d = rows[0]!;
@@ -621,7 +625,13 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
       scopes: scopes.map((s) => ({ id: s.id, parentId: s.parent_id, name: s.name })),
       step: { key: d.step_key, name: d.step_name },
       raisedBy: { companyName: d.raised_by },
-      heldBy: d.held_by ? { companyName: d.held_by, memberName: d.holder_name } : null,
+      heldBy: d.held_by
+        ? {
+            companyName: d.held_by,
+            memberName: d.holder_name,
+            pool: d.pool_names === null ? null : { names: d.pool_names },
+          }
+        : null,
       outcome: d.outcome,
       closedAt: d.closed_at?.toISOString() ?? null,
       // When the Draft was started is audit only, shown to nobody (visibility.md "Creation Date", scenario 61).
@@ -680,7 +690,7 @@ async function namedAnswers(trx: Trx, workItemId: string): Promise<{ named: Name
 }
 
 type ActionRow = {
-  action: "claim" | "release" | "transition";
+  action: "pick_up" | "return_to_pool" | "transition";
   transition_key: string | null;
   label: BilingualText | null;
   transition_kind: WorkItemActions["transitions"][number]["kind"] | null;
@@ -720,8 +730,8 @@ async function actions(trx: Trx, workItemId: string): Promise<Omit<WorkItemActio
     transitions.map((r) => (r.may_recommend ? recommendableOutcomes(trx, workItemId, r.transition_key!) : [])),
   );
   return {
-    claim: rows.some((r) => r.action === "claim"),
-    release: rows.some((r) => r.action === "release"),
+    pickUp: rows.some((r) => r.action === "pick_up"),
+    returnToPool: rows.some((r) => r.action === "return_to_pool"),
     transitions: transitions.map((r, i) => ({
       key: r.transition_key!,
       label: r.label!,
@@ -997,28 +1007,28 @@ export function saveAnswers(
   });
 }
 
-const claimRefusals = ["not_found", "item_closed", "project_closed", "already_claimed", "forbidden"] as const;
-const releaseRefusals = ["not_found", "item_closed", "project_closed", "not_holder"] as const;
-export type ClaimResult = { ok: true } | { ok: false; reason: (typeof claimRefusals)[number] };
-export type ReleaseResult = { ok: true } | { ok: false; reason: (typeof releaseRefusals)[number] };
+const pickUpRefusals = ["not_found", "item_closed", "project_closed", "already_picked_up", "forbidden"] as const;
+const returnToPoolRefusals = ["not_found", "item_closed", "project_closed", "not_holder", "pool_of_one"] as const;
+export type PickUpResult = { ok: true } | { ok: false; reason: (typeof pickUpRefusals)[number] };
+export type ReturnToPoolResult = { ok: true } | { ok: false; reason: (typeof returnToPoolRefusals)[number] };
 
-/** A Member of its Step Pool claims the item's pooled Step; of two at once, one wins (§5.2). */
-export function claimStep(db: Db, memberId: string, workItemId: string, now: Date): Promise<ClaimResult> {
+/** A Member of its Step Pool picks up the item's pooled Step; of two at once, one wins (§5.2). */
+export function pickUpStep(db: Db, memberId: string, workItemId: string, now: Date): Promise<PickUpResult> {
   return withMember(db, memberId, async (trx) => {
     const { rows } = await sql<{ outcome: string }>`
-      select app.claim_step(${workItemId}::uuid, ${now}) as outcome
+      select app.pick_up_step(${workItemId}::uuid, ${now}) as outcome
     `.execute(trx);
-    return commandResult(rows[0]!.outcome, "claimed", claimRefusals);
+    return commandResult(rows[0]!.outcome, "picked_up", pickUpRefusals);
   });
 }
 
-/** The Member who claimed the item's Step gives it back to its pool. */
-export function releaseStep(db: Db, memberId: string, workItemId: string, now: Date): Promise<ReleaseResult> {
+/** The Member who picked up the item's Step gives it back to its pool. */
+export function returnToPoolStep(db: Db, memberId: string, workItemId: string, now: Date): Promise<ReturnToPoolResult> {
   return withMember(db, memberId, async (trx) => {
     const { rows } = await sql<{ outcome: string }>`
-      select app.release_step(${workItemId}::uuid, ${now}) as outcome
+      select app.return_to_pool_step(${workItemId}::uuid, ${now}) as outcome
     `.execute(trx);
-    return commandResult(rows[0]!.outcome, "released", releaseRefusals);
+    return commandResult(rows[0]!.outcome, "returned_to_pool", returnToPoolRefusals);
   });
 }
 
@@ -1047,6 +1057,7 @@ export function getWorkItemHistory(db: Db, memberId: string, workItemId: string)
       internal_note: string | null;
       recommended_code: string | null;
       changes: { field: string; old: unknown; new: unknown }[] | null;
+      handover: WorkItemHistory["events"][number]["handover"];
     }>`select * from app.work_item_history(${workItemId}::uuid)`.execute(trx);
     return {
       events: rows.map((r) => ({
@@ -1065,6 +1076,7 @@ export function getWorkItemHistory(db: Db, memberId: string, workItemId: string)
         internalNote: r.internal_note,
         recommendedCode: r.recommended_code,
         changes: r.changes,
+        handover: r.handover,
       })),
     };
   });

@@ -39,16 +39,16 @@ const stageKey = z.string().regex(/^[a-z][a-z0-9_]{0,62}$/);
 
 /**
  * Who an item is with (the "With" column, V14):
- * - `me`: a Step of my own Company that I have claimed;
- * - `unclaimed`: a Step of my own Company nobody has claimed yet;
- * - `step:<key>`: my own Company's Step `key`, claimed or not;
+ * - `me`: a Step of my own Company that I have picked up;
+ * - `not_picked_up`: a Step of my own Company nobody has picked up yet;
+ * - `step:<key>`: my own Company's Step `key`, picked up or not;
  * - `company:<participant id>`: another Company holds it, as one.
  */
-export type WithFilterValue = "me" | "unclaimed" | `step:${string}` | `company:${string}`;
+export type WithFilterValue = "me" | "not_picked_up" | `step:${string}` | `company:${string}`;
 export const withFilterValue = z
   .string()
   .refine(
-    (v) => v === "me" || v === "unclaimed" || (v.startsWith("step:") && stageKey.safeParse(v.slice(5)).success) || (v.startsWith("company:") && uuid.safeParse(v.slice(8)).success),
+    (v) => v === "me" || v === "not_picked_up" || (v.startsWith("step:") && stageKey.safeParse(v.slice(5)).success) || (v.startsWith("company:") && uuid.safeParse(v.slice(8)).success),
     "Not a With filter",
   )
   .transform((v) => v as WithFilterValue);
@@ -106,7 +106,7 @@ const queryFields = {
     z.string().trim().max(searchMaxLength).optional(),
   ),
   /**
-   * Need My Action: only the items waiting on me, Steps I hold and unclaimed
+   * Need My Action: only the items waiting on me, Steps I hold and not picked up
    * Steps in my Step Pool, plus my own Drafts (which are never counted).
    */
   needMyAction: flag,

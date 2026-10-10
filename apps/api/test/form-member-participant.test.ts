@@ -278,7 +278,7 @@ describe("a Submitted item's member and participant answers", () => {
       )
     ).json().id;
     await ok(tryTake(engineer.caller, id, "send_for_review"));
-    await ok(pm.caller.post(`/v1/work-items/${id}/claim`));
+    await ok(pm.caller.post(`/v1/work-items/${id}/pick-up`));
     await ok(tryTake(pm.caller, id, "submit"));
   });
 

@@ -6,12 +6,14 @@ import {
   type BilingualText,
   type CompanyInvitations,
   type CompanyParticipation,
+  type HandoverPick,
   type ParticipantMembers,
   type ProjectInvitations,
   type ProjectParticipants,
 } from "@rabaed/domain";
 import { sql, type RawBuilder } from "kysely";
 import { refusedAsForbidden, type Forbidden } from "../db-error.ts";
+import { handedOver, type HandoverRefusal } from "../identity/handover.ts";
 import { checkedOutcome, commandResult } from "../outcomes.ts";
 
 // Participants and Project Members. Writes go through the app.* functions of the
@@ -313,40 +315,45 @@ export function addProjectMember(
   );
 }
 
-/** The Participant's Authorized Person removes a Project Member: their access ends at once. */
+/**
+ * The Participant's Authorized Person removes a Project Member: their access ends at
+ * once. Every open Step they hold there is handed over first, to `picks` (RP-108).
+ */
 export function removeProjectMember(
   db: Db,
   memberId: string,
   participantId: string,
   targetId: string,
   now: Date,
-): Promise<ProjectMemberResult> {
-  return refusedAsForbidden(() =>
-    withMember(db, memberId, async (trx) => {
-      const { rows } = await sql<{ outcome: string }>`
-        select app.remove_project_member(${participantId}::uuid, ${targetId}::uuid, ${now}) as outcome
-      `.execute(trx);
-      return commandResult(rows[0]!.outcome, "removed", projectMemberRefusals);
-    }),
-  );
+  picks?: HandoverPick[],
+): Promise<ProjectMemberResult | HandoverRefusal> {
+  return handedOver(db, memberId, { memberId: targetId, participantId, because: "removed", picks, now }, async (trx) => {
+    const { rows } = await sql<{ outcome: string }>`
+      select app.remove_project_member(${participantId}::uuid, ${targetId}::uuid, ${now}) as outcome
+    `.execute(trx);
+    return commandResult(rows[0]!.outcome, "removed", projectMemberRefusals);
+  });
 }
 
-/** The Participant's Authorized Person sets a Project Member's Positions. */
+/**
+ * The Participant's Authorized Person sets a Project Member's Positions. A Step they
+ * hold whose pool they leave by it is handed over first, to `picks` (RP-108).
+ */
 export function setMemberPositions(
   db: Db,
   memberId: string,
   participantId: string,
   targetId: string,
   positions: string[],
-): Promise<ProjectMemberResult> {
-  return refusedAsForbidden(() =>
-    withMember(db, memberId, async (trx) => {
-      const { rows } = await sql<{ outcome: string }>`
-        select app.set_project_member_positions(${participantId}::uuid, ${targetId}::uuid, ${positions}::text[]) as outcome
-      `.execute(trx);
-      return commandResult(rows[0]!.outcome, "set", projectMemberRefusals);
-    }),
-  );
+  now: Date,
+  picks?: HandoverPick[],
+): Promise<ProjectMemberResult | HandoverRefusal> {
+  return handedOver(db, memberId, { memberId: targetId, participantId, because: "positions", picks, now }, async (trx) => {
+    const { rows } = await sql<{ outcome: string }>`
+      select app.set_project_member_positions(${participantId}::uuid, ${targetId}::uuid, ${positions}::text[]) as outcome
+    `.execute(trx);
+    return commandResult(rows[0]!.outcome, "set", projectMemberRefusals);
+  });
 }
 
 /**

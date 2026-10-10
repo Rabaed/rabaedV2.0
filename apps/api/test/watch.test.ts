@@ -30,7 +30,7 @@ const unwatch = (by: Caller, id: string) => ok(by.delete(`/v1/work-items/${id}/w
 async function codeC(id: string, k1Manager: Caller) {
   const answers = { ...(await detail(k1Engineer, id)).answers, sample_checked: true, matches_specification: false, verification_note: "Too dim" };
   await ok(k1Engineer.request("PUT", `/v1/work-items/${id}/answers`, { answers }));
-  await ok(k1Manager.post(`/v1/work-items/${id}/claim`));
+  await ok(k1Manager.post(`/v1/work-items/${id}/pick-up`));
   await ok(k1Manager.post(`/v1/work-items/${id}/transitions`, { transition: "revise_c", answers: { remarks: "Resubmit" }, confirmed: true, idempotencyKey: randomUUID() }));
 }
 
@@ -80,7 +80,7 @@ describe("auto-watch", () => {
 
   it("does not make the internal reviewer a watcher", async () => {
     const id = await inInternalReview(at, at.c1Engineer, "Earthing");
-    await ok(at.c1Pm.post(`/v1/work-items/${id}/claim`));
+    await ok(at.c1Pm.post(`/v1/work-items/${id}/pick-up`));
     expect(await watching(at.c1Pm, id)).toBe(false);
   });
 
@@ -135,7 +135,7 @@ describe("a Revision chain", () => {
   it("keeps a Draft Revision hidden from another Company's watcher (V1), until it is Submitted", async () => {
     await expectHidden(watchRead(k1Engineer, rev1));
     await take(at.c1Engineer, rev1, "send_for_review");
-    await ok(at.c1Pm.post(`/v1/work-items/${rev1}/claim`));
+    await ok(at.c1Pm.post(`/v1/work-items/${rev1}/pick-up`));
     await take(at.c1Pm, rev1, "submit");
     expect(await watching(k1Engineer, rev1)).toBe(true);
   });

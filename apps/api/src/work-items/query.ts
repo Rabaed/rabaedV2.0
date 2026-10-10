@@ -43,7 +43,7 @@ import { sql, type RawBuilder, type Transaction } from "kysely";
 // Revision on its own: app.latest_visible_revision).
 //
 // "With" follows V14 too: the viewer's own Participant sees the Step and who
-// claimed it; anyone else sees the holding Company's name only, which is all
+// picked it up; anyone else sees the holding Company's name only, which is all
 // app.work_item_holder gives them.
 //
 // A new filter is a new key of WorkItemQuery and one more condition in
@@ -89,8 +89,8 @@ type Row = {
   step_key: string;
   step_name: BilingualText;
   holder_name: BilingualText | null;
-  claimer_name: BilingualText | null;
-  claimed_by_me: boolean;
+  holder_member_name: BilingualText | null;
+  held_by_me: boolean;
 };
 
 /**
@@ -252,14 +252,14 @@ function matching(q: WorkItemQuery, now: Date, scope: QueryScope): RawBuilder<bo
   // The Submission Date range, in Saudi days, both days included; an item not yet Submitted has none and is left out.
   if (q.submittedFrom !== undefined) conditions.push(sql`(r.submitted_at at time zone 'Asia/Riyadh')::date >= ${q.submittedFrom}::date`);
   if (q.submittedTo !== undefined) conditions.push(sql`(r.submitted_at at time zone 'Asia/Riyadh')::date <= ${q.submittedTo}::date`);
-  // Steps I hold, unclaimed Steps of my pool, and my own Drafts (app.need_my_action).
+  // Steps I hold, not picked up Steps of my pool, and my own Drafts (app.need_my_action).
   if (q.needMyAction) conditions.push(sql`app.need_my_action(r.id) is not null`);
   if (q.with.length > 0) {
     const steps = q.with.flatMap((v) => (v.startsWith("step:") ? [v.slice(5)] : []));
     const companies = q.with.flatMap((v) => (v.startsWith("company:") ? [v.slice(8)] : []));
     const any: RawBuilder<boolean>[] = [];
     if (q.with.includes("me")) any.push(sql`(r.held_by_own and r.assignee_member_id = app.current_member_id())`);
-    if (q.with.includes("unclaimed")) any.push(sql`(r.held_by_own and r.assignee_member_id is null)`);
+    if (q.with.includes("not_picked_up")) any.push(sql`(r.held_by_own and r.assignee_member_id is null)`);
     if (steps.length > 0) any.push(sql`(r.held_by_own and r.step_key = any(${steps}::text[]))`);
     if (companies.length > 0) any.push(sql`(not r.held_by_own and r.holder_participant_id = any(${companies}::uuid[]))`);
     conditions.push(sql`(${sql.join(any, sql` or `)})`);
@@ -356,7 +356,7 @@ function toRow(r: Row, now: Date): WorkItemRow {
               kind: "own",
               companyName: r.holder_name,
               step: { key: r.step_key, name: r.step_name },
-              claimer: r.claimer_name ? { name: r.claimer_name, isMe: r.claimed_by_me } : null,
+              holder: r.holder_member_name ? { name: r.holder_member_name, isMe: r.held_by_me } : null,
             }
           : { kind: "company", companyName: r.holder_name },
   };
@@ -366,7 +366,7 @@ function toRow(r: Row, now: Date): WorkItemRow {
 // Participant's holder is named (app.work_item_holder), and member's own RLS
 // shows only their own Company's people (V14).
 const holderColumns = sql`hc.legal_name as holder_name,
-  m.full_name as claimer_name, coalesce(r.assignee_member_id = app.current_member_id(), false) as claimed_by_me`;
+  m.full_name as holder_member_name, coalesce(r.assignee_member_id = app.current_member_id(), false) as held_by_me`;
 const holderJoins = sql`left join lateral app.work_item_companies(r.id) hc on hc.participant_id = r.holder_participant_id
   left join member m on m.id = r.assignee_member_id`;
 
@@ -443,12 +443,12 @@ async function boardCards(trx: Trx, scope: QueryScope, q: WorkItemQuery, now: Da
  * What the viewer may do with the board's cards now (RP-350): for each card they
  * hold, the Transitions app.work_item_actions lists, which are exactly the
  * buttons of the item's page, with the Stage of the Step each leads to and its
- * Action Form. Asked only for the open cards the viewer claimed, since nobody
+ * Action Form. Asked only for the open cards the viewer picked up, since nobody
  * else can take a Transition; a card with none has no entry. The Stage is of the
  * item's pinned Workflow Version, one of the Module's own columns.
  */
 async function boardMoves(trx: Trx, cards: readonly WorkItemRow[]): Promise<Record<string, WorkItemMove[]>> {
-  const mine = cards.filter((c) => c.with?.kind === "own" && c.with.claimer?.isMe).map((c) => c.id);
+  const mine = cards.filter((c) => c.with?.kind === "own" && c.with.holder?.isMe).map((c) => c.id);
   if (mine.length === 0) return {};
   const { rows } = await sql<{ id: string; key: string; label: BilingualText; kind: WorkItemMove["kind"]; stage_key: string; action_form: unknown }>`
     select w.id, a.transition_key as key, a.label, a.transition_kind as kind, s.stage_key, tr.action_form

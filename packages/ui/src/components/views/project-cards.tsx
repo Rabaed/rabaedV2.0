@@ -30,7 +30,7 @@ export type ProjectCardsProps = {
 /**
  * The Projects page, the Member's home page (RP-346): one card per Project, a
  * link to it, with how many items need the Member's action there (the Steps
- * they hold and the unclaimed Steps of their pool; never their own Drafts).
+ * they hold and the not picked up Steps of their pool; never their own Drafts).
  * The cards stack on a phone.
  */
 export function ProjectCards({ projects, locale, labels, href, linkAs }: ProjectCardsProps) {

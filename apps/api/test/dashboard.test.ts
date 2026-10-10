@@ -105,7 +105,7 @@ async function listed(by: Caller, projectId: string, query: DashboardFigure["que
 async function submittedRevision(at: Tower, id: string): Promise<string> {
   const revision = (await ok(at.c1Engineer.post(`/v1/work-items/${id}/revisions`, { idempotencyKey: randomUUID() }), 201)).json().id;
   await take(at.c1Engineer, revision, "send_for_review");
-  await ok(at.c1Pm.post(`/v1/work-items/${revision}/claim`));
+  await ok(at.c1Pm.post(`/v1/work-items/${revision}/pick-up`));
   await take(at.c1Pm, revision, "submit");
   return revision;
 }
@@ -119,7 +119,7 @@ async function code(by: Caller, id: string, transition: "approve_a" | "revise_c"
       answers: { ...answers, sample_checked: true, matches_specification: pass, ...(pass ? {} : { verification_note: "Below the specified efficacy" }) },
     }),
   );
-  await ok(by.post(`/v1/work-items/${id}/claim`));
+  await ok(by.post(`/v1/work-items/${id}/pick-up`));
   await ok(
     by.post(`/v1/work-items/${id}/transitions`, {
       transition,
@@ -182,7 +182,7 @@ describe("a chain with Code C and an approved Rev 1", () => {
     await code(k1Manager, original, "revise_c");
     const revision = (await ok(c1Engineer.post(`/v1/work-items/${original}/revisions`, { idempotencyKey: randomUUID() }), 201)).json().id;
     await take(c1Engineer, revision, "send_for_review");
-    await ok(c1Pm.post(`/v1/work-items/${revision}/claim`));
+    await ok(c1Pm.post(`/v1/work-items/${revision}/pick-up`));
     await take(c1Pm, revision, "submit");
     await code(k1Manager, revision, "approve_a");
   });
@@ -291,7 +291,7 @@ describe("scenario 64: the Code C line while C1's Revision is a Draft", () => {
 
   it("keeps the split once C1 Submits the Revision, and K1 still sees one figure", async () => {
     await take(tower.c1Engineer, revision, "send_for_review");
-    await ok(tower.c1Pm.post(`/v1/work-items/${revision}/claim`));
+    await ok(tower.c1Pm.post(`/v1/work-items/${revision}/pick-up`));
     await take(tower.c1Pm, revision, "submit");
     const c1Line = marCard(await dashboard(tower.c1Pm, tower.projectId)).codeC!;
     expect(c1Line.split?.revisionInProgress.count).toBe(1);
@@ -391,7 +391,7 @@ describe("a Type of another Module: the Snag List", () => {
   async function submittedSnag(at: Tower, title: string): Promise<string> {
     const id = await snag(at, title);
     await take(at.c1Engineer, id, "send_for_review");
-    await ok(at.c1Pm.post(`/v1/work-items/${id}/claim`));
+    await ok(at.c1Pm.post(`/v1/work-items/${id}/pick-up`));
     await take(at.c1Pm, id, "submit");
     return id;
   }

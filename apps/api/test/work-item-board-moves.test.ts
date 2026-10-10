@@ -81,7 +81,7 @@ let c1: Company;
 let c1Engineer: Caller; // Raises; holds its Drafts.
 let c1Pm: Caller;
 let c2Engineer: Caller; // A second Contractor (V3).
-let k1ManagerA: Caller; // In the review Step's pool; claims.
+let k1ManagerA: Caller; // In the review Step's pool; picks up.
 let k1ManagerB: Caller; // In the same pool; does not.
 let projectId = "";
 let trade = "";
@@ -110,19 +110,19 @@ async function draft(type: string, title: string): Promise<string> {
   return id;
 }
 
-/** Submitted to K1 and claimed by manager A: waiting for A's decision. */
+/** Submitted to K1 and picked up by manager A: waiting for A's decision. */
 async function atK1(type: string, title: string): Promise<string> {
   const id = await draft(type, title);
   await take(c1Engineer, id, "send_for_review");
-  await ok(c1Pm.post(`/v1/work-items/${id}/claim`));
+  await ok(c1Pm.post(`/v1/work-items/${id}/pick-up`));
   await take(c1Pm, id, "submit");
-  await ok(k1ManagerA.post(`/v1/work-items/${id}/claim`));
+  await ok(k1ManagerA.post(`/v1/work-items/${id}/pick-up`));
   return id;
 }
 
 let marAtK1 = "";
 let twoApprovalsAtK1 = "";
-let pooled = ""; // Submitted, nobody has claimed it yet.
+let pooled = ""; // Submitted, nobody has picked it up yet.
 let aDraft = "";
 
 beforeAll(async () => {
@@ -155,7 +155,7 @@ beforeAll(async () => {
   twoApprovalsAtK1 = await atK1(TYPE, "Busbars");
   pooled = await draft("MAR", "Chillers");
   await take(c1Engineer, pooled, "send_for_review");
-  await ok(c1Pm.post(`/v1/work-items/${pooled}/claim`));
+  await ok(c1Pm.post(`/v1/work-items/${pooled}/pick-up`));
   await take(c1Pm, pooled, "submit");
 });
 

@@ -63,7 +63,7 @@ async function draft(title: string): Promise<string> {
 
 async function submit(id: string) {
   await take(c1Engineer, id, "send_for_review");
-  await ok(c1Pm.post(`/v1/work-items/${id}/claim`));
+  await ok(c1Pm.post(`/v1/work-items/${id}/pick-up`));
   await take(c1Pm, id, "submit");
 }
 
@@ -126,7 +126,7 @@ describe("ids K1 receives once C1 Submits (scenario 73)", () => {
     const answers: WorkItemDetail["answers"] = (await ok(k1Engineer.get(`/v1/work-items/${item}`), 200)).json().answers;
     const verified = { ...answers, sample_checked: true, matches_specification: false, verification_note: "Below the specified size" };
     await ok(k1Engineer.request("PUT", `/v1/work-items/${item}/answers`, { answers: verified }));
-    await ok(k1Manager.post(`/v1/work-items/${item}/claim`));
+    await ok(k1Manager.post(`/v1/work-items/${item}/pick-up`));
     await take(k1Manager, item, "revise_c", { remarks: "Resubmit with 400 mm trays" });
     const revision = (await ok(c1Engineer.post(`/v1/work-items/${item}/revisions`, { idempotencyKey: randomUUID() }), 201)).json().id as string;
     await submit(revision);

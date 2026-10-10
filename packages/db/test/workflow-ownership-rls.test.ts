@@ -134,7 +134,7 @@ const take = (as: string, id: string, transition: string) =>
     as,
     sql`select app.take_transition(${id}::uuid, ${transition}, '{}'::jsonb, '', app.answers_sha256(${id}::uuid), ${randomUUID()}::uuid, now()) as outcome`,
   );
-const claim = (as: string, id: string) => outcome(as, sql`select app.claim_step(${id}::uuid, now()) as outcome`);
+const pickUp = (as: string, id: string) => outcome(as, sql`select app.pick_up_step(${id}::uuid, now()) as outcome`);
 
 /** The Workflow definitions `as` reads, of those named. */
 const definitionsRead = async (as: string, ids: string[]) =>
@@ -362,9 +362,9 @@ describe("scenario RP-426-1: the map is everyone's, an item's internal moves are
     // C1's item, Submitted to K1, whose engineer sends it to the K1 manager: an internal move.
     const item = await raise(c1.member);
     expect(await take(c1.member, item.id, "send_for_review")).toBe("applied");
-    expect(await claim(c1Pm, item.id)).toBe("claimed");
+    expect(await pickUp(c1Pm, item.id)).toBe("picked_up");
     expect(await take(c1Pm, item.id, "submit")).toBe("applied");
-    expect(await claim(k1.member, item.id)).toBe("claimed");
+    expect(await pickUp(k1.member, item.id)).toBe("picked_up");
     expect(await take(k1.member, item.id, "send_to_manager")).toBe("applied");
 
     const moves = (as: string) =>

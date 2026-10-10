@@ -97,14 +97,14 @@ describe("the map of an item moving through C1 and K1", () => {
     await attachDatasheet(engineer, id);
     await ok(tryTake(engineer, id, "send_for_review"));
     inInternalReview = await map(pm, id);
-    await ok(pm.post(`/v1/work-items/${id}/claim`));
+    await ok(pm.post(`/v1/work-items/${id}/pick-up`));
     await ok(tryTake(pm, id, "submit"));
     atK1Engineer = { pm: await map(pm, id), owner: await map(owner, id) };
-    await ok(k1Engineer.post(`/v1/work-items/${id}/claim`));
+    await ok(k1Engineer.post(`/v1/work-items/${id}/pick-up`));
     await ok(tryTake(k1Engineer, id, "send_to_manager"));
     atK1Manager = { pm: await map(pm, id), owner: await map(owner, id), k1Engineer: await map(k1Engineer, id), k1Manager: await map(k1Manager, id) };
     detail = (await pm.get(`/v1/work-items/${id}`)).json();
-    await ok(k1Manager.post(`/v1/work-items/${id}/claim`));
+    await ok(k1Manager.post(`/v1/work-items/${id}/pick-up`));
     await ok(tryTake(k1Manager, id, "approve_a"));
     closed = { pm: await map(pm, id), k1Manager: await map(k1Manager, id) };
   });

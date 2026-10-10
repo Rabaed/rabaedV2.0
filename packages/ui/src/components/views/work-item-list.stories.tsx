@@ -13,7 +13,7 @@ const b = (en: string, ar: string) => ({ en, ar });
 const copy = {
   stage: b("Stage", "المرحلة"),
   with: b("With", "لدى"),
-  unclaimed: b("unclaimed", "لم تُستلَم"),
+  notPickedUp: b("Not picked up", "لم تُستلَم"),
   allRevisions: b("Show all Revisions", "عرض كل المراجعات"),
   needMyAction: b("Need My Action", "بحاجة لإجرائي"),
   nextPage: b("Next page", "الصفحة التالية"),
@@ -73,7 +73,7 @@ const items: WorkItemRow[] = [
     title: "Main LV switchboard",
     stage: stages.internal,
     stepAgeWeeks: 2,
-    with: { kind: "own", companyName: ownCompany, step: { key: "internal_review", name: b("Contractor review", "مراجعة المقاول") }, claimer: null },
+    with: { kind: "own", companyName: ownCompany, step: { key: "internal_review", name: b("Contractor review", "مراجعة المقاول") }, holder: null },
   }),
   row(3, {
     title: "LED downlights",
@@ -84,7 +84,7 @@ const items: WorkItemRow[] = [
       kind: "own",
       companyName: ownCompany,
       step: { key: "internal_review", name: b("Contractor review", "مراجعة المقاول") },
-      claimer: { name: b("Faisal Al Harbi", "فيصل الحربي"), isMe: false },
+      holder: { name: b("Faisal Al Harbi", "فيصل الحربي"), isMe: false },
     },
   }),
   row(4, { title: "Busbar trunking", stage: stages.approved, outcome: "B", location: tower }),
@@ -102,7 +102,7 @@ const items: WorkItemRow[] = [
       kind: "own",
       companyName: ownCompany,
       step: { key: "draft", name: b("Draft", "مسودة") },
-      claimer: { name: b("Sara Al Qahtani", "سارة القحطاني"), isMe: true },
+      holder: { name: b("Sara Al Qahtani", "سارة القحطاني"), isMe: true },
     },
   }),
   row(7, {
@@ -118,7 +118,7 @@ const items: WorkItemRow[] = [
       kind: "own",
       companyName: ownCompany,
       step: { key: "draft", name: b("Draft", "مسودة") },
-      claimer: { name: b("Sara Al Qahtani", "سارة القحطاني"), isMe: true },
+      holder: { name: b("Sara Al Qahtani", "سارة القحطاني"), isMe: true },
     },
   }),
 ];
@@ -179,8 +179,8 @@ const cellsOf = (context: PlayContext, title: string) => {
 };
 
 /**
- * Wide: every column, one row per chain. "With" names the claimer in the
- * viewer's own Company, shows "<Step> · unclaimed", and another Company by its
+ * Wide: every column, one row per chain. "With" names the holder in the
+ * viewer's own Company, shows "<Step> · Not picked up", and another Company by its
  * name only (V14). Document Numbers read left to right, in Arabic too.
  */
 export const Wide: Story = {
@@ -191,7 +191,7 @@ export const Wide: Story = {
     const withColumn = 4;
     const locale = storyLocale(context);
     await expect(cellsOf(context, "Cable tray support brackets")[withColumn]).toHaveTextContent(consultant[locale]);
-    await expect(cellsOf(context, "Main LV switchboard")[withColumn]).toHaveTextContent(storyText(context, copy.unclaimed));
+    await expect(cellsOf(context, "Main LV switchboard")[withColumn]).toHaveTextContent(storyText(context, copy.notPickedUp));
     await expect(cellsOf(context, "LED downlights")[withColumn]).toHaveTextContent(b("Faisal Al Harbi", "فيصل الحربي")[locale]);
     await expect(cellsOf(context, "Earthing rods, galvanised")[0]).toHaveTextContent(
       storyText(context, b("Revision 1: no number yet", "المراجعة 1: بلا رقم بعد")),
@@ -274,7 +274,7 @@ export const ChoosingAFilter: Story = {
   },
 };
 
-/** "With" offers me, unclaimed, my own Company's Steps and the other Companies holding my items, by name. */
+/** "With" offers me, "Not picked up", my own Company's Steps and the other Companies holding my items, by name. */
 export const WithChoices: Story = {
   play: async (context) => {
     await userEvent.click(context.canvas.getByRole("combobox", { name: storyText(context, copy.with) }));
@@ -305,7 +305,7 @@ export const NeedMyActionOff: Story = {
 };
 
 /**
- * Need My Action on: the Steps I hold, the unclaimed Steps of my pool, and my
+ * Need My Action on: the Steps I hold, the not picked up Steps of my pool, and my
  * own Drafts. Turning it off shows every item again; clearing the filters does too.
  */
 export const NeedMyActionOn: Story = {

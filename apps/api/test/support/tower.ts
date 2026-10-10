@@ -140,7 +140,7 @@ export async function inInternalReview(at: Tower, engineer: Caller, title: strin
 export async function submitted(at: Tower, engineer: Caller, pm: Caller, title: string, trade = at.electrical): Promise<string> {
   const id = await draft(at, engineer, title, trade);
   await take(engineer, id, "send_for_review");
-  await ok(pm.post(`/v1/work-items/${id}/claim`));
+  await ok(pm.post(`/v1/work-items/${id}/pick-up`));
   await take(pm, id, "submit");
   return id;
 }
