@@ -1,6 +1,7 @@
 "use client";
 
 import * as TabsPrimitive from "@radix-ui/react-tabs";
+import { matchesSearch } from "@rabaed/domain";
 import { Fragment, useId, useState, type ReactNode } from "react";
 import { cn } from "../../lib/cn.ts";
 import { useMediaQuery } from "../../lib/use-media-query.ts";
@@ -276,10 +277,7 @@ const searchAbove = 5;
 export function FilterValues({ label, hint, values, multiple = true, choices, onChange, labels }: FilterValuesProps) {
   const [search, setSearch] = useState("");
   const id = useId();
-  const words = search.trim().toLocaleLowerCase();
-  const shown = words
-    ? choices.filter((c) => (c.text ?? (typeof c.label === "string" ? c.label : "")).toLocaleLowerCase().includes(words))
-    : choices;
+  const shown = choices.filter((c) => matchesSearch(search, [c.text ?? (typeof c.label === "string" ? c.label : "")]));
   const toggle = (value: string) => {
     const on = values.includes(value);
     if (multiple) onChange(on ? values.filter((v) => v !== value) : [...values, value]);

@@ -1,6 +1,6 @@
 "use client";
 
-import type { Locale, ProjectSummary } from "@rabaed/domain";
+import { matchesSearch, type Locale, type ProjectSummary } from "@rabaed/domain";
 import { useId, useMemo, useState, type ElementType, type ReactNode } from "react";
 import { cn } from "../../lib/cn.ts";
 import { focusRing, touchArea } from "../form/control-styles.ts";
@@ -43,13 +43,11 @@ export type ProjectsBrowserProps = {
 
 /** The Projects that match a search (name in either language, or code) and a state chip, closed ones last. */
 export function filterProjects(projects: ProjectSummary[], search: string, filter: ProjectsFilter): ProjectSummary[] {
-  const needle = search.trim().toLocaleLowerCase();
   // Closed Projects last, as on Home and in the design kit; each group keeps the API's order (newest first).
   return projects.toSorted((a, b) => Number(a.status === "closed") - Number(b.status === "closed")).filter((p) => {
     if (filter === "active" && p.status !== "active") return false;
     if (filter === "closed" && p.status !== "closed") return false;
-    if (needle === "") return true;
-    return [p.code, p.name.en, p.name.ar].some((text) => text.toLocaleLowerCase().includes(needle));
+    return matchesSearch(search, [p.code, p.name.en, p.name.ar]);
   });
 }
 

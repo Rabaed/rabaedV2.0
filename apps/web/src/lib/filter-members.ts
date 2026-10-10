@@ -1,8 +1,6 @@
-import type { CompanyMember } from "@rabaed/domain";
+import { matchesSearch, type CompanyMember } from "@rabaed/domain";
 
 /** The Members whose name (either language) or email contains the words. */
 export function filterMembers<T extends CompanyMember>(members: T[], words: string | undefined): T[] {
-  const needle = (words ?? "").trim().toLocaleLowerCase();
-  if (needle === "") return members;
-  return members.filter((m) => [m.fullName.en, m.fullName.ar, m.email].some((text) => text.toLocaleLowerCase().includes(needle)));
+  return members.filter((m) => matchesSearch(words, [m.fullName.en, m.fullName.ar, m.email]));
 }

@@ -11,6 +11,7 @@ export * from "./form-display.ts";
 export * from "./formula.ts";
 export * from "./health.ts";
 export * from "./locale.ts";
+export * from "./search-match.ts";
 export * from "./member.ts";
 export * from "./module.ts";
 export * from "./notification.ts";
