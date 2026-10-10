@@ -25,6 +25,7 @@ import { optionListRoutes } from "./routes/option-lists.ts";
 import { participantRoutes } from "./routes/participants.ts";
 import { projectRoutes } from "./routes/projects.ts";
 import { scopeRoutes } from "./routes/scopes.ts";
+import { companyDefaultRoutes } from "./routes/company-defaults.ts";
 import { screenRoutes } from "./routes/screens.ts";
 import { sessionRoutes } from "./routes/session.ts";
 import { outcomeRoutes } from "./routes/outcomes.ts";
@@ -143,5 +144,6 @@ export async function buildApp({
   await app.register(stageRoutes(context));
   await app.register(outcomeRoutes(context));
   await app.register(screenRoutes(context));
+  await app.register(companyDefaultRoutes(context));
   return app;
 }

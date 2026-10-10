@@ -131,6 +131,10 @@ const answers = {
   key_taken: () => new HttpError(409, "key_taken"),
   invalid_screen: () => new HttpError(422, "invalid_screen"),
   screen_problems: () => new HttpError(422, "screen_problems"),
+  // Company defaults (RP-517): a Library item with no published Version yet; a Workflow or
+  // Form made for another Work Item Type.
+  not_published: () => new HttpError(409, "not_published"),
+  not_for_type: () => new HttpError(422, "not_for_type"),
 } satisfies Record<string, () => HttpError>;
 
 export type RefusalReason = keyof typeof answers;
