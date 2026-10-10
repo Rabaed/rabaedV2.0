@@ -519,15 +519,27 @@ export function cardContent(
 
 /** The outcome once issued, from its Type's set (RP-429); before that the Revision, from R1. */
 export function badgeOf(card: WorkItemRow, locale: Locale, labels: Pick<WorkItemBoardLabels, "cancelled" | "code" | "revision">, outcomes: ListOutcomes): KanbanCardBadge | undefined {
-  if (card.outcome === "cancelled") return { kind: "plain", label: labels.cancelled };
-  if (card.outcome !== null) {
-    const set = outcomes.filter((o) => o.type === card.type.code);
-    const found = set.find((o) => o.code === card.outcome);
-    if (!found) return { kind: "plain", label: card.outcome };
-    const name = outcomeLabel(found, locale);
-    return { kind: "outcome", look: outcomeLook(found, set), label: found.code.length <= 3 ? labels.code(found.code) : found.name[locale], name };
-  }
+  if (card.outcome !== null) return outcomeBadge(card.outcome, card.type.code, outcomes, locale, labels);
   return card.revisionNo > 0 ? { kind: "revision", label: labels.revision(formatNumber(card.revisionNo, locale)) } : undefined;
+}
+
+/**
+ * An issued outcome's pill, the one definition the Kanban, the List and the item page
+ * show (RP-429, RP-522): named and coloured from its Type's set, never from fixed codes.
+ */
+export function outcomeBadge(
+  outcome: NonNullable<WorkItemRow["outcome"]>,
+  typeCode: string,
+  outcomes: ListOutcomes,
+  locale: Locale,
+  labels: Pick<WorkItemBoardLabels, "cancelled" | "code">,
+): KanbanCardBadge {
+  if (outcome === "cancelled") return { kind: "plain", label: labels.cancelled, code: outcome };
+  const set = outcomes.filter((o) => o.type === typeCode);
+  const found = set.find((o) => o.code === outcome);
+  if (!found) return { kind: "plain", label: outcome, code: outcome };
+  const name = outcomeLabel(found, locale);
+  return { kind: "outcome", look: outcomeLook(found, set), label: found.code.length <= 3 ? labels.code(found.code) : found.name[locale], name, code: found.code };
 }
 
 /**

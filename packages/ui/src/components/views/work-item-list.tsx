@@ -37,7 +37,8 @@ import { Input } from "../form/input.tsx";
 import { Avatar } from "../data/avatar.tsx";
 import { Icon } from "../icon/icon.tsx";
 import { FilterMenu, FilterValues, type FilterChoice, type FilterMenuField } from "../list/filter-menu.tsx";
-import { poolIcon, tradeChipClass } from "./kanban-card.tsx";
+import { HeaderBadge, poolIcon, tradeChipClass } from "./kanban-card.tsx";
+import { outcomeBadge } from "./work-item-board.tsx";
 import { ListToolbar, ToolbarSearch, ToolbarSwitch } from "../list/list-toolbar.tsx";
 import { NumberedPager } from "../list/numbered-pager.tsx";
 import { TableCard } from "../list/table-card.tsx";
@@ -844,3 +845,22 @@ function locationLevels(locations: WorkItemListData["filters"]["locations"], loc
   });
 }
 
+/**
+ * An item's outcome pill outside the List and the Kanban (the item page's Issued
+ * Code, RP-522): the same pill they show (`outcomeBadge`), "Code A" with its icon.
+ */
+export function Outcome({
+  outcome,
+  typeCode,
+  outcomes,
+  locale,
+  cancelled,
+}: {
+  outcome: NonNullable<WorkItemRow["outcome"]>;
+  typeCode: string;
+  outcomes: ListOutcomes;
+  locale: Locale;
+  cancelled: string;
+}) {
+  return <HeaderBadge badge={outcomeBadge(outcome, typeCode, outcomes, locale, { cancelled, code: (code) => `Code ${code}` })} />;
+}

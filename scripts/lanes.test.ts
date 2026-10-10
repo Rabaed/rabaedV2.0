@@ -8,6 +8,7 @@ import {
   databasesOfEnv,
   dropOrKeep,
   firstFreeLane,
+  holderAdvice,
   isPortTaken,
   isValidDbSuffix,
   laneClashes,
@@ -397,6 +398,41 @@ describe("laneHolders", () => {
 
   it("does not count the lane's own compose project for lane:env --db, which shares it", () => {
     expect(laneHolders(5, { containers, cwd, platform: "win32", ownDatabase: true })).toEqual(["G:\\rabaed-wt\\RP-1"]);
+  });
+});
+
+describe("holderAdvice (lane:env's line per holder)", () => {
+  const cwd = "G:/rabaed-wt/current";
+  const wt = (path: string, branch: string, merged: boolean, project?: string): WorktreeLane => ({ path, branch, merged, project });
+  const holder = wt("G:/rabaed-wt/RP-362", "RP-362-views", true, "rabaed-lane3");
+  const input = (worktrees: WorktreeLane[]) => ({ worktrees, hasOriginMain: true, cwd, platform: "win32" as const });
+
+  it("suggests lanes:prune --merged --lane N for a merged holder when no unmerged worktree names the lane", () => {
+    expect(holderAdvice(3, [holder.path], input([holder]))[0]).toContain("pnpm lanes:prune --merged --lane 3");
+  });
+
+  it("does not suggest prune when an unmerged worktree names the lane in its .env (prune keeps it), and names that worktree", () => {
+    const claimant = wt("G:/rabaed-wt/agent-1", "worktree-agent-1", false, "rabaed-lane3");
+    const worktrees = [holder, claimant];
+    // The same keep rule as lanes:prune --merged: it would free nothing here.
+    expect(mergedProjects({ containers: [container({ name: "rabaed-lane3-db-1", project: "rabaed-lane3", workingDir: holder.path })], volumes: [], worktrees, cwd, currentProject: undefined, platform: "win32" })).toEqual([]);
+    const [line] = holderAdvice(3, [holder.path], input(worktrees));
+    expect(line).not.toContain("lanes:prune --merged");
+    expect(line).toContain("G:/rabaed-wt/agent-1");
+    expect(line).toContain("free lane");
+  });
+
+  it("says --force takes the lane over when this worktree's own .env is the one naming it", () => {
+    const [line] = holderAdvice(3, [holder.path], input([holder, wt(cwd, "RP-434-now", false, "rabaed-lane3")]));
+    expect(line).not.toContain("lanes:prune --merged");
+    expect(line).toContain("pnpm lane:env 3 --force");
+  });
+
+  it("keeps the other lines: unmerged holder, gone holder, no origin/main", () => {
+    const open = wt("G:/rabaed-wt/RP-363", "RP-363-dashboard", false, "rabaed-lane3");
+    expect(holderAdvice(3, [open.path], input([open]))[0]).toContain("not merged into origin/main yet");
+    expect(holderAdvice(3, ["G:/gone"], input([]))[0]).toContain("pnpm lanes:prune --lane 3");
+    expect(holderAdvice(3, [holder.path], { ...input([holder]), hasOriginMain: false })[0]).toContain("git fetch origin main");
   });
 });
 

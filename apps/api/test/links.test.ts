@@ -204,6 +204,31 @@ describe("free Links", () => {
     expect(await linksChanges(tower.k1Manager, mar)).toEqual([]);
   });
 
+  it("open, by the Link's own id, as the hidden item's number and Subject only, never its id; its URL is 404 (RP-521-1)", async () => {
+    const res = await ok(k1Mechanical.get(`${linksUrl(mar)}/${toApproved}`), 200);
+    expect(res.json()).toEqual({
+      id: toApproved,
+      kind: "related",
+      fieldKey: null,
+      documentNumber: numbers.c1Approved,
+      subject: "Cable trays, approved",
+      workItemId: null,
+    });
+    expect(res.body).not.toContain(item.c1Approved);
+    await expectHidden(k1Mechanical.get(`/v1/work-items/${item.c1Approved}`));
+    // A reader who sees the linked item gets its id, to open it.
+    expect((await ok(tower.k1Manager.get(`${linksUrl(mar)}/${toApproved}`), 200)).json().workItemId).toBe(item.c1Approved);
+    // A Link is read only through an item the reader sees, and only that item's own.
+    for (const r of [
+      c2Engineer.get(`${linksUrl(mar)}/${toApproved}`),
+      k1Mechanical.get(`${linksUrl(item.c1Submitted)}/${toApproved}`),
+      k1Mechanical.get(`${linksUrl(mar)}/${randomUUID()}`),
+      k1Mechanical.get(`${linksUrl(mar)}/not-an-id`),
+    ]) {
+      await expectHidden(r);
+    }
+  });
+
   it("are changed by nobody but the raiser's Company, and hidden like the item from whoever can't see it", async () => {
     const k1Adds = await addLink(tower.k1Manager, mar, item.c1Submitted);
     expect(k1Adds.statusCode, k1Adds.body).toBe(409);

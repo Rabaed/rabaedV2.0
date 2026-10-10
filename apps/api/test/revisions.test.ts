@@ -120,6 +120,8 @@ describe("C1 creates a Revision of a MAR that got Code C", () => {
     for (const key of ["sample_checked", "matches_specification", "verification_note"]) expect(d.answers).not.toHaveProperty(key);
     expect(d.actions.saveAnswers).toBe(true);
     expect(d.actions.discardRevision).toBe(true);
+    // What makes its page show an enabled "Save and close" over an autosaved Form (RP-518, UAT A-09): no number, autosave on.
+    expect({ documentNumber: d.documentNumber, autosave: d.autosave }).toEqual({ documentNumber: null, autosave: true });
   });
 
   it("has the Documents copied as new rows the raiser can still change", async () => {
