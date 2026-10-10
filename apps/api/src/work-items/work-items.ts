@@ -817,7 +817,7 @@ export function discardDraft(db: Db, memberId: string, workItemId: string, now: 
 /**
  * Download (RP-409, owner decision B; visibility.md scenario RP-409-2): a Submitted item as it was
  * last shared, the same for every viewer who sees it, the holder's and the raiser's own Companies
- * included. Its Status as every Company but the holder reads it (app.work_item_shared_stage), its
+ * included. Its Stage as every Company but the holder reads it (app.work_item_shared_stage), its
  * outcome, its answers as they last arrived (app.work_item_shared_answers, never in-progress ones),
  * the Built-in Fields from those answers, a `participant` answer by its Company, no person, its
  * Documents and Links as of the last arrival (never one added since; uploaders by Company only,

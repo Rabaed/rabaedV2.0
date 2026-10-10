@@ -1,4 +1,4 @@
--- The Draft Stage reads "Draft" (owner decision 2026-10-10, RP-409): one item's Status,
+-- The Draft Stage reads "Draft" (owner decision 2026-10-10, RP-409): one item's Stage,
 -- as every other Stage name reads, not a pile ("Drafts"). The Rabaed Default Stages of
 -- every Module, and each Project's copy that still has the default name (one a Project
 -- Admin renamed keeps its own, app.rename_stage). Projects created from now on copy

@@ -26,7 +26,7 @@
 --   answer only when it names a Company everyone who sees the item may read (the
 --   host's, or one the item involves), a link question by number and Subject only.
 --   app.work_item_shared_named_answers names those Companies.
---   app.work_item_shared_stage: the Status every Company but the holder reads (the
+--   app.work_item_shared_stage: the Stage every Company but the holder reads (the
 --   Step the holding Participant entered at, never an internal one).
 --   app.work_item_shared_documents and app.work_item_shared_links: the Documents and
 --   Links as of the last arrival, as everyone but the holder reads them
