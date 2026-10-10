@@ -25,6 +25,7 @@ export * from "./watch.ts";
 export * from "./work-item.ts";
 export * from "./workflow-publish.ts";
 export * from "./workflow-definition.ts";
+export * from "./work-item-workflow.ts";
 export * from "./workflow-checks.ts";
 export * from "./transition-rules.ts";
 export * from "./workflow-authoring.ts";

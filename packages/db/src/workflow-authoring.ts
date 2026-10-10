@@ -145,6 +145,16 @@ export async function readLatestPublishedDefinition(db: Db, definitionId: string
   return row ? { versionNo: row.version_no, definition: definitionOf(row) } : null;
 }
 
+/** Published Workflow Version `versionId` as a definition, if `db` reads it (V20); null otherwise. */
+export async function readPublishedVersionDefinition(db: Db, versionId: string): Promise<WorkflowDefinition | null> {
+  const { rows } = await sql<VersionRows>`
+    select r.* from workflow_version v cross join lateral app.workflow_version_rows(v.id) r
+    where v.id = ${versionId}::uuid and v.status = 'published'
+  `.execute(db);
+  const row = rows[0];
+  return row ? definitionOf(row) : null;
+}
+
 /** A Rabaed Default's draft saved or published, with the warnings its checks found; or why not. */
 export type RabaedDefaultResult =
   | { ok: true; definitionId: string; versionNo: number; warnings: WorkflowProblem[] }
