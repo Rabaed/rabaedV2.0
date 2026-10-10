@@ -27,6 +27,7 @@ import type {
   SignedInMember,
   WatchState,
   WorkItemDetail,
+  WorkItemLink,
   WorkItemLinks,
   WorkItemHistory,
   WorkItemWorkflowMap,
@@ -35,6 +36,7 @@ import type {
   ModuleKey,
   WorkItemQuery,
   OptionList,
+  TypeOutcomes,
 } from "@rabaed/domain";
 import { activityFeedSearchParams, workItemSearchParams } from "@rabaed/domain";
 import { cookies } from "next/headers";
@@ -175,6 +177,11 @@ export function getWorkItem(workItemId: string): Promise<WorkItemDetail | null> 
   return apiGet<WorkItemDetail>(`/v1/work-items/${encodeURIComponent(workItemId)}`);
 }
 
+/** A Type's outcome set on a Project (the badges read it, RP-429); null when the Member can't see the Project. */
+export function getTypeOutcomes(projectId: string, typeCode: string): Promise<TypeOutcomes | null> {
+  return apiGet<TypeOutcomes>(`/v1/projects/${encodeURIComponent(projectId)}/work-item-types/${encodeURIComponent(typeCode)}/outcomes`);
+}
+
 /** The Form Version a Work Item is pinned to; null if the signed-in Member can't see the item. */
 export function getWorkItemForm(workItemId: string): Promise<FormToFill | null> {
   return apiGet<FormToFill>(`/v1/work-items/${encodeURIComponent(workItemId)}/form`);
@@ -213,6 +220,11 @@ export function getWorkItemDocuments(workItemId: string): Promise<DocumentList |
 /** A Work Item's Links as the signed-in Member may read them (E1); null if they can't see the item. */
 export function getWorkItemLinks(workItemId: string): Promise<WorkItemLinks | null> {
   return apiGet<WorkItemLinks>(`/v1/work-items/${encodeURIComponent(workItemId)}/links`);
+}
+
+/** One Link of a Work Item, by its own id: the target's id only if the Member sees it (RP-521); null if not theirs to read. */
+export function getWorkItemLink(workItemId: string, linkId: string): Promise<WorkItemLink | null> {
+  return apiGet<WorkItemLink>(`/v1/work-items/${encodeURIComponent(workItemId)}/links/${encodeURIComponent(linkId)}`);
 }
 
 /** The Submitted items linking to a Work Item, hidden ones as number and Subject only (E3); null if the Member can't see the item. */
