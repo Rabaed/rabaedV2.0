@@ -1,5 +1,6 @@
 import { withMember } from "@rabaed/db";
-import { bilingualText, signedInMember } from "@rabaed/domain";
+import { appearance, bilingualText, defaultAppearance, signedInMember } from "@rabaed/domain";
+import { sql } from "kysely";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import type { AppContext } from "../app.ts";
@@ -35,7 +36,14 @@ export const companyRoutes =
             "c.authorized_person_id",
           ])
           .where("m.id", "=", memberId)
-          .executeTakeFirst(),
+          .executeTakeFirst()
+          .then(async (member) => {
+            // Their own row only (RLS); none until they choose.
+            const { rows } = await sql<{ theme: "grey" | "warm"; mode: "light" | "dark" | "system" }>`
+              select theme, mode from member_appearance where member_id = app.current_member_id()
+            `.execute(trx);
+            return member && { ...member, appearance: rows[0] ?? defaultAppearance };
+          }),
       );
       if (!row) throw notSignedIn();
       return {
@@ -48,7 +56,20 @@ export const companyRoutes =
           canCreateProjects: row.can_create_projects,
         },
         company: { id: row.company_id, legalName: row.legal_name },
+        appearance: { theme: row.appearance.theme, mode: row.appearance.mode },
       };
+    });
+
+    // The Member's own Theme and Mode (owner decision 2026-10-11), from their menu: kept for them
+    // alone (app.set_member_appearance), so it follows them to every device.
+    app.put("/v1/me/appearance", { schema: { body: appearance, response: { 200: appearance } } }, async (request) => {
+      const memberId = ctx.requireMember(request);
+      const { theme, mode } = request.body;
+      const outcome = await withMember(ctx.db, memberId, (trx) =>
+        sql<{ outcome: string }>`select app.set_member_appearance(${theme}, ${mode}) as outcome`.execute(trx).then((r) => r.rows[0]!.outcome),
+      );
+      if (outcome !== "set") throw notSignedIn();
+      return { theme, mode };
     });
 
     app.get(
