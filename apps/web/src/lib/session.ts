@@ -31,6 +31,7 @@ import type {
   WorkItemLinks,
   WorkItemHistory,
   WorkItemWorkflowMap,
+  WorkflowBuilderRead,
   WorkItemBoard,
   WorkItemList,
   ModuleKey,
@@ -250,6 +251,11 @@ export function getWorkItemHistory(workItemId: string): Promise<WorkItemHistory 
 /** The item's Workflow map (RP-438): its pinned Version and where the item is, as the viewer may know; null if they can't read it. */
 export function getWorkItemWorkflow(workItemId: string): Promise<WorkItemWorkflowMap | null> {
   return apiGet<WorkItemWorkflowMap>(`/v1/work-items/${encodeURIComponent(workItemId)}/workflow`);
+}
+
+/** What the Workflow builder edits with (RP-439), for the Workflow's authors; null for anyone else. */
+export function getWorkflowBuilder(workflowId: string): Promise<WorkflowBuilderRead | null> {
+  return apiGet<WorkflowBuilderRead>(`/v1/workflows/${encodeURIComponent(workflowId)}/builder`);
 }
 
 /** The signed-in Member's notification settings and Project mutes; null if signed out. */

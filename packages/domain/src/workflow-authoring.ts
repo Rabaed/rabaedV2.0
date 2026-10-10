@@ -1,7 +1,10 @@
 import { z } from "zod";
-import { bilingualText, engineerReason } from "./company.ts";
+import type { StageCategory } from "./chain-bucket.ts";
+import { bilingualText, engineerReason, type BilingualText } from "./company.ts";
 import type { DefinitionIssue, WorkflowDefinition } from "./workflow-definition.ts";
 import type { WorkflowProblem } from "./workflow-checks.ts";
+import type { FormSchema } from "./form.ts";
+import type { PositionOption } from "./workflow-rules-edit.ts";
 
 // The Workflow authoring commands' requests and answers (RP-427, WF-4; spec RP-423;
 // workflow-engine.md §1 "Authoring"). The api serves them to Project Admins (a
@@ -75,3 +78,26 @@ export type WorkflowRead = {
   draft: { versionNo: number; name: { en: string; ar: string }; definition: WorkflowDefinition } | null;
   canAuthor: boolean;
 };
+
+/**
+ * What the Workflow builder (RP-439, WF-16) edits with, for the Workflow's authors
+ * only: the Workflow as they read it (its draft included), its Work Item Type, the
+ * Stages of the Type's Module it is checked against (the Project's own, else the
+ * Rabaed Defaults'), the Type's outcome set, and the Positions a Step may name.
+ */
+export type WorkflowBuilderRead = {
+  workflow: WorkflowRead;
+  type: { code: string; name: BilingualText };
+  stages: { key: string; name: BilingualText; category: StageCategory }[];
+  outcomes: WorkflowOutcomeOption[];
+  positions: PositionOption[];
+  /**
+   * The Type's latest published Form (RP-440, WF-17), which publish check 6 reads: a
+   * rule's pickers list only its fields, by group (transitionRuleFields). Null before
+   * the Type has a published Form.
+   */
+  form: FormSchema | null;
+};
+
+/** An outcome of a Work Item Type's set, as the builder offers it to a closing Transition. */
+export type WorkflowOutcomeOption = { code: string; name: BilingualText; closing: boolean; polarity: "positive" | "negative" };
