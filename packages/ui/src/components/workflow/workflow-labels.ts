@@ -29,6 +29,8 @@ export type WorkflowLabels = {
   current: string;
   /** Before a Transition's target in the list, e.g. "to". */
   to: string;
+  /** The builder's small overview of the whole canvas, e.g. "Overview". */
+  overview: string;
   zoomIn: string;
   zoomOut: string;
   fit: string;

@@ -1,7 +1,7 @@
 import type { StageCategory, WorkflowDefinition, WorkflowStep, WorkflowTransition } from "@rabaed/domain";
 import { describe, expect, it } from "vitest";
 import { sameInBoth as name } from "../../storybook/workflow.ts";
-import { workflowMap, type MapNode } from "./workflow-map.ts";
+import { bandAt, placedLayout, workflowMap, type MapNode } from "./workflow-map.ts";
 
 const step = (key: string, stage: string, role: "contractor" | "consultant" | null): WorkflowStep => ({
   key,
@@ -104,6 +104,35 @@ describe("workflowMap: layout", () => {
 
   it("marks nothing without a position", () => {
     expect(map.nodes.some((n) => n.current)).toBe(false);
+  });
+});
+
+describe("workflowMap: the builder (RP-439)", () => {
+  it("draws a band for every open Stage, an empty one too, so a Step can be dropped into it", () => {
+    const map = workflowMap({ definition: mar, stages, dir: "ltr", everyStage: true });
+    expect(map.bands.map((b) => b.key)).toEqual(["draft", "internal_review", "pending_approval", "unused", "outcome"]);
+  });
+
+  it("tells which band a point on the canvas falls in, in Arabic too", () => {
+    for (const dir of ["ltr", "rtl"] as const) {
+      const map = workflowMap({ definition: mar, stages, dir, everyStage: true });
+      const unused = map.bands.find((b) => b.key === "unused")!;
+      expect(bandAt(map, unused.x + 10)?.key).toBe("unused");
+    }
+    expect(bandAt(workflowMap({ definition: mar, stages, dir: "ltr" }), -50)).toBeNull();
+  });
+
+  it("pins the drawn places as a layout that places every Step, so the builder can move one", () => {
+    const layout = placedLayout(mar, stages);
+    expect(Object.keys(layout).toSorted()).toEqual(mar.steps.map((s) => s.key).toSorted());
+    const drawn = workflowMap({ definition: mar, stages, dir: "ltr" });
+    const pinned = workflowMap({ definition: { ...mar, layout }, stages, dir: "ltr" });
+    for (const n of drawn.nodes) expect(byKey(pinned.nodes, n.id)).toMatchObject({ x: n.x, y: n.y });
+  });
+
+  it("keeps a layout that already places every Step", () => {
+    const layout = Object.fromEntries(mar.steps.map((s, i) => [s.key, { x: i * 10, y: 5 }]));
+    expect(placedLayout({ ...mar, layout }, stages)).toBe(layout);
   });
 });
 

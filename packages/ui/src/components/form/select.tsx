@@ -13,6 +13,8 @@ export type SelectProps = Omit<ComponentProps<typeof SelectPrimitive.Root>, keyo
     /** Shown until a value is chosen. */
     placeholder?: ReactNode;
     className?: string;
+    /** The accessible name, for a Select with no visible label of its own (a row of a table of choices). */
+    "aria-label"?: string;
   };
 
 /**
@@ -28,6 +30,7 @@ export function Select({ options, placeholder, className, value, defaultValue, o
     required,
     "aria-describedby": describedBy,
     "aria-invalid": invalid,
+    "aria-label": ariaLabel,
     ...root
   } = useFieldControl(props);
   const state = readOnly
@@ -38,6 +41,7 @@ export function Select({ options, placeholder, className, value, defaultValue, o
     <SelectPrimitive.Root disabled={disabled} required={required} {...state} {...root}>
       <SelectPrimitive.Trigger
         id={id}
+        aria-label={ariaLabel}
         aria-describedby={describedBy}
         aria-invalid={invalid}
         aria-required={required || undefined}

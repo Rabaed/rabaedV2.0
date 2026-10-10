@@ -78,6 +78,12 @@ import {
   IconX,
   IconZoomIn,
   IconZoomOut,
+  IconFocus2,
+  IconPlayerPlay,
+  IconSquarePlus,
+  IconTemplate,
+  IconMail,
+  IconDeviceMobile,
   type Icon as TablerIcon,
 } from "@tabler/icons-react";
 import type { ComponentProps } from "react";
@@ -169,6 +175,12 @@ const icons = {
   x: IconX,
   "zoom-in": IconZoomIn,
   "zoom-out": IconZoomOut,
+  "focus-2": IconFocus2,
+  "player-play": IconPlayerPlay,
+  "square-plus": IconSquarePlus,
+  template: IconTemplate,
+  mail: IconMail,
+  "device-mobile": IconDeviceMobile,
 } satisfies Record<string, TablerIcon>;
 
 export type IconName = keyof typeof icons;
