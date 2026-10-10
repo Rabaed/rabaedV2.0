@@ -8,6 +8,7 @@ import {
   IconArrowRight,
   IconArrowUp,
   IconArrowsSort,
+  IconBan,
   IconBell,
   IconBuilding,
   IconCalendar,
@@ -37,6 +38,7 @@ import {
   IconFilter,
   IconFlag,
   IconFolder,
+  IconGitBranch,
   IconHelpCircle,
   IconHistory,
   IconHome,
@@ -46,6 +48,7 @@ import {
   IconLink,
   IconList,
   IconLock,
+  IconMaximize,
   IconLogin,
   IconLogout,
   IconMapPin,
@@ -73,6 +76,8 @@ import {
   IconUser,
   IconUsers,
   IconX,
+  IconZoomIn,
+  IconZoomOut,
   type Icon as TablerIcon,
 } from "@tabler/icons-react";
 import type { ComponentProps } from "react";
@@ -94,6 +99,7 @@ const icons = {
   "arrow-right": IconArrowRight,
   "arrow-up": IconArrowUp,
   "arrows-sort": IconArrowsSort,
+  ban: IconBan,
   bell: IconBell,
   building: IconBuilding,
   calendar: IconCalendar,
@@ -123,6 +129,7 @@ const icons = {
   filter: IconFilter,
   flag: IconFlag,
   folder: IconFolder,
+  "git-branch": IconGitBranch,
   "help-circle": IconHelpCircle,
   history: IconHistory,
   home: IconHome,
@@ -132,6 +139,7 @@ const icons = {
   link: IconLink,
   list: IconList,
   lock: IconLock,
+  maximize: IconMaximize,
   login: IconLogin,
   logout: IconLogout,
   "map-pin": IconMapPin,
@@ -159,6 +167,8 @@ const icons = {
   user: IconUser,
   users: IconUsers,
   x: IconX,
+  "zoom-in": IconZoomIn,
+  "zoom-out": IconZoomOut,
 } satisfies Record<string, TablerIcon>;
 
 export type IconName = keyof typeof icons;

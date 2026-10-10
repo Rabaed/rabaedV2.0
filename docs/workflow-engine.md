@@ -419,6 +419,10 @@ Error codes, api (`/v1/projects/:id/numbering`, `/numbering/counters…`, `/v1/p
 - The side panel edits the selected Step or Transition: actor rule and outcome mode (Steps; no signing option, ADR 0017); label, kind, condition, outcome, Action Form (using the Form builder component) and notifications (Transitions).
 - "Validate" runs the §1 checks live, and "Publish" runs them again server-side.
 
+As built (RP-438, WF-15): `WorkflowCanvas` in `@rabaed/ui`, on React Flow (`@xyflow/react`), draws a definition with the Project's Stages: a band per open Stage that holds a Step, side by side in the Stages' order (right to left in Arabic), then one Outcome band for the terminal Steps; Steps as cards (name, Participant role, Function Permission, Positions, outcome mode); Transitions as labelled arrows coloured by kind (a Return or Send Back dashed, under the Steps). Steps sit where `layout` puts them when it places every Step; otherwise (the Rabaed Defaults have no layout) each sits in its Stage's band, a later Step of the band beside the earlier one (`workflowMap`, `workflow-map.ts`). `mode="edit"` lets Steps be dragged and hands back the layout in left-to-right units, for WF-16. `WorkflowStepList` is the same map as a list, for keyboard and screen-reader users and phones.
+
+On the item page, "Workflow: <name> · Version n" opens "View workflow", a drawer with the Version the item is pinned to (`GET /v1/work-items/:id/workflow`, visibility.md "Workflow definitions and bindings"), as a map or a list. The viewer's own Participant's Steps are shown one by one and every other role's fold into one part; from a part only the Transitions into the viewer's own Steps are drawn. The position marks the viewer's own current Step, or another Participant's whole part as "With <Company>" (V14, scenario RP-438-1), or a closed item's terminal Step; the marked one carries Step Age as the viewer sees it.
+
 ---
 
 ## Settled (2026-09-26)
