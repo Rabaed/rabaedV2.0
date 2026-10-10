@@ -12,6 +12,7 @@ import {
   outcomeModes,
   parseActionForm,
   removeStep,
+  ruleFieldsOf,
   removeTransition,
   transitionKinds,
   updateStep,
@@ -19,6 +20,7 @@ import {
   type BaseRole,
   type BilingualText,
   type Locale,
+  type RuleField,
   type WorkflowDefinition,
   type WorkflowProblem,
   type WorkflowStep,
@@ -33,7 +35,9 @@ import { Input } from "../form/input.tsx";
 import { SegmentedControl } from "../form/segmented-control.tsx";
 import { Select } from "../form/select.tsx";
 import { Icon } from "../icon/icon.tsx";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "../navigation/tabs.tsx";
 import { Dialog, DialogContent, DialogFooter } from "../overlay/dialog.tsx";
+import { TransitionNotifications, TransitionRules } from "./workflow-transition-rules.tsx";
 import type { WorkflowBuilderLabels } from "./workflow-builder-labels.ts";
 import { canvasDragType, WorkflowCanvas, type CanvasMark, type CanvasSelection } from "./workflow-canvas.tsx";
 import { WorkflowChangeList } from "./workflow-changes.tsx";
@@ -66,6 +70,8 @@ export type WorkflowBuilderProps = {
   /** The Work Item Type's outcome set. */
   outcomes: readonly WorkflowBuilderOutcome[];
   positions: readonly WorkflowBuilderPosition[];
+  /** The fields of the Type's published Form: the only ones a rule's picker lists (RP-440). */
+  fields: readonly RuleField[];
   locale: Locale;
   labels: WorkflowBuilderLabels;
   /** Every publish problem of the draft as last checked (WF-4's validate). */
@@ -98,7 +104,7 @@ const open = new Set(["draft", "in_progress"]);
  * Every edit goes to `onChange`; the page saves the draft through WF-4's API.
  */
 export function WorkflowBuilder(props: WorkflowBuilderProps) {
-  const { name, versionNo, published, stages, outcomes, positions, locale, labels, problems, saveState, backHref, onChange, onValidate, onPublish } = props;
+  const { name, versionNo, published, stages, outcomes, positions, fields, locale, labels, problems, saveState, backHref, onChange, onValidate, onPublish } = props;
   const [history, setHistory] = useState<History>(() => ({
     past: [],
     // Pinned where the canvas draws it, so the first Step moved keeps every other one in place.
@@ -414,6 +420,8 @@ export function WorkflowBuilder(props: WorkflowBuilderProps) {
             openStages={openStages}
             outcomes={outcomes}
             positions={positions}
+            fields={fields}
+            problems={problems}
             locale={locale}
             labels={labels}
             isTerminal={isTerminal}
@@ -512,6 +520,8 @@ type SideEditorProps = {
   openStages: readonly MapStage[];
   outcomes: readonly WorkflowBuilderOutcome[];
   positions: readonly WorkflowBuilderPosition[];
+  fields: readonly RuleField[];
+  problems: readonly WorkflowProblem[];
   locale: Locale;
   labels: WorkflowBuilderLabels;
   isTerminal: (s: WorkflowStep) => boolean;
@@ -653,15 +663,39 @@ function StepEditor({ definition, step, openStages, stages, positions, locale, l
   );
 }
 
-function TransitionEditor({ definition, transition, outcomes, locale, labels, onCommit, onDelete }: SideEditorProps & { transition: WorkflowTransition }) {
+function TransitionEditor({ definition, transition, outcomes, positions, fields: formPickerFields, problems, locale, labels, onCommit, onDelete }: SideEditorProps & { transition: WorkflowTransition }) {
   const set = (patch: Partial<Omit<WorkflowTransition, "key" | "from" | "to">>, coalesce: string | null = null) =>
     onCommit(updateTransition(definition, transition.key, patch), coalesce);
   const nameOf = (key: string) => definition.steps.find((s) => s.key === key)?.name[locale] ?? key;
   const form = actionFormOf(transition.actionForm);
   // The fields it asks: display items (headings, instructions, dividers) ask nothing.
   const fields = (form ? formFields(form) : []).flatMap((f) => ("label" in f ? [f] : []));
+  // The Form's fields, then this Transition's own Action Form's: what a rule may name (publish check 6).
+  const ruleFields = [...formPickerFields, ...ruleFieldsOf(null, transition.actionForm)];
+  const actingRole = definition.steps.find((s) => s.key === transition.from)?.actor?.role;
+  const actingPositions = positions.filter((p) => p.role === actingRole);
   return (
-    <>
+    <Tabs key={transition.key} defaultValue="settings" className="flex flex-col gap-2.5">
+      <TabsList aria-label={labels.rules.tabsName} className="gap-4">
+        <TabsTrigger value="settings" className="h-9 text-[13px]">
+          {labels.rules.tabSettings}
+        </TabsTrigger>
+        <TabsTrigger value="notifications" className="h-9 text-[13px]">
+          {labels.rules.tabNotifications}
+        </TabsTrigger>
+      </TabsList>
+      <TabsContent value="notifications" className="flex flex-col gap-2.5">
+        <TransitionNotifications
+          definition={definition}
+          transition={transition}
+          steps={definition.steps}
+          positionOptions={positions}
+          locale={locale}
+          labels={labels.rules}
+          onCommit={onCommit}
+        />
+      </TabsContent>
+      <TabsContent value="settings" className="flex flex-col gap-2.5">
       <Heading>{labels.transitionHeading(nameOf(transition.from), nameOf(transition.to))}</Heading>
       <Field label={labels.labelEn}>
         <Input value={transition.label.en} dir="ltr" onChange={(e) => set({ label: { ...transition.label, en: e.target.value } }, `${transition.key}:en`)} />
@@ -687,6 +721,16 @@ function TransitionEditor({ definition, transition, outcomes, locale, labels, on
           ]}
         />
       </Field>
+      <TransitionRules
+        definition={definition}
+        transition={transition}
+        fields={ruleFields}
+        positions={actingPositions.map((p) => ({ key: p.key, name: p.name }))}
+        problems={problems}
+        locale={locale}
+        labels={labels.rules}
+        onCommit={onCommit}
+      />
       <Heading>{labels.screen}</Heading>
       {/* The Screen picker, read-only until Screens are on main (RP-516): the Transition's current Action Form. */}
       <div className="flex flex-col gap-2 rounded-[10px] bg-surface p-3 shadow-[0_0_0_1px_var(--border),var(--shadow-lg)]" aria-describedby={`screen-help-${transition.key}`}>
@@ -714,7 +758,8 @@ function TransitionEditor({ definition, transition, outcomes, locale, labels, on
         <Icon name="trash" />
         {labels.deleteTransition}
       </Button>
-    </>
+      </TabsContent>
+    </Tabs>
   );
 }
 

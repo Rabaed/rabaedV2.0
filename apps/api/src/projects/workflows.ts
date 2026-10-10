@@ -9,6 +9,7 @@ import {
   type Db,
 } from "@rabaed/db";
 import {
+  ruleFieldsOf,
   stageCopyProblems,
   type BilingualText,
   type BindWorkflowRequest,
@@ -67,9 +68,12 @@ export function readWorkflowBuilder(db: Db, memberId: string, definitionId: stri
       order by sort, code
     `.execute(trx);
     const positions = await trx.selectFrom("position").select(["base_role", "key", "name"]).orderBy("base_role").orderBy("sort").execute();
+    // The Form the rules are checked against (check 6): its fields are the only ones a rule may name.
+    const check = await readWorkflowCheckContext(trx, definitionId);
     return {
       workflow,
       type: { code: type.code, name: type.name },
+      fields: ruleFieldsOf(check?.context.form ?? null, null),
       stages: stages.rows.filter((s) => s.own === own).map(({ key, name, category }) => ({ key, name, category })),
       outcomes: outcomes.rows,
       positions: positions.map((p) => ({ role: p.base_role, key: p.key, name: p.name as BilingualText })),

@@ -3,6 +3,7 @@ import { expect, fn, userEvent, waitFor, within } from "storybook/test";
 import { storyLocale } from "../../storybook/locale.ts";
 import {
   builderDraft,
+  builderFields,
   builderOutcomes,
   builderPositions,
   builderProblems,
@@ -25,6 +26,7 @@ const meta = {
     stages: workflowStages,
     outcomes: builderOutcomes,
     positions: builderPositions,
+    fields: builderFields,
     locale: "en",
     labels: workflowBuilderLabels("en"),
     problems: builderProblems,

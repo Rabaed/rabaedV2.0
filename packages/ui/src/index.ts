@@ -153,4 +153,5 @@ export type { WorkflowBuilderLabels, WorkflowCompareLabels } from "./components/
 export { WorkflowChangeList, WorkflowCompareDialog, type WorkflowCompareDialogProps } from "./components/workflow/workflow-changes.tsx";
 export { WorkflowStepList, type WorkflowStepListProps } from "./components/workflow/workflow-step-list.tsx";
 export type { WorkflowLabels } from "./components/workflow/workflow-labels.ts";
+export type { WorkflowRuleLabels } from "./components/workflow/workflow-rule-labels.ts";
 export type { MapStage } from "./components/workflow/workflow-map.ts";

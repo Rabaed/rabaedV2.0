@@ -4,6 +4,7 @@ import { bilingualText, engineerReason, type BilingualText } from "./company.ts"
 import type { BaseRole } from "./project.ts";
 import type { DefinitionIssue, WorkflowDefinition } from "./workflow-definition.ts";
 import type { WorkflowProblem } from "./workflow-checks.ts";
+import type { RuleField } from "./workflow-rules-edit.ts";
 
 // The Workflow authoring commands' requests and answers (RP-427, WF-4; spec RP-423;
 // workflow-engine.md §1 "Authoring"). The api serves them to Project Admins (a
@@ -90,4 +91,9 @@ export type WorkflowBuilderRead = {
   stages: { key: string; name: BilingualText; category: StageCategory }[];
   outcomes: { code: string; name: BilingualText; closing: boolean; polarity: "positive" | "negative" }[];
   positions: { role: BaseRole; key: string; name: BilingualText }[];
+  /**
+   * The fields of the Type's latest published Form that take answers (RP-440, WF-17):
+   * the only ones a rule's picker lists. Empty before the Type has a published Form.
+   */
+  fields: RuleField[];
 };
