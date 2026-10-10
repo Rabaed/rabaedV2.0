@@ -46,6 +46,8 @@ export async function WorkItemHistory({
     if (e.type === "recommend_code") return t("recommendedCode");
     if (e.type === "picked_up" || e.type === "claimed") return t("pickedUp");
     if (e.type === "returned_to_pool" || e.type === "released") return t("returnedToPool");
+    // A pool of one (§3.3 rule 4): its actor is the holder, internal to their own Participant.
+    if (e.type === "assigned" && e.by.memberName) return t("assignedOnlyMember", { name: e.by.memberName[locale] });
     if (e.type === "created") return t("created");
     if (e.type === "answers_changed") return t("answersChanged");
     return t("other");

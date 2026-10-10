@@ -233,3 +233,47 @@ describe("Code B's Comments reach exactly who sees the reviewed item", () => {
     expect(await counts(k1.member, source)).toEqual([{ open_count: 0, closed_count: 1 }]);
   });
 });
+
+// Scenario RP-513-1 (RP-513; workflow-engine.md §3.3 rule 4, §3.4; V14), as the app role.
+describe("scenario RP-513-1: K1 never reads C1's pool or holder", () => {
+  const pool = (as: string, id: string) => call<{ names: unknown[]; more: number }>(as, sql`select names, more from app.work_item_pool(${id}::uuid)`);
+  const holder = (as: string, id: string) =>
+    call<{ assignee_member_id: string | null }>(as, sql`select assignee_member_id from app.work_item_holder(${id}::uuid)`);
+  /** C1's pool and holder events of item `id` that `as` reads. */
+  const c1Events = (as: string, id: string) =>
+    call<{ type: string }>(
+      as,
+      sql`select e.type from work_item_event e join participant p on p.id = e.actor_participant_id
+          where e.work_item_id = ${id}::uuid and p.company_id = ${c1.id}::uuid and e.type in ('assigned', 'picked_up')`,
+    );
+
+  it("C1's own Members read who its Comment waits on, then who holds it; K1 reads neither, by any function or table", async () => {
+    const { comments } = await closedAtB("Pooled", [{ comment: "Who has it" }]);
+    const comment = comments[0]!;
+    expect((await pool(c1.member, comment))[0]?.names.length).toBeGreaterThan(1);
+    for (const who of [k1.member, k1.ap]) {
+      expect(await pool(who, comment)).toEqual([]);
+      expect(await holder(who, comment)).toEqual([{ assignee_member_id: null }]);
+      expect(await c1Events(who, comment)).toEqual([]);
+    }
+    expect(await pickUp(c1Pm, comment)).toBe("picked_up");
+    expect(await holder(c1.member, comment)).toEqual([{ assignee_member_id: c1Pm }]);
+    expect(await pool(c1.member, comment)).toEqual([]);
+    for (const who of [k1.member, k1.ap]) {
+      expect(await pool(who, comment)).toEqual([]);
+      expect(await holder(who, comment)).toEqual([{ assignee_member_id: null }]);
+      expect(await c1Events(who, comment)).toEqual([]);
+      expect(await call(who, sql<{ id: string }>`select id from step_assignment where work_item_id = ${comment}::uuid and assignee_member_id is not null`)).toEqual([]);
+    }
+  });
+
+  it("C1's only PM holds the internal review at once; K1 and OR never read that event once the item is Submitted", async () => {
+    const { source } = await closedAtB("Held", [{ comment: "Held" }]);
+    const own = await call<{ type: string; actor_member_id: string }>(
+      c1Pm,
+      sql`select type, actor_member_id from work_item_event where work_item_id = ${source}::uuid and type = 'assigned'`,
+    );
+    expect(own).toContainEqual({ type: "assigned", actor_member_id: c1Pm });
+    for (const who of [k1.member, k1.ap, or.member]) expect(await c1Events(who, source)).toEqual([]);
+  });
+});

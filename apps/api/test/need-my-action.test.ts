@@ -179,7 +179,11 @@ describe("Need My Action", () => {
 
   it("combines with the other filters", async () => {
     expect(ids(await list(c1Pm, { stage: ["draft"] }))).toEqual([]);
-    expect(ids(await list(c1Pm, { with: ["me"] }))).toEqual([inReview]);
+    // C1's only PM holds every Step of C1's internal review at once (§3.3 rule 4).
+    const mine = ids(await list(c1Pm, { with: ["me"] }));
+    expect(mine).toContain(inReview);
+    expect(mine).toEqual(ids(await list(c1Pm)));
+    expect(ids(await list(c1Pm, { with: ["not_picked_up"] }))).toEqual([]);
   });
 });
 

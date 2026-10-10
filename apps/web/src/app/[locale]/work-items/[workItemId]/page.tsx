@@ -203,10 +203,17 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
             <>
               {/* "With": another Company by its name only, a person only within the viewer's own (V14). */}
               <dt className="text-muted">{t("fields.with")}</dt>
-              <dd>
+              <dd data-testid="with-line">
                 {item.heldBy.memberName
                   ? `${item.heldBy.memberName[locale]} · ${item.heldBy.companyName[locale]}`
-                  : item.heldBy.companyName[locale]}
+                  : item.heldBy.pool && item.heldBy.pool.names.length > 0
+                    ? // Pooled at the viewer's own Participant: who it waits on (§3.4).
+                      t("fields.notPickedUpYet", {
+                        company: item.heldBy.companyName[locale],
+                        names: item.heldBy.pool.names.map((n) => n[locale]).join(locale === "ar" ? "، " : ", "),
+                        more: item.heldBy.pool.more,
+                      })
+                    : item.heldBy.companyName[locale]}
               </dd>
             </>
           )}

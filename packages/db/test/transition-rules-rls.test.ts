@@ -294,18 +294,21 @@ describe("not the same person keeps that Member from holding the next Step (RP-4
       ),
     ).toBe("assignee_not_offered");
     expect(await take(k1.member, id, "fresh_eyes")).toBe("applied");
-    // The manager who sent it to the Manager can't pick it up; the other can.
-    expect(await pickUp(k1Manager, id)).toBe("forbidden");
+    // The manager who sent it to the Manager is out of the pool; the other, alone in it, holds it at once (§3.3 rule 4).
+    expect(await pickUp(k1Manager, id)).toBe("already_picked_up");
     expect(await call(k1Manager, sql<{ action: string }>`select action from app.work_item_actions(${id}::uuid) where action = 'pick_up'`)).toEqual([]);
     expect(await pickUp(k1Manager2, id)).toBe("picked_up");
 
     // Returned to the review, which K1's engineer left last: not back to them, nor to the
-    // manager who left it before, but to its pool without either.
+    // manager who left it before, but to its pool without either: the other manager alone,
+    // who holds it at once (§3.3 rule 4).
     expect(await take(k1Manager2, id, "return_fresh")).toBe("applied");
-    expect(await holding(id)).toEqual({ status: "pooled", assignee_member_id: null });
-    expect(await pickUp(k1.member, id)).toBe("forbidden");
-    expect(await pickUp(k1Manager, id)).toBe("forbidden");
+    expect(await holding(id)).toEqual({ status: "picked_up", assignee_member_id: k1Manager2 });
+    expect(await pickUp(k1.member, id)).toBe("already_picked_up");
+    expect(await pickUp(k1Manager, id)).toBe("already_picked_up");
     expect(await pickUp(k1Manager2, id)).toBe("picked_up");
+    // Nobody to give it back to.
+    expect(await outcome(k1Manager2, sql`select app.return_to_pool_step(${id}::uuid, now()) as outcome`)).toBe("pool_of_one");
   });
 
   it("is refused with the usual answer when nobody is left to hold the next Step", async () => {

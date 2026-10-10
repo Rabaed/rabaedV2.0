@@ -186,7 +186,8 @@ describe("scenario 34 through the feed: C1 PM Submits with an Internal Note", ()
     expect(ofItem(entries, id).map(what)).toEqual([
       ["transition", "Submit", "shared"],
       ["internal_note", "Submit", "internal"],
-      ["picked_up", null, "internal"],
+      // C1's only PM held it at once (§3.3 rule 4): no Pick up.
+      ["assigned", null, "internal"],
       ["transition", "Send for Review", "internal"],
     ]);
     const submit = ofItem(entries, id)[0]!;
@@ -295,7 +296,7 @@ describe("paging and filters", () => {
   beforeAll(async () => {
     // A MAR, a second Type in the same Module.
     marId = await submitted(tower, tower.c1Engineer, tower.c1Pm, "Feed MAR");
-    // An item K1's engineer acts on, and one nobody at K1 touches.
+    // An item K1's engineer acts on; the MAR no K1 engineer touches (K1's only manager holds it).
     k1Acted = await atContractorReview(tower.c1Engineer, "Feed K1 acts");
     await ok(tower.c1Pm.post(`/v1/work-items/${k1Acted}/pick-up`));
     await take(tower.c1Pm, k1Acted, "submit");
@@ -340,9 +341,12 @@ describe("paging and filters", () => {
     expect(engineerOn).toContain(k1Acted);
     expect(engineerOn).not.toContain(marId);
     expect((await feed(k1Engineer, { mine: true, type: ["MAR"] })).entries).toEqual([]);
-    // The manager held and acted on the scenario 35 item only.
+    // The manager held and acted on the scenario 35 item, and holds k1Acted and the MAR:
+    // K1's only manager holds a Step whose pool is them alone at once (§3.3 rule 4).
     const managerOn = new Set((await feed(tower.k1Manager, { mine: true })).entries.map((e) => e.workItem.id));
-    expect(managerOn.size).toBe(1);
+    expect(managerOn.size).toBe(3);
+    expect(managerOn).toContain(k1Acted);
+    expect(managerOn).toContain(marId);
     // C1's engineer raised every C1 item: the MAR among them.
     expect(new Set((await feed(tower.c1Engineer, { mine: true, type: ["MAR"] })).entries.map((e) => e.workItem.id))).toEqual(new Set([marId]));
     // Nobody at the Owner acted on anything.

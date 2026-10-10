@@ -437,7 +437,7 @@ describe("the Steps of an item, as the app role reads them (V5, V14; RP-309 revi
       expect(await call(as, sql<{ id: string }>`select id from work_item where id = ${id}`)).toHaveLength(1);
       for (const row of await assignments(as, id)) expect(row.participant_id, as).toBe(own);
     }
-    expect((await assignments(k1.member, id)).map((r) => r.status).sort()).toEqual(["done", "pooled"]);
+    expect((await assignments(k1.member, id)).map((r) => r.status).sort()).toEqual(["done", "picked_up"]);
     expect(await pickUp(k1Manager, id)).toBe("picked_up");
     for (const as of [c1.member, ow.member]) {
       for (const row of await assignments(as, id)) expect(row.assignee_member_id, as).not.toBe(k1Manager);

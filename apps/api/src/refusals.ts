@@ -33,6 +33,8 @@ const answers = {
   item_closed: () => new HttpError(409, "item_closed"),
   not_holder: () => new HttpError(409, "not_holder"),
   already_picked_up: () => new HttpError(409, "already_picked_up"),
+  // Return to pool while the pool has one Member: nobody to give it back to (§3.3 rule 4).
+  pool_of_one: () => new HttpError(409, "pool_of_one"),
   transition_not_available: () => new HttpError(409, "transition_not_available"),
   no_step_pool: () => new HttpError(409, "no_step_pool"),
   next_step_unavailable: () => new HttpError(409, "next_step_unavailable"),

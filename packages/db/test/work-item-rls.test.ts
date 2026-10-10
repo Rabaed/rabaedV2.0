@@ -435,7 +435,7 @@ describe("Send for Review and Return", () => {
       "select type, audience, audience_participant_id, payload from work_item_event where work_item_id = $1 order by seq",
       [item],
     );
-    expect(rows.map((r) => r.type)).toEqual(["created", "transition", "picked_up", "transition", "transition"]);
+    expect(rows.map((r) => r.type)).toEqual(["created", "transition", "assigned", "transition", "transition", "assigned"]);
     expect(rows.every((r) => r.audience === "internal" && r.audience_participant_id === participant.c1)).toBe(true);
     expect(rows[3].payload).toEqual({ reason: "Wrong rating" });
     expect(rows[1].payload.document_number).toMatch(/^TWR-MAR-01-\d{4}$/);
@@ -559,7 +559,8 @@ describe("Submit and Code A", () => {
       k1.member,
       sql`select type, audience from work_item_event where work_item_id = ${item}::uuid order by seq`,
     );
-    expect(visible).toEqual([{ type: "transition", audience: "shared" }]);
+    // And K1's own: a pool of one holds its review at once (§3.3 rule 4).
+    expect(visible).toEqual([{ type: "transition", audience: "shared" }, { type: "assigned", audience: "internal" }]);
   });
 
   it("closes the item with Code A in a shared issue_code event, still chained", async () => {

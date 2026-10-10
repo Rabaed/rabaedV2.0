@@ -8,29 +8,35 @@
 // and the holding Participant's own Members read who it waits on, up to three names
 // then "+n". Every other Participant reads the holding Company's name only.
 import { createDb } from "@rabaed/db";
-import { testDatabaseUrls } from "@rabaed/db/test-support";
-import { workItemSearchParams, type WorkItemBoard, type WorkItemHistory, type WorkItemList, type WorkItemQueryInput } from "@rabaed/domain";
+import { drainOutbox, testDatabaseUrls } from "@rabaed/db/test-support";
+import { workItemSearchParams, type NotificationList, type WorkItemBoard, type WorkItemHistory, type WorkItemList, type WorkItemQueryInput } from "@rabaed/domain";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestApi, type Caller } from "./support/harness.ts";
 import { addSendBackType } from "./support/send-back.ts";
 import { all, bilingual, detail, inInternalReview, memberOnProject, ok, projectMember, submitted, take, type Company, type Tower } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
-const migrator = createDb(testDatabaseUrls().migrator, { max: 1 });
+const urls = testDatabaseUrls();
+const migrator = createDb(urls.migrator, { max: 1 });
+// The worker connects as the app role, with no Member set.
+const worker = createDb(urls.app, { max: 2 });
 afterAll(async () => {
   await api.close();
-  await migrator.destroy();
+  await Promise.all([worker.destroy(), migrator.destroy()]);
 });
+
+const bell = async (by: Caller, id: string) =>
+  ((await ok(by.get("/v1/notifications"), 200)).json() as NotificationList).notifications.filter((n) => n.workItemId === id);
 
 const history = async (by: Caller, id: string): Promise<WorkItemHistory["events"]> =>
   (await ok(by.get(`/v1/work-items/${id}/history`), 200)).json().events;
-const list = async (by: Caller, projectId: string, query: WorkItemQueryInput = {}): Promise<WorkItemList> =>
-  (await ok(by.get(`/v1/projects/${projectId}/work-items?${workItemSearchParams(query)}`), 200)).json();
-const board = async (by: Caller, projectId: string): Promise<WorkItemBoard> =>
-  (await ok(by.get(`/v1/projects/${projectId}/work-items/kanban`), 200)).json();
-const row = async (by: Caller, projectId: string, id: string) => (await list(by, projectId)).items.find((i) => i.id === id);
-const card = async (by: Caller, projectId: string, id: string) =>
-  (await board(by, projectId)).columns.flatMap((c) => c.cards).find((c) => c.id === id);
+const list = async (by: Caller, projectId: string, query: WorkItemQueryInput = {}, module = "submittals"): Promise<WorkItemList> =>
+  (await ok(by.get(`/v1/projects/${projectId}/modules/${module}/work-items?${workItemSearchParams(query)}`), 200)).json();
+const board = async (by: Caller, projectId: string, module = "submittals"): Promise<WorkItemBoard> =>
+  (await ok(by.get(`/v1/projects/${projectId}/modules/${module}/work-items/kanban`), 200)).json();
+const row = async (by: Caller, projectId: string, id: string, module = "submittals") => (await list(by, projectId, {}, module)).items.find((i) => i.id === id);
+const card = async (by: Caller, projectId: string, id: string, module = "submittals") =>
+  (await board(by, projectId, module)).columns.flatMap((c) => c.lanes.map((l) => ({ lane: l, card: l.cards.find((x) => x.id === id) }))).find((x) => x.card);
 const needMyAction = async (by: Caller, projectId: string) => (await list(by, projectId, { needMyAction: true })).items.map((i) => i.id);
 
 /** A Tower like the demo: C1 with one engineer and one PM ("Ali Sonour"), K1 with one manager. */
@@ -86,8 +92,10 @@ describe("a pool of one holds the Step at once (seam 1)", () => {
     expect(events.map((e) => e.type).slice(-2)).toEqual(["transition", "assigned"]);
 
     expect(await needMyAction(at.c1Pm, at.projectId)).toContain(id);
-    const notifications = (await ok(at.c1Pm.get("/v1/notifications"), 200)).json();
-    expect(JSON.stringify(notifications)).toBeDefined();
+    expect(await needMyAction(at.c1Engineer, at.projectId)).not.toContain(id);
+    // "Step reached" goes to Ali by name, once.
+    await drainOutbox(worker);
+    expect((await bell(at.c1Pm, id)).map((n) => n.kind)).toEqual(["step_reached"]);
 
     // Nobody to give it back to.
     const refused = await at.c1Pm.post(`/v1/work-items/${id}/return-to-pool`);
@@ -138,58 +146,79 @@ describe("scenario RP-513-1: K1 never reads C1's pool or holder", () => {
   const TYPE = "POO";
   let at: Tower;
   let c1: Company;
-
-  beforeAll(async () => {
-    await addSendBackType(migrator, TYPE, { en: "Pool test", ar: "اختبار المجموعة" }, {
-      sections: [
+  let c1Name: { en: string; ar?: string };
+  const schema = {
+    sections: [
+        { key: "material", title: bilingual("Material"), fields: [{ key: "model", type: "text", label: bilingual("Model") }] },
         {
           key: "classification",
           title: bilingual("Classification"),
           fields: [
             { key: "trade", type: "trade", label: bilingual("Trade") },
             { key: "location", type: "location", label: bilingual("Location") },
+            { key: "scopes", type: "scopes", label: bilingual("Scopes") },
           ],
         },
       ],
-    });
+  };
+
+  beforeAll(async () => {
+    await addSendBackType(migrator, TYPE, { en: "Pool test", ar: "اختبار المجموعة" }, schema, { withApproveB: true });
     ({ at, c1 } = await demoLike("PO2"));
     await memberOnProject(api, c1, at.c1ParticipantId, ["project_manager"], { name: "Khalid Bakr" });
+    c1Name = (await detail(at.c1Engineer, await atK1("Name"))).raisedBy.companyName;
   });
 
-  async function sentBack(title: string): Promise<string> {
-    const id = (await ok(at.c1Engineer.post(`/v1/projects/${at.projectId}/work-items`, { type: TYPE, title, answers: { trade: at.electrical, location: at.buildingA } }), 201)).json()
+  async function atK1(title: string): Promise<string> {
+    const id = (await ok(at.c1Engineer.post(`/v1/projects/${at.projectId}/work-items`, { type: TYPE, title, answers: { model: title, trade: at.electrical, location: at.buildingA } }), 201)).json()
       .id as string;
     await take(at.c1Engineer, id, "send_for_review");
     await ok(at.c1Pm.post(`/v1/work-items/${id}/pick-up`));
     await take(at.c1Pm, id, "submit");
-    await take(at.k1Manager, id, "send_back", { reason: "Wrong datasheet" });
     return id;
   }
 
-  async function k1ReadsCompanyOnly(id: string) {
+  async function k1ReadsCompanyOnly(id: string, module = "submittals") {
     const d = await detail(at.k1Manager, id);
-    expect(d.heldBy).toEqual({ companyName: d.raisedBy.companyName, memberName: null, pool: null });
+    expect(d.heldBy).toEqual({ companyName: c1Name, memberName: null, pool: null });
     expect(JSON.stringify(d)).not.toMatch(/Ali Sonour|Khalid Bakr|Omar Engineer/);
-    const r = await row(at.k1Manager, at.projectId, id);
-    expect(r?.with).toEqual({ kind: "company", companyName: d.raisedBy.companyName });
-    const c = await card(at.k1Manager, at.projectId, id);
-    expect(JSON.stringify(c)).not.toMatch(/Ali Sonour|Khalid Bakr/);
+    const r = await row(at.k1Manager, at.projectId, id, module);
+    expect(r?.with).toEqual({ kind: "company", companyName: c1Name });
+    const c = await card(at.k1Manager, at.projectId, id, module);
+    expect(c?.lane).toMatchObject({ kind: "company", companyName: c1Name });
+    expect(JSON.stringify(await board(at.k1Manager, at.projectId, module))).not.toMatch(/Ali Sonour|Khalid Bakr|Omar Engineer/);
+    await drainOutbox(worker);
+    expect(JSON.stringify(await bell(at.k1Manager, id))).not.toMatch(/Ali Sonour|Khalid Bakr|Omar Engineer/);
     const events = await history(at.k1Manager, id);
-    expect(events.map((e) => e.type)).not.toContain("assigned");
-    expect(events.map((e) => e.type)).not.toContain("picked_up");
+    // Only K1's own: its only manager holding the review (V5).
+    expect(events.filter((e) => e.type === "assigned" || e.type === "picked_up").map((e) => e.by.memberName)).toEqual(
+      events.filter((e) => e.type === "assigned" || e.type === "picked_up").map(() => bilingual("Hafiz Manager")),
+    );
     expect(JSON.stringify(events)).not.toMatch(/Ali Sonour|Khalid Bakr|Omar Engineer/);
     const feed = (await ok(at.k1Manager.get(`/v1/projects/${at.projectId}/activity`), 200)).json();
     expect(JSON.stringify(feed)).not.toMatch(/Ali Sonour|Khalid Bakr|Omar Engineer/);
   }
 
-  it("while C1's pool waits, and once C1's PM picks it up", async () => {
-    const id = await sentBack("Sent back to a pool");
-    // C1 reads its pool by name.
-    expect((await detail(at.c1Engineer, id)).heldBy?.pool?.names).toEqual([bilingual("Ali Sonour"), bilingual("Khalid Bakr")]);
-    await k1ReadsCompanyOnly(id);
-    await ok(at.c1Pm.post(`/v1/work-items/${id}/pick-up`));
+  it("a Send Back held by the PM who Submitted it: K1 reads C1's name only", async () => {
+    const id = await atK1("Sent back");
+    await take(at.k1Manager, id, "send_back");
     expect((await detail(at.c1Engineer, id)).heldBy?.memberName).toEqual(bilingual("Ali Sonour"));
     await k1ReadsCompanyOnly(id);
+  });
+
+  it("Code B's Comments waiting in C1's pool, and once C1's PM picks one up: K1 reads C1's name only", async () => {
+    const id = await atK1("Commented");
+    await take(at.k1Manager, id, "send_to_manager");
+    await take(at.k1Manager, id, "approve_b", { answers: { remarks: "See comments", items_to_create: [{ comment: "Pool comment" }] } });
+    const comment = (await list(at.c1Pm, at.projectId, {}, "snag_list")).items.find((i) => i.title === "Pool comment")!.id;
+    // C1 reads its pool by name.
+    const pool = (await detail(at.c1Engineer, comment)).heldBy?.pool;
+    expect(pool?.names.length).toBeGreaterThan(1);
+    expect(pool?.names).toContainEqual(bilingual("Ali Sonour"));
+    await k1ReadsCompanyOnly(comment, "snag_list");
+    await ok(at.c1Pm.post(`/v1/work-items/${comment}/pick-up`));
+    expect((await detail(at.c1Engineer, comment)).heldBy?.memberName).toEqual(bilingual("Ali Sonour"));
+    await k1ReadsCompanyOnly(comment, "snag_list");
   });
 
   it("C1 reads K1's only manager holding it by K1's name only", async () => {

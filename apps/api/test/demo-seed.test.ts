@@ -321,9 +321,12 @@ describe("the README walkthrough", () => {
     expect((await detail(hafiz, mar)).heldBy).toEqual({
       companyName: { en: "Design Consultants LLC", ar: "المصممون الاستشاريون ذ.م.م" },
       memberName: null,
+      pool: null,
     });
     expect((await detail(ahmed, mar)).actions).toMatchObject({ pickUp: false, transitions: [] });
-    expect((await detail(mohammed, mar)).actions.pickUp).toBe(true);
+    // Mohammed is the Consultant's only Manager: he holds it at once, with no Pick up (§3.3 rule 4).
+    expect((await detail(mohammed, mar)).actions.pickUp).toBe(false);
+    expect((await detail(mohammed, mar)).heldBy?.memberName?.en).toBe("Mohammed Al Shamsi");
     expect((await detail(faisal, mar)).stage.key).toBe("pending_approval");
     await hidden(yousef, { countsZero: true });
     expect((await ahmed.get(`/v1/work-items/${mar}/history`)).body).not.toContain("Add emergency duration");

@@ -185,9 +185,12 @@ describe("Restrict: not the same person keeps that Member from holding the next 
     // The other manager only.
     expect(fresh?.assignTo).toHaveLength(1);
     await take(k1Engineer, id, "fresh_eyes");
+    // Without them the pool has one Member, who holds it at once (§3.3 rule 4).
+    expect((await detail(k1Manager2, id)).heldBy?.memberName).not.toBeNull();
+    expect((await detail(k1Manager2, id)).actions.returnToPool).toBe(false);
     const refused = await k1Manager.post(`/v1/work-items/${id}/pick-up`);
-    expect(refused.statusCode, refused.body).toBe(403);
-    await pickUp(k1Manager2, id);
+    expect(refused.statusCode, refused.body).toBe(409);
+    expect(refused.json()).toEqual({ error: "already_picked_up" });
   });
 
   it("refuses with the usual answer when nobody is left to hold the next Step", async () => {

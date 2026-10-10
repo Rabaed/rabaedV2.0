@@ -190,7 +190,8 @@ describe("Submit", () => {
 
   it("is offered to the PM holding Internal Review, beside Return", async () => {
     const d = await detail(pm, id);
-    expect(buttons(d)).toEqual(["return_to_pool", "return", "submit"]);
+    // The only PM holds it: nobody to Return it to the pool for (§3.3 rule 4).
+    expect(buttons(d)).toEqual(["return", "submit"]);
     expect(d.actions.transitions.find((t) => t.key === "submit")).toMatchObject({
       label: { en: "Submit" },
       kind: "submit",
@@ -209,7 +210,7 @@ describe("Submit", () => {
       stepAgeWeeks: 1,
     });
     // "With Design Consultants LLC", never a Consultant person (V14).
-    expect(d.heldBy).toEqual({ companyName: bilingual(CONSULTANT), memberName: null });
+    expect(d.heldBy).toEqual({ companyName: bilingual(CONSULTANT), memberName: null, pool: null });
     expect(buttons(d)).toEqual([]);
     // Named on the item, yet never listed among the Contractor's Participants (V15).
     const participants = await pm.get(`/v1/projects/${projectId}/participants`);
@@ -293,11 +294,11 @@ describe("Approve · A", () => {
   it("goes to the Consultant manager who picks it up; the Contractor still sees only the Company", async () => {
     await ok(signer.post(`/v1/work-items/${id}/pick-up`));
     const mine = await detail(signer, id);
-    expect(mine.heldBy).toEqual({ companyName: bilingual(CONSULTANT), memberName: bilingual(SIGNER) });
+    expect(mine.heldBy).toEqual({ companyName: bilingual(CONSULTANT), memberName: bilingual(SIGNER), pool: null });
     expect(buttons(mine)).toEqual(["return_to_pool", "approve_a", "revise_c"]);
     expect(buttons(await detail(otherManager, id))).toEqual([]);
 
-    expect((await detail(pm, id)).heldBy).toEqual({ companyName: bilingual(CONSULTANT), memberName: null });
+    expect((await detail(pm, id)).heldBy).toEqual({ companyName: bilingual(CONSULTANT), memberName: null, pool: null });
     expect(await everything(pm, id)).not.toContain(SIGNER);
   });
 
@@ -456,7 +457,7 @@ describe("Submit with no single Consultant to take it (scenario 37)", () => {
 
   /** Submit isn't offered, and taking it gets the one answer, naming nobody and nothing. */
   async function expectRefused(id: string) {
-    expect(buttons(await detail(pm, id))).toEqual(["return_to_pool", "return"]);
+    expect(buttons(await detail(pm, id))).toEqual(["return"]);
     const res = await takeVerifying(pm, id, "submit");
     expect(res.statusCode).toBe(409);
     expect(res.body).toBe(ANSWER);
@@ -473,7 +474,7 @@ describe("Submit with no single Consultant to take it (scenario 37)", () => {
       await expectRefused(id);
       // Give the Consultant Electrical again: Submit comes back.
       await setK1Trade(all);
-      expect(buttons(await detail(pm, id))).toEqual(["return_to_pool", "return", "submit"]);
+      expect(buttons(await detail(pm, id))).toEqual(["return", "submit"]);
     } finally {
       // K1 is every other test's Consultant.
       await setK1Trade(all);
@@ -487,7 +488,7 @@ describe("Submit with no single Consultant to take it (scenario 37)", () => {
     await expectRefused(id);
     // Narrow the second Consultant away: Submit comes back.
     await ok(c1.caller.request("PUT", `/v1/participants/${k2.participantId}/visibility`, { trade: only(mechanical), location: all }));
-    expect(buttons(await detail(pm, id))).toEqual(["return_to_pool", "return", "submit"]);
+    expect(buttons(await detail(pm, id))).toEqual(["return", "submit"]);
   });
 });
 
