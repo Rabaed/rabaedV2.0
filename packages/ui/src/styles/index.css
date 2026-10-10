@@ -20,6 +20,9 @@
 @import "@fontsource/ibm-plex-sans-arabic/arabic-700.css";
 @import "./arabic-font.css";
 
+/* React Flow's structural styles only (the Workflow canvas); its look is ours. */
+@import "@xyflow/react/dist/base.css";
+
 /* Let Tailwind see the classes used by ui components. */
 @source "../";
 
