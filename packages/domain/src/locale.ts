@@ -59,6 +59,11 @@ export function formatDayMonthYear(
   return weekday ? `${part("weekday")}, ${date}` : date;
 }
 
+/** The calendar day in Saudi time, as YYYY-MM-DD (a spreadsheet's date, RP-409 Export). */
+export function riyadhDay(value: Date): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(value);
+}
+
 /** A date (medium style by default) or, with `timeStyle`, a time, in Latin digits and Saudi time. */
 export function formatDate(
   value: Date,

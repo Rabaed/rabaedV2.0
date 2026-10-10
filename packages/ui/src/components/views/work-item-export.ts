@@ -1,4 +1,4 @@
-import { listColumnKeys, timeZone, type ListColumnKey, type ListColumnLayout, type Locale, type WorkItemRow } from "@rabaed/domain";
+import { listColumnKeys, riyadhDay, type ListColumnKey, type ListColumnLayout, type Locale, type WorkItemRow } from "@rabaed/domain";
 import type { ExportFormat } from "./list-menus.tsx";
 import { placesOf } from "./work-item-board.tsx";
 import { cellText, listDate, type WorkItemTableLabels, type WorkItemTableProps } from "./work-item-table.tsx";
@@ -91,10 +91,6 @@ export const xmlCharacters = (value: string) =>
     })
     .join("");
 
-/** The calendar day of an ISO time in Riyadh (the locale module's time zone), as a spreadsheet date: 2026-10-10. */
-const riyadhDayFormat = new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" });
-const riyadhDay = (iso: string) => riyadhDayFormat.format(new Date(iso));
-
 export function exportFile(rows: WorkItemRow[], columns: ExportColumn[], format: ExportFormat, context: Pick<ExportContext, "locale" | "name">): ExportedFile {
   const cells = rows.map((row) => columns.map((c) => c.cell(row)));
   if (format === "csv") {
@@ -107,7 +103,7 @@ export function exportFile(rows: WorkItemRow[], columns: ExportColumn[], format:
     xmlCharacters(value).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
   const textCell = (value: string, style = "") => `<Cell${style}><Data ss:Type="String">${xml(asText(value))}</Data></Cell>`;
   const cell = (c: ExportCell) =>
-    "text" in c ? textCell(c.text) : `<Cell ss:StyleID="date"><Data ss:Type="DateTime">${riyadhDay(c.date)}T00:00:00.000</Data></Cell>`;
+    "text" in c ? textCell(c.text) : `<Cell ss:StyleID="date"><Data ss:Type="DateTime">${riyadhDay(new Date(c.date))}T00:00:00.000</Data></Cell>`;
   const body = [
     `<Row>${columns.map((c) => textCell(c.header, ' ss:StyleID="head"')).join("")}</Row>`,
     ...cells.map((r) => `<Row>${r.map(cell).join("")}</Row>`),

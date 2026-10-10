@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { browserLocale, directionOf, formatDate, formatDayMonthYear, formatNumber, isLocale } from "./locale.ts";
+import { browserLocale, directionOf, formatDate, formatDayMonthYear, formatNumber, isLocale, riyadhDay } from "./locale.ts";
 
 describe("locale", () => {
   it("knows English and Arabic only", () => {
@@ -82,5 +82,13 @@ describe("formatDayMonthYear", () => {
     expect(ar).toContain("10");
     expect(ar).toContain("2026");
     expect(ar).not.toMatch(/[٠-٩]/);
+  });
+});
+
+describe("riyadhDay", () => {
+  it("is the calendar day in Riyadh, as YYYY-MM-DD, also late in the UTC day", () => {
+    expect(riyadhDay(new Date("2026-10-10T08:00:00Z"))).toBe("2026-10-10");
+    // 22:30 UTC is 01:30 the next day in Riyadh (UTC+3).
+    expect(riyadhDay(new Date("2026-10-10T22:30:00Z"))).toBe("2026-10-11");
   });
 });
