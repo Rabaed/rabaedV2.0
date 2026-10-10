@@ -78,6 +78,11 @@
   --palette-person-rose: #b5455a;
   --palette-person-green: #16874f;
   --palette-person-plum: #9a4f9e;
+  --palette-menu-border-grey: #e2e3e7;
+  --palette-field-fill-grey: #f1f2f4;
+  --palette-navy-menu-border: #2f3a55;
+  --palette-warm-menu-border: #ece2d8;
+  --palette-warm-field-fill: #f8f2ec;
   --palette-overlay-grey: #0f142361;
   --palette-navy-sidebar: #131b2e;
   --palette-navy-sidebar-card: #1b2438;
@@ -200,6 +205,8 @@
   --control-border-hover: var(--palette-slate-600);
   --shadow-colour: var(--palette-slate-900);
   --overlay: var(--palette-overlay-grey);
+  --menu-border: var(--palette-menu-border-grey);
+  --field-fill: var(--palette-field-fill-grey);
   --sidebar: var(--palette-navy-sidebar);
   --sidebar-border: var(--palette-navy-ghost-hover);
   --sidebar-divider: var(--palette-navy-sidebar-divider);
@@ -360,6 +367,8 @@
   --control-border-hover: var(--palette-navy-muted);
   --shadow-colour: var(--palette-black);
   --overlay: var(--palette-navy-overlay);
+  --menu-border: var(--palette-navy-menu-border);
+  --field-fill: var(--palette-navy-ghost-hover);
   --sidebar: var(--palette-navy-sidebar);
   --sidebar-border: var(--palette-navy-ghost-hover);
   --sidebar-divider: var(--palette-navy-sidebar-divider);
@@ -521,6 +530,8 @@
     --control-border-hover: var(--palette-navy-muted);
     --shadow-colour: var(--palette-black);
     --overlay: var(--palette-navy-overlay);
+    --menu-border: var(--palette-navy-menu-border);
+    --field-fill: var(--palette-navy-ghost-hover);
     --sidebar: var(--palette-navy-sidebar);
     --sidebar-border: var(--palette-navy-ghost-hover);
     --sidebar-divider: var(--palette-navy-sidebar-divider);
@@ -683,6 +694,8 @@
   --control-border-hover: var(--palette-warm-muted);
   --shadow-colour: var(--palette-warm-text);
   --overlay: var(--palette-overlay-grey);
+  --menu-border: var(--palette-warm-menu-border);
+  --field-fill: var(--palette-warm-field-fill);
   --sidebar: var(--palette-espresso-sidebar);
   --sidebar-border: var(--palette-espresso-sidebar-border);
   --sidebar-divider: var(--palette-espresso-sidebar-divider);
@@ -843,6 +856,8 @@
   --control-border-hover: var(--palette-espresso-muted);
   --shadow-colour: var(--palette-black);
   --overlay: var(--palette-espresso-overlay);
+  --menu-border: var(--palette-espresso-border);
+  --field-fill: var(--palette-espresso-ghost-hover);
   --sidebar: var(--palette-espresso-sidebar-dark);
   --sidebar-border: var(--palette-espresso-ghost-hover);
   --sidebar-divider: var(--palette-espresso-ghost-hover);
@@ -1004,6 +1019,8 @@
     --control-border-hover: var(--palette-espresso-muted);
     --shadow-colour: var(--palette-black);
     --overlay: var(--palette-espresso-overlay);
+    --menu-border: var(--palette-espresso-border);
+    --field-fill: var(--palette-espresso-ghost-hover);
     --sidebar: var(--palette-espresso-sidebar-dark);
     --sidebar-border: var(--palette-espresso-ghost-hover);
     --sidebar-divider: var(--palette-espresso-ghost-hover);
@@ -1165,6 +1182,8 @@
   --color-control-border-hover: var(--control-border-hover);
   --color-shadow-colour: var(--shadow-colour);
   --color-overlay: var(--overlay);
+  --color-menu-border: var(--menu-border);
+  --color-field-fill: var(--field-fill);
   --color-sidebar: var(--sidebar);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-divider: var(--sidebar-divider);

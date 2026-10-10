@@ -97,6 +97,13 @@ export const palette = {
   "person-green": "#16874f",
   "person-plum": "#9a4f9e",
 
+  // Menus and filled fields (the kit's forms.css --menu-bd, --fld-fill), in each theme.
+  "menu-border-grey": "#e2e3e7",
+  "field-fill-grey": "#f1f2f4",
+  "navy-menu-border": "#2f3a55",
+  "warm-menu-border": "#ece2d8",
+  "warm-field-fill": "#f8f2ec",
+
   // The page's scrim behind a dialog (the kit's --ui-overlay), with its opacity: #rrggbbaa.
   "overlay-grey": "#0f142361",
 

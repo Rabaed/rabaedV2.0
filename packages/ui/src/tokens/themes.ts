@@ -52,6 +52,9 @@ export const greyLight = {
   "shadow-colour": "slate-900",
   // The scrim behind a dialog or drawer, with its own opacity.
   overlay: "overlay-grey",
+  // A menu's or popover's edge, and a filled field's track (the member menu's switches).
+  "menu-border": "menu-border-grey",
+  "field-fill": "field-fill-grey",
 
   // The sidebar: dark in every theme and mode (owner decision 2026-10-11), navy in Grey.
   sidebar: "navy-sidebar",
@@ -321,6 +324,8 @@ export const greyDark = {
   "control-border": "navy-control",
   "control-border-hover": "navy-muted",
   overlay: "navy-overlay",
+  "menu-border": "navy-menu-border",
+  "field-fill": "navy-ghost-hover",
   text: "navy-text",
   "text-secondary": "navy-text-2",
   muted: "navy-muted-text",
@@ -358,6 +363,8 @@ export const warmLight = {
   "border-strong": "warm-border-strong",
   "control-border": "warm-control",
   "control-border-hover": "warm-muted",
+  "menu-border": "warm-menu-border",
+  "field-fill": "warm-field-fill",
   "shadow-colour": "warm-text",
   text: "warm-text",
   "text-secondary": "warm-text-2",
@@ -416,6 +423,8 @@ export const warmDark = {
   "control-border": "espresso-control",
   "control-border-hover": "espresso-muted",
   overlay: "espresso-overlay",
+  "menu-border": "espresso-border",
+  "field-fill": "espresso-ghost-hover",
   text: "espresso-text",
   "text-secondary": "espresso-text-2",
   muted: "espresso-muted",

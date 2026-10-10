@@ -23,7 +23,7 @@ export function PopoverContent({ className, align = "start", sideOffset = 6, ...
         align={align}
         sideOffset={sideOffset}
         className={cn(
-          "z-50 w-72 max-w-[calc(100vw-2rem)] rounded-sm border border-border bg-surface p-4 text-text shadow-md",
+          "z-50 w-72 max-w-[calc(100vw-2rem)] rounded-sm border border-menu-border bg-surface p-4 text-text shadow-md",
           focusRing,
           className,
         )}

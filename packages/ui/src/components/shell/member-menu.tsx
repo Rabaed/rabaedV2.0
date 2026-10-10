@@ -163,7 +163,7 @@ function Choices<T extends string>({
   shown?: boolean;
 }) {
   const group = (
-    <div role="group" aria-label={label} className="flex rounded-sm bg-neutral-tint p-1">
+    <div role="group" aria-label={label} className="flex rounded-sm bg-field-fill p-1">
       {options.map((option) => (
         <button
           key={option}
@@ -174,7 +174,8 @@ function Choices<T extends string>({
           className={cn(
             "h-8 flex-1 rounded-xs text-sm font-medium pointer-coarse:min-h-11",
             focusRing,
-            option === value ? "bg-surface text-text shadow-xs" : "text-neutral-fg hover:text-text",
+            // The chosen one inverse, as the kit's language switch: dark on a light page, light on a dark one.
+            option === value ? "bg-inverse text-on-inverse shadow-xs" : "text-neutral-fg hover:text-text",
           )}
         >
           {name(option)}

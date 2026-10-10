@@ -90,6 +90,8 @@ describe("the four themes (owner decision 2026-10-11)", () => {
     ["brand-fg", "surface"],
     ["brand-fg", "canvas"],
     ["on-inverse", "inverse"],
+    // The member menu's switches: a choice on its track, the chosen one inverse (the kit's .lang button.on).
+    ["neutral-fg", "field-fill"],
     // Badge tones (and Avatar initials): text on its tint.
     ...toneKeys.map((tone) => [`${tone}-fg`, `${tone}-tint`] as [SemanticRole, SemanticRole]),
     ...stageKeys.map((s) => [`stage-${s}-fg`, `stage-${s}-bg`] as [SemanticRole, SemanticRole]),
