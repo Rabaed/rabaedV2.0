@@ -3,31 +3,37 @@ import {
   activityFeedQuery,
   byNewestWaiting,
   homeActivityLimit,
+  homeActivityVerb,
   homeNeedsMyActionLimit,
   homeStepAgeWeeks,
   mergeActivity,
   workItemQuery,
   type Home,
   type HomeWorkItem,
+  type HomeActivityOutcome,
+  type OutcomeAction,
+  type OutcomePolarity,
   type ProjectSummary,
+  type TransitionKind,
   type WorkItemQueryInput,
   type WorkItemRow,
 } from "@rabaed/domain";
-import type { Transaction } from "kysely";
+import { sql, type Transaction } from "kysely";
 import { myProjectSummaries, waitingOnMember } from "../projects/projects.ts";
 import { activityFeedPage } from "../work-items/activity-feed.ts";
-import { queryWorkItems, type QueryScope } from "../work-items/query.ts";
+import { countWorkItems, queryWorkItems, type QueryScope } from "../work-items/query.ts";
 
 // Home across my Projects (RP-407, spec RP-447; visibility.md "Home across
 // Projects"). Home has no read of its own: it runs the per-Project reads the
 // Member already has (the Projects page's Need My Action rows, the work item
-// query, the Activity Feed) over each of their active Projects, inside one
-// transaction as the Member, and sums or merges them here. Whatever a
-// per-Project read hides, Home can't show. A closed Project contributes nothing.
+// query's counts and rows, the Activity Feed) over each of their active
+// Projects, inside one transaction as the Member, and sums or merges them here.
+// Whatever a per-Project read hides, Home can't show. A closed Project
+// contributes nothing.
 
 type Trx = Transaction<Database>;
 
-/** Every row of the work item query for `scope` and `q`, page after page. */
+/** Every row of the work item query for `scope` and `q`, page after page: only for Need My Action, a few rows. */
 async function everyRow(trx: Trx, scope: QueryScope, q: WorkItemQueryInput, now: Date): Promise<WorkItemRow[]> {
   const rows: WorkItemRow[] = [];
   let cursor: string | undefined;
@@ -38,6 +44,11 @@ async function everyRow(trx: Trx, scope: QueryScope, q: WorkItemQueryInput, now:
   } while (cursor);
   return rows;
 }
+
+/** How many items match `q` in the scope, by Stage key: the List's `stages[].count`, no rows read. */
+const counted = (trx: Trx, scope: QueryScope, q: WorkItemQueryInput, now: Date) => countWorkItems(trx, scope, workItemQuery.parse(q), now);
+const total = (counts: Map<string, number>, keep: (stageKey: string) => boolean = () => true) =>
+  [...counts].reduce((n, [key, count]) => n + (keep(key) ? count : 0), 0);
 
 /** Each Module tab of each Project: where the work item query reads. */
 const scopesOf = (projects: readonly ProjectSummary[]) =>
@@ -60,28 +71,63 @@ export function getHome(db: Db, memberId: string, now: Date): Promise<Home> {
       }
     }
 
-    // At their Step for 4+ weeks: open items my own Participant holds ("With" is "own"), aged as the List
-    // ages them for me (V14); a Draft never.
+    // The Draft Stages, which never age on Home: a Revision's Draft has a number, so the List ages it.
+    const draftStages = new Set(
+      active.length === 0
+        ? []
+        : (
+            await trx
+              .selectFrom("stage")
+              .select(["project_id", "module_key", "key"])
+              .where("project_id", "in", active.map((p) => p.id))
+              .where("category", "=", "draft")
+              .execute()
+          ).map((s) => `${s.project_id}/${s.module_key}/${s.key}`),
+    );
+
+    // The List's own counts for each Module: its Submittals (the card's count), my own Participant's open
+    // items at their Step for 4+ weeks as the List ages them for me (V14; never a Draft), and my own
+    // Participant's open items another Participant holds now.
     let longAtStep = 0;
-    for (const scope of scopes) {
-      const aged = await everyRow(trx, scope, { stepAgeMin: homeStepAgeWeeks }, now);
-      longAtStep += aged.filter((r) => r.with?.kind === "own" && r.stage.category !== "draft").length;
+    let waitingWithOthers = 0;
+    const submittals: Record<string, number> = Object.fromEntries(active.map((p) => [p.id, 0]));
+    for (const { project, ...scope } of scopes) {
+      if (scope.moduleKey === "submittals") submittals[project.id] = total(await counted(trx, scope, {}, now));
+      const aged = await counted(trx, scope, { stepAgeMin: homeStepAgeWeeks, heldBy: "own" }, now);
+      longAtStep += total(aged, (key) => !draftStages.has(`${project.id}/${scope.moduleKey}/${key}`));
+      waitingWithOthers += total(await counted(trx, scope, { raisedByMe: true, heldBy: "others" }, now));
     }
 
-    // Recent activity: each Project's newest entries, merged.
+    // Recent activity: each Project's newest entries, merged, each with what was done (its Transition's
+    // kind, a Code's own kind from its polarity and actions), read through the same RLS as the feed: only the events it shows.
     const page = activityFeedQuery.parse({ limit: homeActivityLimit });
     const feeds = [];
     for (const p of active) feeds.push((await activityFeedPage(trx, p.id, page)).entries.map((e) => ({ ...e, project: ref(p) })));
+    const shown = mergeActivity(feeds, homeActivityLimit);
+    const how = new Map<string, { kind: TransitionKind | null; outcome: HomeActivityOutcome | null }>();
+    if (shown.length > 0) {
+      const { rows } = await sql<{ id: string; kind: TransitionKind | null; polarity: OutcomePolarity | null; actions: OutcomeAction[] | null }>`
+        select e.id, t.kind, o.polarity, o.actions
+        from work_item_event e
+        join work_item w on w.id = e.work_item_id
+        left join workflow_transition t on t.id = e.transition_id
+        left join outcome o on o.project_id = e.project_id and o.work_item_type_id = w.work_item_type_id and o.code = e.payload ->> 'outcome'
+        where e.id = any(${shown.map((e) => e.id)}::uuid[])
+      `.execute(trx);
+      for (const r of rows) how.set(r.id, { kind: r.kind, outcome: r.polarity ? { polarity: r.polarity, actions: r.actions ?? [] } : null });
+    }
 
     return {
       counts: {
         activeProjects: active.length,
         needMyAction: active.reduce((n, p) => n + p.needMyAction, 0),
         longAtStep,
+        waitingWithOthers,
       },
       needsMyAction: needsMyAction.toSorted(byNewestWaiting).slice(0, homeNeedsMyActionLimit),
-      activity: mergeActivity(feeds, homeActivityLimit),
+      activity: shown.map((e) => ({ ...e, verb: homeActivityVerb(e.type, how.get(e.id)?.kind ?? null, e.outcome ? (how.get(e.id)?.outcome ?? null) : null) })),
       projects,
+      submittals,
     };
   });
 }

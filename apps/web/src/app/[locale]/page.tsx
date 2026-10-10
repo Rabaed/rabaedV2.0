@@ -24,8 +24,9 @@ export default async function Home({ params }: { params: Promise<{ locale: Local
         </p>
       );
     }
-    const greeting = t(`greeting.${homeGreeting(new Date())}`, { name: firstName(me.member.fullName[locale]) });
-    return <HomeView home={home} locale={locale} greeting={greeting} canCreateProjects={me.member.canCreateProjects} />;
+    const now = new Date();
+    const greeting = t(`greeting.${homeGreeting(now)}`, { name: firstName(me.member.fullName[locale]) });
+    return <HomeView home={home} locale={locale} greeting={greeting} canCreateProjects={me.member.canCreateProjects} now={now.toISOString()} />;
   }
 
   return (

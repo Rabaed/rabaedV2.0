@@ -303,6 +303,11 @@ function matching(q: WorkItemQuery, now: Date, scope: QueryScope): RawBuilder<bo
   if (q.submittedTo !== undefined) conditions.push(sql`(r.submitted_at at time zone 'Asia/Riyadh')::date <= ${q.submittedTo}::date`);
   // Steps I hold, unclaimed Steps of my pool, and my own Drafts (app.need_my_action).
   if (q.needMyAction) conditions.push(sql`app.need_my_action(r.id) is not null`);
+  // Home (RP-407): my own Participant's items, and who holds an open item now. Another Participant
+  // holds it whenever my own doesn't, even one since withdrawn; a closed item is held by nobody.
+  if (q.raisedByMe) conditions.push(sql`r.raised_by_own`);
+  if (q.heldBy === "own") conditions.push(sql`(not r.closed and r.held_by_own)`);
+  if (q.heldBy === "others") conditions.push(sql`(not r.closed and not r.held_by_own)`);
   if (q.with.length > 0) {
     const steps = q.with.flatMap((v) => (v.startsWith("step:") ? [v.slice(5)] : []));
     const companies = q.with.flatMap((v) => (v.startsWith("company:") ? [v.slice(8)] : []));
@@ -529,6 +534,12 @@ function pageCounts(rows: Row[]): Map<string, number> {
   for (const r of rows) counts.set(r.stage_key, (counts.get(r.stage_key) ?? 0) + 1);
   return counts;
 }
+
+/**
+ * How many of the scope's visible items match `q` in each Stage, by Stage key: the List's
+ * `stages[].count`, with no rows read (Home's counts, RP-407).
+ */
+export const countWorkItems = (trx: Trx, scope: QueryScope, q: WorkItemQuery, now: Date) => countByStage(trx, scope, q, now);
 
 /** How many of the scope's visible items match `q` in each Stage, by Stage key. */
 async function countByStage(trx: Trx, scope: QueryScope, q: WorkItemQuery, now: Date): Promise<Map<string, number>> {

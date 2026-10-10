@@ -113,8 +113,8 @@ Every control sits in a `Field`, which gives it a label, optional help text, the
 | `Table` + `TableHeader`, `TableBody`, `TableRow`, `TableHead`, `TableCell`, `TableEmpty` | Lists of records. Real table roles, in a named region that scrolls (and takes keyboard focus) when the table doesn't fit. |
 | `Tabs` + `TabsList`, `TabsTrigger`, `TabsContent` | Switching between views of one area. The ARIA tabs pattern; arrow keys follow the reading direction. |
 | `Badge` | A short label in a tint: `neutral` (default), `brand`, `info`, `success`, `warning`, `danger`; optional `dot`. Not for Stages or Review Codes, which have their own components. |
-| `StatTile` | One count on a card: an icon on a tinted tile (`tone`), the number in Latin digits and what it counts (Home's counts). A row on a phone, a column from `sm`. |
-| `Avatar` | A person's photo or initials (a circle), or with `kind="company"` a company's logo or initials (a rounded square). Named after them; `decorative` when the name is beside it. |
+| `StatTile` | One count on a card, as the design kit's Home tiles (RP-407): a 40px icon square on its tone's tint (`tone`), the number large in Latin digits, and what it counts below; always a column. Keep labels short enough for one line in a four-tile row. |
+| `Avatar` | A person's photo or initials (a circle), or with `kind="company"` a company's logo or initials (a rounded square). Named after them; `decorative` when the name is beside it. `solid`: white initials on a colour from the name (a Company on slate), as the kit's Home; `initialsFrom` gives Latin initials in Arabic. |
 | `CompanyChip` | Another company as one block: its mark and name in a pill. Takes no person, so it can't show another company's people. |
 
 ```tsx

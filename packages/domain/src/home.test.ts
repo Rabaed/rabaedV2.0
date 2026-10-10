@@ -1,5 +1,64 @@
 import { describe, expect, it } from "vitest";
-import { byNewestWaiting, homeGreeting, mergeActivity } from "./home.ts";
+import { byNewestWaiting, homeActivityVerb, homeGreeting, mergeActivity, relativeAge } from "./home.ts";
+
+describe("relativeAge", () => {
+  const now = new Date("2026-10-10T12:00:00.000Z");
+  const ago = (ms: number) => new Date(now.getTime() - ms).toISOString();
+  const minute = 60_000;
+  const hour = 60 * minute;
+
+  it("is 'now' under a minute, and for a time a skewed clock puts ahead", () => {
+    expect(relativeAge(ago(59_000), now)).toEqual({ unit: "now" });
+    expect(relativeAge(new Date(now.getTime() + 5_000).toISOString(), now)).toEqual({ unit: "now" });
+  });
+
+  it("counts whole minutes under an hour, then whole hours under a day", () => {
+    expect(relativeAge(ago(minute), now)).toEqual({ unit: "minutes", count: 1 });
+    expect(relativeAge(ago(10 * minute + 59_000), now)).toEqual({ unit: "minutes", count: 10 });
+    expect(relativeAge(ago(hour), now)).toEqual({ unit: "hours", count: 1 });
+    expect(relativeAge(ago(3 * hour + 59 * minute), now)).toEqual({ unit: "hours", count: 3 });
+    expect(relativeAge(ago(24 * hour - 1), now)).toEqual({ unit: "hours", count: 23 });
+  });
+
+  it("gives the date from a day on", () => {
+    expect(relativeAge(ago(24 * hour), now)).toEqual({ unit: "date" });
+    expect(relativeAge(ago(40 * 24 * hour), now)).toEqual({ unit: "date" });
+  });
+});
+
+describe("homeActivityVerb", () => {
+  it("words an approval (Code A, Code B) as approved", () => {
+    expect(homeActivityVerb("issue_code", "close", { polarity: "positive", actions: [] })).toBe("approved");
+    expect(homeActivityVerb("issue_code", "close", { polarity: "positive", actions: [{ kind: "create_items", type: "CMT" }] })).toBe("approved");
+  });
+
+  it("words a revise-and-resubmit (Code C, which offers a Revision) as returned for revision, never rejected", () => {
+    expect(homeActivityVerb("issue_code", "close", { polarity: "negative", actions: [{ kind: "offer_revision" }] })).toBe("returnedForRevision");
+  });
+
+  it("words a rejection (Code D) as rejected", () => {
+    expect(homeActivityVerb("issue_code", "close", { polarity: "negative", actions: [{ kind: "offer_replacement" }] })).toBe("rejected");
+    expect(homeActivityVerb("issue_code", "close", { polarity: "negative", actions: [] })).toBe("rejected");
+  });
+
+  it("words a Transition by its kind", () => {
+    expect(homeActivityVerb("transition", "submit", null)).toBe("submitted");
+    expect(homeActivityVerb("transition", "send", null)).toBe("sentForReview");
+    expect(homeActivityVerb("transition", "return", null)).toBe("returned");
+    expect(homeActivityVerb("transition", "send_back", null)).toBe("sentBack");
+    expect(homeActivityVerb("transition", "cancel", null)).toBe("cancelled");
+    expect(homeActivityVerb("transition", "close", null)).toBe("closed");
+  });
+
+  it("words any other event by its type", () => {
+    expect(homeActivityVerb("claimed", null, null)).toBe("claimed");
+    expect(homeActivityVerb("released", null, null)).toBe("released");
+    expect(homeActivityVerb("admin_reassigned", null, null)).toBe("assigned");
+    expect(homeActivityVerb("recommend_code", null, null)).toBe("recommended");
+    expect(homeActivityVerb("internal_note", "send", null)).toBe("noted");
+    expect(homeActivityVerb("vacated", null, null)).toBe("updated");
+  });
+});
 
 const item = (id: string, title: string, stepEnteredAt: string | null) => ({ id, title, stepEnteredAt });
 

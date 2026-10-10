@@ -5,6 +5,7 @@ import { useId, type ElementType } from "react";
 import { cn } from "../../lib/cn.ts";
 import { Badge } from "../data/badge.tsx";
 import { focusRing } from "../form/control-styles.ts";
+import { Icon } from "../icon/icon.tsx";
 
 /** The cards' words, in the viewer's language, from the app's messages. */
 export type ProjectCardsLabels = {
@@ -26,6 +27,8 @@ export type ProjectCardProps = {
   href: string;
   /** The link component, e.g. Next.js `Link`, so navigation stays client-side. Defaults to `<a>`. */
   linkAs?: ElementType;
+  /** Home's "n submittals" (RP-407): how many Submittals the Member sees on the Project, worded. Left out, the card shows none. */
+  submittals?: string;
 };
 
 export type ProjectCardsProps = {
@@ -63,7 +66,7 @@ export function ProjectCards({ projects, locale, labels, href, linkAs }: Project
  * Role and the Need My Action count. No progress, no due date: Rabaed has no
  * time axis.
  */
-export function ProjectCard({ project: p, locale, labels, href, linkAs: Link = "a" }: ProjectCardProps) {
+export function ProjectCard({ project: p, locale, labels, href, linkAs: Link = "a", submittals }: ProjectCardProps) {
   const id = useId();
   const count = formatNumber(p.needMyAction, locale);
   const closed = p.status === "closed";
@@ -84,7 +87,7 @@ export function ProjectCard({ project: p, locale, labels, href, linkAs: Link = "
           aria-hidden="true"
           className="flex size-11 shrink-0 items-center justify-center rounded-md bg-primary font-display text-h5 font-extrabold text-on-primary"
         >
-          {Array.from(name.trim())[0] ?? ""}
+          {Array.from(p.name.en.trim())[0] ?? ""}
         </span>
         <span className="flex min-w-0 flex-1 flex-col gap-0.5">
           <span id={`${id}-name`} className="text-body font-bold text-text [overflow-wrap:anywhere]">
@@ -102,13 +105,19 @@ export function ProjectCard({ project: p, locale, labels, href, linkAs: Link = "
       </span>
       <span
         id={`${id}-details`}
-        className="mt-auto flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-t border-border px-4 py-3"
+        className="mt-auto flex items-center justify-between gap-x-3 border-t border-border px-4 py-3"
       >
-        <span className="text-caption text-muted">
+        <span className="min-w-0 truncate text-caption text-muted">
           {p.projectRole.name[locale]}
           {p.isProjectAdmin && ` · ${labels.projectAdmin}`}
         </span>
-        <span className="inline-flex items-center gap-2 text-caption">
+        {submittals !== undefined && (
+          <span className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap text-caption text-text-secondary">
+            <Icon name="file-text" size={15} className="text-muted" />
+            {submittals}
+          </span>
+        )}
+        <span className="inline-flex shrink-0 items-center gap-2 whitespace-nowrap text-caption">
           <span className="sr-only">{`${labels.needMyAction}: ${count}`}</span>
           <span aria-hidden="true" className="text-muted">
             {labels.needMyAction}

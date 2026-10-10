@@ -174,14 +174,25 @@ export const coolLight = {
   "segment-sequence-fg": "slate-900",
   "segment-sequence-solid": "slate-900",
 
-  // Solid fills for a person's initials, white text on them (Avatar `solidFrom`, RP-413).
-  "avatar-1": "person-violet",
-  "avatar-2": "person-blue",
-  "avatar-3": "person-brown",
-  "avatar-4": "person-orange",
-  "avatar-5": "person-rose",
-  "avatar-6": "person-green",
-  "avatar-7": "person-plum",
+  // Solid avatars (the design kit's Home, RP-407): a person's colour picked from their name, a
+  // Company's slate, white initials on each at 4.5:1.
+  "avatar-1": "blue-700",
+  "avatar-2": "green-700",
+  "avatar-3": "violet-700",
+  "avatar-4": "orange-700",
+  "avatar-5": "cyan-700",
+  "avatar-6": "red-700",
+  "avatar-company": "slate-600",
+  "on-avatar": "white",
+
+  // Solid fills for a person's initials in the Members list (Avatar `solidFrom`, RP-413), white text on them.
+  "member-avatar-1": "person-violet",
+  "member-avatar-2": "person-blue",
+  "member-avatar-3": "person-brown",
+  "member-avatar-4": "person-orange",
+  "member-avatar-5": "person-rose",
+  "member-avatar-6": "person-green",
+  "member-avatar-7": "person-plum",
 
   // Step Age: whole weeks at the current step, grey turning red. age-0 is an empty dot.
   // Filled dots carry meaning, so they keep 3:1 against surfaces (WCAG 1.4.11).

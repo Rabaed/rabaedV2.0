@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { browserLocale, directionOf, formatDate, formatNumber, isLocale } from "./locale.ts";
+import { browserLocale, directionOf, formatDate, formatDayMonthYear, formatNumber, isLocale } from "./locale.ts";
 
 describe("locale", () => {
   it("knows English and Arabic only", () => {
@@ -59,5 +59,23 @@ describe("locale", () => {
   it("keeps percentages and decimals Latin in Arabic", () => {
     expect(formatNumber(0.25, "ar", { style: "percent" })).not.toMatch(/[٠-٩۰-۹]/);
     expect(formatNumber(0.25, "en", { style: "percent" })).toBe("25%");
+  });
+});
+
+describe("formatDayMonthYear", () => {
+  // 21:30 UTC on 9 October is already 10 October in Riyadh.
+  const at = new Date("2026-10-09T21:30:00Z");
+
+  it("writes day, month and year as the design kit does, the weekday first when asked, in Saudi time", () => {
+    expect(formatDayMonthYear(at, "en")).toBe("10 October 2026");
+    expect(formatDayMonthYear(at, "en", { weekday: true })).toBe("Saturday, 10 October 2026");
+  });
+
+  it("keeps Arabic's own order, in Latin digits", () => {
+    const ar = formatDayMonthYear(at, "ar", { weekday: true });
+    expect(ar).toContain("السبت");
+    expect(ar).toContain("10");
+    expect(ar).toContain("2026");
+    expect(ar).not.toMatch(/[٠-٩]/);
   });
 });
