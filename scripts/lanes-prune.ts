@@ -5,35 +5,23 @@
 // Each goes with its containers, volumes (its database) and network. The current
 // worktree's project is never removed.
 //
-//   pnpm lanes:prune [--merged] [--lane N] [--yes]     --yes skips the confirmation
+//   pnpm lanes:prune [--merged] [--lane N] [--yes] [--dry-run]     --yes skips the confirmation; --dry-run only lists (RP-500)
 //
 // --lane N limits the candidates (stale, plus merged with --merged) to rabaed-laneN, with the
 // same confirmation and the same keep rules, so one lane is freed without touching the others (RP-505).
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { confirmOrExit } from "./confirm.ts";
-import { composeProjectOfEnv, listContainers, listVolumes, mergedProjects, onlyLane, removeProject, staleProjects, type WorktreeLane } from "./lanes.ts";
+import { composeProjectOfEnv, listContainers, listVolumes, mergedProjects, onlyLane, parsePruneArgs, removeProject, staleProjects, type WorktreeLane } from "./lanes.ts";
 import { branchMerged, listWorktrees, refExists } from "./worktrees.ts";
 
-const usage = "Usage: pnpm lanes:prune [--merged] [--lane N] [--yes]   (--lane N: only rabaed-laneN, N = 0..9)";
-const args = process.argv.slice(2);
-let yes = false;
-let withMerged = false;
-let lane: number | undefined;
-for (let i = 0; i < args.length; i++) {
-  const a = args[i]!;
-  if (a === "--yes") yes = true;
-  else if (a === "--merged") withMerged = true;
-  else if (a === "--lane") lane = Number(args[++i]);
-  else {
-    console.error(usage);
-    process.exit(1);
-  }
-}
-if (lane !== undefined && (!Number.isInteger(lane) || lane < 0 || lane > 9)) {
-  console.error(usage);
+const options = parsePruneArgs(process.argv.slice(2));
+if (!options) {
+  console.error("Usage: pnpm lanes:prune [--merged] [--lane N] [--yes] [--dry-run]   (--lane N: only rabaed-laneN, N = 0..9)");
   process.exit(1);
 }
+const withMerged = options.merged;
+const lane = options.lane;
 
 const containers = listContainers();
 if (!containers) {
@@ -78,8 +66,13 @@ for (const s of candidates) {
   console.log(`  ${s.project}: ${s.reason}; containers: ${s.containers.join(", ") || "none"}; volumes: ${s.volumes.join(", ") || "none"}`);
 }
 
+if (options.dryRun) {
+  console.log("Dry run: nothing removed.");
+  process.exit(0);
+}
+
 await confirmOrExit("Remove them with their volumes? Their databases are lost, including those of stopped worktrees that still exist.", {
-  yes,
+  yes: options.yes,
   verb: "remove",
   done: "removed",
 });

@@ -19,10 +19,16 @@ import {
   orphanDatabases,
   parseConnections,
   parseContainers,
+  parsePruneArgs,
   parseVolumes,
+  chooseTakeover,
+  clashesAfterRemoval,
+  holdsLaneProject,
   pruneCommand,
+  releaseContainers,
   staleProjects,
   type Container,
+  type TakeoverWorktree,
   type WorktreeLane,
 } from "./lanes.ts";
 
@@ -391,6 +397,161 @@ describe("laneHolders", () => {
 
   it("does not count the lane's own compose project for lane:env --db, which shares it", () => {
     expect(laneHolders(5, { containers, cwd, platform: "win32", ownDatabase: true })).toEqual(["G:\\rabaed-wt\\RP-1"]);
+  });
+});
+
+describe("chooseTakeover (lane:env --force, RP-500)", () => {
+  const cwd = "G:\\rabaed-wt\\current";
+  const old = "G:\\rabaed-wt\\RP-448";
+  const containers = [
+    container({ name: "rabaed-lane3-db-1", project: "rabaed-lane3", workingDir: old, ports: [5732] }),
+    container({ name: "rabaed-lane3-files-1", project: "rabaed-lane3", workingDir: old, ports: [9300] }),
+    container({ name: "rabaed-lane4-db-1", project: "rabaed-lane4", workingDir: "G:\\rabaed-wt\\other", ports: [5832] }),
+  ];
+  const wt = (w: Partial<TakeoverWorktree>): TakeoverWorktree => ({ path: old, branch: "RP-448-workflow-core", merged: true, dirty: false, exists: true, ...w });
+  const choice = (worktrees: TakeoverWorktree[], lane = 3) => chooseTakeover(lane, { containers, worktrees, cwd, platform: "win32" });
+
+  it("takes the project over from a merged, clean worktree and says where it came from", () => {
+    const p = choice([wt({})]);
+    expect(p.takeOver.map((c) => c.name)).toEqual(["rabaed-lane3-db-1", "rabaed-lane3-files-1"]);
+    expect(p.from).toEqual([`${old} (RP-448-workflow-core, merged into origin/main)`]);
+    expect(p.refused).toEqual([]);
+  });
+
+  it("refuses a worktree with uncommitted changes", () => {
+    const p = choice([wt({ dirty: true })]);
+    expect(p.takeOver).toEqual([]);
+    expect(p.refused).toEqual([`${old} is on RP-448-workflow-core and has uncommitted changes.`]);
+  });
+
+  it("refuses a worktree that is not merged", () => {
+    const p = choice([wt({ merged: false })]);
+    expect(p.takeOver).toEqual([]);
+    expect(p.refused).toEqual([`${old} is on RP-448-workflow-core, not merged into origin/main yet.`]);
+  });
+
+  it("takes over from a worktree that is gone, and refuses a folder that is not a worktree of this clone", () => {
+    expect(choice([wt({ exists: false })]).takeOver).toHaveLength(2);
+    expect(choice([]).takeOver).toHaveLength(2);
+    const there = chooseTakeover(3, { containers, worktrees: [], cwd, platform: "win32", exists: () => true });
+    expect(there.takeOver).toEqual([]);
+    expect(there.refused).toEqual([`${old} is not a worktree of this clone.`]);
+  });
+
+  it("takes nothing when any holder is refused", () => {
+    const mixed = [...containers, container({ name: "rabaed-lane3-web", project: "rabaed-lane3", workingDir: "G:\\rabaed-wt\\busy" })];
+    const p = chooseTakeover(3, { containers: mixed, worktrees: [wt({}), wt({ path: "G:\\rabaed-wt\\busy", merged: false })], cwd, platform: "win32" });
+    expect(p.takeOver).toEqual([]);
+    expect(p.refused).toHaveLength(1);
+  });
+
+  it("leaves the current worktree's and other lanes' containers alone", () => {
+    const lane4 = choice([wt({}), wt({ path: "G:\\rabaed-wt\\other", merged: false })], 4);
+    expect(lane4.takeOver).toEqual([]);
+    expect(lane4.refused).toHaveLength(1);
+    expect(choice([wt({})], 5).takeOver).toEqual([]);
+    expect(chooseTakeover(3, { containers, worktrees: [wt({ path: cwd })], cwd: old, platform: "win32" }).takeOver).toEqual([]);
+  });
+});
+
+describe("chooseTakeover guards (RP-500 review)", () => {
+  const cwd = "G:\\rabaed-wt\\current";
+  const old = "G:\\rabaed-wt\\RP-448";
+  const containers = [container({ name: "rabaed-lane3-db-1", project: "rabaed-lane3", workingDir: old, ports: [5732] })];
+  const wt = (w: Partial<TakeoverWorktree>): TakeoverWorktree => ({ path: old, branch: "RP-448-x", merged: true, dirty: false, exists: true, ...w });
+  const choose = (worktrees: TakeoverWorktree[], pidRunning: (pid: number) => boolean = () => false) => chooseTakeover(3, { containers, worktrees, cwd, pidRunning, platform: "win32" });
+
+  it("refuses a live holder: its worktree exists and its branch is not merged", () => {
+    const p = choose([wt({ merged: false })]);
+    expect(p.takeOver).toEqual([]);
+    expect(p.refused).toHaveLength(1);
+  });
+
+  it("refuses a merged, clean worktree locked by a pid that still runs, and takes over when the pid is dead", () => {
+    const locked = wt({ locked: "claude agent agent-x (pid 4242)" });
+    const live = choose([locked], (pid) => pid === 4242);
+    expect(live.takeOver).toEqual([]);
+    expect(live.refused).toEqual([`${old} is locked by a session that is still running (pid 4242).`]);
+    expect(choose([locked], () => false).takeOver).toHaveLength(1);
+    expect(choose([wt({ locked: "kept by hand" })], () => true).takeOver).toHaveLength(1);
+  });
+
+  it("treats a worktree whose status cannot be read as having uncommitted changes", () => {
+    const p = choose([wt({ dirty: true, statusError: "fatal: not a git repository" })]);
+    expect(p.takeOver).toEqual([]);
+    expect(p.refused).toEqual([`${old} is on RP-448-x; its uncommitted changes could not be checked (fatal: not a git repository).`]);
+  });
+
+  it("refuses when a worktree that is not merged names the project in its .env", () => {
+    const sharer = wt({ path: "G:\\rabaed-wt\\sub", branch: "RP-9-y", merged: false, project: "rabaed-lane3" });
+    const p = choose([wt({}), sharer]);
+    expect(p.takeOver).toEqual([]);
+    expect(p.refused).toEqual(["G:\\rabaed-wt\\sub is on RP-9-y, not merged into origin/main yet, and has rabaed-lane3 in its .env."]);
+    expect(choose([wt({}), { ...sharer, merged: true }]).takeOver).toHaveLength(1);
+    expect(choose([wt({}), { ...sharer, path: cwd }]).takeOver).toHaveLength(1);
+    expect(choose([wt({}), { ...sharer, project: "rabaed-lane4" }]).takeOver).toHaveLength(1);
+  });
+});
+
+describe("holdsLaneProject", () => {
+  it("finds a worktree with a container of the lane's compose project, even when it is the lane's own under --db", () => {
+    const containers = [container({ name: "a", project: "rabaed-lane3", workingDir: "G:\\w\\one" }), container({ name: "b", project: "rabaed-lane4", workingDir: "G:\\w\\two" })];
+    expect(holdsLaneProject(3, containers, "g:\\w\\one", "win32")).toBe(true);
+    expect(holdsLaneProject(3, containers, "G:\\w\\two", "win32")).toBe(false);
+  });
+});
+
+describe("clashesAfterRemoval", () => {
+  it("counts neither the removed containers nor the ports they held", () => {
+    const db = container({ name: "rabaed-lane3-db-1", project: "rabaed-lane3", workingDir: "G:\\w\\old", ports: [5732] });
+    const input = { containers: [db], takenPorts: new Set([5732]), cwd: "G:\\w\\new", platform: "win32" as const };
+    expect(laneClashes(3, input)).not.toEqual([]);
+    expect(clashesAfterRemoval(3, input, [db])).toEqual([]);
+  });
+
+  it("still reports a port something else holds", () => {
+    const db = container({ name: "rabaed-lane3-db-1", project: "rabaed-lane3", workingDir: "G:\\w\\old", ports: [5732] });
+    const input = { containers: [db], takenPorts: new Set([5732, 3300]), cwd: "G:\\w\\new", platform: "win32" as const };
+    expect(clashesAfterRemoval(3, input, [db])).toHaveLength(1);
+  });
+});
+
+describe("releaseContainers", () => {
+  it("removes the containers without their volumes, one at a time", () => {
+    const calls: string[][] = [];
+    releaseContainers([container({ name: "a" }), container({ name: "b" })], (args) => {
+      calls.push(args);
+      return "";
+    });
+    expect(calls).toEqual([
+      ["rm", "-f", "a"],
+      ["rm", "-f", "b"],
+    ]);
+  });
+
+  it("stops at the first failure and names what was removed and what was not", () => {
+    const run = (args: string[]) => {
+      if (args[2] === "b") throw Object.assign(new Error("boom"), { stderr: "Error: removal in progress\n" });
+      return "";
+    };
+    expect(() => releaseContainers([container({ name: "a" }), container({ name: "b" }), container({ name: "c" })], run)).toThrow(
+      "Could not remove container b (Error: removal in progress). Removed: a. Not removed: b, c.",
+    );
+  });
+});
+
+describe("parsePruneArgs", () => {
+  it("reads --merged, --yes, --dry-run and --lane N", () => {
+    expect(parsePruneArgs(["--merged", "--dry-run"])).toEqual({ merged: true, yes: false, dryRun: true });
+    expect(parsePruneArgs([])).toEqual({ merged: false, yes: false, dryRun: false });
+    expect(parsePruneArgs(["--merged", "--lane", "3", "--dry-run"])).toEqual({ merged: true, yes: false, dryRun: true, lane: 3 });
+  });
+
+  it("rejects anything else, and a lane outside 0..9", () => {
+    expect(parsePruneArgs(["--force"])).toBeUndefined();
+    expect(parsePruneArgs(["--lane"])).toBeUndefined();
+    expect(parsePruneArgs(["--lane", "10"])).toBeUndefined();
+    expect(parsePruneArgs(["--lane", "x"])).toBeUndefined();
   });
 });
 

@@ -11,10 +11,10 @@ Four lanes. **main** plans; **A, B and C** implement. Each implementing session 
 
 Each lane has its own ports, database and Docker Compose project: see "Several worktrees at once" in the README.
 
-**Which ticket is next** comes from Jira, not this file: a lane's frontier is its `lane-x` tickets that are `ready-for-agent` and have every "Blocks" blocker Done. The ticket gives a suggested model (Opus or Sonnet). To list a lane's open tickets:
+**Which ticket is next** comes from Jira, not this file: a lane's frontier is its `lane-x` tickets that are `ready-for-agent` and have every "Blocks" blocker Done, and that are not In Progress (an implementer claims a ticket by moving it to In Progress and assigning itself: `docs/agents/issue-tracker.md`, Claim). The ticket gives a suggested model (Opus or Sonnet). To list a lane's open tickets:
 
 ```
-project = RP AND labels = lane-a AND labels = ready-for-agent AND statusCategory != Done ORDER BY rank
+project = RP AND labels = lane-a AND labels = ready-for-agent AND statusCategory != Done AND status != "In Progress" ORDER BY rank
 ```
 
 A lane takes work in one of two ways: **one ticket per session** (below), or **a whole spec in one session** with `/implement-spec`.
@@ -42,7 +42,9 @@ A lane takes work in one of two ways: **one ticket per session** (below), or **a
 
 ## Pruning old lanes
 
-Every worktree that ran `pnpm dev` leaves a `rabaed-*` Docker Compose project behind (its containers, database volume and network), holding its lane's ports. `pnpm lanes:prune` lists those whose worktree no longer exists, that are not running, or that only have volumes left, and removes them with their volumes after you confirm (`--yes` skips the prompt). It never removes the current worktree's project. Run it from the planning session after archiving finished sessions, or in a lane when `lane:env` says a lane is taken. `lane:env` says whether the worktree holding the lane is on a branch already merged into `origin/main`; then `pnpm lanes:prune --merged` also removes the projects of such worktrees, unless a worktree that is not merged names the project in its `.env`. Add `--lane N` (`pnpm lanes:prune --merged --lane 3`) to free only `rabaed-lane3`, with the same confirmation and keep rules; `lane:env` suggests exactly that, so never reach other lanes' databases with a bare `--merged` or a raw `docker compose down`.
+Every worktree that ran `pnpm dev` leaves a `rabaed-*` Docker Compose project behind (its containers, database volume and network), holding its lane's ports. `pnpm lanes:prune` lists those whose worktree no longer exists, that are not running, or that only have volumes left, and removes them with their volumes after you confirm (`--yes` skips the prompt). It never removes the current worktree's project. Run it from the planning session after archiving finished sessions, or in a lane when `lane:env` says a lane is taken. `lane:env` says whether the worktree holding the lane is on a branch already merged into `origin/main`; then `pnpm lanes:prune --merged` also removes the projects of such worktrees, unless a worktree that is not merged names the project in its `.env`. Add `--lane N` (`pnpm lanes:prune --merged --lane 3`) to free only `rabaed-lane3`, with the same confirmation and keep rules; `lane:env` suggests exactly that, so never reach other lanes' databases with a bare `--merged` or a raw `docker compose down`. `pnpm lanes:prune --dry-run` (also with `--merged` or `--lane N`) only lists what it would remove, exits 0 and never prompts or removes.
+
+`pnpm lane:env N --force` does not need a prune to take lane N over from a worktree that is gone, or whose branch is merged into `origin/main` and has no uncommitted changes (RP-500): it removes that project's containers, keeps its volumes (the database), and says which worktree it came from; the next `docker compose up` recreates the containers under the new worktree. A holder that is not merged, has uncommitted changes, is locked by a session that still runs, or is a folder git does not list still refuses, as does a not-merged worktree that has the project in its `.env`. A `--db` run never takes a lane over.
 
 `pnpm worktrees:prune` does the whole clean-up after merges. After `git fetch --prune origin` it lists, and after you confirm (`--yes` skips the prompt) removes:
 
@@ -51,6 +53,8 @@ Every worktree that ran `pnpm dev` leaves a `rabaed-*` Docker Compose project be
 3. The orphaned compose projects `lanes:prune` finds.
 
 It never touches the main checkout or the current worktree. It skips, and lists, worktrees with uncommitted changes (untracked files outside ignored paths included), commits on no origin branch, a lock by hand, or an open Claude desktop session. A compose project that a kept worktree names in its `.env` stays.
+
+Under the skipped list, both `worktrees:prune` and `worktrees:clean` print a **Stale** section (RP-506): the skipped worktrees whose last commit and newest uncommitted file are both older than `--stale-days <n>` (default 7), oldest first, with the age in days, the branch, the skip reason and, when the lock names a pid, whether that process still runs. It only lists; nothing in it is removed, unlocked or changed. Decide on those by hand (a lock whose pid is not running is a leftover of a closed session).
 
 ## A whole spec in one session (`/implement-spec`)
 

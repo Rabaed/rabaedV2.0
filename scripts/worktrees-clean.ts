@@ -8,7 +8,10 @@
 // --include-empty, those whose branch has no commit of its own yet: their subagent
 // may still be running. They are listed as skipped.
 //
-//   pnpm worktrees:clean [--into <branch>] [--include-empty] [--only <agent-id>...] [--yes]
+// Of the skipped it also lists, read-only, the stale ones: nothing committed or changed
+// for --stale-days (default 7), with age, branch and the lock's pid state (RP-506).
+//
+//   pnpm worktrees:clean [--into <branch>] [--include-empty] [--only <agent-id>...] [--stale-days <n>] [--yes]
 //
 // --only limits the run to the named agent-* worktrees (a session's own stopped
 // implementers), removed even with no commits; other sessions' worktrees are left
@@ -16,10 +19,12 @@
 //
 // The default branch is main; --yes skips the confirmation.
 import { confirmOrExit } from "./confirm.ts";
-import { chooseWorktrees, currentRoot, gatherFacts, gitError, isAgentWorktree, isNamed, listWorktrees, pruneWorktrees, refExists, removeWorktree, reportRemoval } from "./worktrees.ts";
+import { DEFAULT_STALE_DAYS, printStale, staleDaysAt } from "./worktrees-stale.ts";
+import { CURRENT_WORKTREE, chooseWorktrees, currentRoot, gatherFacts, gitError, isAgentWorktree, isNamed, listWorktrees, pruneWorktrees, refExists, removeWorktree, reportRemoval } from "./worktrees.ts";
 
-const usage = "Usage: pnpm worktrees:clean [--into <branch>] [--include-empty] [--only <agent-id>...] [--yes]";
+const usage = "Usage: pnpm worktrees:clean [--into <branch>] [--include-empty] [--only <agent-id>...] [--stale-days <n>] [--yes]";
 const args = process.argv.slice(2);
+let staleDays = DEFAULT_STALE_DAYS;
 let target = "main";
 let yes = false;
 let includeEmpty = false;
@@ -27,9 +32,13 @@ let only: string[] | undefined;
 for (let i = 0; i < args.length; i++) {
   const a = args[i]!;
   const next = args[i + 1];
+  const days = staleDaysAt(args, i);
   if (a === "--yes") yes = true;
   else if (a === "--include-empty") includeEmpty = true;
-  else if (a === "--only" && next && !next.startsWith("--")) {
+  else if (days !== undefined) {
+    staleDays = days;
+    i++;
+  } else if (a === "--only" && next && !next.startsWith("--")) {
     only = [];
     while (args[i + 1] && !args[i + 1]!.startsWith("--")) only.push(args[++i]!);
   } else if (a === "--into" && next && !next.startsWith("--")) {
@@ -58,6 +67,10 @@ const name = (w: { path: string; branch: string | undefined }) => `${w.path} (${
 if (skipped.length > 0) {
   console.log("Skipped:");
   for (const s of skipped) console.log(`  ${name(s.worktree)}: ${s.reason}`);
+  printStale(
+    skipped.filter((s) => s.reason !== CURRENT_WORKTREE),
+    staleDays,
+  );
 }
 if (remove.length === 0) {
   console.log(`No agent worktrees merged into ${target} to remove.`);

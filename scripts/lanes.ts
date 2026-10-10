@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { connect, createServer } from "node:net";
 import { samePath } from "./paths.ts";
+import { lockPid } from "./worktrees-stale.ts";
 
 // Lanes: each worktree's own ports and Docker Compose project (README "Several
 // worktrees at once", planning/parallel-sessions.md). Used by lane-env.ts, which
@@ -206,6 +207,120 @@ export function laneHolders(n: number, { containers, cwd, platform, ownDatabase 
     ownDatabase === true && c.project === laneProject(n) ? false : c.project === laneProject(n) || (c.state === "running" && c.ports.some((p) => ports.has(p))),
   );
   return [...new Set(holding.map((c) => c.workingDir).filter((dir) => dir !== "" && !samePath(dir, cwd, platform)))];
+}
+
+/** A worktree of this clone, as lane:env --force sees a holder of the lane (RP-500). */
+export type TakeoverWorktree = {
+  path: string;
+  branch: string | undefined;
+  /** Its branch is merged into origin/main (worktrees.ts branchMerged). */
+  merged: boolean;
+  /** Uncommitted changes, untracked files outside ignored paths included. */
+  dirty: boolean;
+  /** Why git status could not be read; the worktree then counts as having uncommitted changes. */
+  statusError?: string;
+  /** Its folder is still on disk. */
+  exists: boolean;
+  /** The lock reason (the app names the owning session's pid in it), or undefined when not locked. */
+  locked?: string | undefined;
+  /** COMPOSE_PROJECT_NAME from its .env, if any. */
+  project?: string | undefined;
+};
+
+type TakeoverInput = {
+  containers: Container[];
+  worktrees: TakeoverWorktree[];
+  cwd: string;
+  /** Whether a folder exists; decides for a holder git does not list (default: none does, so it is gone). */
+  exists?: (dir: string) => boolean;
+  /** Whether a process with the pid runs (default: none does). */
+  pidRunning?: (pid: number) => boolean;
+  platform?: NodeJS.Platform;
+};
+
+/**
+ * What lane:env --force may take over for lane n: the containers of its compose project
+ * that belong to worktrees which are gone, or merged into origin/main and clean. The
+ * volumes stay: once these containers are removed the new worktree's `docker compose up`
+ * recreates them under its own folder in the same project and reuses the database.
+ * All or nothing: a holder that is not merged, has uncommitted changes (or whose status
+ * cannot be read), is locked by a process that still runs, or is a folder git does not
+ * list refuses the whole takeover (refused names each, with why). So does a worktree that
+ * is not merged (other than cwd) naming the lane's project in its .env: it shares the lane.
+ */
+export function chooseTakeover(
+  n: number,
+  { containers, worktrees, cwd, exists = () => false, pidRunning = () => false, platform }: TakeoverInput,
+): { takeOver: Container[]; from: string[]; refused: string[] } {
+  const mine = containers.filter((c) => c.project === laneProject(n) && !samePath(c.workingDir, cwd, platform));
+  const from: string[] = [];
+  const refused: string[] = [];
+  for (const dir of new Set(mine.map((c) => c.workingDir))) {
+    const w = worktrees.find((x) => samePath(x.path, dir, platform));
+    const on = w?.branch ?? "a detached HEAD";
+    const pid = lockPid(w?.locked);
+    if (!w) {
+      if (exists(dir)) refused.push(`${dir} is not a worktree of this clone.`);
+      else from.push(`${dir} (gone)`);
+    } else if (!w.exists) from.push(`${dir} (gone)`);
+    else if (pid !== undefined && pidRunning(pid)) refused.push(`${dir} is locked by a session that is still running (pid ${pid}).`);
+    else if (w.statusError !== undefined) refused.push(`${dir} is on ${on}; its uncommitted changes could not be checked (${w.statusError}).`);
+    else if (w.dirty) refused.push(`${dir} is on ${on} and has uncommitted changes.`);
+    else if (!w.merged) refused.push(`${dir} is on ${on}, not merged into origin/main yet.`);
+    else from.push(`${dir} (${w.branch}, merged into origin/main)`);
+  }
+  if (mine.length > 0) {
+    for (const w of worktrees) {
+      if (!w.merged && w.project === laneProject(n) && !samePath(w.path, cwd, platform)) {
+        refused.push(`${w.path} is on ${w.branch ?? "a detached HEAD"}, not merged into origin/main yet, and has ${laneProject(n)} in its .env.`);
+      }
+    }
+  }
+  return refused.length > 0 ? { takeOver: [], from: [], refused } : { takeOver: mine, from, refused };
+}
+
+/** Whether a worktree has a container of lane n's compose project; its folder is then checked before a takeover. */
+export const holdsLaneProject = (n: number, containers: Container[], dir: string, platform?: NodeJS.Platform): boolean =>
+  containers.some((c) => c.project === laneProject(n) && samePath(c.workingDir, dir, platform));
+
+/** laneClashes for lane n once the containers `removed` are gone: their containers and the ports they held no longer count. */
+export function clashesAfterRemoval(n: number, input: ClashInput, removed: Container[]): string[] {
+  const freed = new Set(removed.flatMap((c) => c.ports));
+  return laneClashes(n, { ...input, containers: input.containers.filter((c) => !removed.includes(c)), takenPorts: new Set([...input.takenPorts].filter((p) => !freed.has(p))) });
+}
+
+/**
+ * Removes containers but not their volumes (docker rm -f, without -v), one at a time:
+ * lane:env --force's takeover. When one fails it stops and throws, naming which
+ * containers are removed and which are not.
+ */
+export function releaseContainers(containers: Container[], run: (args: string[]) => string = docker): void {
+  const ids = containers.map((c) => c.name);
+  for (const [i, id] of ids.entries()) {
+    try {
+      run(["rm", "-f", id]);
+    } catch (error) {
+      const reason = (error as { stderr?: string }).stderr?.trim() || String(error);
+      throw new Error(`Could not remove container ${id} (${reason}). Removed: ${ids.slice(0, i).join(", ") || "none"}. Not removed: ${ids.slice(i).join(", ")}.`, { cause: error });
+    }
+  }
+}
+
+/** lanes:prune's options, or undefined for an unknown argument. --dry-run only lists. */
+export function parsePruneArgs(args: string[]): { merged: boolean; yes: boolean; dryRun: boolean; lane?: number } | undefined {
+  const options: { merged: boolean; yes: boolean; dryRun: boolean; lane?: number } = { merged: false, yes: false, dryRun: false };
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i]!;
+    if (a === "--merged") options.merged = true;
+    else if (a === "--yes") options.yes = true;
+    else if (a === "--dry-run") options.dryRun = true;
+    else if (a === "--lane") {
+      const lane = Number(args[++i]);
+      if (!Number.isInteger(lane) || lane < 0 || lane > 9) return undefined;
+      options.lane = lane;
+    } else return undefined;
+  }
+  return options;
 }
 
 /** Whether something holds the port on 127.0.0.1: it cannot be bound there, or something answers on it. */
