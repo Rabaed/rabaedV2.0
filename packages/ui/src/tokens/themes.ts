@@ -174,6 +174,17 @@ export const coolLight = {
   "segment-sequence-fg": "slate-900",
   "segment-sequence-solid": "slate-900",
 
+  // Solid avatars (the design kit's Home, RP-407): a person's colour picked from their name, a
+  // Company's slate, white initials on each at 4.5:1.
+  "avatar-1": "blue-700",
+  "avatar-2": "green-700",
+  "avatar-3": "violet-700",
+  "avatar-4": "orange-700",
+  "avatar-5": "cyan-700",
+  "avatar-6": "red-700",
+  "avatar-company": "slate-600",
+  "on-avatar": "white",
+
   // Step Age: whole weeks at the current step, grey turning red. age-0 is an empty dot.
   // Filled dots carry meaning, so they keep 3:1 against surfaces (WCAG 1.4.11).
   "age-0": "slate-350",

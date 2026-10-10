@@ -77,6 +77,8 @@ describe("cool light launch theme", () => {
     ...["cv", "ar", "el", "me", "su", "other"].map((t) => [`trade-${t}-fg`, `trade-${t}-bg`] as [SemanticRole, SemanticRole]),
     ["revision-fg", "revision-bg"],
     ...segmentToneKeys.map((s) => [`segment-${s}-fg`, `segment-${s}-tint`] as [SemanticRole, SemanticRole]),
+    // Solid avatars' initials (RP-407).
+    ...["1", "2", "3", "4", "5", "6", "company"].map((a) => ["on-avatar", `avatar-${a}`] as [SemanticRole, SemanticRole]),
   ];
 
   it.each(textPairs)("%s on %s meets 4.5:1", (fg, bg) => {

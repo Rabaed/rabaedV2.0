@@ -36,6 +36,25 @@ export const Initials: Story = {
   },
 };
 
+/**
+ * Solid (Home, RP-407): white Latin initials on a colour picked from the English name, in Arabic
+ * too; a Company on slate.
+ */
+export const Solid: Story = {
+  render: (args, context) => (
+    <div className="flex items-center gap-3">
+      {Object.values(people).map((p) => (
+        <Avatar key={p.en} {...args} name={storyText(context, p)} initialsFrom={p.en} solid size="lg" />
+      ))}
+      <Avatar {...args} name={storyText(context, company)} initialsFrom={company.en} kind="company" solid size="lg" />
+    </div>
+  ),
+  play: async (context) => {
+    await expect(context.canvas.getByRole("img", { name: storyText(context, people.faisal) })).toHaveTextContent("FA");
+    await expect(context.canvas.getByRole("img", { name: storyText(context, company) })).toHaveTextContent("AW");
+  },
+};
+
 /** A photo, named after the person. */
 export const Photo: Story = {
   render: (args, context) => <Avatar {...args} name={storyText(context, people.hala)} src={photo} size="lg" />,

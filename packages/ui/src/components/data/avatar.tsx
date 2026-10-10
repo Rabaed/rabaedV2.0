@@ -15,6 +15,15 @@ function toneFor(name: string): Tone {
   return personTones[sum % personTones.length]!;
 }
 
+// Solid avatars (the design kit's Home): a person's solid colour picked from their name the same way, white initials.
+const solidTones = ["bg-avatar-1", "bg-avatar-2", "bg-avatar-3", "bg-avatar-4", "bg-avatar-5", "bg-avatar-6"];
+
+function solidFor(name: string): string {
+  let sum = 0;
+  for (const char of name) sum += char.codePointAt(0)!;
+  return solidTones[sum % solidTones.length]!;
+}
+
 const sizes = {
   sm: "size-6 text-notes",
   md: "size-8 text-caption",
@@ -34,11 +43,13 @@ export type AvatarProps = {
   decorative?: boolean;
   /** The name the initials come from, when not `name`: e.g. the English one, for Latin initials on an Arabic card. */
   initialsFrom?: string;
+  /** White initials on a solid colour (the design kit's Home), rather than on a tint. */
+  solid?: boolean;
   className?: string;
 };
 
 /** A person's photo or initials, or a company's logo or initials, named after them. */
-export function Avatar({ name, src, kind = "person", size = "md", decorative = false, initialsFrom, className }: AvatarProps) {
+export function Avatar({ name, src, kind = "person", size = "md", decorative = false, initialsFrom, solid = false, className }: AvatarProps) {
   const [failedSrc, setFailedSrc] = useState<string>();
   const showImage = src !== undefined && src !== failedSrc;
   return (
@@ -47,7 +58,11 @@ export function Avatar({ name, src, kind = "person", size = "md", decorative = f
       className={cn(
         "inline-flex shrink-0 items-center justify-center overflow-hidden font-semibold select-none",
         kind === "company" ? "rounded-xs" : "rounded-full",
-        showImage ? "bg-surface-subtle" : toneClasses[kind === "company" ? "neutral" : toneFor(name)],
+        showImage
+          ? "bg-surface-subtle"
+          : solid
+            ? cn("text-on-avatar", kind === "company" ? "bg-avatar-company" : solidFor(initialsFrom ?? name))
+            : toneClasses[kind === "company" ? "neutral" : toneFor(name)],
         sizes[size],
         className,
       )}
