@@ -81,8 +81,8 @@ export async function addTestWorkflow(
           'close', 'B', 'approve', 10)` : ""}
         ${withCancel ? `, ('cancel', 'draft', 'cancelled', '{"en": "Cancel", "ar": "إلغاء"}', 'cancel', null, 'create', ${withApproveB ? 11 : 10}),
           ('cancel_review', 'internal_review', 'cancelled', '{"en": "Cancel", "ar": "إلغاء"}', 'cancel', null, 'review', ${withApproveB ? 12 : 11})` : ""}
-        ${forward ? `, ('forward', 'consultant_review', 'or_review', '{"en": "Send to Owner Representative", "ar": "إرسال لممثل المالك"}', 'submit', null, 'review', 20),
-          ('or_send_back', 'or_review', 'consultant_review', '{"en": "Send Back", "ar": "إرجاع إلى المقدّم"}', 'send_back', null, 'review', 21)` : ""}
+        ${forward ? `, ('forward', 'consultant_review', 'or_review', '{"en": "Send to Owner Representative", "ar": "إرسال لممثل المالك"}', 'submit', null, 'review', ${10 + (withApproveB ? 1 : 0) + (withCancel ? 2 : 0)}),
+          ('or_send_back', 'or_review', 'consultant_review', '{"en": "Send Back", "ar": "إرجاع إلى المقدّم"}', 'send_back', null, 'review', ${11 + (withApproveB ? 1 : 0) + (withCancel ? 2 : 0)})` : ""}
       ) as t (key, from_key, to_key, label, kind, outcome, permission, sort)
       join steps f on f.key = t.from_key
       join steps s on s.key = t.to_key
