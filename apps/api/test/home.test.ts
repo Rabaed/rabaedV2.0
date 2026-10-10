@@ -359,6 +359,21 @@ describe("Waiting with others: my own Company's items another Participant holds 
     expect(await waitingFor(at.c1Pm)).toBe(before);
   });
 
+  it("names an outcome that is no Review Code by its own name, never as a Code", async () => {
+    const id = await submitted(at, at.c1Engineer, at.c1Pm, "Recent activity: an Inspection Result");
+    await coded(id, "approve_a");
+    const entry = async () => (await home(at.c1Pm)).activity.find((e) => e.workItem.id === id && e.outcome === "A");
+    // A Review Code: "Code A", so no name of its own.
+    expect((await entry())?.outcomeName).toBeNull();
+    // The same outcome of a Type whose outcomes are Inspection Results reads by its name.
+    await sql`update work_item_type set outcome_kind = 'inspection_result' where code = 'MAR' and project_id is null`.execute(migrator);
+    try {
+      expect((await entry())?.outcomeName).toEqual({ en: "Approved", ar: "معتمد" });
+    } finally {
+      await sql`update work_item_type set outcome_kind = 'review_code' where code = 'MAR' and project_id is null`.execute(migrator);
+    }
+  });
+
   it("counts a Revision chain once: not while its Revision is a Draft, once when the Revision waits with K1", async () => {
     const before = await waitingFor(at.c1Pm);
     const original = await submitted(at, at.c1Engineer, at.c1Pm, "Waiting: revised");
