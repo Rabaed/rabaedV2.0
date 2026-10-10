@@ -8,6 +8,7 @@ import { WorkItemAnswers, WorkItemFormProvider } from "@/components/work-item-fo
 import { WorkItemLinks } from "@/components/work-item-links";
 import { redirect } from "@/i18n/navigation";
 import { readingChoices } from "@/lib/built-in-choices";
+import { codeAfterLabel } from "@/lib/history-code";
 import { linkTargetNames } from "@/lib/link-search";
 import { getMe, getOptionLists, getSharedWorkItem, getWorkItemForm } from "@/lib/session";
 
@@ -117,20 +118,25 @@ export default async function WorkItemPrintPage({ params }: { params: Promise<{ 
         <section className="space-y-3">
           <h2 className="text-h6 font-semibold">{t("history.title")}</h2>
           <ol className="divide-y divide-border border-y border-border">
-            {item.history.map((e, i) => (
+            {item.history.map((e, i) => {
+              const label = e.transition?.[locale] ?? null;
+              // One Code: a Code Transition's label already names it ("Approve · A").
+              const code = codeAfterLabel(label, e.outcome);
+              return (
               <li key={i} className="flex flex-col gap-0.5 py-2 text-sm">
                 <span className="font-semibold">
-                  {e.transition?.[locale] ?? t("history.other")}
-                  {e.outcome && (
+                  {label ?? t("history.other")}
+                  {code && (
                     <bdi dir="ltr" className="ms-2">
-                      {e.outcome}
+                      {code}
                     </bdi>
                   )}
                 </span>
                 <span className="text-muted">{[e.companyName?.[locale], date(e.at)].filter(Boolean).join(" · ")}</span>
                 {e.remarks && <p className="whitespace-pre-wrap">{e.remarks}</p>}
               </li>
-            ))}
+              );
+            })}
           </ol>
         </section>
       </article>
