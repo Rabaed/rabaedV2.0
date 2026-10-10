@@ -122,7 +122,7 @@ export function columnHeader(key: ListColumnKey, labels: Pick<WorkItemTableLabel
 
 const cell = "h-12 border-b border-border-subtle bg-surface px-3 align-middle whitespace-nowrap group-hover/row:bg-hover group-data-selected/row:bg-brand-tint";
 const head =
-  "sticky top-0 z-[3] h-[42px] border-b border-border-subtle bg-surface-subtle px-3 text-start text-[12.5px] font-semibold whitespace-nowrap text-text-secondary";
+  "sticky top-0 z-[3] h-[42px] pointer-coarse:h-12 border-b border-border-subtle bg-surface-subtle px-3 text-start text-[12.5px] font-semibold whitespace-nowrap text-text-secondary";
 /** The pinned first column (the Document Number), above the cells that scroll under it. */
 const pinnedStart = "sticky start-0 z-[2]";
 const dash = <span className="text-faint">—</span>;
@@ -153,7 +153,7 @@ export function WorkItemTable({
   const end = settings !== undefined || rowEnd !== undefined;
   const colSpan = shown.length + (end ? 1 : 0) + (selection ? 1 : 0);
   // With checkboxes, the Document Number is pinned beside them.
-  const pinnedFirst = selection ? "sticky start-11 z-[2]" : pinnedStart;
+  const pinnedFirst = selection ? "sticky start-11 z-[2] pointer-coarse:start-16" : pinnedStart;
   const chosen = selection ? rows.filter((r) => selection.selected.has(r.id)).length : 0;
   return (
     <table className={cn("w-max min-w-full border-separate border-spacing-0 text-[13.5px] text-text", className)}>
@@ -161,10 +161,10 @@ export function WorkItemTable({
       <thead>
         <tr>
           {selection && (
-            <th scope="col" className={cn(head, pinnedStart, "z-[4] w-11 ps-4 pe-0")}>
+            <th scope="col" className={cn(head, pinnedStart, "z-[4] w-11 ps-4 pe-0 pointer-coarse:w-16 pointer-coarse:px-0 pointer-coarse:text-center")}>
               <Checkbox
                 aria-label={selection.selectAll}
-                className="size-4"
+                className="size-4 align-middle"
                 disabled={rows.length === 0}
                 checked={chosen === 0 ? false : chosen === rows.length ? true : "indeterminate"}
                 onCheckedChange={() => selection.onChange(new Set(chosen === rows.length ? [] : rows.map((r) => r.id)))}
@@ -267,10 +267,10 @@ export function WorkItemTable({
                       }}
                     >
                       {selection && (
-                        <td className={cn(cell, pinnedStart, "w-11 ps-4 pe-0")}>
+                        <td className={cn(cell, pinnedStart, "w-11 ps-4 pe-0 pointer-coarse:w-16 pointer-coarse:px-0 pointer-coarse:text-center")}>
                           <Checkbox
                             aria-label={selection.selectRow(row.title)}
-                            className="size-4"
+                            className="size-4 align-middle"
                             checked={selected}
                             onCheckedChange={(on) => {
                               const next = new Set(selection.selected);

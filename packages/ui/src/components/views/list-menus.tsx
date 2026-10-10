@@ -39,7 +39,7 @@ export function GroupMenu<K extends string>({ choices, value, onChange, labels }
         </button>
       </PopoverTrigger>
       <PopoverContent aria-labelledby={`${id}-title`} align="end" className="w-52 rounded-md p-1 shadow-lg">
-        <h2 id={`${id}-title`} className="px-2.5 pt-2 pb-1 text-[10.5px] font-bold tracking-[0.06em] text-faint uppercase">
+        <h2 id={`${id}-title`} className="px-2.5 pt-2 pb-1 text-[10.5px] font-bold tracking-[0.06em] text-muted uppercase">
           {labels.groupBy}
         </h2>
         <ul>
@@ -166,7 +166,7 @@ export function ExportMenu({ onExport, labels, busy = false }: ExportMenuProps) 
       <button type="button" onClick={() => onExport(format)} className={menuItem}>
         <Icon name={icon} size={16} />
         {name}
-        <small className="ms-auto text-[11.5px] text-faint">{hint}</small>
+        <small className="ms-auto text-[11.5px] text-muted">{hint}</small>
       </button>
     </PopoverClose>
   );
@@ -178,7 +178,7 @@ export function ExportMenu({ onExport, labels, busy = false }: ExportMenuProps) 
       </button>
       <Popover>
         <PopoverTrigger asChild>
-          <button type="button" aria-label={labels.options} title={labels.options} disabled={busy} className={cn(toolbarButton, "-ms-px rounded-s-none px-2")}>
+          <button type="button" aria-label={labels.options} title={labels.options} disabled={busy} className={cn(toolbarButton, "-ms-px rounded-s-none px-2 pointer-coarse:min-w-11")}>
             <Icon name="chevron-down" />
           </button>
         </PopoverTrigger>

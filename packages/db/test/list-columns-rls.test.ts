@@ -55,8 +55,9 @@ beforeAll(async () => {
   await migrator.connect();
   app = createDb(urls.app, { max: 2 });
   const engineer = await one("insert into rabaed_engineer (email, full_name) values ($1, 'Seam Two') returning id", [email("eng")]);
-  [people.a, people.colleague] = await company(engineer, "Company A", 2);
-  [people.b] = await company(engineer, "Company B", 1);
+  const [a, colleague] = await company(engineer, "Company A", 2);
+  const [other] = await company(engineer, "Company B", 1);
+  Object.assign(people, { a: a!, colleague: colleague!, b: other! });
   expect(await set(people.a)).toBe("set");
   expect(await set(people.b)).toBe("set");
 });
