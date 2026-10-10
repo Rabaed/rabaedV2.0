@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { busiestProjectId, byNewestWaiting, homeGreeting, isWaitingWithOthers, mergeActivity, relativeAge } from "./home.ts";
+import { byNewestWaiting, homeActivityVerb, homeGreeting, mergeActivity, relativeAge } from "./home.ts";
 
 describe("relativeAge", () => {
   const now = new Date("2026-10-10T12:00:00.000Z");
@@ -26,28 +26,28 @@ describe("relativeAge", () => {
   });
 });
 
-describe("isWaitingWithOthers", () => {
-  const own = { kind: "own" as const, companyName: { en: "C1", ar: "C1" }, step: { key: "s", name: { en: "S", ar: "S" } }, claimer: null };
-  const other = { kind: "company" as const, companyName: { en: "K1", ar: "K1" } };
-  const created = "2026-09-01T08:00:00.000Z";
-
-  it("is an item my own Participant raised (its Creation Date is mine to read) that another Company holds", () => {
-    expect(isWaitingWithOthers({ with: other, creationDate: created })).toBe(true);
+describe("homeActivityVerb", () => {
+  it("words a Code by its polarity, whatever its letter", () => {
+    expect(homeActivityVerb("issue_code", "close", "positive")).toBe("approved");
+    expect(homeActivityVerb("issue_code", "close", "negative")).toBe("rejected");
   });
 
-  it("is never an item we hold, a closed one, or another Company's item", () => {
-    expect(isWaitingWithOthers({ with: own, creationDate: created })).toBe(false);
-    expect(isWaitingWithOthers({ with: null, creationDate: created })).toBe(false);
-    // Another Company raised it: I never read its Creation Date (visibility.md "Creation Date").
-    expect(isWaitingWithOthers({ with: other, creationDate: null })).toBe(false);
+  it("words a Transition by its kind", () => {
+    expect(homeActivityVerb("transition", "submit", null)).toBe("submitted");
+    expect(homeActivityVerb("transition", "send", null)).toBe("sentForReview");
+    expect(homeActivityVerb("transition", "return", null)).toBe("returned");
+    expect(homeActivityVerb("transition", "send_back", null)).toBe("sentBack");
+    expect(homeActivityVerb("transition", "cancel", null)).toBe("cancelled");
+    expect(homeActivityVerb("transition", "close", null)).toBe("closed");
   });
-});
 
-describe("busiestProjectId", () => {
-  it("is the Project with the most, the first listed on a tie, none when all are zero", () => {
-    expect(busiestProjectId([["a", 1], ["b", 3], ["c", 3]])).toBe("b");
-    expect(busiestProjectId([["a", 0], ["b", 0]])).toBeUndefined();
-    expect(busiestProjectId([])).toBeUndefined();
+  it("words any other event by its type", () => {
+    expect(homeActivityVerb("claimed", null, null)).toBe("claimed");
+    expect(homeActivityVerb("released", null, null)).toBe("released");
+    expect(homeActivityVerb("admin_reassigned", null, null)).toBe("assigned");
+    expect(homeActivityVerb("recommend_code", null, null)).toBe("recommended");
+    expect(homeActivityVerb("internal_note", "send", null)).toBe("noted");
+    expect(homeActivityVerb("vacated", null, null)).toBe("updated");
   });
 });
 

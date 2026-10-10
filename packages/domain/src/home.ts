@@ -2,25 +2,51 @@ import { z } from "zod";
 import { activityFeed } from "./activity-feed.ts";
 import { bilingualText } from "./company.ts";
 import { moduleKeySchema } from "./module.ts";
+import type { OutcomePolarity } from "./outcome.ts";
 import { projectSummary } from "./project.ts";
-import { workItemRow, type WorkItemRow } from "./work-item.ts";
+import { workItemRow, type TransitionKind, type workItemEventTypes } from "./work-item.ts";
+
+type WorkItemEventType = (typeof workItemEventTypes)[number];
 
 /**
  * Home (RP-407, spec RP-447; visibility.md "Home across Projects"): what needs
  * the Member across their Projects. Every number and row is the sum or merge of
  * a per-Project read the Member already has (the Projects page's Need My Action
- * count, the List's rows, the Activity Feed), over their active Projects only,
- * so Home shows nothing those reads don't.
+ * count, the List's counts and rows, the Activity Feed), over their active
+ * Projects only, so Home shows nothing those reads don't.
  */
 
-/** Step Age at or above which an item counts in Home's "at their step for 4+ weeks" tile. Never a due date. */
+/** Step Age at or above which an item counts in Home's "4+ weeks at their step" tile. Never a due date. */
 export const homeStepAgeWeeks = 4;
-/** Rows in the "Needs my action" list; the tile counts them all, and "View all" shows the rest. */
-export const homeNeedsMyActionLimit = 5;
-/** Entries in "Recent activity"; "View all" opens a Project's Activity Feed when there are more. */
-export const homeActivityLimit = 5;
+/** Rows in the "Needs my action" card, as the design kit shows; the tile counts them all. */
+export const homeNeedsMyActionLimit = 4;
+/** Entries in "Recent activity", as the design kit shows. */
+export const homeActivityLimit = 4;
 
-/** The Project a Home row belongs to: what its Members see of it on every page. */
+/**
+ * What an activity entry says the person or Company did, in the past tense (the design kit's
+ * "approved … (Code B)"): from the event's type, its Transition's kind and, for a Code, the
+ * Code's polarity. The Code itself is the entry's `outcome`.
+ */
+export const homeActivityVerbs = [
+  "submitted",
+  "sentForReview",
+  "returned",
+  "sentBack",
+  "approved",
+  "rejected",
+  "closed",
+  "cancelled",
+  "claimed",
+  "released",
+  "assigned",
+  "recommended",
+  "noted",
+  "updated",
+] as const;
+export type HomeActivityVerb = (typeof homeActivityVerbs)[number];
+
+/** The project a Home row belongs to: what its Members see of it on every page. */
 const homeProject = z.object({ id: z.uuid(), code: z.string(), name: bilingualText });
 
 export const home = z.object({
@@ -32,21 +58,20 @@ export const home = z.object({
     /** Open items the Member's own Participant holds, at their Step for `homeStepAgeWeeks`+ weeks as the Member sees it (V14); never a Draft. */
     longAtStep: z.number().int().nonnegative(),
     /**
-     * "Submitted by my Company, waiting with others": open items my own Participant raised that another
-     * Participant holds now (`isWaitingWithOthers`), one per Revision chain, from the List rows I read; never a Draft.
+     * "Waiting with others": open items my own Participant raised that another Participant holds now (even
+     * one since withdrawn), one per Revision chain, counted by the List's own filters; never a Draft, which
+     * my own Participant holds.
      */
     waitingWithOthers: z.number().int().nonnegative(),
   }),
   /** The items behind the Need My Action count, the newest-waiting first, up to `homeNeedsMyActionLimit`. */
   needsMyAction: z.array(workItemRow.extend({ project: homeProject, moduleKey: moduleKeySchema })),
-  /** The newest Activity Feed entries across the active Projects, up to `homeActivityLimit`. */
-  activity: z.array(activityFeed.shape.entries.element.extend({ project: homeProject })),
-  /** Whether the active Projects' feeds hold more entries than `activity` shows. */
-  moreActivity: z.boolean(),
+  /** The newest Activity Feed entries across the active Projects, up to `homeActivityLimit`, each with what was done. */
+  activity: z.array(activityFeed.shape.entries.element.extend({ project: homeProject, verb: z.enum(homeActivityVerbs) })),
   /** The Member's Projects, as the Projects page lists them. */
   projects: z.array(projectSummary),
   /**
-   * Each active Project's Submittals the Member sees: the rows of its Submittals List (the latest Revision of
+   * Each active Project's Submittals the Member sees: the count of its Submittals List (the latest Revision of
    * each chain, open and closed), so never an item the List hides. A closed Project has none (it contributes nothing).
    */
   submittals: z.record(z.uuid(), z.number().int().nonnegative()),
@@ -77,13 +102,46 @@ export function byNewestWaiting<T extends { id: string; title: string; stepEnter
 }
 
 /**
- * Whether a List row is "Submitted by my Company, waiting with others": open, held by another Company
- * (`with.kind` "company", V14), and raised by my own Participant. The row tells the last by its Creation
- * Date, which only the raiser's Participant reads (visibility.md "Creation Date") and which every item
- * that has left its Draft has; so another Company's item, which I may see but never raised, never counts.
+ * What an Activity Feed event did, as Home words it: a Code by its polarity (approved or
+ * rejected), a Transition by its kind, any other event by its type.
  */
-export function isWaitingWithOthers(row: Pick<WorkItemRow, "with" | "creationDate">): boolean {
-  return row.with?.kind === "company" && row.creationDate !== null;
+export function homeActivityVerb(type: WorkItemEventType, kind: TransitionKind | null, polarity: OutcomePolarity | null): HomeActivityVerb {
+  if (polarity) return polarity === "positive" ? "approved" : "rejected";
+  switch (type) {
+    case "transition":
+    case "issue_code":
+      switch (kind) {
+        case "submit":
+          return "submitted";
+        case "send":
+          return "sentForReview";
+        case "return":
+          return "returned";
+        case "send_back":
+          return "sentBack";
+        case "close":
+          return "closed";
+        case "cancel":
+          return "cancelled";
+        default:
+          return "updated";
+      }
+    case "cancelled":
+      return "cancelled";
+    case "claimed":
+      return "claimed";
+    case "released":
+      return "released";
+    case "assigned":
+    case "admin_reassigned":
+      return "assigned";
+    case "recommend_code":
+      return "recommended";
+    case "internal_note":
+      return "noted";
+    default:
+      return "updated";
+  }
 }
 
 /** How long ago something happened, as Home's recent activity says it: now, minutes, hours, then the date from a day on. */
@@ -96,13 +154,6 @@ export function relativeAge(at: string, now: Date): RelativeAge {
   if (minutes < 60) return { unit: "minutes", count: minutes };
   if (minutes < 24 * 60) return { unit: "hours", count: Math.floor(minutes / 60) };
   return { unit: "date" };
-}
-
-/** The Project with the most of something (Home's "Open board" and "View all"): the first listed on a tie; none when all are zero. */
-export function busiestProjectId(counts: readonly (readonly [projectId: string, count: number])[]): string | undefined {
-  let best: readonly [string, number] | undefined;
-  for (const entry of counts) if (entry[1] > 0 && (!best || entry[1] > best[1])) best = entry;
-  return best?.[0];
 }
 
 /** The newest `limit` entries of several Projects' feeds (each already newest first), newest first; ties by id. */
