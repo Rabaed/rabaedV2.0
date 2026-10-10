@@ -214,8 +214,9 @@ export function WorkItemTable({
               </th>
             );
           })}
+          {/* Its button sits at the end, 24px in from the column's edge: a sort button scrolled under the pinned column is covered by the cell, never by a control. */}
           {end && (
-            <th scope="col" className={cn(head, "sticky end-0 z-[4] w-11 border-s px-1.5 text-center")}>
+            <th scope="col" className={cn(head, "sticky end-0 z-[4] w-[60px] border-s ps-0 pe-2 text-end")}>
               {settings}
             </th>
           )}
@@ -268,7 +269,7 @@ export function WorkItemTable({
                           <Cell column={key} row={row} locale={locale} labels={labels} filters={filters} places={places} itemHref={itemHref} linkAs={Link} />
                         </td>
                       ))}
-                      {end && <td className={cn(cell, "sticky end-0 z-[2] border-s px-1.5 text-center")}>{rowEnd?.(row)}</td>}
+                      {end && <td className={cn(cell, "sticky end-0 z-[2] w-[60px] border-s ps-0 pe-2 text-end")}>{rowEnd?.(row)}</td>}
                     </tr>
                   );
                 })}

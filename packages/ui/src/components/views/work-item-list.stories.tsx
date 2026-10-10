@@ -201,10 +201,6 @@ const meta = {
       run: fn(async () => null),
     },
   },
-  // The table is as wide as its content and scrolls, as the design draws it: at the story's width
-  // the last column's sort button sits under the pinned settings column until scrolled to. Axe
-  // counts that covered button as too small; it is covered, not small (size-6 everywhere).
-  parameters: { a11y: { options: { rules: { "target-size": { enabled: false } } } } },
   render: (args, context) => <WorkItemList {...args} locale={storyLocale(context)} labels={workItemListLabels[storyLocale(context)]} />,
 } satisfies Meta<typeof WorkItemList>;
 
@@ -221,6 +217,24 @@ const cellsOf = (context: PlayContext, title: string) => {
 const cellOf = (context: PlayContext, title: string, header: { en: string; ar: string }) => {
   const headers = within(tableOf(context)).getAllByRole("columnheader").map((h) => h.textContent ?? "");
   return cellsOf(context, title)[headers.findIndex((h) => h === storyText(context, header))]!;
+};
+
+/**
+ * A sort button that keyboard focus reaches is never left under a pinned column: the
+ * table scrolls it clear of the settings column at the end (WCAG 2.4.11).
+ */
+export const FocusedSortButtonInView: Story = {
+  play: async (context) => {
+    const headers = within(tableOf(context)).getAllByRole("columnheader");
+    // The last data column's: the one that starts under the pinned settings column.
+    const button = within(headers[headers.length - 2]!).getByRole("button");
+    button.focus();
+    await new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)));
+    const box = button.getBoundingClientRect();
+    for (const x of [box.left + 2, box.left + box.width / 2, box.right - 2]) {
+      await expect(document.elementFromPoint(x, box.top + box.height / 2)?.closest("button")).toBe(button);
+    }
+  },
 };
 
 /**

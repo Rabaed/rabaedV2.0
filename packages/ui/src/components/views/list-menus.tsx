@@ -35,6 +35,7 @@ export function GroupMenu<K extends string>({ choices, value, onChange, labels }
         <button
           type="button"
           aria-label={current ? labels.groupedBy(current.label) : undefined}
+          title={current ? labels.groupedBy(current.label) : undefined}
           className={cn(toolbarButton, toolbarFilled, current && "bg-brand-tint text-brand-fg hover:bg-brand-tint")}
         >
           <Icon name="category" />

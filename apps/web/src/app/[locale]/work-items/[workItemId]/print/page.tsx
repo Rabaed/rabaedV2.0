@@ -54,8 +54,8 @@ export default async function WorkItemPrintPage({ params }: { params: Promise<{ 
       fieldTimes={{}}
       autosave={false}
     >
-      {/* When printed, only this sheet: the app's frame around it is left out. */}
-      <style>{"@media print { body * { visibility: hidden; } [data-print-sheet], [data-print-sheet] * { visibility: visible; } [data-print-sheet] { position: absolute; inset: 0; padding: 0; } [data-print-hide] { display: none; } }"}</style>
+      {/* When printed, only this sheet: the app's frame around it is left out, and the page is the sheet's white to the bottom of every page. */}
+      <style>{"@media print { html, body { background: var(--color-surface) !important; } body * { visibility: hidden; } [data-print-sheet], [data-print-sheet] * { visibility: visible; } [data-print-sheet] { position: absolute; inset: 0; padding: 0; } [data-print-hide] { display: none; } }"}</style>
       <article data-print-sheet="" className="mx-auto max-w-3xl space-y-6 bg-surface p-6">
         <header className="flex flex-wrap items-start justify-between gap-3 border-b border-border pb-4">
           <div className="space-y-1">
