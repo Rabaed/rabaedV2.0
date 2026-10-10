@@ -316,6 +316,9 @@ export const createRevisionRefusals = ["not_found", "project_closed", "idempoten
 export const createReplacementRefusals = ["not_found", "project_closed", "idempotency_key_reused", "replacement_not_allowed"] as const;
 export type ReplacementRefusal = (typeof createReplacementRefusals)[number];
 
+/** The refusal of Duplicate (RP-409): one word for every reason it isn't allowed, so it names nothing. */
+export const duplicateRefusals = ["not_found", "project_closed", "duplicate_not_allowed"] as const;
+
 /** The refusals of discarding a Draft Revision (app.discard_revision). */
 export const discardRevisionRefusals = ["not_found", "project_closed", "not_discardable"] as const;
 
@@ -411,6 +414,11 @@ export const workItemActions = z.object({
   createReplacement: z.boolean(),
   /** Discard this Revision: still in Draft, never numbered, for the raiser's Company. */
   discardRevision: z.boolean(),
+  /**
+   * Duplicate (RP-409, the List's row menu): a new Draft of the same Type with only what the
+   * viewer's own Company wrote, for a Member of the raiser's Company on an active Project.
+   */
+  duplicate: z.boolean(),
   transitions: z.array(
     z.object({
       key: z.string(),

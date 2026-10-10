@@ -147,7 +147,7 @@ describe("numbered pages", () => {
   });
 });
 
-describe("Export (the rows the viewer reads, with the List's filters)", () => {
+describe("scenario RP-409-2: Export, the rows the viewer reads with the List's filters", () => {
   const exported = async (by: Caller, query: WorkItemQueryInput, project = at.projectId) =>
     (await ok(by.get(`/v1/projects/${project}/modules/submittals/work-items/export?${workItemSearchParams(query)}`), 200)).json() as {
       items: WorkItemList["items"];

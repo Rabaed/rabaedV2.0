@@ -1,6 +1,9 @@
 import { withMember, type Database, type Db } from "@rabaed/db";
 import {
+  answerFields,
   backwardKinds,
+  duplicateRefusals,
+  isAnswerField,
   changedOutside,
   editableSections,
   errorsInSections,
@@ -561,6 +564,7 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
       can_create_revision: boolean;
       can_discard_revision: boolean;
       can_create_replacement: boolean;
+      can_duplicate: boolean;
       workflow_name: BilingualText;
       workflow_version_no: number;
     }>`
@@ -570,7 +574,8 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
         raiser.legal_name as raised_by, holder.legal_name as held_by, m.full_name as holder_name,
         app.can_save_answers(w.id) as can_save_answers, w.revision_no, app.revision_versions_changed(w.id) as versions_changed,
         app.can_create_revision(w.id) as can_create_revision, app.can_discard_revision(w.id) as can_discard_revision,
-        app.can_create_replacement(w.id) as can_create_replacement
+        app.can_create_replacement(w.id) as can_create_replacement,
+        ${canDuplicate(sql.ref("w"))} as can_duplicate
       from work_item w
       cross join lateral app.step_as_seen(w.id) seen
       join workflow_step s on s.id = seen.step_id
@@ -628,9 +633,73 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
         createRevision: d.can_create_revision,
         createReplacement: d.can_create_replacement,
         discardRevision: d.can_discard_revision,
+        duplicate: d.can_duplicate,
       },
     };
   });
+}
+
+/**
+ * Whether the acting Member may duplicate a visible item `w` (RP-409): a Member of the
+ * Participant that raised it, on an active Project. Creating the copy checks the rest.
+ */
+const canDuplicate = (w: RawBuilder<unknown>) => sql<boolean>`(
+  coalesce(${w}.raised_by_participant_id in (select app.current_participant_ids()), false)
+  and exists (select 1 from project p where p.id = ${w}.project_id and p.status = 'active'))`;
+
+/** Field types whose answers are Documents: Duplicate never copies them. */
+const documentFieldTypes: readonly string[] = ["attachments", "photos", "checklist"];
+
+export type DuplicateResult = CreateWorkItemResult | { ok: false; reason: (typeof duplicateRefusals)[number] };
+
+/**
+ * Duplicate (RP-409, the List's row menu; visibility.md scenario RP-409-1): a new Draft of the
+ * item's Type, created as any new item is (createWorkItem: the latest Form Version, the
+ * raiser's Draft Step, every check), with its Subject and only what the raiser's own Company
+ * wrote: the answers of the sections editable at the Draft, as the Member reads them
+ * (app.work_item_answers), whose field the latest Form still has with the same type. Never
+ * another Participant's sections, a Document, a Link's history, an Internal Note or an event.
+ * Refused alike, `duplicate_not_allowed`, to anyone but a Member of the raiser's Participant;
+ * not found for an item they can't see.
+ */
+export async function duplicateWorkItem(db: Db, memberId: string, workItemId: string, now: Date): Promise<DuplicateResult> {
+  const source = await withMember(db, memberId, async (trx) => {
+    const { rows } = await sql<{
+      project_id: string;
+      type_code: string;
+      title: string;
+      data: Record<string, unknown>;
+      schema: unknown;
+      can_duplicate: boolean;
+      project_active: boolean;
+    }>`
+      select w.project_id, t.code as type_code, w.title, app.work_item_answers(w.id) as data, fv.schema,
+        ${canDuplicate(sql.ref("w"))} as can_duplicate,
+        exists (select 1 from project p where p.id = w.project_id and p.status = 'active') as project_active
+      from work_item w
+      join work_item_type t on t.id = w.work_item_type_id
+      join form_version fv on fv.id = w.form_version_id
+      where w.id = ${workItemId} and app.sees_work_item(w.id)
+    `.execute(trx);
+    const item = rows[0];
+    if (!item) return { refused: "not_found" as const };
+    if (!item.project_active) return { refused: "project_closed" as const };
+    if (!item.can_duplicate) return { refused: "duplicate_not_allowed" as const };
+    const pinned = formSchema.parse(item.schema);
+    const answers = answersFromDb(pinned, item.data);
+    const latest = await latestForm(trx, item.type_code);
+    if (!latest) return { refused: "duplicate_not_allowed" as const };
+    const atDraft = formToFillAt(latest, ...(await draftOf(trx, item.project_id, item.type_code)));
+    const editable = new Set(atDraft.editableSections);
+    const wasType = new Map(answerFields(pinned).map((f) => [f.key, f.type]));
+    const kept = latest.schema.sections
+      .filter((s) => editable.has(s.key))
+      .flatMap((s) => s.fields)
+      .filter((f) => isAnswerField(f) && !documentFieldTypes.includes(f.type) && wasType.get(f.key) === f.type && answers[f.key] !== undefined);
+    return { refused: undefined, projectId: item.project_id, type: item.type_code, title: item.title, answers: Object.fromEntries(kept.map((f) => [f.key, answers[f.key]])) };
+  });
+  if (source.refused !== undefined) return { ok: false, reason: source.refused };
+  return createWorkItem(db, memberId, source.projectId, { type: source.type, title: source.title, answers: source.answers }, now);
 }
 
 /** An item's per-field times as the acting Member who may save it reads them; locks the item when `lock`. */
@@ -706,7 +775,7 @@ async function actionRows(trx: Trx, workItemId: string, transitionKey?: string):
 }
 
 /** What the acting Member may press on a visible item now. */
-async function actions(trx: Trx, workItemId: string): Promise<Omit<WorkItemActions, "saveAnswers" | "createRevision" | "createReplacement" | "discardRevision">> {
+async function actions(trx: Trx, workItemId: string): Promise<Omit<WorkItemActions, "saveAnswers" | "createRevision" | "createReplacement" | "discardRevision" | "duplicate">> {
   const rows = await actionRows(trx, workItemId);
   const transitions = rows.filter((r) => r.action === "transition");
   const offered = await Promise.all(transitions.map((r) => (r.offers_assign_to ? assignees(trx, workItemId, r.transition_key!) : [])));

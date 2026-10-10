@@ -91,6 +91,7 @@ const answers = {
   // Replacements (RP-435): one answer whatever the reason (the outcome offers none, one already
   // stands, a Member the Draft Step doesn't allow), so nobody outside the raiser learns whether one stands.
   replacement_not_allowed: () => new HttpError(409, "replacement_not_allowed"),
+  duplicate_not_allowed: () => new HttpError(409, "duplicate_not_allowed"),
   // A Project's Stages (RP-428). The shapes are checked by the request schemas first;
   // a Stage's name that isn't English and Arabic is `invalid_name` (below).
   invalid_stage: () => new HttpError(422, "invalid_stage"),

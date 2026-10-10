@@ -44,6 +44,7 @@ import { boardWorkItems, changeBoardLayout, exportWorkItems, listWorkItems, save
 import { createReplacement, createRevision, discardRevision, getRevisionChain } from "../work-items/revisions.ts";
 import {
   claimStep,
+  duplicateWorkItem,
   createWorkItem,
   getNewWorkItemForm,
   getNewWorkItemFormChoices,
@@ -324,6 +325,19 @@ export const workItemRoutes =
         const memberId = ctx.requireMember(request);
         const id = idOrNotFound(request.params.workItemId);
         const result = await createReplacement(ctx.db, ctx.files, memberId, id, request.body.idempotencyKey, ctx.now());
+        if (!result.ok) throw refusal(result);
+        return reply.code(201).send({ id: result.id });
+      },
+    );
+
+    // Duplicate (RP-409, the List's row menu): a new Draft of the same Type with only what the
+    // Member's own Company wrote (scenario RP-409-1). Refused alike for every reason but a hidden item (404).
+    app.post(
+      "/v1/work-items/:workItemId/duplicate",
+      { schema: { params: workItemParams, response: { 201: createdWorkItem } } },
+      async (request, reply) => {
+        const memberId = ctx.requireMember(request);
+        const result = await duplicateWorkItem(ctx.db, memberId, idOrNotFound(request.params.workItemId), ctx.now());
         if (!result.ok) throw refusal(result);
         return reply.code(201).send({ id: result.id });
       },
