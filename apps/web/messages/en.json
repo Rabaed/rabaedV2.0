@@ -20,6 +20,10 @@
     "backToProjects": "Back to Projects",
     "hostCompany": "Host Company: {company}"
   },
+  "notFoundPage": {
+    "message": "We can't find this page. It may not exist, or you may not have access to it. Ask the person who sent you the link.",
+    "projects": "Projects"
+  },
   "home": {
     "title": "Rabaed",
     "tagline": "Construction projects, one place, each company sees only its own work.",
@@ -706,6 +710,8 @@
       "title": "Form",
       "toFix": "Fix these fields:",
       "saved": "Draft saved.",
+      "save": "Save",
+      "saveAndClose": "Save and close",
       "anotherMember": "another Member",
       "invalid": "Some answers aren't valid. Check the fields marked in the Form.",
       "notEditable": "These answers can't be changed any more.",
@@ -870,6 +876,10 @@
       "none": "No Links yet.",
       "remove": "Remove the Link to {number}",
       "hidden": "You are not allowed to see the details of this item.",
+      "linkPage": {
+        "title": "Linked item",
+        "back": "Back to the item it is linked from"
+      },
       "linkedFrom": {
         "title": "Linked from",
         "none": "No Submitted item links here yet."

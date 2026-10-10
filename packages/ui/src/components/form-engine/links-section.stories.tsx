@@ -77,7 +77,7 @@ const section = (
     search={search(locale)}
     onAdd={args.onAdd}
     onRemove={args.onRemove}
-    hrefFor={(id) => `#/work-items/${id}`}
+    hrefFor={(link) => (link.workItemId ? `#/work-items/${link.workItemId}` : null)}
     debounceMs={0}
     {...extra}
   />

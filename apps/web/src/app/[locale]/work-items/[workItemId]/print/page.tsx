@@ -40,7 +40,10 @@ export default async function WorkItemPrintPage({ params }: { params: Promise<{ 
     <WorkItemFormProvider
       workItemId={item.id}
       projectId={item.projectId}
+      documentNumber={item.documentNumber}
       linkTargets={linkTargetNames(links.links)}
+      // Read only, to print: a link question's hidden item opens nothing here.
+      hiddenLinks={{}}
       schema={form.schema}
       choices={choices}
       // No person is named on the shared item.

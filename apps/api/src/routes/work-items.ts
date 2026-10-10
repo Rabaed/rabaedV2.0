@@ -28,6 +28,7 @@ import {
   workItemDetail,
   workItemExport,
   workItemHistory,
+  workItemLink,
   workItemLinks,
   workItemList,
   workItemQuery,
@@ -42,7 +43,7 @@ import { refusal } from "../refusals.ts";
 import { getActivityFeed } from "../work-items/activity-feed.ts";
 import { getDashboard } from "../work-items/dashboard.ts";
 import { getLinkedFrom } from "../work-items/linked-from.ts";
-import { addWorkItemLink, getWorkItemLinks, removeWorkItemLink } from "../work-items/links.ts";
+import { addWorkItemLink, getWorkItemLink, getWorkItemLinks, removeWorkItemLink } from "../work-items/links.ts";
 import { boardWorkItems, changeBoardLayout, exportWorkItems, listWorkItems, saveListColumns, type QueryScope } from "../work-items/query.ts";
 import { createReplacement, createRevision, discardRevision, getRevisionChain } from "../work-items/revisions.ts";
 import {
@@ -270,6 +271,18 @@ export const workItemRoutes =
       async (request) => {
         const memberId = ctx.requireMember(request);
         return visibleOrNotFound(getWorkItemLinks(ctx.db, memberId, idOrNotFound(request.params.workItemId)));
+      },
+    );
+
+    // One Link, by its own id (RP-521): where a Link to an item the Member can't see
+    // opens. Its number and Subject only, never the target's id.
+    app.get(
+      "/v1/work-items/:workItemId/links/:linkId",
+      { schema: { params: linkParams, response: { 200: workItemLink } } },
+      async (request) => {
+        const memberId = ctx.requireMember(request);
+        const id = idOrNotFound(request.params.workItemId);
+        return visibleOrNotFound(getWorkItemLink(ctx.db, memberId, id, idOrNotFound(request.params.linkId)));
       },
     );
 

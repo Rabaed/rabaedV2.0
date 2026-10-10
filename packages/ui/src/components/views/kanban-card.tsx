@@ -27,8 +27,10 @@ export type KanbanCardBadge =
       label: string;
       /** Its full name, for screen readers and on hover, e.g. "Approved". */
       name: string;
+      /** The outcome's code, e.g. "A", as `data-outcome`. */
+      code?: string;
     }
-  | { kind: "plain"; label: string };
+  | { kind: "plain"; label: string; /** The outcome's code, e.g. "cancelled", as `data-outcome`. */ code?: string };
 
 /**
  * Who holds the card, or who closed it, as the viewer may read it (V14). `initialsFrom`
@@ -251,13 +253,20 @@ export function HeaderBadge({ badge }: { badge: KanbanCardBadge }) {
     );
   }
   if (badge.kind === "plain") {
-    return <span className="inline-flex h-[22px] items-center rounded-[6px] bg-neutral-tint px-2 text-caption font-semibold text-neutral-fg">{badge.label}</span>;
+    return (
+      <span data-outcome={badge.code} className="inline-flex h-[22px] items-center rounded-[6px] bg-neutral-tint px-2 text-caption font-semibold text-neutral-fg">
+        {badge.label}
+      </span>
+    );
   }
   const { classes, icon } = outcomeLooks[badge.look];
+  // The whole pill left to right, "Code A" in Arabic too (the card anatomy, RP-522).
   return (
     <span
       title={badge.name}
+      data-outcome={badge.code}
       data-outcome-look={badge.look}
+      dir="ltr"
       className={cn("inline-flex h-[22px] items-center gap-1 rounded-[6px] px-2 font-ui text-caption font-bold", classes)}
     >
       <Icon name={icon} size={13} />

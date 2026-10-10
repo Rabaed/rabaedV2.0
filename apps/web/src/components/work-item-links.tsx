@@ -6,13 +6,13 @@ import { useTranslations } from "next-intl";
 import { useState, type ReactNode } from "react";
 import { Link, useRouter } from "@/i18n/navigation";
 import { useLinksSectionLabels } from "@/lib/form-labels";
-import { linkSearch } from "@/lib/link-search";
+import { linkHref, linkSearch } from "@/lib/link-search";
 
 // The Links System Field, below the Form (form-engine.md part 2b): the item's
 // Links as the API returns them for the viewer, a linked item they can't see by
-// its number and Subject only (E1). The raiser's Company adds free Links with
-// Link search and removes them until Submit; the page is refreshed after a
-// change, so the list comes back from the API.
+// its number and Subject only (E1), opening on the Link's own page (RP-521).
+// The raiser's Company adds free Links with Link search and removes them until
+// Submit; the page is refreshed after a change, so the list comes back from the API.
 
 const refusals: Record<string, string> = {
   target_not_found: "targetNotFound",
@@ -76,7 +76,7 @@ export function WorkItemLinks({
         )
       }
       onRemove={(link: WorkItemLink) => void change(() => fetch(`${base}/${link.id}`, { method: "DELETE" }))}
-      hrefFor={(id) => `/work-items/${id}`}
+      hrefFor={(link) => linkHref(workItemId, link)}
       linkAs={Link}
       questionLabels={questionLabels}
       pending={pending}

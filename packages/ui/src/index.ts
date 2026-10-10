@@ -178,7 +178,7 @@ export {
 export { Pager, TableCard, type PagerLabels, type PagerProps, type TableCardProps } from "./components/list/table-card.tsx";
 export { NumberedPager, type NumberedPagerLabels, type NumberedPagerProps } from "./components/list/numbered-pager.tsx";
 export { ListToast, type ListToastProps } from "./components/list/list-toast.tsx";
-export { WorkItemList, type WorkItemFilterHints, type WorkItemListLabels, type WorkItemListProps } from "./components/views/work-item-list.tsx";
+export { Outcome, WorkItemList, type WorkItemFilterHints, type WorkItemListLabels, type WorkItemListProps } from "./components/views/work-item-list.tsx";
 export { WorkItemTable, type WorkItemTableLabels, type WorkItemTableProps } from "./components/views/work-item-table.tsx";
 export { ColumnSettings, type ColumnSettingsLabels, type ColumnSettingsProps } from "./components/views/column-settings.tsx";
 export { type WholeTableLabels } from "./components/views/work-item-export.ts";
@@ -201,6 +201,7 @@ export {
   type KanbanCardProps,
 } from "./components/views/kanban-card.tsx";
 export { BoardLayoutMenu, type BoardLayoutMenuLabels, type BoardLayoutMenuProps } from "./components/views/board-layout-menu.tsx";
+export { outcomesOfType } from "./components/views/outcomes-of-type.ts";
 export {
   WorkItemBoard,
   boardStages,

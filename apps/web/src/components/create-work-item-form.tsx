@@ -127,7 +127,7 @@ export function CreateWorkItemForm({
         optionLists={optionLists}
         onChange={change}
         idPrefix="answer"
-        links={{ targets: {}, search: linkSearch(projectId), hrefFor: (id) => `/work-items/${id}`, linkAs: Link }}
+        links={{ targets: {}, search: linkSearch(projectId), hrefFor: (choice) => (typeof choice === "string" ? `/work-items/${choice}` : null), linkAs: Link }}
       />
       {error && (
         <p role="alert" className="text-sm text-danger">
