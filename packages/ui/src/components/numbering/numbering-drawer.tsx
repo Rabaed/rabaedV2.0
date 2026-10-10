@@ -32,7 +32,7 @@ export function NumberingDrawer({ open, onOpenChange, code, title, description, 
   return (
     <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
       <DialogPrimitive.Portal>
-        <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-inverse/40" />
+        <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-overlay" />
         <DialogPrimitive.Content
           {...(description ? {} : { "aria-describedby": undefined })}
           className="fixed inset-y-0 end-0 z-50 flex w-full max-w-[620px] flex-col bg-canvas text-text shadow-lg focus-visible:outline-none"
@@ -73,7 +73,7 @@ export function NumberingModal({ open, onOpenChange, title, description, childre
   return (
     <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
       <DialogPrimitive.Portal>
-        <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-inverse/40" />
+        <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-overlay" />
         <DialogPrimitive.Content
           className="fixed inset-0 z-50 m-auto flex h-fit max-h-[calc(100dvh-2rem)] w-[min(560px,calc(100%-2rem))] flex-col overflow-hidden rounded-lg bg-surface text-text shadow-lg focus-visible:outline-none"
           data-testid={testId}

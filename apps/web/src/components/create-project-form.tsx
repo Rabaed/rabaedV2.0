@@ -68,7 +68,7 @@ export function CreateProjectForm() {
         </div>
       </form>
       {error && (
-        <p role="alert" className="text-sm text-danger">
+        <p role="alert" className="text-sm text-danger-fg">
           {error}
         </p>
       )}

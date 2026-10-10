@@ -54,7 +54,7 @@ export function WorkItemActions({
         )}
       </div>
       {calls.error && !asking && (
-        <p role="alert" className="text-sm text-danger">
+        <p role="alert" className="text-sm text-danger-fg">
           {calls.error}
         </p>
       )}

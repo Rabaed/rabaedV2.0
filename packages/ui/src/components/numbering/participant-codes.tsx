@@ -266,7 +266,7 @@ function InlineCode({
         )}
       </span>
       {error && (
-        <span role="alert" className="text-caption text-danger">
+        <span role="alert" className="text-caption text-danger-fg">
           {error}
         </span>
       )}

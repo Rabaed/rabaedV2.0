@@ -36,7 +36,7 @@ export function MarkNotificationsRead() {
         {t("markAllRead")}
       </Button>
       {failed && (
-        <p role="alert" className="text-sm text-danger">
+        <p role="alert" className="text-sm text-danger-fg">
           {t("unavailable")}
         </p>
       )}

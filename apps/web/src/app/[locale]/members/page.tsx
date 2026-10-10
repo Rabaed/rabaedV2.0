@@ -29,7 +29,7 @@ export default async function MembersPage({ params }: { params: Promise<{ locale
       {list ? (
         <MembersTable members={list.members} canManage={canManage} />
       ) : (
-        <p role="alert" className="text-danger">
+        <p role="alert" className="text-danger-fg">
           {t("unavailable")}
         </p>
       )}

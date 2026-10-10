@@ -91,7 +91,7 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
     >
       <div className="max-w-3xl space-y-6">
         <div className="space-y-2">
-          <Link href={`/projects/${item.projectId}/work-items`} className="text-sm text-primary underline underline-offset-4">
+          <Link href={`/projects/${item.projectId}/work-items`} className="text-sm text-brand-fg underline underline-offset-4">
             {t("title")}
           </Link>
           <div className="flex flex-wrap items-start justify-between gap-3">
@@ -173,7 +173,7 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
             <>
               <dt className="text-muted">{t("fields.duplicatedFrom")}</dt>
               <dd>
-                <Link href={`/work-items/${item.duplicatedFrom.workItemId}`} className="text-primary underline underline-offset-4">
+                <Link href={`/work-items/${item.duplicatedFrom.workItemId}`} className="text-brand-fg underline underline-offset-4">
                   {item.duplicatedFrom.documentNumber ? <DocNo value={item.duplicatedFrom.documentNumber} /> : <bdi>{item.duplicatedFrom.subject}</bdi>}
                 </Link>
               </dd>

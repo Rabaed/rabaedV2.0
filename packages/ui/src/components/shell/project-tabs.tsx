@@ -71,7 +71,7 @@ export function ProjectTabs({ label, labels, modules, href, current, linkAs: Lin
               ref={key === current ? currentRef : undefined}
               href={href(key)}
               aria-current={key === current ? "page" : undefined}
-              className={cn(tabClass, key === current ? "border-primary font-semibold text-primary" : "text-muted hover:text-text")}
+              className={cn(tabClass, key === current ? "border-primary font-semibold text-brand-fg" : "text-muted hover:text-text")}
             >
               {labels[key]}
             </Link>

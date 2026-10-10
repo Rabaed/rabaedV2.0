@@ -133,7 +133,7 @@ export function NotificationSettingsForm({ locale, labels, value, onSave, onMute
   return (
     <div className="space-y-8">
       {error && (
-        <p role="alert" className="text-sm text-danger">
+        <p role="alert" className="text-sm text-danger-fg">
           {error}
         </p>
       )}
@@ -191,7 +191,7 @@ export function NotificationSettingsForm({ locale, labels, value, onSave, onMute
                 </span>
                 {group === "watched" && (
                   <details className="group/outcomes">
-                    <summary className="cursor-pointer text-sm font-medium text-primary pointer-coarse:min-h-11 pointer-coarse:py-3">{labels.outcomes}</summary>
+                    <summary className="cursor-pointer text-sm font-medium text-brand-fg pointer-coarse:min-h-11 pointer-coarse:py-3">{labels.outcomes}</summary>
                     <div className="mt-3 grid gap-6 sm:grid-cols-3">
                       {Object.entries(outcomeGroups).map(([key, outcomes]) => (
                         <Field key={key} label={labels.outcomeGroups[key as keyof typeof outcomeGroups]} group>

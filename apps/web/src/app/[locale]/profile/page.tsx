@@ -25,7 +25,7 @@ export default async function ProfilePage({ params }: { params: Promise<{ locale
         {settings ? (
           <NotificationSettings value={settings} locale={locale} />
         ) : (
-          <p role="alert" className="text-danger">
+          <p role="alert" className="text-danger-fg">
             {t("unavailable")}
           </p>
         )}

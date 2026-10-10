@@ -30,7 +30,7 @@ export function ModalContent({
 }: ModalContentProps) {
   return (
     <DialogPrimitive.Portal>
-      <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-inverse/40" />
+      <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-overlay" />
       <DialogPrimitive.Content
         // Without a description, don't point aria-describedby at nothing.
         {...(description ? {} : { "aria-describedby": undefined })}

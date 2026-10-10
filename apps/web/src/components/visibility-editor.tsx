@@ -114,7 +114,7 @@ export function VisibilityEditor({
             {t("save")}
           </Button>
           {message && (
-            <p role={message.kind === "error" ? "alert" : "status"} className={message.kind === "error" ? "text-sm text-danger" : "text-sm text-muted"}>
+            <p role={message.kind === "error" ? "alert" : "status"} className={message.kind === "error" ? "text-sm text-danger-fg" : "text-sm text-muted"}>
               {message.text}
             </p>
           )}

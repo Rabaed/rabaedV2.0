@@ -19,7 +19,7 @@ export default async function ActivityPage({ params }: { params: Promise<{ local
 
   return (
     <div className="space-y-4">
-      <Link href={`/projects/${project.id}`} className="text-sm text-primary underline underline-offset-4">
+      <Link href={`/projects/${project.id}`} className="text-sm text-brand-fg underline underline-offset-4">
         {project.name[locale]}
       </Link>
       <ActivityFeedView projectId={project.id} initial={activity} locale={locale} fullHeight />

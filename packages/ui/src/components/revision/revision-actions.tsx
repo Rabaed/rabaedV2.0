@@ -80,7 +80,7 @@ export function RevisionActions({ labels, canCreate, canDiscard, onCreate, onDis
           </DialogTrigger>
           <DialogContent title={labels.discardTitle} description={labels.discardIntro} closeLabel={labels.close}>
             {error && (
-              <p role="alert" className="text-sm text-danger">
+              <p role="alert" className="text-sm text-danger-fg">
                 {error}
               </p>
             )}
@@ -102,7 +102,7 @@ export function RevisionActions({ labels, canCreate, canDiscard, onCreate, onDis
         </Dialog>
       )}
       {error && !confirming && (
-        <p role="alert" className="text-sm text-danger">
+        <p role="alert" className="text-sm text-danger-fg">
           {error}
         </p>
       )}

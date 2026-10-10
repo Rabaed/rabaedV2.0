@@ -117,7 +117,7 @@ export function ActivityFeedPanel({
           {t("title")}
         </h2>
         {viewAllHref && !fullHeight && (
-          <Link href={viewAllHref} className={cn("rounded-sm text-sm text-primary underline underline-offset-4", focusRing, touchBox)}>
+          <Link href={viewAllHref} className={cn("rounded-sm text-sm text-brand-fg underline underline-offset-4", focusRing, touchBox)}>
             {t("viewAll")}
           </Link>
         )}

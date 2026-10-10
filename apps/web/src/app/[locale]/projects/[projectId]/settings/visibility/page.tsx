@@ -61,7 +61,7 @@ export default async function VisibilitySettingsPage({
                 allLabel={{ trade: t("allTrades"), location: t("allLocations") }}
               />
             ) : (
-              <p role="alert" className="text-danger">
+              <p role="alert" className="text-danger-fg">
                 {t("unavailable")}
               </p>
             )}

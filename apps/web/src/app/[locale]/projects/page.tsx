@@ -28,7 +28,7 @@ export default async function ProjectsPage({ params }: { params: Promise<{ local
       </div>
 
       {!list ? (
-        <p role="alert" className="text-danger">
+        <p role="alert" className="text-danger-fg">
           {t("unavailable")}
         </p>
       ) : (

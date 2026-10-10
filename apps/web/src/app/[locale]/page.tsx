@@ -19,7 +19,7 @@ export default async function Home({ params }: { params: Promise<{ locale: Local
     const home = await getHome();
     if (!home) {
       return (
-        <p role="alert" className="text-danger">
+        <p role="alert" className="text-danger-fg">
           {t("unavailable")}
         </p>
       );
@@ -39,7 +39,7 @@ export default async function Home({ params }: { params: Promise<{ locale: Local
       <p>
         {t("documentNumberLabel")} <DocNo value="TWR-MAR-0000001" />
       </p>
-      <Link href="/health" className="text-primary underline underline-offset-4">
+      <Link href="/health" className="text-brand-fg underline underline-offset-4">
         {t("healthLink")}
       </Link>
     </div>

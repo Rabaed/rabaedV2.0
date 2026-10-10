@@ -16,7 +16,7 @@ import { StagePill } from "../status/stage-pill.tsx";
 // each. Presentational: the rows come from GET /v1/home as the Member may see
 // them, and the app supplies the words and links.
 
-const linkClass = cn("inline-flex items-center rounded-sm text-[13px] font-semibold text-primary hover:underline underline-offset-4", focusRing, touchBox);
+const linkClass = cn("inline-flex items-center rounded-sm text-[13px] font-semibold text-brand-fg hover:underline underline-offset-4", focusRing, touchBox);
 
 /** A titled card with links at the end of its 49px heading, as the kit's. Fills its grid cell's height. */
 function HomeCard({ title, actions, children, className }: { title: string; actions?: ReactNode; children: ReactNode; className?: string }) {
@@ -86,7 +86,7 @@ export function NeedsMyActionCard({ items, locale, labels, itemHref, boards, lin
             </Link>
             {others.length > 0 && (
               <Popover>
-                <PopoverTrigger className={cn("inline-flex items-center justify-center rounded-sm text-primary hover:bg-hover", focusRing, touchBox)} aria-label={labels.otherBoards}>
+                <PopoverTrigger className={cn("inline-flex items-center justify-center rounded-sm text-brand-fg hover:bg-hover", focusRing, touchBox)} aria-label={labels.otherBoards}>
                   <Icon name="chevron-down" size={16} />
                 </PopoverTrigger>
                 <PopoverContent align="end" aria-label={labels.otherBoards} className="w-auto min-w-48 p-1.5">

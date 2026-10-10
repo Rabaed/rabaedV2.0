@@ -56,7 +56,7 @@ export function AcceptInvitationForm() {
   if (token === undefined) return null;
   if (!token) {
     return (
-      <p role="alert" className="text-danger">
+      <p role="alert" className="text-danger-fg">
         {t("invalid")}
       </p>
     );
@@ -71,7 +71,7 @@ export function AcceptInvitationForm() {
         <Input name="confirm" type="password" autoComplete="new-password" />
       </Field>
       {error && (
-        <p role="alert" className="text-sm text-danger">
+        <p role="alert" className="text-sm text-danger-fg">
           {error}
         </p>
       )}
