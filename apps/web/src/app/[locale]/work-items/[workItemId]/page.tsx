@@ -1,5 +1,5 @@
 import { answerFields, formatNumber, isOpenStageCategory, stepAgeLabel, type Locale } from "@rabaed/domain";
-import { AgeDots, DocNo, StagePill, stageColour } from "@rabaed/ui";
+import { AgeDots, DocNo, Outcome, StagePill, stageColour } from "@rabaed/ui";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
 import { WorkItemActions } from "@/components/work-item-actions";
@@ -23,6 +23,7 @@ import {
   getOptionLists,
   getProjectScopes,
   getRevisionChain,
+  getTypeOutcomes,
   getWatchState,
   getWorkItem,
   getWorkItemDocuments,
@@ -60,6 +61,8 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
   if (!me) return redirect({ href: "/sign-in", locale });
   if (!item || !form || !people || !documents || !links || !linkedFrom) notFound();
   // Editable: the Built-in Fields offer what a new item's do. Otherwise they only name the item's own values.
+  // The closed item's Issued Code: the same badge as the List and the Kanban, from its Type's outcome set (RP-429, RP-522).
+  const typeOutcomes = item.outcome ? await getTypeOutcomes(item.projectId, item.type.code) : null;
   const editable = item.actions.saveAnswers;
   const [mine, scopes] = editable
     ? await Promise.all([getMyVisibility(item.projectId), getProjectScopes(item.projectId)])
@@ -194,9 +197,15 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
             <>
               <dt className="text-muted">{t("fields.issuedCode")}</dt>
               <dd>
-                <bdi dir="ltr" className="font-semibold" data-testid="issued-code">
-                  {item.outcome}
-                </bdi>
+                <span data-testid="issued-code">
+                  <Outcome
+                    outcome={item.outcome}
+                    typeCode={item.type.code}
+                    outcomes={(typeOutcomes?.outcomes ?? []).map((o) => ({ ...o, type: item.type.code }))}
+                    locale={locale}
+                    cancelled={tViews("list.cancelled")}
+                  />
+                </span>
               </dd>
             </>
           )}

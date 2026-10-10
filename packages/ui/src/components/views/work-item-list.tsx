@@ -28,6 +28,7 @@ import { Table, TableBody, TableCell, TableEmpty, TableHead, TableHeader, TableR
 import { DocNo } from "../doc-no/doc-no.tsx";
 import { cn } from "../../lib/cn.ts";
 import { touchBox } from "../form/control-styles.ts";
+import { Icon } from "../icon/icon.tsx";
 import { Field } from "../form/field.tsx";
 import { Input } from "../form/input.tsx";
 import { Select } from "../form/select.tsx";
@@ -456,8 +457,9 @@ function WithCell({ row, locale, unclaimed }: { row: WorkItemRow; locale: Locale
 /**
  * An item's outcome badge, the same on the List and the Kanban (RP-429): named
  * and coloured from its Type's outcome set, never from fixed codes. A letter
- * code (a Review Code) shows its letter, its name for screen readers and on
- * hover; any other outcome shows its name.
+ * code (a Review Code) shows "Code A" with its icon, in Arabic too and the whole
+ * badge left to right (the card anatomy, RP-522), its name for screen readers
+ * and on hover; any other outcome shows its name.
  */
 export function Outcome({
   outcome,
@@ -487,10 +489,9 @@ export function Outcome({
       </Badge>
     );
   return (
-    <Badge tone={outcomeTone(found)} title={label} data-outcome={found.code}>
-      <span aria-hidden="true" translate="no">
-        {found.code}
-      </span>
+    <Badge tone={outcomeTone(found)} title={label} data-outcome={found.code} dir="ltr" translate="no">
+      <Icon name={offersRevision(found) ? "refresh" : found.polarity === "positive" ? "circle-check" : "circle-x"} size={14} />
+      <span aria-hidden="true">Code {found.code}</span>
       <span className="sr-only">{label}</span>
     </Badge>
   );
