@@ -1,7 +1,7 @@
 "use client";
 
 import { formatDayMonthYear, formatNumber, relativeAge, workItemListHref, type Home, type Locale } from "@rabaed/domain";
-import { NeedsMyActionCard, ProjectCard, RecentActivityCard, StatTile } from "@rabaed/ui";
+import { NeedsMyActionCard, ProjectCard, projectTileIndexes, RecentActivityCard, StatTile } from "@rabaed/ui";
 import { useTranslations } from "next-intl";
 import { Link } from "@/i18n/navigation";
 import { NewProjectDialog } from "./new-project-dialog";
@@ -58,6 +58,7 @@ export function HomeView({
   };
   const itemHref = (id: string) => `/work-items/${id}`;
   const shown = home.projects.toSorted((a, b) => Number(a.status === "closed") - Number(b.status === "closed")).slice(0, projectCards);
+  const tiles = projectTileIndexes(shown.map((p) => p.id));
 
   return (
     <div className="flex flex-col">
@@ -129,27 +130,26 @@ export function HomeView({
           <p className="text-muted">{t("noProjects")}</p>
         ) : (
           <ul aria-label={t("yourProjects")} className="grid grid-cols-[repeat(auto-fill,minmax(min(300px,100%),1fr))] gap-[18px]">
-            {shown.map((p) => {
-              const count = home.submittals[p.id];
-              return (
-                <li key={p.id} className="flex">
-                  <ProjectCard
-                    project={p}
-                    locale={locale}
-                    labels={{
-                      list: t("yourProjects"),
-                      needMyAction: tProjects("needMyAction"),
-                      active: tProjects("active"),
-                      closed: tProjects("closed"),
-                      projectAdmin: tProjects("projectAdmin"),
-                    }}
-                    href={`/projects/${p.id}`}
-                    linkAs={Link}
-                    {...(count === undefined ? {} : { submittals: t("submittals", { count, n: formatNumber(count, locale) }) })}
-                  />
-                </li>
-              );
-            })}
+            {shown.map((p, i) => (
+              <li key={p.id} className="flex">
+                <ProjectCard
+                  project={p}
+                  locale={locale}
+                  labels={{
+                    list: t("yourProjects"),
+                    needMyAction: (_count, n) => tProjects("cardNeedMyAction", { n }),
+                    submittals: (count, n) => tProjects("cardSubmittals", { count, n }),
+                    active: tProjects("active"),
+                    closed: tProjects("closed"),
+                    projectAdmin: tProjects("projectAdmin"),
+                  }}
+                  href={`/projects/${p.id}`}
+                  linkAs={Link}
+                  submittals={home.submittals[p.id]}
+                  tile={tiles[i]}
+                />
+              </li>
+            ))}
           </ul>
         )}
       </section>

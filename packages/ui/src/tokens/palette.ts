@@ -74,7 +74,14 @@ export const palette = {
   "violet-50": "#f0ecfe",
   "violet-500": "#7a5af0",
   "violet-700": "#6547d6",
-  "cyan-50": "#e2f5f8",
+  // A Project's letter tile (RP-408): the design kit's own tomato, blue and purple; its green and orange
+  // darkened just enough for the white letter (19px / 800 is large text) to reach 3:1.
+  "tile-tomato": "#f8552f",
+  "tile-blue": "#3d6db5",
+  "tile-green": "#1ea762",
+  "tile-purple": "#6b5ad8",
+  "tile-orange": "#d27d3e",
+  "cyan-50":"#e2f5f8",
   "cyan-500": "#1aa3b8",
   "cyan-700": "#0f7688",
 } as const;

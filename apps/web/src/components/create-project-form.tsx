@@ -62,7 +62,7 @@ export function CreateProjectForm() {
           />
         </Field>
         <div className="sm:col-span-2">
-          <Button type="submit" disabled={pending}>
+          <Button type="submit" disabled={pending} className="h-[42px] rounded-[11px] px-4 font-semibold">
             {t("create")}
           </Button>
         </div>

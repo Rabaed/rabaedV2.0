@@ -12,7 +12,7 @@ export const projectRoutes =
   async (app) => {
     app.get("/v1/projects", { schema: { response: { 200: myProjects } } }, async (request) => {
       const memberId = ctx.requireMember(request);
-      return { projects: await listMyProjects(ctx.db, memberId) };
+      return listMyProjects(ctx.db, memberId, ctx.now());
     });
 
     app.post(

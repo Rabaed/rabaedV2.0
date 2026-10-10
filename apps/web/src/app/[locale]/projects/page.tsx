@@ -14,13 +14,17 @@ export default async function ProjectsPage({ params }: { params: Promise<{ local
   const canCreate = me.member.canCreateProjects;
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-3">
+    <div className="flex flex-col">
+      <div className="mb-[22px] flex flex-wrap items-end gap-4">
         <div className="flex min-w-0 flex-col gap-1">
-          <h1 className="font-display text-h4 font-bold text-text">{t("title")}</h1>
+          <h1 className="font-display text-h4 leading-[1.2] font-bold tracking-[-0.01em] ltr:font-extrabold">{t("title")}</h1>
           <p className="text-body text-muted">{t("subtitle")}</p>
         </div>
-        {canCreate && <NewProjectDialog />}
+        {canCreate && (
+          <div className="ms-auto">
+            <NewProjectDialog className="h-[42px] rounded-[11px] px-4 font-semibold" />
+          </div>
+        )}
       </div>
 
       {!list ? (
@@ -28,7 +32,12 @@ export default async function ProjectsPage({ params }: { params: Promise<{ local
           {t("unavailable")}
         </p>
       ) : (
-        <ProjectCardsView projects={list.projects} locale={locale} emptyAction={canCreate ? <NewProjectDialog /> : undefined} />
+        <ProjectCardsView
+          projects={list.projects}
+          submittals={list.submittals}
+          locale={locale}
+          emptyAction={canCreate ? <NewProjectDialog className="h-[42px] rounded-[11px] px-4 font-semibold" /> : undefined}
+        />
       )}
     </div>
   );
