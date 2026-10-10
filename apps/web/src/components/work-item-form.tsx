@@ -56,6 +56,8 @@ type WorkItemFormState = {
   documentNumber: string | null;
   /** The number and Subject of each item its link questions chose that the viewer sees. */
   linkTargets: LinkTargetNames;
+  /** Where each chosen item the viewer can't see opens, by its Document Number: its Link's page (RP-521). */
+  hiddenLinks: Readonly<Record<string, string>>;
   errors: readonly FieldError[];
   editable: boolean;
   /** The Form Sections the viewer may change now; the others read (form-engine.md §4). */
@@ -92,6 +94,7 @@ export function WorkItemFormProvider({
   projectId,
   documentNumber,
   linkTargets,
+  hiddenLinks,
   schema,
   choices,
   answers: saved,
@@ -109,6 +112,7 @@ export function WorkItemFormProvider({
   projectId: string;
   documentNumber: string | null;
   linkTargets: LinkTargetNames;
+  hiddenLinks: Readonly<Record<string, string>>;
   schema: FormSchema;
   choices: BuiltInChoices;
   answers: Record<string, unknown>;
@@ -243,6 +247,7 @@ export function WorkItemFormProvider({
         projectId,
         documentNumber,
         linkTargets,
+        hiddenLinks,
         answers,
         named,
         errors,
@@ -309,6 +314,7 @@ export function WorkItemAnswers({ locale, workItemId, documents }: { locale: Loc
           targets: form.linkTargets,
           search: linkSearch(form.projectId),
           hrefFor: (id) => `/work-items/${id}`,
+          hiddenHrefFor: (documentNumber) => form.hiddenLinks[documentNumber] ?? null,
           linkAs: Link,
           workItemId,
         }}

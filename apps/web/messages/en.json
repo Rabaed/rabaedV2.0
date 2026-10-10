@@ -629,6 +629,10 @@
       "none": "No Links yet.",
       "remove": "Remove the Link to {number}",
       "hidden": "You are not allowed to see the details of this item.",
+      "linkPage": {
+        "title": "Linked item",
+        "back": "Back to the item it is linked from"
+      },
       "linkedFrom": {
         "title": "Linked from",
         "none": "No Submitted item links here yet."

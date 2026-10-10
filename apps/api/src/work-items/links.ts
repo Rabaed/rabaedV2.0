@@ -1,5 +1,5 @@
 import { withMember, type Db } from "@rabaed/db";
-import type { LinkKind, WorkItemLinks } from "@rabaed/domain";
+import type { LinkKind, WorkItemLink, WorkItemLinks } from "@rabaed/domain";
 import { sql } from "kysely";
 import { checkedOutcome, commandResult } from "../outcomes.ts";
 
@@ -45,7 +45,17 @@ export function getWorkItemLinks(db: Db, memberId: string, workItemId: string): 
   });
 }
 
-const addLinkRefusals = ["not_found", "project_closed", "not_editable", "target_not_found", "already_linked"] as const;
+/**
+ * One Link of a visible item, by the Link's own id (RP-521): what the Links
+ * read gives for it, so a hidden target is still its number and Subject only.
+ * Null when they can't see the item or the Link isn't one of its own.
+ */
+export async function getWorkItemLink(db: Db, memberId: string, workItemId: string, linkId: string): Promise<WorkItemLink | null> {
+  const all = await getWorkItemLinks(db, memberId, workItemId);
+  return all?.links.find((l) => l.id === linkId) ?? null;
+}
+
+const addLinkRefusals =["not_found", "project_closed", "not_editable", "target_not_found", "already_linked"] as const;
 export type AddLinkResult = { ok: true; id: string } | { ok: false; reason: (typeof addLinkRefusals)[number] };
 
 /**

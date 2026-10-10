@@ -32,6 +32,8 @@ export type FormLinks = {
   search: (query: string, page: number) => Promise<LinkSearchResults>;
   /** Where a chosen item the viewer sees opens. */
   hrefFor: (workItemId: string) => string;
+  /** Where a chosen item the viewer can't see opens, by its Document Number: the page of the item's Link to it (RP-521). */
+  hiddenHrefFor?: (documentNumber: string) => string | null;
   /** The item's own id, never offered; undefined before it exists. */
   workItemId?: string;
   /** The link component, e.g. the app's `Link`. Defaults to `<a>`. */
@@ -70,6 +72,7 @@ function ChosenItem({
       documentNumber={shown.documentNumber}
       subject={shown.subject}
       href={typeof choice === "string" ? links.hrefFor(choice) : null}
+      hiddenHref={typeof choice === "string" ? null : links.hiddenHrefFor?.(choice.documentNumber)}
       linkAs={Anchor}
       remove={onRemove && { label: labels.remove(shown.documentNumber), icon: "x", onRemove }}
     />
