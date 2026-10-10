@@ -81,8 +81,7 @@ export async function addTestWorkflow(
           'close', 'B', 'approve', 10)` : ""}
         ${withCancel ? `, ('cancel', 'draft', 'cancelled', '{"en": "Cancel", "ar": "إلغاء"}', 'cancel', null, 'create', ${withApproveB ? 11 : 10}),
           ('cancel_review', 'internal_review', 'cancelled', '{"en": "Cancel", "ar": "إلغاء"}', 'cancel', null, 'review', ${withApproveB ? 12 : 11})` : ""}
-        ${forward ? `, ('forward', 'consultant_review', 'or_review', '{"en": "Send to Owner Representative", "ar": "إرسال لممثل المالك"}', 'send', null, 'review', 20),
-          ('back_to_consultant', 'or_review', 'consultant_review', '{"en": "Back to Consultant", "ar": "إعادة للاستشاري"}', 'send', null, 'review', 21)` : ""}
+        ${forward ? `, ('forward', 'consultant_review', 'or_review', '{"en": "Send to Owner Representative", "ar": "إرسال لممثل المالك"}', 'send', null, 'review', 20)` : ""}
       ) as t (key, from_key, to_key, label, kind, outcome, permission, sort)
       join steps f on f.key = t.from_key
       join steps s on s.key = t.to_key
@@ -110,7 +109,7 @@ export type TestWorkflowOptions = {
   withCancel?: boolean;
   /** Consultant review Recommends a Code (RP-433). */
   recommendCode?: boolean;
-  /** Consultant review may send the item on to the Owner Representative (a third Company), and it comes back (RP-407). */
+  /** Consultant review may send the item on to the Owner Representative (a third Company), a Step with no way on (RP-407). */
   forward?: boolean;
   name?: { en: string; ar: string };
   /** A Project's own Workflow, or one in a Company's Library; a Rabaed Default when left out. */
