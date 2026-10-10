@@ -50,6 +50,7 @@ describe("inviting a Member", () => {
       status: "invited",
       isAuthorizedPerson: false,
       canCreateProjects: false,
+      projectCount: 0,
     });
     await api.acceptInvitation(invited.invitationToken);
     const after = (await a.caller.get("/v1/members")).json().members.find((m: { id: string }) => m.id === invited.id);
@@ -206,6 +207,58 @@ describe("the Members list", () => {
 
   it("needs a signed-in Member", async () => {
     expect((await api.anonymous().get("/v1/members")).statusCode).toBe(401);
+  });
+});
+
+// RP-413-1: the Projects column counts the Projects of the Member's own Company only.
+describe("the Projects count", () => {
+  type Row = { id: string; projectCount: number | null };
+  const rows = async (by: Caller) => (await by.get("/v1/members")).json().members as Row[];
+  const countOf = (list: Row[], id: string) => list.find((m) => m.id === id)?.projectCount;
+
+  async function twoProjects() {
+    const host = await api.projectCreator();
+    const first = await api.createProject(host.caller, { code: "ONE" });
+    const second = await api.createProject(host.caller, { code: "TWO" });
+    const participantOf = async (projectId: string) =>
+      (await host.caller.get(`/v1/projects/${projectId}/participants`)).json().participants[0].id as string;
+    const [p1, p2] = [await participantOf(first.id), await participantOf(second.id)];
+    const busy = await api.member(host.caller);
+    const light = await api.member(host.caller);
+    const idle = await api.member(host.caller);
+    await api.addProjectMember(host.caller, p1, busy.member.id);
+    await api.addProjectMember(host.caller, p2, busy.member.id);
+    await api.addProjectMember(host.caller, p1, light.member.id);
+    return { host, busy, light, idle, first, p1 };
+  }
+
+  it("is the number of the Company's Projects each Member is on, as the Authorized Person reads it", async () => {
+    const { host, busy, light, idle } = await twoProjects();
+    const list = await rows(host.caller);
+    expect(countOf(list, busy.member.id)).toBe(2);
+    expect(countOf(list, light.member.id)).toBe(1);
+    expect(countOf(list, idle.member.id)).toBe(0);
+  });
+
+  it("gives a plain Member their own count and none for a colleague (they cannot see colleagues' Projects)", async () => {
+    const { busy, light } = await twoProjects();
+    const list = await rows(busy.caller);
+    expect(countOf(list, busy.member.id)).toBe(2);
+    expect(countOf(list, light.member.id)).toBeNull();
+  });
+
+  it("never counts another Company's people or Projects, and another Company never reads it", async () => {
+    const { host, busy, first } = await twoProjects();
+    const other = await api.authorizedPerson();
+    const theirs = await api.addParticipant(host.caller, first.id, other.company, "consultant");
+    const otherMember = await api.member(other.caller);
+    await api.addProjectMember(other.caller, theirs, otherMember.member.id);
+    const own = await rows(other.caller);
+    expect(own.map((m) => m.id)).not.toContain(busy.member.id);
+    expect(countOf(own, otherMember.member.id)).toBe(1);
+    // The host's count is untouched by the other Company's Member on the same Project.
+    expect(countOf(await rows(host.caller), busy.member.id)).toBe(2);
+    expect((await rows(host.caller)).map((m) => m.id)).not.toContain(otherMember.member.id);
   });
 });
 

@@ -1,6 +1,6 @@
 import { newToken, type Invitation } from "@rabaed/auth";
 import { withMember, type Database, type Db } from "@rabaed/db";
-import type { CompanyMember, InviteMemberRequest } from "@rabaed/domain";
+import type { CompanyMember, InviteMemberRequest, ListedMember } from "@rabaed/domain";
 import { sql, type Transaction } from "kysely";
 import { refusedAsForbidden, type Forbidden } from "../db-error.ts";
 import { checkedOutcome } from "../outcomes.ts";
@@ -41,8 +41,28 @@ function asAuthorizedPerson<T>(
 }
 
 /** The Company's Members, as RLS lets the acting Member see them: their own Company only. */
-export async function listMembers(db: Db, memberId: string): Promise<CompanyMember[]> {
-  return withMember(db, memberId, (trx) => selectMembers(trx).orderBy("m.created_at").orderBy("m.id").execute());
+export async function listMembers(db: Db, memberId: string): Promise<ListedMember[]> {
+  return withMember(db, memberId, async (trx) => {
+    const members = await selectMembers(trx).orderBy("m.created_at").orderBy("m.id").execute();
+    // The Project Members rows RLS lets this Member read: all of the Company's for its Authorized
+    // Person, otherwise only those of Projects they are on. So a plain Member's count is right for
+    // themself only, and a colleague's stays null rather than a number that undercounts.
+    const counts = await trx
+      .selectFrom("project_member as pm")
+      .innerJoin("participant as p", "p.id", "pm.participant_id")
+      .select(["pm.member_id as memberId", sql<string>`count(*)`.as("projects")])
+      .where("pm.status", "=", "active")
+      .where("p.status", "=", "active")
+      .where("pm.member_id", "in", members.map((m) => m.id))
+      .groupBy("pm.member_id")
+      .execute();
+    const projects = new Map(counts.map((c) => [c.memberId, Number(c.projects)]));
+    const readsAll = members.some((m) => m.id === memberId && m.isAuthorizedPerson);
+    return members.map((m) => ({
+      ...m,
+      projectCount: readsAll || m.id === memberId ? (projects.get(m.id) ?? 0) : null,
+    }));
+  });
 }
 
 function selectMembers(trx: Transaction<Database>) {

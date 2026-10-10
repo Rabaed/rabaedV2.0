@@ -18,7 +18,16 @@ export const companyMember = z.object({
 });
 export type CompanyMember = z.infer<typeof companyMember>;
 
-export const companyMembers = z.object({ members: z.array(companyMember) });
+/**
+ * A row of the Members page: the Member and the number of their own Company's
+ * Projects they are on. A Member reads that number for themselves; for a
+ * colleague only the Authorized Person can read it (null otherwise: the rest
+ * cannot see a colleague's Projects, so a count would be wrong).
+ */
+export const listedMember = companyMember.extend({ projectCount: z.number().int().nonnegative().nullable() });
+export type ListedMember = z.infer<typeof listedMember>;
+
+export const companyMembers = z.object({ members: z.array(listedMember) });
 export type CompanyMembers = z.infer<typeof companyMembers>;
 
 /** The Authorized Person invites a Member of their Company. */
