@@ -12,14 +12,21 @@ export const linkSearch =
   };
 
 /**
+ * Where one of an item's Links opens: the linked item, when the viewer sees it;
+ * otherwise the Link's own page, by the Link's id through the item it is linked
+ * from (RP-521), never the hidden item's id, which the viewer never has.
+ */
+export const linkHref = (workItemId: string, link: WorkItemLink): string =>
+  link.workItemId ? `/work-items/${link.workItemId}` : `/work-items/${workItemId}/links/${link.id}`;
+
+/**
  * Where a linked item the viewer can't see opens, by its Document Number: the
- * page of one of the item's Links to it, by the Link's own id (RP-521), never
- * the hidden item's, which the viewer never has. Plain data, so a server page
- * can hand it to the Form.
+ * page of the item's first Link to it (`linkHref`). Plain data, so a server page
+ * can hand it to the Form's link questions.
  */
 export const hiddenLinkHrefs = (workItemId: string, links: readonly WorkItemLink[]): Readonly<Record<string, string>> => {
   const byNumber: Record<string, string> = {};
-  for (const l of links) if (l.workItemId === null) byNumber[l.documentNumber] ??= `/work-items/${workItemId}/links/${l.id}`;
+  for (const l of links) if (l.workItemId === null) byNumber[l.documentNumber] ??= linkHref(workItemId, l);
   return byNumber;
 };
 

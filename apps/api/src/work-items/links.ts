@@ -55,7 +55,7 @@ export async function getWorkItemLink(db: Db, memberId: string, workItemId: stri
   return all?.links.find((l) => l.id === linkId) ?? null;
 }
 
-const addLinkRefusals =["not_found", "project_closed", "not_editable", "target_not_found", "already_linked"] as const;
+const addLinkRefusals = ["not_found", "project_closed", "not_editable", "target_not_found", "already_linked"] as const;
 export type AddLinkResult = { ok: true; id: string } | { ok: false; reason: (typeof addLinkRefusals)[number] };
 
 /**

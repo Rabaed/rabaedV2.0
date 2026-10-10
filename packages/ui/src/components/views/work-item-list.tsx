@@ -28,7 +28,7 @@ import { Table, TableBody, TableCell, TableEmpty, TableHead, TableHeader, TableR
 import { DocNo } from "../doc-no/doc-no.tsx";
 import { cn } from "../../lib/cn.ts";
 import { touchBox } from "../form/control-styles.ts";
-import { Icon } from "../icon/icon.tsx";
+import { Icon, type IconName } from "../icon/icon.tsx";
 import { Field } from "../form/field.tsx";
 import { Input } from "../form/input.tsx";
 import { Select } from "../form/select.tsx";
@@ -111,6 +111,12 @@ function outcomeTone(outcome: ListOutcomes[number] | undefined): Tone {
   if (!outcome) return "neutral";
   if (offersRevision(outcome)) return "warning";
   return outcome.polarity === "positive" ? "success" : "danger";
+}
+
+/** A Review Code badge's icon, chosen like its tone: a refresh for one offering a Revision, else a check or a cross by its polarity (RP-522). */
+function outcomeIcon(outcome: ListOutcomes[number]): IconName {
+  if (offersRevision(outcome)) return "refresh";
+  return outcome.polarity === "positive" ? "circle-check" : "circle-x";
 }
 
 /** Each outcome code of the Types, once (the first Type's name), then Cancelled: the outcome filter's choices. */
@@ -490,7 +496,7 @@ export function Outcome({
     );
   return (
     <Badge tone={outcomeTone(found)} title={label} data-outcome={found.code} dir="ltr" translate="no">
-      <Icon name={offersRevision(found) ? "refresh" : found.polarity === "positive" ? "circle-check" : "circle-x"} size={14} />
+      <Icon name={outcomeIcon(found)} size={14} />
       <span aria-hidden="true">Code {found.code}</span>
       <span className="sr-only">{label}</span>
     </Badge>

@@ -313,8 +313,7 @@ export function WorkItemAnswers({ locale, workItemId, documents }: { locale: Loc
         links={{
           targets: form.linkTargets,
           search: linkSearch(form.projectId),
-          hrefFor: (id) => `/work-items/${id}`,
-          hiddenHrefFor: (documentNumber) => form.hiddenLinks[documentNumber] ?? null,
+          hrefFor: (choice) => (typeof choice === "string" ? `/work-items/${choice}` : (form.hiddenLinks[choice.documentNumber] ?? null)),
           linkAs: Link,
           workItemId,
         }}

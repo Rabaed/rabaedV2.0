@@ -40,10 +40,12 @@ export type LinksSectionProps = {
   onAdd: (target: LinkTarget) => void;
   /** The Member removes a free Link. */
   onRemove: (link: WorkItemLink) => void;
-  /** Where a linked item the viewer can see opens. */
-  hrefFor: (workItemId: string) => string;
-  /** Where a Link to an item the viewer can't see opens: the Link's own page, by its id (RP-521). */
-  hiddenHrefFor?: (link: WorkItemLink) => string;
+  /**
+   * Where a Link opens: the linked item the viewer can see, or for one they can't
+   * (`workItemId` null) the Link's own page, by its id (RP-521). Null: opening it
+   * says here that they may not see its details.
+   */
+  hrefFor: (link: WorkItemLink) => string | null;
   /** The link component, e.g. the app's `Link`, so navigation stays client-side. Defaults to `<a>`. */
   linkAs?: ElementType;
   /** A link question's label by its field key, to list its Links under (RP-293). */
@@ -73,7 +75,6 @@ export function LinksSection({
   onAdd,
   onRemove,
   hrefFor,
-  hiddenHrefFor,
   linkAs = "a",
   questionLabels = {},
   pending = false,
@@ -92,8 +93,8 @@ export function LinksSection({
       labels={text.item}
       documentNumber={link.documentNumber}
       subject={link.subject}
-      href={link.workItemId ? hrefFor(link.workItemId) : null}
-      hiddenHref={link.workItemId ? null : hiddenHrefFor?.(link)}
+      href={hrefFor(link)}
+      hidden={link.workItemId === null}
       linkAs={linkAs}
       remove={
         canChange && link.kind === "related"

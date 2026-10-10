@@ -12,7 +12,7 @@ export default async function NotFound() {
 
   return (
     <div className="space-y-6" data-testid="not-found">
-      <p className="text-h5 font-semibold">{t("message")}</p>
+      <h1 className="text-h5 font-semibold">{t("message")}</h1>
       <Link href="/projects" className={buttonVariants()}>
         {t("projects")}
       </Link>

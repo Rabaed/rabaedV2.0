@@ -9,8 +9,8 @@ import { LinkedItemRow, type LinkedItemRowLabels } from "./linked-item-row.tsx";
 // chosen, each its Document Number (left to right) and Subject, and Link search
 // to choose more while the answers may change. A chosen item the viewer can't
 // see comes from the API as a HiddenLinkChoice, without an id (E1, ADR 0012):
-// opening it only says they may not see its details, and asks nothing of the
-// API. Presentational: the page passes the Link search API and the names of the
+// opening it only says they may not see its details, on the page of its Link
+// when the page gives one (RP-521). Presentational: the page passes the Link search API and the names of the
 // chosen items the viewer sees.
 
 /** The link question's words, from the app's messages. */
@@ -30,10 +30,12 @@ export type FormLinks = {
   targets: LinkTargetNames;
   /** The Link search API (edit mode). */
   search: (query: string, page: number) => Promise<LinkSearchResults>;
-  /** Where a chosen item the viewer sees opens. */
-  hrefFor: (workItemId: string) => string;
-  /** Where a chosen item the viewer can't see opens, by its Document Number: the page of the item's Link to it (RP-521). */
-  hiddenHrefFor?: (documentNumber: string) => string | null;
+  /**
+   * Where a chosen item opens: one the viewer sees by its id; one they can't, by
+   * its Document Number, on the page of the item's Link to it (RP-521). Null:
+   * opening it says here that they may not see its details.
+   */
+  hrefFor: (choice: Choice) => string | null;
   /** The item's own id, never offered; undefined before it exists. */
   workItemId?: string;
   /** The link component, e.g. the app's `Link`. Defaults to `<a>`. */
@@ -71,8 +73,8 @@ function ChosenItem({
       labels={labels.item}
       documentNumber={shown.documentNumber}
       subject={shown.subject}
-      href={typeof choice === "string" ? links.hrefFor(choice) : null}
-      hiddenHref={typeof choice === "string" ? null : links.hiddenHrefFor?.(choice.documentNumber)}
+      href={links.hrefFor(choice)}
+      hidden={typeof choice !== "string"}
       linkAs={Anchor}
       remove={onRemove && { label: labels.remove(shown.documentNumber), icon: "x", onRemove }}
     />

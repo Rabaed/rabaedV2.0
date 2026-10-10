@@ -1,5 +1,5 @@
 import { answerFields, formatNumber, isOpenStageCategory, stepAgeLabel, type Locale } from "@rabaed/domain";
-import { AgeDots, DocNo, Outcome, StagePill, stageColour } from "@rabaed/ui";
+import { AgeDots, DocNo, Outcome, outcomesOfType, StagePill, stageColour } from "@rabaed/ui";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
 import { WorkItemActions } from "@/components/work-item-actions";
@@ -202,7 +202,7 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
                   <Outcome
                     outcome={item.outcome}
                     typeCode={item.type.code}
-                    outcomes={(typeOutcomes?.outcomes ?? []).map((o) => ({ ...o, type: item.type.code }))}
+                    outcomes={outcomesOfType(item.type.code, typeOutcomes?.outcomes ?? [])}
                     locale={locale}
                     cancelled={tViews("list.cancelled")}
                   />
