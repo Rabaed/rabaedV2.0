@@ -221,7 +221,7 @@ export function WorkItemTable({
                       onSort({ sort: key, dir: sorted ? (direction === "asc" ? "desc" : "asc") : workItemSortOrders[key] })
                     }
                     className={cn(
-                      "ms-auto inline-flex shrink-0 rounded-xs p-0.5 text-faint hover:bg-hover hover:text-text",
+                      "ms-auto -mx-[3px] inline-flex size-6 shrink-0 items-center justify-center rounded-xs text-faint hover:bg-hover hover:text-text",
                       sorted && "text-brand-fg hover:text-brand-fg",
                       focusRing,
                       touchBox,
