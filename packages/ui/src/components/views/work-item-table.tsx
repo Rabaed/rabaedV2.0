@@ -364,10 +364,10 @@ function Cell({ column, row, locale, labels, filters, places, itemHref, linkAs: 
     }
     case "locationLevel1":
     case "locationLevel2":
-    case "locationLevel3": {
-      const depth = levelOf[column]!;
-      const place = row.location === null ? undefined : (places.get(row.location.id) ?? [{ depth: 1, name: row.location.name }]).find((p) => p.depth === depth);
-      return place ? <span className="text-text-secondary">{place.name[locale]}</span> : dash;
+    case "locationLevel3":
+    case "contractor": {
+      const text = columnText[column](row, { locale, labels, filters, places });
+      return text ? <span className="text-text-secondary">{text}</span> : dash;
     }
     case "owner": {
       const owner = ownerOf(row, locale, labels);
@@ -385,12 +385,9 @@ function Cell({ column, row, locale, labels, filters, places, itemHref, linkAs: 
         </span>
       );
     }
-    case "contractor":
-      return row.raiserCompanyName ? <span className="text-text-secondary">{row.raiserCompanyName[locale]}</span> : dash;
     case "created": {
-      // The Creation Date on my own Company's items (the API gives it to the raiser's Participant only), else the Submission Date.
-      const iso = row.creationDate ?? row.submissionDate;
-      return iso === null ? dash : <span className="font-ui text-muted tabular-nums">{listDate(iso, locale)}</span>;
+      const text = columnText.created(row, { locale, labels, filters, places });
+      return text ? <span className="font-ui text-muted tabular-nums">{text}</span> : dash;
     }
     case "stepAge":
       // A closed item doesn't age.
@@ -398,54 +395,61 @@ function Cell({ column, row, locale, labels, filters, places, itemHref, linkAs: 
   }
 }
 
+/** The labels a column's text reads. */
+export type CellTextLabels = Pick<WorkItemTableLabels, "noNumber" | "revisionNoNumber" | "unclaimed" | "cancelled" | "code" | "revision">;
+
+type ColumnContext = {
+  locale: Locale;
+  labels: CellTextLabels;
+  filters: WorkItemTableProps["filters"];
+  places: Map<string, { depth: number; name: BilingualText }[]>;
+};
+
+/** The place at a level of an item's Location (its own Location when the Project's places don't hold it). */
+const placeAt = (row: WorkItemRow, depth: number, places: ColumnContext["places"]) =>
+  row.location === null ? undefined : (places.get(row.location.id) ?? [{ depth: 1, name: row.location.name }]).find((p) => p.depth === depth);
+
 /**
- * A cell as text, for Export (RP-409): what the cell shows, as the viewer may read it (the owner
- * per V14, the Creation Date only to the raiser's Participant). Empty where the cell shows "—".
+ * Each column's value as text, the one definition of what a cell says: the table's plain cells, Export
+ * (cellText) and Group by's group names (list-groups) read it. Empty where the cell shows "—".
+ */
+const columnText: Record<ListColumnKey, (row: WorkItemRow, c: ColumnContext) => string> = {
+  documentNumber: (row, { locale, labels }) =>
+    cardNumber(row.documentNumber, row.revisionNo) ??
+    (row.revisionNo > 0 ? labels.revisionNoNumber(formatNumber(row.revisionNo, locale)) : labels.noNumber),
+  subject: (row) => row.title,
+  revision: (row, { locale, labels }) => labels.revision(formatNumber(row.revisionNo, locale)),
+  trade: (row, { locale }) => `${row.trade.name[locale]} (${row.trade.code})`,
+  type: (row) => row.type.code,
+  stage: (row, { locale }) => row.stage.name[locale],
+  outcome: (row, { locale, labels, filters }) => (row.outcome === null ? "" : (badgeOf(row, locale, labels, filters.outcomes)?.label ?? "")),
+  locationLevel1: (row, { locale, places }) => placeAt(row, 1, places)?.name[locale] ?? "",
+  locationLevel2: (row, { locale, places }) => placeAt(row, 2, places)?.name[locale] ?? "",
+  locationLevel3: (row, { locale, places }) => placeAt(row, 3, places)?.name[locale] ?? "",
+  owner: (row, { locale, labels }) => ownerOf(row, locale, labels)?.name ?? "",
+  contractor: (row, { locale }) => row.raiserCompanyName?.[locale] ?? "",
+  // The Creation Date on my own Company's items (the API gives it to the raiser's Participant only), else the Submission Date.
+  created: (row, { locale }) => {
+    const iso = row.creationDate ?? row.submissionDate;
+    return iso === null ? "" : listDate(iso, locale);
+  },
+  // A closed item doesn't age.
+  stepAge: (row, { locale }) => (isOpenStageCategory(row.stage.category) && row.stepAgeWeeks !== null ? formatNumber(row.stepAgeWeeks, locale) : ""),
+};
+
+/**
+ * A cell as text, for Export (RP-409) and Group by: what the cell shows, as the viewer may read it (the
+ * owner per V14, the Creation Date only to the raiser's Participant). Empty where the cell shows "—".
  */
 export function cellText(
   column: ListColumnKey,
   row: WorkItemRow,
   locale: Locale,
-  labels: Pick<WorkItemTableLabels, "noNumber" | "revisionNoNumber" | "unclaimed" | "cancelled" | "code" | "revision">,
+  labels: CellTextLabels,
   filters: WorkItemTableProps["filters"],
   places = placesOf(filters.locations),
 ): string {
-  const n = (value: number) => formatNumber(value, locale);
-  switch (column) {
-    case "documentNumber":
-      return cardNumber(row.documentNumber, row.revisionNo) ?? (row.revisionNo > 0 ? labels.revisionNoNumber(n(row.revisionNo)) : labels.noNumber);
-    case "subject":
-      return row.title;
-    case "revision":
-      return labels.revision(n(row.revisionNo));
-    case "trade":
-      return `${row.trade.name[locale]} (${row.trade.code})`;
-    case "type":
-      return row.type.code;
-    case "stage":
-      return row.stage.name[locale];
-    case "outcome": {
-      const badge = row.outcome === null ? undefined : badgeOf(row, locale, labels, filters.outcomes);
-      return badge?.label ?? "";
-    }
-    case "locationLevel1":
-    case "locationLevel2":
-    case "locationLevel3": {
-      const depth = levelOf[column]!;
-      const place = row.location === null ? undefined : (places.get(row.location.id) ?? [{ depth: 1, name: row.location.name }]).find((p) => p.depth === depth);
-      return place?.name[locale] ?? "";
-    }
-    case "owner":
-      return ownerOf(row, locale, labels)?.name ?? "";
-    case "contractor":
-      return row.raiserCompanyName?.[locale] ?? "";
-    case "created": {
-      const iso = row.creationDate ?? row.submissionDate;
-      return iso === null ? "" : listDate(iso, locale);
-    }
-    case "stepAge":
-      return isOpenStageCategory(row.stage.category) && row.stepAgeWeeks !== null ? n(row.stepAgeWeeks) : "";
-  }
+  return columnText[column](row, { locale, labels, filters, places });
 }
 
 /** A date as the List, its Export and Download write it: "10 Oct 2026", Arabic in its own order, Latin digits. */
