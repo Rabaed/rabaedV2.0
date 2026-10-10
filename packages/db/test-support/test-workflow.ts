@@ -15,6 +15,13 @@
  * review) to a Cancelled Step (RP-433); `recommendCode` makes Consultant review a
  * Step that Recommends a Code to the manager (§5.3, RP-433).
  *
+ * `engineerStep` gives Internal Review its Contractor Engineer Step (ADR 0020,
+ * RP-515), as the Rabaed Default MAR's next Version will: the Return goes there,
+ * never back to the Draft, and the engineer Sends it for Review again:
+ *
+ *   Contractor review ─return→ Contractor Engineer (Stage internal_review, permission create)
+ *   Contractor Engineer ─send_for_review_again→ Contractor review
+ *
  * It passes publish checks 4 and 8, as every published Version must. `run`
  * executes SQL as the migrator (a pg client's or Kysely's query); the result is
  * the new Workflow definition's id, for a test Type to use.
@@ -28,7 +35,9 @@ export async function addTestWorkflow(
   run: (text: string) => Promise<{ rows: unknown[] }>,
   options: TestWorkflowOptions = {},
 ): Promise<string> {
-  const { withApproveB = false, withCancel = false, recommendCode = false, publish = true } = options;
+  const { withApproveB = false, withCancel = false, recommendCode = false, engineerStep = false, publish = true } = options;
+  // The Contractor Engineer Step's Transitions sort after the rest (sorts stay 1, 2, 3…).
+  const engineerSort = 10 + (withApproveB ? 1 : 0) + (withCancel ? 2 : 0);
   const name = JSON.stringify(options.name ?? { en: "Send Back (test)", ar: "الإرجاع (اختبار)" }).replaceAll("'", "''");
   const owner = options.owner;
   const definition = options.version
@@ -58,6 +67,8 @@ export async function addTestWorkflow(
         ('approved', '{"en": "Approved", "ar": "معتمد"}', 'approved', '{}', 'none'),
         ('revise_resubmit', '{"en": "Revise & Resubmit", "ar": "مراجعة وإعادة تقديم"}', 'revise_resubmit', '{}', 'none')
         ${withCancel ? `, ('cancelled', '{"en": "Cancelled", "ar": "ملغى"}', 'cancelled', '{}', 'none')` : ""}
+        ${engineerStep ? `, ('contractor_engineer', '{"en": "Contractor Engineer", "ar": "مهندس المقاول"}', 'internal_review',
+          '{"base_role": "contractor", "permission": "create"}', 'none')` : ""}
       ) as s (key, name, stage_key, actor_rule, outcome_mode)
       returning id, key, workflow_version_id
     ), transitions as (
@@ -65,7 +76,7 @@ export async function addTestWorkflow(
       select f.workflow_version_id, t.key, f.id, s.id, t.label::jsonb, t.kind, t.outcome, t.permission, t.sort
       from (values
         ('send_for_review', 'draft', 'internal_review', '{"en": "Send for Review", "ar": "إرسال للمراجعة"}', 'send', null, 'create', 1),
-        ('return', 'internal_review', 'draft', '{"en": "Return", "ar": "إعادة"}', 'return', null, 'review', 2),
+        ('return', 'internal_review', '${engineerStep ? "contractor_engineer" : "draft"}', '{"en": "Return", "ar": "إعادة"}', 'return', null, 'review', 2),
         ('submit', 'internal_review', 'consultant_review', '{"en": "Submit", "ar": "تقديم"}', 'submit', null, 'submit', 3),
         ('send_back', 'consultant_review', 'internal_review', '{"en": "Send Back", "ar": "إرجاع إلى المقدّم"}', 'send_back', null, 'review', 4),
         ('send_back_to_draft', 'consultant_review', 'draft', '{"en": "Send Back to Draft", "ar": "إرجاع إلى المسودة"}',
@@ -80,6 +91,9 @@ export async function addTestWorkflow(
           'close', 'B', 'approve', 10)` : ""}
         ${withCancel ? `, ('cancel', 'draft', 'cancelled', '{"en": "Cancel", "ar": "إلغاء"}', 'cancel', null, 'create', ${withApproveB ? 11 : 10}),
           ('cancel_review', 'internal_review', 'cancelled', '{"en": "Cancel", "ar": "إلغاء"}', 'cancel', null, 'review', ${withApproveB ? 12 : 11})` : ""}
+        ${engineerStep ? `, ('send_for_review_again', 'contractor_engineer', 'internal_review', '{"en": "Send for Review", "ar": "إرسال للمراجعة"}',
+          'send', null, 'create', ${engineerSort})` : ""}
+        ${engineerStep && withCancel ? `, ('cancel_engineer', 'contractor_engineer', 'cancelled', '{"en": "Cancel", "ar": "إلغاء"}', 'cancel', null, 'create', ${engineerSort + 1})` : ""}
       ) as t (key, from_key, to_key, label, kind, outcome, permission, sort)
       join steps f on f.key = t.from_key
       join steps s on s.key = t.to_key
@@ -145,6 +159,8 @@ export type TestWorkflowOptions = {
   withCancel?: boolean;
   /** Consultant review Recommends a Code (RP-433). */
   recommendCode?: boolean;
+  /** Internal Review's Contractor Engineer Step, where the Return goes (ADR 0020, RP-515). */
+  engineerStep?: boolean;
   name?: { en: string; ar: string };
   /** A Project's own Workflow, or one in a Company's Library; a Rabaed Default when left out. */
   owner?: { kind: "project"; projectId: string } | { kind: "company"; companyId: string };

@@ -290,6 +290,14 @@ describe("a Draft Work Item", () => {
     // When the Draft was started is audit only, shown to nobody (scenario 61).
     expect(await call(c1.member, sql<{ seq: number }>`select seq from work_item_event where work_item_id = ${draft}`)).toEqual([]);
   });
+
+  it("scenario RP-515-1: gives nobody, its author included, a time its Step began: a Draft has no Step Age (ADR 0020)", async () => {
+    const [seen] = await call<{ stage: string; entered_at: Date | null }>(
+      c1.member,
+      sql`select seen.stage_key as stage, seen.entered_at from app.step_as_seen(${draft}::uuid) seen`,
+    );
+    expect(seen).toEqual({ stage: "draft", entered_at: null });
+  });
 });
 
 describe("creating a Draft", () => {

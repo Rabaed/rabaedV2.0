@@ -354,6 +354,15 @@ describe("workflowPublishProblems", () => {
       expect(problems(d)).toContainEqual({ code: "form_edited_after_submit", severity: "error", step: "site_check" });
     });
 
+    it("passes a Return that stays in Internal Review, to the Contractor Engineer Step, which edits the Form (ADR 0020)", () => {
+      const d = mar();
+      addStep(d, { key: "contractor_engineer", stage: "internal_review", actor: { role: "contractor", permission: "create" } });
+      transition(d, "return").to = "contractor_engineer";
+      add(d, { key: "send_for_review_again", from: "contractor_engineer", to: "internal_review", permission: "create" });
+      expect(problems(d)).toEqual([]);
+      expect(d.steps.filter((s) => stepEditsForm(d, s, submittalStages)).map((s) => s.key)).toEqual(["draft", "contractor_engineer"]);
+    });
+
     it("refuses \"Drafts visible to\" on a Step that isn't the Draft Step", () => {
       const d = mar();
       step(d, "draft").draftsVisibleTo = "author";

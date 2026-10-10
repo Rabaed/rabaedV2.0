@@ -1,6 +1,6 @@
 // Seam 1 for Documents, the Attachments System Field (RP-269, spec RP-261): the
 // raiser uploads, lists, downloads and removes Documents in Draft through
-// short-lived signed URLs to the local file store; the first Send freezes them;
+// short-lived signed URLs to the local file store; the first Submit freezes them;
 // anyone who can't see the item gets a 404 for its Documents and their URLs; and
 // a download URL stops working once it expires.
 import { randomUUID } from "node:crypto";
@@ -198,6 +198,7 @@ describe("Documents once the item is sent", () => {
   let itemId = "";
   let documentId = "";
   let datasheetId = ""; // The MAR Form Version 2's Datasheet field, which it needs to leave Draft.
+  let certificateId = "";
 
   beforeAll(async () => {
     itemId = await draft();
@@ -206,17 +207,17 @@ describe("Documents once the item is sent", () => {
     await ok(tryTake(engineer, itemId, "send_for_review"));
   });
 
-  it("are frozen: no removal, no replacement, no new upload", async () => {
+  it("are changed by nobody in Internal Review, though not frozen before the Submit (ADR 0020)", async () => {
     expect(await list(engineer, itemId)).toMatchObject({
       documents: [
-        { id: documentId, frozen: true },
-        { id: datasheetId, frozen: true },
+        { id: documentId, frozen: false },
+        { id: datasheetId, frozen: false },
       ],
       canChange: false,
     });
-    const removed = await engineer.delete(documentUrl(itemId, documentId));
-    expect({ status: removed.statusCode, body: removed.json() }).toEqual({ status: 409, body: { error: "document_frozen" } });
     for (const who of [engineer, pm]) {
+      const removed = await who.delete(documentUrl(itemId, documentId));
+      expect({ status: removed.statusCode, body: removed.json() }).toEqual({ status: 409, body: { error: "not_editable" } });
       const res = await start(who, itemId, { sizeBytes: 10 });
       expect({ status: res.statusCode, body: res.json() }).toEqual({ status: 409, body: { error: "not_editable" } });
     }
@@ -226,34 +227,37 @@ describe("Documents once the item is sent", () => {
     expect((await fetch(await downloadUrl(pm, itemId, documentId))).status).toBe(200);
   });
 
-  it("stay frozen when the item is Returned to Draft, where new ones may be added", async () => {
+  it("are removed and added by the engineer holding the item again after a Return", async () => {
     await ok(pm.post(`/v1/work-items/${itemId}/pick-up`));
     await ok(tryTake(pm, itemId, "return", { reason: "Add the test certificate" }));
-    expect((await engineer.delete(documentUrl(itemId, documentId))).json()).toEqual({ error: "document_frozen" });
-    const certificate = await uploaded(engineer, itemId, "%PDF-1.7 certificate", "certificate.pdf");
+    await ok(engineer.delete(documentUrl(itemId, documentId)));
+    certificateId = await uploaded(engineer, itemId, "%PDF-1.7 certificate", "certificate.pdf");
     expect((await list(engineer, itemId)).documents.map((d) => [d.id, d.frozen])).toEqual([
-      [documentId, true],
-      [datasheetId, true],
-      [certificate, false],
+      [datasheetId, false],
+      [certificateId, false],
     ]);
-    await ok(engineer.delete(documentUrl(itemId, certificate)));
   });
 
-  it("go with the item to the Consultant once Submitted, who sees the Company, not the person", async () => {
+  it("freeze at the Submit and go with the item to the Consultant, who sees the Company, not the person", async () => {
     await ok(tryTake(engineer, itemId, "send_for_review"));
     await ok(pm.post(`/v1/work-items/${itemId}/pick-up`));
     await ok(tryTake(pm, itemId, "submit"));
+    expect((await list(engineer, itemId)).documents.map((d) => [d.id, d.frozen])).toEqual([
+      [datasheetId, true],
+      [certificateId, true],
+    ]);
     const seen = await list(k1Engineer, itemId);
     expect(seen).toMatchObject({
       documents: [
-        { id: documentId, frozen: true, uploadedBy: { memberName: null } },
         { id: datasheetId, frozen: true, uploadedBy: { memberName: null } },
+        { id: certificateId, frozen: true, uploadedBy: { memberName: null } },
       ],
       canChange: false,
     });
-    expect((await fetch(await downloadUrl(k1Engineer, itemId, documentId))).status).toBe(200);
+    expect((await fetch(await downloadUrl(k1Engineer, itemId, certificateId))).status).toBe(200);
     await ok(k1Manager.post(`/v1/work-items/${itemId}/pick-up`));
-    expect((await k1Manager.delete(documentUrl(itemId, documentId))).json()).toEqual({ error: "document_frozen" });
+    expect((await k1Manager.delete(documentUrl(itemId, certificateId))).json()).toEqual({ error: "document_frozen" });
+    expect((await engineer.delete(documentUrl(itemId, certificateId))).json()).toEqual({ error: "document_frozen" });
     expect((await start(k1Manager, itemId, { sizeBytes: 10 })).json()).toEqual({ error: "not_editable" });
   });
 });

@@ -32,10 +32,13 @@ A Workflow version is a directed graph.
 
 ### Example: Rabaed Default "Material Submittal (MAR)"
 
+Settled 2026-10-10 (ADR 0020), to publish as a new Version of the Rabaed Default (RP-437):
+
 ```mermaid
 flowchart LR
-  D[Draft<br/>Contractor Engineer] -- "Send for Review" --> PM[Internal Review<br/>Contractor PM]
-  PM -- "Return" --> D
+  D[Drafts<br/>Draft · Contractor Engineer] -- "Send for Review" --> PM[Internal Review<br/>Contractor PM]
+  PM -- "Return" --> CE[Internal Review<br/>Contractor Engineer]
+  CE -- "Send for Review" --> PM
   PM -- "Submit" --> KE[Pending Approval<br/>Consultant Engineer<br/>recommend_code]
   KE -- "Send to Manager" --> KM[Pending Approval<br/>Consultant Manager<br/>issue_code]
   KM -- "Return to Engineer" --> KE
@@ -44,6 +47,11 @@ flowchart LR
   KM -- "Revise & Resubmit · C" --> RR((Revise & Resubmit))
   KM -- "Reject · D" --> RJ((Rejected))
 ```
+
+- **Internal Review is a Stage holding two Steps,** Contractor Engineer and Contractor PM. **A Return never goes back to the Draft Step** or the Drafts Stage: the PM's Return goes to the Contractor Engineer Step, and the engineer sends it for review again. The Drafts Stage holds only items never sent, so a Draft never has a Document Number (§8) or a Step Age (§10). The first Return goes to the item's author (§3.3). Items on MAR Workflow Version 2 keep its route, whose Return goes back to the Draft Step.
+- **Who edits the Form:** the Member holding the Draft Step or the Contractor Engineer Step, before the Submit (form-engine.md §4, ADR 0019). At the Contractor Engineer Step the holder may also add, replace and remove Documents: they freeze at the Submit (§5.1).
+- **Cancel** stays as built: from the raiser's own Steps, until the first Submit (§5.1 "Cancel"). A Returned item is not a Draft: it keeps its number and is never discarded (§5.4).
+- As built (RP-515): the engine runs this route on any Workflow (the seam suites' test Workflow has it with `engineerStep`, `packages/db/test-support`); the Rabaed Default MAR's new Version is RP-437. Publishing does not yet refuse a `return` into a Step in a `draft` Stage (ADR 0020, "to confirm"): MAR Version 2 has one.
 
 The MAR has no Send Back: the Consultant sends work back to the Contractor only with Code C, and the Contractor resubmits it as a Revision (§5.4). Send Back is for Workflows such as the Site Report's "Return for Comment" (ADR 0014).
 
@@ -161,6 +169,7 @@ When an item enters a Step, the engine resolves the holder in three stages.
 
 **3.3 Default assignee.** The first rule that yields a pool member wins:
 1. The person who held this Step before, when coming back by `return` or `send_back`.
+   **Then the item's author, for a Return** (settled 2026-10-10, ADR 0020): a `return` into a Step nobody has held yet (the Contractor Engineer Step, the first time) goes to the Member who sent the item from its Draft Step, if they are still in the Transition's pool; otherwise on to the rules below (the pool, or its only Member). With two engineers, the correction never lands with the one who didn't write it. As built (RP-515, `20270115000000_return_in_internal_review.sql`): `app.transition_next_holder`, after rule 1, reads the holder of the item's done Draft Step assignment (`app.is_draft_step`) when no assignment of the target Step exists, within `app.transition_step_pool`.
 2. A person the previous actor picked in the Action Form, if the Transition offers "Assign to". As built (RP-431, WF-8): only a Member of the actor's own Participant, from the next Step's Step Pool (Positions, Visibility), so only when that Participant holds the next Step; never another Company's Members (`app.assignees_offered`). The pick is `take_transition`'s `p_assign_to`; one it couldn't have offered is refused `assignee_not_offered`, whoever it names.
 3. The Participant's **default holder** for this Step, set in Project Settings by that Participant (e.g. "Contractor PM: Ali"). **Designed, parked** (settled 2026-10-10, ADR 0018): not built until a Project needs two or more people in one pool to default to one of them; rule 4 covers the common case.
 4. **The pool's only Member** (settled 2026-10-10, ADR 0018; UAT RP-467, RP-468): when the Step Pool for the Transition (after "not the same person", §4) has exactly one Member, they hold it at once, with no Pick up. It is judged when the item arrives: a Member joining the pool later doesn't take it away. The holding Participant's history records it as an internal event ("Assigned to Ali Sonour, the only one who can take this Step"); "Step reached" goes to that Member and Need My Action counts it as theirs; "Return to pool" isn't offered while the pool has one Member. The same at every Step of every Participant.
@@ -221,8 +230,9 @@ Checks, in order. Any failure aborts with nothing written.
 Effects, in order:
 
 1. **First exit from Draft:**
-   - the Document Number is assigned (§8), and `numbered_at` (the Creation Date) set with it;
-   - all Documents are frozen (`frozen_at`, content hashed).
+   - the Document Number is assigned (§8), and `numbered_at` (the Creation Date) set with it.
+
+   **Documents freeze at the Submit** (settled 2026-10-10, ADR 0020), not at the first exit from Draft: until the first Submit the holder of a raiser's Step that edits the Form (the Draft, the Contractor Engineer Step after a Return) adds, replaces and removes them. Nobody outside the raiser's Participant has seen them before (V1). The content hash of a Send for Review still covers them as they are then (§7). As built (RP-515, `20270115000000_return_in_internal_review.sql`): the trigger `work_item_freezes_documents_at_submit` (`app.freeze_documents_at_submit`) sets `frozen_at` on every confirmed Document not removed when the item, once Submitted, crosses to another Participant (a Submit: the first, or the next after a Send Back, so Documents added after a Send Back freeze too), or closes (a Cancel included); it replaced `work_item_freezes_documents`, which froze them leaving the Draft Step. `app.can_change_draft_documents` (and so `app.can_change_documents` and every Document command) is `app.can_save_answers` at a Step the raiser's Participant holds: the holder, at a Step that edits the Form, before the first Submit or back after a Send Back; nobody else, the PM holding Internal Review included (`not_editable`). A frozen Document is still refused `document_frozen`.
 2. The event is appended. It records:
    - type `transition` (or `recommend_code` / `issue_code`);
    - the Action Form payload;
@@ -294,7 +304,7 @@ Effects, in order:
   - `work_item.revision_no`, `revision_of_id`, `root_id` (an original's own id, set on insert) and `discarded_at`; one `revision_no` per chain among the rows not discarded. The app role reads `revision_no` only, never the chain's ids (an Owner Representative whose Visibility widened may see Rev 1 but not the original, V2).
   - `app.can_create_revision(item)` is the rule above, with the Draft Step of the **latest** published Version of the Workflow the item runs (role and permission; `app.revision_draft_step`, RP-427). `app.create_revision(item, idempotency_key, now)` locks the chain's original row, so two requests never open two Revisions, and answers `created`, `applied` (the same key again: the same Revision), `not_found` (hidden), `project_closed`, `idempotency_key_reused`, or `revision_not_allowed` for every other reason alike: nobody outside the raiser learns whether a Draft Revision is open. The api is `POST /v1/work-items/:id/revisions` (409 `revision_not_allowed`).
   - The answers come from `app.fill_revision` (form-engine.md §4), only for fields the Revision's Form Version still has with the same type; `WorkItemDetail.versionsChanged` says when the Form or Workflow Version differs from the revised item's, and the page shows a notice. Documents are copied as new, confirmed, unfrozen rows keeping their original upload times (`document_copy` records the source, never granted; RP-393), and the api copies their files in the same transaction, since a storage key names its item.
-  - **Discard** (`app.discard_revision`, `POST /v1/work-items/:id/discard`): only while the Revision has no Document Number (it never left Draft), by an active Member of the raiser's Participant. It closes as `cancelled`, is marked `discarded_at`, its assignment is done and its `work_item_access` rows go, so nobody, the raiser included, sees it again. Outcomes `discarded`, `not_found`, `project_closed`, `not_discardable` (409). A Revision Returned to Draft after it was numbered can't be discarded: its number was issued.
+  - **Discard** (`app.discard_revision`, `POST /v1/work-items/:id/discard`): only while the Revision has no Document Number (it never left Draft), by an active Member of the raiser's Participant. It closes as `cancelled`, is marked `discarded_at`, its assignment is done and its `work_item_access` rows go, so nobody, the raiser included, sees it again. Outcomes `discarded`, `not_found`, `project_closed`, `not_discardable` (409). A Revision Returned to Draft after it was numbered can't be discarded: its number was issued. (Settled 2026-10-10, ADR 0020: a Return stays in Internal Review, so on such a Workflow a numbered Revision is never back in Draft; at the Contractor Engineer Step it isn't a Draft and `app.can_discard_revision` refuses it, as any numbered one.)
   - The `related` Link from the revised item is added at the Revision's **first Submit**, not at creation: the closed item's Links are read by everyone who sees it, and a Draft Revision must not reach them (V1, scenario 51).
   - `WorkItemDetail` has `revisionNo`, `versionsChanged`, `droppedFields` (form-engine.md §7, `app.revision_dropped_fields`), and `actions.createRevision` / `actions.discardRevision`.
   - Database functions: `app.revision_draft_step(item)` (the Draft Step of the latest published Version of the Workflow the item runs, RP-427: a chain stays on its own Workflow whatever the Project binds later; it replaced `app.latest_draft_step(type)`, the Type's Rabaed Default's, dropped in the same migration), `app.can_create_revision(item)`, `app.can_discard_revision(item)`, `app.revision_versions_changed(item)`, `app.revision_dropped_fields(item)`, `app.form_field_type(form_version, key)`, `app.create_revision(item, key, now)`, `app.fill_revision(revision, closed_item, now)` (only `app.create_revision` calls it), `app.revision_document_copies(item)` (the storage keys the api copies), `app.discard_revision(item, now)`, `app.revision_chain(item)` and `app.set_work_item_root()` (the trigger setting an original's `root_id`).
@@ -413,6 +423,7 @@ Error codes, api (`/v1/projects/:id/numbering`, `/numbering/counters…`, `/v1/p
 ## 10. Step Age and "Need My Action"
 
 - **Step Age** = weeks since `step_entered_at`, shown as up to 4 dots, for the holding Participant's own Members. Every other Company counts it from `participant_entered_at` and sees the Step it arrived at, so internal moves never reset or reveal anything (visibility.md V14). `app.step_as_seen` is the one place that chooses.
+- **A Draft shows no Step Age** (settled 2026-10-10, ADR 0020; settles RP-364): the time a Draft was started reaches nobody, its own author included. A Return stays in Internal Review (§1), so a Returned item's Step Age counts from the Return, as at any Step. As built (RP-515): `app.step_as_seen` gives no `entered_at` for an item at its Draft Step that was never numbered (it never left it), to every reader, so the List, the Kanban, the item detail, the `stepAgeMin` filter, the Step Age sort and cursor and the weekly report carry none (the api's reads also keep their own `document_number is null` guard, RP-393). An item Sent Back to its Draft Step after a Submit, or Returned there on an older Version, has its number and counts from that move. Scenario RP-515-1 (seam 1 `apps/api/test/return-in-internal-review.test.ts`, seam 2 `packages/db/test/work-item-rls.test.ts`).
 - A weekly job builds each Participant's ageing report from the items it can see, through `app.step_as_seen` too.
 - **"Need My Action"** = open assignments where the viewer is the assignee, or is in the pool and nobody has picked it up. It is a toggle on a Project's views (List, Kanban, later Plan, Floor and the Snag List), and each Project card shows its count. The viewer's own Drafts stay in view with the toggle on but are never counted (settled 2026-10-06).
 - **Weekly Step Age report:** Sunday 07:00 Riyadh time, by email, to Members holding the Assign permission (their Participant's open items) and to the Owner's and Owner Representative's Members holding Assign (oversight items). It stops when the Project closes.
