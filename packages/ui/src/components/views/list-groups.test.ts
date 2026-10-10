@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { groupRows } from "./list-groups.ts";
 
 // Story data only.
-const b = (en: string, ar: string) => ({ en, ar });
+const b = (en: string, ar: string) => Object.fromEntries([["en", en], ["ar", ar]]) as { en: string; ar: string };
 const stages = [
   { key: "draft", name: b("Draft", "مسودة"), category: "draft" as const, count: 0 },
   { key: "pending_approval", name: b("Pending Approval", "بانتظار الاعتماد"), category: "in_progress" as const, count: 0 },
