@@ -280,21 +280,65 @@ const labelGroupOf = (t: WorkflowTransition) => JSON.stringify([t.from, t.label.
 const sharingLabel = (transitions: readonly WorkflowTransition[], t: WorkflowTransition) =>
   transitions.filter((other) => labelGroupOf(other) === labelGroupOf(t));
 
+/** The Workflow and Form a Transition's field scope is read in. */
+export type FieldScopeInput = {
+  steps: readonly WorkflowStep[];
+  transitions: readonly WorkflowTransition[];
+  /** The latest published Version of the Type's Form; null when it has none. */
+  form: FormSchema | null;
+  /** A Stage's category; undefined when the Module has no such Stage. */
+  categoryOf: (stage: string) => StageCategory | undefined;
+};
+
+/** The fields, by key, each group of a Transition's rules may name (transitionFieldScope). */
+export type TransitionFieldScope = {
+  /** A field of this Transition's Action Form or of the Form; undefined when neither has it. */
+  fieldOf: (key: string) => FormField | undefined;
+  /** What a Restrict's condition reads. */
+  restrict: ReadonlySet<string>;
+  /** What a Validate reads. */
+  validate: ReadonlySet<string>;
+  /** What an action writes, or copies from. */
+  write: ReadonlySet<string>;
+};
+
+/**
+ * The fields Transition `t`'s rules may name, by group: the one rule publish check 6
+ * and the builder's pickers both read.
+ *
+ * Conditions read the Form's latest published Version. A Validate also reads this
+ * Transition's Action Form answers. A Restrict hides the button, before any pop-up
+ * is filled, so it reads them only when it picks among Transitions sharing a label
+ * and source Step (WF-7, §4), and then only fields every one of their Action Forms asks.
+ *
+ * Actions write only fields the acting Participant fills at that Step (WF-8): this
+ * Transition's Action Form, and the Form Sections changed at its source Step
+ * (form-sections.ts); a copy reads from those fields only, never another
+ * Participant's answers.
+ */
+export function transitionFieldScope(t: WorkflowTransition, { steps, transitions, form, categoryOf }: FieldScopeInput): TransitionFieldScope {
+  const formFieldOf = new Map(form === null ? [] : formFields(form).map((f) => [f.key, f]));
+  const own = actionFormFields(t.actionForm);
+  const group = sharingLabel(transitions, t);
+  const routing = group.length < 2 ? [] : [...own.keys()].filter((key) => group.every((g) => actionFormFields(g.actionForm).has(key)));
+  const holders: WorkflowStepHolder[] = steps.map((s) => ({ key: s.key, role: s.actor?.role ?? null, draft: categoryOf(s.stage) === "draft" }));
+  const filledAtSource = (form?.sections ?? []).filter((section) => sectionSteps(section, holders).includes(t.from)).flatMap((section) => section.fields.map((f) => f.key));
+  return {
+    fieldOf: (key) => own.get(key) ?? formFieldOf.get(key),
+    restrict: new Set([...formFieldOf.keys(), ...routing]),
+    validate: new Set([...formFieldOf.keys(), ...own.keys()]),
+    write: new Set([...filledAtSource, ...own.keys()]),
+  };
+}
+
 /**
  * Check 6, Transition by Transition, and what rules and actions name.
  *
- * Conditions read the Form's latest published Version and the item's attributes.
- * A Validate also reads this Transition's Action Form answers. A Restrict hides
- * the button, before any pop-up is filled, so it reads them only when it picks
- * among Transitions sharing a label and source Step (WF-7, §4), and then only
- * fields every one of their Action Forms asks.
- *
- * Actions write only fields the acting Participant fills at that Step (WF-8):
- * this Transition's Action Form, and the Form Sections changed at its source
- * Step (form-sections.ts); a copy reads from those fields only, never another
- * Participant's answers, and on a move inside one Participant never carries its
- * Action Form answers (internal, V5) into the Form, which every Participant reads
- * once the item leaves. Setting a Member field to a value would name a person.
+ * Conditions and actions name only what transitionFieldScope allows; a condition
+ * may also read the item's attributes. On a move inside one Participant a copy
+ * never carries its Action Form answers (internal, V5) into the Form, which every
+ * Participant reads once the item leaves. Setting a Member field to a value would
+ * name a person.
  *
  * The Steps and Transitions a rule names exist, "been through" a Step names one
  * of the acting Participant's own (its source Step's role), and a Document rule
@@ -302,34 +346,27 @@ const sharingLabel = (transitions: readonly WorkflowTransition[], t: WorkflowTra
  */
 function ruleProblems({ steps, transitions, context, stepOf, categoryOf }: CheckInput): FoundProblem[] {
   const formFieldOf = new Map(context.form === null ? [] : formFields(context.form).map((f) => [f.key, f]));
-  const holders: WorkflowStepHolder[] = steps.map((s) => ({ key: s.key, role: s.actor?.role ?? null, draft: categoryOf(s.stage) === "draft" }));
-  const filledAt = (step: string) =>
-    new Set((context.form?.sections ?? []).filter((section) => sectionSteps(section, holders).includes(step)).flatMap((section) => section.fields.map((f) => f.key)));
   const transitionKeys = new Set(transitions.map((t) => t.key));
 
   return transitions.flatMap((t): FoundProblem[] => {
     const ownActionForm = actionFormFields(t.actionForm);
+    const scope = transitionFieldScope(t, { steps, transitions, form: context.form, categoryOf });
     const problemAt = (code: WorkflowProblemCode, detail: string): FoundProblem => ({ code, transition: t.key, detail });
-    const conditionReadProblems = (rule: Condition, readable: (field: string) => boolean): FoundProblem[] =>
+    const conditionReadProblems = (rule: Condition, readable: ReadonlySet<string>): FoundProblem[] =>
       comparisons(rule).flatMap((c): FoundProblem[] => {
-        if (c.field !== undefined) return readable(c.field) ? [] : [problemAt("unknown_field", c.field)];
+        if (c.field !== undefined) return readable.has(c.field) ? [] : [problemAt("unknown_field", c.field)];
         return (workflowRuleAttrs as readonly string[]).includes(c.attr) ? [] : [problemAt("unknown_attribute", c.attr)];
       });
+    const { fieldOf } = scope;
 
-    const group = sharingLabel(transitions, t);
-    const routingFields = group.length < 2 ? new Set<string>() : new Set([...ownActionForm.keys()].filter((key) => group.every((g) => actionFormFields(g.actionForm).has(key))));
-    const restrictReads = (field: string) => formFieldOf.has(field) || routingFields.has(field);
-    const fieldOf = (field: string) => ownActionForm.get(field) ?? formFieldOf.get(field);
-
-    const fillable = new Set([...filledAt(t.from), ...ownActionForm.keys()]);
     const writeProblems = (field: string): FoundProblem[] => {
       if (fieldOf(field) === undefined) return [problemAt("unknown_field", field)];
-      return fillable.has(field) ? [] : [problemAt("field_not_filled_at_step", field)];
+      return scope.write.has(field) ? [] : [problemAt("field_not_filled_at_step", field)];
     };
 
     return [
       ...(t.rules?.restrict ?? []).flatMap((r): FoundProblem[] => {
-        if (r.type === "condition") return conditionReadProblems(r.condition, restrictReads);
+        if (r.type === "condition") return conditionReadProblems(r.condition, scope.restrict);
         if (r.type === "not_same_person" && "transition" in r) return transitionKeys.has(r.transition) ? [] : [problemAt("unknown_transition", r.transition)];
         if ((r.type !== "not_same_person" && r.type !== "been_through") || !("step" in r)) return [];
         const named = stepOf.get(r.step);
@@ -338,7 +375,7 @@ function ruleProblems({ steps, transitions, context, stepOf, categoryOf }: Check
         return r.type === "been_through" && named.actor?.role !== ownRole ? [problemAt("been_through_other_participant", r.step)] : [];
       }),
       ...(t.rules?.validate ?? []).flatMap((v): FoundProblem[] => {
-        if (v.type === "condition") return conditionReadProblems(v.condition, (field) => fieldOf(field) !== undefined);
+        if (v.type === "condition") return conditionReadProblems(v.condition, scope.validate);
         if (v.type !== "has_document" || v.field === undefined) return [];
         const named = fieldOf(v.field);
         if (named === undefined) return [problemAt("unknown_field", v.field)];

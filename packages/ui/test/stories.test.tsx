@@ -14,7 +14,8 @@
  * (pointer: coarse), so they can check 44px touch targets. Stories with
  * `parameters.overlay` (dialogs, sheets, toasts) leave their overlay open and
  * are screenshotted as a 1024 × 768 page, portals included. Motion is reduced,
- * so animations never reach a screenshot.
+ * so animations never reach a screenshot, and every font is loaded before the
+ * first story, so none mounts in a fallback font.
  * Update screenshots on purpose with the "update-screenshots" PR label; CI
  * commits the baselines of new stories itself (RP-296).
  */
@@ -36,6 +37,12 @@ declare module "vitest" {
 const annotations = setProjectAnnotations([preview]);
 beforeAll(annotations.beforeAll);
 beforeAll(() => cdp().send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] }));
+// Every font face loaded up front. A face otherwise loads when its first glyph is laid out, so a
+// story would mount in a fallback font and reflow when it arrives: what measured itself at mount
+// (React Flow fits the canvas to its first size) would then depend on how fast the font came.
+beforeAll(async () => {
+  await Promise.allSettled([...document.fonts].map((face) => face.load()));
+});
 
 type StoriesModule = Parameters<typeof composeStories>[0];
 type ComposedStory = ReturnType<typeof composeStory>;

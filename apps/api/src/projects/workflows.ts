@@ -10,7 +10,10 @@ import {
 } from "@rabaed/db";
 import {
   stageCopyProblems,
+  type BilingualText,
   type BindWorkflowRequest,
+  type StageCategory,
+  type WorkflowBuilderRead,
   type DefinitionIssue,
   type DuplicateWorkflowRequest,
   type SaveWorkflowDraftRequest,
@@ -32,34 +35,79 @@ import { checkedOutcome, commandResult } from "../outcomes.ts";
 
 /** A Workflow as the Member reads it (V18, V20); null when they don't, as for one only its authors read yet. */
 export function readWorkflow(db: Db, memberId: string, definitionId: string): Promise<WorkflowRead | null> {
-  return withMember(db, memberId, async (trx) => {
-    const definition = await trx
-      .selectFrom("workflow_definition")
-      .select(["id", "name", "owner_kind", "project_id", sql<string | null>`app.workflow_type(id)`.as("work_item_type_id")])
-      .where("id", "=", definitionId)
-      .executeTakeFirst();
-    if (!definition) return null;
-    const versions = await trx
-      .selectFrom("workflow_version")
-      .select("version_no")
-      .where("workflow_definition_id", "=", definitionId)
-      .where("status", "=", "published")
-      .orderBy("version_no")
-      .execute();
-    const canAuthor = await authors(trx, definitionId);
-    const draft = canAuthor ? await readWorkflowDraft(trx, definitionId) : null;
+  return withMember(db, memberId, (trx) => workflowRead(trx, definitionId));
+}
+
+/**
+ * What the builder edits with (RP-439, WF-16), for the Workflow's authors only: the
+ * Workflow, its Type, the Stages and outcome set it is checked against (as
+ * readWorkflowCheckContext reads them) and the Positions; null for anyone else.
+ */
+export function readWorkflowBuilder(db: Db, memberId: string, definitionId: string): Promise<WorkflowBuilderRead | null> {
+  return withMember(db, memberId, async (trx): Promise<WorkflowBuilderRead | null> => {
+    if (!(await authors(trx, definitionId))) return null;
+    const workflow = await workflowRead(trx, definitionId, true);
+    const { rows } = await sql<{ type_id: string; code: string; name: BilingualText; module_key: string; project_id: string | null }>`
+      select t.id as type_id, t.code, t.name, t.module_key, d.project_id
+      from workflow_definition d join work_item_type t on t.id = app.workflow_type(d.id)
+      where d.id = ${definitionId}::uuid
+    `.execute(trx);
+    const type = rows[0];
+    if (!workflow || !type) return null;
+    const stages = await sql<{ key: string; name: BilingualText; category: StageCategory; own: boolean }>`
+      select key, name, category, project_id is not null as own from stage
+      where module_key = ${type.module_key} and (project_id is null or project_id = ${type.project_id}::uuid)
+      order by sort, key
+    `.execute(trx);
+    const own = stages.rows.some((s) => s.own);
+    const outcomes = await sql<WorkflowBuilderRead["outcomes"][number]>`
+      select code, name, closing, polarity from outcome
+      where work_item_type_id = ${type.type_id}::uuid
+        and case when ${type.project_id}::uuid is null then project_id is null else project_id = ${type.project_id}::uuid end
+      order by sort, code
+    `.execute(trx);
+    const positions = await trx.selectFrom("position").select(["base_role", "key", "name"]).orderBy("base_role").orderBy("sort").execute();
+    // The Form the rules are checked against (check 6): the pickers list only its fields.
+    const check = await readWorkflowCheckContext(trx, definitionId);
     return {
-      id: definition.id,
-      name: definition.name,
-      owner: definition.owner_kind,
-      projectId: definition.project_id,
-      workItemTypeId: definition.work_item_type_id,
-      publishedVersions: versions.map((v) => v.version_no),
-      published: await readLatestPublishedDefinition(trx, definitionId),
-      draft: draft && { versionNo: draft.versionNo, name: draft.name, definition: draft.definition },
-      canAuthor,
+      workflow,
+      type: { code: type.code, name: type.name },
+      form: check?.context.form ?? null,
+      stages: stages.rows.filter((s) => s.own === own).map(({ key, name, category }) => ({ key, name, category })),
+      outcomes: outcomes.rows,
+      positions: positions.map((p) => ({ role: p.base_role, key: p.key, name: p.name as BilingualText })),
     };
   });
+}
+
+/** The Workflow as the acting Member reads it; `canAuthor` when the caller already asked authors(), else it is asked here. */
+async function workflowRead(trx: Db, definitionId: string, canAuthorKnown?: boolean): Promise<WorkflowRead | null> {
+  const definition = await trx
+    .selectFrom("workflow_definition")
+    .select(["id", "name", "owner_kind", "project_id", sql<string | null>`app.workflow_type(id)`.as("work_item_type_id")])
+    .where("id", "=", definitionId)
+    .executeTakeFirst();
+  if (!definition) return null;
+  const versions = await trx
+    .selectFrom("workflow_version")
+    .select("version_no")
+    .where("workflow_definition_id", "=", definitionId)
+    .where("status", "=", "published")
+    .orderBy("version_no")
+    .execute();
+  const canAuthor = canAuthorKnown ?? (await authors(trx, definitionId));
+  const draft = canAuthor ? await readWorkflowDraft(trx, definitionId) : null;
+  return {
+    id: definition.id,
+    name: definition.name,
+    owner: definition.owner_kind,
+    projectId: definition.project_id,
+    workItemTypeId: definition.work_item_type_id,
+    publishedVersions: versions.map((v) => v.version_no),
+    published: await readLatestPublishedDefinition(trx, definitionId),
+    draft: draft && { versionNo: draft.versionNo, name: draft.name, definition: draft.definition },
+    canAuthor,
+  };
 }
 
 const duplicateRefusals = ["not_found", "project_closed", "invalid_name"] as const;
