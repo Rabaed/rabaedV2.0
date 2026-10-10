@@ -447,7 +447,9 @@
       "step": "الخطوة",
       "with": "لدى",
       "raisedBy": "أنشأه",
-      "issuedCode": "الرمز الصادر"
+      "issuedCode": "الرمز الصادر",
+      "comments": "الملاحظات",
+      "commentCounts": "{open} مفتوحة / {closed} مغلقة"
     },
     "invalid": "أدخل موضوعًا واختر تخصصًا.",
     "notContractor": "فقط المقاول يمكنه إنشاء اعتماد مواد.",
