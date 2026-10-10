@@ -15,7 +15,7 @@ import { WorkItemWatch } from "@/components/work-item-watch";
 import { WorkItemWorkflow } from "@/components/work-item-workflow";
 import { Link, redirect } from "@/i18n/navigation";
 import { fillingChoices, readingChoices } from "@/lib/built-in-choices";
-import { linkTargetNames } from "@/lib/link-search";
+import { hiddenLinkHrefs, linkTargetNames } from "@/lib/link-search";
 import {
   getLinkedFrom,
   getMe,
@@ -72,6 +72,7 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
       workItemId={item.id}
       projectId={item.projectId}
       linkTargets={linkTargetNames(links.links)}
+      hiddenLinks={hiddenLinkHrefs(item.id, links.links)}
       schema={form.schema}
       choices={choices}
       people={people}

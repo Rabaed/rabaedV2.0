@@ -9,8 +9,8 @@ import { LinkedItemRow, type LinkedItemRowLabels } from "./linked-item-row.tsx";
 // The Links System Field, below the Form (form-engine.md part 2b; visibility.md
 // E1): every Link of the item, each the other item's Document Number and
 // Subject. One the viewer can see opens it; one they can't comes without an id,
-// so opening it only says they may not see its details, and asks nothing of the
-// API. While the raiser's Company may change them (until Submit), free Links are
+// so opening it only says they may not see its details, on the Link's own page
+// (RP-521). While the raiser's Company may change them (until Submit), free Links are
 // added with Link search and removed here. A link question's Links (RP-293) are
 // listed under the question's label, and removed by changing its answer.
 // Presentational: the page passes the API's Links and does the adding and removing.
@@ -42,6 +42,8 @@ export type LinksSectionProps = {
   onRemove: (link: WorkItemLink) => void;
   /** Where a linked item the viewer can see opens. */
   hrefFor: (workItemId: string) => string;
+  /** Where a Link to an item the viewer can't see opens: the Link's own page, by its id (RP-521). */
+  hiddenHrefFor?: (link: WorkItemLink) => string;
   /** The link component, e.g. the app's `Link`, so navigation stays client-side. Defaults to `<a>`. */
   linkAs?: ElementType;
   /** A link question's label by its field key, to list its Links under (RP-293). */
@@ -71,6 +73,7 @@ export function LinksSection({
   onAdd,
   onRemove,
   hrefFor,
+  hiddenHrefFor,
   linkAs = "a",
   questionLabels = {},
   pending = false,
@@ -90,6 +93,7 @@ export function LinksSection({
       documentNumber={link.documentNumber}
       subject={link.subject}
       href={link.workItemId ? hrefFor(link.workItemId) : null}
+      hiddenHref={link.workItemId ? null : hiddenHrefFor?.(link)}
       linkAs={linkAs}
       remove={
         canChange && link.kind === "related"

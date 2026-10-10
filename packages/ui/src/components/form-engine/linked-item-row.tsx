@@ -10,8 +10,9 @@ import { Icon, type IconName } from "../icon/icon.tsx";
 // One linked item in a list (form-engine.md part 2b; visibility.md E1, E3): the
 // other item's Document Number (left to right) and Subject. One the viewer can
 // see opens it; one they can't comes without an id, so opening it only says they
-// may not see its details, and asks nothing of the API. Shared by the Links
-// section, Linked from and the link question.
+// may not see its details: on the page of the Link to it, by the Link's own id,
+// when there is one (RP-521), else right here. Shared by the Links section,
+// Linked from and the link question.
 
 /** The row's words, from the app's messages. */
 export type LinkedItemRowLabels = {
@@ -25,6 +26,12 @@ export type LinkedItemRowProps = {
   subject: string;
   /** Where the item opens; null for one the viewer can't see. */
   href: string | null;
+  /**
+   * For one the viewer can't see: the page of the Link to it, by the Link's own
+   * id (RP-521), which says only that they may not see its details. Without it,
+   * opening the item shows that sentence here.
+   */
+  hiddenHref?: string | null;
   /** The link component, e.g. the app's `Link`. */
   linkAs: ElementType;
   /** A button removing the item, when it may be removed. */
@@ -32,7 +39,7 @@ export type LinkedItemRowProps = {
 };
 
 /** A list item: the linked item, opening it or saying the viewer may not see it, and its remove button. */
-export function LinkedItemRow({ labels: text, documentNumber, subject, href, linkAs: Anchor, remove }: LinkedItemRowProps) {
+export function LinkedItemRow({ labels: text, documentNumber, subject, href, hiddenHref, linkAs: Anchor, remove }: LinkedItemRowProps) {
   const messageId = useId();
   const [explained, setExplained] = useState(false);
   const target = cn(
@@ -50,8 +57,8 @@ export function LinkedItemRow({ labels: text, documentNumber, subject, href, lin
   return (
     <li className="flex flex-col">
       <div className="flex items-center gap-1 pe-1">
-        {href !== null ? (
-          <Anchor href={href} className={target}>
+        {href !== null || hiddenHref ? (
+          <Anchor href={href ?? hiddenHref} className={target}>
             {label}
           </Anchor>
         ) : (
@@ -67,7 +74,7 @@ export function LinkedItemRow({ labels: text, documentNumber, subject, href, lin
           </IconButton>
         )}
       </div>
-      {href === null && (
+      {href === null && !hiddenHref && (
         <p id={messageId} className={cn("px-3 pb-2 text-sm text-muted", !explained && "hidden")}>
           {text.hidden}
         </p>
