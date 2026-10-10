@@ -1,6 +1,6 @@
 import { stepAgeLabel } from "@rabaed/domain";
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { expect } from "storybook/test";
+import { expect, waitFor } from "storybook/test";
 import { AgeDots } from "../status/age-dots.tsx";
 import { storyLocale } from "../../storybook/locale.ts";
 import { consultantCompany, twoTierReview, workflowLabels, workflowStages } from "../../storybook/workflow.ts";
@@ -30,8 +30,9 @@ export const WholeWorkflow: Story = {
   },
   play: async ({ canvas, context }) => {
     const locale = storyLocale(context);
-    await expect(await canvas.findByText(twoTierReview.steps[3]!.name[locale])).toBeVisible();
-    await expect(canvas.getByText(workflowLabels(locale).outcome)).toBeVisible();
+    // React Flow shows a node once it has measured it.
+    await waitFor(async () => expect(await canvas.findByText(twoTierReview.steps[3]!.name[locale])).toBeVisible());
+    await waitFor(() => expect(canvas.getByText(workflowLabels(locale).outcome)).toBeVisible());
   },
 };
 
@@ -79,7 +80,8 @@ export const ItemWithAnotherCompany: Story = {
   },
   play: async ({ canvasElement, canvas, context }) => {
     const locale = storyLocale(context);
-    await expect(await canvas.findByText(workflowLabels(locale).withCompany(consultantCompany[locale]))).toBeVisible();
+    // React Flow shows a node once it has measured it.
+    await waitFor(async () => expect(await canvas.findByText(workflowLabels(locale).withCompany(consultantCompany[locale]))).toBeVisible());
     for (const hidden of [twoTierReview.steps[2]!, twoTierReview.steps[3]!]) {
       await expect(canvasElement.outerHTML).not.toContain(hidden.name.en);
       await expect(canvasElement.outerHTML).not.toContain(hidden.name.ar);
@@ -114,6 +116,7 @@ export const Editable: Story = {
     );
   },
   play: async ({ canvas, context }) => {
-    await expect(await canvas.findByText(twoTierReview.steps[0]!.name[storyLocale(context)])).toBeVisible();
+    // React Flow shows a node once it has measured it.
+    await waitFor(async () => expect(await canvas.findByText(twoTierReview.steps[0]!.name[storyLocale(context)])).toBeVisible());
   },
 };
