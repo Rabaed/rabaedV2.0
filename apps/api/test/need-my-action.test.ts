@@ -222,8 +222,8 @@ describe("a closed Project", () => {
 });
 
 describe("Module tabs", () => {
-  it("are the Modules the Project has a Work Item Type in: Submittals only, by default", async () => {
-    expect((await card(c1Engineer)).modules).toEqual(["submittals"]);
+  it("are the Modules the Project has a Work Item Type in: by default the Submittals and the Snag List (the Comment, RP-434)", async () => {
+    expect((await card(c1Engineer)).modules).toEqual(["submittals", "snag_list"]);
   });
 
   it("grow with a Project's own Type in another Module, on that Project only", async () => {
@@ -233,8 +233,8 @@ describe("Module tabs", () => {
       select 'project', ${other}::uuid, 'inspections', 'WIR', ${JSON.stringify(bilingual("Work Inspection"))}::jsonb, workflow_definition_id, 'inspection_result'
       from work_item_type where code = 'MAR' and project_id is null
     `.execute(migrator);
-    expect((await card(c1.caller, other)).modules).toEqual(["submittals", "inspections"]);
-    expect((await card(c1.caller)).modules).toEqual(["submittals"]);
+    expect((await card(c1.caller, other)).modules).toEqual(["submittals", "inspections", "snag_list"]);
+    expect((await card(c1.caller)).modules).toEqual(["submittals", "snag_list"]);
   });
 
   it("each lead to their Module's List and Kanban, of that Module's Types only", async () => {

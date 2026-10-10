@@ -212,6 +212,15 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
           )}
           <dt className="text-muted">{t("fields.raisedBy")}</dt>
           <dd>{item.raisedBy.companyName[locale]}</dd>
+          {/* Its Comments in the Snag List (Code B's), counting only those the viewer sees. */}
+          {item.comments.open + item.comments.closed > 0 && (
+            <>
+              <dt className="text-muted">{t("fields.comments")}</dt>
+              <dd data-testid="comment-counts">
+                {t("fields.commentCounts", { open: formatNumber(item.comments.open, locale), closed: formatNumber(item.comments.closed, locale) })}
+              </dd>
+            </>
+          )}
         </dl>
 
         {history && <WorkItemHistory events={history.events} schema={form.schema} optionLists={optionLists} locale={locale} />}
