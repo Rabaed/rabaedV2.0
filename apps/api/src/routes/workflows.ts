@@ -3,7 +3,7 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import type { AppContext } from "../app.ts";
 import { idOrNotFound, visibleOrNotFound } from "../http-error.ts";
-import { bindWorkflow, duplicateWorkflow, publishWorkflow, readWorkflow, saveWorkflowDraft, unbindWorkflow, validateWorkflow } from "../projects/workflows.ts";
+import { bindWorkflow, duplicateWorkflow, publishWorkflow, readWorkflow, readWorkflowBuilder, saveWorkflowDraft, unbindWorkflow, validateWorkflow } from "../projects/workflows.ts";
 import { refusal } from "../refusals.ts";
 
 const workflowParams = z.object({ workflowId: z.string() });
@@ -19,6 +19,12 @@ export const workflowRoutes =
     app.get("/v1/workflows/:workflowId", { schema: { params: workflowParams } }, async (request) => {
       const memberId = ctx.requireMember(request);
       return visibleOrNotFound(readWorkflow(ctx.db, memberId, idOrNotFound(request.params.workflowId)));
+    });
+
+    // What the builder edits with (RP-439, WF-16): its authors only, the same 404 for anyone else.
+    app.get("/v1/workflows/:workflowId/builder", { schema: { params: workflowParams } }, async (request) => {
+      const memberId = ctx.requireMember(request);
+      return visibleOrNotFound(readWorkflowBuilder(ctx.db, memberId, idOrNotFound(request.params.workflowId)));
     });
 
     app.post(
