@@ -315,7 +315,7 @@ There is no admin path to `take_transition`, `recommend_code`, `issue_code`, or 
 
 ### 5.7 The List's row commands: Delete, Duplicate, Download (as built, RP-409)
 
-The List's row ⋯ menu (owner decisions 2026-10-10; `20270113000100_list_row_commands.sql`; data-model.md §5 "The List's row commands"; visibility.md Exports row, scenarios RP-409-1 to RP-409-3):
+The List's row ⋯ menu (owner decisions 2026-10-10; `20270114000400_list_row_commands.sql`; data-model.md §5 "The List's row commands"; visibility.md Exports row, scenarios RP-409-1 to RP-409-3):
 
 - **Delete** (`POST /v1/work-items/:id/discard-draft`, `app.discard_draft`): discards any Draft that never left Draft, an original too, for a Member who may edit it now (`app.can_discard_draft`, the rule for saving its answers). It closes `cancelled`, is marked `discarded_at`, its assignment done and its access rows removed: nobody sees it again. A discarded original frees nothing (it had no number). `WorkItemSummary.actions.discardDraft` says when the menu offers it.
 - **Duplicate** (`POST /v1/work-items/:id/duplicate`, `{idempotencyKey}`, 201 `{id}`): a new Draft of the latest published Form of the item's Type, with the Subject, the answers last written by the caller's own Participant (`app.own_written_fields`) for fields its Draft Step can edit with the same type, and the Documents and photos that Participant uploaded (`app.copy_duplicate_documents`; the api copies the files in the same transaction, at most `duplicateMaxFileBytes` in all). It records only its source (`app.record_duplicate`), with no time and no event; the same key again answers with the same Draft while it stands.
