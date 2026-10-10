@@ -116,16 +116,20 @@ export const ThemeAndMode: Story = {
     const mode = within(menu).getByRole("group", { name: t(appearanceCopy.mode) });
     await expect(within(theme).getByRole("button", { name: t(appearanceCopy.warm) })).toHaveAttribute("aria-pressed", "true");
     await expect(within(mode).getByRole("button", { name: t(appearanceCopy.system) })).toHaveAttribute("aria-pressed", "true");
+    const page = () => getComputedStyle(document.body).backgroundColor;
+    const warmLight = page();
 
     await userEvent.click(within(theme).getByRole("button", { name: t(appearanceCopy.grey) }));
     await expect(document.documentElement).toHaveAttribute("data-theme", "grey");
     await userEvent.click(within(mode).getByRole("button", { name: t(appearanceCopy.dark) }));
     await expect(document.documentElement).toHaveAttribute("data-mode", "dark");
     await expect(within(mode).getByRole("button", { name: t(appearanceCopy.dark) })).toHaveAttribute("aria-pressed", "true");
+    const greyDark = page();
+    await expect(greyDark).not.toBe(warmLight);
 
     await userEvent.click(within(theme).getByRole("button", { name: t(appearanceCopy.warm) }));
     await expect(document.documentElement).toHaveAttribute("data-theme", "warm");
-    // The page itself is espresso now.
-    await expect(getComputedStyle(document.documentElement).getPropertyValue("--canvas")).toContain("espresso");
+    // The page itself repaints: espresso, neither navy nor the warm light canvas.
+    await expect([warmLight, greyDark]).not.toContain(page());
   },
 };
