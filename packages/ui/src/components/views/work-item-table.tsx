@@ -95,19 +95,19 @@ export type WorkItemTableProps = {
 
 /** Each column's least width, as the design draws it (px). */
 const widths: Record<ListColumnKey, string> = {
-  documentNumber: "min-w-[150px]",
-  subject: "min-w-[260px]",
-  revision: "min-w-[70px]",
-  trade: "min-w-[190px]",
-  type: "min-w-[80px]",
-  stage: "min-w-[170px]",
-  outcome: "min-w-[100px]",
-  locationLevel1: "min-w-[100px]",
-  locationLevel2: "min-w-[110px]",
-  locationLevel3: "min-w-[90px]",
-  owner: "min-w-[200px]",
+  documentNumber: "min-w-[120px]",
+  subject: "min-w-[200px]",
+  revision: "min-w-[56px]",
+  trade: "min-w-[150px]",
+  type: "min-w-[64px]",
+  stage: "min-w-[140px]",
+  outcome: "min-w-[84px]",
+  locationLevel1: "min-w-[80px]",
+  locationLevel2: "min-w-[90px]",
+  locationLevel3: "min-w-[80px]",
+  owner: "min-w-[230px]",
   contractor: "min-w-[220px]",
-  created: "min-w-[120px]",
+  created: "min-w-[104px]",
   stepAge: "min-w-[110px]",
 };
 
@@ -152,8 +152,8 @@ export function WorkItemTable({
   const direction = sortDirectionOf(query);
   const end = settings !== undefined || rowEnd !== undefined;
   const colSpan = shown.length + (end ? 1 : 0) + (selection ? 1 : 0);
-  // With checkboxes, the Document Number is pinned beside them.
-  const pinnedFirst = selection ? "sticky start-11 z-[2] pointer-coarse:start-16" : pinnedStart;
+  // With checkboxes, only they stay pinned at the start, as the design pins them; without, the Document Number does.
+  const pinnedFirst = selection ? undefined : pinnedStart;
   const chosen = selection ? rows.filter((r) => selection.selected.has(r.id)).length : 0;
   return (
     <table className={cn("w-max min-w-full border-separate border-spacing-0 text-[13.5px] text-text", className)}>
@@ -205,7 +205,7 @@ export function WorkItemTable({
                 className={cn(
                   head,
                   widths[key],
-                  i === 0 && cn(pinnedFirst, "z-[4]"),
+                  i === 0 && pinnedFirst && cn(pinnedFirst, "z-[4]"),
                   dragging === key && "opacity-40",
                   over === key && dragging !== key && "shadow-[inset_3px_0_0_var(--color-primary)] rtl:shadow-[inset_-3px_0_0_var(--color-primary)]",
                 )}
@@ -314,6 +314,17 @@ type CellProps = {
 };
 
 /** One cell, as the viewer may read it: the owner per V14, the Creation Date only to the raiser's Participant. */
+/** A group header's value (Group by): the cell its rows share, in its own pill, as the table shows it. */
+export function GroupValue({
+  column,
+  row,
+  locale,
+  labels,
+  filters,
+}: Pick<CellProps, "column" | "row" | "locale" | "labels" | "filters">): ReactNode {
+  return <Cell column={column} row={row} locale={locale} labels={labels} filters={filters} places={placesOf(filters.locations)} itemHref={() => "#"} linkAs="a" />;
+}
+
 function Cell({ column, row, locale, labels, filters, places, itemHref, linkAs: Link }: CellProps): ReactNode {
   const n = (value: number) => formatNumber(value, locale);
   switch (column) {
@@ -333,7 +344,7 @@ function Cell({ column, row, locale, labels, filters, places, itemHref, linkAs: 
           data-item-link=""
           dir="auto"
           title={row.title}
-          className={cn("block max-w-[260px] truncate font-semibold text-text hover:text-brand-fg", focusRing, touchBox)}
+          className={cn("block max-w-[200px] truncate font-semibold text-text hover:text-brand-fg", focusRing, touchBox)}
         >
           {row.title}
         </Link>

@@ -1,5 +1,6 @@
 import "server-only";
 import type {
+  SharedWorkItem,
   ActivityFeed,
   ActivityFeedQuery,
   CompanyInvitations,
@@ -183,6 +184,11 @@ export function getActivityFeed(projectId: string, query: Partial<ActivityFeedQu
 /** One Work Item; null if the signed-in Member can't see it (exactly as if it didn't exist). */
 export function getWorkItem(workItemId: string): Promise<WorkItemDetail | null> {
   return apiGet<WorkItemDetail>(`/v1/work-items/${encodeURIComponent(workItemId)}`);
+}
+
+/** Download (RP-409): a Work Item as it was shared, the same for every viewer; null before its first Submit or when unseen. */
+export function getSharedWorkItem(workItemId: string): Promise<SharedWorkItem | null> {
+  return apiGet<SharedWorkItem>(`/v1/work-items/${encodeURIComponent(workItemId)}/shared`);
 }
 
 /** The Form Version a Work Item is pinned to; null if the signed-in Member can't see the item. */

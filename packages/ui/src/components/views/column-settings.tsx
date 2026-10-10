@@ -96,7 +96,7 @@ export function ColumnSettings({ columns, headerOf, labels, number, onChange, on
           </h2>
           <span className="ms-auto text-caption text-muted">{labels.shown(number(shown), number(columns.length))}</span>
         </div>
-        <ul className="max-h-[min(28rem,calc(100dvh-14rem))] overflow-auto px-1.5 py-1">
+        <ul className="max-h-[calc(100dvh-14rem)] overflow-auto px-1.5 py-1">
           {columns.map((column, index) => {
             const locked = lockedListColumns.includes(column.key);
             const header = headerOf(column.key);

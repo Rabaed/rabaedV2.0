@@ -4,7 +4,7 @@ import { useId, useState, type ReactNode } from "react";
 import { cn } from "../../lib/cn.ts";
 import { focusRing, touchBox } from "../form/control-styles.ts";
 import { Icon, type IconName } from "../icon/icon.tsx";
-import { toolbarButton } from "../list/list-toolbar.tsx";
+import { toolbarButton, toolbarFilled } from "../list/list-toolbar.tsx";
 import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "../overlay/popover.tsx";
 
 // The List's toolbar menus (RP-409, the owner's design): Group (GROUP BY Status, Discipline,
@@ -32,7 +32,7 @@ export function GroupMenu<K extends string>({ choices, value, onChange, labels }
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <button type="button" className={cn(toolbarButton, current && "border-brand-tint bg-brand-tint text-brand-fg")}>
+        <button type="button" className={cn(toolbarButton, toolbarFilled, current && "bg-brand-tint text-brand-fg hover:bg-brand-tint")}>
           <Icon name="category" />
           {current ? labels.groupedBy(current.label) : labels.group}
           <Icon name="chevron-down" />
@@ -151,40 +151,59 @@ export function RowMenu({ subject, load, onAction, labels }: RowMenuProps) {
 }
 
 export type ExportFormat = "csv" | "excel";
+/** "What you see" (the shown columns) or "the whole table" (every List field), RP-409 owner decision. */
+export type ExportScope = "shown" | "whole";
 
 export type ExportMenuProps = {
-  onExport: (format: ExportFormat) => void;
-  labels: { export: string; options: string; csv: string; excel: string };
+  onExport: (format: ExportFormat, scope: ExportScope) => void;
+  labels: { export: string; options: string; shown: string; whole: string; csv: string; excel: string };
   /** While an export is being made. */
   busy?: boolean;
 };
 
-/** Export (CSV) with its arrow menu: CSV or Excel. */
+/** Export (what you see, CSV) with its arrow menu: what you see or the whole table, each as CSV or Excel. */
 export function ExportMenu({ onExport, labels, busy = false }: ExportMenuProps) {
-  const item = (format: ExportFormat, icon: IconName, name: string, hint: ReactNode) => (
-    <PopoverClose asChild>
-      <button type="button" onClick={() => onExport(format)} className={menuItem}>
+  const id = useId();
+  const item = (format: ExportFormat, scope: ExportScope, icon: IconName, name: string, hint: ReactNode) => (
+    <PopoverClose asChild key={`${scope}:${format}`}>
+      <button type="button" onClick={() => onExport(format, scope)} className={menuItem}>
         <Icon name={icon} size={16} />
         {name}
         <small className="ms-auto text-[11.5px] text-muted">{hint}</small>
       </button>
     </PopoverClose>
   );
+  const group = (scope: ExportScope, title: string) => (
+    <div role="group" aria-labelledby={`${id}-${scope}`}>
+      <h2 id={`${id}-${scope}`} className="px-2.5 pt-2 pb-1 text-[10.5px] font-bold tracking-[0.06em] text-muted uppercase">
+        {title}
+      </h2>
+      {item("csv", scope, "file-text", labels.csv, ".csv")}
+      {item("excel", scope, "table", labels.excel, ".xml")}
+    </div>
+  );
   return (
     <span className="inline-flex shrink-0">
-      <button type="button" disabled={busy} onClick={() => onExport("csv")} className={cn(toolbarButton, "rounded-e-none disabled:opacity-60")}>
+      <button type="button" disabled={busy} onClick={() => onExport("csv", "shown")} className={cn(toolbarButton, toolbarFilled, "rounded-e-none disabled:opacity-60")}>
         <Icon name="file-download" />
         {labels.export}
       </button>
       <Popover>
         <PopoverTrigger asChild>
-          <button type="button" aria-label={labels.options} title={labels.options} disabled={busy} className={cn(toolbarButton, "-ms-px rounded-s-none px-2 pointer-coarse:min-w-11")}>
+          <button
+            type="button"
+            aria-label={labels.options}
+            title={labels.options}
+            disabled={busy}
+            className={cn(toolbarButton, toolbarFilled, "-ms-px rounded-s-none px-2 pointer-coarse:min-w-11")}
+          >
             <Icon name="chevron-down" />
           </button>
         </PopoverTrigger>
-        <PopoverContent aria-label={labels.options} align="end" className="w-48 rounded-md p-1 shadow-lg">
-          {item("csv", "file-text", labels.csv, ".csv")}
-          {item("excel", "table", labels.excel, ".xls")}
+        <PopoverContent aria-label={labels.options} align="end" className="w-60 rounded-md p-1 shadow-lg">
+          {group("shown", labels.shown)}
+          <div className="m-1 h-px bg-border-subtle" />
+          {group("whole", labels.whole)}
         </PopoverContent>
       </Popover>
     </span>

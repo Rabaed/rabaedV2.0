@@ -119,6 +119,17 @@
       "excel": "Excel",
       "exportSelected": "Export selected",
       "exported": "Exported {what} ({format})",
+      "exportedCapped": "Exported the first {what} ({format})",
+      "exportShown": "Export what you see",
+      "exportWhole": "Export the whole table",
+      "wholeTable": {
+        "typeName": "Work Item Type",
+        "location": "Location",
+        "creationDate": "Creation Date",
+        "submissionDate": "Submission Date",
+        "project": "Project"
+      },
+      "groupCount": "{count, plural, one {1 on this page} other {{n} on this page}}",
       "rowMenu": {
         "open": "Open",
         "edit": "Edit",
@@ -129,7 +140,7 @@
         "more": "More for {subject}",
         "loading": "Loading…",
         "deleteTitle": "Delete this Draft?",
-        "deleteBody": "“{subject}” will be gone for everyone. This can't be undone.",
+        "deleteBody": "Nobody will see “{subject}” again, you included. It never had a number, so none is lost.",
         "cancel": "Cancel",
         "discarded": "Draft discarded",
         "failed": "That didn't work. Refresh the page and try again."
@@ -883,7 +894,8 @@
       "emptyAnswer": "(empty)",
       "changedValue": "changed",
       "linksField": "Links",
-      "recommendedCode": "Recommended Code"
+      "recommendedCode": "Recommended Code",
+      "duplicated": "Duplicated from {number}"
     }
   },
   "revision": {

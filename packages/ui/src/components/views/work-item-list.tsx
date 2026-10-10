@@ -26,9 +26,9 @@ import { ListToast } from "../list/list-toast.tsx";
 import { Button } from "../button/button.tsx";
 import { ColumnSettings, type ColumnSettingsLabels } from "./column-settings.tsx";
 import { groupRows, listGroupings, type ListGrouping } from "./list-groups.ts";
-import { ExportMenu, GroupMenu, RowMenu, type ExportFormat, type RowAction, type RowMenuLabels, type RowPermissions } from "./list-menus.tsx";
+import { ExportMenu, GroupMenu, RowMenu, type ExportFormat, type ExportScope, type RowAction, type RowMenuLabels, type RowPermissions } from "./list-menus.tsx";
 import { Dialog, DialogClose, DialogContent, DialogFooter } from "../overlay/dialog.tsx";
-import { exportFile, saveFile } from "./work-item-export.ts";
+import { exportFile, saveFile, shownColumns, wholeTableColumns, type WholeTableLabels } from "./work-item-export.ts";
 import { Badge } from "../data/badge.tsx";
 import { cn } from "../../lib/cn.ts";
 import { focusRing } from "../form/control-styles.ts";
@@ -44,7 +44,7 @@ import { TableCard } from "../list/table-card.tsx";
 import { AgeDots } from "../status/age-dots.tsx";
 import { stageColour } from "../status/stage-colour.ts";
 import { StageDot } from "../status/stage-pill.tsx";
-import { columnHeader, WorkItemTable } from "./work-item-table.tsx";
+import { columnHeader, GroupValue, WorkItemTable } from "./work-item-table.tsx";
 
 /**
  * The List's words, in the viewer's language, from the app's messages: the
@@ -109,6 +109,15 @@ export type WorkItemListLabels = {
   exportSelected: string;
   /** "Exported 42 submittals (CSV)": `n` is `count` written for the locale. */
   exported: (n: string, count: number, format: string) => string;
+  /** The toast when the Export stopped at its cap: "Exported the first 5,000 submittals (CSV)". */
+  exportedCapped: (n: string, count: number, format: string) => string;
+  /** The arrow menu's two kinds: "Export what you see", "Export the whole table". */
+  exportShown: string;
+  exportWhole: string;
+  /** The whole table's fields beyond the List's columns. */
+  wholeTable: WholeTableLabels;
+  /** A group header's count: "3 on this page". */
+  groupCount: (n: string, count: number) => string;
   /** A row's ⋯ menu, and Delete's question. */
   rowMenu: RowMenuLabels & { deleteTitle: string; deleteBody: (subject: string) => string; cancel: string };
   noNumber: string;
@@ -221,7 +230,9 @@ export type WorkItemListProps = {
   /** "Save as my default": keeps the columns for the Member; true once kept. Without it, the table has no column settings. */
   onSaveColumns?: (columns: ListColumnLayout) => Promise<boolean>;
   /** Export: every row the viewer reads with the List's query (null when it couldn't be read). Without it, the List has no Export. */
-  loadExportRows?: () => Promise<WorkItemRow[] | null>;
+  loadExportRows?: () => Promise<{ items: WorkItemRow[]; capped: boolean } | null>;
+  /** The Project's name, a column of "the whole table". */
+  projectName?: string;
   /**
    * The rows' ⋯ menus (RP-409): `load` asks what the viewer may do with a row now; `run` does it,
    * answering with a toast's words, or nothing. Without it, rows have no menu.
@@ -258,6 +269,7 @@ export function WorkItemList({
   columns: initialColumns,
   onSaveColumns,
   loadExportRows,
+  projectName,
   rowActions,
 }: WorkItemListProps) {
   const [deleting, setDeleting] = useState<WorkItemRow | null>(null);
@@ -286,13 +298,17 @@ export function WorkItemList({
   // List's own read; under a search only the pages read so far), or the rows chosen on this page;
   // the columns shown, in their order.
   const [exporting, setExporting] = useState(false);
-  const exportRows = async (format: ExportFormat, rows: () => Promise<WorkItemRow[] | null>) => {
+  const exportRows = async (format: ExportFormat, scope: ExportScope, rows: () => Promise<{ items: WorkItemRow[]; capped: boolean } | null>) => {
     setExporting(true);
     try {
       const got = await rows();
       if (got === null) return;
-      saveFile(exportFile(got, columns, format, { locale, labels, filters: list.filters, headerOf, name: labels.table }));
-      setToast(labels.exported(n(got.length), got.length, format === "csv" ? t("csv") : t("excel")));
+      const context = { locale, labels, filters: list.filters, headerOf, name: labels.table };
+      const exportColumns = scope === "shown" ? shownColumns(columns, context) : wholeTableColumns(context, labels.wholeTable, projectName ?? "");
+      saveFile(exportFile(got.items, exportColumns, format, context));
+      const formatName = format === "csv" ? t("csv") : t("excel");
+      const count = got.items.length;
+      setToast(got.capped ? labels.exportedCapped(n(count), count, formatName) : labels.exported(n(count), count, formatName));
     } finally {
       setExporting(false);
     }
@@ -300,8 +316,8 @@ export function WorkItemList({
   const exportMenu = !board && loadExportRows && (
     <ExportMenu
       busy={exporting}
-      onExport={(format) => void exportRows(format, loadExportRows)}
-      labels={{ export: t("export"), options: t("exportOptions"), csv: t("csv"), excel: t("excel") }}
+      onExport={(format, scope) => void exportRows(format, scope, loadExportRows)}
+      labels={{ export: t("export"), options: t("exportOptions"), shown: t("exportShown"), whole: t("exportWhole"), csv: t("csv"), excel: t("excel") }}
     />
   );
   const bulkActions: ReactNode = (
@@ -309,12 +325,13 @@ export function WorkItemList({
       variant="secondary"
       size="sm"
       disabled={exporting}
-      onClick={() => void exportRows("csv", async () => list.items.filter((i) => selected.has(i.id)))}
+      onClick={() => void exportRows("csv", "shown", async () => ({ items: list.items.filter((i) => selected.has(i.id)), capped: false }))}
     >
       <Icon name="file-download" />
       {t("exportSelected")}
     </Button>
   );
+
   // Group by (RP-409): the page's rows under a header per value, each folded on a click.
   const [groupBy, setGroupBy] = useState<ListGrouping | null>(null);
   const [folded, setFolded] = useState<ReadonlySet<string>>(new Set());
@@ -549,8 +566,8 @@ export function WorkItemList({
           maxLength={searchMaxLength}
           description={t("searchHelp")}
           onSearch={(q) => change({ q })}
-          // The List's toolbar also holds Group and Export, so its search is a little narrower until the screen is wide.
-          className={board ? undefined : "sm:w-40 2xl:w-60"}
+          // 240px, as the design draws it, so "Search this list" fits.
+          className={board ? undefined : "sm:w-60"}
         />
         <span className="inline-flex shrink-0 items-center">
         <FilterMenu
@@ -582,7 +599,7 @@ export function WorkItemList({
             aria-label={t("clear")}
             title={t("clear")}
             className={cn(
-              "-ms-px inline-flex h-[42px] w-9 items-center justify-center rounded-e-sm border border-border-strong bg-surface text-muted hover:bg-hover hover:text-text pointer-coarse:min-h-11 pointer-coarse:w-11",
+              "-ms-px inline-flex h-[34px] w-9 items-center justify-center rounded-e-sm border border-border-strong bg-surface text-muted hover:bg-hover hover:text-text pointer-coarse:min-h-11 pointer-coarse:w-11",
               focusRing,
             )}
           >
@@ -660,10 +677,13 @@ export function WorkItemList({
                         className={cn("sticky start-0 flex h-11 w-max items-center gap-2.5 ps-4 pe-3 hover:text-text", focusRing)}
                       >
                         <Icon name={group.collapsed ? "chevron-right" : "chevron-down"} size={16} className="text-muted" />
-                        <span className="inline-flex h-[22px] items-center rounded-xs px-1.5 text-[11.5px] font-bold text-text-secondary ring-1 ring-border-strong ring-inset">
-                          {group.label ?? t("groupNone")}
-                        </span>
-                        <span className="text-[13px] text-muted">{labels.items(n(group.rows.length), group.rows.length)}</span>
+                        {/* The value in its own pill (a Status pill, a Discipline chip…), as its rows show it. */}
+                        {group.label === null || groupBy === null ? (
+                          <span className="text-[13px] text-muted">{t("groupNone")}</span>
+                        ) : (
+                          <GroupValue column={groupBy} row={group.rows[0]!} locale={locale} labels={labels} filters={list.filters} />
+                        )}
+                        <span className="text-[13px] text-muted">{labels.groupCount(n(group.rows.length), group.rows.length)}</span>
                       </button>
                     </td>
                   </tr>

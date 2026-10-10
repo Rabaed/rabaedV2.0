@@ -24,6 +24,7 @@ import {
   WorkItemViewSwitch,
   type BoardLayoutMenuLabels,
   type RowAction,
+  type WholeTableLabels,
   type RowPermissions,
   type WorkItemBoardLabels,
   type WorkItemFilterHints,
@@ -46,14 +47,10 @@ async function readItem(id: string): Promise<WorkItemDetail | null> {
   return res.ok ? ((await res.json()) as WorkItemDetail) : null;
 }
 
-/** The Workflow's own Cancel of an original Draft with no number, when it offers one with nothing to fill: how such a Draft is discarded. */
-const draftCancel = (item: WorkItemDetail) =>
-  item.stage.category === "draft" && item.documentNumber === null ? item.actions.transitions.find((tr) => tr.kind === "cancel" && tr.actionForm === null) : undefined;
-
 /**
  * A row's ⋯ menu: Edit an own Draft the viewer may change; Duplicate, Resubmit (create a Revision) and
- * Delete (discard a Draft Revision, or Cancel an original Draft the Workflow lets them) as the item's
- * actions say; Download for whoever reads the item.
+ * Delete (discard one's own Draft, any Draft never numbered) as the item's actions say; Download once
+ * the item has been shared (Submitted), for whoever reads it.
  */
 async function rowPermissions(row: WorkItemRow): Promise<RowPermissions | null> {
   const item = await readItem(row.id);
@@ -62,8 +59,8 @@ async function rowPermissions(row: WorkItemRow): Promise<RowPermissions | null> 
     edit: item.stage.category === "draft" && item.actions.saveAnswers,
     duplicate: item.actions.duplicate,
     resubmit: item.actions.createRevision,
-    download: true,
-    delete: item.actions.discardRevision || draftCancel(item) !== undefined,
+    download: item.submissionDate !== null,
+    delete: item.actions.discardDraft,
   };
 }
 
@@ -113,6 +110,11 @@ function useViewLabels(tableLabel: string, module: string): { list: WorkItemList
       excel: l("excel"),
       exportSelected: l("exportSelected"),
       exported: (n, count, format) => t("list.exported", { what: t(module === "submittals" ? "list.submittals" : "list.items", { n, count }), format }),
+      exportedCapped: (n, count, format) => t("list.exportedCapped", { what: t(module === "submittals" ? "list.submittals" : "list.items", { n, count }), format }),
+      exportShown: l("exportShown"),
+      exportWhole: l("exportWhole"),
+      wholeTable: Object.fromEntries((["typeName", "location", "creationDate", "submissionDate", "project"] as const).map((key) => [key, t(`list.wholeTable.${key}`)])) as WholeTableLabels,
+      groupCount: (n, count) => t("list.groupCount", { n, count }),
       rowMenu: {
         ...(Object.fromEntries((["open", "edit", "duplicate", "resubmit", "download", "delete", "loading", "deleteTitle", "cancel"] as const).map((key) => [key, t(`list.rowMenu.${key}`)])) as Record<
           "open" | "edit" | "duplicate" | "resubmit" | "download" | "delete" | "loading" | "deleteTitle" | "cancel",
@@ -181,11 +183,13 @@ export function WorkItemListOrKanban(
     /** The Project and Module of the tab: the board's Card view layout and collapsed groups are kept per board. */
     projectId: string;
     module: string;
+    /** The Project's name, for "the whole table" Export. */
+    projectName?: string;
     /** The filter fields' names in the other language. */
     hints?: WorkItemFilterHints;
   } & ({ view: "list"; list: WorkItemListData } | { view: "kanban"; board: WorkItemBoardData }),
 ) {
-  const { query, locale, view, action, projectId, module, hints } = props;
+  const { query, locale, view, action, projectId, module, hints, projectName } = props;
   const t = useTranslations("workItemViews");
   const labels = useViewLabels(props.tableLabel, module);
   const router = useRouter();
@@ -224,27 +228,20 @@ export function WorkItemListOrKanban(
         router.push(itemHref(row.id));
         return null;
       case "download":
-        // The item page as the viewer reads it, printed to PDF by their browser.
+        // The item as it was shared (its final output), printed to PDF by the viewer's browser.
         window.open(getPathname({ href: `/work-items/${row.id}/print`, locale }), "_blank", "noopener");
         return null;
       case "resubmit":
       case "duplicate": {
-        const res = await post(`/work-items/${row.id}/${action === "resubmit" ? "revisions" : "duplicate"}`, action === "resubmit" ? { idempotencyKey: crypto.randomUUID() } : {});
+        // A key per request, so a double-click makes one Revision or one Draft.
+        const res = await post(`/work-items/${row.id}/${action === "resubmit" ? "revisions" : "duplicate"}`, { idempotencyKey: crypto.randomUUID() });
         if (!res.ok) return failed;
         router.push(itemHref(((await res.json()) as { id: string }).id));
         return null;
       }
       case "delete": {
-        const item = await readItem(row.id);
-        const cancel = item ? draftCancel(item) : undefined;
-        const res = !item
-          ? null
-          : item.actions.discardRevision
-            ? await post(`/work-items/${row.id}/discard`, {})
-            : cancel
-              ? await post(`/work-items/${row.id}/transitions`, { transition: cancel.key, confirmed: true, idempotencyKey: crypto.randomUUID() })
-              : null;
-        if (!res?.ok) return failed;
+        const res = await post(`/work-items/${row.id}/discard-draft`, {});
+        if (!res.ok) return failed;
         router.refresh();
         return t("list.rowMenu.discarded");
       }
@@ -260,16 +257,19 @@ export function WorkItemListOrKanban(
       itemHref={itemHref}
       linkAs={NextLink}
       onQueryChange={(q) => router.push(hrefFor(q))}
-      // Export: the rows the Member reads with this query, through the List's own read (RP-409).
+      // Export: the rows the Member reads with this query, through the List's own read (RP-409); under
+      // a search, the pages read so far (to this one). At most 5,000 rows: `capped` says when it stopped.
       loadExportRows={
         props.view === "list"
           ? async () => {
               const params = workItemSearchParams({ ...query, module: undefined, cursor: undefined, lang: locale });
               const res = await fetch(`/api/v1/projects/${projectId}/modules/${module}/work-items/export?${params}`);
-              return res.ok ? ((await res.json()) as WorkItemExport).items : null;
+              return res.ok ? ((await res.json()) as WorkItemExport) : null;
             }
           : undefined
       }
+      projectName={projectName}
+
       // Each row's ⋯ menu (RP-409): what the viewer may do, from the item as the API gives it (the same
       // actions as the item page); every command is checked again by the API when it is taken.
       rowActions={props.view === "list" ? { load: rowPermissions, run: (row, action) => runRowAction(row, action) } : undefined}

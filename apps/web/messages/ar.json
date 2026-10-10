@@ -100,7 +100,7 @@
         "locationLevel3": "الطابق",
         "owner": "المسؤول الحالي",
         "contractor": "المقاول",
-        "created": "تاريخ الإنشاء",
+        "created": "التاريخ",
         "stepAge": "عمر الخطوة"
       },
       "sortBy": "الترتيب حسب {column}",
@@ -119,6 +119,17 @@
       "excel": "Excel",
       "exportSelected": "تصدير المحدد",
       "exported": "تم تصدير {what} ({format})",
+      "exportedCapped": "تم تصدير أول {what} ({format})",
+      "exportShown": "تصدير ما تراه",
+      "exportWhole": "تصدير الجدول كاملًا",
+      "wholeTable": {
+        "typeName": "اسم النوع",
+        "location": "الموقع",
+        "creationDate": "تاريخ الإنشاء",
+        "submissionDate": "تاريخ التقديم",
+        "project": "المشروع"
+      },
+      "groupCount": "{count, plural, one {واحد في هذه الصفحة} other {{n} في هذه الصفحة}}",
       "rowMenu": {
         "open": "فتح",
         "edit": "تعديل",
@@ -129,7 +140,7 @@
         "more": "المزيد لـ {subject}",
         "loading": "جارٍ التحميل…",
         "deleteTitle": "حذف هذه المسودة؟",
-        "deleteBody": "ستُحذف «{subject}» للجميع. لا يمكن التراجع عن ذلك.",
+        "deleteBody": "لن يرى أحد «{subject}» بعد الآن، ولا أنت. لم يُصدر لها رقم، فلا يضيع رقم.",
         "cancel": "إلغاء",
         "discarded": "تم تجاهل المسودة",
         "failed": "لم ينجح ذلك. حدّث الصفحة وحاول مرة أخرى."
@@ -883,7 +894,8 @@
       "emptyAnswer": "(فارغ)",
       "changedValue": "عُدّل",
       "linksField": "الروابط",
-      "recommendedCode": "الرمز الموصى به"
+      "recommendedCode": "الرمز الموصى به",
+      "duplicated": "نسخة من {number}"
     }
   },
   "revision": {

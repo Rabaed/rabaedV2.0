@@ -1,55 +1,44 @@
-import { answerFields, formatDate, formatNumber, type Locale } from "@rabaed/domain";
+import { answerFields, formatDayMonthYear, formatNumber, type Locale, type WorkItemDetail } from "@rabaed/domain";
 import { DocNo, StagePill, stageColour } from "@rabaed/ui";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
 import { PrintNow } from "@/components/print-now";
 import { WorkItemAttachments } from "@/components/work-item-attachments";
 import { WorkItemAnswers, WorkItemFormProvider } from "@/components/work-item-form";
-import { WorkItemHistory } from "@/components/work-item-history";
 import { WorkItemLinkedFrom } from "@/components/work-item-linked-from";
 import { WorkItemLinks } from "@/components/work-item-links";
 import { redirect } from "@/i18n/navigation";
 import { readingChoices } from "@/lib/built-in-choices";
 import { linkTargetNames } from "@/lib/link-search";
-import {
-  getLinkedFrom,
-  getMe,
-  getOptionLists,
-  getWorkItem,
-  getWorkItemDocuments,
-  getWorkItemForm,
-  getWorkItemFormChoices,
-  getWorkItemHistory,
-  getWorkItemLinks,
-} from "@/lib/session";
+import { getLinkedFrom, getMe, getOptionLists, getSharedWorkItem, getWorkItemDocuments, getWorkItemForm, getWorkItemLinks } from "@/lib/session";
 
 /**
- * Download (RP-409, the List's row menu): one Work Item as the viewer reads it, laid out to print,
- * which the browser saves as a PDF. Built from the same reads as the item page (its answers, Documents,
- * Links and history through the same API calls), so it holds nothing the item page wouldn't show
- * this viewer: another Company's Internal Notes, in-progress answers and people stay out (V5, V14,
- * V19; visibility.md scenario RP-409-2). Read only: nothing on it can be changed.
+ * Download (RP-409, owner decision 2026-10-10): the item's final output, laid out to print, which the
+ * browser saves as a PDF. Its content as it was shared, with its outcome (`GET /work-items/:id/shared`):
+ * the same for every viewer who sees it, the raiser's own Company included. No internal Step, no
+ * Internal Note, no person and no in-progress answers, for anyone (visibility.md scenario RP-409-2).
+ * Nothing before the first Submit. Read only: nothing on it can be changed.
  */
 export default async function WorkItemPrintPage({ params }: { params: Promise<{ locale: Locale; workItemId: string }> }) {
   const { locale, workItemId } = await params;
   setRequestLocale(locale);
   const t = await getTranslations("workItems");
   const tViews = await getTranslations("workItemViews");
-  const [me, item, form, people, documents, links, linkedFrom, history, optionLists] = await Promise.all([
+  const [me, item, form, documents, links, linkedFrom, optionLists] = await Promise.all([
     getMe(),
-    getWorkItem(workItemId),
+    getSharedWorkItem(workItemId),
     getWorkItemForm(workItemId),
-    getWorkItemFormChoices(workItemId),
     getWorkItemDocuments(workItemId),
     getWorkItemLinks(workItemId),
     getLinkedFrom(workItemId),
-    getWorkItemHistory(workItemId),
     getOptionLists(),
   ]);
   if (!me) return redirect({ href: "/sign-in", locale });
-  if (!item || !form || !people || !documents || !links || !linkedFrom) notFound();
-  const date = (iso: string | null) => (iso === null ? null : formatDate(new Date(iso), locale));
+  if (!item || !form || !documents || !links || !linkedFrom) notFound();
+  const date = (iso: string) => formatDayMonthYear(new Date(iso), locale, { month: "short" });
   const readOnly = { ...documents, canChange: false };
+  // The Built-in Fields name the item's own values, as on any item read only.
+  const choices = readingChoices({ trade: item.trade, location: item.location, scopes: item.scopes } as WorkItemDetail, locale);
 
   return (
     <WorkItemFormProvider
@@ -57,8 +46,9 @@ export default async function WorkItemPrintPage({ params }: { params: Promise<{ 
       projectId={item.projectId}
       linkTargets={linkTargetNames(links.links)}
       schema={form.schema}
-      choices={readingChoices(item, locale)}
-      people={people}
+      choices={choices}
+      // No person is named on the shared item.
+      people={{ members: [], participants: [] }}
       optionLists={optionLists}
       answers={item.answers}
       named={item.namedAnswers}
@@ -101,40 +91,21 @@ export default async function WorkItemPrintPage({ params }: { params: Promise<{ 
           <dd>
             <StagePill stage={stageColour(item.stage)} label={item.stage.name[locale]} />
           </dd>
-          <dt className="text-muted">{t("fields.step")}</dt>
-          <dd>{item.step.name[locale]}</dd>
           {item.outcome && (
             <>
               <dt className="text-muted">{t("fields.issuedCode")}</dt>
               <dd>
-                <bdi dir="ltr" className="font-semibold">
+                <bdi dir="ltr" className="font-semibold" data-testid="issued-code">
                   {item.outcome}
                 </bdi>
+                {item.outcomeName && <span className="ms-2 text-muted">{item.outcomeName[locale]}</span>}
               </dd>
-            </>
-          )}
-          {item.heldBy && (
-            <>
-              {/* Another Company by its name only, a person only within the viewer's own (V14). */}
-              <dt className="text-muted">{t("fields.with")}</dt>
-              <dd>{item.heldBy.memberName ? `${item.heldBy.memberName[locale]} · ${item.heldBy.companyName[locale]}` : item.heldBy.companyName[locale]}</dd>
             </>
           )}
           <dt className="text-muted">{t("fields.raisedBy")}</dt>
           <dd>{item.raisedBy.companyName[locale]}</dd>
-          {/* The Creation Date only reaches the raiser's Participant; everyone who sees the item reads the Submission Date. */}
-          {item.creationDate && (
-            <>
-              <dt className="text-muted">{tViews("list.creationDate")}</dt>
-              <dd>{date(item.creationDate)}</dd>
-            </>
-          )}
-          {item.submissionDate && (
-            <>
-              <dt className="text-muted">{tViews("list.submissionDate")}</dt>
-              <dd>{date(item.submissionDate)}</dd>
-            </>
-          )}
+          <dt className="text-muted">{tViews("list.submissionDate")}</dt>
+          <dd>{date(item.submissionDate)}</dd>
         </dl>
 
         <WorkItemAnswers locale={locale} workItemId={item.id} documents={readOnly} />
@@ -148,7 +119,27 @@ export default async function WorkItemPrintPage({ params }: { params: Promise<{ 
         >
           <WorkItemLinkedFrom items={linkedFrom.items} />
         </WorkItemLinks>
-        {history && <WorkItemHistory events={history.events} schema={form.schema} optionLists={optionLists} locale={locale} />}
+
+        {/* The shared moves only, each by its Company: no Step, no person, no Internal Note. */}
+        <section className="space-y-3">
+          <h2 className="text-h6 font-semibold">{t("history.title")}</h2>
+          <ol className="divide-y divide-border border-y border-border">
+            {item.history.map((e, i) => (
+              <li key={i} className="flex flex-col gap-0.5 py-2 text-sm">
+                <span className="font-semibold">
+                  {e.transition?.[locale] ?? t("history.other")}
+                  {e.outcome && (
+                    <bdi dir="ltr" className="ms-2">
+                      {e.outcome}
+                    </bdi>
+                  )}
+                </span>
+                <span className="text-muted">{[e.companyName?.[locale], date(e.at)].filter(Boolean).join(" · ")}</span>
+                {e.remarks && <p className="whitespace-pre-wrap">{e.remarks}</p>}
+              </li>
+            ))}
+          </ol>
+        </section>
       </article>
     </WorkItemFormProvider>
   );

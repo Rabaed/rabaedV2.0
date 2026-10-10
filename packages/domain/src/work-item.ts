@@ -349,8 +349,10 @@ export const sharedWorkItem = z.object({
   outcome: workItemOutcome.nullable(),
   /** The outcome's name in its Type's set, e.g. "Approved as noted". */
   outcomeName: bilingualText.nullable(),
-  trade: z.object({ code: z.string(), name: bilingualText }),
-  location: z.object({ code: z.string(), name: bilingualText }).nullable(),
+  trade: dimensionValueRef,
+  location: dimensionValueRef.nullable(),
+  /** Its Scopes and Sub-scopes, each Scope before its Sub-scopes. */
+  scopes: z.array(z.object({ id: z.uuid(), parentId: z.uuid().nullable(), name: bilingualText })),
   raisedBy: z.object({ companyName: bilingualText }),
   submissionDate: z.iso.datetime(),
   closedAt: z.iso.datetime().nullable(),

@@ -39,7 +39,7 @@ export type ToolbarSearchProps = {
   /** The words of the search the page shows. Give the component a `key` of it, so a new query shows its own words. */
   value: string | undefined;
   maxLength?: number;
-  /** 42px tall, as the Kanban Board Anatomy's toolbar (RP-410); 36px otherwise. */
+  /** 34px tall, the List's and the Kanban's toolbar (the owner's design, RP-409); 36px otherwise. */
   tall?: boolean;
   /** Asked for on Enter, with the trimmed words; undefined for an emptied box. */
   onSearch: (words: string | undefined) => void;
@@ -78,7 +78,7 @@ export function ToolbarSearch({ label, placeholder, description, value, maxLengt
         htmlFor={id}
         className={cn(
           "flex items-center gap-2 rounded-sm border border-control-border bg-surface px-2.5 text-muted hover:border-control-border-hover",
-          tall ? "h-[42px]" : "h-9",
+          tall ? "h-[34px]" : "h-9",
           "focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-focus pointer-coarse:min-h-11",
         )}
       >
@@ -118,7 +118,7 @@ export type ToolbarSwitchProps = {
 export function ToolbarSwitch({ label, checked, onCheckedChange }: ToolbarSwitchProps) {
   const id = useId();
   return (
-    <div className="inline-flex h-[42px] shrink-0 items-center gap-2 rounded-sm border border-border-strong bg-surface px-3 text-sm font-semibold whitespace-nowrap text-text-secondary hover:bg-hover pointer-coarse:min-h-11">
+    <div className="inline-flex h-[34px] shrink-0 items-center gap-2 rounded-sm px-2.5 text-[13.5px] font-semibold whitespace-nowrap text-text-secondary hover:bg-hover pointer-coarse:min-h-11">
       <Switch id={id} checked={checked} onCheckedChange={onCheckedChange} />
       <label htmlFor={id} className="cursor-pointer select-none">
         {label}
@@ -127,9 +127,12 @@ export function ToolbarSwitch({ label, checked, onCheckedChange }: ToolbarSwitch
   );
 }
 
-/** The shared look of a compact toolbar button (Filter, Card view layout), for a `button` or a trigger: white, outlined. */
+/** With `toolbarButton`: grey-filled, keeping its outline (the design's Group and Export). */
+export const toolbarFilled = "bg-secondary hover:bg-secondary-hover active:bg-secondary-press data-[state=open]:bg-secondary-press";
+
+/** The shared look of a compact toolbar button (Filter, Card view layout), for a `button` or a trigger: 34px, white, outlined. */
 export const toolbarButton = cn(
-  "inline-flex h-[42px] shrink-0 items-center gap-1.5 rounded-sm border border-border-strong bg-surface px-3 text-sm font-semibold whitespace-nowrap text-text-secondary",
+  "inline-flex h-[34px] shrink-0 items-center gap-1.5 rounded-sm border border-border-strong bg-surface px-3 text-[13.5px] font-semibold whitespace-nowrap text-text-secondary",
   "hover:bg-hover active:bg-press data-[state=open]:bg-press pointer-coarse:min-h-11",
   "[&_svg]:size-4 [&_svg]:shrink-0",
   focusRing,

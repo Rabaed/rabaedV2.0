@@ -596,15 +596,7 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
     const d = rows[0]!;
     const { schema } = await trx.selectFrom("form_version").select("schema").where("id", "=", d.form_version_id).executeTakeFirstOrThrow();
     const answers = answersFromDb(formSchema.parse(schema), d.data);
-    // work_item_scope shows only a visible item's; every Project Member reads the Project's Scopes.
-    const { rows: scopes } = await sql<{ id: string; parent_id: string | null; name: BilingualText }>`
-      select s.id, s.parent_id, s.name
-      from work_item_scope ws
-      join scope s on s.id = ws.scope_id
-      left join scope parent on parent.id = s.parent_id
-      where ws.work_item_id = ${workItemId}
-      order by coalesce(parent.sort, s.sort), coalesce(s.parent_id, s.id), s.depth, s.sort
-    `.execute(trx);
+    const scopes = await itemScopes(trx, workItemId);
     const { named, unnamed } = await namedAnswers(trx, workItemId);
     const stamps = await fieldStamps(trx, workItemId, false);
     const { rows: dropped } = await sql<{ field_key: string; label: BilingualText }>`
@@ -623,7 +615,7 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
       namedAnswers: named,
       fieldTimes: fieldTimesFor(stamps, memberId),
       autosave: auto[0]!.autosave,
-      scopes: scopes.map((s) => ({ id: s.id, parentId: s.parent_id, name: s.name })),
+      scopes,
       step: { key: d.step_key, name: d.step_name },
       raisedBy: { companyName: d.raised_by },
       heldBy: d.held_by ? { companyName: d.held_by, memberName: d.holder_name } : null,
@@ -643,6 +635,20 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
       },
     };
   });
+}
+
+/** A visible item's Scopes and Sub-scopes, each Scope before its Sub-scopes. */
+async function itemScopes(trx: Trx, workItemId: string): Promise<WorkItemDetail["scopes"]> {
+  // work_item_scope shows only a visible item's; every Project Member reads the Project's Scopes.
+  const { rows } = await sql<{ id: string; parent_id: string | null; name: BilingualText }>`
+    select s.id, s.parent_id, s.name
+    from work_item_scope ws
+    join scope s on s.id = ws.scope_id
+    left join scope parent on parent.id = s.parent_id
+    where ws.work_item_id = ${workItemId}
+    order by coalesce(parent.sort, s.sort), coalesce(s.parent_id, s.id), s.depth, s.sort
+  `.execute(trx);
+  return rows.map((s) => ({ id: s.id, parentId: s.parent_id, name: s.name }));
 }
 
 /**
@@ -802,8 +808,9 @@ export function getSharedWorkItem(db: Db, memberId: string, workItemId: string):
       stage: summary.stage,
       outcome: d.outcome,
       outcomeName: d.outcome_name,
-      trade: { code: summary.trade.code, name: summary.trade.name },
-      location: summary.location ? { code: summary.location.code, name: summary.location.name } : null,
+      trade: summary.trade,
+      location: summary.location,
+      scopes: await itemScopes(trx, workItemId),
       raisedBy: { companyName: d.raised_by },
       submissionDate: d.submitted_at.toISOString(),
       closedAt: d.closed_at?.toISOString() ?? null,

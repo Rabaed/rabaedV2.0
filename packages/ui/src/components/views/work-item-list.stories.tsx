@@ -35,7 +35,7 @@ const copy = {
   submittedFrom: b("Submitted from", "قُدِّم من"),
   number: b("Submittal No.", "رقم التقديم"),
   title: b("Title", "العنوان"),
-  created: b("Created", "تاريخ الإنشاء"),
+  created: b("Created", "التاريخ"),
   currentOwner: b("Current owner", "المسؤول الحالي"),
   settings: b("Table settings", "إعدادات الجدول"),
   group: b("Group", "تجميع"),
@@ -188,7 +188,8 @@ const meta = {
     itemHref: (id: string) => `#${id}`,
     onQueryChange: fn<WorkItemListProps["onQueryChange"]>(),
     onSaveColumns: fn<NonNullable<WorkItemListProps["onSaveColumns"]>>(async () => true),
-    loadExportRows: fn<NonNullable<WorkItemListProps["loadExportRows"]>>(async () => items),
+    loadExportRows: fn<NonNullable<WorkItemListProps["loadExportRows"]>>(async () => ({ items, capped: false })),
+    projectName: "Riyadh Gate Tower",
     rowActions: {
       load: async (r: WorkItemRow) => ({
         edit: r.stage.category === "draft",

@@ -577,7 +577,7 @@ export function WorkItemViewSwitch({ view, labels, hrefFor, linkAs: Link = "a" }
           href={hrefFor(v)}
           aria-current={v === view ? "page" : undefined}
           className={cn(
-            "inline-flex h-10 items-center gap-1.5 px-[14px] text-sm font-semibold text-text-secondary hover:bg-hover pointer-coarse:min-h-11",
+            "inline-flex h-8 items-center gap-1.5 px-3 text-[13.5px] font-semibold text-text-secondary hover:bg-hover pointer-coarse:min-h-11",
             "aria-[current=page]:bg-primary aria-[current=page]:text-on-primary aria-[current=page]:hover:bg-primary-hover",
             focusRing,
           )}
