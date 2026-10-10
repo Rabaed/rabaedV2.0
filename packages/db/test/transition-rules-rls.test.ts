@@ -115,7 +115,7 @@ const take = (as: string, id: string, transition: string, answers: object = {}) 
     as,
     sql`select app.take_transition(${id}::uuid, ${transition}, ${JSON.stringify(answers)}::jsonb, '', app.answers_sha256(${id}::uuid), ${randomUUID()}::uuid, now()) as outcome`,
   );
-const claim = (as: string, id: string) => outcome(as, sql`select app.claim_step(${id}::uuid, now()) as outcome`);
+const pickUp = (as: string, id: string) => outcome(as, sql`select app.pick_up_step(${id}::uuid, now()) as outcome`);
 const offered = async (as: string, id: string) =>
   (await call<{ transition_key: string }>(as, sql`select transition_key from app.work_item_actions(${id}::uuid) where action = 'transition'`)).map(
     (r) => r.transition_key,
@@ -136,7 +136,7 @@ async function draft(by: string, model: string): Promise<string> {
 async function submitted(model: string): Promise<string> {
   const id = await draft(c1.member, model);
   expect(await take(c1.member, id, "send_for_review")).toBe("applied");
-  expect(await claim(c1Pm, id)).toBe("claimed");
+  expect(await pickUp(c1Pm, id)).toBe("picked_up");
   expect(await take(c1Pm, id, "submit")).toBe("applied");
   return id;
 }
@@ -217,7 +217,7 @@ describe("a label shared by several Transitions", () => {
   it("is offered once, and the Action Form answer picks its route; none or several is no route", async () => {
     const id = await draft(c1.member, "Routed");
     expect(await take(c1.member, id, "send_for_review")).toBe("applied");
-    expect(await claim(c1Pm, id)).toBe("claimed");
+    expect(await pickUp(c1Pm, id)).toBe("picked_up");
     expect((await offered(c1Pm, id)).filter((key) => key.startsWith("route_"))).toEqual(["route_fast"]);
     expect(await take(c1Pm, id, "route_fast", { route: "sideways" })).toBe("no_route");
     expect(await take(c1Pm, id, "route_fast", {})).toBe("no_route");
@@ -234,14 +234,14 @@ describe("a label shared by several Transitions", () => {
 describe("not the same person (RP-430-1)", () => {
   it("hides Approve from the K1 manager who sent the item to the Manager, and offers it to another", async () => {
     const id = await submitted("Separation");
-    expect(await claim(k1Manager, id)).toBe("claimed");
+    expect(await pickUp(k1Manager, id)).toBe("picked_up");
     expect(await take(k1Manager, id, "send_to_manager")).toBe("applied");
-    expect(await claim(k1Manager, id)).toBe("claimed");
+    expect(await pickUp(k1Manager, id)).toBe("picked_up");
     expect(await offered(k1Manager, id)).not.toContain("approve_a");
     expect(await take(k1Manager, id, "approve_a")).toBe("transition_not_available");
-    // Released, the Step goes to the other manager, who may approve it.
-    expect(await outcome(k1Manager, sql`select app.release_step(${id}::uuid, now()) as outcome`)).toBe("released");
-    expect(await claim(k1Manager2, id)).toBe("claimed");
+    // Returned to the pool, the Step goes to the other manager, who may approve it.
+    expect(await outcome(k1Manager, sql`select app.return_to_pool_step(${id}::uuid, now()) as outcome`)).toBe("returned_to_pool");
+    expect(await pickUp(k1Manager2, id)).toBe("picked_up");
     expect(await offered(k1Manager2, id)).toContain("approve_a");
     expect(await take(k1Manager2, id, "approve_a")).toBe("applied");
   });
@@ -249,22 +249,22 @@ describe("not the same person (RP-430-1)", () => {
   it("reads the acting Member's own moves only: the C1 PM who raised and sent it can't submit it a second time", async () => {
     const id = await draft(c1Pm, "Second pair of eyes");
     expect(await take(c1Pm, id, "send_for_review")).toBe("applied");
-    expect(await claim(c1Pm, id)).toBe("claimed");
+    expect(await pickUp(c1Pm, id)).toBe("picked_up");
     expect(await offered(c1Pm, id)).not.toContain("submit_separate");
-    expect(await outcome(c1Pm, sql`select app.release_step(${id}::uuid, now()) as outcome`)).toBe("released");
-    expect(await claim(c1Pm2, id)).toBe("claimed");
+    expect(await outcome(c1Pm, sql`select app.return_to_pool_step(${id}::uuid, now()) as outcome`)).toBe("returned_to_pool");
+    expect(await pickUp(c1Pm2, id)).toBe("picked_up");
     expect(await offered(c1Pm2, id)).toContain("submit_separate");
   });
 });
 
 describe("not the same person keeps that Member from holding the next Step (RP-430-1)", () => {
-  const release = (as: string, id: string) => outcome(as, sql`select app.release_step(${id}::uuid, now()) as outcome`);
+  const returnToPool = (as: string, id: string) => outcome(as, sql`select app.return_to_pool_step(${id}::uuid, now()) as outcome`);
   const assignees = async (as: string, id: string, transition: string) =>
     (await call<{ member_id: string }>(as, sql`select member_id from app.transition_assignees(${id}::uuid, ${transition})`)).map((r) => r.member_id);
   const holding = async (id: string) =>
     (
       await migrator.query<{ status: string; assignee_member_id: string | null }>(
-        "select status, assignee_member_id from step_assignment where work_item_id = $1 and status in ('pooled', 'claimed', 'vacant')",
+        "select status, assignee_member_id from step_assignment where work_item_id = $1 and status in ('pooled', 'picked_up', 'vacant')",
         [id],
       )
     ).rows[0];
@@ -272,13 +272,13 @@ describe("not the same person keeps that Member from holding the next Step (RP-4
   /** At K1's review again, held by its engineer: K1's manager sent it to the Manager, `returner` returned it. */
   async function backAtReview(model: string, returner: string): Promise<string> {
     const id = await submitted(model);
-    expect(await claim(k1Manager, id)).toBe("claimed");
+    expect(await pickUp(k1Manager, id)).toBe("picked_up");
     expect(await take(k1Manager, id, "send_to_manager")).toBe("applied");
-    expect(await claim(returner, id)).toBe("claimed");
+    expect(await pickUp(returner, id)).toBe("picked_up");
     expect(await take(returner, id, "return_to_engineer")).toBe("applied");
     // Back to the manager who held the review; handed on to K1's engineer.
-    expect(await release(k1Manager, id)).toBe("released");
-    expect(await claim(k1.member, id)).toBe("claimed");
+    expect(await returnToPool(k1Manager, id)).toBe("returned_to_pool");
+    expect(await pickUp(k1.member, id)).toBe("picked_up");
     return id;
   }
 
@@ -294,18 +294,18 @@ describe("not the same person keeps that Member from holding the next Step (RP-4
       ),
     ).toBe("assignee_not_offered");
     expect(await take(k1.member, id, "fresh_eyes")).toBe("applied");
-    // The manager who sent it to the Manager can't claim it; the other can.
-    expect(await claim(k1Manager, id)).toBe("forbidden");
-    expect(await call(k1Manager, sql<{ action: string }>`select action from app.work_item_actions(${id}::uuid) where action = 'claim'`)).toEqual([]);
-    expect(await claim(k1Manager2, id)).toBe("claimed");
+    // The manager who sent it to the Manager can't pick it up; the other can.
+    expect(await pickUp(k1Manager, id)).toBe("forbidden");
+    expect(await call(k1Manager, sql<{ action: string }>`select action from app.work_item_actions(${id}::uuid) where action = 'pick_up'`)).toEqual([]);
+    expect(await pickUp(k1Manager2, id)).toBe("picked_up");
 
     // Returned to the review, which K1's engineer left last: not back to them, nor to the
     // manager who left it before, but to its pool without either.
     expect(await take(k1Manager2, id, "return_fresh")).toBe("applied");
     expect(await holding(id)).toEqual({ status: "pooled", assignee_member_id: null });
-    expect(await claim(k1.member, id)).toBe("forbidden");
-    expect(await claim(k1Manager, id)).toBe("forbidden");
-    expect(await claim(k1Manager2, id)).toBe("claimed");
+    expect(await pickUp(k1.member, id)).toBe("forbidden");
+    expect(await pickUp(k1Manager, id)).toBe("forbidden");
+    expect(await pickUp(k1Manager2, id)).toBe("picked_up");
   });
 
   it("is refused with the usual answer when nobody is left to hold the next Step", async () => {
@@ -318,7 +318,7 @@ describe("not the same person keeps that Member from holding the next Step (RP-4
 describe("has been through a Step (RP-430-2)", () => {
   it("never holds for K1 on the Contractor's Step, though C1's Submit left it", async () => {
     const id = await submitted("Contractor route");
-    expect(await claim(k1Manager, id)).toBe("claimed");
+    expect(await pickUp(k1Manager, id)).toBe("picked_up");
     expect(await offered(k1Manager, id)).not.toContain("check_contractor_route");
     expect(await take(k1Manager, id, "check_contractor_route")).toBe("transition_not_available");
   });
@@ -327,7 +327,7 @@ describe("has been through a Step (RP-430-2)", () => {
     const id = await draft(c1Pm, "Own route");
     expect(await offered(c1Pm, id)).not.toContain("submit_direct");
     expect(await take(c1Pm, id, "send_for_review")).toBe("applied");
-    expect(await claim(c1Pm2, id)).toBe("claimed");
+    expect(await pickUp(c1Pm2, id)).toBe("picked_up");
     expect(await take(c1Pm2, id, "return")).toBe("applied");
     expect(await offered(c1Pm, id)).toContain("submit_direct");
   });
@@ -342,14 +342,14 @@ describe("all Comments closed (RP-430-3)", () => {
       "insert into work_item_link (project_id, from_id, to_id, kind, created_by_member_id) values ($1, $2, $3, 'raised_from', $4)",
       [projectId, comment, id, c1.member],
     );
-    expect(await claim(k1Manager, id)).toBe("claimed");
+    expect(await pickUp(k1Manager, id)).toBe("picked_up");
     expect(await take(k1Manager, id, "send_to_manager")).toBe("applied");
-    expect(await claim(k1Manager2, id)).toBe("claimed");
+    expect(await pickUp(k1Manager2, id)).toBe("picked_up");
     expect(await offered(k1Manager2, id)).toContain("reject_d");
 
     // Submitted, K1 sees the open Comment: Reject is no longer offered, and refused like one that isn't there.
     expect(await take(c1.member, comment, "send_for_review")).toBe("applied");
-    expect(await claim(c1Pm, comment)).toBe("claimed");
+    expect(await pickUp(c1Pm, comment)).toBe("picked_up");
     expect(await take(c1Pm, comment, "submit")).toBe("applied");
     expect(await offered(k1Manager2, id)).not.toContain("reject_d");
     expect(await take(k1Manager2, id, "reject_d")).toBe("transition_not_available");

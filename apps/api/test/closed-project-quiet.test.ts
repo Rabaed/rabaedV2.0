@@ -86,15 +86,15 @@ async function submittedItem(title: string): Promise<string> {
   );
   const id = res.json().id as string;
   await take(raiser.caller, id, "send_for_review");
-  await ok(pm.caller.post(`/v1/work-items/${id}/claim`));
+  await ok(pm.caller.post(`/v1/work-items/${id}/pick-up`));
   await take(pm.caller, id, "submit");
   return id;
 }
 
 async function issueCodeB(id: string) {
-  await ok(signer.caller.post(`/v1/work-items/${id}/claim`));
+  await ok(signer.caller.post(`/v1/work-items/${id}/pick-up`));
   await take(signer.caller, id, "send_to_manager");
-  await ok(signer.caller.post(`/v1/work-items/${id}/claim`));
+  await ok(signer.caller.post(`/v1/work-items/${id}/pick-up`));
   await ok(signer.caller.post(`/v1/work-items/${id}/transitions`, { transition: "approve_b", answers: {}, confirmed: true, idempotencyKey: randomUUID() }));
 }
 

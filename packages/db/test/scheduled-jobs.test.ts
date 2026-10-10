@@ -1,7 +1,7 @@
 // Seam 2 for the worker's scheduled jobs (RP-358): a job runs once per run time
 // of its schedule, however many workers poll or how often, as the app role with
-// no Member set. A job that fails is rolled back with its claim, so the next
-// poll runs it again. A signed-in Member can't claim a run.
+// no Member set. A job that fails is rolled back with the run's lock, so the next
+// poll runs it again. A signed-in Member can't take a run.
 import { randomUUID } from "node:crypto";
 import type { WeeklySchedule } from "@rabaed/domain";
 import { sql } from "kysely";
@@ -25,7 +25,7 @@ function countingJob() {
     name: `test_${randomUUID()}`,
     schedule: weekdays,
     run: async (trx: Parameters<ScheduledJob["run"]>[0], runAt: Date) => {
-      // It runs in the claim's transaction, as the app role.
+      // It runs in the transaction that took the run, as the app role.
       await sql`select 1`.execute(trx);
       if (job.failing) throw new Error("job failed");
       job.runs.push(runAt);
@@ -61,7 +61,7 @@ describe("runScheduledJobs", () => {
     expect(job.runs).toEqual([]);
   });
 
-  it("runs a failed job again at the next poll: its claim is rolled back with it", async () => {
+  it("runs a failed job again at the next poll: its lock is rolled back with it", async () => {
     const job = countingJob();
     job.failing = true;
     const [failed] = await runScheduledJobs(worker, [job], riyadh("2026-10-07T07:00"));
@@ -78,7 +78,7 @@ describe("runScheduledJobs", () => {
     expect(runs.map((r) => r.outcome)).toEqual(["failed", "ran"]);
   });
 
-  it("is the worker's only: a signed-in Member's session can't claim a run", async () => {
+  it("is the worker's only: a signed-in Member's session can't take a run", async () => {
     const { rows } = await sql<{ id: string }>`select id from member limit 1`.execute(migrator);
     await expect(
       withMember(worker, rows[0]!.id, (trx) => sql`select app.claim_scheduled_run(${`test_${randomUUID()}`}, now())`.execute(trx)),

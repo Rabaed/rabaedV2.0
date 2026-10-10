@@ -44,9 +44,10 @@ export async function WorkItemHistory({
       return e.transition ? t("internalNoteWith", { transition: e.transition[locale] }) : t("internalNote");
     }
     if (e.type === "recommend_code") return t("recommendedCode");
-    if (e.type === "created" || e.type === "claimed" || e.type === "released" || e.type === "answers_changed") {
-      return t(e.type === "answers_changed" ? "answersChanged" : e.type);
-    }
+    if (e.type === "picked_up" || e.type === "claimed") return t("pickedUp");
+    if (e.type === "returned_to_pool" || e.type === "released") return t("returnedToPool");
+    if (e.type === "created") return t("created");
+    if (e.type === "answers_changed") return t("answersChanged");
     return t("other");
   };
   const fields = new Map(answerFields(schema).map((f) => [f.key, f]));

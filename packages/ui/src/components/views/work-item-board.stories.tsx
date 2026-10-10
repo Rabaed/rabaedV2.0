@@ -28,7 +28,7 @@ const copy = {
   list: b("List", "قائمة"),
   kanban: b("Kanban", "كانبان"),
   stage: b("Stage", "المرحلة"),
-  unclaimed: b("unclaimed", "لم تُستلَم"),
+  notPickedUp: b("notPickedUp", "لم تُستلَم"),
   moveItem: b("Move #", "نقل #"),
   moveTo: b("To #", "إلى #"),
 };
@@ -72,7 +72,7 @@ const card = (n: number, rest: Partial<WorkItemRow>): WorkItemRow => ({
 
 const withConsultant = { kind: "company", companyName: consultant } as const;
 const cards = {
-  draft: card(1, { title: "Fire alarm cables", documentNumber: null, stepEnteredAt: null, stepAgeWeeks: null, stage: stages.draft, with: { kind: "own", companyName: ownCompany, step: draftStep, claimer: { name: sara, isMe: true } } }),
+  draft: card(1, { title: "Fire alarm cables", documentNumber: null, stepEnteredAt: null, stepAgeWeeks: null, stage: stages.draft, with: { kind: "own", companyName: ownCompany, step: draftStep, holder: { name: sara, isMe: true } } }),
   revisionDraft: card(2, {
     title: "Earthing rods, galvanised",
     documentNumber: null,
@@ -80,9 +80,9 @@ const cards = {
     stepAgeWeeks: null,
     revisionNo: 1,
     stage: stages.draft,
-    with: { kind: "own", companyName: ownCompany, step: draftStep, claimer: { name: sara, isMe: true } },
+    with: { kind: "own", companyName: ownCompany, step: draftStep, holder: { name: sara, isMe: true } },
   }),
-  review: card(3, { title: "Main LV switchboard", stage: stages.internal, stepAgeWeeks: 2, with: { kind: "own", companyName: ownCompany, step: reviewStep, claimer: null } }),
+  review: card(3, { title: "Main LV switchboard", stage: stages.internal, stepAgeWeeks: 2, with: { kind: "own", companyName: ownCompany, step: reviewStep, holder: null } }),
   pending1: card(4, { title: "Cable tray support brackets", stepAgeWeeks: 4, with: withConsultant }),
   pending2: card(5, { title: "LED downlights", documentNumber: "TWR-TMC-EL-MAR-0005 Rev 1", revisionNo: 1, stepAgeWeeks: 3, with: withConsultant }),
   pending3: card(6, { title: "Smoke detectors", with: { kind: "company", companyName: otherConsultant } }),
@@ -192,10 +192,10 @@ export const Wide: Story = {
     );
     await expect(within(lanes[alWahaFirst ? 0 : 1]!).getAllByRole("link")).toHaveLength(2);
     // Another Company's lane: its name only, no Step and no person.
-    await expect(within(pending).queryByText(storyText(context, copy.unclaimed))).toBeNull();
+    await expect(within(pending).queryByText(storyText(context, copy.notPickedUp))).toBeNull();
 
     const review = columnOf(context, stages.internal);
-    await expect(within(review).getByRole("region", { name: reviewStep.name[locale] })).toHaveTextContent(storyText(context, copy.unclaimed));
+    await expect(within(review).getByRole("region", { name: reviewStep.name[locale] })).toHaveTextContent(storyText(context, copy.notPickedUp));
 
     const number = within(pending).getByText("TWR-TMC-EL-MAR-0005 Rev 1");
     await expect(getComputedStyle(number).direction).toBe("ltr");

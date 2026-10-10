@@ -84,7 +84,7 @@ async function submittedItem(raiser: Person, pm: Person, title: string): Promise
   );
   const id = res.json().id as string;
   await take(raiser.caller, id, "send_for_review");
-  await ok(pm.caller.post(`/v1/work-items/${id}/claim`));
+  await ok(pm.caller.post(`/v1/work-items/${id}/pick-up`));
   await take(pm.caller, id, "submit");
   const documentNumber = (await ok(raiser.caller.get(`/v1/work-items/${id}`), 200)).json().documentNumber as string;
   return { id, documentNumber };
@@ -92,9 +92,9 @@ async function submittedItem(raiser: Person, pm: Person, title: string): Promise
 
 /** K1's `signer` takes the item through K1's internal review and issues Code B. */
 async function issueCodeB(id: string, signer: Person) {
-  await ok(signer.caller.post(`/v1/work-items/${id}/claim`));
+  await ok(signer.caller.post(`/v1/work-items/${id}/pick-up`));
   await take(signer.caller, id, "send_to_manager");
-  await ok(signer.caller.post(`/v1/work-items/${id}/claim`));
+  await ok(signer.caller.post(`/v1/work-items/${id}/pick-up`));
   await ok(signer.caller.post(`/v1/work-items/${id}/transitions`, { transition: "approve_b", answers: {}, confirmed: true, idempotencyKey: randomUUID() }));
 }
 
@@ -230,11 +230,11 @@ describe("a Step reached", () => {
     expect(about(quiet.email, documentNumber)).toHaveLength(1);
   });
 
-  it("is not emailed to a pool colleague once another has claimed it before the send (withdrawn)", async () => {
+  it("is not emailed to a pool colleague once another has picked it up before the send (withdrawn)", async () => {
     const colleague = await person(k1, k1ParticipantId, ["manager"]);
     const { id, documentNumber } = await submittedItem(raiser, pm, "Chillers");
     await deliverOnly();
-    await ok(signer.caller.post(`/v1/work-items/${id}/claim`));
+    await ok(signer.caller.post(`/v1/work-items/${id}/pick-up`));
     await sendHeldEmails();
     expect(about(colleague.email, documentNumber)).toEqual([]);
     expect(about(signer.email, documentNumber)).toHaveLength(1);
@@ -328,7 +328,7 @@ describe("a Send Back (RP-356)", () => {
   it("emails the Members it was sent back to, with K1 by name only; never K1 or C2", async () => {
     const item = await submittedItem(raiser, pm, "Dampers");
     await drain();
-    await ok(signer.caller.post(`/v1/work-items/${item.id}/claim`));
+    await ok(signer.caller.post(`/v1/work-items/${item.id}/pick-up`));
     await take(signer.caller, item.id, "send_back");
     await drain();
     const { rows } = await sql<{ name: { en: string; ar: string } }>`select legal_name as name from company where id = ${k1.company.companyId}`.execute(migrator);
@@ -344,20 +344,20 @@ describe("a Send Back (RP-356)", () => {
 describe("a Vacancy (RP-356)", () => {
   const apEmail = () => c1.company.authorizedPerson.email;
 
-  /** A new item whose Contractor review `holder` claimed, then left the Project: its Step is vacant (as RP-108 will make it). */
+  /** A new item whose Contractor review `holder` picked up, then left the Project: its Step is vacant (as RP-108 will make it). */
   async function vacated(title: string, beforeVacant: () => Promise<void> = async () => {}): Promise<string> {
     const holder = await person(c1, at.c1ParticipantId, ["project_manager"]);
     const id = (
       await ok(raiser.caller.post(`/v1/projects/${at.projectId}/work-items`, { type: TYPE, title, answers: { model: "P1", trade: at.electrical, location: at.buildingA } }), 201)
     ).json().id as string;
     await take(raiser.caller, id, "send_for_review");
-    await ok(holder.caller.post(`/v1/work-items/${id}/claim`));
+    await ok(holder.caller.post(`/v1/work-items/${id}/pick-up`));
     await drain();
     await beforeVacant();
     await ok(c1.caller.delete(`/v1/participants/${at.c1ParticipantId}/members/${holder.id}`));
     await sql`
       update step_assignment set status = 'vacant', updated_at = now()
-      where work_item_id = ${id}::uuid and assignee_member_id = ${holder.id}::uuid and status = 'claimed'
+      where work_item_id = ${id}::uuid and assignee_member_id = ${holder.id}::uuid and status = 'picked_up'
     `.execute(migrator);
     return id;
   }

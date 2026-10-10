@@ -93,9 +93,9 @@ describe("scenario RP-426-1: the map is everyone's, an item's internal moves are
   it("C1 reads its item's Workflow and Version, but not K1's internal move on it", async () => {
     const id = await draft(at, at.c1Engineer, "Internal moves");
     await take(at.c1Engineer, id, "send_for_review");
-    await ok(at.c1Pm.post(`/v1/work-items/${id}/claim`));
+    await ok(at.c1Pm.post(`/v1/work-items/${id}/pick-up`));
     await take(at.c1Pm, id, "submit");
-    await ok(k1Engineer.post(`/v1/work-items/${id}/claim`));
+    await ok(k1Engineer.post(`/v1/work-items/${id}/pick-up`));
     // The MAR's "Consultant verification" is filled at `consultant_review`, a Step this Workflow has too.
     const answers = { ...(await detail(k1Engineer, id)).answers, sample_checked: true, matches_specification: true };
     await ok(k1Engineer.request("PUT", `/v1/work-items/${id}/answers`, { answers }));

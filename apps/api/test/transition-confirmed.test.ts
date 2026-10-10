@@ -102,11 +102,11 @@ describe("the audit row of a confirmed Transition", () => {
   beforeAll(async () => {
     id = await draft(at, at.c1Engineer, "Recorded");
     await take(at.c1Engineer, id, "send_for_review"); // 0
-    await ok(at.c1Pm.post(`/v1/work-items/${id}/claim`));
+    await ok(at.c1Pm.post(`/v1/work-items/${id}/pick-up`));
     await take(at.c1Pm, id, "return", { reason: "Give the model" }); // 1: nothing changed
     await ok(at.c1Engineer.request("PUT", `/v1/work-items/${id}/answers`, { answers: answers("CT-300") }));
     await take(at.c1Engineer, id, "send_for_review"); // 2: an answer changed
-    await ok(at.c1Pm.post(`/v1/work-items/${id}/claim`));
+    await ok(at.c1Pm.post(`/v1/work-items/${id}/pick-up`));
     await take(at.c1Pm, id, "return", { reason: "Attach the certificate" }); // 3
     await uploadDocument(at.c1Engineer, id, {
       fieldKey: "test_certificate",
@@ -115,9 +115,9 @@ describe("the audit row of a confirmed Transition", () => {
       body: "%PDF-1.7 a certificate",
     });
     await take(at.c1Engineer, id, "send_for_review"); // 4: a Document added
-    await ok(at.c1Pm.post(`/v1/work-items/${id}/claim`));
+    await ok(at.c1Pm.post(`/v1/work-items/${id}/pick-up`));
     await take(at.c1Pm, id, "submit"); // 5
-    await ok(signer.caller.post(`/v1/work-items/${id}/claim`));
+    await ok(signer.caller.post(`/v1/work-items/${id}/pick-up`));
     // The Consultant fills its verification (MAR Form Version 4), then issues the Code.
     const filled = { ...(await detail(signer.caller, id)).answers, sample_checked: true, matches_specification: true };
     await ok(signer.caller.request("PUT", `/v1/work-items/${id}/answers`, { answers: filled }));

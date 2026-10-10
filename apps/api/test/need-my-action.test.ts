@@ -1,6 +1,6 @@
 // Seam 1 for Need My Action, the Projects page's counts and the Module tabs
 // (RP-346, spec RP-344; visibility.md the Need My Action channel, V3, V14,
-// scenario 70). The toggle keeps the Steps I hold and the unclaimed Steps of my
+// scenario 70). The toggle keeps the Steps I hold and the not picked up Steps of my
 // Step Pool, on items I can see, plus my own Drafts, which are never counted.
 // The count on the Project card is the toggle's rows minus my Drafts, and a
 // closed Project has none.
@@ -65,9 +65,9 @@ async function draft(by: Caller, title: string, project = projectId, answers: Re
 /** Sends a Draft for C1's internal review, where it waits in the PM's pool. */
 const sendForReview = (id: string) => take(c1Engineer, id, "send_for_review");
 
-/** C1's PM claims the internal review and Submits it to K1, where it waits in the review Step's pool. */
+/** C1's PM picks up the internal review and Submits it to K1, where it waits in the review Step's pool. */
 async function submit(id: string) {
-  await ok(c1Pm.post(`/v1/work-items/${id}/claim`));
+  await ok(c1Pm.post(`/v1/work-items/${id}/pick-up`));
   await take(c1Pm, id, "submit");
 }
 
@@ -123,20 +123,20 @@ describe("Need My Action", () => {
     expect(ids(await list(c1Colleague))).toEqual([colleaguesDraft]);
   });
 
-  it("lists an unclaimed Step in my pool, and the Step once I hold it", async () => {
+  it("lists a Step not picked up in my pool, and the Step once I hold it", async () => {
     expect(ids(await list(c1Pm))).toEqual([inReview]);
     expect((await card(c1Pm)).needMyAction).toBe(1);
-    await ok(c1Pm.post(`/v1/work-items/${inReview}/claim`));
+    await ok(c1Pm.post(`/v1/work-items/${inReview}/pick-up`));
     expect(ids(await list(c1Pm))).toEqual([inReview]);
     expect((await card(c1Pm)).needMyAction).toBe(1);
   });
 
-  it("leaves the other pool members' Need My Action and counts when one of them claims it (scenario 70)", async () => {
+  it("leaves the other pool members' Need My Action and counts when one of them picks it up (scenario 70)", async () => {
     for (const k1 of [k1A, k1B]) {
       expect(ids(await list(k1))).toEqual([pooled]);
       expect((await card(k1)).needMyAction).toBe(1);
     }
-    await ok(k1A.post(`/v1/work-items/${pooled}/claim`));
+    await ok(k1A.post(`/v1/work-items/${pooled}/pick-up`));
     expect(ids(await list(k1A))).toEqual([pooled]);
     expect((await card(k1A)).needMyAction).toBe(1);
     expect(ids(await list(k1B))).toEqual([]);

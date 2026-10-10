@@ -82,7 +82,7 @@ const routed = async (id: string, kind: string) =>
     `.execute(migrator)
   ).rows;
 
-/** An item of the Send Back Type, on `tower`'s Project, Submitted to K1 and claimed by `holder`. */
+/** An item of the Send Back Type, on `tower`'s Project, Submitted to K1 and picked up by `holder`. */
 async function atConsultant(tower: Tower, title: string, holder: Caller = tower.k1Manager): Promise<string> {
   const res = await ok(
     tower.c1Engineer.post(`/v1/projects/${tower.projectId}/work-items`, {
@@ -94,9 +94,9 @@ async function atConsultant(tower: Tower, title: string, holder: Caller = tower.
   );
   const id = res.json().id as string;
   await take(tower.c1Engineer, id, "send_for_review");
-  await ok(tower.c1Pm.post(`/v1/work-items/${id}/claim`));
+  await ok(tower.c1Pm.post(`/v1/work-items/${id}/pick-up`));
   await take(tower.c1Pm, id, "submit");
-  await ok(holder.post(`/v1/work-items/${id}/claim`));
+  await ok(holder.post(`/v1/work-items/${id}/pick-up`));
   return id;
 }
 
@@ -182,13 +182,13 @@ async function vacated(tower: Tower, title: string, holder: Caller): Promise<str
   );
   const id = res.json().id as string;
   await take(tower.c1Engineer, id, "send_for_review");
-  await ok(holder.post(`/v1/work-items/${id}/claim`));
+  await ok(holder.post(`/v1/work-items/${id}/pick-up`));
   await drainOutbox(worker);
   const holderId = await meOf(holder);
   await ok(c1.caller.delete(`/v1/participants/${tower.c1ParticipantId}/members/${holderId}`));
   await sql`
     update step_assignment set status = 'vacant', updated_at = now()
-    where work_item_id = ${id}::uuid and assignee_member_id = ${holderId}::uuid and status = 'claimed'
+    where work_item_id = ${id}::uuid and assignee_member_id = ${holderId}::uuid and status = 'picked_up'
   `.execute(migrator);
   return id;
 }

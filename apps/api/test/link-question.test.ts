@@ -139,7 +139,7 @@ beforeAll(async () => {
   item.c1Internal = await inInternalReview(tower, c1Engineer, "Cable trays, in internal review");
   item.c1Submitted = await submitted(tower, c1Engineer, c1Pm, "Cable trays, submitted");
   item.c1Approved = await submitted(tower, c1Engineer, c1Pm, "Cable trays, approved");
-  await ok(k1Manager.post(`/v1/work-items/${item.c1Approved}/claim`));
+  await ok(k1Manager.post(`/v1/work-items/${item.c1Approved}/pick-up`));
   await verified(k1Manager, item.c1Approved);
   await ok(tryTake(k1Manager, item.c1Approved, "approve_a"));
   item.c2Submitted = await submitted(tower, c2Engineer, c2Pm, "Cable trays, second contractor");
@@ -228,7 +228,7 @@ describe("a link question", () => {
   });
 
   it("is frozen with the answers from Submit", async () => {
-    await ok(tower.c1Pm.post(`/v1/work-items/${lq}/claim`));
+    await ok(tower.c1Pm.post(`/v1/work-items/${lq}/pick-up`));
     await ok(tryTake(tower.c1Pm, lq, "submit"));
     const r = await save(tower.c1Engineer, lq, { relies: true, related: [item.c1Approved] });
     expect(refusal(r)).toEqual({ status: 409, body: { error: "not_editable" } });

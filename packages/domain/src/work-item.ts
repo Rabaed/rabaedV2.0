@@ -90,15 +90,15 @@ export type WorkItemOutcome = string;
 
 /**
  * Who an open item is with, as the viewer may read it (V14): `own` when the
- * viewer's own Participant holds it, with the Step and who claimed it (null
- * while unclaimed); `company` when another Company holds it, by its name only.
+ * viewer's own Participant holds it, with the Step and who picked it up (null
+ * while not picked up); `company` when another Company holds it, by its name only.
  */
 export const workItemWith = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("own"),
     companyName: bilingualText,
     step: z.object({ key: z.string(), name: bilingualText }),
-    claimer: z.object({ name: bilingualText, isMe: z.boolean() }).nullable(),
+    holder: z.object({ name: bilingualText, isMe: z.boolean() }).nullable(),
   }),
   z.object({ kind: z.literal("company"), companyName: bilingualText }),
 ]);
@@ -338,9 +338,9 @@ export type CreateReplacementRequest = z.infer<typeof createReplacementRequest>;
 /** Exactly what the viewer may press on the item now. */
 export const workItemActions = z.object({
   /** Take the pooled Step. */
-  claim: z.boolean(),
-  /** Give the Step they claimed back to its pool. */
-  release: z.boolean(),
+  pickUp: z.boolean(),
+  /** Give the Step they picked up back to its pool. */
+  returnToPool: z.boolean(),
   /** Save draft: change the Form's answers (the raiser's Company, in Draft). */
   saveAnswers: z.boolean(),
   /**
@@ -457,14 +457,18 @@ export const workItemEventTypes = [
   "recommend_code",
   "issue_code",
   "assigned",
-  "claimed",
-  "released",
+  "picked_up",
+  "returned_to_pool",
   "vacated",
   "admin_reassigned",
   "admin_reset",
   "internal_note",
   "cancelled",
   "answers_changed",
+  // Events written before RP-512 keep their old type (the audit trail is append-only and
+  // hash-chained); they read as Pick up and Return to pool.
+  "claimed",
+  "released",
 ] as const;
 
 /**

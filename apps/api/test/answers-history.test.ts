@@ -83,7 +83,7 @@ describe("answers after Draft", () => {
     await ok(save(engineer, id, { ...complete, model: DRAFT_MODEL }));
     await attachDatasheet(engineer, id);
     await ok(tryTake(engineer, id, "send_for_review"));
-    await ok(pm.post(`/v1/work-items/${id}/claim`));
+    await ok(pm.post(`/v1/work-items/${id}/pick-up`));
   });
 
   it("records nothing for the saves made in Draft", async () => {

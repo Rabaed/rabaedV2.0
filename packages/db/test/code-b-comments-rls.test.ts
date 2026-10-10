@@ -62,7 +62,7 @@ const take = (as: string, id: string, transition: string, answers: object = {}) 
     as,
     sql`select app.take_transition(${id}::uuid, ${transition}, ${JSON.stringify(answers)}::jsonb, '', app.answers_sha256(${id}::uuid), ${randomUUID()}::uuid, now()) as outcome`,
   );
-const claim = (as: string, id: string) => outcome(as, sql`select app.claim_step(${id}::uuid, now()) as outcome`);
+const pickUp = (as: string, id: string) => outcome(as, sql`select app.pick_up_step(${id}::uuid, now()) as outcome`);
 
 /** The items `as` sees of `ids`. */
 const seen = async (as: string, ids: string[]) =>
@@ -81,11 +81,11 @@ async function closedAtB(model: string, rows: { comment: string }[]): Promise<{ 
   );
   const source = created!.work_item_id;
   expect(await take(c1.member, source, "send_for_review")).toBe("applied");
-  expect(await claim(c1Pm, source)).toBe("claimed");
+  expect(await pickUp(c1Pm, source)).toBe("picked_up");
   expect(await take(c1Pm, source, "submit")).toBe("applied");
-  expect(await claim(k1.member, source)).toBe("claimed");
+  expect(await pickUp(k1.member, source)).toBe("picked_up");
   expect(await take(k1.member, source, "send_to_manager")).toBe("applied");
-  expect(await claim(k1.ap, source)).toBe("claimed");
+  expect(await pickUp(k1.ap, source)).toBe("picked_up");
   expect(await take(k1.ap, source, "approve_b", { items_to_create: rows })).toBe("applied");
   const { rows: links } = await migrator.query<{ id: string }>(
     "select from_id as id from work_item_link where to_id = $1 and kind = 'raised_from' order by from_id",
@@ -224,10 +224,10 @@ describe("Code B's Comments reach exactly who sees the reviewed item", () => {
     expect(await seen(k1Mechanical, [source, ...comments])).toEqual([]);
     expect(await counts(k1Mechanical, source)).toEqual([]);
     // A Comment closed counts as closed, for everyone who sees it.
-    expect(await claim(c1Pm, comments[0]!)).toBe("claimed");
+    expect(await pickUp(c1Pm, comments[0]!)).toBe("picked_up");
     await migrator.query("update work_item set data = data || '{\"resolution_note\": \"Done\"}' where id = $1", [comments[0]]);
     expect(await take(c1Pm, comments[0]!, "resolve")).toBe("applied");
-    expect(await claim(k1.member, comments[0]!)).toBe("claimed");
+    expect(await pickUp(k1.member, comments[0]!)).toBe("picked_up");
     expect(await take(k1.member, comments[0]!, "close")).toBe("applied");
     expect(await counts(c1.member, source)).toEqual([{ open_count: 0, closed_count: 1 }]);
     expect(await counts(k1.member, source)).toEqual([{ open_count: 0, closed_count: 1 }]);

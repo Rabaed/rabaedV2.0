@@ -44,8 +44,8 @@ async function newDraft(by: Caller, model: string, answers: Record<string, unkno
 }
 
 const offered = async (by: Caller, id: string) => (await detail(by, id)).actions.transitions.map((t) => t.key);
-const claim = (by: Caller, id: string) => ok(by.post(`/v1/work-items/${id}/claim`));
-const release = (by: Caller, id: string) => ok(by.post(`/v1/work-items/${id}/release`));
+const pickUp = (by: Caller, id: string) => ok(by.post(`/v1/work-items/${id}/pick-up`));
+const returnToPool = (by: Caller, id: string) => ok(by.post(`/v1/work-items/${id}/return-to-pool`));
 const pdf = (fieldKey: string | null) => ({
   ...(fieldKey === null ? {} : { fieldKey }),
   fileName: "datasheet.pdf",
@@ -58,23 +58,23 @@ async function inReview(model: string, answers: Record<string, unknown> = {}, be
   const id = await newDraft(engineer, model, answers);
   await beforeSending?.(id);
   await take(engineer, id, "send_for_review");
-  await claim(pm, id);
+  await pickUp(pm, id);
   return id;
 }
 
-/** An item Submitted to K1, claimed by `holder`. */
+/** An item Submitted to K1, picked up by `holder`. */
 async function atConsultant(model: string, holder: Caller, answers: Record<string, unknown> = {}): Promise<string> {
   const id = await inReview(model, answers);
   await take(pm, id, "submit");
-  await claim(holder, id);
+  await pickUp(holder, id);
   return id;
 }
 
-/** An item K1's `sender` sent to the Manager, claimed by `holder`. */
+/** An item K1's `sender` sent to the Manager, picked up by `holder`. */
 async function atApproval(model: string, sender: Caller, holder: Caller, answers: Record<string, unknown> = {}): Promise<string> {
   const id = await atConsultant(model, sender, answers);
   await take(sender, id, "send_to_manager");
-  await claim(holder, id);
+  await pickUp(holder, id);
   return id;
 }
 
@@ -139,8 +139,8 @@ describe("Restrict: who may take it, by Position", () => {
     const id = await atConsultant("Positions", k1Engineer);
     expect(await offered(k1Engineer, id)).not.toContain("send_back");
     await expectNotAvailable(tryTake(k1Engineer, id, "send_back"));
-    await release(k1Engineer, id);
-    await claim(k1Manager, id);
+    await returnToPool(k1Engineer, id);
+    await pickUp(k1Manager, id);
     expect(await offered(k1Manager, id)).toContain("send_back");
     await take(k1Manager, id, "send_back");
   });
@@ -151,8 +151,8 @@ describe("Restrict: not the same person", () => {
     const id = await atApproval("Separation", k1Manager, k1Manager);
     expect(await offered(k1Manager, id)).not.toContain("approve_a");
     await expectNotAvailable(tryTake(k1Manager, id, "approve_a"));
-    await release(k1Manager, id);
-    await claim(k1Manager2, id);
+    await returnToPool(k1Manager, id);
+    await pickUp(k1Manager2, id);
     expect(await offered(k1Manager2, id)).toContain("approve_a");
     await take(k1Manager2, id, "approve_a");
   });
@@ -160,10 +160,10 @@ describe("Restrict: not the same person", () => {
   it("hides the second-pair-of-eyes Submit from the PM who left the Draft", async () => {
     const id = await newDraft(pm, "Second pair of eyes");
     await take(pm, id, "send_for_review");
-    await claim(pm, id);
+    await pickUp(pm, id);
     expect(await offered(pm, id)).not.toContain("submit_separate");
-    await release(pm, id);
-    await claim(pm2, id);
+    await returnToPool(pm, id);
+    await pickUp(pm2, id);
     await take(pm2, id, "submit_separate");
   });
 });
@@ -174,8 +174,8 @@ describe("Restrict: not the same person keeps that Member from holding the next 
     const id = await atApproval(model, k1Manager, returner);
     await take(returner, id, "return_to_engineer");
     // Back with the manager who held the review; handed on to K1's engineer.
-    await release(k1Manager, id);
-    await claim(k1Engineer, id);
+    await returnToPool(k1Manager, id);
+    await pickUp(k1Engineer, id);
     return id;
   }
 
@@ -185,9 +185,9 @@ describe("Restrict: not the same person keeps that Member from holding the next 
     // The other manager only.
     expect(fresh?.assignTo).toHaveLength(1);
     await take(k1Engineer, id, "fresh_eyes");
-    const refused = await k1Manager.post(`/v1/work-items/${id}/claim`);
+    const refused = await k1Manager.post(`/v1/work-items/${id}/pick-up`);
     expect(refused.statusCode, refused.body).toBe(403);
-    await claim(k1Manager2, id);
+    await pickUp(k1Manager2, id);
   });
 
   it("refuses with the usual answer when nobody is left to hold the next Step", async () => {
@@ -205,7 +205,7 @@ describe("Restrict: has been through a Step, or a shared fact", () => {
     expect(await offered(pm, id)).not.toContain("submit_direct");
     await expectNotAvailable(tryTake(pm, id, "submit_direct"));
     await take(pm, id, "send_for_review");
-    await claim(pm2, id);
+    await pickUp(pm2, id);
     await take(pm2, id, "return");
     expect(await offered(pm, id)).toContain("submit_direct");
     await take(pm, id, "submit_direct");
@@ -215,7 +215,7 @@ describe("Restrict: has been through a Step, or a shared fact", () => {
     const id = await inReview("Resubmit");
     expect(await offered(pm, id)).not.toContain("resubmit");
     await take(pm, id, "submit");
-    await claim(k1Manager, id);
+    await pickUp(k1Manager, id);
     await take(k1Manager, id, "send_back");
     expect(await offered(pm, id)).toContain("resubmit");
     await take(pm, id, "resubmit");
@@ -227,7 +227,7 @@ describe("Restrict: has been through a Step, or a shared fact", () => {
     await take(k1Manager, id, "revise_c", { remarks: "Use the other cable." });
     const revision = (await ok(engineer.post(`/v1/work-items/${id}/revisions`, { idempotencyKey: randomUUID() }), 201)).json().id as string;
     await take(engineer, revision, "send_for_review");
-    await claim(pm, revision);
+    await pickUp(pm, revision);
     expect(await offered(pm, revision)).toContain("submit_revision");
     await take(pm, revision, "submit_revision");
   });
@@ -244,7 +244,7 @@ describe("Restrict: all Comments closed", () => {
     await expectNotAvailable(tryTake(k1Manager, id, "reject_d"));
     // Closed, it no longer holds the item back.
     await take(k1Engineer, comment, "send_to_manager");
-    await claim(k1Manager2, comment);
+    await pickUp(k1Manager2, comment);
     await take(k1Manager2, comment, "approve_a");
     expect(await offered(k1Manager, id)).toContain("reject_d");
     await take(k1Manager, id, "reject_d");
@@ -279,7 +279,7 @@ describe("Validate: the Form complete", () => {
     expect(await offered(k1Engineer, id)).toContain("escalate");
     await expectRefusedWith(tryTake(k1Engineer, id, "escalate"), incomplete);
     await take(k1Engineer, id, "send_to_manager");
-    await claim(k1Manager, id);
+    await pickUp(k1Manager, id);
     expect((await detail(k1Manager, id)).step.key).toBe("senior_approval");
     const answers = (await detail(k1Manager, id)).answers;
     await ok(k1Manager.request("PUT", `/v1/work-items/${id}/answers`, { answers: { ...answers, verdict: "Fit for use" } }));

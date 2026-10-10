@@ -122,7 +122,7 @@ const take = (as: string, id: string, transition: string) =>
     as,
     sql`select app.take_transition(${id}::uuid, ${transition}, '{}'::jsonb, '', app.answers_sha256(${id}::uuid), ${randomUUID()}::uuid, now()) as outcome`,
   );
-const claim = (as: string, id: string) => outcome(as, sql`select app.claim_step(${id}::uuid, now()) as outcome`);
+const pickUp = (as: string, id: string) => outcome(as, sql`select app.pick_up_step(${id}::uuid, now()) as outcome`);
 const createRevision = (as: string, id: string) =>
   call<{ outcome: string; work_item_id: string | null }>(
     as,
@@ -218,9 +218,9 @@ beforeAll(async () => {
   );
   closed = draft!.work_item_id;
   expect(await take(c1.member, closed, "send_for_review")).toBe("applied");
-  expect(await claim(c1Pm, closed)).toBe("claimed");
+  expect(await pickUp(c1Pm, closed)).toBe("picked_up");
   expect(await take(c1Pm, closed, "submit")).toBe("applied");
-  expect(await claim(k1.member, closed)).toBe("claimed");
+  expect(await pickUp(k1.member, closed)).toBe("picked_up");
   expect(await take(k1.member, closed, "revise_c")).toBe("applied");
 
   const created1 = await createRevision(c1.member, closed);
@@ -318,9 +318,9 @@ describe("the Links between the items of a chain, for a reader who sees only som
     );
     original = draft!.work_item_id;
     expect(await take(c1.member, original, "send_for_review")).toBe("applied");
-    expect(await claim(c1Pm, original)).toBe("claimed");
+    expect(await pickUp(c1Pm, original)).toBe("picked_up");
     expect(await take(c1Pm, original, "submit")).toBe("applied");
-    expect(await claim(k1.member, original)).toBe("claimed");
+    expect(await pickUp(k1.member, original)).toBe("picked_up");
     expect(await take(k1.member, original, "revise_c")).toBe("applied");
     moved = (await createRevision(c1.member, original)).work_item_id!;
     expect(
@@ -330,7 +330,7 @@ describe("the Links between the items of a chain, for a reader who sees only som
       ),
     ).toBe("saved");
     expect(await take(c1.member, moved, "send_for_review")).toBe("applied");
-    expect(await claim(c1Pm, moved)).toBe("claimed");
+    expect(await pickUp(c1Pm, moved)).toBe("picked_up");
     expect(await take(c1Pm, moved, "submit")).toBe("applied");
   });
 
@@ -367,9 +367,9 @@ describe("an item closed otherwise than with Code C", () => {
     );
     const id = draft!.work_item_id;
     expect(await take(c1.member, id, "send_for_review")).toBe("applied");
-    expect(await claim(c1Pm, id)).toBe("claimed");
+    expect(await pickUp(c1Pm, id)).toBe("picked_up");
     expect(await take(c1Pm, id, "submit")).toBe("applied");
-    expect(await claim(k1.member, id)).toBe("claimed");
+    expect(await pickUp(k1.member, id)).toBe("picked_up");
     expect(await take(k1.member, id, "revise_c")).toBe("applied");
     expect(await call(c1.member, sql`select app.can_create_revision(${id}::uuid) as can`)).toEqual([{ can: true }]);
     // An outcome of its Type's set that offers no Revision (RP-429): Code D, which offers a replacement.
@@ -426,9 +426,9 @@ describe("a replacement of a rejected item (RP-435-1)", () => {
     );
     rejected = draft!.work_item_id;
     expect(await take(c1.member, rejected, "send_for_review")).toBe("applied");
-    expect(await claim(c1Pm, rejected)).toBe("claimed");
+    expect(await pickUp(c1Pm, rejected)).toBe("picked_up");
     expect(await take(c1Pm, rejected, "submit")).toBe("applied");
-    expect(await claim(k1.member, rejected)).toBe("claimed");
+    expect(await pickUp(k1.member, rejected)).toBe("picked_up");
     expect(await take(k1.member, rejected, "revise_c")).toBe("applied");
     // Code C offers a Revision, not a replacement; the outcome set is what decides (RP-429).
     expect(await call(c1.member, sql`select app.can_create_replacement(${rejected}::uuid) as can`)).toEqual([{ can: false }]);
@@ -474,7 +474,7 @@ describe("a replacement of a rejected item (RP-435-1)", () => {
     const number = rows[0]!.document_number;
     expect(number).not.toContain("Rev");
     expect(await linkedFrom(k1.member, rejected)).toEqual([]);
-    expect(await claim(c1Pm, replacement)).toBe("claimed");
+    expect(await pickUp(c1Pm, replacement)).toBe("picked_up");
     expect(await take(c1Pm, replacement, "submit")).toBe("applied");
     for (const who of [c1.member, k1.member, ow.member]) {
       expect(await linkedFrom(who, rejected)).toEqual([{ document_number: number }]);

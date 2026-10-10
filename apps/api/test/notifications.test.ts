@@ -174,21 +174,21 @@ describe("Return and Submit", () => {
   beforeAll(async () => {
     id = await createDraft("Lighting fixtures");
     await take(engineer.caller, id, "send_for_review");
-    await ok(pm.caller.post(`/v1/work-items/${id}/claim`));
+    await ok(pm.caller.post(`/v1/work-items/${id}/pick-up`));
     await take(pm.caller, id, "return", { reason: "Wrong tray size" });
     await drainOutbox(worker);
   });
 
   it("notifies the Engineer the Return comes back to, not the PM who returned it", async () => {
     expect(await about(engineer, id)).toHaveLength(1);
-    // Send for Review was delivered only after the PM had claimed and returned it: a
+    // Send for Review was delivered only after the PM had picked up and returned it: a
     // Step the item already left notifies nobody.
     expect(await about(pm, id)).toEqual([]);
   });
 
   it("notifies the Consultant's pool on Submit, never the Consultant's Engineer or the second Contractor", async () => {
     await take(engineer.caller, id, "send_for_review");
-    await ok(pm.caller.post(`/v1/work-items/${id}/claim`));
+    await ok(pm.caller.post(`/v1/work-items/${id}/pick-up`));
     await take(pm.caller, id, "submit");
     await drainOutbox(worker);
     const [n] = await about(manager, id);

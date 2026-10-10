@@ -50,10 +50,10 @@ export type WorkItemListLabels = {
   stage: string;
   with: string;
   withMe: string;
-  /** After a Step's name, when nobody in the viewer's Company has claimed it. */
-  unclaimed: string;
-  /** The "With" filter's choice of every unclaimed Step. */
-  anyUnclaimed: string;
+  /** After a Step's name, when nobody in the viewer's Company has picked it up. */
+  notPickedUp: string;
+  /** The "With" filter's choice of every not picked up Step. */
+  anyNotPickedUp: string;
   trade: string;
   location: string;
   outcome: string;
@@ -153,7 +153,7 @@ export type WorkItemListProps = {
  * The List of a Module's Work Items (spec RP-344): a toolbar of filters and
  * sort with the Need My Action and "Show all Revisions" switches, the Stage counts of the matching
  * items, and one page of them, 50 rows. Every choice is a new query, which the
- * page keeps in its URL. "With" follows V14: the Step and who claimed it in the
+ * page keeps in its URL. "With" follows V14: the Step and who picked it up in the
  * viewer's own Company, another Company's name only, as the API sends it.
  * The table scrolls sideways on a narrow screen.
  */
@@ -201,7 +201,7 @@ export function WorkItemList({ list, query, locale, labels, hrefFor, itemHref, o
             value={query.with[0]}
             options={[
               { value: "me", label: t("withMe") },
-              { value: "unclaimed", label: t("anyUnclaimed") },
+              { value: "not_picked_up", label: t("anyNotPickedUp") },
               ...list.filters.with.steps.map((s) => ({ value: `step:${s.key}`, label: s.name[locale] })),
               ...list.filters.with.companies.map((c) => ({ value: `company:${c.participantId}`, label: c.name[locale] })),
             ]}
@@ -327,7 +327,7 @@ export function WorkItemList({ list, query, locale, labels, hrefFor, itemHref, o
                   <StagePill stage={stageColour(item.stage)} label={item.stage.name[locale]} locale={locale} />
                 </TableCell>
                 <TableCell className="whitespace-nowrap">
-                  <WithCell row={item} locale={locale} unclaimed={t("unclaimed")} />
+                  <WithCell row={item} locale={locale} notPickedUp={t("notPickedUp")} />
                 </TableCell>
                 <TableCell>
                   {/* A closed item doesn't age. */}
@@ -443,14 +443,14 @@ function locationOptions(locations: WorkItemListData["filters"]["locations"], lo
 }
 
 /** "With", as V14 has it. */
-function WithCell({ row, locale, unclaimed }: { row: WorkItemRow; locale: Locale; unclaimed: string }) {
+function WithCell({ row, locale, notPickedUp }: { row: WorkItemRow; locale: Locale; notPickedUp: string }) {
   const w = row.with;
   if (!w) return null;
   if (w.kind === "company") return <WithChip kind="company" inViewerCompany={false} companyName={w.companyName[locale]} />;
-  if (!w.claimer) {
-    return <WithChip kind="pool" inViewerCompany companyName={w.companyName[locale]} stepName={w.step.name[locale]} unclaimedLabel={unclaimed} />;
+  if (!w.holder) {
+    return <WithChip kind="pool" inViewerCompany companyName={w.companyName[locale]} stepName={w.step.name[locale]} notPickedUpLabel={notPickedUp} />;
   }
-  return <WithChip kind="person" inViewerCompany name={w.claimer.name[locale]} companyName={w.companyName[locale]} />;
+  return <WithChip kind="person" inViewerCompany name={w.holder.name[locale]} companyName={w.companyName[locale]} />;
 }
 
 /**

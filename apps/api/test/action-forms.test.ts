@@ -56,11 +56,11 @@ async function history(by: Caller, id: string): Promise<WorkItemHistory["events"
   return res.json().events;
 }
 
-/** An item sent for review and claimed by the PM, at Internal Review. */
+/** An item sent for review and picked up by the PM, at Internal Review. */
 async function atInternalReview(title: string) {
   const id = await createDraft(title);
   await ok(tryTake(engineer, id, "send_for_review"));
-  await ok(pm.post(`/v1/work-items/${id}/claim`));
+  await ok(pm.post(`/v1/work-items/${id}/pick-up`));
   return id;
 }
 

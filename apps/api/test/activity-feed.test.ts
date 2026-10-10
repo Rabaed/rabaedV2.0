@@ -168,7 +168,7 @@ describe("scenario 34 through the feed: C1 PM Submits with an Internal Note", ()
   let id = "";
   beforeAll(async () => {
     id = await atContractorReview(tower.c1Engineer, "Feed FD-34");
-    await ok(tower.c1Pm.post(`/v1/work-items/${id}/claim`));
+    await ok(tower.c1Pm.post(`/v1/work-items/${id}/pick-up`));
     await take(tower.c1Pm, id, "submit", { internalNote: NOTE });
   });
 
@@ -186,7 +186,7 @@ describe("scenario 34 through the feed: C1 PM Submits with an Internal Note", ()
     expect(ofItem(entries, id).map(what)).toEqual([
       ["transition", "Submit", "shared"],
       ["internal_note", "Submit", "internal"],
-      ["claimed", null, "internal"],
+      ["picked_up", null, "internal"],
       ["transition", "Send for Review", "internal"],
     ]);
     const submit = ofItem(entries, id)[0]!;
@@ -202,11 +202,11 @@ describe("scenario 35 through the feed: K1 moves the Submitted item internally",
   let id = "";
   beforeAll(async () => {
     id = await atContractorReview(tower.c1Engineer, "Feed FD-35");
-    await ok(tower.c1Pm.post(`/v1/work-items/${id}/claim`));
+    await ok(tower.c1Pm.post(`/v1/work-items/${id}/pick-up`));
     await take(tower.c1Pm, id, "submit");
-    await ok(k1Engineer.post(`/v1/work-items/${id}/claim`));
+    await ok(k1Engineer.post(`/v1/work-items/${id}/pick-up`));
     await take(k1Engineer, id, "send_to_manager");
-    await ok(tower.k1Manager.post(`/v1/work-items/${id}/claim`));
+    await ok(tower.k1Manager.post(`/v1/work-items/${id}/pick-up`));
     await take(tower.k1Manager, id, "return_to_engineer");
   });
 
@@ -237,9 +237,9 @@ describe("scenario 47 through the feed: K1 fills its section and saves twice", (
   let id = "";
   beforeAll(async () => {
     id = await atContractorReview(tower.c1Engineer, "Feed FD-47");
-    await ok(tower.c1Pm.post(`/v1/work-items/${id}/claim`));
+    await ok(tower.c1Pm.post(`/v1/work-items/${id}/pick-up`));
     await take(tower.c1Pm, id, "submit");
-    await ok(k1Engineer.post(`/v1/work-items/${id}/claim`));
+    await ok(k1Engineer.post(`/v1/work-items/${id}/pick-up`));
     const save = async (by: Caller, changes: Record<string, unknown>) =>
       ok(by.request("PUT", `/v1/work-items/${id}/answers`, { answers: { ...(await detail(by, id)).answers, ...changes } }));
     await save(k1Engineer, { sample_checked: true });
@@ -297,9 +297,9 @@ describe("paging and filters", () => {
     marId = await submitted(tower, tower.c1Engineer, tower.c1Pm, "Feed MAR");
     // An item K1's engineer acts on, and one nobody at K1 touches.
     k1Acted = await atContractorReview(tower.c1Engineer, "Feed K1 acts");
-    await ok(tower.c1Pm.post(`/v1/work-items/${k1Acted}/claim`));
+    await ok(tower.c1Pm.post(`/v1/work-items/${k1Acted}/pick-up`));
     await take(tower.c1Pm, k1Acted, "submit");
-    await ok(k1Engineer.post(`/v1/work-items/${k1Acted}/claim`));
+    await ok(k1Engineer.post(`/v1/work-items/${k1Acted}/pick-up`));
     await take(k1Engineer, k1Acted, "send_to_manager");
   });
 

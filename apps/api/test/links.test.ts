@@ -81,7 +81,7 @@ beforeAll(async () => {
   item.c1Internal = await inInternalReview(tower, c1Engineer, "Cable trays, in internal review");
   item.c1Submitted = await submitted(tower, c1Engineer, c1Pm, "Cable trays, submitted");
   item.c1Approved = await submitted(tower, c1Engineer, c1Pm, "Cable trays, approved");
-  await ok(k1Manager.post(`/v1/work-items/${item.c1Approved}/claim`));
+  await ok(k1Manager.post(`/v1/work-items/${item.c1Approved}/pick-up`));
   await verified(k1Manager, item.c1Approved);
   await take(k1Manager, item.c1Approved, "approve_a");
   item.c2Submitted = await submitted(tower, c2Engineer, c2Pm, "Cable trays, second contractor");
@@ -173,7 +173,7 @@ describe("free Links", () => {
   });
 
   it("are frozen from Submit: adding and removing are refused", async () => {
-    await ok(tower.c1Pm.post(`/v1/work-items/${mar}/claim`));
+    await ok(tower.c1Pm.post(`/v1/work-items/${mar}/pick-up`));
     await take(tower.c1Pm, mar, "submit");
     for (const r of [await addLink(tower.c1Engineer, mar, item.c1Submitted), await removeLink(tower.c1Pm, mar, toApproved)]) {
       expect(r.statusCode, r.body).toBe(409);

@@ -112,8 +112,8 @@ async function history(by: Caller, id: string): Promise<WorkItemHistory["events"
 }
 
 const buttons = (d: WorkItemDetail) => [
-  ...(d.actions.claim ? ["claim"] : []),
-  ...(d.actions.release ? ["release"] : []),
+  ...(d.actions.pickUp ? ["pick_up"] : []),
+  ...(d.actions.returnToPool ? ["return_to_pool"] : []),
   ...d.actions.transitions.map((t) => t.key),
 ];
 
@@ -134,14 +134,14 @@ async function everything(by: Caller, id: string) {
   return parts.map((r) => r.body).join("\n");
 }
 
-/** A Draft, sent, Returned once with a reason, sent again and claimed by the PM: ready to Submit. */
+/** A Draft, sent, Returned once with a reason, sent again and picked up by the PM: ready to Submit. */
 async function readyToSubmit(title: string) {
   const id = await createDraft(engineer, title);
   await ok(takeVerifying(engineer, id, "send_for_review"));
-  await ok(pm.post(`/v1/work-items/${id}/claim`));
+  await ok(pm.post(`/v1/work-items/${id}/pick-up`));
   await ok(takeVerifying(pm, id, "return", { reason: "Wrong tray size" }));
   await ok(takeVerifying(engineer, id, "send_for_review"));
-  await ok(pm.post(`/v1/work-items/${id}/claim`));
+  await ok(pm.post(`/v1/work-items/${id}/pick-up`));
   return id;
 }
 
@@ -190,7 +190,7 @@ describe("Submit", () => {
 
   it("is offered to the PM holding Internal Review, beside Return", async () => {
     const d = await detail(pm, id);
-    expect(buttons(d)).toEqual(["release", "return", "submit"]);
+    expect(buttons(d)).toEqual(["return_to_pool", "return", "submit"]);
     expect(d.actions.transitions.find((t) => t.key === "submit")).toMatchObject({
       label: { en: "Submit" },
       kind: "submit",
@@ -224,7 +224,7 @@ describe("Submit", () => {
       expect(counts).toMatchObject({ draft: 0, internal_review: 0, pending_approval: 1 });
       expect((await detail(caller, id)).documentNumber).toMatch(/^TWR-MAR-01-\d{4}$/);
     }
-    expect(buttons(await detail(signer, id))).toEqual(["claim"]);
+    expect(buttons(await detail(signer, id))).toEqual(["pick_up"]);
     // An Engineer can't issue a Code, so isn't in the pool.
     expect(buttons(await detail(k1Engineer, id))).toEqual([]);
   });
@@ -232,7 +232,7 @@ describe("Submit", () => {
   it("hides it from a Consultant Member whose Visibility doesn't cover its Trade (scenario 4)", async () => {
     expect(await listed(mechanicalManager)).toMatchObject({ ids: [], counts: { pending_approval: 0 } });
     await expectHidden(mechanicalManager.get(`/v1/work-items/${id}`));
-    await expectHidden(mechanicalManager.post(`/v1/work-items/${id}/claim`));
+    await expectHidden(mechanicalManager.post(`/v1/work-items/${id}/pick-up`));
   });
 
   it("shows it as oversight to the Owner and the Owner Representative whose Visibility covers it, with no actions (V2, scenario 6)", async () => {
@@ -290,11 +290,11 @@ describe("Approve · A", () => {
     await ok(takeVerifying(pm, id, "submit"));
   });
 
-  it("goes to the Consultant manager who claims it; the Contractor still sees only the Company", async () => {
-    await ok(signer.post(`/v1/work-items/${id}/claim`));
+  it("goes to the Consultant manager who picks it up; the Contractor still sees only the Company", async () => {
+    await ok(signer.post(`/v1/work-items/${id}/pick-up`));
     const mine = await detail(signer, id);
     expect(mine.heldBy).toEqual({ companyName: bilingual(CONSULTANT), memberName: bilingual(SIGNER) });
-    expect(buttons(mine)).toEqual(["release", "approve_a", "revise_c"]);
+    expect(buttons(mine)).toEqual(["return_to_pool", "approve_a", "revise_c"]);
     expect(buttons(await detail(otherManager, id))).toEqual([]);
 
     expect((await detail(pm, id)).heldBy).toEqual({ companyName: bilingual(CONSULTANT), memberName: null });
@@ -324,23 +324,23 @@ describe("Approve · A", () => {
       outcome: "A",
       by: { companyName: bilingual(CONSULTANT), memberName: bilingual(SIGNER) },
     });
-    // The Consultant's Claim is theirs alone.
+    // The Consultant's Pick up is theirs alone.
     expect(events.filter((e) => e.by.companyName?.en === CONSULTANT)).toHaveLength(1);
     expect(await everything(pm, id)).not.toContain(OTHER_MANAGER);
   });
 
-  it("shows the Consultant only the Submit and the Code of the Contractor's side, beside its own Claim", async () => {
+  it("shows the Consultant only the Submit and the Code of the Contractor's side, beside its own Pick up", async () => {
     const events = await history(signer, id);
     expect(events.map((e) => [e.type, e.by.companyName?.en])).toEqual([
       ["transition", "Test Constructions"],
-      ["claimed", CONSULTANT],
+      ["picked_up", CONSULTANT],
       // Its own verification, saved before the Code (MAR Form Version 4, RP-306).
       ["answers_changed", CONSULTANT],
       ["issue_code", CONSULTANT],
     ]);
   });
 
-  it("accepts no more Transitions, Claims or Releases once closed", async () => {
+  it("accepts no more Transitions, Pick ups or Returns to pool once closed", async () => {
     for (const [caller, key] of [
       [signer, "approve_a"],
       [signer, "revise_c"],
@@ -350,8 +350,8 @@ describe("Approve · A", () => {
       expect(res.statusCode, res.body).toBe(409);
       expect(res.json()).toEqual({ error: "item_closed" });
     }
-    expect((await otherManager.post(`/v1/work-items/${id}/claim`)).json()).toEqual({ error: "item_closed" });
-    expect((await signer.post(`/v1/work-items/${id}/release`)).json()).toEqual({ error: "item_closed" });
+    expect((await otherManager.post(`/v1/work-items/${id}/pick-up`)).json()).toEqual({ error: "item_closed" });
+    expect((await signer.post(`/v1/work-items/${id}/return-to-pool`)).json()).toEqual({ error: "item_closed" });
   });
 
   it("is counted under Approved for everyone who sees it, and for nobody else", async () => {
@@ -370,7 +370,7 @@ describe("Revise & Resubmit · C", () => {
   });
 
   it("closes the item Revise & Resubmit with Code C", async () => {
-    await ok(otherManager.post(`/v1/work-items/${id}/claim`));
+    await ok(otherManager.post(`/v1/work-items/${id}/pick-up`));
     await ok(takeVerifying(otherManager, id, "revise_c", { remarks: "Resubmit with the type test certificate" }));
     const d = await detail(engineer, id);
     expect(d).toMatchObject({ stage: { key: "revise_resubmit", category: "closed_negative" }, outcome: "C", heldBy: null });
@@ -393,7 +393,7 @@ describe("Remarks with the Code (MAR Workflow Version 2)", () => {
   async function submitted(title: string) {
     const id = await readyToSubmit(title);
     await ok(takeVerifying(pm, id, "submit"));
-    await ok(signer.post(`/v1/work-items/${id}/claim`));
+    await ok(signer.post(`/v1/work-items/${id}/pick-up`));
     return id;
   }
   const code = (d: WorkItemDetail, key: string) => d.actions.transitions.find((t) => t.key === key);
@@ -456,7 +456,7 @@ describe("Submit with no single Consultant to take it (scenario 37)", () => {
 
   /** Submit isn't offered, and taking it gets the one answer, naming nobody and nothing. */
   async function expectRefused(id: string) {
-    expect(buttons(await detail(pm, id))).toEqual(["release", "return"]);
+    expect(buttons(await detail(pm, id))).toEqual(["return_to_pool", "return"]);
     const res = await takeVerifying(pm, id, "submit");
     expect(res.statusCode).toBe(409);
     expect(res.body).toBe(ANSWER);
@@ -473,7 +473,7 @@ describe("Submit with no single Consultant to take it (scenario 37)", () => {
       await expectRefused(id);
       // Give the Consultant Electrical again: Submit comes back.
       await setK1Trade(all);
-      expect(buttons(await detail(pm, id))).toEqual(["release", "return", "submit"]);
+      expect(buttons(await detail(pm, id))).toEqual(["return_to_pool", "return", "submit"]);
     } finally {
       // K1 is every other test's Consultant.
       await setK1Trade(all);
@@ -487,7 +487,7 @@ describe("Submit with no single Consultant to take it (scenario 37)", () => {
     await expectRefused(id);
     // Narrow the second Consultant away: Submit comes back.
     await ok(c1.caller.request("PUT", `/v1/participants/${k2.participantId}/visibility`, { trade: only(mechanical), location: all }));
-    expect(buttons(await detail(pm, id))).toEqual(["release", "return", "submit"]);
+    expect(buttons(await detail(pm, id))).toEqual(["return_to_pool", "return", "submit"]);
   });
 });
 
@@ -505,10 +505,10 @@ describe("Internal Note (V5, scenarios 7 and 34)", () => {
   beforeAll(async () => {
     id = await createDraft(engineer, "Cable glands");
     await ok(takeVerifying(engineer, id, "send_for_review", { internalNote: SENT }));
-    await ok(pm.post(`/v1/work-items/${id}/claim`));
+    await ok(pm.post(`/v1/work-items/${id}/pick-up`));
     await ok(takeVerifying(pm, id, "return", { reason: "Wrong gland size", internalNote: RETURNED }));
     await ok(takeVerifying(engineer, id, "send_for_review"));
-    await ok(pm.post(`/v1/work-items/${id}/claim`));
+    await ok(pm.post(`/v1/work-items/${id}/pick-up`));
     await ok(takeVerifying(pm, id, "submit", { internalNote: SUBMITTED }));
   });
 
@@ -536,12 +536,12 @@ describe("Internal Note (V5, scenarios 7 and 34)", () => {
   });
 
   it("written with the Code, stays inside the Consultant (scenario 8)", async () => {
-    await ok(signer.post(`/v1/work-items/${id}/claim`));
+    await ok(signer.post(`/v1/work-items/${id}/pick-up`));
     await ok(takeVerifying(signer, id, "approve_a", { internalNote: CODED }));
     expect(await notes(otherManager)).toEqual([["Approve · A", CODED, "internal"]]);
     for (const caller of [engineer, pm, orEngineer]) {
       const events = await history(caller, id);
-      // Numbered as they see them: no gap counts the Consultant's Claim or Internal Note.
+      // Numbered as they see them: no gap counts the Consultant's Pick up or Internal Note.
       expect(events.map((e) => e.seq)).toEqual(events.map((_, i) => i + 1));
       expect(events.at(-1)).toMatchObject({ type: "issue_code", outcome: "A", internalNote: null });
       expect(await everything(caller, id)).not.toContain(CODED);
@@ -554,7 +554,7 @@ describe("Internal Note (V5, scenarios 7 and 34)", () => {
     const send = () =>
       engineer.post(`/v1/work-items/${other}/transitions`, { transition: "send_for_review", internalNote: SENT, confirmed: true, idempotencyKey });
     await Promise.all([ok(send()), ok(send())]);
-    await ok(pm.post(`/v1/work-items/${other}/claim`));
+    await ok(pm.post(`/v1/work-items/${other}/pick-up`));
     await ok(takeVerifying(pm, other, "return", { reason: "Again", internalNote: "   " }));
     const events = await history(engineer, other);
     expect(events.filter((e) => e.type === "internal_note").map((e) => e.internalNote)).toEqual([SENT]);
@@ -564,7 +564,7 @@ describe("Internal Note (V5, scenarios 7 and 34)", () => {
     const other = await createDraft(engineer, "Cable ties");
     expect((await takeVerifying(pm, other, "send_for_review", { internalNote: "Not mine to send" })).statusCode).not.toBe(204);
     await ok(takeVerifying(engineer, other, "send_for_review"));
-    await ok(pm.post(`/v1/work-items/${other}/claim`));
+    await ok(pm.post(`/v1/work-items/${other}/pick-up`));
     expect((await takeVerifying(pm, other, "return", { internalNote: "No reason given" })).json()).toEqual({ error: "invalid_action_form", fields: [{ key: "reason", code: "required" }] });
     const events = await history(pm, other);
     expect(events.some((e) => e.type === "internal_note")).toBe(false);

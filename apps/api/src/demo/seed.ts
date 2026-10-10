@@ -370,14 +370,14 @@ export async function seedDemo(
       caller("POST", `/v1/work-items/${itemId}/transitions`, { transition, confirmed: true, idempotencyKey: randomUUID() });
     /**
      * Hafiz raises the MAR with its Datasheet and its free Links to `freeLinks`, and
-     * sends it; Ali claims it and Submits it to the Consultant.
+     * sends it; Ali picks it up and Submits it to the Consultant.
      */
     const submitted = async (title: string, datasheet: string[], answers: Record<string, unknown>, freeLinks: string[] = []) => {
       const { id } = await hafizCaller<{ id: string }>("POST", `/v1/projects/${projectId}/work-items`, { type: "MAR", title, answers });
       for (const target of freeLinks) await hafizCaller("POST", `/v1/work-items/${id}/links`, { workItemId: target });
       await upload(id, { fieldKey: "datasheet", fileName: `${datasheet[0]!.replaceAll(" ", "-")}-datasheet.pdf`, contentType: "application/pdf", body: demoPdf(datasheet) });
       await take(hafizCaller, id, "send_for_review");
-      await aliCaller("POST", `/v1/work-items/${id}/claim`);
+      await aliCaller("POST", `/v1/work-items/${id}/pick-up`);
       await take(aliCaller, id, "submit");
       return id;
     };
@@ -403,7 +403,7 @@ export async function seedDemo(
       await ahmedCaller("PUT", `/v1/work-items/${itemId}/answers`, { answers: { ...answers, ...verification } });
     };
     await verify(exitSignage, { sample_checked: true, matches_specification: true });
-    await mohammedCaller("POST", `/v1/work-items/${exitSignage}/claim`);
+    await mohammedCaller("POST", `/v1/work-items/${exitSignage}/pick-up`);
     await take(mohammedCaller, exitSignage, "approve_a");
     // In Tower 2, linking the approved exit signs it supervises twice: under
     // Related submittals (the Form Version 3's link question) and as a free Link.
@@ -450,7 +450,7 @@ export async function seedDemo(
       verification_note:
         "The tray is electro-zinc plated, not hot dip galvanised as the specification requires. / اللوحة مجلفنة كهربائياً وليست مجلفنة بالغمس الساخن كما تشترط المواصفات.",
     });
-    await mohammedCaller("POST", `/v1/work-items/${cableTray}/claim`);
+    await mohammedCaller("POST", `/v1/work-items/${cableTray}/pick-up`);
     await mohammedCaller("POST", `/v1/work-items/${cableTray}/transitions`, {
       transition: "revise_c",
       answers: {
@@ -476,7 +476,7 @@ export async function seedDemo(
       },
     });
     await take(hafizCaller, rev1, "send_for_review");
-    await aliCaller("POST", `/v1/work-items/${rev1}/claim`);
+    await aliCaller("POST", `/v1/work-items/${rev1}/pick-up`);
     await take(aliCaller, rev1, "submit");
   }
 

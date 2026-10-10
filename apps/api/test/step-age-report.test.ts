@@ -71,7 +71,7 @@ async function item(projectId: string, raiser: Person, title: string, trade: str
   const id = res.json().id as string;
   if (pm) {
     await take(raiser.caller, id, "send_for_review");
-    await ok(pm.caller.post(`/v1/work-items/${id}/claim`));
+    await ok(pm.caller.post(`/v1/work-items/${id}/pick-up`));
     await take(pm.caller, id, "submit");
   }
   return id;
@@ -182,16 +182,16 @@ beforeAll(async () => {
 
   oldTrays = await item(at.projectId, c1Engineer, "Old cable trays", at.electrical, c1Pm);
   closed = await item(at.projectId, c1Engineer, "Closed fittings", at.electrical, c1Pm);
-  await ok(k1Lead.caller.post(`/v1/work-items/${closed}/claim`));
+  await ok(k1Lead.caller.post(`/v1/work-items/${closed}/pick-up`));
   await take(k1Lead.caller, closed, "send_to_manager");
-  await ok(k1Lead.caller.post(`/v1/work-items/${closed}/claim`));
+  await ok(k1Lead.caller.post(`/v1/work-items/${closed}/pick-up`));
   await ok(k1Lead.caller.post(`/v1/work-items/${closed}/transitions`, { transition: "approve_b", answers: {}, confirmed: true, idempotencyKey: randomUUID() }));
   await api.later(10 * DAY);
   pumps = await item(at.projectId, c1Engineer, "Pumps", at.mechanical, c1Pm);
   c2Item = await item(at.projectId, c2Engineer, "C2 lighting", at.electrical, c2Lead);
   await api.later(5 * DAY);
   // K1 moves the trays inside K1: nobody else's age of it changes (V14).
-  await ok(k1Lead.caller.post(`/v1/work-items/${oldTrays}/claim`));
+  await ok(k1Lead.caller.post(`/v1/work-items/${oldTrays}/pick-up`));
   await take(k1Lead.caller, oldTrays, "send_to_manager");
   await api.later(5 * DAY);
   valves = await item(at.projectId, c1Engineer, "Draft valves", at.electrical);

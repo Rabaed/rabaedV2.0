@@ -680,7 +680,7 @@ async function namedAnswers(trx: Trx, workItemId: string): Promise<{ named: Name
 }
 
 type ActionRow = {
-  action: "claim" | "release" | "transition";
+  action: "pick_up" | "return_to_pool" | "transition";
   transition_key: string | null;
   label: BilingualText | null;
   transition_kind: WorkItemActions["transitions"][number]["kind"] | null;
@@ -720,8 +720,8 @@ async function actions(trx: Trx, workItemId: string): Promise<Omit<WorkItemActio
     transitions.map((r) => (r.may_recommend ? recommendableOutcomes(trx, workItemId, r.transition_key!) : [])),
   );
   return {
-    claim: rows.some((r) => r.action === "claim"),
-    release: rows.some((r) => r.action === "release"),
+    pickUp: rows.some((r) => r.action === "pick_up"),
+    returnToPool: rows.some((r) => r.action === "return_to_pool"),
     transitions: transitions.map((r, i) => ({
       key: r.transition_key!,
       label: r.label!,
@@ -997,28 +997,28 @@ export function saveAnswers(
   });
 }
 
-const claimRefusals = ["not_found", "item_closed", "project_closed", "already_claimed", "forbidden"] as const;
-const releaseRefusals = ["not_found", "item_closed", "project_closed", "not_holder"] as const;
-export type ClaimResult = { ok: true } | { ok: false; reason: (typeof claimRefusals)[number] };
-export type ReleaseResult = { ok: true } | { ok: false; reason: (typeof releaseRefusals)[number] };
+const pickUpRefusals = ["not_found", "item_closed", "project_closed", "already_picked_up", "forbidden"] as const;
+const returnToPoolRefusals = ["not_found", "item_closed", "project_closed", "not_holder"] as const;
+export type PickUpResult = { ok: true } | { ok: false; reason: (typeof pickUpRefusals)[number] };
+export type ReturnToPoolResult = { ok: true } | { ok: false; reason: (typeof returnToPoolRefusals)[number] };
 
-/** A Member of its Step Pool claims the item's pooled Step; of two at once, one wins (§5.2). */
-export function claimStep(db: Db, memberId: string, workItemId: string, now: Date): Promise<ClaimResult> {
+/** A Member of its Step Pool picks up the item's pooled Step; of two at once, one wins (§5.2). */
+export function pickUpStep(db: Db, memberId: string, workItemId: string, now: Date): Promise<PickUpResult> {
   return withMember(db, memberId, async (trx) => {
     const { rows } = await sql<{ outcome: string }>`
-      select app.claim_step(${workItemId}::uuid, ${now}) as outcome
+      select app.pick_up_step(${workItemId}::uuid, ${now}) as outcome
     `.execute(trx);
-    return commandResult(rows[0]!.outcome, "claimed", claimRefusals);
+    return commandResult(rows[0]!.outcome, "picked_up", pickUpRefusals);
   });
 }
 
-/** The Member who claimed the item's Step gives it back to its pool. */
-export function releaseStep(db: Db, memberId: string, workItemId: string, now: Date): Promise<ReleaseResult> {
+/** The Member who picked up the item's Step gives it back to its pool. */
+export function returnToPoolStep(db: Db, memberId: string, workItemId: string, now: Date): Promise<ReturnToPoolResult> {
   return withMember(db, memberId, async (trx) => {
     const { rows } = await sql<{ outcome: string }>`
-      select app.release_step(${workItemId}::uuid, ${now}) as outcome
+      select app.return_to_pool_step(${workItemId}::uuid, ${now}) as outcome
     `.execute(trx);
-    return commandResult(rows[0]!.outcome, "released", releaseRefusals);
+    return commandResult(rows[0]!.outcome, "returned_to_pool", returnToPoolRefusals);
   });
 }
 

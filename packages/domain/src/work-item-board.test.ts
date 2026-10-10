@@ -31,7 +31,7 @@ function card(w: WorkItemRow["with"], holderParticipantId: string | null = null)
     },
   };
 }
-const ownStep = (key: string, name: string): WorkItemRow["with"] => ({ kind: "own", companyName: own, step: { key, name: b(name) }, claimer: null });
+const ownStep = (key: string, name: string): WorkItemRow["with"] => ({ kind: "own", companyName: own, step: { key, name: b(name) }, holder: null });
 const company = (name: string): WorkItemRow["with"] => ({ kind: "company", companyName: b(name) });
 
 describe("boardLanes", () => {
@@ -62,8 +62,8 @@ describe("boardLanes", () => {
   it("orders the lanes by name in the viewer's language", () => {
     const named = (en: string, ar: string) => ({ en, ar });
     const cards = [
-      card({ kind: "own", companyName: own, step: { key: "review", name: named("Review", "أ مراجعة") }, claimer: null }),
-      card({ kind: "own", companyName: own, step: { key: "draft", name: named("Draft", "ب مسودة") }, claimer: null }),
+      card({ kind: "own", companyName: own, step: { key: "review", name: named("Review", "أ مراجعة") }, holder: null }),
+      card({ kind: "own", companyName: own, step: { key: "draft", name: named("Draft", "ب مسودة") }, holder: null }),
       card({ kind: "company", companyName: named("Al Waha PMC", "ي الواحة") }, k1),
       card({ kind: "company", companyName: named("Zeta PMC", "أ زيتا") }, k2),
       card(null),

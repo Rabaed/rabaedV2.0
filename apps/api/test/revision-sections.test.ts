@@ -173,12 +173,12 @@ async function closedAtCodeC(model: string, answers: Record<string, unknown> = {
   );
   const id = res.json().id as string;
   await ok(tryTake(engineer.caller, id, "send_for_review"));
-  await ok(pm.caller.post(`/v1/work-items/${id}/claim`));
+  await ok(pm.caller.post(`/v1/work-items/${id}/pick-up`));
   await ok(tryTake(pm.caller, id, "submit"));
-  await ok(k1Engineer.caller.post(`/v1/work-items/${id}/claim`));
+  await ok(k1Engineer.caller.post(`/v1/work-items/${id}/pick-up`));
   await ok(saveOver(k1Engineer, id, { sample_checked: false, verification_note: "Sample does not match" }));
   await ok(tryTake(k1Engineer.caller, id, "send_to_manager"));
-  await ok(k1Manager.caller.post(`/v1/work-items/${id}/claim`));
+  await ok(k1Manager.caller.post(`/v1/work-items/${id}/pick-up`));
   await ok(tryTake(k1Manager.caller, id, "revise_c"));
   return id;
 }

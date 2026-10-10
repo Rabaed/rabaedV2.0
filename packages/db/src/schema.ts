@@ -563,8 +563,8 @@ export interface StepAssignmentTable {
   step_id: string;
   participant_id: string;
   assignee_member_id: string | null;
-  status: "pooled" | "claimed" | "done" | "vacant" | "reassigned";
-  claimed_at: Timestamp | null;
+  status: "pooled" | "picked_up" | "done" | "vacant" | "reassigned";
+  picked_up_at: Timestamp | null;
   done_at: Timestamp | null;
   created_at: Generated<Timestamp>;
   updated_at: Generated<Timestamp>;

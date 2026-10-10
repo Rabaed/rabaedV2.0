@@ -222,7 +222,7 @@ describe("Documents once the item is sent", () => {
   });
 
   it("stay frozen when the item is Returned to Draft, where new ones may be added", async () => {
-    await ok(pm.post(`/v1/work-items/${itemId}/claim`));
+    await ok(pm.post(`/v1/work-items/${itemId}/pick-up`));
     await ok(tryTake(pm, itemId, "return", { reason: "Add the test certificate" }));
     expect((await engineer.delete(documentUrl(itemId, documentId))).json()).toEqual({ error: "document_frozen" });
     const certificate = await uploaded(engineer, itemId, "%PDF-1.7 certificate", "certificate.pdf");
@@ -236,7 +236,7 @@ describe("Documents once the item is sent", () => {
 
   it("go with the item to the Consultant once Submitted, who sees the Company, not the person", async () => {
     await ok(tryTake(engineer, itemId, "send_for_review"));
-    await ok(pm.post(`/v1/work-items/${itemId}/claim`));
+    await ok(pm.post(`/v1/work-items/${itemId}/pick-up`));
     await ok(tryTake(pm, itemId, "submit"));
     const seen = await list(k1Engineer, itemId);
     expect(seen).toMatchObject({
@@ -247,7 +247,7 @@ describe("Documents once the item is sent", () => {
       canChange: false,
     });
     expect((await fetch(await downloadUrl(k1Engineer, itemId, documentId))).status).toBe(200);
-    await ok(k1Manager.post(`/v1/work-items/${itemId}/claim`));
+    await ok(k1Manager.post(`/v1/work-items/${itemId}/pick-up`));
     expect((await k1Manager.delete(documentUrl(itemId, documentId))).json()).toEqual({ error: "document_frozen" });
     expect((await start(k1Manager, itemId, { sizeBytes: 10 })).json()).toEqual({ error: "not_editable" });
   });

@@ -14,7 +14,7 @@ type NoPerson = { name?: never; photoSrc?: never };
 /**
  * Who holds the current Step. A `person` in the viewer's own Company carries
  * their `name` and `photoSrc`; any holder in another Company, and a `company`
- * as a whole (nobody has claimed the Step yet), carries its Company only
+ * as a whole (nobody has picked up the Step yet), carries its Company only
  * (visibility V14). Passing another Company's person's name fails the typecheck.
  */
 export type WithChipHolder =
@@ -30,13 +30,13 @@ export type WithChipHolder =
   | (HolderCompany & NoPerson & { kind: "company"; inViewerCompany: boolean })
   | (HolderCompany &
       NoPerson & {
-        /** A Step of the viewer's own Company that nobody has claimed yet: "<Step> · unclaimed". */
+        /** A Step of the viewer's own Company that nobody has picked up yet: "<Step> · not picked up". */
         kind: "pool";
         inViewerCompany: true;
         /** The Step's name. */
         stepName: string;
-        /** "unclaimed", in the viewer's language. */
-        unclaimedLabel: string;
+        /** "not picked up", in the viewer's language. */
+        notPickedUpLabel: string;
       });
 
 export type WithChipProps = WithChipHolder & { className?: string };
@@ -54,7 +54,7 @@ export function WithChip(props: WithChipProps) {
   if (props.kind === "pool" && props.inViewerCompany === true) {
     return (
       <span className={cn("inline-flex items-center gap-1 whitespace-nowrap text-body", className)}>
-        {props.stepName} <span className="text-muted">· {props.unclaimedLabel}</span>
+        {props.stepName} <span className="text-muted">· {props.notPickedUpLabel}</span>
       </span>
     );
   }
