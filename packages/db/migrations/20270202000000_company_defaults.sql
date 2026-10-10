@@ -90,13 +90,13 @@ alter table workflow_event add constraint workflow_event_type_check
 
 -- The commands ---------------------------------------------------------------------------------
 
--- The Authorized Person marks Library item p_item_id as their Company's default of kind
+-- The Authorized Person marks Library item p_library_id as their Company's default of kind
 -- p_kind for Work Item Type p_type_id, replacing the one there was. The item is one of
 -- their own Company's Library, with a published Version, and (a Workflow, a Form with a
 -- Type of its own) made for that Type. Outcome: 'set'; 'not_found' (not the Authorized
 -- Person, an unknown kind, Type or item, another Company's item); 'not_published';
 -- 'not_for_type'.
-create function app.set_company_default(p_type_id uuid, p_kind text, p_item_id uuid, p_now timestamptz)
+create function app.set_company_default(p_type_id uuid, p_kind text, p_library_id uuid, p_now timestamptz)
   returns text
   language plpgsql volatile security definer
   set search_path = pg_catalog, public
@@ -114,30 +114,30 @@ create function app.set_company_default(p_type_id uuid, p_kind text, p_item_id u
       end if;
       if p_kind = 'workflow' then
         if not exists (
-          select 1 from workflow_definition d where d.id = p_item_id and d.owner_kind = 'company' and d.company_id = v_company_id
+          select 1 from workflow_definition d where d.id = p_library_id and d.owner_kind = 'company' and d.company_id = v_company_id
         ) then
           return 'not_found';
         end if;
-        if not app.workflow_is_published(p_item_id) then
+        if not app.workflow_is_published(p_library_id) then
           return 'not_published';
         end if;
-        if app.workflow_type(p_item_id) is distinct from p_type_id then
+        if app.workflow_type(p_library_id) is distinct from p_type_id then
           return 'not_for_type';
         end if;
       elsif p_kind = 'screen' then
-        if not exists (select 1 from screen s where s.id = p_item_id and s.owner_kind = 'company' and s.company_id = v_company_id) then
+        if not exists (select 1 from screen s where s.id = p_library_id and s.owner_kind = 'company' and s.company_id = v_company_id) then
           return 'not_found';
         end if;
-        if not app.screen_is_published(p_item_id) then
+        if not app.screen_is_published(p_library_id) then
           return 'not_published';
         end if;
       else
         select f.work_item_type_id into v_form_type
-        from form_definition f where f.id = p_item_id and f.owner_kind = 'company' and f.company_id = v_company_id;
+        from form_definition f where f.id = p_library_id and f.owner_kind = 'company' and f.company_id = v_company_id;
         if not found then
           return 'not_found';
         end if;
-        if not exists (select 1 from form_version v where v.form_definition_id = p_item_id and v.status = 'published') then
+        if not exists (select 1 from form_version v where v.form_definition_id = p_library_id and v.status = 'published') then
           return 'not_published';
         end if;
         if v_form_type is not null and v_form_type <> p_type_id then
@@ -149,9 +149,9 @@ create function app.set_company_default(p_type_id uuid, p_kind text, p_item_id u
         company_id, work_item_type_id, kind, form_definition_id, workflow_definition_id, screen_id, created_at, updated_at
       ) values (
         v_company_id, p_type_id, p_kind,
-        case when p_kind = 'form' then p_item_id end,
-        case when p_kind = 'workflow' then p_item_id end,
-        case when p_kind = 'screen' then p_item_id end,
+        case when p_kind = 'form' then p_library_id end,
+        case when p_kind = 'workflow' then p_library_id end,
+        case when p_kind = 'screen' then p_library_id end,
         v_at, v_at
       )
       on conflict (company_id, work_item_type_id, kind) do update
@@ -160,7 +160,7 @@ create function app.set_company_default(p_type_id uuid, p_kind text, p_item_id u
           screen_id = excluded.screen_id,
           updated_at = excluded.updated_at;
       perform app.write_workflow_event(null, null, v_company_id, 'default_set',
-        jsonb_build_object('work_item_type_id', p_type_id, 'kind', p_kind, 'item_id', p_item_id), v_at);
+        jsonb_build_object('work_item_type_id', p_type_id, 'kind', p_kind, 'item_id', p_library_id), v_at);
       return 'set';
     end
   $$;
