@@ -20,6 +20,7 @@ import {
 } from "@rabaed/domain";
 import { sql, type Transaction } from "kysely";
 import { myProjectSummaries, waitingOnMember } from "../projects/projects.ts";
+import { submittalCounts } from "../projects/submittal-counts.ts";
 import { activityFeedPage } from "../work-items/activity-feed.ts";
 import { countWorkItems, queryWorkItems, type QueryScope } from "../work-items/query.ts";
 
@@ -90,9 +91,8 @@ export function getHome(db: Db, memberId: string, now: Date): Promise<Home> {
     // Participant's open items another Participant holds now.
     let longAtStep = 0;
     let waitingWithOthers = 0;
-    const submittals: Record<string, number> = Object.fromEntries(active.map((p) => [p.id, 0]));
+    const submittals = await submittalCounts(trx, active, now);
     for (const { project, ...scope } of scopes) {
-      if (scope.moduleKey === "submittals") submittals[project.id] = total(await counted(trx, scope, {}, now));
       const aged = await counted(trx, scope, { stepAgeMin: homeStepAgeWeeks, heldBy: "own" }, now);
       longAtStep += total(aged, (key) => !draftStages.has(`${project.id}/${scope.moduleKey}/${key}`));
       waitingWithOthers += total(await counted(trx, scope, { raisedByMe: true, heldBy: "others" }, now));

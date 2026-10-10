@@ -1,7 +1,8 @@
 import { withMember, type Database, type Db } from "@rabaed/db";
-import { moduleTabOrder, type BilingualText, type CreateProjectRequest, type ModuleKey, type ProjectSummary } from "@rabaed/domain";
+import { moduleTabOrder, type BilingualText, type CreateProjectRequest, type ModuleKey, type MyProjects, type ProjectSummary } from "@rabaed/domain";
 import { sql, type Transaction } from "kysely";
 import { refusedAsForbidden, type Forbidden } from "../db-error.ts";
+import { submittalCounts } from "./submittal-counts.ts";
 
 export type CreateProjectResult = { ok: true; projectId: string; projectNumber: number } | Forbidden;
 
@@ -104,9 +105,16 @@ export async function myProjectSummaries(trx: Transaction<Database>, memberId: s
   return summaries(trx, await selectProjects(trx, memberId).orderBy("p.created_at", "desc").orderBy("p.id", "desc").execute());
 }
 
-/** The Member's Projects, as the Projects page lists them, newest first. */
-export function listMyProjects(db: Db, memberId: string): Promise<ProjectSummary[]> {
-  return withMember(db, memberId, (trx) => myProjectSummaries(trx, memberId));
+/**
+ * The Member's Projects, as the Projects page lists them, newest first, with each
+ * card's "n submittals": the Member's own Submittals List count on it, a closed
+ * Project's too (its List is still theirs to read).
+ */
+export function listMyProjects(db: Db, memberId: string, now: Date): Promise<MyProjects> {
+  return withMember(db, memberId, async (trx) => {
+    const projects = await myProjectSummaries(trx, memberId);
+    return { projects, submittals: await submittalCounts(trx, projects, now) };
+  });
 }
 
 /** One of my Projects, or null: a Project the Member is not on is indistinguishable from one that doesn't exist. */

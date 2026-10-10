@@ -11,14 +11,28 @@ import type { ProjectDashboardLabels } from "../components/views/project-dashboa
 // (apps/web/messages), in English and Arabic.
 
 export const projectCardsLabels: Record<Locale, ProjectCardsLabels> = {
-  en: { list: "Projects", needMyAction: "Need My Action", active: "Active", closed: "Closed", projectAdmin: "Project Admin" },
-  ar: { list: "المشاريع", needMyAction: "بحاجة لإجرائي", active: "نشط", closed: "مغلق", projectAdmin: "مسؤول المشروع" },
+  en: {
+    list: "Projects",
+    needMyAction: (_count, n) => `${n} need my action`,
+    submittals: (count, n) => (count === 1 ? `${n} submittal` : `${n} submittals`),
+    active: "Active",
+    closed: "Closed",
+    projectAdmin: "Project Admin",
+  },
+  ar: {
+    list: "المشاريع",
+    needMyAction: (_count, n) => `${n} بحاجة لإجرائي`,
+    submittals: (_count, n) => `${n} تقديمات`,
+    active: "نشط",
+    closed: "مغلق",
+    projectAdmin: "مسؤول المشروع",
+  },
 };
 
 export const projectsBrowserLabels: Record<Locale, ProjectsBrowserLabels> = {
   en: {
     ...projectCardsLabels.en,
-    search: "Search by Project name or code",
+    search: "Search Projects",
     filter: "Show",
     all: "All",
     emptyTitle: "No Projects yet",
@@ -28,7 +42,7 @@ export const projectsBrowserLabels: Record<Locale, ProjectsBrowserLabels> = {
   },
   ar: {
     ...projectCardsLabels.ar,
-    search: "ابحث بالاسم أو الرمز",
+    search: "ابحث في المشاريع",
     filter: "عرض",
     all: "الكل",
     emptyTitle: "لا مشاريع بعد",

@@ -35,7 +35,13 @@ const projects: ProjectSummary[] = [
 const meta = {
   title: "Views/ProjectsBrowser",
   component: ProjectsBrowser,
-  args: { projects, locale: "en", labels: projectsBrowserLabels.en, href: (id: string) => `#/projects/${id}` },
+  args: {
+    projects,
+    locale: "en",
+    labels: projectsBrowserLabels.en,
+    href: (id: string) => `#/projects/${id}`,
+    submittals: Object.fromEntries(projects.map((p, i) => [p.id, [48, 31, 0, 204][i]!])),
+  },
   render: (args, context) => (
     <ProjectsBrowser {...args} locale={storyLocale(context)} labels={projectsBrowserLabels[storyLocale(context)]} />
   ),

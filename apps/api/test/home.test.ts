@@ -240,6 +240,8 @@ describe("a closed Project (RP-407-3)", () => {
     expect(after.activity).toEqual([]);
     // Still on the Projects list, as closed.
     expect(after.projects.map((p) => [p.code, p.status])).toEqual([["HCL", "closed"]]);
+    // The Projects page still counts its Submittals List, as the Member reads it (RP-408-1).
+    expect((await ok(closing.c1Pm.get("/v1/projects"), 200)).json().submittals).toEqual({ [closing.projectId]: 1 });
   });
 });
 
@@ -395,6 +397,21 @@ describe("Waiting with others: my own Company's items another Participant holds 
     expect((await home(at.c1Engineer)).submittals[at.projectId]).toBeGreaterThanOrEqual(k1Count + 2);
     expect((await ok(at.k1Manager.get(`/v1/work-items/${internal}`), 404))).toBeTruthy();
     expect((await home(c2OnAt)).submittals[at.projectId]).toBe(0);
+  });
+
+  it("gives the Projects page the same counts as Home's cards, never another Company's internal items (RP-408-1)", async () => {
+    const listed = async (by: Caller) =>
+      ((await ok(by.get(`/v1/projects/${at.projectId}/work-items`), 200)).json() as WorkItemList).stages.reduce((n, s) => n + s.count, 0);
+    const page = async (by: Caller) => (await ok(by.get("/v1/projects"), 200)).json() as { submittals: Record<string, number>; projects: ProjectSummary[] };
+    for (const who of [at.c1Engineer, at.c1Pm, at.k1Manager, c2OnAt, orOnAt]) {
+      const answer = await page(who);
+      expect(answer.submittals[at.projectId]).toBe(await listed(who));
+      expect(answer.submittals[at.projectId]).toBe((await home(who)).submittals[at.projectId]);
+      expect(Object.keys(answer.submittals).sort()).toEqual(answer.projects.map((p) => p.id).sort());
+    }
+    // K1 never counts C1's Draft or internal review; C2 none of C1's.
+    expect((await page(at.c1Engineer)).submittals[at.projectId]).toBeGreaterThan((await page(at.k1Manager)).submittals[at.projectId]!);
+    expect((await page(c2OnAt)).submittals[at.projectId]).toBe(0);
   });
 
   it("still counts an item held by a Participant that has since withdrawn: it is still waiting with others", async () => {

@@ -185,6 +185,14 @@ export const coolLight = {
   "avatar-company": "slate-600",
   "on-avatar": "white",
 
+  // A Project's letter tile (the design kit's Projects page): one of five colours, tomato, blue, green,
+  // purple, orange, picked from the Project's id so it never changes; white letter at 4.5:1.
+  "project-tile-1": "tomato-750",
+  "project-tile-2": "blue-700",
+  "project-tile-3": "green-700",
+  "project-tile-4": "violet-700",
+  "project-tile-5": "orange-700",
+
   // Step Age: whole weeks at the current step, grey turning red. age-0 is an empty dot.
   // Filled dots carry meaning, so they keep 3:1 against surfaces (WCAG 1.4.11).
   "age-0": "slate-350",

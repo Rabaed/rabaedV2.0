@@ -195,6 +195,11 @@
   --avatar-6: var(--palette-red-700);
   --avatar-company: var(--palette-slate-600);
   --on-avatar: var(--palette-white);
+  --project-tile-1: var(--palette-tomato-750);
+  --project-tile-2: var(--palette-blue-700);
+  --project-tile-3: var(--palette-green-700);
+  --project-tile-4: var(--palette-violet-700);
+  --project-tile-5: var(--palette-orange-700);
   --age-0: var(--palette-slate-350);
   --age-1: var(--palette-slate-600);
   --age-2: var(--palette-amber-700);
@@ -330,6 +335,11 @@
   --color-avatar-6: var(--avatar-6);
   --color-avatar-company: var(--avatar-company);
   --color-on-avatar: var(--on-avatar);
+  --color-project-tile-1: var(--project-tile-1);
+  --color-project-tile-2: var(--project-tile-2);
+  --color-project-tile-3: var(--project-tile-3);
+  --color-project-tile-4: var(--project-tile-4);
+  --color-project-tile-5: var(--project-tile-5);
   --color-age-0: var(--age-0);
   --color-age-1: var(--age-1);
   --color-age-2: var(--age-2);
