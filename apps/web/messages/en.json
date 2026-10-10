@@ -800,6 +800,7 @@
     "kind": "Type",
     "outcomeCode": "Outcome",
     "noOutcome": "—",
+    "outcomeOnlyOnClose": "Only a Close sets an outcome.",
     "screen": "Screen",
     "screenHelp": "The Screen this Transition asks. Screens are edited in Settings → Screens.",
     "internalNoteOnly": "Internal Note only",
@@ -832,6 +833,8 @@
     "publishVersion": "Publish v{version}",
     "published": "v{version} published — new items will use it",
     "close": "Close",
+    "alertsRegion": "Builder alerts",
+    "dismiss": "Dismiss",
     "names": {
       "newStep": "New step",
       "newTransition": "New transition",

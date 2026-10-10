@@ -4,6 +4,7 @@ import { storyLocale } from "../../storybook/locale.ts";
 import {
   builderDraft,
   builderFields,
+  builderForm,
   builderOutcomes,
   builderPositions,
   builderProblems,
@@ -28,7 +29,7 @@ const meta = {
     stages: workflowStages,
     outcomes: builderOutcomes,
     positions: builderPositions,
-    fields: builderFields,
+    form: builderForm,
     locale: "en",
     labels: workflowBuilderLabels("en"),
     problems: builderProblems,

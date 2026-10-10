@@ -1,8 +1,8 @@
-import { conditionOpKey } from "@rabaed/domain";
-import type { BaseRole, FunctionPermission, Locale, RuleField, TransitionKind, WorkflowDefinition, WorkflowProblem, WorkflowStep, WorkflowTransition } from "@rabaed/domain";
+import { conditionOpKey, formSchema, ruleFieldsOf } from "@rabaed/domain";
+import type { BaseRole, FunctionPermission, Locale, PositionOption, RuleField, TransitionKind, WorkflowDefinition, WorkflowProblem, WorkflowStep, WorkflowTransition } from "@rabaed/domain";
 import { ruleMessages } from "./workflow-rule-messages.ts";
 import type { WorkflowRuleLabels } from "../components/workflow/workflow-rule-labels.ts";
-import type { WorkflowBuilderOutcome, WorkflowBuilderPosition } from "../components/workflow/workflow-builder.tsx";
+import type { WorkflowBuilderOutcome } from "../components/workflow/workflow-builder.tsx";
 import type { WorkflowBuilderLabels, WorkflowCompareLabels } from "../components/workflow/workflow-builder-labels.ts";
 import type { WorkflowLabels } from "../components/workflow/workflow-labels.ts";
 import type { MapStage } from "../components/workflow/workflow-map.ts";
@@ -173,7 +173,7 @@ export const builderOutcomes: WorkflowBuilderOutcome[] = [
   { code: "D", name: t("Rejected", "مرفوض"), closing: true },
 ];
 
-export const builderPositions: WorkflowBuilderPosition[] = [
+export const builderPositions: PositionOption[] = [
   { role: "contractor", key: "engineer", name: t("Engineer", "مهندس") },
   { role: "contractor", key: "project_manager", name: t("Project Manager", "مدير المشروع") },
   { role: "consultant", key: "engineer", name: t("Engineer", "مهندس") },
@@ -197,25 +197,45 @@ export const builderProblems: WorkflowProblem[] = [
   },
 ];
 
-/** The Form's fields a rule can name, as WF-4's builder read gives them (the MAR's, in short). */
-export const builderFields: RuleField[] = [
-  { key: "manufacturer", type: "text", label: t("Manufacturer", "الشركة المصنعة"), source: "form" },
-  { key: "cost_impact", type: "number", label: t("Cost impact (SAR)", "أثر التكلفة (ريال)"), source: "form" },
-  {
-    key: "category",
-    type: "select",
-    label: t("Category", "الفئة"),
-    options: [
-      { value: "civil", label: t("Civil", "مدني") },
-      { value: "mep", label: t("MEP", "ميكانيكا وكهرباء") },
-    ],
-    source: "form",
-  },
-  { key: "needed_by", type: "date", label: t("Needed by", "مطلوب قبل"), source: "form" },
-  { key: "datasheet", type: "attachments", label: t("Datasheet", "الورقة الفنية"), source: "form" },
-  { key: "sample_checked", type: "yes_no", label: t("Sample checked", "تم فحص العينة"), source: "form" },
-  { key: "verification_note", type: "textarea", label: t("Verification note", "ملاحظة التحقق"), source: "form" },
-];
+/**
+ * The Type's Form, as WF-4's builder read gives it (the MAR's, in short): the raiser's
+ * section, and the verification the Consultant fills at its Steps.
+ */
+export const builderForm = formSchema.parse({
+  sections: [
+    {
+      key: "submittal",
+      title: t("Submittal", "التقديم"),
+      fields: [
+        { key: "manufacturer", type: "text", label: t("Manufacturer", "الشركة المصنعة") },
+        { key: "cost_impact", type: "number", label: t("Cost impact (SAR)", "أثر التكلفة (ريال)") },
+        {
+          key: "category",
+          type: "select",
+          label: t("Category", "الفئة"),
+          options: [
+            { value: "civil", label: t("Civil", "مدني") },
+            { value: "mep", label: t("MEP", "ميكانيكا وكهرباء") },
+          ],
+        },
+        { key: "needed_by", type: "date", label: t("Needed by", "مطلوب قبل") },
+        { key: "datasheet", type: "attachments", label: t("Datasheet", "الورقة الفنية") },
+      ],
+    },
+    {
+      key: "verification",
+      title: t("Verification", "التحقق"),
+      editable_at: ["consultant_engineer", "consultant_manager"],
+      fields: [
+        { key: "sample_checked", type: "yes_no", label: t("Sample checked", "تم فحص العينة") },
+        { key: "verification_note", type: "textarea", label: t("Verification note", "ملاحظة التحقق") },
+      ],
+    },
+  ],
+});
+
+/** The Form's fields a rule can name. */
+export const builderFields: RuleField[] = ruleFieldsOf(builderForm, null);
 
 type Messages = Record<string, unknown>;
 
@@ -383,6 +403,7 @@ export function workflowBuilderLabels(locale: Locale): WorkflowBuilderLabels {
     kind: l("Type", "النوع"),
     outcomeCode: l("Outcome", "النتيجة"),
     noOutcome: "—",
+    outcomeOnlyOnClose: l("Only a Close sets an outcome.", "لا يحدد النتيجة إلا انتقال من نوع إغلاق."),
     screen: l("Screen", "الشاشة"),
     screenHelp: l("The Screen this Transition asks. Screens are edited in Settings → Screens.", "الشاشة التي يطلبها هذا الانتقال. تُعدَّل الشاشات في الإعدادات ← الشاشات."),
     internalNoteOnly: l("Internal Note only", "ملاحظة داخلية فقط"),
@@ -415,6 +436,8 @@ export function workflowBuilderLabels(locale: Locale): WorkflowBuilderLabels {
     publishVersion: (v) => l(`Publish v${v}`, `نشر v${v}`),
     published: (v) => l(`v${v} published — new items will use it`, `تم نشر v${v} — العناصر الجديدة ستستخدمه`),
     close: l("Close", "إغلاق"),
+    alertsRegion: l("Builder alerts", "تنبيهات المصمم"),
+    dismiss: l("Dismiss", "إخفاء"),
     names: {
       newStep: t("New step", "خطوة جديدة"),
       newTransition: t("New transition", "انتقال جديد"),

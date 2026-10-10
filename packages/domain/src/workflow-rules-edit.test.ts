@@ -12,12 +12,16 @@ import {
   removeRule,
   ruleFieldsOf,
   ruleKindOf,
+  ruleKinds,
   setRecipient,
+  transitionRuleFields,
   updateRule,
   valueInputFor,
   type RuleField,
 } from "./workflow-rules-edit.ts";
 import { workflowRuleProblemsOf } from "./workflow-rules-edit.ts";
+import { workflowPublishProblems } from "./workflow-checks.ts";
+import type { WorkflowTransition } from "./workflow-definition.ts";
 import { formSchema } from "./form.ts";
 
 // Pure domain: the Workflow builder's rule, action and notification edits (RP-440,
@@ -141,7 +145,7 @@ describe("the kind of a stored rule", () => {
   });
 
   it("starts each kind from a rule the format accepts, on the Form's first suitable field", () => {
-    const context = { fields, steps: base.steps, transitions: base.transitions, transitionKey: "approve" };
+    const context = { fields: { restrict: fields, validate: fields, write: fields }, steps: base.steps, transitions: base.transitions, transitionKey: "approve" };
     expect(defaultRule("field_value", "restrict", context)).toEqual({ group: "restrict", rule: { type: "condition", condition: { field: "cost_impact", op: "=", value: 0 } } });
     expect(defaultRule("field_filled", "validate", context)).toMatchObject({ group: "validate", rule: { type: "condition", condition: { field: "cost_impact", op: "not_empty" } } });
     expect(defaultRule("has_document", "validate", context)).toEqual({ group: "validate", rule: { type: "has_document" } });
@@ -152,10 +156,32 @@ describe("the kind of a stored rule", () => {
   });
 
   it("offers no field rule when the Form has no fields", () => {
-    const context = { fields: [], steps: base.steps, transitions: base.transitions, transitionKey: "submit" };
+    const context = { fields: { restrict: [], validate: [], write: [] }, steps: base.steps, transitions: base.transitions, transitionKey: "submit" };
     expect(defaultRule("field_value", "restrict", context)).toBeNull();
     expect(defaultRule("set_field", "action", context)).toBeNull();
     expect(defaultRule("form_complete", "validate", context)).not.toBeNull();
+  });
+
+  it("starts each group on a field that group may name", () => {
+    const context = {
+      fields: { restrict: [field("subject")], validate: [field("cost_impact")], write: [field("needed_by"), field("category")] },
+      steps: base.steps,
+      transitions: base.transitions,
+      transitionKey: "approve",
+    };
+    expect(defaultRule("field_value", "restrict", context)).toMatchObject({ rule: { condition: { field: "subject" } } });
+    expect(defaultRule("field_value", "validate", context)).toMatchObject({ rule: { condition: { field: "cost_impact" } } });
+    expect(defaultRule("copy_field", "action", context)).toEqual({ group: "action", rule: { type: "copy_field", from: "needed_by", to: "category" } });
+  });
+
+  it("offers each group's kinds in the dialog's order, and none of another group's", () => {
+    expect(ruleKinds).toEqual({
+      restrict: ["field_value", "positions", "not_same_person", "been_through", "all_closed"],
+      validate: ["field_filled", "field_value", "form_complete", "has_document"],
+      action: ["offer_assign_to", "set_field", "copy_field"],
+    });
+    const context = { fields: { restrict: fields, validate: fields, write: fields }, steps: base.steps, transitions: base.transitions, transitionKey: "approve" };
+    expect(defaultRule("positions", "validate", context)).toBeNull();
   });
 });
 
@@ -250,5 +276,75 @@ describe("the publish problems of a Transition's rules", () => {
       { code: "unknown_step", severity: "error", transition: "approve", detail: "nope", message: t("z", "z") },
     ] as const;
     expect(workflowRuleProblemsOf(problems, "submit").map((p) => p.code)).toEqual(["unknown_field"]);
+  });
+});
+
+describe("the fields each group of a Transition's rules may name", () => {
+  // The raiser fills General at the Draft; the Consultant fills Review at its Step.
+  const sectioned = formSchema.parse({
+    sections: [
+      { key: "general", title: t("General", "عام"), fields: [{ key: "subject", type: "text", label: t("Subject", "الموضوع") }] },
+      { key: "review", title: t("Review", "مراجعة"), editable_at: ["review"], fields: [{ key: "verdict", type: "text", label: t("Verdict", "الرأي") }] },
+    ],
+  });
+  const asking = (...keys: string[]) => ({ sections: [{ key: "ask", title: t("Ask", "اسأل"), fields: keys.map((key) => ({ key, type: "text", label: t(key, key) })) }] });
+  const stages = [
+    { key: "draft", category: "draft" },
+    { key: "pending_approval", category: "in_progress" },
+    { key: "approved", category: "closed_positive" },
+  ] as const;
+  type ActionForm = WorkflowTransition["actionForm"];
+  const withActionForms = (approve: ActionForm, other?: ActionForm): WorkflowDefinition => ({
+    ...base,
+    transitions: [
+      base.transitions[0]!,
+      { ...base.transitions[1]!, actionForm: approve },
+      // Same label and source Step as Approve when `other` is given: one button, a condition picking between them.
+      ...(other === undefined ? [] : [{ ...base.transitions[1]!, key: "approve_b", outcome: "B", actionForm: other }]),
+    ],
+  });
+  const keys = (fs: readonly RuleField[]) => fs.map((f) => f.key);
+
+  it("a Restrict reads the Form, not the Transition's own Action Form, which is filled after the button is offered", () => {
+    const d = withActionForms(asking("remarks"));
+    const scope = transitionRuleFields(sectioned, d.transitions[1]!, d, stages);
+    expect(keys(scope.restrict)).toEqual(["subject", "verdict"]);
+  });
+
+  it("a Restrict also reads the Action Form fields every Transition sharing its label and source Step asks", () => {
+    const d = withActionForms(asking("remarks", "code"), asking("remarks"));
+    const scope = transitionRuleFields(sectioned, d.transitions[1]!, d, stages);
+    expect(keys(scope.restrict)).toEqual(["subject", "verdict", "remarks"]);
+  });
+
+  it("a Validate reads the Form and the Transition's own Action Form", () => {
+    const d = withActionForms(asking("remarks"));
+    expect(keys(transitionRuleFields(sectioned, d.transitions[1]!, d, stages).validate)).toEqual(["subject", "verdict", "remarks"]);
+  });
+
+  it("an action writes only what the acting Participant fills at the source Step: its Sections and the Action Form", () => {
+    const d = withActionForms(asking("remarks"));
+    expect(keys(transitionRuleFields(sectioned, d.transitions[1]!, d, stages).write)).toEqual(["verdict", "remarks"]);
+    expect(keys(transitionRuleFields(sectioned, d.transitions[0]!, d, stages).write)).toEqual(["subject"]);
+  });
+
+  it("agrees with publish check 6: what a picker offers publishes, what it leaves out is refused", () => {
+    const d = withActionForms(asking("remarks", "code"), asking("remarks"));
+    const context = { outcomes: [], stages, form: sectioned };
+    const every = ruleFieldsOf(sectioned, asking("remarks", "code"));
+    const refused = (rule: Partial<WorkflowTransition>) => {
+      const changed = { ...d, transitions: d.transitions.map((x) => (x.key === "approve" ? { ...x, ...rule } : x)) };
+      return workflowPublishProblems(changed, context).some((p) => p.transition === "approve" && (p.code === "unknown_field" || p.code === "field_not_filled_at_step"));
+    };
+    const scope = transitionRuleFields(sectioned, d.transitions[1]!, d, stages);
+    for (const f of every) {
+      const offered = (list: readonly RuleField[]) => list.some((x) => x.key === f.key);
+      expect(refused({ rules: { restrict: [{ type: "condition", condition: { field: f.key, op: "not_empty" } }] } }), `restrict ${f.key}`).toBe(!offered(scope.restrict));
+      expect(
+        refused({ rules: { validate: [{ type: "condition", condition: { field: f.key, op: "not_empty" }, message: t("m", "م") }] } }),
+        `validate ${f.key}`,
+      ).toBe(!offered(scope.validate));
+      expect(refused({ actions: [{ type: "set_field", field: f.key, value: "x" }] }), `write ${f.key}`).toBe(!offered(scope.write));
+    }
   });
 });

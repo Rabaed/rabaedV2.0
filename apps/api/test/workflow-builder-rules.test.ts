@@ -1,11 +1,11 @@
 // Seam 1: the builder's rules, actions and notifications (RP-440, WF-17; spec RP-423;
-// workflow-engine.md §11). The builder reads the Form's fields for its pickers
+// workflow-engine.md §11). The builder reads the Form for its pickers
 // (`GET /v1/workflows/:id/builder`), changes a Transition through @rabaed/domain's rule
 // edits, and saves, validates and publishes through WF-4's API (RP-427): every kind of
 // rule can be added, edited and removed, and comes back from publish as it was written.
 import { createDb } from "@rabaed/db";
 import { testDatabaseUrls } from "@rabaed/db/test-support";
-import { addRule, removeRule, setRecipient, updateRule, type RuleEntry, type WorkflowBuilderRead, type WorkflowDefinition, type WorkflowRead } from "@rabaed/domain";
+import { addRule, removeRule, ruleFieldsOf, setRecipient, transitionRuleFields, updateRule, type RuleEntry, type WorkflowBuilderRead, type WorkflowDefinition, type WorkflowRead } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestApi, type Caller } from "./support/harness.ts";
@@ -71,15 +71,27 @@ const everyKind: RuleEntry[] = [
 
 describe("the builder's rule pickers", () => {
   it("list the Type's Form fields that take answers, with their types, and nothing else", async () => {
-    const { fields } = await builder(c1.caller);
+    const { form } = await builder(c1.caller);
+    const fields = ruleFieldsOf(form, null);
     expect(fields.map((f) => f.key)).toEqual(
       expect.arrayContaining(["manufacturer", "datasheet", "sample_checked", "matches_specification", "verification_note", "trade", "location"]),
     );
     expect(fields.find((f) => f.key === "sample_checked")).toMatchObject({ type: "yes_no", source: "form", label: { en: expect.any(String), ar: expect.any(String) } });
     expect(fields.find((f) => f.key === "datasheet")?.type).toBe("attachments");
-    expect(fields.every((f) => f.source === "form")).toBe(true);
     // Not the Action Form's fields (they belong to one Transition), nor invented ones.
     expect(fields.map((f) => f.key)).not.toContain("remarks");
+  });
+
+  it("list, by group, what publish accepts: a Restrict not the Action Form, an Effect only what the consultant fills", async () => {
+    const { form, stages, workflow } = await builder(c1.caller);
+    const definition = workflow.draft!.definition;
+    const fields = transitionRuleFields(form, definition.transitions.find((x) => x.key === TRANSITION)!, definition, stages);
+    const keys = (list: { key: string }[]) => list.map((f) => f.key);
+    expect(keys(fields.restrict)).not.toContain("remarks");
+    expect(keys(fields.validate)).toEqual(expect.arrayContaining(["remarks", "manufacturer"]));
+    expect(keys(fields.write)).toEqual(expect.arrayContaining(["remarks", "verification_note"]));
+    // The raiser's answers: the consultant never writes them.
+    expect(keys(fields.write)).not.toContain("manufacturer");
   });
 
   it("a rule naming a field the Form doesn't have is a publish error the builder lists", async () => {

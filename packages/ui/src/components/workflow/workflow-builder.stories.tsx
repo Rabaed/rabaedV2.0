@@ -3,7 +3,7 @@ import { expect, fn, userEvent, waitFor, within } from "storybook/test";
 import { storyLocale } from "../../storybook/locale.ts";
 import {
   builderDraft,
-  builderFields,
+  builderForm,
   builderOutcomes,
   builderPositions,
   builderProblems,
@@ -26,7 +26,7 @@ const meta = {
     stages: workflowStages,
     outcomes: builderOutcomes,
     positions: builderPositions,
-    fields: builderFields,
+    form: builderForm,
     locale: "en",
     labels: workflowBuilderLabels("en"),
     problems: builderProblems,
@@ -100,6 +100,9 @@ export const TransitionSelected: Story = {
     const editor = within(canvas.getByRole("complementary", { name: labels.editor }));
     await expect(editor.getByLabelText(labels.labelEn)).toHaveValue("Send to Owner Rep");
     await expect(editor.getByRole("radio", { name: labels.map.kind("submit") })).toBeChecked();
+    // Only a Close sets an outcome: on a Submit it is off, and says why.
+    await expect(editor.getByRole("combobox", { name: labels.outcomeCode })).toBeDisabled();
+    await expect(editor.getByText(labels.outcomeOnlyOnClose)).toBeVisible();
     await expect(editor.getByText(labels.internalNoteOnly)).toBeVisible();
   },
 };
@@ -167,6 +170,18 @@ export const PublishBlocked: Story = {
     const dialog = within(await within(document.body).findByRole("dialog"));
     await expect(await dialog.findByText(labels.errorsBlock("1"))).toBeVisible();
     await expect(dialog.getByRole("button", { name: labels.publishVersion("4") })).toBeDisabled();
+  },
+};
+
+/** Just opened, nothing saved yet: the bar names no save time. */
+export const JustOpened: Story = {
+  args: { saveState: { kind: "opened" } },
+  render,
+  play: async ({ canvas, context }) => {
+    const labels = workflowBuilderLabels(storyLocale(context));
+    await expect(canvas.getByText(labels.draft("4"), { exact: false })).toBeVisible();
+    await expect(canvas.queryByText(labels.saved(""), { exact: false })).toBeNull();
+    await expect(canvas.queryByText(labels.unsaved, { exact: false })).toBeNull();
   },
 };
 

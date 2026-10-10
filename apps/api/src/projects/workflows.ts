@@ -9,7 +9,6 @@ import {
   type Db,
 } from "@rabaed/db";
 import {
-  ruleFieldsOf,
   stageCopyProblems,
   type BilingualText,
   type BindWorkflowRequest,
@@ -47,7 +46,7 @@ export function readWorkflow(db: Db, memberId: string, definitionId: string): Pr
 export function readWorkflowBuilder(db: Db, memberId: string, definitionId: string): Promise<WorkflowBuilderRead | null> {
   return withMember(db, memberId, async (trx): Promise<WorkflowBuilderRead | null> => {
     if (!(await authors(trx, definitionId))) return null;
-    const workflow = await workflowRead(trx, definitionId);
+    const workflow = await workflowRead(trx, definitionId, true);
     const { rows } = await sql<{ type_id: string; code: string; name: BilingualText; module_key: string; project_id: string | null }>`
       select t.id as type_id, t.code, t.name, t.module_key, d.project_id
       from workflow_definition d join work_item_type t on t.id = app.workflow_type(d.id)
@@ -68,12 +67,12 @@ export function readWorkflowBuilder(db: Db, memberId: string, definitionId: stri
       order by sort, code
     `.execute(trx);
     const positions = await trx.selectFrom("position").select(["base_role", "key", "name"]).orderBy("base_role").orderBy("sort").execute();
-    // The Form the rules are checked against (check 6): its fields are the only ones a rule may name.
+    // The Form the rules are checked against (check 6): the pickers list only its fields.
     const check = await readWorkflowCheckContext(trx, definitionId);
     return {
       workflow,
       type: { code: type.code, name: type.name },
-      fields: ruleFieldsOf(check?.context.form ?? null, null),
+      form: check?.context.form ?? null,
       stages: stages.rows.filter((s) => s.own === own).map(({ key, name, category }) => ({ key, name, category })),
       outcomes: outcomes.rows,
       positions: positions.map((p) => ({ role: p.base_role, key: p.key, name: p.name as BilingualText })),
@@ -81,7 +80,8 @@ export function readWorkflowBuilder(db: Db, memberId: string, definitionId: stri
   });
 }
 
-async function workflowRead(trx: Db, definitionId: string): Promise<WorkflowRead | null> {
+/** The Workflow as the acting Member reads it; `canAuthor` when the caller already asked authors(), else it is asked here. */
+async function workflowRead(trx: Db, definitionId: string, canAuthorKnown?: boolean): Promise<WorkflowRead | null> {
   const definition = await trx
     .selectFrom("workflow_definition")
     .select(["id", "name", "owner_kind", "project_id", sql<string | null>`app.workflow_type(id)`.as("work_item_type_id")])
@@ -95,7 +95,7 @@ async function workflowRead(trx: Db, definitionId: string): Promise<WorkflowRead
     .where("status", "=", "published")
     .orderBy("version_no")
     .execute();
-  const canAuthor = await authors(trx, definitionId);
+  const canAuthor = canAuthorKnown ?? (await authors(trx, definitionId));
   const draft = canAuthor ? await readWorkflowDraft(trx, definitionId) : null;
   return {
     id: definition.id,

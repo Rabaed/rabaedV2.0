@@ -13,10 +13,12 @@ import {
   type Comparison,
   type Condition,
   type Locale,
+  type PositionOption,
   type RuleEntry,
   type RuleField,
   type RuleGroup,
   type RuleRef,
+  type TransitionRuleFields,
   type WorkflowDefinition,
   type WorkflowProblem,
   type WorkflowTransition,
@@ -24,9 +26,10 @@ import {
 import { useState } from "react";
 import { cn } from "../../lib/cn.ts";
 import { Button, IconButton } from "../button/button.tsx";
+import { focusRing } from "../form/control-styles.ts";
 import { Icon, type IconName } from "../icon/icon.tsx";
 import { ConditionBuilder } from "./workflow-condition-builder.tsx";
-import { WorkflowRuleDialog, type RulePosition } from "./workflow-rule-dialog.tsx";
+import { WorkflowRuleDialog } from "./workflow-rule-dialog.tsx";
 import type { WorkflowRuleLabels } from "./workflow-rule-labels.ts";
 
 type CommonProps = {
@@ -38,7 +41,10 @@ type CommonProps = {
 };
 
 /** One line saying what a rule does, in the viewer's language. */
-export function ruleSummary(entry: RuleEntry, ctx: { fields: readonly RuleField[]; definition: WorkflowDefinition; positions: readonly RulePosition[]; locale: Locale; labels: WorkflowRuleLabels }): string {
+export function ruleSummary(
+  entry: RuleEntry,
+  ctx: { fields: readonly RuleField[]; definition: WorkflowDefinition; positions: readonly Pick<PositionOption, "key" | "name">[]; locale: Locale; labels: WorkflowRuleLabels },
+): string {
   const { fields, definition, positions, locale, labels } = ctx;
   const fieldName = (key: string) => fields.find((f) => f.key === key)?.label[locale] ?? key;
   const stepName = (key: string) => definition.steps.find((s) => s.key === key)?.name[locale] ?? key;
@@ -108,8 +114,9 @@ const groupIcon: Record<RuleGroup, IconName> = { restrict: "lock", validate: "ci
 const groups: RuleGroup[] = ["restrict", "validate", "action"];
 
 type RulesProps = CommonProps & {
-  fields: readonly RuleField[];
-  positions: readonly RulePosition[];
+  /** What each group may name, as publish check 6 accepts it (transitionRuleFields). */
+  fields: TransitionRuleFields;
+  positions: readonly PositionOption[];
   /** Every publish problem of the draft; the ones about this Transition's rules show under them. */
   problems: readonly WorkflowProblem[];
 };
@@ -124,7 +131,8 @@ export function TransitionRules({ definition, transition, fields, positions, pro
   const [dialog, setDialog] = useState<{ editing: { ref: RuleRef; entry: RuleEntry } | null } | null>(null);
   const listed = listRules(transition);
   const mine = workflowRuleProblemsOf(problems, transition.key);
-  const ctx = { fields, definition, positions, locale, labels };
+  // A summary names any field the rules may name.
+  const ctx = { fields: [...fields.validate, ...fields.write, ...fields.restrict], definition, positions, locale, labels };
   const own = (r: { ref: RuleRef; entry: RuleEntry }) => ruleSummary(r.entry, ctx);
   const remove = (ref: RuleRef) => onCommit(removeRule(definition, transition.key, ref));
 
@@ -154,7 +162,7 @@ export function TransitionRules({ definition, transition, fields, positions, pro
                       onRemove={() => remove(r.ref)}
                       onEdit={() => setDialog({ editing: r })}
                       compact
-                      fields={fields}
+                      fields={fields.restrict}
                       locale={locale}
                       labels={labels}
                       name={`${labels.groupTitle("restrict")} ${i + 1}`}
@@ -225,7 +233,8 @@ function Chip({ on, locked, onToggle, children }: { on: boolean; locked?: boolea
       aria-disabled={locked || undefined}
       onClick={locked ? undefined : onToggle}
       className={cn(
-        "inline-flex h-7 items-center gap-1 rounded-full px-3 text-[12px] font-semibold focus-visible:outline-2 focus-visible:outline-focus",
+        "inline-flex h-7 items-center gap-1 rounded-full px-3 text-[12px] font-semibold",
+        focusRing,
         on ? "bg-inverse text-on-inverse" : "bg-surface text-text shadow-[inset_0_0_0_1px_var(--control-border)] hover:shadow-[inset_0_0_0_1px_var(--primary)]",
         locked && "cursor-default",
       )}

@@ -13,11 +13,13 @@ import {
   type BilingualText,
   type Condition,
   type Locale,
+  type PositionOption,
   type RuleEntry,
   type RuleField,
   type RuleGroup,
   type RuleKind,
   type RuleRef,
+  type TransitionRuleFields,
   type WorkflowStep,
   type WorkflowTransition,
 } from "@rabaed/domain";
@@ -34,18 +36,15 @@ import { Dialog, DialogContent, DialogFooter } from "../overlay/dialog.tsx";
 import { ConditionBuilder } from "./workflow-condition-builder.tsx";
 import type { WorkflowRuleLabels } from "./workflow-rule-labels.ts";
 
-/** A Position the acting Participant's role has, for a Restrict rule that names Positions. */
-export type RulePosition = { key: string; name: BilingualText };
-
 export type RuleDialogProps = {
   /** The Transition the rule is for. */
   transition: WorkflowTransition;
   steps: readonly WorkflowStep[];
   transitions: readonly WorkflowTransition[];
-  /** The Form's fields and the Transition's own Action Form's: the only ones a rule may name. */
-  fields: readonly RuleField[];
+  /** What each group may name, as publish check 6 accepts it (transitionRuleFields). */
+  fields: TransitionRuleFields;
   /** The Positions of the acting Participant (the role of the Transition's source Step). */
-  positions: readonly RulePosition[];
+  positions: readonly PositionOption[];
   locale: Locale;
   labels: WorkflowRuleLabels;
   /** The rule to edit, or null to add a new one. */
@@ -188,7 +187,7 @@ function RuleEditor(props: EditorProps) {
     ...(current && !list.some((f) => f.key === current) ? [{ value: current, label: labels.missingField(current) }] : []),
     ...list.map((f) => ({ value: f.key, label: f.label[locale] })),
   ];
-  const fieldOf = (key: string) => fields.find((f) => f.key === key);
+  const fieldOf = (key: string) => [...fields.validate, ...fields.write, ...fields.restrict].find((f) => f.key === key);
 
   if (entry.group === "restrict") {
     const rule = entry.rule;
@@ -198,7 +197,7 @@ function RuleEditor(props: EditorProps) {
           <ConditionBuilder
             value={rule.condition}
             onChange={(condition) => onChange({ group: "restrict", rule: { type: "condition", condition } })}
-            fields={fields}
+            fields={fields.restrict}
             locale={locale}
             labels={labels}
             name={labels.kindTitle("field_value")}
@@ -355,7 +354,7 @@ function RuleEditor(props: EditorProps) {
                       rule: { type: "condition", condition: { field: next, op: "not_empty" }, message: followed ? defaultValidationMessage(target.label) : rule.message },
                     });
                   }}
-                  options={fieldOptions(fields, key)}
+                  options={fieldOptions(fields.validate, key)}
                 />
               </Field>
               {messageFields}
@@ -367,7 +366,7 @@ function RuleEditor(props: EditorProps) {
             <ConditionBuilder
               value={rule.condition}
               onChange={(condition: Condition) => onChange({ group: "validate", rule: { ...rule, condition } })}
-              fields={fields}
+              fields={fields.validate}
               locale={locale}
               labels={labels}
               name={labels.kindTitle("field_value")}
@@ -378,7 +377,7 @@ function RuleEditor(props: EditorProps) {
       case "form_complete":
         return <p className="m-0 text-[13px] text-muted">{labels.kindHelp("form_complete")}</p>;
       case "has_document": {
-        const documents = fields.filter(isDocumentField);
+        const documents = fields.validate.filter(isDocumentField);
         return (
           <>
             <Field label={labels.documentField} help={labels.documentHelp}>
@@ -395,7 +394,7 @@ function RuleEditor(props: EditorProps) {
   }
 
   const rule = entry.rule;
-  const settable = fields.filter(isSettable);
+  const settable = fields.write.filter(isSettable);
   switch (rule.type) {
     case "offer_assign_to":
       return <p className="m-0 text-[13px] text-muted">{labels.assignHelp}</p>;

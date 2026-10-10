@@ -16,7 +16,7 @@ export type WorkflowBuilderLabels = {
   back: string;
   /** The draft's badge, e.g. "Draft v4". */
   draft: (version: string) => string;
-  /** After the draft's badge: "Saved 14:32", "Saving…", "Unsaved changes", "Couldn't save". */
+  /** After the draft's badge: "Saved 14:32", "Saving…", "Unsaved changes", "Couldn't save"; nothing before the first save. */
   saved: (time: string) => string;
   saving: string;
   unsaved: string;
@@ -67,6 +67,8 @@ export type WorkflowBuilderLabels = {
   kind: string;
   outcomeCode: string;
   noOutcome: string;
+  /** Why the outcome is off on any kind but Close. */
+  outcomeOnlyOnClose: string;
   screen: string;
   screenHelp: string;
   /** A Transition without its own Action Form: only the Internal Note is asked. */
@@ -103,6 +105,9 @@ export type WorkflowBuilderLabels = {
   publishVersion: (version: string) => string;
   published: (version: string) => string;
   close: string;
+  /** The toasts' region, and the button that dismisses one. */
+  alertsRegion: string;
+  dismiss: string;
   names: {
     newStep: BilingualText;
     newTransition: BilingualText;

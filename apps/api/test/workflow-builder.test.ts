@@ -136,11 +136,21 @@ describe("a Project Admin builds the Project's copy of the MAR", () => {
 });
 
 describe("only the Workflow's authors open the builder", () => {
-  it("a Project Member, a Rabaed Default and a made-up id are the same 404", async () => {
+  // Scenario RP-439-1.
+  it("a Project Member, another Project's Project Admin, a Rabaed Default and a made-up or malformed id are the same 404", async () => {
     const res = await c1.caller.post(`/v1/workflows/${marDefault}/duplicate`, { projectId: at.projectId, name: { en: "Kept", ar: "محفوظ" } });
     const id = res.json().id;
+    await ok(c1.caller.get(`/v1/workflows/${id}/builder`), 200);
     await expectHidden(at.c1Engineer.get(`/v1/workflows/${id}/builder`));
     await expectHidden(k1Engineer.get(`/v1/workflows/${id}/builder`));
+    // Another Project: its Project Admin can't open Tower's Workflow, nor Tower's its own.
+    const other: Company = await api.projectCreator();
+    const otherProjectId = (await api.createProject(other.caller, { code: "WFO" })).id;
+    const otherCopy = await other.caller.post(`/v1/workflows/${marDefault}/duplicate`, { projectId: otherProjectId, name: { en: "Elsewhere", ar: "في مكان آخر" } });
+    expect(otherCopy.statusCode, otherCopy.body).toBe(201);
+    await ok(other.caller.get(`/v1/workflows/${otherCopy.json().id}/builder`), 200);
+    await expectHidden(other.caller.get(`/v1/workflows/${id}/builder`));
+    await expectHidden(c1.caller.get(`/v1/workflows/${otherCopy.json().id}/builder`));
     await expectHidden(c1.caller.get(`/v1/workflows/${marDefault}/builder`));
     await expectHidden(c1.caller.get(`/v1/workflows/${crypto.randomUUID()}/builder`));
     await expectHidden(c1.caller.get(`/v1/workflows/not-an-id/builder`));

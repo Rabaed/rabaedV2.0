@@ -3,7 +3,8 @@ import type { Comparison, Condition, ConditionOp } from "./condition.ts";
 import { conditionOps } from "./condition.ts";
 import { parseActionForm } from "./action-form.ts";
 import { formFields, isAnswerField, type FormFieldType, type FormOption, type FormSchema } from "./form.ts";
-import type { WorkflowProblem } from "./workflow-checks.ts";
+import type { StageCategory } from "./chain-bucket.ts";
+import { transitionFieldScope, type WorkflowProblem } from "./workflow-checks.ts";
 import type { Restriction, TransitionAction, Validation, WorkflowDefinition, WorkflowStep, WorkflowTransition } from "./workflow-definition.ts";
 import type { NotificationRecipient } from "./workflow-definition.ts";
 import type { BaseRole } from "./project.ts";
@@ -26,12 +27,19 @@ export type RuleEntry =
 /** Where a rule sits on a Transition: its group and place in that group's list. */
 export type RuleRef = { group: RuleGroup; index: number };
 
-/** What the dialog offers, by group; one editor each. */
-export const restrictKinds = ["field_value", "positions", "not_same_person", "been_through", "all_closed"] as const;
-export const validateKinds = ["field_filled", "field_value", "form_complete", "has_document"] as const;
-export const actionKinds = ["offer_assign_to", "set_field", "copy_field"] as const;
-export const ruleKinds = { restrict: restrictKinds, validate: validateKinds, action: actionKinds } as const;
-export type RuleKind = (typeof restrictKinds)[number] | (typeof validateKinds)[number] | (typeof actionKinds)[number];
+/** The kinds of rule the dialog offers; one editor each. A kind may sit in more than one group (a field value is a Restrict or a Validate). */
+export type RuleKind =
+  | "field_value"
+  | "positions"
+  | "not_same_person"
+  | "been_through"
+  | "all_closed"
+  | "field_filled"
+  | "form_complete"
+  | "has_document"
+  | "offer_assign_to"
+  | "set_field"
+  | "copy_field";
 
 function withTransition(definition: WorkflowDefinition, key: string, change: (t: WorkflowTransition) => WorkflowTransition): WorkflowDefinition {
   return { ...definition, transitions: definition.transitions.map((t) => (t.key === key ? change(t) : t)) };
@@ -130,6 +138,27 @@ export function ruleFieldsOf(form: FormSchema | null, actionForm: unknown): Rule
     own = null; // an Action Form the format no longer reads: publish check 7 names it
   }
   return [...(form ? fieldsOfSchema(form, "form") : []), ...(own ? fieldsOfSchema(own, "action_form") : [])];
+}
+
+/** The fields each group of a Transition's rules may name, for its pickers. */
+export type TransitionRuleFields = { restrict: RuleField[]; validate: RuleField[]; write: RuleField[] };
+
+/**
+ * What Transition `t`'s pickers list, by group: ruleFieldsOf's fields, kept to those
+ * publish check 6 accepts there (transitionFieldScope, the rule the check reads).
+ * `stages` are the Module's, whose categories say which Step is the Draft.
+ */
+export function transitionRuleFields(
+  form: FormSchema | null,
+  t: WorkflowTransition,
+  workflow: Pick<WorkflowDefinition, "steps" | "transitions">,
+  stages: readonly { key: string; category: StageCategory }[],
+): TransitionRuleFields {
+  const categories = new Map(stages.map((s) => [s.key, s.category]));
+  const scope = transitionFieldScope(t, { steps: workflow.steps, transitions: workflow.transitions, form, categoryOf: (stage) => categories.get(stage) });
+  const every = ruleFieldsOf(form, t.actionForm);
+  const within = (keys: ReadonlySet<string>) => every.filter((f) => keys.has(f.key));
+  return { restrict: within(scope.restrict), validate: within(scope.validate), write: within(scope.write) };
 }
 
 /** A field a rule names that the Form doesn't have, kept so the rule can still be shown and changed. */
@@ -291,60 +320,73 @@ export function defaultValidationMessage(label: BilingualText): BilingualText {
 // Starting a rule -------------------------------------------------------------------------
 
 export type RuleContext = {
-  fields: readonly RuleField[];
+  /** What each group may name (transitionRuleFields). */
+  fields: TransitionRuleFields;
   steps: readonly WorkflowStep[];
   transitions: readonly WorkflowTransition[];
   /** The Transition the rule is for. */
   transitionKey: string;
 };
 
+type Start = (context: RuleContext) => RuleEntry | null;
+
 /**
- * A new rule of `kind` that fits the format, on the first field that suits it; null
- * when it can't start (a field rule on a Form with no fields, a Document rule where
- * there is nothing to name is still fine: it means any Document on the item).
+ * Every kind the dialog offers, by group, in the order it lists them, with the rule
+ * it starts from: one fitting the format, on the first field the group may name
+ * that suits it; null when it can't start (a field rule with no field to name; a
+ * Document rule with none still starts: it means any Document on the item). Adding
+ * a kind adds its row here, its editor and summary (exhaustive switches over the
+ * stored rule) and its messages.
  */
-export function defaultRule(kind: RuleKind, group: RuleGroup, context: RuleContext): RuleEntry | null {
-  const first = context.fields[0];
-  const settable = context.fields.filter(isSettable);
-  const sourceStep = context.transitions.find((t) => t.key === context.transitionKey)?.from;
-  const entry = (e: RuleEntry): RuleEntry => e;
-  switch (kind) {
-    case "field_value":
-      if (!first) return null;
-      return group === "validate"
-        ? entry({ group, rule: { type: "condition", condition: defaultComparison(first), message: { en: "", ar: "" } } })
-        : entry({ group: "restrict", rule: { type: "condition", condition: defaultComparison(first) } });
-    case "field_filled":
-      return first
-        ? entry({ group: "validate", rule: { type: "condition", condition: { field: first.key, op: "not_empty" }, message: defaultValidationMessage(first.label) } })
-        : null;
-    case "positions":
-      // Starts with none chosen: the format needs at least one, so the dialog holds it until one is ticked.
-      return entry({ group: "restrict", rule: { type: "positions", positions: [] } });
-    case "not_same_person": {
-      const held = context.steps.find((s) => s.actor !== null && s.key !== sourceStep) ?? context.steps.find((s) => s.actor !== null);
-      return held ? entry({ group: "restrict", rule: { type: "not_same_person", step: held.key } }) : null;
-    }
-    case "been_through":
-      return entry({ group: "restrict", rule: { type: "been_through", fact: "sent_back" } });
-    case "all_closed":
-      return entry({ group: "restrict", rule: { type: "all_closed", items: "comments" } });
-    case "form_complete":
-      return entry({ group: "validate", rule: { type: "form_complete" } });
-    case "has_document":
-      return entry({ group: "validate", rule: { type: "has_document" } });
-    case "offer_assign_to":
-      return entry({ group: "action", rule: { type: "offer_assign_to" } });
-    case "set_field": {
-      const target = settable[0];
-      return target ? entry({ group: "action", rule: { type: "set_field", field: target.key, value: defaultSetValue(target) } }) : null;
-    }
-    case "copy_field": {
+const ruleKindTable: Record<RuleGroup, Partial<Record<RuleKind, Start>>> = {
+  restrict: {
+    field_value: ({ fields }) => {
+      const first = fields.restrict[0];
+      return first ? { group: "restrict", rule: { type: "condition", condition: defaultComparison(first) } } : null;
+    },
+    // Starts with none chosen: the format needs at least one, so the dialog holds it until one is ticked.
+    positions: () => ({ group: "restrict", rule: { type: "positions", positions: [] } }),
+    not_same_person: ({ steps, transitions, transitionKey }) => {
+      const sourceStep = transitions.find((t) => t.key === transitionKey)?.from;
+      const held = steps.find((s) => s.actor !== null && s.key !== sourceStep) ?? steps.find((s) => s.actor !== null);
+      return held ? { group: "restrict", rule: { type: "not_same_person", step: held.key } } : null;
+    },
+    been_through: () => ({ group: "restrict", rule: { type: "been_through", fact: "sent_back" } }),
+    all_closed: () => ({ group: "restrict", rule: { type: "all_closed", items: "comments" } }),
+  },
+  validate: {
+    field_filled: ({ fields }) => {
+      const first = fields.validate[0];
+      return first ? { group: "validate", rule: { type: "condition", condition: { field: first.key, op: "not_empty" }, message: defaultValidationMessage(first.label) } } : null;
+    },
+    field_value: ({ fields }) => {
+      const first = fields.validate[0];
+      return first ? { group: "validate", rule: { type: "condition", condition: defaultComparison(first), message: { en: "", ar: "" } } } : null;
+    },
+    form_complete: () => ({ group: "validate", rule: { type: "form_complete" } }),
+    has_document: () => ({ group: "validate", rule: { type: "has_document" } }),
+  },
+  action: {
+    offer_assign_to: () => ({ group: "action", rule: { type: "offer_assign_to" } }),
+    set_field: ({ fields }) => {
+      const target = fields.write.filter(isSettable)[0];
+      return target ? { group: "action", rule: { type: "set_field", field: target.key, value: defaultSetValue(target) } } : null;
+    },
+    copy_field: ({ fields }) => {
+      const settable = fields.write.filter(isSettable);
       const from = settable[0];
       const to = settable[1] ?? from;
-      return from && to ? entry({ group: "action", rule: { type: "copy_field", from: from.key, to: to.key } }) : null;
-    }
-  }
+      return from && to ? { group: "action", rule: { type: "copy_field", from: from.key, to: to.key } } : null;
+    },
+  },
+};
+
+/** What the dialog offers, by group, in order. */
+export const ruleKinds = Object.fromEntries(Object.entries(ruleKindTable).map(([group, kinds]) => [group, Object.keys(kinds)])) as Record<RuleGroup, RuleKind[]>;
+
+/** A new rule of `kind` in `group` (ruleKindTable); null when it can't start, or the group has no such kind. */
+export function defaultRule(kind: RuleKind, group: RuleGroup, context: RuleContext): RuleEntry | null {
+  return ruleKindTable[group][kind]?.(context) ?? null;
 }
 
 /** The value a "set a field" action starts from, for the field's type. */
