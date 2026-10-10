@@ -1,5 +1,7 @@
 import { z } from "zod";
-import { bilingualText, engineerReason } from "./company.ts";
+import type { StageCategory } from "./chain-bucket.ts";
+import { bilingualText, engineerReason, type BilingualText } from "./company.ts";
+import type { BaseRole } from "./project.ts";
 import type { DefinitionIssue, WorkflowDefinition } from "./workflow-definition.ts";
 import type { WorkflowProblem } from "./workflow-checks.ts";
 
@@ -74,4 +76,18 @@ export type WorkflowRead = {
    */
   draft: { versionNo: number; name: { en: string; ar: string }; definition: WorkflowDefinition } | null;
   canAuthor: boolean;
+};
+
+/**
+ * What the Workflow builder (RP-439, WF-16) edits with, for the Workflow's authors
+ * only: the Workflow as they read it (its draft included), its Work Item Type, the
+ * Stages of the Type's Module it is checked against (the Project's own, else the
+ * Rabaed Defaults'), the Type's outcome set, and the Positions a Step may name.
+ */
+export type WorkflowBuilderRead = {
+  workflow: WorkflowRead;
+  type: { code: string; name: BilingualText };
+  stages: { key: string; name: BilingualText; category: StageCategory }[];
+  outcomes: { code: string; name: BilingualText; closing: boolean; polarity: "positive" | "negative" }[];
+  positions: { role: BaseRole; key: string; name: BilingualText }[];
 };

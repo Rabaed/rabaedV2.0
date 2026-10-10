@@ -140,7 +140,17 @@ export { ProjectCards, type ProjectCardsLabels, type ProjectCardsProps } from ".
 export { ProjectDashboard, type ProjectDashboardLabels, type ProjectDashboardProps } from "./components/views/project-dashboard.tsx";
 export { moduleName } from "./lib/module-name.ts";
 export { ActivityFeedPanel, type ActivityFeedFilters, type ActivityFeedPanelLabels, type ActivityFeedPanelProps } from "./components/views/activity-feed-panel.tsx";
-export { WorkflowCanvas, type WorkflowCanvasProps } from "./components/workflow/workflow-canvas.tsx";
+export { WorkflowCanvas, type CanvasMark, type CanvasSelection, type WorkflowCanvasProps } from "./components/workflow/workflow-canvas.tsx";
+export {
+  WorkflowBuilder,
+  type WorkflowBuilderOutcome,
+  type WorkflowBuilderPosition,
+  type WorkflowBuilderProps,
+  type WorkflowPublishResult,
+  type WorkflowSaveState,
+} from "./components/workflow/workflow-builder.tsx";
+export type { WorkflowBuilderLabels, WorkflowCompareLabels } from "./components/workflow/workflow-builder-labels.ts";
+export { WorkflowChangeList, WorkflowCompareDialog, type WorkflowCompareDialogProps } from "./components/workflow/workflow-changes.tsx";
 export { WorkflowStepList, type WorkflowStepListProps } from "./components/workflow/workflow-step-list.tsx";
 export type { WorkflowLabels } from "./components/workflow/workflow-labels.ts";
 export type { MapStage } from "./components/workflow/workflow-map.ts";

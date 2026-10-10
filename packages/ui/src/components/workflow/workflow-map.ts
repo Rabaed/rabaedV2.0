@@ -66,6 +66,8 @@ export type WorkflowMapInput = {
   viewerRole?: BaseRole | null;
   /** Where the item is, as the API gives it. */
   position?: WorkItemMapPosition | null;
+  /** The builder (RP-439): a band for every open Stage, an empty one too, to drop a Step into. */
+  everyStage?: boolean;
 };
 
 const STEP_WIDTH = 200;
@@ -82,16 +84,16 @@ const closed = new Set<StageCategory>(["closed_positive", "closed_negative", "ca
 const forward = new Set<WorkflowTransition["kind"]>(["send", "submit", "close", "cancel"]);
 
 /** Bands, nodes and edges of a Workflow on the canvas. */
-export function workflowMap({ definition, stages, dir, viewerRole, position }: WorkflowMapInput): WorkflowMapModel {
+export function workflowMap({ definition, stages, dir, viewerRole, position, everyStage = false }: WorkflowMapInput): WorkflowMapModel {
   const stageOf = new Map(stages.map((s) => [s.key, s]));
-  const terminal = (s: WorkflowStep) => s.actor === null || closed.has(stageOf.get(s.stage)?.category ?? "in_progress");
+  const terminal = isTerminal(stageOf);
   const colourOf = (s: WorkflowStep): StageKey => {
     const stage = stageOf.get(s.stage);
     return stage ? stageColour(stage) : terminal(s) ? "approved" : "pending";
   };
 
-  const saved = definition.steps.length > 0 && definition.steps.every((s) => definition.layout[s.key]);
-  const { boxes, bands, width, height } = saved ? savedLayout(definition, stages, terminal) : autoLayout(definition, stages, terminal);
+  const keys = bandKeys(definition, stages, terminal, everyStage);
+  const { boxes, bands, width, height } = placesEvery(definition) ? savedLayout(definition, keys, stages, terminal) : autoLayout(definition, keys, stages, terminal);
 
   // Fold the other roles' Steps, in the order the Workflow first names each role.
   const folded = new Map<string, BaseRole>();
@@ -158,14 +160,38 @@ export function workflowMap({ definition, stages, dir, viewerRole, position }: W
   return mirrored({ width, height, bands, nodes, edges }, dir);
 }
 
+/** The band a point at `x` on the canvas (in the model's own direction) falls in; null outside every band. */
+export function bandAt(model: WorkflowMapModel, x: number): MapBand | null {
+  return model.bands.find((b) => x >= b.x && x < b.x + b.width) ?? null;
+}
+
+/**
+ * A layout placing every Step where the canvas draws it now, in left-to-right units: the
+ * builder pins it before the first move, as a layout counts only when it places every
+ * Step (the Rabaed Defaults have none). A layout that already does is kept as it is.
+ */
+export function placedLayout(definition: WorkflowDefinition, stages: readonly MapStage[], everyStage = false): WorkflowDefinition["layout"] {
+  if (placesEvery(definition)) return definition.layout;
+  const terminal = isTerminal(new Map(stages.map((s) => [s.key, s])));
+  const { boxes } = autoLayout(definition, bandKeys(definition, stages, terminal, everyStage), stages, terminal);
+  return Object.fromEntries([...boxes].map(([key, b]) => [key, { x: b.x, y: b.y }]));
+}
+
+const placesEvery = (definition: WorkflowDefinition) => definition.steps.length > 0 && definition.steps.every((s) => definition.layout[s.key]);
+
+const isTerminal = (stageOf: ReadonlyMap<string, MapStage>) => (s: WorkflowStep) => s.actor === null || closed.has(stageOf.get(s.stage)?.category ?? "in_progress");
+
 type Layout = { boxes: Map<string, Omit<Box, "id" | "current">>; bands: MapBand[]; width: number; height: number };
 
 const size = (isTerminal: boolean) => (isTerminal ? { width: END_WIDTH, height: END_HEIGHT } : { width: STEP_WIDTH, height: STEP_HEIGHT });
 
-/** The open Stages that hold a Step, in order (a Stage the set lacks goes last, by its key), then the Outcome band. */
-function bandKeys(definition: WorkflowDefinition, stages: readonly MapStage[], terminal: (s: WorkflowStep) => boolean) {
+/**
+ * The open Stages that hold a Step, in order (a Stage the set lacks goes last, by its key);
+ * every open Stage of the set with `everyStage`. The Outcome band follows them.
+ */
+function bandKeys(definition: WorkflowDefinition, stages: readonly MapStage[], terminal: (s: WorkflowStep) => boolean, everyStage: boolean) {
   const used = new Set(definition.steps.filter((s) => !terminal(s)).map((s) => s.stage));
-  const known = stages.filter((s) => used.has(s.key)).map((s) => s.key);
+  const known = stages.filter((s) => used.has(s.key) || (everyStage && !closed.has(s.category))).map((s) => s.key);
   const unknown = [...used].filter((k) => !stages.some((s) => s.key === k));
   return [...known, ...unknown];
 }
@@ -177,7 +203,7 @@ function band(key: string, stages: readonly MapStage[], x: number, width: number
 
 const outcomeBand = (x: number, width: number): MapBand => ({ key: "outcome", name: null, colour: "approved", x, width });
 
-function autoLayout(definition: WorkflowDefinition, stages: readonly MapStage[], terminal: (s: WorkflowStep) => boolean): Layout {
+function autoLayout(definition: WorkflowDefinition, keys: readonly string[], stages: readonly MapStage[], terminal: (s: WorkflowStep) => boolean): Layout {
   // How far along the flow each Step is: its distance from the Draft over forward Transitions.
   const depth = new Map<string, number>();
   const start = definition.steps.find((s) => stages.find((st) => st.key === s.stage)?.category === "draft") ?? definition.steps[0];
@@ -196,9 +222,15 @@ function autoLayout(definition: WorkflowDefinition, stages: readonly MapStage[],
   const bands: MapBand[] = [];
   const lanes: { x: number; steps: WorkflowStep[] }[] = [];
   let x = 0;
-  for (const key of bandKeys(definition, stages, terminal)) {
+  for (const key of keys) {
     const inBand = definition.steps.filter((s) => s.stage === key && !terminal(s));
     const depths = [...new Set(inBand.map((s) => depth.get(s.key) ?? Number.MAX_SAFE_INTEGER))].toSorted((a, b) => a - b);
+    if (depths.length === 0) {
+      // An empty band (the builder's): one column wide, to drop a Step into.
+      bands.push(band(key, stages, x, LANE));
+      x += LANE;
+      continue;
+    }
     depths.forEach((d, i) =>
       lanes.push({
         x: x + i * LANE + (LANE - STEP_WIDTH) / 2,
@@ -221,12 +253,12 @@ function autoLayout(definition: WorkflowDefinition, stages: readonly MapStage[],
   return { boxes, bands, width: x + LANE, height };
 }
 
-function savedLayout(definition: WorkflowDefinition, stages: readonly MapStage[], terminal: (s: WorkflowStep) => boolean): Layout {
+function savedLayout(definition: WorkflowDefinition, keys: readonly string[], stages: readonly MapStage[], terminal: (s: WorkflowStep) => boolean): Layout {
   const boxes: Layout["boxes"] = new Map(definition.steps.map((s) => [s.key, { ...definition.layout[s.key]!, ...size(terminal(s)) }]));
   const bands: MapBand[] = [];
   let x = 0;
   const right = (steps: WorkflowStep[]) => Math.max(x, ...steps.map((s) => boxes.get(s.key)!.x + boxes.get(s.key)!.width));
-  for (const key of bandKeys(definition, stages, terminal)) {
+  for (const key of keys) {
     const end = Math.max(x + LANE, right(definition.steps.filter((s) => s.stage === key && !terminal(s))) + 30);
     bands.push(band(key, stages, x, end - x));
     x = end;

@@ -55,6 +55,7 @@ export function WorkItemWorkflow({ map, locale, documentNumber, stepAgeWeeks }: 
       withCompany: (company) => t("withCompany", { company }),
       current: t("current"),
       to: t("to"),
+      overview: t("overview"),
       zoomIn: t("zoomIn"),
       zoomOut: t("zoomOut"),
       fit: t("fit"),
