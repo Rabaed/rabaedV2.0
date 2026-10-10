@@ -290,6 +290,14 @@ describe("a Draft Work Item", () => {
     // When the Draft was started is audit only, shown to nobody (scenario 61).
     expect(await call(c1.member, sql<{ seq: number }>`select seq from work_item_event where work_item_id = ${draft}`)).toEqual([]);
   });
+
+  it("scenario RP-515-1: gives nobody, its author included, a time its Step began: a Draft has no Step Age (ADR 0020)", async () => {
+    const [seen] = await call<{ stage: string; entered_at: Date | null }>(
+      c1.member,
+      sql`select seen.stage_key as stage, seen.entered_at from app.step_as_seen(${draft}::uuid) seen`,
+    );
+    expect(seen).toEqual({ stage: "draft", entered_at: null });
+  });
 });
 
 describe("creating a Draft", () => {
@@ -777,7 +785,13 @@ describe("a Draft's answers", () => {
     expect(await sendForReview(c1.member, sql`app.answers_sha256(${item}::uuid)`)).toBe("applied");
   });
 
-  // RP-268: open to the raiser until Submit, every change after Draft on the record.
+  // RP-268: open to the raiser until Submit, every change after Draft on the record;
+  // RP-514: only to the Member holding a Step that edits the Form (the Draft here).
+  const take = (as: string, transition: string, reason = "") =>
+    call<{ outcome: string }>(
+      as,
+      sql`select app.take_transition(${item}::uuid, ${transition}, ${JSON.stringify(reason ? { reason } : {})}::jsonb, '', app.answers_sha256(${item}::uuid), ${randomUUID()}::uuid, now()) as outcome`,
+    ).then((rows) => rows[0]!.outcome);
   describe("after Draft", () => {
     let pm = "";
     const diffs = async () =>
@@ -798,14 +812,18 @@ describe("a Draft's answers", () => {
       expect(await call<{ outcome: string }>(pm, sql`select app.pick_up_step(${item}::uuid, now()) as outcome`)).toEqual([{ outcome: "picked_up" }]);
     });
 
-    it("are saved by the raiser's Members at its internal Steps, each change a diff internal to the raiser", async () => {
+    it("are saved by the holder of a Step that edits the Form, never the PM at Internal Review, each change a diff internal to the raiser", async () => {
       expect(await diffs()).toEqual([]);
-      expect(await save(pm, { description: "Later", model: "CT-300" })).toBe("saved");
+      expect(await save(pm, { description: "Later", model: "CT-300" })).toBe("not_editable");
+      expect(await save(c1.member, { description: "Later", model: "CT-300" })).toBe("not_editable");
+      expect(await take(pm, "return", "Check the model")).toBe("applied");
+      expect(await save(pm, { description: "Later", model: "CT-300" })).toBe("not_editable");
+      expect(await save(c1.member, { description: "Later", model: "CT-300" })).toBe("saved");
       expect(await stored()).toEqual({ description: "Later", model: "CT-300" });
       const [diff, ...more] = await diffs();
       expect(more).toEqual([]);
       expect(diff).toMatchObject({
-        actor_member_id: pm,
+        actor_member_id: c1.member,
         actor_participant_id: participant.c1,
         audience: "internal",
         audience_participant_id: participant.c1,
@@ -818,7 +836,7 @@ describe("a Draft's answers", () => {
       });
       expect(diff.content_sha256).toHaveLength(32);
       // A save that changes nothing records nothing.
-      expect(await save(pm, { description: "Later", model: "CT-300" })).toBe("saved");
+      expect(await save(c1.member, { description: "Later", model: "CT-300" })).toBe("saved");
       expect(await diffs()).toHaveLength(1);
     });
 
@@ -843,12 +861,6 @@ describe("a Draft's answers", () => {
     });
 
     it("keeps recording changes in a Draft it was Returned to", async () => {
-      const take = (as: string, transition: string, reason = "") =>
-        call<{ outcome: string }>(
-          as,
-          sql`select app.take_transition(${item}::uuid, ${transition}, ${JSON.stringify(reason ? { reason } : {})}::jsonb, '', app.answers_sha256(${item}::uuid), ${randomUUID()}::uuid, now()) as outcome`,
-        ).then((rows) => rows[0]!.outcome);
-      expect(await take(pm, "return", "Check the model")).toBe("applied");
       expect(await save(c1.member, { description: "Later", model: "CT-301" })).toBe("saved");
       expect((await diffs()).at(-1)).toMatchObject({
         actor_member_id: c1.member,
@@ -858,14 +870,15 @@ describe("a Draft's answers", () => {
       expect(await call<{ outcome: string }>(pm, sql`select app.pick_up_step(${item}::uuid, now()) as outcome`)).toEqual([{ outcome: "picked_up" }]);
     });
 
-    it("can't be Submitted except with the answers checked", async () => {
+    it("is Submitted by the PM, who can't change the answers, with no hash to check (RP-514)", async () => {
+      // The answers were checked when they left the Draft, and nobody may change them since.
+      expect(await call<{ hash: Buffer | null }>(pm, sql`select app.answers_sha256(${item}::uuid) as hash`)).toEqual([{ hash: null }]);
       const submit = (hash: RawBuilder<unknown>) =>
         call<{ outcome: string }>(
           pm,
           sql`select app.take_transition(${item}::uuid, 'submit', '{}', '', ${hash}, ${randomUUID()}::uuid, now()) as outcome`,
         ).then((rows) => rows[0]!.outcome);
-      expect(await submit(sql`null`)).toBe("form_not_checked");
-      expect(await submit(sql`app.answers_sha256(${item}::uuid)`)).toBe("applied");
+      expect(await submit(sql`null`)).toBe("applied");
     });
 
     it("are read-only for everyone from Submit onwards, and the diffs stay with the raiser (V5)", async () => {
@@ -933,7 +946,9 @@ describe("a Draft's Built-in Fields", () => {
   it("refuse a save that would drop the Trade, leave the Trade, or step outside the saver's Visibility", async () => {
     expect(await save({ trade: null, location: loc.buildingB })).toBe("trade_required");
     expect(await save({ trade: trade.electrical, location: loc.buildingB, scopes: [scope.hvac] })).toBe("value_not_found");
-    expect(await save({ trade: trade.electrical, location: loc.buildingA, scopes: [] }, c1Narrow)).toBe("outside_visibility");
+    // A Member who doesn't hold the Draft is refused before anything else (RP-514); stepping outside the
+    // saver's own Visibility is refused at creation (above) and for the holder (app.save_work_item_answers).
+    expect(await save({ trade: trade.electrical, location: loc.buildingA, scopes: [] }, c1Narrow)).toBe("not_editable");
     expect((await answers(c1.member))?.scopes).toEqual([scope.power]);
   });
 

@@ -51,6 +51,21 @@ describe("actionFormProblems", () => {
     );
   });
 
+  it("takes a checklist whose items ask no photos, and refuses one asking photos (RP-516: files are Documents)", () => {
+    const checklist = (photo: string) => ({
+      key: "checks",
+      type: "checklist",
+      label: label("Checks"),
+      items: [
+        { key: "sample", text: label("Sample checked"), answers: "yes_no_na" },
+        { key: "matches", text: label("Matches specification"), photo },
+      ],
+    });
+    expect(actionFormProblems(schema(checklist("off")))).toEqual([]);
+    expect(actionFormProblems(schema(checklist("optional")))).toEqual([{ key: "checks", code: "not_in_action_form" }]);
+    expect(actionFormProblems(schema(checklist("required_on_negative")))).toEqual([{ key: "checks", code: "not_in_action_form" }]);
+  });
+
   it("refuses the keys the engine writes in the Transition's payload", () => {
     expect(
       actionFormProblems(

@@ -924,6 +924,7 @@
       "internalNote": "ملاحظة داخلية",
       "remarks": "الملاحظات",
       "internalNoteWith": "ملاحظة داخلية · {transition}",
+      "internalAnswersWith": "رد داخلي · {transition}",
       "internal": "داخلي: لا يراه إلا شركتك.",
       "answersChanged": "تعديل النموذج",
       "emptyAnswer": "(فارغ)",

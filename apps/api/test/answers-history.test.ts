@@ -1,8 +1,9 @@
 // Seam 1 for Form answers after Draft (RP-268, spec RP-261; form-engine.md §4;
-// visibility.md V5, V13; workflow-engine.md §5.1): the raiser's Participant edits
-// the answers in Draft and its internal Steps, every change after Draft is a
-// field-level diff in the raiser's own history, and from Submit onwards nobody
-// can save. The Consultant and the Owner Representative never see the diffs.
+// visibility.md V5, V13; workflow-engine.md §5.1): the raiser's Member holding a
+// Step that edits the Form changes the answers (RP-514: the Draft, also after a
+// Return; never the PM at Internal Review), every change after the item first left
+// Draft is a field-level diff in the raiser's own history, and from Submit onwards
+// nobody can save. The Consultant and the Owner Representative never see the diffs.
 import type { WorkItemHistory } from "@rabaed/domain";
 import type { LightMyRequestResponse } from "fastify";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -90,9 +91,13 @@ describe("answers after Draft", () => {
     expect(await diffs(engineer, id)).toEqual([]);
   });
 
-  it("lets the raiser's PM edit them during Internal Review", async () => {
-    expect((await detail(pm, id)).actions.saveAnswers).toBe(true);
-    await ok(save(pm, id, { ...complete, description: REVIEWED }));
+  it("doesn't let the raiser's PM edit them during Internal Review; Returned, the engineer does (RP-514)", async () => {
+    expect((await detail(pm, id)).actions.saveAnswers).toBe(false);
+    const res = await save(pm, id, { ...complete, description: REVIEWED });
+    expect({ status: res.statusCode, body: res.json() }).toEqual({ status: 409, body: { error: "not_editable" } });
+    await ok(tryTake(pm, id, "return", { reason: "Hot-dip, please" }));
+    expect((await detail(engineer, id)).actions.saveAnswers).toBe(true);
+    await ok(save(engineer, id, { ...complete, description: REVIEWED }));
     expect((await detail(pm, id)).answers).toEqual({ ...complete, description: REVIEWED, trade: electrical, location: buildingA });
   });
 
@@ -113,13 +118,13 @@ describe("answers after Draft", () => {
   });
 
   it("records nothing for a save that changes nothing", async () => {
-    await ok(save(pm, id, { ...complete, description: REVIEWED }));
+    await ok(save(engineer, id, { ...complete, description: REVIEWED }));
     expect(await diffs(pm, id)).toHaveLength(1);
   });
 
-  it("checks the Form is complete again at Submit", async () => {
+  it("checks the Form is complete again when it leaves the Draft", async () => {
     await ok(save(engineer, id, { description: REVIEWED }));
-    const res = await tryTake(pm, id, "submit");
+    const res = await tryTake(engineer, id, "send_for_review");
     expect({ status: res.statusCode, body: res.json() }).toEqual({
       status: 422,
       body: { error: "form_incomplete", fields: [{ key: "manufacturer", code: "required" }] },
@@ -130,6 +135,7 @@ describe("answers after Draft", () => {
 
   describe("from Submit onwards", () => {
     beforeAll(async () => {
+      await ok(tryTake(engineer, id, "send_for_review"));
       await ok(tryTake(pm, id, "submit"));
     });
 

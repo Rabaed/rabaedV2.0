@@ -4,7 +4,7 @@ import { notificationDigestHandler, notificationEmailHandler, processOutbox, typ
 import { databaseNameOf, databaseUrlsFromEnv, withDatabaseName, type DatabaseUrls } from "../src/config.ts";
 import { stepAgeReportHandler } from "../src/step-age-report.ts";
 
-export { addTestWorkflow, approveBActionForm, type TestWorkflowOptions } from "./test-workflow.ts";
+export { addTestScreen, addTestWorkflow, approveBActionForm, type TestWorkflowOptions } from "./test-workflow.ts";
 export { expectedContentSha256, jsonbText, type HashedDocument } from "./content-hash.ts";
 export { addRulesWorkflow, rulesFormSchema, type RulesTransition } from "./rules-workflow.ts";
 export { actionsFormSchema, addActionsWorkflow } from "./actions-workflow.ts";

@@ -60,6 +60,10 @@ export async function readWorkflowCheckContext(db: Db, definitionId: string): Pr
     order by sort, code
   `.execute(db);
   const lists = await sql<{ id: string }>`select id from option_list`.execute(db);
+  // The Screens its Transitions may show (RP-516): the owner's, else the Rabaed Defaults', by key.
+  const screens = await sql<{ key: string; schema: unknown }>`
+    select key, schema from app.workflow_screens(${definitionId}::uuid)
+  `.execute(db);
   return {
     workItemTypeId: type.type_id,
     outcomeKind: type.outcome_kind,
@@ -69,6 +73,7 @@ export async function readWorkflowCheckContext(db: Db, definitionId: string): Pr
       stages: stages.rows.filter((s) => s.own === own).map(({ key, category }) => ({ key, category })),
       form: type.form === null ? null : formSchema.parse(type.form),
       optionListIds: new Set(lists.rows.map((l) => l.id)),
+      screens: new Map(screens.rows.map((s) => [s.key, formSchema.parse(s.schema)])),
     },
   };
 }

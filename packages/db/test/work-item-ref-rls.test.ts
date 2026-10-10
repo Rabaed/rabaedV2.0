@@ -163,8 +163,19 @@ const answers = (as: string, item: string) =>
 const write = (item: string, data: Record<string, unknown>) =>
   migrator.query("update work_item set data = $1 where id = $2", [JSON.stringify(data), item]);
 
-/** The acting Member saves the item's answers (`related` only), as the API does. */
-const save = (as: string, side: Side, related: unknown[]) =>
+/**
+ * As the owner, `as` holds the item's Draft: only its holder saves it (RP-514), so each
+ * save here is by the Member holding it then, as after a Handover.
+ */
+const hold = (as: string, item: string) =>
+  migrator.query(
+    "update step_assignment set assignee_member_id = $1, status = 'picked_up' where work_item_id = $2 and status in ('pooled', 'picked_up', 'vacant')",
+    [as, item],
+  );
+
+/** The acting Member, holding the Draft, saves the item's answers (`related` only), as the API does. */
+const save = async (as: string, side: Side, related: unknown[]) =>
+  (await hold(as, side.from)) &&
   call<{ outcome: string }>(
     as,
     sql`select app.save_work_item_answers(${side.from}::uuid, ${JSON.stringify({ related })}::jsonb,

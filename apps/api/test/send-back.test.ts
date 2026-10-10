@@ -229,12 +229,10 @@ describe("answer times never earlier than the Creation Date once numbered (RP-39
     expect(await answerTimes(engineer, draft)).toContain(started);
   });
 
-  it("reads no time earlier than the Creation Date for the PM at Internal Review", async () => {
+  it("reads none for the PM at Internal Review, who doesn't edit the Form (RP-514)", async () => {
     const { numberedAt } = await recorded(id);
     expect(Date.parse(numberedAt!) - draftSaved).toBeGreaterThanOrEqual(2 * DAY);
-    const times = await answerTimes(pm, id);
-    expect(times.length).toBeGreaterThan(0);
-    for (const t of times) expect(t).toBeGreaterThanOrEqual(Date.parse(numberedAt!));
+    expect(await answerTimes(pm, id)).toEqual([]);
   });
 
   it("reads none for the raiser after a Send Back either", async () => {
