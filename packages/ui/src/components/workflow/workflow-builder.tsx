@@ -744,7 +744,7 @@ function TransitionEditor({ definition, transition, stages, outcomes, positions,
             <span key={f.key} className="flex h-[26px] items-center rounded-[5px] px-2 text-[11.5px] text-muted shadow-[inset_0_0_0_1px_var(--control-border)]">
               {f.label[locale]}
               {"required" in f && f.required === true && (
-                <span aria-hidden="true" className="ms-0.5 text-danger">
+                <span aria-hidden="true" className="ms-0.5 text-danger-fg">
                   *
                 </span>
               )}
