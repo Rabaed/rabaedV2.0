@@ -1,4 +1,4 @@
-import { listColumnKeys, type ListColumnKey, type ListColumnLayout, type Locale, type WorkItemRow } from "@rabaed/domain";
+import { listColumnKeys, timeZone, type ListColumnKey, type ListColumnLayout, type Locale, type WorkItemRow } from "@rabaed/domain";
 import type { ExportFormat } from "./list-menus.tsx";
 import { placesOf } from "./work-item-board.tsx";
 import { cellText, listDate, type WorkItemTableLabels, type WorkItemTableProps } from "./work-item-table.tsx";
@@ -91,8 +91,9 @@ export const xmlCharacters = (value: string) =>
     })
     .join("");
 
-/** The calendar day of an ISO time in Riyadh (UTC+3 all year), as a spreadsheet date. */
-const riyadhDay = (iso: string) => new Date(new Date(iso).getTime() + 3 * 3_600_000).toISOString().slice(0, 10);
+/** The calendar day of an ISO time in Riyadh (the locale module's time zone), as a spreadsheet date: 2026-10-10. */
+const riyadhDayFormat = new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" });
+const riyadhDay = (iso: string) => riyadhDayFormat.format(new Date(iso));
 
 export function exportFile(rows: WorkItemRow[], columns: ExportColumn[], format: ExportFormat, context: Pick<ExportContext, "locale" | "name">): ExportedFile {
   const cells = rows.map((row) => columns.map((c) => c.cell(row)));
