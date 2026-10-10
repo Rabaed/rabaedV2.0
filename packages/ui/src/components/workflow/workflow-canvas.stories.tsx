@@ -67,7 +67,7 @@ export const ItemWithAnotherCompany: Story = {
           labels={workflowLabels(locale)}
           viewerRole="contractor"
           position={{ kind: "company", role: "consultant", companyName: consultantCompany }}
-          currentNote={
+          currentDetail={
             <span className="inline-flex items-center gap-1.5">
               <AgeDots weeks={2} locale={locale} />
               <span aria-hidden="true">{stepAgeLabel(2, locale)}</span>

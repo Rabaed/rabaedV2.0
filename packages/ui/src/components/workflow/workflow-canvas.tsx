@@ -38,13 +38,13 @@ export type WorkflowCanvasProps = {
   /** Where the item is, as the API gives it. */
   position?: WorkItemMapPosition | null;
   /** Shown on the marked Step or part, e.g. its Step Age (aged as the viewer may see it, V14). */
-  currentNote?: ReactNode;
+  currentDetail?: ReactNode;
   /** Edit mode: a Step was dropped somewhere new. Positions are in left-to-right canvas units, as `layout` stores them. */
   onLayoutChange?: (layout: WorkflowDefinition["layout"]) => void;
   className?: string;
 };
 
-type Ctx = { labels: WorkflowLabels; locale: Locale; rtl: boolean; stageNames: Map<string, string>; currentNote: ReactNode };
+type Ctx = { labels: WorkflowLabels; locale: Locale; rtl: boolean; stageNames: Map<string, string>; currentDetail: ReactNode };
 type BandData = { band: MapBand; height: number; ctx: Ctx };
 type ItemData = { node: MapNode; ctx: Ctx; edit: boolean };
 type EdgeData = { edge: MapEdge; lane: number; ctx: Ctx };
@@ -71,13 +71,13 @@ export function WorkflowCanvas(props: WorkflowCanvasProps) {
 const nodeTypes = { band: BandNode, step: StepNode, end: EndNode, part: PartNode };
 const edgeTypes = { transition: TransitionEdge };
 
-function Canvas({ definition, stages, locale, labels, mode = "read", viewerRole, position, currentNote, onLayoutChange, className }: WorkflowCanvasProps) {
+function Canvas({ definition, stages, locale, labels, mode = "read", viewerRole, position, currentDetail, onLayoutChange, className }: WorkflowCanvasProps) {
   const dir = directionOf(locale);
   const edit = mode === "edit";
   const model = useMemo(() => workflowMap({ definition, stages, dir, viewerRole, position }), [definition, stages, dir, viewerRole, position]);
   const ctx = useMemo<Ctx>(
-    () => ({ labels, locale, rtl: dir === "rtl", stageNames: new Map(stages.map((s) => [s.key, s.name[locale]])), currentNote }),
-    [labels, locale, dir, stages, currentNote],
+    () => ({ labels, locale, rtl: dir === "rtl", stageNames: new Map(stages.map((s) => [s.key, s.name[locale]])), currentDetail }),
+    [labels, locale, dir, stages, currentDetail],
   );
   const { nodes, edges } = useMemo(() => toFlow(model, ctx, edit), [model, ctx, edit]);
 
@@ -145,7 +145,7 @@ function toFlow(model: WorkflowMapModel, ctx: Ctx, edit: boolean): { nodes: Canv
     id: node.id,
     type: node.kind === "group" ? "part" : node.kind,
     position: { x: node.x, y: node.y },
-    // Measured by React Flow: a note on the marked one makes it taller.
+    // Measured by React Flow: Step Age on the marked one makes it taller.
     data: { node, ctx, edit },
     draggable: edit && node.kind !== "group",
     selectable: edit && node.kind !== "group",
@@ -169,6 +169,7 @@ function toFlow(model: WorkflowMapModel, ctx: Ctx, edit: boolean): { nodes: Canv
       target: edge.target,
       sourceHandle,
       targetHandle,
+      // eslint-disable-next-line rabaed/no-avoid-terms -- React Flow's arrowhead API, not a Rabaed term.
       markerEnd: { type: MarkerType.ArrowClosed, color: colour, width: 16, height: 16 },
       data: { edge, lane, ctx },
     };
@@ -225,6 +226,7 @@ function StepNode({ data }: NodeProps<Node<ItemData, "step">>) {
     >
       <Handles rtl={ctx.rtl} />
       <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-surface-subtle text-text-secondary">
+        {/* eslint-disable-next-line rabaed/no-avoid-terms -- the Tabler icon's name: a person holds the Step. */}
         <Icon name="user" size={15} />
       </span>
       <div className="min-w-0 flex-1 space-y-1">
@@ -235,7 +237,7 @@ function StepNode({ data }: NodeProps<Node<ItemData, "step">>) {
             {ctx.labels.outcomeMode(step.outcomeMode)}
           </span>
         )}
-        {node.current && <CurrentNote ctx={ctx} />}
+        {node.current && <CurrentDetail ctx={ctx} />}
       </div>
     </div>
   );
@@ -285,18 +287,18 @@ function PartNode({ data }: NodeProps<Node<ItemData, "part">>) {
       <div className="min-w-0 space-y-1">
         <div className="text-[13px] leading-snug font-semibold text-text">{groupTitle(node, ctx.labels, ctx.locale)}</div>
         <div className="text-[11.5px] text-muted">{groupStages(node, ctx).join(" · ")}</div>
-        {node.current && <CurrentNote ctx={ctx} />}
+        {node.current && <CurrentDetail ctx={ctx} />}
       </div>
     </div>
   );
 }
 
-/** "Current", for screen readers, and the caller's note (Step Age) on the marked Step or part. */
-function CurrentNote({ ctx }: { ctx: Ctx }) {
+/** "Current", for screen readers, and the caller's detail (Step Age) on the marked Step or part. */
+function CurrentDetail({ ctx }: { ctx: Ctx }) {
   return (
     <>
       <span className="sr-only">{ctx.labels.current}</span>
-      {ctx.currentNote && <div className="border-t border-border-subtle pt-1.5 text-[11.5px] text-text-secondary">{ctx.currentNote}</div>}
+      {ctx.currentDetail && <div className="border-t border-border-subtle pt-1.5 text-[11.5px] text-text-secondary">{ctx.currentDetail}</div>}
     </>
   );
 }
@@ -306,6 +308,7 @@ function groupStages(node: Extract<MapNode, { kind: "group" }>, ctx: Ctx): strin
   return [...new Set(node.stepStages.map((key) => ctx.stageNames.get(key) ?? key))];
 }
 
+// eslint-disable-next-line rabaed/no-avoid-terms -- React Flow's arrowhead prop, not a Rabaed term.
 function TransitionEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, data, markerEnd }: EdgeProps<CanvasEdge>) {
   if (!data) return null;
   const { edge, lane, ctx } = data;
@@ -329,6 +332,7 @@ function TransitionEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition
   labelY += lane * 22;
   return (
     <>
+      {/* eslint-disable-next-line rabaed/no-avoid-terms -- React Flow's arrowhead prop, not a Rabaed term. */}
       <BaseEdge id={id} path={path} markerEnd={markerEnd} style={{ stroke: colour, strokeWidth: 1.6, strokeDasharray: dashed ? "6 4" : undefined }} />
       <EdgeLabelRenderer>
         <span
@@ -350,7 +354,13 @@ function Zoom({ labels, rtl }: { labels: WorkflowLabels; rtl: boolean }) {
   const flow = useReactFlow();
   const button = "flex size-8 items-center justify-center rounded-md text-text-secondary hover:bg-hover focus-visible:outline-2 focus-visible:outline-focus";
   return (
-    <div className={cn("absolute bottom-3 z-10 flex gap-0.5 rounded-lg border border-border bg-surface p-1 shadow-sm", rtl ? "left-3" : "right-3")}>
+    <div
+      className={cn(
+        "absolute bottom-3 z-10 flex gap-0.5 rounded-lg border border-border bg-surface p-1 shadow-sm",
+        // The canvas is laid out left to right, so its end corner in Arabic is its start.
+        rtl ? "start-3" : "end-3",
+      )}
+    >
       <button type="button" className={button} aria-label={labels.zoomOut} onClick={() => flow.zoomOut()}>
         <Icon name="zoom-out" size={17} />
       </button>

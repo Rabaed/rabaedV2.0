@@ -64,7 +64,7 @@ export function WorkItemWorkflow({ map, locale, documentNumber, stepAgeWeeks }: 
   const name = map.name[locale];
   const folded = map.definition.steps.some((s) => s.actor && s.actor.role !== map.viewerRole);
   const shared = { definition: map.definition, stages: map.stages, locale, labels, viewerRole: map.viewerRole, position: map.position };
-  const currentNote =
+  const currentDetail =
     stepAgeWeeks !== null && map.position?.kind !== "closed" ? (
       <span className="inline-flex items-center gap-1.5">
         <AgeDots weeks={stepAgeWeeks} locale={locale} />
@@ -105,7 +105,7 @@ export function WorkItemWorkflow({ map, locale, documentNumber, stepAgeWeeks }: 
           />
           {view === "map" ? (
             <div className="min-h-[420px] flex-1">
-              <WorkflowCanvas {...shared} currentNote={currentNote} className="h-full" />
+              <WorkflowCanvas {...shared} currentDetail={currentDetail} className="h-full" />
             </div>
           ) : (
             <WorkflowStepList {...shared} />

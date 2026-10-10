@@ -7,6 +7,9 @@ import type { MapStage } from "../components/workflow/workflow-map.ts";
 
 const t = (en: string, ar: string) => ({ en, ar });
 
+/** The same words in both languages: for tests, where only keys and shapes matter. */
+export const sameInBoth = (text: string) => t(text, text);
+
 export const workflowStages: MapStage[] = [
   { key: "draft", name: t("Drafts", "المسودات"), category: "draft" },
   { key: "internal_review", name: t("Internal Review", "مراجعة داخلية"), category: "in_progress" },

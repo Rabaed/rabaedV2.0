@@ -46,6 +46,7 @@ export function WorkflowStepList({ definition, stages, locale, labels, viewerRol
                 className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full"
                 style={node.kind === "end" ? { background: colour.bg, color: colour.fg } : { background: "var(--surface-subtle)", color: "var(--text-secondary)" }}
               >
+                {/* eslint-disable-next-line rabaed/no-avoid-terms -- the Tabler icon's name: a person holds the Step. */}
                 <Icon name={node.kind === "group" ? "lock" : node.kind === "end" ? endIcon(node.colour) : "user"} size={15} />
               </span>
               <div className="min-w-0 flex-1">

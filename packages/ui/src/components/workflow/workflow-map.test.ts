@@ -1,8 +1,8 @@
 import type { StageCategory, WorkflowDefinition, WorkflowStep, WorkflowTransition } from "@rabaed/domain";
 import { describe, expect, it } from "vitest";
+import { sameInBoth as name } from "../../storybook/workflow.ts";
 import { workflowMap, type MapNode } from "./workflow-map.ts";
 
-const name = (en: string) => ({ en, ar: en });
 const step = (key: string, stage: string, role: "contractor" | "consultant" | null): WorkflowStep => ({
   key,
   name: name(key),

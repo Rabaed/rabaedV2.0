@@ -180,12 +180,12 @@ function autoLayout(definition: WorkflowDefinition, stages: readonly MapStage[],
   const depth = new Map<string, number>();
   const start = definition.steps.find((s) => stages.find((st) => st.key === s.stage)?.category === "draft") ?? definition.steps[0];
   if (start) depth.set(start.key, 0);
-  for (let queue = start ? [start.key] : []; queue.length > 0; ) {
-    const from = queue.shift()!;
+  for (let frontier = start ? [start.key] : []; frontier.length > 0; ) {
+    const from = frontier.shift()!;
     for (const t of definition.transitions) {
       if (t.from === from && forward.has(t.kind) && !depth.has(t.to)) {
         depth.set(t.to, depth.get(from)! + 1);
-        queue.push(t.to);
+        frontier.push(t.to);
       }
     }
   }

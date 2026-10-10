@@ -95,7 +95,7 @@
     },
     "viewSwitch": {
       "view": "View",
-      "list": "List",
+      "list": "Steps",
       "kanban": "Kanban"
     },
     "dashboard": {
@@ -700,7 +700,7 @@
     "close": "Close",
     "showAs": "Show the workflow as",
     "map": "Map",
-    "list": "List",
+    "list": "Steps",
     "canvas": "Workflow map",
     "listName": "Steps and Transitions",
     "outcome": "Outcome",
@@ -711,7 +711,7 @@
     "zoomIn": "Zoom in",
     "zoomOut": "Zoom out",
     "fit": "Fit to view",
-    "newerVersion": "This item follows Version {version}. The workflow was updated to Version {latest}.",
+    "newerVersion": "This item runs on Version {version}. The workflow was updated to Version {latest}.",
     "grouped": "Some Steps are grouped because they are internal to another company.",
     "outcomeModes": {
       "recommend_code": "Recommends a code",
