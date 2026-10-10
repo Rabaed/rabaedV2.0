@@ -25,7 +25,7 @@ export function ListToolbar({ label, children, end, className }: ListToolbarProp
   return (
     <section aria-label={label} className={cn("flex flex-wrap items-center gap-2", className)}>
       {children}
-      {end !== undefined && <div className="ms-auto flex flex-wrap items-center gap-2">{end}</div>}
+      {end !== undefined && <div className="ms-auto flex flex-wrap items-center gap-1.5">{end}</div>}
     </section>
   );
 }
@@ -41,6 +41,8 @@ export type ToolbarSearchProps = {
   maxLength?: number;
   /** 34px tall, the List's and the Kanban's toolbar (the owner's design, RP-409); 36px otherwise. */
   tall?: boolean;
+  /** The "/" hint only from 1440 wide, where the box is wide enough to keep its words beside it. */
+  hintWide?: boolean;
   /** Asked for on Enter, with the trimmed words; undefined for an emptied box. */
   onSearch: (words: string | undefined) => void;
   className?: string;
@@ -50,7 +52,7 @@ export type ToolbarSearchProps = {
  * The list's search box: compact, with a "/" hint. Pressing "/" anywhere on the
  * page (outside a text box) puts the cursor in it; Enter searches.
  */
-export function ToolbarSearch({ label, placeholder, description, value, maxLength, tall = false, onSearch, className }: ToolbarSearchProps) {
+export function ToolbarSearch({ label, placeholder, description, value, maxLength, tall = false, hintWide = false, onSearch, className }: ToolbarSearchProps) {
   const input = useRef<HTMLInputElement>(null);
   const id = useId();
   useEffect(() => {
@@ -95,7 +97,10 @@ export function ToolbarSearch({ label, placeholder, description, value, maxLengt
           aria-describedby={description === undefined ? undefined : `${id}-help`}
           className="h-full min-w-0 flex-1 bg-transparent text-sm text-text outline-none placeholder:text-muted"
         />
-        <kbd aria-hidden="true" className="hidden rounded-xs border border-border px-1.5 font-ui text-micro font-semibold text-muted sm:inline">
+        <kbd
+          aria-hidden="true"
+          className={cn("hidden rounded-xs border border-border px-1.5 font-ui text-micro font-semibold text-muted", hintWide ? "min-[1440px]:inline" : "sm:inline")}
+        >
           /
         </kbd>
       </label>

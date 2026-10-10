@@ -553,7 +553,7 @@ export function WorkItemList({
             {viewSwitch}
           </>
         }
-        className={board ? "gap-3" : "gap-2"}
+        className={board ? "gap-3" : "gap-1.5"}
       >
         {action}
         <ToolbarSearch
@@ -566,8 +566,9 @@ export function WorkItemList({
           maxLength={searchMaxLength}
           description={t("searchHelp")}
           onSearch={(q) => change({ q })}
-          // 240px as the design draws it from 1440 wide; a little narrower below, where the row is full but "Search this list" still fits.
-          className={board ? undefined : cn(filtered ? "sm:w-44" : "sm:w-[196px]", "min-[1440px]:w-60")}
+          // 240px as the design draws it from 1440 wide; narrower below (without the "/" hint), so the row stays one with a filter or grouping on.
+          hintWide={!board}
+          className={board ? undefined : cn(filtered || groupBy !== null ? "sm:w-[148px]" : "sm:w-[196px]", "min-[1440px]:w-60")}
         />
         <span className="inline-flex shrink-0 items-center">
         <FilterMenu

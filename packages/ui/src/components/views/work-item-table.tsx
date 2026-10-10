@@ -93,24 +93,6 @@ export type WorkItemTableProps = {
   className?: string;
 };
 
-/** Each column's least width, as the design draws it (px). */
-const widths: Record<ListColumnKey, string> = {
-  documentNumber: "min-w-[120px]",
-  subject: "min-w-[150px]",
-  revision: "min-w-[56px]",
-  trade: "min-w-[150px]",
-  type: "min-w-[64px]",
-  stage: "min-w-[140px]",
-  outcome: "min-w-[84px]",
-  locationLevel1: "min-w-[80px]",
-  locationLevel2: "min-w-[90px]",
-  locationLevel3: "min-w-[80px]",
-  owner: "min-w-[200px]",
-  contractor: "min-w-[220px]",
-  created: "min-w-[104px]",
-  stepAge: "min-w-[110px]",
-};
-
 const levelOf: Partial<Record<ListColumnKey, number>> = { locationLevel1: 1, locationLevel2: 2, locationLevel3: 3 };
 
 /** A column's header: the Location tree's own name for its level when it has one (Zone, Building, Floor). */
@@ -120,9 +102,9 @@ export function columnHeader(key: ListColumnKey, labels: Pick<WorkItemTableLabel
   return named ? named[locale] : labels.columns[key];
 }
 
-const cell = "h-12 border-b border-border-subtle bg-surface px-2.5 align-middle whitespace-nowrap group-hover/row:bg-hover group-data-selected/row:bg-brand-tint";
+const cell = "h-12 border-b border-border-subtle bg-surface px-3 align-middle whitespace-nowrap group-hover/row:bg-hover group-data-selected/row:bg-brand-tint";
 const head =
-  "sticky top-0 z-[3] h-[42px] pointer-coarse:h-12 border-b border-border-subtle bg-surface-subtle px-2.5 text-start text-[12.5px] font-semibold whitespace-nowrap text-text-secondary";
+  "sticky top-0 z-[3] h-[42px] pointer-coarse:h-12 border-b border-border-subtle bg-surface-subtle px-3 text-start text-[12.5px] font-semibold whitespace-nowrap text-text-secondary";
 /** The pinned first column (the Document Number), above the cells that scroll under it. */
 const pinnedStart = "sticky start-0 z-[2]";
 const dash = <span className="text-faint">—</span>;
@@ -204,14 +186,13 @@ export function WorkItemTable({
                 }}
                 className={cn(
                   head,
-                  widths[key],
                   i === 0 && pinnedFirst && cn(pinnedFirst, "z-[4]"),
                   dragging === key && "opacity-40",
                   over === key && dragging !== key && "shadow-[inset_3px_0_0_var(--color-primary)] rtl:shadow-[inset_-3px_0_0_var(--color-primary)]",
                 )}
               >
-                <span className="flex items-center gap-1">
-                  <Icon name="grid-dots" size={12} className="shrink-0 text-faint opacity-70" />
+                <span className="flex items-center gap-1.5">
+                  <Icon name="grid-dots" size={14} className="shrink-0 text-faint opacity-70" />
                   <span>{header}</span>
                   <button
                     type="button"
@@ -221,7 +202,7 @@ export function WorkItemTable({
                       onSort({ sort: key, dir: sorted ? (direction === "asc" ? "desc" : "asc") : workItemSortOrders[key] })
                     }
                     className={cn(
-                      "ms-auto -mx-[3px] inline-flex size-6 shrink-0 items-center justify-center rounded-xs text-faint hover:bg-hover hover:text-text",
+                      "ms-auto -me-[3px] inline-flex size-6 shrink-0 items-center justify-center rounded-xs text-faint hover:bg-hover hover:text-text",
                       sorted && "text-brand-fg hover:text-brand-fg",
                       focusRing,
                       touchBox,
@@ -344,7 +325,7 @@ function Cell({ column, row, locale, labels, filters, places, itemHref, linkAs: 
           data-item-link=""
           dir="auto"
           title={row.title}
-          className={cn("block max-w-[150px] truncate font-semibold text-text hover:text-brand-fg", focusRing, touchBox)}
+          className={cn("block max-w-[420px] truncate font-semibold text-text hover:text-brand-fg", focusRing, touchBox)}
         >
           {row.title}
         </Link>
@@ -399,7 +380,7 @@ function Cell({ column, row, locale, labels, filters, places, itemHref, linkAs: 
           ) : (
             <Avatar name={owner.name} initialsFrom={owner.initialsFrom} kind={owner.kind === "company" ? "company" : "person"} size="sm" solid decorative />
           )}
-          <span className="max-w-[150px] truncate" title={owner.name}>{owner.name}</span>
+          <span>{owner.name}</span>
         </span>
       );
     }

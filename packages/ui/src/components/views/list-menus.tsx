@@ -32,9 +32,21 @@ export function GroupMenu<K extends string>({ choices, value, onChange, labels }
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <button type="button" className={cn(toolbarButton, toolbarFilled, current && "bg-brand-tint text-brand-fg hover:bg-brand-tint")}>
+        <button
+          type="button"
+          aria-label={current ? labels.groupedBy(current.label) : undefined}
+          className={cn(toolbarButton, toolbarFilled, current && "bg-brand-tint text-brand-fg hover:bg-brand-tint")}
+        >
           <Icon name="category" />
-          {current ? labels.groupedBy(current.label) : labels.group}
+          {current ? (
+            <>
+              {/* Below 1440 wide only the value, so the toolbar keeps one row; the name says it whole. */}
+              <span className="hidden min-[1440px]:inline">{labels.groupedBy(current.label)}</span>
+              <span className="min-[1440px]:hidden">{current.label}</span>
+            </>
+          ) : (
+            labels.group
+          )}
           <Icon name="chevron-down" />
         </button>
       </PopoverTrigger>
