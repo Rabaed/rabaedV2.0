@@ -497,7 +497,10 @@ describe("the List's row commands (RP-409)", () => {
 
   it("discards an original Draft for the raiser's Participant only; then nobody sees it, C1 included (scenario RP-409-3)", async () => {
     const draft = await newDraft("Gaskets");
-    expect(await call(c1Pm, sql`select app.can_discard_draft(${draft}::uuid) as can`)).toEqual([{ can: true }]);
+    // Only the Member holding the Draft edits it (RP-514), so only they may discard it: not C1's PM, who sees it.
+    expect(await call(c1Pm, sql`select app.can_discard_draft(${draft}::uuid) as can`)).toEqual([{ can: false }]);
+    expect(await call(c1.member, sql`select app.can_discard_draft(${draft}::uuid) as can`)).toEqual([{ can: true }]);
+    expect(await outcome(c1Pm, sql`select app.discard_draft(${draft}::uuid, now()) as outcome`)).toBe("not_discardable");
     expect(await outcome(k1.member, sql`select app.discard_draft(${draft}::uuid, now()) as outcome`)).toBe("not_found");
     expect(await outcome(c1.member, sql`select app.discard_draft(${draft}::uuid, now()) as outcome`)).toBe("discarded");
     for (const who of [c1.member, c1Pm, k1.member]) expect(await everythingOf(who, draft)).toEqual(nothing);
