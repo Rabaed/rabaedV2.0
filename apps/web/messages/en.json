@@ -104,6 +104,10 @@
         "stepAge": "Step Age"
       },
       "sortBy": "Sort by {column}",
+      "selectAll": "Select all on this page",
+      "selectRow": "Select {subject}",
+      "selected": "{count, plural, one {1 selected} other {{n} selected}}",
+      "clearSelection": "Clear selection",
       "columnSettings": {
         "settings": "Table settings",
         "title": "Columns",

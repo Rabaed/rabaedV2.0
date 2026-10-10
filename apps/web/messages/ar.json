@@ -104,6 +104,10 @@
         "stepAge": "عمر الخطوة"
       },
       "sortBy": "الترتيب حسب {column}",
+      "selectAll": "تحديد الكل في هذه الصفحة",
+      "selectRow": "تحديد {subject}",
+      "selected": "{count, plural, one {عنصر محدد} other {{n} محدد}}",
+      "clearSelection": "مسح التحديد",
       "columnSettings": {
         "settings": "إعدادات الجدول",
         "title": "الأعمدة",

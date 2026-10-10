@@ -78,6 +78,10 @@ export const workItemListLabels: Record<Locale, WorkItemListLabels> = {
       stepAge: "Step Age",
     },
     sortBy: (column) => `Sort by ${column}`,
+    selectAll: "Select all on this page",
+    selectRow: (subject) => `Select ${subject}`,
+    selected: (n) => `${n} selected`,
+    clearSelection: "Clear selection",
     columnSettings: {
       settings: "Table settings",
       title: "Columns",
@@ -167,6 +171,10 @@ export const workItemListLabels: Record<Locale, WorkItemListLabels> = {
       stepAge: "عمر الخطوة",
     },
     sortBy: (column) => `الترتيب حسب ${column}`,
+    selectAll: "تحديد الكل في هذه الصفحة",
+    selectRow: (subject) => `تحديد ${subject}`,
+    selected: (n, count) => (count === 1 ? "عنصر محدد" : `${n} محدد`),
+    clearSelection: "مسح التحديد",
     columnSettings: {
       settings: "إعدادات الجدول",
       title: "الأعمدة",

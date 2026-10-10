@@ -16,7 +16,8 @@ import {
   type WorkItemQuery,
   type WorkItemRow,
 } from "@rabaed/domain";
-import { useState, type ElementType, type ReactNode } from "react";
+import { Fragment, useState, type ElementType, type ReactNode } from "react";
+import { Checkbox } from "../form/checkbox.tsx";
 import { moveColumn } from "./column-settings.tsx";
 import { cn } from "../../lib/cn.ts";
 import { Avatar } from "../data/avatar.tsx";
@@ -74,6 +75,21 @@ export type WorkItemTableProps = {
   settings?: ReactNode;
   /** A column dragged by its header to another place. */
   onColumnsChange?: (columns: ListColumnLayout) => void;
+  /** The rows chosen with their checkboxes, pinned at the reading start; with a checkbox in the header for them all. */
+  selection?: {
+    selected: ReadonlySet<string>;
+    onChange: (selected: ReadonlySet<string>) => void;
+    /** The header checkbox's name, e.g. "Select all on this page". */
+    selectAll: string;
+    /** A row's checkbox, e.g. "Select Fire Suppression System". */
+    selectRow: (subject: string) => string;
+  };
+  /** In each row's last cell, pinned at the reading end: its menu. */
+  rowEnd?: (row: WorkItemRow) => ReactNode;
+  /** The rows in groups (Group by), each under its header row; without, the rows as they come. */
+  groups?: TableGroup[];
+  /** A group's header row, spanning `colSpan` cells. */
+  groupHeader?: (group: TableGroup, colSpan: number) => ReactNode;
   className?: string;
 };
 
@@ -123,6 +139,10 @@ export function WorkItemTable({
   itemHref,
   linkAs: Link = "a",
   settings,
+  selection,
+  rowEnd,
+  groups,
+  groupHeader,
   className,
 }: WorkItemTableProps) {
   const [dragging, setDragging] = useState<ListColumnKey | null>(null);
@@ -130,12 +150,27 @@ export function WorkItemTable({
   const shown = columns.filter((c) => c.shown).map((c) => c.key);
   const places = placesOf(filters.locations);
   const direction = sortDirectionOf(query);
-  const colSpan = shown.length + (settings ? 1 : 0);
+  const end = settings !== undefined || rowEnd !== undefined;
+  const colSpan = shown.length + (end ? 1 : 0) + (selection ? 1 : 0);
+  // With checkboxes, the Document Number is pinned beside them.
+  const pinnedFirst = selection ? "sticky start-11 z-[2]" : pinnedStart;
+  const chosen = selection ? rows.filter((r) => selection.selected.has(r.id)).length : 0;
   return (
     <table className={cn("w-max min-w-full border-separate border-spacing-0 text-[13.5px] text-text", className)}>
       <caption className="sr-only">{labels.table}</caption>
       <thead>
         <tr>
+          {selection && (
+            <th scope="col" className={cn(head, pinnedStart, "z-[4] w-11 ps-4 pe-0")}>
+              <Checkbox
+                aria-label={selection.selectAll}
+                className="size-4"
+                disabled={rows.length === 0}
+                checked={chosen === 0 ? false : chosen === rows.length ? true : "indeterminate"}
+                onCheckedChange={() => selection.onChange(new Set(chosen === rows.length ? [] : rows.map((r) => r.id)))}
+              />
+            </th>
+          )}
           {shown.map((key, i) => {
             const header = columnHeader(key, labels, filters.locations, locale);
             const sorted = query.sort === key;
@@ -170,7 +205,7 @@ export function WorkItemTable({
                 className={cn(
                   head,
                   widths[key],
-                  i === 0 && cn(pinnedStart, "z-[4]"),
+                  i === 0 && cn(pinnedFirst, "z-[4]"),
                   dragging === key && "opacity-40",
                   over === key && dragging !== key && "shadow-[inset_3px_0_0_var(--color-primary)] rtl:shadow-[inset_-3px_0_0_var(--color-primary)]",
                 )}
@@ -198,7 +233,7 @@ export function WorkItemTable({
               </th>
             );
           })}
-          {settings && (
+          {end && (
             <th scope="col" className={cn(head, "sticky end-0 z-[4] w-[52px] border-s px-2 text-center")}>
               {settings}
             </th>
@@ -213,30 +248,58 @@ export function WorkItemTable({
             </td>
           </tr>
         ) : (
-          rows.map((row) => (
-            <tr
-              key={row.id}
-              className="group/row cursor-pointer"
-              // The whole row opens the item; the Subject is its link, for the keyboard and screen readers.
-              onClick={(event) => {
-                // eslint-disable-next-line rabaed/no-avoid-terms -- CSS element names: a click on a control in the row is its own
-                if ((event.target as Element).closest("a, button, input, label")) return;
-                event.currentTarget.querySelector<HTMLAnchorElement>("a[data-item-link]")?.click();
-              }}
-            >
-              {shown.map((key, i) => (
-                <td key={key} className={cn(cell, i === 0 && pinnedStart)}>
-                  <Cell column={key} row={row} locale={locale} labels={labels} filters={filters} places={places} itemHref={itemHref} linkAs={Link} />
-                </td>
-              ))}
-              {settings && <td className={cn(cell, "sticky end-0 z-[2] border-s px-2")} />}
-            </tr>
+          (groups ?? [{ key: "", label: null, rows }]).map((group) => (
+            <Fragment key={group.key}>
+              {group.label !== null && groupHeader?.(group, colSpan)}
+              {(group.label === null || !group.collapsed) &&
+                group.rows.map((row) => {
+                  const selected = selection?.selected.has(row.id) ?? false;
+                  return (
+                    <tr
+                      key={row.id}
+                      data-selected={selected || undefined}
+                      className="group/row cursor-pointer"
+                      // The whole row opens the item; the Subject is its link, for the keyboard and screen readers.
+                      onClick={(event) => {
+                        // eslint-disable-next-line rabaed/no-avoid-terms -- CSS element names: a click on a control in the row is its own
+                        if ((event.target as Element).closest("a, button, input, label, [role=menu], [role=dialog]")) return;
+                        event.currentTarget.querySelector<HTMLAnchorElement>("a[data-item-link]")?.click();
+                      }}
+                    >
+                      {selection && (
+                        <td className={cn(cell, pinnedStart, "w-11 ps-4 pe-0")}>
+                          <Checkbox
+                            aria-label={selection.selectRow(row.title)}
+                            className="size-4"
+                            checked={selected}
+                            onCheckedChange={(on) => {
+                              const next = new Set(selection.selected);
+                              if (on === true) next.add(row.id);
+                              else next.delete(row.id);
+                              selection.onChange(next);
+                            }}
+                          />
+                        </td>
+                      )}
+                      {shown.map((key, i) => (
+                        <td key={key} className={cn(cell, i === 0 && pinnedFirst)}>
+                          <Cell column={key} row={row} locale={locale} labels={labels} filters={filters} places={places} itemHref={itemHref} linkAs={Link} />
+                        </td>
+                      ))}
+                      {end && <td className={cn(cell, "sticky end-0 z-[2] border-s px-2 text-center")}>{rowEnd?.(row)}</td>}
+                    </tr>
+                  );
+                })}
+            </Fragment>
           ))
         )}
       </tbody>
     </table>
   );
 }
+
+/** A group of the page's rows (RP-409, Group by): its key, its header's words, its rows, whether it is folded. */
+export type TableGroup = { key: string; label: ReactNode; rows: WorkItemRow[]; collapsed?: boolean };
 
 type CellProps = {
   column: ListColumnKey;

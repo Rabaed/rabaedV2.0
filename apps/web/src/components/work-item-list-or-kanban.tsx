@@ -67,6 +67,10 @@ function useViewLabels(tableLabel: string, module: string): { list: WorkItemList
         ...(module === "submittals" ? {} : { documentNumber: l("documentNumber") }),
       },
       sortBy: (column) => t("list.sortBy", { column }),
+      selectAll: l("selectAll"),
+      selectRow: (subject) => t("list.selectRow", { subject }),
+      selected: (n, count) => t("list.selected", { n, count }),
+      clearSelection: l("clearSelection"),
       columnSettings: {
         ...(Object.fromEntries((["settings", "title", "locked", "reset", "saveDefault", "saved"] as const).map((key) => [key, t(`list.columnSettings.${key}`)])) as Record<
           "settings" | "title" | "locked" | "reset" | "saveDefault" | "saved",

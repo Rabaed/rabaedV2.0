@@ -22,6 +22,7 @@ import {
 } from "@rabaed/domain";
 import { useCallback, useState, type ElementType, type ReactNode } from "react";
 import { ListToast } from "../list/list-toast.tsx";
+import { Button } from "../button/button.tsx";
 import { ColumnSettings, type ColumnSettingsLabels } from "./column-settings.tsx";
 import { Badge } from "../data/badge.tsx";
 import { cn } from "../../lib/cn.ts";
@@ -82,6 +83,13 @@ export type WorkItemListLabels = {
   revision: (n: string) => string;
   /** The column settings, and the toast once they are saved, e.g. "Saved as your default columns". */
   columnSettings: ColumnSettingsLabels & { saved: string };
+  /** The header checkbox, e.g. "Select all on this page". */
+  selectAll: string;
+  /** A row's checkbox, e.g. "Select Fire Suppression System". */
+  selectRow: (subject: string) => string;
+  /** The bulk bar's count: `n` is `count` written for the locale. */
+  selected: (n: string, count: number) => string;
+  clearSelection: string;
   noNumber: string;
   revisionNoNumber: (revision: string) => string;
   empty: string;
@@ -231,6 +239,12 @@ export function WorkItemList({
   const [toast, setToast] = useState<string | null>(null);
   const clearToast = useCallback(() => setToast(null), []);
   const headerOf = (key: ListColumnKey) => columnHeader(key, labels, list.filters.locations, locale);
+  // Rows chosen on this page (RP-409): a new page, filter or sort starts with none.
+  const pageKey = list.items.map((i) => i.id).join(",");
+  const [selection, setSelection] = useState<{ page: string; ids: ReadonlySet<string> }>({ page: pageKey, ids: new Set() });
+  const selected = selection.page === pageKey ? selection.ids : new Set<string>();
+  const select = (ids: ReadonlySet<string>) => setSelection({ page: pageKey, ids });
+  const bulkActions: ReactNode = null;
   const filtered = isFilteredWorkItemQuery(query);
 
   const valueLabels = { clear: t("clearField"), search: t("searchValues"), noMatches: t("noMatches") };
@@ -492,6 +506,17 @@ export function WorkItemList({
       {board ?? (
         <>
           <TableCard footer={<WorkItemPager list={list} query={query} labels={labels} locale={locale} hrefFor={hrefFor} linkAs={Link} onQueryChange={change} />}>
+            {selected.size > 0 && (
+              // The bulk bar: what can be done with the rows chosen on this page.
+              <div className="flex flex-wrap items-center gap-2.5 border-b border-border-subtle bg-brand-tint px-[14px] py-2 text-[13px] font-semibold text-brand-fg">
+                <span role="status">{labels.selected(n(selected.size), selected.size)}</span>
+                <span className="flex-1" />
+                {bulkActions}
+                <Button variant="ghost" size="sm" onClick={() => select(new Set())}>
+                  {labels.clearSelection}
+                </Button>
+              </div>
+            )}
             {/* The table scrolls sideways (and, on a wide screen, down) in its own region, so the page never does. */}
             <div role="region" aria-label={t("table")} tabIndex={0} className={cn("min-h-64 overflow-auto lg:max-h-[calc(100dvh-17rem)]", focusRing)}>
               <WorkItemTable
@@ -505,6 +530,7 @@ export function WorkItemList({
                 itemHref={itemHref}
                 linkAs={Link}
                 onColumnsChange={onSaveColumns ? setColumns : undefined}
+                selection={{ selected, onChange: select, selectAll: labels.selectAll, selectRow: labels.selectRow }}
                 settings={
                   onSaveColumns && (
                     <ColumnSettings
