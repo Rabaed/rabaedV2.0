@@ -177,7 +177,9 @@ function Canvas({
   }
 
   useEffect(() => {
-    if (focus) void flow.fitView({ nodes: [{ id: focus.key }], maxZoom: 1, duration: 200, padding: 0.6 });
+    // Panned to, unless the user asks for reduced motion (CSS can't reach React Flow's zoom animation).
+    const duration = matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 200;
+    if (focus) void flow.fitView({ nodes: [{ id: focus.key }], maxZoom: 1, duration, padding: 0.6 });
   }, [focus, flow]);
 
   /** A node's place in left-to-right layout units, from its place on the (mirrored in Arabic) canvas. */
