@@ -131,6 +131,7 @@ const allowedMessages: Record<string, string> = {
   "workItemViews.list.role": "owner's anatomy (2026-10-10): the filter panel's \"Role\" field, for the Step holding the item",
   "workItemViews.layout.location": "owner's anatomy (2026-10-10): the Card view layout's \"Plan location\" switch, for the Location",
   "workItemViews.layout.fixedParts": "owner's anatomy (2026-10-10): the Card view layout's \"Header, subject, tags, owner\" row",
+  "home.recentActivity": "owner's kit choice (2026-10-10): Home's \"Recent activity\" card, which merges the Projects' Activity Feeds; not the Schedule's Activities",
   "workItemViews.list.filtersApplied":"the filter panel's footer, \"1 filter applied\": the List's own filters, not a Visibility Dimension",
 };
 

@@ -1,36 +1,55 @@
-import { formatDate, isOpenStageCategory, type HomeActivityEntry, type HomeWorkItem, type Locale } from "@rabaed/domain";
+"use client";
+
+import { cardNumber, type HomeActivityEntry, type HomeWorkItem, type Locale } from "@rabaed/domain";
 import { useId, type ElementType, type ReactNode } from "react";
 import { cn } from "../../lib/cn.ts";
 import { Avatar } from "../data/avatar.tsx";
 import { DocNo } from "../doc-no/doc-no.tsx";
 import { focusRing, touchBox } from "../form/control-styles.ts";
 import { Icon } from "../icon/icon.tsx";
-import { AgeDots } from "../status/age-dots.tsx";
+import { Popover, PopoverContent, PopoverTrigger } from "../overlay/popover.tsx";
 import { stageColour } from "../status/stage-colour.ts";
 import { StagePill } from "../status/stage-pill.tsx";
 import { whatHappened, type ActivityEventLabels } from "./activity-feed-panel.tsx";
 
-// Home's two cards (RP-407): what needs the Member across their Projects, and
-// what happened lately. Presentational: the rows come from GET /v1/home as the
-// Member may see them, and the app supplies the words and links.
+// Home's two cards (RP-407), as the design kit draws them: what needs the
+// Member across their Projects, and what happened lately. Presentational: the
+// rows come from GET /v1/home as the Member may see them, and the app supplies
+// the words and links.
 
-/** A titled card with links at the end of its heading. */
-function HomeCard({ title, actions, children, className }: { title: string; actions?: ReactNode; children: ReactNode; className?: string }) {
+const linkClass = cn("inline-flex items-center rounded-sm text-[13px] font-semibold text-primary hover:underline underline-offset-4", focusRing, touchBox);
+
+/** A titled card with links at the end of its heading and, when there is more, "View all" at its foot. Fills its grid cell's height. */
+function HomeCard({
+  title,
+  actions,
+  footer,
+  children,
+  className,
+}: {
+  title: string;
+  actions?: ReactNode;
+  footer?: ReactNode;
+  children: ReactNode;
+  className?: string;
+}) {
   const titleId = useId();
   return (
-    <section aria-labelledby={titleId} className={cn("flex min-w-0 flex-col rounded-lg border border-border bg-surface", className)}>
-      <header className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b border-border px-5 py-3">
-        <h2 id={titleId} className="py-1 text-h6 font-bold">
+    <section aria-labelledby={titleId} className={cn("flex h-full min-w-0 flex-col rounded-lg border border-border bg-surface", className)}>
+      <header className="flex flex-wrap items-center gap-x-2.5 gap-y-1 border-b border-border-subtle px-5 py-4">
+        <h2 id={titleId} className="text-[16px] font-bold">
           {title}
         </h2>
-        {actions}
+        {actions && <div className="ms-auto flex items-center gap-1">{actions}</div>}
       </header>
-      <div className="min-w-0 px-5 py-1">{children}</div>
+      <div className="min-w-0 flex-1 px-5 py-1">{children}</div>
+      {footer && <footer className="border-t border-border-subtle px-5 py-2.5">{footer}</footer>}
     </section>
   );
 }
 
-const linkClass = cn("inline-flex items-center rounded-sm text-sm font-semibold text-primary hover:underline underline-offset-4", focusRing, touchBox);
+/** A row of a Home card: the kit's `act-it`, a line between rows. */
+const rowClass = cn("-mx-2 flex items-center gap-3 rounded-sm px-2 py-3 hover:bg-hover", focusRing);
 
 export type NeedsMyActionCardLabels = {
   title: string;
@@ -38,69 +57,105 @@ export type NeedsMyActionCardLabels = {
   empty: string;
   /** An item with no Document Number yet. */
   noNumber: string;
+  /** A Revision after the number, e.g. "R2". */
+  revision: (n: number) => string;
+  /** "View all", when more items wait than the card shows. */
+  viewAll: string;
+  /** The menu of the other Projects' boards, when items wait on several. */
+  otherBoards: string;
 };
 
+/** "Open board": a Project's Kanban showing its Need My Action. */
+export type HomeBoardLink = { key: string; label: string; href: string };
+
 export type NeedsMyActionCardProps = {
-  /** The items waiting on the Member, newest-waiting first, as the API sends them. */
+  /** The items waiting on the Member, newest-waiting first, as the API sends them (at most five). */
   items: HomeWorkItem[];
   locale: Locale;
   labels: NeedsMyActionCardLabels;
   /** An item's page. */
   itemHref: (id: string) => string;
-  /** "Open board" links: a Project's Kanban showing its Need My Action. */
-  boards: { key: string; label: string; href: string }[];
+  /** "Open board": the first is the header's link (the Project with the most waiting); any others are in its menu. */
+  boards: HomeBoardLink[];
+  /** "View all": set when more items wait than the card shows. */
+  viewAllHref?: string;
   /** The link component, e.g. Next.js `Link`. Defaults to `<a>`. */
   linkAs?: ElementType;
   className?: string;
 };
 
 /**
- * "Needs my action" across the Member's Projects: each item's Subject, its
- * Document Number (left to right) and Project, its Stage and Step Age. Never
- * a due date: age only.
+ * "Needs my action" across the Member's Projects, as the kit's rows: each
+ * item's Subject, then its Document Number (left to right), Revision and
+ * Project, and its Stage at the end. One "Open board" in the header.
  */
-export function NeedsMyActionCard({ items, locale, labels, itemHref, boards, linkAs: Link = "a", className }: NeedsMyActionCardProps) {
+export function NeedsMyActionCard({ items, locale, labels, itemHref, boards, viewAllHref, linkAs: Link = "a", className }: NeedsMyActionCardProps) {
+  const [board, ...others] = boards;
   return (
     <HomeCard
       title={labels.title}
       className={className}
       actions={
-        boards.length > 0 && (
-          <nav className="flex flex-wrap gap-x-4">
-            {boards.map((b) => (
-              <Link key={b.key} href={b.href} className={linkClass}>
-                {b.label}
-              </Link>
-            ))}
-          </nav>
+        board && (
+          <>
+            <Link href={board.href} className={linkClass}>
+              {board.label}
+            </Link>
+            {others.length > 0 && (
+              <Popover>
+                <PopoverTrigger className={cn("inline-flex items-center justify-center rounded-sm text-primary hover:bg-hover", focusRing, touchBox)} aria-label={labels.otherBoards}>
+                  <Icon name="chevron-down" size={16} />
+                </PopoverTrigger>
+                <PopoverContent align="end" aria-label={labels.otherBoards} className="w-auto min-w-48 p-1.5">
+                  <ul className="flex flex-col">
+                    {others.map((b) => (
+                      <li key={b.key}>
+                        <Link href={b.href} className={cn("block rounded-sm px-3 py-2 text-sm font-medium hover:bg-hover", focusRing)}>
+                          {b.label}
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                </PopoverContent>
+              </Popover>
+            )}
+          </>
+        )
+      }
+      footer={
+        viewAllHref && (
+          <Link href={viewAllHref} className={linkClass}>
+            {labels.viewAll}
+          </Link>
         )
       }
     >
       {items.length === 0 ? (
         <p className="py-4 text-muted">{labels.empty}</p>
       ) : (
-        <ul className="divide-y divide-border">
-          {items.map((item) => (
-            <li key={item.id}>
-              <Link href={itemHref(item.id)} className={cn("-mx-2 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-sm px-2 py-3 hover:bg-hover", focusRing)}>
-                <span aria-hidden="true" className="inline-flex size-9 shrink-0 items-center justify-center rounded-md bg-neutral-tint text-neutral-fg">
-                  <Icon name="file-text" />
-                </span>
-                <span className="flex min-w-0 flex-1 basis-48 flex-col">
-                  <span className="truncate font-semibold">{item.title}</span>
-                  <span className="truncate text-sm text-muted">
-                    {item.documentNumber ? <DocNo value={item.documentNumber} /> : labels.noNumber}
-                    {" · "}
-                    {item.project.name[locale]}
+        <ul className="divide-y divide-border-subtle">
+          {items.map((item) => {
+            const number = cardNumber(item.documentNumber, item.revisionNo);
+            return (
+              <li key={item.id}>
+                <Link href={itemHref(item.id)} className={rowClass}>
+                  <span aria-hidden="true" className="inline-flex size-9 shrink-0 items-center justify-center rounded-[10px] bg-canvas text-muted">
+                    <Icon name="file-text" size={18} />
                   </span>
-                </span>
-                <span className="flex shrink-0 items-center gap-3">
-                  <StagePill stage={stageColour(item.stage)} label={item.stage.name[locale]} locale={locale} />
-                  {isOpenStageCategory(item.stage.category) && item.stepAgeWeeks !== null && <AgeDots weeks={item.stepAgeWeeks} locale={locale} />}
-                </span>
-              </Link>
-            </li>
-          ))}
+                  <span className="flex min-w-0 flex-1 flex-col">
+                    <span className="truncate text-body font-semibold">{item.title}</span>
+                    <span className="truncate text-[12.5px] text-muted">
+                      {number ? <DocNo value={number} className="font-normal" /> : labels.noNumber}
+                      {item.revisionNo > 0 && ` · ${labels.revision(item.revisionNo)}`}
+                      {" · "}
+                      {item.project.name[locale]}
+                    </span>
+                  </span>
+                  <StagePill stage={stageColour(item.stage)} label={item.stage.name[locale]} locale={locale} className="ms-auto shrink-0" />
+                </Link>
+              </li>
+            );
+          })}
         </ul>
       )}
     </HomeCard>
@@ -110,50 +165,75 @@ export function NeedsMyActionCard({ items, locale, labels, itemHref, boards, lin
 export type RecentActivityCardLabels = ActivityEventLabels & {
   title: string;
   empty: string;
-  noNumber: string;
-  /** Only the viewer's own Company sees this entry. */
-  internal: string;
+  /** "View all", when the feeds hold more than the card shows. */
+  viewAll: string;
+  /** The Code an entry issued, after its Subject: "(Code B)". */
+  code: (outcome: string) => string;
 };
 
 export type RecentActivityCardProps = {
-  /** The newest entries across the Member's Projects, newest first, as the API sends them. */
+  /** The newest entries across the Member's Projects, newest first, as the API sends them (at most five). */
   entries: HomeActivityEntry[];
   locale: Locale;
   labels: RecentActivityCardLabels;
+  /** When it happened, as Home says it: "10m ago", "1h ago", then the date. */
+  when: (at: string) => string;
   itemHref: (id: string) => string;
+  /** "View all": a Project's Activity Feed, set when the feeds hold more. */
+  viewAllHref?: string;
   linkAs?: ElementType;
   className?: string;
 };
 
 /**
- * "Recent activity" across the Member's Projects: each entry as the Project's
- * Activity Feed words it, another Company by its name only and people only of
- * the viewer's own Company (V14), with the Project and when.
+ * An entry's words after its name: the Transition taken (a Code's Transition
+ * without its " · B", which the entry gives after the Subject), as the
+ * Activity Feed words it.
  */
-export function RecentActivityCard({ entries, locale, labels, itemHref, linkAs: Link = "a", className }: RecentActivityCardProps) {
+function action(e: HomeActivityEntry, locale: Locale, labels: ActivityEventLabels): string {
+  const said = whatHappened(e, locale, labels);
+  const suffix = e.outcome ? ` · ${e.outcome}` : null;
+  return suffix && said.endsWith(suffix) ? said.slice(0, -suffix.length) : said;
+}
+
+/**
+ * "Recent activity" across the Member's Projects, as the kit's entries: who,
+ * what and which item on one line, then how long ago. A person only of the
+ * viewer's own Company, with their round avatar; another Company by its name
+ * only, with its square one (V14).
+ */
+export function RecentActivityCard({ entries, locale, labels, when, itemHref, viewAllHref, linkAs: Link = "a", className }: RecentActivityCardProps) {
   return (
-    <HomeCard title={labels.title} className={className}>
+    <HomeCard
+      title={labels.title}
+      className={className}
+      footer={
+        viewAllHref && (
+          <Link href={viewAllHref} className={linkClass}>
+            {labels.viewAll}
+          </Link>
+        )
+      }
+    >
       {entries.length === 0 ? (
         <p className="py-4 text-muted">{labels.empty}</p>
       ) : (
-        <ol className="divide-y divide-border">
+        <ol className="divide-y divide-border-subtle">
           {entries.map((e) => {
-            const company = e.by.companyName?.[locale] ?? "";
+            const person = e.by.memberName?.[locale];
+            const name = person ?? e.by.companyName?.[locale] ?? "";
             return (
               <li key={e.id}>
-                <Link href={itemHref(e.workItem.id)} className={cn("-mx-2 flex gap-3 rounded-sm px-2 py-3 hover:bg-hover", focusRing)}>
-                  <Avatar name={company} kind="company" decorative className="shrink-0" />
+                <Link href={itemHref(e.workItem.id)} className={rowClass}>
+                  <Avatar name={name} kind={person ? "person" : "company"} decorative className="size-[34px] text-[13px]" />
                   <span className="flex min-w-0 flex-col gap-0.5">
-                    <span className="break-words">
-                      <span className="font-semibold">{company}</span>
-                      {e.by.memberName && <span className="text-muted"> · {e.by.memberName[locale]}</span>} {whatHappened(e, locale, labels)}{" "}
-                      {e.workItem.documentNumber ? <DocNo value={e.workItem.documentNumber} /> : <span className="text-muted">({labels.noNumber})</span>}
-                      <span> · {e.workItem.title}</span>
+                    <span className="text-body font-medium break-words">
+                      {name} <span className="text-muted">{action(e, locale, labels)} {e.workItem.title}</span>
+                      {e.outcome && <span className="text-muted"> {labels.code(e.outcome)}</span>}
                     </span>
-                    <span className="text-sm text-muted">
-                      {e.project.name[locale]} · <time dateTime={e.at}>{formatDate(new Date(e.at), locale, { dateStyle: "medium", timeStyle: "short" })}</time>
-                      {e.audience === "internal" && <span> · {labels.internal}</span>}
-                    </span>
+                    <time dateTime={e.at} className="text-[12.5px] text-muted tabular-nums">
+                      {when(e.at)}
+                    </time>
                   </span>
                 </Link>
               </li>
