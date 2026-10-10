@@ -463,7 +463,10 @@ export const Exporting: Story = {
 export const RowMenuOpen: Story = {
   parameters: overlay,
   play: async (context) => {
-    await userEvent.click(context.canvas.getByRole("button", { name: storyText(context, b("More for Earthing rods, galvanised", "المزيد لـ Earthing rods, galvanised")) }));
+    const more = context.canvas.getByRole("button", { name: storyText(context, b("More for Earthing rods, galvanised", "المزيد لـ Earthing rods, galvanised")) });
+    // Its name shows on hover too.
+    await expect(more).toHaveAttribute("title", storyText(context, b("More for Earthing rods, galvanised", "المزيد لـ Earthing rods, galvanised")));
+    await userEvent.click(more);
     const menu = await screen.findByRole("menu", { name: storyText(context, b("More for Earthing rods, galvanised", "المزيد لـ Earthing rods, galvanised")) });
     await waitFor(() =>
       expect(within(menu).getAllByRole("menuitem").map((b) => b.textContent)).toEqual(

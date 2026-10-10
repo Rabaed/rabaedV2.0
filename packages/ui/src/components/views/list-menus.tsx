@@ -132,6 +132,7 @@ export function RowMenu({ subject, load, onAction, labels }: RowMenuProps) {
       label={labels.more(subject)}
       // The design's 28px button, so the table's last column stays narrow.
       className="h-7 w-7 text-text-secondary"
+      width="narrow"
       items={shown.map(item)}
       status={permitted === "loading" ? labels.loading : undefined}
       onOpenChange={(open) => {

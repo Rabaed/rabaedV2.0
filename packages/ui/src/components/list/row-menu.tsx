@@ -34,6 +34,8 @@ export type RowActionsMenuProps = {
   onOpenChange?: (open: boolean) => void;
   /** A line under the commands while more are on their way, e.g. "Checking…"; read out politely. */
   status?: string;
+  /** `narrow`: the List's menu (13rem, the owner's design); the Members' is 15rem. */
+  width?: "narrow";
   className?: string;
 };
 
@@ -42,7 +44,7 @@ export type RowActionsMenuProps = {
  * puts focus on the first command; Up, Down, Home and End move between them;
  * Escape closes it and returns focus to the button.
  */
-export function RowActionsMenu({ label, items, busy = false, onOpenChange, status, className }: RowActionsMenuProps) {
+export function RowActionsMenu({ label, items, busy = false, onOpenChange, status, width, className }: RowActionsMenuProps) {
   const list = useRef<HTMLDivElement>(null);
 
   function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
@@ -74,28 +76,37 @@ export function RowActionsMenu({ label, items, busy = false, onOpenChange, statu
           <Icon name="dots" size={18} />
         </IconButton>
       </PopoverTrigger>
-      <PopoverContent ref={list} role="menu" aria-label={label} align="end" onKeyDown={onKeyDown} className="w-auto min-w-52 rounded-md border-border-strong p-1.5 shadow-lg">
-        {items.map((item) => (
-          <Fragment key={item.key}>
-            {item.separated && <div role="separator" className="m-1 h-px bg-border-subtle" />}
-            <PopoverClose asChild>
-              <button
-                type="button"
-                role="menuitem"
-                disabled={busy}
-                onClick={item.onSelect}
-                className={cn(
-                  "flex w-full items-center gap-2.5 rounded-sm px-2.5 py-[9px] text-start text-[13.5px] font-medium whitespace-nowrap hover:bg-canvas disabled:cursor-not-allowed disabled:opacity-60 pointer-coarse:min-h-11",
-                  item.tone === "danger" ? "text-danger-fg" : "text-text-secondary",
-                  focusRing,
-                )}
-              >
-                {item.icon !== undefined && <Icon name={item.icon} size={17} className={item.tone === "danger" ? "text-danger-fg" : "text-muted"} />}
-                {item.label}
-              </button>
-            </PopoverClose>
-          </Fragment>
-        ))}
+      <PopoverContent
+        ref={list}
+        aria-label={label}
+        align="end"
+        onKeyDown={onKeyDown}
+        className={cn("w-auto rounded-md border-border-strong p-1.5 shadow-lg", width === "narrow" ? "min-w-52" : "min-w-60")}
+      >
+        {/* The commands are the menu; a line saying more are on their way sits beside it, not in it. */}
+        <div role="menu" aria-label={label} aria-busy={status !== undefined || undefined}>
+          {items.map((item) => (
+            <Fragment key={item.key}>
+              {item.separated && <div role="separator" className="m-1 h-px bg-border-subtle" />}
+              <PopoverClose asChild>
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={busy}
+                  onClick={item.onSelect}
+                  className={cn(
+                    "flex w-full items-center gap-2.5 rounded-sm px-2.5 py-[9px] text-start text-[13.5px] font-medium whitespace-nowrap hover:bg-canvas disabled:cursor-not-allowed disabled:opacity-60 pointer-coarse:min-h-11",
+                    item.tone === "danger" ? "text-danger-fg" : "text-text-secondary",
+                    focusRing,
+                  )}
+                >
+                  {item.icon !== undefined && <Icon name={item.icon} size={17} className={item.tone === "danger" ? "text-danger-fg" : "text-muted"} />}
+                  {item.label}
+                </button>
+              </PopoverClose>
+            </Fragment>
+          ))}
+        </div>
         {status !== undefined && (
           <p role="status" className="px-2.5 py-2 text-caption text-muted">
             {status}
