@@ -174,7 +174,8 @@ describe("Code B with three rows makes three Comments in the Snag List (seam 1)"
     const source = await closedAtB("Switchgear", [{ comment: "Show the IP rating" }]);
     expect((await raisedFrom(at.c1Pm, source)).length).toBe(1);
     const board = (await ok(at.c1Pm.get(`/v1/projects/${at.projectId}/modules/snag_list/work-items/kanban`), 200)).json() as WorkItemBoard;
-    expect(board.columns.map((c) => c.stageKey)).toEqual(["draft", "open", "resolved", "closed"]);
+    // The Snag List's Stages (another suite may add test-only ones to the Rabaed set).
+    expect(board.columns.map((c) => c.stageKey)).toEqual(expect.arrayContaining(["draft", "open", "resolved", "closed"]));
     expect(board.columns.find((c) => c.stageKey === "open")!.shown).toBeGreaterThan(0);
   });
 });
