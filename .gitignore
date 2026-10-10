@@ -30,6 +30,8 @@ packages/ui/src/styles/arabic-font.css
 
 # --- Tooling ---
 node_modules/
+# pnpm's store, when a sandboxed agent can't write to the drive root's store (RP-549).
+.pnpm-store/
 dist/
 build/
 coverage/

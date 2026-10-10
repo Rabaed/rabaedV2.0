@@ -7,6 +7,7 @@
 secrets/
 .git/
 **/node_modules/
+**/.pnpm-store/
 **/.next/
 **/cdk.out/
 **/coverage/
