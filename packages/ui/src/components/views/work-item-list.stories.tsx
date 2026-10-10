@@ -13,7 +13,7 @@ const b = (en: string, ar: string) => ({ en, ar });
 const copy = {
   stage: b("Stage", "المرحلة"),
   with: b("With", "لدى"),
-  notPickedUp: b("notPickedUp", "لم تُستلَم"),
+  notPickedUp: b("not picked up", "لم تُستلَم"),
   allRevisions: b("Show all Revisions", "عرض كل المراجعات"),
   needMyAction: b("Need My Action", "بحاجة لإجرائي"),
   nextPage: b("Next page", "الصفحة التالية"),
@@ -268,7 +268,7 @@ export const ChoosingAFilter: Story = {
   },
 };
 
-/** "With" offers me, notPickedUp, my own Company's Steps and the other Companies holding my items, by name. */
+/** "With" offers me, "Not picked up", my own Company's Steps and the other Companies holding my items, by name. */
 export const WithChoices: Story = {
   play: async (context) => {
     await userEvent.click(context.canvas.getByRole("combobox", { name: storyText(context, copy.with) }));
