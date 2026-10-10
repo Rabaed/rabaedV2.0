@@ -12,16 +12,17 @@ import {
   outcomeModes,
   parseActionForm,
   removeStep,
-  ruleFieldsOf,
   removeTransition,
   transitionKinds,
+  transitionRuleFields,
   updateStep,
   updateTransition,
   type BaseRole,
-  type BilingualText,
+  type FormSchema,
   type Locale,
-  type RuleField,
+  type PositionOption,
   type WorkflowDefinition,
+  type WorkflowOutcomeOption,
   type WorkflowProblem,
   type WorkflowStep,
   type WorkflowTransition,
@@ -30,6 +31,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type
 import { cn } from "../../lib/cn.ts";
 import { Button, IconButton } from "../button/button.tsx";
 import { Checkbox } from "../form/checkbox.tsx";
+import { focusRing } from "../form/control-styles.ts";
 import { Field } from "../form/field.tsx";
 import { Input } from "../form/input.tsx";
 import { SegmentedControl } from "../form/segmented-control.tsx";
@@ -37,6 +39,7 @@ import { Select } from "../form/select.tsx";
 import { Icon } from "../icon/icon.tsx";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../navigation/tabs.tsx";
 import { Dialog, DialogContent, DialogFooter } from "../overlay/dialog.tsx";
+import { ToastProvider, useToast } from "../overlay/toast.tsx";
 import { TransitionNotifications, TransitionRules } from "./workflow-transition-rules.tsx";
 import type { WorkflowBuilderLabels } from "./workflow-builder-labels.ts";
 import { canvasDragType, WorkflowCanvas, type CanvasMark, type CanvasSelection } from "./workflow-canvas.tsx";
@@ -45,14 +48,11 @@ import { placedLayout, workflowMap, type MapStage } from "./workflow-map.ts";
 import { stageVars } from "./workflow-parts.tsx";
 import { stageColour } from "../status/stage-colour.ts";
 
-/** Where the draft's saving stands, as the page saving it through WF-4's API knows it. */
-export type WorkflowSaveState = { kind: "saved"; at: Date } | { kind: "saving" } | { kind: "unsaved" } | { kind: "failed" };
+/** Where the draft's saving stands, as the page saving it through WF-4's API knows it; `opened` until the first save. */
+export type WorkflowSaveState = { kind: "opened" } | { kind: "saved"; at: Date } | { kind: "saving" } | { kind: "unsaved" } | { kind: "failed" };
 
-/** An outcome of the Work Item Type's set, for a closing Transition. */
-export type WorkflowBuilderOutcome = { code: string; name: BilingualText; closing: boolean };
-
-/** A Position a Step may name. */
-export type WorkflowBuilderPosition = { role: BaseRole; key: string; name: BilingualText };
+/** An outcome of the Work Item Type's set, for a closing Transition: the builder read's, without its polarity. */
+export type WorkflowBuilderOutcome = Pick<WorkflowOutcomeOption, "code" | "name" | "closing">;
 
 export type WorkflowPublishResult = { ok: true; versionNo: number } | { ok: false; problems: readonly WorkflowProblem[] };
 
@@ -69,9 +69,10 @@ export type WorkflowBuilderProps = {
   stages: readonly MapStage[];
   /** The Work Item Type's outcome set. */
   outcomes: readonly WorkflowBuilderOutcome[];
-  positions: readonly WorkflowBuilderPosition[];
-  /** The fields of the Type's published Form: the only ones a rule's picker lists (RP-440). */
-  fields: readonly RuleField[];
+  /** The Positions a Step may name. */
+  positions: readonly PositionOption[];
+  /** The Type's published Form: a rule's pickers list only its fields, as publish check 6 accepts them (RP-440). */
+  form: FormSchema | null;
   locale: Locale;
   labels: WorkflowBuilderLabels;
   /** Every publish problem of the draft as last checked (WF-4's validate). */
@@ -104,7 +105,16 @@ const open = new Set(["draft", "in_progress"]);
  * Every edit goes to `onChange`; the page saves the draft through WF-4's API.
  */
 export function WorkflowBuilder(props: WorkflowBuilderProps) {
-  const { name, versionNo, published, stages, outcomes, positions, fields, locale, labels, problems, saveState, backHref, onChange, onValidate, onPublish } = props;
+  return (
+    <ToastProvider label={props.labels.alertsRegion} closeLabel={props.labels.dismiss}>
+      <Builder {...props} />
+    </ToastProvider>
+  );
+}
+
+function Builder(props: WorkflowBuilderProps) {
+  const { name, versionNo, published, stages, outcomes, positions, form, locale, labels, problems, saveState, backHref, onChange, onValidate, onPublish } = props;
+  const toast = useToast();
   const [history, setHistory] = useState<History>(() => ({
     past: [],
     // Pinned where the canvas draws it, so the first Step moved keeps every other one in place.
@@ -116,15 +126,8 @@ export function WorkflowBuilder(props: WorkflowBuilderProps) {
   const [selection, setSelection] = useState<CanvasSelection | null>(null);
   const [focus, setFocus] = useState<{ key: string; nonce: number } | null>(null);
   const [testRun, setTestRun] = useState<TestRun | null>(null);
-  const [toast, setToast] = useState<string | null>(null);
   const [publish, setPublish] = useState<PublishState | null>(null);
   const v = (n: number) => formatNumber(n, locale);
-
-  useEffect(() => {
-    if (!toast) return;
-    const timer = setTimeout(() => setToast(null), 2400);
-    return () => clearTimeout(timer);
-  }, [toast]);
 
   /** Applies an edit. Edits sharing `coalesce` (typing into one field) make one undo step. */
   const commit = useCallback(
@@ -281,7 +284,7 @@ export function WorkflowBuilder(props: WorkflowBuilderProps) {
   const validate = async () => {
     const found = await onValidate();
     const errors = found.filter((p) => p.severity === "error").length;
-    setToast(errors ? labels.errorsToFix(v(errors)) : labels.validationPassed);
+    toast(errors ? { title: labels.errorsToFix(v(errors)), tone: "danger" } : { title: labels.validationPassed, tone: "success" });
   };
 
   const openPublish = async () => {
@@ -293,7 +296,7 @@ export function WorkflowBuilder(props: WorkflowBuilderProps) {
     const result = await onPublish();
     if (result.ok) {
       setPublish(null);
-      setToast(labels.published(v(result.versionNo)));
+      toast({ title: labels.published(v(result.versionNo)), tone: "success" });
     } else {
       setPublish({ phase: "ready", problems: result.problems });
     }
@@ -302,13 +305,15 @@ export function WorkflowBuilder(props: WorkflowBuilderProps) {
   const errors = problems.filter((p) => p.severity === "error");
   const warnings = problems.length - errors.length;
   const status =
-    saveState.kind === "saved"
-      ? labels.saved(formatDate(saveState.at, locale, { timeStyle: "short" }))
-      : saveState.kind === "saving"
-        ? labels.saving
-        : saveState.kind === "unsaved"
-          ? labels.unsaved
-          : labels.saveFailed;
+    saveState.kind === "opened"
+      ? null
+      : saveState.kind === "saved"
+        ? labels.saved(formatDate(saveState.at, locale, { timeStyle: "short" }))
+        : saveState.kind === "saving"
+          ? labels.saving
+          : saveState.kind === "unsaved"
+            ? labels.unsaved
+            : labels.saveFailed;
 
   return (
     <div className="flex h-full min-h-[640px] flex-col gap-2.5 p-3 sm:px-4">
@@ -321,7 +326,7 @@ export function WorkflowBuilder(props: WorkflowBuilderProps) {
           <Icon name="edit" size={12} />
           {labels.draft(v(versionNo))}
           <span aria-live="polite" className={cn("font-medium", saveState.kind === "failed" && "text-danger-fg")}>
-            · {status}
+            {status !== null && `· ${status}`}
           </span>
         </span>
         <span className="flex-1" />
@@ -420,7 +425,7 @@ export function WorkflowBuilder(props: WorkflowBuilderProps) {
             openStages={openStages}
             outcomes={outcomes}
             positions={positions}
-            fields={fields}
+            form={form}
             problems={problems}
             locale={locale}
             labels={labels}
@@ -444,7 +449,7 @@ export function WorkflowBuilder(props: WorkflowBuilderProps) {
                   type="button"
                   onClick={() => showProblem(p)}
                   aria-label={labels.showProblem(p.message[locale])}
-                  className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-start text-[12.5px] text-text hover:bg-hover focus-visible:outline-2 focus-visible:outline-focus"
+                  className={cn("flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-start text-[12.5px] text-text hover:bg-hover", focusRing)}
                 >
                   <Icon
                     name={p.severity === "error" ? "circle-x" : "alert-triangle"}
@@ -474,13 +479,6 @@ export function WorkflowBuilder(props: WorkflowBuilderProps) {
           onShowProblems={() => setPublish(null)}
         />
       )}
-
-      {toast && (
-        <div role="status" className="fixed inset-x-0 bottom-6 z-50 mx-auto flex w-fit items-center gap-2 rounded-lg bg-inverse px-4 py-2.5 text-sm font-medium text-on-inverse shadow-lg">
-          <Icon name="circle-check" size={16} />
-          {toast}
-        </div>
-      )}
     </div>
   );
 
@@ -505,7 +503,10 @@ function PaletteItem({ item, icon, swatch, onAdd, children }: { item: string; ic
         e.dataTransfer.effectAllowed = "copy";
       }}
       onClick={onAdd}
-      className="flex items-center gap-2 rounded-lg bg-surface-subtle px-2.5 py-2 text-start text-[12.5px] font-semibold text-text shadow-[inset_0_0_0_1px_var(--border-subtle)] hover:shadow-[inset_0_0_0_1px_var(--primary)] focus-visible:outline-2 focus-visible:outline-focus"
+      className={cn(
+        "flex items-center gap-2 rounded-lg bg-surface-subtle px-2.5 py-2 text-start text-[12.5px] font-semibold text-text shadow-[inset_0_0_0_1px_var(--border-subtle)] hover:shadow-[inset_0_0_0_1px_var(--primary)]",
+        focusRing,
+      )}
     >
       {swatch ?? (icon && <Icon name={icon} size={16} className="shrink-0" />)}
       {children}
@@ -519,8 +520,8 @@ type SideEditorProps = {
   stages: readonly MapStage[];
   openStages: readonly MapStage[];
   outcomes: readonly WorkflowBuilderOutcome[];
-  positions: readonly WorkflowBuilderPosition[];
-  fields: readonly RuleField[];
+  positions: readonly PositionOption[];
+  form: FormSchema | null;
   problems: readonly WorkflowProblem[];
   locale: Locale;
   labels: WorkflowBuilderLabels;
@@ -663,15 +664,16 @@ function StepEditor({ definition, step, openStages, stages, positions, locale, l
   );
 }
 
-function TransitionEditor({ definition, transition, outcomes, positions, fields: formPickerFields, problems, locale, labels, onCommit, onDelete }: SideEditorProps & { transition: WorkflowTransition }) {
+function TransitionEditor({ definition, transition, stages, outcomes, positions, form, problems, locale, labels, onCommit, onDelete }: SideEditorProps & { transition: WorkflowTransition }) {
   const set = (patch: Partial<Omit<WorkflowTransition, "key" | "from" | "to">>, coalesce: string | null = null) =>
     onCommit(updateTransition(definition, transition.key, patch), coalesce);
   const nameOf = (key: string) => definition.steps.find((s) => s.key === key)?.name[locale] ?? key;
-  const form = actionFormOf(transition.actionForm);
+  const actionForm = actionFormOf(transition.actionForm);
   // The fields it asks: display items (headings, instructions, dividers) ask nothing.
-  const fields = (form ? formFields(form) : []).flatMap((f) => ("label" in f ? [f] : []));
-  // The Form's fields, then this Transition's own Action Form's: what a rule may name (publish check 6).
-  const ruleFields = [...formPickerFields, ...ruleFieldsOf(null, transition.actionForm)];
+  const fields = (actionForm ? formFields(actionForm) : []).flatMap((f) => ("label" in f ? [f] : []));
+  // What each group of rules may name, as publish check 6 accepts it.
+  const ruleFields = transitionRuleFields(form, transition, definition, stages);
+  const closes = transition.kind === "close";
   const actingRole = definition.steps.find((s) => s.key === transition.from)?.actor?.role;
   const actingPositions = positions.filter((p) => p.role === actingRole);
   return (
@@ -711,7 +713,7 @@ function TransitionEditor({ definition, transition, outcomes, positions, fields:
           className="flex-wrap [&>button]:h-7 [&>button]:px-2 [&>button]:text-xs"
         />
       </Field>
-      <Field label={labels.outcomeCode}>
+      <Field label={labels.outcomeCode} help={closes ? undefined : labels.outcomeOnlyOnClose} disabled={!closes}>
         <Select
           value={transition.outcome ?? "none"}
           onValueChange={(code) => set({ outcome: code === "none" ? null : code })}
@@ -725,7 +727,7 @@ function TransitionEditor({ definition, transition, outcomes, positions, fields:
         definition={definition}
         transition={transition}
         fields={ruleFields}
-        positions={actingPositions.map((p) => ({ key: p.key, name: p.name }))}
+        positions={actingPositions}
         problems={problems}
         locale={locale}
         labels={labels.rules}

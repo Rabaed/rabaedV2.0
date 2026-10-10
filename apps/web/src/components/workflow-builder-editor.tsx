@@ -34,7 +34,8 @@ export function WorkflowBuilderEditor({ read, locale, backHref, names }: Props) 
   const start = workflow.draft?.definition ?? workflow.published?.definition ?? { steps: [], transitions: [], layout: {} };
   const versionNo = workflow.draft?.versionNo ?? Math.max(0, ...workflow.publishedVersions) + 1;
 
-  const [saveState, setSaveState] = useState<WorkflowSaveState>({ kind: "saved", at: new Date() });
+  // Nothing saved yet: the bar says nothing until the first save.
+  const [saveState, setSaveState] = useState<WorkflowSaveState>({ kind: "opened" });
   const [problems, setProblems] = useState<readonly WorkflowProblem[]>([]);
   const latest = useRef<WorkflowDefinition>(start);
   const pending = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -298,6 +299,7 @@ export function WorkflowBuilderEditor({ read, locale, backHref, names }: Props) 
       kind: t("kind"),
       outcomeCode: t("outcomeCode"),
       noOutcome: t("noOutcome"),
+      outcomeOnlyOnClose: t("outcomeOnlyOnClose"),
       screen: t("screen"),
       screenHelp: t("screenHelp"),
       internalNoteOnly: t("internalNoteOnly"),
@@ -330,6 +332,8 @@ export function WorkflowBuilderEditor({ read, locale, backHref, names }: Props) 
       publishVersion: (version) => t("publishVersion", { version }),
       published: (version) => t("published", { version }),
       close: t("close"),
+      alertsRegion: t("alertsRegion"),
+      dismiss: t("dismiss"),
       names,
     }),
     [t, tMap, tRoles, tRules, read.positions, locale, names],
@@ -347,7 +351,7 @@ export function WorkflowBuilderEditor({ read, locale, backHref, names }: Props) 
       stages={read.stages}
       outcomes={read.outcomes}
       positions={read.positions}
-      fields={read.fields}
+      form={read.form}
       locale={locale}
       labels={labels}
       problems={problems}

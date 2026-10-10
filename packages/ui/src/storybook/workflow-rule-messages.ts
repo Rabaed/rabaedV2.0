@@ -1,4 +1,6 @@
-// Generated from the web app's `workflowRules` messages (RP-440): the builder's rule words for the stories.
+// A copy of the web app's `workflowRules` messages (apps/web/messages, RP-440): the
+// builder's rule words for the stories, since the package has no translations of its
+// own. workflow-rule-messages.test.ts fails when the copy and the messages differ.
 export const ruleMessages = {
   "en": {
     "heading": "Condition",

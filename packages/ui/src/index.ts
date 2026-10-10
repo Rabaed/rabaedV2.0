@@ -144,7 +144,6 @@ export { WorkflowCanvas, type CanvasMark, type CanvasSelection, type WorkflowCan
 export {
   WorkflowBuilder,
   type WorkflowBuilderOutcome,
-  type WorkflowBuilderPosition,
   type WorkflowBuilderProps,
   type WorkflowPublishResult,
   type WorkflowSaveState,

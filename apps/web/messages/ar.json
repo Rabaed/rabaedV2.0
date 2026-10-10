@@ -800,6 +800,7 @@
     "kind": "النوع",
     "outcomeCode": "النتيجة",
     "noOutcome": "—",
+    "outcomeOnlyOnClose": "لا يحدد النتيجة إلا انتقال من نوع إغلاق.",
     "screen": "الشاشة",
     "screenHelp": "الشاشة التي يطلبها هذا الانتقال. تُعدَّل الشاشات في الإعدادات ← الشاشات.",
     "internalNoteOnly": "ملاحظة داخلية فقط",
@@ -832,6 +833,8 @@
     "publishVersion": "نشر v{version}",
     "published": "تم نشر v{version} — العناصر الجديدة ستستخدمه",
     "close": "إغلاق",
+    "alertsRegion": "تنبيهات المصمم",
+    "dismiss": "إخفاء",
     "names": {
       "newStep": "خطوة جديدة",
       "newTransition": "انتقال جديد",

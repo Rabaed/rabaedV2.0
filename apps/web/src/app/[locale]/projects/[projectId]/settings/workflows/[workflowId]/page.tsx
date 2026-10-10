@@ -48,9 +48,14 @@ export default async function WorkflowBuilderPage({ params }: { params: Promise<
   };
 
   return (
-    // The builder takes the whole width under the Project's tabs, as the design's does.
-    <div className="ms-[calc(50%-50vw)] h-[calc(100dvh-11rem)] min-h-[640px] w-screen">
-      <WorkflowBuilderEditor read={read} locale={locale} backHref={`/${locale}/projects/${projectId}/settings`} names={names} />
+    // The builder takes the whole width under the Project's tabs, as the design's does. The outer
+    // box keeps its place in the page; the inner one spans the viewport from there. It is placed
+    // against the viewport (no ancestor is positioned), whose width leaves out the scrollbar, so
+    // unlike `w-screen` (100vw) it never makes the page scroll sideways.
+    <div className="h-[calc(100dvh-11rem)] min-h-[640px]">
+      <div className="absolute inset-x-0 h-[calc(100dvh-11rem)] min-h-[640px]">
+        <WorkflowBuilderEditor read={read} locale={locale} backHref={`/${locale}/projects/${projectId}/settings`} names={names} />
+      </div>
     </div>
   );
 }
