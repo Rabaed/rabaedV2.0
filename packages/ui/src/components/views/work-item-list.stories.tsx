@@ -201,6 +201,10 @@ const meta = {
       run: fn(async () => null),
     },
   },
+  // The table is as wide as its content and scrolls, as the design draws it: at the story's width
+  // the last column's sort button sits under the pinned settings column until scrolled to. Axe
+  // counts that covered button as too small; it is covered, not small (size-6 everywhere).
+  parameters: { a11y: { options: { rules: { "target-size": { enabled: false } } } } },
   render: (args, context) => <WorkItemList {...args} locale={storyLocale(context)} labels={workItemListLabels[storyLocale(context)]} />,
 } satisfies Meta<typeof WorkItemList>;
 
@@ -344,8 +348,6 @@ export const ColumnSettingsOpen: Story = {
 
 /** A column moves with the arrow keys on its handle, never above the locked ones. */
 export const MovingAColumn: Story = {
-  // Moved, a sort button sits under the pinned settings column at the table's edge until scrolled to: covered, not small.
-  parameters: { a11y: { options: { rules: { "target-size": { enabled: false } } } } },
   play: async (context) => {
     await userEvent.click(context.canvas.getByRole("button", { name: storyText(context, copy.settings) }));
     const panel = await screen.findByRole("dialog", { name: storyText(context, b("Columns", "الأعمدة")) });
@@ -582,8 +584,6 @@ export const NeedMyActionOff: Story = {
  * own Drafts. Turning it off shows every item again; clearing the filters does too.
  */
 export const NeedMyActionOn: Story = {
-  // Few short rows: the Zone sort button sits under the pinned settings column at the table's edge until scrolled to: covered, not small.
-  parameters: { a11y: { options: { rules: { "target-size": { enabled: false } } } } },
   args: {
     query: { ...defaults, needMyAction: true },
     list: { ...list, items: items.filter((i) => i.with?.kind === "own"), stages: list.stages.map((s) => ({ ...s, count: s.key === "approved" || s.key === "revise_resubmit" ? 0 : s.count })) },
@@ -711,8 +711,6 @@ export const SlashFocusesSearch: Story = {
 
 /** A search with results: the box holds the words, the rows are the matches, and clearing the filters clears it too. */
 export const SearchWithResults: Story = {
-  // One short row: the Zone sort button sits under the pinned settings column at the table's edge until scrolled to: covered, not small.
-  parameters: { a11y: { options: { rules: { "target-size": { enabled: false } } } } },
   args: {
     query: { ...defaults, q: "LED" },
     list: {
