@@ -67,6 +67,9 @@ export const workflowProblemCodes = [
   "cancel_not_by_raiser",
   "cancel_not_to_cancelled_stage",
   "cancel_sets_outcome",
+  // Who edits the raiser's Form (ADR 0019, RP-514)
+  "form_edited_after_submit",
+  "drafts_visible_to_not_on_draft",
   // Check 6, and what rules and actions name
   "unknown_field",
   "unknown_attribute",
@@ -133,6 +136,7 @@ export function workflowPublishProblems(definition: WorkflowDefinition, context:
     ...outcomeProblems(input),
     ...builtCheckProblems(input),
     ...cancelProblems(input),
+    ...formEditingProblems(input),
     ...ruleProblems(input),
     ...routingWarnings(input),
   ];
@@ -247,6 +251,45 @@ function cancelProblems({ steps, transitions, stepOf, categoryOf }: CheckInput):
       if (t.outcome !== null) codes.push("cancel_sets_outcome");
       return codes.map((code) => ({ code, transition: t.key }));
     });
+}
+
+/**
+ * Whether the raiser's Form is edited at `step` of `definition` (ADR 0019; RP-514), by
+ * the Member holding it: its `editsForm`, else the default, a Step of the Draft Step's
+ * Participant role held with the Draft Step's Function Permission (the author's: the
+ * Draft, and the Contractor Engineer Step), never the internal reviewer's.
+ * app.step_edits_form says the same in the database.
+ */
+export function stepEditsForm(
+  definition: Pick<WorkflowDefinition, "steps">,
+  step: WorkflowStep,
+  stages: WorkflowPublishContext["stages"],
+): boolean {
+  if (step.editsForm !== undefined) return step.editsForm;
+  const draftStages = new Set(stages.filter((s) => s.category === "draft").map((s) => s.key));
+  return definition.steps.some(
+    (d) => draftStages.has(d.stage) && d.actor !== null && step.actor !== null && d.actor.role === step.actor.role && d.actor.permission === step.actor.permission,
+  );
+}
+
+/**
+ * Nobody edits the raiser's Form at or after a Submit (ADR 0019), but where a Send Back
+ * leads (ADR 0014, as built RP-309): a Step reached from a Submit's target without a
+ * Send Back may not edit it. Back at the raiser by a Send Back, its Steps may, until the
+ * next Submit. "Drafts visible to" is set on the Draft Step only.
+ */
+function formEditingProblems({ steps, transitions, context, categoryOf }: CheckInput): FoundProblem[] {
+  const forward = transitions.filter((t) => t.kind !== "send_back");
+  const afterSubmit = new Set<string>();
+  for (const t of transitions.filter((t) => t.kind === "submit")) for (const key of reachable(forward, t.to)) afterSubmit.add(key);
+  return [
+    ...steps
+      .filter((s) => afterSubmit.has(s.key) && stepEditsForm({ steps }, s, context.stages))
+      .map((s): FoundProblem => ({ code: "form_edited_after_submit", step: s.key })),
+    ...steps
+      .filter((s) => s.draftsVisibleTo !== undefined && categoryOf(s.stage) !== "draft")
+      .map((s): FoundProblem => ({ code: "drafts_visible_to_not_on_draft", step: s.key })),
+  ];
 }
 
 /** The item attributes a rule may read (`attr`, §4). */
@@ -575,6 +618,14 @@ const messages: Record<WorkflowProblemCode, (names: Names) => BilingualText> = {
   cancel_sets_outcome: (names) => ({
     en: `${names.transition.en} is a Cancel, which sets no outcome.`,
     ar: `${names.transition.ar} إلغاء، ولا يضع أي نتيجة.`,
+  }),
+  form_edited_after_submit: (names) => ({
+    en: `${names.step.en} edits the raiser's Form, but an item reaches it after a Submit. Only the raiser's Steps an item is Sent Back to may.`,
+    ar: `${names.step.ar} تعدّل نموذج مُنشئ العنصر، لكن العنصر يصلها بعد التقديم. لا يجوز ذلك إلا لخطوات مُنشئ العنصر بعد الإرجاع إلى المقدّم.`,
+  }),
+  drafts_visible_to_not_on_draft: (names) => ({
+    en: `${names.step.en} sets who reads a Draft, which only the Draft Step does.`,
+    ar: `${names.step.ar} تحدد من يقرأ المسودة، ولا يحدد ذلك إلا خطوة المسودة.`,
   }),
   unknown_field: (names) => ({
     en: `${names.transition.en} reads field "${names.detail}", which the Form doesn't have where the rule is checked.`,

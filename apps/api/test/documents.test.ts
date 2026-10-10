@@ -150,11 +150,16 @@ describe("a Draft's Documents, for the raiser", () => {
     expect(res.headers.get("content-disposition")).toContain("filename*=UTF-8''Tray%20datasheet%20%E2%80%94%20rev%201.pdf");
   });
 
-  it("are listed and downloaded by the raiser's Company, and only changed with Attach", async () => {
-    expect((await list(pm, itemId)).canChange).toBe(true);
+  it("are listed and downloaded by the raiser's Company, and only changed with Attach, by the Draft's holder", async () => {
+    expect((await list(engineer, itemId)).canChange).toBe(true);
+    // The PM reads them, but only the Member holding the Draft changes them (RP-514).
+    expect((await list(pm, itemId)).canChange).toBe(false);
     expect((await list(viewer, itemId)).canChange).toBe(false);
-    expect((await start(viewer, itemId, { sizeBytes: 10 })).json()).toEqual({ error: "forbidden" });
-    expect((await viewer.delete(documentUrl(itemId, documentId))).json()).toEqual({ error: "forbidden" });
+    // Not holding the Draft, they are refused before their missing Attach is asked about.
+    for (const by of [viewer, pm]) {
+      expect((await start(by, itemId, { sizeBytes: 10 })).json()).toEqual({ error: "not_editable" });
+      expect((await by.delete(documentUrl(itemId, documentId))).json()).toEqual({ error: "not_editable" });
+    }
     expect((await fetch(await downloadUrl(viewer, itemId, documentId))).status).toBe(200);
   });
 

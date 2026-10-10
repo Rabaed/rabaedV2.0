@@ -105,6 +105,13 @@ export async function addTestWorkflow(
       where key = '${key}' and workflow_version_id = '${row.version_id}'
     `);
   }
+  // "Drafts visible to" on the Draft Step (RP-514); `company` when left out.
+  if (options.draftsVisibleTo) {
+    await run(`
+      update workflow_step set drafts_visible_to = '${options.draftsVisibleTo}'
+      where key = 'draft' and workflow_version_id = '${row.version_id}'
+    `);
+  }
   if (publish) await run(`update workflow_version set status = 'published', published_at = now() where id = '${row.version_id}'`);
   return row.id;
 }
@@ -147,4 +154,6 @@ export type TestWorkflowOptions = {
   publish?: boolean;
   /** A Transition's extra recipients (RP-432), by its key. */
   notifications?: Record<string, unknown[]>;
+  /** The Draft Step's "Drafts visible to" (RP-514): the author only, or (left out) the author's whole Company. */
+  draftsVisibleTo?: "company" | "author";
 };

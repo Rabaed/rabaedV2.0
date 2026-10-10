@@ -166,7 +166,9 @@ As built (RP-428, WF-5): `owner_kind {rabaed, project}`. Every Project has its o
 - `workflow_version`: `id`, `workflow_definition_id`, `version_no`, `status {draft, published}`, `layout jsonb` (React Flow node positions only), `published_at`. Published versions are immutable. `draft_name i18n` (RP-427): a draft's new name for the Workflow, given to `workflow_definition.name` when it is published and then cleared, so nobody but the draft's authors reads it before (V20). A definition with no published Version is read by its authors only.
 
 **workflow_step**
-`id`, `workflow_version_id`, `key`, `name i18n`, `stage_key`, `actor_rule jsonb`, `is_signing bool` (read by nothing: every Transition is signed, ADR 0017), `outcome_mode {none, recommend_code, issue_code, inspection_result}`.
+`id`, `workflow_version_id`, `key`, `name i18n`, `stage_key`, `actor_rule jsonb`, `is_signing bool` (read by nothing: every Transition is signed, ADR 0017), `outcome_mode {none, recommend_code, issue_code, inspection_result}`, `edits_form bool` (nullable), `drafts_visible_to {company, author}` (nullable).
+- `edits_form` (RP-514, ADR 0019): whether the raiser's Form is edited at the Step, by the Member holding it, before the first Submit (or at a Step a Send Back leads to). Null is the default, `app.step_edits_form`: a Step of the Draft Step's role held with the Draft Step's Function Permission (form-engine.md §4).
+- `drafts_visible_to` (RP-514, ADR 0019): on the Draft Step only; null is `company`. `author`: a Draft is seen by the Member holding it alone (visibility.md V1).
 - `actor_rule` says who can hold the Step: base role or project role, required permission (e.g. `approve`), and optional default assignee resolution. The Participant is resolved at runtime from the item's Visibility values; that is how "Electrical goes to Consultant A" works.
 - `issue_code` marks the final review Step.
 

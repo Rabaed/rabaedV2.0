@@ -43,6 +43,10 @@ const actorRule = z.strictObject({
 });
 export type ActorRule = z.infer<typeof actorRule>;
 
+/** Who of the raiser's Company reads a Draft: all its Members who see the item, or only the Member holding it (ADR 0019). */
+export const draftsVisibleTo = ["company", "author"] as const;
+export type DraftsVisibleTo = (typeof draftsVisibleTo)[number];
+
 const step = z.strictObject({
   key,
   name: bilingualText,
@@ -51,6 +55,13 @@ const step = z.strictObject({
   /** Null on a terminal Step: nobody holds a closed item. */
   actor: actorRule.nullable(),
   outcomeMode: z.enum(outcomeModes),
+  /**
+   * Whether the raiser's Form is edited here, by the Member holding the Step (ADR 0019,
+   * RP-514). Left out: the default (`stepEditsForm`, workflow-checks.ts).
+   */
+  editsForm: z.boolean().optional(),
+  /** On the Draft Step: who of the raiser's Company reads a Draft (V1). Left out: `company`. */
+  draftsVisibleTo: z.enum(draftsVisibleTo).optional(),
 });
 export type WorkflowStep = z.infer<typeof step>;
 
@@ -174,6 +185,10 @@ export type WorkflowStepRow = {
   /** Dropped by ADR 0017 (every Transition is confirmed and recorded): always written false. */
   is_signing: boolean;
   outcome_mode: "none" | "recommend_code" | "issue_code" | "inspection_result";
+  /** Null (left out): the default (RP-514). */
+  edits_form?: boolean | null;
+  /** On the Draft Step; null (left out): `company`. */
+  drafts_visible_to?: DraftsVisibleTo | null;
 };
 
 /**
@@ -208,6 +223,8 @@ export function definitionFromRows(rows: WorkflowVersionRows): WorkflowDefinitio
       stage: s.stage_key,
       actor: Object.keys(s.actor_rule).length === 0 ? null : actorFromRule(s.actor_rule),
       outcomeMode: s.outcome_mode === "issue_code" || s.outcome_mode === "inspection_result" ? "issue_outcome" : s.outcome_mode,
+      ...(s.edits_form == null ? {} : { editsForm: s.edits_form }),
+      ...(s.drafts_visible_to == null ? {} : { draftsVisibleTo: s.drafts_visible_to }),
     })),
     transitions: [...rows.transitions]
       .sort((a, b) => a.sort - b.sort)
@@ -243,6 +260,8 @@ export function definitionToRows(definition: WorkflowDefinition, outcomeKind: Ou
       actor_rule: s.actor === null ? {} : ruleFromActor(s.actor),
       is_signing: false,
       outcome_mode: s.outcomeMode === "issue_outcome" ? (outcomeKind === "inspection_result" ? "inspection_result" : "issue_code") : s.outcomeMode,
+      ...(s.editsForm === undefined ? {} : { edits_form: s.editsForm }),
+      ...(s.draftsVisibleTo === undefined ? {} : { drafts_visible_to: s.draftsVisibleTo }),
     })),
     transitions: definition.transitions.map((t, index) => ({
       key: t.key,

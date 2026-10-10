@@ -71,6 +71,18 @@ describe("the Workflow definition format", () => {
     };
     expect(definitionFromRows(definitionToRows(definition, "review_code"))).toEqual(definition);
   });
+
+  it("keeps a Step's \"edits the Form\" and the Draft Step's \"Drafts visible to\" through the rows, only when set (RP-514)", () => {
+    const definition = definitionFromRows(marRows(2));
+    definition.steps[0] = { ...definition.steps[0]!, draftsVisibleTo: "author" };
+    definition.steps[1] = { ...definition.steps[1]!, editsForm: true };
+    const rows = definitionToRows(definition, "review_code");
+    expect(rows.steps[0]).toMatchObject({ drafts_visible_to: "author" });
+    expect(rows.steps[1]).toMatchObject({ edits_form: true });
+    expect(rows.steps[2]).not.toHaveProperty("edits_form");
+    expect(rows.steps[2]).not.toHaveProperty("drafts_visible_to");
+    expect(definitionFromRows(rows)).toEqual(definition);
+  });
 });
 
 describe("parseWorkflowDefinition", () => {

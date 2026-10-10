@@ -15,7 +15,9 @@ A Workflow version is a directed graph.
 - **Steps** are the points of the graph. Each has:
   - a `stage_key`, which decides its Kanban column;
   - an **actor rule**: who may hold it (§3);
-  - an `outcome_mode`: `none`, `recommend_code`, `issue_code` or `inspection_result`.
+  - an `outcome_mode`: `none`, `recommend_code`, `issue_code` or `inspection_result`;
+  - whether the raiser's Form is edited there (`edits_form`, ADR 0019; RP-514), by the Member holding it, before the first Submit (form-engine.md §4). Left out (null), the default: a Step of the Draft Step's role held with the Draft Step's Function Permission (the Draft, the Contractor Engineer Step), never the internal reviewer's;
+  - on the Draft Step, **Drafts visible to** (`drafts_visible_to`, ADR 0019; RP-514): `company` (the default) or `author` (visibility.md V1).
 
   There is no per-Step or per-Transition signing choice: every Transition is confirmed and recorded (§7, ADR 0017). The old `workflow_step.is_signing` column is read by nothing; the definition format (WF-2) and the builder leave it out.
 - **Transitions** are edges. Each has:
@@ -51,7 +53,7 @@ The Issued Code is the `outcome` of the Transition taken from the `issue_code` S
 
 As built (RP-425): one JSON document per Workflow Version, `WorkflowDefinition` in `packages/domain` (`workflow-definition.ts`), used by the builder (live), the api (publish) and Rabaed Admin (import):
 
-- `steps`: `key`, `name` (English and Arabic), `stage` (the Stage key), `actor` (`role`, the Function Permission `permission`, optional `positions`; null on a terminal Step), `outcomeMode` (`none`, `recommend_code`, `issue_outcome`: the Issued Code or the Inspection Result, by the Work Item Type's `outcome_kind`).
+- `steps`: `key`, `name` (English and Arabic), `stage` (the Stage key), `actor` (`role`, the Function Permission `permission`, optional `positions`; null on a terminal Step), `outcomeMode` (`none`, `recommend_code`, `issue_outcome`: the Issued Code or the Inspection Result, by the Work Item Type's `outcome_kind`), and optionally `editsForm` (true or false; left out, the default, `stepEditsForm`) and, on the Draft Step, `draftsVisibleTo` (`company`, `author`). As built (RP-514): stored in `workflow_step.edits_form` and `workflow_step.drafts_visible_to`, null when left out; a row carries each only when set.
 - `transitions`: `key`, `label`, `kind`, `from`, `to`, `outcome`, `permission`, `actionForm`, and optionally:
   - `rules.restrict`: a condition; Positions; not the same person as held a Step (`step`) or took a Transition (`transition`); has been through a Step (`step`, one of the acting Participant's own) or a shared fact (`fact`: `sent_back`, `revision`); all Comments or Subtasks closed;
   - `rules.validate`: a condition with its message; Form complete; a Document (`has_document`, optionally in a named Document field);
@@ -89,6 +91,11 @@ And, from spec RP-423 (`workflow-checks.ts`):
 - No Workflow names a person: Positions only. The format enforces it (see "Definition format"); an action setting a Member field to a value is `names_person`.
 - A Cancel leaves only the raiser's own Steps (the Draft Step's role), goes to a Step in a cancelled Stage, and sets no outcome. At run time it is offered only until the first Submit, and never on a Revision (§5.1 "Cancel", §5.4).
 - Among Transitions sharing a label and source Step, conditions that can overlap or leave a gap are a **warning** (§4): `condition_overlap`, `condition_gap`, found by trying the answers on each condition's edges.
+
+And, from ADR 0019 (as built, RP-514; `formEditingProblems` in `workflow-checks.ts`):
+
+- **Nobody edits the raiser's Form at or after a Submit.** A Step that edits the Form (`stepEditsForm`) and is reachable from a `submit`'s target Step without a `send_back` is refused (`form_edited_after_submit`): another Participant's Step, or a raiser's Step a `send` crosses back to. An item Sent Back to its raiser is edited at the raiser's Steps that edit the Form, by their holder, until the next Submit (ADR 0014): the Step the Send Back leads to, and the Draft after a Return from it. At run time `app.can_save_answers` keeps to it (form-engine.md §4).
+- **"Drafts visible to"** is set on the Draft Step only (`drafts_visible_to_not_on_draft`).
 
 As built (RP-334): checks 4 and 8 are `workflowKindProblems`, which `workflowPublishProblems` runs. A Step's role is its actor rule's `base_role`; a `send_back` is valid from a Step of role A to a Step of role B when some `submit` goes from a Step of B to a Step of A. The database also refuses a `send_back` with an outcome (`workflow_transition_send_back_no_outcome`), and `take_transition` raises on a `return` that would cross Participants. The seam suites' test Workflow with a Send Back is `addTestWorkflow` (`packages/db/test-support`).
 
