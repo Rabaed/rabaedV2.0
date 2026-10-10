@@ -688,6 +688,7 @@
       "subject": "الموضوع",
       "type": "النوع",
       "documentNumber": "رقم المستند",
+      "duplicatedFrom": "مكرّر من",
       "step": "الخطوة",
       "with": "لدى",
       "raisedBy": "أنشأه",
@@ -899,8 +900,7 @@
       "emptyAnswer": "(فارغ)",
       "changedValue": "عُدّل",
       "linksField": "الروابط",
-      "recommendedCode": "الرمز الموصى به",
-      "duplicated": "نسخة من {number}"
+      "recommendedCode": "الرمز الموصى به"
     }
   },
   "revision": {

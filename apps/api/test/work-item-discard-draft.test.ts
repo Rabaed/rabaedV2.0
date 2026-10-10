@@ -1,21 +1,23 @@
 // Seam 1 for the List's row menu Delete (RP-409, owner decision 2026-10-10;
 // workflow-engine.md §5.4 "Discard"; visibility.md scenario RP-409-3): Delete
 // discards the viewer's own Draft, every Draft, an original too, while it has no
-// Document Number. Only the raiser's Participant may; afterwards nobody sees it,
+// Document Number. Only a Member who may edit it may (the rule for saving its
+// answers); afterwards nobody sees it,
 // the raiser included. An item that was numbered is never discarded.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { attachDatasheet, createTestApi, expectHidden } from "./support/harness.ts";
-import { buildTower, detail, ok, take, type Tower } from "./support/tower.ts";
+import { buildTower, detail, ok, take, type Company, type Tower } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
 afterAll(() => api.close());
 
 let at: Tower;
+let c1: Company;
 let draft = "";
 let numbered = "";
 
 beforeAll(async () => {
-  const c1 = await api.projectCreator();
+  c1 = await api.projectCreator();
   const k1 = await api.authorizedPerson();
   at = await buildTower(api, { c1, k1 }, "DSC");
   const create = async (title: string) =>
@@ -40,6 +42,19 @@ describe("scenario RP-409-3: Delete discards C1's own original Draft", () => {
     expect((await detail(at.c1Engineer, draft)).actions.discardDraft).toBe(true);
     expect((await detail(at.c1Pm, draft)).actions.discardDraft).toBe(true);
     expect((await detail(at.c1Engineer, numbered)).actions.discardDraft).toBe(false);
+  });
+
+  it("follows the rule for editing the Draft: offered exactly to those who may save its answers", async () => {
+    for (const who of [at.c1Engineer, at.c1Pm]) {
+      const d = await detail(who, draft);
+      expect(d.actions.discardDraft).toBe(d.actions.saveAnswers);
+    }
+  });
+
+  it("refuses a Member who may not edit the Draft, on the server", async () => {
+    // A Member of C1's Company who is not on the Project neither edits nor deletes it.
+    const outsider = (await api.member(c1.caller)).caller;
+    await expectHidden(outsider.post(`/v1/work-items/${draft}/discard-draft`));
   });
 
   it("refuses an item that was numbered", async () => {

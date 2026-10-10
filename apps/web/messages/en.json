@@ -688,6 +688,7 @@
       "subject": "Subject",
       "type": "Type",
       "documentNumber": "Document Number",
+      "duplicatedFrom": "Duplicated from",
       "step": "Step",
       "with": "With",
       "raisedBy": "Raised by",
@@ -899,8 +900,7 @@
       "emptyAnswer": "(empty)",
       "changedValue": "changed",
       "linksField": "Links",
-      "recommendedCode": "Recommended Code",
-      "duplicated": "Duplicated from {number}"
+      "recommendedCode": "Recommended Code"
     }
   },
   "revision": {

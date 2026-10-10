@@ -523,17 +523,42 @@ describe("the List's row commands (RP-409)", () => {
     expect(await call(ow.member, sql`select app.own_written_fields(${closed}::uuid) as key`)).toEqual([]);
   });
 
-  it("records a Duplicate on the new Draft, internal to C1, and finds it again by its key", async () => {
+  it("keeps a Duplicate's source on the new Draft, named to C1 only, with no time, and finds it again by its key", async () => {
     const copy = await newDraft("Fire doors");
     const key = randomUUID();
-    expect(await outcome(k1.member, sql`select app.record_duplicate(${copy}::uuid, ${closed}::uuid, ${key}::uuid, now()) as outcome`)).toBe("not_found");
-    expect(await outcome(c1.member, sql`select app.record_duplicate(${copy}::uuid, ${closed}::uuid, ${key}::uuid, now()) as outcome`)).toBe("recorded");
+    expect(await outcome(k1.member, sql`select app.record_duplicate(${copy}::uuid, ${closed}::uuid, ${key}::uuid) as outcome`)).toBe("not_found");
+    expect(await outcome(c1.member, sql`select app.record_duplicate(${copy}::uuid, ${closed}::uuid, ${key}::uuid) as outcome`)).toBe("recorded");
     expect(await call(c1.member, sql`select app.duplicate_of_key(${key}::uuid) as id`)).toEqual([{ id: copy }]);
     expect(await call(c1Pm, sql`select app.duplicate_of_key(${key}::uuid) as id`)).toEqual([{ id: null }]);
     expect(await call(k1.member, sql`select app.duplicate_of_key(${key}::uuid) as id`)).toEqual([{ id: null }]);
-    await expect(call(c1.member, sql`select app.record_duplicate(${copy}::uuid, ${closed}::uuid, ${key}::uuid, now())`)).rejects.toThrow(/duplicate key/);
-    const [event] = await call<{ audience: string }>(c1.member, sql`select audience from work_item_event where work_item_id = ${copy} and type = 'duplicated'`);
-    expect(event).toEqual({ audience: "internal" });
+    // Recorded once: a second source is refused.
+    expect(await outcome(c1.member, sql`select app.record_duplicate(${copy}::uuid, ${closed}::uuid, ${randomUUID()}::uuid) as outcome`)).toBe("not_found");
+    // A second live Draft for the same request breaks the key.
+    const other = await newDraft("Fire doors again");
+    await expect(call(c1.member, sql`select app.record_duplicate(${other}::uuid, ${closed}::uuid, ${key}::uuid)`)).rejects.toThrow(/duplicate key/);
+    const source = sql`select work_item_id, document_number, subject from app.work_item_duplicated_from(${copy}::uuid)`;
+    for (const who of [c1.member, c1Pm]) expect(await call(who, source)).toEqual([expect.objectContaining({ work_item_id: closed })]);
+    expect(await call(k1.member, source)).toEqual([]);
+    // Nothing of it is an event, so nothing has a time.
+    const events = await migrator.query("select type from work_item_event where work_item_id = $1", [copy]);
+    expect(events.rows).toEqual([{ type: "created" }]);
+    // The app role can't read the columns that keep it.
+    await expect(call(c1.member, sql`select duplicated_from_id from work_item where id = ${copy}`)).rejects.toThrow(/permission denied/);
+    // Once discarded, the key is free again.
+    expect(await outcome(c1.member, sql`select app.discard_draft(${copy}::uuid, now()) as outcome`)).toBe("discarded");
+    expect(await call(c1.member, sql`select app.duplicate_of_key(${key}::uuid) as id`)).toEqual([{ id: null }]);
+    expect(await outcome(c1.member, sql`select app.record_duplicate(${other}::uuid, ${closed}::uuid, ${key}::uuid) as outcome`)).toBe("recorded");
+  });
+
+  it("lets only a Member who may edit a Draft discard it (app.can_save_answers)", async () => {
+    const draft = await newDraft("Seals");
+    for (const who of [c1.member, c1Pm, k1.member]) {
+      const [row] = await call<{ discard: boolean; save: boolean }>(
+        who,
+        sql`select app.can_discard_draft(${draft}::uuid) as discard, app.can_save_answers(${draft}::uuid) as save`,
+      );
+      expect(row!.discard).toBe(row!.save);
+    }
   });
 
   it("gives an item's answers as shared, the same to every viewer, and nothing before the first Submit (scenario RP-409-2)", async () => {

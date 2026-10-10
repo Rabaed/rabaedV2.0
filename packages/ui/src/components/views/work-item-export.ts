@@ -78,6 +78,19 @@ const byteOrderMark = String.fromCharCode(0xfeff);
 /** A value a spreadsheet would run as a formula (=, +, -, @, a tab or a return first) is kept as text by a leading quote. */
 export const asText = (value: string) => (/^[=+\-@\t\r]/.test(value) ? `'${value}` : value);
 
+/**
+ * `value` without the characters XML 1.0 may not hold (C0 controls but tab, line feed and
+ * return; U+FFFE, U+FFFF; an unpaired surrogate), which would make Excel refuse the file.
+ */
+export const xmlCharacters = (value: string) =>
+  Array.from(value)
+    .filter((c) => {
+      const code = c.codePointAt(0)!;
+      if (code < 0x20) return code === 0x09 || code === 0x0a || code === 0x0d;
+      return !(code >= 0xd800 && code <= 0xdfff) && code !== 0xfffe && code !== 0xffff;
+    })
+    .join("");
+
 /** The calendar day of an ISO time in Riyadh (UTC+3 all year), as a spreadsheet date. */
 const riyadhDay = (iso: string) => new Date(new Date(iso).getTime() + 3 * 3_600_000).toISOString().slice(0, 10);
 
@@ -89,7 +102,8 @@ export function exportFile(rows: WorkItemRow[], columns: ExportColumn[], format:
     const lines = [columns.map((c) => asText(c.header)), ...cells.map((r) => r.map(text))];
     return { name: `${context.name}.csv`, type: "text/csv;charset=utf-8", content: `${byteOrderMark}${lines.map((r) => `${r.map(quoted).join(",")}\r\n`).join("")}` };
   }
-  const xml = (value: string) => value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
+  const xml = (value: string) =>
+    xmlCharacters(value).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
   const textCell = (value: string, style = "") => `<Cell${style}><Data ss:Type="String">${xml(asText(value))}</Data></Cell>`;
   const cell = (c: ExportCell) =>
     "text" in c ? textCell(c.text) : `<Cell ss:StyleID="date"><Data ss:Type="DateTime">${riyadhDay(c.date)}T00:00:00.000</Data></Cell>`;

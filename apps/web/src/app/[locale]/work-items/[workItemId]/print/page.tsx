@@ -5,17 +5,18 @@ import { notFound } from "next/navigation";
 import { PrintNow } from "@/components/print-now";
 import { WorkItemAttachments } from "@/components/work-item-attachments";
 import { WorkItemAnswers, WorkItemFormProvider } from "@/components/work-item-form";
-import { WorkItemLinkedFrom } from "@/components/work-item-linked-from";
 import { WorkItemLinks } from "@/components/work-item-links";
 import { redirect } from "@/i18n/navigation";
 import { readingChoices } from "@/lib/built-in-choices";
 import { linkTargetNames } from "@/lib/link-search";
-import { getLinkedFrom, getMe, getOptionLists, getSharedWorkItem, getWorkItemDocuments, getWorkItemForm, getWorkItemLinks } from "@/lib/session";
+import { getMe, getOptionLists, getSharedWorkItem, getWorkItemForm } from "@/lib/session";
 
 /**
- * Download (RP-409, owner decision 2026-10-10): the item's final output, laid out to print, which the
- * browser saves as a PDF. Its content as it was shared, with its outcome (`GET /work-items/:id/shared`):
- * the same for every viewer who sees it, the raiser's own Company included. No internal Step, no
+ * Download (RP-409, owner decision B): the item's final output, laid out to print, which the
+ * browser saves as a PDF. Everything on it comes from one read, `GET /work-items/:id/shared`: its
+ * content as it last arrived, with its outcome, the same for every viewer who sees it, the holder's
+ * and the raiser's own Companies included. Its Status as other Companies read it, its Documents and
+ * Links as of the last arrival (never one added since), no Linked from, no internal Step, no
  * Internal Note, no person and no in-progress answers, for anyone (visibility.md scenario RP-409-2).
  * Nothing before the first Submit. Read only: nothing on it can be changed.
  */
@@ -24,19 +25,13 @@ export default async function WorkItemPrintPage({ params }: { params: Promise<{ 
   setRequestLocale(locale);
   const t = await getTranslations("workItems");
   const tViews = await getTranslations("workItemViews");
-  const [me, item, form, documents, links, linkedFrom, optionLists] = await Promise.all([
-    getMe(),
-    getSharedWorkItem(workItemId),
-    getWorkItemForm(workItemId),
-    getWorkItemDocuments(workItemId),
-    getWorkItemLinks(workItemId),
-    getLinkedFrom(workItemId),
-    getOptionLists(),
-  ]);
+  const [me, item, form, optionLists] = await Promise.all([getMe(), getSharedWorkItem(workItemId), getWorkItemForm(workItemId), getOptionLists()]);
   if (!me) return redirect({ href: "/sign-in", locale });
-  if (!item || !form || !documents || !links || !linkedFrom) notFound();
+  if (!item || !form) notFound();
   const date = (iso: string) => formatDayMonthYear(new Date(iso), locale, { month: "short" });
-  const readOnly = { ...documents, canChange: false };
+  // Read only: nothing is uploaded here, so no limits apply.
+  const readOnly = { documents: item.documents, canChange: false, limits: { maxBytes: 1, contentTypes: [] } };
+  const links = { links: item.links.map((l) => ({ ...l, workItemId: null })), canChange: false };
   // The Built-in Fields name the item's own values, as on any item read only.
   const choices = readingChoices({ trade: item.trade, location: item.location, scopes: item.scopes } as WorkItemDetail, locale);
 
@@ -113,12 +108,10 @@ export default async function WorkItemPrintPage({ params }: { params: Promise<{ 
         <WorkItemLinks
           workItemId={item.id}
           projectId={item.projectId}
-          list={{ ...links, canChange: false }}
+          list={links}
           locale={locale}
           questionLabels={Object.fromEntries(answerFields(form.schema).map((f) => [f.key, f.label[locale]]))}
-        >
-          <WorkItemLinkedFrom items={linkedFrom.items} />
-        </WorkItemLinks>
+        />
 
         {/* The shared moves only, each by its Company: no Step, no person, no Internal Note. */}
         <section className="space-y-3">

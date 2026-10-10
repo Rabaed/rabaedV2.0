@@ -5,7 +5,7 @@
 // own Participant, in the sections the raiser fills. Never another Company's
 // answers (the Consultant's verification, or its write to a section both may
 // change), nor any Internal Note, Document, Link or history: the new Draft starts
-// its own, with one event of its own Company's saying where it came from. The same
+// its own, naming where it came from to its own Company, with no time. The same
 // key again answers with the same Draft. Nobody else may duplicate it, and the row
 // menu offers it only where allowed.
 import { randomUUID } from "node:crypto";
@@ -103,12 +103,58 @@ describe("scenario RP-409-1: C1 duplicates a MAR K1 verified and closed with Cod
     expect(JSON.stringify(events)).not.toMatch(/C1 only|K1 only|Resubmit/);
   });
 
-  it("records where it came from, internal to C1", async () => {
+  it("names where it came from to C1, with no time and no event", async () => {
     const source = (await detail(at.c1Engineer, closed)).documentNumber;
-    const events = await history(at.c1Engineer, copy);
-    expect(events.events.filter((e) => e.type === "duplicated")).toEqual([
-      expect.objectContaining({ type: "duplicated", audience: "internal", documentNumber: source }),
-    ]);
+    for (const who of [at.c1Engineer, at.c1Pm]) {
+      expect((await detail(who, copy)).duplicatedFrom).toEqual({ workItemId: closed, documentNumber: source, subject: "Fixtures" });
+    }
+    expect((await history(at.c1Engineer, copy)).events.map((e) => e.type)).not.toContain("duplicated");
+  });
+
+  it("answers the same request made twice at once with one Draft", async () => {
+    const twice = randomUUID();
+    const [a, b] = await Promise.all([duplicate(at.c1Engineer, closed, twice), duplicate(at.c1Engineer, closed, twice)]);
+    expect(a.statusCode).toBe(201);
+    expect(b.statusCode).toBe(201);
+    expect(a.json().id).toBe(b.json().id);
+  });
+
+  it("makes a new Draft for the same request once the first was deleted", async () => {
+    const again = randomUUID();
+    const first = (await ok(duplicate(at.c1Engineer, closed, again), 201)).json().id as string;
+    await ok(at.c1Engineer.post(`/v1/work-items/${first}/discard-draft`));
+    const second = (await ok(duplicate(at.c1Engineer, closed, again), 201)).json().id as string;
+    expect(second).not.toBe(first);
+    expect((await ok(duplicate(at.c1Engineer, closed, again), 201)).json().id).toBe(second);
+  });
+
+  it("never tells when its Draft was started, once numbered (scenario 61)", async () => {
+    const started = (await ok(duplicate(at.c1Engineer, closed), 201)).json().id as string;
+    // As if the Draft had been started long ago: no read may give that time once it is numbered.
+    await sql`update work_item set created_at = '2020-01-02T03:04:05Z' where id = ${started}::uuid`.execute(migrator);
+    await attachDatasheet(at.c1Engineer, started);
+    await take(at.c1Engineer, started, "send_for_review");
+    for (const who of [at.c1Engineer, at.c1Pm]) {
+      const reads = [
+        await detail(who, started),
+        await history(who, started),
+        (await ok(who.get(`/v1/projects/${at.projectId}/activity`), 200)).json(),
+        (await ok(who.get(`/v1/projects/${at.projectId}/work-items`), 200)).json(),
+      ];
+      expect(JSON.stringify(reads)).not.toContain("2020-01-02");
+    }
+    expect((await detail(at.c1Pm, started)).duplicatedFrom).toMatchObject({ workItemId: closed });
+  });
+
+  it("copies a Built-in Field only when C1 wrote it last, as any other field", async () => {
+    // As if K1's manager had written the location last.
+    await sql`
+      update work_item set field_times = jsonb_set(field_times, '{location}', jsonb_build_object('at', now(), 'by', ${k1.company.authorizedPerson.id}::text))
+      where id = ${closed}::uuid
+    `.execute(migrator);
+    const d = await detail(at.c1Engineer, (await ok(duplicate(at.c1Engineer, closed), 201)).json().id);
+    expect(d.answers).not.toHaveProperty("location");
+    expect(d.answers).toMatchObject({ trade: at.electrical, manufacturer: "Philips" });
   });
 
   it("never copies a field another Company wrote last, even in a section C1 fills", async () => {

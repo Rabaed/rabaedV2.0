@@ -44,8 +44,6 @@ export async function WorkItemHistory({
       return e.transition ? t("internalNoteWith", { transition: e.transition[locale] }) : t("internalNote");
     }
     if (e.type === "recommend_code") return t("recommendedCode");
-    // A Duplicate names where it came from, to its own Company only (RP-409).
-    if (e.type === "duplicated") return t("duplicated", { number: `\u2066${e.documentNumber ?? ""}\u2069` });
     if (e.type === "created" || e.type === "claimed" || e.type === "released" || e.type === "answers_changed") {
       return t(e.type === "answers_changed" ? "answersChanged" : e.type);
     }

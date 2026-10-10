@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { bilingualText } from "./company.ts";
+import { documentSummary } from "./document.ts";
 import { formAnswers, formSchema, namedAnswers } from "./form.ts";
 import { listColumnLayout } from "./list-columns.ts";
 import { outcomeCodePattern, outcomeSchema } from "./outcome.ts";
@@ -359,6 +360,10 @@ export const sharedWorkItem = z.object({
   answers: formAnswers,
   /** A `participant` answer by its Company's name; a `member` answer names nobody (no people). */
   namedAnswers,
+  /** Its Documents as of its last arrival, never one added since; the uploader by Company only. */
+  documents: z.array(documentSummary),
+  /** Its Links as of its last arrival, each linked item by Document Number and Subject only. */
+  links: z.array(workItemLink.omit({ workItemId: true })),
   history: z.array(
     z.object({
       at: z.iso.datetime(),
@@ -558,6 +563,12 @@ export const workItemDetail = workItemSummary.extend({
    * the Draft was started is never shown (visibility.md "Creation Date").
    */
   creationDate: z.iso.datetime().nullable(),
+  /**
+   * The item a Duplicate made this Draft from (RP-409), only for the raiser's
+   * Participant and only while they see it: its Document Number (null for a Draft)
+   * and Subject. It has no time, so it never tells when the Draft was started.
+   */
+  duplicatedFrom: z.object({ workItemId: z.uuid(), documentNumber: z.string().nullable(), subject: z.string() }).nullable(),
   /** The Submission Date: its first Submit out of the raiser's Participant, kept after a Send Back. Null until then. */
   submissionDate: z.iso.datetime().nullable(),
   /**
@@ -584,8 +595,6 @@ export const workItemEventTypes = [
   "internal_note",
   "cancelled",
   "answers_changed",
-  // RP-409: a Duplicate names the item it came from (its `documentNumber`), internal to the raiser.
-  "duplicated",
 ] as const;
 
 /**

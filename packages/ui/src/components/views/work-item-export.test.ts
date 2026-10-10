@@ -1,6 +1,6 @@
 import { defaultListColumns, type WorkItemRow } from "@rabaed/domain";
 import { describe, expect, it } from "vitest";
-import { asText, exportFile, shownColumns, wholeTableColumns } from "./work-item-export.ts";
+import { asText, exportFile, shownColumns, wholeTableColumns, xmlCharacters } from "./work-item-export.ts";
 
 // Story data only.
 const b = (en: string, ar: string) => Object.fromEntries([["en", en], ["ar", ar]]) as { en: string; ar: string };
@@ -76,5 +76,17 @@ describe("Export (RP-409)", () => {
     expect(en.content).toContain('<Data ss:Type="DateTime">2026-09-14T00:00:00.000</Data>');
     expect(en.content).not.toContain("DisplayRightToLeft");
     expect(exportFile([row], shownColumns(only("subject"), context("ar")), "excel", context("ar")).content).toContain("<DisplayRightToLeft/>");
+  });
+
+  it("leaves out of Excel the characters XML can't hold, keeping tabs, line breaks and every letter", () => {
+    const bell = String.fromCharCode(7);
+    const nul = String.fromCharCode(0);
+    const lone = String.fromCharCode(0xd800);
+    expect(xmlCharacters(`A${nul}B${bell}C￾${lone}D\tE\nF\rG \u{1F600} عربي`)).toBe("ABCD\tE\nF\rG \u{1F600} عربي");
+    const dirty = { ...row, title: `Cable${bell} tray${nul}` };
+    const file = exportFile([dirty], shownColumns(only("subject"), context("en")), "excel", context("en"));
+    expect(file.content).toContain('<Data ss:Type="String">Cable tray</Data>');
+    expect(file.content).not.toContain(bell);
+    expect(file.content).not.toContain(nul);
   });
 });

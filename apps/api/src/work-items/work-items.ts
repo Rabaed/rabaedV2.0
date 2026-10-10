@@ -2,7 +2,6 @@ import { withMember, type Database, type Db } from "@rabaed/db";
 import {
   answerFields,
   backwardKinds,
-  builtInFieldTypes,
   discardDraftRefusals,
   duplicateRefusals,
   type SharedWorkItem,
@@ -31,6 +30,7 @@ import {
   type FormChoices,
   type FormSchema,
   type FormFieldType,
+  type LinkKind,
   type FormToFill,
   type FormVersion,
   type SectionEditContext,
@@ -608,6 +608,9 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
       select field_key, label from app.revision_dropped_fields(${workItemId}::uuid)
     `.execute(trx);
     const { rows: auto } = await sql<{ autosave: boolean }>`select app.answers_autosave(${workItemId}::uuid) as autosave`.execute(trx);
+    const { rows: source } = await sql<{ work_item_id: string; document_number: string | null; subject: string }>`
+      select work_item_id, document_number, subject from app.work_item_duplicated_from(${workItemId}::uuid)
+    `.execute(trx);
     return {
       ...toSummary(row, now),
       formVersionId: d.form_version_id,
@@ -629,6 +632,10 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
       // When the Draft was started is audit only, shown to nobody (visibility.md "Creation Date", scenario 61).
       creationDate: d.creation_date?.toISOString() ?? null,
       submissionDate: d.submitted_at?.toISOString() ?? null,
+      // The raiser's Participant only, and no time (visibility.md "Creation Date").
+      duplicatedFrom: source[0]
+        ? { workItemId: source[0].work_item_id, documentNumber: source[0].document_number, subject: source[0].subject }
+        : null,
       comments: { open: d.open_comments, closed: d.closed_comments },
       actions: {
         ...(await actions(trx, workItemId)),
@@ -675,19 +682,53 @@ export type DuplicateResult = CreateWorkItemResult | { ok: false; reason: (typeo
  * item's Type, created in one transaction as any new item is (createWorkItemIn: the latest Form
  * Version, the raiser's Draft Step, every check), with its Subject and only what the Member's own
  * Participant wrote: the answers of the sections editable at the Draft, as the Member reads them
- * (app.work_item_answers), whose last writer is of their own Participant (app.own_written_fields;
- * the Built-in Fields, which only the raiser's Draft sets, always), and whose field the latest
- * Form still has with the same type. Never another Company's writes, even in a section both may
- * change, nor a Document, an Internal Note or the history: the new Draft records only where it
- * came from, in its own `duplicated` event, internal to the raiser (app.record_duplicate). The
- * same `idempotencyKey` again answers with the same Draft. Refused alike, `duplicate_not_allowed`,
+ * (app.work_item_answers), whose last writer is of their own Participant (app.own_written_fields,
+ * the Built-in Fields too), and whose field the latest Form still has with the same type. Never
+ * another Company's writes, even in a section both may change, nor a Document, an Internal Note
+ * or the history: the new Draft keeps only which item it came from, with no time
+ * (app.record_duplicate). The same `idempotencyKey` again, or twice at once, answers with the same
+ * Draft while it stands; once it is discarded, a new one. Refused alike, `duplicate_not_allowed`,
  * to anyone but a Member of the raiser's Participant; not found for an item they can't see.
  */
-export function duplicateWorkItem(db: Db, memberId: string, workItemId: string, idempotencyKey: string, now: Date): Promise<DuplicateResult> {
+export async function duplicateWorkItem(
+  db: Db,
+  memberId: string,
+  workItemId: string,
+  idempotencyKey: string,
+  now: Date,
+): Promise<DuplicateResult> {
+  const madeFor = (trx: Trx) =>
+    sql<{ id: string | null }>`select app.duplicate_of_key(${idempotencyKey}::uuid) as id`.execute(trx).then((r) => r.rows[0]?.id ?? null);
+  try {
+    return await duplicateIn(db, memberId, workItemId, idempotencyKey, now, madeFor);
+  } catch (error) {
+    if (!isDuplicateRequest(error)) throw error;
+    // The same request, at the same time, made its Draft first: answer with that one.
+    const id = await withMember(db, memberId, madeFor);
+    if (id === null) throw error;
+    return { ok: true, id };
+  }
+}
+
+/** The unique index that allows one live Draft per Duplicate request was hit. */
+const isDuplicateRequest = (error: unknown) =>
+  typeof error === "object" &&
+  error !== null &&
+  (error as { code?: unknown }).code === "23505" &&
+  (error as { constraint?: unknown }).constraint === "work_item_duplicate_key";
+
+function duplicateIn(
+  db: Db,
+  memberId: string,
+  workItemId: string,
+  idempotencyKey: string,
+  now: Date,
+  madeFor: (trx: Trx) => Promise<string | null>,
+): Promise<DuplicateResult> {
   return refusedAsForbidden(() =>
     withMember(db, memberId, async (trx): Promise<DuplicateResult> => {
-      const { rows: done } = await sql<{ id: string | null }>`select app.duplicate_of_key(${idempotencyKey}::uuid) as id`.execute(trx);
-      if (done[0]?.id) return { ok: true, id: done[0].id };
+      const done = await madeFor(trx);
+      if (done !== null) return { ok: true, id: done };
       const { rows } = await sql<{
         project_id: string;
         type_code: string;
@@ -727,7 +768,7 @@ export function duplicateWorkItem(db: Db, memberId: string, workItemId: string, 
             !documentFieldTypes.includes(f.type) &&
             wasType.get(f.key) === f.type &&
             answers[f.key] !== undefined &&
-            (ownWritten.has(f.key) || (builtInFieldTypes as readonly string[]).includes(f.type)),
+            ownWritten.has(f.key),
         );
       const created = await createWorkItemIn(
         trx,
@@ -737,7 +778,7 @@ export function duplicateWorkItem(db: Db, memberId: string, workItemId: string, 
       );
       if (!created.ok) return created;
       const { rows: recorded } = await sql<{ outcome: string }>`
-        select app.record_duplicate(${created.id}::uuid, ${workItemId}::uuid, ${idempotencyKey}::uuid, ${now}) as outcome
+        select app.record_duplicate(${created.id}::uuid, ${workItemId}::uuid, ${idempotencyKey}::uuid) as outcome
       `.execute(trx);
       // The Member made the Draft and sees both: anything else is a bug, and nothing is created.
       checkedOutcome(recorded[0]!.outcome, ["recorded"]);
@@ -755,17 +796,22 @@ export function discardDraft(db: Db, memberId: string, workItemId: string, now: 
 }
 
 /**
- * Download (RP-409; visibility.md scenario RP-409-2): a Submitted item as it was shared, the
- * same for every viewer who sees it, the raiser's own Company included: its outcome, its answers
- * as last shared (app.work_item_shared_answers), a `participant` answer by its Company, no person,
- * and the shared events of its history by Company only, with no Step. Null when the Member can't
- * see it, or before its first Submit.
+ * Download (RP-409, owner decision B; visibility.md scenario RP-409-2): a Submitted item as it was
+ * last shared, the same for every viewer who sees it, the holder's and the raiser's own Companies
+ * included. Its Status as every Company but the holder reads it (app.work_item_shared_stage), its
+ * outcome, its answers as they last arrived (app.work_item_shared_answers, never in-progress ones),
+ * the Built-in Fields from those answers, a `participant` answer by its Company, no person, its
+ * Documents and Links as of the last arrival (never one added since; uploaders by Company only,
+ * linked items by number and Subject only), and the shared events of its history by Company only,
+ * with no Step. No Linked from: it differs between viewers. Null when the Member can't see it, or
+ * before its first Submit.
  */
 export function getSharedWorkItem(db: Db, memberId: string, workItemId: string): Promise<SharedWorkItem | null> {
   return withMember(db, memberId, async (trx) => {
     const [row] = await visibleItems(trx, sql`w.id = ${workItemId}`);
     if (!row) return null;
     const { rows } = await sql<{
+      project_id: string;
       form_version_id: string;
       revision_no: number;
       outcome: string | null;
@@ -775,18 +821,26 @@ export function getSharedWorkItem(db: Db, memberId: string, workItemId: string):
       closed_at: Date | null;
       answers: Record<string, unknown> | null;
       schema: unknown;
+      stage_key: string | null;
+      stage_name: BilingualText | null;
+      stage_category: WorkItemSummary["stage"]["category"] | null;
     }>`
-      select w.form_version_id, w.revision_no, w.outcome, oc.name as outcome_name, raiser.legal_name as raised_by,
-        w.submitted_at, w.closed_at, app.work_item_shared_answers(w.id) as answers, fv.schema
+      select w.project_id, w.form_version_id, w.revision_no, w.outcome, oc.name as outcome_name, raiser.legal_name as raised_by,
+        w.submitted_at, w.closed_at, app.work_item_shared_answers(w.id) as answers, fv.schema,
+        st.key as stage_key, st.name as stage_name, st.category as stage_category
       from work_item w
       join form_version fv on fv.id = w.form_version_id
+      join work_item_type t on t.id = w.work_item_type_id
       join app.work_item_companies(w.id) raiser on raiser.participant_id = w.raised_by_participant_id
+      left join stage st on st.project_id = w.project_id and st.module_key = t.module_key and st.key = app.work_item_shared_stage(w.id)
       left join outcome oc on oc.project_id = w.project_id and oc.work_item_type_id = w.work_item_type_id and oc.code = w.outcome
       where w.id = ${workItemId}
     `.execute(trx);
     const d = rows[0];
-    if (!d || d.submitted_at === null || d.answers === null) return null;
-    const { named } = await namedAnswers(trx, workItemId);
+    if (!d || d.submitted_at === null || d.answers === null || d.stage_key === null) return null;
+    const { rows: named } = await sql<{ field_key: string; company_name: BilingualText }>`
+      select field_key, company_name from app.work_item_shared_named_answers(${workItemId}::uuid)
+    `.execute(trx);
     const { rows: events } = await sql<{
       created_at: Date;
       audience: string;
@@ -800,9 +854,10 @@ export function getSharedWorkItem(db: Db, memberId: string, workItemId: string):
     );
     const summary = toSummary(row, new Date());
     const schema = formSchema.parse(d.schema);
-    // A `member` answer names a person: the shared item names nobody, whoever reads it.
-    const people = new Set(answerFields(schema).filter((f) => f.type === "member").map((f) => f.key));
-    const shared = Object.fromEntries(Object.entries(answersFromDb(schema, d.answers)).filter(([key]) => !people.has(key)));
+    // No `member` answer (the database leaves them out): the shared item names nobody, whoever reads it.
+    const answers = answersFromDb(schema, d.answers);
+    const builtIn = await sharedBuiltIns(trx, d.project_id, answers);
+    if (!builtIn) return null;
     return {
       id: summary.id,
       projectId: summary.projectId,
@@ -811,18 +866,18 @@ export function getSharedWorkItem(db: Db, memberId: string, workItemId: string):
       documentNumber: summary.documentNumber,
       revisionNo: d.revision_no,
       type: summary.type,
-      stage: summary.stage,
+      stage: { key: d.stage_key, name: d.stage_name!, category: d.stage_category! },
       outcome: d.outcome,
       outcomeName: d.outcome_name,
-      trade: summary.trade,
-      location: summary.location,
-      scopes: await itemScopes(trx, workItemId),
+      ...builtIn,
       raisedBy: { companyName: d.raised_by },
       submissionDate: d.submitted_at.toISOString(),
       closedAt: d.closed_at?.toISOString() ?? null,
-      answers: shared,
+      answers,
       // A Company by its name; nobody's name, whoever reads it.
-      namedAnswers: Object.fromEntries(Object.entries(named).filter(([key]) => !people.has(key)).map(([key, n]) => [key, { companyName: n.companyName, memberName: null }])),
+      namedAnswers: Object.fromEntries(named.map((n) => [n.field_key, { companyName: n.company_name, memberName: null }])),
+      documents: await sharedDocuments(trx, workItemId),
+      links: await sharedLinks(trx, workItemId),
       history: events
         .filter((e) => e.audience === "shared")
         .map((e) => ({
@@ -835,6 +890,82 @@ export function getSharedWorkItem(db: Db, memberId: string, workItemId: string):
         })),
     };
   });
+}
+
+/** The Built-in Fields as the shared answers hold them (`trade`, `location` and `scopes` ids), by name. */
+async function sharedBuiltIns(
+  trx: Trx,
+  projectId: string,
+  answers: Record<string, unknown>,
+): Promise<Pick<SharedWorkItem, "trade" | "location" | "scopes"> | null> {
+  const idOf = (key: string) => (typeof answers[key] === "string" ? (answers[key] as string) : null);
+  const scopeIds = Array.isArray(answers.scopes) ? answers.scopes.filter((s): s is string => typeof s === "string") : [];
+  const value = async (valueId: string | null) => {
+    if (valueId === null) return null;
+    const { rows } = await sql<{ id: string; code: string; name: BilingualText }>`
+      select v.id, v.code, v.name from dimension_value v
+      join visibility_dimension d on d.id = v.dimension_id and d.project_id = ${projectId}
+      where v.id = ${valueId}::uuid
+    `.execute(trx);
+    return rows[0] ?? null;
+  };
+  const trade = await value(idOf("trade"));
+  if (!trade) return null;
+  const { rows: scopes } = await sql<{ id: string; parent_id: string | null; name: BilingualText }>`
+    select s.id, s.parent_id, s.name
+    from scope s
+    left join scope parent on parent.id = s.parent_id
+    where s.project_id = ${projectId} and s.id = any(${scopeIds}::uuid[])
+    order by coalesce(parent.sort, s.sort), coalesce(s.parent_id, s.id), s.depth, s.sort
+  `.execute(trx);
+  return { trade, location: await value(idOf("location")), scopes: scopes.map((s) => ({ id: s.id, parentId: s.parent_id, name: s.name })) };
+}
+
+/** A Submitted item's Documents as of its last arrival (app.work_item_shared_documents), each uploader by Company only. */
+async function sharedDocuments(trx: Trx, workItemId: string): Promise<SharedWorkItem["documents"]> {
+  const { rows } = await sql<{
+    id: string;
+    file_name: string;
+    size_bytes: string;
+    content_type: string;
+    uploaded_at: Date;
+    company_name: BilingualText;
+    frozen: boolean;
+    field_key: string | null;
+    item_key: string | null;
+    taken_at: Date | null;
+    taken_latitude: number | null;
+    taken_longitude: number | null;
+  }>`
+    select d.id, d.file_name, d.size_bytes, d.content_type, t.uploaded_at, co.legal_name as company_name,
+      d.frozen_at is not null as frozen, d.field_key, d.item_key, d.taken_at, d.taken_latitude, d.taken_longitude
+    from document d
+    join app.document_times(${workItemId}::uuid) t on t.document_id = d.id
+    join app.work_item_companies(d.work_item_id) co on co.participant_id = d.uploaded_by_participant_id
+    where d.work_item_id = ${workItemId} and d.id in (select app.work_item_shared_documents(${workItemId}::uuid))
+    order by t.uploaded_at, d.file_name, d.id
+  `.execute(trx);
+  return rows.map((r) => ({
+    id: r.id,
+    fileName: r.file_name,
+    sizeBytes: Number(r.size_bytes),
+    contentType: r.content_type,
+    uploadedAt: r.uploaded_at.toISOString(),
+    uploadedBy: { companyName: r.company_name, memberName: null },
+    frozen: r.frozen,
+    fieldKey: r.field_key,
+    itemKey: r.item_key,
+    takenAt: r.taken_at?.toISOString() ?? null,
+    takenWhere: r.taken_latitude !== null && r.taken_longitude !== null ? { latitude: r.taken_latitude, longitude: r.taken_longitude } : null,
+  }));
+}
+
+/** A Submitted item's Links as of its last arrival (app.work_item_shared_links). */
+async function sharedLinks(trx: Trx, workItemId: string): Promise<SharedWorkItem["links"]> {
+  const { rows } = await sql<{ id: string; kind: LinkKind; field_key: string | null; document_number: string; subject: string }>`
+    select id, kind, field_key, document_number, subject from app.work_item_shared_links(${workItemId}::uuid)
+  `.execute(trx);
+  return rows.map((r) => ({ id: r.id, kind: r.kind, fieldKey: r.field_key, documentNumber: r.document_number, subject: r.subject }));
 }
 
 /** An item's per-field times as the acting Member who may save it reads them; locks the item when `lock`. */
