@@ -24,3 +24,4 @@ Taking a pooled Step is called **Pick up**, not Claim, which is the Financial mo
 - `assign_vacancy` and the "Vacancy in my Company" notification setting are removed; the Participant-level Vacancy stays.
 - `claim`/`release` are renamed `pick_up`/`return_to_pool` in the database, API and events, and the buttons read "Pick up" and "Return to pool".
 - The holder's own Participant sees who holds the Step, or the pool's names while it waits; other Participants still see the Company only (V14).
+- The design docs (workflow-engine.md §3.3, §5.2, §9, data-model.md) are updated by the PRs that build this (spec RP-511), not by the planning session (CODING_STANDARDS.md, Docs). Draft wording for them is in commit 3577da11.

@@ -174,7 +174,7 @@ _Avoid_: Deleted, voided
 
 
 **Form**:
-The customisable middle of a Work Item, built in the form builder: the fields a Work Item Type captures between the System Fields above and below it. Field labels are in Arabic and English. A Form is a Rabaed Default, kept in a Company's Library, or copied into a Project. The Form belongs to the raiser: only the raiser's Member holding the current Step edits it, at the Steps its Workflow allows, before the first Submit; after that a change needs a Revision. Every other Participant answers in its reply Screen, never in the Form.
+The customisable middle of a Work Item, built in the form builder: the fields a Work Item Type captures between the System Fields above and below it. Field labels are in Arabic and English. A Form is a Rabaed Default, kept in a Company's Library, or copied into a Project. The Form belongs to the raiser: only the raiser's Member holding the current Step edits it, at the Steps its Workflow allows, before the first Submit or after a Send Back; otherwise a change needs a Revision. Every other Participant answers in its reply Screen, never in the Form.
 _Avoid_: Template (on its own), general template
 
 **Form Section**:
