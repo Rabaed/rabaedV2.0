@@ -122,14 +122,14 @@ describe("a Project Admin builds the Project's copy of the MAR", () => {
     const id = await draft(at, at.c1Engineer, "Follows the Owner Rep route");
     expect((await detail(at.c1Engineer, id)).workflow).toEqual({ name: ROUTE, versionNo: 1 });
     await take(at.c1Engineer, id, "send_for_review");
-    await ok(at.c1Pm.post(`/v1/work-items/${id}/claim`));
+    await ok(at.c1Pm.post(`/v1/work-items/${id}/pick-up`));
     await take(at.c1Pm, id, "submit");
     const answers = { ...(await detail(k1Engineer, id)).answers, sample_checked: true, matches_specification: true, verification_note: "As specified" };
     await ok(k1Engineer.request("PUT", `/v1/work-items/${id}/answers`, { answers }));
-    await ok(at.k1Manager.post(`/v1/work-items/${id}/claim`));
+    await ok(at.k1Manager.post(`/v1/work-items/${id}/pick-up`));
     await take(at.k1Manager, id, "send_to_owner_rep");
     expect((await detail(ownerRep, id)).step.name.en).toBe("Owner Representative approval");
-    await ok(ownerRep.post(`/v1/work-items/${id}/claim`));
+    await ok(ownerRep.post(`/v1/work-items/${id}/pick-up`));
     await take(ownerRep, id, "owner_approve_code_a");
     expect(await detail(at.c1Engineer, id)).toMatchObject({ outcome: "A", step: { name: { en: "Approved" } } });
   });
