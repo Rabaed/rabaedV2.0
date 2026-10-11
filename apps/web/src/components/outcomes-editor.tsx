@@ -5,7 +5,7 @@ import { Badge, Button, Checkbox, Dialog, DialogClose, DialogContent, DialogFoot
 import { useLocale, useTranslations } from "next-intl";
 import { useState } from "react";
 import { useRouter } from "@/i18n/navigation";
-import { setupCall } from "@/lib/setup-call";
+import { refusalMessage, setupCall } from "@/lib/setup-call";
 
 type Props = {
   projectId: string;
@@ -34,14 +34,7 @@ export function OutcomesEditor({ projectId, type, outcomes, canEdit, typeChoices
   const path = `/projects/${projectId}/work-item-types/${encodeURIComponent(type.code)}/outcomes`;
 
   const refusal = (error: string) =>
-    ({
-      not_found: t("errors.notFound"),
-      project_closed: t("errors.projectClosed"),
-      invalid_outcome: t("errors.invalid"),
-      outcome_exists: t("errors.exists"),
-      invalid_order: t("errors.invalidOrder"),
-      outcome_in_use: t("errors.inUse"),
-    })[error] ?? t("errors.unavailable");
+    refusalMessage(t, { invalid_outcome: "invalid", outcome_exists: "exists", invalid_order: "invalidOrder", outcome_in_use: "inUse" }, error);
 
   async function move(index: number, delta: -1 | 1) {
     const codes = outcomes.map((o) => o.code);

@@ -20,7 +20,8 @@ import { useLocale, useTranslations } from "next-intl";
 import { useState, type ReactNode } from "react";
 import { SaveToLibraryAction } from "@/components/save-to-library-action";
 import { Link, useRouter } from "@/i18n/navigation";
-import { createdId, setupCall, type SetupResult } from "@/lib/setup-call";
+import { refusalMessage, setupCall, type SetupResult } from "@/lib/setup-call";
+import { copyIntoProject } from "@/lib/copy-into-project";
 
 type Props = {
   projectId: string;
@@ -74,16 +75,14 @@ export function WorkflowSettingsView({ projectId, settings, participants, copySu
   ];
 
   const errorText = (error: string) =>
-    ({
-      not_found: t("errors.notFound"),
-      project_closed: t("errors.projectClosed"),
-      invalid_name: t("errors.invalidName"),
-      stage_missing: t("errors.stageMissing"),
-      workflow_name_names_participant: t("errors.namesParticipant"),
-      workflow_not_published: t("errors.notPublished"),
-      workflow_not_for_type: t("errors.notForType"),
-      workflow_problems: t("errors.problems"),
-    })[error] ?? t("errors.unavailable");
+    refusalMessage(t, {
+      invalid_name: "invalidName",
+      stage_missing: "stageMissing",
+      workflow_name_names_participant: "namesParticipant",
+      workflow_not_published: "notPublished",
+      workflow_not_for_type: "notForType",
+      workflow_problems: "problems",
+    }, error);
 
   const done = (message?: string) => {
     setDialog(null);
@@ -215,10 +214,9 @@ export function WorkflowSettingsView({ projectId, settings, participants, copySu
           projectId={projectId}
           type={dialog.type}
           library={settings.library.filter((l) => l.workItemTypeId === dialog.type.id)}
-          bind={bind}
           errorText={errorText}
           onClose={() => setDialog(null)}
-          onDone={() => done(t("libraryUsed", { type: typeName(dialog.type) }))}
+          onCreated={(id) => router.push(`${base}/${id}`)}
         />
       )}
       {dialog?.kind === "exception" && (
@@ -421,13 +419,12 @@ function DuplicateDialog({
       onClose={onClose}
       disabled={name.en.trim() === "" || name.ar.trim() === ""}
       onSubmit={async () => {
-        const res = await setupCall("POST", `/workflows/${type.workflow.id}/duplicate`, { projectId, name });
-        const id = createdId(res);
-        if (id) {
-          onCreated(id);
+        const copy = await copyIntoProject(type.workflow.id, projectId, name);
+        if (copy.ok) {
+          onCreated(copy.id);
           return null;
         }
-        return errorText(res.ok ? "unavailable" : res.error);
+        return [errorText(copy.error), ...copy.problems.map((p) => p.message[locale])].join(" ");
       }}
     >
       <Field label={t("nameEn")} required>
@@ -440,23 +437,25 @@ function DuplicateDialog({
   );
 }
 
-/** "Use a Library Workflow": the Library's copy is duplicated into the Project, published and bound as the Type's Workflow. */
+/**
+ * "Use a Library Workflow": the Library Workflow copied into the Project as a draft, opened in
+ * the builder, the same path as the Library's "Use on a Project" (copyIntoProject; decided
+ * 2026-10-11). The Project Admin publishes and binds it once they have reviewed it.
+ */
 function LibraryDialog({
   projectId,
   type,
   library,
-  bind,
   errorText,
   onClose,
-  onDone,
+  onCreated,
 }: {
   projectId: string;
   type: WorkflowSettingsType;
   library: WorkflowSettings["library"];
-  bind: (type: WorkflowSettingsType, workflowId: string, participantId: string | null) => Promise<SetupResult>;
   errorText: (error: string) => string;
   onClose: () => void;
-  onDone: () => void;
+  onCreated: (id: string) => void;
 }) {
   const t = useTranslations("projectSettings.workflows");
   const locale = useLocale() as Locale;
@@ -471,15 +470,12 @@ function LibraryDialog({
       disabled={!source}
       onSubmit={async () => {
         if (!source) return null;
-        const copy = await setupCall("POST", `/workflows/${source.id}/duplicate`, { projectId, name: source.name });
-        const id = createdId(copy);
-        if (!id) return errorText(copy.ok ? "unavailable" : copy.error);
-        const published = await setupCall("POST", `/workflows/${id}/publish`);
-        if (!published.ok) return `${t("libraryCopiedOnly")} ${errorText(published.error)}`;
-        const bound = await bind(type, id, null);
-        if (!bound.ok) return `${t("libraryCopiedOnly")} ${errorText(bound.error)}`;
-        onDone();
-        return null;
+        const copy = await copyIntoProject(source.id, projectId, source.name);
+        if (copy.ok) {
+          onCreated(copy.id);
+          return null;
+        }
+        return [errorText(copy.error), ...copy.problems.map((p) => p.message[locale])].join(" ");
       }}
     >
       <Field label={t("libraryWorkflow")} required>

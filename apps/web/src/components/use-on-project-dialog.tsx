@@ -5,6 +5,8 @@ import { Button, buttonVariants, Dialog, DialogClose, DialogContent, DialogFoote
 import { useLocale, useTranslations } from "next-intl";
 import { useState, type FormEvent } from "react";
 import { Link } from "@/i18n/navigation";
+import { copyIntoProject } from "@/lib/copy-into-project";
+import { bilingualNameOf } from "@/lib/setup-call";
 
 /** A Project the Member is Project Admin of, which a Library Workflow can be copied into. */
 export type UsableProject = { id: string; code: string; name: BilingualText };
@@ -19,9 +21,9 @@ type Props = {
 
 /**
  * "Use on a Project" (RP-442, WF-19; ADR 0016): a Library Workflow copied into one of the
- * Projects the Member is Project Admin of (`POST /v1/workflows/:id/duplicate`). The copy is
- * a draft of the Project's own, independent of the Library; the dialog then offers it in
- * the builder. A Project whose Module lacks a Stage the Workflow uses refuses it, naming each.
+ * Projects the Member is Project Admin of (copyIntoProject, the same path as Settings →
+ * Workflows' "Use a Library Workflow"). The copy is a draft of the Project's own,
+ * independent of the Library; the dialog then offers it in the builder. A Project whose Module lacks a Stage the Workflow uses refuses it, naming each.
  */
 export function UseOnProjectDialog({ workflowId, name, projects }: Props) {
   const t = useTranslations("library.useOn");
@@ -45,44 +47,25 @@ export function UseOnProjectDialog({ workflowId, name, projects }: Props) {
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    const en = String(form.get("nameEn") ?? "").trim();
-    const ar = String(form.get("nameAr") ?? "").trim();
+    const name = bilingualNameOf(new FormData(event.currentTarget));
     const chosen = projects.find((p) => p.id === project);
-    if (!en || !ar || !chosen) {
+    if (!name || !chosen) {
       setError(t("invalid"));
       return;
     }
     setPending(true);
     setError(null);
     setProblems([]);
-    try {
-      const res = await fetch(`/api/v1/workflows/${encodeURIComponent(workflowId)}/duplicate`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ projectId: chosen.id, name: { en, ar } }),
-      });
-      if (res.status === 201) {
-        const { id } = (await res.json()) as { id: string };
-        setCopied({ id, projectId: chosen.id, project: chosen.name[locale] });
-        return;
-      }
-      const body = (await res.json().catch(() => ({}))) as { error?: string; problems?: StageCopyProblem[] };
-      if (body.error === "stage_missing") setProblems(body.problems ?? []);
-      setError(
-        body.error === "stage_missing"
-          ? t("stageMissing")
-          : body.error === "project_closed"
-            ? t("closed")
-            : res.status === 400 || res.status === 422
-              ? t("invalid")
-              : t("failed"),
-      );
-    } catch {
-      setError(t("failed"));
-    } finally {
-      setPending(false);
+    const copy = await copyIntoProject(workflowId, chosen.id, name);
+    setPending(false);
+    if (copy.ok) {
+      setCopied({ id: copy.id, projectId: chosen.id, project: chosen.name[locale] });
+      return;
     }
+    setProblems(copy.problems);
+    setError(
+      { stage_missing: t("stageMissing"), project_closed: t("closed"), invalid_name: t("invalid"), invalid_request: t("invalid") }[copy.error] ?? t("failed"),
+    );
   }
 
   return (

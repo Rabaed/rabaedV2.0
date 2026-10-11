@@ -5,7 +5,7 @@ import { Badge, Button, Dialog, DialogClose, DialogContent, DialogFooter, Dialog
 import { useLocale, useTranslations } from "next-intl";
 import { useState } from "react";
 import { useRouter } from "@/i18n/navigation";
-import { setupCall } from "@/lib/setup-call";
+import { refusalMessage, setupCall } from "@/lib/setup-call";
 
 type Props = {
   projectId: string;
@@ -32,15 +32,7 @@ export function StagesEditor({ projectId, moduleKey, moduleName, stages, canEdit
   const path = `/projects/${projectId}/modules/${moduleKey}/stages`;
 
   const refusal = (error: string) =>
-    ({
-      not_found: t("errors.notFound"),
-      project_closed: t("errors.projectClosed"),
-      invalid_name: t("errors.invalidName"),
-      invalid_stage: t("errors.invalidStage"),
-      stage_exists: t("errors.exists"),
-      invalid_order: t("errors.invalidOrder"),
-      stage_in_use: t("errors.inUse"),
-    })[error] ?? t("errors.unavailable");
+    refusalMessage(t, { invalid_name: "invalidName", invalid_stage: "invalidStage", stage_exists: "exists", invalid_order: "invalidOrder", stage_in_use: "inUse" }, error);
 
   async function run(call: Promise<Awaited<ReturnType<typeof setupCall>>>, done: string) {
     const res = await call;

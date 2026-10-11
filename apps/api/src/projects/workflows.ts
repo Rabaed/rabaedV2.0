@@ -3,6 +3,8 @@ import {
   hasError,
   prepareDraft,
   readLatestPublishedDefinition,
+  readModuleStages,
+  readPositions,
   readWorkflowCheckContext,
   readWorkflowDraft,
   withMember,
@@ -12,7 +14,6 @@ import {
   stageCopyProblems,
   type BilingualText,
   type BindWorkflowRequest,
-  type StageCategory,
   type WorkflowBuilderRead,
   type DefinitionIssue,
   type DuplicateWorkflowRequest,
@@ -86,18 +87,13 @@ async function workflowMap(trx: Db, definitionId: string, canAuthorKnown?: boole
   `.execute(trx);
   const type = rows[0];
   if (!type) return null;
-  const stages = await sql<{ key: string; name: BilingualText; category: StageCategory; own: boolean }>`
-    select key, name, category, project_id is not null as own from stage
-    where module_key = ${type.module_key} and (project_id is null or project_id = ${type.project_id}::uuid)
-    order by sort, key
-  `.execute(trx);
-  const own = stages.rows.some((s) => s.own);
-  const positions = await trx.selectFrom("position").select(["base_role", "key", "name"]).orderBy("base_role").orderBy("sort").execute();
+  // The Project's own Stages for a Project's Workflow (the Rabaed Defaults' while it has none), else the Rabaed Defaults'.
+  const own = type.project_id === null ? [] : await readModuleStages(trx, type.module_key, type.project_id);
   return {
     workflow,
     type: { code: type.code, name: type.name },
-    stages: stages.rows.filter((s) => s.own === own).map(({ key, name, category }) => ({ key, name, category })),
-    positions: positions.map((p) => ({ role: p.base_role, key: p.key, name: p.name as BilingualText })),
+    stages: own.length > 0 ? own : await readModuleStages(trx, type.module_key, null),
+    positions: await readPositions(trx),
   };
 }
 
@@ -148,25 +144,19 @@ export type SaveToLibraryResult =
 /**
  * The Authorized Person saves a Workflow they read to their Company's Library: a copy
  * (WF-4's duplicate into the Library; nothing records the original, ADR 0016), published at
- * once so it can be used on a Project straight away. When the Library's checks refuse the
- * copy, it stays a draft and the problems are returned.
+ * once so it can be used on a Project straight away. One transaction: the copy and its
+ * publish are saved together. When the Library's checks refuse the copy, it stays a draft
+ * and the problems are returned.
  */
-export async function saveWorkflowToLibrary(
-  db: Db,
-  memberId: string,
-  sourceId: string,
-  input: SaveWorkflowToLibraryRequest,
-  now: Date,
-): Promise<SaveToLibraryResult> {
-  const copy = await duplicateWorkflow(db, memberId, sourceId, { projectId: null, name: input.name }, now);
-  if (!copy.ok) {
-    // A copy into the Library has no Project Stages to check, so stage_missing cannot be answered here.
-    if (copy.reason === "stage_missing") throw new Error("a copy into a Library checked a Project's Stages");
-    return { ok: false, reason: copy.reason };
-  }
-  const published = await publishWorkflow(db, memberId, copy.id, now);
-  if (published.ok) return { ok: true, saved: { id: copy.id, published: true, problems: published.warnings } };
-  return { ok: true, saved: { id: copy.id, published: false, problems: published.reason === "workflow_problems" ? published.problems : [] } };
+export function saveWorkflowToLibrary(db: Db, memberId: string, sourceId: string, input: SaveWorkflowToLibraryRequest, now: Date): Promise<SaveToLibraryResult> {
+  return withMember(db, memberId, async (trx): Promise<SaveToLibraryResult> => {
+    // A copy into the Library has no Project Stages to check, so it never answers stage_missing.
+    const copy = await duplicateIn(trx, sourceId, { projectId: null, name: input.name }, now);
+    if (!copy.ok) return { ok: false, reason: copy.reason };
+    const published = await publishIn(trx, copy.id, now);
+    if (published.ok) return { ok: true, saved: { id: copy.id, published: true, problems: published.warnings } };
+    return { ok: true, saved: { id: copy.id, published: false, problems: published.reason === "workflow_problems" ? published.problems : [] } };
+  });
 }
 
 /** The Workflow as the acting Member reads it; `canAuthor` when the caller already asked authors(), else it is asked here. */
@@ -226,24 +216,32 @@ export async function duplicateWorkflow(
   now: Date,
 ): Promise<DuplicateWorkflowResult> {
   try {
-    return await withMember(db, memberId, async (trx): Promise<DuplicateWorkflowResult> => {
-      const { rows } = await sql<{ outcome: string; workflow_definition_id: string | null }>`
-        select outcome, workflow_definition_id from app.duplicate_workflow(
-          ${sourceId}::uuid, ${input.projectId}::uuid, ${JSON.stringify(input.name)}::jsonb, ${now})
-      `.execute(trx);
-      const outcome = checkedOutcome(rows[0]!.outcome, ["duplicated", ...duplicateRefusals]);
-      if (outcome !== "duplicated") return { ok: false, reason: outcome };
-      const id = rows[0]!.workflow_definition_id!;
-      if (input.projectId !== null) {
-        const problems = await copyStageProblems(trx, id, input.projectId);
-        if (problems.length > 0) throw new StageMissing(problems);
-      }
-      return { ok: true, id };
-    });
+    return await withMember(db, memberId, (trx) => duplicateIn(trx, sourceId, input, now));
   } catch (error) {
     if (error instanceof StageMissing) return { ok: false, reason: "stage_missing", problems: error.problems };
     throw error;
   }
+}
+
+/** The copy, in the acting Member's transaction; throws StageMissing (to undo it) when the Project lacks a Stage it uses. */
+async function duplicateIn(
+  trx: Db,
+  sourceId: string,
+  input: DuplicateWorkflowRequest,
+  now: Date,
+): Promise<{ ok: true; id: string } | { ok: false; reason: (typeof duplicateRefusals)[number] }> {
+  const { rows } = await sql<{ outcome: string; workflow_definition_id: string | null }>`
+    select outcome, workflow_definition_id from app.duplicate_workflow(
+      ${sourceId}::uuid, ${input.projectId}::uuid, ${JSON.stringify(input.name)}::jsonb, ${now})
+  `.execute(trx);
+  const outcome = checkedOutcome(rows[0]!.outcome, ["duplicated", ...duplicateRefusals]);
+  if (outcome !== "duplicated") return { ok: false, reason: outcome };
+  const id = rows[0]!.workflow_definition_id!;
+  if (input.projectId !== null) {
+    const problems = await copyStageProblems(trx, id, input.projectId);
+    if (problems.length > 0) throw new StageMissing(problems);
+  }
+  return { ok: true, id };
 }
 
 /** The Stages copy `copyId` (a draft the Member authors) uses that Project `projectId` lacks in its Type's Module. */
@@ -311,20 +309,23 @@ export type PublishWorkflowResult =
 
 /** Publishes the draft of a Workflow the Member authors, after every publish check: refused on any error, warnings allowed. */
 export function publishWorkflow(db: Db, memberId: string, definitionId: string, now: Date): Promise<PublishWorkflowResult> {
-  return withMember(db, memberId, async (trx): Promise<PublishWorkflowResult> => {
-    const check = await authoredCheckContext(trx, definitionId);
-    if (!check) return { ok: false, reason: "not_found" };
-    // Locks the definition: no save comes between these checks and the publish.
-    const draft = await readWorkflowDraft(trx, definitionId);
-    if (!draft) return { ok: false, reason: "no_draft" };
-    const { problems } = prepareDraft(draft.definition, check);
-    if (hasError(problems)) return { ok: false, reason: "workflow_problems", problems };
-    const { rows } = await sql<{ outcome: string; version_no: number | null }>`
-      select outcome, version_no from app.publish_workflow(${definitionId}::uuid, ${now})
-    `.execute(trx);
-    const outcome = checkedOutcome(rows[0]!.outcome, ["published", ...publishRefusals]);
-    return outcome === "published" ? { ok: true, versionNo: rows[0]!.version_no!, warnings: problems } : { ok: false, reason: outcome };
-  });
+  return withMember(db, memberId, (trx) => publishIn(trx, definitionId, now));
+}
+
+/** The publish, in the acting Member's transaction. */
+async function publishIn(trx: Db, definitionId: string, now: Date): Promise<PublishWorkflowResult> {
+  const check = await authoredCheckContext(trx, definitionId);
+  if (!check) return { ok: false, reason: "not_found" };
+  // Locks the definition: no save comes between these checks and the publish.
+  const draft = await readWorkflowDraft(trx, definitionId);
+  if (!draft) return { ok: false, reason: "no_draft" };
+  const { problems } = prepareDraft(draft.definition, check);
+  if (hasError(problems)) return { ok: false, reason: "workflow_problems", problems };
+  const { rows } = await sql<{ outcome: string; version_no: number | null }>`
+    select outcome, version_no from app.publish_workflow(${definitionId}::uuid, ${now})
+  `.execute(trx);
+  const outcome = checkedOutcome(rows[0]!.outcome, ["published", ...publishRefusals]);
+  return outcome === "published" ? { ok: true, versionNo: rows[0]!.version_no!, warnings: problems } : { ok: false, reason: outcome };
 }
 
 const bindRefusals = ["not_found", "project_closed", "workflow_not_published", "workflow_not_for_type", "workflow_name_names_participant"] as const;

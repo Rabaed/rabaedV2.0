@@ -107,7 +107,7 @@ describe("a new Project's Stages", () => {
 });
 
 describe("the Project Admin's Stage commands", () => {
-  it("are audited in setup_event, which the app role can't read and nobody can change", async () => {
+  it("are audited in setup_event, which the app role can't read and nobody can change (scenario RP-450-1)", async () => {
     expect(
       await outcomeAs(creator, sql`select app.rename_stage(${projectId}::uuid, 'submittals', 'approved', '{"en": "Done", "ar": "تم"}'::jsonb) as outcome`),
     ).toBe("renamed");

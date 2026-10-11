@@ -15,7 +15,7 @@ import { useLocale, useTranslations } from "next-intl";
 import { useState } from "react";
 import { Link, useRouter } from "@/i18n/navigation";
 import { addField, changeField, fieldKinds, hasNamed, moveField, newField, removeField, startingSchema, withInternal, type FieldKind } from "@/lib/screen-editor";
-import { setupCall } from "@/lib/setup-call";
+import { refusalMessage, setupCall } from "@/lib/setup-call";
 
 type Props = {
   projectId: string;
@@ -68,13 +68,7 @@ export function ScreenEditor({ projectId, screen, pins, words, itemsTargets }: P
   };
 
   const refusal = (error: string) =>
-    ({
-      not_found: t("errors.notFound"),
-      project_closed: t("errors.projectClosed"),
-      no_draft: t("errors.noDraft"),
-      invalid_screen: t("errors.invalid"),
-      screen_problems: t("errors.problems"),
-    })[error] ?? t("errors.unavailable");
+    refusalMessage(t, { no_draft: "noDraft", invalid_screen: "invalid", screen_problems: "problems" }, error);
 
   async function save(): Promise<boolean> {
     setState("saving");

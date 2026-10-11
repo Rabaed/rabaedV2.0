@@ -21,8 +21,12 @@ const screenContent = z.object({
   internalFields: z.array(z.string().max(64)).max(200).default([]),
 });
 
-/** A Project Admin creates a Screen on the Project: its key, its name and its first draft. */
-export const createScreenRequest = screenContent.extend({ key: screenKey, name: bilingualText });
+/**
+ * A Project Admin creates a Screen on the Project: its key, its name and its first draft;
+ * `publish` publishes that draft as Version 1 in the same transaction (copying a Rabaed
+ * Default Screen as it is), and a publish refused leaves nothing created.
+ */
+export const createScreenRequest = screenContent.extend({ key: screenKey, name: bilingualText, publish: z.boolean().default(false) });
 export type CreateScreenRequest = z.infer<typeof createScreenRequest>;
 
 /** Save a Screen's draft: the next Version, published separately. */

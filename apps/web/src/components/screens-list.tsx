@@ -5,7 +5,7 @@ import { Badge, Button, Dialog, DialogClose, DialogContent, DialogFooter, Dialog
 import { useLocale, useTranslations } from "next-intl";
 import { useState } from "react";
 import { Link, useRouter } from "@/i18n/navigation";
-import { createdId, setupCall } from "@/lib/setup-call";
+import { createdId, refusalMessage, setupCall } from "@/lib/setup-call";
 
 export type ScreenRow = {
   id: string;
@@ -47,19 +47,23 @@ export function ScreensList({ projectId, canEdit, screens, starting }: Props) {
   const defaults = screens.filter((s) => s.owner === "rabaed" && !ownKeys.has(s.key));
 
   const refusal = (error: string) =>
-    ({ not_found: t("errors.notFound"), project_closed: t("errors.projectClosed"), key_taken: t("errors.keyTaken"), invalid_screen: t("errors.invalid") })[error] ?? t("errors.unavailable");
+    refusalMessage(t, { key_taken: "keyTaken", invalid_screen: "invalid", screen_problems: "problems", no_draft: "noDraft" }, error);
 
+  /** Copies a Rabaed Default Screen in, published as it was (one call, one transaction), so Workflows can pin it at once. */
   async function copyDefault(row: ScreenRow) {
     if (!row.copy) return;
     setBusy(row.id);
-    const res = await setupCall("POST", `/projects/${projectId}/screens`, { key: row.key, name: row.name, schema: row.copy.schema, internalFields: row.copy.internalFields });
+    const res = await setupCall("POST", `/projects/${projectId}/screens`, {
+      key: row.key,
+      name: row.name,
+      schema: row.copy.schema,
+      internalFields: row.copy.internalFields,
+      publish: true,
+    });
     setBusy(null);
     const id = createdId(res);
-    if (id) {
-      // Published as it was, so the copy is a Screen workflows can pin at once.
-      await setupCall("POST", `/screens/${id}/publish`);
-      router.push(`${base}/${id}`);
-    } else setNotice(refusal(res.ok ? "unavailable" : res.error));
+    if (id) router.push(`${base}/${id}`);
+    else setNotice(refusal(res.ok ? "unavailable" : res.error));
   }
 
   const table = (rows: ScreenRow[], title: string, intro: string, testId: string) => (
