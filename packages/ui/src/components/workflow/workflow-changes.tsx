@@ -25,7 +25,8 @@ export function WorkflowChangeList({ before, after, locale, labels }: { before: 
             style={{ color: c.change === "added" ? "var(--success)" : c.change === "removed" ? "var(--danger)" : "var(--stage-resubmitted-dot)" }}
           />
           <span>
-            {labels[c.change]} {c.name[locale]}
+            {/* A name may mix scripts ("اعتماد – Code A"): isolated, so its direction never depends on the words around it. */}
+            {labels[c.change]} <bdi>{c.name[locale]}</bdi>
           </span>
         </li>
       ))}
