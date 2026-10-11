@@ -483,3 +483,16 @@ On the item page, "Workflow: <name> · Version n" opens "View workflow", a drawe
 1. **Consultant withdrawn while holding a Contractor's item:** the item is not cancelled. The assignment becomes a Participant-level **Vacancy**. When a new Participant in that role covering the item's Visibility is added, the item goes to that Participant's Step Pool. Only items the withdrawn Participant *raised* are cancelled.
 2. **No parallel review in v1.** Workflows are sequential. Parallel branches ("all must approve") are a v2 engine feature.
 3. **Default holders are allowed.** Each Participant can set a default holder per Step in Project Settings (§3.3, rule 3).
+
+---
+
+## 12. Adding a Rabaed Default Type: the checklist
+
+The MAR was once the only Rabaed Default Type; the Comment (RP-434) joined it and broke four tests that assumed one. Three now read the Types from the database (`apps/api/test/support/default-types.ts`: `defaultModules`, `typeCodes`), so a new Type or Module does not break them: `dashboard.test.ts` (the Snag List filter), `need-my-action.test.ts` and `projects.test.ts` (a Project's Module tabs). Use those helpers in a new test rather than writing the list. What a migration that adds a Type still has to do:
+
+1. **Stages.** A Module has its own Stages: `insert into stage` in `20260929000000_work_items.sql` seeds the Submittals'; a Type in another Module needs its Module's Stages (the Comment's migration, `20270107000000_code_b_comments.sql`, shows one).
+2. **Form.** A Type's Form is a `form_definition` with a published `form_version`; the MAR Form is seeded in `20261010000000_form_versions.sql`. A Type with no Form raises items with no answers.
+3. **Workflow.** A published Version that passes the publish checks, and `work_item_type.workflow_definition_id` / `workflow_definition.work_item_type_id` pointing at each other.
+4. **Numbering.** `app.issue_document_number` (`20261026100000_numbering_pattern.sql`) takes the Type's pattern, else the Project's, else the Rabaed Default, so a new Type needs no row; its number is `<project>-<type code>-<ordinal>-0001`, so its code is part of every Document Number.
+5. **Position permissions.** `position_permission` rows per Module, or no Position can raise or act on it.
+6. **Tests that cannot derive it.** `apps/api/test/work-item-board-moves.test.ts` builds its test Type on the seeded MAR (`where code = 'MAR'`) and expects the MAR's Transition keys and Stages (`approve_a`, `revise_c`, `pending_approval`); change it if the MAR's Workflow changes, not when a Type is added. Run the seam suites of `dashboard`, `need-my-action`, `projects`, `work-item-board-moves` and `demo-seed` before queueing.
