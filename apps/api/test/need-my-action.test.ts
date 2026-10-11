@@ -241,6 +241,7 @@ describe("Module tabs", () => {
       from work_item_type where code = 'MAR' and project_id is null
     `.execute(migrator);
     expect((await card(c1.caller, other)).modules).toEqual(await defaultModules(migrator, ["inspections"]));
+    expect((await card(c1.caller, other)).modules).toContain("inspections");
     expect((await card(c1.caller)).modules).toEqual(await defaultModules(migrator));
   });
 

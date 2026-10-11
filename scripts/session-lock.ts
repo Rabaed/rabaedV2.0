@@ -29,13 +29,9 @@ export function parseSessionLock(locked: string | undefined): { name: string; pi
 export function foreignSessionLock(locked: string | undefined, ownPid: number, processes: ProcessList, sessionPid?: number): string | undefined {
   const lock = parseSessionLock(locked);
   if (!lock || !processes.isAlive(lock.pid)) return undefined;
-  if (!/^claude(\.exe)?$/i.test(processes.nameOf(lock.pid) ?? "")) return undefined;
+  if (!isClaude(lock.pid, processes)) return undefined;
   if (lock.pid === sessionPid) return undefined;
-  const seen = new Set<number>();
-  for (let p: number | undefined = ownPid; p !== undefined && !seen.has(p); p = processes.parentOf(p)) {
-    if (p === lock.pid) return undefined;
-    seen.add(p);
-  }
+  for (const p of ancestors(ownPid, processes)) if (p === lock.pid) return undefined;
   return `This worktree is locked by another live Claude session: ${lock.name} (pid ${lock.pid}). That session owns it, and its spec; do not set up a lane here, even with --force. Stop, or start your own session.`;
 }
 
@@ -51,31 +47,33 @@ export function sessionPidOf(env: Record<string, string | undefined>): number | 
  * The tree is the holder's parent chain reaching this session's claude: sessionPid (CLAUDE_PID), else the first
  * `claude` process among ownPid's ancestors. Never higher: the desktop app above it also parents other sessions.
  */
-export function ownServerHint(port: number, holderPid: number, ownPid: number, processes: ProcessList, sessionPid?: number): string | undefined {
-  const session = sessionPid ?? claudeAncestor(ownPid, processes);
+export function ownServerHint(
+  port: number,
+  holderPid: number,
+  ownPid: number,
+  processes: ProcessList,
+  sessionPid?: number,
+  platform: NodeJS.Platform = process.platform,
+): string | undefined {
+  const session = sessionPid ?? [...ancestors(ownPid, processes)].find((p) => p > 1 && isClaude(p, processes));
   if (session === undefined) return undefined;
-  const seen = new Set<number>();
-  let inTree = false;
-  for (let p: number | undefined = processes.parentOf(holderPid); p !== undefined && !seen.has(p); p = processes.parentOf(p)) {
-    if (p === session) {
-      inTree = true;
-      break;
-    }
-    seen.add(p);
-  }
-  if (!inTree) return undefined;
-  const stop = process.platform === "win32" ? `taskkill /pid ${holderPid} /t` : `kill ${holderPid}`;
+  if (![...ancestors(holderPid, processes)].slice(1).includes(session)) return undefined;
+  // /f: a windowless node process refuses a plain taskkill ("can only be terminated forcefully").
+  const stop = platform === "win32" ? `taskkill /pid ${holderPid} /t /f` : `kill ${holderPid}`;
   return `Port ${port} is held by this session's own dev server (${processes.nameOf(holderPid) ?? "process"}, pid ${holderPid}), probably its pnpm demo or pnpm dev. Stop it with \`${stop}\`, or run it after the implementers finish or on another lane.`;
 }
 
-/** The nearest `claude` / `claude.exe` among pid's ancestors (pid included), or undefined. */
-function claudeAncestor(pid: number, processes: ProcessList): number | undefined {
+/** pid, then its parent, grandparent and so on, stopping at a pid that is not running or one already seen. */
+function* ancestors(pid: number, processes: ProcessList): Generator<number> {
   const seen = new Set<number>();
-  for (let p: number | undefined = pid; p !== undefined && p > 1 && !seen.has(p); p = processes.parentOf(p)) {
-    if (/^claude(\.exe)?$/i.test(processes.nameOf(p) ?? "")) return p;
+  for (let p: number | undefined = pid; p !== undefined && !seen.has(p); p = processes.parentOf(p)) {
     seen.add(p);
+    yield p;
   }
-  return undefined;
+}
+
+function isClaude(pid: number, processes: ProcessList): boolean {
+  return /^claude(\.exe)?$/i.test(processes.nameOf(pid) ?? "");
 }
 
 /** The pid listening on a TCP port, or undefined when none is found or it cannot be read. */

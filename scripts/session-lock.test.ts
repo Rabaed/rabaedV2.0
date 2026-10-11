@@ -82,10 +82,11 @@ describe("ownServerHint (RP-545)", () => {
   const procs = { parentOf: (pid: number) => tree.get(pid)?.[0], nameOf: (pid: number) => tree.get(pid)?.[1], isAlive: (pid: number) => tree.has(pid) };
 
   it("names a port held by a process under the session's claude and the command to stop it", () => {
-    const hint = ownServerHint(4700, 90, 50, procs, 30);
+    const hint = ownServerHint(4700, 90, 50, procs, 30, "win32");
     expect(hint).toContain("Port 4700 is held by this session's own dev server");
     expect(hint).toContain("pid 90");
-    expect(hint).toMatch(/(taskkill \/pid|kill) 90/);
+    expect(hint).toContain("taskkill /pid 90 /t /f");
+    expect(ownServerHint(4700, 90, 50, procs, 30, "linux")).toContain("`kill 90`");
   });
   it("finds the session through this process's own ancestors when CLAUDE_PID is not set", () => {
     expect(ownServerHint(4700, 90, 50, procs)).toContain("pid 90");
