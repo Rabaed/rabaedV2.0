@@ -13,6 +13,7 @@ import { moduleKeys, workItemSearchParams, type Dashboard, type DashboardCard, t
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { attachDatasheet, createTestApi, expectHidden, type Caller } from "./support/harness.ts";
+import { typeCodes } from "./support/default-types.ts";
 import { all, bilingual, buildTower, draft, inInternalReview, ok, projectMember, submitted, take, type Company, type Tower } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
@@ -449,7 +450,8 @@ describe("a Type of another Module: the Snag List", () => {
     expect(submittals.items.map((i) => i.type.code)).toEqual(["MAR"]);
     const snags: WorkItemList = (await ok(tower.c1Pm.get(`/v1/projects/${tower.projectId}/work-items?module=snag_list`), 200)).json();
     expect(snags.items.map((i) => i.type.code)).toEqual([SNAG, SNAG, SNAG]);
-    expect(snags.filters.types.map((t) => t.code).sort()).toEqual(["CMT", SNAG].sort());
+    expect(snags.filters.types.map((t) => t.code).sort()).toEqual(await typeCodes(migrator, "snag_list", tower.projectId));
+    expect(snags.filters.types.map((t) => t.code)).toContain(SNAG);
     expect(snags.stages.reduce((sum, s) => sum + s.count, 0)).toBe(3);
   });
 });
