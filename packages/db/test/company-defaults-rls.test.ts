@@ -142,4 +142,15 @@ describe("Company defaults through the app role", () => {
     const names = await call<{ name: { en: string } }>(rival.ap, sql`select d.name from workflow_definition d where d.project_id = ${rivals!.project_id}::uuid`);
     expect(names.map((n) => n.name.en)).toEqual(["Rival route"]);
   });
+
+  it("write one setup_event row per command that changed something, to the Company or the Project (RP-450)", async () => {
+    const rows = async (where: string, id: string) =>
+      (await migrator.query(`select type from setup_event where kind = 'company_default' and ${where} = $1 order by created_at, id`, [id])).rows.map((r) => r.type);
+    // TMC: set workflow, set form, cleared workflow; the refused commands wrote nothing.
+    expect(await rows("company_id", tmc.id)).toEqual(["default_set", "default_set", "default_cleared"]);
+    const applied = await migrator.query("select type, company_id from setup_event where kind = 'company_default' and type = 'defaults_applied' and project_id is not null");
+    expect(applied.rows.length).toBeGreaterThanOrEqual(2);
+    expect(applied.rows.every((r) => r.company_id === null)).toBe(true);
+    await expect(call(tmc.ap, sql`select * from setup_event`)).rejects.toMatchObject({ code: "42501" });
+  });
 });

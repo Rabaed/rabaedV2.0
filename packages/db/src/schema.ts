@@ -331,14 +331,16 @@ export interface WorkflowDefinitionTable {
   updated_at: Generated<Timestamp>;
 }
 
-/** A Member's change to a Workflow or a binding, append-only (RP-427). Not granted to the app role. */
-export interface WorkflowEventTable {
+/** A setup change (Workflow, Form, Screen, Stage, Outcome set, Company default), append-only (RP-450). Not granted to the app role. */
+export interface SetupEventTable {
   id: Generated<string>;
+  kind: "workflow" | "form" | "screen" | "stage" | "outcome_set" | "company_default";
   workflow_definition_id: string | null;
+  /** Exactly one of project_id and company_id is set. */
   project_id: string | null;
   company_id: string | null;
   actor_member_id: string;
-  type: "duplicated" | "draft_saved" | "published" | "bound" | "unbound";
+  type: string;
   payload: Json;
   created_at: Generated<Timestamp>;
 }
@@ -671,7 +673,7 @@ export interface Database {
   stage: StageTable;
   workflow_definition: WorkflowDefinitionTable;
   workflow_binding: WorkflowBindingTable;
-  workflow_event: WorkflowEventTable;
+  setup_event: SetupEventTable;
   workflow_version: WorkflowVersionTable;
   workflow_step: WorkflowStepTable;
   workflow_transition: WorkflowTransitionTable;

@@ -196,6 +196,16 @@ describe("Screens through the app role", () => {
     expect(await call<{ version_no: number }>(k1.member, sql`select version_no from app.screen_draft(${screenId}::uuid)`)).toEqual([]);
   });
 
+  it("write exactly one setup_event row per command, none for a refused one, to the Project only (RP-450)", async () => {
+    const { rows } = await migrator.query("select kind, type, project_id, company_id, actor_member_id from setup_event where kind = 'screen' and project_id = $1 order by created_at, id", [
+      projectId,
+    ]);
+    expect(rows).toEqual(
+      ["screen_created", "screen_published", "screen_draft_saved"].map((type) => ({ kind: "screen", type, project_id: projectId, company_id: null, actor_member_id: c1.ap })),
+    );
+    await expect(call(c1.ap, sql`select * from setup_event`)).rejects.toMatchObject({ code: "42501" });
+  });
+
   it("keep a published Version as it is, even for the tables' owner", async () => {
     const published = await one("select id from screen_version where screen_id = $1 and status = 'published'", [screenId]);
     await expect(migrator.query("update screen_version set schema = '{}' where id = $1", [published])).rejects.toMatchObject({ code: "42501" });

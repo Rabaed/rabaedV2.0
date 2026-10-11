@@ -1,7 +1,7 @@
 // Seam 2 for outcome sets (RP-429, WF-6; data-model.md outcome). Each Work Item
 // Type has its own set; a Project runs its own copy of each Rabaed Default Type's
 // set, seeded like its Stages; its Project Admin adds outcomes and changes their
-// names, follow-up actions and order there, each audited in project_event, and the
+// names, follow-up actions and order there, each audited in setup_event, and the
 // Rabaed Defaults never change. Outcomes are read like their Type: every Member of
 // the Project reads its copy (project-rls.test.ts checks the table among every
 // Project table), and the app role writes none directly.
@@ -130,11 +130,12 @@ describe("a Project's copy", () => {
     expect(await setOf(projectId)).toEqual([...defaultOutcomeSets.review_code, { code: "E", name: e, closing: true, polarity: "positive", actions: [] }]);
     expect(await setOf(otherProjectId)).toEqual(defaultOutcomeSets.review_code);
     expect(await setOf(null)).toEqual(defaultOutcomeSets.review_code);
-    const { rows } = await migrator.query("select type, actor_member_id, payload from project_event where project_id = $1 and type = 'outcome_added'", [
+    const { rows } = await migrator.query("select kind, type, actor_member_id, payload from setup_event where project_id = $1 and type = 'outcome_added'", [
       projectId,
     ]);
     expect(rows).toEqual([
       {
+        kind: "outcome_set",
         type: "outcome_added",
         actor_member_id: creator,
         payload: { type: "MAR", code: "E", name: e, closing: true, polarity: "positive", actions: [] },
@@ -169,7 +170,7 @@ describe("a Project's copy", () => {
     const b = (await setOf(projectId)).find((o) => o.code === "B");
     expect(b).toEqual({ code: "B", name: renamed, closing: true, polarity: "positive", actions: [{ kind: "offer_revision" }] });
     expect((await setOf(null)).find((o) => o.code === "B")).toEqual(defaultOutcomeSets.review_code[1]);
-    const { rows } = await migrator.query("select payload from project_event where project_id = $1 and type = 'outcome_changed'", [projectId]);
+    const { rows } = await migrator.query("select payload from setup_event where project_id = $1 and type = 'outcome_changed'", [projectId]);
     expect(rows).toEqual([
       {
         payload: {
@@ -213,7 +214,7 @@ describe("an outcome's code, closing and polarity (decided 2026-10-09)", () => {
     expect(await change("F", "F2", false, "negative")).toBe("changed");
     expect((await setOf(project)).find((o) => o.code === "F2")).toEqual({ code: "F2", name: e, closing: false, polarity: "negative", actions: [] });
     expect((await setOf(project)).find((o) => o.code === "F")).toBeUndefined();
-    const { rows } = await migrator.query("select payload from project_event where project_id = $1 and type = 'outcome_changed'", [project]);
+    const { rows } = await migrator.query("select payload from setup_event where project_id = $1 and type = 'outcome_changed'", [project]);
     expect(rows).toEqual([
       {
         payload: {

@@ -2,7 +2,7 @@
 // "Authoring"; visibility.md V20, scenario RP-427-3), as the app role and the migrator:
 // - the app role writes no definition table directly: a Workflow, its Versions, Steps,
 //   Transitions and the bindings change only through the app.* commands, each audited
-//   in workflow_event, which the app role can't read;
+//   in setup_event, which the app role can't read;
 // - a draft is read by its authors only, through app.workflow_draft, never through the
 //   tables;
 // - a Rabaed Default published the way the `workflow:publish` CLI publishes it is what
@@ -168,8 +168,8 @@ describe("the app role and the definition tables", () => {
       sql`update workflow_transition set label = '{"en": "x", "ar": "x"}'`,
       sql`insert into workflow_binding (project_id, work_item_type_id, workflow_definition_id) values (${projectId}::uuid, ${typeId}::uuid, ${rabaedDefault}::uuid)`,
       sql`delete from workflow_binding`,
-      sql`insert into workflow_event (project_id, actor_member_id, type) values (${projectId}::uuid, ${admin}::uuid, 'bound')`,
-      sql`select * from workflow_event`,
+      sql`insert into setup_event (kind, type, project_id, actor_member_id) values ('workflow', 'bound', ${projectId}::uuid, ${admin}::uuid)`,
+      sql`select * from setup_event`,
     ];
     for (const write of writes) {
       await expect(call(admin, write), write.compile(app).sql).rejects.toMatchObject({ code: "42501" });
@@ -191,11 +191,11 @@ describe("the app role and the definition tables", () => {
     expect(await outcome(admin, sql`select app.bind_workflow(${projectId}::uuid, ${typeId}::uuid, null, ${copy}::uuid, now()) as outcome`)).toBe("bound");
     expect(await outcome(admin, sql`select app.unbind_workflow(${projectId}::uuid, ${typeId}::uuid, null, now()) as outcome`)).toBe("unbound");
     const { rows } = await migrator.query(
-      "select type, actor_member_id, project_id from workflow_event where project_id = $1 order by created_at, id",
+      "select kind, type, actor_member_id, project_id, company_id from setup_event where project_id = $1 order by created_at, id",
       [projectId],
     );
     expect(rows).toEqual(
-      ["duplicated", "published", "bound", "unbound"].map((type) => ({ type, actor_member_id: admin, project_id: projectId })),
+      ["duplicated", "published", "bound", "unbound"].map((type) => ({ kind: "workflow", type, actor_member_id: admin, project_id: projectId, company_id: null })),
     );
   });
 
@@ -207,7 +207,7 @@ describe("the app role and the definition tables", () => {
     expect(
       await outcome(engineer, sql`select outcome from app.duplicate_workflow(${copy}::uuid, ${projectId}::uuid, '{"en": "x", "ar": "x"}'::jsonb, now())`),
     ).toBe("not_found");
-    const { rows } = await migrator.query("select count(*)::int as n from workflow_event where actor_member_id = $1", [engineer]);
+    const { rows } = await migrator.query("select count(*)::int as n from setup_event where actor_member_id = $1", [engineer]);
     expect(rows[0].n).toBe(0);
   });
 });
