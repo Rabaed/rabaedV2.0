@@ -151,6 +151,6 @@ describe("Company defaults through the app role", () => {
     const applied = await migrator.query("select type, company_id from setup_event where kind = 'company_default' and type = 'defaults_applied' and project_id is not null");
     expect(applied.rows.length).toBeGreaterThanOrEqual(2);
     expect(applied.rows.every((r) => r.company_id === null)).toBe(true);
-    await expect(call(tmc.ap, sql`select * from setup_event`)).rejects.toMatchObject({ code: "42501" });
+    await expect(call(tmc.ap, sql<object>`select * from setup_event`)).rejects.toMatchObject({ code: "42501" });
   });
 });

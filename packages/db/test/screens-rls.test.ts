@@ -203,7 +203,7 @@ describe("Screens through the app role", () => {
     expect(rows).toEqual(
       ["screen_created", "screen_published", "screen_draft_saved"].map((type) => ({ kind: "screen", type, project_id: projectId, company_id: null, actor_member_id: c1.ap })),
     );
-    await expect(call(c1.ap, sql`select * from setup_event`)).rejects.toMatchObject({ code: "42501" });
+    await expect(call(c1.ap, sql<object>`select * from setup_event`)).rejects.toMatchObject({ code: "42501" });
   });
 
   it("keep a published Version as it is, even for the tables' owner", async () => {
