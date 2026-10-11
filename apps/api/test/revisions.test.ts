@@ -270,8 +270,10 @@ describe("a Revision's answer times (RP-392-2)", () => {
     const creationDate = Date.parse((await detail(engineer, rev)).creationDate!);
     expect(creationDate).toBeGreaterThan(started);
     await ok(pm.post(`/v1/work-items/${rev}/pick-up`));
-    // The PM doesn't edit the Form (RP-514), so reads no answer times at all.
-    expect(await times(pm)).toEqual([]);
+    // The PM doesn't edit the Form (RP-514) but reads the answer times as the raiser's Participant (RP-525).
+    const read = await times(pm);
+    expect(read.length).toBeGreaterThan(0);
+    for (const t of read) expect(t).toBeGreaterThanOrEqual(creationDate);
     // Returned to its Draft, the engineer holding it reads them from the Creation Date on.
     await take(pm, rev, "return", { reason: "Check the panel schedule" });
     const seen = await times(engineer);

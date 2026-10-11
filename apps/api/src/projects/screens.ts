@@ -57,7 +57,7 @@ export function readScreen(db: Db, memberId: string, screenId: string): Promise<
       where screen_id = ${screenId}::uuid and status = 'published' order by version_no
     `.execute(trx);
     const draft = screen.can_author
-      ? (await sql<VersionRow>`select version_no, schema, internal_fields from app.screen_draft(${screenId}::uuid)`.execute(trx)).rows[0]
+      ? (await sql<VersionRow>`select version_no, schema, internal_fields from app.screen_draft_read(${screenId}::uuid)`.execute(trx)).rows[0]
       : undefined;
     const latest = published.rows.at(-1);
     return {
@@ -74,8 +74,8 @@ export function readScreen(db: Db, memberId: string, screenId: string): Promise<
   });
 }
 
-/** Problems with a draft's schema itself: it must be a Form schema to be saved; the rest waits for publish. */
-const unparsable = (schema: unknown): ScreenProblem[] => screenProblems(schema, []).filter((p) => p.code === "invalid_schema");
+/** The problems that stop a draft's schema from being saved at all: where it isn't a Form schema. The rest waits for publish. */
+const unsavableSchemaProblems = (schema: unknown): ScreenProblem[] => screenProblems(schema, []).filter((p) => p.code === "invalid_schema");
 
 const createRefusals = ["not_found", "project_closed", "invalid_name", "key_taken"] as const;
 export type CreateScreenResult =
@@ -86,7 +86,7 @@ export type CreateScreenResult =
 /** A Project Admin creates a Screen on the Project, its first draft as given. */
 export function createScreen(db: Db, memberId: string, projectId: string, input: CreateScreenRequest, now: Date): Promise<CreateScreenResult> {
   return withMember(db, memberId, async (trx): Promise<CreateScreenResult> => {
-    const problems = unparsable(input.schema);
+    const problems = unsavableSchemaProblems(input.schema);
     if (problems.length > 0) {
       // Said to its Project Admins only: to anyone else the Project is the plain 404.
       const { rows } = await sql<{ authors: boolean }>`
@@ -113,10 +113,12 @@ export type SaveScreenDraftResult =
 /** Saves the draft of a Screen the Member authors: its next Version. */
 export function saveScreenDraft(db: Db, memberId: string, screenId: string, input: SaveScreenDraftRequest, now: Date): Promise<SaveScreenDraftResult> {
   return withMember(db, memberId, async (trx): Promise<SaveScreenDraftResult> => {
-    const { rows: authored } = await sql<{ can: boolean }>`select app.can_author_screen(${screenId}::uuid) as can`.execute(trx);
-    if (!authored[0]!.can) return { ok: false, reason: "not_found" };
-    const problems = unparsable(input.schema);
-    if (problems.length > 0) return { ok: false, reason: "invalid_screen", problems };
+    const problems = unsavableSchemaProblems(input.schema);
+    if (problems.length > 0) {
+      // Said to its authors only: to anyone else the Screen is the plain 404 (the command says so otherwise).
+      const { rows: authored } = await sql<{ can: boolean }>`select app.can_author_screen(${screenId}::uuid) as can`.execute(trx);
+      return authored[0]!.can ? { ok: false, reason: "invalid_screen", problems } : { ok: false, reason: "not_found" };
+    }
     const { rows } = await sql<{ outcome: string; version_no: number | null }>`
       select outcome, version_no from app.save_screen_draft(
         ${screenId}::uuid, ${JSON.stringify(input.schema)}::jsonb, ${input.internalFields}::text[], ${now})
@@ -135,9 +137,8 @@ export type PublishScreenResult =
 /** Publishes the draft of a Screen the Member authors, after every check: refused on any problem. */
 export function publishScreen(db: Db, memberId: string, screenId: string, now: Date): Promise<PublishScreenResult> {
   return withMember(db, memberId, async (trx): Promise<PublishScreenResult> => {
-    const { rows: authored } = await sql<{ can: boolean }>`select app.can_author_screen(${screenId}::uuid) as can`.execute(trx);
-    if (!authored[0]!.can) return { ok: false, reason: "not_found" };
-    // Locks the Screen: no save comes between these checks and the publish.
+    // Locks the Screen: no save comes between these checks and the publish. Nothing for
+    // anyone who doesn't author it, whom app.publish_screen refuses as 'not_found'.
     const draft = (await sql<VersionRow>`select version_no, schema, internal_fields from app.screen_draft(${screenId}::uuid)`.execute(trx)).rows[0];
     if (draft) {
       const lists = await sql<{ id: string }>`select id from option_list`.execute(trx);

@@ -8,7 +8,7 @@
 // by the acting Participant only, in the history too (seam 2: screens-rls.test.ts).
 import { createDb } from "@rabaed/db";
 import { testDatabaseUrls } from "@rabaed/db/test-support";
-import { formSchema, type ScreenList, type ScreenRead, type WorkflowDefinition, type WorkflowRead } from "@rabaed/domain";
+import { formSchema, type ScreenList, type ScreenRead, type WorkflowDefinition, type WorkflowRead, type WorkflowTransition } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestApi, expectHidden, type Caller } from "./support/harness.ts";
@@ -173,12 +173,16 @@ describe("a Project Admin authors the Project's Screens", () => {
 });
 
 describe("a Transition shows a Screen, pinned by the Workflow Version", () => {
-  /** The Project's copy of the Type's Workflow, its Code A showing `screen`, published and bound. */
-  async function publishRoute(screen: string) {
+  /** The Project's copy of the Type's Workflow, its Code A showing `screen` (with `actions`), published and bound. */
+  async function publishRoute(screen: string, actions?: WorkflowTransition["actions"]) {
     const definition = (await readWorkflow(c1.caller, routeId)).draft?.definition ?? (await readWorkflow(c1.caller, routeId)).published!.definition;
     const withScreen: WorkflowDefinition = {
       ...definition,
-      transitions: definition.transitions.map((t) => (t.key === "approve_a" ? { ...t, actionForm: null, screen } : t)),
+      transitions: definition.transitions.map((t) => {
+        if (t.key !== "approve_a") return t;
+        const { actions: _, ...rest } = t;
+        return { ...rest, actionForm: null, screen, ...(actions ? { actions } : {}) };
+      }),
     };
     await ok(c1.caller.request("PUT", `/v1/workflows/${routeId}/draft`, { definition: withScreen }), 200);
     return c1.caller.post(`/v1/workflows/${routeId}/publish`);
@@ -255,5 +259,14 @@ describe("a Transition shows a Screen, pinned by the Workflow Version", () => {
       checks: { sample: { answer: "yes" } },
     });
     expect(own.find((e) => e.type === "internal_note")?.internalNote).toBe("Recommended A after the plant visit.");
+  });
+
+  it("refuses to publish a copy of the Screen's internal answer into a shared one (scenario RP-525-1)", async () => {
+    const res = await publishRoute("code_reply", [{ type: "copy_field", from: "verification_note", to: "remarks" }]);
+    expect(res.statusCode, res.body).toBe(422);
+    expect(res.json().problems).toContainEqual(expect.objectContaining({ code: "copy_internal_answer", transition: "approve_a" }));
+    // Into another internal field it stays with K1.
+    expect((await publishRoute("code_reply", [{ type: "copy_field", from: "remarks", to: "verification_note" }])).statusCode).toBe(200);
+    expect((await publishRoute("code_reply")).statusCode).toBe(200);
   });
 });

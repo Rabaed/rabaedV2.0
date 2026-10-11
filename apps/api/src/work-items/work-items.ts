@@ -209,12 +209,14 @@ type PinnedForm = {
    * from what a Transition checks.
    */
   data: Record<string, unknown>;
-  /** The answers' hash, as app.take_transition compares it; null unless they may save now. */
+  /** The answers' hash, as app.take_transition compares it; null unless they may save now or hold the raiser's Step (a Submit). */
   dataSha256: Buffer | null;
   /** They may save its answers now (app.can_save_answers). */
   canSave: boolean;
   /** The Form as they may fill it now: the sections they may change, and who fills the others. */
   toFill: FormToFill;
+  /** The sections the Step the Member sees is filled at (a Submit checks them, whoever takes it). */
+  sectionsAtStep: string[];
 };
 
 /** A visible item's pinned Form Version and its answers; null when the Member can't see the item. */
@@ -224,12 +226,13 @@ async function pinnedForm(trx: Trx, workItemId: string): Promise<PinnedForm | nu
       project_id: string;
       data: Record<string, unknown>;
       data_sha256: Buffer | null;
+      can_save: boolean;
       workflow_version_id: string;
       step_key: string;
     }
   >`
     select v.id, v.version_no, v.schema, w.project_id, app.work_item_answers(w.id) as data,
-      app.answers_sha256(w.id) as data_sha256,
+      app.answers_sha256(w.id) as data_sha256, app.can_save_answers(w.id) as can_save,
       w.workflow_version_id, s.key as step_key
     from work_item w
     join form_version v on v.id = w.form_version_id
@@ -242,8 +245,8 @@ async function pinnedForm(trx: Trx, workItemId: string): Promise<PinnedForm | nu
   const r = rows[0];
   if (!r) return null;
   const form = toFormVersion(r);
-  // app.answers_sha256 is null exactly when app.can_save_answers is false: one permission check, not two.
-  const canSave = r.data_sha256 !== null;
+  // app.answers_sha256 is also given to the holder of the raiser's Step who may not save (their Submit, RP-525).
+  const canSave = r.can_save;
   const steps = await workflowSteps(trx, r.workflow_version_id);
   return {
     form,
@@ -252,6 +255,7 @@ async function pinnedForm(trx: Trx, workItemId: string): Promise<PinnedForm | nu
     dataSha256: r.data_sha256,
     canSave,
     toFill: formToFillAt(form, steps, { step: r.step_key, canSave }),
+    sectionsAtStep: [...editableSections(form.schema, steps.steps, { step: r.step_key, canSave: true })],
   };
 }
 
@@ -943,12 +947,13 @@ export function takeTransition(
         held: pinned.data,
         files: await fieldFileCounts(trx, workItemId),
       });
-    // Moving on by a Member who may save the answers now (other than a cancel or a Return)
-    // needs the required fields of the sections naming the Step being left (form-engine.md §4);
-    // the database refuses answers that weren't checked.
-    if (pinned.canSave) {
+    // Moving on by a Member who may save the answers now (other than a cancel or a Return),
+    // and every Submit whoever takes it (the PM, who may not save), needs the required
+    // fields of the sections naming the Step being left (form-engine.md §4); the database
+    // refuses answers that weren't checked.
+    if (pinned.canSave || routed?.kind === "submit") {
       const checked = await checkFormComplete();
-      const missing = checked.ok ? [] : errorsInSections(pinned.form.schema, pinned.toFill.editableSections, checked.errors);
+      const missing = checked.ok ? [] : errorsInSections(pinned.form.schema, pinned.sectionsAtStep, checked.errors);
       // A cancel, a Return or a Send Back takes the item back: nothing has to be complete.
       const kind = routed?.kind;
       const back = kind === "cancel" || (kind != null && backwardKinds.includes(kind));
