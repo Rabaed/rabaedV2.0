@@ -99,5 +99,42 @@ export type WorkflowBuilderRead = {
   form: FormSchema | null;
 };
 
+// The Library's Workflows (RP-442, WF-19; ADR 0016; visibility.md V18). A Company keeps
+// copies of Workflows in its Library, private to it until one is copied into a Project.
+
+/** Save a Workflow the Member reads, whatever its owner, to their Company's Library under `name` (their Authorized Person only). */
+export const saveWorkflowToLibraryRequest = z.object({ name: bilingualText });
+export type SaveWorkflowToLibraryRequest = z.infer<typeof saveWorkflowToLibraryRequest>;
+
+/**
+ * The copy saved to the Library. It is published at once, as the Version of the
+ * Workflow it was copied from; when the Library's checks refuse that (the original uses
+ * a Stage only its Project has), the copy stays a draft in the Library, `published` is
+ * false and `problems` say why, so its Authorized Person finishes it in the builder.
+ */
+export type SavedToLibrary = { id: string; published: boolean; problems: WorkflowProblem[] };
+
+/** One of the Company's Library Workflows, as its Members list it. */
+export type LibraryWorkflow = {
+  id: string;
+  name: BilingualText;
+  workItemType: { id: string; code: string; name: BilingualText } | null;
+  /** The numbers of its published Versions, in order; none while it is only a draft, which only its Authorized Person lists. */
+  publishedVersions: number[];
+  /** When its latest Version was published, else when it was copied in. */
+  updatedAt: string;
+  /** The Company's default Workflow for its Type (Company defaults, RP-517). */
+  isDefault: boolean;
+};
+
+/** The Company's Library Workflows: private to the Company, so only its own Members read them (V18). */
+export type LibraryWorkflows = { workflows: LibraryWorkflow[] };
+
+/**
+ * A Workflow to look at, for whoever reads it (V18, V20): the same map the builder opens
+ * on, without what only authors need (the Form and the outcome set).
+ */
+export type WorkflowMapRead = Pick<WorkflowBuilderRead, "workflow" | "type" | "stages" | "positions">;
+
 /** An outcome of a Work Item Type's set, as the builder offers it to a closing Transition. */
 export type WorkflowOutcomeOption = { code: string; name: BilingualText; closing: boolean; polarity: "positive" | "negative" };

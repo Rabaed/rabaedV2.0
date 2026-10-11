@@ -34,6 +34,7 @@ export default async function WorkflowSettingsPage({ params }: { params: Promise
       <WorkflowSettingsView
         projectId={projectId}
         settings={settings}
+        isAuthorizedPerson={me.member.isAuthorizedPerson}
         copySuffix={{ en: en("copySuffix"), ar: ar("copySuffix") }}
         participants={(participants?.participants ?? []).map((p) => ({ id: p.id, name: p.company.legalName[locale] }))}
       />

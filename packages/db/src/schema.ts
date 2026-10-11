@@ -133,7 +133,14 @@ export interface AdminActionTable {
     | "set_participant_code"
     | "set_numbering_counter_start"
     | "save_workflow_draft"
-    | "publish_workflow";
+    | "publish_workflow"
+    | "duplicate_workflow"
+    | "add_default_outcome"
+    | "change_default_outcome"
+    | "reorder_default_outcomes"
+    | "add_default_stage"
+    | "rename_default_stage"
+    | "reorder_default_stages";
   target_kind: string;
   /** Null for a read of a list. */
   target_id: string | null;

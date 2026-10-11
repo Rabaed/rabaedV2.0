@@ -18,6 +18,7 @@ import {
 } from "@rabaed/ui";
 import { useLocale, useTranslations } from "next-intl";
 import { useState, type ReactNode } from "react";
+import { SaveToLibraryAction } from "@/components/save-to-library-action";
 import { Link, useRouter } from "@/i18n/navigation";
 import { createdId, setupCall, type SetupResult } from "@/lib/setup-call";
 
@@ -26,6 +27,8 @@ type Props = {
   settings: WorkflowSettings;
   /** What a copy's name ends with, in each language, whichever the viewer reads: the name is kept in both. */
   copySuffix: BilingualText;
+  /** Their Company's Authorized Person: only they save a Workflow to the Library (RP-442). */
+  isAuthorizedPerson: boolean;
   /** The Participants a Project Admin may set an exception for (V15: every one for them), by name in the viewer's language. */
   participants: { id: string; name: string }[];
 };
@@ -45,7 +48,7 @@ const head = "border-b border-border-subtle bg-surface-subtle px-5 py-2.5 text-s
  * exception for a Participant, and go back to the Rabaed Default; everyone else reads
  * (V20), the exceptions only their own Participant's (V15). Every write is WF-4's command.
  */
-export function WorkflowSettingsView({ projectId, settings, participants, copySuffix }: Props) {
+export function WorkflowSettingsView({ projectId, settings, participants, copySuffix, isAuthorizedPerson }: Props) {
   const t = useTranslations("projectSettings.workflows");
   const locale = useLocale() as Locale;
   const router = useRouter();
@@ -65,7 +68,6 @@ export function WorkflowSettingsView({ projectId, settings, participants, copySu
       : []),
     { key: "exception", label: t("addException"), icon: "briefcase", onSelect: () => setDialog({ kind: "exception", type }) },
     { key: "versions", label: t("viewVersions"), icon: "git-branch", onSelect: () => router.push(`${base}/${type.workflow.id}/versions/${type.workflow.versionNo ?? 1}`) },
-    // RP-442 adds "Save to my Company's Library" here: one more item that copies this row's Workflow into the Library (a Company's Authorized Person).
     ...(type.workflow.source === "project_copy"
       ? [{ key: "back", label: t("backToDefault"), icon: "arrow-back-up" as const, onSelect: () => setDialog({ kind: "back", type }), separated: true }]
       : []),
@@ -116,7 +118,7 @@ export function WorkflowSettingsView({ projectId, settings, participants, copySu
                 <th scope="col" className={head}>{t("colType")}</th>
                 <th scope="col" className={head}>{t("colWorkflow")}</th>
                 <th scope="col" className={head}>{t("colExceptions")}</th>
-                {settings.canEdit && (
+                {(settings.canEdit || isAuthorizedPerson) && (
                   <th scope="col" className={head}>
                     <span className="sr-only">{t("colActions")}</span>
                   </th>
@@ -173,14 +175,19 @@ export function WorkflowSettingsView({ projectId, settings, participants, copySu
                       </ul>
                     )}
                   </td>
-                  {settings.canEdit && (
+                  {(settings.canEdit || isAuthorizedPerson) && (
                     <td className={`${cell} whitespace-nowrap`}>
-                      <span className="flex items-center justify-end gap-1.5">
-                        <Button variant="secondary" size="sm" onClick={() => setDialog({ kind: "duplicate", type })}>
-                          <Icon name="copy" size={15} />
-                          {t("duplicateEdit")}
-                        </Button>
-                        <RowActionsMenu label={t("actionsFor", { type: typeName(type) })} items={menu(type)} />
+                      <span className="flex flex-col items-end gap-1.5">
+                        {settings.canEdit && (
+                          <span className="flex items-center gap-1.5">
+                            <Button variant="secondary" size="sm" onClick={() => setDialog({ kind: "duplicate", type })}>
+                              <Icon name="copy" size={15} />
+                              {t("duplicateEdit")}
+                            </Button>
+                            <RowActionsMenu label={t("actionsFor", { type: typeName(type) })} items={menu(type)} />
+                          </span>
+                        )}
+                        <SaveToLibraryAction workflowId={type.workflow.id} name={type.workflow.name} isAuthorizedPerson={isAuthorizedPerson} />
                       </span>
                     </td>
                   )}

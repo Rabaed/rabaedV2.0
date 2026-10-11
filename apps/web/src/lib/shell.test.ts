@@ -16,6 +16,8 @@ describe("sidebarItemOf", () => {
     expect(sidebarItemOf("/members")).toBe("members");
     expect(sidebarItemOf("/participants")).toBe("company-projects");
     expect(sidebarItemOf("/participants/p1/members/m1/visibility")).toBe("company-projects");
+    expect(sidebarItemOf("/library")).toBe("library");
+    expect(sidebarItemOf("/library/workflows/w1")).toBe("library");
   });
 
   it("marks nothing on the Member's own pages", () => {

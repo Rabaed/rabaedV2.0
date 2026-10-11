@@ -12,6 +12,7 @@ import type {
   FormChoices,
   FormToFill,
   Home,
+  LibraryWorkflows,
   LinkedFrom,
   MemberVisibility,
   MyProjects,
@@ -34,6 +35,7 @@ import type {
   WorkItemHistory,
   WorkItemWorkflowMap,
   WorkflowBuilderRead,
+  WorkflowMapRead,
   WorkItemBoard,
   WorkItemList,
   ModuleKey,
@@ -307,6 +309,16 @@ export function getScreenPins(projectId: string): Promise<ScreenPins | null> {
 /** A Project's Stages of one Module (RP-428); null when the Member isn't on it. */
 export function getProjectStages(projectId: string, moduleKey: ModuleKey): Promise<ProjectStages | null> {
   return apiGet<ProjectStages>(`/v1/projects/${encodeURIComponent(projectId)}/modules/${moduleKey}/stages`);
+}
+
+/** The Member's Company's Library Workflows (RP-442); null if signed out or they can't be read. */
+export function getLibraryWorkflows(): Promise<LibraryWorkflows | null> {
+  return apiGet<LibraryWorkflows>("/v1/library/workflows");
+}
+
+/** A Workflow to look at (RP-442), for whoever reads it; null for anyone else. */
+export function getWorkflowMap(workflowId: string): Promise<WorkflowMapRead | null> {
+  return apiGet<WorkflowMapRead>(`/v1/workflows/${encodeURIComponent(workflowId)}/map`);
 }
 
 /** The signed-in Member's notification settings and Project mutes; null if signed out. */

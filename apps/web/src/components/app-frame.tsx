@@ -110,6 +110,8 @@ function Frame({ locale, memberName, companyName, isAuthorizedPerson, unread, de
         // eslint-disable-next-line rabaed/no-avoid-terms -- Tabler's icon name, not copy
         { key: "members", label: t("members"), icon: "users", href: "/members" },
         ...(isAuthorizedPerson ? [{ key: "company-projects", label: t("participations"), icon: "building" as const, href: "/participants" }] : []),
+        // The Company's Library (RP-442): every Member of the Company lists it; it is private to the Company (V18).
+        { key: "library", label: t("library"), icon: "folder", href: "/library" },
       ],
     },
   ];
