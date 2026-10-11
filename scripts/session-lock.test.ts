@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { foreignSessionLock, parseProcessTable, parseSessionLock, sessionPidOf } from "./session-lock.ts";
+import { foreignSessionLock, ownServerHint, parseProcessTable, parseSessionLock, sessionPidOf } from "./session-lock.ts";
 
 const lock = "claude session RP-461-retro-tooling (pid 1700)";
 // Process list injected: pid -> [parent pid, name]. Pid 1700 is a live foreign claude.exe; 50 -> 40 -> 30 is this process's chain.
@@ -73,5 +73,32 @@ describe("parseProcessTable", () => {
     expect(p.parentOf(50)).toBe(40);
     expect(p.nameOf(1700)).toBe("claude.exe");
     expect(p.nameOf(70)).toBe("claude");
+  });
+});
+
+describe("ownServerHint (RP-545)", () => {
+  // 90 (vite) -> 80 (node) -> 30 (this session's claude.exe); 70 hangs off the foreign claude.exe 1700; 60 hangs off explorer.
+  const tree = new Map<number, [number, string]>([...table, [80, [30, "node.exe"]], [90, [80, "node.exe"]], [70, [1700, "node.exe"]]]);
+  const procs = { parentOf: (pid: number) => tree.get(pid)?.[0], nameOf: (pid: number) => tree.get(pid)?.[1], isAlive: (pid: number) => tree.has(pid) };
+
+  it("names a port held by a process under the session's claude and the command to stop it", () => {
+    const hint = ownServerHint(4700, 90, 50, procs, 30);
+    expect(hint).toContain("Port 4700 is held by this session's own dev server");
+    expect(hint).toContain("pid 90");
+    expect(hint).toMatch(/(taskkill \/pid|kill) 90/);
+  });
+  it("finds the session through this process's own ancestors when CLAUDE_PID is not set", () => {
+    expect(ownServerHint(4700, 90, 50, procs)).toContain("pid 90");
+  });
+  it("says nothing about a holder outside the session's tree", () => {
+    expect(ownServerHint(4700, 70, 50, procs, 30)).toBeUndefined();
+    expect(ownServerHint(4700, 60, 50, procs, 30)).toBeUndefined();
+  });
+  it("stops at this session's claude, so another session's server under the same desktop app is not called its own", () => {
+    // Both claude.exe sessions (30, 1700) run under the desktop app 5, which is also named claude.exe.
+    const app = new Map<number, [number, string]>([...tree, [30, [5, "claude.exe"]], [1700, [5, "claude.exe"]], [5, [1, "claude.exe"]]]);
+    const under = { parentOf: (pid: number) => app.get(pid)?.[0], nameOf: (pid: number) => app.get(pid)?.[1], isAlive: (pid: number) => app.has(pid) };
+    expect(ownServerHint(4700, 70, 50, under)).toBeUndefined();
+    expect(ownServerHint(4700, 90, 50, under)).toContain("pid 90");
   });
 });
