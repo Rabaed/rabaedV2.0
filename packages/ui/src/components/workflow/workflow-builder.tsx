@@ -1051,7 +1051,7 @@ function PublishDialog({ state, versionNo, published, running, definition, local
     <Dialog open onOpenChange={(isOpen) => !isOpen && onClose()}>
       <DialogContent
         title={
-          <span className="flex items-center gap-2.5">
+          <span className="flex items-center gap-2.5 font-sans text-base font-bold">
             <Icon name="upload" size={18} className="text-primary" />
             {labels.publishTitle(v(versionNo))}
           </span>

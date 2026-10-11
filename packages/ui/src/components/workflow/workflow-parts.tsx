@@ -78,7 +78,7 @@ export function groupTitle(node: Extract<MapNode, { kind: "group" }>, labels: Wo
  * subtle surface (`referenceModalBody`, `referenceModalFooter`).
  */
 export const referenceModal =
-  "gap-0 rounded-2xl p-0 *:first:items-center *:first:border-b *:first:border-border-subtle *:first:px-5 *:first:py-4 [&_h2]:font-sans [&_h2]:text-base [&_h2]:font-bold";
+  "gap-0 rounded-2xl p-0 *:first:items-center *:first:border-b *:first:border-border-subtle *:first:px-5 *:first:py-4";
 export const referenceModalBody = "flex flex-col gap-3 px-5 py-4";
 export const referenceModalFooter = "mt-0 border-t border-border-subtle bg-surface-subtle px-5 py-3";
 

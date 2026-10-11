@@ -182,14 +182,14 @@ function ComparisonRow({ comparison, onChange, fields, locale, labels, name, onR
           ...(known || key === "" ? [] : [{ value: key, label: labels.missingField(key) }]),
           ...fields.map((f) => ({ value: f.key, label: label(f) })),
         ]}
-        className={cn("min-w-0", compact ? "h-[30px] flex-[1.3_1_0] text-[12px]" : "flex-[2_1_9rem]")}
+        className={cn("min-w-0", compact ? "h-[30px] flex-[2_1_0] text-[12px]" : "flex-[2_1_9rem]")}
       />
       <Select
         aria-label={`${labels.operator} · ${name}`}
         value={comparison.op}
         onValueChange={(next) => set(retargetComparison(comparison, field, next as ConditionOp))}
         options={ops.map((o) => ({ value: o, label: compact ? (opSymbol[o] ?? labels.op(o)) : labels.op(o) }))}
-        className={cn("min-w-0", compact ? cn("h-[30px] shrink-0 text-[12px]", opSymbol[comparison.op] ? "w-[3.75rem]" : "w-[6.5rem]") : "flex-[1_1_7rem]")}
+        className={cn("min-w-0", compact ? cn("h-[30px] shrink-0 text-[12px]", opSymbol[comparison.op] ? "w-[3.25rem]" : "w-[6.5rem]") : "flex-[1_1_7rem]")}
       />
       {input !== "none" && (
         <div className={cn("min-w-0", compact ? "flex-1 [&_[role=combobox]]:h-[30px] [&_input]:h-[30px] [&_[role=combobox]]:text-[12px] [&_input]:text-[12px]" : "flex-[2_1_9rem]")}>
