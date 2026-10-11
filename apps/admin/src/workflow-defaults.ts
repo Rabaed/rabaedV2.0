@@ -1,4 +1,12 @@
-import { rabaedDefaultWorkflowId, readLatestPublishedDefinition, readWorkflowCheckContext, writeRabaedDefaultWorkflow, type Db } from "@rabaed/db";
+import {
+  rabaedDefaultWorkflowId,
+  readLatestPublishedDefinition,
+  readModuleStages,
+  readPositions,
+  readWorkflowCheckContext,
+  writeRabaedDefaultWorkflow,
+  type Db,
+} from "@rabaed/db";
 import {
   definitionFromRows,
   formSchema,
@@ -20,9 +28,11 @@ import { Refused, refusable, type Refusable } from "./refusals.ts";
 // the builder reads them, and the edits of a Rabaed Default's outcome set and its Module's Stage
 // set. The reads are Rabaed's own data (nothing of a Company's), so they ask for no reason, as
 // the publish check doesn't; every change is an Engineer action with a reason in admin_action
-// (V9). Projects keep the sets they were given: an edit reaches the Projects created after it,
-// and a new outcome or Stage is copied into the Projects that lack it (the database's triggers),
-// so the Rabaed Default Workflows every Project runs always find theirs.
+// (V9). Projects keep the sets they were given: every edit, an added outcome or Stage included,
+// reaches only the Projects created after it (decided 2026-10-11: a new Project copies the
+// Rabaed Defaults as they are then). Each edit takes its set's advisory lock before reading
+// the set it checks, as a Project's own Stage and outcome commands do, so two edits never
+// interleave between a check and its write.
 
 type VersionRows = { layout: unknown; steps: unknown; transitions: unknown };
 const definitionOf = (row: VersionRows): WorkflowDefinition =>
@@ -74,14 +84,6 @@ export async function readRabaedWorkflow(db: Db, typeCode: string): Promise<Admi
     .where("status", "=", "published")
     .orderBy("version_no")
     .execute();
-  const stages = await db
-    .selectFrom("stage")
-    .select(["key", "name", "category"])
-    .where("owner_kind", "=", "rabaed")
-    .where("module_key", "=", type.module_key)
-    .orderBy("sort")
-    .orderBy("key")
-    .execute();
   const outcomes = await db
     .selectFrom("outcome")
     .select(["code", "name", "closing", "polarity", "actions"])
@@ -90,7 +92,6 @@ export async function readRabaedWorkflow(db: Db, typeCode: string): Promise<Admi
     .orderBy("sort")
     .orderBy("code")
     .execute();
-  const positions = await db.selectFrom("position").select(["base_role", "key", "name"]).orderBy("base_role").orderBy("sort").execute();
   const check = await readWorkflowCheckContext(db, definitionId);
   return {
     workflow: {
@@ -107,10 +108,10 @@ export async function readRabaedWorkflow(db: Db, typeCode: string): Promise<Admi
     type: { code: type.code, name: type.name },
     moduleKey: type.module_key,
     form: check?.context.form ?? null,
-    stages: stages.map((s) => ({ key: s.key, name: s.name, category: s.category })),
+    stages: await readModuleStages(db, type.module_key, null),
     outcomes: outcomes.map(({ code, name, closing, polarity }) => ({ code, name, closing, polarity })),
     outcomeSet: outcomes.map((o): Outcome => ({ code: o.code, name: o.name, closing: o.closing, polarity: o.polarity, actions: outcomeActions.parse(o.actions) })),
-    positions: positions.map((p) => ({ role: p.base_role, key: p.key, name: p.name })),
+    positions: await readPositions(db),
     screens: await rabaedScreens(db, definitionId),
     // A Rabaed Default runs on every Company's Projects: Rabaed Admin counts no Company's items (V9).
     running: [],
@@ -162,12 +163,22 @@ export async function duplicateRabaedWorkflow(
   );
 }
 
-export type SetRefusal = "not_found" | "exists" | "invalid_order";
+export type SetRefusal = "not_found" | "already_exists" | "invalid_order";
+
+/** Holds Type `typeId`'s Rabaed Default outcome set until the transaction ends (a Project's own is 'outcomes:<project>:<type>'). */
+const lockOutcomeSet = (trx: Db, typeId: string) => sql`select pg_advisory_xact_lock(hashtextextended(${`outcomes:rabaed:${typeId}`}, 0))`.execute(trx);
+
+/** Holds the Module's Rabaed Default Stage set until the transaction ends (a Project's own is 'stages:<project>:<module>'). */
+const lockStageSet = (trx: Db, moduleKey: ModuleKey) => sql`select pg_advisory_xact_lock(hashtextextended(${`stages:rabaed:${moduleKey}`}, 0))`.execute(trx);
+
+/** Whether `next` names every member of `current` exactly once: a reorder, nothing added, dropped or repeated. */
+export const isPermutation = (current: readonly string[], next: readonly string[]): boolean =>
+  current.length === next.length && new Set(next).size === next.length && next.every((x) => current.includes(x));
 
 const outcomeTarget = async (trx: Db, typeCode: string) =>
   trx.selectFrom("work_item_type").select("id").where("owner_kind", "=", "rabaed").where("code", "=", typeCode).executeTakeFirst();
 
-/** Adds an outcome to Type `typeCode`'s Rabaed Default set, last in its order; every Project gets its own copy. */
+/** Adds an outcome to Type `typeCode`'s Rabaed Default set, last in its order; the Projects created afterwards get it. */
 export function addDefaultOutcome(
   db: Db,
   engineerId: string,
@@ -178,8 +189,9 @@ export function addDefaultOutcome(
     asEngineer(db, { engineerId, action: "add_default_outcome", reason: input.reason }, async (trx) => {
       const type = await outcomeTarget(trx, typeCode);
       if (!type) throw new Refused("not_found");
+      await lockOutcomeSet(trx, type.id);
       const existing = await trx.selectFrom("outcome").select(["code", "sort"]).where("owner_kind", "=", "rabaed").where("work_item_type_id", "=", type.id).execute();
-      if (existing.some((o) => o.code === input.code)) throw new Refused("exists");
+      if (existing.some((o) => o.code === input.code)) throw new Refused("already_exists");
       await trx
         .insertInto("outcome")
         .values({
@@ -233,8 +245,9 @@ export function reorderDefaultOutcomes(db: Db, engineerId: string, typeCode: str
     asEngineer(db, { engineerId, action: "reorder_default_outcomes", reason: input.reason }, async (trx) => {
       const type = await outcomeTarget(trx, typeCode);
       if (!type) throw new Refused("not_found");
+      await lockOutcomeSet(trx, type.id);
       const current = await trx.selectFrom("outcome").select("code").where("owner_kind", "=", "rabaed").where("work_item_type_id", "=", type.id).orderBy("sort").execute();
-      if (!sameMembers(current.map((o) => o.code), input.codes)) throw new Refused("invalid_order");
+      if (!isPermutation(current.map((o) => o.code), input.codes)) throw new Refused("invalid_order");
       for (const [index, code] of input.codes.entries()) {
         await trx.updateTable("outcome").set({ sort: index + 1 }).where("owner_kind", "=", "rabaed").where("work_item_type_id", "=", type.id).where("code", "=", code).execute();
       }
@@ -243,11 +256,9 @@ export function reorderDefaultOutcomes(db: Db, engineerId: string, typeCode: str
   );
 }
 
-const sameMembers = (a: string[], b: string[]) => a.length === b.length && new Set([...a, ...b]).size === a.length;
-
 const stageRows = (trx: Db, moduleKey: ModuleKey) => trx.selectFrom("stage").where("owner_kind", "=", "rabaed").where("module_key", "=", moduleKey);
 
-/** Adds a Stage to the Module's Rabaed Defaults, last in its order; every Project that lacks it is given it. */
+/** Adds a Stage to the Module's Rabaed Defaults, last in its order; the Projects created afterwards get it. */
 export function addDefaultStage(
   db: Db,
   engineerId: string,
@@ -256,8 +267,9 @@ export function addDefaultStage(
 ): Promise<Refusable<null, SetRefusal>> {
   return refusable(() =>
     asEngineer(db, { engineerId, action: "add_default_stage", reason: input.reason }, async (trx) => {
+      await lockStageSet(trx, moduleKey);
       const existing = await stageRows(trx, moduleKey).select(["key", "sort"]).execute();
-      if (existing.some((s) => s.key === input.key)) throw new Refused("exists");
+      if (existing.some((s) => s.key === input.key)) throw new Refused("already_exists");
       await trx
         .insertInto("stage")
         .values({
@@ -291,8 +303,9 @@ export function renameDefaultStage(db: Db, engineerId: string, moduleKey: Module
 export function reorderDefaultStages(db: Db, engineerId: string, moduleKey: ModuleKey, input: { keys: string[]; reason: string }): Promise<Refusable<null, SetRefusal>> {
   return refusable(() =>
     asEngineer(db, { engineerId, action: "reorder_default_stages", reason: input.reason }, async (trx) => {
+      await lockStageSet(trx, moduleKey);
       const current = await stageRows(trx, moduleKey).select("key").orderBy("sort").execute();
-      if (!sameMembers(current.map((s) => s.key), input.keys)) throw new Refused("invalid_order");
+      if (!isPermutation(current.map((s) => s.key), input.keys)) throw new Refused("invalid_order");
       for (const [index, key] of input.keys.entries()) {
         await trx.updateTable("stage").set({ sort: index + 1 }).where("owner_kind", "=", "rabaed").where("module_key", "=", moduleKey).where("key", "=", key).execute();
       }

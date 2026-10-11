@@ -29,7 +29,7 @@ export function WorkflowList({ locale }: { locale: Locale }) {
           <TableHeader>
             <TableRow>
               <TableHead>{s.colType}</TableHead>
-              <TableHead>{s.colName}</TableHead>
+              <TableHead>{s.colWorkflow}</TableHead>
               <TableHead>{s.colModule}</TableHead>
               <TableHead>{s.colVersions}</TableHead>
               <TableHead>{s.colDraft}</TableHead>

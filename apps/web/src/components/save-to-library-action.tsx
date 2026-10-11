@@ -5,6 +5,7 @@ import { Button, buttonVariants, Dialog, DialogClose, DialogContent, DialogFoote
 import { useLocale, useTranslations } from "next-intl";
 import { useState, type FormEvent } from "react";
 import { Link } from "@/i18n/navigation";
+import { bilingualNameOf, setupCall } from "@/lib/setup-call";
 
 export type SaveToLibraryActionProps = {
   /** The Workflow to copy: any the Member reads (a Project's, a Rabaed Default, their Library's). */
@@ -44,31 +45,20 @@ export function SaveToLibraryAction({ workflowId, name, isAuthorizedPerson, vari
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    const en = String(form.get("nameEn") ?? "").trim();
-    const ar = String(form.get("nameAr") ?? "").trim();
-    if (!en || !ar) {
+    const name = bilingualNameOf(new FormData(event.currentTarget));
+    if (!name) {
       setError(t("invalid"));
       return;
     }
     setPending(true);
     setError(null);
-    try {
-      const res = await fetch(`/api/v1/workflows/${encodeURIComponent(workflowId)}/save-to-library`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ name: { en, ar } }),
-      });
-      if (res.status === 201) {
-        setSaved({ ...((await res.json()) as SavedToLibrary), name: locale === "ar" ? ar : en });
-        return;
-      }
-      setError(res.status === 404 ? t("notAllowed") : res.status === 400 || res.status === 422 ? t("invalid") : t("failed"));
-    } catch {
-      setError(t("failed"));
-    } finally {
-      setPending(false);
+    const res = await setupCall("POST", `/workflows/${encodeURIComponent(workflowId)}/save-to-library`, { name });
+    setPending(false);
+    if (res.ok) {
+      setSaved({ ...(res.body as SavedToLibrary), name: locale === "ar" ? name.ar : name.en });
+      return;
     }
+    setError(res.status === 404 ? t("notAllowed") : res.status === 400 || res.status === 422 ? t("invalid") : t("failed"));
   }
 
   return (

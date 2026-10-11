@@ -5,15 +5,15 @@
 // publishes Screens; every other Member reads the same, minus the drafts, the Library and
 // the exceptions that are not their own Participant's. Each published Workflow Version is
 // read whole, and which Screen Version it pins.
-import { createDb } from "@rabaed/db";
+import { createDb, readLatestPublishedDefinition, writeRabaedDefaultWorkflow } from "@rabaed/db";
 import { testDatabaseUrls } from "@rabaed/db/test-support";
 import type { ScreenPins, WorkflowDefinition, WorkflowRead, WorkflowSettings, WorkflowVersionRead } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestApi, expectHidden, type Caller } from "./support/harness.ts";
-import { all, buildTower, ok, projectMember, type Company, type Tower } from "./support/tower.ts";
+import { all, buildTower, detail, draft, ok, projectMember, type Company, type Tower } from "./support/tower.ts";
 
-const api = await createTestApi();
+const api = await createTestApi({ files: true });
 const migrator = createDb(testDatabaseUrls().migrator, { max: 1 });
 afterAll(async () => {
   await api.close();
@@ -158,9 +158,15 @@ describe("which Screen Versions the Workflow Versions pin", () => {
     };
     await ok(c1.caller.request("PUT", `/v1/workflows/${route}/draft`, { definition: withScreen }), 200);
     await ok(c1.caller.post(`/v1/workflows/${route}/publish`), 200); // Workflow Version 2 pins Screen Version 1
+    // A running item on Workflow Version 2, raised before the Screen changes.
+    const running = await draft(at, at.c1Engineer, "Pinned while running");
+    const sendForm = async () => (await detail(at.c1Engineer, running)).actions.transitions.find((t) => t.key === sendKey)?.actionForm;
+    expect(await sendForm()).toMatchObject(schema("Remarks"));
 
     await ok(c1.caller.request("PUT", `/v1/screens/${screen}/draft`, { schema: schema("Remarks (new)"), internalFields: [] }), 200);
     await ok(c1.caller.post(`/v1/screens/${screen}/publish`), 200); // Screen Version 2
+    // The running item keeps its pinned Screen Version 1 (scenario RP-441-1).
+    expect(await sendForm()).toMatchObject(schema("Remarks"));
 
     const pinsOf = async (by: Caller): Promise<ScreenPins["pins"]> => (await ok(by.get(`/v1/projects/${at.projectId}/screen-pins`), 200)).json().pins;
     for (const reader of [c1.caller, at.k1Manager]) {
@@ -169,5 +175,98 @@ describe("which Screen Versions the Workflow Versions pin", () => {
       ]);
     }
     await expectHidden(other.c1Engineer.get(`/v1/projects/${at.projectId}/screen-pins`));
+  });
+});
+
+describe("a Stage the Project Admin renames (scenario RP-441-1)", () => {
+  it("reads renamed to everyone on the Project, in its Stages and its Workflow Versions; nobody else learns of it or may do it", async () => {
+    const stagesOf = async (by: Caller, projectId: string) =>
+      (await ok(by.get(`/v1/projects/${projectId}/modules/submittals/stages`), 200)).json().stages as { key: string; name: { en: string; ar: string } }[];
+    const before = (await stagesOf(other.c1Engineer, other.projectId)).find((s) => s.key === "approved")!.name;
+
+    // Only a Project Admin renames it; anyone else, on the Project or not, gets the plain 404.
+    for (const by of [at.c1Engineer, at.k1Manager, other.c1Engineer]) {
+      await expectHidden(by.request("PATCH", `/v1/projects/${at.projectId}/modules/submittals/stages/approved`, { name: label("Signed off") }));
+    }
+    await ok(c1.caller.request("PATCH", `/v1/projects/${at.projectId}/modules/submittals/stages/approved`, { name: label("Signed off") }));
+
+    const route = marOf(await settings(c1.caller, at.projectId)).workflow.id;
+    for (const reader of [c1.caller, at.c1Engineer, at.k1Manager, c2Engineer]) {
+      expect((await stagesOf(reader, at.projectId)).find((s) => s.key === "approved")!.name).toEqual(label("Signed off"));
+      const v1: WorkflowVersionRead = (await ok(reader.get(`/v1/workflows/${route}/versions/1`), 200)).json();
+      expect(v1.stages.find((s) => s.key === "approved")!.name).toEqual(label("Signed off"));
+    }
+    // Another Project's set is its own: unchanged, and this one is hidden from its Members.
+    expect((await stagesOf(other.c1Engineer, other.projectId)).find((s) => s.key === "approved")!.name).toEqual(before);
+    await expectHidden(other.c1Engineer.get(`/v1/projects/${at.projectId}/modules/submittals/stages`));
+  });
+});
+
+// RP-443-1 (Rabaed Admin -> Workflows): a new Rabaed Default Version is what new items start on,
+// on every Project running the Default; items already raised keep theirs. Published as Rabaed
+// Admin publishes it (writeRabaedDefaultWorkflow), on a test Rabaed Type of its own (MAR's Form
+// and Workflow), so no other suite's Default changes under it.
+describe("a new Rabaed Default Version (scenario RP-443-1)", () => {
+  const TYPE = "RDV";
+  let definitionId = "";
+
+  beforeAll(async () => {
+    const existing = await sql<{ workflow_definition_id: string }>`
+      select workflow_definition_id from work_item_type where owner_kind = 'rabaed' and code = ${TYPE}
+    `.execute(migrator);
+    if (existing.rows[0]) {
+      definitionId = existing.rows[0].workflow_definition_id;
+      return;
+    }
+    const created = await sql<{ id: string }>`
+      insert into workflow_definition (owner_kind, name) values ('rabaed', ${JSON.stringify(label("Default Version (test)"))}::jsonb) returning id
+    `.execute(migrator);
+    definitionId = created.rows[0]!.id;
+    await sql`
+      insert into work_item_type (owner_kind, module_key, code, name, workflow_definition_id, outcome_kind, form_definition_id)
+      select 'rabaed', t.module_key, ${TYPE}, ${JSON.stringify(label("Default Version (test)"))}::jsonb, ${definitionId}::uuid, t.outcome_kind, t.form_definition_id
+      from work_item_type t where t.owner_kind = 'rabaed' and t.code = 'MAR'
+    `.execute(migrator);
+    const mar = (await readLatestPublishedDefinition(migrator, marWorkflowId))!;
+    expect(await writeRabaedDefaultWorkflow(migrator, TYPE, mar.definition, { publish: true })).toMatchObject({ ok: true });
+  });
+
+  const raise = async (title: string): Promise<string> => {
+    const res = await at.c1Engineer.post(`/v1/projects/${at.projectId}/work-items`, {
+      type: TYPE,
+      title,
+      answers: { manufacturer: "ACME Cables", description: "Galvanised, 300 mm", trade: at.electrical, location: at.buildingA },
+    });
+    expect(res.statusCode, res.body).toBe(201);
+    return res.json().id;
+  };
+
+  it("is what a Project on the Default raises new items on; a raised item keeps its Version; Members read no draft", async () => {
+    const before = (await readLatestPublishedDefinition(migrator, definitionId))!;
+    const earlier = await raise("On the earlier Version");
+    expect((await detail(at.c1Engineer, earlier)).workflow.versionNo).toBe(before.versionNo);
+
+    const next: WorkflowDefinition = {
+      ...before.definition,
+      steps: before.definition.steps.map((s) => (s.key === "draft" ? { ...s, name: label(`Prepare v${before.versionNo + 1}`) } : s)),
+    };
+    // A draft first: no Member reads it, the Project Admin included.
+    expect(await writeRabaedDefaultWorkflow(migrator, TYPE, next, { publish: false })).toMatchObject({ ok: true });
+    for (const reader of [c1.caller, at.c1Engineer]) {
+      const read: WorkflowRead = (await ok(reader.get(`/v1/workflows/${definitionId}`), 200)).json();
+      expect(read).toMatchObject({ draft: null, canAuthor: false, publishedVersions: expect.not.arrayContaining([before.versionNo + 1]) });
+    }
+    expect(await writeRabaedDefaultWorkflow(migrator, TYPE, next, { publish: true })).toMatchObject({ ok: true, versionNo: before.versionNo + 1 });
+
+    // The raiser reads its Drafts (nobody else sees an item before its Submit).
+    const later = await raise("On the new Version");
+    expect((await detail(at.c1Engineer, later)).workflow.versionNo).toBe(before.versionNo + 1);
+    expect((await detail(at.c1Engineer, earlier)).workflow.versionNo).toBe(before.versionNo);
+    for (const reader of [c1.caller, at.c1Engineer]) {
+      const read: WorkflowRead = (await ok(reader.get(`/v1/workflows/${definitionId}`), 200)).json();
+      expect(read).toMatchObject({ draft: null, published: { versionNo: before.versionNo + 1 } });
+    }
+    const type = (await settings(c1.caller, at.projectId)).types.find((t) => t.code === TYPE)!;
+    expect(type.workflow).toMatchObject({ id: definitionId, versionNo: before.versionNo + 1, source: "rabaed_default" });
   });
 });

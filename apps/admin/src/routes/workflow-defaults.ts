@@ -26,7 +26,9 @@ import {
   type SetRefusal,
 } from "../workflow-defaults.ts";
 
-const refusedSet = (reason: SetRefusal) => new HttpError(reason === "not_found" ? 404 : reason === "exists" ? 409 : 422, reason === "exists" ? "already_exists" : reason);
+/** The status each refusal of a Rabaed Default set edit answers with; its code is the refusal's own. */
+const setRefusalStatus: Record<SetRefusal, number> = { not_found: 404, already_exists: 409, invalid_order: 422 };
+const refusedSet = (reason: SetRefusal) => new HttpError(setRefusalStatus[reason], reason);
 
 // Rabaed Admin -> Workflows (RP-443, WF-20): the Rabaed Defaults per Work Item Type with their
 // Versions, the builder's read of one, duplicating, and the Rabaed Default outcome and Stage

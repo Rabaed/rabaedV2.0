@@ -144,6 +144,14 @@ export function WorkItemBoard({
   const places = placesOf(board.filters.locations);
   // The Step each column is narrowed to by its header (RP-519), by Stage key.
   const [onlyStep, setOnlyStep] = useState<Record<string, string | undefined>>({});
+  // A Step that leaves its column (its last card moved on) is cleared: coming back later, it doesn't narrow the column again.
+  useEffect(() => {
+    setOnlyStep((current) => {
+      const kept = Object.entries(current).filter(([stageKey, step]) => step !== undefined && columns.get(stageKey)?.steps.some((s) => s.key === step));
+      return kept.length === Object.keys(current).length ? current : Object.fromEntries(kept);
+    });
+    // `columns` is rebuilt from `board` on every render; the board is what changes.
+  }, [board]);
   return (
     <section
       aria-label={labels.board}
@@ -165,6 +173,10 @@ export function WorkItemBoard({
           const headingId = `board-column-${stage.key}`;
           // The header names the viewer's own Steps with their counts, so a lane need not repeat them; a Stage with only its own Step has nothing to add (RP-519).
           const stepsShown = column !== undefined && column.steps.length > 0 && !(column.steps.length === 1 && column.steps[0]!.key === stage.key);
+          // The Step the column is narrowed to, while it is still one of the column's (a Step that left it narrows nothing).
+          const narrowedTo = stepsShown ? column!.steps.find((s) => s.key === onlyStep[stage.key]) : undefined;
+          // Narrowed, the header counts the cards it shows: that Step's, one of the viewer's own (V14).
+          const headerCount = narrowedTo ? narrowedTo.count : shown;
           const dropMove = dragging?.targets.get(stage.key);
           return (
             <li
@@ -205,13 +217,13 @@ export function WorkItemBoard({
                 <StageDot stage={stageColour(stage)} />
                 <span className="min-w-0 truncate">{stage.name[locale]}</span>
                 <span className="rounded-full bg-neutral-tint px-2 font-ui text-caption leading-5 font-semibold text-neutral-fg tabular-nums">
-                  {formatNumber(shown, locale)}
+                  {formatNumber(headerCount, locale)}
                 </span>
               </h2>
               {stepsShown && (
                 <StepFilter
                   steps={column!.steps}
-                  active={onlyStep[stage.key]}
+                  active={narrowedTo?.key}
                   locale={locale}
                   labels={labels}
                   onChange={(key) => setOnlyStep((prev) => ({ ...prev, [stage.key]: key }))}
@@ -238,7 +250,7 @@ export function WorkItemBoard({
                   <p className="px-1 py-4 text-center text-caption text-muted">{labels.noItems}</p>
                 ) : (
                   lanesInLocale(column!.lanes, locale)
-                    .flatMap((lane) => laneAtStep(lane, stepsShown ? onlyStep[stage.key] : undefined))
+                    .flatMap((lane) => laneAtStep(lane, narrowedTo?.key))
                     .map((lane, index) => {
                     const key = `${stage.key}:${laneKey(lane)}`;
                     return (

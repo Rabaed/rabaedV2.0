@@ -186,7 +186,7 @@ describe("the app role and the definition tables", () => {
     expect(await call(engineer, sql`select app.can_author_workflow(${copy}::uuid) as can`)).toEqual([{ can: false }]);
   });
 
-  it("each command is audited: who, when, what", async () => {
+  it("each command is audited: who, when, what, in one setup_event row each (scenario RP-450-1)", async () => {
     expect(await outcome(admin, sql`select outcome from app.publish_workflow(${copy}::uuid, now())`)).toBe("published");
     expect(await outcome(admin, sql`select app.bind_workflow(${projectId}::uuid, ${typeId}::uuid, null, ${copy}::uuid, now()) as outcome`)).toBe("bound");
     expect(await outcome(admin, sql`select app.unbind_workflow(${projectId}::uuid, ${typeId}::uuid, null, now()) as outcome`)).toBe("unbound");

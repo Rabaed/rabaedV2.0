@@ -2,6 +2,45 @@
 
 The Rabaed design system: tokens, the Tailwind theme and components, in English (LTR) and Arabic (RTL). Spec: RP-197.
 
+## Where things are
+
+Find a component here before reading the rest of this file. Paths are under `packages/ui/src/`; a component's story sits beside it (`x.tsx`, `x.stories.tsx`). Everything public is exported from `src/index.ts`. The folders in the first table are checked against the disk by `scripts/ui-route-maps.test.ts`: a folder that is listed but gone, or on disk but not listed, fails the unit test.
+
+| Folder under `src/components/` | What it holds (main exports) |
+|---|---|
+| `button/` | `Button`, `IconButton`, `buttonVariants`, `SignButton` |
+| `data/` | `Avatar`, `CompanyChip` (`avatar.tsx`), `Badge`, `StatTile`, table parts; `initials.ts`, `tone.ts` |
+| `doc-no/` | `DocNo`: a Document Number, always left-to-right |
+| `feedback/` | Empty, loading and error states (`states.tsx`) |
+| `form/` | `Input`, `Textarea`, `Select`, `Checkbox`, `CheckboxGroup`, `RadioGroup`, `Switch`, `SegmentedControl`, `Field`, `DirectionProvider` |
+| `form-engine/` | The Form renderer and its field types: `FormRenderer`, `ActionForm`, `LinkSearch`, `LinksSection`, `LinkedFromList` |
+| `handover/` | `HandoverDialog` |
+| `icon/` | `Icon`, `iconNames` |
+| `list/` | List-page parts: `ListToolbar`, filter menu, `TableCard`, `Pager`, `NumberedPager`, `RowActionsMenu` |
+| `members/` | `MembersCard` |
+| `navigation/` | `Tabs`, `TabsList`, `TabsTrigger`, `TabsContent` |
+| `notifications/` | `NotificationSettings` |
+| `numbering/` | Document Numbering settings: `DocumentNumbering`, `NumberingCounters`, `NumberingVersions`, `ParticipantCodes`, pattern editor |
+| `overlay/` | `Dialog`, `Sheet`, `Popover`, `Tooltip`, `ToastProvider`, `useToast` |
+| `revision/` | `RevisionPicker`, `RevisionActions`, `ReplacementActions` |
+| `settings/` | `SettingsLayout` (the Project Settings frame) |
+| `shell/` | `AppShell`, `TopBar`, `Sidebar`, `PageFrame`, `PageHeader`, `ProjectTabs`, `MemberMenu` |
+| `status/` | `StagePill`, `StageDot`, `AgeDots`, `CodeBadge`, `SaveStatus`, `WithChip`, `WorkItemCard`, `stageColour` |
+| `views/` | Whole views: `WorkItemList`, `WorkItemTable`, `WorkItemBoard` (Kanban), `ProjectDashboard`, `ProjectCards`, `ProjectsBrowser`, `ActivityFeedPanel`, Home cards, `ColumnSettings` |
+| `watch/` | `WatchButton` |
+| `workflow/` | The Workflow builder: `WorkflowBuilder`, `WorkflowCanvas`, `WorkflowStepList`, `WorkflowCompareDialog`, rule dialog and labels |
+
+Elsewhere (the paths in the first column are checked to exist):
+
+| Path | What it holds |
+|---|---|
+| `src/tokens/` | Palette, themes, scales, contrast; `src/styles/tokens.css` is generated from it |
+| `src/styles/` | CSS entry (`index.css`) and the generated `tokens.css` |
+| `src/fonts/` | `prepareArabicFont()` |
+| `src/lib/` | `cn`, direction helpers, `useMediaQuery`, module names |
+| `src/storybook/` | Story helpers and fixtures: `themed()` (`theme.ts`), locale, shell, views, form-engine fixtures |
+| `test/` | `stories.test.tsx` (renders every story; screenshots in `__screenshots__/`) and the touch-target test |
+
 ## Use it
 
 ```css

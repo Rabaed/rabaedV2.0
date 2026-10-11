@@ -1,10 +1,9 @@
-import { readPublishedVersionDefinition, readWorkflowDraft, withMember, type Db } from "@rabaed/db";
+import { latestPublishedVersionNo, readModuleStages, readPositions, readPublishedVersionDefinition, withMember, type Db } from "@rabaed/db";
 import {
   moduleKeys,
   type BilingualText,
   type ModuleKey,
   type ScreenPins,
-  type StageCategory,
   type WorkflowSettings,
   type WorkflowSettingsType,
   type WorkflowVersionRead,
@@ -39,7 +38,7 @@ export function readWorkflowSettings(db: Db, memberId: string, projectId: string
     const named = async (ids: string[]): Promise<Map<string, Latest>> => {
       if (ids.length === 0) return new Map();
       const { rows } = await sql<Latest>`
-        select d.id, d.name, (select max(v.version_no) from workflow_version v where v.workflow_definition_id = d.id and v.status = 'published') as version_no
+        select d.id, d.name, ${latestPublishedVersionNo(sql.ref("d.id"))} as version_no
         from workflow_definition d where d.id = any(${ids}::uuid[])
       `.execute(trx);
       return new Map(rows.map((r) => [r.id, r]));
@@ -53,15 +52,15 @@ export function readWorkflowSettings(db: Db, memberId: string, projectId: string
     const workflows = await named([...new Set([...byCode.values()].map((t) => t.workflow_definition_id).concat(bindings.rows.map((b) => b.workflow_definition_id)))]);
     const pick = (id: string) => workflows.get(id);
 
+    // The Project's own Workflows, for a Project Admin (their authors), each with its latest Version and whether a draft waits.
     const copies = canEdit
-      ? await sql<{ id: string; type_id: string | null }>`
-          select d.id, app.workflow_type(d.id) as type_id from workflow_definition d
+      ? await sql<Latest & { type_id: string | null; has_draft: boolean }>`
+          select d.id, d.name, app.workflow_type(d.id) as type_id, ${latestPublishedVersionNo(sql.ref("d.id"))} as version_no,
+            exists (select 1 from app.workflow_draft(d.id)) as has_draft
+          from workflow_definition d
           where d.owner_kind = 'project' and d.project_id = ${projectId}::uuid order by d.created_at, d.id
         `.execute(trx)
       : { rows: [] };
-    const copyNames = await named(copies.rows.map((c) => c.id));
-    const drafts = new Set<string>();
-    for (const c of copies.rows) if (await readWorkflowDraft(trx, c.id)) drafts.add(c.id);
 
     const result: WorkflowSettingsType[] = [...byCode.values()]
       .sort((a, b) => moduleKeys.indexOf(a.module_key) - moduleKeys.indexOf(b.module_key) || a.code.localeCompare(b.code))
@@ -87,13 +86,7 @@ export function readWorkflowSettings(db: Db, memberId: string, projectId: string
               }),
             copies: copies.rows
               .filter((c) => c.type_id === t.id)
-              .map((c) => ({
-                id: c.id,
-                name: copyNames.get(c.id)!.name,
-                versionNo: copyNames.get(c.id)!.version_no,
-                bound: own?.workflow_definition_id === c.id,
-                hasDraft: drafts.has(c.id),
-              })),
+              .map((c) => ({ id: c.id, name: c.name, versionNo: c.version_no, bound: own?.workflow_definition_id === c.id, hasDraft: c.has_draft })),
           },
         ];
       });
@@ -101,8 +94,7 @@ export function readWorkflowSettings(db: Db, memberId: string, projectId: string
     // The Library: the Member's own Company's Workflows with a published Version, per Type, for a Project Admin.
     const library = canEdit
       ? await sql<{ id: string; name: BilingualText; version_no: number; work_item_type_id: string }>`
-          select d.id, d.name, d.work_item_type_id,
-            (select max(v.version_no) from workflow_version v where v.workflow_definition_id = d.id and v.status = 'published') as version_no
+          select d.id, d.name, d.work_item_type_id, ${latestPublishedVersionNo(sql.ref("d.id"))} as version_no
           from workflow_definition d
           where d.owner_kind = 'company' and d.company_id = app.current_company_id()
             and exists (select 1 from workflow_version v where v.workflow_definition_id = d.id and v.status = 'published')
@@ -139,16 +131,6 @@ export function readWorkflowVersion(db: Db, memberId: string, workflowId: string
     if (!version) return null;
     const read = await readPublishedVersionDefinition(trx, version.id);
     if (!read) return null;
-    const stages = await sql<{ key: string; name: BilingualText; category: StageCategory }>`
-      select key, name, category from stage
-      where module_key = ${definition.module_key} and project_id is not distinct from ${definition.project_id}::uuid
-      order by sort, key
-    `.execute(trx);
-    const used = [...new Set(read.steps.flatMap((s) => s.actor?.positions ?? []))];
-    const positions =
-      used.length === 0
-        ? []
-        : await trx.selectFrom("position").select(["base_role", "key", "name"]).where("key", "in", used).orderBy("sort").execute();
     // Change Notes: the Workflow's authors only (workflow_change_note's policy); counts: the items the reader sees.
     const changeNotes = await trx
       .selectFrom("workflow_change_note")
@@ -167,8 +149,8 @@ export function readWorkflowVersion(db: Db, memberId: string, workflowId: string
         running: running.find((r) => r.versionNo === v.version_no)?.count ?? 0,
       })),
       definition: read,
-      stages: stages.rows,
-      positions: positions.map((p) => ({ role: p.base_role, key: p.key, name: p.name as BilingualText })),
+      stages: definition.module_key === null ? [] : await readModuleStages(trx, definition.module_key, definition.project_id),
+      positions: await readPositions(trx, [...new Set(read.steps.flatMap((s) => s.actor?.positions ?? []))]),
     };
   });
 }

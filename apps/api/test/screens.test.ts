@@ -152,6 +152,22 @@ describe("a Project Admin authors the Project's Screens", () => {
     expect(res.json()).toMatchObject({ error: "screen_problems", problems: [{ key: "recommended", code: "unknown_internal_field" }] });
   });
 
+  // RP-528 review: a Rabaed Default Screen is copied in published, in one call and one transaction.
+  it("creates and publishes a Screen in one call; a refused publish creates nothing", async () => {
+    const refused = await c1.caller.post(`/v1/projects/${at.projectId}/screens`, {
+      key: "copied_reply", name: label("Copied"), schema: codeReplyV1, internalFields: ["recommended"], publish: true,
+    });
+    expect(refused.statusCode, refused.body).toBe(422);
+    expect(refused.json()).toMatchObject({ error: "screen_problems", problems: [{ key: "recommended", code: "unknown_internal_field" }] });
+    const list: ScreenList = (await ok(c1.caller.get(`/v1/projects/${at.projectId}/screens`), 200)).json();
+    expect(list.screens.map((s) => s.key)).not.toContain("copied_reply");
+
+    const copied = (await ok(c1.caller.post(`/v1/projects/${at.projectId}/screens`, {
+      key: "copied_reply", name: label("Copied"), schema: codeReplyV1, internalFields: ["verification_note"], publish: true,
+    }), 201)).json().id;
+    expect(await readScreen(at.k1Manager, copied)).toMatchObject({ publishedVersions: [1], published: { versionNo: 1, internalFields: ["verification_note"] } });
+  });
+
   it("publishes it: every Project Member reads it, never another Project's (V20)", async () => {
     await ok(c1.caller.request("PUT", `/v1/screens/${screenId}/draft`, { schema: codeReplyV1, internalFields: ["verification_note"] }), 200);
     expect((await ok(c1.caller.post(`/v1/screens/${screenId}/publish`), 200)).json()).toEqual({ versionNo: 1 });
