@@ -74,11 +74,12 @@ describe("per-field times", () => {
     expect(Object.keys(await times(engineer, id)).sort()).toEqual(["location", "manufacturer", "trade"]);
   });
 
-  it("shows them to a Member who may save: the one holding the Draft", async () => {
+  it("shows them to every Member of the raiser's Participant, the one holding the Draft and a colleague who may not save (RP-525)", async () => {
     const id = await newDraft();
     expect(Object.keys((await detail(engineer, id)).fieldTimes).length).toBeGreaterThan(0);
     expect((await detail(engineer, id)).fieldTimes.manufacturer).toMatchObject({ byMe: true, memberName: { en: "Test Member" } });
-    expect((await detail(colleague, id)).fieldTimes).toEqual({});
+    expect((await detail(colleague, id)).actions.saveAnswers).toBe(false);
+    expect((await detail(colleague, id)).fieldTimes.manufacturer).toMatchObject({ byMe: false, memberName: { en: "Test Member" } });
   });
 });
 

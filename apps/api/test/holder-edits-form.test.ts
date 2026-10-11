@@ -12,7 +12,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { workItemSearchParams, type HandoverStep, type WorkItemList } from "@rabaed/domain";
 import { createTestApi, expectHidden, type Caller } from "./support/harness.ts";
 import { addSendBackType } from "./support/send-back.ts";
-import { all, bilingual, detail, draft, memberOnProject, ok, projectMember, take, type Company, type Tower } from "./support/tower.ts";
+import { sql } from "kysely";
+import { all, bilingual, detail, draft, memberOnProject, ok, projectMember, take, tryTake, type Company, type Tower } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
 const migrator = createDb(testDatabaseUrls().migrator, { max: 1 });
@@ -151,6 +152,59 @@ describe("a Send Back reopens the raiser's Form for its holder until the next Su
     await take(k1(), id, "send_back");
     await refusedToSave(ali, id, { model: "SB-2a" });
     await refusedToSave(hafiz, id, { model: "SB-2b" });
+  });
+});
+
+describe("every Submit checks the Form, whoever takes it (RP-525)", () => {
+  const TYPE = "HEFFC";
+
+  beforeAll(async () => {
+    await addSendBackType(migrator, TYPE, bilingual("Form checked at Submit (test)"), {
+      sections: [
+        { key: "material", title: bilingual("Material"), fields: [{ key: "model", type: "text", required: true, label: bilingual("Model") }] },
+        {
+          key: "classification",
+          title: bilingual("Classification"),
+          fields: [
+            { key: "trade", type: "trade", label: bilingual("Trade") },
+            { key: "location", type: "location", label: bilingual("Location") },
+            { key: "scopes", type: "scopes", label: bilingual("Scopes") },
+          ],
+        },
+      ],
+    });
+  });
+
+  it("Ali's Submit, who can't save, is refused while a required answer is missing, as anyone's", async () => {
+    const id = (
+      await ok(hafiz.post(`/v1/projects/${at.projectId}/work-items`, { type: TYPE, title: "Checked", answers: { model: "FC-1", trade: at.electrical, location: at.buildingA } }), 201)
+    ).json().id as string;
+    await take(hafiz, id, "send_for_review");
+    // An answer gone since the Draft was checked (a Version from before the publish checks, or data mended by hand).
+    await sql`update work_item set data = data - 'model' where id = ${id}::uuid`.execute(migrator);
+    expect((await detail(ali, id)).actions.saveAnswers).toBe(false);
+    const refused = await tryTake(ali, id, "submit");
+    expect(refused.statusCode, refused.body).toBe(422);
+    expect(refused.json()).toEqual({ error: "form_incomplete", fields: [{ key: "model", code: "required" }] });
+
+    await sql`update work_item set data = data || '{"model": "FC-1"}' where id = ${id}::uuid`.execute(migrator);
+    await take(ali, id, "submit");
+  });
+});
+
+describe("answer times reach the raiser's whole Participant, never another Company (RP-525)", () => {
+  it("Ali and Omar read them though they can't save; K1 never does", async () => {
+    const id = await draft(at, hafiz, "Timed");
+    await ok(save(hafiz, id, { manufacturer: "Timed Cables" }));
+    await take(hafiz, id, "send_for_review");
+    for (const by of [ali, omar, hafiz]) {
+      const read = await detail(by, id);
+      expect(read.actions.saveAnswers).toBe(false);
+      expect(read.fieldTimes.manufacturer).toMatchObject({ memberName: bilingual("Hafiz Engineer") });
+    }
+    await take(ali, id, "submit");
+    expect((await detail(ali, id)).fieldTimes.manufacturer).toMatchObject({ memberName: bilingual("Hafiz Engineer") });
+    expect((await detail(k1Manager, id)).fieldTimes).toEqual({});
   });
 });
 

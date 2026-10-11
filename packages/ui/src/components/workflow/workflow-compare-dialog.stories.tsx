@@ -32,9 +32,12 @@ export const Compare: Story = {
     const locale = storyLocale(context);
     const labels = workflowCompareLabels(locale);
     const dialog = within(await within(document.body).findByRole("dialog", { name: labels.title("3", "4") }));
-    await expect(dialog.getByText(`${labels.added} ${builderDraft.steps[4]!.name[locale]}`)).toBeVisible();
+    const added = builderDraft.steps[4]!.name[locale];
+    // The change line reads "Added <name>", the name in its own <bdi>.
+    await expect(dialog.getByText((_, el) => el?.tagName === "LI" && el.textContent?.trim() === `${labels.added} ${added}`)).toBeVisible();
     // On v4's map only (React Flow shows a node once it has measured it), marked added.
-    await waitFor(async () => expect(await dialog.findByText(builderDraft.steps[4]!.name[locale])).toBeVisible());
-    await expect(dialog.getByText(builderDraft.steps[4]!.name[locale]).closest("[class*='ring-success']")).not.toBeNull();
+    const onMap = () => dialog.queryAllByText(added).find((el) => el.closest("li") === null);
+    await waitFor(() => expect(onMap()).toBeVisible());
+    await expect(onMap()!.closest("[class*='ring-success']")).not.toBeNull();
   },
 };
