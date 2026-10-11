@@ -59,6 +59,8 @@ const allowedInText: string[] = [
   "demo environment", // the demo deploy (`DEMO_FLAG`), not a Project's Instance.
   "file store", // the S3 file store (`FILE_STORE_*`) that holds Documents' bytes.
   "both names", // a Member's or Company's name in English and Arabic.
+  "stage category", // a Stage's category (`stage.category`: draft, in progress, closed or cancelled), not a Form's.
+  "follow up actions", // an outcome's follow-up actions (`outcome.actions`, workflow-engine.md "Outcomes"), not a Watch.
   "filters", // the List's own filters ("Clear filters"; docs/data-model.md, List and Dashboard). "Filter" alone names a Visibility Dimension.
 ];
 

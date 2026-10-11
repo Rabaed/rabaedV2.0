@@ -3,22 +3,52 @@
 // save it as the draft and publish it as the Type's next Version, each save and publish
 // logged in admin_action with its reason; a definition with an error is refused,
 // problem by problem, and nothing is published or logged.
-import { createDb, readLatestPublishedDefinition } from "@rabaed/db";
+import { randomInt, randomUUID } from "node:crypto";
+import { createDb, readLatestPublishedDefinition, withMember } from "@rabaed/db";
 import { addTestWorkflow, testDatabaseUrls } from "@rabaed/db/test-support";
 import type { WorkflowDefinition } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { reorderDefaultOutcomes, reorderDefaultStages } from "../src/workflow-defaults.ts";
 import { publishRabaedWorkflowAs } from "../src/workflows.ts";
 import { createTestAdmin, type Browser } from "./support/harness.ts";
 
 const admin = await createTestAdmin();
 const adminDb = createDb(testDatabaseUrls().admin, { max: 1 });
 const migrator = createDb(testDatabaseUrls().migrator, { max: 1 });
+const appDb = createDb(testDatabaseUrls().app, { max: 1 });
 afterAll(async () => {
   await admin.close();
   await adminDb.destroy();
   await migrator.destroy();
+  await appDb.destroy();
 });
+
+const digits = (n: number) => Array.from({ length: n }, () => randomInt(10)).join("");
+
+/** A new Project of a new Company, created as its Members create one (`app.create_project`): it copies the Rabaed Defaults as they are now. */
+async function newProject(): Promise<string> {
+  const { id: engineerId } = await migrator
+    .insertInto("rabaed_engineer")
+    .values({ email: `eng-${randomUUID().slice(0, 8)}@rabaed.test`, full_name: "Seam One" })
+    .returning("id")
+    .executeTakeFirstOrThrow();
+  const company = await sql<{ id: string }>`
+    insert into company (legal_name, cr_number, vat_number, onboarded_by)
+    values ('{"en": "Defaults", "ar": "افتراضي"}', ${digits(10)}, ${`3${digits(13)}3`}, ${engineerId}) returning id
+  `.execute(migrator);
+  const member = await sql<{ id: string }>`
+    insert into member (company_id, email, full_name, status, can_create_projects)
+    values (${company.rows[0]!.id}, ${`creator-${randomUUID().slice(0, 8)}@rabaed.test`}, '{"en": "Creator", "ar": "المنشئ"}', 'active', true) returning id
+  `.execute(migrator);
+  const memberId = member.rows[0]!.id;
+  await sql`update company set authorized_person_id = ${memberId} where id = ${company.rows[0]!.id}`.execute(migrator);
+  return withMember(appDb, memberId, (trx) =>
+    sql<{ project_id: string }>`select project_id from app.create_project('{"en": "Later", "ar": "لاحق"}'::jsonb, 'DEF', 'contractor')`
+      .execute(trx)
+      .then((r) => r.rows[0]!.project_id),
+  );
+}
 
 const TYPE = "WFADM";
 let definitionId = "";
@@ -137,15 +167,19 @@ describe("Rabaed Admin's Workflows screen (visibility scenario RP-443-1)", () =>
     await migrator.deleteFrom("stage").where("key", "=", stageKey).execute();
     await migrator.deleteFrom("outcome").where("code", "=", outcomeCode).execute();
   });
-  const projectCopies = (code: string) =>
+  /** Project `projectId`'s copy of outcome `code` of the test Type, if it has one. */
+  const projectCopy = (projectId: string, code: string) =>
     migrator
       .selectFrom("outcome")
       .innerJoin("work_item_type", "work_item_type.id", "outcome.work_item_type_id")
-      .select(["outcome.name", "outcome.sort"])
+      .select(["outcome.name", "outcome.actions", "outcome.sort"])
       .where("work_item_type.code", "=", TYPE)
       .where("outcome.code", "=", code)
-      .where("outcome.owner_kind", "=", "project")
+      .where("outcome.project_id", "=", projectId)
       .execute();
+  /** Project `projectId`'s own Submittals Stage `key`, if it has one. */
+  const projectStage = (projectId: string, key: string) =>
+    migrator.selectFrom("stage").select("name").where("project_id", "=", projectId).where("module_key", "=", "submittals").where("key", "=", key).execute();
 
   it("lists the Rabaed Default Workflows by Type with their Versions", async () => {
     const res = await engineer.browser.get("/v1/workflows");
@@ -192,18 +226,23 @@ describe("Rabaed Admin's Workflows screen (visibility scenario RP-443-1)", () =>
     expect((await engineer.browser.post(`/v1/workflows/${TYPE}/duplicate`, { fromTypeCode: "MAR", reason: " " })).statusCode).toBe(400);
   });
 
-  it("adds an outcome to a Rabaed Default set; every Project gets its own copy; changes and order leave the Projects' copies alone", async () => {
+  // Decided 2026-10-11 (RP-528 review): every edit of a Rabaed Default set, an addition included, reaches only the Projects created afterwards.
+  it("adds an outcome to a Rabaed Default set: existing Projects keep theirs, a Project created afterwards gets it; changes and order leave Projects' copies alone", async () => {
+    const existing = await newProject();
     const add = await engineer.browser.post(`/v1/workflows/${TYPE}/outcomes`, {
       code: outcomeCode, name: name("Extra"), closing: true, polarity: "negative", actions: [{ kind: "offer_revision" }], reason: "Add an outcome",
     });
     expect(add.statusCode, add.body).toBe(200);
-    const copies = await projectCopies(outcomeCode);
-    expect(copies.length).toBeGreaterThan(0);
+    expect(await projectCopy(existing, outcomeCode)).toEqual([]);
+    const later = await newProject();
+    const copies = await projectCopy(later, outcomeCode);
+    expect(copies).toEqual([expect.objectContaining({ name: name("Extra"), actions: [{ kind: "offer_revision" }] })]);
 
     const dup = await engineer.browser.post(`/v1/workflows/${TYPE}/outcomes`, {
       code: outcomeCode, name: name("Again"), closing: true, polarity: "negative", actions: [], reason: "Add twice",
     });
     expect(dup.statusCode).toBe(409);
+    expect(dup.json()).toEqual({ error: "already_exists" });
 
     const change = await engineer.browser.post(`/v1/workflows/${TYPE}/outcomes/${outcomeCode}`, { name: name("Renamed"), actions: [], reason: "Rename it" });
     expect(change.statusCode, change.body).toBe(200);
@@ -212,14 +251,19 @@ describe("Rabaed Admin's Workflows screen (visibility scenario RP-443-1)", () =>
 
     const set = (await engineer.browser.get(`/v1/workflows/${TYPE}`)).json().outcomeSet;
     expect(set.find((o: { code: string }) => o.code === outcomeCode)).toMatchObject({ name: name("Renamed"), actions: [] });
-    expect(await projectCopies(outcomeCode)).toEqual(copies);
+    expect(await projectCopy(later, outcomeCode)).toEqual(copies);
 
     const codes: string[] = set.map((o: { code: string }) => o.code);
     const reordered = [outcomeCode, ...codes.filter((c) => c !== outcomeCode)];
     expect((await engineer.browser.post(`/v1/workflows/${TYPE}/outcomes/order`, { codes: reordered, reason: "Put it first" })).statusCode).toBe(200);
     expect((await engineer.browser.get(`/v1/workflows/${TYPE}`)).json().outcomeSet.map((o: { code: string }) => o.code)).toEqual(reordered);
     expect((await engineer.browser.post(`/v1/workflows/${TYPE}/outcomes/order`, { codes: reordered.slice(1), reason: "Missing one" })).statusCode).toBe(422);
-    expect(await projectCopies(outcomeCode)).toEqual(copies);
+    // One code twice in place of another is not a reorder either: the request schema refuses it, and so does the command itself.
+    const repeated = [reordered[0]!, reordered[0]!, ...reordered.slice(2)];
+    expect((await engineer.browser.post(`/v1/workflows/${TYPE}/outcomes/order`, { codes: repeated, reason: "Repeated" })).statusCode).toBe(400);
+    expect(await reorderDefaultOutcomes(adminDb, engineer.id, TYPE, { codes: repeated, reason: "Repeated" })).toEqual({ ok: false, reason: "invalid_order" });
+    expect(await projectCopy(later, outcomeCode)).toEqual(copies);
+    expect(await projectCopy(existing, outcomeCode)).toEqual([]);
 
     const logged = await adminDb
       .selectFrom("admin_action")
@@ -235,29 +279,34 @@ describe("Rabaed Admin's Workflows screen (visibility scenario RP-443-1)", () =>
     ]);
   });
 
-  it("adds, renames and reorders a Rabaed Default Stage of a Module; Projects' own Stage sets stay theirs", async () => {
+  it("adds, renames and reorders a Rabaed Default Stage of a Module: existing Projects keep their sets, a Project created afterwards gets it", async () => {
+    const existing = await newProject();
     const add = await engineer.browser.post(`/v1/stages/submittals`, { key: stageKey, name: name("On Hold"), category: "in_progress", reason: "Add a Stage" });
     expect(add.statusCode, add.body).toBe(200);
     expect((await engineer.browser.post(`/v1/stages/submittals`, { key: stageKey, name: name("Again"), category: "in_progress", reason: "Twice" })).statusCode).toBe(409);
     expect((await engineer.browser.post(`/v1/stages/nowhere`, { key: "x_y", name: name("X"), category: "in_progress", reason: "No Module" })).statusCode).toBe(400);
+    expect(await projectStage(existing, stageKey)).toEqual([]);
 
-    const projectStage = () =>
-      migrator.selectFrom("stage").select("name").where("owner_kind", "=", "project").where("module_key", "=", "submittals").where("key", "=", stageKey).execute();
-    const before = await projectStage();
-    expect(before.length).toBeGreaterThan(0);
+    const later = await newProject();
+    const before = await projectStage(later, stageKey);
+    expect(before).toEqual([{ name: name("On Hold") }]);
 
     expect((await engineer.browser.post(`/v1/stages/submittals/${stageKey}`, { name: name("Paused"), reason: "Rename the Stage" })).statusCode).toBe(200);
     expect((await engineer.browser.post(`/v1/stages/submittals/nope`, { name: name("x"), reason: "No such" })).statusCode).toBe(404);
     const stages = (await engineer.browser.get(`/v1/workflows/${TYPE}`)).json().stages;
     expect(stages.find((s: { key: string }) => s.key === stageKey).name).toEqual(name("Paused"));
-    expect(await projectStage()).toEqual(before);
+    expect(await projectStage(later, stageKey)).toEqual(before);
 
     const keys: string[] = stages.map((s: { key: string }) => s.key);
     const reordered = [stageKey, ...keys.filter((k) => k !== stageKey)];
     expect((await engineer.browser.post(`/v1/stages/submittals/order`, { keys: reordered, reason: "Put it first" })).statusCode).toBe(200);
     expect((await engineer.browser.get(`/v1/workflows/${TYPE}`)).json().stages.map((s: { key: string }) => s.key)).toEqual(reordered);
     expect((await engineer.browser.post(`/v1/stages/submittals/order`, { keys: reordered.slice(1), reason: "Missing one" })).statusCode).toBe(422);
-    expect(await projectStage()).toEqual(before);
+    const repeated = [reordered[0]!, reordered[0]!, ...reordered.slice(2)];
+    expect((await engineer.browser.post(`/v1/stages/submittals/order`, { keys: repeated, reason: "Repeated" })).statusCode).toBe(400);
+    expect(await reorderDefaultStages(adminDb, engineer.id, "submittals", { keys: repeated, reason: "Repeated" })).toEqual({ ok: false, reason: "invalid_order" });
+    expect(await projectStage(later, stageKey)).toEqual(before);
+    expect(await projectStage(existing, stageKey)).toEqual([]);
 
     const logged = await adminDb
       .selectFrom("admin_action")
@@ -267,6 +316,34 @@ describe("Rabaed Admin's Workflows screen (visibility scenario RP-443-1)", () =>
       .orderBy("at")
       .execute();
     expect(logged.map((l) => l.action)).toEqual(["add_default_stage", "rename_default_stage", "reorder_default_stages"]);
+  });
+
+  it("adds one outcome or Stage once when two Engineers add it at the same time: the set's lock lets one check see the other's write", async () => {
+    const code = `Y${suffix}`;
+    const key = `race_${suffix}`;
+    try {
+      const outcomes = await Promise.all(
+        [1, 2].map((n) =>
+          engineer.browser.post(`/v1/workflows/${TYPE}/outcomes`, { code, name: name(`Race ${n}`), closing: true, polarity: "positive", actions: [], reason: `Race ${n}` }),
+        ),
+      );
+      expect(outcomes.map((r) => r.statusCode).sort()).toEqual([200, 409]);
+      const stages = await Promise.all(
+        [1, 2].map((n) => engineer.browser.post(`/v1/stages/submittals`, { key, name: name(`Race ${n}`), category: "in_progress", reason: `Race ${n}` })),
+      );
+      expect(stages.map((r) => r.statusCode).sort()).toEqual([200, 409]);
+      const rabaed = await migrator
+        .selectFrom("outcome")
+        .select("code")
+        .where("owner_kind", "=", "rabaed")
+        .where("code", "=", code)
+        .execute();
+      expect(rabaed.length).toBe(1);
+      expect((await migrator.selectFrom("stage").select("key").where("owner_kind", "=", "rabaed").where("key", "=", key).execute()).length).toBe(1);
+    } finally {
+      await migrator.deleteFrom("outcome").where("code", "=", code).execute();
+      await migrator.deleteFrom("stage").where("key", "=", key).execute();
+    }
   });
 
   it("is reached by a signed-in Rabaed Engineer only, before the body is read", async () => {

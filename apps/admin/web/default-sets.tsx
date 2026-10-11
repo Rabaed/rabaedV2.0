@@ -122,11 +122,11 @@ function OutcomeSet({
         <TableHeader>
           <TableRow>
             <TableHead>{s.colCode}</TableHead>
-            <TableHead>{s.colName}</TableHead>
+            <TableHead>{s.colOutcome}</TableHead>
             <TableHead>{s.colClosing}</TableHead>
             <TableHead>{s.colPolarity}</TableHead>
-            <TableHead>{s.colFollowUp}</TableHead>
-            <TableHead>{s.colActions}</TableHead>
+            <TableHead>{s.colFollowUpActions}</TableHead>
+            <TableHead>{s.colEdit}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -327,9 +327,9 @@ function StageSet({
         <TableHeader>
           <TableRow>
             <TableHead>{s.colKey}</TableHead>
-            <TableHead>{s.colName}</TableHead>
+            <TableHead>{s.colStage}</TableHead>
             <TableHead>{s.colCategory}</TableHead>
-            <TableHead>{s.colActions}</TableHead>
+            <TableHead>{s.colEdit}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>

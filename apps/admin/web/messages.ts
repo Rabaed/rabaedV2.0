@@ -1,15 +1,15 @@
-import type { Locale } from "@rabaed/domain";
+import { intlLocaleOf, type Locale } from "@rabaed/domain";
 import type { Translate } from "@rabaed/ui";
 import { IntlMessageFormat } from "intl-messageformat";
 import ar from "../../web/messages/ar.json";
 import en from "../../web/messages/en.json";
 
 // The builder's words are the customer app's own messages (workflowBuilder, workflowMap,
-// workflowRules, projects.roles), formatted with the same ICU format and Latin digits.
+// workflowRules, projects.roles), formatted with the same ICU format, Gregorian calendar and
+// Latin digits as the app (intlLocaleOf).
 
 type Tree = { [key: string]: string | Tree };
 const messages: Record<Locale, Tree> = { en: en as Tree, ar: ar as Tree };
-const intlLocale: Record<Locale, string> = { en: "en-SA", ar: "ar-SA-u-nu-latn" };
 const formats = new Map<string, IntlMessageFormat>();
 
 /** The translator for one namespace of the messages, e.g. `workflowBuilder` or `projects.roles`. */
@@ -22,7 +22,7 @@ export function messagesOf(locale: Locale, namespace: string): Translate {
     const cacheKey = `${locale}:${path}`;
     let format = formats.get(cacheKey);
     if (!format) {
-      format = new IntlMessageFormat(node, intlLocale[locale]);
+      format = new IntlMessageFormat(node, intlLocaleOf(locale));
       formats.set(cacheKey, format);
     }
     return String(format.format(values));
