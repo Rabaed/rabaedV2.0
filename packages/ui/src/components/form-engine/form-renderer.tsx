@@ -803,9 +803,9 @@ export function FormRenderer({
   return (
     <div className={cn("flex flex-col gap-6", className)}>
       {shownErrors.length > 0 && (
-        <div role="alert" className="flex flex-col gap-2 rounded-md border border-danger bg-danger-tint p-4 text-body text-text">
+        <div role="alert" className="flex flex-col gap-2 rounded-md border border-danger-fg bg-danger-tint p-4 text-body text-text">
           <p className="flex items-center gap-2 font-semibold">
-            <Icon name="alert-circle" size={20} className="text-danger" />
+            <Icon name="alert-circle" size={20} className="text-danger-fg" />
             {labels.summary(formatNumber(shownErrors.length, locale), shownErrors.length)}
           </p>
           <ul className="flex flex-col gap-1 ps-7">

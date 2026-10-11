@@ -32,6 +32,7 @@ describe("creating a Project", () => {
       code: "TWR",
       name: { en: "Riyadh Gate Tower – Phase 2", ar: "برج بوابة الرياض – المرحلة الثانية" },
       status: "active",
+      hostCompany: { legalName: { en: "Test Constructions", ar: "إنشاءات الاختبار" } },
       projectRole: { baseRole: "contractor", name: { en: "Contractor", ar: "المقاول" } },
       isProjectAdmin: true,
       needMyAction: 0,
@@ -136,6 +137,25 @@ describe("a Project is invisible to anyone not on it", () => {
     const project = await api.createProject(a.caller);
     expect((await api.anonymous().get("/v1/projects")).statusCode).toBe(401);
     expect((await api.anonymous().get(`/v1/projects/${project.id}`)).statusCode).toBe(401);
+  });
+});
+
+describe("the Host Company", () => {
+  it("is named on the Project to every Member of it, another Company's included (V15)", async () => {
+    const hostName = { en: "Gulf Host Constructions", ar: "الخليج المضيف للإنشاءات" };
+    const consultant = await api.authorizedPerson();
+    const company = await api.onboardCompany({ legalName: hostName });
+    const hostCaller = await api.acceptInvitation(company.invitationToken);
+    expect((await hostCaller.patch(`/v1/members/${company.authorizedPerson.id}`, { canCreateProjects: true })).statusCode).toBe(200);
+    const { id } = await api.createProject(hostCaller);
+    const participantId = await api.addParticipant(hostCaller, id, consultant.company, "consultant");
+    await api.addProjectMember(consultant.caller, participantId, consultant.company.authorizedPerson.id);
+
+    for (const caller of [hostCaller, consultant.caller]) {
+      expect((await caller.get(`/v1/projects/${id}`)).json().hostCompany).toEqual({ legalName: hostName });
+      const listed = (await caller.get("/v1/projects")).json().projects.find((p: { id: string }) => p.id === id);
+      expect(listed.hostCompany).toEqual({ legalName: hostName });
+    }
   });
 });
 

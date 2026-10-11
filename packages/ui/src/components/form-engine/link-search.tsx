@@ -131,7 +131,7 @@ export function LinkSearch({ locale, labels: text, search, onPick, exclude = [],
         {status}
       </p>
       {found.state === "failed" && (
-        <p role="alert" className="text-sm text-danger">
+        <p role="alert" className="text-sm text-danger-fg">
           {text.failed}
         </p>
       )}

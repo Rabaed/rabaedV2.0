@@ -32,7 +32,7 @@ export function Table({ label, stickyHeader = false, containerClassName, classNa
       // A tab stop only where there is something to scroll.
       tabIndex={scrollable ? 0 : undefined}
       data-sticky-header={stickyHeader || undefined}
-      className={cn("group/table overflow-auto rounded-sm border border-border bg-surface", focusRing, containerClassName)}
+      className={cn("group/table relative overflow-auto rounded-sm border border-border bg-surface", focusRing, containerClassName)}
     >
       <table className={cn("w-full border-separate border-spacing-0 text-body text-text", className)} {...props}>
         <caption className="sr-only">{label}</caption>

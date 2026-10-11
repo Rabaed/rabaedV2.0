@@ -1,6 +1,7 @@
 import { withMember, type Db } from "@rabaed/db";
 import { createReplacementRefusals, createRevisionRefusals, discardRevisionRefusals, type RevisionChain } from "@rabaed/domain";
 import { sql } from "kysely";
+import { withFileCopies } from "../documents/copy-files.ts";
 import type { FileStore } from "../documents/file-store.ts";
 import { checkedOutcome, commandResult } from "../outcomes.ts";
 
@@ -8,7 +9,8 @@ import { checkedOutcome, commandResult } from "../outcomes.ts";
 // create or discard one, and when (app.create_revision, app.discard_revision);
 // a refusal names nothing about the chain, so nobody outside the raiser learns
 // whether a Draft Revision is open. A new Revision's Documents are new rows,
-// whose files are copied here, in the same transaction: if a copy fails,
+// whose files are copied here, in the same transaction: if a copy or the
+// transaction fails, the files already copied are deleted (withFileCopies) and
 // nothing is created.
 
 export type CreateRevisionResult = { ok: true; id: string } | { ok: false; reason: (typeof createRevisionRefusals)[number] };
@@ -22,7 +24,7 @@ export function createRevision(
   idempotencyKey: string,
   now: Date,
 ): Promise<CreateRevisionResult> {
-  return withMember(db, memberId, async (trx): Promise<CreateRevisionResult> => {
+  return withFileCopies(files, (copy) => withMember(db, memberId, async (trx): Promise<CreateRevisionResult> => {
     const { rows } = await sql<{ outcome: string; work_item_id: string | null }>`
       select outcome, work_item_id from app.create_revision(${workItemId}::uuid, ${idempotencyKey}::uuid, ${now})
     `.execute(trx);
@@ -33,10 +35,10 @@ export function createRevision(
       const { rows: copies } = await sql<{ storage_key: string; source_storage_key: string }>`
         select storage_key, source_storage_key from app.revision_document_copies(${id}::uuid)
       `.execute(trx);
-      for (const c of copies) await files.copy(c.source_storage_key, c.storage_key);
+      await copy(copies);
     }
     return { ok: true, id };
-  });
+  }));
 }
 
 export type CreateReplacementResult = { ok: true; id: string } | { ok: false; reason: (typeof createReplacementRefusals)[number] };
@@ -54,7 +56,7 @@ export function createReplacement(
   idempotencyKey: string,
   now: Date,
 ): Promise<CreateReplacementResult> {
-  return withMember(db, memberId, async (trx): Promise<CreateReplacementResult> => {
+  return withFileCopies(files, (copy) => withMember(db, memberId, async (trx): Promise<CreateReplacementResult> => {
     const { rows } = await sql<{ outcome: string; work_item_id: string | null }>`
       select outcome, work_item_id from app.create_replacement(${workItemId}::uuid, ${idempotencyKey}::uuid, ${now})
     `.execute(trx);
@@ -65,10 +67,10 @@ export function createReplacement(
       const { rows: copies } = await sql<{ storage_key: string; source_storage_key: string }>`
         select storage_key, source_storage_key from app.revision_document_copies(${id}::uuid)
       `.execute(trx);
-      for (const c of copies) await files.copy(c.source_storage_key, c.storage_key);
+      await copy(copies);
     }
     return { ok: true, id };
-  });
+  }));
 }
 
 export type DiscardRevisionResult = { ok: true } | { ok: false; reason: (typeof discardRevisionRefusals)[number] };

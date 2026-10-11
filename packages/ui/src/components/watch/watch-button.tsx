@@ -59,7 +59,7 @@ export function WatchButton({ labels, watching: initial, onChange }: WatchButton
         {watching ? labels.watching : labels.watch}
       </Button>
       {error && (
-        <p role="alert" className="text-sm text-danger">
+        <p role="alert" className="text-sm text-danger-fg">
           {error}
         </p>
       )}

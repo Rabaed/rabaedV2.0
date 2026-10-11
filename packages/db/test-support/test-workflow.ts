@@ -35,9 +35,10 @@ export async function addTestWorkflow(
   run: (text: string) => Promise<{ rows: unknown[] }>,
   options: TestWorkflowOptions = {},
 ): Promise<string> {
-  const { withApproveB = false, withCancel = false, recommendCode = false, engineerStep = false, publish = true } = options;
-  // The Contractor Engineer Step's Transitions sort after the rest (sorts stay 1, 2, 3…).
-  const engineerSort = 10 + (withApproveB ? 1 : 0) + (withCancel ? 2 : 0);
+  const { withApproveB = false, withCancel = false, recommendCode = false, forward = false, engineerStep = false, publish = true } = options;
+  // The Owner Representative's Transitions sort after the rest, then the Contractor Engineer Step's (sorts stay 1, 2, 3…).
+  const forwardSort = 10 + (withApproveB ? 1 : 0) + (withCancel ? 2 : 0);
+  const engineerSort = forwardSort + (forward ? 2 : 0);
   const name = JSON.stringify(options.name ?? { en: "Send Back (test)", ar: "الإرجاع (اختبار)" }).replaceAll("'", "''");
   const owner = options.owner;
   const definition = options.version
@@ -67,6 +68,7 @@ export async function addTestWorkflow(
         ('approved', '{"en": "Approved", "ar": "معتمد"}', 'approved', '{}', 'none'),
         ('revise_resubmit', '{"en": "Revise & Resubmit", "ar": "مراجعة وإعادة تقديم"}', 'revise_resubmit', '{}', 'none')
         ${withCancel ? `, ('cancelled', '{"en": "Cancelled", "ar": "ملغى"}', 'cancelled', '{}', 'none')` : ""}
+        ${forward ? `, ('or_review', '{"en": "Owner Representative review", "ar": "مراجعة ممثل المالك"}', 'pending_approval', '{"base_role": "owner_representative", "permission": "view"}', 'none')` : ""}
         ${engineerStep ? `, ('contractor_engineer', '{"en": "Contractor Engineer", "ar": "مهندس المقاول"}', 'internal_review',
           '{"base_role": "contractor", "permission": "create"}', 'none')` : ""}
       ) as s (key, name, stage_key, actor_rule, outcome_mode)
@@ -91,6 +93,8 @@ export async function addTestWorkflow(
           'close', 'B', 'approve', 10)` : ""}
         ${withCancel ? `, ('cancel', 'draft', 'cancelled', '{"en": "Cancel", "ar": "إلغاء"}', 'cancel', null, 'create', ${withApproveB ? 11 : 10}),
           ('cancel_review', 'internal_review', 'cancelled', '{"en": "Cancel", "ar": "إلغاء"}', 'cancel', null, 'review', ${withApproveB ? 12 : 11})` : ""}
+        ${forward ? `, ('forward', 'consultant_review', 'or_review', '{"en": "Send to Owner Representative", "ar": "إرسال لممثل المالك"}', 'submit', null, 'review', ${forwardSort}),
+          ('or_send_back', 'or_review', 'consultant_review', '{"en": "Send Back", "ar": "إرجاع إلى المقدّم"}', 'send_back', null, 'review', ${forwardSort + 1})` : ""}
         ${engineerStep ? `, ('send_for_review_again', 'contractor_engineer', 'internal_review', '{"en": "Send for Review", "ar": "إرسال للمراجعة"}',
           'send', null, 'create', ${engineerSort})` : ""}
         ${engineerStep && withCancel ? `, ('cancel_engineer', 'contractor_engineer', 'cancelled', '{"en": "Cancel", "ar": "إلغاء"}', 'cancel', null, 'create', ${engineerSort + 1})` : ""}
@@ -168,6 +172,8 @@ export type TestWorkflowOptions = {
   withCancel?: boolean;
   /** Consultant review Recommends a Code (RP-433). */
   recommendCode?: boolean;
+  /** Consultant review may send the item on to the Owner Representative (a third Company), a Submit to its Participant, which may Send it Back (RP-407). */
+  forward?: boolean;
   /** Internal Review's Contractor Engineer Step, where the Return goes (ADR 0020, RP-515). */
   engineerStep?: boolean;
   name?: { en: string; ar: string };

@@ -30,7 +30,7 @@ export default async function NewWorkItemPage({ params }: { params: Promise<{ lo
   return (
     <div className="max-w-2xl space-y-6">
       <div className="space-y-1">
-        <Link href={`/projects/${project.id}/work-items`} className="text-sm text-primary underline underline-offset-4">
+        <Link href={`/projects/${project.id}/work-items`} className="text-sm text-brand-fg underline underline-offset-4">
           {t("title")}
         </Link>
         <h1 className="text-h4 font-semibold">{t("newMar")}</h1>

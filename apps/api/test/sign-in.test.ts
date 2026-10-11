@@ -21,6 +21,8 @@ describe("accepting an invitation", () => {
         canCreateProjects: false,
       },
       company: { id: company.companyId, legalName: { en: "Test Constructions", ar: "إنشاءات الاختبار" } },
+      // A new Member's Theme and Mode: Warm, following the device.
+      appearance: { theme: "warm", mode: "system" },
     });
   });
 

@@ -69,7 +69,7 @@ export function AddParticipantForm({ projectId }: { projectId: string }) {
         </p>
       )}
       {error && (
-        <p role="alert" className="text-sm text-danger sm:col-span-3">
+        <p role="alert" className="text-sm text-danger-fg sm:col-span-3">
           {error}
         </p>
       )}

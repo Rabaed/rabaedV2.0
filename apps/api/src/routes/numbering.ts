@@ -1,4 +1,4 @@
-import { numberingSettings, saveNumberingPatternRequest } from "@rabaed/domain";
+import { numberingSettings, saveNumberingRequest } from "@rabaed/domain";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import type { AppContext } from "../app.ts";
@@ -26,7 +26,7 @@ export const numberingRoutes =
 
     app.put(
       "/v1/projects/:projectId/numbering",
-      { schema: { params: projectParams, body: saveNumberingPatternRequest } },
+      { schema: { params: projectParams, body: saveNumberingRequest } },
       async (request, reply) => {
         const memberId = ctx.requireMember(request);
         const projectId = idOrNotFound(request.params.projectId);

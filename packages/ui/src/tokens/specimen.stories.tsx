@@ -3,7 +3,7 @@ import { expect } from "storybook/test";
 import { storyText } from "../storybook/locale.ts";
 import { palette } from "./palette.ts";
 import { radii, shadows, spacing, typeScale } from "./scales.ts";
-import { coolLight, reviewCodes, stageKeys, type SemanticRole } from "./themes.ts";
+import { greyLight, reviewCodes, stageKeys, type SemanticRole } from "./themes.ts";
 
 const meta = {
   title: "Foundations/Tokens",
@@ -13,7 +13,7 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-const roles = Object.keys(coolLight) as SemanticRole[];
+const roles = Object.keys(greyLight) as SemanticRole[];
 const groups: { en: string; ar: string; roles: SemanticRole[] }[] = [
   { en: "Surfaces and lines", ar: "الأسطح والحدود", roles: ["canvas", "surface", "surface-subtle", "hover", "press", "border", "border-subtle", "border-strong", "control-border", "control-border-hover", "shadow-colour"] },
   { en: "Text", ar: "النص", roles: ["text", "text-secondary", "muted", "faint", "inverse", "on-inverse"] },
@@ -34,7 +34,7 @@ function Swatch({ role }: { role: SemanticRole }) {
       <span className="min-w-0">
         <span className="block font-mono text-caption text-text">{role}</span>
         <span className="block font-mono text-notes text-muted" dir="ltr">
-          {coolLight[role]} · {palette[coolLight[role]]}
+          {greyLight[role]} · {palette[greyLight[role]]}
         </span>
       </span>
     </li>
@@ -56,7 +56,7 @@ function TokenSpecimen(context: StoryContext) {
   const t = (en: string, ar: string) => storyText(context, { en, ar });
   return (
     <main className="space-y-8 bg-canvas p-6">
-      <h1 className="font-display text-h4 font-bold text-text">{t("Rabaed tokens · cool light", "رموز ربائد · الفاتح البارد")}</h1>
+      <h1 className="font-display text-h4 font-bold text-text">{t("Rabaed tokens · Grey, Light", "رموز ربائد · الرمادي، الفاتح")}</h1>
 
       {groups.map((group) => (
         <section key={group.en} className="rounded-md border border-border bg-surface p-4 shadow-xs">

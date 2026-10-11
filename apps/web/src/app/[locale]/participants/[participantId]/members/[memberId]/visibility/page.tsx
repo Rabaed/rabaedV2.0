@@ -29,7 +29,7 @@ export default async function MemberVisibilityPage({
   return (
     <div className="space-y-6">
       <div className="space-y-1">
-        <Link href={`/participants/${participantId}`} className="text-sm text-primary underline underline-offset-4">
+        <Link href={`/participants/${participantId}`} className="text-sm text-brand-fg underline underline-offset-4">
           {participation.participant.project.name[locale]} · {participation.participant.projectRole.name[locale]}
         </Link>
         <h1 className="text-h4 font-semibold">{t("memberTitle", { name: data.member.fullName[locale] })}</h1>

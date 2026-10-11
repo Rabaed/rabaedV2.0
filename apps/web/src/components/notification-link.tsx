@@ -20,7 +20,7 @@ export function NotificationLink({ id, href, unread, children }: { id: string; h
   }
 
   return (
-    <Link href={href} onClick={markRead} className="font-medium text-primary underline underline-offset-4">
+    <Link href={href} onClick={markRead} className="font-medium text-brand-fg underline underline-offset-4">
       {children}
     </Link>
   );

@@ -91,7 +91,7 @@ export function AddDimensionValueForm({
         </Button>
       </div>
       {error && (
-        <p role="alert" className="text-sm text-danger sm:col-span-2">
+        <p role="alert" className="text-sm text-danger-fg sm:col-span-2">
           {error}
         </p>
       )}

@@ -1,9 +1,10 @@
 import type { DimensionValue, Locale } from "@rabaed/domain";
+import { SettingsHeader, SettingsSection } from "@rabaed/ui";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
 import { AddDimensionValueForm } from "@/components/add-dimension-value-form";
 import { TradeScopes } from "@/components/trade-scopes";
-import { Link, redirect } from "@/i18n/navigation";
+import { redirect } from "@/i18n/navigation";
 import { treeOrder } from "@/lib/dimension-tree";
 import { getMe, getProject, getProjectDimensions, getProjectScopes } from "@/lib/session";
 
@@ -42,16 +43,10 @@ export default async function TradesLocationsPage({
     .map((l) => ({ id: l.id, label: `${"— ".repeat(l.level)}${label(l)} · ${l.levelName?.[locale] ?? ""}` }));
 
   return (
-    <div className="space-y-8">
-      <div className="space-y-1">
-        <Link href={`/projects/${project.id}`} className="text-sm text-primary underline underline-offset-4">
-          {project.name[locale]}
-        </Link>
-        <h1 className="text-h4 font-semibold">{t("title")}</h1>
-      </div>
+    <>
+      <SettingsHeader title={t("title")} />
 
-      <section className="space-y-4">
-        <h2 className="text-h6 font-semibold">{t("trades")}</h2>
+      <SettingsSection title={t("trades")}>
         {dimensions.trade.length === 0 ? (
           <p className="text-muted">{t("noTrades")}</p>
         ) : (
@@ -75,10 +70,9 @@ export default async function TradesLocationsPage({
           </ul>
         )}
         {project.isProjectAdmin && <AddDimensionValueForm projectId={project.id} kind="trade" />}
-      </section>
+      </SettingsSection>
 
-      <section className="space-y-4">
-        <h2 className="text-h6 font-semibold">{t("locations")}</h2>
+      <SettingsSection title={t("locations")}>
         {locations.length === 0 ? (
           <p className="text-muted">{t("noLocations")}</p>
         ) : (
@@ -95,7 +89,7 @@ export default async function TradesLocationsPage({
           </ul>
         )}
         {project.isProjectAdmin && <AddDimensionValueForm projectId={project.id} kind="location" parents={parents} />}
-      </section>
-    </div>
+      </SettingsSection>
+    </>
   );
 }

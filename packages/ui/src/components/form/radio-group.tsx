@@ -38,7 +38,7 @@ export function RadioGroup({ options, className, value, defaultValue, onValueCha
               className={cn(
                 "inline-flex size-5 shrink-0 items-center justify-center rounded-full border border-control-border bg-surface",
                 "hover:border-control-border-hover data-[state=checked]:border-primary",
-                "group-aria-invalid:border-danger",
+                "group-aria-invalid:border-danger-fg",
                 "disabled:cursor-not-allowed disabled:border-border disabled:bg-disabled",
                 focusRing,
                 touchArea,

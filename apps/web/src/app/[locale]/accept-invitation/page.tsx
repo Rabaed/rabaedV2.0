@@ -6,7 +6,7 @@ export default async function AcceptInvitationPage({ params }: { params: Promise
   setRequestLocale((await params).locale);
   const t = await getTranslations("acceptInvitation");
   return (
-    <div className="space-y-6">
+    <div className="max-w-3xl space-y-6">
       <h1 className="text-h4 font-semibold">{t("title")}</h1>
       <AcceptInvitationForm />
     </div>
