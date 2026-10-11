@@ -23,7 +23,7 @@ A lane takes work in one of two ways: **one ticket per session** (below), or **a
 
 1. In the Claude desktop app → Code tab → **new session** on `G:\Rabaed Contech` with the **worktree** option on (the app creates the worktree and branch). Never start an implementing session in the main folder, and never run `git worktree add` by hand for it — the app wouldn't see the PR.
    **Session already open on the main folder?** Keep it and recover in place, in this order. The rule above still holds: nothing is implemented in the main folder.
-   1. Call the `EnterWorktree` tool, named after the branch. It creates `.claude/worktrees/<name>` from `origin/main`.
+   1. Call the `EnterWorktree` tool, named after the branch. It creates `.claude/worktrees/<name>` from `origin/main`, but if a worktree of that name already exists it **resumes** it (once it resumed another session's live one). Check the worktree is yours before working in it: `pnpm lane:env` refuses a worktree another live session holds (RP-501's lock check); if it does, stop and use another name.
    2. Rename the branch to the key's name (`git branch -m RP-nnn-...`), then run `pnpm lane:env N --force`.
    3. After `gh pr create`, link the PR to the session with `bind_pr`, so CI and Auto-fix notifications still arrive.
 2. Name it `Agent X – RP-nnn`.
@@ -41,6 +41,8 @@ A lane takes work in one of two ways: **one ticket per session** (below), or **a
 5. After the queue merges the PR, run `pnpm worktrees:prune` (see "Pruning old lanes"), then `/mattpocock-skills:retro` in that session (see below), then archive it. The next ticket gets a fresh session (this replaces `/clear`).
 
 ## Pruning old lanes
+
+Never run `docker compose down -v` (or `--volumes`, or `docker volume rm rabaed-*`) by hand: it deletes a lane's database volume, and the committed `.claude/settings.json` denies those commands for agents. Free a lane only with `pnpm lanes:prune --lane N` (or `pnpm worktrees:prune` after merges), which confirm first and keep a live worktree's lane.
 
 Every worktree that ran `pnpm dev` leaves a `rabaed-*` Docker Compose project behind (its containers, database volume and network), holding its lane's ports. `pnpm lanes:prune` lists those whose worktree no longer exists, that are not running, or that only have volumes left, and removes them with their volumes after you confirm (`--yes` skips the prompt). It never removes the current worktree's project. Run it from the planning session after archiving finished sessions, or in a lane when `lane:env` says a lane is taken. `lane:env` says whether the worktree holding the lane is on a branch already merged into `origin/main`; then `pnpm lanes:prune --merged` also removes the projects of such worktrees, unless a worktree that is not merged names the project in its `.env`. Add `--lane N` (`pnpm lanes:prune --merged --lane 3`) to free only `rabaed-lane3`, with the same confirmation and keep rules; `lane:env` suggests exactly that, so never reach other lanes' databases with a bare `--merged` or a raw `docker compose down`. `pnpm lanes:prune --dry-run` (also with `--merged` or `--lane N`) only lists what it would remove, exits 0 and never prompts or removes.
 
