@@ -39,7 +39,9 @@ export function ProjectSettingsNav({
       ? [{ key: "members-visibility", label: t("membersVisibility"), icon: "eye-off", href: `/participants/${ownParticipantId}` } satisfies SettingsNavItem]
       : []),
   ];
-  const current = items.find((item) => pathname === item.href || pathname.startsWith(`${item.href}/`))?.key;
+  // The builder takes the whole width: its page reaches under this column, so no navigation is drawn there.
+  if (/\/settings\/workflows\/[^/]+$/.test(pathname)) return <div aria-hidden="true" />;
+  const current =items.find((item) => pathname === item.href || pathname.startsWith(`${item.href}/`))?.key;
 
   return (
     <SettingsNav
