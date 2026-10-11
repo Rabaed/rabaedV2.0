@@ -42,7 +42,7 @@ Create a Jira issue in RP as above.
 
 Run these in `/to-spec` and `/to-tickets`, before the issue is created.
 
-- **Spec: glossary.** Check every domain term against the _Avoid_ lists in `GLOSSARY.md`. A clash gets a glossary entry or a different word before the spec is published (RP-299 used "Remarks", which is Avoid for Comment and Internal Note).
+- **Spec: glossary.** Check every domain term against the _Avoid_ lists in `GLOSSARY.md`. A clash gets a glossary entry or a different word before the spec is published (RP-299 used "Remarks", which is Avoid for Comment and Internal Note). A new _Avoid_ entry in `GLOSSARY.md` is checked with `pnpm lint` before the glossary change merges: the rule reads the Avoid lines, so the new word can break files nobody touched (see `packages/eslint-plugin/README.md` for the false hits).
 - **Ticket: existing code.** Find every function, table or endpoint the ticket calls "existing" or "as today" on `main` with grep. Each one not found gets a "Blocks" link from the ticket that builds it (RP-305 assumed `create_revision`, which RP-103 and RP-316 build).
   - For every event, status, permission or role the ticket relies on, find on `main` the code that **produces** it: inserts the event, sets the status, seeds or grants the permission. A name found only in a check constraint, enum or type list doesn't count. RP-356 hooked the Vacancy notification to the "existing" `vacated` event, which only a check constraint allows and nothing inserts (RP-108 builds it); RP-359 sent the weekly report to Members holding `assign`, which no seeded Position holds.
   - Anything with no producer gets a "Blocks" link from the ticket that builds it, or the ticket says how its tests set it up.
