@@ -39,7 +39,7 @@
           {
             "key": "remarks",
             "type": "textarea",
-            "required": false,
+            "required": true,
             "maxLength": 4000,
             "label": { "en": "Remarks", "ar": "الملاحظات" },
             "help": { "en": "Shared with everyone who sees this item.", "ar": "يراها كل من يرى هذا العنصر." }

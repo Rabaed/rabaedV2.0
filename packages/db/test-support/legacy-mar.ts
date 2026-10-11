@@ -10,9 +10,11 @@ import type { Db } from "../src/client.ts";
 import { sql } from "kysely";
 
 /**
- * The legacy MAR's Type code, added by the seam suites' global setup (seed-demo.ts): the
- * MAR as tests of the engine's general behaviour drive it (Submit straight to the
- * Consultant's one Step that issues the Code), and as items started before RP-437 run.
+ * The legacy MAR's Type code: "MARV", "the MAR on Workflow Version 2", a test-only Rabaed
+ * Default Work Item Type, never in a real database. The seam suites' global setup
+ * (seed-demo.ts) adds it: the MAR Form Version 3 on a copy of the MAR Workflow Version 2,
+ * as tests of the engine's general behaviour drive it (Submit straight to the
+ * Consultant's one Step that issues the Code), and as items started before RP-437 ran.
  */
 export const LEGACY_MAR = "MARV";
 

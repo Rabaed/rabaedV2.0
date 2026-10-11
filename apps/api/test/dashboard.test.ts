@@ -73,14 +73,14 @@ function figures(d: Dashboard): [string, DashboardFigure][] {
             ...c.bars.flatMap((b) => named(b.bucket, b)),
             ...named("in preparation", c.inPreparation),
             ...named("approved", c.approved),
-            ...(c.codeC
+            ...(c.revisionLine
               ? [
-                  ...named("Code C", c.codeC.total),
-                  ...named("approved on revision", c.codeC.approvedOnRevision),
-                  ...named("awaiting revision", c.codeC.awaitingRevision),
-                  ...named("no Revision yet", c.codeC.split?.noRevisionYet ?? null),
-                  ...named("Revision in progress", c.codeC.split?.revisionInProgress ?? null),
-                  ...named("rejected after C", c.codeC.rejectedAfterC),
+                  ...named("Code C", c.revisionLine.total),
+                  ...named("approved on revision", c.revisionLine.approvedOnRevision),
+                  ...named("awaiting revision", c.revisionLine.awaitingRevision),
+                  ...named("no Revision yet", c.revisionLine.split?.noRevisionYet ?? null),
+                  ...named("Revision in progress", c.revisionLine.split?.revisionInProgress ?? null),
+                  ...named("rejected after C", c.revisionLine.rejectedAfterC),
                 ]
               : []),
           ]
@@ -220,7 +220,7 @@ describe("scenario 65 and every number equals its List", () => {
     expect(mar.inPreparation?.count).toBe(1);
     expect(mar.bars.every((b) => b.count === 0)).toBe(true);
     expect(mar.approved.count).toBe(0);
-    expect(mar.codeC).toBeNull();
+    expect(mar.revisionLine).toBeNull();
     expect(await listed(c2Engineer, tower.projectId, mar.total.query)).toEqual([c2Item]);
   });
 
@@ -243,10 +243,11 @@ describe("scenario 65 and every number equals its List", () => {
         expect(new Set(ids).size, name).toBe(ids.length);
       }
     }
-  });
+    // One List read per figure, for four readers: about 6 s alone, over 20 s with every seam suite at once.
+  }, 60_000);
 });
 
-describe("scenario 64: the Code C line while C1's Revision is a Draft", () => {
+describe("scenario 64: the Revision line while C1's Revision is a Draft", () => {
   let tower: Tower;
   let unrevised = "";
   let original = "";
@@ -262,7 +263,7 @@ describe("scenario 64: the Code C line while C1's Revision is a Draft", () => {
   });
 
   it("shows K1 both chains as awaiting revision, one figure, without the Draft (V1)", async () => {
-    const line = marCard(await dashboard(tower.k1Manager, tower.projectId)).codeC!;
+    const line = marCard(await dashboard(tower.k1Manager, tower.projectId)).revisionLine!;
     expect(line.total.count).toBe(2);
     expect(line.awaitingRevision.count).toBe(2);
     expect(line.split).toBeNull();
@@ -275,7 +276,7 @@ describe("scenario 64: the Code C line while C1's Revision is a Draft", () => {
   });
 
   it("shows C1 \"no Revision yet\" and \"Revision in progress\"", async () => {
-    const line = marCard(await dashboard(tower.c1Pm, tower.projectId)).codeC!;
+    const line = marCard(await dashboard(tower.c1Pm, tower.projectId)).revisionLine!;
     expect(line.total.count).toBe(2);
     expect(line.awaitingRevision.count).toBe(2);
     expect(line.split?.noRevisionYet.count).toBe(1);
@@ -288,9 +289,9 @@ describe("scenario 64: the Code C line while C1's Revision is a Draft", () => {
     await take(tower.c1Engineer, revision, "send_for_review");
     await ok(tower.c1Pm.post(`/v1/work-items/${revision}/pick-up`));
     await take(tower.c1Pm, revision, "submit");
-    const c1Line = marCard(await dashboard(tower.c1Pm, tower.projectId)).codeC!;
+    const c1Line = marCard(await dashboard(tower.c1Pm, tower.projectId)).revisionLine!;
     expect(c1Line.split?.revisionInProgress.count).toBe(1);
-    const k1Line = marCard(await dashboard(tower.k1Manager, tower.projectId)).codeC!;
+    const k1Line = marCard(await dashboard(tower.k1Manager, tower.projectId)).revisionLine!;
     expect(k1Line.awaitingRevision.count).toBe(2);
     expect(k1Line.split).toBeNull();
     expect((await listed(tower.k1Manager, tower.projectId, k1Line.awaitingRevision.query)).sort()).toEqual([unrevised, revision].sort());
@@ -313,7 +314,7 @@ describe("a chain with two Code Cs and an approved Rev 2", () => {
 
   it("counts it once, as approved on revision, for both Companies", async () => {
     for (const by of [tower.c1Pm, tower.k1Manager]) {
-      const line = marCard(await dashboard(by, tower.projectId)).codeC!;
+      const line = marCard(await dashboard(by, tower.projectId)).revisionLine!;
       expect(line.total.count).toBe(1);
       expect(line.approvedOnRevision).toMatchObject({ count: 1, percent: 100 });
       expect(line.awaitingRevision.count).toBe(0);

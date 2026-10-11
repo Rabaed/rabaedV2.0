@@ -93,8 +93,9 @@ beforeAll(async () => {
   const c2 = await participant("contractor");
   c2Engineer = await projectMember(api, c2.company, c2.participantId, ["engineer"]);
   const k1 = await participant("consultant");
-  k1A = await projectMember(api, k1.company, k1.participantId, ["manager"]);
-  k1B = await projectMember(api, k1.company, k1.participantId, ["manager"]);
+  // Two Consultant Engineers: the MAR's Consultant Engineer Step waits in their pool (RP-511 decision 1).
+  k1A = await projectMember(api, k1.company, k1.participantId, ["engineer"]);
+  k1B = await projectMember(api, k1.company, k1.participantId, ["engineer"]);
 });
 
 describe("Need My Action", () => {
@@ -226,7 +227,7 @@ describe("a closed Project", () => {
 });
 
 describe("Module tabs", () => {
-  it("are the Modules the Project has a Work Item Type in: by default the Submittals, the Inspections (WIR, NCR, RP-437) and the Snag List (the Comment, RP-434)", async () => {
+  it("are the Modules the Project has a Work Item Type in: by default the Submittals, the Inspections (WIR, RP-437) and the Snag List (the Comment, RP-434)", async () => {
     expect((await card(c1Engineer)).modules).toEqual(["submittals", "inspections", "snag_list"]);
   });
 
@@ -265,7 +266,7 @@ describe("Module tabs", () => {
     expect((await ok(c1Engineer.get(path("site_reports", "/kanban")), 200)).json().columns.flatMap((c: { lanes: unknown[] }) => c.lanes)).toEqual([]);
     // The Inspections list holds the Rabaed Default Inspections Types (RP-437), and no Submittal.
     const inspections: WorkItemList = (await ok(c1Engineer.get(path("inspections")), 200)).json();
-    expect(inspections.filters.types.map((t) => t.code).sort()).toEqual(["NCR", "WIR"]);
+    expect(inspections.filters.types.map((t) => t.code).sort()).toEqual(["WIR"]);
     expect(inspections.items).toEqual([]);
     // Another Company's Member who isn't on the Project: not found, as ever.
     await expectHidden((await api.authorizedPerson()).caller.get(path("site_reports")));

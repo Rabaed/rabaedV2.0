@@ -195,7 +195,7 @@ export const WithoutInPreparation: Story = {
  */
 export const CodeCLine: Story = {
   play: async (context) => {
-    const line = within(context.canvas.getByTestId("code-c-MAR"));
+    const line = within(context.canvas.getByTestId("revision-line-MAR"));
     const t = (text: { en: string; ar: string }) => storyText(context, text);
     await expect(line.getByRole("link", { name: `${t(copy.codeC)} 5` })).toHaveAttribute(
       "href",
@@ -216,7 +216,7 @@ export const CodeCLine: Story = {
 export const CodeCLineRejectedAfterC: Story = {
   args: { dashboard: withRejectedAfterC },
   play: async (context) => {
-    const line = within(context.canvas.getByTestId("code-c-MAR"));
+    const line = within(context.canvas.getByTestId("revision-line-MAR"));
     await expect(line.getByRole("link", { name: `${storyText(context, copy.rejectedAfterC)} 1` })).toHaveAttribute("href", "?type=MAR&codeC=rejectedAfterC");
   },
 };

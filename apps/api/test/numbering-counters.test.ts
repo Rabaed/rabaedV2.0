@@ -37,9 +37,9 @@ describe("a starting number", () => {
     expect(set.statusCode, set.body).toBe(200);
     expect(set.json()).toEqual({ counterKey: "NUM-MAR-01", nextNumber: "NUM-MAR-01-0144" });
 
-    const first = await inInternalReview(tower, tower.c1Engineer, "Cable trays", "MAR");
+    const first = await inInternalReview(tower, tower.c1Engineer, "Cable trays", { type: "MAR" });
     expect(await documentNumber(first)).toBe("NUM-MAR-01-0144");
-    const second = await inInternalReview(tower, tower.c1Engineer, "Busbars", "MAR");
+    const second = await inInternalReview(tower, tower.c1Engineer, "Busbars", { type: "MAR" });
     expect(await documentNumber(second)).toBe("NUM-MAR-01-0145");
   });
 

@@ -11,8 +11,10 @@
 // Manager, who may Return it to the Engineer or issue A, B, C or D on its Code Screen,
 // whose final verification is pre-filled from the Engineer's reply and shared with
 // the Code.
-import { publishRabaedDefaults } from "@rabaed/admin/services";
+import { readFileSync } from "node:fs";
+import { publishRabaedDefaults, rabaedDefaultTypes } from "@rabaed/admin/services";
 import { createDb } from "@rabaed/db";
+import { sql } from "kysely";
 import { testDatabaseUrls } from "@rabaed/db/test-support";
 import type { DocumentList, FormVersion, WorkItemHistory } from "@rabaed/domain";
 import { DEMO_ENGINEER_EMAIL } from "../src/demo/seed.ts";
@@ -59,9 +61,8 @@ async function submitted(title: string, coverNote = "Panels for Level 2, as draw
 const verified = { sample_checked: true, matches_specification: true };
 const notMatching = { sample_checked: true, matches_specification: false, verification_note: "Wrong colour temperature" };
 
-/** Ahmed picks the MAR up and sends it to the Manager with his reply, a Recommended Code and an Internal Note. */
+/** Ahmed, K1's only Consultant Engineer, holds the MAR at once and sends it to the Manager with his reply, a Recommended Code and an Internal Note. */
 async function reviewed(id: string, reply: Record<string, unknown>, recommendedCode: string) {
-  await ok(ahmed.post(`/v1/work-items/${id}/pick-up`));
   await take(ahmed, id, "send_to_manager", { answers: reply, recommendedCode, internalNote: "Engineer: compared with the approved sample" });
 }
 
@@ -86,7 +87,7 @@ beforeAll(async () => {
   const k1ParticipantId = await participant(k1, "consultant");
   const o1ParticipantId = await participant(o1, "owner_representative");
   const c2ParticipantId = await participant(c2, "contractor");
-  // C2 covers Mechanical only: one Contractor covers an Electrical item, so a Consultant's NCR reaches C1 (§3.1).
+  // C2 covers Mechanical only, and never sees C1's Electrical items (V3).
   const mechanical = await post("trades", { code: "ME", name: bilingual("Mechanical") });
   await ok(c1.caller.request("PUT", `/v1/participants/${c2ParticipantId}/visibility`, { trade: { isAll: false, valueIds: [mechanical] }, location: all }));
   hafiz = await projectMember(api, c1, c1ParticipantId, ["engineer"], { name: "Hafiz Hamdan" });
@@ -105,14 +106,40 @@ describe("the Rabaed Defaults as documents (`pnpm defaults:publish`)", () => {
       const again = await publishRabaedDefaults(migrator, { engineerId: engineer.id, reason: "RP-437 test: nothing to publish" });
       expect(again.ok).toBe(true);
       expect(again.ok && again.done.filter((d) => d.published)).toEqual([]);
+      expect(again.ok && again.moved).toEqual([
+        { type: "CMT", moved: 0 },
+        { type: "MAR", moved: 0 },
+      ]);
       expect(again.ok && again.done.filter((d) => d.kind === "workflow").map((d) => [d.name, d.versionNo])).toEqual([
         ["MAR", 3],
         ["SAR", 1],
         ["DAR", 1],
         ["WIR", 1],
-        ["NCR", 1],
         ["CMT", 2],
       ]);
+    } finally {
+      await migrator.destroy();
+    }
+  });
+
+  it("name the Types the migration adds, each with its own Form or the MAR's (the two lists agree)", async () => {
+    const sqlFile = readFileSync(new URL("../../../packages/db/migrations/20270118000000_rabaed_default_types.sql", import.meta.url), "utf8");
+    const added = [...sqlFile.matchAll(/^\s*\(\d+, '\w+', '([A-Z]+)',/gm)].map((m) => m[1]);
+    expect(added).toEqual(["SAR", "DAR", "WIR"]);
+    expect(added.every((code) => rabaedDefaultTypes.some((t) => t.type === code))).toBe(true);
+    const migrator = createDb(testDatabaseUrls().migrator, { max: 1 });
+    try {
+      const types = await migrator
+        .selectFrom("work_item_type")
+        .select(["code", "form_definition_id"])
+        .where("owner_kind", "=", "rabaed")
+        .where("code", "in", rabaedDefaultTypes.map((t) => t.type))
+        .execute();
+      const formOf = (code: string) => types.find((t) => t.code === code)?.form_definition_id;
+      for (const { type, form } of rabaedDefaultTypes) {
+        expect(formOf(type), type).toBeTruthy();
+        if (type !== "MAR") expect(formOf(type) === formOf("MAR"), type).toBe(form === null);
+      }
     } finally {
       await migrator.destroy();
     }
@@ -152,21 +179,33 @@ describe("the MAR Workflow Version 3 (seam 1 acceptance)", () => {
     expect((await detail(ahmed, id)).stage.key).toBe("pending_approval");
   });
 
+  it("the Consultant Engineer Step's pool is the Consultant's Engineers only, so its only Engineer holds it at once and the Manager doesn't (RP-511 decision 1)", async () => {
+    const id = await submitted("Pool of one");
+    expect((await detail(ahmed, id)).heldBy?.memberName?.en).toBe("Ahmed bin Said");
+    expect((await detail(ahmed, id)).actions).toMatchObject({ pickUp: false });
+    expect((await detail(mohammed, id)).actions).toMatchObject({ pickUp: false, transitions: [] });
+  });
+
   it("A: the Manager's Code Screen starts from the Engineer's verification; the item closes Approved", async () => {
     const id = await submitted("Code A");
     await reviewed(id, verified, "A");
     const approve = (await transitionsOf(mohammed, id)).find((t) => t.key === "approve_a")!;
     expect(approve.prefill).toEqual(verified);
-    await take(mohammed, id, "approve_a", { answers: { ...approve.prefill, remarks: "Approved as submitted" } });
+    // Remarks are optional with A only.
+    await take(mohammed, id, "approve_a", { answers: approve.prefill });
     expect(await detail(hafiz, id)).toMatchObject({ stage: { key: "approved" }, outcome: "A" });
   });
 
-  it("B: needs its Comments, each a Comment in the Snag List for the Contractor", async () => {
+  it("B: needs its Remarks and Comments, each Comment one in the Snag List for the Contractor", async () => {
     const id = await submitted("Code B");
     await reviewed(id, verified, "B");
-    const none = await tryTake(mohammed, id, "approve_b", { answers: verified });
+    const comments = [{ comment: "Label the drivers" }, { comment: "Add the IP rating" }];
+    const none = await tryTake(mohammed, id, "approve_b", { answers: { ...verified, remarks: "See the Comments" } });
     expect(none.statusCode, none.body).toBe(422);
-    await take(mohammed, id, "approve_b", { answers: { ...verified, items_to_create: [{ comment: "Label the drivers" }, { comment: "Add the IP rating" }] } });
+    const noRemarks = await tryTake(mohammed, id, "approve_b", { answers: { ...verified, items_to_create: comments } });
+    expect(noRemarks.statusCode, noRemarks.body).toBe(422);
+    expect(noRemarks.json()).toEqual({ error: "invalid_action_form", fields: [{ key: "remarks", code: "required" }] });
+    await take(mohammed, id, "approve_b", { answers: { ...verified, remarks: "See the Comments", items_to_create: comments } });
     expect(await detail(hafiz, id)).toMatchObject({ outcome: "B", comments: { open: 2, closed: 0 } });
   });
 
@@ -182,6 +221,8 @@ describe("the MAR Workflow Version 3 (seam 1 acceptance)", () => {
   it("D: closes Rejected and offers the raiser a replacement", async () => {
     const id = await submitted("Code D");
     await reviewed(id, notMatching, "D");
+    const noRemarks = await tryTake(mohammed, id, "reject_d", { answers: notMatching });
+    expect(noRemarks.statusCode, noRemarks.body).toBe(422);
     await take(mohammed, id, "reject_d", { answers: { ...notMatching, remarks: "Not the specified product" } });
     expect(await detail(hafiz, id)).toMatchObject({ stage: { key: "rejected" }, outcome: "D", actions: { createReplacement: true, createRevision: false } });
   });
@@ -262,9 +303,23 @@ describe("RP-437-1: who reads the replies of a MAR on Version 3", () => {
     }
   });
 
+  it("labels each reply's answers in the history with the Screen it was given in, only on answers the reader may read (leak channel: the history's answersForm)", async () => {
+    const sections = (e: WorkItemHistory["events"][number] | undefined) => e?.answersForm?.sections.map((s) => s.key);
+    // Another Company reads the Submit's Cover Note and the Code's shared reply, each with its own Screen,
+    // although the Consultant's internal events before the Code are not theirs to read.
+    for (const who of [hafiz, faisal, ahmed]) {
+      const events = await history(who, id);
+      expect(sections(events.find((e) => e.answers?.cover_note !== undefined))).toEqual(["cover"]);
+      expect(sections(events.find((e) => e.type === "issue_code"))).toEqual(["final_verification", "code_remarks"]);
+      for (const e of events) if (!e.answers) expect(e.answersForm).toBeUndefined();
+    }
+    for (const who of [hafiz, faisal]) expect((await history(who, id)).some((e) => sections(e)?.includes("verification"))).toBe(false);
+    // The Consultant reads its Engineer's internal reply labelled by the "Consultant review" Screen.
+    expect(sections((await history(ahmed, id)).find((e) => e.type === "internal_answers"))).toEqual(["verification"]);
+  });
+
   it("a Member of another Company is never handed the pre-fill: the Submit comes from the Contractor", async () => {
     const other = await submitted("No pre-fill across Companies");
-    await ok(ahmed.post(`/v1/work-items/${other}/pick-up`));
     expect((await transitionsOf(ahmed, other)).find((t) => t.key === "send_to_manager")!.prefill).toBeUndefined();
   });
 });
@@ -289,16 +344,88 @@ describe("the Inspections' Rabaed Defaults (RP-437)", () => {
     expect(await detail(hafiz, failed)).toMatchObject({ stage: { key: "failed" }, outcome: "failed", actions: { createRevision: true } });
   });
 
-  it("an NCR is raised by the Consultant, answered by the Contractor and closed with an Approval outcome", async () => {
-    const id = (
-      await ok(ahmed.post(`/v1/projects/${projectId}/work-items`, { type: "NCR", title: "Honeycombing", answers: { description: "Honeycombing on column C4", trade: electrical, location: buildingA } }), 201)
-    ).json().id as string;
-    await take(ahmed, id, "raise");
-    // Ali, the Contractor's only Member who may answer, holds it at once.
-    await take(ali, id, "respond", { answers: { corrective_action: "Repair with non-shrink grout" } });
-    await ok(ahmed.post(`/v1/work-items/${id}/pick-up`));
-    await take(ahmed, id, "accept", { remarks: "Repair accepted" });
-    expect(await detail(hafiz, id)).toMatchObject({ stage: { key: "closed" }, outcome: "approved" });
-    expect((await history(hafiz, id)).find((e) => e.answers?.corrective_action)).toMatchObject({ answers: { corrective_action: "Repair with non-shrink grout" } });
+  it("have no NCR: it gets its own Workflow and Form (RP-553)", async () => {
+    expect((await hafiz.get(`/v1/projects/${projectId}/work-item-types/WIR/form`)).statusCode).toBe(200);
+    expect((await hafiz.get(`/v1/projects/${projectId}/work-item-types/NCR/form`)).statusCode).toBe(404);
+  });
+});
+
+// Items in flight on a Version retired with ADR 0019 (RP-437 review): `pnpm defaults:publish`
+// moves them on (apps/admin/src/in-flight.ts). Seeded here as such items are: an item
+// pinned to the old Versions, as the migrator rewrites it.
+describe("items in flight on a retired Version", () => {
+  const migrator = createDb(testDatabaseUrls().migrator, { max: 1 });
+  afterAll(() => migrator.destroy());
+
+  /** Pins item `id` (of Type `type`, at its current Step) to that Type's Workflow Version `workflowNo` and Form Version `formNo`, Steps by key. */
+  async function pinTo(id: string, type: string, workflowNo: number, formNo: number) {
+    await sql`
+      with old as (
+        select v.id as version_id, s.key, s.id as step_id from work_item_type t
+        join workflow_version v on v.workflow_definition_id = t.workflow_definition_id and v.version_no = ${workflowNo}
+        join workflow_step s on s.workflow_version_id = v.id
+        where t.owner_kind = 'rabaed' and t.code = ${type}
+      ),
+      moved_assignments as (
+        update step_assignment a set step_id = o.step_id
+        from workflow_step cur, old o
+        where a.work_item_id = ${id}::uuid and cur.id = a.step_id and o.key = cur.key
+        returning a.id
+      )
+      update work_item w set
+        workflow_version_id = (select distinct version_id from old),
+        current_step_id = (select o.step_id from old o join workflow_step cur on cur.key = o.key where cur.id = w.current_step_id),
+        participant_entered_step_id = (select o.step_id from old o join workflow_step cur on cur.key = o.key where cur.id = w.participant_entered_step_id),
+        form_version_id = (
+          select f.id from work_item_type t join form_version f on f.form_definition_id = t.form_definition_id
+          where t.owner_kind = 'rabaed' and t.code = ${type} and f.version_no = ${formNo})
+      where w.id = ${id}::uuid
+    `.execute(migrator);
+  }
+  const moveInFlight = async () => {
+    const engineer = await migrator.selectFrom("rabaed_engineer").select("id").where("email", "=", DEMO_ENGINEER_EMAIL).executeTakeFirstOrThrow();
+    const result = await publishRabaedDefaults(migrator, { engineerId: engineer.id, reason: "RP-437 test: move items in flight" });
+    expect(result.ok && result.done.filter((d) => d.published)).toEqual([]);
+    return result.ok ? result.moved : [];
+  };
+
+  it("an open Comment on the Comment Form Version 1 moves to the Version 2 Workflow and Form, so its Resolve can be taken", async () => {
+    const mar = await submitted("Comment in flight");
+    await reviewed(mar, verified, "B");
+    await take(mohammed, mar, "approve_b", { answers: { ...verified, remarks: "See the Comment", items_to_create: [{ comment: "Seal the conduit entries" }] } });
+    const comment = (await migrator.selectFrom("work_item").select("id").where("title", "=", "Seal the conduit entries").executeTakeFirstOrThrow()).id;
+    await pinTo(comment, "CMT", 1, 1);
+    expect(await detail(ali, comment)).toMatchObject({ stage: { key: "open" }, workflow: { versionNo: 1 } });
+    await ok(ali.post(`/v1/work-items/${comment}/pick-up`));
+    // On Version 1 its Resolve needs the Form's Resolution section, which nobody may save any more.
+    expect((await tryTake(ali, comment, "resolve")).statusCode).toBe(422);
+
+    expect(await moveInFlight()).toContainEqual({ type: "CMT", moved: 1 });
+    expect(await detail(ali, comment)).toMatchObject({ stage: { key: "open" }, workflow: { versionNo: 2 }, heldBy: { memberName: { en: "Ali Sonour" } } });
+    await take(ali, comment, "resolve", { answers: { resolution_note: "Sealed with intumescent mastic" } });
+    expect((await detail(ahmed, comment)).stage.key).toBe("resolved");
+    expect(await moveInFlight()).toContainEqual({ type: "CMT", moved: 0 });
+  });
+
+  it("an open MAR on the Form Version 4 at the Consultant moves to the Workflow Version 3's Consultant Engineer Step, whose reply records the verification", async () => {
+    const id = (await ok(hafiz.post(`/v1/projects/${projectId}/work-items`, { type: "MAR", title: "MAR in flight", answers: answers("MAR in flight") }), 201)).json()
+      .id as string;
+    await datasheet(hafiz, id, "in-flight.pdf");
+    await pinTo(id, "MAR", 2, 4);
+    await take(hafiz, id, "send_for_review");
+    await take(ali, id, "submit");
+    // On Workflow Version 2, at the Consultant's one review Step.
+    expect(await detail(ahmed, id)).toMatchObject({ step: { key: "consultant_review" }, workflow: { versionNo: 2 } });
+
+    expect(await moveInFlight()).toContainEqual({ type: "MAR", moved: 1 });
+    const moved = await detail(ahmed, id);
+    expect(moved).toMatchObject({ stage: { key: "pending_approval" }, step: { key: "consultant_engineer" }, workflow: { versionNo: 3 } });
+    expect(moved.heldBy?.memberName?.en).toBe("Ahmed bin Said");
+    await reviewed(id, notMatching, "C");
+    const revise = (await transitionsOf(mohammed, id)).find((t) => t.key === "revise_c")!;
+    expect(revise.prefill).toEqual(notMatching);
+    await take(mohammed, id, "revise_c", { answers: { ...notMatching, remarks: "Use 4000 K" } });
+    expect(await detail(hafiz, id)).toMatchObject({ outcome: "C" });
+    expect((await history(hafiz, id)).at(-1)).toMatchObject({ type: "issue_code", answers: { ...notMatching, remarks: "Use 4000 K" } });
   });
 });

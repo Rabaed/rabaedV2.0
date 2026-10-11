@@ -1115,7 +1115,7 @@ async function ownArrivalAnswers(trx: Trx, workItemId: string): Promise<Record<s
     with arrival as (
       -- The last move the viewer reads. They hold the item, so it moved to their Step:
       -- by their own Participant (internal), or by another (a Submit, shared).
-      select e.transition_id, e.created_at, e.payload - 'document_number' - 'outcome' as answers
+      select e.seq, e.transition_id, e.audience_participant_id, e.payload - 'document_number' - 'outcome' as answers
       from work_item_event e
       where e.work_item_id = ${workItemId}::uuid and e.type = 'transition' and e.audience = 'internal'
         and e.seq = (
@@ -1124,9 +1124,17 @@ async function ownArrivalAnswers(trx: Trx, workItemId: string): Promise<Record<s
         )
     )
     select coalesce((
-      select i.payload -> 'answers' from work_item_event i, arrival a
+      -- Its internal answers: the event app.take_transition writes for the same Transition
+      -- just before it, after the move before it, internal to the same Participant.
+      select i.payload -> 'answers' from work_item_event i
       where i.work_item_id = ${workItemId}::uuid and i.type = 'internal_answers'
-        and i.transition_id = a.transition_id and i.created_at = a.created_at
+        and i.transition_id = a.transition_id
+        and i.audience = 'internal' and i.audience_participant_id = a.audience_participant_id
+        and i.seq < a.seq
+        and i.seq > coalesce((
+          select max(p.seq) from work_item_event p
+          where p.work_item_id = i.work_item_id and p.type in ('transition', 'issue_code') and p.seq < a.seq
+        ), 0)
     ), '{}'::jsonb) || a.answers as answers
     from arrival a
   `.execute(trx);
@@ -1459,20 +1467,12 @@ export function getWorkItemHistory(db: Db, memberId: string, workItemId: string)
       changes: { field: string; old: unknown; new: unknown }[] | null;
       handover: WorkItemHistory["events"][number]["handover"];
       answers: Record<string, unknown> | null;
+      /** The Action Form the answers were given in (its Transition's, as its Workflow Version pinned it; read project-wide like the Workflow, V20), so the page labels them. */
+      action_form: unknown;
     }>`select * from app.work_item_history(${workItemId}::uuid)`.execute(trx);
-    // The Action Form each event's answers were given in (its Transition's, as its Workflow
-    // Version pinned it; read project-wide like the Workflow, V20), so the page labels them.
-    // The same events, in the same order, as app.work_item_history numbers them.
-    const forms = await sql<{ action_form: unknown }>`
-      select tr.action_form from work_item_event e
-      join work_item w on w.id = e.work_item_id
-      left join workflow_transition tr on tr.id = e.transition_id
-      where e.work_item_id = ${workItemId}::uuid
-      order by e.seq
-    `.execute(trx);
     return {
-      events: rows.map((r, i) => ({
-        ...(r.answers ? { answersForm: parseActionForm(forms.rows[i]?.action_form ?? null) } : {}),
+      events: rows.map((r) => ({
+        ...(r.answers ? { answersForm: parseActionForm(r.action_form ?? null) } : {}),
         seq: r.seq,
         type: r.type,
         at: r.created_at.toISOString(),

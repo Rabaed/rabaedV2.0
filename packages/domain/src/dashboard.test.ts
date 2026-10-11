@@ -163,10 +163,10 @@ describe("dashboardCard", () => {
     expect([card.total, card.approved, ...card.bars].map((f) => f.query.module)).toEqual(Array(6).fill("inspections"));
   });
 
-  describe("the Code C line", () => {
+  describe("the Revision line (Code C, or a Failed inspection)", () => {
     const codeC = (entries: [CodeCState | null, number][]) => new Map(entries);
-    const line = (entries: [CodeCState | null, number][], outcomeKind: "review_code" | "approval" = "review_code") =>
-      outcomes(dashboardCard({ type: mar, moduleKey: "submittals", ...kind(outcomeKind), counts: counts([["A", 1]]), codeCCounts: codeC(entries) })).codeC;
+    const line = (entries: [CodeCState | null, number][], outcomeKind: OutcomeKind = "review_code") =>
+      outcomes(dashboardCard({ type: mar, moduleKey: "submittals", ...kind(outcomeKind), counts: counts([["A", 1]]), codeCCounts: codeC(entries) })).revisionLine;
 
     it("reads Code C 5 · approved on revision 3 (60%) · awaiting revision 2", () => {
       const c = line([["approvedOnRevision", 3], ["awaitingRevision", 2], [null, 7]])!;
@@ -199,7 +199,9 @@ describe("dashboardCard", () => {
       expect(line([])).toBeNull();
       expect(line([[null, 3]])).toBeNull();
       expect(line([["awaitingRevision", 1]], "approval")).toBeNull();
-      expect(outcomes(dashboardCard({ type: mar, moduleKey: "submittals", ...kind("review_code"), counts: counts([]) })).codeC).toBeNull();
+      // An Inspection Result offers one too: Failed is re-inspected by a Revision (RP-437).
+      expect(line([["awaitingRevision", 1]], "inspection_result")?.awaitingRevision.count).toBe(1);
+      expect(outcomes(dashboardCard({ type: mar, moduleKey: "submittals", ...kind("review_code"), counts: counts([]) })).revisionLine).toBeNull();
     });
   });
 });

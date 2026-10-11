@@ -43,7 +43,12 @@ export default async function ProjectPage({ params }: { params: Promise<{ locale
                 open: tViews("dashboard.open"),
                 closed: tViews("dashboard.closed"),
                 empty: tViews("dashboard.empty"),
-                codeC: tViews("dashboard.codeC"),
+                revisionLine: {
+                  review_code: tViews("dashboard.revisionLine.review_code"),
+                  inspection_result: tViews("dashboard.revisionLine.inspection_result"),
+                  approval: tViews("dashboard.revisionLine.approval"),
+                  none: tViews("dashboard.revisionLine.none"),
+                },
                 ...chainLabels(tViews),
                 approved: {
                   review_code: tViews("dashboard.approved.review_code"),

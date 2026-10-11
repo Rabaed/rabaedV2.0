@@ -1,8 +1,7 @@
 import type { Db } from "@rabaed/db";
-import { bilingualText, formSchema, screenKey, screenProblems, type ScreenProblem } from "@rabaed/domain";
+import { bilingualText, formSchema, sameJson, screenKey, screenProblems, type ScreenProblem } from "@rabaed/domain";
 import { sql } from "kysely";
 import { z } from "zod";
-import { sameJson } from "./same-json.ts";
 
 // Rabaed Default Screens (ADR 0019, RP-516; workflow-engine.md §5.7): the reusable Action
 // Forms Rabaed Default Workflows name by key, which a Project's Screens with the same key

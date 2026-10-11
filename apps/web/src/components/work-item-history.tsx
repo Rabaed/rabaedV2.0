@@ -17,6 +17,11 @@ type Change = NonNullable<Event["changes"]>[number];
 // Answers that hold ids (Built-in Fields, people and Companies) are named only on
 // the Form itself; a diff says they changed, never the ids.
 const idTypes = new Set(["trade", "location", "scopes", "member", "participant"]);
+/**
+ * Answers the history gives an event as its own line (app.work_item_history's `reason`
+ * and `remarks`, read from the same answers), so a reply's answers don't repeat them.
+ */
+const ownLines: ReadonlySet<string> = new Set(["reason", "remarks"] satisfies (keyof Event)[]);
 
 /**
  * A Work Item's history as the viewer may see it. The API already leaves out
@@ -81,13 +86,14 @@ export async function WorkItemHistory({
   };
   // A reply's answers (RP-437): the Cover Note with a Submit, the final verification with
   // a Code, a reply's internal answers for its own Company; labelled from the Action Form
-  // they were given in. The reason and the Remarks have their own lines above.
-  const replyAnswers = (e: Event) =>
-    e.answers && e.answersForm
-      ? answerFields(e.answersForm)
-          .filter((f) => f.key !== "reason" && f.key !== "remarks" && e.answers![f.key] !== undefined && e.answers![f.key] !== null && e.answers![f.key] !== "")
-          .map((f) => [f, e.answers![f.key]] as const)
-      : [];
+  // they were given in, each answered field once.
+  const replyAnswers = (e: Event) => {
+    const answers = e.answers;
+    if (!answers || !e.answersForm) return [];
+    return answerFields(e.answersForm)
+      .filter((f) => !ownLines.has(f.key) && answers[f.key] !== undefined && answers[f.key] !== null && answers[f.key] !== "")
+      .map((f) => [f, answers[f.key]] as const);
+  };
   const who = (e: Event) =>
     [e.by.memberName?.[locale], e.by.companyName?.[locale]].filter((part): part is string => Boolean(part)).join(" · ");
 
@@ -95,7 +101,9 @@ export async function WorkItemHistory({
     <section className="space-y-3">
       <h2 className="text-h6 font-semibold">{t("title")}</h2>
       <ol className="divide-y divide-border border-y border-border" data-testid="work-item-history">
-        {[...events].reverse().map((e) => (
+        {[...events].reverse().map((e) => {
+          const answers = replyAnswers(e);
+          return (
           <li key={e.seq} className="space-y-1 py-3">
             <div className="flex flex-wrap items-baseline justify-between gap-2">
               <span className="font-medium">{what(e)}</span>
@@ -124,9 +132,9 @@ export async function WorkItemHistory({
                 <span className="font-medium">{t("remarks")}:</span> {e.remarks}
               </p>
             )}
-            {replyAnswers(e).length > 0 && (
+            {answers.length > 0 && (
               <dl className="space-y-0.5 text-sm" data-testid="history-answers">
-                {replyAnswers(e).map(([field, v]) => (
+                {answers.map(([field, v]) => (
                   <div key={field.key} className="whitespace-pre-wrap">
                     <dt className="inline font-medium">{field.label[locale]}:</dt>{" "}
                     <dd className="inline">
@@ -153,7 +161,8 @@ export async function WorkItemHistory({
             )}
             {e.audience === "internal" && <p className="text-xs text-muted">{t("internal")}</p>}
           </li>
-        ))}
+          );
+        })}
       </ol>
     </section>
   );

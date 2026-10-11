@@ -1,9 +1,9 @@
 import { readFileSync } from "node:fs";
 import { rabaedDefaultWorkflowId, readLatestPublishedDefinition, type Db, type RabaedDefaultResult } from "@rabaed/db";
-import { formSchema, parseWorkflowDefinition, type WorkflowDefinition } from "@rabaed/domain";
+import { compareStrings, formSchema, parseWorkflowDefinition, sameJson, type WorkflowDefinition } from "@rabaed/domain";
 import { sql } from "kysely";
 import { publishFormVersion, rabaedDefaultFormId, type PublishFormResult } from "./forms.ts";
-import { sameJson } from "./same-json.ts";
+import { moveInFlightItems, type InFlightMoved } from "./in-flight.ts";
 import { publishRabaedScreen, rabaedScreenDocument, type PublishScreenResult } from "./screens.ts";
 import { writeRabaedWorkflow } from "./workflows.ts";
 
@@ -14,7 +14,8 @@ import { writeRabaedWorkflow } from "./workflows.ts";
 // command its own CLI uses (`form:publish`, `workflow:publish`), after every publish
 // check, and only when it differs from the latest published Version: run again, it
 // publishes nothing. Screens go first (a Workflow Version pins the Screens it names),
-// then Forms (a Workflow's checks read its Type's latest Form), then Workflows.
+// then Forms (a Workflow's checks read its Type's latest Form), then Workflows. Last,
+// the open items still on a Version retired with ADR 0019 move on (in-flight.ts).
 
 /** A Rabaed Default Screen, by its file in apps/admin/screens (its key). */
 export const rabaedDefaultScreens = [
@@ -27,9 +28,6 @@ export const rabaedDefaultScreens = [
   "inspection_passed",
   "inspection_passed_with_comments",
   "inspection_failed",
-  "ncr_response",
-  "ncr_accept",
-  "ncr_reject",
   "comment_resolution",
 ] as const;
 
@@ -44,7 +42,6 @@ export const rabaedDefaultTypes = [
   { type: "SAR", form: null, workflow: "MAR.json" },
   { type: "DAR", form: null, workflow: "MAR.json" },
   { type: "WIR", form: "WIR.json", workflow: "WIR.json" },
-  { type: "NCR", form: "NCR.json", workflow: "NCR.json" },
   { type: "CMT", form: "CMT.json", workflow: "CMT.json" },
 ] as const;
 
@@ -62,7 +59,7 @@ export const rabaedWorkflowFile = (file: string): unknown => json("workflows", f
 export type DefaultPublished = { kind: "screen" | "form" | "workflow"; name: string; versionNo: number; published: boolean; warnings?: string[] };
 
 export type PublishDefaultsResult =
-  | { ok: true; done: DefaultPublished[] }
+  | { ok: true; done: DefaultPublished[]; moved: InFlightMoved }
   | { ok: false; kind: "screen"; name: string; result: Exclude<PublishScreenResult, { ok: true }> }
   | { ok: false; kind: "form"; name: string; result: Exclude<PublishFormResult, { ok: true }> }
   | { ok: false; kind: "workflow"; name: string; result: Exclude<RabaedDefaultResult, { ok: true }> };
@@ -108,7 +105,7 @@ export async function publishRabaedDefaults(migratorDb: Db, { engineerId, reason
     if (!result.ok) return { ok: false, kind: "workflow", name: type, result };
     done.push({ kind: "workflow", name: type, versionNo: result.versionNo, published: true, warnings: result.warnings.map((w) => `${w.code}: ${w.message.en}`) });
   }
-  return { ok: true, done };
+  return { ok: true, done, moved: await moveInFlightItems(migratorDb) };
 }
 
 /**
@@ -145,6 +142,6 @@ async function latestPublishedForm(db: Db, formId: string) {
 
 /** Whether two definitions are the same Workflow: Steps in any order (rows keep none), Transitions in theirs. */
 export function sameDefinition(a: WorkflowDefinition, b: WorkflowDefinition): boolean {
-  const steps = (d: WorkflowDefinition) => [...d.steps].sort((x, y) => (x.key < y.key ? -1 : x.key > y.key ? 1 : 0));
+  const steps = (d: WorkflowDefinition) => [...d.steps].sort((x, y) => compareStrings(x.key, y.key));
   return sameJson({ ...a, steps: steps(a) }, { ...b, steps: steps(b) });
 }

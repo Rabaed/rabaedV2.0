@@ -14,12 +14,12 @@
 --   definition, so a new MAR Form Version reaches them too); and the Stage "Rejected"
 --   (closed negative) that Code D closes into, copied into every Project by
 --   stage_rabaed_default_copied.
--- * Inspections: the Work Inspection Request (WIR, Inspection Results) and the
---   Non-Conformance Report (NCR, Approval), each with an empty Form definition its
---   Version 1 is published into. The Module's Rabaed Default Stages and the Rabaed
---   Positions' Function Permissions there: the Contractor raises a WIR (engineer
---   `create`, its PM `review` and `submit`, which also answers an NCR); the
---   Consultant inspects and raises NCRs (`create`, `review`, `approve`).
+-- * Inspections: the Work Inspection Request (WIR, Inspection Results), with an empty
+--   Form definition its Version 1 is published into. The Module's Rabaed Default
+--   Stages and the Rabaed Positions' Function Permissions there: the Contractor raises
+--   a WIR (engineer `create`, its PM `review` and `submit`); the Consultant inspects
+--   it (`review`, `approve`). The Non-Conformance Report gets its own Workflow and
+--   Form (RP-553), so it is not here.
 -- * Inspection Results (app.default_outcomes, as @rabaed/domain defaultOutcomeSets):
 --   Passed with Comments creates Comments (`create_items` CMT, as Code B) and Failed
 --   offers a Revision, the re-inspection (`offer_revision`, as Code C). No Type had
@@ -34,13 +34,9 @@ insert into stage (owner_kind, module_key, key, name, category, sort) values
   ('rabaed', 'inspections', 'draft', '{"en": "Draft", "ar": "مسودة"}', 'draft', 1),
   ('rabaed', 'inspections', 'internal_review', '{"en": "Internal Review", "ar": "المراجعة الداخلية"}', 'in_progress', 2),
   ('rabaed', 'inspections', 'pending_inspection', '{"en": "Pending Inspection", "ar": "بانتظار المعاينة"}', 'in_progress', 3),
-  ('rabaed', 'inspections', 'pending_response', '{"en": "Pending Response", "ar": "بانتظار الرد"}', 'in_progress', 4),
-  ('rabaed', 'inspections', 'under_review', '{"en": "Under Review", "ar": "قيد المراجعة"}', 'in_progress', 5),
-  ('rabaed', 'inspections', 'passed', '{"en": "Passed", "ar": "ناجح"}', 'closed_positive', 6),
-  ('rabaed', 'inspections', 'failed', '{"en": "Failed", "ar": "راسب"}', 'closed_negative', 7),
-  ('rabaed', 'inspections', 'closed', '{"en": "Closed", "ar": "مغلق"}', 'closed_positive', 8),
-  ('rabaed', 'inspections', 'rejected', '{"en": "Rejected", "ar": "مرفوض"}', 'closed_negative', 9),
-  ('rabaed', 'inspections', 'cancelled', '{"en": "Cancelled", "ar": "ملغى"}', 'cancelled', 10);
+  ('rabaed', 'inspections', 'passed', '{"en": "Passed", "ar": "ناجح"}', 'closed_positive', 4),
+  ('rabaed', 'inspections', 'failed', '{"en": "Failed", "ar": "راسب"}', 'closed_negative', 5),
+  ('rabaed', 'inspections', 'cancelled', '{"en": "Cancelled", "ar": "ملغى"}', 'cancelled', 6);
 
 insert into position_permission (position_id, module_key, permission)
 select p.id, 'inspections', x.permission
@@ -49,10 +45,8 @@ from (values
   ('contractor', 'project_manager', 'view'), ('contractor', 'project_manager', 'create'),
   ('contractor', 'project_manager', 'attach'), ('contractor', 'project_manager', 'review'),
   ('contractor', 'project_manager', 'submit'),
-  ('consultant', 'engineer', 'view'), ('consultant', 'engineer', 'create'), ('consultant', 'engineer', 'attach'),
-  ('consultant', 'engineer', 'review'), ('consultant', 'engineer', 'approve'),
-  ('consultant', 'manager', 'view'), ('consultant', 'manager', 'create'), ('consultant', 'manager', 'attach'),
-  ('consultant', 'manager', 'review'), ('consultant', 'manager', 'approve'),
+  ('consultant', 'engineer', 'view'), ('consultant', 'engineer', 'review'), ('consultant', 'engineer', 'approve'),
+  ('consultant', 'manager', 'view'), ('consultant', 'manager', 'review'), ('consultant', 'manager', 'approve'),
   ('owner', 'representative', 'view'),
   ('owner_representative', 'engineer', 'view')
 ) as x (base_role, key, permission)
@@ -103,8 +97,7 @@ do $$
       select * from (values
         (1, 'submittals', 'SAR', '{"en": "Shop Drawing Submittal", "ar": "اعتماد المخططات التنفيذية"}'::jsonb, 'review_code', true),
         (2, 'submittals', 'DAR', '{"en": "Document Submittal", "ar": "اعتماد المستندات"}'::jsonb, 'review_code', true),
-        (3, 'inspections', 'WIR', '{"en": "Work Inspection Request", "ar": "طلب معاينة أعمال"}'::jsonb, 'inspection_result', false),
-        (4, 'inspections', 'NCR', '{"en": "Non-Conformance Report", "ar": "تقرير عدم مطابقة"}'::jsonb, 'approval', false)
+        (3, 'inspections', 'WIR', '{"en": "Work Inspection Request", "ar": "طلب معاينة أعمال"}'::jsonb, 'inspection_result', false)
       ) as t (n, module_key, code, name, outcome_kind, mar_form)
       order by n
     loop

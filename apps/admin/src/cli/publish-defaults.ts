@@ -7,7 +7,9 @@
 // document goes through the command its own CLI uses (`form:publish`,
 // `workflow:publish`); the Workflows are a Rabaed Engineer action, logged in
 // admin_action with the reason (visibility.md V9) against the active Engineer whose
-// Rabaed Admin email `--engineer` gives. Run again, it publishes nothing. A refusal is
+// Rabaed Admin email `--engineer` gives. Then it moves the open items still on a Version
+// retired with ADR 0019 on to the latest (in-flight.ts). Run again, it publishes and
+// moves nothing. A refusal is
 // listed problem by problem and stops it; what it published before stays.
 import { parseArgs } from "node:util";
 import { createDb, databaseUrlsFromEnv } from "@rabaed/db";
@@ -36,6 +38,7 @@ try {
         console.log(`  ${d.kind} ${d.name}: Version ${d.versionNo}${d.published ? " published" : " (unchanged)"}`);
         for (const w of d.warnings ?? []) console.log(`    warning ${w}`);
       }
+      for (const m of result.moved) console.log(`  open ${m.type} items moved off a retired Version: ${m.moved}`);
     } else {
       process.exitCode = 1;
       console.error(`Refused at the ${result.kind} ${result.name}, nothing more published:\n  ${JSON.stringify(result.result, null, 2)}`);

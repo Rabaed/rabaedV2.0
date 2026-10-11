@@ -26,7 +26,7 @@
       "key": "consultant_engineer",
       "name": { "en": "Consultant Engineer", "ar": "مهندس الاستشاري" },
       "stage": "pending_approval",
-      "actor": { "role": "consultant", "permission": "review" },
+      "actor": { "role": "consultant", "permission": "review", "positions": ["engineer"] },
       "outcomeMode": "recommend_code"
     },
     {

@@ -97,7 +97,7 @@ describe("free Links", () => {
   let toApproved = "";
 
   beforeAll(async () => {
-    mar = await draft(tower, tower.c1Engineer, "Chilled water pipes", tower.mechanical);
+    mar = await draft(tower, tower.c1Engineer, "Chilled water pipes", { trade: tower.mechanical });
   });
 
   it("are added by the raiser in Draft, and read as Document Number and Subject with the linked item's id", async () => {

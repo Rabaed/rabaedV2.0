@@ -147,7 +147,7 @@ beforeAll(async () => {
     await ok(c1.caller.request("PUT", `/v1/participants/${participantId}/visibility`, { trade: all, location: all }));
     return projectMember(api, company, participantId, positions);
   };
-  consultant = await other("consultant", ["manager"]);
+  consultant = await other("consultant", ["engineer"]);
   c2Engineer = await other("contractor", ["engineer"]);
 });
 

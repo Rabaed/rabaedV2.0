@@ -6,7 +6,7 @@ import {
   type DashboardBar,
   type DashboardBarTone,
   type DashboardCard,
-  type DashboardCodeCLine,
+  type DashboardRevisionLine,
   type DashboardFigure,
   type DashboardFigureQuery,
   type FixedChainBucket,
@@ -26,10 +26,11 @@ export type ProjectDashboardLabels = {
   open: string;
   closed: string;
   empty: string;
-  codeC: string;
+  /** The Revision line's name, by outcome kind: "Code C" for Review Codes, "Failed" for Inspection Results. */
+  revisionLine: Record<OutcomeKind, string>;
   /** The name of each bucket that isn't an outcome (an outcome's bar has its own name from the Type's set). */
   buckets: Record<FixedChainBucket, string>;
-  /** The Code C line's sub-states, as the line and a List filtered from it name them. */
+  /** The Revision line's sub-states, as the line and a List filtered from it name them. */
   codeCStates: Record<CodeCFilter, string>;
   /** The footer's name for the approved share, by outcome kind. */
   approved: Record<OutcomeKind, string>;
@@ -134,7 +135,7 @@ function TypeCard({ card, ...ctx }: { card: DashboardCard } & Ctx) {
               {formatNumber(card.approved.percent / 100, locale, { style: "percent" })}
             </Figure>
           </p>
-          {card.codeC && <CodeCLine typeCode={card.type.code} line={card.codeC} {...ctx} />}
+          {card.revisionLine && <RevisionLine typeCode={card.type.code} outcomeKind={card.outcomeKind} line={card.revisionLine} {...ctx} />}
         </>
       )}
     </article>
@@ -146,7 +147,7 @@ function TypeCard({ card, ...ctx }: { card: DashboardCard } & Ctx) {
  * revision split for the raiser's own Company, and "rejected after C" when
  * there is any (RP-352). Each figure links to its List.
  */
-function CodeCLine({ typeCode, line, ...ctx }: { typeCode: string; line: DashboardCodeCLine } & Ctx) {
+function RevisionLine({ typeCode, outcomeKind, line, ...ctx }: { typeCode: string; outcomeKind: OutcomeKind; line: DashboardRevisionLine } & Ctx) {
   const { locale, labels } = ctx;
   const n = (count: number) => formatNumber(count, locale);
   // Each figure at least 24px tall (44px on a touch screen), so the links on one line are easy to hit.
@@ -163,9 +164,9 @@ function CodeCLine({ typeCode, line, ...ctx }: { typeCode: string; line: Dashboa
     </span>
   );
   return (
-    <p data-testid={`code-c-${typeCode}`} className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-caption">
+    <p data-testid={`revision-line-${typeCode}`} className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-caption">
       <Figure figure={line.total} {...ctx} className={cn(target, "font-semibold")}>
-        {labels.codeC} {n(line.total.count)}
+        {labels.revisionLine[outcomeKind]} {n(line.total.count)}
       </Figure>
       {separator}
       {part("approvedOnRevision", line.approvedOnRevision, ` (${formatNumber(line.approvedOnRevision.percent / 100, locale, { style: "percent" })})`)}

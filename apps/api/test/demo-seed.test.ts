@@ -324,9 +324,10 @@ describe("the README walkthrough", () => {
       memberName: null,
       pool: null,
     });
-    // Its Consultant Engineers and Manager may pick it up: nobody holds it yet.
+    // Its Consultant Engineers may pick it up, never its Manager (RP-511 decision 1): nobody holds it yet.
     expect((await detail(ahmed, mar)).actions.pickUp).toBe(true);
-    expect((await detail(mohammed, mar)).heldBy?.pool?.names.map((n) => n.en).sort()).toEqual(["Ahmed bin Said", "Mohammed Al Shamsi", "Sara"]);
+    expect((await detail(mohammed, mar)).heldBy?.pool?.names.map((n) => n.en).sort()).toEqual(["Ahmed bin Said", "Sara"]);
+    expect((await detail(mohammed, mar)).actions.pickUp).toBe(false);
     expect((await detail(faisal, mar)).stage.key).toBe("pending_approval");
     await hidden(yousef, { countsZero: true });
     for (const who of [ahmed, faisal]) {

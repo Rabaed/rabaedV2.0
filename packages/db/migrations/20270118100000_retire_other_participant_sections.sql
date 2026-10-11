@@ -18,7 +18,7 @@
 --   after a Send Back (V19, narrowed).
 --
 -- Rebuilt from their latest bodies: app.can_save_answers
--- (20270117000000_raisers_form_review_fixes.sql), app.transition_effects
+-- (20270117100000_raisers_form_review_fixes.sql), app.transition_effects
 -- (20270111000000_pool_of_one.sql).
 
 -- Who may save -------------------------------------------------------------------------------
@@ -87,8 +87,6 @@ AS $function$
       v_audience text;
       v_outcome text;
       v_crosses boolean;
-      v_data jsonb;
-      v_times jsonb;
       v_new_assignment_id uuid;
     begin
       select w.* into v_item from work_item w where w.id = p_work_item_id;
@@ -144,8 +142,6 @@ AS $function$
       end if;
       -- It leaves the acting Participant: handed to another, or closed (nobody holds it).
       v_crosses := p_next_participant_id is distinct from p_participant_id;
-      v_data := v_item.data;
-      v_times := v_item.field_times;
       -- Only what crosses is shared (a Send Back always does): a move inside one
       -- Participant stays its own, even from a Step that could issue a Code (V5, V14).
       v_audience := case
@@ -166,7 +162,7 @@ AS $function$
         jsonb_strip_nulls(p_answers || jsonb_build_object('document_number', v_number, 'outcome', v_outcome)),
         v_audience, case when v_audience = 'internal' then p_participant_id end,
         -- The item's exact content as this Transition leaves it (ADR 0017).
-        app.work_item_content_sha256(p_work_item_id, v_item.title, v_data, v_outcome),
+        app.work_item_content_sha256(p_work_item_id, v_item.title, v_item.data, v_outcome),
         p_at
       );
 
@@ -188,8 +184,6 @@ AS $function$
           else submitted_at end,
         outcome = v_outcome,
         closed_at = case when v_outcome is not null then p_at end,
-        data = v_data,
-        field_times = v_times,
         updated_at = p_at
       where id = p_work_item_id;
 

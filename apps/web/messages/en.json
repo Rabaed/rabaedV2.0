@@ -246,7 +246,12 @@
       "open": "Open",
       "closed": "Closed",
       "empty": "No Work Item Types on this Project yet.",
-      "codeC": "Code C",
+      "revisionLine": {
+        "review_code": "Code C",
+        "inspection_result": "Failed",
+        "approval": "Revisions",
+        "none": "Revisions"
+      },
       "approved": {
         "review_code": "Approved (A+B)",
         "inspection_result": "Passed, with or without Comments",
