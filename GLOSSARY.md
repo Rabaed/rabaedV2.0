@@ -217,7 +217,7 @@ _Avoid_: Company template, preset
 The versioned graph of Steps and Transitions, drawn in the visual workflow builder, that a Work Item passes through. A Work Item stays on the Workflow version it started with. A Project runs its own copy for each Work Item Type, sometimes a different one for one raising Participant; everyone on the Project can read its map (ADR 0016).
 
 **Version**:
-A published, unchangeable edition of a Form, a Workflow or a Screen. A Work Item stays on the Versions it started with (its Workflow Version pins the Screen Versions it uses); later Versions apply only to new Work Items.
+A published, unchangeable edition of a Form, a Workflow, a Screen or a Numbering Pattern. A Work Item stays on the Versions it started with (its Workflow Version pins the Screen Versions it uses; its number keeps the pattern it was numbered under); later Versions apply only to new Work Items.
 _Avoid_: Revision (reserved for Work Items), edition
 
 **Stage**:
@@ -318,14 +318,14 @@ _Avoid_: Comments (reserved for the Snag List), note, recommendation (too close 
 
 **Revision**:
 A resubmission of a Work Item that ended with Code C: a new Work Item, started as a Draft from the latest one, that keeps the same number with a revision suffix (MS-003 → MS-003 Rev 1) and is linked to the one before it. The first submission has no suffix. The earlier one stays closed at Code C, and anyone who sees a Revision can switch to the earlier ones they may see.
-_Avoid_: Version (reserved for Forms and Workflows), resubmittal
+_Avoid_: Version (reserved for Forms, Workflows, Screens and Numbering Patterns), resubmittal
 
 **Document Number**:
 The identifier a Work Item gets when it first leaves Draft (e.g. TWR-MAR-CCM-0001); numbers are never reused, built from the Project's Numbering Pattern. A Revision keeps the number of the one before it, with its revision suffix.
 _Avoid_: ID, reference number
 
 **Numbering Pattern**:
-How a Project builds its Document Numbers: up to six segments (Project, Work Item Type, Trade, Participant Code, Location level, fixed text), a separator and a sequence, with the segments the sequence counts separately for. One per Project, optionally overridden per Work Item Type. Set by the Project Admin or a Rabaed Engineer; a change applies only to Work Items numbered after it.
+How a Project builds its Document Numbers: up to six segments (Project, Work Item Type, Trade, Participant Code, Location level, fixed text), a separator and a sequence, with the segments the sequence counts separately for. One per Project, optionally a Custom pattern per Work Item Type. Set by the Project Admin or a Rabaed Engineer; a change applies only to Work Items numbered after it.
 _Avoid_: Numbering scheme, format
 
 **Participant Code**:

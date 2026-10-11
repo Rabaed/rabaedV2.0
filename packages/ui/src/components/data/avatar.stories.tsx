@@ -36,6 +36,45 @@ export const Initials: Story = {
   },
 };
 
+/**
+ * Solid (Home, RP-407): white Latin initials on a colour picked from the English name, in Arabic
+ * too; a Company on slate.
+ */
+export const Solid: Story = {
+  render: (args, context) => (
+    <div className="flex items-center gap-3">
+      {Object.values(people).map((p) => (
+        <Avatar key={p.en} {...args} name={storyText(context, p)} initialsFrom={p.en} solid size="lg" />
+      ))}
+      <Avatar {...args} name={storyText(context, company)} initialsFrom={company.en} kind="company" solid size="lg" />
+    </div>
+  ),
+  play: async (context) => {
+    await expect(context.canvas.getByRole("img", { name: storyText(context, people.faisal) })).toHaveTextContent("FA");
+    await expect(context.canvas.getByRole("img", { name: storyText(context, company) })).toHaveTextContent("AW");
+  },
+};
+
+/**
+ * The Members list's avatar (RP-413): given a stable key, the initials sit in white on a mid-tone solid colour
+ * picked from it, so the same Member always has the same one.
+ */
+export const SolidMember: Story = {
+  render: (args, context) => (
+    <div className="flex items-center gap-3">
+      <Avatar {...args} name={storyText(context, people.faisal)} initialsFrom={people.faisal.en} solidFrom="member-1" />
+      <Avatar {...args} name={storyText(context, people.hala)} initialsFrom={people.hala.en} solidFrom="member-2" />
+      <Avatar {...args} name={storyText(context, people.nasser)} initialsFrom={people.nasser.en} solidFrom="member-3" />
+      <Avatar {...args} name={storyText(context, people.faisal)} initialsFrom={people.faisal.en} solidFrom="member-1" size="lg" />
+    </div>
+  ),
+  play: async (context) => {
+    const [first, again] = context.canvas.getAllByRole("img", { name: storyText(context, people.faisal) });
+    await expect(getComputedStyle(first!).backgroundColor).toBe(getComputedStyle(again!).backgroundColor);
+    await expect(first).toHaveClass("text-on-primary");
+  },
+};
+
 /** A photo, named after the person. */
 export const Photo: Story = {
   render: (args, context) => <Avatar {...args} name={storyText(context, people.hala)} src={photo} size="lg" />,

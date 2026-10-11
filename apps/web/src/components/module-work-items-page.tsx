@@ -1,8 +1,9 @@
 import { workItemQueryFromSearchParams, workItemViewFromSearchParams, type Locale, type ModuleKey } from "@rabaed/domain";
-import { buttonVariants } from "@rabaed/ui";
+import { Icon, buttonVariants, cn } from "@rabaed/ui";
 import { getTranslations } from "next-intl/server";
 import { notFound } from "next/navigation";
 import { WorkItemListOrKanban } from "@/components/work-item-list-or-kanban";
+import { listQueryFromSearchParams } from "@/lib/list-url";
 import { Link, redirect } from "@/i18n/navigation";
 import { getMe, getProject, getWorkItemBoard, getWorkItems } from "@/lib/session";
 
@@ -26,43 +27,71 @@ export async function ModuleWorkItemsPage({
 }) {
   const t = await getTranslations("workItems");
   const tabs = await getTranslations("projectTabs");
+  // The filter fields' names in the other language, small after each (the owner's anatomy, RP-410).
+  const other = await getTranslations({ locale: locale === "en" ? "ar" : "en", namespace: "workItemViews.list" });
+  const hints = {
+    stage: other("statusField"),
+    ...Object.fromEntries(
+      (["trade", "documentType", "owner", "role", "createdDate", "stepAge", "outcome", "submissionDate", "revisions"] as const).map((key) => [key, other(key)]),
+    ),
+  };
   // A filter the URL holds that isn't valid is left out, so an old or edited link still opens.
   // The tab's path names the Module, whatever the query string says.
-  const query = { ...workItemQueryFromSearchParams(searchParams), module };
-  // List or Kanban, kept in the URL as `view`.
+  // List or Kanban, kept in the URL as `view`. The List pages by number, sorted by Submittal No. unless the URL says.
   const view = workItemViewFromSearchParams(searchParams);
+  const query = { ...(view === "list" ? listQueryFromSearchParams(searchParams) : workItemQueryFromSearchParams(searchParams)), module };
   const [me, project, list, board] = await Promise.all([
     getMe(),
     getProject(projectId),
-    view === "list" ? getWorkItems(projectId, module, query) : null,
+    // Names sort in the reader's language.
+    view === "list" ? getWorkItems(projectId, module, { ...query, lang: locale }) : null,
     view === "kanban" ? getWorkItemBoard(projectId, module, query) : null,
   ]);
   if (!me) return redirect({ href: "/sign-in", locale });
   if (!project || !(list ?? board)) notFound();
   const title = tabs(module);
 
-  return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div className="space-y-1">
-          <Link href={`/projects/${project.id}`} className="text-sm text-primary underline underline-offset-4">
-            {project.name[locale]}
-          </Link>
-          <h1 className="text-h4 font-semibold">{title}</h1>
-        </div>
-        {/* The MAR's Draft Step is held by Contractors; the API refuses anyone else too. */}
-        {module === "submittals" && project.projectRole.baseRole === "contractor" && (
-          <Link href={`/projects/${project.id}/work-items/new`} className={buttonVariants()}>
-            {t("newMar")}
-          </Link>
-        )}
-      </div>
+  // The MAR's Draft Step is held by Contractors; the API refuses anyone else too.
+  const action =
+    module === "submittals" && project.projectRole.baseRole === "contractor" ? (
+      <Link href={`/projects/${project.id}/work-items/new`} className={cn(buttonVariants(), "h-[34px] px-3.5")}>
+        <Icon name="plus" />
+        {t("addSubmittal")}
+      </Link>
+    ) : undefined;
 
+  return (
+    <>
+      {/* The top bar names the Project and its tabs the Module: the heading is for screen readers. */}
+      <h1 className="sr-only">{title}</h1>
       {board ? (
-        <WorkItemListOrKanban view="kanban" board={board} query={query} locale={locale} tableLabel={title} />
+        <WorkItemListOrKanban
+          view="kanban"
+          board={board}
+          query={query}
+          locale={locale}
+          tableLabel={title}
+          action={action}
+          projectId={project.id}
+          module={module}
+          hints={hints}
+        />
       ) : (
-        list && <WorkItemListOrKanban view="list" list={list} query={query} locale={locale} tableLabel={title} />
+        list && (
+          <WorkItemListOrKanban
+            view="list"
+            list={list}
+            query={query}
+            locale={locale}
+            tableLabel={title}
+            action={action}
+            projectId={project.id}
+            module={module}
+            projectName={project.name[locale]}
+            hints={hints}
+          />
+        )
       )}
-    </div>
+    </>
   );
 }

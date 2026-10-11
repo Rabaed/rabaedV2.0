@@ -43,8 +43,7 @@ export function CreateProjectForm() {
   }
 
   return (
-    <section className="space-y-4 rounded-md border border-border p-4">
-      <h2 className="text-h6 font-semibold">{t("createTitle")}</h2>
+    <div className="space-y-4">
       <form onSubmit={onSubmit} className="grid gap-4 sm:grid-cols-2" noValidate>
         <Field label={t("nameEn")} id="project-name-en" required>
           <Input name="nameEn" dir="ltr" lang="en" />
@@ -63,16 +62,16 @@ export function CreateProjectForm() {
           />
         </Field>
         <div className="sm:col-span-2">
-          <Button type="submit" disabled={pending}>
+          <Button type="submit" disabled={pending} className="h-[42px] rounded-[11px] px-4 font-semibold">
             {t("create")}
           </Button>
         </div>
       </form>
       {error && (
-        <p role="alert" className="text-sm text-danger">
+        <p role="alert" className="text-sm text-danger-fg">
           {error}
         </p>
       )}
-    </section>
+    </div>
   );
 }

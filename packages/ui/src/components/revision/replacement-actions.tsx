@@ -58,7 +58,7 @@ export function ReplacementActions({ labels, canCreate, onCreate }: ReplacementA
         </Button>
       </div>
       {error && (
-        <p role="alert" className="text-sm text-danger">
+        <p role="alert" className="text-sm text-danger-fg">
           {error}
         </p>
       )}

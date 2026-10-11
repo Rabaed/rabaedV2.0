@@ -21,14 +21,18 @@ const defaults: WorkItemQuery = {
   type: [],
   stage: [],
   with: [],
+  owner: [],
+  role: [],
   trade: [],
   location: [],
   outcome: [],
   bucket: [],
   codeC: [],
   stepAgeMin: undefined,
+  createdWithin: undefined,
   q: undefined,
   needMyAction: false,
+  raisedByMe: false,
   allRevisions: false,
   sort: "stepAge",
   cursor: undefined,
@@ -52,6 +56,29 @@ describe("workItemQuery", () => {
     for (const bad of ["someone", "step:", "company:not-an-id", "step:Bad Key"]) {
       expect(workItemQuery.safeParse({ with: bad }).success, bad).toBe(false);
     }
+  });
+
+  it("takes every Owner value (one of my people, my pool's Steps not picked up, another Company), and nothing else (RP-410)", () => {
+    const values = [`member:${row}`, "not_picked_up", `company:${participant}`];
+    expect(workItemQuery.parse({ owner: values.join(",") }).owner).toEqual(values);
+    for (const bad of ["me", "member:", "member:someone", "company:x", "step:k1"]) {
+      expect(workItemQuery.safeParse({ owner: bad }).success, bad).toBe(false);
+    }
+  });
+
+  it("takes several Roles, as Step keys of my own Company (RP-410)", () => {
+    expect(workItemQuery.parse({ role: "internal_review,draft" }).role).toEqual(["internal_review", "draft"]);
+    expect(workItemQuery.safeParse({ role: "Bad Key" }).success).toBe(false);
+  });
+
+  it("takes a Created date window of 7, 30 or 90 days, and keeps it in the URL (RP-410)", () => {
+    expect(workItemQuery.parse({ createdWithin: "30" }).createdWithin).toBe(30);
+    expect(workItemQuery.safeParse({ createdWithin: "10" }).success).toBe(false);
+    const q = workItemQuery.parse({ createdWithin: 7, owner: "not_picked_up", role: "draft" });
+    expect(workItemSearchParams(q).toString()).toBe("owner=not_picked_up&role=draft&createdWithin=7");
+    expect(workItemQueryFromSearchParams(workItemSearchParams(q))).toEqual(q);
+    expect(isFilteredWorkItemQuery(q)).toBe(true);
+    expect(withoutFilters(q)).toEqual(defaults);
   });
 
   it("takes the Dashboard's buckets, an outcome a Project Admin added among them, and nothing else", () => {
@@ -91,13 +118,18 @@ describe("the query in the URL", () => {
     type: ["MAR"],
     stage: ["submitted", "under_review"],
     with: ["not_picked_up", `company:${participant}`],
+    owner: [`member:${row}`, `company:${participant}`],
+    role: ["internal_review"],
     trade: [trade],
     location: [location],
     outcome: ["C", "passed_with_comments"],
     bucket: ["pending", "in_preparation"],
     codeC: ["rejectedAfterC"],
     stepAgeMin: 2,
+    createdWithin: 90,
     needMyAction: true,
+    raisedByMe: true,
+    heldBy: "others",
     allRevisions: true,
     sort: "documentNumber",
     cursor: encodeWorkItemCursor("documentNumber", ["false", "TWR-C1-EL-MAR-0001", "", row]),
@@ -184,6 +216,50 @@ describe("filters", () => {
   it("clear to the first page, keeping the Module, the sort and Revisions", () => {
     const query: WorkItemQuery = { ...defaults, module: "snag_list", stage: ["draft"], stepAgeMin: 3, needMyAction: true, sort: "documentNumber", allRevisions: true, cursor: "x" };
     expect(withoutFilters(query)).toEqual({ ...defaults, module: "snag_list", sort: "documentNumber", allRevisions: true });
+  });
+});
+
+describe("numbered pages and every column's sort (RP-409)", () => {
+  it("takes a page and 10, 25 or 50 rows a page, and nothing else", () => {
+    expect(workItemQuery.parse({ page: "3", pageSize: "25" })).toMatchObject({ page: 3, pageSize: 25 });
+    for (const bad of [{ page: "0" }, { page: "-1" }, { page: "two" }, { pageSize: "20" }, { pageSize: "100" }]) {
+      expect(workItemQuery.safeParse(bad).success, JSON.stringify(bad)).toBe(false);
+    }
+  });
+
+  it("sorts by any List column, either way", () => {
+    for (const sort of ["subject", "revision", "trade", "type", "stage", "outcome", "locationLevel1", "locationLevel2", "locationLevel3", "owner", "created", "contractor"]) {
+      expect(workItemQuery.parse({ sort, dir: "desc", page: "1" })).toMatchObject({ sort, dir: "desc" });
+    }
+    expect(workItemQuery.safeParse({ dir: "sideways" }).success).toBe(false);
+  });
+
+  it("pages with a cursor only for the cursor's own sorts, in their own order, and never with a page", () => {
+    const cursor = encodeWorkItemCursor("stepAge", ["false", "2026-10-01T00:00:00.000000Z", "", row]);
+    expect(workItemQuery.safeParse({ cursor, page: "2" }).success).toBe(false);
+    expect(workItemQuery.safeParse({ cursor, dir: "asc" }).success).toBe(false);
+    expect(workItemQuery.safeParse({ cursor: encodeWorkItemCursor("subject" as never, ["false", "a", "", row]), sort: "subject" }).success).toBe(false);
+  });
+
+  it("keeps the page, its size and the order in the URL, and reads them back", () => {
+    const query: WorkItemQuery = { ...defaults, sort: "owner", dir: "desc", page: 4, pageSize: 10 };
+    const params = workItemSearchParams(query);
+    expect(params.toString()).toBe("sort=owner&dir=desc&page=4&pageSize=10");
+    expect(workItemQueryFromSearchParams(new URLSearchParams(params.toString()))).toEqual(query);
+    expect(workItemQueryFromSearchParams({ page: "x", pageSize: "7", dir: "up" })).toEqual(defaults);
+  });
+
+  it("clears the filters to the first page, keeping the order and the page size", () => {
+    expect(withoutFilters({ ...defaults, stage: ["draft"], sort: "subject", dir: "desc", page: 3, pageSize: 10 })).toEqual({
+      ...defaults,
+      sort: "subject",
+      dir: "desc",
+      pageSize: 10,
+    });
+  });
+
+  it("isn't narrowed by the page, its size or the order", () => {
+    expect(isFilteredWorkItemQuery({ ...defaults, page: 2, pageSize: 10, dir: "desc", sort: "trade" })).toBe(false);
   });
 });
 

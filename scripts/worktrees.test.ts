@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -225,6 +225,15 @@ describe("gatherFacts and removeWorktree in a throwaway repository", () => {
       [0, false, true],
       [0, false, true],
     ]);
+  });
+
+  it("counts an untracked file as uncommitted, but not a .pnpm-store/ the branch doesn't ignore (RP-549)", () => {
+    run(["worktree", "add", "-b", "worktree-agent-store", agent("agent-store")]);
+    mkdirSync(join(agent("agent-store"), ".pnpm-store", "v10"), { recursive: true });
+    writeFileSync(join(agent("agent-store"), ".pnpm-store", "v10", "index"), "x");
+    expect(gatherFacts([listed("agent-store")], "main", root)[0]!.dirty).toBe(false);
+    writeFileSync(join(agent("agent-store"), "c.txt"), "c");
+    expect(gatherFacts([listed("agent-store")], "main", root)[0]!.dirty).toBe(true);
   });
 
   it("sees a commit, and keeps it seen once merged", () => {

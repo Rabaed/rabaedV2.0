@@ -6,7 +6,7 @@ export const textBox = [
   "w-full rounded-sm border border-control-border bg-surface px-3 text-body text-text",
   "placeholder:text-muted hover:border-control-border-hover",
   focusRing,
-  "aria-invalid:border-danger aria-invalid:hover:border-danger",
+  "aria-invalid:border-danger-fg aria-invalid:hover:border-danger-fg",
   "disabled:cursor-not-allowed disabled:border-border disabled:bg-disabled disabled:text-muted",
   "read-only:bg-surface-subtle read-only:hover:border-control-border",
   "aria-readonly:bg-surface-subtle aria-readonly:hover:border-control-border",

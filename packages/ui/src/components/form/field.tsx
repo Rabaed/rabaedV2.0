@@ -123,7 +123,7 @@ export function Field({
       {label}
       {required && (
         // The control itself is marked required; the asterisk is visual only.
-        <span aria-hidden="true" className="ms-0.5 text-danger">
+        <span aria-hidden="true" className="ms-0.5 text-danger-fg">
           *
         </span>
       )}
@@ -148,7 +148,7 @@ export function Field({
         </p>
       )}
       {error && (
-        <p id={errorId} className="flex items-start gap-1 text-sm text-danger">
+        <p id={errorId} className="flex items-start gap-1 text-sm text-danger-fg">
           <Icon name="alert-circle" size={16} className="mt-0.5" />
           <span>{error}</span>
         </p>

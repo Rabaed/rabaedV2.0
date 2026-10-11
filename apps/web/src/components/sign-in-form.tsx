@@ -47,7 +47,7 @@ export function SignInForm() {
         <Input name="password" type="password" autoComplete="current-password" />
       </Field>
       {error && (
-        <p role="alert" className="text-sm text-danger">
+        <p role="alert" className="text-sm text-danger-fg">
           {error}
         </p>
       )}

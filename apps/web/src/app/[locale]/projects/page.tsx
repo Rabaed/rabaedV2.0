@@ -1,6 +1,6 @@
 import type { Locale } from "@rabaed/domain";
 import { getTranslations, setRequestLocale } from "next-intl/server";
-import { CreateProjectForm } from "@/components/create-project-form";
+import { NewProjectDialog } from "@/components/new-project-dialog";
 import { ProjectCardsView } from "@/components/project-cards-view";
 import { redirect } from "@/i18n/navigation";
 import { getMe, getMyProjects } from "@/lib/session";
@@ -11,21 +11,33 @@ export default async function ProjectsPage({ params }: { params: Promise<{ local
   const t = await getTranslations("projects");
   const [me, list] = await Promise.all([getMe(), getMyProjects()]);
   if (!me) return redirect({ href: "/sign-in", locale });
+  const canCreate = me.member.canCreateProjects;
 
   return (
-    <div className="space-y-8">
-      <h1 className="text-h4 font-semibold">{t("title")}</h1>
-
-      {me.member.canCreateProjects && <CreateProjectForm />}
+    <div className="flex flex-col">
+      <div className="mb-[22px] flex flex-wrap items-end gap-4">
+        <div className="flex min-w-0 flex-col gap-1">
+          <h1 className="font-display text-h4 leading-[1.2] font-bold tracking-[-0.01em] ltr:font-extrabold">{t("title")}</h1>
+          <p className="text-body text-muted">{t("subtitle")}</p>
+        </div>
+        {canCreate && (
+          <div className="ms-auto">
+            <NewProjectDialog className="h-[42px] rounded-[11px] px-4 font-semibold" />
+          </div>
+        )}
+      </div>
 
       {!list ? (
-        <p role="alert" className="text-danger">
+        <p role="alert" className="text-danger-fg">
           {t("unavailable")}
         </p>
-      ) : list.projects.length === 0 ? (
-        <p className="text-muted">{me.member.canCreateProjects ? t("emptyCreator") : t("empty")}</p>
       ) : (
-        <ProjectCardsView projects={list.projects} locale={locale} />
+        <ProjectCardsView
+          projects={list.projects}
+          submittals={list.submittals}
+          locale={locale}
+          emptyAction={canCreate ? <NewProjectDialog className="h-[42px] rounded-[11px] px-4 font-semibold" /> : undefined}
+        />
       )}
     </div>
   );
