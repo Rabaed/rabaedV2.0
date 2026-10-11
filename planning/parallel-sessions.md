@@ -83,6 +83,15 @@ Use it when a spec's tickets form a chain that one lane would otherwise work thr
    4. Then run `/mattpocock-skills:retro` and archive the session.
    5. When you stop an implementer yourself, remove only its worktree: `pnpm worktrees:clean --only agent-<id> --yes` (several ids may follow `--only`). It removes the named worktree even with no commits, and leaves other sessions' worktrees unlooked at; hand-run `git worktree remove` and `git branch -D` are refused by auto mode.
 
+## Implementer brief
+
+Every implementing session and implementer subagent follows these, on top of the ticket and `CODING_STANDARDS.md`. An `/implement-spec` brief points here instead of repeating them.
+
+- **Isolated worktree shell:** plain, literal commands that act on this worktree only; write scripts with Write and run them; no heredocs, `git -C`, `cd … &&` or variable paths. Run `pnpm lane:env` from PowerShell, not Git Bash.
+- **Fresh worktree:** run `pnpm install --frozen-lockfile` first (a new worktree has no `node_modules`, so `vitest` is missing).
+- **Glossary lint:** run `pnpm lint` before your first commit; scripts and `messages/*.json` are linted against `GLOSSARY.md` _Avoid_ too (`packages/eslint-plugin/README.md` lists the common false hits and how to silence one).
+- **Renames:** renaming a term, label or message key, or removing a group, follows the checklist in `docs/agents/renames.md`.
+
 ## Retro before archiving
 
 `/mattpocock-skills:retro` looks back at the session and suggests changes to the agents' environment, not the code. A mistake that a rule could catch becomes a check (a lint rule, a pre-commit hook or a CI job). A judgement call becomes a line in `CODING_STANDARDS.md`. Each accepted suggestion becomes a `ready-for-agent` Task, as RP-287 did. A new required CI check also has to be added to the `main` ruleset.
