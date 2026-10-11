@@ -408,6 +408,7 @@
     "notCreator": "لا يُنشئ المشاريع إلا منشئ المشاريع.",
     "unavailable": "حدث خطأ. حاول مرة أخرى.",
     "participants": "المشاركون",
+    "projectDetails": "تفاصيل المشروع",
     "participantCode": "رمز المشارك",
     "setParticipantCodes": "تحديد رموز المشاركين",
     "projectMembers": "أعضاء المشروع",

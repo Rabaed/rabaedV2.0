@@ -221,11 +221,54 @@ export const CodeCLineRejectedAfterC: Story = {
   },
 };
 
-/** Narrow: the cards stack, one per row, and nothing scrolls sideways. */
+/**
+ * Every figure on a card, each bar's and each Code C row's, reads whole on one
+ * line, nothing cut off (RP-411): a card keeps a width that fits its longest
+ * label, in English and Arabic, and wraps to the next row instead of squeezing.
+ */
+async function expectFiguresWhole(root: HTMLElement) {
+  // Nothing spills past its card's edge.
+  for (const card of root.querySelectorAll<HTMLElement>("article")) {
+    await expect(card.scrollWidth, `${card.getAttribute("aria-labelledby")} keeps its figures inside`).toBeLessThanOrEqual(card.clientWidth);
+  }
+  const links = [...root.querySelectorAll<HTMLElement>("article a")];
+  await expect(links.length).toBeGreaterThan(0);
+  for (const link of links) {
+    const range = document.createRange();
+    range.selectNodeContents(link);
+    const boxes = [...range.getClientRects()].filter((r) => r.width > 0);
+    // One line: every piece of the figure's text overlaps every other vertically.
+    const lines = Math.min(...boxes.map((r) => r.bottom)) > Math.max(...boxes.map((r) => r.top));
+    await expect(lines, `"${link.textContent}" sits on one line`).toBe(true);
+    for (const el of link.querySelectorAll<HTMLElement>("*")) {
+      // Only what clips can cut text off; screen-reader-only text is clipped on purpose.
+      if (getComputedStyle(el).overflowX === "visible" || el.classList.contains("sr-only")) continue;
+      await expect(el.scrollWidth, `"${el.textContent}" is not cut off`).toBeLessThanOrEqual(el.clientWidth);
+    }
+  }
+}
+
+/** On a wide screen, every card's figures read whole, in both languages. */
+export const FiguresWhole: Story = {
+  play: async (context) => {
+    await expectFiguresWhole(context.canvasElement);
+  },
+};
+
+/** The rarer Code C row too ("rejected after C"). */
+export const FiguresWholeRejectedAfterC: Story = {
+  args: { dashboard: withRejectedAfterC },
+  play: async (context) => {
+    await expectFiguresWhole(context.canvasElement);
+  },
+};
+
+/** Narrow: the cards stack, one per row, every figure still whole, and nothing scrolls sideways. */
 export const Narrow: Story = {
   parameters: phone,
   play: async (context) => {
     await expect(context.canvasElement.scrollWidth).toBeLessThanOrEqual(context.canvasElement.clientWidth);
+    await expectFiguresWhole(context.canvasElement);
   },
 };
 
