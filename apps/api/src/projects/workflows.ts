@@ -374,7 +374,7 @@ async function publishIn(trx: Db, definitionId: string, now: Date, changeNote?: 
           select outcome, version_no from app.publish_workflow(${definitionId}::uuid, ${now})
         `.execute(trx)
       : await sql<{ outcome: string; version_no: number | null }>`
-          select outcome, version_no from app.publish_workflow(${definitionId}::uuid, ${now}, ${changeNote}::text)
+          select outcome, version_no from app.publish_workflow_with_change_note(${definitionId}::uuid, ${now}, ${changeNote}::text)
         `.execute(trx);
   const outcome = checkedOutcome(rows[0]!.outcome, ["published", ...publishRefusals]);
   return outcome === "published" ? { ok: true, versionNo: rows[0]!.version_no!, warnings: problems } : { ok: false, reason: outcome };
