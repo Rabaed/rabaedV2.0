@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { browserLocale, directionOf, formatDate, formatNumber, isLocale, sortedByName } from "./locale.ts";
+import { browserLocale, directionOf, formatDate, formatDayMonthYear, formatNumber, isLocale, riyadhDay, sortedByName } from "./locale.ts";
 
 describe("locale", () => {
   it("knows English and Arabic only", () => {
@@ -69,5 +69,36 @@ describe("locale", () => {
     ];
     expect(sortedByName(people, (p) => p.en, "en").map((p) => p.en)).toEqual(["Ali Sonour", "Badr Alawi", "Saad Harbi"]);
     expect(sortedByName(people, (p) => p.ar, "ar").map((p) => p.ar)).toEqual(["بدر العلوي", "سعد الحربي", "علي سنور"]);
+  });
+});
+
+describe("formatDayMonthYear", () => {
+  // 21:30 UTC on 9 October is already 10 October in Riyadh.
+  const at = new Date("2026-10-09T21:30:00Z");
+
+  it("writes day, month and year as the design kit does, the weekday first when asked, in Saudi time", () => {
+    expect(formatDayMonthYear(at, "en")).toBe("10 October 2026");
+    expect(formatDayMonthYear(at, "en", { weekday: true })).toBe("Saturday, 10 October 2026");
+  });
+
+  it("writes the month short for the List, its Export and Download (RP-409)", () => {
+    expect(formatDayMonthYear(at, "en", { month: "short" })).toBe("10 Oct 2026");
+    expect(formatDayMonthYear(at, "ar", { month: "short" })).toMatch(/^10 .+ 2026$/);
+  });
+
+  it("keeps Arabic's own order, in Latin digits", () => {
+    const ar = formatDayMonthYear(at, "ar", { weekday: true });
+    expect(ar).toContain("السبت");
+    expect(ar).toContain("10");
+    expect(ar).toContain("2026");
+    expect(ar).not.toMatch(/[٠-٩]/);
+  });
+});
+
+describe("riyadhDay", () => {
+  it("is the calendar day in Riyadh, as YYYY-MM-DD, also late in the UTC day", () => {
+    expect(riyadhDay(new Date("2026-10-10T08:00:00Z"))).toBe("2026-10-10");
+    // 22:30 UTC is 01:30 the next day in Riyadh (UTC+3).
+    expect(riyadhDay(new Date("2026-10-10T22:30:00Z"))).toBe("2026-10-11");
   });
 });

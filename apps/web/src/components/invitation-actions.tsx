@@ -43,7 +43,7 @@ export function InvitationActions({ invitationId }: { invitationId: string }) {
         {t("decline")}
       </Button>
       {error && (
-        <span role="alert" className="text-sm text-danger">
+        <span role="alert" className="text-sm text-danger-fg">
           {t("unavailable")}
         </span>
       )}

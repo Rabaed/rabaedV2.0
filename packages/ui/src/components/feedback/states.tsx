@@ -16,7 +16,7 @@ type StateLayoutProps = StateProps & { icon: IconName; tone: "muted" | "danger";
 function State({ icon, tone, role, title, children, action, className }: StateLayoutProps) {
   return (
     <div role={role} className={cn("flex flex-col items-center gap-3 px-6 py-12 text-center", className)}>
-      <span className={cn("flex size-12 items-center justify-center rounded-full", tone === "danger" ? "bg-danger-tint text-danger" : "bg-surface-subtle text-muted")}>
+      <span className={cn("flex size-12 items-center justify-center rounded-full", tone === "danger" ? "bg-danger-tint text-danger-fg" : "bg-surface-subtle text-muted")}>
         <Icon name={icon} size={24} />
       </span>
       <h2 className="font-display text-h6 font-semibold text-text">{title}</h2>

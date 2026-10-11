@@ -197,18 +197,20 @@ describe("columns and swimlanes (V14)", () => {
     expect(cardOf(b, draftItem)?.stage.key).toBe("draft");
   });
 
-  it("makes each of my own Company's Steps a lane", async () => {
+  it("makes each of my own Company's roles a lane (RP-410): the holder's Position, with my Project Role", async () => {
     const b = await board(c1Engineer);
-    expect(laneOf(b, draftItem)).toMatchObject({ kind: "step", step: { key: "draft" } });
+    // Drafts held by C1's engineer.
+    expect(laneOf(b, draftItem)).toMatchObject({ kind: "role", position: { key: "engineer" }, projectRole: { en: "Contractor" } });
     expect(laneOf(b, mechanical)).toBe(laneOf(b, draftItem));
+    // K1's item picked up by its manager: the Manager lane; not picked up, in the pool it would be the pool's first Position.
     const theirs = await board(k1ManagerB);
-    expect(laneOf(theirs, withK1)).toMatchObject({ kind: "step", step: { key: "consultant_review" } });
+    expect(laneOf(theirs, withK1)).toMatchObject({ kind: "role", position: { key: "manager" }, projectRole: { en: "Consultant" } });
   });
 
-  it("shows another Company's Steps as one lane with its name: no Step name or person", async () => {
+  it("shows another Company as one lane with its name: no Step, role or person (V5, V14)", async () => {
     const theirs = await board(k1ManagerA);
     const k1Lane = laneOf(theirs, withK1);
-    if (k1Lane?.kind !== "step") throw new Error("expected K1's own Step lane");
+    if (k1Lane?.kind !== "role") throw new Error("expected K1's own role lane");
     const holder = cardOf(theirs, withK1)!.with;
     if (holder?.kind !== "own" || !holder.holder) throw new Error("expected K1's holder");
     const k1Name = holder.companyName.en;
@@ -219,9 +221,18 @@ describe("columns and swimlanes (V14)", () => {
     expect(Object.keys(lane).sort()).toEqual(["cards", "companyName", "count", "kind", "participantId"]);
     expect(cardOf(mine, withK1)!.with).toEqual({ kind: "company", companyName: expect.objectContaining({ en: k1Name }) });
     const json = JSON.stringify(mine);
-    for (const secret of [holder.holder.name.en, holder.holder.name.ar, k1Lane.step.name.en, k1Lane.step.name.ar, "consultant_review"]) {
+    const k1Step = holder.step;
+    for (const secret of [holder.holder.name.en, holder.holder.name.ar, k1Step.name.en, k1Step.name.ar, "consultant_review"]) {
       expect(json).not.toContain(secret);
     }
+    // K1's Positions never reach C1's answer: no lane or card names a role of another Company.
+    const roles = [
+      ...mine.columns.flatMap((c) => c.lanes).flatMap((l) => (l.kind === "role" ? [l.position.key] : [])),
+      ...cards(mine).flatMap((c) => (c.with?.kind === "own" && c.with.role ? [c.with.role.position.key] : [])),
+    ];
+    expect(roles.every((k) => k === "engineer" || k === "project_manager"), JSON.stringify(roles)).toBe(true);
+    expect(json).not.toContain(k1Lane.position.name.en === "Manager" ? '"Manager"' : k1Lane.position.name.en);
+    expect(json).not.toContain('"Consultant"');
   });
 
   it("puts closed items, which nobody holds, in the closed lane", async () => {
@@ -303,12 +314,12 @@ describe("a second Contractor (V3, scenario 17)", () => {
       expectCountsAddUp(b, label);
       expect(cards(b).every((c) => c.id === c2Item), label).toBe(true);
       expect(b.stages.reduce((sum, s) => sum + s.count, 0), label).toBe(cards(b).length);
-      expect(b.columns.flatMap((c) => c.lanes).every((l) => l.kind === "step"), label).toBe(true);
+      expect(b.columns.flatMap((c) => c.lanes).every((l) => l.kind === "role" || l.kind === "step"), label).toBe(true);
       expect(b.filters.with.companies, label).toEqual([]);
     }
     const b = await board(c2Engineer);
     expect(cardIds(b)).toEqual([c2Item]);
-    expect(column(b, "draft").lanes).toEqual([expect.objectContaining({ kind: "step", count: 1 })]);
+    expect(column(b, "draft").lanes).toEqual([expect.objectContaining({ kind: "role", count: 1 })]);
     expect(b.columns.filter((c) => c.stageKey !== "draft").every((c) => c.shown === 0 && c.lanes.length === 0)).toBe(true);
   });
 });
@@ -334,6 +345,11 @@ describe("closed columns", () => {
     expect(cardIds(after)).toContain(withK1);
     // The List behind "Show all" still has them.
     expect((await listAll(k1ManagerB, { stage: [closedStage] })).items.map((r) => r.id)).toEqual(expect.arrayContaining([closedItem, chainRoot]));
+    // The List has no 30-day cut at all (RP-410): with no filter, every closed item is there, counted in its Stage.
+    const { first, items } = await listAll(k1ManagerB);
+    expect(items.map((r) => r.id)).toEqual(expect.arrayContaining([closedItem, chainRoot]));
+    expect(first.stages.find((s) => s.key === closedStage)!.count).toBe(total);
+    expect(items.filter((r) => r.stage.key === closedStage)).toHaveLength(total);
   });
 });
 

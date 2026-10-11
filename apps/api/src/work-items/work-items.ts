@@ -1,6 +1,12 @@
 import { withMember, type Database, type Db } from "@rabaed/db";
 import {
+  answerFields,
   backwardKinds,
+  discardDraftRefusals,
+  duplicateMaxFileBytes,
+  duplicateRefusals,
+  type SharedWorkItem,
+  isAnswerField,
   changedOutside,
   editableSections,
   errorsInSections,
@@ -25,6 +31,7 @@ import {
   type FormChoices,
   type FormSchema,
   type FormFieldType,
+  type LinkKind,
   type FormToFill,
   type FormVersion,
   type SectionEditContext,
@@ -44,6 +51,8 @@ import {
 } from "@rabaed/domain";
 import { sql, type RawBuilder, type Transaction } from "kysely";
 import { refusedAsForbidden, type Forbidden } from "../db-error.ts";
+import { withFileCopies } from "../documents/copy-files.ts";
+import type { FileStore } from "../documents/file-store.ts";
 import { isUuid } from "../http-error.ts";
 import { readOptionLists } from "../option-lists/option-lists.ts";
 import { checkedOutcome, commandResult } from "../outcomes.ts";
@@ -460,49 +469,50 @@ export function createWorkItem(
   input: Required<CreateWorkItemRequest>,
   now: Date,
 ): Promise<CreateWorkItemResult> {
-  return refusedAsForbidden(() =>
-    withMember(db, memberId, async (trx): Promise<CreateWorkItemResult> => {
-      const onProject = await trx.selectFrom("project").select("id").where("id", "=", projectId).executeTakeFirst();
-      if (!onProject) return { ok: false, reason: "not_found" };
-      const form = await latestForm(trx, input.type);
-      if (!form) return { ok: false, reason: "type_not_found" };
-      // Only the Form Sections editable at the Draft take answers (form-engine.md §4).
-      const atDraft = formToFillAt(form, ...(await draftOf(trx, projectId, input.type)));
-      if (changedOutside(form.schema, new Set(atDraft.editableSections), {}, input.answers).length > 0) {
-        return { ok: false, reason: "not_editable" };
-      }
-      const checked = validateAnswers(form.schema, input.answers, "draft", {
-        scopes: await projectScopes(trx, projectId),
-        offered: await offeredFor(trx, form.schema, projectId, null),
-        optionLists: await optionListsFor(trx, form.schema),
-        linkable: await linkableIds(trx, form.schema, projectId, null, input.answers),
-      });
-      if (!checked.ok) return { ok: false, reason: "invalid_answers", errors: checked.errors };
-      // A link question's items are saved with their Links, by app.save_work_item_answers below.
-      const linkKeys = linkQuestionKeys(form.schema).filter((key) => key in checked.answers);
-      const stored = storedAnswers(Object.fromEntries(Object.entries(checked.answers).filter(([key]) => !linkKeys.includes(key))));
-      const { rows } = await sql<{ outcome: string; work_item_id: string | null }>`
-        select outcome, work_item_id from app.create_work_item(
-          ${projectId}::uuid, ${input.type}, ${input.title}, ${form.id}::uuid, ${stored.data}::jsonb,
-          ${stored.tradeId}::uuid, ${stored.locationId}::uuid, ${now}, ${stored.scopeIds}::uuid[])
-      `.execute(trx);
-      const outcome = checkedOutcome(rows[0]!.outcome, ["created", ...createWorkItemRefusals]);
-      const { work_item_id } = rows[0]!;
-      if (outcome !== "created") return { ok: false, reason: outcome };
-      if (linkKeys.length > 0) {
-        // In the same transaction. Its items were checked above, so anything but
-        // saved is unexpected: it throws, and nothing is created.
-        const all = storedAnswers(checked.answers);
-        const { rows: saved } = await sql<{ outcome: string }>`
-          select app.save_work_item_answers(
-            ${work_item_id}::uuid, ${all.data}::jsonb, ${all.tradeId}::uuid, ${all.locationId}::uuid, ${all.scopeIds}::uuid[], ${now}) as outcome
-        `.execute(trx);
-        checkedOutcome(saved[0]!.outcome, ["saved"]);
-      }
-      await recordFieldTimes(trx, work_item_id!, now);
-      return { ok: true, id: work_item_id! };
-    }),
-  );
+  return refusedAsForbidden(() => withMember(db, memberId, (trx) => createWorkItemIn(trx, projectId, input, now)));
+}
+
+/** createWorkItem, in a transaction already acting as the Member (Duplicate creates its Draft in its own). */
+async function createWorkItemIn(trx: Trx, projectId: string, input: Required<CreateWorkItemRequest>, now: Date): Promise<CreateWorkItemResult> {
+  const onProject = await trx.selectFrom("project").select("id").where("id", "=", projectId).executeTakeFirst();
+  if (!onProject) return { ok: false, reason: "not_found" };
+  const form = await latestForm(trx, input.type);
+  if (!form) return { ok: false, reason: "type_not_found" };
+  // Only the Form Sections editable at the Draft take answers (form-engine.md §4).
+  const atDraft = formToFillAt(form, ...(await draftOf(trx, projectId, input.type)));
+  if (changedOutside(form.schema, new Set(atDraft.editableSections), {}, input.answers).length > 0) {
+    return { ok: false, reason: "not_editable" };
+  }
+  const checked = validateAnswers(form.schema, input.answers, "draft", {
+    scopes: await projectScopes(trx, projectId),
+    offered: await offeredFor(trx, form.schema, projectId, null),
+    optionLists: await optionListsFor(trx, form.schema),
+    linkable: await linkableIds(trx, form.schema, projectId, null, input.answers),
+  });
+  if (!checked.ok) return { ok: false, reason: "invalid_answers", errors: checked.errors };
+  // A link question's items are saved with their Links, by app.save_work_item_answers below.
+  const linkKeys = linkQuestionKeys(form.schema).filter((key) => key in checked.answers);
+  const stored = storedAnswers(Object.fromEntries(Object.entries(checked.answers).filter(([key]) => !linkKeys.includes(key))));
+  const { rows } = await sql<{ outcome: string; work_item_id: string | null }>`
+    select outcome, work_item_id from app.create_work_item(
+      ${projectId}::uuid, ${input.type}, ${input.title}, ${form.id}::uuid, ${stored.data}::jsonb,
+      ${stored.tradeId}::uuid, ${stored.locationId}::uuid, ${now}, ${stored.scopeIds}::uuid[])
+  `.execute(trx);
+  const outcome = checkedOutcome(rows[0]!.outcome, ["created", ...createWorkItemRefusals]);
+  const { work_item_id } = rows[0]!;
+  if (outcome !== "created") return { ok: false, reason: outcome };
+  if (linkKeys.length > 0) {
+    // In the same transaction. Its items were checked above, so anything but
+    // saved is unexpected: it throws, and nothing is created.
+    const all = storedAnswers(checked.answers);
+    const { rows: saved } = await sql<{ outcome: string }>`
+      select app.save_work_item_answers(
+        ${work_item_id}::uuid, ${all.data}::jsonb, ${all.tradeId}::uuid, ${all.locationId}::uuid, ${all.scopeIds}::uuid[], ${now}) as outcome
+    `.execute(trx);
+    checkedOutcome(saved[0]!.outcome, ["saved"]);
+  }
+  await recordFieldTimes(trx, work_item_id!, now);
+  return { ok: true, id: work_item_id! };
 }
 
 /** `text` as a LIKE pattern that matches it anywhere, with its own %, _ and \ taken literally. */
@@ -562,6 +572,8 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
       can_create_revision: boolean;
       can_discard_revision: boolean;
       can_create_replacement: boolean;
+      can_duplicate: boolean;
+      can_discard_draft: boolean;
       workflow_name: BilingualText;
       workflow_version_no: number;
       open_comments: number;
@@ -576,7 +588,8 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
         pool.names as pool_names,
         app.can_save_answers(w.id) as can_save_answers, w.revision_no, app.revision_versions_changed(w.id) as versions_changed,
         app.can_create_revision(w.id) as can_create_revision, app.can_discard_revision(w.id) as can_discard_revision,
-        app.can_create_replacement(w.id) as can_create_replacement
+        app.can_create_replacement(w.id) as can_create_replacement,
+        ${canDuplicate(sql.ref("w"))} as can_duplicate, app.can_discard_draft(w.id) as can_discard_draft
       from work_item w
       cross join lateral app.step_as_seen(w.id) seen
       join workflow_step s on s.id = seen.step_id
@@ -595,21 +608,16 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
     const d = rows[0]!;
     const { schema } = await trx.selectFrom("form_version").select("schema").where("id", "=", d.form_version_id).executeTakeFirstOrThrow();
     const answers = answersFromDb(formSchema.parse(schema), d.data);
-    // work_item_scope shows only a visible item's; every Project Member reads the Project's Scopes.
-    const { rows: scopes } = await sql<{ id: string; parent_id: string | null; name: BilingualText }>`
-      select s.id, s.parent_id, s.name
-      from work_item_scope ws
-      join scope s on s.id = ws.scope_id
-      left join scope parent on parent.id = s.parent_id
-      where ws.work_item_id = ${workItemId}
-      order by coalesce(parent.sort, s.sort), coalesce(s.parent_id, s.id), s.depth, s.sort
-    `.execute(trx);
+    const scopes = await itemScopes(trx, workItemId);
     const { named, unnamed } = await namedAnswers(trx, workItemId);
     const stamps = await fieldStamps(trx, workItemId, false);
     const { rows: dropped } = await sql<{ field_key: string; label: BilingualText }>`
       select field_key, label from app.revision_dropped_fields(${workItemId}::uuid)
     `.execute(trx);
     const { rows: auto } = await sql<{ autosave: boolean }>`select app.answers_autosave(${workItemId}::uuid) as autosave`.execute(trx);
+    const { rows: source } = await sql<{ work_item_id: string; document_number: string | null; subject: string }>`
+      select work_item_id, document_number, subject from app.work_item_duplicated_from(${workItemId}::uuid)
+    `.execute(trx);
     return {
       ...toSummary(row, now),
       formVersionId: d.form_version_id,
@@ -622,7 +630,7 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
       namedAnswers: named,
       fieldTimes: fieldTimesFor(stamps, memberId),
       autosave: auto[0]!.autosave,
-      scopes: scopes.map((s) => ({ id: s.id, parentId: s.parent_id, name: s.name })),
+      scopes,
       step: { key: d.step_key, name: d.step_name },
       raisedBy: { companyName: d.raised_by },
       heldBy: d.held_by
@@ -637,6 +645,10 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
       // When the Draft was started is audit only, shown to nobody (visibility.md "Creation Date", scenario 61).
       creationDate: d.creation_date?.toISOString() ?? null,
       submissionDate: d.submitted_at?.toISOString() ?? null,
+      // The raiser's Participant only, and no time (visibility.md "Creation Date").
+      duplicatedFrom: source[0]
+        ? { workItemId: source[0].work_item_id, documentNumber: source[0].document_number, subject: source[0].subject }
+        : null,
       comments: { open: d.open_comments, closed: d.closed_comments },
       actions: {
         ...(await actions(trx, workItemId)),
@@ -644,9 +656,357 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
         createRevision: d.can_create_revision,
         createReplacement: d.can_create_replacement,
         discardRevision: d.can_discard_revision,
+        duplicate: d.can_duplicate,
+        discardDraft: d.can_discard_draft,
       },
     };
   });
+}
+
+/** A visible item's Scopes and Sub-scopes, each Scope before its Sub-scopes. */
+async function itemScopes(trx: Trx, workItemId: string): Promise<WorkItemDetail["scopes"]> {
+  // work_item_scope shows only a visible item's; every Project Member reads the Project's Scopes.
+  const { rows } = await sql<{ id: string; parent_id: string | null; name: BilingualText }>`
+    select s.id, s.parent_id, s.name
+    from work_item_scope ws
+    join scope s on s.id = ws.scope_id
+    left join scope parent on parent.id = s.parent_id
+    where ws.work_item_id = ${workItemId}
+    order by coalesce(parent.sort, s.sort), coalesce(s.parent_id, s.id), s.depth, s.sort
+  `.execute(trx);
+  return rows.map((s) => ({ id: s.id, parentId: s.parent_id, name: s.name }));
+}
+
+/** Whether item `w`'s Project is active (not closed). */
+const projectActive = (w: RawBuilder<unknown>) => sql<boolean>`exists (select 1 from project p where p.id = ${w}.project_id and p.status = 'active')`;
+
+/**
+ * Whether the acting Member may duplicate a visible item `w` (RP-409): a Member of the
+ * Participant that raised it, on an active Project. Creating the copy checks the rest.
+ */
+const canDuplicate = (w: RawBuilder<unknown>) => sql<boolean>`(
+  coalesce(${w}.raised_by_participant_id in (select app.current_participant_ids()), false) and ${projectActive(w)})`;
+
+/** Field types that hold Documents: a Duplicate copies those its own Participant uploaded. */
+const documentFieldTypes: readonly string[] = ["attachments", "photos", "checklist"];
+
+export type DuplicateResult = CreateWorkItemResult | { ok: false; reason: (typeof duplicateRefusals)[number] };
+
+/**
+ * Duplicate (RP-409, the List's row menu; visibility.md scenario RP-409-1): a new Draft of the
+ * item's Type, created in one transaction as any new item is (createWorkItemIn: the latest Form
+ * Version, the raiser's Draft Step, every check), with its Subject and only what the Member's own
+ * Participant wrote: the answers of the sections editable at the Draft, as the Member reads them
+ * (app.work_item_answers), whose last writer is of their own Participant (app.own_written_fields,
+ * the Built-in Fields and checklists too), and whose field the latest Form still has with the
+ * same type; and the Documents and photos their own Participant uploaded, of the Attachments
+ * System Field and of those file, photo and checklist fields (app.copy_duplicate_documents: new
+ * rows, uploaded now, whose files are copied here in the same transaction, so discarding either
+ * item never touches the other's files). Never another Company's writes or files, even in a
+ * section both may change, nor an Internal Note or the history: the new Draft keeps only which
+ * item it came from, with no time (app.record_duplicate). The same `idempotencyKey` again, or
+ * twice at once, answers with the same Draft while it stands; once it is discarded, a new one.
+ * Refused alike, `duplicate_not_allowed`, to anyone but a Member of the raiser's Participant; not
+ * found for an item they can't see.
+ */
+export async function duplicateWorkItem(
+  db: Db,
+  files: FileStore,
+  memberId: string,
+  workItemId: string,
+  idempotencyKey: string,
+  now: Date,
+  maxFileBytes: number = duplicateMaxFileBytes,
+): Promise<DuplicateResult> {
+  const madeFor = (trx: Trx) =>
+    sql<{ id: string | null }>`select app.duplicate_of_key(${idempotencyKey}::uuid) as id`.execute(trx).then((r) => r.rows[0]?.id ?? null);
+  try {
+    return await duplicateIn({ db, files, memberId, workItemId, idempotencyKey, now, maxFileBytes, madeFor });
+  } catch (error) {
+    // Nothing was created, and no file copied: its files come to more than a Duplicate copies.
+    if (error instanceof FilesTooLarge) return { ok: false, reason: "duplicate_files_too_large" };
+    if (!isDuplicateRequest(error)) throw error;
+    // The same request, at the same time, made its Draft first: answer with that one.
+    const id = await withMember(db, memberId, madeFor);
+    if (id === null) throw error;
+    return { ok: true, id };
+  }
+}
+
+/** The unique index that allows one live Draft per Duplicate request was hit. */
+const isDuplicateRequest = (error: unknown) =>
+  typeof error === "object" &&
+  error !== null &&
+  (error as { code?: unknown }).code === "23505" &&
+  (error as { constraint?: unknown }).constraint === "work_item_duplicate_key";
+
+/** Thrown inside the Duplicate's transaction, so its rows roll back, before any file is copied. */
+class FilesTooLarge extends Error {}
+
+function duplicateIn({
+  db,
+  files,
+  memberId,
+  workItemId,
+  idempotencyKey,
+  now,
+  maxFileBytes,
+  madeFor,
+}: {
+  db: Db;
+  files: FileStore;
+  memberId: string;
+  workItemId: string;
+  idempotencyKey: string;
+  now: Date;
+  maxFileBytes: number;
+  /** The Draft this request already made, if any (app.duplicate_of_key). */
+  madeFor: (trx: Trx) => Promise<string | null>;
+}): Promise<DuplicateResult> {
+  return refusedAsForbidden(() =>
+    withFileCopies(files, (copy) => withMember(db, memberId, async (trx): Promise<DuplicateResult> => {
+      const done = await madeFor(trx);
+      if (done !== null) return { ok: true, id: done };
+      const { rows } = await sql<{
+        project_id: string;
+        type_code: string;
+        title: string;
+        data: Record<string, unknown>;
+        schema: unknown;
+        can_duplicate: boolean;
+        project_active: boolean;
+      }>`
+        select w.project_id, t.code as type_code, w.title, app.work_item_answers(w.id) as data, fv.schema,
+          ${canDuplicate(sql.ref("w"))} as can_duplicate,
+          ${projectActive(sql.ref("w"))} as project_active
+        from work_item w
+        join work_item_type t on t.id = w.work_item_type_id
+        join form_version fv on fv.id = w.form_version_id
+        where w.id = ${workItemId} and app.sees_work_item(w.id)
+      `.execute(trx);
+      const item = rows[0];
+      if (!item) return { ok: false, reason: "not_found" };
+      if (!item.project_active) return { ok: false, reason: "project_closed" };
+      if (!item.can_duplicate) return { ok: false, reason: "duplicate_not_allowed" };
+      const pinned = formSchema.parse(item.schema);
+      const answers = answersFromDb(pinned, item.data);
+      const latest = await latestForm(trx, item.type_code);
+      if (!latest) return { ok: false, reason: "duplicate_not_allowed" };
+      const { rows: own } = await sql<{ key: string }>`select app.own_written_fields(${workItemId}::uuid) as key`.execute(trx);
+      const ownWritten = new Set(own.map((r) => r.key));
+      const atDraft = formToFillAt(latest, ...(await draftOf(trx, item.project_id, item.type_code)));
+      const editable = new Set(atDraft.editableSections);
+      const wasType = new Map(answerFields(pinned).map((f) => [f.key, f.type]));
+      const atDraftFields = latest.schema.sections
+        .filter((s) => editable.has(s.key))
+        .flatMap((s) => s.fields)
+        .filter((f) => isAnswerField(f) && wasType.get(f.key) === f.type);
+      // A file or photo field has no answer, only Documents; a checklist both.
+      const kept = atDraftFields.filter((f) => answers[f.key] !== undefined && ownWritten.has(f.key));
+      const fileKeys = atDraftFields.filter((f) => documentFieldTypes.includes(f.type)).map((f) => f.key);
+      const created = await createWorkItemIn(
+        trx,
+        item.project_id,
+        { type: item.type_code, title: item.title, answers: Object.fromEntries(kept.map((f) => [f.key, answers[f.key]])) },
+        now,
+      );
+      if (!created.ok) return created;
+      const { rows: recorded } = await sql<{ outcome: string }>`
+        select app.record_duplicate(${created.id}::uuid, ${workItemId}::uuid, ${idempotencyKey}::uuid) as outcome
+      `.execute(trx);
+      // The Member made the Draft and sees both: anything else is a bug, and nothing is created.
+      checkedOutcome(recorded[0]!.outcome, ["recorded"]);
+      const { rows: copies } = await sql<{ storage_key: string; source_storage_key: string; size_bytes: string }>`
+        select storage_key, source_storage_key, size_bytes
+        from app.copy_duplicate_documents(${created.id}::uuid, ${workItemId}::uuid, ${fileKeys}::text[], ${now})
+      `.execute(trx);
+      if (copies.reduce((sum, c) => sum + Number(c.size_bytes), 0) > maxFileBytes) throw new FilesTooLarge();
+      // If a file can't be copied, or the transaction then fails, the copies made are deleted and nothing is created.
+      await copy(copies);
+      return created;
+    })),
+  );
+}
+
+/** Delete (RP-409, the List's row menu): discards the Member's own Draft (app.discard_draft). */
+export function discardDraft(db: Db, memberId: string, workItemId: string, now: Date) {
+  return withMember(db, memberId, async (trx) => {
+    const { rows } = await sql<{ outcome: string }>`select app.discard_draft(${workItemId}::uuid, ${now}) as outcome`.execute(trx);
+    return commandResult(rows[0]!.outcome, "discarded", discardDraftRefusals);
+  });
+}
+
+/**
+ * Download (RP-409, owner decision B; visibility.md scenario RP-409-2): a Submitted item as it was
+ * last shared, the same for every viewer who sees it, the holder's and the raiser's own Companies
+ * included. Its Stage as every Company but the holder reads it (app.work_item_shared_stage), its
+ * outcome, its answers as they last arrived (app.work_item_shared_answers, never in-progress ones),
+ * the Built-in Fields from those answers, a `participant` answer by its Company, no person, its
+ * Documents and Links as of the last arrival (never one added since; uploaders by Company only,
+ * linked items by number and Subject only), and the shared events of its history by Company only,
+ * with no Step. No Linked from: it differs between viewers. Null when the Member can't see it, or
+ * before its first Submit.
+ */
+export function getSharedWorkItem(db: Db, memberId: string, workItemId: string, now: Date): Promise<SharedWorkItem | null> {
+  return withMember(db, memberId, async (trx) => {
+    const [row] = await visibleItems(trx, sql`w.id = ${workItemId}`);
+    if (!row) return null;
+    const { rows } = await sql<{
+      project_id: string;
+      form_version_id: string;
+      revision_no: number;
+      outcome: string | null;
+      outcome_name: BilingualText | null;
+      raised_by: BilingualText;
+      submitted_at: Date | null;
+      closed_at: Date | null;
+      answers: Record<string, unknown> | null;
+      schema: unknown;
+      stage_key: string | null;
+      stage_name: BilingualText | null;
+      stage_category: WorkItemSummary["stage"]["category"] | null;
+    }>`
+      select w.project_id, w.form_version_id, w.revision_no, w.outcome, oc.name as outcome_name, raiser.legal_name as raised_by,
+        w.submitted_at, w.closed_at, app.work_item_shared_answers(w.id) as answers, fv.schema,
+        st.key as stage_key, st.name as stage_name, st.category as stage_category
+      from work_item w
+      join form_version fv on fv.id = w.form_version_id
+      join work_item_type t on t.id = w.work_item_type_id
+      join app.work_item_companies(w.id) raiser on raiser.participant_id = w.raised_by_participant_id
+      left join stage st on st.project_id = w.project_id and st.module_key = t.module_key and st.key = app.work_item_shared_stage(w.id)
+      left join outcome oc on oc.project_id = w.project_id and oc.work_item_type_id = w.work_item_type_id and oc.code = w.outcome
+      where w.id = ${workItemId}
+    `.execute(trx);
+    const d = rows[0];
+    if (!d || d.submitted_at === null || d.answers === null || d.stage_key === null) return null;
+    const { rows: named } = await sql<{ field_key: string; company_name: BilingualText }>`
+      select field_key, company_name from app.work_item_shared_named_answers(${workItemId}::uuid)
+    `.execute(trx);
+    const { rows: events } = await sql<{
+      created_at: Date;
+      audience: string;
+      company_name: BilingualText | null;
+      transition_label: BilingualText | null;
+      outcome: string | null;
+      remarks: string | null;
+      document_number: string | null;
+    }>`select created_at, audience, company_name, transition_label, outcome, remarks, document_number from app.work_item_history(${workItemId}::uuid)`.execute(
+      trx,
+    );
+    const summary = toSummary(row, now);
+    const schema = formSchema.parse(d.schema);
+    // No `member` answer (the database leaves them out): the shared item names nobody, whoever reads it.
+    const answers = answersFromDb(schema, d.answers);
+    const builtIn = await sharedBuiltIns(trx, d.project_id, answers);
+    if (!builtIn) return null;
+    return {
+      id: summary.id,
+      projectId: summary.projectId,
+      formVersionId: d.form_version_id,
+      title: summary.title,
+      documentNumber: summary.documentNumber,
+      revisionNo: d.revision_no,
+      type: summary.type,
+      stage: { key: d.stage_key, name: d.stage_name!, category: d.stage_category! },
+      outcome: d.outcome,
+      outcomeName: d.outcome_name,
+      ...builtIn,
+      raisedBy: { companyName: d.raised_by },
+      submissionDate: d.submitted_at.toISOString(),
+      closedAt: d.closed_at?.toISOString() ?? null,
+      answers,
+      // A Company by its name; nobody's name, whoever reads it.
+      namedAnswers: Object.fromEntries(named.map((n) => [n.field_key, { companyName: n.company_name, memberName: null }])),
+      documents: await sharedDocuments(trx, workItemId),
+      links: await sharedLinks(trx, workItemId),
+      history: events
+        .filter((e) => e.audience === "shared")
+        .map((e) => ({
+          at: e.created_at.toISOString(),
+          transition: e.transition_label,
+          companyName: e.company_name,
+          outcome: e.outcome,
+          remarks: e.remarks,
+          documentNumber: e.document_number,
+        })),
+    };
+  });
+}
+
+/** The Built-in Fields as the shared answers hold them (`trade`, `location` and `scopes` ids), by name. */
+async function sharedBuiltIns(
+  trx: Trx,
+  projectId: string,
+  answers: Record<string, unknown>,
+): Promise<Pick<SharedWorkItem, "trade" | "location" | "scopes"> | null> {
+  const idOf = (key: string) => (typeof answers[key] === "string" ? (answers[key] as string) : null);
+  const scopeIds = Array.isArray(answers.scopes) ? answers.scopes.filter((s): s is string => typeof s === "string") : [];
+  const value = async (valueId: string | null) => {
+    if (valueId === null) return null;
+    const { rows } = await sql<{ id: string; code: string; name: BilingualText }>`
+      select v.id, v.code, v.name from dimension_value v
+      join visibility_dimension d on d.id = v.dimension_id and d.project_id = ${projectId}
+      where v.id = ${valueId}::uuid
+    `.execute(trx);
+    return rows[0] ?? null;
+  };
+  const trade = await value(idOf("trade"));
+  if (!trade) return null;
+  const { rows: scopes } = await sql<{ id: string; parent_id: string | null; name: BilingualText }>`
+    select s.id, s.parent_id, s.name
+    from scope s
+    left join scope parent on parent.id = s.parent_id
+    where s.project_id = ${projectId} and s.id = any(${scopeIds}::uuid[])
+    order by coalesce(parent.sort, s.sort), coalesce(s.parent_id, s.id), s.depth, s.sort
+  `.execute(trx);
+  return { trade, location: await value(idOf("location")), scopes: scopes.map((s) => ({ id: s.id, parentId: s.parent_id, name: s.name })) };
+}
+
+/** A Submitted item's Documents as of its last arrival (app.work_item_shared_documents), each uploader by Company only. */
+async function sharedDocuments(trx: Trx, workItemId: string): Promise<SharedWorkItem["documents"]> {
+  const { rows } = await sql<{
+    id: string;
+    file_name: string;
+    size_bytes: string;
+    content_type: string;
+    uploaded_at: Date;
+    company_name: BilingualText;
+    frozen: boolean;
+    field_key: string | null;
+    item_key: string | null;
+    taken_at: Date | null;
+    taken_latitude: number | null;
+    taken_longitude: number | null;
+  }>`
+    select d.id, d.file_name, d.size_bytes, d.content_type, t.uploaded_at, co.legal_name as company_name,
+      d.frozen_at is not null as frozen, d.field_key, d.item_key, d.taken_at, d.taken_latitude, d.taken_longitude
+    from document d
+    join app.document_times(${workItemId}::uuid) t on t.document_id = d.id
+    join app.work_item_companies(d.work_item_id) co on co.participant_id = d.uploaded_by_participant_id
+    where d.work_item_id = ${workItemId} and d.id in (select app.work_item_shared_documents(${workItemId}::uuid))
+    order by t.uploaded_at, d.file_name, d.id
+  `.execute(trx);
+  return rows.map((r) => ({
+    id: r.id,
+    fileName: r.file_name,
+    sizeBytes: Number(r.size_bytes),
+    contentType: r.content_type,
+    uploadedAt: r.uploaded_at.toISOString(),
+    uploadedBy: { companyName: r.company_name, memberName: null },
+    frozen: r.frozen,
+    fieldKey: r.field_key,
+    itemKey: r.item_key,
+    takenAt: r.taken_at?.toISOString() ?? null,
+    takenWhere: r.taken_latitude !== null && r.taken_longitude !== null ? { latitude: r.taken_latitude, longitude: r.taken_longitude } : null,
+  }));
+}
+
+/** A Submitted item's Links as of its last arrival (app.work_item_shared_links). */
+async function sharedLinks(trx: Trx, workItemId: string): Promise<SharedWorkItem["links"]> {
+  const { rows } = await sql<{ id: string; kind: LinkKind; field_key: string | null; document_number: string; subject: string }>`
+    select id, kind, field_key, document_number, subject from app.work_item_shared_links(${workItemId}::uuid)
+  `.execute(trx);
+  return rows.map((r) => ({ id: r.id, kind: r.kind, fieldKey: r.field_key, documentNumber: r.document_number, subject: r.subject }));
 }
 
 /** An item's per-field times as the acting Member who may save it reads them; locks the item when `lock`. */
@@ -722,7 +1082,7 @@ async function actionRows(trx: Trx, workItemId: string, transitionKey?: string):
 }
 
 /** What the acting Member may press on a visible item now. */
-async function actions(trx: Trx, workItemId: string): Promise<Omit<WorkItemActions, "saveAnswers" | "createRevision" | "createReplacement" | "discardRevision">> {
+async function actions(trx: Trx, workItemId: string): Promise<Omit<WorkItemActions, "saveAnswers" | "createRevision" | "createReplacement" | "discardRevision" | "duplicate" | "discardDraft">> {
   const rows = await actionRows(trx, workItemId);
   const transitions = rows.filter((r) => r.action === "transition");
   const offered = await Promise.all(transitions.map((r) => (r.offers_assign_to ? assignees(trx, workItemId, r.transition_key!) : [])));

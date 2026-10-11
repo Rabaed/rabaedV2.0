@@ -11,6 +11,7 @@ import {
   outcomeActions,
   outcomeCode,
   outcomeLabel,
+  outcomeLook,
   outcomeSchema,
   type Outcome,
 } from "./outcome.ts";
@@ -120,5 +121,19 @@ describe("outcomeLabel", () => {
     expect(outcomeLabel(a!, "en")).toBe("Approved (A)");
     expect(outcomeLabel(a!, "ar")).toBe("معتمد (A)");
     expect(outcomeLabel(defaultOutcomeSets.inspection_result[0]!, "en")).toBe("Passed");
+  });
+});
+
+describe("outcomeLook (RP-410): how a card shows its outcome, from its place in its Type's set", () => {
+  const set = defaultOutcomeSets.review_code;
+  const look = (code: string, of: readonly Outcome[] = set) => outcomeLook(of.find((o) => o.code === code)!, of);
+
+  it("gives the Review Codes their own looks: A the clean approval, B approved with more to do, C a Revision, D rejected", () => {
+    expect(["A", "B", "C", "D"].map((c) => look(c))).toEqual(["a", "b", "c", "d"]);
+  });
+
+  it("makes only the set's first positive outcome with no follow-up the clean one", () => {
+    const inspection = defaultOutcomeSets.inspection_result;
+    expect(["passed", "passed_with_comments", "failed"].map((c) => look(c, inspection))).toEqual(["a", "b", "d"]);
   });
 });

@@ -256,4 +256,25 @@ describe("a Transition shows a Screen, pinned by the Workflow Version", () => {
     });
     expect(own.find((e) => e.type === "internal_note")?.internalNote).toBe("Recommended A after the plant visit.");
   });
+
+  it("leaves a reply's internal answers out of the Download, the same for everyone, the Consultant included (RP-409-2, RP-516-1)", async () => {
+    const id = await atApproval("Downloaded");
+    await take(at.k1Manager, id, "approve_a", {
+      answers: { remarks: "Fits the approved sample.", verification_note: "Batch 9 checked on site.", checks: { sample: { answer: "yes" } } },
+      internalNote: "Recommended A after the site visit.",
+    });
+    const shared = [];
+    for (const reader of [at.c1Pm, at.c1Engineer, at.k1Manager]) {
+      const res = await ok(reader.get(`/v1/work-items/${id}/shared`), 200);
+      const text = res.body;
+      expect(text).not.toContain("Batch 9");
+      expect(text).not.toContain("site visit");
+      expect(text).not.toContain("internal_answers");
+      shared.push(res.json());
+    }
+    // One shared item, whoever downloads it, with the reply's shared Remarks.
+    expect(JSON.stringify(shared[0])).toContain("Fits the approved sample.");
+    expect(shared[1]).toEqual(shared[0]);
+    expect(shared[2]).toEqual(shared[0]);
+  });
 });

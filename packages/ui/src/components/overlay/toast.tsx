@@ -19,7 +19,7 @@ const ToastContext = createContext<ShowToast | null>(null);
 let nextToastId = 0;
 
 const icons: Record<ToastTone, IconName> = { info: "info-circle", success: "circle-check", danger: "alert-circle" };
-const iconColour: Record<ToastTone, string> = { info: "text-muted", success: "text-success", danger: "text-danger" };
+const iconColour: Record<ToastTone, string> = { info: "text-muted", success: "text-success", danger: "text-danger-fg" };
 
 export type ToastProviderProps = {
   /** Names the notifications region for screen readers, e.g. "Notifications" / "الإشعارات". */

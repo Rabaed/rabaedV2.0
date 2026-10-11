@@ -81,4 +81,10 @@ describe("participantSegment", () => {
     expect(participantSegment({ code: null, ordinal: 2 })).toBe("02");
     expect(participantSegment({ code: null, ordinal: 123 })).toBe("123");
   });
+
+  // visibility.md RP-381-1: a Member who isn't a Project Admin never gets an order on the Project.
+  it("is a placeholder, never an order, for a Participant without a code whose order the reader may not know", () => {
+    expect(participantSegment({ code: null, ordinal: null })).toBe("XX");
+    expect(participantSegment({ code: "CCM", ordinal: null })).toBe("CCM");
+  });
 });

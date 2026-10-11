@@ -13,6 +13,8 @@ export type ModalContentProps = Omit<ComponentProps<typeof DialogPrimitive.Conte
   description?: ReactNode;
   /** The close button's accessible name, e.g. "Close" / "إغلاق". */
   closeLabel: string;
+  /** Classes for the close button, e.g. its colours on a dark panel (the phone's navigation). */
+  closeClassName?: string;
 };
 
 /**
@@ -24,13 +26,14 @@ export function ModalContent({
   title,
   description,
   closeLabel,
+  closeClassName,
   className,
   children,
   ...props
 }: ModalContentProps) {
   return (
     <DialogPrimitive.Portal>
-      <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-inverse/40" />
+      <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-overlay" />
       <DialogPrimitive.Content
         // Without a description, don't point aria-describedby at nothing.
         {...(description ? {} : { "aria-describedby": undefined })}
@@ -43,7 +46,7 @@ export function ModalContent({
             {description && <DialogPrimitive.Description className="text-body text-muted">{description}</DialogPrimitive.Description>}
           </div>
           <DialogPrimitive.Close asChild>
-            <IconButton label={closeLabel} size="sm" className="-me-2 -mt-1">
+            <IconButton label={closeLabel} size="sm" className={cn("-me-2 -mt-1", closeClassName)}>
               <Icon name="x" />
             </IconButton>
           </DialogPrimitive.Close>

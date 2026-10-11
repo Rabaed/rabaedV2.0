@@ -97,7 +97,7 @@ export function HandoverDialog({ open, onOpenChange, steps, locale, labels, onCo
           ))}
         </ul>
         {error && (
-          <p role="alert" className="text-sm text-danger">
+          <p role="alert" className="text-sm text-danger-fg">
             {error}
           </p>
         )}

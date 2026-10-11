@@ -1,5 +1,6 @@
 import {
   CopyObjectCommand,
+  DeleteObjectCommand,
   CreateBucketCommand,
   HeadBucketCommand,
   HeadObjectCommand,
@@ -37,6 +38,8 @@ export interface FileStore {
   read(key: string): Promise<Uint8Array | null>;
   /** Stores a copy of the file under `fromKey` as `toKey` (a Revision's copied Documents; both under the same Project). */
   copy(fromKey: string, toKey: string): Promise<void>;
+  /** Deletes the file stored under `key`, if any (a copy whose item was never created). */
+  remove(key: string): Promise<void>;
 }
 
 export interface FileStoreSettings {
@@ -151,6 +154,10 @@ export function createFileStore(settings: FileStoreSettings): FileStore {
     async copy(fromKey, toKey) {
       await s3.send(new CopyObjectCommand({ Bucket: settings.bucket, Key: toKey, CopySource: `${settings.bucket}/${encodeURIComponent(fromKey).replace(/%2F/g, "/")}` }));
     },
+
+    async remove(key) {
+      await s3.send(new DeleteObjectCommand({ Bucket: settings.bucket, Key: key }));
+    },
   };
 }
 
@@ -184,4 +191,5 @@ export const noFileStore: FileStore = {
   stat: () => Promise.reject(new Error("No file store configured")),
   read: () => Promise.reject(new Error("No file store configured")),
   copy: () => Promise.reject(new Error("No file store configured")),
+  remove: () => Promise.reject(new Error("No file store configured")),
 };

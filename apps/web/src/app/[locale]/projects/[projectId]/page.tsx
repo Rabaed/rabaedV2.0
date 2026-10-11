@@ -100,7 +100,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ locale
                     )}
                   </span>
                   {p.isOwnCompany && (
-                    <Link href={`/participants/${p.id}`} className="text-sm text-primary underline underline-offset-4">
+                    <Link href={`/participants/${p.id}`} className="text-sm text-brand-fg underline underline-offset-4">
                       {t("projectMembers")}
                     </Link>
                   )}
@@ -111,7 +111,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ locale
         )}
         {/* Participant Codes are set in one place, Project Settings → Numbering (RP-381). */}
         {project.isProjectAdmin && (
-          <Link href={`/projects/${project.id}/settings/numbering`} className="text-sm text-primary underline underline-offset-4">
+          <Link href={`/projects/${project.id}/settings/numbering`} className="text-sm text-brand-fg underline underline-offset-4">
             {t("setParticipantCodes")}
           </Link>
         )}
