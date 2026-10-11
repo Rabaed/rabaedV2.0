@@ -32,6 +32,7 @@ export * from "./work-item-workflow.ts";
 export * from "./workflow-checks.ts";
 export * from "./transition-rules.ts";
 export * from "./workflow-authoring.ts";
+export * from "./workflow-settings.ts";
 export * from "./workflow-edit.ts";
 export * from "./workflow-rules-edit.ts";
 export * from "./numbering.ts";

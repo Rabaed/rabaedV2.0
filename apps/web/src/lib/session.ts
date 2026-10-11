@@ -40,6 +40,12 @@ import type {
   WorkItemQuery,
   OptionList,
   TypeOutcomes,
+  ProjectStages,
+  ScreenList,
+  ScreenPins,
+  ScreenRead,
+  WorkflowSettings,
+  WorkflowVersionRead,
 } from "@rabaed/domain";
 import { activityFeedSearchParams, workItemSearchParams } from "@rabaed/domain";
 import { cookies } from "next/headers";
@@ -271,6 +277,36 @@ export function getWorkItemWorkflow(workItemId: string): Promise<WorkItemWorkflo
 /** What the Workflow builder edits with (RP-439), for the Workflow's authors; null for anyone else. */
 export function getWorkflowBuilder(workflowId: string): Promise<WorkflowBuilderRead | null> {
   return apiGet<WorkflowBuilderRead>(`/v1/workflows/${encodeURIComponent(workflowId)}/builder`);
+}
+
+/** Which Workflow each Work Item Type of a Project runs, with the exceptions the Member may read (RP-441); null when they aren't on it. */
+export function getWorkflowSettings(projectId: string): Promise<WorkflowSettings | null> {
+  return apiGet<WorkflowSettings>(`/v1/projects/${encodeURIComponent(projectId)}/workflow-settings`);
+}
+
+/** A published Version of a Workflow, whole, for its read-only map (RP-441); null when the Member can't read it. */
+export function getWorkflowVersion(workflowId: string, versionNo: number): Promise<WorkflowVersionRead | null> {
+  return apiGet<WorkflowVersionRead>(`/v1/workflows/${encodeURIComponent(workflowId)}/versions/${versionNo}`);
+}
+
+/** The Screens a Project's Workflows may show: its own and the Rabaed Defaults (RP-441); null when the Member isn't on it. */
+export function getProjectScreens(projectId: string): Promise<ScreenList | null> {
+  return apiGet<ScreenList>(`/v1/projects/${encodeURIComponent(projectId)}/screens`);
+}
+
+/** A Screen, its draft for its authors only (RP-441); null when the Member can't read it. */
+export function getScreen(screenId: string): Promise<ScreenRead | null> {
+  return apiGet<ScreenRead>(`/v1/screens/${encodeURIComponent(screenId)}`);
+}
+
+/** Which Workflow Versions pin which Screen Version on a Project (RP-441); null when the Member isn't on it. */
+export function getScreenPins(projectId: string): Promise<ScreenPins | null> {
+  return apiGet<ScreenPins>(`/v1/projects/${encodeURIComponent(projectId)}/screen-pins`);
+}
+
+/** A Project's Stages of one Module (RP-428); null when the Member isn't on it. */
+export function getProjectStages(projectId: string, moduleKey: ModuleKey): Promise<ProjectStages | null> {
+  return apiGet<ProjectStages>(`/v1/projects/${encodeURIComponent(projectId)}/modules/${moduleKey}/stages`);
 }
 
 /** The signed-in Member's notification settings and Project mutes; null if signed out. */

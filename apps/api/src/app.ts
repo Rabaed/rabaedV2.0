@@ -35,6 +35,7 @@ import { visibilityRoutes } from "./routes/visibility.ts";
 import { watchRoutes } from "./routes/watch.ts";
 import { workItemRoutes } from "./routes/work-items.ts";
 import { workflowRoutes } from "./routes/workflows.ts";
+import { workflowSettingsRoutes } from "./routes/workflow-settings.ts";
 
 export const SESSION_COOKIE = "rabaed_session";
 
@@ -136,6 +137,7 @@ export async function buildApp({
   await app.register(scopeRoutes(context));
   await app.register(workItemRoutes(context));
   await app.register(workflowRoutes(context));
+  await app.register(workflowSettingsRoutes(context));
   await app.register(documentRoutes(context));
   await app.register(notificationRoutes(context));
   await app.register(notificationSettingsRoutes(context));

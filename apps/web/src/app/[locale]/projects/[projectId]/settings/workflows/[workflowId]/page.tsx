@@ -54,7 +54,7 @@ export default async function WorkflowBuilderPage({ params }: { params: Promise<
     // unlike `w-screen` (100vw) it never makes the page scroll sideways.
     <div className="h-[calc(100dvh-11rem)] min-h-[640px]">
       <div className="absolute inset-x-0 h-[calc(100dvh-11rem)] min-h-[640px]">
-        <WorkflowBuilderEditor read={read} locale={locale} backHref={`/${locale}/projects/${projectId}/settings`} names={names} />
+        <WorkflowBuilderEditor read={read} locale={locale} backHref={`/${locale}/projects/${projectId}/settings/workflows`} names={names} />
       </div>
     </div>
   );

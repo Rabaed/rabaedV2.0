@@ -6,7 +6,9 @@ import { Link, usePathname, useRouter } from "@/i18n/navigation";
 
 /**
  * The left navigation of the Project Settings pages (RP-412): Document
- * Numbering, Trades & Locations, and for a Project Admin Visibility. The
+ * Numbering, Workflows, Screens, Stages and Outcomes (RP-441: every Member reads
+ * them, only Project Admins change them), Trades & Locations, and for a Project
+ * Admin Visibility. The
  * Authorized Person also reaches their Company's Members' Visibility, which
  * is the Participant's own page. The current page comes from the address.
  */
@@ -27,6 +29,10 @@ export function ProjectSettingsNav({
 
   const items: SettingsNavItem[] = [
     { key: "numbering", label: t("numbering"), icon: "list", href: `${base}/numbering` },
+    { key: "workflows", label: t("workflows"), icon: "refresh", href: `${base}/workflows` },
+    { key: "screens", label: t("screens"), icon: "template", href: `${base}/screens` },
+    { key: "stages", label: t("stages"), icon: "flag", href: `${base}/stages` },
+    { key: "outcomes", label: t("outcomes"), icon: "circle-check", href: `${base}/outcomes` },
     { key: "trades-locations", label: t("tradesLocations"), icon: "map-pin", href: `${base}/trades-locations` },
     ...(isProjectAdmin ? [{ key: "visibility", label: t("visibility"), icon: "eye", href: `${base}/visibility` } satisfies SettingsNavItem] : []),
     ...(ownParticipantId
