@@ -37,17 +37,18 @@ export default async function ScreenPage({ params }: { params: Promise<Params> }
     kinds: Object.fromEntries(fieldKinds.map((kind) => [kind, tr(`kinds.${kind}`)])) as Record<(typeof fieldKinds)[number], string>,
   });
 
-  // The Types whose outcome turns the "items to create" table's rows into items (WF-11).
-  const hasItemsTable = JSON.stringify(screen.draft?.schema ?? screen.published?.schema ?? {}).includes("items_to_create");
-  const itemsTargets = hasItemsTable
-    ? [
-        ...new Set(
-          (await Promise.all((settings?.types ?? []).map((type) => getTypeOutcomes(projectId, type.code)))).flatMap((o) =>
-            (o?.outcomes ?? []).flatMap((outcome) => itemsToCreate(outcome) ?? []),
-          ),
-        ),
-      ]
-    : [];
+  // The outcomes of the Project's Types that turn the "items to create" table's rows into items (WF-11), whose target Type the editor picks.
+  const types = settings?.types ?? [];
+  const itemsOutcomes = (
+    await Promise.all(
+      types.map(async (type) =>
+        ((await getTypeOutcomes(projectId, type.code))?.outcomes ?? [])
+          .filter((outcome) => itemsToCreate(outcome) !== null)
+          .map((outcome) => ({ typeCode: type.code, typeName: type.name[locale], outcome })),
+      ),
+    )
+  ).flat();
+  const typeChoices = types.map((type) => ({ code: type.code, name: type.name[locale] }));
 
   return (
     <>
@@ -66,7 +67,8 @@ export default async function ScreenPage({ params }: { params: Promise<Params> }
         screen={screen}
         pins={(pins?.pins ?? []).filter((p) => p.screenId === screenId)}
         words={{ en: wordsOf(en), ar: wordsOf(ar) }}
-        itemsTargets={itemsTargets}
+        itemsOutcomes={itemsOutcomes}
+        typeChoices={typeChoices}
       />
     </>
   );

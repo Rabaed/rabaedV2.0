@@ -2,17 +2,20 @@
 
 import {
   formatNumber,
+  itemsToCreate,
+  itemsToCreateKey,
   type BilingualText,
   type FormField,
   type FormSchema,
   type Locale,
+  type Outcome,
   type ScreenPins,
   type ScreenProblem,
   type ScreenRead,
 } from "@rabaed/domain";
 import { Badge, Button, Field, Icon, IconButton, Input, Popover, PopoverContent, PopoverTrigger, SegmentedControl, SettingsSection, Switch, Select } from "@rabaed/ui";
 import { useLocale, useTranslations } from "next-intl";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Link, useRouter } from "@/i18n/navigation";
 import { addField, changeField, fieldKinds, hasNamed, moveField, newField, removeField, startingSchema, withInternal, type FieldKind } from "@/lib/screen-editor";
 import { refusalMessage, setupCall } from "@/lib/setup-call";
@@ -23,9 +26,14 @@ type Props = {
   pins: ScreenPins["pins"];
   /** The words a new field starts with, in each language whichever the author reads: a field is labelled in both. */
   words: Record<"en" | "ar", { section: string; field: string; option: string; column: string; kinds: Record<FieldKind, string> }>;
-  /** Types whose outcome turns the "items to create" table's rows into items, by code, for the note on that field. */
-  itemsTargets: string[];
+  /** The outcomes of the Project's Types that turn the "items to create" table's rows into items, each with the Type it creates. */
+  itemsOutcomes: ItemsOutcome[];
+  /** The Work Item Types the rows may become, by code and name in the viewer's language. */
+  typeChoices: { code: string; name: string }[];
 };
+
+/** An outcome of Type `typeCode`'s set on the Project whose follow-up action creates items from the table's rows. */
+export type ItemsOutcome = { typeCode: string; typeName: string; outcome: Outcome };
 
 const fieldTypeLabelKey: Record<string, string> = {
   text: "text",
@@ -46,7 +54,7 @@ const fieldTypeLabelKey: Record<string, string> = {
  * it the Version Workflow Versions pin from then on. Anyone else on the Project reads the
  * published Version (V20). The server's checks decide what may be published.
  */
-export function ScreenEditor({ projectId, screen, pins, words, itemsTargets }: Props) {
+export function ScreenEditor({ projectId, screen, pins, words, itemsOutcomes, typeChoices }: Props) {
   const t = useTranslations("projectSettings.screens");
   const locale = useLocale() as Locale;
   const router = useRouter();
@@ -185,7 +193,7 @@ export function ScreenEditor({ projectId, screen, pins, words, itemsTargets }: P
                     last={index === section.fields.length - 1}
                     editable={editable}
                     internal={internal.includes(field.key)}
-                    itemsTargets={itemsTargets}
+                    itemsTarget={<ItemsTargetPicker projectId={projectId} editable={editable} itemsOutcomes={itemsOutcomes} typeChoices={typeChoices} t={t} />}
                     onChange={(change) => edit(changeField(schema, field.key, change))}
                     onInternal={(isInternal) => edit(schema, withInternal(schema, internal, field.key, isInternal))}
                     onMove={(delta) => edit(moveField(schema, field.key, delta))}
@@ -248,7 +256,7 @@ function FieldCard({
   last,
   editable,
   internal,
-  itemsTargets,
+  itemsTarget,
   onChange,
   onInternal,
   onMove,
@@ -261,7 +269,8 @@ function FieldCard({
   last: boolean;
   editable: boolean;
   internal: boolean;
-  itemsTargets: string[];
+  /** What the "items to create" table shows under it: the Type its rows become. */
+  itemsTarget: ReactNode;
   onChange: (change: (field: FormField) => FormField) => void;
   onInternal: (internal: boolean) => void;
   onMove: (delta: -1 | 1) => void;
@@ -341,13 +350,71 @@ function FieldCard({
       </div>
       {field.type === "select" && <OptionsEditor field={field} editable={editable} onChange={onChange} t={t} locale={locale} />}
       {field.type === "checklist" && <ChecklistEditor field={field} editable={editable} onChange={onChange} t={t} />}
-      {field.type === "table" && field.key === "items_to_create" && (
-        <p className="flex items-start gap-1.5 text-sm text-muted">
-          <Icon name="info-circle" size={15} className="mt-0.5 shrink-0" />
-          {itemsTargets.length === 0 ? t("itemsNoTarget") : t("itemsTarget", { types: itemsTargets.join(", ") })}
+      {field.type === "table" && field.key === itemsToCreateKey && itemsTarget}
+    </div>
+  );
+}
+
+/**
+ * The "items to create" table's target Type (RP-441; decided 2026-10-11): for each outcome of
+ * the Project's Types that creates items from the rows, the Type they become, which a Project
+ * Admin picks here. The choice is the outcome's follow-up action on the Project's own copy of
+ * the set (`PATCH …/outcomes/:code`, audited as any outcome change), so the Outcomes page and
+ * item creation (WF-11) read the same Type.
+ */
+function ItemsTargetPicker({
+  projectId,
+  editable,
+  itemsOutcomes,
+  typeChoices,
+  t,
+}: {
+  projectId: string;
+  editable: boolean;
+  itemsOutcomes: ItemsOutcome[];
+  typeChoices: { code: string; name: string }[];
+  t: Translate;
+}) {
+  const router = useRouter();
+  const [error, setError] = useState<string | null>(null);
+  if (itemsOutcomes.length === 0) {
+    return (
+      <p className="flex items-start gap-1.5 text-sm text-muted">
+        <Icon name="info-circle" size={15} className="mt-0.5 shrink-0" />
+        {t("itemsNoTarget")}
+      </p>
+    );
+  }
+  async function pick({ typeCode, outcome }: ItemsOutcome, target: string) {
+    setError(null);
+    const actions = outcome.actions.map((a) => (a.kind === "create_items" ? { ...a, type: target } : a));
+    const res = await setupCall("PATCH", `/projects/${projectId}/work-item-types/${encodeURIComponent(typeCode)}/outcomes/${encodeURIComponent(outcome.code)}`, {
+      name: outcome.name,
+      actions,
+    });
+    if (res.ok) router.refresh();
+    else setError(refusalMessage(t, {}, res.error));
+  }
+  return (
+    <fieldset className="flex flex-col gap-2">
+      <legend className="mb-1 text-sm font-semibold text-text">{t("itemsTargetTitle")}</legend>
+      <p className="text-sm text-muted">{t("itemsTargetHelp")}</p>
+      {itemsOutcomes.map((entry) => (
+        <Field key={`${entry.typeCode}-${entry.outcome.code}`} label={t("itemsTargetFor", { type: entry.typeCode, outcome: entry.outcome.code })}>
+          <Select
+            value={itemsToCreate(entry.outcome) ?? ""}
+            disabled={!editable}
+            onValueChange={(target) => void pick(entry, target)}
+            options={typeChoices.map((c) => ({ value: c.code, label: `${c.code} · ${c.name}` }))}
+          />
+        </Field>
+      ))}
+      {error && (
+        <p role="alert" className="text-sm text-danger-fg">
+          {error}
         </p>
       )}
-    </div>
+    </fieldset>
   );
 }
 
