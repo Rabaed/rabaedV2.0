@@ -5,7 +5,7 @@
 // fills it, and a save into it is refused as a whole (visibility.md scenario
 // 46's shape, with a test-only Form: the MAR Form Version 4 comes in Form 3-07).
 //
-// The Form is test-only: a Rabaed Default Work Item Type (the MAR's Workflow)
+// The Form is test-only: a Rabaed Default Work Item Type (the legacy MAR's Workflow, Version 2)
 // pointed at a new Form on every run, so its Versions start from 1.
 import { randomUUID } from "node:crypto";
 import { publishFormVersion } from "@rabaed/admin/services";
@@ -16,6 +16,7 @@ import { sql } from "kysely";
 import type { LightMyRequestResponse } from "fastify";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestApi, type Caller } from "./support/harness.ts";
+import { LEGACY_MAR } from "@rabaed/db/test-support";
 import { detail, projectMember } from "./support/tower.ts";
 
 const api = await createTestApi();
@@ -67,7 +68,7 @@ async function newFormForTestType(): Promise<string> {
     insert into work_item_type (owner_kind, module_key, code, name, workflow_definition_id, outcome_kind, form_definition_id)
     select 'rabaed', module_key, ${TYPE}, '{"en": "Form Sections submittal", "ar": "اعتماد أقسام النموذج"}',
       workflow_definition_id, outcome_kind, ${id}::uuid
-    from work_item_type where owner_kind = 'rabaed' and code = 'MAR'
+    from work_item_type where owner_kind = 'rabaed' and code = ${LEGACY_MAR}
     on conflict do nothing
   `.execute(migrator);
   await migrator.updateTable("work_item_type").set({ form_definition_id: id }).where("owner_kind", "=", "rabaed").where("code", "=", TYPE).execute();

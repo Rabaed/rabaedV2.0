@@ -383,6 +383,14 @@ export const workItemActions = z.object({
        * leaves the Participant).
        */
       recommendCode: z.array(z.object({ code: workItemOutcome, name: bilingualText })).optional(),
+      /**
+       * The pop-up's answers to start from (RP-437; workflow-engine.md §5.7): the answers,
+       * to the same field keys, of the reply that brought the item to the viewer, when a
+       * Member of the viewer's own Participant took it (such as the Consultant Engineer's
+       * verification, pre-filling the Manager's Code); never another Participant's (V5).
+       * Absent when there are none.
+       */
+      prefill: z.record(z.string(), z.unknown()).optional(),
     }),
   ),
 });
@@ -534,6 +542,12 @@ export const workItemHistory = z.object({
        * Screen's internal ones, internal to the acting Participant (V5). Null otherwise.
        */
       answers: z.record(z.string(), z.unknown()).nullable(),
+      /**
+       * With `answers`: the Action Form they were given in, as the item's Workflow Version
+       * pinned it (RP-437), to label them. Read like the Workflow, by everyone on the
+       * Project (V20); absent without answers.
+       */
+      answersForm: formSchema.nullable().optional(),
     }),
   ),
 });

@@ -79,6 +79,15 @@ export async function WorkItemHistory({
     if (field && idTypes.has(field.type)) return `${label}: ${t("changedValue")}`;
     return `${label}: ${value(change, change.old)} ${locale === "ar" ? "←" : "→"} ${value(change, change.new)}`;
   };
+  // A reply's answers (RP-437): the Cover Note with a Submit, the final verification with
+  // a Code, a reply's internal answers for its own Company; labelled from the Action Form
+  // they were given in. The reason and the Remarks have their own lines above.
+  const replyAnswers = (e: Event) =>
+    e.answers && e.answersForm
+      ? answerFields(e.answersForm)
+          .filter((f) => f.key !== "reason" && f.key !== "remarks" && e.answers![f.key] !== undefined && e.answers![f.key] !== null && e.answers![f.key] !== "")
+          .map((f) => [f, e.answers![f.key]] as const)
+      : [];
   const who = (e: Event) =>
     [e.by.memberName?.[locale], e.by.companyName?.[locale]].filter((part): part is string => Boolean(part)).join(" · ");
 
@@ -114,6 +123,18 @@ export async function WorkItemHistory({
               <p className="whitespace-pre-wrap" data-testid="history-remarks">
                 <span className="font-medium">{t("remarks")}:</span> {e.remarks}
               </p>
+            )}
+            {replyAnswers(e).length > 0 && (
+              <dl className="space-y-0.5 text-sm" data-testid="history-answers">
+                {replyAnswers(e).map(([field, v]) => (
+                  <div key={field.key} className="whitespace-pre-wrap">
+                    <dt className="inline font-medium">{field.label[locale]}:</dt>{" "}
+                    <dd className="inline">
+                      <bdi>{formatFormValue(field, v, locale, undefined, optionLists)}</bdi>
+                    </dd>
+                  </div>
+                ))}
+              </dl>
             )}
             {e.recommendedCode && (
               <p data-testid="history-recommended-code">

@@ -1,0 +1,23 @@
+{
+  "key": "ncr_reject",
+  "name": { "en": "Reject", "ar": "رفض" },
+  "schema": {
+    "sections": [
+      {
+        "key": "close_remarks",
+        "title": { "en": "Remarks", "ar": "الملاحظات" },
+        "fields": [
+          {
+            "key": "remarks",
+            "type": "textarea",
+            "required": true,
+            "maxLength": 4000,
+            "label": { "en": "Remarks", "ar": "الملاحظات" },
+            "help": { "en": "Say why the response is rejected. Shared with everyone who sees this item.", "ar": "اذكر سبب رفض الرد. يراها كل من يرى هذا العنصر." }
+          }
+        ]
+      }
+    ]
+  },
+  "internalFields": []
+}

@@ -1,10 +1,13 @@
 // Seam 1 for the MAR Form Version 4 (RP-306, spec RP-299; form-engine.md §4 "MAR
 // Form Version 4"; visibility.md V19 and scenarios 46 and 48): Version 3 plus the
 // Consultant verification section, filled in only by the Consultant at its review
-// Step. New MARs pin Version 4; earlier MARs keep their Version. Version 4 passes the
-// publish checks against Versions 1 to 3 and against the MAR's Workflow (`editable_at`
-// names a Step the Workflow has). Issuing a Code is refused while the verification
-// is incomplete; once issued, the answers and the Remarks are everyone's.
+// Step. Version 4 passed the publish checks against Versions 1 to 3 and against the
+// MAR's Workflow Versions 1 and 2 (`editable_at` names a Step they have). Issuing a
+// Code is refused while the verification is incomplete; once issued, the answers and
+// the Remarks are everyone's. Since RP-437 new MARs pin Version 5 (no Consultant
+// verification, ADR 0019) on Workflow Version 3; what an item on Version 4 does runs
+// here on the legacy MAR test Type, the Form Version 4 on the Workflow Version 2
+// (packages/db/test-support/legacy-mar.ts).
 import { createDb } from "@rabaed/db";
 import { testDatabaseUrls } from "@rabaed/db/test-support";
 import {
@@ -19,6 +22,7 @@ import { sql } from "kysely";
 import type { LightMyRequestResponse } from "fastify";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { attachDatasheet, createTestApi, type Caller } from "./support/harness.ts";
+import { LEGACY_MAR } from "@rabaed/db/test-support";
 import { detail, projectMember, tryTake } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
@@ -78,7 +82,7 @@ const complete = {
   items: [{ fixture_type: "Downlight", quantity: 120, unit: "pcs" }],
 };
 const created = async (title: string) =>
-  (await ok(engineer.post(`/v1/projects/${projectId}/work-items`, { type: "MAR", title, answers: { ...complete, trade: electrical, location: buildingA } }), 201))
+  (await ok(engineer.post(`/v1/projects/${projectId}/work-items`, { type: LEGACY_MAR, title, answers: { ...complete, trade: electrical, location: buildingA } }), 201))
     .json().id as string;
 const history = async (by: Caller, id: string): Promise<WorkItemHistory> => (await ok(by.get(`/v1/work-items/${id}/history`), 200)).json();
 /** Saves `changes` over the answers `by` reads, as the web form does. */
@@ -121,20 +125,19 @@ beforeAll(async () => {
 });
 
 describe("the MAR Form Version 4", () => {
-  it("is the MAR's latest Version, and passes the publish checks against Versions 1 to 3 and every MAR Workflow Version", async () => {
+  it("passes the publish checks against Versions 1 to 3 and the MAR Workflow Versions it was published with (1 and 2); Version 5 follows it", async () => {
     const versions = await marVersions();
-    expect(versions.map((v) => v.version_no)).toEqual([1, 2, 3, 4]);
+    expect(versions.map((v) => v.version_no)).toEqual([1, 2, 3, 4, 5]);
     const [v1, v2, v3, v4] = versions.map((v) => formSchema.parse(v.schema));
     const { rows: lists } = await sql<{ id: string }>`select id from option_list`.execute(migrator);
-    const workflows = await marWorkflows();
-    expect(workflows.length).toBeGreaterThanOrEqual(2);
+    const workflows = (await marWorkflows()).slice(0, 2);
     for (const steps of workflows) expect(steps.map((s) => s.key)).toContain("consultant_review");
     expect(publishProblems(v4!, [v1!, v2!, v3!], { optionListIds: new Set(lists.map((l) => l.id)), workflows })).toEqual([]);
   });
 
   it("is Version 3 plus the Consultant verification, labelled in English and Arabic, editable at the Consultant review Step", async () => {
-    const form: FormVersion = (await ok(engineer.get(`/v1/projects/${projectId}/work-item-types/MAR/form`), 200)).json();
-    expect(form.versionNo).toBe(4);
+    const form: FormVersion = (await ok(engineer.get(`/v1/projects/${projectId}/work-item-types/${LEGACY_MAR}/form`), 200)).json();
+    expect(formSchema.parse((await marVersions())[3]!.schema)).toEqual(form.schema);
     const section = form.schema.sections.find((s) => s.key === "consultant_verification")!;
     expect(section).toMatchObject({
       title: { en: "Consultant verification", ar: "تحقق الاستشاري" },
@@ -157,10 +160,10 @@ describe("the MAR Form Version 4", () => {
 });
 
 describe("a new MAR, and one on an earlier Version", () => {
-  it("pins Version 4, and leaves Draft without the Consultant's section", async () => {
-    const [, , , v4] = await marVersions();
+  it("on Version 4, leaves Draft without the Consultant's section", async () => {
     const id = await created("Lighting fixtures");
-    expect((await detail(engineer, id)).formVersionId).toBe(v4!.id);
+    const form: FormToFill = (await ok(engineer.get(`/v1/work-items/${id}/form`), 200)).json();
+    expect(form.schema.sections.map((s) => s.key)).toContain("consultant_verification");
     await attachDatasheet(engineer, id);
     await ok(tryTake(engineer, id, "send_for_review"));
     expect((await detail(engineer, id)).stage.key).not.toBe("draft");
@@ -184,7 +187,7 @@ describe("a Draft MAR on Version 4 (scenario 46)", () => {
   it("shows the Contractor 'Consultant verification' empty, read-only and marked 'Filled in by the Consultant'", async () => {
     const id = await created("Draft fixtures");
     const form: FormToFill = (await ok(engineer.get(`/v1/work-items/${id}/form`), 200)).json();
-    expect(form.versionNo).toBe(4);
+    expect(form.schema.sections.map((s) => s.key)).toContain("consultant_verification");
     expect(form.editableSections).not.toContain("consultant_verification");
     expect(form.editableSections).toContain("material");
     expect(form.filledBy.consultant_verification).toMatchObject({ en: "Consultant" });

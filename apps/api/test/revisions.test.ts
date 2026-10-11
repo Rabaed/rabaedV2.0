@@ -12,6 +12,7 @@ import type { DocumentList, LinkedFrom, RevisionChain, WorkItemLinks } from "@ra
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { attachDatasheet, createTestApi, expectHidden, uploadDocument, type Caller } from "./support/harness.ts";
 import { all, bilingual, detail, ok, only, projectMember, take, type Company } from "./support/tower.ts";
+import { LEGACY_MAR } from "@rabaed/db/test-support";
 
 const api = await createTestApi({ files: true });
 afterAll(() => api.close());
@@ -61,7 +62,7 @@ async function codeC(id: string) {
 /** A MAR with its datasheet, and the Attachments named, closed at Code C. */
 async function closedAtCodeC(title: string, attachments: string[] = []): Promise<string> {
   const res = await ok(
-    engineer.post(`/v1/projects/${projectId}/work-items`, { type: "MAR", title, answers: { ...complete, trade: electrical, location: buildingA } }),
+    engineer.post(`/v1/projects/${projectId}/work-items`, { type: LEGACY_MAR, title, answers: { ...complete, trade: electrical, location: buildingA } }),
     201,
   );
   const id = res.json().id as string;
@@ -200,7 +201,7 @@ describe("who may create a Revision", () => {
   });
 
   it("is refused for an item without Code C", async () => {
-    const draft = (await ok(engineer.post(`/v1/projects/${projectId}/work-items`, { type: "MAR", title: "Draft", answers: { ...complete, trade: electrical } }), 201)).json()
+    const draft = (await ok(engineer.post(`/v1/projects/${projectId}/work-items`, { type: LEGACY_MAR, title: "Draft", answers: { ...complete, trade: electrical } }), 201)).json()
       .id as string;
     expect((await createRevision(engineer, draft)).statusCode).toBe(409);
     expect((await detail(engineer, draft)).actions.createRevision).toBe(false);
@@ -288,7 +289,7 @@ describe("Documents added during the Draft (RP-399-1; scenarios 61, 74 and 75)",
   it("read no earlier than the Creation Date once numbered, for the C1 PM and for K1, though the C1 engineer saw the real time", async () => {
     const res = await ok(
       engineer.post(`/v1/projects/${projectId}/work-items`, {
-        type: "MAR",
+        type: LEGACY_MAR,
         title: "Cable trays",
         answers: { ...complete, trade: electrical, location: buildingA },
       }),
@@ -502,7 +503,7 @@ describe("the Links of a discarded Revision", () => {
     target = await closedAtCodeC("Earthing");
     const res = await ok(
       engineer.post(`/v1/projects/${projectId}/work-items`, {
-        type: "MAR",
+        type: LEGACY_MAR,
         title: "Earthing pits",
         answers: { ...complete, trade: electrical, location: buildingA, related_submittals: [target] },
       }),

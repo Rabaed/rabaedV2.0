@@ -10,6 +10,7 @@ import type { WorkflowDefinition, WorkflowRead } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestApi, expectHidden, type Caller } from "./support/harness.ts";
+import { LEGACY_MAR, LEGACY_WORKFLOW_NAME } from "@rabaed/db/test-support";
 import { all, buildTower, detail, draft, ok, projectMember, take, type Company, type Tower } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
@@ -67,7 +68,7 @@ beforeAll(async () => {
     .participants.find((p: { isOwnCompany: boolean; id: string }) => !p.isOwnCompany && p.id !== c2ParticipantId).id;
   k1Engineer = await projectMember(api, k1, k1ParticipantId, ["engineer"]);
   const mar = await sql<{ id: string; workflow_definition_id: string }>`
-    select id, workflow_definition_id from work_item_type where owner_kind = 'rabaed' and code = 'MAR'
+    select id, workflow_definition_id from work_item_type where owner_kind = 'rabaed' and code = ${LEGACY_MAR}
   `.execute(migrator);
   marTypeId = mar.rows[0]!.id;
   marDefault = mar.rows[0]!.workflow_definition_id;
@@ -162,7 +163,7 @@ describe("a Project Admin authors the Project's own Workflow", () => {
     await ok(bind(c1.caller, at.projectId, route));
     const after = await draft(at, at.c1Engineer, "After the binding");
     expect((await detail(at.c1Engineer, after)).workflow).toEqual({ name: TOWER_ROUTE, versionNo: 1 });
-    expect((await detail(at.c1Engineer, before)).workflow.name.en).toBe("Material Submittal (MAR)");
+    expect((await detail(at.c1Engineer, before)).workflow.name.en).toBe(LEGACY_WORKFLOW_NAME.en);
     expect((await detail(at.c1Engineer, after)).step.name.en).toBe("Prepare");
   });
 
@@ -193,7 +194,7 @@ describe("a Project Admin authors the Project's own Workflow", () => {
     const res = await c1.caller.delete(`/v1/projects/${at.projectId}/workflow-bindings?workItemTypeId=${marTypeId}`);
     expect(res.statusCode, res.body).toBe(204);
     const id = await draft(at, at.c1Engineer, "Unbound");
-    expect((await detail(at.c1Engineer, id)).workflow.name.en).toBe("Material Submittal (MAR)");
+    expect((await detail(at.c1Engineer, id)).workflow.name.en).toBe(LEGACY_WORKFLOW_NAME.en);
     await ok(bind(c1.caller, at.projectId, route));
   });
 });

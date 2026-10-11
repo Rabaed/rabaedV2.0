@@ -12,6 +12,7 @@ import type { DocumentList, NotificationList, WorkItemDetail, WorkItemLinks, Wor
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { attachDatasheet, createTestApi, type Caller } from "./support/harness.ts";
 import { all, bilingual, ok, projectMember, take, type Company } from "./support/tower.ts";
+import { LEGACY_MAR } from "@rabaed/db/test-support";
 
 const api = await createTestApi({ files: true });
 // The worker delivers notifications; it connects as the app role, with no Member set.
@@ -50,7 +51,7 @@ function expectRandom(ids: string[]) {
 async function draft(title: string): Promise<string> {
   const res = await ok(
     c1Engineer.post(`/v1/projects/${projectId}/work-items`, {
-      type: "MAR",
+      type: LEGACY_MAR,
       title,
       answers: { manufacturer: "ACME Cables", description: "Galvanised, 300 mm", trade, location },
     }),

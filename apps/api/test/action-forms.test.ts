@@ -12,6 +12,7 @@ import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { attachDatasheet, createTestApi, expectHidden, type Caller, type OnboardedCompany } from "./support/harness.ts";
 import { detail, projectMember, tryTake } from "./support/tower.ts";
+import { LEGACY_MAR } from "@rabaed/db/test-support";
 
 const api = await createTestApi({ files: true });
 const migrator = createDb(testDatabaseUrls().migrator, { max: 1 });
@@ -41,7 +42,7 @@ async function ok(res: Promise<{ statusCode: number; body: string }>, status = 2
 
 async function createDraft(title: string): Promise<string> {
   const res = await engineer.post(`/v1/projects/${projectId}/work-items`, {
-    type: "MAR",
+    type: LEGACY_MAR,
     title,
     answers: { manufacturer: "ACME Cables", description: "Galvanised, 300 mm", trade: electrical, location: buildingA },
   });

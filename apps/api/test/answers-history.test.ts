@@ -9,6 +9,7 @@ import type { LightMyRequestResponse } from "fastify";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { attachDatasheet, createTestApi, type Caller, type OnboardedCompany } from "./support/harness.ts";
 import { detail, projectMember, tryTake } from "./support/tower.ts";
+import { LEGACY_MAR } from "@rabaed/db/test-support";
 
 const api = await createTestApi({ files: true });
 afterAll(() => api.close());
@@ -76,7 +77,7 @@ describe("answers after Draft", () => {
 
   beforeAll(async () => {
     id = (await ok(engineer.post(`/v1/projects/${projectId}/work-items`, {
-      type: "MAR",
+      type: LEGACY_MAR,
       title: "Cable trays",
       answers: { trade: electrical, location: buildingA, ...complete },
     }), 201)).json().id;

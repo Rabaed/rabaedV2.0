@@ -10,6 +10,7 @@ import { encodeWorkItemCursor, isOpenStageCategory, workItemSearchParams, type W
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { attachDatasheet, createTestApi, expectHidden, type Caller } from "./support/harness.ts";
 import { all, bilingual, ok, projectMember, take, type Company } from "./support/tower.ts";
+import { LEGACY_MAR } from "@rabaed/db/test-support";
 
 const api = await createTestApi({ files: true });
 afterAll(() => api.close());
@@ -48,7 +49,7 @@ const total = (l: WorkItemList) => l.stages.reduce((sum, s) => sum + s.count, 0)
 async function draft(title: string, answers: Record<string, unknown> = {}): Promise<string> {
   const res = await ok(
     c1Engineer.post(`/v1/projects/${projectId}/work-items`, {
-      type: "MAR",
+      type: LEGACY_MAR,
       title,
       answers: { ...complete, trade: trade.electrical, location: loc.buildingA, ...answers },
     }),
@@ -133,7 +134,7 @@ describe("cursor paging", () => {
     await projectMember(api, c1, own, ["project_manager"]); // holds the internal review
     for (let i = 0; i < 53; i++) {
       const answers = i < 3 ? { ...complete, trade: tradeId, location: locationId } : { trade: tradeId };
-      const res = await ok(engineer.post(`/v1/projects/${pagingProject}/work-items`, { type: "MAR", title: `Item ${i}`, answers }), 201);
+      const res = await ok(engineer.post(`/v1/projects/${pagingProject}/work-items`, { type: LEGACY_MAR, title: `Item ${i}`, answers }), 201);
       created.push(res.json().id);
     }
     // A few leave Draft, so they get a Document Number; the rest have none yet, and
@@ -272,7 +273,7 @@ describe("filters and sorts, combined", () => {
   });
 
   it("filters by Type, Stage, Trade and Location, a Location taking in the ones under it", async () => {
-    expect(ids(await list(c1Engineer, { type: ["MAR"] }))).toEqual(expect.arrayContaining([mechanicalInB, electricalInA]));
+    expect(ids(await list(c1Engineer, { type: [LEGACY_MAR] }))).toEqual(expect.arrayContaining([mechanicalInB, electricalInA]));
     expect(ids(await list(c1Engineer, { type: ["SAR"] }))).toEqual([]);
     expect(ids(await list(c1Engineer, { trade: [trade.mechanical] }))).toEqual([mechanicalInB]);
     const inTower = ids(await list(c1Engineer, { location: [loc.tower1] }));
@@ -302,7 +303,7 @@ describe("filters and sorts, combined", () => {
     // A new Draft, without its datasheet: the moved clock spoils an upload's signature.
     const fresh = (
       await ok(
-        c1Engineer.post(`/v1/projects/${projectId}/work-items`, { type: "MAR", title: "Lighting poles", answers: { trade: trade.electrical } }),
+        c1Engineer.post(`/v1/projects/${projectId}/work-items`, { type: LEGACY_MAR, title: "Lighting poles", answers: { trade: trade.electrical } }),
         201,
       )
     ).json().id;
@@ -344,7 +345,7 @@ describe("a second Contractor (V3, scenario 17)", () => {
   beforeAll(async () => {
     const res = await ok(
       c2Engineer.post(`/v1/projects/${projectId}/work-items`, {
-        type: "MAR",
+        type: LEGACY_MAR,
         title: "C2 pumps",
         answers: { ...complete, trade: trade.mechanical, location: loc.buildingB },
       }),

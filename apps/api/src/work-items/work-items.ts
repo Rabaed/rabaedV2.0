@@ -1,5 +1,6 @@
 import { withMember, type Database, type Db } from "@rabaed/db";
 import {
+  answerFields,
   backwardKinds,
   changedOutside,
   editableSections,
@@ -729,18 +730,64 @@ async function actions(trx: Trx, workItemId: string): Promise<Omit<WorkItemActio
   const recommendable = await Promise.all(
     transitions.map((r) => (r.may_recommend ? recommendableOutcomes(trx, workItemId, r.transition_key!) : [])),
   );
+  const arrival = transitions.length > 0 ? await ownArrivalAnswers(trx, workItemId) : {};
   return {
     pickUp: rows.some((r) => r.action === "pick_up"),
     returnToPool: rows.some((r) => r.action === "return_to_pool"),
-    transitions: transitions.map((r, i) => ({
-      key: r.transition_key!,
-      label: r.label!,
-      kind: r.transition_kind!,
-      actionForm: parseActionForm(r.action_form),
-      ...(offered[i]!.length > 0 ? { assignTo: offered[i] } : {}),
-      ...(recommendable[i]!.length > 0 ? { recommendCode: recommendable[i] } : {}),
-    })),
+    transitions: transitions.map((r, i) => {
+      const actionForm = parseActionForm(r.action_form);
+      const prefill = actionForm ? prefilled(actionForm, arrival) : {};
+      return {
+        key: r.transition_key!,
+        label: r.label!,
+        kind: r.transition_kind!,
+        actionForm,
+        ...(offered[i]!.length > 0 ? { assignTo: offered[i] } : {}),
+        ...(recommendable[i]!.length > 0 ? { recommendCode: recommendable[i] } : {}),
+        ...(Object.keys(prefill).length > 0 ? { prefill } : {}),
+      };
+    }),
   };
+}
+
+/**
+ * The Action Form answers of the move that brought the item to its current Step, when
+ * that move was inside the viewer's own Participant (an `internal` event, which only its
+ * own Participant reads, V5): the shared and internal answers of the reply that handed
+ * it to them, such as the Consultant Engineer's verification for the Manager's Code
+ * (workflow-engine.md §5.7, RP-437). Empty when the item arrived from another
+ * Participant, whose answers are never carried over.
+ */
+async function ownArrivalAnswers(trx: Trx, workItemId: string): Promise<Record<string, unknown>> {
+  const { rows } = await sql<{ answers: Record<string, unknown> | null }>`
+    with arrival as (
+      -- The last move the viewer reads. They hold the item, so it moved to their Step:
+      -- by their own Participant (internal), or by another (a Submit, shared).
+      select e.transition_id, e.created_at, e.payload - 'document_number' - 'outcome' as answers
+      from work_item_event e
+      where e.work_item_id = ${workItemId}::uuid and e.type = 'transition' and e.audience = 'internal'
+        and e.seq = (
+          select max(m.seq) from work_item_event m
+          where m.work_item_id = e.work_item_id and m.type in ('transition', 'issue_code') and m.to_step_id is not null
+        )
+    )
+    select coalesce((
+      select i.payload -> 'answers' from work_item_event i, arrival a
+      where i.work_item_id = ${workItemId}::uuid and i.type = 'internal_answers'
+        and i.transition_id = a.transition_id and i.created_at = a.created_at
+    ), '{}'::jsonb) || a.answers as answers
+    from arrival a
+  `.execute(trx);
+  return rows[0]?.answers ?? {};
+}
+
+/** `answers`' values for the answer fields `actionForm` asks, by key. */
+function prefilled(actionForm: FormSchema, answers: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(
+    answerFields(actionForm)
+      .filter((f) => f.key in answers)
+      .map((f) => [f.key, answers[f.key]]),
+  );
 }
 
 /**
@@ -1060,8 +1107,19 @@ export function getWorkItemHistory(db: Db, memberId: string, workItemId: string)
       handover: WorkItemHistory["events"][number]["handover"];
       answers: Record<string, unknown> | null;
     }>`select * from app.work_item_history(${workItemId}::uuid)`.execute(trx);
+    // The Action Form each event's answers were given in (its Transition's, as its Workflow
+    // Version pinned it; read project-wide like the Workflow, V20), so the page labels them.
+    // The same events, in the same order, as app.work_item_history numbers them.
+    const forms = await sql<{ action_form: unknown }>`
+      select tr.action_form from work_item_event e
+      join work_item w on w.id = e.work_item_id
+      left join workflow_transition tr on tr.id = e.transition_id
+      where e.work_item_id = ${workItemId}::uuid
+      order by e.seq
+    `.execute(trx);
     return {
-      events: rows.map((r) => ({
+      events: rows.map((r, i) => ({
+        ...(r.answers ? { answersForm: parseActionForm(forms.rows[i]?.action_form ?? null) } : {}),
         seq: r.seq,
         type: r.type,
         at: r.created_at.toISOString(),

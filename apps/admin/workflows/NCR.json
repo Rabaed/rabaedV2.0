@@ -1,0 +1,102 @@
+{
+  "steps": [
+    {
+      "key": "draft",
+      "name": { "en": "Draft", "ar": "مسودة" },
+      "stage": "draft",
+      "actor": { "role": "consultant", "permission": "create" },
+      "outcomeMode": "none"
+    },
+    {
+      "key": "contractor_response",
+      "name": { "en": "Contractor response", "ar": "رد المقاول" },
+      "stage": "pending_response",
+      "actor": { "role": "contractor", "permission": "submit" },
+      "outcomeMode": "none"
+    },
+    {
+      "key": "consultant_review",
+      "name": { "en": "Consultant review", "ar": "مراجعة الاستشاري" },
+      "stage": "under_review",
+      "actor": { "role": "consultant", "permission": "approve" },
+      "outcomeMode": "issue_outcome"
+    },
+    {
+      "key": "closed",
+      "name": { "en": "Closed", "ar": "مغلق" },
+      "stage": "closed",
+      "actor": null,
+      "outcomeMode": "none"
+    },
+    {
+      "key": "rejected",
+      "name": { "en": "Rejected", "ar": "مرفوض" },
+      "stage": "rejected",
+      "actor": null,
+      "outcomeMode": "none"
+    },
+    {
+      "key": "cancelled",
+      "name": { "en": "Cancelled", "ar": "ملغى" },
+      "stage": "cancelled",
+      "actor": null,
+      "outcomeMode": "none"
+    }
+  ],
+  "transitions": [
+    {
+      "key": "raise",
+      "label": { "en": "Raise", "ar": "إصدار" },
+      "kind": "submit",
+      "from": "draft",
+      "to": "contractor_response",
+      "outcome": null,
+      "permission": "create",
+      "actionForm": null
+    },
+    {
+      "key": "respond",
+      "label": { "en": "Respond", "ar": "الرد" },
+      "kind": "submit",
+      "from": "contractor_response",
+      "to": "consultant_review",
+      "outcome": null,
+      "permission": "submit",
+      "actionForm": null,
+      "screen": "ncr_response"
+    },
+    {
+      "key": "accept",
+      "label": { "en": "Accept and close", "ar": "قبول وإغلاق" },
+      "kind": "close",
+      "from": "consultant_review",
+      "to": "closed",
+      "outcome": "approved",
+      "permission": "approve",
+      "actionForm": null,
+      "screen": "ncr_accept"
+    },
+    {
+      "key": "reject",
+      "label": { "en": "Reject", "ar": "رفض" },
+      "kind": "close",
+      "from": "consultant_review",
+      "to": "rejected",
+      "outcome": "rejected",
+      "permission": "approve",
+      "actionForm": null,
+      "screen": "ncr_reject"
+    },
+    {
+      "key": "cancel",
+      "label": { "en": "Cancel", "ar": "إلغاء" },
+      "kind": "cancel",
+      "from": "draft",
+      "to": "cancelled",
+      "outcome": null,
+      "permission": "create",
+      "actionForm": null
+    }
+  ],
+  "layout": {}
+}

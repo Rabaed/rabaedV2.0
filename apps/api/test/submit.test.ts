@@ -8,6 +8,7 @@ import type { WorkItemDetail, WorkItemHistory } from "@rabaed/domain";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { attachDatasheet, createTestApi, expectHidden, DEFAULT_PASSWORD, type Caller, type OnboardedCompany } from "./support/harness.ts";
 import { detail, memberOnProject, tryTake, type TakeOptions } from "./support/tower.ts";
+import { LEGACY_MAR } from "@rabaed/db/test-support";
 
 const api = await createTestApi({ files: true });
 afterAll(() => api.close());
@@ -79,7 +80,7 @@ async function participant(
 
 async function createDraft(by: Caller, title: string, location = buildingA): Promise<string> {
   const res = await by.post(`/v1/projects/${projectId}/work-items`, {
-    type: "MAR",
+    type: LEGACY_MAR,
     title,
     answers: { manufacturer: "ACME Cables", description: "Galvanised, 300 mm", trade: electrical, location },
   });
@@ -223,7 +224,7 @@ describe("Submit", () => {
       const { ids, counts } = await listed(caller);
       expect(ids).toEqual([id]);
       expect(counts).toMatchObject({ draft: 0, internal_review: 0, pending_approval: 1 });
-      expect((await detail(caller, id)).documentNumber).toMatch(/^TWR-MAR-01-\d{4}$/);
+      expect((await detail(caller, id)).documentNumber).toMatch(/^TWR-MARV-01-\d{4}$/);
     }
     expect(buttons(await detail(signer, id))).toEqual(["pick_up"]);
     // An Engineer can't issue a Code, so isn't in the pool.

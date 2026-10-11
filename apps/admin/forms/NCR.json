@@ -1,0 +1,42 @@
+{
+  "sections": [
+    {
+      "key": "non_conformance",
+      "title": { "en": "Non-conformance", "ar": "عدم المطابقة" },
+      "fields": [
+        {
+          "key": "description",
+          "type": "textarea",
+          "required": true,
+          "label": { "en": "Description", "ar": "الوصف" },
+          "help": {
+            "en": "What does not conform, and where.",
+            "ar": "ما الذي لا يطابق، وأين."
+          }
+        },
+        {
+          "key": "specification_section",
+          "type": "text",
+          "required": false,
+          "label": { "en": "Specification section", "ar": "بند المواصفات" }
+        }
+      ]
+    },
+    {
+      "key": "documents",
+      "title": { "en": "Documents", "ar": "المستندات" },
+      "fields": [
+        { "key": "photos", "type": "photos", "required": false, "label": { "en": "Photos", "ar": "الصور" } }
+      ]
+    },
+    {
+      "key": "classification",
+      "title": { "en": "Classification", "ar": "التصنيف" },
+      "fields": [
+        { "key": "trade", "type": "trade", "required": true, "label": { "en": "Trade", "ar": "التخصص" } },
+        { "key": "location", "type": "location", "required": true, "label": { "en": "Location", "ar": "الموقع" } },
+        { "key": "scopes", "type": "scopes", "required": false, "label": { "en": "Scopes", "ar": "النطاقات" } }
+      ]
+    }
+  ]
+}

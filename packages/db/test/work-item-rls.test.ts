@@ -7,7 +7,7 @@ import { sql, type RawBuilder } from "kysely";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb, withMember, type Db } from "../src/index.ts";
-import { joinProject, testDatabaseUrls } from "../test-support/index.ts";
+import { joinProject, LEGACY_MAR, testDatabaseUrls } from "../test-support/index.ts";
 
 const urls = testDatabaseUrls();
 const digits = (n: number) => Array.from({ length: n }, () => randomInt(10)).join("");
@@ -95,7 +95,7 @@ const createDraft = (as: string, input: BuiltIns & { title?: string } = {}) =>
   call<Created>(
     as,
     sql`select outcome, work_item_id from app.create_work_item(
-      ${projectId}::uuid, 'MAR', ${input.title ?? "Cable trays"}, app.latest_form_version('MAR'), '{"description": "Galvanised, 300 mm"}'::jsonb,
+      ${projectId}::uuid, ${LEGACY_MAR}, ${input.title ?? "Cable trays"}, app.latest_form_version(${LEGACY_MAR}), '{"description": "Galvanised, 300 mm"}'::jsonb,
       ${input.trade === undefined ? trade.electrical : input.trade}::uuid,
       ${input.location === undefined ? loc.buildingA : input.location}::uuid, now(),
       ${input.scopes ?? [scope.lighting]}::uuid[])`,
@@ -446,7 +446,7 @@ describe("Send for Review and Return", () => {
     expect(rows.map((r) => r.type)).toEqual(["created", "transition", "assigned", "transition", "transition", "assigned"]);
     expect(rows.every((r) => r.audience === "internal" && r.audience_participant_id === participant.c1)).toBe(true);
     expect(rows[3].payload).toEqual({ reason: "Wrong rating" });
-    expect(rows[1].payload.document_number).toMatch(/^TWR-MAR-01-\d{4}$/);
+    expect(rows[1].payload.document_number).toMatch(/^TWR-MARV-01-\d{4}$/);
     expect((await migrator.query("select app.work_item_chain_intact($1) as ok", [item])).rows[0].ok).toBe(true);
   });
 
@@ -748,7 +748,7 @@ describe("a Draft's answers", () => {
 
   it("is pinned to the MAR's latest published Form Version", async () => {
     const { rows } = await migrator.query(
-      "select form_version_id = app.latest_form_version('MAR') as latest from work_item where id = $1",
+      "select form_version_id = app.latest_form_version('MARV') as latest from work_item where id = $1",
       [item],
     );
     expect(rows).toEqual([{ latest: true }]);
@@ -758,7 +758,7 @@ describe("a Draft's answers", () => {
     const [row] = await call<{ outcome: string }>(
       c1.member,
       sql`select outcome from app.create_work_item(
-        ${projectId}::uuid, 'MAR', 'Old', ${randomUUID()}::uuid, '{}'::jsonb, ${trade.electrical}::uuid, null, now())`,
+        ${projectId}::uuid, ${LEGACY_MAR}, 'Old', ${randomUUID()}::uuid, '{}'::jsonb, ${trade.electrical}::uuid, null, now())`,
     );
     expect(row!.outcome).toBe("form_version_not_latest");
   });

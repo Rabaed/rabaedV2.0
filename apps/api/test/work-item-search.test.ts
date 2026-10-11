@@ -9,6 +9,7 @@ import { workItemSearchParams, type WorkItemBoard, type WorkItemList, type WorkI
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { attachDatasheet, createTestApi, type Caller } from "./support/harness.ts";
 import { all, bilingual, buildTower, draft, ok, projectMember, submitted, take, type Company, type Tower } from "./support/tower.ts";
+import { LEGACY_MAR } from "@rabaed/db/test-support";
 
 const api = await createTestApi({ files: true });
 afterAll(() => api.close());
@@ -58,7 +59,7 @@ beforeAll(async () => {
   item.c1Draft = await draft(tower, c1Engineer, "Quokka enclosure cabling");
   // C2's own item, Submitted to K1: C1 never sees it (V3).
   const c2Draft = await c2Engineer.post(`/v1/projects/${projectId}/work-items`, {
-    type: "MAR",
+    type: LEGACY_MAR,
     title: "Xylophonic damper actuators",
     answers: { manufacturer: "ACME Cables", description: "Galvanised, 300 mm", trade: tower.electrical, location: tower.buildingA },
   });
@@ -73,8 +74,8 @@ beforeAll(async () => {
 describe("what Search finds", () => {
   it("finds a part of a Document Number, in any case", async () => {
     const numbered = [item.lighting, item.arabic, item.mechanical, item.trays].sort();
-    expect(ids(await search(tower.c1Engineer, "MAR-01-00"))).toEqual(numbered);
-    expect(ids(await search(tower.c1Engineer, "src-mar-01-000"))).toEqual(numbered);
+    expect(ids(await search(tower.c1Engineer, "MARV-01-00"))).toEqual(numbered);
+    expect(ids(await search(tower.c1Engineer, "src-marv-01-000"))).toEqual(numbered);
   });
 
   it("finds English and Arabic Subjects, by a whole word or a part of one", async () => {

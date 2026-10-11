@@ -18,6 +18,7 @@ import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestApi, expectHidden, type Caller } from "./support/harness.ts";
 import { all, bilingual, buildTower, detail, draft, inInternalReview, memberOnProject, ok, only, projectMember, submitted, tryTake, type Company, type Tower } from "./support/tower.ts";
+import { LEGACY_MAR } from "@rabaed/db/test-support";
 
 const api = await createTestApi({ files: true });
 const migrator = createDb(testDatabaseUrls().migrator, { max: 1 });
@@ -73,7 +74,7 @@ async function addType() {
         insert into work_item_type (owner_kind, module_key, code, name, workflow_definition_id, outcome_kind, form_definition_id)
         select 'rabaed', module_key, ${sql.lit(TYPE)}, '{"en": "Link question submittal", "ar": "اعتماد بسؤال ربط"}',
           workflow_definition_id, outcome_kind, v_definition
-        from work_item_type where owner_kind = 'rabaed' and code = 'MAR';
+        from work_item_type where owner_kind = 'rabaed' and code = ${sql.lit(LEGACY_MAR)};
       end
     $$
   `.execute(migrator);

@@ -1,0 +1,253 @@
+{
+  "sections": [
+    {
+      "key": "material",
+      "title": {
+        "ar": "تفاصيل المادة",
+        "en": "Material details"
+      },
+      "fields": [
+        {
+          "key": "manufacturer",
+          "type": "text",
+          "label": {
+            "ar": "المصنّع",
+            "en": "Manufacturer"
+          },
+          "required": true
+        },
+        {
+          "key": "model",
+          "type": "text",
+          "label": {
+            "ar": "الطراز",
+            "en": "Model"
+          },
+          "required": false
+        },
+        {
+          "key": "specification_section",
+          "help": {
+            "ar": "بند مواصفات المشروع الذي تستوفيه هذه المادة.",
+            "en": "The section of the Project specification this material answers."
+          },
+          "type": "text",
+          "label": {
+            "ar": "بند المواصفات",
+            "en": "Specification section"
+          },
+          "required": false
+        },
+        {
+          "key": "description",
+          "type": "textarea",
+          "label": {
+            "ar": "الوصف",
+            "en": "Description"
+          },
+          "required": true
+        }
+      ]
+    },
+    {
+      "key": "quantities",
+      "title": {
+        "ar": "البنود",
+        "en": "Items"
+      },
+      "fields": [
+        {
+          "key": "items",
+          "help": {
+            "ar": "كل وحدة أو منتج يشمله هذا الاعتماد، مع الكمية التي سيستخدمها المشروع.",
+            "en": "Each fixture or product this submittal covers, with how many the Project will use."
+          },
+          "type": "table",
+          "label": {
+            "ar": "البنود",
+            "en": "Items"
+          },
+          "columns": [
+            {
+              "key": "fixture_type",
+              "type": "text",
+              "label": {
+                "ar": "نوع الوحدة",
+                "en": "Fixture type"
+              },
+              "required": true,
+              "maxLength": 200
+            },
+            {
+              "key": "description",
+              "type": "text",
+              "label": {
+                "ar": "الوصف",
+                "en": "Description"
+              },
+              "required": false,
+              "maxLength": 500
+            },
+            {
+              "key": "quantity",
+              "min": 0,
+              "type": "number",
+              "label": {
+                "ar": "الكمية",
+                "en": "Quantity"
+              },
+              "total": true,
+              "decimals": 2,
+              "required": true
+            },
+            {
+              "key": "unit",
+              "type": "select",
+              "label": {
+                "ar": "الوحدة",
+                "en": "Unit"
+              },
+              "options": [
+                {
+                  "label": {
+                    "ar": "قطعة",
+                    "en": "Pieces"
+                  },
+                  "value": "pcs"
+                },
+                {
+                  "label": {
+                    "ar": "متر",
+                    "en": "Metres"
+                  },
+                  "value": "m"
+                },
+                {
+                  "label": {
+                    "ar": "متر مربع",
+                    "en": "Square metres"
+                  },
+                  "value": "m2"
+                },
+                {
+                  "label": {
+                    "ar": "طقم",
+                    "en": "Sets"
+                  },
+                  "value": "set"
+                }
+              ],
+              "required": true
+            }
+          ],
+          "required": false
+        }
+      ]
+    },
+    {
+      "key": "documents",
+      "title": {
+        "ar": "المستندات",
+        "en": "Documents"
+      },
+      "fields": [
+        {
+          "key": "datasheet",
+          "help": {
+            "ar": "نشرة بيانات المصنّع لهذه المادة.",
+            "en": "The manufacturer's datasheet for this material."
+          },
+          "type": "attachments",
+          "label": {
+            "ar": "نشرة البيانات (PDF)",
+            "en": "Datasheet (PDF)"
+          },
+          "required": true,
+          "contentTypes": [
+            "application/pdf"
+          ]
+        },
+        {
+          "key": "test_certificate",
+          "type": "attachments",
+          "label": {
+            "ar": "شهادة الاختبار",
+            "en": "Test certificate"
+          },
+          "required": false
+        },
+        {
+          "key": "sample_photo",
+          "type": "photos",
+          "label": {
+            "ar": "صورة العينة",
+            "en": "Sample photo"
+          },
+          "required": false
+        }
+      ]
+    },
+    {
+      "key": "references",
+      "title": {
+        "ar": "المراجع",
+        "en": "References"
+      },
+      "fields": [
+        {
+          "key": "related_submittals",
+          "help": {
+            "ar": "اعتمادات سابقة يعتمد عليها هذا الاعتماد، مثل اعتماد مواد معتمد. يمكن اختيار البنود المقدَّمة التي تراها في هذا المشروع فقط.",
+            "en": "Earlier submittals this one relies on, such as an approved MAR. Only Submitted items you can see in this Project can be picked."
+          },
+          "type": "work_item_ref",
+          "label": {
+            "ar": "الاعتمادات ذات الصلة",
+            "en": "Related submittals"
+          },
+          "required": false
+        }
+      ]
+    },
+    {
+      "key": "classification",
+      "title": {
+        "ar": "التصنيف",
+        "en": "Classification"
+      },
+      "fields": [
+        {
+          "key": "trade",
+          "type": "trade",
+          "label": {
+            "ar": "التخصص",
+            "en": "Trade"
+          },
+          "required": true
+        },
+        {
+          "key": "location",
+          "type": "location",
+          "label": {
+            "ar": "الموقع",
+            "en": "Location"
+          },
+          "required": true
+        },
+        {
+          "key": "scopes",
+          "help": {
+            "ar": "نطاقات التخصص المختار التي تخصها هذه المادة.",
+            "en": "The Scopes of the chosen Trade this material is for."
+          },
+          "type": "scopes",
+          "label": {
+            "ar": "النطاقات",
+            "en": "Scopes"
+          },
+          "required": false
+        }
+      ]
+    }
+  ]
+}

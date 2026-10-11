@@ -9,6 +9,7 @@ import { addRule, removeRule, ruleFieldsOf, setRecipient, transitionRuleFields, 
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestApi, type Caller } from "./support/harness.ts";
+import { LEGACY_MAR } from "@rabaed/db/test-support";
 import { buildTower, ok, type Company, type Tower } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
@@ -32,7 +33,7 @@ beforeAll(async () => {
   const k1: Company = await api.authorizedPerson();
   at = await buildTower(api, { c1, k1 }, "WFR");
   const mar = await sql<{ workflow_definition_id: string }>`
-    select workflow_definition_id from work_item_type where owner_kind = 'rabaed' and code = 'MAR'
+    select workflow_definition_id from work_item_type where owner_kind = 'rabaed' and code = ${LEGACY_MAR}
   `.execute(migrator);
   marDefault = mar.rows[0]!.workflow_definition_id;
   const res = await c1.caller.post(`/v1/workflows/${marDefault}/duplicate`, { projectId: at.projectId, name: ROUTE });

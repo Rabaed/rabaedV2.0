@@ -22,6 +22,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { attachDatasheet, createTestApi, DEFAULT_PASSWORD, expectHidden, type Caller } from "./support/harness.ts";
 import { addSendBackType } from "./support/send-back.ts";
 import { all, bilingual, buildTower, detail, memberOnProject, ok, only, projectMember, submitted, take, type Company, type Tower } from "./support/tower.ts";
+import { LEGACY_MAR } from "@rabaed/db/test-support";
 
 const api = await createTestApi({ files: true });
 const urls = testDatabaseUrls();
@@ -78,7 +79,7 @@ async function issue(id: string, code: "approve_a" | "revise_c", by: Caller = at
 async function inReview(title: string): Promise<string> {
   const res = await ok(
     at.c1Engineer.post(`/v1/projects/${at.projectId}/work-items`, {
-      type: "MAR",
+      type: LEGACY_MAR,
       title,
       answers: { manufacturer: "ACME Cables", description: "Galvanised, 300 mm", trade: at.electrical, location: at.buildingA },
     }),

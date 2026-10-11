@@ -18,6 +18,7 @@ import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestApi, expectHidden, type Caller } from "./support/harness.ts";
 import { all, bilingual, buildTower, detail, ok, projectMember, submitted, take, type Company, type Tower } from "./support/tower.ts";
+import { LEGACY_MAR } from "@rabaed/db/test-support";
 
 const api = await createTestApi({ files: true });
 const migrator = createDb(testDatabaseUrls().migrator, { max: 1 });
@@ -329,10 +330,10 @@ describe("paging and filters", () => {
     const everything = (await feed(tower.c1Pm)).entries;
     expect((await feed(tower.c1Pm, { module: "submittals" })).entries).toEqual(everything);
     expect((await feed(tower.c1Pm, { module: "inspections" })).entries).toEqual([]);
-    const mars = (await feed(tower.c1Pm, { type: ["MAR"] })).entries;
+    const mars = (await feed(tower.c1Pm, { type: [LEGACY_MAR] })).entries;
     expect(new Set(mars.map((e) => e.workItem.id))).toEqual(new Set([marId]));
-    expect((await feed(tower.c1Pm, { type: ["MAR", TYPE] })).entries).toEqual(everything);
-    expect((await feed(tower.c1Pm, { module: "inspections", type: ["MAR"] })).entries).toEqual([]);
+    expect((await feed(tower.c1Pm, { type: [LEGACY_MAR, TYPE] })).entries).toEqual(everything);
+    expect((await feed(tower.c1Pm, { module: "inspections", type: [LEGACY_MAR] })).entries).toEqual([]);
   });
 
   it("keeps \"items I'm on\" to the ones I raised, held or acted on, combined with the other filters", async () => {
@@ -340,7 +341,7 @@ describe("paging and filters", () => {
     const engineerOn = new Set((await feed(k1Engineer, { mine: true })).entries.map((e) => e.workItem.id));
     expect(engineerOn).toContain(k1Acted);
     expect(engineerOn).not.toContain(marId);
-    expect((await feed(k1Engineer, { mine: true, type: ["MAR"] })).entries).toEqual([]);
+    expect((await feed(k1Engineer, { mine: true, type: [LEGACY_MAR] })).entries).toEqual([]);
     // The manager held and acted on the scenario 35 item, and holds k1Acted and the MAR:
     // K1's only manager holds a Step whose pool is them alone at once (§3.3 rule 4).
     const managerOn = new Set((await feed(tower.k1Manager, { mine: true })).entries.map((e) => e.workItem.id));
@@ -348,7 +349,7 @@ describe("paging and filters", () => {
     expect(managerOn).toContain(k1Acted);
     expect(managerOn).toContain(marId);
     // C1's engineer raised every C1 item: the MAR among them.
-    expect(new Set((await feed(tower.c1Engineer, { mine: true, type: ["MAR"] })).entries.map((e) => e.workItem.id))).toEqual(new Set([marId]));
+    expect(new Set((await feed(tower.c1Engineer, { mine: true, type: [LEGACY_MAR] })).entries.map((e) => e.workItem.id))).toEqual(new Set([marId]));
     // Nobody at the Owner acted on anything.
     expect((await feed(owner, { mine: true })).entries).toEqual([]);
   });
@@ -357,7 +358,7 @@ describe("paging and filters", () => {
     await ok(owner.request("PUT", `/v1/work-items/${marId}/watch`));
     const watched = (await feed(owner, { mine: true })).entries;
     expect(new Set(watched.map((e) => e.workItem.id))).toEqual(new Set([marId]));
-    expect(watched).toEqual((await feed(owner, { type: ["MAR"] })).entries);
+    expect(watched).toEqual((await feed(owner, { type: [LEGACY_MAR] })).entries);
     await ok(owner.delete(`/v1/work-items/${marId}/watch`));
     expect((await feed(owner, { mine: true })).entries).toEqual([]);
   });

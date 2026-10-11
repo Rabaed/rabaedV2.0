@@ -1,0 +1,241 @@
+{
+  "steps": [
+    {
+      "key": "draft",
+      "name": { "en": "Draft", "ar": "مسودة" },
+      "stage": "draft",
+      "actor": { "role": "contractor", "permission": "create" },
+      "outcomeMode": "none"
+    },
+    {
+      "key": "internal_review",
+      "name": { "en": "Contractor PM", "ar": "مدير مشروع المقاول" },
+      "stage": "internal_review",
+      "actor": { "role": "contractor", "permission": "review" },
+      "outcomeMode": "none"
+    },
+    {
+      "key": "contractor_engineer",
+      "name": { "en": "Contractor Engineer", "ar": "مهندس المقاول" },
+      "stage": "internal_review",
+      "actor": { "role": "contractor", "permission": "create" },
+      "outcomeMode": "none",
+      "editsForm": true
+    },
+    {
+      "key": "consultant_engineer",
+      "name": { "en": "Consultant Engineer", "ar": "مهندس الاستشاري" },
+      "stage": "pending_approval",
+      "actor": { "role": "consultant", "permission": "review" },
+      "outcomeMode": "recommend_code"
+    },
+    {
+      "key": "consultant_manager",
+      "name": { "en": "Consultant Manager", "ar": "مدير الاستشاري" },
+      "stage": "pending_approval",
+      "actor": { "role": "consultant", "permission": "approve" },
+      "outcomeMode": "issue_outcome"
+    },
+    {
+      "key": "approved",
+      "name": { "en": "Approved", "ar": "معتمد" },
+      "stage": "approved",
+      "actor": null,
+      "outcomeMode": "none"
+    },
+    {
+      "key": "revise_resubmit",
+      "name": { "en": "Revise & Resubmit", "ar": "مراجعة وإعادة تقديم" },
+      "stage": "revise_resubmit",
+      "actor": null,
+      "outcomeMode": "none"
+    },
+    {
+      "key": "rejected",
+      "name": { "en": "Rejected", "ar": "مرفوض" },
+      "stage": "rejected",
+      "actor": null,
+      "outcomeMode": "none"
+    },
+    {
+      "key": "cancelled",
+      "name": { "en": "Cancelled", "ar": "ملغى" },
+      "stage": "cancelled",
+      "actor": null,
+      "outcomeMode": "none"
+    }
+  ],
+  "transitions": [
+    {
+      "key": "send_for_review",
+      "label": { "en": "Send for Review", "ar": "إرسال للمراجعة" },
+      "kind": "send",
+      "from": "draft",
+      "to": "internal_review",
+      "outcome": null,
+      "permission": "create",
+      "actionForm": null
+    },
+    {
+      "key": "return",
+      "label": { "en": "Return", "ar": "إعادة" },
+      "kind": "return",
+      "from": "internal_review",
+      "to": "contractor_engineer",
+      "outcome": null,
+      "permission": "review",
+      "actionForm": {
+        "sections": [
+          {
+            "key": "return",
+            "title": { "en": "Return", "ar": "إعادة" },
+            "fields": [
+              {
+                "key": "reason",
+                "type": "textarea",
+                "required": true,
+                "maxLength": 2000,
+                "label": { "en": "Reason", "ar": "السبب" },
+                "help": { "en": "Only your Company sees this.", "ar": "لا يراه إلا شركتك." }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "key": "send_for_review_again",
+      "label": { "en": "Send for Review", "ar": "إرسال للمراجعة" },
+      "kind": "send",
+      "from": "contractor_engineer",
+      "to": "internal_review",
+      "outcome": null,
+      "permission": "create",
+      "actionForm": null
+    },
+    {
+      "key": "submit",
+      "label": { "en": "Submit", "ar": "تقديم" },
+      "kind": "submit",
+      "from": "internal_review",
+      "to": "consultant_engineer",
+      "outcome": null,
+      "permission": "submit",
+      "actionForm": null,
+      "screen": "cover_note"
+    },
+    {
+      "key": "send_to_manager",
+      "label": { "en": "Send to Manager", "ar": "إرسال للمدير" },
+      "kind": "send",
+      "from": "consultant_engineer",
+      "to": "consultant_manager",
+      "outcome": null,
+      "permission": "review",
+      "actionForm": null,
+      "screen": "consultant_review"
+    },
+    {
+      "key": "return_to_engineer",
+      "label": { "en": "Return to Engineer", "ar": "إعادة للمهندس" },
+      "kind": "return",
+      "from": "consultant_manager",
+      "to": "consultant_engineer",
+      "outcome": null,
+      "permission": "approve",
+      "actionForm": {
+        "sections": [
+          {
+            "key": "return",
+            "title": { "en": "Return to Engineer", "ar": "إعادة للمهندس" },
+            "fields": [
+              {
+                "key": "reason",
+                "type": "textarea",
+                "required": true,
+                "maxLength": 2000,
+                "label": { "en": "Reason", "ar": "السبب" },
+                "help": { "en": "Only your Company sees this.", "ar": "لا يراه إلا شركتك." }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "key": "approve_a",
+      "label": { "en": "Approve · A", "ar": "اعتماد · A" },
+      "kind": "close",
+      "from": "consultant_manager",
+      "to": "approved",
+      "outcome": "A",
+      "permission": "approve",
+      "actionForm": null,
+      "screen": "code_a"
+    },
+    {
+      "key": "approve_b",
+      "label": { "en": "Approve with Comments · B", "ar": "اعتماد مع ملاحظات · B" },
+      "kind": "close",
+      "from": "consultant_manager",
+      "to": "approved",
+      "outcome": "B",
+      "permission": "approve",
+      "actionForm": null,
+      "screen": "code_b"
+    },
+    {
+      "key": "revise_c",
+      "label": { "en": "Revise & Resubmit · C", "ar": "مراجعة وإعادة تقديم · C" },
+      "kind": "close",
+      "from": "consultant_manager",
+      "to": "revise_resubmit",
+      "outcome": "C",
+      "permission": "approve",
+      "actionForm": null,
+      "screen": "code_c"
+    },
+    {
+      "key": "reject_d",
+      "label": { "en": "Reject · D", "ar": "رفض · D" },
+      "kind": "close",
+      "from": "consultant_manager",
+      "to": "rejected",
+      "outcome": "D",
+      "permission": "approve",
+      "actionForm": null,
+      "screen": "code_d"
+    },
+    {
+      "key": "cancel",
+      "label": { "en": "Cancel", "ar": "إلغاء" },
+      "kind": "cancel",
+      "from": "draft",
+      "to": "cancelled",
+      "outcome": null,
+      "permission": "create",
+      "actionForm": null
+    },
+    {
+      "key": "cancel_engineer",
+      "label": { "en": "Cancel", "ar": "إلغاء" },
+      "kind": "cancel",
+      "from": "contractor_engineer",
+      "to": "cancelled",
+      "outcome": null,
+      "permission": "create",
+      "actionForm": null
+    },
+    {
+      "key": "cancel_review",
+      "label": { "en": "Cancel", "ar": "إلغاء" },
+      "kind": "cancel",
+      "from": "internal_review",
+      "to": "cancelled",
+      "outcome": null,
+      "permission": "review",
+      "actionForm": null
+    }
+  ],
+  "layout": {}
+}

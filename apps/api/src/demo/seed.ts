@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { createEngineer, onboardCompany } from "@rabaed/admin/services";
+import { createEngineer, onboardCompany, publishRabaedDefaults } from "@rabaed/admin/services";
 import type { Db } from "@rabaed/db";
 import type { BaseRole, BilingualText, Locale, StartedDocumentUpload, VisibilityGrant } from "@rabaed/domain";
 import type { FastifyInstance } from "fastify";
@@ -129,6 +129,15 @@ export async function seedDemo(
     label: "Rabaed Engineer (Rabaed Admin)",
   };
   const engineerId = await createEngineer(databases.migrator, { email: engineer.email, fullName: engineer.name.en, password });
+
+  // The seed step every environment runs (RP-437): the Rabaed Default Screens, Forms and
+  // Workflows as documents (apps/admin), so new MARs start on Workflow Version 3 and Form
+  // Version 5. Already published (a deploy ran it), it publishes nothing.
+  const defaults = await publishRabaedDefaults(databases.migrator, {
+    engineerId,
+    reason: "Demo seed: the Rabaed Default Workflows, Forms and Screens (RP-437)",
+  });
+  if (!defaults.ok) throw new Error(`Demo seed: the Rabaed Default ${defaults.kind} ${defaults.name} was refused: ${JSON.stringify(defaults.result)}`);
 
   /** The Engineer onboards a Company; its Authorized Person accepts the invitation. */
   async function onboard(n: number, domain: string, legalName: BilingualText, ap: Person): Promise<Onboarded> {
@@ -370,17 +379,44 @@ export async function seedDemo(
       caller("POST", `/v1/work-items/${itemId}/transitions`, { transition, confirmed: true, idempotencyKey: randomUUID() });
     /**
      * Hafiz raises the MAR with its Datasheet and its free Links to `freeLinks`, and
-     * sends it; Ali picks it up and Submits it to the Consultant.
+     * sends it; Ali, the only one who may review it, holds it at once and Submits it
+     * to the Consultant with its Cover Note (MAR Workflow Version 3).
      */
-    const submitted = async (title: string, datasheet: string[], answers: Record<string, unknown>, freeLinks: string[] = []) => {
+    const submitted = async (title: string, datasheet: string[], answers: Record<string, unknown>, coverNote: string, freeLinks: string[] = []) => {
       const { id } = await hafizCaller<{ id: string }>("POST", `/v1/projects/${projectId}/work-items`, { type: "MAR", title, answers });
       for (const target of freeLinks) await hafizCaller("POST", `/v1/work-items/${id}/links`, { workItemId: target });
       await upload(id, { fieldKey: "datasheet", fileName: `${datasheet[0]!.replaceAll(" ", "-")}-datasheet.pdf`, contentType: "application/pdf", body: demoPdf(datasheet) });
       await take(hafizCaller, id, "send_for_review");
       await aliCaller("POST", `/v1/work-items/${id}/pick-up`);
-      await take(aliCaller, id, "submit");
+      await aliCaller("POST", `/v1/work-items/${id}/transitions`, {
+        transition: "submit",
+        answers: { cover_note: coverNote },
+        confirmed: true,
+        idempotencyKey: randomUUID(),
+      });
       return id;
     };
+    /**
+     * The Consultant's reply (ADR 0019): Ahmed picks the MAR up and answers in his "Send
+     * to Manager" Screen, the verification, a Recommended Code and an Internal Note, all
+     * internal to Design Consultants; Mohammed, the only one who may issue the Code,
+     * holds it at once.
+     */
+    const reviewed = async (itemId: string, verification: Record<string, unknown>, recommendedCode: string, internalNote: string) => {
+      await ahmedCaller("POST", `/v1/work-items/${itemId}/pick-up`);
+      await ahmedCaller("POST", `/v1/work-items/${itemId}/transitions`, {
+        transition: "send_to_manager",
+        answers: verification,
+        recommendedCode,
+        internalNote,
+        confirmed: true,
+        idempotencyKey: randomUUID(),
+      });
+      await mohammedCaller("POST", `/v1/work-items/${itemId}/pick-up`);
+    };
+    /** Mohammed issues the Code with its Screen's answers: the final verification and Remarks, shared with the Code. */
+    const coded = (itemId: string, transition: string, answers: Record<string, unknown>) =>
+      mohammedCaller("POST", `/v1/work-items/${itemId}/transitions`, { transition, answers, confirmed: true, idempotencyKey: randomUUID() });
     const exitSignage = await submitted(
       "Exit signage – Tower 1",
       ["Thorn Voyager", "LED exit sign, maintained, 3-hour duration.", "Demo datasheet: made up for the Rabaed demo."],
@@ -394,17 +430,10 @@ export async function seedDemo(
         location: tower1Floors[0],
         scopes: [lighting, emergencyLighting],
       },
+      "Exit signs for all Tower 1 escape routes, as drawing E-301. / لوحات المخارج لجميع مسارات الهروب في البرج 1، حسب المخطط E-301.",
     );
-    // The MAR Form Version 4's Consultant verification: filled in by the Consultant at
-    // its review Step (the Contractor reads it empty until the item leaves), then the Code.
-    // `answers` over what the Consultant reads, as the web form saves.
-    const verify = async (itemId: string, verification: Record<string, unknown>) => {
-      const { answers } = await ahmedCaller<{ answers: Record<string, unknown> }>("GET", `/v1/work-items/${itemId}`);
-      await ahmedCaller("PUT", `/v1/work-items/${itemId}/answers`, { answers: { ...answers, ...verification } });
-    };
-    await verify(exitSignage, { sample_checked: true, matches_specification: true });
-    await mohammedCaller("POST", `/v1/work-items/${exitSignage}/pick-up`);
-    await take(mohammedCaller, exitSignage, "approve_a");
+    await reviewed(exitSignage, { sample_checked: true, matches_specification: true }, "A", "Checked against the sample on site.");
+    await coded(exitSignage, "approve_a", { sample_checked: true, matches_specification: true });
     // In Tower 2, linking the approved exit signs it supervises twice: under
     // Related submittals (the Form Version 3's link question) and as a free Link.
     /* eslint-disable rabaed/no-avoid-terms -- an electrical panel, the equipment this submittal is for, not a Form Section. */
@@ -422,14 +451,15 @@ export async function seedDemo(
         scopes: [lighting, emergencyLighting],
         related_submittals: [exitSignage],
       },
+      "The panel for the approved exit signs. / اللوحة الخاصة بلوحات المخارج المعتمدة.",
       [exitSignage],
     );
     /* eslint-enable rabaed/no-avoid-terms */
 
-    // The part 3 flow (Form Version 4, MAR Workflow Version 2), ending with Code C and
-    // Remarks. The Consultant's verification sits empty for the Contractor, marked
-    // "Filled in by the Consultant", until the Code is issued; Ahmed fills it at the review
-    // Step, and Mohammed issues Code C with Remarks. Its Rev 1 follows.
+    // Ending with Code C and Remarks (Form Version 5, MAR Workflow Version 3). Ahmed's
+    // verification and his Recommended Code stay inside Design Consultants (V5); Mohammed
+    // issues Code C with Remarks and the final verification, both shared with the Code.
+    // Its Rev 1 follows.
     const cableTray = await submitted(
       CODE_C_TITLE,
       ["Legrand Cablofil CF 54", "Wire mesh cable tray, hot dip galvanised.", "Demo datasheet: made up for the Rabaed demo."],
@@ -442,28 +472,24 @@ export async function seedDemo(
         trade: electrical,
         location: tower1Floors[1],
       },
+      "Cable trays for the Tower 1 risers. / حوامل الكابلات لصواعد البرج 1.",
     );
-    await verify(cableTray, {
+    const trayVerification = {
       sample_checked: true,
       matches_specification: false,
-      // eslint-disable-next-line rabaed/no-avoid-terms -- the demo Form's field key, kept as published in its Form Version.
+      // eslint-disable-next-line rabaed/no-avoid-terms -- the Screen's field key, kept as the MAR Form Version 4 named it.
       verification_note:
-        "The tray is electro-zinc plated, not hot dip galvanised as the specification requires. / اللوحة مجلفنة كهربائياً وليست مجلفنة بالغمس الساخن كما تشترط المواصفات.",
-    });
-    await mohammedCaller("POST", `/v1/work-items/${cableTray}/pick-up`);
-    await mohammedCaller("POST", `/v1/work-items/${cableTray}/transitions`, {
-      transition: "revise_c",
-      answers: {
-        remarks:
-          "Resubmit with hot dip galvanised trays (EN ISO 1461). / أعد التقديم بلوحات مجلفنة بالغمس الساخن (EN ISO 1461).",
-      },
-      confirmed: true,
-      idempotencyKey: randomUUID(),
+        "The tray is electro-zinc plated, not hot dip galvanised as the specification requires. / الحامل مجلفن كهربائياً وليس مجلفناً بالغمس الساخن كما تشترط المواصفات.",
+    };
+    await reviewed(cableTray, trayVerification, "C", "Recommend C: the finish doesn't meet 26 05 36.");
+    await coded(cableTray, "revise_c", {
+      ...trayVerification,
+      remarks: "Resubmit with hot dip galvanised trays (EN ISO 1461). / أعد التقديم بحوامل مجلفنة بالغمس الساخن (EN ISO 1461).",
     });
 
     // Its Rev 1 (RP-316, RP-318): Hafiz creates it from the closed MAR, with his
-    // answers and the Datasheet copied and the Consultant's verification empty,
-    // changes the trays to hot dip galvanised, and sends it; Ali Submits it. The
+    // answers and the Datasheet copied, changes the trays to hot dip galvanised, and
+    // sends it; Ali Submits it. The
     // Consultant receives `… Rev 1`, and the item page's Revision drop-down opens
     // the original to compare.
     const { id: rev1 } = await hafizCaller<{ id: string }>("POST", `/v1/work-items/${cableTray}/revisions`, { idempotencyKey: randomUUID() });

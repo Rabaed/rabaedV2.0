@@ -14,6 +14,7 @@ import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { attachDatasheet, createTestApi, expectHidden, type Caller } from "./support/harness.ts";
 import { all, bilingual, buildTower, draft, inInternalReview, ok, projectMember, submitted, take, type Company, type Tower } from "./support/tower.ts";
+import { LEGACY_MAR } from "@rabaed/db/test-support";
 
 const api = await createTestApi({ files: true });
 const migrator = createDb(testDatabaseUrls().migrator, { max: 1 });
@@ -54,7 +55,7 @@ function card(d: Dashboard, code: string): DashboardCard {
 }
 
 function marCard(d: Dashboard) {
-  const c = card(d, "MAR");
+  const c = card(d, LEGACY_MAR);
   if (c.kind !== "outcomes") throw new Error("expected an outcomes card");
   return c;
 }
@@ -275,7 +276,7 @@ describe("scenario 64: the Code C line while C1's Revision is a Draft", () => {
     expect(line.rejectedAfterC).toBeNull();
     expect((await listed(tower.k1Manager, tower.projectId, line.awaitingRevision.query)).sort()).toEqual([unrevised, original].sort());
     for (const codeC of ["noRevisionYet", "revisionInProgress"] as const) {
-      expect(await listed(tower.k1Manager, tower.projectId, { module: "submittals", type: ["MAR"], bucket: [], codeC: [codeC] })).toEqual([]);
+      expect(await listed(tower.k1Manager, tower.projectId, { module: "submittals", type: [LEGACY_MAR], bucket: [], codeC: [codeC] })).toEqual([]);
     }
   });
 
@@ -371,7 +372,7 @@ describe("a Type of another Module: the Snag List", () => {
       insert into work_item_type (owner_kind, module_key, code, name, workflow_definition_id, outcome_kind, form_definition_id)
       select t.owner_kind, 'snag_list', ${SNAG}, ${JSON.stringify(bilingual("Snag (test)"))}::jsonb, t.workflow_definition_id, t.outcome_kind, t.form_definition_id
       from work_item_type t
-      where t.owner_kind = 'rabaed' and t.code = 'MAR'
+      where t.owner_kind = 'rabaed' and t.code = ${LEGACY_MAR}
         and not exists (select 1 from work_item_type x where x.owner_kind = 'rabaed' and x.code = ${SNAG})
     `.execute(migrator);
   }
@@ -446,7 +447,7 @@ describe("a Type of another Module: the Snag List", () => {
 
   it("keeps the Submittals List to the Submittals, and the Snag List to its Stages and Types", async () => {
     const submittals: WorkItemList = (await ok(tower.c1Pm.get(`/v1/projects/${tower.projectId}/work-items`), 200)).json();
-    expect(submittals.items.map((i) => i.type.code)).toEqual(["MAR"]);
+    expect(submittals.items.map((i) => i.type.code)).toEqual([LEGACY_MAR]);
     const snags: WorkItemList = (await ok(tower.c1Pm.get(`/v1/projects/${tower.projectId}/work-items?module=snag_list`), 200)).json();
     expect(snags.items.map((i) => i.type.code)).toEqual([SNAG, SNAG, SNAG]);
     expect(snags.filters.types.map((t) => t.code).sort()).toEqual(["CMT", SNAG].sort());

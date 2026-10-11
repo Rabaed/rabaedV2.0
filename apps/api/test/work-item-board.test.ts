@@ -17,6 +17,7 @@ import {
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { attachDatasheet, createTestApi, expectHidden, type Caller } from "./support/harness.ts";
 import { all, bilingual, ok, projectMember, take, type Company } from "./support/tower.ts";
+import { LEGACY_MAR } from "@rabaed/db/test-support";
 
 const api = await createTestApi({ files: true });
 afterAll(() => api.close());
@@ -86,7 +87,7 @@ function expectCountsAddUp(b: WorkItemBoard, label?: string) {
 async function draft(title: string, answers: Record<string, unknown> = {}): Promise<string> {
   const res = await ok(
     c1Engineer.post(`/v1/projects/${projectId}/work-items`, {
-      type: "MAR",
+      type: LEGACY_MAR,
       title,
       answers: { ...complete, trade: trade.electrical, location: loc.buildingA, ...answers },
     }),
@@ -179,7 +180,7 @@ beforeAll(async () => {
   c2Item = (
     await ok(
       c2Engineer.post(`/v1/projects/${projectId}/work-items`, {
-        type: "MAR",
+        type: LEGACY_MAR,
         title: "C2 pumps",
         answers: { ...complete, trade: trade.mechanical, location: loc.buildingB },
       }),

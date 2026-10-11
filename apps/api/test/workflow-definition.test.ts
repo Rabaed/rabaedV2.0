@@ -127,10 +127,11 @@ beforeAll(async () => {
 });
 
 describe("every published Workflow Version", () => {
-  it("includes MAR Versions 1 and 2, each used by a Work Item Type", () => {
+  it("includes MAR Versions 1, 2 and 3 (RP-437), each used by a Work Item Type", () => {
     expect(versions.filter((v) => v.name === "Material Submittal (MAR)").map((v) => [v.versionNo, v.outcomeKind])).toEqual([
       [1, "review_code"],
       [2, "review_code"],
+      [3, "review_code"],
     ]);
     expect(versions.filter((v) => v.typeId === null).map((v) => v.name)).toEqual([]);
   });

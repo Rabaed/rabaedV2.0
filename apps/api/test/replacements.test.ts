@@ -15,6 +15,7 @@ import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { attachDatasheet, createTestApi, expectHidden, uploadDocument, type Caller } from "./support/harness.ts";
 import { all, bilingual, detail, ok, projectMember, take, type Company } from "./support/tower.ts";
+import { LEGACY_MAR } from "@rabaed/db/test-support";
 
 const api = await createTestApi({ files: true });
 const migrator = createDb(testDatabaseUrls().migrator, { max: 1 });
@@ -68,7 +69,7 @@ async function codeC(id: string) {
 /** A MAR with its datasheet, and the Attachments named, closed at Code C. */
 async function closedAtCodeC(title: string, attachments: string[] = []): Promise<string> {
   const res = await ok(
-    engineer.post(`/v1/projects/${projectId}/work-items`, { type: "MAR", title, answers: { ...complete, trade: electrical, location: buildingA } }),
+    engineer.post(`/v1/projects/${projectId}/work-items`, { type: LEGACY_MAR, title, answers: { ...complete, trade: electrical, location: buildingA } }),
     201,
   );
   const id = res.json().id as string;
@@ -140,14 +141,14 @@ describe("what the item page offers follows the outcome's follow-up actions", ()
     }
     await expectHidden(createReplacement(stranger, d));
     await expectHidden(createReplacement(engineer, randomUUID()));
-    const open = (await ok(engineer.post(`/v1/projects/${projectId}/work-items`, { type: "MAR", title: "Open", answers: { ...complete, trade: electrical } }), 201))
+    const open = (await ok(engineer.post(`/v1/projects/${projectId}/work-items`, { type: LEGACY_MAR, title: "Open", answers: { ...complete, trade: electrical } }), 201))
       .json().id as string;
     expect((await createReplacement(engineer, open)).statusCode).toBe(409);
     expect((await detail(engineer, open)).actions.createReplacement).toBe(false);
   });
 
   it("follows the Type's outcome set: a Project Admin makes Code C offer a replacement instead of a Revision", async () => {
-    const base = `/v1/projects/${projectId}/work-item-types/MAR/outcomes`;
+    const base = `/v1/projects/${projectId}/work-item-types/${LEGACY_MAR}/outcomes`;
     const path = `${base}/C`;
     const set: TypeOutcomes = (await ok(c1.caller.get(base), 200)).json();
     const c = set.outcomes.find((o) => o.code === "C")!;

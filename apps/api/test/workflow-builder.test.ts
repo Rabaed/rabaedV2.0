@@ -20,6 +20,7 @@ import {
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestApi, expectHidden, type Caller } from "./support/harness.ts";
+import { LEGACY_MAR } from "@rabaed/db/test-support";
 import { all, buildTower, detail, draft, ok, projectMember, take, type Company, type Tower } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
@@ -64,7 +65,7 @@ beforeAll(async () => {
   await ok(c1.caller.request("PUT", `/v1/participants/${r1ParticipantId}/visibility`, { trade: all, location: all }));
   ownerRep = await projectMember(api, r1, r1ParticipantId, [APPROVER]);
   const mar = await sql<{ id: string; workflow_definition_id: string }>`
-    select id, workflow_definition_id from work_item_type where owner_kind = 'rabaed' and code = 'MAR'
+    select id, workflow_definition_id from work_item_type where owner_kind = 'rabaed' and code = ${LEGACY_MAR}
   `.execute(migrator);
   marTypeId = mar.rows[0]!.id;
   marDefault = mar.rows[0]!.workflow_definition_id;
@@ -83,7 +84,7 @@ describe("a Project Admin builds the Project's copy of the MAR", () => {
     route = res.json().id;
     const read = await builder(c1.caller, route);
     expect(read.workflow).toMatchObject({ id: route, name: ROUTE, owner: "project", draft: { versionNo: 1 }, canAuthor: true });
-    expect(read.type).toEqual({ code: "MAR", name: expect.objectContaining({ en: expect.any(String), ar: expect.any(String) }) });
+    expect(read.type).toEqual({ code: LEGACY_MAR, name: expect.objectContaining({ en: expect.any(String), ar: expect.any(String) }) });
     expect(read.stages.map((s) => s.key)).toEqual(expect.arrayContaining(["draft", "pending_approval", "approved", "cancelled"]));
     expect(read.stages.find((s) => s.key === "approved")).toMatchObject({ category: "closed_positive", name: { en: expect.any(String), ar: expect.any(String) } });
     expect(read.outcomes.map((o) => o.code)).toEqual(expect.arrayContaining(["A", "B", "C", "D"]));
