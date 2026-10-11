@@ -47,7 +47,7 @@ import {
   type TakeoverWorktree,
 } from "./lanes.ts";
 import { samePath } from "./paths.ts";
-import { foreignSessionLock, parseSessionLock, readProcessList, sessionPidOf } from "./session-lock.ts";
+import { foreignSessionLock, listeningPid, ownServerHint, parseSessionLock, readProcessList, sessionPidOf } from "./session-lock.ts";
 import { isRunning } from "./worktrees-stale.ts";
 import { branchMerged, currentRoot, gitDirty, gitError, listWorktrees, refExists, type Worktree } from "./worktrees.ts";
 
@@ -125,6 +125,23 @@ function holderStatus(lane: number): string[] {
   return holderAdvice(lane, holders, { worktrees: relevant, hasOriginMain, cwd: check.cwd });
 }
 
+/** RP-545: lane n's taken ports held by a process of this session itself (its own pnpm demo / dev), with the command to stop it. */
+function ownServerHints(lane: number): string[] {
+  const hints: string[] = [];
+  try {
+    const processes = readProcessList();
+    for (const port of Object.values(lanePorts(lane))) {
+      if (!check.takenPorts.has(port)) continue;
+      const pid = listeningPid(port);
+      const hint = pid === undefined ? undefined : ownServerHint(port, pid, process.pid, processes, sessionPidOf(process.env));
+      if (hint) hints.push(hint);
+    }
+  } catch {
+    // The process list cannot be read: the plain refusal stands.
+  }
+  return hints;
+}
+
 /**
  * --force (RP-500): when only containers of worktrees that are gone, or merged into origin/main and
  * clean, hold lane n, removes those containers (never the volumes) so this worktree's compose up
@@ -194,6 +211,7 @@ if (clashes.length > 0) {
   const why = `Lane ${n} is not free:\n${clashes.map((c) => `  - ${c}`).join("\n")}`;
   if (!free || next === undefined) {
     console.error(why);
+    for (const line of ownServerHints(n)) console.error(line);
     for (const line of holderStatus(n)) console.error(line);
     console.error(next === undefined ? `No lane is free. ${prune}` : `Lane ${next} is free: pnpm lane:env ${next}${force ? " --force" : ""} (or add --free). ${prune}`);
     process.exit(1);

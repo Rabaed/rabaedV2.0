@@ -45,6 +45,53 @@ export function sessionPidOf(env: Record<string, string | undefined>): number | 
   return Number.isInteger(pid) && pid > 0 ? pid : undefined;
 }
 
+/**
+ * RP-545: the hint for a lane port held by a process of this very session (its own `pnpm demo` / `pnpm dev`), which
+ * blocks the implementers' `lane:env --db` runs; undefined when the holder is not in this session's process tree.
+ * The tree is the holder's parent chain reaching this session's claude: sessionPid (CLAUDE_PID), else the first
+ * `claude` process among ownPid's ancestors. Never higher: the desktop app above it also parents other sessions.
+ */
+export function ownServerHint(port: number, holderPid: number, ownPid: number, processes: ProcessList, sessionPid?: number): string | undefined {
+  const session = sessionPid ?? claudeAncestor(ownPid, processes);
+  if (session === undefined) return undefined;
+  const seen = new Set<number>();
+  let inTree = false;
+  for (let p: number | undefined = processes.parentOf(holderPid); p !== undefined && !seen.has(p); p = processes.parentOf(p)) {
+    if (p === session) {
+      inTree = true;
+      break;
+    }
+    seen.add(p);
+  }
+  if (!inTree) return undefined;
+  const stop = process.platform === "win32" ? `taskkill /pid ${holderPid} /t` : `kill ${holderPid}`;
+  return `Port ${port} is held by this session's own dev server (${processes.nameOf(holderPid) ?? "process"}, pid ${holderPid}), probably its pnpm demo or pnpm dev. Stop it with \`${stop}\`, or run it after the implementers finish or on another lane.`;
+}
+
+/** The nearest `claude` / `claude.exe` among pid's ancestors (pid included), or undefined. */
+function claudeAncestor(pid: number, processes: ProcessList): number | undefined {
+  const seen = new Set<number>();
+  for (let p: number | undefined = pid; p !== undefined && p > 1 && !seen.has(p); p = processes.parentOf(p)) {
+    if (/^claude(\.exe)?$/i.test(processes.nameOf(p) ?? "")) return p;
+    seen.add(p);
+  }
+  return undefined;
+}
+
+/** The pid listening on a TCP port, or undefined when none is found or it cannot be read. */
+export function listeningPid(port: number): number | undefined {
+  try {
+    const out =
+      process.platform === "win32"
+        ? execFileSync("powershell.exe", ["-NoProfile", "-Command", `(Get-NetTCPConnection -LocalPort ${port} -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1).OwningProcess`], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] })
+        : execFileSync("lsof", ["-t", `-iTCP:${port}`, "-sTCP:LISTEN"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+    const pid = Number(out.trim().split(/\s+/)[0]);
+    return Number.isInteger(pid) && pid > 0 ? pid : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /** Reads lines of `pid ppid name` into a process list. */
 export function parseProcessTable(out: string): ProcessList {
   const parents = new Map<number, number>();
