@@ -8,7 +8,7 @@
 import { randomUUID } from "node:crypto";
 import { createDb } from "@rabaed/db";
 import { drainOutbox, testDatabaseUrls } from "@rabaed/db/test-support";
-import type { DocumentList, NotificationList, WorkItemDetail, WorkItemLinks, WorkItemList } from "@rabaed/domain";
+import type { DocumentList, NotificationList, WorkItemLinks, WorkItemList } from "@rabaed/domain";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { attachDatasheet, createTestApi, type Caller } from "./support/harness.ts";
 import { all, bilingual, ok, projectMember, take, type Company } from "./support/tower.ts";
@@ -31,7 +31,6 @@ const timeIn = (id: string) => parseInt(id.replaceAll("-", "").slice(0, 12), 16)
 let c1: Company;
 let c1Engineer: Caller;
 let c1Pm: Caller;
-let k1Engineer: Caller;
 let k1Manager: Caller;
 let projectId = "";
 let trade = "";
@@ -81,7 +80,7 @@ beforeAll(async () => {
   await ok(c1.caller.request("PUT", `/v1/participants/${k1}/visibility`, { trade: all, location: all }));
   c1Engineer = await projectMember(api, c1, own, ["engineer"]);
   c1Pm = await projectMember(api, c1, own, ["project_manager"]);
-  k1Engineer = await projectMember(api, k1Company, k1, ["engineer"]);
+  await projectMember(api, k1Company, k1, ["engineer"]); // A Consultant engineer, in its Step Pool.
   k1Manager = await projectMember(api, k1Company, k1, ["manager"]);
   // Anything earlier tests left in the outbox is not ours to judge.
   await drainOutbox(worker);
@@ -124,9 +123,6 @@ describe("ids K1 receives once C1 Submits (scenario 73)", () => {
 
   it("are random: the Documents copied into a Revision of it, once C1 Submits that", async () => {
     // K1 issues Code C, and C1 Submits a Revision with the Documents copied.
-    const answers: WorkItemDetail["answers"] = (await ok(k1Engineer.get(`/v1/work-items/${item}`), 200)).json().answers;
-    const verified = { ...answers, sample_checked: true, matches_specification: false, verification_note: "Below the specified size" };
-    await ok(k1Engineer.request("PUT", `/v1/work-items/${item}/answers`, { answers: verified }));
     await ok(k1Manager.post(`/v1/work-items/${item}/pick-up`));
     await take(k1Manager, item, "revise_c", { remarks: "Resubmit with 400 mm trays" });
     const revision = (await ok(c1Engineer.post(`/v1/work-items/${item}/revisions`, { idempotencyKey: randomUUID() }), 201)).json().id as string;

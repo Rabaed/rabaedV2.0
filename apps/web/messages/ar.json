@@ -499,8 +499,7 @@
         "choose": "اختر…",
         "none": "بدون",
         "leftProject": "\u2068{name}\u2069 (لم يعد في المشروع)",
-        "unanswered": "لم تتم الإجابة",
-        "filledBy": "يعبّئه {role}"
+        "unanswered": "لم تتم الإجابة"
       },
       "builtIn": {
         "choose": "اختر…",

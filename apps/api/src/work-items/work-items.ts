@@ -8,7 +8,6 @@ import {
   formFields,
   mergeFieldAnswers,
   formSchema,
-  sectionsFilledBy,
   isHiddenLinkChoice,
   offeredChoices,
   parseActionForm,
@@ -259,12 +258,12 @@ async function pinnedForm(trx: Trx, workItemId: string): Promise<PinnedForm | nu
   };
 }
 
-/** A Workflow Version's Steps as Form Sections are matched to them, and the name of each base role's Project Role. */
-type WorkflowSteps = { steps: WorkflowStepHolder[]; roleNames: ReadonlyMap<string, BilingualText> };
+/** A Workflow Version's Steps as Form Sections are matched to them. */
+type WorkflowSteps = { steps: WorkflowStepHolder[] };
 
 /** The Steps of the Workflow Version `workflowVersionId`. Definitions, which every Member reads. */
 async function workflowSteps(trx: Trx, workflowVersionId: string): Promise<WorkflowSteps> {
-  const { rows } = await sql<{ key: string; role: string | null; draft: boolean; role_name: BilingualText | null }>`
+  const { rows } = await sql<{ key: string; role: string | null; draft: boolean }>`
     -- A Draft as app.is_draft_step (which the app role can't call) tells it: a Stage of category draft, in any
     -- Module, of the Stage set the Workflow is published against (RP-428): its Project's for a Project's own
     -- Workflow, the Rabaed Defaults' for any other.
@@ -273,29 +272,19 @@ async function workflowSteps(trx: Trx, workflowVersionId: string): Promise<Workf
         select 1 from stage st
         where st.key = s.stage_key and st.category = 'draft'
           and case when d.owner_kind = 'project' then st.project_id = d.project_id else st.owner_kind = 'rabaed' end
-      ) as draft,
-      r.name as role_name
+      ) as draft
     from workflow_step s
     join workflow_version v on v.id = s.workflow_version_id
     join workflow_definition d on d.id = v.workflow_definition_id
-    -- Projects use the Rabaed Default Project Roles for now.
-    left join project_role r on r.owner_kind = 'rabaed' and r.base_role = s.actor_rule ->> 'base_role'
     where s.workflow_version_id = ${workflowVersionId}
     order by s.key
   `.execute(trx);
-  return {
-    steps: rows.map(({ key, role, draft }) => ({ key, role, draft })),
-    roleNames: new Map(rows.flatMap((r) => (r.role && r.role_name ? [[r.role, r.role_name] as const] : []))),
-  };
+  return { steps: rows.map(({ key, role, draft }) => ({ key, role, draft })) };
 }
 
-/** `form` as it is filled in at `step`: the sections editable there, and who fills the sections another Participant fills. */
-function formToFillAt(form: FormVersion, { steps, roleNames }: WorkflowSteps, at: SectionEditContext): FormToFill {
-  const filledBy = Object.entries(sectionsFilledBy(form.schema, steps)).flatMap(([key, role]) => {
-    const name = roleNames.get(role);
-    return name ? [[key, name] as const] : [];
-  });
-  return { ...form, editableSections: [...editableSections(form.schema, steps, at)], filledBy: Object.fromEntries(filledBy) };
+/** `form` as it is filled in at `step`: the sections editable there. */
+function formToFillAt(form: FormVersion, { steps }: WorkflowSteps, at: SectionEditContext): FormToFill {
+  return { ...form, editableSections: [...editableSections(form.schema, steps, at)] };
 }
 
 /**

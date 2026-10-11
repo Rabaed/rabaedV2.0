@@ -30,6 +30,7 @@ export const rabaedDefaultScreens = [
   "ncr_response",
   "ncr_accept",
   "ncr_reject",
+  "comment_resolution",
 ] as const;
 
 /**
@@ -44,7 +45,7 @@ export const rabaedDefaultTypes = [
   { type: "DAR", form: null, workflow: "MAR.json" },
   { type: "WIR", form: "WIR.json", workflow: "WIR.json" },
   { type: "NCR", form: "NCR.json", workflow: "NCR.json" },
-  { type: "CMT", form: null, workflow: "CMT.json" },
+  { type: "CMT", form: "CMT.json", workflow: "CMT.json" },
 ] as const;
 
 const json = (folder: "screens" | "forms" | "workflows", file: string): unknown =>

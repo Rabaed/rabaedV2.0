@@ -105,7 +105,7 @@ beforeAll(async () => {
       },
     ],
   };
-  await addSendBackType(migrator, TYPE, { en: "Screened submittal", ar: "تقديم بشاشات" }, form);
+  await addSendBackType(migrator, TYPE, { en: "Screened submittal", ar: "تقديم بشاشات" }, form, { engineerStep: true });
   c1 = await api.projectCreator();
   k1 = await api.authorizedPerson();
   at = await buildTower(api, { c1, k1 }, "SCR");

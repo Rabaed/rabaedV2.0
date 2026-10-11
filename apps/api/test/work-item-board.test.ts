@@ -28,7 +28,6 @@ let c1: Company; // Contractor; its Authorized Person created the Project.
 let c1Engineer: Caller;
 let c1Pm: Caller;
 let c2Engineer: Caller; // A second Contractor (V3).
-let k1Engineer: Caller; // Consultant: verifies.
 let k1ManagerA: Caller; // Consultant: in the review Step's pool.
 let k1ManagerB: Caller; // Consultant: in the same pool.
 let outsider: Caller; // A Company on no Project of these.
@@ -105,18 +104,8 @@ async function submit(id: string) {
   await take(c1Pm, id, "submit");
 }
 
-/** K1 verifies the submitted item and issues Code C, closing it. */
+/** K1 issues Code C on the submitted item, closing it. */
 async function codeC(id: string) {
-  await ok(
-    k1Engineer.request("PUT", `/v1/work-items/${id}/answers`, {
-      answers: {
-        ...(await ok(k1Engineer.get(`/v1/work-items/${id}`), 200)).json().answers,
-        sample_checked: true,
-        matches_specification: false,
-        verification_note: "Below the specified efficacy",
-      },
-    }),
-  );
   await ok(k1ManagerA.post(`/v1/work-items/${id}/pick-up`));
   await take(k1ManagerA, id, "revise_c", { remarks: "Resubmit with 110 lm/W luminaires" });
 }
@@ -154,7 +143,7 @@ beforeAll(async () => {
   c2Engineer = await projectMember(api, c2.company, c2.participantId, ["engineer"]);
   const k1 = await participant("consultant");
   k1ParticipantId = k1.participantId;
-  k1Engineer = await projectMember(api, k1.company, k1.participantId, ["engineer"]);
+  await projectMember(api, k1.company, k1.participantId, ["engineer"]);
   // Named, so the test can tell that C1 never reads their name.
   const managerA = await api.inviteMember(k1.company.caller, { fullName: { en: "Hessa Al Otaibi", ar: "حصة العتيبي" } });
   k1ManagerA = await api.acceptInvitation(managerA.invitationToken);

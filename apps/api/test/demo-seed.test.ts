@@ -436,7 +436,7 @@ describe("the README walkthrough", () => {
     // The Form is the raiser's (Version 5): no section of it is the Consultant's.
     const draft: FormToFill = (await hafiz.get(`/v1/work-items/${mar}/form`)).json();
     expect(draft.versionNo).toBe(5);
-    expect(draft.filledBy).toEqual({});
+    expect(draft.schema.sections.every((s) => s.editable_at === undefined)).toBe(true);
     await take(hafiz, mar, "send_for_review");
     await pickUp(ali);
     await take(ali, mar, "submit");

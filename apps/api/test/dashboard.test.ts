@@ -111,15 +111,9 @@ async function submittedRevision(at: Tower, id: string): Promise<string> {
   return revision;
 }
 
-/** K1 verifies item `id` and issues a Review Code. */
+/** K1 issues a Review Code on item `id`. */
 async function code(by: Caller, id: string, transition: "approve_a" | "revise_c") {
-  const answers = (await ok(by.get(`/v1/work-items/${id}`), 200)).json().answers as Record<string, unknown>;
   const pass = transition === "approve_a";
-  await ok(
-    by.request("PUT", `/v1/work-items/${id}/answers`, {
-      answers: { ...answers, sample_checked: true, matches_specification: pass, ...(pass ? {} : { verification_note: "Below the specified efficacy" }) },
-    }),
-  );
   await ok(by.post(`/v1/work-items/${id}/pick-up`));
   await ok(
     by.post(`/v1/work-items/${id}/transitions`, {

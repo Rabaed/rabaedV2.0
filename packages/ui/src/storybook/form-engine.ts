@@ -222,7 +222,6 @@ export const formRendererLabels: Record<Locale, FormRendererLabels> = {
     // The name sits in an isolate (\u2068 first strong, \u2069 ends), so an Arabic name keeps its place.
     leftProject: (name) => `\u2068${name}\u2069 (no longer on the Project)`,
     unanswered: "Not answered",
-    filledBy: (role) => `Filled in by the ${role}`,
     builtIn: { choose: "Choose…", chooseTradeFirst: "Choose a Trade first.", noScopes: "This Trade has no Scopes." },
     attachments: attachments.en,
     photos: photos.en,
@@ -296,7 +295,6 @@ export const formRendererLabels: Record<Locale, FormRendererLabels> = {
     none: "بدون",
     leftProject: (name) => `\u2068${name}\u2069 (لم يعد في المشروع)`,
     unanswered: "لم تتم الإجابة",
-    filledBy: (role) => `يعبّئه ${role}`,
     builtIn: { choose: "اختر…", chooseTradeFirst: "اختر التخصص أولًا.", noScopes: "لا توجد نطاقات لهذا التخصص." },
     attachments: attachments.ar,
     photos: photos.ar,

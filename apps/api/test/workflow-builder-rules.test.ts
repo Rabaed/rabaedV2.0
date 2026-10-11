@@ -4,12 +4,11 @@
 // edits, and saves, validates and publishes through WF-4's API (RP-427): every kind of
 // rule can be added, edited and removed, and comes back from publish as it was written.
 import { createDb } from "@rabaed/db";
-import { testDatabaseUrls } from "@rabaed/db/test-support";
+import { LEGACY_MAR, returnInInternalReview, testDatabaseUrls } from "@rabaed/db/test-support";
 import { addRule, removeRule, ruleFieldsOf, setRecipient, transitionRuleFields, updateRule, type RuleEntry, type WorkflowBuilderRead, type WorkflowDefinition, type WorkflowRead } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestApi, type Caller } from "./support/harness.ts";
-import { LEGACY_MAR } from "@rabaed/db/test-support";
 import { buildTower, ok, type Company, type Tower } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
@@ -39,6 +38,33 @@ beforeAll(async () => {
   const res = await c1.caller.post(`/v1/workflows/${marDefault}/duplicate`, { projectId: at.projectId, name: ROUTE });
   expect(res.statusCode, res.body).toBe(201);
   route = res.json().id;
+  // Publishable (its Return kept in Internal Review, ADR 0020), and the Code's pop-up
+  // asks a Reviewer's note beside the Remarks, for an Effect to copy into (the
+  // consultant fills its reply, never the Form, ADR 0019).
+  const copy = returnInInternalReview((await read(c1.caller)).draft!.definition);
+  const definition: WorkflowDefinition = {
+    ...copy,
+    transitions: copy.transitions.map((x) =>
+      x.key === TRANSITION
+        ? {
+            ...x,
+            actionForm: {
+              sections: [
+                {
+                  key: "code_remarks",
+                  title: { en: "Remarks", ar: "الملاحظات" },
+                  fields: [
+                    { key: "remarks", type: "textarea", required: false, label: { en: "Remarks", ar: "الملاحظات" } },
+                    { key: "reviewer_note", type: "textarea", required: false, label: { en: "Reviewer's note", ar: "ملاحظة المراجع" } },
+                  ],
+                },
+              ],
+            },
+          }
+        : x,
+    ),
+  };
+  await ok(c1.caller.request("PUT", `/v1/workflows/${route}/draft`, { definition }), 200);
 });
 
 const builder = async (by: Caller): Promise<WorkflowBuilderRead> => (await ok(by.get(`/v1/workflows/${route}/builder`), 200)).json();
@@ -54,20 +80,20 @@ const save = async (definition: WorkflowDefinition) => {
 const t = (en: string, ar: string) => ({ en, ar });
 const message = t("Check the specification first.", "تحقق من المواصفات أولًا.");
 
-/** One rule of every kind, as the dialog writes them from the Form's own fields. */
+/** One rule of every kind, as the dialog writes them from the Form's own fields and the Code's pop-up. */
 const everyKind: RuleEntry[] = [
-  { group: "restrict", rule: { type: "condition", condition: { all: [{ field: "sample_checked", op: "=", value: true }, { not: { field: "verification_note", op: "empty" } }] } } },
+  { group: "restrict", rule: { type: "condition", condition: { all: [{ field: "model", op: "not_empty" }, { not: { field: "description", op: "empty" } }] } } },
   { group: "restrict", rule: { type: "positions", positions: ["manager"] } },
   { group: "restrict", rule: { type: "not_same_person", step: "internal_review" } },
   { group: "restrict", rule: { type: "been_through", step: "consultant_review" } },
   { group: "restrict", rule: { type: "all_closed", items: "comments" } },
-  { group: "validate", rule: { type: "condition", condition: { field: "verification_note", op: "not_empty" }, message: t("Add a verification note.", "أضف ملاحظة تحقق.") } },
-  { group: "validate", rule: { type: "condition", condition: { any: [{ field: "matches_specification", op: "=", value: true }, { field: "manufacturer", op: "in", value: ["acme"] }] }, message } },
+  { group: "validate", rule: { type: "condition", condition: { field: "description", op: "not_empty" }, message: t("Add a description.", "أضف وصفًا.") } },
+  { group: "validate", rule: { type: "condition", condition: { any: [{ field: "specification_section", op: "not_empty" }, { field: "manufacturer", op: "in", value: ["acme"] }] }, message } },
   { group: "validate", rule: { type: "form_complete" } },
   { group: "validate", rule: { type: "has_document", field: "datasheet" } },
   { group: "action", rule: { type: "offer_assign_to" } },
   { group: "action", rule: { type: "set_field", field: "remarks", value: "Reviewed" } },
-  { group: "action", rule: { type: "copy_field", from: "verification_note", to: "remarks" } },
+  { group: "action", rule: { type: "copy_field", from: "remarks", to: "reviewer_note" } },
 ];
 
 describe("the builder's rule pickers", () => {
@@ -75,9 +101,9 @@ describe("the builder's rule pickers", () => {
     const { form } = await builder(c1.caller);
     const fields = ruleFieldsOf(form, null);
     expect(fields.map((f) => f.key)).toEqual(
-      expect.arrayContaining(["manufacturer", "datasheet", "sample_checked", "matches_specification", "verification_note", "trade", "location"]),
+      expect.arrayContaining(["manufacturer", "model", "description", "datasheet", "trade", "location"]),
     );
-    expect(fields.find((f) => f.key === "sample_checked")).toMatchObject({ type: "yes_no", source: "form", label: { en: expect.any(String), ar: expect.any(String) } });
+    expect(fields.find((f) => f.key === "model")).toMatchObject({ type: "text", source: "form", label: { en: expect.any(String), ar: expect.any(String) } });
     expect(fields.find((f) => f.key === "datasheet")?.type).toBe("attachments");
     // Not the Action Form's fields (they belong to one Transition), nor invented ones.
     expect(fields.map((f) => f.key)).not.toContain("remarks");
@@ -90,7 +116,7 @@ describe("the builder's rule pickers", () => {
     const keys = (list: { key: string }[]) => list.map((f) => f.key);
     expect(keys(fields.restrict)).not.toContain("remarks");
     expect(keys(fields.validate)).toEqual(expect.arrayContaining(["remarks", "manufacturer"]));
-    expect(keys(fields.write)).toEqual(expect.arrayContaining(["remarks", "verification_note"]));
+    expect(keys(fields.write)).toEqual(expect.arrayContaining(["remarks", "reviewer_note"]));
     // The raiser's answers: the consultant never writes them.
     expect(keys(fields.write)).not.toContain("manufacturer");
   });
@@ -135,7 +161,7 @@ describe("each kind of rule, action and notification, added, edited and removed"
     definition = updateRule(definition, TRANSITION, { group: "restrict", index: 1 }, { group: "restrict", rule: { type: "positions", positions: ["manager", "engineer"] } });
     definition = updateRule(definition, TRANSITION, { group: "validate", index: 0 }, {
       group: "validate",
-      rule: { type: "condition", condition: { field: "verification_note", op: "not_empty" }, message: t("A verification note is needed.", "ملاحظة التحقق مطلوبة.") },
+      rule: { type: "condition", condition: { field: "description", op: "not_empty" }, message: t("A description is needed.", "الوصف مطلوب.") },
     });
     definition = updateRule(definition, TRANSITION, { group: "action", index: 1 }, { group: "action", rule: { type: "set_field", field: "remarks", value: "Reviewed twice" } });
     definition = setRecipient(definition, TRANSITION, { to: "watchers" }, false);

@@ -21,7 +21,7 @@ import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestApi, type Caller } from "./support/harness.ts";
 import { addSendBackType } from "./support/send-back.ts";
-import { all, bilingual, buildTower, detail, ok, only, submitted, take, type Company, type Tower } from "./support/tower.ts";
+import { all, bilingual, buildTower, ok, only, submitted, take, type Company, type Tower } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
 const urls = testDatabaseUrls();
@@ -304,8 +304,6 @@ describe("the digest job", () => {
 describe("a new Revision (scenario 75)", () => {
   it("collects for the watchers' digest when it gets its number, never while it is a Draft", async () => {
     const id = await submitted(at, raiser.caller, pm.caller, "Revised conduits");
-    const answers = { ...(await detail(at.k1Manager, id)).answers, sample_checked: true, matches_specification: false, verification_note: "Too dim" };
-    await ok(at.k1Manager.request("PUT", `/v1/work-items/${id}/answers`, { answers }));
     await ok(at.k1Manager.post(`/v1/work-items/${id}/pick-up`));
     await ok(at.k1Manager.post(`/v1/work-items/${id}/transitions`, { transition: "revise_c", answers: { remarks: "Resubmit" }, confirmed: true, idempotencyKey: randomUUID() }));
     await drain();

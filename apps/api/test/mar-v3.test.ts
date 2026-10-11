@@ -11,7 +11,11 @@
 // Manager, who may Return it to the Engineer or issue A, B, C or D on its Code Screen,
 // whose final verification is pre-filled from the Engineer's reply and shared with
 // the Code.
+import { publishRabaedDefaults } from "@rabaed/admin/services";
+import { createDb } from "@rabaed/db";
+import { testDatabaseUrls } from "@rabaed/db/test-support";
 import type { DocumentList, FormVersion, WorkItemHistory } from "@rabaed/domain";
+import { DEMO_ENGINEER_EMAIL } from "../src/demo/seed.ts";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestApi, expectHidden, uploadDocument, type Caller } from "./support/harness.ts";
 import { all, bilingual, detail, ok, projectMember, take, tryTake, type Company } from "./support/tower.ts";
@@ -82,12 +86,37 @@ beforeAll(async () => {
   const k1ParticipantId = await participant(k1, "consultant");
   const o1ParticipantId = await participant(o1, "owner_representative");
   const c2ParticipantId = await participant(c2, "contractor");
+  // C2 covers Mechanical only: one Contractor covers an Electrical item, so a Consultant's NCR reaches C1 (§3.1).
+  const mechanical = await post("trades", { code: "ME", name: bilingual("Mechanical") });
+  await ok(c1.caller.request("PUT", `/v1/participants/${c2ParticipantId}/visibility`, { trade: { isAll: false, valueIds: [mechanical] }, location: all }));
   hafiz = await projectMember(api, c1, c1ParticipantId, ["engineer"], { name: "Hafiz Hamdan" });
   ali = await projectMember(api, c1, c1ParticipantId, ["project_manager"], { name: "Ali Sonour" });
   ahmed = await projectMember(api, k1, k1ParticipantId, ["engineer"], { name: "Ahmed bin Said" });
   mohammed = await projectMember(api, k1, k1ParticipantId, ["manager"], { name: "Mohammed Al Shamsi" });
   faisal = await projectMember(api, o1, o1ParticipantId, ["engineer"], { name: "Faisal Al Otaibi" });
   yousef = await projectMember(api, c2, c2ParticipantId, ["engineer"], { name: "Yousef Karim" });
+});
+
+describe("the Rabaed Defaults as documents (`pnpm defaults:publish`)", () => {
+  it("are what the seed step published, so running it again publishes nothing", async () => {
+    const migrator = createDb(testDatabaseUrls().migrator, { max: 1 });
+    try {
+      const engineer = await migrator.selectFrom("rabaed_engineer").select("id").where("email", "=", DEMO_ENGINEER_EMAIL).executeTakeFirstOrThrow();
+      const again = await publishRabaedDefaults(migrator, { engineerId: engineer.id, reason: "RP-437 test: nothing to publish" });
+      expect(again.ok).toBe(true);
+      expect(again.ok && again.done.filter((d) => d.published)).toEqual([]);
+      expect(again.ok && again.done.filter((d) => d.kind === "workflow").map((d) => [d.name, d.versionNo])).toEqual([
+        ["MAR", 3],
+        ["SAR", 1],
+        ["DAR", 1],
+        ["WIR", 1],
+        ["NCR", 1],
+        ["CMT", 2],
+      ]);
+    } finally {
+      await migrator.destroy();
+    }
+  });
 });
 
 describe("the MAR Form Version 5", () => {
@@ -237,5 +266,39 @@ describe("RP-437-1: who reads the replies of a MAR on Version 3", () => {
     const other = await submitted("No pre-fill across Companies");
     await ok(ahmed.post(`/v1/work-items/${other}/pick-up`));
     expect((await transitionsOf(ahmed, other)).find((t) => t.key === "send_to_manager")!.prefill).toBeUndefined();
+  });
+});
+
+describe("the Inspections' Rabaed Defaults (RP-437)", () => {
+  const raiseWir = async (title: string) => {
+    const id = (
+      await ok(hafiz.post(`/v1/projects/${projectId}/work-items`, { type: "WIR", title, answers: { description: "Slab rebar, Level 2", trade: electrical, location: buildingA } }), 201)
+    ).json().id as string;
+    await take(hafiz, id, "send_for_review");
+    await take(ali, id, "submit", { answers: { cover_note: "Ready on site from 09:00" } });
+    await ok(ahmed.post(`/v1/work-items/${id}/pick-up`));
+    return id;
+  };
+
+  it("a WIR Passed with Comments makes its Comments; a Failed one is re-inspected by a Revision", async () => {
+    const passed = await raiseWir("Rebar Level 2");
+    await take(ahmed, passed, "pass_with_comments", { answers: { remarks: "Fix the cover", items_to_create: [{ comment: "Raise the cover to 40 mm" }] } });
+    expect(await detail(hafiz, passed)).toMatchObject({ stage: { key: "passed" }, outcome: "passed_with_comments", comments: { open: 1, closed: 0 } });
+    const failed = await raiseWir("Rebar Level 3");
+    await take(ahmed, failed, "fail", { remarks: "Spacing out of tolerance" });
+    expect(await detail(hafiz, failed)).toMatchObject({ stage: { key: "failed" }, outcome: "failed", actions: { createRevision: true } });
+  });
+
+  it("an NCR is raised by the Consultant, answered by the Contractor and closed with an Approval outcome", async () => {
+    const id = (
+      await ok(ahmed.post(`/v1/projects/${projectId}/work-items`, { type: "NCR", title: "Honeycombing", answers: { description: "Honeycombing on column C4", trade: electrical, location: buildingA } }), 201)
+    ).json().id as string;
+    await take(ahmed, id, "raise");
+    // Ali, the Contractor's only Member who may answer, holds it at once.
+    await take(ali, id, "respond", { answers: { corrective_action: "Repair with non-shrink grout" } });
+    await ok(ahmed.post(`/v1/work-items/${id}/pick-up`));
+    await take(ahmed, id, "accept", { remarks: "Repair accepted" });
+    expect(await detail(hafiz, id)).toMatchObject({ stage: { key: "closed" }, outcome: "approved" });
+    expect((await history(hafiz, id)).find((e) => e.answers?.corrective_action)).toMatchObject({ answers: { corrective_action: "Repair with non-shrink grout" } });
   });
 });

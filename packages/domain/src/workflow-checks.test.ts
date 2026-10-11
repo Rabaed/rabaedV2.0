@@ -69,8 +69,33 @@ const itemsForm = (
   ],
 });
 
-/** MAR Workflow Version 2, a fresh copy to break. */
-const mar = (): WorkflowDefinition => definitionFromRows(marRows(2));
+/**
+ * MAR Workflow Version 2 with its Return kept in Internal Review, as Version 3 has it
+ * (ADR 0020): to a Contractor Engineer Step, which sends it for review again. A fresh
+ * copy to break.
+ */
+const mar = (): WorkflowDefinition => {
+  const d = definitionFromRows(marRows(2));
+  d.steps.push({
+    key: "contractor_engineer",
+    name: { en: "Contractor Engineer", ar: "مهندس المقاول" },
+    stage: "internal_review",
+    actor: { role: "contractor", permission: "create" },
+    outcomeMode: "none",
+  });
+  d.transitions.find((t) => t.key === "return")!.to = "contractor_engineer";
+  d.transitions.push({
+    key: "send_for_review_again",
+    label: { en: "Send for Review", ar: "إرسال للمراجعة" },
+    kind: "send",
+    from: "contractor_engineer",
+    to: "internal_review",
+    outcome: null,
+    permission: "create",
+    actionForm: null,
+  });
+  return d;
+};
 
 const step = (definition: WorkflowDefinition, key: string): WorkflowStep => definition.steps.find((s) => s.key === key)!;
 const transition = (definition: WorkflowDefinition, key: string): WorkflowTransition => definition.transitions.find((t) => t.key === key)!;
@@ -99,8 +124,25 @@ describe("stepEditsForm, over the cases the database shares", () => {
 });
 
 describe("workflowPublishProblems", () => {
-  it.each([1, 2] as const)("passes MAR Version %i", (version) => {
-    expect(workflowPublishProblems(definitionFromRows(marRows(version)), context())).toEqual([]);
+  it.each([1, 2] as const)("refuses only MAR Version %i's Return to the Draft: a Return stays in Internal Review now (ADR 0020)", (version) => {
+    expect(workflowPublishProblems(definitionFromRows(marRows(version)), context())).toEqual([
+      {
+        code: "return_to_draft",
+        severity: "error",
+        transition: "return",
+        step: "draft",
+        message: {
+          en: "\"Return\" goes back to \"Draft\", in the Drafts. A Return stays in Internal Review: send it to the engineer's Step there.",
+          ar: expect.stringContaining("المراجعة الداخلية"),
+        },
+      },
+    ]);
+  });
+
+  it("passes a Send Back to the Draft: only a Return stays out of the Drafts", () => {
+    const d = mar();
+    add(d, { key: "send_back_to_draft", kind: "send_back", from: "consultant_review", to: "draft" });
+    expect(problems(d)).toEqual([]);
   });
 
   describe("check 1: one Draft start Step, every Step reachable, no dead end", () => {
@@ -321,10 +363,8 @@ describe("workflowPublishProblems", () => {
   describe("the raiser's Form is edited only before a Submit, or at a Step a Send Back leads to (ADR 0019)", () => {
     it("by default the Draft Step edits the Form, and the raiser's internal reviewer doesn't", () => {
       const d = mar();
-      expect(d.steps.filter((s) => stepEditsForm(d, s, submittalStages)).map((s) => s.key)).toEqual(["draft"]);
-      // A raiser's Step held with the Draft Step's Function Permission (the author's) does too.
-      addStep(d, { key: "contractor_engineer", stage: "internal_review", actor: { role: "contractor", permission: "create" } });
-      expect(stepEditsForm(d, step(d, "contractor_engineer"), submittalStages)).toBe(true);
+      // A raiser's Step held with the Draft Step's Function Permission (the author's, the Contractor Engineer's) does too.
+      expect(d.steps.filter((s) => stepEditsForm(d, s, submittalStages)).map((s) => s.key)).toEqual(["draft", "contractor_engineer"]);
       // Set on the Step, it is what the Step says.
       step(d, "internal_review").editsForm = true;
       step(d, "draft").editsForm = false;
@@ -367,9 +407,7 @@ describe("workflowPublishProblems", () => {
 
     it("passes a Return that stays in Internal Review, to the Contractor Engineer Step, which edits the Form (ADR 0020)", () => {
       const d = mar();
-      addStep(d, { key: "contractor_engineer", stage: "internal_review", actor: { role: "contractor", permission: "create" } });
-      transition(d, "return").to = "contractor_engineer";
-      add(d, { key: "send_for_review_again", from: "contractor_engineer", to: "internal_review", permission: "create" });
+      expect(transition(d, "return").to).toBe("contractor_engineer");
       expect(problems(d)).toEqual([]);
       expect(d.steps.filter((s) => stepEditsForm(d, s, submittalStages)).map((s) => s.key)).toEqual(["draft", "contractor_engineer"]);
     });

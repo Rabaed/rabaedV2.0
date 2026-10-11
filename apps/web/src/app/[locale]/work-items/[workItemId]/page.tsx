@@ -85,7 +85,6 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
       named={item.namedAnswers}
       editable={editable && !!mine && !!scopes}
       editableSections={form.editableSections}
-      filledBy={form.filledBy}
       fieldTimes={item.fieldTimes}
       autosave={item.autosave}
     >

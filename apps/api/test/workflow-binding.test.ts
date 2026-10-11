@@ -97,9 +97,6 @@ describe("scenario RP-426-1: the map is everyone's, an item's internal moves are
     await ok(at.c1Pm.post(`/v1/work-items/${id}/pick-up`));
     await take(at.c1Pm, id, "submit");
     await ok(k1Engineer.post(`/v1/work-items/${id}/pick-up`));
-    // The MAR's "Consultant verification" is filled at `consultant_review`, a Step this Workflow has too.
-    const answers = { ...(await detail(k1Engineer, id)).answers, sample_checked: true, matches_specification: true };
-    await ok(k1Engineer.request("PUT", `/v1/work-items/${id}/answers`, { answers }));
     await take(k1Engineer, id, "send_to_manager");
 
     const moves = async (by: Caller) =>

@@ -228,13 +228,6 @@ describe("dropping", () => {
   it("takes the Transition, and the card is in its new Stage on the next read", async () => {
     const before = await board(k1ManagerA);
     const move = dropTargets(before.moves[marAtK1]!, "pending_approval").get("revise_resubmit")!;
-    // The Consultant's verification is part of the Form, filled before a Code.
-    const answers = (await ok(k1ManagerA.get(`/v1/work-items/${marAtK1}`), 200)).json().answers;
-    await ok(
-      k1ManagerA.request("PUT", `/v1/work-items/${marAtK1}/answers`, {
-        answers: { ...answers, sample_checked: true, matches_specification: false, verification_note: "Below the specified efficacy" },
-      }),
-    );
     await take(k1ManagerA, marAtK1, move.transition,{ remarks: "Resubmit with 110 lm/W luminaires" });
     const after = await board(k1ManagerA);
     const column = after.columns.find((c) => c.stageKey === "revise_resubmit")!;

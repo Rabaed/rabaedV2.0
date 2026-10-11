@@ -1,10 +1,11 @@
-// A test-only Rabaed Default Work Item Type that runs as a MAR did before RP-437: the MAR
-// Form Version 4 (with the Consultant verification filled by the Consultant at its
-// review Step, ADR 0013, V19) on the MAR Workflow Version 2 (Contractor review →
-// Consultant review, which issues A or C). The Rabaed Default MAR moved on to Form
-// Version 5 and Workflow Version 3 (ADR 0019, ADR 0020); items started before keep
-// these, so the tests of what they do run on this copy: the Form and the Workflow are
-// copied from the MAR's own published Versions, as data.
+// A test-only Rabaed Default Work Item Type that runs the MAR's route before RP-437: the
+// MAR Workflow Version 2 (Contractor review, whose Return goes back to the Draft → Submit →
+// the Consultant's one review Step, which issues A or C), on the MAR Form Version 3 (no
+// Consultant verification: Version 4's, filled by another Participant, retired with
+// ADR 0019, and Version 5 has none). The Rabaed Default MAR moved on to Workflow Version 3
+// (ADR 0020); the engine's general behaviour is tested on this copy, the Form and the
+// Workflow copied from the MAR's own published Versions, as data.
+import type { WorkflowDefinition } from "@rabaed/domain";
 import type { Db } from "../src/client.ts";
 import { sql } from "kysely";
 
@@ -18,7 +19,7 @@ export const LEGACY_MAR = "MARV";
 /** The legacy MAR's Workflow's name, as its items read it. */
 export const LEGACY_WORKFLOW_NAME = { en: "Material Submittal (Workflow Version 2, test)", ar: "اعتماد المواد (الإصدار 2، اختبار)" };
 
-/** Adds the Type `code` (once; again does nothing): the MAR Form Version 4 on the MAR Workflow Version 2, in Submittals. */
+/** Adds the Type `code` (once; again does nothing): the MAR Form Version 3 on the MAR Workflow Version 2, in Submittals. */
 export async function addLegacyMarType(migrator: Db, code: string): Promise<void> {
   await sql`
     do $$
@@ -33,12 +34,12 @@ export async function addLegacyMarType(migrator: Db, code: string): Promise<void
           return;
         end if;
         insert into form_definition (owner_kind, name)
-        values ('rabaed', '{"en": "Material Submittal (Form Version 4, test)", "ar": "اعتماد مواد (اختبار)"}')
+        values ('rabaed', '{"en": "Material Submittal (Form Version 3, test)", "ar": "اعتماد مواد (اختبار)"}')
         returning id into v_form;
         insert into form_version (form_definition_id, version_no, status, published_at, schema)
         select v_form, 1, 'published', now(), f.schema
         from form_version f join work_item_type t on t.form_definition_id = f.form_definition_id
-        where t.owner_kind = 'rabaed' and t.code = 'MAR' and f.version_no = 4;
+        where t.owner_kind = 'rabaed' and t.code = 'MAR' and f.version_no = 3;
 
         select v.id into v_source from workflow_version v
         join work_item_type t on t.workflow_definition_id = v.workflow_definition_id
@@ -69,4 +70,36 @@ export async function addLegacyMarType(migrator: Db, code: string): Promise<void
       end
     $$
   `.execute(migrator);
+}
+
+/**
+ * `definition` (a copy of the legacy MAR's route) with its Return kept in Internal Review,
+ * as publishing asks since RP-437 (ADR 0020, `return_to_draft`): the Return goes to a
+ * Contractor Engineer Step there, which sends it for review again. Unchanged when no
+ * Return goes into the Draft Step. For tests that publish a copy of the legacy route.
+ */
+export function returnInInternalReview(definition: WorkflowDefinition): WorkflowDefinition {
+  const draft = definition.steps.find((s) => s.stage === "draft");
+  const back = definition.transitions.find((t) => t.kind === "return" && t.to === draft?.key);
+  if (!draft || !back || !draft.actor) return definition;
+  return {
+    ...definition,
+    steps: [
+      ...definition.steps,
+      { key: "contractor_engineer", name: { en: "Contractor Engineer", ar: "مهندس المقاول" }, stage: "internal_review", actor: draft.actor, outcomeMode: "none" },
+    ],
+    transitions: [
+      ...definition.transitions.map((t) => (t === back ? { ...t, to: "contractor_engineer" } : t)),
+      {
+        key: "send_for_review_again",
+        label: { en: "Send for Review", ar: "إرسال للمراجعة" },
+        kind: "send",
+        from: "contractor_engineer",
+        to: back.from,
+        outcome: null,
+        permission: draft.actor.permission,
+        actionForm: null,
+      },
+    ],
+  };
 }

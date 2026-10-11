@@ -7,7 +7,7 @@
 // Transition, validates, publishes Version 1 of the Project's copy and binds it
 // (through WF-4's API: binding in Project Settings is RP-441), and a new MAR follows it.
 import { createDb } from "@rabaed/db";
-import { testDatabaseUrls } from "@rabaed/db/test-support";
+import { LEGACY_MAR, returnInInternalReview, testDatabaseUrls } from "@rabaed/db/test-support";
 import {
   addStep,
   connectSteps,
@@ -20,7 +20,6 @@ import {
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestApi, expectHidden, type Caller } from "./support/harness.ts";
-import { LEGACY_MAR } from "@rabaed/db/test-support";
 import { all, buildTower, detail, draft, ok, projectMember, take, type Company, type Tower } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
@@ -94,7 +93,8 @@ describe("a Project Admin builds the Project's copy of the MAR", () => {
   });
 
   it("adds an Owner Representative approval Step with a Code Transition, and validates it with no errors", async () => {
-    const start = (await builder(c1.caller, route)).workflow.draft!.definition;
+    // The legacy MAR's Return goes back to the Draft: kept in Internal Review, as publishing asks (ADR 0020).
+    const start = returnInInternalReview((await builder(c1.caller, route)).workflow.draft!.definition);
     const issuing = start.steps.find((s) => s.outcomeMode === "issue_outcome")!;
     const approved = start.steps.find((s) => s.stage === "approved")!;
     const added = addStep(start, {
@@ -125,8 +125,6 @@ describe("a Project Admin builds the Project's copy of the MAR", () => {
     await take(at.c1Engineer, id, "send_for_review");
     await ok(at.c1Pm.post(`/v1/work-items/${id}/pick-up`));
     await take(at.c1Pm, id, "submit");
-    const answers = { ...(await detail(k1Engineer, id)).answers, sample_checked: true, matches_specification: true, verification_note: "As specified" };
-    await ok(k1Engineer.request("PUT", `/v1/work-items/${id}/answers`, { answers }));
     await ok(at.k1Manager.post(`/v1/work-items/${id}/pick-up`));
     await take(at.k1Manager, id, "send_to_owner_rep");
     expect((await detail(ownerRep, id)).step.name.en).toBe("Owner Representative approval");

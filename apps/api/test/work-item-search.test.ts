@@ -121,14 +121,11 @@ describe("what Search finds", () => {
 });
 
 describe("what Search never finds (V1, V3, V19)", () => {
-  it("scenario 66: a K1 engineer's answers in Consultant verification are never searched", async () => {
-    const answers = (await ok(k1Engineer.get(`/v1/work-items/${item.lighting}`), 200)).json().answers;
-    await ok(
-      k1Engineer.request("PUT", `/v1/work-items/${item.lighting}/answers`, {
-        answers: { ...answers, sample_checked: true, matches_specification: false, verification_note: "Zanzibarite efficacy too low" },
-      }),
-    );
-    for (const by of [tower.c1Engineer, tower.c1Pm, k1Engineer]) {
+  it("scenario 66: a Consultant's reply (its Remarks with a Code) is never searched", async () => {
+    const id = await submitted(tower, tower.c1Engineer, tower.c1Pm, "Search reply");
+    await ok(tower.k1Manager.post(`/v1/work-items/${id}/pick-up`));
+    await take(tower.k1Manager, id, "approve_a", { remarks: "Zanzibarite efficacy checked" });
+    for (const by of [tower.c1Engineer, tower.c1Pm, tower.k1Manager]) {
       const result = await search(by, "Zanzibarite");
       expect(result.items).toEqual([]);
       expect(total(result)).toBe(0);

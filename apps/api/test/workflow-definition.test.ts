@@ -160,7 +160,12 @@ describe("every published Workflow Version", () => {
         stages: stages.rows.filter((s) => s.moduleKey === v.moduleKey && s.projectId === v.ownerProjectId),
         form: v.form === null ? null : formSchema.parse(v.form),
         optionListIds: new Set(lists.rows.map((l) => l.id)),
-      }).map((p) => ({ version: `${v.name} v${v.versionNo}`, code: p.code, step: p.step, transition: p.transition, message: p.message.en })),
+      })
+        // A Version published before ADR 0020's check keeps its Return to the Draft (a
+        // published Version never changes): MAR Versions 1 and 2, and the seam suites' test
+        // Workflows written as data. Publishing refuses it from now on (RP-437).
+        .filter((p) => p.code !== "return_to_draft")
+        .map((p) => ({ version: `${v.name} v${v.versionNo}`, code: p.code, step: p.step, transition: p.transition, message: p.message.en })),
     );
     expect(problems).toEqual([]);
   });

@@ -4,6 +4,7 @@
  *
  *   Draft ─send_for_review→ Contractor review ─submit (and its ruled twins)→ Consultant review
  *   Draft ─submit_direct→ Consultant review        been through Contractor review
+ *   Draft ─escalate→ Contractor review             validate: the whole Form is complete
  *   Contractor review ─return→ Draft
  *   Contractor review ─submit_separate→           not the Member who left the Draft
  *                     ─resubmit→                  been Sent Back (a shared fact)
@@ -14,7 +15,6 @@
  *   Consultant review ─send_back→ Contractor review    Positions: manager only
  *                     ─send_to_manager→ Consultant approval  ┐ one label, "Send to Manager":
  *                     ─send_to_senior→ Senior approval       ┘ cost impact over 500,000 goes to Senior
- *                     ─escalate→ Consultant approval  validate: the Form is complete
  *                     ─fresh_eyes→ Consultant approval  not the Members who took send_to_manager
  *                                                       or return_to_engineer, nor in its pool; Assign to
  *   Consultant approval ─return_to_engineer→ Consultant review
@@ -24,8 +24,12 @@
  *                       ─reject_d→ Revise · D          all Comments closed
  *   Senior approval ─senior_approve_a→ Approved · A, ─return_from_senior→ Consultant review
  *
- * The manager's verdict (Form, required over a 1,000,000 cost impact) is filled at
- * either approval, so "Escalate" can be refused while it is missing.
+ * The Contractor review's verdict (a Form Section the raiser fills at its review,
+ * required over a 1,000,000 cost impact) is not one of the Draft's, so leaving the
+ * Draft never checks it, while "Send for Review (Form complete)" reads the whole Form
+ * and is refused while it is missing. (Before RP-437 it was the Consultant manager's,
+ * filled at either approval: Form Sections filled by another Participant retired,
+ * ADR 0019.)
  *
  * It passes every publish check (workflowPublishProblems) with `rulesFormSchema`,
  * as every published Version must. `extra` adds Transitions as given, for a seam-2
@@ -105,7 +109,7 @@ export type RulesTransition = {
   actions?: unknown;
 };
 
-/** The Form the rules Workflow is checked with: the cost impact and Datasheet it reads, and the manager's verdict. */
+/** The Form the rules Workflow is checked with: the cost impact and Datasheet it reads, and the Contractor review's verdict. */
 export const rulesFormSchema = {
   sections: [
     {
@@ -129,8 +133,8 @@ export const rulesFormSchema = {
     {
       key: "review",
       title: { en: "Review", ar: "المراجعة" },
-      editable_at: ["consultant_approval", "senior_approval"],
-      // Required for a cost impact over 1,000,000, which goes to the Senior approval.
+      editable_at: ["internal_review"],
+      // Required for a cost impact over 1,000,000.
       fields: [{ key: "verdict", type: "text", required: { field: "cost", op: ">", value: 1_000_000 }, label: { en: "Verdict", ar: "الحكم" } }],
     },
   ],
@@ -245,12 +249,12 @@ const transitions: RulesTransition[] = [
   },
   {
     key: "escalate",
-    from: "consultant_review",
-    to: "consultant_approval",
-    label: name("Escalate with the verdict", "تصعيد مع الحكم"),
+    from: "draft",
+    to: "internal_review",
+    label: name("Send for Review (Form complete)", "إرسال للمراجعة (النموذج مكتمل)"),
     kind: "send",
     outcome: null,
-    permission: "review",
+    permission: "create",
     rules: { validate: [{ type: "form_complete" }] },
   },
   {
