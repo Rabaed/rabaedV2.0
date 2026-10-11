@@ -8,11 +8,17 @@ import type { WorkflowCompareLabels } from "./workflow-builder-labels.ts";
 import { WorkflowCanvas, type CanvasMark } from "./workflow-canvas.tsx";
 import type { MapStage } from "./workflow-map.ts";
 
-type ChangeWords = { added: string; removed: string; changed: string; noChanges: string };
+type ChangeWords = { added: string; removed: string; changed: string; noChanges: string; conditionChanged?: string };
 
-/** What changed between two definitions, line by line: added, removed, changed (the publish and compare dialogs). */
+/**
+ * What changed between two definitions, line by line: added, removed, changed (the publish and
+ * compare dialogs); a changed Transition whose rules changed says so, as the reference's "— condition".
+ */
 export function WorkflowChangeList({ before, after, locale, labels }: { before: WorkflowDefinition; after: WorkflowDefinition; locale: Locale; labels: ChangeWords }) {
   const changes = definitionChanges(before, after);
+  const rulesOf = (d: WorkflowDefinition, key: string) => JSON.stringify(d.transitions.find((t) => t.key === key)?.rules ?? null);
+  const conditionChanged = (c: (typeof changes)[number]) =>
+    labels.conditionChanged !== undefined && c.change === "changed" && c.kind === "transition" && rulesOf(before, c.key) !== rulesOf(after, c.key);
   if (changes.length === 0) return <p className="text-sm text-muted">{labels.noChanges}</p>;
   return (
     <ul className="flex flex-col gap-1">
@@ -26,6 +32,7 @@ export function WorkflowChangeList({ before, after, locale, labels }: { before: 
           />
           <span>
             {labels[c.change]} {c.name[locale]}
+            {conditionChanged(c) && ` ${labels.conditionChanged}`}
           </span>
         </li>
       ))}

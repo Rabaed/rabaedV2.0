@@ -22,13 +22,13 @@ import {
   type NodeProps,
 } from "@xyflow/react";
 import { directionOf, type BaseRole, type Locale, type WorkItemMapPosition, type WorkflowDefinition } from "@rabaed/domain";
-import { useEffect, useMemo, useState, type DragEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
 import { cn } from "../../lib/cn.ts";
 import { IconButton } from "../button/button.tsx";
 import { Icon } from "../icon/icon.tsx";
 import type { WorkflowLabels } from "./workflow-labels.ts";
 import { bandAt, workflowMap, type MapBand, type MapEdge, type MapNode, type MapStage, type WorkflowMapModel } from "./workflow-map.ts";
-import { edgeLook, endIcon, groupTitle, hatched, kindIcon, stageVars, stepMeta } from "./workflow-parts.tsx";
+import { edgeLook, endIcon, groupTitle, hatched, isConditional, kindIcon, stageVars, stepIcon, stepMeta } from "./workflow-parts.tsx";
 
 /** What the builder has selected on the canvas: a Step or a Transition, by key. */
 export type CanvasSelection = { kind: "step" | "transition"; key: string };
@@ -91,6 +91,8 @@ type Ctx = {
   marks: Readonly<Record<string, CanvasMark>>;
   selected: string | null;
   onSelect: ((selection: CanvasSelection | null) => void) | undefined;
+  /** The builder's Steps entered by a Transition with Restrict rules: they wear the condition badge. */
+  conditional: ReadonlySet<string>;
 };
 type BandData = { band: MapBand; height: number; ctx: Ctx };
 type ItemData = { node: MapNode; ctx: Ctx; edit: boolean };
@@ -118,6 +120,8 @@ export function WorkflowCanvas(props: WorkflowCanvasProps) {
 }
 
 const nodeTypes = { band: BandNode, step: StepNode, end: EndNode, part: PartNode };
+/** The reference builder's scale at 1366 wide: Steps never drawn smaller when the builder fits. */
+const MIN_FIT_ZOOM = 0.38;
 const edgeTypes = { transition: TransitionEdge };
 const noMarks: Readonly<Record<string, CanvasMark>> = {};
 
@@ -161,9 +165,24 @@ function Canvas({
       marks,
       selected,
       onSelect,
+      conditional: new Set(edit ? definition.transitions.filter(isConditional).map((t) => t.to) : []),
     }),
-    [labels, locale, dir, edit, stages, currentDetail, marks, selected, onSelect],
+    [labels, locale, dir, edit, stages, currentDetail, marks, selected, onSelect, definition.transitions],
   );
+  const box = useRef<HTMLDivElement>(null);
+  /**
+   * The builder's fit (RP-555, as the reference's): the whole diagram's width, from the top,
+   * never smaller than the reference's scale at 1366 (pan for the rest), never past 1:1.
+   * Centred when it is narrower than the canvas; else from the flow's start.
+   */
+  const fitTop = useCallback(() => {
+    const rect = box.current?.getBoundingClientRect();
+    if (!rect || rect.width === 0) return;
+    const zoom = Math.min(1, Math.max(MIN_FIT_ZOOM, Math.min((rect.width - 16) / model.width, (rect.height - 16) / model.height)));
+    const wide = model.width * zoom;
+    const x = wide <= rect.width ? (rect.width - wide) / 2 : dir === "rtl" ? rect.width - wide - 8 : 8;
+    void flow.setViewport({ x, y: 10, zoom });
+  }, [flow, model.width, model.height, dir]);
   const drawn = useMemo(() => toFlow(model, ctx, edit, selection), [model, ctx, edit, selection]);
   // Controlled, so the builder's edits redraw without resetting the view; React Flow moves a dragged node meanwhile.
   const [nodes, setNodes] = useState(drawn.nodes);
@@ -197,6 +216,7 @@ function Canvas({
 
   return (
     <div
+      ref={box}
       role="group"
       aria-label={labels.canvas}
       dir="ltr"
@@ -222,8 +242,12 @@ function Canvas({
         onPaneClick={edit && onSelect ? () => onSelect(null) : undefined}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
-        fitView
+        // The builder fits from the top (fitTop); a map to look at is fitted whole.
+        fitView={!edit}
         fitViewOptions={{ padding: 0.04 }}
+        onInit={edit ? fitTop : undefined}
+        // React Flow's MIT licence asks for no attribution; the builder's overview stays clear of it.
+        proOptions={{ hideAttribution: true }}
         minZoom={0.2}
         maxZoom={2}
         nodesDraggable={edit}
@@ -262,15 +286,21 @@ function Canvas({
         key={edit ? dir : `${dir}:${definition.steps.length}:${viewerRole ?? ""}:${JSON.stringify(position ?? null)}`}
       >
         <Background variant={BackgroundVariant.Dots} gap={18} size={1.4} color="var(--border-strong)" />
-        <Zoom labels={labels} rtl={dir === "rtl"} />
+        <Zoom labels={labels} rtl={dir === "rtl"} onFit={edit ? fitTop : undefined} />
         {minimap && (
           <MiniMap
             position={dir === "rtl" ? "bottom-right" : "bottom-left"}
             pannable
             ariaLabel={labels.overview}
+            // As the reference's: the Steps as grey blocks, the part in view tinted and outlined in the brand colour.
             nodeColor={(n) => (n.type === "band" ? "transparent" : "var(--border-strong)")}
-            maskColor="color-mix(in srgb, var(--primary) 8%, transparent)"
-            className="!m-3 !h-[85px] !w-[170px] overflow-hidden rounded-md border border-border !bg-surface"
+            nodeStrokeColor="transparent"
+            nodeBorderRadius={3}
+            bgColor="color-mix(in srgb, var(--primary) 8%, var(--surface))"
+            maskColor="color-mix(in srgb, var(--surface) 72%, transparent)"
+            maskStrokeColor="var(--primary)"
+            maskStrokeWidth={2}
+            className="!m-3 !h-[85px] !w-[170px] overflow-hidden rounded-lg shadow-[0_0_0_1px_var(--border)]"
           />
         )}
       </ReactFlow>
@@ -396,7 +426,7 @@ function StepNode({ data, selected }: NodeProps<Node<ItemData, "step">>) {
       data-current={node.current || undefined}
       data-selected={selected || undefined}
       className={cn(
-        "group/node flex w-[200px] gap-2.5 rounded-xl border border-border bg-surface p-3 text-start shadow-sm",
+        "group/node relative flex w-[200px] gap-2.5 rounded-xl border border-border bg-surface p-3 text-start shadow-sm",
         edit && "cursor-grab",
         node.current && "ring-2 ring-primary ring-offset-2 ring-offset-surface",
         selected && "ring-2 ring-primary ring-offset-0 shadow-[0_0_0_6px_var(--brand-tint)]",
@@ -405,10 +435,18 @@ function StepNode({ data, selected }: NodeProps<Node<ItemData, "step">>) {
       style={{ borderTop: `3px solid ${stageVars(node.colour).dot}`, minHeight: node.height }}
     >
       <Handles rtl={ctx.rtl} edit={edit} />
-      <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-surface-subtle text-text-secondary">
-        {/* eslint-disable-next-line rabaed/no-avoid-terms -- the Tabler icon's name: a person holds the Step. */}
-        <Icon name="user" size={15} />
+      <span className="flex size-[30px] shrink-0 items-center justify-center rounded-[9px] bg-surface-subtle text-text-secondary">
+        <Icon name={stepIcon(step)} size={16} />
       </span>
+      {ctx.conditional.has(node.id) && (
+        // As the reference's: an amber filter badge at the card's top end corner.
+        <span
+          title={ctx.labels.conditional}
+          className="absolute -end-[9px] -top-[9px] flex size-[22px] items-center justify-center rounded-full bg-stage-resubmitted-dot text-on-primary shadow-xs"
+        >
+          <Icon name="filter" size={12} label={ctx.labels.conditional} />
+        </span>
+      )}
       <div className="min-w-0 flex-1 space-y-1">
         <div className="text-[13px] leading-snug font-semibold text-text">{step.name[ctx.locale]}</div>
         <div className="text-[11.5px] leading-snug text-muted">{stepMeta(step, ctx.labels)}</div>
@@ -521,19 +559,24 @@ function TransitionEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition
     [path, labelX, labelY] = getBezierPath({ sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition });
   }
   labelY += lane * 22;
+  const next = mark === "next";
   const label = (
     <>
-      <Icon name={kindIcon(edge.transition.kind)} size={12} style={{ color: selected || mark === "next" ? undefined : colour }} />
+      <Icon name={kindIcon(edge.transition.kind)} size={12} style={{ color: next ? undefined : colour }} />
+      {/* As the reference's: a filter icon on a Transition offered only when its rules hold. */}
+      {ctx.edit && isConditional(edge.transition) && <Icon name="filter" size={12} style={{ color: next ? undefined : colour }} label={ctx.labels.conditional} />}
       <span className="truncate">{edge.transition.label[ctx.locale]}</span>
     </>
   );
   const labelClass = cn(
     "nodrag nopan absolute inline-flex max-w-[180px] items-center gap-1 rounded-full border bg-surface px-2 py-0.5 text-[11px] leading-4 font-semibold whitespace-nowrap text-text shadow-xs",
-    (selected || mark === "next") && "!bg-primary !text-on-primary !border-primary",
+    // Selected: outlined, as the owner chose (RP-555), so the label keeps its kind's colour.
+    selected && "border-2 shadow-[0_0_0_3px_var(--brand-tint)]",
+    next && "!bg-primary !text-on-primary !border-primary",
     mark === "faded" && "border-dashed !bg-surface-subtle",
     mark === "removed" && "line-through",
   );
-  const style = { transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`, borderColor: colour };
+  const style = { transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`, borderColor: colour, zIndex: selected ? 1 : undefined };
   return (
     <>
       <BaseEdge
@@ -573,7 +616,7 @@ function TransitionEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition
 }
 
 /** Zoom in, zoom out and fit, at the canvas's end corner as in the design. */
-function Zoom({ labels, rtl }: { labels: WorkflowLabels; rtl: boolean }) {
+function Zoom({ labels, rtl, onFit }: { labels: WorkflowLabels; rtl: boolean; onFit?: (() => void) | undefined }) {
   const flow = useReactFlow();
   return (
     <div
@@ -589,7 +632,7 @@ function Zoom({ labels, rtl }: { labels: WorkflowLabels; rtl: boolean }) {
       <IconButton label={labels.zoomIn} size="sm" onClick={() => flow.zoomIn()}>
         <Icon name="zoom-in" />
       </IconButton>
-      <IconButton label={labels.fit} size="sm" onClick={() => flow.fitView({ padding: 0.04 })}>
+      <IconButton label={labels.fit} size="sm" onClick={() => (onFit ? onFit() : void flow.fitView({ padding: 0.04 }))}>
         <Icon name="maximize" />
       </IconButton>
     </div>

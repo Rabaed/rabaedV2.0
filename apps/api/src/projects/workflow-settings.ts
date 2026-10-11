@@ -11,6 +11,7 @@ import {
 } from "@rabaed/domain";
 import { sql } from "kysely";
 import { isProjectAdmin } from "./project-admin.ts";
+import { runningByVersion } from "./workflows.ts";
 
 // Project → Settings → Workflows (RP-441, WF-18; ADR 0016, 0019; visibility.md V15, V18,
 // V20). Reads only: every write is WF-4's, Screens', Stages' or outcomes' own command.
@@ -129,7 +130,7 @@ export function readWorkflowVersion(db: Db, memberId: string, workflowId: string
     if (!definition) return null;
     const published = await trx
       .selectFrom("workflow_version")
-      .select(["id", "version_no"])
+      .select(["id", "version_no", "published_at"])
       .where("workflow_definition_id", "=", workflowId)
       .where("status", "=", "published")
       .orderBy("version_no")
@@ -148,10 +149,23 @@ export function readWorkflowVersion(db: Db, memberId: string, workflowId: string
       used.length === 0
         ? []
         : await trx.selectFrom("position").select(["base_role", "key", "name"]).where("key", "in", used).orderBy("sort").execute();
+    // Change Notes: the Workflow's authors only (workflow_change_note's policy); counts: the items the reader sees.
+    const changeNotes = await trx
+      .selectFrom("workflow_change_note")
+      .select(["workflow_version_id", "change_note"])
+      .where("workflow_version_id", "in", published.map((v) => v.id))
+      .execute();
+    const running = await runningByVersion(trx, workflowId);
     return {
       name: definition.name,
       versionNo,
       publishedVersions: published.map((v) => v.version_no),
+      history: published.toReversed().map((v) => ({
+        versionNo: v.version_no,
+        publishedAt: (v.published_at ?? new Date(0)).toISOString(),
+        changeNote: changeNotes.find((n) => n.workflow_version_id === v.id)?.change_note ?? null,
+        running: running.find((r) => r.versionNo === v.version_no)?.count ?? 0,
+      })),
       definition: read,
       stages: stages.rows,
       positions: positions.map((p) => ({ role: p.base_role, key: p.key, name: p.name as BilingualText })),

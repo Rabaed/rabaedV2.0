@@ -1,6 +1,7 @@
 import { rabaedDefaultWorkflowId, readLatestPublishedDefinition, readWorkflowCheckContext, writeRabaedDefaultWorkflow, type Db } from "@rabaed/db";
 import {
   definitionFromRows,
+  formSchema,
   outcomeActions,
   type AdminWorkflowRead,
   type AdminWorkflowSummary,
@@ -110,7 +111,25 @@ export async function readRabaedWorkflow(db: Db, typeCode: string): Promise<Admi
     outcomes: outcomes.map(({ code, name, closing, polarity }) => ({ code, name, closing, polarity })),
     outcomeSet: outcomes.map((o): Outcome => ({ code: o.code, name: o.name, closing: o.closing, polarity: o.polarity, actions: outcomeActions.parse(o.actions) })),
     positions: positions.map((p) => ({ role: p.base_role, key: p.key, name: p.name })),
+    screens: await rabaedScreens(db, definitionId),
+    // A Rabaed Default runs on every Company's Projects: Rabaed Admin counts no Company's items (V9).
+    running: [],
   };
+}
+
+/** The Rabaed Default Screens a Rabaed Default's Transition may show (RP-555's picker), as publishing pins them. */
+async function rabaedScreens(db: Db, definitionId: string): Promise<AdminWorkflowRead["screens"]> {
+  const { rows } = await sql<{ key: string; name: BilingualText; schema: unknown }>`
+    select w.key, s.name, w.schema
+    from app.workflow_screens(${definitionId}::uuid) w
+    join screen_version v on v.id = w.screen_version_id
+    join screen s on s.id = v.screen_id
+    order by w.key
+  `.execute(db);
+  return rows.flatMap((r) => {
+    const schema = formSchema.safeParse(r.schema);
+    return schema.success ? [{ key: r.key, name: r.name, schema: schema.data }] : [];
+  });
 }
 
 export type DuplicateRefusal = "not_found" | "invalid_definition";

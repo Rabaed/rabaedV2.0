@@ -36,6 +36,7 @@ export const message = (locale: Locale, path: string): string => messagesOf(loca
 export function builderNames() {
   const both = (key: string) => ({ en: messagesOf("en", "workflowBuilder.names")(key), ar: messagesOf("ar", "workflowBuilder.names")(key) });
   return {
+    firstStep: both("firstStep"),
     newStep: both("newStep"),
     newTransition: both("newTransition"),
     engineerReview: both("engineerReview"),

@@ -33,7 +33,9 @@ import { SegmentedControl } from "../form/segmented-control.tsx";
 import { Select } from "../form/select.tsx";
 import { Switch } from "../form/switch.tsx";
 import { Dialog, DialogContent, DialogFooter } from "../overlay/dialog.tsx";
+import { Icon } from "../icon/icon.tsx";
 import { ConditionBuilder } from "./workflow-condition-builder.tsx";
+import { referenceModal, referenceModalBody, referenceModalFooter } from "./workflow-parts.tsx";
 import type { WorkflowRuleLabels } from "./workflow-rule-labels.ts";
 
 export type RuleDialogProps = {
@@ -80,14 +82,20 @@ export function WorkflowRuleDialog(props: RuleDialogProps) {
   return (
     <Dialog open onOpenChange={(isOpen) => !isOpen && onClose()}>
       <DialogContent
-        title={editing ? labels.editTitle(transitionName) : labels.addTitle(transitionName)}
-        description={picked ? labels.kindHelp(picked.kind) : labels.chooseKind}
+        title={
+          <span className="flex items-center gap-2.5">
+            <Icon name="filter" size={18} className="text-primary" />
+            {editing ? labels.editTitle(transitionName) : labels.addTitle(transitionName)}
+          </span>
+        }
         closeLabel={labels.close}
-        className="w-[min(640px,calc(100%-2rem))]"
+        // The reference's modal look (owner's decision 5): ruled header, padded body, footer on the subtle surface.
+        className={cn(referenceModal, "w-[min(640px,calc(100%-2rem))]")}
       >
+        <p className="m-0 border-b border-border-subtle bg-surface-subtle px-5 py-2.5 text-[12.5px] text-muted">{picked ? labels.kindHelp(picked.kind) : labels.chooseKind}</p>
         {picked === null || draft === null ? (
           <form
-            className="flex flex-col gap-4"
+            className="flex flex-col"
             onSubmit={(e) => {
               e.preventDefault();
               const [group, kind] = choice.split(":") as [RuleGroup, RuleKind];
@@ -95,12 +103,12 @@ export function WorkflowRuleDialog(props: RuleDialogProps) {
             }}
           >
             {/* The list scrolls on a short screen, so Next stays in reach. */}
-            <div className="-mx-1 flex max-h-[min(58dvh,30rem)] flex-col gap-4 overflow-y-auto px-1 py-1">
+            <div className={cn(referenceModalBody, "max-h-[min(58dvh,30rem)] gap-4 overflow-y-auto")}>
             {groups.map((group) => (
               <fieldset key={group} className="m-0 flex flex-col gap-1.5 border-0 p-0">
-                <legend className="mb-1 text-[11px] font-bold tracking-wider text-muted uppercase">
+                <legend className="mb-1.5 text-[10.5px] font-bold tracking-[0.06em] text-muted uppercase">
                   {labels.groupTitle(group)}
-                  <span className="ms-2 font-medium tracking-normal normal-case">{labels.groupHelp(group)}</span>
+                  <span className="ms-2 font-medium tracking-normal text-muted normal-case">{labels.groupHelp(group)}</span>
                 </legend>
                 {ruleKinds[group].map((kind) => {
                   const available = defaultRule(kind, group, context) !== null;
@@ -111,7 +119,8 @@ export function WorkflowRuleDialog(props: RuleDialogProps) {
                       key={value}
                       htmlFor={id}
                       className={cn(
-                        "flex cursor-pointer items-start gap-3 rounded-lg px-3 py-2 shadow-[inset_0_0_0_1px_var(--border-subtle)] hover:shadow-[inset_0_0_0_1px_var(--primary)]",
+                        // The reference's palette items (`.pal`): a subtle panel, a hairline, the brand colour on hover.
+                        "flex cursor-pointer items-start gap-2.5 rounded-[9px] bg-surface-subtle px-2.5 py-[9px] shadow-[inset_0_0_0_1px_var(--border-subtle)] hover:shadow-[inset_0_0_0_1px_var(--primary)]",
                         "has-[:checked]:bg-brand-tint has-[:checked]:shadow-[inset_0_0_0_2px_var(--primary)] has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-focus",
                         !available && "cursor-not-allowed opacity-60 hover:shadow-[inset_0_0_0_1px_var(--border-subtle)]",
                       )}
@@ -127,9 +136,9 @@ export function WorkflowRuleDialog(props: RuleDialogProps) {
                         onDoubleClick={() => available && start(kind, group)}
                         className="mt-1 accent-[var(--primary)]"
                       />
-                      <span className="flex flex-col">
-                        <b className="text-[13.5px]">{labels.kindTitle(kind)}</b>
-                        <span className="text-[12.5px] text-muted">{available ? labels.kindHelp(kind) : labels.noFields}</span>
+                      <span className="flex flex-col gap-0.5">
+                        <b className="text-[12.5px] font-semibold">{labels.kindTitle(kind)}</b>
+                        <span className="text-[12px] leading-snug text-muted">{available ? labels.kindHelp(kind) : labels.noFields}</span>
                       </span>
                     </label>
                   );
@@ -137,7 +146,7 @@ export function WorkflowRuleDialog(props: RuleDialogProps) {
               </fieldset>
             ))}
             </div>
-            <DialogFooter className="-mx-6 -mb-6 border-t border-border-subtle bg-surface-subtle px-6 py-3">
+            <DialogFooter className={referenceModalFooter}>
               <Button variant="secondary" onClick={onClose}>
                 {labels.cancel}
               </Button>
@@ -148,17 +157,19 @@ export function WorkflowRuleDialog(props: RuleDialogProps) {
           </form>
         ) : (
           <form
-            className="flex flex-col gap-4"
+            className="flex flex-col"
             onSubmit={(e) => {
               e.preventDefault();
               if (isRuleComplete(draft)) onSubmit(draft, editing?.ref ?? null);
             }}
           >
-            <p className="m-0 flex items-center gap-2 text-[11px] font-bold tracking-wider text-muted uppercase">
-              {labels.groupTitle(picked.group)} · {labels.kindTitle(picked.kind)}
-            </p>
-            <RuleEditor kind={picked.kind} entry={draft} onChange={setDraft} {...props} />
-            <DialogFooter className="-mx-6 -mb-6 border-t border-border-subtle bg-surface-subtle px-6 py-3">
+            <div className={referenceModalBody}>
+              <p className="m-0 flex items-center gap-2 text-[10.5px] font-bold tracking-[0.06em] text-muted uppercase">
+                {labels.groupTitle(picked.group)} · {labels.kindTitle(picked.kind)}
+              </p>
+              <RuleEditor kind={picked.kind} entry={draft} onChange={setDraft} {...props} />
+            </div>
+            <DialogFooter className={referenceModalFooter}>
               {!editing && (
                 <Button variant="ghost" className="me-auto" onClick={() => setPicked(null)}>
                   {labels.back}

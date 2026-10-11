@@ -119,18 +119,26 @@ export function WorkflowBuilderEditor({ read, locale, backHref, names }: Props) 
     return check(latest.current);
   }, [flush, check]);
 
-  const onPublish = useCallback(async (): Promise<WorkflowPublishResult> => {
-    // A Workflow opened on its published Version has no draft until it is saved once.
-    if (!(await flush()) || (!workflow.draft && !(await save()))) return { ok: false, problems: known.current };
-    const res = await fetch(`${api}/publish`, { method: "POST" }).catch(() => null);
-    const body = ((await res?.json().catch(() => ({}))) ?? {}) as { versionNo?: number; problems?: WorkflowProblem[] };
-    if (res?.ok && body.versionNo !== undefined) {
-      router.refresh();
-      return { ok: true, versionNo: body.versionNo };
-    }
-    if (body.problems) show(body.problems);
-    return { ok: false, problems: body.problems ?? known.current };
-  }, [flush, save, workflow.draft, api, router]);
+  const onPublish = useCallback(
+    async (changeNote: string): Promise<WorkflowPublishResult> => {
+      // A Workflow opened on its published Version has no draft until it is saved once.
+      if (!(await flush()) || (!workflow.draft && !(await save()))) return { ok: false, problems: known.current };
+      const res = await fetch(`${api}/publish`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ changeNote }) }).catch(() => null);
+      const body = ((await res?.json().catch(() => ({}))) ?? {}) as { versionNo?: number; problems?: WorkflowProblem[] };
+      if (res?.ok && body.versionNo !== undefined) {
+        // As the reference: a Project's Workflow goes on to its Versions, the new one first (RP-555); a Library's stays here.
+        if (workflow.owner === "project" && workflow.projectId) {
+          router.push(`/${locale}/projects/${workflow.projectId}/settings/workflows/${workflow.id}/versions/${body.versionNo}?published=1`);
+        } else {
+          router.refresh();
+        }
+        return { ok: true, versionNo: body.versionNo };
+      }
+      if (body.problems) show(body.problems);
+      return { ok: false, problems: body.problems ?? known.current };
+    },
+    [flush, save, workflow.draft, workflow.owner, workflow.projectId, workflow.id, locale, api, router],
+  );
 
   const labels = useMemo<WorkflowBuilderLabels>(
     () => workflowBuilderLabels({ t, tMap, tRules, tRoles, positions: read.positions, locale, names }),
@@ -150,6 +158,8 @@ export function WorkflowBuilderEditor({ read, locale, backHref, names }: Props) 
       outcomes={read.outcomes}
       positions={read.positions}
       form={read.form}
+      screens={read.screens}
+      running={read.running}
       locale={locale}
       labels={labels}
       problems={problems}

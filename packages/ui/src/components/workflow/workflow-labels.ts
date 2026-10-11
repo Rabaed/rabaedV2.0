@@ -31,6 +31,8 @@ export type WorkflowLabels = {
   to: string;
   /** The builder's small overview of the whole canvas, e.g. "Overview". */
   overview: string;
+  /** The builder's badge on a Step entered by a Transition with Restrict rules, e.g. "Entered only when a condition holds". */
+  conditional?: string;
   zoomIn: string;
   zoomOut: string;
   fit: string;

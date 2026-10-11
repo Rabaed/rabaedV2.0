@@ -9,7 +9,9 @@ import {
   type Db,
 } from "@rabaed/db";
 import {
+  formSchema,
   stageCopyProblems,
+  type WorkflowScreenOption,
   type BilingualText,
   type BindWorkflowRequest,
   type StageCategory,
@@ -64,8 +66,49 @@ export function readWorkflowBuilder(db: Db, memberId: string, definitionId: stri
     `.execute(trx);
     // The Form the rules are checked against (check 6): the pickers list only its fields.
     const check = await readWorkflowCheckContext(trx, definitionId);
-    return { ...map, form: check?.context.form ?? null, outcomes: outcomes.rows };
+    return {
+      ...map,
+      form: check?.context.form ?? null,
+      outcomes: outcomes.rows,
+      screens: await workflowScreenOptions(trx, definitionId),
+      running: await runningByVersion(trx, definitionId),
+    };
   });
+}
+
+/**
+ * The Screens a Transition of Workflow `definitionId` may show (RP-555's picker): as
+ * publishing pins them (app.workflow_screens), with each Screen's name. Screens are
+ * definitions, read like the Workflows that show them (V20, V18).
+ */
+export async function workflowScreenOptions(trx: Db, definitionId: string): Promise<WorkflowScreenOption[]> {
+  const { rows } = await sql<{ key: string; name: BilingualText; schema: unknown }>`
+    select w.key, s.name, w.schema
+    from app.workflow_screens(${definitionId}::uuid) w
+    join screen_version v on v.id = w.screen_version_id
+    join screen s on s.id = v.screen_id
+    order by w.key
+  `.execute(trx);
+  return rows.flatMap((r) => {
+    const schema = formSchema.safeParse(r.schema);
+    return schema.success ? [{ key: r.key, name: r.name, schema: schema.data }] : [];
+  });
+}
+
+/**
+ * How many open items run on each published Version of Workflow `definitionId`, as the
+ * acting Member sees items (row-level security on work_item: app.sees_work_item), so a
+ * count never tells of an item they don't see (scenario RP-555-1).
+ */
+export async function runningByVersion(trx: Db, definitionId: string): Promise<{ versionNo: number; count: number }[]> {
+  const { rows } = await sql<{ version_no: number; count: string }>`
+    select v.version_no, count(*) as count
+    from work_item w join workflow_version v on v.id = w.workflow_version_id
+    where v.workflow_definition_id = ${definitionId}::uuid and w.closed_at is null
+    group by v.version_no
+    order by v.version_no
+  `.execute(trx);
+  return rows.map((r) => ({ versionNo: r.version_no, count: Number(r.count) }));
 }
 
 /**
@@ -303,14 +346,18 @@ export function validateWorkflow(db: Db, memberId: string, definitionId: string,
   });
 }
 
-const publishRefusals = ["not_found", "project_closed", "no_draft", "workflow_name_names_participant"] as const;
+const publishRefusals = ["not_found", "project_closed", "no_draft", "workflow_name_names_participant", "invalid_change_note", "change_note_names_participant"] as const;
 export type PublishWorkflowResult =
   | { ok: true; versionNo: number; warnings: WorkflowProblem[] }
   | { ok: false; reason: "workflow_problems"; problems: WorkflowProblem[] }
   | { ok: false; reason: (typeof publishRefusals)[number] };
 
-/** Publishes the draft of a Workflow the Member authors, after every publish check: refused on any error, warnings allowed. */
-export function publishWorkflow(db: Db, memberId: string, definitionId: string, now: Date): Promise<PublishWorkflowResult> {
+/**
+ * Publishes the draft of a Workflow the Member authors, after every publish check: refused on
+ * any error, warnings allowed. With `changeNote` (the publish dialog's, RP-555) the Version keeps it as
+ * its Change Note; without it (the Library's copy, published at once) it keeps none.
+ */
+export function publishWorkflow(db: Db, memberId: string, definitionId: string, now: Date, changeNote?: string): Promise<PublishWorkflowResult> {
   return withMember(db, memberId, async (trx): Promise<PublishWorkflowResult> => {
     const check = await authoredCheckContext(trx, definitionId);
     if (!check) return { ok: false, reason: "not_found" };
@@ -319,9 +366,14 @@ export function publishWorkflow(db: Db, memberId: string, definitionId: string, 
     if (!draft) return { ok: false, reason: "no_draft" };
     const { problems } = prepareDraft(draft.definition, check);
     if (hasError(problems)) return { ok: false, reason: "workflow_problems", problems };
-    const { rows } = await sql<{ outcome: string; version_no: number | null }>`
-      select outcome, version_no from app.publish_workflow(${definitionId}::uuid, ${now})
-    `.execute(trx);
+    const { rows } =
+      changeNote === undefined
+        ? await sql<{ outcome: string; version_no: number | null }>`
+            select outcome, version_no from app.publish_workflow(${definitionId}::uuid, ${now})
+          `.execute(trx)
+        : await sql<{ outcome: string; version_no: number | null }>`
+            select outcome, version_no from app.publish_workflow(${definitionId}::uuid, ${now}, ${changeNote}::text)
+          `.execute(trx);
     const outcome = checkedOutcome(rows[0]!.outcome, ["published", ...publishRefusals]);
     return outcome === "published" ? { ok: true, versionNo: rows[0]!.version_no!, warnings: problems } : { ok: false, reason: outcome };
   });

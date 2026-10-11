@@ -263,55 +263,30 @@ export function TransitionNotifications({ definition, transition, steps, positio
   const choices = notificationChoices(transition, steps, positionOptions);
   const set = (recipient: Parameters<typeof setRecipient>[2], on: boolean) => onCommit(setRecipient(definition, transition.key, recipient, on));
   return (
-    <div className="flex flex-col gap-3">
+    // Inline under the Transition, as the reference's Notifications (RP-555): one row of chips, then the channels.
+    <section aria-label={labels.notificationsHeading} className="flex flex-col gap-2">
       <h3 className="mt-1.5 mb-0 text-[10.5px] font-bold tracking-wider text-muted uppercase">{labels.notificationsHeading}</h3>
-      <p className="m-0 text-[12.5px] text-muted">{labels.notificationsHelp}</p>
-      <div role="group" aria-label={labels.recipients} className="flex flex-col gap-2">
-        <div className="flex flex-wrap gap-1.5">
-          <Chip on locked>
-            {labels.holder}
+      <div role="group" aria-label={labels.recipients} className="flex flex-wrap gap-1.5">
+        <Chip on locked>
+          {labels.holder}
+        </Chip>
+        <Chip on={choices.raiser} onToggle={() => set({ to: "raiser" }, !choices.raiser)}>
+          {labels.raiser}
+        </Chip>
+        <Chip on={choices.watchers} onToggle={() => set({ to: "watchers" }, !choices.watchers)}>
+          {labels.watchers}
+        </Chip>
+        {/* A Position of the acting Participant: never a person, a group or an email address (visibility.md). */}
+        {choices.positions.map((p) => (
+          <Chip key={p.key} on={p.on} onToggle={() => set({ to: "position", position: p.key }, !p.on)}>
+            {p.name[locale]}
           </Chip>
-          <Chip on={choices.raiser} onToggle={() => set({ to: "raiser" }, !choices.raiser)}>
-            {labels.raiser}
-          </Chip>
-          <Chip on={choices.watchers} onToggle={() => set({ to: "watchers" }, !choices.watchers)}>
-            {labels.watchers}
-          </Chip>
-        </div>
-        <p className="m-0 text-caption text-muted">{labels.holderAlways}</p>
+        ))}
       </div>
-      <div role="group" aria-label={labels.positionsOfActing} className="flex flex-col gap-1.5">
-        <b className="text-[12.5px]">{labels.positionsOfActing}</b>
-        {choices.positions.length === 0 ? (
-          <p className="m-0 text-[12.5px] text-muted">{labels.noActingPositions}</p>
-        ) : (
-          <div className="flex flex-wrap gap-1.5">
-            {choices.positions.map((p) => (
-              <Chip key={p.key} on={p.on} onToggle={() => set({ to: "position", position: p.key }, !p.on)}>
-                {p.name[locale]}
-              </Chip>
-            ))}
-          </div>
-        )}
-      </div>
-      <div role="group" aria-label={labels.channels} className="flex flex-col gap-1.5">
-        <b className="text-[12.5px]">{labels.channels}</b>
-        <ul className="m-0 flex list-none flex-col gap-1.5 p-0">
-          <Channel icon="bell" name={labels.inApp} status={labels.inAppHelp} on />
-          <Channel icon="mail" name={labels.email} status={labels.emailHelp} on />
-          <Channel icon="device-mobile" name={labels.sms} status={labels.smsHelp} />
-        </ul>
-      </div>
-    </div>
-  );
-}
-
-function Channel({ icon, name, status, on }: { icon: IconName; name: string; status: string; on?: boolean }) {
-  return (
-    <li className={cn("flex items-center gap-2 rounded-sm bg-surface-subtle px-2 py-1.5 text-[12.5px] shadow-[inset_0_0_0_1px_var(--border-subtle)]", !on && "text-muted")}>
-      <Icon name={icon} size={16} />
-      <b>{name}</b>
-      <span className="ms-auto text-muted">{status}</span>
-    </li>
+      <p className="m-0 text-caption text-muted">{labels.holderAlways}</p>
+      <p className="m-0 text-[12px] text-muted" title={`${labels.emailHelp} · ${labels.sms}: ${labels.smsHelp}`}>
+        {labels.channels}: {labels.inApp} · {labels.email}
+      </p>
+    </section>
   );
 }

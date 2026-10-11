@@ -181,7 +181,7 @@ export async function writeRabaedDefaultWorkflow(
   trx: Db,
   typeCode: string,
   input: unknown,
-  { publish }: { publish: boolean },
+  { publish, changeNote }: { publish: boolean; changeNote?: string | undefined },
 ): Promise<RabaedDefaultResult> {
   const definitionId = await rabaedDefaultWorkflowId(trx, typeCode);
   const check = definitionId ? await readWorkflowCheckContext(trx, definitionId) : null;
@@ -197,7 +197,7 @@ export async function writeRabaedDefaultWorkflow(
   if (saved.rows[0]?.outcome !== "saved") throw new Error(`write_workflow_draft: ${saved.rows[0]?.outcome}`);
   if (!publish) return { ok: true, definitionId, versionNo: saved.rows[0].version_no, warnings: prepared.problems };
   const published = await sql<{ outcome: string; version_no: number }>`
-    select outcome, version_no from app.mark_workflow_published(${definitionId}::uuid, now())
+    select outcome, version_no from app.mark_workflow_published(${definitionId}::uuid, now(), ${changeNote ?? null}::text)
   `.execute(trx);
   if (published.rows[0]?.outcome !== "published") throw new Error(`mark_workflow_published: ${published.rows[0]?.outcome}`);
   return { ok: true, definitionId, versionNo: published.rows[0].version_no, warnings: prepared.problems };

@@ -376,6 +376,13 @@ export interface WorkflowVersionTable {
   updated_at: Generated<Timestamp>;
 }
 
+/** A published Version's Change Note (RP-555); read by the Workflow's authors only, written by the publish commands. */
+export interface WorkflowChangeNoteTable {
+  workflow_version_id: string;
+  change_note: string;
+  created_at: Generated<Timestamp>;
+}
+
 export interface WorkflowStepTable {
   id: Generated<string>;
   workflow_version_id: string;
@@ -682,6 +689,7 @@ export interface Database {
   workflow_binding: WorkflowBindingTable;
   setup_event: SetupEventTable;
   workflow_version: WorkflowVersionTable;
+  workflow_change_note: WorkflowChangeNoteTable;
   workflow_step: WorkflowStepTable;
   workflow_transition: WorkflowTransitionTable;
   work_item_type: WorkItemTypeTable;

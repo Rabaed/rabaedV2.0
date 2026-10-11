@@ -51,6 +51,11 @@ export type WorkflowBuilderLabels = {
   permission: string;
   positions: string;
   positionsHelp: string;
+  /** Who may hold the Step, naming no one (visibility.md: the builder names no Member), e.g. "Pool: anyone holding Consultant · Review". */
+  poolHint: (holders: string) => string;
+  /** The raiser's Steps: whether the Member holding it edits the raiser's Form (ADR 0019). */
+  editsForm: string;
+  editsFormHelp: string;
   outcomeHeading: string;
   outcomeNone: string;
   draftsVisibleTo: string;
@@ -73,17 +78,24 @@ export type WorkflowBuilderLabels = {
   screenHelp: string;
   /** A Transition without its own Action Form: only the Internal Note is asked. */
   internalNoteOnly: string;
+  /** The Screen picker's choices: none (the Internal Note only), the Transition's own Action Form, a key with no published Screen. */
+  screenNone: string;
+  screenOwn: string;
+  screenMissing: (key: string) => string;
   confirm: string;
   deleteTransition: string;
   /** The validation panel. */
   problemsName: string;
   noErrors: string;
-  errors: (count: string) => string;
-  warnings: (count: string) => string;
+  /** Counts: `count` picks the plural, `n` is it written with Latin digits. */
+  errors: (count: number, n: string) => string;
+  warnings: (count: number, n: string) => string;
   showProblem: (message: string) => string;
   validationPassed: string;
-  errorsToFix: (count: string) => string;
-  /** The test run bar. */
+  errorsToFix: (count: number, n: string) => string;
+  /** The test run bar: the sample values the conditions read, and when none of the Step's Transitions is offered with them. */
+  sample: string;
+  noWayOn: string;
   testRunAt: string;
   finished: (outcome: string) => string;
   restart: string;
@@ -96,11 +108,20 @@ export type WorkflowBuilderLabels = {
   removed: string;
   changed: string;
   noChanges: string;
+  /** After a changed Transition whose rules changed, e.g. "— condition". */
+  conditionChanged: string;
   checking: string;
   passed: string;
-  errorsBlock: (count: string) => string;
+  errorsBlock: (count: number, n: string) => string;
   showProblems: string;
+  /** The change note the Version keeps (RP-555): required. */
+  changeNote: string;
+  changeNotePlaceholder: string;
+  changeNoteRequired: string;
+  /** When no item the author sees runs on the Workflow. */
   appliesToNew: (version: string) => string;
+  /** How many items the author sees keep the latest Version (`latest`) and older ones (`older`); `next` is the Version publishing makes. */
+  keepVersions: (counts: { latest: number; latestN: string; older: number; olderN: string; version: string; next: string }) => string;
   cancel: string;
   publishVersion: (version: string) => string;
   published: (version: string) => string;
@@ -109,6 +130,8 @@ export type WorkflowBuilderLabels = {
   alertsRegion: string;
   dismiss: string;
   names: {
+    /** The Draft Step a blank Workflow starts with, e.g. "Contractor Engineer"; without it, `newStep`. */
+    firstStep?: BilingualText;
     newStep: BilingualText;
     newTransition: BilingualText;
     engineerReview: BilingualText;

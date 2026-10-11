@@ -115,6 +115,9 @@ const answers = {
   workflow_not_published: () => new HttpError(409, "workflow_not_published"),
   workflow_not_for_type: () => new HttpError(422, "workflow_not_for_type"),
   workflow_name_names_participant: () => new HttpError(422, "workflow_name_names_participant"),
+  // A publish's Change Note (RP-555): blank or too long; on an exception's Workflow, naming a Participant (V15).
+  invalid_change_note: () => new HttpError(422, "invalid_change_note"),
+  change_note_names_participant: () => new HttpError(422, "change_note_names_participant"),
   // A Workflow copied into a Project whose Module lacks one of its Stages (WF-5): `problems` names each.
   stage_missing: () => new HttpError(422, "stage_missing"),
   // A used outcome's code, closing or polarity (RP-429, decided 2026-10-09); the body has its message.

@@ -1,6 +1,7 @@
 import {
   bindWorkflowRequest,
   duplicateWorkflowRequest,
+  publishWorkflowRequest,
   saveWorkflowDraftRequest,
   saveWorkflowToLibraryRequest,
   unbindWorkflowQuery,
@@ -93,9 +94,9 @@ export const workflowRoutes =
       return visibleOrNotFound(validateWorkflow(ctx.db, memberId, idOrNotFound(request.params.workflowId), request.body.definition));
     });
 
-    app.post("/v1/workflows/:workflowId/publish", { schema: { params: workflowParams } }, async (request) => {
+    app.post("/v1/workflows/:workflowId/publish", { schema: { params: workflowParams, body: publishWorkflowRequest } }, async (request) => {
       const memberId = ctx.requireMember(request);
-      const result = await publishWorkflow(ctx.db, memberId, idOrNotFound(request.params.workflowId), ctx.now());
+      const result = await publishWorkflow(ctx.db, memberId, idOrNotFound(request.params.workflowId), ctx.now(), request.body?.changeNote);
       if (!result.ok) throw refusal(result);
       return { versionNo: result.versionNo, warnings: result.warnings };
     });

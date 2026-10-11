@@ -43,6 +43,12 @@ export type WorkflowVersionRead = {
   name: BilingualText;
   versionNo: number;
   publishedVersions: number[];
+  /**
+   * Every published Version, newest first, as the Versions history lists it (RP-555): when it
+   * was published, its change note (null for one published before Change Notes), and how many items
+   * the reader sees still run on it (scenario RP-555-1).
+   */
+  history: { versionNo: number; publishedAt: string; changeNote: string | null; running: number }[];
   definition: WorkflowDefinition;
   stages: { key: string; name: BilingualText; category: StageCategory }[];
   positions: PositionOption[];

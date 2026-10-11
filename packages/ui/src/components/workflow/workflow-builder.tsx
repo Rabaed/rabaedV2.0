@@ -3,7 +3,9 @@
 import {
   addStep,
   baseRoles,
+  conditionFields,
   connectSteps,
+  evaluateCondition,
   formatDate,
   formatNumber,
   formFields,
@@ -11,19 +13,25 @@ import {
   moveStep,
   outcomeModes,
   parseActionForm,
+  readsAttrs,
   removeStep,
   removeTransition,
+  ruleFieldsOf,
+  stepEditsForm,
   transitionKinds,
   transitionRuleFields,
   updateStep,
   updateTransition,
   type BaseRole,
+  type Condition,
   type FormSchema,
   type Locale,
   type PositionOption,
+  type RuleField,
   type WorkflowDefinition,
   type WorkflowOutcomeOption,
   type WorkflowProblem,
+  type WorkflowScreenOption,
   type WorkflowStep,
   type WorkflowTransition,
 } from "@rabaed/domain";
@@ -36,8 +44,9 @@ import { Field } from "../form/field.tsx";
 import { Input } from "../form/input.tsx";
 import { SegmentedControl } from "../form/segmented-control.tsx";
 import { Select } from "../form/select.tsx";
+import { Switch } from "../form/switch.tsx";
+import { Textarea } from "../form/textarea.tsx";
 import { Icon } from "../icon/icon.tsx";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "../navigation/tabs.tsx";
 import { Dialog, DialogContent, DialogFooter } from "../overlay/dialog.tsx";
 import { ToastProvider, useToast } from "../overlay/toast.tsx";
 import { TransitionNotifications, TransitionRules } from "./workflow-transition-rules.tsx";
@@ -45,7 +54,7 @@ import type { WorkflowBuilderLabels } from "./workflow-builder-labels.ts";
 import { canvasDragType, WorkflowCanvas, type CanvasMark, type CanvasSelection } from "./workflow-canvas.tsx";
 import { WorkflowChangeList } from "./workflow-changes.tsx";
 import { placedLayout, workflowMap, type MapStage } from "./workflow-map.ts";
-import { stageVars } from "./workflow-parts.tsx";
+import { referenceModal, referenceModalBody, referenceModalFooter, stageVars } from "./workflow-parts.tsx";
 import { stageColour } from "../status/stage-colour.ts";
 
 /** Where the draft's saving stands, as the page saving it through WF-4's API knows it; `opened` until the first save. */
@@ -82,17 +91,69 @@ export type WorkflowBuilderProps = {
   backHref: string;
   /** Every edit, for the page to save the draft and check it again. */
   onChange: (definition: WorkflowDefinition) => void;
+  /**
+   * The Screens a Transition may show (ADR 0019; RP-555's Screen picker), as the builder
+   * read gives them; none: the picker offers only the Internal Note.
+   */
+  screens?: readonly WorkflowScreenOption[];
+  /** How many items the author sees run on each published Version: the publish dialog says they keep it. */
+  running?: readonly { versionNo: number; count: number }[];
   /** Checks the draft on the server now (saving anything pending first): its problems. */
   onValidate: () => Promise<readonly WorkflowProblem[]>;
-  /** Publishes the draft (the server checks it again). */
-  onPublish: () => Promise<WorkflowPublishResult>;
+  /** Publishes the draft with its change note (the server checks it again). */
+  onPublish: (changeNote: string) => Promise<WorkflowPublishResult>;
 };
 
 type History = { past: WorkflowDefinition[]; present: WorkflowDefinition; future: WorkflowDefinition[] };
 type TestRun = { at: string; path: string[]; edges: string[] };
+/** A test run's sample answers, by field key, for the fields the draft's Restrict conditions read. */
+type Sample = Record<string, unknown>;
 type PublishState = { phase: "checking" } | { phase: "ready"; problems: readonly WorkflowProblem[] } | { phase: "publishing" };
 
 const open = new Set(["draft", "in_progress"]);
+const noScreens: readonly WorkflowScreenOption[] = [];
+const noRunning: readonly { versionNo: number; count: number }[] = [];
+
+/** A blank draft (no Step at all) with the one Draft Step it starts with, selected; any other draft as it is. */
+function seedBlank(definition: WorkflowDefinition, stages: readonly MapStage[], labels: WorkflowBuilderLabels): { definition: WorkflowDefinition; key: string | null } {
+  const draftStage = stages.find((s) => s.category === "draft");
+  if (definition.steps.length > 0 || !draftStage) return { definition, key: null };
+  const added = addStep(definition, { name: labels.names.firstStep ?? labels.names.newStep, stage: draftStage.key, actor: { role: "contractor", permission: "create" }, at: { x: 55, y: 80 } });
+  return added;
+}
+
+/** The plain Restrict conditions of a Transition: those a test run can check with sample answers (none reading an item attribute). */
+function sampledConditions(t: WorkflowTransition): Condition[] {
+  return (t.rules?.restrict ?? []).flatMap((r) => (r.type === "condition" && !readsAttrs(r.condition) ? [r.condition] : []));
+}
+
+/** The Form fields the draft's Restrict conditions read, in the order first read (a field the Form lacks is a publish problem, not sampled). */
+function sampledFields(definition: WorkflowDefinition, form: FormSchema | null): RuleField[] {
+  const known = ruleFieldsOf(form, null);
+  const keys = [...new Set(definition.transitions.flatMap((t) => sampledConditions(t).flatMap(conditionFields)))];
+  return keys.flatMap((key) => known.filter((f) => f.key === key));
+}
+
+/** Sample answers that make the first condition on each field hold, so a test run starts on its conditional route. */
+function defaultSample(definition: WorkflowDefinition, fields: readonly RuleField[]): Sample {
+  const out: Sample = {};
+  const visit = (c: Condition) => {
+    if ("all" in c) return c.all.forEach(visit);
+    if ("any" in c) return c.any.forEach(visit);
+    if ("not" in c) return visit(c.not);
+    if (c.field === undefined || c.field in out || !("value" in c)) return;
+    const value = Array.isArray(c.value) ? c.value[0] : c.value;
+    out[c.field] = typeof value === "number" ? (c.op === ">" ? value + 1 : c.op === "<" ? value - 1 : value) : value;
+  };
+  for (const t of definition.transitions) sampledConditions(t).forEach(visit);
+  for (const f of fields) if (!(f.key in out)) out[f.key] = f.type === "yes_no" ? true : "";
+  return out;
+}
+
+/** Whether a test run offers `t` with `sample`: every plain Restrict condition holds; other rules aren't sampled. */
+function offeredWith(t: WorkflowTransition, sample: Sample): boolean {
+  return sampledConditions(t).every((c) => evaluateCondition(c, { fields: sample }));
+}
 
 /**
  * The Workflow builder (RP-439, WF-16; workflow-engine.md §11), as the design's
@@ -114,20 +175,33 @@ export function WorkflowBuilder(props: WorkflowBuilderProps) {
 
 function Builder(props: WorkflowBuilderProps) {
   const { name, versionNo, published, stages, outcomes, positions, form, locale, labels, problems, saveState, backHref, onChange, onValidate, onPublish } = props;
+  const screens = props.screens ?? noScreens;
+  const running = props.running ?? noRunning;
   const toast = useToast();
+  // A blank Workflow starts with one Draft Step, as the reference's "Start blank" does (RP-555).
+  const [seeded] = useState(() => seedBlank(props.definition, stages, labels));
   const [history, setHistory] = useState<History>(() => ({
     past: [],
     // Pinned where the canvas draws it, so the first Step moved keeps every other one in place.
-    present: { ...props.definition, layout: placedLayout(props.definition, stages, true) },
+    present: { ...seeded.definition, layout: placedLayout(seeded.definition, stages, true) },
     future: [],
   }));
   const definition = history.present;
   const coalescing = useRef<string | null>(null);
-  const [selection, setSelection] = useState<CanvasSelection | null>(null);
+  const [selection, setSelection] = useState<CanvasSelection | null>(seeded.key === null ? null : { kind: "step", key: seeded.key });
   const [focus, setFocus] = useState<{ key: string; nonce: number } | null>(null);
   const [testRun, setTestRun] = useState<TestRun | null>(null);
+  const [sample, setSample] = useState<Sample | null>(null);
   const [publish, setPublish] = useState<PublishState | null>(null);
   const v = (n: number) => formatNumber(n, locale);
+
+  // The seeded Step is an edit like any other: the page saves it and checks the draft.
+  const seededSaved = useRef(false);
+  useEffect(() => {
+    if (seeded.key === null || seededSaved.current) return;
+    seededSaved.current = true;
+    onChange(history.present);
+  }, [seeded.key, onChange, history.present]);
 
   /** Applies an edit. Edits sharing `coalesce` (typing into one field) make one undo step. */
   const commit = useCallback(
@@ -257,18 +331,23 @@ function Builder(props: WorkflowBuilderProps) {
 
   // Test run: from the Draft Step, take a Transition at each Step; the path stays lit, the rest fades.
   const startStep = definition.steps.find((s) => stages.find((st) => st.key === s.stage)?.category === "draft") ?? definition.steps[0];
+  // The fields the draft's Restrict conditions read: the test run asks a sample value of each (RP-555).
+  const sampleFields = useMemo(() => sampledFields(definition, form), [definition, form]);
   const toggleTestRun = () => {
     select(null);
+    setSample((s) => s ?? defaultSample(definition, sampleFields));
     setTestRun((run) => (run || !startStep ? null : { at: startStep.key, path: [startStep.key], edges: [] }));
   };
+  /** Whether the test run offers `t` with the sample: its Restrict conditions on the Form hold (others aren't sampled). */
+  const offered = useCallback((t: WorkflowTransition) => offeredWith(t, sample ?? {}), [sample]);
   const marks = useMemo(() => {
     if (!testRun) return undefined;
     const out: Record<string, CanvasMark> = {};
     for (const s of definition.steps) out[s.key] = testRun.path.includes(s.key) ? "done" : "faded";
     out[testRun.at] = "current";
-    for (const t of definition.transitions) out[t.key] = testRun.edges.includes(t.key) ? "done" : t.from === testRun.at ? "next" : "faded";
+    for (const t of definition.transitions) out[t.key] = testRun.edges.includes(t.key) ? "done" : t.from === testRun.at && offered(t) ? "next" : "faded";
     return out;
-  }, [testRun, definition]);
+  }, [testRun, definition, offered]);
 
   const showProblem = (p: WorkflowProblem) => {
     if (p.transition) {
@@ -284,16 +363,16 @@ function Builder(props: WorkflowBuilderProps) {
   const validate = async () => {
     const found = await onValidate();
     const errors = found.filter((p) => p.severity === "error").length;
-    toast(errors ? { title: labels.errorsToFix(v(errors)), tone: "danger" } : { title: labels.validationPassed, tone: "success" });
+    toast(errors ? { title: labels.errorsToFix(errors, v(errors)), tone: "danger" } : { title: labels.validationPassed, tone: "success" });
   };
 
   const openPublish = async () => {
     setPublish({ phase: "checking" });
     setPublish({ phase: "ready", problems: await onValidate() });
   };
-  const doPublish = async () => {
+  const doPublish = async (changeNote: string) => {
     setPublish({ phase: "publishing" });
-    const result = await onPublish();
+    const result = await onPublish(changeNote);
     if (result.ok) {
       setPublish(null);
       toast({ title: labels.published(v(result.versionNo)), tone: "success" });
@@ -403,6 +482,10 @@ function Builder(props: WorkflowBuilderProps) {
               <TestRunBar
                 run={testRun}
                 definition={definition}
+                fields={sampleFields}
+                sample={sample ?? {}}
+                onSample={(key, value) => setSample((s) => ({ ...s, [key]: value }))}
+                offered={offered}
                 locale={locale}
                 labels={labels}
                 terminal={(key) => {
@@ -426,6 +509,7 @@ function Builder(props: WorkflowBuilderProps) {
             outcomes={outcomes}
             positions={positions}
             form={form}
+            screens={screens}
             problems={problems}
             locale={locale}
             labels={labels}
@@ -439,8 +523,8 @@ function Builder(props: WorkflowBuilderProps) {
         <section aria-label={labels.problemsName} className="max-h-[150px] overflow-auto rounded-xl border border-border bg-surface px-3 py-2 lg:col-start-2 lg:row-start-2">
           <div className="mb-1 flex items-center gap-2 text-[12.5px] font-bold">
             <Icon name={errors.length ? "alert-triangle" : "circle-check"} size={16} style={{ color: errors.length ? "var(--danger)" : "var(--success)" }} />
-            {errors.length ? labels.errors(v(errors.length)) : labels.noErrors}
-            {warnings > 0 && <span>· {labels.warnings(v(warnings))}</span>}
+            {errors.length ? labels.errors(errors.length, v(errors.length)) : labels.noErrors}
+            {warnings > 0 && <span className="font-semibold text-muted">· {labels.warnings(warnings, v(warnings))}</span>}
           </div>
           <ul>
             {problems.map((p, i) => (
@@ -471,11 +555,12 @@ function Builder(props: WorkflowBuilderProps) {
           state={publish}
           versionNo={versionNo}
           published={published}
+          running={running}
           definition={definition}
           locale={locale}
           labels={labels}
           onClose={() => setPublish(null)}
-          onPublish={() => void doPublish()}
+          onPublish={(changeNote) => void doPublish(changeNote)}
           onShowProblems={() => setPublish(null)}
         />
       )}
@@ -522,6 +607,7 @@ type SideEditorProps = {
   outcomes: readonly WorkflowBuilderOutcome[];
   positions: readonly PositionOption[];
   form: FormSchema | null;
+  screens: readonly WorkflowScreenOption[];
   problems: readonly WorkflowProblem[];
   locale: Locale;
   labels: WorkflowBuilderLabels;
@@ -578,6 +664,9 @@ function StepEditor({ definition, step, openStages, stages, positions, locale, l
   }
   const actor = step.actor ?? { role: "contractor" as BaseRole, permission: "review" as const };
   const isDraft = stages.find((s) => s.key === step.stage)?.category === "draft";
+  // The raiser's Steps: those of the Draft Step's Participant role (ADR 0019).
+  const raiserRole = definition.steps.find((s) => stages.find((st) => st.key === s.stage)?.category === "draft")?.actor?.role;
+  const raiser = raiserRole !== undefined && actor.role === raiserRole;
   const ofRole = positions.filter((p) => p.role === actor.role);
   const targets = definition.steps.filter((s) => s.key !== step.key);
   return (
@@ -588,15 +677,16 @@ function StepEditor({ definition, step, openStages, stages, positions, locale, l
         <Select value={step.stage} onValueChange={(stage) => set({ stage })} options={openStages.map((s) => ({ value: s.key, label: s.name[locale] }))} />
       </Field>
       <Heading>{labels.whoHolds}</Heading>
+      {/* The reference's compact pair: the heading names them, the labels stay for screen readers. */}
       <div className="grid grid-cols-2 gap-1.5">
-        <Field label={labels.role}>
+        <Field label={labels.role} className="[&>label]:sr-only">
           <Select
             value={actor.role}
             onValueChange={(role) => set({ actor: { role: role as BaseRole, permission: actor.permission } })}
             options={baseRoles.map((r) => ({ value: r, label: labels.map.role(r) }))}
           />
         </Field>
-        <Field label={labels.permission}>
+        <Field label={labels.permission} className="[&>label]:sr-only">
           <Select
             value={actor.permission}
             onValueChange={(permission) => set({ actor: { ...actor, permission: permission as typeof actor.permission } })}
@@ -604,6 +694,14 @@ function StepEditor({ definition, step, openStages, stages, positions, locale, l
           />
         </Field>
       </div>
+      {/* Who may hold it, naming no one: the builder names no Member (visibility.md, RP-439; owner's decision 2). */}
+      <p className="m-0 flex items-start gap-1.5 rounded-lg bg-info-tint px-2.5 py-2 text-[12px] leading-snug font-medium text-info-fg">
+        {/* eslint-disable-next-line rabaed/no-avoid-terms -- Tabler's icon name: the people who may hold it. */}
+        <Icon name="users" size={14} className="mt-px" />
+        {labels.poolHint(
+          [labels.map.role(actor.role), labels.map.permission(actor.permission), ...(actor.positions ?? []).map((k) => labels.map.position(k, actor.role))].join(" · "),
+        )}
+      </p>
       {ofRole.length > 0 && (
         <fieldset className="flex flex-col gap-1.5">
           <legend className="mb-1 text-body font-medium text-text">{labels.positions}</legend>
@@ -636,6 +734,12 @@ function StepEditor({ definition, step, openStages, stages, positions, locale, l
           options={outcomeModes.map((m) => ({ value: m, label: m === "none" ? labels.outcomeNone : labels.map.outcomeMode(m) }))}
         />
       </Field>
+      {raiser && (
+        // The reference's "Editable form sections", as ADR 0019 allows it: one setting, on the raiser's Steps only (owner's decision 3).
+        <Field label={labels.editsForm} help={labels.editsFormHelp} layout="inline">
+          <Switch checked={stepEditsForm(definition, step, stages)} onCheckedChange={(on) => set({ editsForm: on })} />
+        </Field>
+      )}
       {isDraft && (
         <>
           <Heading>{labels.draftsVisibleTo}</Heading>
@@ -664,11 +768,13 @@ function StepEditor({ definition, step, openStages, stages, positions, locale, l
   );
 }
 
-function TransitionEditor({ definition, transition, stages, outcomes, positions, form, problems, locale, labels, onCommit, onDelete }: SideEditorProps & { transition: WorkflowTransition }) {
+function TransitionEditor({ definition, transition, stages, outcomes, positions, form, screens, problems, locale, labels, onCommit, onDelete }: SideEditorProps & { transition: WorkflowTransition }) {
   const set = (patch: Partial<Omit<WorkflowTransition, "key" | "from" | "to">>, coalesce: string | null = null) =>
     onCommit(updateTransition(definition, transition.key, patch), coalesce);
   const nameOf = (key: string) => definition.steps.find((s) => s.key === key)?.name[locale] ?? key;
-  const actionForm = actionFormOf(transition.actionForm);
+  // What it asks: the chosen Screen's Form (ADR 0019), else its own Action Form, else the Internal Note only.
+  const screen = transition.screen === undefined ? undefined : screens.find((s) => s.key === transition.screen);
+  const actionForm = screen ? screen.schema : transition.screen === undefined ? actionFormOf(transition.actionForm) : null;
   // The fields it asks: display items (headings, instructions, dividers) ask nothing.
   const fields = (actionForm ? formFields(actionForm) : []).flatMap((f) => ("label" in f ? [f] : []));
   // What each group of rules may name, as publish check 6 accepts it.
@@ -676,28 +782,16 @@ function TransitionEditor({ definition, transition, stages, outcomes, positions,
   const closes = transition.kind === "close";
   const actingRole = definition.steps.find((s) => s.key === transition.from)?.actor?.role;
   const actingPositions = positions.filter((p) => p.role === actingRole);
+  const closing = outcomes.filter((o) => o.closing);
+  const ownForm = transition.screen === undefined && transition.actionForm !== null;
+  const picked = transition.screen ?? (ownForm ? "__own" : "__none");
+  const pick = (value: string) => {
+    const { screen: _old, ...rest } = transition;
+    const next = value === "__none" ? { ...rest, actionForm: null } : { ...rest, actionForm: null, screen: value };
+    onCommit({ ...definition, transitions: definition.transitions.map((t) => (t.key === transition.key ? next : t)) });
+  };
   return (
-    <Tabs key={transition.key} defaultValue="settings" className="flex flex-col gap-2.5">
-      <TabsList aria-label={labels.rules.tabsName} className="gap-4">
-        <TabsTrigger value="settings" className="h-9 text-[13px]">
-          {labels.rules.tabSettings}
-        </TabsTrigger>
-        <TabsTrigger value="notifications" className="h-9 text-[13px]">
-          {labels.rules.tabNotifications}
-        </TabsTrigger>
-      </TabsList>
-      <TabsContent value="notifications" className="flex flex-col gap-2.5">
-        <TransitionNotifications
-          definition={definition}
-          transition={transition}
-          steps={definition.steps}
-          positionOptions={positions}
-          locale={locale}
-          labels={labels.rules}
-          onCommit={onCommit}
-        />
-      </TabsContent>
-      <TabsContent value="settings" className="flex flex-col gap-2.5">
+    <div key={transition.key} className="flex flex-col gap-2.5">
       <Heading>{labels.transitionHeading(nameOf(transition.from), nameOf(transition.to))}</Heading>
       <Field label={labels.labelEn}>
         <Input value={transition.label.en} dir="ltr" onChange={(e) => set({ label: { ...transition.label, en: e.target.value } }, `${transition.key}:en`)} />
@@ -710,7 +804,8 @@ function TransitionEditor({ definition, transition, stages, outcomes, positions,
           value={transition.kind}
           onValueChange={(kind) => set({ kind: kind as WorkflowTransition["kind"], ...(kind === "close" ? {} : { outcome: null }) })}
           options={transitionKinds.map((k) => ({ value: k, label: labels.map.kind(k) }))}
-          className="flex-wrap [&>button]:h-7 [&>button]:px-2 [&>button]:text-xs"
+          // Six kinds, Send Back included: a 3 by 2 grid in the 330px panel.
+          className="grid w-full grid-cols-3 [&>button]:h-7 [&>button]:px-1.5 [&>button]:text-xs"
         />
       </Field>
       <Field label={labels.outcomeCode} help={closes ? undefined : labels.outcomeOnlyOnClose} disabled={!closes}>
@@ -734,9 +829,39 @@ function TransitionEditor({ definition, transition, stages, outcomes, positions,
         onCommit={onCommit}
       />
       <Heading>{labels.screen}</Heading>
-      {/* The Screen picker, read-only until Screens are on main (RP-516): the Transition's current Action Form. */}
-      <div className="flex flex-col gap-2 rounded-[10px] bg-surface p-3 shadow-[0_0_0_1px_var(--border),var(--shadow-lg)]" aria-describedby={`screen-help-${transition.key}`}>
+      {/* The Screen picker (owner's decision 6, ADR 0019): it replaces the reference's Comments / Attach / Pick code ticks. */}
+      <Field label={labels.screen} help={labels.screenHelp} className="[&>label]:sr-only">
+        <Select
+          value={picked}
+          onValueChange={pick}
+          options={[
+            { value: "__none", label: labels.screenNone },
+            ...(ownForm ? [{ value: "__own", label: labels.screenOwn }] : []),
+            ...(transition.screen !== undefined && !screen ? [{ value: transition.screen, label: labels.screenMissing(transition.screen) }] : []),
+            ...screens.map((s) => ({ value: s.key, label: s.name[locale] })),
+          ]}
+        />
+      </Field>
+      {/* The reference's preview card, of the chosen Screen; no signature line (ADR 0017: every Transition is confirmed and recorded). */}
+      <div className="flex flex-col gap-2 rounded-[10px] bg-surface p-3 shadow-[0_0_0_1px_var(--border),var(--shadow-lg)]">
         <b className="text-[13.5px]">{transition.label[locale]}</b>
+        {closes && closing.length > 0 && (
+          <div className="flex flex-wrap gap-1">
+            {closing.map((o) => {
+              const colour = stageVars(o.code === "C" ? "resubmitted" : o.code === "D" ? "rejected" : "approved");
+              const on = o.code === transition.outcome;
+              return (
+                <span
+                  key={o.code}
+                  className="inline-flex h-[22px] items-center rounded-[5px] px-1.5 text-[11px] font-bold"
+                  style={on ? { background: colour.dot, color: "var(--on-primary)" } : { background: colour.bg, color: colour.fg }}
+                >
+                  {o.code}
+                </span>
+              );
+            })}
+          </div>
+        )}
         {fields.length === 0 ? (
           <span className="flex h-[26px] items-center rounded-[5px] px-2 text-[11.5px] text-muted shadow-[inset_0_0_0_1px_var(--control-border)]">{labels.internalNoteOnly}</span>
         ) : (
@@ -753,15 +878,21 @@ function TransitionEditor({ definition, transition, stages, outcomes, positions,
         )}
         <span className="inline-flex h-8 items-center self-end rounded-sm bg-primary px-3 text-sm font-medium text-on-primary">{labels.confirm}</span>
       </div>
-      <p id={`screen-help-${transition.key}`} className="m-0 text-caption text-muted">
-        {labels.screenHelp}
-      </p>
+      {/* Inline, as the reference's (owner's decision 7); no "Company admins" or "Distribution list" (visibility.md). */}
+      <TransitionNotifications
+        definition={definition}
+        transition={transition}
+        steps={definition.steps}
+        positionOptions={positions}
+        locale={locale}
+        labels={labels.rules}
+        onCommit={onCommit}
+      />
       <Button variant="ghost" size="sm" className="self-start text-danger-fg" onClick={onDelete}>
         <Icon name="trash" />
         {labels.deleteTransition}
       </Button>
-      </TabsContent>
-    </Tabs>
+    </div>
   );
 }
 
@@ -777,6 +908,12 @@ function actionFormOf(stored: unknown) {
 type TestRunBarProps = {
   run: TestRun;
   definition: WorkflowDefinition;
+  /** The fields the conditions read, and their sample answers. */
+  fields: readonly RuleField[];
+  sample: Sample;
+  onSample: (key: string, value: unknown) => void;
+  /** Whether a Transition is offered with the sample. */
+  offered: (t: WorkflowTransition) => boolean;
   locale: Locale;
   labels: WorkflowBuilderLabels;
   terminal: (key: string) => boolean;
@@ -785,14 +922,26 @@ type TestRunBarProps = {
   onClose: () => void;
 };
 
-/** The test run's bar over the canvas: where the run is and the Transitions it may take there. */
-function TestRunBar({ run, definition, locale, labels, terminal, onTake, onRestart, onClose }: TestRunBarProps) {
+/**
+ * The test run's bar over the canvas (the reference's): the sample answers the conditions read,
+ * where the run is, and the Transitions it may take there with them: a conditional one only
+ * when the sample meets its condition.
+ */
+function TestRunBar({ run, definition, fields, sample, onSample, offered, locale, labels, terminal, onTake, onRestart, onClose }: TestRunBarProps) {
   const at = definition.steps.find((s) => s.key === run.at);
-  const next = definition.transitions.filter((t) => t.from === run.at);
+  const next = definition.transitions.filter((t) => t.from === run.at && offered(t));
   return (
     <div role="region" aria-label={labels.testRun} className="absolute inset-x-3 bottom-3 z-20 flex flex-wrap items-center gap-2 rounded-xl bg-inverse px-3 py-2.5 text-[12.5px] text-on-inverse" dir={locale === "ar" ? "rtl" : "ltr"}>
       <Icon name="player-play" size={16} />
       <b>{labels.testRun}</b>
+      {fields.length > 0 && (
+        <span className="flex flex-wrap items-center gap-1.5">
+          {labels.sample}
+          {fields.map((f) => (
+            <SampleInput key={f.key} field={f} value={sample[f.key]} locale={locale} yes={labels.rules.yes} no={labels.rules.no} onChange={(value) => onSample(f.key, value)} />
+          ))}
+        </span>
+      )}
       <span className="opacity-70">·</span>
       {at && terminal(at.key) ? (
         <b>{labels.finished(at.name[locale])}</b>
@@ -801,6 +950,7 @@ function TestRunBar({ run, definition, locale, labels, terminal, onTake, onResta
           <span>
             {labels.testRunAt} <b>{at?.name[locale]}</b> —
           </span>
+          {next.length === 0 && <span className="opacity-80">{labels.noWayOn}</span>}
           {next.map((t) => (
             <Button key={t.key} size="sm" onClick={() => onTake(t)}>
               {t.label[locale]}
@@ -820,28 +970,96 @@ function TestRunBar({ run, definition, locale, labels, terminal, onTake, onResta
   );
 }
 
+/** One sample answer in the test run bar, by the field's type: a number (Latin digits), a choice, yes or no, or text. */
+function SampleInput({ field, value, locale, yes, no, onChange }: { field: RuleField; value: unknown; locale: Locale; yes: string; no: string; onChange: (value: unknown) => void }) {
+  const name = field.label[locale];
+  const look = "h-[26px] rounded-[5px] border-0 bg-surface px-1.5 text-[12px] text-text";
+  if (field.type === "yes_no") {
+    return (
+      <label className="inline-flex items-center gap-1">
+        {name}
+        <select aria-label={name} className={look} value={value === false ? "no" : "yes"} onChange={(e) => onChange(e.target.value === "yes")}>
+          <option value="yes">{yes}</option>
+          <option value="no">{no}</option>
+        </select>
+      </label>
+    );
+  }
+  if (field.options && field.options.length > 0) {
+    return (
+      <label className="inline-flex items-center gap-1">
+        {name}
+        <select aria-label={name} className={look} value={String(value ?? "")} onChange={(e) => onChange(e.target.value)}>
+          {field.options.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label[locale]}
+            </option>
+          ))}
+        </select>
+      </label>
+    );
+  }
+  const numeric = field.type === "number" || field.type === "currency";
+  return (
+    <label className="inline-flex items-center gap-1">
+      {name}
+      <input
+        aria-label={name}
+        dir="ltr"
+        inputMode={numeric ? "decimal" : undefined}
+        className={cn(look, "w-28")}
+        value={value === undefined || value === null ? "" : String(value)}
+        onChange={(e) => onChange(numeric ? (e.target.value === "" || Number.isNaN(Number(e.target.value)) ? e.target.value : Number(e.target.value)) : e.target.value)}
+      />
+    </label>
+  );
+}
+
 type PublishDialogProps = {
   state: PublishState;
   versionNo: number;
   published: WorkflowBuilderProps["published"];
+  running: readonly { versionNo: number; count: number }[];
   definition: WorkflowDefinition;
   locale: Locale;
   labels: WorkflowBuilderLabels;
   onClose: () => void;
-  onPublish: () => void;
+  onPublish: (changeNote: string) => void;
   onShowProblems: () => void;
 };
 
 /**
- * Publish (design: the publish modal): what changed since the published Version,
- * the server's check of the saved draft, and that running items keep their Version.
+ * Publish (the reference's publish modal, RP-555): what changed since the published Version,
+ * the server's check of the saved draft, the required change note the Version keeps, and how
+ * many items (of those the author sees) keep their Version.
  */
-function PublishDialog({ state, versionNo, published, definition, locale, labels, onClose, onPublish, onShowProblems }: PublishDialogProps) {
+function PublishDialog({ state, versionNo, published, running, definition, locale, labels, onClose, onPublish, onShowProblems }: PublishDialogProps) {
   const v = (n: number) => formatNumber(n, locale);
   const errors = state.phase === "ready" ? state.problems.filter((p) => p.severity === "error").length : 0;
+  const [changeNote, setChangeNote] = useState("");
+  const [changeNoteMissing, setChangeNoteMissing] = useState(false);
+  const latest = published ? (running.find((r) => r.versionNo === published.versionNo)?.count ?? 0) : 0;
+  const older = running.filter((r) => published && r.versionNo !== published.versionNo).reduce((sum, r) => sum + r.count, 0);
+  const submit = () => {
+    if (changeNote.trim() === "") {
+      setChangeNoteMissing(true);
+      return;
+    }
+    onPublish(changeNote.trim());
+  };
   return (
     <Dialog open onOpenChange={(isOpen) => !isOpen && onClose()}>
-      <DialogContent title={labels.publishTitle(v(versionNo))} closeLabel={labels.close} className="w-[min(620px,calc(100%-2rem))]">
+      <DialogContent
+        title={
+          <span className="flex items-center gap-2.5">
+            <Icon name="upload" size={18} className="text-primary" />
+            {labels.publishTitle(v(versionNo))}
+          </span>
+        }
+        closeLabel={labels.close}
+        className={cn(referenceModal, "w-[min(620px,calc(100%-2rem))]")}
+      >
+        <div className={referenceModalBody}>
         <h3 className="m-0 text-[11px] font-bold tracking-wider text-muted uppercase">
           {published ? labels.changesSince(v(published.versionNo)) : labels.firstVersion}
         </h3>
@@ -850,7 +1068,7 @@ function PublishDialog({ state, versionNo, published, definition, locale, labels
           {state.phase === "ready" && errors > 0 ? (
             <div className="flex items-center gap-2 rounded-[10px] bg-danger-tint px-3 py-2.5 text-[13px] font-semibold text-danger-fg">
               <Icon name="circle-x" size={16} />
-              {labels.errorsBlock(v(errors))}
+              {labels.errorsBlock(errors, v(errors))}
               <Button size="sm" variant="secondary" className="ms-auto" onClick={onShowProblems}>
                 {labels.showProblems}
               </Button>
@@ -867,15 +1085,27 @@ function PublishDialog({ state, versionNo, published, definition, locale, labels
             </div>
           )}
         </div>
+        <Field label={labels.changeNote} required error={changeNoteMissing && changeNote.trim() === "" ? labels.changeNoteRequired : undefined}>
+          <Textarea
+            value={changeNote}
+            rows={3}
+            maxLength={1000}
+            placeholder={labels.changeNotePlaceholder}
+            onChange={(e) => setChangeNote(e.target.value)}
+          />
+        </Field>
         <div className="flex items-center gap-2 rounded-[10px] bg-info-tint px-3 py-2.5 text-[13px] font-medium text-info-fg">
           <Icon name="info-circle" size={16} className="shrink-0" />
-          {labels.appliesToNew(v(versionNo))}
+          {published && latest + older > 0
+            ? labels.keepVersions({ latest, latestN: v(latest), older, olderN: v(older), version: v(published.versionNo), next: v(versionNo) })
+            : labels.appliesToNew(v(versionNo))}
         </div>
-        <DialogFooter className="-mx-6 -mb-6 border-t border-border-subtle bg-surface-subtle px-6 py-3">
+        </div>
+        <DialogFooter className={referenceModalFooter}>
           <Button variant="secondary" onClick={onClose}>
             {labels.cancel}
           </Button>
-          <Button onClick={onPublish} disabled={state.phase !== "ready" || errors > 0}>
+          <Button onClick={submit} disabled={state.phase !== "ready" || errors > 0}>
             <Icon name="upload" />
             {labels.publishVersion(v(versionNo))}
           </Button>

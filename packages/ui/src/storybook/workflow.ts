@@ -1,5 +1,17 @@
 import { conditionOpKey, formSchema, ruleFieldsOf } from "@rabaed/domain";
-import type { BaseRole, FunctionPermission, Locale, PositionOption, RuleField, TransitionKind, WorkflowDefinition, WorkflowProblem, WorkflowStep, WorkflowTransition } from "@rabaed/domain";
+import type {
+  BaseRole,
+  FunctionPermission,
+  Locale,
+  PositionOption,
+  RuleField,
+  TransitionKind,
+  WorkflowDefinition,
+  WorkflowProblem,
+  WorkflowScreenOption,
+  WorkflowStep,
+  WorkflowTransition,
+} from "@rabaed/domain";
 import { ruleMessages } from "./workflow-rule-messages.ts";
 import type { WorkflowRuleLabels } from "../components/workflow/workflow-rule-labels.ts";
 import type { WorkflowBuilderOutcome } from "../components/workflow/workflow-builder.tsx";
@@ -113,6 +125,7 @@ export function workflowLabels(locale: Locale): WorkflowLabels {
     current: ar ? "الحالية" : "Current",
     to: ar ? "إلى" : "to",
     overview: ar ? "نظرة عامة" : "Overview",
+    conditional: ar ? "لا يُدخل إليها إلا عند تحقق شرط" : "Entered only when a condition holds",
     zoomIn: ar ? "تكبير" : "Zoom in",
     zoomOut: ar ? "تصغير" : "Zoom out",
     fit: ar ? "ملاءمة" : "Fit",
@@ -131,7 +144,10 @@ export const builderDraft: WorkflowDefinition = {
   ],
   transitions: [
     ...twoTierReview.transitions.map((tr) =>
-      tr.key === "approve_a"
+      // The Return asks the Screen "Return with a reason" (ADR 0019, RP-555's picker).
+      tr.key === "return_to_engineer"
+        ? { ...tr, screen: "return_reason" }
+        : tr.key === "approve_a"
         ? {
             ...tr,
             actionForm: {
@@ -236,6 +252,40 @@ export const builderForm = formSchema.parse({
 
 /** The Form's fields a rule can name. */
 export const builderFields: RuleField[] = ruleFieldsOf(builderForm, null);
+
+/** The Screens the builder offers a Transition (RP-555's picker), as the builder read gives them. */
+export const builderScreens: WorkflowScreenOption[] = [
+  {
+    key: "code_reply",
+    name: t("Code reply", "الرد بالرمز"),
+    schema: formSchema.parse({
+      sections: [
+        {
+          key: "reply",
+          title: t("Reply", "الرد"),
+          fields: [
+            { type: "textarea", key: "comments", label: t("Comments", "الملاحظات") },
+            { type: "attachments", key: "files", label: t("Attach files", "إرفاق ملفات") },
+          ],
+        },
+      ],
+    }),
+  },
+  {
+    key: "return_reason",
+    name: t("Return with a reason", "إرجاع مع السبب"),
+    schema: formSchema.parse({
+      sections: [{ key: "reason", title: t("Reason", "السبب"), fields: [{ type: "textarea", key: "reason", label: t("Reason", "السبب"), required: true }] }],
+    }),
+  },
+];
+
+/** Items the author sees on each published Version (the publish dialog's counts). */
+export const builderRunning = [
+  { versionNo: 3, count: 31 },
+  { versionNo: 2, count: 14 },
+  { versionNo: 1, count: 2 },
+];
 
 type Messages = Record<string, unknown>;
 
@@ -387,6 +437,12 @@ export function workflowBuilderLabels(locale: Locale): WorkflowBuilderLabels {
     permission: l("Permission", "الصلاحية"),
     positions: l("Positions", "المناصب"),
     positionsHelp: l("None ticked: anyone of that Participant with the Permission.", "بدون تحديد: أي شخص من ذلك المشارك لديه الصلاحية."),
+    poolHint: (holders) => l(`Pool: anyone holding ${holders}`, `المجموعة: أي شخص يتولى ${holders}`),
+    editsForm: l("Edits the raiser's Form", "يعدّل نموذج المُنشئ"),
+    editsFormHelp: l(
+      "Whoever holds this Step edits the raiser's Form. Nobody edits it after a Submit.",
+      "من يتولى هذه الخطوة يعدّل نموذج المُنشئ. لا يعدّله أحد بعد التقديم.",
+    ),
     outcomeHeading: l("Outcome", "النتيجة"),
     outcomeNone: l("None", "بدون"),
     draftsVisibleTo: l("Drafts visible to", "المسودات مرئية لـ"),
@@ -405,17 +461,25 @@ export function workflowBuilderLabels(locale: Locale): WorkflowBuilderLabels {
     noOutcome: "—",
     outcomeOnlyOnClose: l("Only a Close sets an outcome.", "لا يحدد النتيجة إلا انتقال من نوع إغلاق."),
     screen: l("Screen", "الشاشة"),
-    screenHelp: l("The Screen this Transition asks. Screens are edited in Settings → Screens.", "الشاشة التي يطلبها هذا الانتقال. تُعدَّل الشاشات في الإعدادات ← الشاشات."),
+    screenHelp: l(
+      "The Screen this Transition asks when it is confirmed. Screens are edited in Settings → Screens.",
+      "الشاشة التي يطلبها هذا الانتقال عند تأكيده. تُعدَّل الشاشات في الإعدادات ← الشاشات.",
+    ),
     internalNoteOnly: l("Internal Note only", "ملاحظة داخلية فقط"),
+    screenNone: l("No Screen — Internal Note only", "بدون شاشة — ملاحظة داخلية فقط"),
+    screenOwn: l("This Transition's own Action Form", "نموذج هذا الانتقال الخاص"),
+    screenMissing: (key) => l(`${key} (no published Version)`, `${key} (لا إصدار منشور)`),
     confirm: l("Confirm", "تأكيد"),
     deleteTransition: l("Delete Transition", "حذف الانتقال"),
     problemsName: l("Validation", "التحقق"),
     noErrors: l("No errors", "لا أخطاء"),
-    errors: (n) => l(`${n} errors`, `${n} أخطاء`),
-    warnings: (n) => l(`${n} warnings`, `${n} تحذيرات`),
+    errors: (c, n) => l(c === 1 ? "1 error" : `${n} errors`, c === 1 ? "خطأ واحد" : c === 2 ? "خطآن" : c <= 10 ? `${n} أخطاء` : `${n} خطأ`),
+    warnings: (c, n) => l(c === 1 ? "1 warning" : `${n} warnings`, c === 1 ? "تحذير واحد" : c === 2 ? "تحذيران" : c <= 10 ? `${n} تحذيرات` : `${n} تحذير`),
     showProblem: (m) => l(`Show: ${m}`, `عرض: ${m}`),
     validationPassed: l("Validation passed", "اجتاز التحقق"),
-    errorsToFix: (n) => l(`${n} errors to fix`, `${n} أخطاء للإصلاح`),
+    errorsToFix: (c, n) => l(c === 1 ? "1 error to fix" : `${n} errors to fix`, c === 1 ? "خطأ واحد للإصلاح" : `${n} أخطاء للإصلاح`),
+    sample: l("Sample:", "عينة:"),
+    noWayOn: l("No Transition is offered with these values", "لا يُتاح أي انتقال بهذه القيم"),
     testRunAt: l("At", "عند"),
     finished: (o) => l(`Finished: ${o}`, `انتهى: ${o}`),
     restart: l("Restart", "إعادة"),
@@ -427,11 +491,26 @@ export function workflowBuilderLabels(locale: Locale): WorkflowBuilderLabels {
     removed: l("Removed", "أُزيل"),
     changed: l("Changed", "تغيّر"),
     noChanges: l("No changes", "لا تغييرات"),
+    conditionChanged: l("— condition", "— الشرط"),
     checking: l("Checking on the server…", "جارٍ التحقق على الخادم…"),
     passed: l("Validation passed", "اجتاز التحقق"),
-    errorsBlock: (n) => l(`${n} validation errors — fix them before publishing.`, `${n} أخطاء تحقق — أصلحها قبل النشر.`),
+    errorsBlock: (c, n) =>
+      l(
+        c === 1 ? "1 validation error — fix it before publishing." : `${n} validation errors — fix them before publishing.`,
+        c === 1 ? "خطأ تحقق واحد — أصلحها قبل النشر." : `${n} أخطاء تحقق — أصلحها قبل النشر.`,
+      ),
     showProblems: l("Show problems", "عرض المشكلات"),
+    changeNote: l("Change note", "ملاحظة التغيير"),
+    changeNotePlaceholder: l("What changed and why?", "ما الذي تغيّر ولماذا؟"),
+    changeNoteRequired: l("Write what changed before publishing.", "اكتب ما الذي تغيّر قبل النشر."),
     appliesToNew: (v) => l(`Items already running keep their Version. New items will use v${v}.`, `العناصر الجارية تحتفظ بإصداراتها. العناصر الجديدة ستستخدم v${v}.`),
+    keepVersions: ({ latestN, older, olderN, version, next }) =>
+      older > 0
+        ? l(
+            `${latestN} items on v${version} and ${olderN} on older Versions keep their Version. New items will use v${next}.`,
+            `${latestN} عنصرًا على v${version} و${olderN} على إصدارات أقدم تحتفظ بإصداراتها. العناصر الجديدة ستستخدم v${next}.`,
+          )
+        : l(`${latestN} items on v${version} keep their Version. New items will use v${next}.`, `${latestN} عنصرًا على v${version} تحتفظ بإصداراتها. العناصر الجديدة ستستخدم v${next}.`),
     cancel: l("Cancel", "إلغاء"),
     publishVersion: (v) => l(`Publish v${v}`, `نشر v${v}`),
     published: (v) => l(`v${v} published — new items will use it`, `تم نشر v${v} — العناصر الجديدة ستستخدمه`),
@@ -439,6 +518,7 @@ export function workflowBuilderLabels(locale: Locale): WorkflowBuilderLabels {
     alertsRegion: l("Builder alerts", "تنبيهات المصمم"),
     dismiss: l("Dismiss", "إخفاء"),
     names: {
+      firstStep: t("Contractor Engineer", "مهندس المقاول"),
       newStep: t("New step", "خطوة جديدة"),
       newTransition: t("New transition", "انتقال جديد"),
       engineerReview: t("Engineer review", "مراجعة المهندس"),

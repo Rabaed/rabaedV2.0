@@ -34,7 +34,12 @@ export const validateWorkflowRequest = z.object({ definition: z.unknown().option
 export type ValidateWorkflowRequest = z.infer<typeof validateWorkflowRequest>;
 
 /** A Rabaed Engineer saves or publishes a Rabaed Default's definition, with the reason Rabaed Admin logs (V9). */
-export const rabaedWorkflowRequest = z.object({ definition: z.unknown(), reason: engineerReason });
+export const rabaedWorkflowRequest = z.object({
+  definition: z.unknown(),
+  reason: engineerReason,
+  /** On a publish: the change note the Version keeps (RP-555). */
+  changeNote: z.string().trim().min(1).max(1000).optional(),
+});
 export type RabaedWorkflowRequest = z.infer<typeof rabaedWorkflowRequest>;
 
 /** What a check finds: where the document doesn't fit the format, else every publish problem. */
@@ -97,7 +102,30 @@ export type WorkflowBuilderRead = {
    * the Type has a published Form.
    */
   form: FormSchema | null;
+  /**
+   * The Screens a Transition may show (ADR 0019, RP-555's picker): for each key, the
+   * owner's Screen with that key, else the Rabaed Default one, at its latest published
+   * Version, as publishing would pin it (app.workflow_screens).
+   */
+  screens: WorkflowScreenOption[];
+  /**
+   * How many items still run on each published Version, counting only the items the
+   * author sees (RP-555; scenario RP-555-1): the publish dialog says they keep their
+   * Version. Versions no visible item runs on are left out.
+   */
+  running: { versionNo: number; count: number }[];
 };
+
+/** A Screen the builder offers a Transition, by key, with what it asks. */
+export type WorkflowScreenOption = { key: string; name: BilingualText; schema: FormSchema };
+
+/**
+ * Publish a Workflow's draft, with the change note its Versions history shows (RP-555): the
+ * builder's publish dialog always gives one. A publish with no body keeps no Change Note (a copy
+ * published as it is, from Settings → Workflows).
+ */
+export const publishWorkflowRequest = z.object({ changeNote: z.string().trim().min(1).max(1000).optional() }).optional();
+export type PublishWorkflowRequest = z.infer<typeof publishWorkflowRequest>;
 
 // The Library's Workflows (RP-442, WF-19; ADR 0016; visibility.md V18). A Company keeps
 // copies of Workflows in its Library, private to it until one is copied into a Project.

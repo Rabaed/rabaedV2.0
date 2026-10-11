@@ -609,6 +609,25 @@ describe("workflowPublishProblems", () => {
       );
     });
 
+    it("refuses a Send that hands the item to another Participant: that is a Submit (RP-555)", () => {
+      const d = mar();
+      transition(d, "submit").kind = "send";
+      const found = workflowPublishProblems(d, context()).filter((p) => p.code === "send_crosses_participants");
+      expect(found.map(({ code, severity, transition: t }) => ({ code, severity, transition: t }))).toEqual([
+        { code: "send_crosses_participants", severity: "error", transition: "submit" },
+      ]);
+      expect(found[0]!.message).toEqual({
+        en: `"Submit" is a Send but goes to another Participant: use Submit.`,
+        ar: `"تقديم" إرسال لكنه يذهب إلى مشارك آخر: استخدم تقديم.`,
+      });
+    });
+
+    it("lets a Send stay inside one Participant, and leaves a Send into a closed Step to the close checks", () => {
+      const d = mar();
+      add(d, { key: "send_to_end", from: "internal_review", to: "approved" });
+      expect(problems(d).filter((p) => p.code === "send_crosses_participants")).toEqual([]);
+    });
+
     it("refuses an Action Form that isn't a valid Form schema (check 7)", () => {
       const d = mar();
       transition(d, "submit").actionForm = { sections: [] };

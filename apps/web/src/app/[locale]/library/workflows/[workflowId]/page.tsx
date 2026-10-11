@@ -39,6 +39,7 @@ export default async function LibraryWorkflowPage({ params }: { params: Promise<
     ]);
     const both = (key: keyof WorkflowBuilderLabels["names"]) => ({ en: en(key), ar: ar(key) });
     const names: WorkflowBuilderLabels["names"] = {
+      firstStep: both("firstStep"),
       newStep: both("newStep"),
       newTransition: both("newTransition"),
       engineerReview: both("engineerReview"),

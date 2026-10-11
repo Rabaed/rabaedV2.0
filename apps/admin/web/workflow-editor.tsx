@@ -112,10 +112,11 @@ export function WorkflowEditor({ typeCode, locale }: { typeCode: string; locale:
 
   const onValidate = useCallback(async () => check(latest.current!), [check]);
 
-  const onPublish = async (): Promise<WorkflowPublishResult> => {
+  const onPublish = async (changeNote: string): Promise<WorkflowPublishResult> => {
     if (needReason()) return { ok: false, problems: known.current };
     try {
-      const { versionNo } = await api<{ versionNo: number }>("POST", `${api_}/publish`, { definition: latest.current, reason: reason.trim() });
+      // The builder's change note is the Version's (RP-555); the reason is what admin_action logs (V9).
+      const { versionNo } = await api<{ versionNo: number }>("POST", `${api_}/publish`, { definition: latest.current, reason: reason.trim(), changeNote });
       setNotice({ kind: "ok", text: s.published(versionNo) });
       opened.current = false;
       await load();
@@ -235,6 +236,8 @@ export function WorkflowEditor({ typeCode, locale }: { typeCode: string; locale:
           outcomes={read.outcomes}
           positions={read.positions}
           form={read.form}
+          screens={read.screens}
+          running={read.running}
           locale={locale}
           labels={labels}
           problems={problems}
