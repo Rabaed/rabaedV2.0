@@ -24,6 +24,16 @@ const glossaryUrl = new URL("../../../GLOSSARY.md", import.meta.url);
  *
  * A one-word label in a message that can't be narrowed to a phrase is allowed by its key path in
  * `allowedMessages`; in code, by an `eslint-disable-next-line` comment that gives the reason.
+ *
+ * Common false hits and how to silence one, with an example of each (more in ../README.md). Run `pnpm lint`
+ * before your first commit: scripts and messages/*.json are checked too.
+ * - A phrase of plain English or a recurring code phrase: add the phrase, never the bare word, to
+ *   `allowedInText` with its reason: `"check the", // the verb ("Check the email"), not an Inspection.`
+ * - A one-word message label (JSON takes no comments): its key path in `allowedMessages`, with the reason as
+ *   the value: `"workItemViews.viewSwitch.list": "the List view beside the Kanban, not an Option List"`.
+ * - One spot in code (a library's name, an icon, a CLI service): put `// eslint-disable-next-line
+ *   rabaed/no-avoid-terms -- <reason>` above it, as in scripts/test-services.ts: `-- \`files\` is the Docker
+ *   Compose service's name, not a Document`. The reason is required.
  */
 const allowedInText: string[] = [
   "user agent", // the HTTP header, quoted in a log line.

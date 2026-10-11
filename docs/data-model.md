@@ -11,6 +11,7 @@ The logical data model for the platform and the Project Module, in PostgreSQL te
 - **Nothing is hard-deleted.** Rows are deactivated, withdrawn, cancelled or closed.
 - **Every table carries** `created_at`, `created_by`, `updated_at`. Change history for regulated tables goes to the audit log (§9).
 - `→` means foreign key.
+- **Finding a function's current body.** The `app.*` functions are redefined across many migrations (the newest by file name wins). `pnpm db:fn <name>` prints the newest definition and the migration and line it is in; `--list` shows every redefinition in order.
 
 ## Core relationships
 
