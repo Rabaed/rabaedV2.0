@@ -1,0 +1,675 @@
+"use client";
+
+import type { NumberingAttributes, NumberingCounter, NumberingPattern } from "@rabaed/domain";
+import { useEffect, useId, useState, type ReactNode } from "react";
+import { cn } from "../../lib/cn.ts";
+import { Button } from "../button/button.tsx";
+import { Badge } from "../data/badge.tsx";
+import { Checkbox } from "../form/checkbox.tsx";
+import { Field } from "../form/field.tsx";
+import { Icon } from "../icon/icon.tsx";
+import { SettingsSection } from "../settings/settings-layout.tsx";
+import { NumberingDrawer, NumberingModal, TypeCode } from "./numbering-drawer.tsx";
+import {
+  comfortableLength,
+  maxSegments,
+  nextSequences,
+  patternNumber,
+  previewType,
+  sampleEntries,
+  samePattern,
+  sharesCounter,
+  type SampleContext,
+} from "./numbering-model.ts";
+import { PatternNumber, rich, toneClasses, type NumberingText } from "./numbering-text.tsx";
+import { AddSegments, PatternWarnings, SampleLabel, SegmentChips, SequenceOptions } from "./pattern-editor.tsx";
+
+// Project Settings → Document Numbering (RP-412 rebuild; kit settings-numbering.html,
+// settings/numbering.js and .css; brief design/prompts/document-numbering-settings.md):
+// the live preview, the Project pattern edited in place, its sequence, the table of
+// Work Item Types with their Custom patterns (edited in a drawer), the fixed revision
+// suffix, and the floating "Unsaved changes" bar that opens the save confirmation.
+// Every Project Member reads it; only a Project Admin (`canEdit`) gets the controls.
+//
+// Every number shown for a Type is built under the pattern in effect for it: its
+// Custom pattern if it has one, else the Project pattern; example counters follow
+// that pattern's scope (`sampleEntries`).
+//
+// Visibility (visibility.md scenario 55, RP-412-2, RP-381-1): real next numbers come
+// only from `counters`, which the page passes to Project Admins only, who read
+// counters anyway. Everyone else sees examples from their own Participant, sequence
+// from 1, and a placeholder for a Participant Code not set yet, never its order.
+
+/** The live preview's item: a sample, with the long label of its line ("TMC Constructions · Electrical"). */
+export type NumberingContext = SampleContext & { label: string };
+
+/** A Work Item Type with its Custom pattern (null: it uses the Project pattern). */
+export type NumberingTypeRow = { id: string; code: string; name: string; custom: NumberingPattern | null };
+
+/** One pattern to save: the Project's (`workItemTypeId` null) or a Type's; a Type's null pattern uses the Project pattern again. */
+export type PatternChange = { workItemTypeId: string | null; pattern: NumberingPattern | null };
+
+export type DocumentNumberingProps = {
+  t: NumberingText;
+  canEdit: boolean;
+  /** The Project pattern in effect: the saved one, or the Rabaed Default. */
+  projectPattern: NumberingPattern;
+  isRabaedDefault: boolean;
+  types: readonly NumberingTypeRow[];
+  /** The live preview's item: the viewer's own Participant and the Project's first Trade. */
+  preview: NumberingContext;
+  /** The items of the "Next numbers" box and the scope's counters. */
+  samples: readonly SampleContext[];
+  /** A Project Admin's counters: the numbers become real next numbers. Absent for anyone else. */
+  counters?: readonly NumberingCounter[];
+  /** Two of the Project's Trade codes, for the scope's explanation. */
+  tradeCodes: readonly string[];
+  /** Saves the changes, Project pattern first; true only when the shared-counter warning applies and was accepted. */
+  onSave: (changes: PatternChange[], sharedCounterAccepted: boolean) => Promise<{ ok: true } | { ok: false; error: string }>;
+};
+
+const withType = (context: SampleContext, typeCode: string): NumberingAttributes => ({ ...context.attributes, typeCode });
+
+type NumberFor = (pattern: NumberingPattern, contexts: readonly SampleContext[], typeCode: string) => ReturnType<typeof patternNumber>[];
+
+/** The Document Numbering page's settings, below its header. */
+export function DocumentNumbering({ t, canEdit, projectPattern, isRabaedDefault, types, preview, samples, counters, tradeCodes, onSave }: DocumentNumberingProps) {
+  const savedCustoms = () => Object.fromEntries(types.map((type) => [type.id, type.custom])) as Record<string, NumberingPattern | null>;
+
+  // What is saved, and the Project Admin's edits not saved yet.
+  const [saved, setSaved] = useState({ project: projectPattern, customs: savedCustoms() });
+  const [project, setProject] = useState(projectPattern);
+  const [customs, setCustoms] = useState(savedCustoms);
+  const [drawer, setDrawer] = useState<{ type: NumberingTypeRow; pattern: NumberingPattern } | null>(null);
+  const [reviewing, setReviewing] = useState(false);
+  const [accepted, setAccepted] = useState(false);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState(false);
+
+  // A page refresh brings the saved patterns again; drop the edits only once they match.
+  const savedKey = JSON.stringify([projectPattern, types.map((type) => type.custom)]);
+  useEffect(() => {
+    const next = { project: projectPattern, customs: savedCustoms() };
+    setSaved(next);
+  }, [savedKey]);
+  useEffect(() => {
+    if (!done) return;
+    const id = setTimeout(() => setDone(false), 2600);
+    return () => clearTimeout(id);
+  }, [done]);
+
+  const changes: PatternChange[] = [
+    ...(samePattern(project, saved.project) ? [] : [{ workItemTypeId: null, pattern: project }]),
+    ...types.flatMap((type) => (samePattern(customs[type.id] ?? null, saved.customs[type.id] ?? null) ? [] : [{ workItemTypeId: type.id, pattern: customs[type.id] ?? null }])),
+  ];
+  const dirty = canEdit && changes.length > 0;
+  // Room under the page while the floating bar shows, so it never covers the last card (the kit's padding under the page).
+  const floating = dirty || done;
+  useEffect(() => {
+    if (!floating) return;
+    const before = document.body.style.paddingBottom;
+    document.body.style.paddingBottom = "72px";
+    return () => {
+      document.body.style.paddingBottom = before;
+    };
+  }, [floating]);
+  const needsAcceptance = changes.some((c) => c.pattern !== null && sharesCounter(c.pattern));
+
+  const numberFor: NumberFor = (pattern, contexts, typeCode) => {
+    const items = contexts.map((c) => withType(c, typeCode));
+    const seqs = nextSequences(pattern, items, counters);
+    return items.map((item, i) => patternNumber(pattern, item, seqs[i]!));
+  };
+
+  // The Types as edited, and the pattern in effect for each.
+  const current = types.map((type) => ({ ...type, custom: customs[type.id] ?? null }));
+  const inEffect = (type: { custom: NumberingPattern | null }) => type.custom ?? project;
+  // The preview numbers a Type on the Project pattern where there is one, so it follows the edits.
+  const shown = previewType(current);
+  const shownCode = shown?.code ?? "MAR";
+  const shownPattern = shown ? inEffect(shown) : project;
+  const [previewNumber] = numberFor(shownPattern, [preview], shownCode);
+  const previewContext = `${preview.label} · ${shown?.name ?? shownCode}`;
+  const nextNumbers = sampleEntries(shownPattern, samples, shownCode, "number", counters);
+  // The Project pattern's own examples: a Type that uses it (none when every Type has a Custom pattern).
+  const onProject = current.find((type) => type.custom === null);
+  const projectCode = onProject?.code ?? shownCode;
+  const [projectNumber] = numberFor(project, [preview], projectCode);
+  const projectCounters = onProject ? sampleEntries(project, samples, onProject.code, "counter", counters) : [];
+
+  const discard = () => {
+    setProject(saved.project);
+    setCustoms(saved.customs);
+  };
+
+  const confirm = async () => {
+    setPending(true);
+    setError(null);
+    const result = await onSave(changes, needsAcceptance && accepted).catch(() => ({ ok: false as const, error: t("unavailable") }));
+    setPending(false);
+    if (!result.ok) {
+      setError(result.error);
+      return;
+    }
+    setSaved({ project, customs });
+    setReviewing(false);
+    setDone(true);
+  };
+
+  const editProject = canEdit ? setProject : undefined;
+  const legendKinds = [...new Set(shownPattern.segments.map((s) => s.kind))];
+
+  return (
+    <>
+      {/* Live preview */}
+      <SettingsSection
+        title={t("previewTitle")}
+        description={t(counters ? "previewNext" : "previewExample", { context: previewContext })}
+        data-testid="numbering-preview"
+      >
+        <div className="grid items-start gap-6 min-[1100px]:grid-cols-[minmax(0,1fr)_320px]">
+          <div className="min-w-0">
+            <PatternNumber parts={previewNumber!.parts} separator={shownPattern.separator} size="lg" />
+            <ul aria-label={t("legend")} className="mt-3 flex flex-wrap gap-x-[14px] gap-y-1.5 text-caption text-muted">
+              {[...legendKinds, "sequence" as const].map((kind) => (
+                <li key={kind} className="inline-flex items-center gap-1.5">
+                  <i aria-hidden="true" className={cn("size-2 rounded-[3px]", toneClasses[kind].solid)} />
+                  {t(`kinds.${kind}`)}
+                </li>
+              ))}
+            </ul>
+            <p className="mt-2.5 text-caption text-muted">
+              {t("length")}:{" "}
+              <b className={cn("tabular-nums", previewNumber!.text.length > comfortableLength ? "text-warning-fg" : "text-text")}>
+                {previewNumber!.text.length}
+              </b>{" "}
+              / {comfortableLength}
+            </p>
+          </div>
+          {counters && nextNumbers.length > 0 && (
+            <div className="flex min-w-0 flex-col gap-2 rounded-md bg-surface-subtle px-[14px] py-3 shadow-[inset_0_0_0_1px_var(--border-subtle)]" data-testid="next-numbers">
+              <h3 className="text-[10.5px] font-bold text-muted uppercase ltr:tracking-[0.06em]">{t("nextNumbers")}</h3>
+              <ul className="flex flex-col gap-2">
+                {nextNumbers.map((n, i) => (
+                  <li key={i} className="flex min-w-0 items-center gap-2.5 text-[12.5px] text-text-secondary">
+                    <SampleLabel entry={n} fallback={shown?.name ?? shownCode} />
+                    <bdi
+                      dir="ltr"
+                      translate="no"
+                      className="ms-auto shrink-0 rounded-[6px] bg-surface px-[7px] py-[3px] font-semibold whitespace-nowrap text-text tabular-nums shadow-[inset_0_0_0_1px_var(--border)]"
+                    >
+                      {n.text}
+                    </bdi>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      </SettingsSection>
+
+      {/* The Project pattern */}
+      <SettingsSection
+        title={t("patternTitle")}
+        description={isRabaedDefault && samePattern(project, saved.project) ? t("rabaedDefault") : canEdit ? t("patternHint") : t("patternHintReadOnly")}
+        actions={<span className="text-caption font-semibold text-muted tabular-nums">{t("segmentCount", { n: project.segments.length, max: maxSegments })}</span>}
+        data-testid="numbering-project-pattern"
+      >
+        <div>
+          <SegmentChips t={t} pattern={project} example={withType(preview, projectCode)} onChange={editProject} />
+          {editProject && <AddSegments t={t} pattern={project} example={withType(preview, projectCode)} onChange={editProject} />}
+          <PatternWarnings t={t} pattern={project} length={projectNumber!.text.length} onChange={editProject} />
+        </div>
+      </SettingsSection>
+
+      {/* The sequence */}
+      <SettingsSection title={t("sequenceTitle")}>
+        <SequenceOptions t={t} pattern={project} onChange={editProject} tradeCodes={tradeCodes} examples={projectCounters} fallback={onProject?.name ?? projectCode} />
+      </SettingsSection>
+
+      {/* Per Work Item Type */}
+      <SettingsSection title={t("typesTitle")} description={t("typesIntro")} bodyClassName="px-0 pt-[14px] pb-0" data-testid="numbering-types">
+        <div
+          role="region"
+          aria-label={t("typesTitle")}
+          tabIndex={0}
+          className="relative hidden overflow-x-auto focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus sm:block"
+        >
+          <table className="w-full border-collapse text-[13.5px]">
+            <thead>
+              <tr className="bg-surface-subtle">
+                <th scope="col" className="border-b border-border-subtle px-5 py-2.5 text-start text-caption font-semibold whitespace-nowrap text-muted">
+                  {t("colType")}
+                </th>
+                <th scope="col" className="border-b border-border-subtle px-5 py-2.5 text-start text-caption font-semibold whitespace-nowrap text-muted">
+                  {t("colPattern")}
+                </th>
+                <th scope="col" className="border-b border-border-subtle px-5 py-2.5 text-start text-caption font-semibold whitespace-nowrap text-muted">
+                  {counters ? t("colNext") : t("colExample")}
+                </th>
+                {canEdit && (
+                  <th scope="col" className="border-b border-border-subtle px-5 py-2.5">
+                    <span className="sr-only">{t("colChange")}</span>
+                  </th>
+                )}
+              </tr>
+            </thead>
+            <tbody>
+              {current.map((type) => {
+                const custom = type.custom;
+                const [n] = numberFor(inEffect(type), [preview], type.code);
+                return (
+                  <tr key={type.id} className="border-b border-border-subtle last:border-b-0" data-testid="numbering-type-row">
+                    <td className="px-5 py-3 whitespace-nowrap">
+                      <span className="flex items-center gap-2.5">
+                        <TypeCode code={type.code} />
+                        <b className="font-semibold text-text">{type.name}</b>
+                      </span>
+                    </td>
+                    <td className="px-5 py-3 whitespace-nowrap">
+                      <PatternBadge t={t} custom={custom !== null} />
+                    </td>
+                    <td className="px-5 py-3 whitespace-nowrap">
+                      <bdi dir="ltr" translate="no" className="text-[12.5px] font-semibold text-text tabular-nums">
+                        {n!.text}
+                      </bdi>
+                    </td>
+                    {canEdit && (
+                      <td className="px-5 py-3 whitespace-nowrap">
+                        <span className="flex justify-end gap-1.5">
+                          <TypeActions
+                            t={t}
+                            custom={custom !== null}
+                            onEdit={() => setDrawer({ type, pattern: custom ?? project })}
+                            onUseProject={() => setCustoms({ ...customs, [type.id]: null })}
+                          />
+                        </span>
+                      </td>
+                    )}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        {/* On a phone, one card per Type (as Versions), its number and action in reach without scrolling sideways. */}
+        <ul aria-label={t("typesTitle")} className="flex flex-col sm:hidden">
+          {current.map((type) => {
+            const custom = type.custom;
+            const [n] = numberFor(inEffect(type), [preview], type.code);
+            return (
+              <li key={type.id} className="flex flex-col gap-2 border-t border-border-subtle px-5 py-3 text-[13.5px]" data-testid="numbering-type-item">
+                <span className="flex min-w-0 items-center gap-2.5">
+                  <TypeCode code={type.code} />
+                  <b className="min-w-0 truncate font-semibold text-text">{type.name}</b>
+                  <span className="shrink-0 ms-auto">
+                    <PatternBadge t={t} custom={custom !== null} />
+                  </span>
+                </span>
+                <span className="flex flex-wrap items-center gap-2">
+                  <span className="text-caption text-muted">{counters ? t("colNext") : t("colExample")}</span>
+                  <bdi dir="ltr" translate="no" className="text-[12.5px] font-semibold whitespace-nowrap text-text tabular-nums">
+                    {n!.text}
+                  </bdi>
+                </span>
+                {canEdit && (
+                  <span className="flex flex-wrap gap-1.5">
+                    <TypeActions
+                      t={t}
+                      custom={custom !== null}
+                      onEdit={() => setDrawer({ type, pattern: custom ?? project })}
+                      onUseProject={() => setCustoms({ ...customs, [type.id]: null })}
+                    />
+                  </span>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      </SettingsSection>
+
+      {/* Revision suffix */}
+      <SettingsSection
+        title={t("revisionTitle")}
+        description={t("revisionIntro")}
+        actions={
+          <span className="inline-flex items-center gap-1.5 rounded-[7px] bg-neutral-tint px-2.5 py-[5px] text-[12.5px] font-semibold text-neutral-fg">
+            <Icon name="lock" size={14} />
+            {t("fixed")}
+          </span>
+        }
+      >
+        <p className="flex flex-wrap items-center gap-[14px]" data-testid="revision-example">
+          {[0, 1, 2].map((rev) => (
+            <span key={rev} className="inline-flex items-center gap-[14px]">
+              {rev > 0 && <Icon name="arrow-right" size={16} className="text-faint" />}
+              <bdi dir="ltr" translate="no" className="text-[15px] font-bold whitespace-nowrap text-text tabular-nums">
+                {previewNumber!.text}
+                {rev > 0 && <em className="text-brand-fg not-italic"> Rev {rev}</em>}
+              </bdi>
+            </span>
+          ))}
+        </p>
+      </SettingsSection>
+
+
+      {dirty && (
+        <div
+          role="region"
+          aria-label={t("unsaved")}
+          className="fixed end-4 bottom-[18px] z-40 flex max-w-[calc(100vw-2rem)] items-center gap-3 rounded-md bg-inverse py-2.5 ps-4 pe-3 text-[13.5px] font-semibold whitespace-nowrap text-on-inverse shadow-lg sm:end-7"
+          data-testid="unsaved-bar"
+        >
+          <Icon name="alert-circle" size={17} className="shrink-0" />
+          <span className="min-w-0 truncate">{t("unsaved")}</span>
+          <Button size="sm" variant="ghost" className="text-on-inverse hover:bg-on-inverse/15 active:bg-on-inverse/25" onClick={discard}>
+            {t("discard")}
+          </Button>
+          <Button
+            size="sm"
+            onClick={() => {
+              setAccepted(false);
+              setError(null);
+              setReviewing(true);
+            }}
+          >
+            {t("reviewSave")}
+          </Button>
+        </div>
+      )}
+
+      {done && (
+        <div
+          role="status"
+          className="fixed end-4 bottom-[18px] z-40 flex items-center gap-2 rounded-md bg-inverse px-4 py-2.5 text-[13.5px] font-semibold text-on-inverse shadow-lg sm:end-7"
+        >
+          <Icon name="circle-check" size={17} />
+          {t("saved")}
+        </div>
+      )}
+
+      <SaveModal
+        t={t}
+        open={reviewing}
+        onOpenChange={setReviewing}
+        changes={changes}
+        saved={saved}
+        types={current}
+        projectCode={projectCode}
+        preview={preview}
+        numberFor={numberFor}
+        needsAcceptance={needsAcceptance}
+        accepted={accepted}
+        onAccept={setAccepted}
+        pending={pending}
+        error={error}
+        onConfirm={confirm}
+      />
+
+      {drawer && (
+        <CustomPatternDrawer
+          t={t}
+          type={drawer.type}
+          pattern={drawer.pattern}
+          projectPattern={project}
+          onChange={(pattern) => setDrawer({ ...drawer, pattern })}
+          onClose={() => setDrawer(null)}
+          onApply={() => {
+            setCustoms({ ...customs, [drawer.type.id]: drawer.pattern });
+            setDrawer(null);
+          }}
+          preview={preview}
+          samples={samples}
+          counters={counters}
+          tradeCodes={tradeCodes}
+          numberFor={numberFor}
+        />
+      )}
+    </>
+  );
+}
+
+/** A Type's Pattern badge: "Custom", or "Uses Project pattern". */
+function PatternBadge({ t, custom }: { t: NumberingText; custom: boolean }) {
+  return custom ? (
+    <Badge tone="brand" className="h-[22px] gap-[5px] rounded-[6px] px-2 text-[11.5px]">
+      <Icon name="edit" size={13} />
+      {t("custom")}
+    </Badge>
+  ) : (
+    <Badge tone="neutral" className="h-[22px] rounded-[6px] px-2 text-[11.5px]">
+      {t("usesProject")}
+    </Badge>
+  );
+}
+
+/** A Type's actions: Edit and "Use Project pattern" for a Custom pattern, else Customize. */
+function TypeActions({ t, custom, onEdit, onUseProject }: { t: NumberingText; custom: boolean; onEdit: () => void; onUseProject: () => void }) {
+  return custom ? (
+    <>
+      <Button size="sm" variant="secondary" onClick={onEdit}>
+        <Icon name="edit" />
+        {t("edit")}
+      </Button>
+      <Button size="sm" variant="ghost" onClick={onUseProject}>
+        {t("useProject")}
+      </Button>
+    </>
+  ) : (
+    <Button size="sm" variant="secondary" onClick={onEdit}>
+      {t("customize")}
+    </Button>
+  );
+}
+
+/** The save confirmation: before → after of each pattern that changes, the guarantees, and the shared-counter acceptance where it applies. */
+function SaveModal({
+  t,
+  open,
+  onOpenChange,
+  changes,
+  saved,
+  types,
+  projectCode,
+  preview,
+  numberFor,
+  needsAcceptance,
+  accepted,
+  onAccept,
+  pending,
+  error,
+  onConfirm,
+}: {
+  t: NumberingText;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  changes: PatternChange[];
+  saved: { project: NumberingPattern; customs: Record<string, NumberingPattern | null> };
+  /** The Types as they will be saved. */
+  types: readonly NumberingTypeRow[];
+  /** The Type the Project pattern's before and after are numbered for. */
+  projectCode: string;
+  preview: SampleContext;
+  numberFor: NumberFor;
+  needsAcceptance: boolean;
+  accepted: boolean;
+  onAccept: (accepted: boolean) => void;
+  pending: boolean;
+  error: string | null;
+  onConfirm: () => void;
+}) {
+  const acceptId = useId();
+  const typeChanges = changes.filter((c) => c.workItemTypeId !== null);
+  const project = changes.find((c) => c.workItemTypeId === null);
+  // The Project pattern's before and after (unchanged when only Types change), as in the kit.
+  const after = project?.pattern ?? saved.project;
+  const [beforeNumber] = numberFor(saved.project, [preview], projectCode);
+  const [afterNumber] = numberFor(after, [preview], projectCode);
+  // As the kit: the Custom patterns kept with the save, whether or not they change.
+  const customCount = types.filter((type) => type.custom !== null).length;
+  const lines = [
+    t("keepsRegister"),
+    t("keepsRevisions"),
+    ...(customCount > 0 ? [t("customsSaved", { count: customCount, n: String(customCount) })] : []),
+    ...(typeChanges.length > 0 ? [t("typesSaved", { types: typeChanges.map((c) => types.find((x) => x.id === c.workItemTypeId)!.code).join(", ") })] : []),
+  ];
+  return (
+    <NumberingModal
+      open={open}
+      onOpenChange={onOpenChange}
+      title={t("modalTitle")}
+      description={rich(t, "modalIntro", { strong: <b className="font-semibold text-text">{t("modalIntroStrong")}</b> })}
+      testId="numbering-save-modal"
+      footer={
+        <>
+          <Button variant="secondary" onClick={() => onOpenChange(false)}>
+            {t("cancel")}
+          </Button>
+          <Button disabled={pending || (needsAcceptance && !accepted)} onClick={onConfirm}>
+            <Icon name="check" />
+            {pending ? t("saving") : t("saveNew")}
+          </Button>
+        </>
+      }
+    >
+      <BeforeAfter t={t} label={project ? undefined : t("projectScope")} before={beforeNumber!.text} after={afterNumber!.text} />
+      {typeChanges.map((change) => {
+        const type = types.find((x) => x.id === change.workItemTypeId)!;
+        const [b] = numberFor(saved.customs[type.id] ?? saved.project, [preview], type.code);
+        const [a] = numberFor(change.pattern ?? after, [preview], type.code);
+        return <BeforeAfter key={type.id} t={t} label={type.code} before={b!.text} after={a!.text} />;
+      })}
+      <ul className="flex flex-col gap-1.5 text-[13px] text-text-secondary" data-testid="save-checks">
+        {lines.map((line) => (
+          <li key={line} className="flex items-start gap-2">
+            <Icon name="circle-check" size={16} className="mt-px shrink-0 text-success" />
+            {line}
+          </li>
+        ))}
+      </ul>
+      {needsAcceptance && (
+        <div className="flex flex-col gap-2 rounded-[10px] bg-warning-tint px-3 py-2.5 text-sm text-warning-fg" data-testid="shared-counter-acceptance">
+          <p className="flex items-start gap-2.5">
+            <Icon name="alert-triangle" size={17} className="mt-px shrink-0" />
+            <span>
+              <b>{t("sharedTitle")}.</b> {t("sharedBody")}
+            </span>
+          </p>
+          <Field label={t("sharedAccept")} layout="inline" id={acceptId} className="text-text">
+            <Checkbox checked={accepted} onCheckedChange={(c) => onAccept(c === true)} />
+          </Field>
+        </div>
+      )}
+      {error && (
+        <p role="alert" className="text-sm text-danger-fg">
+          {error}
+        </p>
+      )}
+    </NumberingModal>
+  );
+}
+
+/** The kit's `.ba`: the label column, the numbers beside it on the reading side, the arrow under the before number. */
+function BeforeAfter({ t, label, before, after }: { t: NumberingText; label?: string; before: string; after: string }) {
+  // A number reads left to right, but sits against its label: on the right in Arabic.
+  const number = "block text-left text-base font-bold whitespace-nowrap tabular-nums rtl:text-right";
+  return (
+    <div className="grid grid-cols-[70px_minmax(0,1fr)] items-center gap-x-3 gap-y-2 overflow-x-auto rounded-md bg-surface-subtle p-[14px] shadow-[inset_0_0_0_1px_var(--border-subtle)]">
+      {label !== undefined && (
+        <bdi dir="auto" className="col-span-2 text-caption font-semibold text-muted">
+          {label}
+        </bdi>
+      )}
+      <small className="text-[11.5px] font-bold text-muted uppercase ltr:tracking-[0.04em]">{t("before")}</small>
+      <bdi dir="ltr" translate="no" className={cn(number, "text-muted")}>
+        {before}
+      </bdi>
+      <Icon name="arrow-down" size={14} className="col-start-2 justify-self-start text-faint" />
+      <small className="text-[11.5px] font-bold text-muted uppercase ltr:tracking-[0.04em]">{t("after")}</small>
+      <bdi dir="ltr" translate="no" className={cn(number, "text-text")} data-testid="after-number">
+        {after}
+      </bdi>
+    </div>
+  );
+}
+
+/** The drawer of a Type's Custom pattern: preview, segments and sequence, applied to the page's edits. */
+function CustomPatternDrawer({
+  t,
+  type,
+  pattern,
+  projectPattern,
+  onChange,
+  onClose,
+  onApply,
+  preview,
+  samples,
+  counters,
+  tradeCodes,
+  numberFor,
+}: {
+  t: NumberingText;
+  type: NumberingTypeRow;
+  pattern: NumberingPattern;
+  projectPattern: NumberingPattern;
+  onChange: (pattern: NumberingPattern) => void;
+  onClose: () => void;
+  onApply: () => void;
+  preview: SampleContext;
+  samples: readonly SampleContext[];
+  counters?: readonly NumberingCounter[];
+  tradeCodes: readonly string[];
+  numberFor: NumberFor;
+}) {
+  const [n] = numberFor(pattern, [preview], type.code);
+  const examples = sampleEntries(pattern, samples, type.code, "counter", counters);
+  const example = withType(preview, type.code);
+  return (
+    <NumberingDrawer
+      open
+      onOpenChange={(open) => !open && onClose()}
+      code={type.code}
+      title={t("drawerTitle", { type: type.name })}
+      description={t("drawerIntro")}
+      closeLabel={t("close")}
+      testId="custom-pattern-drawer"
+      footer={
+        <>
+          <Button variant="ghost" onClick={() => onChange(projectPattern)}>
+            {t("startFromProject")}
+          </Button>
+          <span className="flex-1" />
+          <Button variant="secondary" onClick={onClose}>
+            {t("cancel")}
+          </Button>
+          <Button onClick={onApply}>
+            <Icon name="check" />
+            {t("apply")}
+          </Button>
+        </>
+      }
+    >
+      <DrawerCard>
+        <PatternNumber parts={n!.parts} separator={pattern.separator} size="lg" />
+      </DrawerCard>
+      <DrawerCard title={t("segmentsTitle")}>
+        <SegmentChips t={t} pattern={pattern} example={example} onChange={onChange} />
+        <AddSegments t={t} pattern={pattern} example={example} onChange={onChange} />
+        <PatternWarnings t={t} pattern={pattern} length={n!.text.length} onChange={onChange} />
+      </DrawerCard>
+      <DrawerCard>
+        <SequenceOptions t={t} pattern={pattern} onChange={onChange} tradeCodes={tradeCodes} examples={examples} fallback={type.name} />
+      </DrawerCard>
+    </NumberingDrawer>
+  );
+}
+
+function DrawerCard({ title, children }: { title?: string; children: ReactNode }) {
+  return (
+    <section className="rounded-[14px] border border-border bg-surface">
+      {title && <h3 className="px-5 pt-4 text-[15.5px] font-bold text-text">{title}</h3>}
+      <div className="px-5 pt-4 pb-5">{children}</div>
+    </section>
+  );
+}

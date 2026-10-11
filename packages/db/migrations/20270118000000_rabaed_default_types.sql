@@ -31,7 +31,7 @@ insert into stage (owner_kind, module_key, key, name, category, sort) values
   ('rabaed', 'submittals', 'rejected', '{"en": "Rejected", "ar": "مرفوض"}', 'closed_negative', 7);
 
 insert into stage (owner_kind, module_key, key, name, category, sort) values
-  ('rabaed', 'inspections', 'draft', '{"en": "Drafts", "ar": "المسودات"}', 'draft', 1),
+  ('rabaed', 'inspections', 'draft', '{"en": "Draft", "ar": "مسودة"}', 'draft', 1),
   ('rabaed', 'inspections', 'internal_review', '{"en": "Internal Review", "ar": "المراجعة الداخلية"}', 'in_progress', 2),
   ('rabaed', 'inspections', 'pending_inspection', '{"en": "Pending Inspection", "ar": "بانتظار المعاينة"}', 'in_progress', 3),
   ('rabaed', 'inspections', 'pending_response', '{"en": "Pending Response", "ar": "بانتظار الرد"}', 'in_progress', 4),

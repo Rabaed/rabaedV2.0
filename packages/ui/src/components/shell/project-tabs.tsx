@@ -6,21 +6,21 @@ import { cn } from "../../lib/cn.ts";
 import { focusRing } from "../form/control-styles.ts";
 
 /** The Project tabs in the agreed order (design change requests, 2026-09-27): a Module's tab is its Module key. */
-export const projectTabKeys = ["dashboard", ...moduleTabOrder, "settings"] as const;
+export const projectTabKeys = ["dashboard", ...moduleTabOrder, "activity", "settings"] as const;
 export type ProjectTabKey = (typeof projectTabKeys)[number];
 
 /**
- * The tabs a Project shows (RP-346): Dashboard, Submittals and Settings always;
+ * The tabs a Project shows (RP-346, RP-406): Dashboard, Submittals, Activity and Settings always;
  * another Module's tab only when the Project has a Work Item Type in it. Never
  * an empty tab, and no placeholder for what isn't built.
  */
 export function visibleProjectTabs(modules: readonly ModuleKey[]): ProjectTabKey[] {
-  const shown = new Set<ProjectTabKey>(["dashboard", "submittals", "settings", ...modules]);
+  const shown = new Set<ProjectTabKey>(["dashboard", "submittals", "activity", "settings", ...modules]);
   return projectTabKeys.filter((key) => shown.has(key));
 }
 
 const tabClass = cn(
-  "inline-flex h-12 shrink-0 items-center border-b-2 border-transparent text-body font-medium whitespace-nowrap",
+  "inline-flex h-13 shrink-0 items-center border-b-2 border-transparent text-body font-medium whitespace-nowrap",
   // Touch targets of at least 44px on phones (gloved hands on site).
   "pointer-coarse:min-w-11",
   focusRing,
@@ -71,7 +71,7 @@ export function ProjectTabs({ label, labels, modules, href, current, linkAs: Lin
               ref={key === current ? currentRef : undefined}
               href={href(key)}
               aria-current={key === current ? "page" : undefined}
-              className={cn(tabClass, key === current ? "border-primary font-semibold text-primary" : "text-muted hover:text-text")}
+              className={cn(tabClass, key === current ? "border-primary font-semibold text-brand-fg" : "text-muted hover:text-text")}
             >
               {labels[key]}
             </Link>

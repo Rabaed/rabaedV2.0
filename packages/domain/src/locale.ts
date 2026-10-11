@@ -42,6 +42,34 @@ export function formatNumber(value: number, locale: Locale, options?: Intl.Numbe
   return new Intl.NumberFormat(intlLocaleOf(locale), options).format(value);
 }
 
+/**
+ * A date as the design kit writes it: day, month and year, "10 October 2026", with the weekday first
+ * when asked, "Saturday, 10 October 2026" (Home's top bar and recent activity). Arabic keeps its own
+ * order, in Latin digits; Saudi time. `month: "short"` gives "10 Oct 2026": the List, its Export and Download (RP-409).
+ */
+export function formatDayMonthYear(
+  value: Date,
+  locale: Locale,
+  { weekday = false, month = "long" }: { weekday?: boolean; month?: "long" | "short" } = {},
+): string {
+  const format = new Intl.DateTimeFormat(intlLocaleOf(locale), {
+    timeZone,
+    day: "numeric",
+    month,
+    year: "numeric",
+    ...(weekday ? { weekday: "long" as const } : {}),
+  });
+  if (locale === "ar") return format.format(value);
+  const part = (type: Intl.DateTimeFormatPartTypes) => format.formatToParts(value).find((p) => p.type === type)?.value ?? "";
+  const date = `${part("day")} ${part("month")} ${part("year")}`;
+  return weekday ? `${part("weekday")}, ${date}` : date;
+}
+
+/** The calendar day in Saudi time, as YYYY-MM-DD (a spreadsheet's date, RP-409 Export). */
+export function riyadhDay(value: Date): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(value);
+}
+
 /** A date (medium style by default) or, with `timeStyle`, a time, in Latin digits and Saudi time. */
 export function formatDate(
   value: Date,

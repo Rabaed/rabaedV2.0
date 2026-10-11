@@ -184,7 +184,7 @@ export function ChecklistField({ field, value, mode, locale, labels: text, error
       return (
         <li key={item.key} className="flex flex-col gap-2 rounded-md border border-border p-3">
           <p className="text-body text-text"><bdi>{item.text[locale]}</bdi></p>
-          <p className={cn("flex items-center gap-1 text-body font-semibold", negative ? "text-danger" : "text-text")}>
+          <p className={cn("flex items-center gap-1 text-body font-semibold", negative ? "text-danger-fg" : "text-text")}>
             {negative && <Icon name="alert-circle" size={16} />}
             {given === undefined ? (
               <span className="font-normal text-muted">{text.notAnswered}</span>
@@ -257,7 +257,7 @@ export function ChecklistField({ field, value, mode, locale, labels: text, error
         {itemErrors.length > 0 && (
           <ul className="flex flex-col gap-1">
             {itemErrors.map((error) => (
-              <li key={error.code} className="flex items-start gap-1 text-sm text-danger">
+              <li key={error.code} className="flex items-start gap-1 text-sm text-danger-fg">
                 <Icon name="alert-circle" size={16} className="mt-0.5 shrink-0" />
                 <span>{itemErrorText(error, locale, text)}</span>
               </li>

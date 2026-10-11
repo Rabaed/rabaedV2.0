@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { boardLanes, dropTargets, lanesInLocale, workItemViewFromSearchParams, type BoardCardInput, type WorkItemMove } from "./work-item-board.ts";
+import {
+  boardLanes,
+  cardNumber,
+  dropTargets,
+  lanesInLocale,
+  workItemViewFromSearchParams,
+  type BoardCardInput,
+  type WorkItemMove,
+} from "./work-item-board.ts";
 import type { WorkItemRow } from "./work-item.ts";
 
 const b = (en: string) => ({ en, ar: en });
@@ -34,7 +42,36 @@ function card(w: WorkItemRow["with"], holderParticipantId: string | null = null)
 const ownStep = (key: string, name: string): WorkItemRow["with"] => ({ kind: "own", companyName: own, step: { key, name: b(name) }, holder: null });
 const company = (name: string): WorkItemRow["with"] => ({ kind: "company", companyName: b(name) });
 
+const contractor = b("Contractor");
+const engineer = { key: "engineer", name: b("Engineer"), sort: 1 };
+const pm = { key: "project_manager", name: b("Project Manager"), sort: 2 };
+const ownRole = (position: typeof engineer, step = "review"): WorkItemRow["with"] => ({
+  kind: "own",
+  companyName: own,
+  step: { key: step, name: b(step) },
+  holder: null,
+  role: { position, projectRole: contractor },
+});
+
 describe("boardLanes", () => {
+  it("makes each of my own roles (Positions) a lane, in the Positions' order, whatever their Steps; another Company stays one lane (V5)", () => {
+    const lanes = boardLanes([
+      card(ownRole(pm, "review")),
+      card(company("Al Waha PMC"), k1),
+      card(ownRole(engineer, "draft")),
+      card(ownRole(pm, "draft")),
+      card(ownStep("odd", "Odd step")),
+    ]);
+    expect(lanes.map((l) => (l.kind === "role" ? l.position.key : l.kind === "step" ? `step:${l.step.key}` : l.kind))).toEqual([
+      "engineer",
+      "project_manager",
+      "step:odd",
+      "company",
+    ]);
+    const pmLane = lanes[1]!;
+    expect(pmLane).toMatchObject({ kind: "role", projectRole: contractor, count: 2 });
+  });
+
   it("makes each own Step a lane, each other Company one lane, and closed items a lane of their own, in that order", () => {
     const cards = [
       card(company("Zeta PMC"), k2),
@@ -113,5 +150,18 @@ describe("dropTargets", () => {
 
   it("has no targets without Transitions", () => {
     expect(dropTargets([], "draft").size).toBe(0);
+  });
+});
+
+describe("cardNumber (RP-410): the card's number, its R badge carrying the Revision", () => {
+  it("leaves out a Revision's issued \" Rev n\"", () => {
+    expect(cardNumber("TWR-MAR-01-0016 Rev 3", 3)).toBe("TWR-MAR-01-0016");
+    expect(cardNumber("TWR-MAR-01-0016 Rev 12", 12)).toBe("TWR-MAR-01-0016");
+  });
+
+  it("keeps any other number whole: the original's, or a suffix that isn't its own Revision", () => {
+    expect(cardNumber("TWR-MAR-01-0016", 0)).toBe("TWR-MAR-01-0016");
+    expect(cardNumber("TWR-MAR-01-0016 Rev 2", 3)).toBe("TWR-MAR-01-0016 Rev 2");
+    expect(cardNumber(null, 1)).toBeNull();
   });
 });

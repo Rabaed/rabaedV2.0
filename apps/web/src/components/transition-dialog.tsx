@@ -255,7 +255,7 @@ export function TransitionDialog({
           </Field>
         )}
         {error && (
-          <p role="alert" className="text-sm text-danger">
+          <p role="alert" className="text-sm text-danger-fg">
             {error}
           </p>
         )}

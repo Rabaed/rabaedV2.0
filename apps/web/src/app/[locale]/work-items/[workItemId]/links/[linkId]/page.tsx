@@ -24,7 +24,7 @@ export default async function WorkItemLinkPage({ params }: { params: Promise<{ l
 
   return (
     <div className="max-w-3xl space-y-6" data-testid="hidden-link">
-      <Link href={`/work-items/${workItemId}`} className="text-sm text-primary underline underline-offset-4">
+      <Link href={`/work-items/${workItemId}`} className="text-sm text-brand-fg underline underline-offset-4">
         {t("linkPage.back")}
       </Link>
       <h1 className="text-h4 font-semibold">{t("linkPage.title")}</h1>

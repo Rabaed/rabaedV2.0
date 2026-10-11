@@ -117,7 +117,7 @@ export function ActivityFeedPanel({
           {t("title")}
         </h2>
         {viewAllHref && !fullHeight && (
-          <Link href={viewAllHref} className={cn("rounded-sm text-sm text-primary underline underline-offset-4", focusRing, touchBox)}>
+          <Link href={viewAllHref} className={cn("rounded-sm text-sm text-brand-fg underline underline-offset-4", focusRing, touchBox)}>
             {t("viewAll")}
           </Link>
         )}
@@ -184,8 +184,11 @@ export function ActivityFeedPanel({
   );
 }
 
-/** "<did what>": the Transition taken, or what kind of event it was. */
-function whatHappened(e: ActivityFeedEntry, locale: Locale, labels: ActivityFeedPanelLabels): string {
+/** The labels `whatHappened` reads. */
+export type ActivityEventLabels = Pick<ActivityFeedPanelLabels, "pickedUp" | "returnedToPool" | "assigned" | "internalNote" | "recommended" | "cancelled" | "updated">;
+
+/** "<did what>": the Transition taken, or what kind of event it was. Home's recent activity words its entries the same way. */
+export function whatHappened(e: ActivityFeedEntry, locale: Locale, labels: ActivityEventLabels): string {
   const label = e.transition?.[locale];
   switch (e.type) {
     case "transition":

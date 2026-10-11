@@ -183,3 +183,14 @@ describe("app.module_keys", () => {
     expect([...rows[0]!.keys].sort()).toEqual([...moduleKeys].sort());
   });
 });
+
+// Owner decision 2026-10-10 (RP-409): the Draft Stage reads "Draft", one item's Status.
+describe("the Draft Stage's name", () => {
+  it("is Draft in every Module's Rabaed Defaults and in a new Project's copy", async () => {
+    const { rows } = await migrator.query<{ name: unknown }>(
+      "select distinct name from stage where key = 'draft' and (owner_kind = 'rabaed' or project_id = $1)",
+      [projectId],
+    );
+    expect(rows).toEqual([{ name: { en: "Draft", ar: "مسودة" } }]);
+  });
+});
