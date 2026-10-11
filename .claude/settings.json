@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "deny": [
+      "Bash(docker compose *down*-v*)",
+      "Bash(docker compose *down*--volumes*)",
+      "Bash(docker-compose *down*-v*)",
+      "Bash(docker-compose *down*--volumes*)",
+      "Bash(docker volume rm *rabaed-*)"
+    ]
+  }
+}
