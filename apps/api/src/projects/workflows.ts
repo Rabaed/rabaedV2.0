@@ -16,7 +16,11 @@ import {
   type WorkflowBuilderRead,
   type DefinitionIssue,
   type DuplicateWorkflowRequest,
+  type LibraryWorkflows,
+  type SavedToLibrary,
   type SaveWorkflowDraftRequest,
+  type SaveWorkflowToLibraryRequest,
+  type WorkflowMapRead,
   type StageCopyProblem,
   type UnbindWorkflowQuery,
   type WorkflowProblem,
@@ -46,38 +50,123 @@ export function readWorkflow(db: Db, memberId: string, definitionId: string): Pr
 export function readWorkflowBuilder(db: Db, memberId: string, definitionId: string): Promise<WorkflowBuilderRead | null> {
   return withMember(db, memberId, async (trx): Promise<WorkflowBuilderRead | null> => {
     if (!(await authors(trx, definitionId))) return null;
-    const workflow = await workflowRead(trx, definitionId, true);
-    const { rows } = await sql<{ type_id: string; code: string; name: BilingualText; module_key: string; project_id: string | null }>`
-      select t.id as type_id, t.code, t.name, t.module_key, d.project_id
-      from workflow_definition d join work_item_type t on t.id = app.workflow_type(d.id)
-      where d.id = ${definitionId}::uuid
+    const map = await workflowMap(trx, definitionId, true);
+    if (!map) return null;
+    const { rows } = await sql<{ type_id: string; project_id: string | null }>`
+      select app.workflow_type(d.id) as type_id, d.project_id from workflow_definition d where d.id = ${definitionId}::uuid
     `.execute(trx);
-    const type = rows[0];
-    if (!workflow || !type) return null;
-    const stages = await sql<{ key: string; name: BilingualText; category: StageCategory; own: boolean }>`
-      select key, name, category, project_id is not null as own from stage
-      where module_key = ${type.module_key} and (project_id is null or project_id = ${type.project_id}::uuid)
-      order by sort, key
-    `.execute(trx);
-    const own = stages.rows.some((s) => s.own);
+    const type = rows[0]!;
     const outcomes = await sql<WorkflowBuilderRead["outcomes"][number]>`
       select code, name, closing, polarity from outcome
       where work_item_type_id = ${type.type_id}::uuid
         and case when ${type.project_id}::uuid is null then project_id is null else project_id = ${type.project_id}::uuid end
       order by sort, code
     `.execute(trx);
-    const positions = await trx.selectFrom("position").select(["base_role", "key", "name"]).orderBy("base_role").orderBy("sort").execute();
     // The Form the rules are checked against (check 6): the pickers list only its fields.
     const check = await readWorkflowCheckContext(trx, definitionId);
+    return { ...map, form: check?.context.form ?? null, outcomes: outcomes.rows };
+  });
+}
+
+/**
+ * A Workflow to look at (RP-442, WF-19), for whoever reads it (V18, V20): the map the builder
+ * opens on, its draft only when the Member authors it; null when they don't read it.
+ */
+export function readWorkflowMap(db: Db, memberId: string, definitionId: string): Promise<WorkflowMapRead | null> {
+  return withMember(db, memberId, (trx) => workflowMap(trx, definitionId));
+}
+
+async function workflowMap(trx: Db, definitionId: string, canAuthorKnown?: boolean): Promise<WorkflowMapRead | null> {
+  const workflow = await workflowRead(trx, definitionId, canAuthorKnown);
+  if (!workflow) return null;
+  const { rows } = await sql<{ code: string; name: BilingualText; module_key: string; project_id: string | null }>`
+    select t.code, t.name, t.module_key, d.project_id
+    from workflow_definition d join work_item_type t on t.id = app.workflow_type(d.id)
+    where d.id = ${definitionId}::uuid
+  `.execute(trx);
+  const type = rows[0];
+  if (!type) return null;
+  const stages = await sql<{ key: string; name: BilingualText; category: StageCategory; own: boolean }>`
+    select key, name, category, project_id is not null as own from stage
+    where module_key = ${type.module_key} and (project_id is null or project_id = ${type.project_id}::uuid)
+    order by sort, key
+  `.execute(trx);
+  const own = stages.rows.some((s) => s.own);
+  const positions = await trx.selectFrom("position").select(["base_role", "key", "name"]).orderBy("base_role").orderBy("sort").execute();
+  return {
+    workflow,
+    type: { code: type.code, name: type.name },
+    stages: stages.rows.filter((s) => s.own === own).map(({ key, name, category }) => ({ key, name, category })),
+    positions: positions.map((p) => ({ role: p.base_role, key: p.key, name: p.name as BilingualText })),
+  };
+}
+
+/**
+ * The Member's Company's Library Workflows (RP-442, WF-19). Row-level security keeps it to
+ * their own Company's, and to the published ones unless they are its Authorized Person (V18).
+ */
+export function listLibraryWorkflows(db: Db, memberId: string): Promise<LibraryWorkflows> {
+  return withMember(db, memberId, async (trx) => {
+    const { rows } = await sql<{
+      id: string;
+      name: BilingualText;
+      type_id: string | null;
+      type_code: string | null;
+      type_name: BilingualText | null;
+      versions: number[] | null;
+      updated_at: Date;
+      is_default: boolean;
+    }>`
+      select d.id, d.name, t.id as type_id, t.code as type_code, t.name as type_name,
+        (select array_agg(v.version_no order by v.version_no) from workflow_version v
+         where v.workflow_definition_id = d.id and v.status = 'published') as versions,
+        coalesce((select max(v.published_at) from workflow_version v
+                  where v.workflow_definition_id = d.id and v.status = 'published'), d.created_at) as updated_at,
+        exists (select 1 from company_default cd where cd.kind = 'workflow' and cd.workflow_definition_id = d.id) as is_default
+      from workflow_definition d
+      left join work_item_type t on t.id = app.workflow_type(d.id)
+      where d.owner_kind = 'company' and d.company_id = app.current_company_id()
+      order by t.code, d.created_at, d.id
+    `.execute(trx);
     return {
-      workflow,
-      type: { code: type.code, name: type.name },
-      form: check?.context.form ?? null,
-      stages: stages.rows.filter((s) => s.own === own).map(({ key, name, category }) => ({ key, name, category })),
-      outcomes: outcomes.rows,
-      positions: positions.map((p) => ({ role: p.base_role, key: p.key, name: p.name as BilingualText })),
+      workflows: rows.map((r) => ({
+        id: r.id,
+        name: r.name,
+        workItemType: r.type_id && r.type_code && r.type_name ? { id: r.type_id, code: r.type_code, name: r.type_name } : null,
+        publishedVersions: r.versions ?? [],
+        updatedAt: r.updated_at.toISOString(),
+        isDefault: r.is_default,
+      })),
     };
   });
+}
+
+export type SaveToLibraryResult =
+  | { ok: true; saved: SavedToLibrary }
+  | { ok: false; reason: (typeof duplicateRefusals)[number] };
+
+/**
+ * The Authorized Person saves a Workflow they read to their Company's Library: a copy
+ * (WF-4's duplicate into the Library; nothing records the original, ADR 0016), published at
+ * once so it can be used on a Project straight away. When the Library's checks refuse the
+ * copy, it stays a draft and the problems are returned.
+ */
+export async function saveWorkflowToLibrary(
+  db: Db,
+  memberId: string,
+  sourceId: string,
+  input: SaveWorkflowToLibraryRequest,
+  now: Date,
+): Promise<SaveToLibraryResult> {
+  const copy = await duplicateWorkflow(db, memberId, sourceId, { projectId: null, name: input.name }, now);
+  if (!copy.ok) {
+    // A copy into the Library has no Project Stages to check, so stage_missing cannot be answered here.
+    if (copy.reason === "stage_missing") throw new Error("a copy into a Library checked a Project's Stages");
+    return { ok: false, reason: copy.reason };
+  }
+  const published = await publishWorkflow(db, memberId, copy.id, now);
+  if (published.ok) return { ok: true, saved: { id: copy.id, published: true, problems: published.warnings } };
+  return { ok: true, saved: { id: copy.id, published: false, problems: published.reason === "workflow_problems" ? published.problems : [] } };
 }
 
 /** The Workflow as the acting Member reads it; `canAuthor` when the caller already asked authors(), else it is asked here. */

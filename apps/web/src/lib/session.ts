@@ -12,6 +12,7 @@ import type {
   FormChoices,
   FormToFill,
   Home,
+  LibraryWorkflows,
   LinkedFrom,
   MemberVisibility,
   MyProjects,
@@ -34,6 +35,7 @@ import type {
   WorkItemHistory,
   WorkItemWorkflowMap,
   WorkflowBuilderRead,
+  WorkflowMapRead,
   WorkItemBoard,
   WorkItemList,
   ModuleKey,
@@ -271,6 +273,16 @@ export function getWorkItemWorkflow(workItemId: string): Promise<WorkItemWorkflo
 /** What the Workflow builder edits with (RP-439), for the Workflow's authors; null for anyone else. */
 export function getWorkflowBuilder(workflowId: string): Promise<WorkflowBuilderRead | null> {
   return apiGet<WorkflowBuilderRead>(`/v1/workflows/${encodeURIComponent(workflowId)}/builder`);
+}
+
+/** The Member's Company's Library Workflows (RP-442); null if signed out or they can't be read. */
+export function getLibraryWorkflows(): Promise<LibraryWorkflows | null> {
+  return apiGet<LibraryWorkflows>("/v1/library/workflows");
+}
+
+/** A Workflow to look at (RP-442), for whoever reads it; null for anyone else. */
+export function getWorkflowMap(workflowId: string): Promise<WorkflowMapRead | null> {
+  return apiGet<WorkflowMapRead>(`/v1/workflows/${encodeURIComponent(workflowId)}/map`);
 }
 
 /** The signed-in Member's notification settings and Project mutes; null if signed out. */
