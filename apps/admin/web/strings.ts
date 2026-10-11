@@ -1,5 +1,7 @@
 import type { Locale } from "@rabaed/domain";
 
+/* eslint-disable rabaed/no-avoid-terms -- Rabaed Admin's Workflows page speaks of Work Item Types, Stages and outcomes: their name, category and result are those records' own columns, not a Subject or a Form category. */
+
 // Rabaed Admin's Workflows page: its own words, English and Arabic. The builder's words
 // come from the customer app's messages (messages.ts), so the builder reads the same everywhere.
 

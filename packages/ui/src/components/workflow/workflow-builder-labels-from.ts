@@ -1,11 +1,11 @@
 import { conditionOpKey, type Locale, type PositionOption } from "@rabaed/domain";
 import type { WorkflowBuilderLabels } from "./workflow-builder-labels.ts";
 
-/** A message lookup of one namespace of the app's messages (next-intl's `t`, or Rabaed Admin's). */
-export type MessageLookup = (key: string, values?: Record<string, string | number>) => string;
+/** A translator of one namespace of the app's messages (next-intl's `t`, or Rabaed Admin's). */
+export type Translate = (key: string, values?: Record<string, string | number>) => string;
 
 /**
- * The builder's words (RP-439, RP-443) from the app's messages, one lookup per namespace
+ * The builder's words (RP-439, RP-443) from the app's messages, one translator per namespace
  * (`workflowBuilder`, `workflowMap`, `workflowRules`, `projects.roles`): the Project settings
  * page and Rabaed Admin's Workflows page build them the same way.
  */
@@ -18,10 +18,10 @@ export function workflowBuilderLabels({
   locale,
   names,
 }: {
-  t: MessageLookup;
-  tMap: MessageLookup;
-  tRules: MessageLookup;
-  tRoles: MessageLookup;
+  t: Translate;
+  tMap: Translate;
+  tRules: Translate;
+  tRoles: Translate;
   positions: readonly PositionOption[];
   locale: Locale;
   names: WorkflowBuilderLabels["names"];

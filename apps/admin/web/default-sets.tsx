@@ -91,6 +91,7 @@ export function DefaultSets({ locale, read, reason, needReason, onChanged }: Pro
   );
 }
 
+// eslint-disable-next-line rabaed/no-avoid-terms -- an outcome's follow-up actions: the outcome set's own term (workflow-engine.md).
 const followUps = (actions: readonly OutcomeAction[], s: Strings): string => {
   if (actions.length === 0) return s.none;
   return actions.map((a) => (a.kind === "offer_revision" ? s.offerRevision : a.kind === "offer_replacement" ? s.offerReplacement : `${s.createItems} ${a.type}`)).join(", ");

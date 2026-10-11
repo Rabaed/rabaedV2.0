@@ -132,6 +132,11 @@ describe("Rabaed Admin's Workflows screen (visibility scenario RP-443-1)", () =>
   const outcomeCode = `X${suffix}`;
   const stageKey = `hold_${suffix}`;
   const name = (en: string) => ({ en, ar: `${en} (ar)` });
+  // The Rabaed Default sets are shared by every suite: leave them as they were found.
+  afterAll(async () => {
+    await migrator.deleteFrom("stage").where("key", "=", stageKey).execute();
+    await migrator.deleteFrom("outcome").where("code", "=", outcomeCode).execute();
+  });
   const projectCopies = (code: string) =>
     migrator
       .selectFrom("outcome")

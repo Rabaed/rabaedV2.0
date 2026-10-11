@@ -5,7 +5,7 @@ import { Badge, Button, Field, Input, Select, WorkflowBuilder, workflowBuilderLa
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, ApiError } from "./api.ts";
 import { DefaultSets } from "./default-sets.tsx";
-import { builderNames, lookup, message } from "./messages.ts";
+import { builderNames, message, messagesOf } from "./messages.ts";
 import { strings } from "./strings.ts";
 
 type Notice = { kind: "ok" | "error"; text: string } | null;
@@ -144,10 +144,10 @@ export function WorkflowEditor({ typeCode, locale }: { typeCode: string; locale:
   const labels = useMemo<WorkflowBuilderLabels>(
     () =>
       workflowBuilderLabels({
-        t: lookup(locale, "workflowBuilder"),
-        tMap: lookup(locale, "workflowMap"),
-        tRules: lookup(locale, "workflowRules"),
-        tRoles: lookup(locale, "projects.roles"),
+        t: messagesOf(locale, "workflowBuilder"),
+        tMap: messagesOf(locale, "workflowMap"),
+        tRules: messagesOf(locale, "workflowRules"),
+        tRoles: messagesOf(locale, "projects.roles"),
         positions,
         locale,
         names: builderNames(),
