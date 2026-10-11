@@ -16,6 +16,7 @@ import {
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { attachDatasheet, createTestApi, expectHidden, type Caller } from "./support/harness.ts";
 import { all, bilingual, ok, projectMember, take, type Company } from "./support/tower.ts";
+import { LEGACY_MAR } from "@rabaed/db/test-support";
 
 const api = await createTestApi({ files: true });
 afterAll(() => api.close());
@@ -54,7 +55,7 @@ const listIds = async (by: Caller, query: WorkItemQueryInput) => (await list(by,
 async function draft(title: string, answers: Record<string, unknown> = {}): Promise<string> {
   const res = await ok(
     c1Engineer.post(`/v1/projects/${projectId}/work-items`, {
-      type: "MAR",
+      type: LEGACY_MAR,
       title,
       answers: { ...complete, trade: trade.electrical, location: loc.a1f1, ...answers },
     }),
@@ -233,12 +234,6 @@ describe("search on a closed item", () => {
     closed = await draft("Gaskets", { trade: trade.mechanical, location: loc.zoneA });
     await inReview(closed);
     await take(c1Pm, closed, "submit");
-    const { answers } = (await ok(k1Engineer.get(`/v1/work-items/${closed}`), 200)).json();
-    await ok(
-      k1Engineer.request("PUT", `/v1/work-items/${closed}/answers`, {
-        answers: { ...answers, sample_checked: true, matches_specification: false, verification_note: "Wrong rating" },
-      }),
-    );
     await ok(k1Manager.post(`/v1/work-items/${closed}/pick-up`));
     await take(k1Manager, closed, "revise_c", { remarks: "Resubmit with the rated gaskets" });
   });

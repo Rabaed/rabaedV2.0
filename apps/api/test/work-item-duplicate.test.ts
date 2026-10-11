@@ -18,6 +18,7 @@ import { createFileStore, fileStoreSettingsFromEnv, type FileStore } from "../sr
 import { duplicateWorkItem } from "../src/work-items/work-items.ts";
 import { attachDatasheet, createTestApi, expectHidden, type Caller } from "./support/harness.ts";
 import { buildTower, detail, ok, projectMember, take, type Company, type Tower } from "./support/tower.ts";
+import { LEGACY_MAR } from "@rabaed/db/test-support";
 
 const api = await createTestApi({ files: true });
 const migrator = createDb(testDatabaseUrls().migrator, { max: 1 });
@@ -53,7 +54,7 @@ beforeAll(async () => {
   stranger = (await api.authorizedPerson()).caller;
 
   const res = await ok(
-    at.c1Engineer.post(`/v1/projects/${at.projectId}/work-items`, { type: "MAR", title: "Fixtures", answers: { ...answers, trade: at.electrical, location: at.buildingA } }),
+    at.c1Engineer.post(`/v1/projects/${at.projectId}/work-items`, { type: LEGACY_MAR, title: "Fixtures", answers: { ...answers, trade: at.electrical, location: at.buildingA } }),
     201,
   );
   closed = res.json().id;
@@ -61,12 +62,6 @@ beforeAll(async () => {
   await take(at.c1Engineer, closed, "send_for_review", { internalNote: "C1 only: check the price" });
   await ok(at.c1Pm.post(`/v1/work-items/${closed}/pick-up`));
   await take(at.c1Pm, closed, "submit", { internalNote: "C1 only: submitted early" });
-  const item = await detail(at.k1Manager, closed);
-  await ok(
-    at.k1Manager.request("PUT", `/v1/work-items/${closed}/answers`, {
-      answers: { ...item.answers, sample_checked: true, matches_specification: false, verification_note: "Below the specified efficacy" },
-    }),
-  );
   await ok(at.k1Manager.post(`/v1/work-items/${closed}/pick-up`));
   await take(at.k1Manager, closed, "revise_c", { remarks: "Resubmit", internalNote: "K1 only: their price is high" });
   // A file K1 uploaded to the item (as if its Form let K1 attach one): never C1's to copy.
@@ -94,7 +89,7 @@ describe("scenario RP-409-1: C1 duplicates a MAR K1 verified and closed with Cod
     const d = await detail(at.c1Engineer, copy);
     expect(d).toMatchObject({
       title: "Fixtures",
-      type: { code: "MAR" },
+      type: { code: LEGACY_MAR },
       documentNumber: null,
       revisionNo: 0,
       stage: { key: "draft" },

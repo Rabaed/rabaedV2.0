@@ -140,6 +140,7 @@ describe("outcomeLook (RP-410): how a card shows its outcome, from its place in 
 
   it("makes only the set's first positive outcome with no follow-up the clean one", () => {
     const inspection = defaultOutcomeSets.inspection_result;
-    expect(["passed", "passed_with_comments", "failed"].map((c) => look(c, inspection))).toEqual(["a", "b", "d"]);
+    // Failed offers a re-inspection by Revision (RP-437), so it looks as Code C does.
+    expect(["passed", "passed_with_comments", "failed"].map((c) => look(c, inspection))).toEqual(["a", "b", "c"]);
   });
 });
