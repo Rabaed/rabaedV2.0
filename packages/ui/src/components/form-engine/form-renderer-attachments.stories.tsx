@@ -119,7 +119,7 @@ export const WithErrors: Story = {
   },
 };
 
-/** Sent: the files are frozen; they open, but nothing is uploaded or removed. The list is the field's labelled group. */
+/** Submitted: the files are frozen; they open, but nothing is uploaded or removed. The list is the field's labelled group. */
 export const Frozen: Story = {
   args: { files: files([{ ...datasheet, frozen: true }], false) },
   play: async (context) => {

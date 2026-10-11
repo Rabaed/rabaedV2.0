@@ -870,15 +870,20 @@ describe("a Draft's answers", () => {
       expect(await call<{ outcome: string }>(pm, sql`select app.pick_up_step(${item}::uuid, now()) as outcome`)).toEqual([{ outcome: "picked_up" }]);
     });
 
-    it("is Submitted by the PM, who can't change the answers, with no hash to check (RP-514)", async () => {
-      // The answers were checked when they left the Draft, and nobody may change them since.
-      expect(await call<{ hash: Buffer | null }>(pm, sql`select app.answers_sha256(${item}::uuid) as hash`)).toEqual([{ hash: null }]);
+    it("is Submitted by the PM, who can't change the answers, only with the answers checked again (RP-525 E)", async () => {
+      // Every Submit checks the Form, whoever takes it: the PM holding it gets the hash, though they can't save.
+      expect(await call<{ can: boolean }>(pm, sql`select app.can_save_answers(${item}::uuid) as can`)).toEqual([{ can: false }]);
+      for (const other of [c1.member, k1.member]) {
+        expect(await call<{ hash: Buffer | null }>(other, sql`select app.answers_sha256(${item}::uuid) as hash`)).toEqual([{ hash: null }]);
+      }
       const submit = (hash: RawBuilder<unknown>) =>
         call<{ outcome: string }>(
           pm,
           sql`select app.take_transition(${item}::uuid, 'submit', '{}', '', ${hash}, ${randomUUID()}::uuid, now()) as outcome`,
         ).then((rows) => rows[0]!.outcome);
-      expect(await submit(sql`null`)).toBe("applied");
+      expect(await submit(sql`null`)).toBe("form_not_checked");
+      expect(await submit(sql`sha256('{}'::bytea)`)).toBe("form_not_checked");
+      expect(await submit(sql`app.answers_sha256(${item}::uuid)`)).toBe("applied");
     });
 
     it("are read-only for everyone from Submit onwards, and the diffs stay with the raiser (V5)", async () => {
