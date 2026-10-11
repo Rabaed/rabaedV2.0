@@ -7,6 +7,7 @@ const text = {
   en: {
     title: "Rabaed Admin",
     otherLanguage: "العربية",
+    workflowsLink: "Workflows",
     signOut: "Sign out",
     signInTitle: "Sign in",
     email: "Email",
@@ -151,6 +152,7 @@ const text = {
   ar: {
     title: "إدارة ربائد",
     otherLanguage: "English",
+    workflowsLink: "سير العمل",
     signOut: "تسجيل الخروج",
     signInTitle: "تسجيل الدخول",
     email: "البريد الإلكتروني",
@@ -345,6 +347,7 @@ function show(view, who) {
   $("sign-in").hidden = view !== "sign-in";
   $("home").hidden = view !== "home";
   $("sign-out").hidden = view !== "home";
+  $("workflows-link").hidden = view !== "home";
   $("who").textContent = view === "home" ? who : "";
   if (view === "sign-in") {
     $("password-form").hidden = false;

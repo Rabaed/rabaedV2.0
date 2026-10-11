@@ -37,6 +37,10 @@ body {
   border-block-end: 1px solid var(--line);
 }
 
+.bar a {
+  color: var(--accent);
+}
+
 .spacer {
   flex: 1;
 }

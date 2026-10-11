@@ -33,12 +33,6 @@ WORKDIR /app/apps/api
 EXPOSE 4000
 CMD ["./node_modules/.bin/tsx", "src/server.ts"]
 
-# Rabaed Admin (ADR 0010): its own image and service, never the customer api's.
-FROM node-service AS admin
-WORKDIR /app/apps/admin
-EXPOSE 4050
-CMD ["./node_modules/.bin/tsx", "src/server.ts"]
-
 FROM node-service AS worker
 WORKDIR /app/apps/worker
 CMD ["./node_modules/.bin/tsx", "src/main.ts"]
@@ -48,6 +42,19 @@ CMD ["./node_modules/.bin/tsx", "src/main.ts"]
 # thmanyah/*.woff2). Without them this stage is empty and Arabic falls back to
 # IBM Plex Sans Arabic (packages/ui/src/fonts/arabic-font.ts).
 FROM scratch AS fonts
+
+# Rabaed Admin (ADR 0010): its own image and service, never the customer api's. Its
+# Workflows page (RP-443) is the builder from @rabaed/ui, built into apps/admin/dist and
+# served from /assets; Arabic uses the licensed fonts only when the deploy supplies them.
+FROM deps AS admin-build
+COPY --from=fonts / packages/ui/fonts/
+RUN pnpm --filter @rabaed/admin build
+
+FROM node-service AS admin
+COPY --from=admin-build --chown=node:node /app/apps/admin/dist /app/apps/admin/dist
+WORKDIR /app/apps/admin
+EXPOSE 4050
+CMD ["./node_modules/.bin/tsx", "src/server.ts"]
 
 FROM deps AS web-build
 COPY --from=fonts / packages/ui/fonts/
