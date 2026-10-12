@@ -11,6 +11,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { exportWorkItems } from "../src/work-items/query.ts";
 import { createTestApi, type Caller } from "./support/harness.ts";
 import { bilingual, buildTower, ok, submitted, take, type Company, type Tower } from "./support/tower.ts";
+import { LEGACY_MAR } from "@rabaed/db/test-support";
 
 const api = await createTestApi({ files: true });
 const migrator = createDb(testDatabaseUrls().migrator, { max: 1 });
@@ -49,14 +50,8 @@ async function allPages(by: Caller, query: WorkItemQueryInput) {
   return { rows, sizes };
 }
 
-/** K1 verifies a submitted item and closes it with `transition`. */
+/** K1 closes a submitted item with `transition`. */
 async function code(id: string, transition: "approve_a" | "revise_c", manager: Caller) {
-  const item = (await ok(manager.get(`/v1/work-items/${id}`), 200)).json();
-  await ok(
-    manager.request("PUT", `/v1/work-items/${id}/answers`, {
-      answers: { ...item.answers, sample_checked: true, matches_specification: transition === "approve_a", verification_note: "Checked" },
-    }),
-  );
   await ok(manager.post(`/v1/work-items/${id}/pick-up`));
   await take(manager, id, transition, { remarks: "As noted" });
 }
@@ -73,7 +68,7 @@ beforeAll(async () => {
   // Drafts with only their Trade: quick to make, and they share a Step entry time.
   for (let i = 0; i < 21; i++) {
     const answers = { trade: i % 2 ? at.electrical : at.mechanical, ...(i === 0 ? { location: floor1 } : i === 1 ? { location: zone2 } : {}) };
-    const res = await ok(at.c1Engineer.post(`/v1/projects/${at.projectId}/work-items`, { type: "MAR", title: `Item ${String(i).padStart(2, "0")}`, answers }), 201);
+    const res = await ok(at.c1Engineer.post(`/v1/projects/${at.projectId}/work-items`, { type: LEGACY_MAR, title: `Item ${String(i).padStart(2, "0")}`, answers }), 201);
     created.push(res.json().id);
   }
   onFloor = created[0]!;

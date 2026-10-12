@@ -12,6 +12,7 @@ import { addTestWorkflow, testDatabaseUrls } from "@rabaed/db/test-support";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestApi, type Caller } from "./support/harness.ts";
+import { LEGACY_MAR, LEGACY_WORKFLOW_NAME } from "@rabaed/db/test-support";
 import { all, buildTower, detail, draft, ok, projectMember, take, type Company, type Tower } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
@@ -21,7 +22,7 @@ afterAll(async () => {
   await migrator.destroy();
 });
 
-const MAR = { name: { en: "Material Submittal (MAR)", ar: "اعتماد المواد (MAR)" }, versionNo: 2 };
+const MAR = { name: LEGACY_WORKFLOW_NAME, versionNo: 1 };
 const TOWER_ROUTE = { en: "Tower MAR route", ar: "مسار اعتماد المواد للبرج" };
 const C2_ROUTE = { en: "C2's MAR route", ar: "مسار اعتماد المواد للمقاول الثاني" };
 
@@ -38,7 +39,7 @@ const bindMar = (definitionId: string, raisingParticipantId: string | null = nul
   sql`
     insert into workflow_binding (project_id, work_item_type_id, raising_participant_id, workflow_definition_id)
     select ${at.projectId}::uuid, t.id, ${raisingParticipantId}::uuid, ${definitionId}::uuid
-    from work_item_type t where t.owner_kind = 'rabaed' and t.code = 'MAR'
+    from work_item_type t where t.owner_kind = 'rabaed' and t.code = ${LEGACY_MAR}
   `.execute(migrator);
 
 beforeAll(async () => {
@@ -96,9 +97,6 @@ describe("scenario RP-426-1: the map is everyone's, an item's internal moves are
     await ok(at.c1Pm.post(`/v1/work-items/${id}/pick-up`));
     await take(at.c1Pm, id, "submit");
     await ok(k1Engineer.post(`/v1/work-items/${id}/pick-up`));
-    // The MAR's "Consultant verification" is filled at `consultant_review`, a Step this Workflow has too.
-    const answers = { ...(await detail(k1Engineer, id)).answers, sample_checked: true, matches_specification: true };
-    await ok(k1Engineer.request("PUT", `/v1/work-items/${id}/answers`, { answers }));
     await take(k1Engineer, id, "send_to_manager");
 
     const moves = async (by: Caller) =>

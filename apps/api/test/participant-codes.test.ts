@@ -139,17 +139,17 @@ describe("who sees a code (V15)", () => {
 describe("Document Numbers", () => {
   it("print the ordinal until a code is set, then the code under the Rabaed Default, on a counter of its own", async () => {
     const at = await project("PC7");
-    const first = await draft(at, at.c1Engineer, "Before the code");
+    const first = await draft(at, at.c1Engineer, "Before the code", { type: "MAR" });
     await sendForReview(at.c1Engineer, first);
     expect(await numberOf(at.c1Engineer, first)).toBe("PC7-MAR-01-0001");
 
     await ok(code(c1.caller, at.c1ParticipantId, "ccm"));
-    const second = await draft(at, at.c1Engineer, "After the code");
+    const second = await draft(at, at.c1Engineer, "After the code", { type: "MAR" });
     await sendForReview(at.c1Engineer, second);
     // The ordinal counter's issued numbers stay; the code starts its own run.
     expect(await numberOf(at.c1Engineer, first)).toBe("PC7-MAR-01-0001");
     expect(await numberOf(at.c1Engineer, second)).toBe("PC7-MAR-CCM-0001");
-    const third = await draft(at, at.c1Engineer, "Another");
+    const third = await draft(at, at.c1Engineer, "Another", { type: "MAR" });
     await sendForReview(at.c1Engineer, third);
     expect(await numberOf(at.c1Engineer, third)).toBe("PC7-MAR-CCM-0002");
   });
@@ -159,7 +159,7 @@ describe("Document Numbers", () => {
     await ok(code(c1.caller, at.c1ParticipantId, "CCM"));
     // A code nothing used yet can still change.
     await ok(code(c1.caller, at.c1ParticipantId, "CMC"));
-    const id = await draft(at, at.c1Engineer, "Uses the code");
+    const id = await draft(at, at.c1Engineer, "Uses the code", { type: "MAR" });
     await sendForReview(at.c1Engineer, id);
     expect(await numberOf(at.c1Engineer, id)).toBe("PC8-MAR-CMC-0001");
 
@@ -179,7 +179,7 @@ describe("Document Numbers", () => {
 
   it("don't fix a code that the numbers printed so far did not use", async () => {
     const at = await project("PC9");
-    const id = await draft(at, at.c1Engineer, "Numbered by position");
+    const id = await draft(at, at.c1Engineer, "Numbered by position", { type: "MAR" });
     await sendForReview(at.c1Engineer, id);
     await ok(code(c1.caller, at.c1ParticipantId, "CCM"));
     await ok(code(c1.caller, at.c1ParticipantId, "CC2"));
@@ -217,7 +217,7 @@ describe("a starting number", () => {
     const set = await code(c1.caller, at.c1ParticipantId, "CCM");
     expect({ status: set.statusCode, body: set.json() }).toEqual({ status: 409, body: { error: "code_in_use" } });
     expect((await codesOf(c1.caller, at.projectId))[at.c1ParticipantId]).toBeNull();
-    const id = await draft(at, at.c1Engineer, "Continues the register");
+    const id = await draft(at, at.c1Engineer, "Continues the register", { type: "MAR" });
     await sendForReview(at.c1Engineer, id);
     expect(await numberOf(at.c1Engineer, id)).toBe("PC12-MAR-01-0144");
   });

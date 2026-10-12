@@ -10,8 +10,10 @@ import { insertTestWorkflow, type RulesTransition, type TestStep } from "./rules
  *         Reference                                                         ─return_to_engineer→ Consultant review, offer Assign to
  *
  * Every action writes only fields the acting Participant fills at that Step: the
- * raiser's "Material" section at its own Steps, the Consultant's "Review" section
- * at its Steps, and the Transition's Action Form. It passes every publish check
+ * raiser's "Material" section at its own Steps, and the Transition's Action Form. The
+ * Consultant's Review is its reply (ADR 0019, RP-437): Send to Manager's Action Form
+ * (Reviewed on, Verdict) and the Code's (Remarks, the Reviewer's note); the Form is
+ * the raiser's. It passes every publish check
  * (workflowPublishProblems) with `actionsFormSchema`, as every published Version
  * must. `extra` adds Transitions as given, for a seam-2 test of what publishing
  * would refuse. `run` executes SQL as the migrator; the result is the new
@@ -26,7 +28,7 @@ export function addActionsWorkflow(
 
 const name = (en: string, ar: string) => ({ en, ar });
 
-/** The Form the actions Workflow is checked with: the raiser's Material, the Consultant's Review. */
+/** The Form the actions Workflow is checked with: the raiser's Material and Classification. */
 export const actionsFormSchema = {
   sections: [
     {
@@ -45,16 +47,6 @@ export const actionsFormSchema = {
         { key: "trade", type: "trade", label: name("Trade", "التخصص") },
         { key: "location", type: "location", label: name("Location", "الموقع") },
         { key: "scopes", type: "scopes", label: name("Scopes", "النطاقات") },
-      ],
-    },
-    {
-      key: "review",
-      title: name("Review", "المراجعة"),
-      editable_at: ["consultant_review", "consultant_approval"],
-      fields: [
-        { key: "reviewed_on", type: "date", label: name("Reviewed on", "تاريخ المراجعة") },
-        { key: "verdict", type: "text", label: name("Verdict", "الحكم") },
-        { key: "reviewer_note", type: "textarea", label: name("Reviewer's note", "ملاحظة المراجع") },
       ],
     },
   ],
@@ -127,6 +119,18 @@ const transitions: RulesTransition[] = [
     kind: "send",
     outcome: null,
     permission: "review",
+    action_form: {
+      sections: [
+        {
+          key: "review",
+          title: name("Review", "المراجعة"),
+          fields: [
+            { key: "reviewed_on", type: "date", label: name("Reviewed on", "تاريخ المراجعة") },
+            { key: "verdict", type: "text", label: name("Verdict", "الحكم") },
+          ],
+        },
+      ],
+    },
     actions: [assignTo, { type: "set_field", field: "reviewed_on", value: { now: true } }, { type: "set_field", field: "verdict", value: "Checked" }],
   },
   {
@@ -148,7 +152,16 @@ const transitions: RulesTransition[] = [
     outcome: "A",
     permission: "approve",
     action_form: {
-      sections: [{ key: "code_a", title: name("Approve", "اعتماد"), fields: [{ key: "remarks", type: "textarea", label: name("Remarks", "الملاحظات") }] }],
+      sections: [
+        {
+          key: "code_a",
+          title: name("Approve", "اعتماد"),
+          fields: [
+            { key: "remarks", type: "textarea", label: name("Remarks", "الملاحظات") },
+            { key: "reviewer_note", type: "textarea", label: name("Reviewer's note", "ملاحظة المراجع") },
+          ],
+        },
+      ],
     },
     actions: [{ type: "copy_field", from: "remarks", to: "reviewer_note" }],
   },

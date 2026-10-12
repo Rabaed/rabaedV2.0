@@ -6,16 +6,15 @@
 // one Comment per row of its Action Form's `items_to_create` table, in the Snag List:
 // raised by the reviewer, `raised_from`-linked to the reviewed item, Open with the
 // item's raiser, visible to the Participants who see the item. The Contractor resolves
-// a Comment with a note; the Consultant closes it or Returns it to Open. The reviewed
+// a Comment with a note in its reply; the Consultant closes it or Returns it to Open. The reviewed
 // item counts its Comments open and closed, only those the viewer sees.
 //
 // The reviewed Type is test-only, on the test Workflow with Code B (addSendBackType,
 // `withApproveB`); the Comments run the Rabaed Default Comment Workflow.
-import { readFileSync } from "node:fs";
-import { createDb } from "@rabaed/db";
+import { rabaedWorkflowFile, sameDefinition } from "@rabaed/admin/services";
+import { createDb, rabaedDefaultWorkflowId, readLatestPublishedDefinition } from "@rabaed/db";
 import { testDatabaseUrls } from "@rabaed/db/test-support";
-import { definitionFromRows, type WorkflowVersionRows, type WorkItemBoard, type WorkItemDetail, type WorkItemLinks, type WorkItemList } from "@rabaed/domain";
-import { sql } from "kysely";
+import { parseWorkflowDefinition, type WorkItemBoard, type WorkItemDetail, type WorkItemLinks, type WorkItemList } from "@rabaed/domain";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestApi, expectHidden, type Caller } from "./support/harness.ts";
 import { addSendBackType } from "./support/send-back.ts";
@@ -84,12 +83,10 @@ async function closedAtB(title: string, rows: { comment: string; reference?: str
   return id;
 }
 
-/** C1's PM picks up the Comment, writes the resolution note and resolves it. */
+/** C1's PM picks up the Comment and resolves it, with the resolution note in its reply (the Resolve Screen, RP-437). */
 async function resolve(id: string, note: string) {
   await ok(at.c1Pm.post(`/v1/work-items/${id}/pick-up`));
-  const answers = (await detail(at.c1Pm, id)).answers;
-  await ok(at.c1Pm.request("PUT", `/v1/work-items/${id}/answers`, { answers: { ...answers, resolution_note: note } }));
-  await take(at.c1Pm, id, "resolve");
+  await take(at.c1Pm, id, "resolve", { answers: { resolution_note: note } });
 }
 
 beforeAll(async () => {
@@ -138,7 +135,7 @@ describe("Code B with three rows makes three Comments in the Snag List (seam 1)"
     const lux = byTitle.get("Fix the lux levels")!;
     const emergency = byTitle.get("Add emergency fittings")!;
 
-    // Resolving asks for the resolution note: the Form Section C1 fills at Open.
+    // Resolving asks for the resolution note: C1's reply, in the Resolve Screen (ADR 0019).
     await ok(at.c1Pm.post(`/v1/work-items/${lux}/pick-up`));
     const noNote = await tryTake(at.c1Pm, lux, "resolve");
     expect(noNote.statusCode, noNote.body).toBe(422);
@@ -147,7 +144,10 @@ describe("Code B with three rows makes three Comments in the Snag List (seam 1)"
     await resolve(lux, "Lux levels recalculated");
     const resolved = await detail(at.k1Manager, lux);
     expect(resolved.step.key).toBe("resolved");
-    expect(resolved.answers).toMatchObject({ resolution_note: "Lux levels recalculated" });
+    // The note is shared with the Resolve: K1 reads it in the history, never in the Form.
+    expect(resolved.answers).not.toHaveProperty("resolution_note");
+    const resolveEvent = ((await ok(at.k1Manager.get(`/v1/work-items/${lux}/history`), 200)).json().events as { answers: Record<string, unknown> | null }[]).filter((e) => e.answers).at(-1);
+    expect(resolveEvent!.answers).toEqual({ resolution_note: "Lux levels recalculated" });
     await ok(at.k1Manager.post(`/v1/work-items/${lux}/pick-up`));
     await take(at.k1Manager, lux, "close");
     expect((await detail(at.c1Pm, lux)).outcome).toBe("closed");
@@ -208,28 +208,12 @@ describe("Comments are seen where their reviewed item is (scenarios RP-434-1 to 
 });
 
 describe("the Rabaed Default Comment Workflow", () => {
-  it("is the document `pnpm workflow:publish` publishes (apps/admin/workflows/CMT.json), as Version 1", async () => {
-    const version = await sql<{ id: string; layout: unknown }>`
-      select v.id, v.layout from workflow_version v
-      join work_item_type t on t.workflow_definition_id = v.workflow_definition_id
-      where t.owner_kind = 'rabaed' and t.code = 'CMT' and v.version_no = 1 and v.status = 'published'
-    `.execute(migrator);
-    const id = version.rows[0]!.id;
-    const steps = await sql<WorkflowVersionRows["steps"][number]>`
-      select key, name, stage_key, actor_rule, is_signing, outcome_mode from workflow_step where workflow_version_id = ${id}::uuid order by id
-    `.execute(migrator);
-    const transitions = await sql<WorkflowVersionRows["transitions"][number]>`
-      select tr.key, f.key as from_step_key, s.key as to_step_key, tr.label, tr.kind, tr.outcome, tr.permission, tr.sort, tr.action_form
-      from workflow_transition tr
-      join workflow_step f on f.id = tr.from_step_id
-      join workflow_step s on s.id = tr.to_step_id
-      where tr.workflow_version_id = ${id}::uuid order by tr.sort
-    `.execute(migrator);
-    const file: unknown = JSON.parse(readFileSync(new URL("../../admin/workflows/CMT.json", import.meta.url), "utf8"));
-    const stored = definitionFromRows({ layout: version.rows[0]!.layout ?? {}, steps: steps.rows, transitions: transitions.rows });
-    expect({ ...stored, steps: [...stored.steps].sort((a, b) => a.key.localeCompare(b.key)) }).toEqual({
-      ...(file as typeof stored),
-      steps: [...(file as typeof stored).steps].sort((a, b) => a.key.localeCompare(b.key)),
-    });
+  it("is the document `pnpm defaults:publish` publishes (apps/admin/workflows/CMT.json), as its latest Version: Version 1, migrated, then 2 with the Resolve Screen (RP-437)", async () => {
+    const definitionId = (await rabaedDefaultWorkflowId(migrator, "CMT"))!;
+    const latest = (await readLatestPublishedDefinition(migrator, definitionId))!;
+    expect(latest.versionNo).toBe(2);
+    const file = parseWorkflowDefinition(rabaedWorkflowFile("CMT.json"));
+    expect(file.ok && sameDefinition(latest.definition, file.definition)).toBe(true);
+    expect(latest.definition.transitions.find((t) => t.key === "resolve")).toMatchObject({ screen: "comment_resolution", actionForm: null });
   });
 });

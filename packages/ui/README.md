@@ -9,7 +9,7 @@ Find a component here before reading the rest of this file. Paths are under `pac
 | Folder under `src/components/` | What it holds (main exports) |
 |---|---|
 | `button/` | `Button`, `IconButton`, `buttonVariants`, `SignButton` |
-| `data/` | `Avatar`, `CompanyChip` (`avatar.tsx`), `Badge`, `StatTile`, table parts; `initials.ts`, `tone.ts` |
+| `data/` | `Avatar`, `CompanyChip` (`avatar.tsx`), `Badge`, `StatTile`, `TitledCard`, `KeyValues`, table parts; `initials.ts`, `tone.ts` |
 | `doc-no/` | `DocNo`: a Document Number, always left-to-right |
 | `feedback/` | Empty, loading and error states (`states.tsx`) |
 | `form/` | `Input`, `Textarea`, `Select`, `Checkbox`, `CheckboxGroup`, `RadioGroup`, `Switch`, `SegmentedControl`, `Field`, `DirectionProvider` |
@@ -152,6 +152,8 @@ Every control sits in a `Field`, which gives it a label, optional help text, the
 | `Table` + `TableHeader`, `TableBody`, `TableRow`, `TableHead`, `TableCell`, `TableEmpty` | Lists of records. Real table roles, in a named region that scrolls (and takes keyboard focus) when the table doesn't fit. |
 | `Tabs` + `TabsList`, `TabsTrigger`, `TabsContent` | Switching between views of one area. The ARIA tabs pattern; arrow keys follow the reading direction. |
 | `Badge` | A short label in a tint: `neutral` (default), `brand`, `info`, `success`, `warning`, `danger`; optional `dot`. Not for Stages or Review Codes, which have their own components. |
+| `TitledCard` | The design kit's card (`.pc`, RP-411): a 49px heading row ruled off from a padded body, with `actions` (links, a figure) at its end; fills its grid cell's height. `as="article"` for one of a set of like cards, `level` for the heading. Home's cards, the Dashboard's Type cards, the Activity Feed panel and the Project page's details share it. |
+| `KeyValues` | The kit's key-value grid (`.kv`): each value in bold under its small muted name, as many to a row as fit at 220px. A Project's details, its Participants. |
 | `StatTile` | One count on a card, as the design kit's Home tiles (RP-407): a 40px icon square on its tone's tint (`tone`), the number large in Latin digits, and what it counts below; always a column. Keep labels short enough for one line in a four-tile row. |
 | `Avatar` | A person's photo or initials (a circle), or with `kind="company"` a company's logo or initials (a rounded square). Named after them; `decorative` when the name is beside it. `solid`: white initials on a colour from the name (a Company on slate), as the kit's Home; `initialsFrom` gives Latin initials in Arabic. |
 | `CompanyChip` | Another company as one block: its mark and name in a pill. Takes no person, so it can't show another company's people. |

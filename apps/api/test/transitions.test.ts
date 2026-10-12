@@ -7,6 +7,7 @@ import type { WorkItemDetail, WorkItemHistory } from "@rabaed/domain";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { attachDatasheet, createTestApi, expectHidden, type Caller, type OnboardedCompany } from "./support/harness.ts";
 import { detail, projectMember, tryTake } from "./support/tower.ts";
+import { LEGACY_MAR } from "@rabaed/db/test-support";
 
 const api = await createTestApi({ files: true });
 afterAll(() => api.close());
@@ -44,7 +45,7 @@ async function otherParticipant(role: "contractor" | "consultant" | "owner_repre
 /** A complete Draft MAR. `datasheet: false` leaves out its Datasheet, for a raiser who can't attach files. */
 async function createDraft(by: Caller, title = "Cable trays", { datasheet = true } = {}): Promise<string> {
   const res = await by.post(`/v1/projects/${projectId}/work-items`, {
-    type: "MAR",
+    type: LEGACY_MAR,
     title,
     answers: { manufacturer: "ACME Cables", description: "Galvanised, 300 mm", trade: electrical, location: buildingA },
   });
@@ -110,7 +111,7 @@ describe("Send for Review", () => {
       heldBy: { companyName: { en: "Test Constructions" }, memberName: null },
       stepAgeWeeks: 1,
     });
-    expect(d.documentNumber).toBe("TWR-MAR-01-0001");
+    expect(d.documentNumber).toBe("TWR-MARV-01-0001");
     expect(buttons(d)).toEqual([]);
     expect(buttons(await detail(pm1, id))).toEqual(["pick_up"]);
   });
@@ -191,7 +192,7 @@ describe("Pick up, Return and re-send", () => {
 
   it("Returns it to the Engineer who sent it, with the reason, keeping the Document Number", async () => {
     const number = (await detail(pm1, id)).documentNumber;
-    expect(number).toMatch(/^TWR-MAR-01-\d{4}$/);
+    expect(number).toMatch(/^TWR-MARV-01-\d{4}$/);
     await ok(tryTake(pm1, id, "return", { reason: "Wrong tray size" }));
     const d = await detail(engineer, id);
     expect(d).toMatchObject({ stage: { key: "draft" }, documentNumber: number });
@@ -216,7 +217,7 @@ describe("Pick up, Return and re-send", () => {
     expect(events[0]).toMatchObject({
       fromStep: { en: "Draft" },
       toStep: { en: "Contractor review" },
-      documentNumber: expect.stringMatching(/^TWR-MAR-01-/),
+      documentNumber: expect.stringMatching(/^TWR-MARV-01-/),
       by: { companyName: { en: "Test Constructions" }, memberName: { en: "Test Member" } },
     });
     expect(events[2]!.reason).toBe("Wrong tray size");

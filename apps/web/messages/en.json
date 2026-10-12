@@ -248,7 +248,12 @@
       "open": "Open",
       "closed": "Closed",
       "empty": "No Work Item Types on this Project yet.",
-      "codeC": "Code C",
+      "revisionLine": {
+        "review_code": "Code C",
+        "inspection_result": "Failed",
+        "approval": "Revisions",
+        "none": "Revisions"
+      },
       "approved": {
         "review_code": "Approved (A+B)",
         "inspection_result": "Passed, with or without Comments",
@@ -410,6 +415,7 @@
     "notCreator": "Only a Project Creator can create a Project.",
     "unavailable": "Something went wrong. Try again.",
     "participants": "Participants",
+    "projectDetails": "Project details",
     "participantCode": "Participant Code",
     "setParticipantCodes": "Set Participant Codes",
     "projectMembers": "Project Members",
@@ -762,8 +768,7 @@
         "choose": "Choose…",
         "none": "None",
         "leftProject": "\u2068{name}\u2069 (no longer on the Project)",
-        "unanswered": "Not answered",
-        "filledBy": "Filled in by the {role}"
+        "unanswered": "Not answered"
       },
       "builtIn": {
         "choose": "Choose…",

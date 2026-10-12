@@ -49,8 +49,8 @@ const needMyAction = async (by: Caller) =>
   ((await ok(by.get(`/v1/projects/${projectId}/work-items?${workItemSearchParams({ needMyAction: true })}`), 200)).json() as WorkItemList).items.map(
     (i) => i.id,
   );
-const history = async (by: Caller, id: string) =>
-  ((await ok(by.get(`/v1/work-items/${id}/history`), 200)).json().events as { type: string }[]).map((e) => e.type);
+/** The history as `by` reads it, whole, to look for what it says. */
+const historyBody = async (by: Caller, id: string) => (await ok(by.get(`/v1/work-items/${id}/history`), 200)).body;
 
 /** Today's date in Riyadh, as a `date` field stores it. */
 const riyadhToday = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Riyadh" }).format(new Date());
@@ -124,20 +124,21 @@ describe("set and copy", () => {
     expect((await detail(pm.caller, id)).answers).toMatchObject({ model: "Model X", reference: "Model X", sent_on: riyadhToday() });
   });
 
-  it("writes K1's Review at its own Step, on K1's record only, and copies the Remarks when the Code is issued", async () => {
+  it("writes K1's Review in its own reply, internal to K1, and copies the Remarks into the Code's (RP-431-1)", async () => {
     const id = await newDraft("Reviewed");
     await take(engineer.caller, id, "send_for_review");
     await pickUp(pm.caller, id);
     await take(pm.caller, id, "submit");
     await pickUp(k1Engineer.caller, id);
     await take(k1Engineer.caller, id, "send_to_manager", { assignTo: k1Manager.id });
-    expect((await detail(k1Manager.caller, id)).answers).toMatchObject({ verdict: "Checked", reviewed_on: riyadhToday() });
-    expect(await history(k1Manager.caller, id)).toContain("answers_changed");
-    // C1 reads the Review as it arrived, and sees no change on the record (V19).
-    expect((await detail(pm.caller, id)).answers).not.toHaveProperty("verdict");
-    expect(await history(pm.caller, id)).not.toContain("answers_changed");
+    // The Review is K1's reply (ADR 0019), internal to K1: never in the Form, never C1's to read.
+    expect(await historyBody(k1Manager.caller, id)).toContain("Checked");
+    expect((await detail(k1Manager.caller, id)).answers).not.toHaveProperty("verdict");
+    expect(await historyBody(pm.caller, id)).not.toContain("Checked");
 
     await take(k1Manager.caller, id, "approve_a", { remarks: "Fine as built." });
-    expect((await detail(pm.caller, id)).answers).toMatchObject({ verdict: "Checked", reviewer_note: "Fine as built." });
+    // The Code's reply is shared: its Remarks, copied into the Reviewer's note.
+    expect(await historyBody(pm.caller, id)).toContain("Fine as built.");
+    expect(await historyBody(pm.caller, id)).not.toContain("Checked");
   });
 });

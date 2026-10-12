@@ -7,7 +7,7 @@
 // Transition, validates, publishes Version 1 of the Project's copy and binds it
 // (through WF-4's API: binding in Project Settings is RP-441), and a new MAR follows it.
 import { createDb } from "@rabaed/db";
-import { testDatabaseUrls } from "@rabaed/db/test-support";
+import { LEGACY_MAR, returnInInternalReview, testDatabaseUrls } from "@rabaed/db/test-support";
 import {
   addStep,
   connectSteps,
@@ -64,7 +64,7 @@ beforeAll(async () => {
   await ok(c1.caller.request("PUT", `/v1/participants/${r1ParticipantId}/visibility`, { trade: all, location: all }));
   ownerRep = await projectMember(api, r1, r1ParticipantId, [APPROVER]);
   const mar = await sql<{ id: string; workflow_definition_id: string }>`
-    select id, workflow_definition_id from work_item_type where owner_kind = 'rabaed' and code = 'MAR'
+    select id, workflow_definition_id from work_item_type where owner_kind = 'rabaed' and code = ${LEGACY_MAR}
   `.execute(migrator);
   marTypeId = mar.rows[0]!.id;
   marDefault = mar.rows[0]!.workflow_definition_id;
@@ -83,7 +83,7 @@ describe("a Project Admin builds the Project's copy of the MAR", () => {
     route = res.json().id;
     const read = await builder(c1.caller, route);
     expect(read.workflow).toMatchObject({ id: route, name: ROUTE, owner: "project", draft: { versionNo: 1 }, canAuthor: true });
-    expect(read.type).toEqual({ code: "MAR", name: expect.objectContaining({ en: expect.any(String), ar: expect.any(String) }) });
+    expect(read.type).toEqual({ code: LEGACY_MAR, name: expect.objectContaining({ en: expect.any(String), ar: expect.any(String) }) });
     expect(read.stages.map((s) => s.key)).toEqual(expect.arrayContaining(["draft", "pending_approval", "approved", "cancelled"]));
     expect(read.stages.find((s) => s.key === "approved")).toMatchObject({ category: "closed_positive", name: { en: expect.any(String), ar: expect.any(String) } });
     expect(read.outcomes.map((o) => o.code)).toEqual(expect.arrayContaining(["A", "B", "C", "D"]));
@@ -95,7 +95,8 @@ describe("a Project Admin builds the Project's copy of the MAR", () => {
   });
 
   it("adds an Owner Representative approval Step with a Code Transition, and validates it with no errors", async () => {
-    const start = (await builder(c1.caller, route)).workflow.draft!.definition;
+    // The legacy MAR's Return goes back to the Draft: kept in Internal Review, as publishing asks (ADR 0020).
+    const start = returnInInternalReview((await builder(c1.caller, route)).workflow.draft!.definition);
     const issuing = start.steps.find((s) => s.outcomeMode === "issue_outcome")!;
     const approved = start.steps.find((s) => s.stage === "approved")!;
     const added = addStep(start, {
@@ -126,8 +127,6 @@ describe("a Project Admin builds the Project's copy of the MAR", () => {
     await take(at.c1Engineer, id, "send_for_review");
     await ok(at.c1Pm.post(`/v1/work-items/${id}/pick-up`));
     await take(at.c1Pm, id, "submit");
-    const answers = { ...(await detail(k1Engineer, id)).answers, sample_checked: true, matches_specification: true, verification_note: "As specified" };
-    await ok(k1Engineer.request("PUT", `/v1/work-items/${id}/answers`, { answers }));
     await ok(at.k1Manager.post(`/v1/work-items/${id}/pick-up`));
     await take(at.k1Manager, id, "send_to_owner_rep");
     expect((await detail(ownerRep, id)).step.name.en).toBe("Owner Representative approval");

@@ -105,7 +105,7 @@ beforeAll(async () => {
       },
     ],
   };
-  await addSendBackType(migrator, TYPE, { en: "Screened submittal", ar: "تقديم بشاشات" }, form);
+  await addSendBackType(migrator, TYPE, { en: "Screened submittal", ar: "تقديم بشاشات" }, form, { engineerStep: true });
   c1 = await api.projectCreator();
   k1 = await api.authorizedPerson();
   at = await buildTower(api, { c1, k1 }, "SCR");
@@ -284,6 +284,32 @@ describe("a Transition shows a Screen, pinned by the Workflow Version", () => {
     // Into another internal field it stays with K1.
     expect((await publishRoute("code_reply", [{ type: "copy_field", from: "remarks", to: "verification_note" }])).statusCode).toBe(200);
     expect((await publishRoute("code_reply")).statusCode).toBe(200);
+  });
+
+  it("pre-fills the Code from the reply that handed it over inside the Consultant: its shared and internal answers alike (RP-437)", async () => {
+    const definition = (await readWorkflow(c1.caller, routeId)).published!.definition;
+    const replying: WorkflowDefinition = {
+      ...definition,
+      transitions: definition.transitions.map((t) => (t.key === "send_to_manager" ? { ...t, actionForm: null, screen: "code_reply" } : t)),
+    };
+    await ok(c1.caller.request("PUT", `/v1/workflows/${routeId}/draft`, { definition: replying }), 200);
+    expect((await c1.caller.post(`/v1/workflows/${routeId}/publish`)).statusCode).toBe(200);
+    try {
+      const id = await raise("Pre-filled");
+      await take(at.c1Engineer, id, "send_for_review");
+      await ok(at.c1Pm.post(`/v1/work-items/${id}/pick-up`));
+      await take(at.c1Pm, id, "submit");
+      await ok(k1Engineer.post(`/v1/work-items/${id}/pick-up`));
+      const reply = { remarks: "Matches the sample.", verification_note: "Batch 11 checked.", checks: { sample: { answer: "yes" } } };
+      await take(k1Engineer, id, "send_to_manager", { answers: reply });
+      const approve = (await detail(at.k1Manager, id)).actions.transitions.find((t) => t.key === "approve_a");
+      expect(approve?.prefill).toEqual(reply);
+      // The Contractor is never handed it: the item came to it from another Participant.
+      expect(JSON.stringify(await history(at.c1Engineer, id))).not.toContain("Batch 11");
+    } finally {
+      await ok(c1.caller.request("PUT", `/v1/workflows/${routeId}/draft`, { definition }), 200);
+      expect((await c1.caller.post(`/v1/workflows/${routeId}/publish`)).statusCode).toBe(200);
+    }
   });
 
   it("leaves a reply's internal answers out of the Download, the same for everyone, the Consultant included (RP-409-2, RP-516-1)", async () => {

@@ -13,7 +13,6 @@ import {
   formFields,
   mergeFieldAnswers,
   formSchema,
-  sectionsFilledBy,
   isHiddenLinkChoice,
   offeredChoices,
   parseActionForm,
@@ -267,12 +266,12 @@ async function pinnedForm(trx: Trx, workItemId: string): Promise<PinnedForm | nu
   };
 }
 
-/** A Workflow Version's Steps as Form Sections are matched to them, and the name of each base role's Project Role. */
-type WorkflowSteps = { steps: WorkflowStepHolder[]; roleNames: ReadonlyMap<string, BilingualText> };
+/** A Workflow Version's Steps as Form Sections are matched to them. */
+type WorkflowSteps = { steps: WorkflowStepHolder[] };
 
 /** The Steps of the Workflow Version `workflowVersionId`. Definitions, which every Member reads. */
 async function workflowSteps(trx: Trx, workflowVersionId: string): Promise<WorkflowSteps> {
-  const { rows } = await sql<{ key: string; role: string | null; draft: boolean; role_name: BilingualText | null }>`
+  const { rows } = await sql<{ key: string; role: string | null; draft: boolean }>`
     -- A Draft as app.is_draft_step (which the app role can't call) tells it: a Stage of category draft, in any
     -- Module, of the Stage set the Workflow is published against (RP-428): its Project's for a Project's own
     -- Workflow, the Rabaed Defaults' for any other.
@@ -281,29 +280,19 @@ async function workflowSteps(trx: Trx, workflowVersionId: string): Promise<Workf
         select 1 from stage st
         where st.key = s.stage_key and st.category = 'draft'
           and case when d.owner_kind = 'project' then st.project_id = d.project_id else st.owner_kind = 'rabaed' end
-      ) as draft,
-      r.name as role_name
+      ) as draft
     from workflow_step s
     join workflow_version v on v.id = s.workflow_version_id
     join workflow_definition d on d.id = v.workflow_definition_id
-    -- Projects use the Rabaed Default Project Roles for now.
-    left join project_role r on r.owner_kind = 'rabaed' and r.base_role = s.actor_rule ->> 'base_role'
     where s.workflow_version_id = ${workflowVersionId}
     order by s.key
   `.execute(trx);
-  return {
-    steps: rows.map(({ key, role, draft }) => ({ key, role, draft })),
-    roleNames: new Map(rows.flatMap((r) => (r.role && r.role_name ? [[r.role, r.role_name] as const] : []))),
-  };
+  return { steps: rows.map(({ key, role, draft }) => ({ key, role, draft })) };
 }
 
-/** `form` as it is filled in at `step`: the sections editable there, and who fills the sections another Participant fills. */
-function formToFillAt(form: FormVersion, { steps, roleNames }: WorkflowSteps, at: SectionEditContext): FormToFill {
-  const filledBy = Object.entries(sectionsFilledBy(form.schema, steps)).flatMap(([key, role]) => {
-    const name = roleNames.get(role);
-    return name ? [[key, name] as const] : [];
-  });
-  return { ...form, editableSections: [...editableSections(form.schema, steps, at)], filledBy: Object.fromEntries(filledBy) };
+/** `form` as it is filled in at `step`: the sections editable there. */
+function formToFillAt(form: FormVersion, { steps }: WorkflowSteps, at: SectionEditContext): FormToFill {
+  return { ...form, editableSections: [...editableSections(form.schema, steps, at)] };
 }
 
 /**
@@ -1093,18 +1082,72 @@ async function actions(trx: Trx, workItemId: string): Promise<Omit<WorkItemActio
   const recommendable = await Promise.all(
     transitions.map((r) => (r.may_recommend ? recommendableOutcomes(trx, workItemId, r.transition_key!) : [])),
   );
+  const arrival = transitions.length > 0 ? await ownArrivalAnswers(trx, workItemId) : {};
   return {
     pickUp: rows.some((r) => r.action === "pick_up"),
     returnToPool: rows.some((r) => r.action === "return_to_pool"),
-    transitions: transitions.map((r, i) => ({
-      key: r.transition_key!,
-      label: r.label!,
-      kind: r.transition_kind!,
-      actionForm: parseActionForm(r.action_form),
-      ...(offered[i]!.length > 0 ? { assignTo: offered[i] } : {}),
-      ...(recommendable[i]!.length > 0 ? { recommendCode: recommendable[i] } : {}),
-    })),
+    transitions: transitions.map((r, i) => {
+      const actionForm = parseActionForm(r.action_form);
+      const prefill = actionForm ? prefilled(actionForm, arrival) : {};
+      return {
+        key: r.transition_key!,
+        label: r.label!,
+        kind: r.transition_kind!,
+        actionForm,
+        ...(offered[i]!.length > 0 ? { assignTo: offered[i] } : {}),
+        ...(recommendable[i]!.length > 0 ? { recommendCode: recommendable[i] } : {}),
+        ...(Object.keys(prefill).length > 0 ? { prefill } : {}),
+      };
+    }),
   };
+}
+
+/**
+ * The Action Form answers of the move that brought the item to its current Step, when
+ * that move was inside the viewer's own Participant (an `internal` event, which only its
+ * own Participant reads, V5): the shared and internal answers of the reply that handed
+ * it to them, such as the Consultant Engineer's verification for the Manager's Code
+ * (workflow-engine.md §5.7, RP-437). Empty when the item arrived from another
+ * Participant, whose answers are never carried over.
+ */
+async function ownArrivalAnswers(trx: Trx, workItemId: string): Promise<Record<string, unknown>> {
+  const { rows } = await sql<{ answers: Record<string, unknown> | null }>`
+    with arrival as (
+      -- The last move the viewer reads. They hold the item, so it moved to their Step:
+      -- by their own Participant (internal), or by another (a Submit, shared).
+      select e.seq, e.transition_id, e.audience_participant_id, e.payload - 'document_number' - 'outcome' as answers
+      from work_item_event e
+      where e.work_item_id = ${workItemId}::uuid and e.type = 'transition' and e.audience = 'internal'
+        and e.seq = (
+          select max(m.seq) from work_item_event m
+          where m.work_item_id = e.work_item_id and m.type in ('transition', 'issue_code') and m.to_step_id is not null
+        )
+    )
+    select coalesce((
+      -- Its internal answers: the event app.take_transition writes for the same Transition
+      -- just before it, after the move before it, internal to the same Participant.
+      select i.payload -> 'answers' from work_item_event i
+      where i.work_item_id = ${workItemId}::uuid and i.type = 'internal_answers'
+        and i.transition_id = a.transition_id
+        and i.audience = 'internal' and i.audience_participant_id = a.audience_participant_id
+        and i.seq < a.seq
+        and i.seq > coalesce((
+          select max(p.seq) from work_item_event p
+          where p.work_item_id = i.work_item_id and p.type in ('transition', 'issue_code') and p.seq < a.seq
+        ), 0)
+    ), '{}'::jsonb) || a.answers as answers
+    from arrival a
+  `.execute(trx);
+  return rows[0]?.answers ?? {};
+}
+
+/** `answers`' values for the answer fields `actionForm` asks, by key. */
+function prefilled(actionForm: FormSchema, answers: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(
+    answerFields(actionForm)
+      .filter((f) => f.key in answers)
+      .map((f) => [f.key, answers[f.key]]),
+  );
 }
 
 /**
@@ -1424,9 +1467,12 @@ export function getWorkItemHistory(db: Db, memberId: string, workItemId: string)
       changes: { field: string; old: unknown; new: unknown }[] | null;
       handover: WorkItemHistory["events"][number]["handover"];
       answers: Record<string, unknown> | null;
+      /** The Action Form the answers were given in (its Transition's, as its Workflow Version pinned it; read project-wide like the Workflow, V20), so the page labels them. */
+      action_form: unknown;
     }>`select * from app.work_item_history(${workItemId}::uuid)`.execute(trx);
     return {
       events: rows.map((r) => ({
+        ...(r.answers ? { answersForm: parseActionForm(r.action_form ?? null) } : {}),
         seq: r.seq,
         type: r.type,
         at: r.created_at.toISOString(),

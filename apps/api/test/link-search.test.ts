@@ -67,7 +67,6 @@ beforeAll(async () => {
   item.c1Submitted = await submitted(tower, c1Engineer, c1Pm, "Cable trays, submitted");
   item.c1Approved = await submitted(tower, c1Engineer, c1Pm, "Cable trays, approved");
   await ok(k1Manager.post(`/v1/work-items/${item.c1Approved}/pick-up`));
-  await verified(k1Manager, item.c1Approved);
   await take(k1Manager, item.c1Approved, "approve_a");
   item.c1Mechanical = await submitted(tower, c1Engineer, c1Pm, "Cable trays, mechanical", tower.mechanical);
   item.c2Submitted = await submitted(tower, c2Engineer, c2Pm, "Cable trays, second contractor");
@@ -157,9 +156,3 @@ describe("Link search (scenario 79)", () => {
   });
 });
 
-/** The Consultant's verification (MAR Form Version 4, RP-306), saved by the Code's signer before the Code. */
-async function verified(by: Caller, id: string) {
-  const answers = (await by.get(`/v1/work-items/${id}`)).json().answers as Record<string, unknown>;
-  const saved = await by.request("PUT", `/v1/work-items/${id}/answers`, { answers: { ...answers, sample_checked: true, matches_specification: true } });
-  expect(saved.statusCode, saved.body).toBe(204);
-}

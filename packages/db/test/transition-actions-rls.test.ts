@@ -294,22 +294,21 @@ describe("set and copy", () => {
     expect(await answers(c1Pm, id)).toMatchObject({ model: "Model X", reference: "Model X", sent_on: riyadhToday() });
   });
 
-  it("writes K1's own Review at its Step, recorded inside K1 and read by C1 as it arrived until the Code (RP-431-1)", async () => {
+  it("writes K1's own Review in its reply, internal to K1, and the Remarks it copies into the Code's, read by C1 from the Code (RP-431-1)", async () => {
     const id = await submitted("Reviewed");
     expect(await take(k1.member, id, "send_to_manager")).toBe("applied");
-    expect(await answers(k1Manager, id)).toMatchObject({ verdict: "Checked", reviewed_on: riyadhToday() });
-    // C1 reads the Review as it arrived: empty, and no change on its record.
-    const c1Reads = await answers(c1Pm, id);
-    expect(c1Reads).not.toHaveProperty("verdict");
-    expect(c1Reads).not.toHaveProperty("reviewed_on");
+    // The Review is K1's reply (ADR 0019): in its Send to Manager, internal to K1; the Form is untouched.
+    const reply = (await events(k1Manager, id)).filter((e) => e.type === "transition").at(-1)!;
+    expect(reply.payload).toMatchObject({ verdict: "Checked", reviewed_on: riyadhToday() });
+    expect((await events(c1Pm, id)).filter((e) => e.type === "transition").map((e) => e.payload)).not.toContainEqual(expect.objectContaining({ verdict: "Checked" }));
+    expect(await answers(k1Manager, id)).not.toHaveProperty("verdict");
     expect((await events(c1Pm, id)).map((e) => e.type)).not.toContain("answers_changed");
-    const k1Changes = (await events(k1Manager, id)).filter((e) => e.type === "answers_changed");
-    expect(k1Changes.flatMap((e) => (e.payload.changes as { field: string }[]).map((c) => c.field)).sort()).toEqual(["reviewed_on", "verdict"]);
 
-    // The Code: the Remarks copied into the Reviewer's note, and everyone reads the Review.
+    // The Code: the Remarks copied into the Reviewer's note, both shared with it.
     expect(await pickUp(k1Manager, id)).toBe("picked_up");
     expect(await take(k1Manager, id, "approve_a", { answers: { remarks: "Fine as built." } })).toBe("applied");
-    expect(await answers(c1Pm, id)).toMatchObject({ verdict: "Checked", reviewer_note: "Fine as built." });
+    const code = (await events(c1Pm, id)).at(-1)!;
+    expect(code).toMatchObject({ type: "issue_code", payload: { remarks: "Fine as built.", reviewer_note: "Fine as built." } });
   });
 });
 
