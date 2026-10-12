@@ -11,17 +11,41 @@ import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 // drift on main is never 25% slower than main, so only a fixed budget sees it.
 //
 // Seam 1 runs as shards (RP-557); their reports become one first, whose total
-// is the longest shard's span:
+// is the longest shard's span. Each report's shard number k comes from its
+// name, `...-<k>.json`, so a shard with no report shows as missing and never
+// relabels the rest:
 //
-//   node scripts/test-timing.ts --merge seam1-timing.json seam1-timing-1.json ...
+//   node scripts/test-timing.ts --merge seam1-timing.json --of 4 seam1-timing-1.json ...
 //
-// Timing is a notice, never a failure: this script always exits 0.
+// Timing is a notice, never a failure: from the command line this script always
+// exits 0. Misuse (a missing report path, `--merge` without `--of <n>` or with a
+// report name lacking a shard number from 1 to n, a `--budget` that is not
+// minutes above 0) and an unreadable report make `run` throw; the command line
+// prints that as a `::warning` instead of failing the job.
 
-/** The part of vitest's JSON report used here. */
+/** The part of vitest's JSON report used here; the other fields are kept as they are. */
 export interface VitestReport {
   testResults: { name: string; startTime: number; endTime: number }[];
-  /** Set on a report merged from shards (RP-557): each shard's first start and last end. */
-  shards?: { startTime: number; endTime: number }[];
+  success?: boolean;
+  [field: string]: unknown;
+}
+
+/** One shard's first start and last end. */
+export interface ShardSpan {
+  shard: number;
+  startTime: number;
+  endTime: number;
+}
+
+/**
+ * A report merged from shards (RP-557): vitest's top-level shape, plus `shards`
+ * and `shardCount`, which vitest never writes.
+ */
+export interface MergedReport extends VitestReport {
+  /** Each shard that left a report, by its real shard number. */
+  shards: ShardSpan[];
+  /** How many shards were expected: a number from 1 to this with no span had no report. */
+  shardCount: number;
 }
 
 export interface Timing {
@@ -31,8 +55,8 @@ export interface Timing {
    */
   totalMs: number;
   files: { file: string; ms: number }[];
-  /** Each shard's span, in shard order, for a merged report. */
-  shardsMs?: number[];
+  /** Every expected shard of a merged report, in shard order; `ms` is unset for one with no report. */
+  shards?: { shard: number; ms?: number }[];
 }
 
 /** A slowdown above this share of main's total time gets a notice. */
@@ -51,25 +75,56 @@ function spanOf(results: { startTime: number; endTime: number }[]): { startTime:
   return { startTime: Math.min(...results.map((r) => r.startTime)), endTime: Math.max(...results.map((r) => r.endTime)) };
 }
 
+function isMerged(report: VitestReport): report is MergedReport {
+  return Array.isArray(report.shards) && typeof report.shardCount === "number";
+}
+
 export function timingOf(report: VitestReport): Timing {
   const files = report.testResults.map((r) => ({ file: relativeFile(r.name), ms: Math.max(0, r.endTime - r.startTime) }));
-  if (report.shards) {
-    const shardsMs = report.shards.map((s) => Math.max(0, s.endTime - s.startTime));
-    return { totalMs: Math.max(0, ...shardsMs), files, shardsMs };
+  if (isMerged(report)) {
+    const spans = new Map(report.shards.map((s) => [s.shard, Math.max(0, s.endTime - s.startTime)]));
+    const shards = Array.from({ length: report.shardCount }, (_, i) => {
+      const ms = spans.get(i + 1);
+      return ms === undefined ? { shard: i + 1 } : { shard: i + 1, ms };
+    });
+    return { totalMs: Math.max(0, ...spans.values()), files, shards };
   }
   const { startTime, endTime } = spanOf(report.testResults);
   return { totalMs: Math.max(0, endTime - startTime), files };
 }
 
 /**
- * One report from several shards' reports (RP-557): every file of each, and
- * each shard's span, since shards run side by side on separate runners.
+ * One report from several shards' reports (RP-557), in vitest's top-level
+ * shape: every file of each, the `num*` counts summed, `success` only if every
+ * shard's is, other fields from the first; plus each shard's span, since shards
+ * run side by side on separate runners.
  */
-export function mergeReports(reports: VitestReport[]): VitestReport {
+export function mergeReports(shards: { shard: number; report: VitestReport }[], shardCount: number): MergedReport {
+  const ordered = [...shards].sort((a, b) => a.shard - b.shard);
+  const reports = ordered.map((s) => s.report);
+  const counts: Record<string, number> = {};
+  for (const report of reports) {
+    for (const [field, value] of Object.entries(report)) {
+      if (field.startsWith("num") && typeof value === "number") counts[field] = (counts[field] ?? 0) + value;
+    }
+  }
   return {
+    ...reports[0],
+    ...counts,
+    success: reports.length > 0 && reports.every((r) => r.success === true),
     testResults: reports.flatMap((r) => r.testResults),
-    shards: reports.map((r) => spanOf(r.testResults)),
+    shards: ordered.map(({ shard, report }) => ({ shard, ...spanOf(report.testResults) })),
+    shardCount,
   };
+}
+
+/** The shard number k in a shard report's name, `...-<k>.json`. */
+function shardNumberOf(path: string, shardCount: number): number {
+  const match = /-(\d+)\.json$/.exec(path);
+  if (!match) throw new Error(`no shard number in "${path}": name each shard report ...-<k>.json`);
+  const shard = Number(match[1]);
+  if (shard < 1 || shard > shardCount) throw new Error(`shard number ${shard} in "${path}" is not from 1 to ${shardCount}`);
+  return shard;
 }
 
 export function formatDuration(ms: number): string {
@@ -115,19 +170,20 @@ export function summarise(title: string, current: Timing, main?: Timing, { top =
     main && main.totalMs > 0
       ? `${formatDuration(current.totalMs)}, main ${formatDuration(main.totalMs)} (${formatChange(current.totalMs, main.totalMs)})`
       : `${formatDuration(current.totalMs)} (no run on main to compare with yet)`;
-  const lines = [`### ${title}: test time`, ""];
+  const lines: string[] = [];
 
+  // The very first line of the job summary, the same text as the annotation (RP-558).
   let warning: string | undefined;
   if (budgetMinutes !== undefined && current.totalMs > budgetMinutes * 60_000) {
-    const three = bySlowest.slice(0, 3).map(({ file, ms }) => `${file} (${formatDuration(ms)})`);
-    // eslint-disable-next-line rabaed/no-avoid-terms -- test files, in a CI annotation.
-    warning = `${title} took ${formatDuration(current.totalMs)}, over its budget of ${budgetMinutes} min. Slowest files: ${three.join(", ")}.`;
-    lines.push(`> **Over budget:** ${warning}`, "");
+    const slowestThree = bySlowest.slice(0, 3).map(({ file, ms }) => `${file} ${formatDuration(ms)}`);
+    warning = `${title} took ${formatDuration(current.totalMs)}, over its budget of ${budgetMinutes} min. Slowest: ${slowestThree.join(", ")}.`;
+    lines.push(warning, "");
   }
-  lines.push(`Total: **${total}**`);
-  if (current.shardsMs) {
-    const n = current.shardsMs.length;
-    lines.push("", `Shards: ${current.shardsMs.map((ms, i) => `${i + 1}/${n} ${formatDuration(ms)}`).join(", ")}`);
+  lines.push(`### ${title}: test time`, "", `Total: **${total}**`);
+  if (current.shards) {
+    const n = current.shards.length;
+    const each = current.shards.map(({ shard, ms }) => `${shard}/${n} ${ms === undefined ? "missing" : formatDuration(ms)}`);
+    lines.push("", `Shards: ${each.join(", ")}`);
   }
 
   let notice: string | undefined;
@@ -157,9 +213,12 @@ export function run(argv: string[], env: NodeJS.ProcessEnv = process.env): void 
     return at === -1 ? undefined : argv[at + 1];
   };
   if (argv[0] === "--merge") {
-    const [out, ...shards] = argv.slice(1);
-    if (!out || shards.length === 0) throw new Error("usage: test-timing.ts --merge <out.json> <shard.json>...");
-    const merged = mergeReports(shards.map((path) => JSON.parse(readFileSync(path, "utf8")) as VitestReport));
+    const usage = "usage: test-timing.ts --merge <out.json> --of <shards> <name-<k>.json>...";
+    const [out, of, count, ...paths] = argv.slice(1);
+    const shardCount = Number(count);
+    if (!out || of !== "--of" || !Number.isInteger(shardCount) || shardCount < 1 || paths.length === 0) throw new Error(usage);
+    const shards = paths.map((path) => ({ shard: shardNumberOf(path, shardCount), report: JSON.parse(readFileSync(path, "utf8")) as VitestReport }));
+    const merged = mergeReports(shards, shardCount);
     writeFileSync(out, JSON.stringify(merged));
     return;
   }

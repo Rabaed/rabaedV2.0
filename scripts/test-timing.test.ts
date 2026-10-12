@@ -1,7 +1,7 @@
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   formatChange,
   formatDuration,
@@ -50,18 +50,36 @@ describe("mergeReports (one report from seam 1's shards, RP-557)", () => {
   // Shard 1 spans 10s, shard 2 spans 25s; shard 2 started later, on another runner.
   const shard1 = report(["apps/a.test.ts", 1_000, 5_000], ["apps/b.test.ts", 5_000, 11_000]);
   const shard2 = report(["apps/c.test.ts", 100_000, 125_000]);
+  const shard4 = report(["apps/d.test.ts", 0, 3_000]);
 
   it("keeps every file of each shard, and the total is the longest shard's span", () => {
-    const t = timingOf(mergeReports([shard1, shard2]));
+    const t = timingOf(mergeReports([{ shard: 1, report: shard1 }, { shard: 2, report: shard2 }], 2));
     expect(t.files.map((f) => f.file)).toEqual(["apps/a.test.ts", "apps/b.test.ts", "apps/c.test.ts"]);
     expect(t.totalMs).toBe(25_000);
-    expect(t.shardsMs).toEqual([10_000, 25_000]);
+    expect(t.shards).toEqual([
+      { shard: 1, ms: 10_000 },
+      { shard: 2, ms: 25_000 },
+    ]);
   });
 
-  it("lists each shard's span in the summary", () => {
-    const { markdown } = summarise("seam 1", timingOf(mergeReports([shard1, shard2])), undefined);
+  it("lists each shard's span in the summary, by its real shard number", () => {
+    const { markdown } = summarise("seam 1", timingOf(mergeReports([{ shard: 1, report: shard1 }, { shard: 2, report: shard2 }], 2)), undefined);
     expect(markdown).toContain("Total: **25.0s");
     expect(markdown).toContain("Shards: 1/2 10.0s, 2/2 25.0s");
+  });
+
+  it("lists an expected shard with no report as missing, without relabelling the others", () => {
+    const merged = mergeReports([{ shard: 4, report: shard4 }, { shard: 1, report: shard1 }, { shard: 2, report: shard2 }], 4);
+    expect(summarise("seam 1", timingOf(merged), undefined).markdown).toContain("Shards: 1/4 10.0s, 2/4 25.0s, 3/4 missing, 4/4 3.0s");
+  });
+
+  it("keeps vitest's top-level shape: counts summed, success only if every shard's is, other fields from the first", () => {
+    const a = { ...shard1, numTotalTests: 5, numFailedTests: 0, numPassedTestSuites: 2, success: true, startTime: 1_000, snapshot: { added: 0 } };
+    const b = { ...shard2, numTotalTests: 3, numFailedTests: 1, numPassedTestSuites: 1, success: false, startTime: 100_000, snapshot: { added: 9 } };
+    const merged = mergeReports([{ shard: 1, report: a }, { shard: 2, report: b }], 2);
+    expect(merged).toMatchObject({ numTotalTests: 8, numFailedTests: 1, numPassedTestSuites: 3, success: false, startTime: 1_000, snapshot: { added: 0 } });
+    expect(merged.testResults).toHaveLength(3);
+    expect(mergeReports([{ shard: 1, report: a }, { shard: 2, report: { ...b, success: true } }], 2).success).toBe(true);
   });
 
   it("gives no shard line for a report from one job", () => {
@@ -120,10 +138,10 @@ describe("summarise with a budget (RP-558)", () => {
     report(["apps/a.test.ts", 0, 240_000], ["apps/b.test.ts", 240_000, 420_000], ["apps/c.test.ts", 420_000, 540_000], ["apps/d.test.ts", 540_000, 600_000]),
   );
 
-  it("over the budget, warns with the total, the budget and the three slowest files, at the top of the summary", () => {
+  it("over the budget, warns with the total, the budget and the three slowest, as the summary's very first line", () => {
     const { markdown, warning } = summarise("seam 1", tenMinutes, undefined, { budgetMinutes: 8 });
-    expect(warning).toBe("seam 1 took 10m00s, over its budget of 8 min. Slowest files: apps/a.test.ts (4m00s), apps/b.test.ts (3m00s), apps/c.test.ts (2m00s).");
-    expect(markdown.split("\n").slice(0, 3)).toEqual(["### seam 1: test time", "", `> **Over budget:** ${warning}`]);
+    expect(warning).toBe("seam 1 took 10m00s, over its budget of 8 min. Slowest: apps/a.test.ts 4m00s, apps/b.test.ts 3m00s, apps/c.test.ts 2m00s.");
+    expect(markdown.split("\n").slice(0, 3)).toEqual([warning, "", "### seam 1: test time"]);
   });
 
   it("under the budget, or with no budget, gives no warning", () => {
@@ -160,27 +178,37 @@ describe("run", () => {
   it("prints an over-budget warning with --budget, and still does not fail", () => {
     const summary = join(dir, "summary.md");
     const current = write("cur.json", report(["apps/a.test.ts", 0, 200_000]));
-    const lines: string[] = [];
-    const log = console.log;
-    console.log = (line: string) => lines.push(line);
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
     try {
       run([current, "--title", "seam 2", "--budget", "3"], { GITHUB_STEP_SUMMARY: summary });
       run([current, "--title", "seam 2"], { GITHUB_STEP_SUMMARY: summary });
+      const message = "seam 2 took 3m20s, over its budget of 3 min. Slowest: apps/a.test.ts 3m20s.";
+      expect(log.mock.calls).toEqual([[`::warning title=seam 2 over budget::${message}`]]);
+      expect(readFileSync(summary, "utf8").startsWith(`${message}\n`)).toBe(true);
     } finally {
-      console.log = log;
+      log.mockRestore();
     }
-    expect(lines).toEqual(["::warning title=seam 2 over budget::seam 2 took 3m20s, over its budget of 3 min. Slowest files: apps/a.test.ts (3m20s)."]);
-    expect(readFileSync(summary, "utf8")).toContain("> **Over budget:** seam 2 took 3m20s");
   });
 
-  it("merges shard reports into one file with --merge", () => {
+  it("merges shard reports into one file with --merge, each labelled by the shard number in its name", () => {
     const a = write("seam1-timing-1.json", report(["apps/a.test.ts", 0, 4_000]));
-    const b = write("seam1-timing-2.json", report(["apps/b.test.ts", 50_000, 57_000]));
+    const c = write("seam1-timing-3.json", report(["apps/b.test.ts", 50_000, 57_000]));
     const out = join(dir, "seam1-timing.json");
-    run(["--merge", out, a, b]);
+    run(["--merge", out, "--of", "4", c, a]);
     const t = timingOf(JSON.parse(readFileSync(out, "utf8")) as VitestReport);
     expect(t.files.map((f) => f.file)).toEqual(["apps/a.test.ts", "apps/b.test.ts"]);
     expect(t.totalMs).toBe(7_000);
+    expect(t.shards).toEqual([{ shard: 1, ms: 4_000 }, { shard: 2 }, { shard: 3, ms: 7_000 }, { shard: 4 }]);
+  });
+
+  it("throws on misuse of --merge or --budget, for the command line to turn into a warning", () => {
+    const a = write("seam1-timing-1.json", report(["apps/a.test.ts", 0, 4_000]));
+    const unnumbered = write("timing.json", report(["apps/a.test.ts", 0, 4_000]));
+    const out = join(dir, "out.json");
+    expect(() => run(["--merge", out, a])).toThrow(/--of/);
+    expect(() => run(["--merge", out, "--of", "4", unnumbered])).toThrow(/shard number/);
+    expect(() => run(["--merge", out, "--of", "4", write("seam1-timing-5.json", report())])).toThrow(/1 to 4/);
+    expect(() => run([a, "--budget", "soon"])).toThrow(/--budget/);
   });
 
   it("still summarises when main's timing is broken", () => {

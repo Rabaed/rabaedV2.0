@@ -215,7 +215,8 @@ jobs:
   seam1-result:
     name: seam 1 (API as a Member)
     needs: seam1
-    if: always()
+    # Not always(): a superseded, cancelled run reports nothing, not a shard failure.
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     permissions: { contents: read, actions: read } # actions: finds main's timing report (RP-321)
     steps:
@@ -229,21 +230,23 @@ jobs:
             echo "::error::A seam 1 shard did not pass ($RESULT): see the seam 1 (shard k/4) jobs."
             exit 1
           fi
-      - if: always()
+      - if: ${{ !cancelled() }}
         uses: actions/checkout@v7
         with: { persist-credentials: false }
-      - if: always()
+      - if: ${{ !cancelled() }}
         uses: actions/setup-node@v7
         with: { node-version: 24 }
-      - if: always()
+      - if: ${{ !cancelled() }}
         uses: actions/download-artifact@v8
         with:
           pattern: seam1-timing-shard-*
           merge-multiple: true
-      # One report in main's shape; its total is the slowest shard's span.
-      - if: always()
-        run: node scripts/test-timing.ts --merge seam1-timing.json seam1-timing-*.json
-      - if: always()
+      # One report in vitest's shape; its total is the slowest shard's span, and
+      # each shard keeps its number from its file name. With no shard report
+      # (every shard died early) the timing steps skip, leaving the one real error.
+      - if: ${{ !cancelled() && hashFiles('seam1-timing-*.json') != '' }}
+        run: node scripts/test-timing.ts --merge seam1-timing.json --of 4 seam1-timing-*.json
+      - if: ${{ !cancelled() && hashFiles('seam1-timing-*.json') != '' }}
         uses: ./.github/actions/test-timing
         # about 1.3 x the sharded total measured on PR #189 (RP-558)
         with: { title: "seam 1", report: seam1-timing.json, artifact: seam1-timing, budget: 8 }
