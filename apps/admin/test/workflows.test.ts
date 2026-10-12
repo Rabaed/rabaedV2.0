@@ -117,6 +117,25 @@ describe("a Rabaed Default Workflow in Rabaed Admin", () => {
     ]);
   });
 
+  it("keeps the builder's Change Note with the Version it publishes (RP-555), apart from the reason admin_action logs", async () => {
+    const before = (await readLatestPublishedDefinition(adminDb, definitionId))!;
+    const next = renamed(before.definition, "Prepare and check");
+    const published = await engineer.browser.post(`/v1/workflows/${TYPE}/publish`, {
+      definition: next,
+      reason: "Rename the Draft Step again",
+      changeNote: "  The Draft Step checks the submittal before it is sent.  ",
+    });
+    expect(published.statusCode, published.body).toBe(200);
+    const { versionNo } = published.json() as { versionNo: number };
+    expect(versionNo).toBe(before.versionNo + 1);
+    const kept = await sql<{ change_note: string }>`
+      select n.change_note from workflow_change_note n join workflow_version v on v.id = n.workflow_version_id
+      where v.workflow_definition_id = ${definitionId} and v.version_no = ${versionNo}
+    `.execute(migrator);
+    expect(kept.rows).toEqual([{ change_note: "The Draft Step checks the submittal before it is sent." }]);
+    expect((await actionsOn(definitionId)).at(-1)).toEqual({ engineer_id: engineer.id, action: "publish_workflow", reason: "Rename the Draft Step again" });
+  });
+
   it("is refused with an error, a definition that isn't one, or no reason; nothing is published or logged", async () => {
     const before = (await readLatestPublishedDefinition(adminDb, definitionId))!;
     const withError = await engineer.browser.post(`/v1/workflows/${TYPE}/publish`, { definition: broken(before.definition), reason: "Try it" });

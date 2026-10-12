@@ -233,6 +233,7 @@ function Canvas({
     setEdges(drawn.edges);
   }
   const [connecting, setConnecting] = useState(false);
+  const boxing = useRef(false);
   const [dropping, setDropping] = useState(false);
 
   useEffect(() => {
@@ -349,19 +350,35 @@ function Canvas({
         // The model mirrors itself for Arabic; React Flow always lays out left to right.
         nodes={nodes}
         edges={edges}
-        onNodesChange={(changes) => setNodes((ns) => applyNodeChanges(changes, ns))}
-        onEdgesChange={(changes) => setEdges((es) => applyEdgeChanges(changes, es))}
-        onSelectionChange={
+        onNodesChange={(changes) => {
+          setNodes((ns) => applyNodeChanges(changes, ns));
+          // A Step picked by the author (a click, or Enter on a focused Step); a box selection reports when it ends.
+          const picked = boxing.current ? undefined : changes.find((c) => c.type === "select" && c.selected && !c.id.startsWith("band:"));
+          if (picked && "id" in picked && !chosen.has(picked.id)) onSelect?.({ kind: "step", key: picked.id });
+        }}
+        onEdgesChange={(changes) => {
+          setEdges((es) => applyEdgeChanges(changes, es));
+          const picked = boxing.current ? undefined : changes.find((c) => c.type === "select" && c.selected);
+          if (picked && "id" in picked && !chosen.has(picked.id)) onSelect?.({ kind: "transition", key: picked.id });
+        }}
+        onSelectionStart={
           edit
-            ? ({ nodes: picked, edges: pickedEdges }) => {
-                // What the author picked (a click, Enter on a focused Step, or a box); a selection the props made sends nothing back.
+            ? () => {
+                boxing.current = true;
+              }
+            : undefined
+        }
+        onSelectionEnd={
+          edit
+            ? () => {
+                // Shift-drag: everything inside the box, selected together.
+                boxing.current = false;
                 const items: CanvasSelection[] = [
-                  ...picked.filter((n) => n.type === "step" || n.type === "end").map((n) => ({ kind: "step" as const, key: n.id })),
-                  ...pickedEdges.map((e) => ({ kind: "transition" as const, key: e.id })),
+                  ...flow.getNodes().filter((n) => n.selected && (n.type === "step" || n.type === "end")).map((n) => ({ kind: "step" as const, key: n.id })),
+                  ...flow.getEdges().filter((e) => e.selected).map((e) => ({ kind: "transition" as const, key: e.id })),
                 ];
-                if (items.length === 0 || (items.length === chosen.size && items.every((i) => chosen.has(i.key)))) return;
                 if (items.length === 1) onSelect?.(items[0]!);
-                else onSelectMany?.(items);
+                else if (items.length > 1) onSelectMany?.(items);
               }
             : undefined
         }
@@ -805,7 +822,8 @@ function TransitionEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition
     "wf-label nodrag nopan absolute inline-flex h-[22px] max-w-[220px] items-center gap-[3px] rounded-full bg-surface px-2 text-[11px] font-semibold whitespace-nowrap text-text",
     "shadow-[inset_0_0_0_1.5px_var(--ec)] [&_.wf-label-icon]:text-[var(--ec)]",
     // Selected: filled in the arrow's colour, as the reference's and the owner chose (RP-555).
-    selected && "!bg-[var(--ec)] !text-on-primary [&_.wf-label-icon]:!text-on-primary",
+    // A shade darker than the arrow, so its white text keeps its contrast (WCAG AA).
+    selected && "!bg-[color-mix(in_srgb,var(--ec),black_45%)] !text-on-primary [&_.wf-label-icon]:!text-on-primary",
     next && "!bg-primary !text-on-primary !shadow-none [&_.wf-label-icon]:!text-on-primary",
     faded && "!text-muted shadow-[inset_0_0_0_1.5px_var(--border)] [&_.wf-label-icon]:!text-faint",
     mark === "removed" && "line-through",

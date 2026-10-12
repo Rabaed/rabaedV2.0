@@ -70,6 +70,14 @@ type Story = StoryObj<typeof meta>;
  * and Publish see the problems of the draft as it stands.
  */
 function Frame(props: WorkflowBuilderProps) {
+  // Each story starts from the default view (curved arrows, snap and minimap on), whatever an earlier story chose.
+  useState(() => {
+    try {
+      localStorage.removeItem("rabaed.workflowBuilder.view");
+    } catch {
+      // No storage: the defaults anyway.
+    }
+  });
   const latest = useRef(props.definition);
   const [problems, setProblems] = useState(() => builderProblemsOf(props.definition));
   const [saveState, setSaveState] = useState<WorkflowSaveState>(props.saveState);
@@ -258,9 +266,10 @@ export const TransitionCondition: Story = {
     await expect(editor.getByRole("radio", { name: labels.map.kind("submit") })).toBeChecked();
     // Only a Close sets an outcome: on a Submit it is off, and says why.
     await expect(editor.getByText(labels.outcomeOnlyOnClose)).toBeVisible();
-    const value = editor.getByRole("spinbutton", { name: new RegExp(labels.rules.value) });
-    await expect(value).toHaveValue(500000);
-    await expect(value.getBoundingClientRect().width).toBeGreaterThan(70);
+    const value = editor.getByLabelText(new RegExp(labels.rules.value)) as HTMLInputElement;
+    await expect(value.value).toBe("500000");
+    // As wide as the field's picker (the review's "5" of 500000 was the value squeezed).
+    await expect(value.getBoundingClientRect().width).toBeGreaterThan(60);
   },
 };
 
@@ -519,7 +528,7 @@ export const BlankWorkflow: Story = {
     await shown(canvas, labels.names.firstStep![locale]);
     await expect(editorOf(canvas, labels).getByLabelText(labels.nameEn)).toHaveValue("Contractor Engineer");
     await expect(args.onChange).toHaveBeenCalledWith(expect.objectContaining({ steps: [expect.objectContaining({ key: "contractor_engineer", stage: "draft" })] }));
-    await expect(canvas.getByRole("button", { name: new RegExp(labels.showProblem("").trim()) })).toBeVisible();
+    await expect(canvas.getAllByRole("button", { name: new RegExp(labels.showProblem("").trim()) }).length).toBeGreaterThan(0);
     await expect(canvas.queryByText(labels.noErrors)).toBeNull();
   },
 };

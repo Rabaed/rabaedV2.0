@@ -68,6 +68,37 @@ describe("the change note", () => {
   });
 });
 
+describe("on an exception's Workflow", () => {
+  // As its name (scenario RP-427-4): an exception's Change Note never names the Participant it is for (V15).
+  const C3_LEGAL_NAME = { en: "Najd Facades Contracting", ar: "مقاولات واجهات نجد" };
+  let exception = "";
+  beforeAll(async () => {
+    const c3Company = await api.onboardCompany({ legalName: C3_LEGAL_NAME });
+    const c3: Company = { company: c3Company, caller: await api.acceptInvitation(c3Company.invitationToken) };
+    const c3Participant = await api.addParticipant(c1.caller, at.projectId, c3.company, "contractor");
+    const mar = await sql<{ workflow_definition_id: string }>`
+      select workflow_definition_id from work_item_type where owner_kind = 'rabaed' and code = 'MAR'
+    `.execute(migrator);
+    const res = await c1.caller.post(`/v1/workflows/${mar.rows[0]!.workflow_definition_id}/duplicate`, { projectId: at.projectId, name: { en: "MARs, facade route", ar: "مسار الواجهات" } });
+    expect(res.statusCode, res.body).toBe(201);
+    exception = res.json().id;
+    await ok(c1.caller.post(`/v1/workflows/${exception}/publish`, { changeNote: "First version of the facade route." }), 200);
+    await ok(c1.caller.request("PUT", `/v1/projects/${at.projectId}/workflow-bindings`, { workItemTypeId: marTypeId, raisingParticipantId: c3Participant, workflowId: exception }));
+  });
+
+  it("is refused when it names the Participant the exception is for, and nothing is published", async () => {
+    const definition = (await ok(c1.caller.get(`/v1/workflows/${exception}/builder`), 200)).json().workflow.published.definition;
+    await ok(c1.caller.request("PUT", `/v1/workflows/${exception}/draft`, { definition }), 200);
+    const refused = await c1.caller.post(`/v1/workflows/${exception}/publish`, { changeNote: `Shorter route for ${C3_LEGAL_NAME.en}.` });
+    expect(refused.statusCode).toBe(422);
+    expect(refused.json()).toEqual({ error: "change_note_names_participant" });
+    expect((await ok(c1.caller.get(`/v1/workflows/${exception}/builder`), 200)).json().workflow.publishedVersions).toEqual([1]);
+    // Said without naming them, it publishes.
+    await ok(c1.caller.post(`/v1/workflows/${exception}/publish`, { changeNote: "Shorter route for facade submittals." }), 200);
+    expect((await ok(c1.caller.get(`/v1/workflows/${exception}/builder`), 200)).json().workflow.publishedVersions).toEqual([1, 2]);
+  });
+});
+
 describe("items that keep their Version", () => {
   // Scenario RP-555-1.
   it("are counted as each reader sees them: the Project Admin counts no Draft it doesn't see", async () => {
