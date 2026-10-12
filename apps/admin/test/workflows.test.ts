@@ -5,7 +5,7 @@
 // problem by problem, and nothing is published or logged.
 import { randomInt, randomUUID } from "node:crypto";
 import { createDb, readLatestPublishedDefinition, withMember } from "@rabaed/db";
-import { addTestWorkflow, testDatabaseUrls } from "@rabaed/db/test-support";
+import { addTestScreen, addTestWorkflow, testDatabaseUrls } from "@rabaed/db/test-support";
 import type { WorkflowDefinition } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -142,6 +142,29 @@ describe("a Rabaed Default Workflow in Rabaed Admin", () => {
     const published = await publishRabaedWorkflowAs(migrator, { engineerEmail: email.toUpperCase(), typeCode: TYPE, definition: next, reason: "Publish from the CLI" });
     expect(published).toMatchObject({ ok: true, versionNo: before.versionNo + 1 });
     expect((await actionsOn(definitionId)).at(-1)).toEqual({ engineer_id: engineer.id, action: "publish_workflow", reason: "Publish from the CLI" });
+  });
+
+  it("shows a Rabaed Default Screen: Rabaed Admin reads the Screens, checks and pins it (RP-525 review)", async () => {
+    const key = `admin_reply_${randomUUID().slice(0, 8).replaceAll("-", "")}`;
+    const reply = { sections: [{ key: "reply", title: { en: "Reply", ar: "الرد" }, fields: [{ key: "remarks", type: "textarea", label: { en: "Remarks", ar: "ملاحظات" } }] }] };
+    const screenVersionId = await addTestScreen((text) => sql.raw(text).execute(migrator), key, reply, []);
+    const before = (await readLatestPublishedDefinition(adminDb, definitionId))!;
+    const showing = (screen: string): WorkflowDefinition => ({
+      ...before.definition,
+      transitions: before.definition.transitions.map((t) => (t.key === "approve_a" ? { ...t, actionForm: null, screen } : t)),
+    });
+    const missing = await engineer.browser.post(`/v1/workflows/${TYPE}/validate`, { definition: showing(`${key}_missing`) });
+    expect(missing.json().problems).toContainEqual(expect.objectContaining({ code: "screen_not_found", transition: "approve_a" }));
+    expect((await engineer.browser.post(`/v1/workflows/${TYPE}/validate`, { definition: showing(key) })).json()).toEqual({ issues: [], problems: [] });
+
+    const published = await engineer.browser.post(`/v1/workflows/${TYPE}/publish`, { definition: showing(key), reason: "Show the reply Screen" });
+    expect(published.statusCode, published.body).toBe(200);
+    const pinned = await sql<{ screen_version_id: string | null }>`
+      select t.screen_version_id from workflow_transition t
+      join workflow_version v on v.id = t.workflow_version_id
+      where v.workflow_definition_id = ${definitionId}::uuid and v.version_no = ${before.versionNo + 1} and t.key = 'approve_a'
+    `.execute(adminDb);
+    expect(pinned.rows).toEqual([{ screen_version_id: screenVersionId }]);
   });
 
   it("is reached by a signed-in Rabaed Engineer only", async () => {

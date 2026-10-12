@@ -1,0 +1,65 @@
+[
+  {
+    "name": "the Draft Step, by default",
+    "steps": [
+      { "key": "draft", "stage": "draft", "actor": { "role": "contractor", "permission": "create" } },
+      { "key": "internal_review", "stage": "internal_review", "actor": { "role": "contractor", "permission": "review" } }
+    ],
+    "step": "draft",
+    "editsForm": true
+  },
+  {
+    "name": "not the raiser's internal reviewer, by default (another Function Permission)",
+    "steps": [
+      { "key": "draft", "stage": "draft", "actor": { "role": "contractor", "permission": "create" } },
+      { "key": "internal_review", "stage": "internal_review", "actor": { "role": "contractor", "permission": "review" } }
+    ],
+    "step": "internal_review",
+    "editsForm": false
+  },
+  {
+    "name": "a raiser's Step held with the Draft Step's Function Permission (the Contractor Engineer Step), by default",
+    "steps": [
+      { "key": "draft", "stage": "draft", "actor": { "role": "contractor", "permission": "create" } },
+      { "key": "contractor_engineer", "stage": "internal_review", "actor": { "role": "contractor", "permission": "create" } }
+    ],
+    "step": "contractor_engineer",
+    "editsForm": true
+  },
+  {
+    "name": "not another Participant's Step with the same Function Permission, by default",
+    "steps": [
+      { "key": "draft", "stage": "draft", "actor": { "role": "contractor", "permission": "create" } },
+      { "key": "consultant_review", "stage": "pending_approval", "actor": { "role": "consultant", "permission": "create" } }
+    ],
+    "step": "consultant_review",
+    "editsForm": false
+  },
+  {
+    "name": "not a terminal Step, which nobody holds",
+    "steps": [
+      { "key": "draft", "stage": "draft", "actor": { "role": "contractor", "permission": "create" } },
+      { "key": "approved", "stage": "approved", "actor": null }
+    ],
+    "step": "approved",
+    "editsForm": false
+  },
+  {
+    "name": "a Step set to edit the Form does, whoever holds it",
+    "steps": [
+      { "key": "draft", "stage": "draft", "actor": { "role": "contractor", "permission": "create" } },
+      { "key": "internal_review", "stage": "internal_review", "actor": { "role": "contractor", "permission": "review" }, "editsForm": true }
+    ],
+    "step": "internal_review",
+    "editsForm": true
+  },
+  {
+    "name": "a Draft Step set not to edit the Form doesn't",
+    "steps": [
+      { "key": "draft", "stage": "draft", "actor": { "role": "contractor", "permission": "create" }, "editsForm": false },
+      { "key": "internal_review", "stage": "internal_review", "actor": { "role": "contractor", "permission": "review" } }
+    ],
+    "step": "draft",
+    "editsForm": false
+  }
+]

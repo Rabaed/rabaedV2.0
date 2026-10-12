@@ -12,12 +12,13 @@ import { sql } from "kysely";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb, withMember, type Db } from "../src/index.ts";
-import { addTestScreen, addTestWorkflow, joinProject, testDatabaseUrls } from "../test-support/index.ts";
+import { addTestScreen, addTestWorkflow, approveBActionForm, joinProject, testDatabaseUrls } from "../test-support/index.ts";
 
 const urls = testDatabaseUrls();
 const digits = (n: number) => Array.from({ length: n }, () => randomInt(10)).join("");
 const email = (who: string) => `${who}-${randomUUID().slice(0, 8)}@rabaed.test`;
 const TYPE = "SCRLS";
+const LEAKY = "SCRLL";
 const label = (en: string) => ({ en, ar: en });
 const codeReply = {
   sections: [
@@ -28,6 +29,16 @@ const codeReply = {
         { key: "remarks", type: "textarea", label: label("Remarks") },
         { key: "verification_note", type: "textarea", label: label("Verification note") },
       ],
+    },
+  ],
+};
+
+/** Code B's reply: its table of items and a verification note, both marked internal (which publishing refuses for the table). */
+const leakyCodeB = {
+  sections: [
+    {
+      ...approveBActionForm.sections[0]!,
+      fields: [...approveBActionForm.sections[0]!.fields, { key: "verification_note", type: "textarea", label: label("Verification note") }],
     },
   ],
 };
@@ -78,17 +89,9 @@ const take = (as: string, id: string, transition: string, answers: object = {}, 
   );
 const pickUp = (as: string, id: string) => outcome(as, sql`select app.pick_up_step(${id}::uuid, now()) as outcome`);
 
-/** The Screens of `ids` `as` reads through the table. */
-const screensSeen = async (as: string, ids: string[]) =>
-  (await call<{ id: string }>(as, sql`select id from screen where id = any(${ids}::uuid[]) order by id`)).map((r) => r.id);
-
-beforeAll(async () => {
-  migrator = new pg.Client({ connectionString: urls.migrator });
-  await migrator.connect();
-  app = createDb(urls.app, { max: 2 });
-  const screenVersion = await addTestScreen((text) => migrator.query(text), `code_reply_${digits(6)}`, codeReply, ["verification_note"]);
-  const workflowId = await addTestWorkflow((text) => migrator.query(text), { screens: { approve_a: screenVersion } });
-  await migrator.query(`
+/** A Rabaed Default Type `code` on Workflow `workflowId`, its Form a Model. */
+const addType = (code: string, workflowId: string) =>
+  migrator.query(`
     do $$
       declare
         v_form uuid;
@@ -99,9 +102,58 @@ beforeAll(async () => {
         values (v_form, 1, 'published', now(), '{"sections": [{"key": "material", "title": {"en": "Material", "ar": "المادة"},
           "fields": [{"key": "model", "type": "text", "label": {"en": "Model", "ar": "الطراز"}}]}]}'::jsonb);
         insert into work_item_type (owner_kind, module_key, code, name, workflow_definition_id, outcome_kind, form_definition_id)
-        values ('rabaed', 'submittals', '${TYPE}', '{"en": "Screens (test)", "ar": "الشاشات"}', '${workflowId}', 'review_code', v_form);
+        values ('rabaed', 'submittals', '${code}', '{"en": "Screens (test)", "ar": "الشاشات"}', '${workflowId}', 'review_code', v_form);
       end
     $$`);
+
+/** C1's item of Type `type`, Submitted and at K1's manager's Code Step. */
+async function atApproval(type: string, model: string): Promise<string> {
+  const [created] = await call<{ outcome: string; work_item_id: string }>(
+    c1.member,
+    sql`select outcome, work_item_id from app.create_work_item(
+      ${projectId}::uuid, ${type}, ${model}, app.latest_form_version(${type}), ${JSON.stringify({ model })}::jsonb,
+      ${electrical}::uuid, ${buildingA}::uuid, now())`,
+  );
+  const id = created!.work_item_id;
+  expect(await take(c1.member, id, "send_for_review")).toBe("applied");
+  expect(await pickUp(c1Pm, id)).toBe("picked_up");
+  expect(await take(c1Pm, id, "submit")).toBe("applied");
+  expect(await pickUp(k1.member, id)).toBe("picked_up");
+  expect(await take(k1.member, id, "send_to_manager")).toBe("applied");
+  expect(await pickUp(k1.ap, id)).toBe("picked_up");
+  return id;
+}
+
+/** The Screens of `ids` `as` reads through the table. */
+const screensSeen = async (as: string, ids: string[]) =>
+  (await call<{ id: string }>(as, sql`select id from screen where id = any(${ids}::uuid[]) order by id`)).map((r) => r.id);
+
+beforeAll(async () => {
+  migrator = new pg.Client({ connectionString: urls.migrator });
+  await migrator.connect();
+  app = createDb(urls.app, { max: 2 });
+  const screenVersion = await addTestScreen((text) => migrator.query(text), `code_reply_${digits(6)}`, codeReply, ["verification_note"]);
+  const workflowId = await addTestWorkflow((text) => migrator.query(text), { screens: { approve_a: screenVersion } });
+  await addType(TYPE, workflowId);
+  // Scenario RP-525-1's Workflow, published past the checks as a Version from before them
+  // could be: Code B's table internal to the Consultant, Code A copying an internal answer
+  // into a shared one.
+  const leakyB = await addTestScreen((text) => migrator.query(text), `leaky_b_${digits(6)}`, leakyCodeB, ["items_to_create", "verification_note"]);
+  const leaky = await addTestScreen((text) => migrator.query(text), `leaky_a_${digits(6)}`, codeReply, ["verification_note"]);
+  const leakyId = await addTestWorkflow((text) => migrator.query(text), { withApproveB: true, screens: { approve_b: leakyB, approve_a: leaky }, publish: false });
+  await migrator.query(`
+    update workflow_transition t set actions = '[{"type": "copy_field", "from": "verification_note", "to": "remarks"}]'::jsonb
+    from workflow_version v where v.id = t.workflow_version_id and v.workflow_definition_id = $1 and t.key = 'approve_a'`, [leakyId]);
+  // And K1 hands the item back to C1's Draft by a forward move, not a Send Back (RP-525 B).
+  await migrator.query(`
+    insert into workflow_transition (workflow_version_id, key, from_step_id, to_step_id, label, kind, permission, sort)
+    select v.id, 'back_to_draft', f.id, d.id, '{"en": "Back to Draft", "ar": "إلى المسودة"}', 'submit', 'review', 11
+    from workflow_version v
+    join workflow_step f on f.workflow_version_id = v.id and f.key = 'consultant_review'
+    join workflow_step d on d.workflow_version_id = v.id and d.key = 'draft'
+    where v.workflow_definition_id = $1`, [leakyId]);
+  await migrator.query("update workflow_version set status = 'published', published_at = now() where workflow_definition_id = $1", [leakyId]);
+  await addType(LEAKY, leakyId);
   const engineer = await one("insert into rabaed_engineer (email, full_name) values ($1, 'Seam Two') returning id", [email("eng")]);
   c1 = await company(engineer, "C1");
   k1 = await company(engineer, "K1");
@@ -206,6 +258,19 @@ describe("Screens through the app role", () => {
     await expect(call(c1.ap, sql<object>`select * from setup_event`)).rejects.toMatchObject({ code: "42501" });
   });
 
+  it("give its draft to a read without the lock a publish takes (RP-525 review)", async () => {
+    expect(await call<{ version_no: number }>(k1.member, sql`select version_no from app.screen_draft_read(${screenId}::uuid)`)).toEqual([]);
+    // A publish holds the Screen locked (app.screen_draft); its page still reads the draft at once.
+    const read = await withMember(app, c1.ap, async (publishing) => {
+      await sql`select * from app.screen_draft(${screenId}::uuid)`.execute(publishing);
+      return withMember(app, c1.ap, async (reading) => {
+        await sql`set local lock_timeout = '500ms'`.execute(reading);
+        return (await sql<{ version_no: number }>`select version_no from app.screen_draft_read(${screenId}::uuid)`.execute(reading)).rows;
+      });
+    });
+    expect(read).toEqual([{ version_no: 2 }]);
+  });
+
   it("keep a published Version as it is, even for the tables' owner", async () => {
     const published = await one("select id from screen_version where screen_id = $1 and status = 'published'", [screenId]);
     await expect(migrator.query("update screen_version set schema = '{}' where id = $1", [published])).rejects.toMatchObject({ code: "42501" });
@@ -258,5 +323,82 @@ describe("a reply's internal answers stay with the acting Participant (scenario 
       expect(read.find((r) => r.type === "internal_answers")?.answers).toEqual({ verification_note: "Batch 7 at the plant." });
       expect(read.find((r) => r.type === "issue_code")?.answers).toEqual({ remarks: "Matches the sample." });
     }
+  });
+});
+
+describe("scenario RP-525-1: a Screen's internal answers never reach the Contractor, even past the publish checks", () => {
+  it("Code B's rows in an internal table become no Comment: they stay with K1", async () => {
+    const id = await atApproval(LEAKY, "Internal table");
+    const rows = [{ comment: "Torque log missing" }];
+    expect(await take(k1.ap, id, "approve_b", { remarks: "See K1's notes.", items_to_create: rows, verification_note: "Plant batch 9." })).toBe("applied");
+    const { rows: links } = await migrator.query("select from_id from work_item_link where to_id = $1 and kind = 'raised_from'", [id]);
+    expect(links).toEqual([]);
+    for (const contractor of [c1.member, c1Pm]) {
+      const read = await call<{ type: string; answers: Record<string, unknown> | null }>(contractor, sql`select type, answers from app.work_item_history(${id}::uuid)`);
+      expect(read.find((r) => r.type === "issue_code")?.answers).toEqual({ remarks: "See K1's notes." });
+      expect(JSON.stringify(read)).not.toContain("Torque log");
+      expect(JSON.stringify(read)).not.toContain("Plant batch 9");
+    }
+    const own = await call<{ type: string; answers: Record<string, unknown> | null }>(k1.ap, sql`select type, answers from app.work_item_history(${id}::uuid)`);
+    expect(own.find((r) => r.type === "internal_answers")?.answers).toEqual({ items_to_create: rows, verification_note: "Plant batch 9." });
+  });
+
+  it("a copy of an internal answer into a shared field is refused, and nothing is written", async () => {
+    const id = await atApproval(LEAKY, "Internal copy");
+    expect(await take(k1.ap, id, "approve_a", { remarks: "Fine.", verification_note: "Plant batch 10." })).toBe("action_not_allowed");
+    const events = await call<{ type: string }>(k1.ap, sql`select type from work_item_event where work_item_id = ${id}::uuid order by seq`);
+    expect(events.map((e) => e.type)).not.toContain("issue_code");
+    expect(events.map((e) => e.type)).not.toContain("internal_answers");
+  });
+});
+
+describe("after the first Submit nobody saves the raiser's Form but after a Send Back, even on a Version never checked (RP-525)", () => {
+  const save = (as: string, id: string, model: string) =>
+    outcome(as, sql`select app.save_work_item_answers(${id}::uuid, ${JSON.stringify({ model })}::jsonb, ${electrical}::uuid, ${buildingA}::uuid, null::uuid[], now()) as outcome`);
+  const canSave = async (as: string, id: string) =>
+    (await call<{ can: boolean }>(as, sql`select app.can_save_answers(${id}::uuid) as can`))[0]!.can;
+  /** C1's engineer holding the item, back at its Draft. */
+  const holdDraft = async (id: string) => {
+    const [held] = await call<{ assignee_member_id: string | null; status: string }>(
+      c1.member,
+      sql`select assignee_member_id, status from step_assignment where work_item_id = ${id}::uuid and status in ('pooled', 'picked_up', 'vacant')`,
+    );
+    if (held?.status !== "picked_up") expect(await pickUp(c1.member, id)).toBe("picked_up");
+  };
+
+  it("K1 moving it back to the Draft by a forward move leaves the Form closed to its holder", async () => {
+    const [created] = await call<{ outcome: string; work_item_id: string }>(
+      c1.member,
+      sql`select outcome, work_item_id from app.create_work_item(
+        ${projectId}::uuid, ${LEAKY}, 'Back', app.latest_form_version(${LEAKY}), '{"model": "B-1"}'::jsonb,
+        ${electrical}::uuid, ${buildingA}::uuid, now())`,
+    );
+    const id = created!.work_item_id;
+    expect(await take(c1.member, id, "send_for_review")).toBe("applied");
+    expect(await pickUp(c1Pm, id)).toBe("picked_up");
+    expect(await take(c1Pm, id, "submit")).toBe("applied");
+    expect(await pickUp(k1.member, id)).toBe("picked_up");
+    expect(await take(k1.member, id, "back_to_draft")).toBe("applied");
+    await holdDraft(id);
+    expect(await canSave(c1.member, id)).toBe(false);
+    expect(await save(c1.member, id, "B-1 changed")).toBe("not_editable");
+  });
+
+  it("a Send Back to the Draft opens it to its holder again", async () => {
+    const [created] = await call<{ outcome: string; work_item_id: string }>(
+      c1.member,
+      sql`select outcome, work_item_id from app.create_work_item(
+        ${projectId}::uuid, ${LEAKY}, 'Sent back', app.latest_form_version(${LEAKY}), '{"model": "B-2"}'::jsonb,
+        ${electrical}::uuid, ${buildingA}::uuid, now())`,
+    );
+    const id = created!.work_item_id;
+    expect(await take(c1.member, id, "send_for_review")).toBe("applied");
+    expect(await pickUp(c1Pm, id)).toBe("picked_up");
+    expect(await take(c1Pm, id, "submit")).toBe("applied");
+    expect(await pickUp(k1.member, id)).toBe("picked_up");
+    expect(await take(k1.member, id, "send_back_to_draft")).toBe("applied");
+    await holdDraft(id);
+    expect(await canSave(c1.member, id)).toBe(true);
+    expect(await save(c1.member, id, "B-2 changed")).toBe("saved");
   });
 });

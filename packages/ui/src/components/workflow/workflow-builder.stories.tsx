@@ -318,7 +318,12 @@ export const TestRunFinished: Story = {
 /** Ref 41: publishing refused: the server's check finds an error, and Publish stays off. */
 export const PublishBlocked: Story = {
   render,
-  parameters: { overlay: true },
+  parameters: {
+    overlay: true,
+    // In Arabic, the change line "تغيّر اعتماد – Code A" renders 206 pixels differently from run to run on CI
+    // (PR #180 was dropped from the merge queue on it twice); a mixed-script line, not a layout change.
+    screenshot: { allowedMismatchedPixels: 300, reason: "Mixed Arabic/Latin change line varies by about 206 pixels between CI runs" },
+  },
   play: async ({ canvas, context }) => {
     const locale = storyLocale(context);
     const labels = workflowBuilderLabels(locale);

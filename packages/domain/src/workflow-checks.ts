@@ -33,11 +33,14 @@ export type WorkflowPublishContext = {
   /**
    * The Screens a Transition may show (ADR 0019, RP-516), by key: the latest published
    * Version's schema of the owner's Screen with that key, else the Rabaed Default one.
-   * Given, a Transition naming a Screen is checked with that Action Form; without it
-   * (the builder), Screens aren't checked.
+   * Given, a Transition naming a Screen is checked with that Action Form, and its
+   * internal fields stay internal (V5); without it (the builder), Screens aren't checked.
    */
-  screens?: ReadonlyMap<string, FormSchema>;
+  screens?: ReadonlyMap<string, ScreenForm>;
 };
+
+/** A Screen Version as the publish checks read it: its Action Form, and the keys of the fields internal to the acting Participant. */
+export type ScreenForm = { schema: FormSchema; internalFields: readonly string[] };
 
 export const workflowProblemCodes = [
   // Structure and check 1
@@ -61,6 +64,7 @@ export const workflowProblemCodes = [
   "close_to_open_step",
   "ends_without_close",
   "items_table_missing",
+  "items_table_internal",
   // Check 4 and 8 (workflowKindProblems)
   "return_crosses_participants",
   "submit_stays_inside",
@@ -122,6 +126,8 @@ type CheckInput = WorkflowDefinition & {
   categoryOf: (stage: string) => StageCategory | undefined;
   /** The Step sits in a closed or cancelled Stage. */
   isTerminal: (step: WorkflowStep) => boolean;
+  /** The keys of Transition `key`'s Action Form fields internal to the acting Participant: its Screen's (none for an Action Form of its own). */
+  internalOf: (key: string) => ReadonlySet<string>;
 };
 
 /**
@@ -134,6 +140,7 @@ export function workflowPublishProblems(definition: WorkflowDefinition, context:
   const input: CheckInput = {
     ...withScreenForms(definition, context.screens),
     context,
+    internalOf: (key) => new Set(screenOf(definition, context.screens, key)?.internalFields),
     stepOf: new Map(definition.steps.map((s) => [s.key, s])),
     categoryOf,
     isTerminal: (s) => {
@@ -142,7 +149,7 @@ export function workflowPublishProblems(definition: WorkflowDefinition, context:
     },
   };
   const found = [
-    ...screenProblems(definition, context.screens),
+    ...screenNamingProblems(definition, context.screens),
     ...structureProblems(input),
     ...graphProblems(input),
     ...stageProblems(input),
@@ -157,24 +164,31 @@ export function workflowPublishProblems(definition: WorkflowDefinition, context:
   return found.map(({ reason, ...p }) => ({ ...p, severity: p.severity ?? "error", message: message({ ...p, reason }, definition) }));
 }
 
+/** The Screen Transition `key` shows instead of an Action Form of its own; undefined when none, or without `screens`. */
+function screenOf(definition: WorkflowDefinition, screens: WorkflowPublishContext["screens"], key: string): ScreenForm | undefined {
+  const t = definition.transitions.find((x) => x.key === key);
+  return t === undefined || t.screen === undefined || t.actionForm !== null ? undefined : screens?.get(t.screen);
+}
+
 /**
  * The definition as its Transitions' Screens make it (ADR 0019, RP-516): a Transition
- * naming a Screen has that Screen's Action Form, so every other check reads it. Without
- * `screens` (the builder), it is left as it is.
+ * naming a Screen has that Screen's Action Form, so every other check reads it (and its
+ * internal fields, through CheckInput's `internalOf`). Without `screens` (the builder),
+ * it is left as it is.
  */
 function withScreenForms(definition: WorkflowDefinition, screens: WorkflowPublishContext["screens"]): WorkflowDefinition {
   if (screens === undefined) return definition;
   return {
     ...definition,
     transitions: definition.transitions.map((t) => {
-      const schema = t.screen === undefined || t.actionForm !== null ? undefined : screens.get(t.screen);
-      return schema === undefined ? t : { ...t, actionForm: schema as unknown as Record<string, unknown> };
+      const screen = screenOf(definition, screens, t.key);
+      return screen === undefined ? t : { ...t, actionForm: screen.schema };
     }),
   };
 }
 
 /** A Transition shows a Screen with a published Version its owner uses, and then has no Action Form of its own. */
-function screenProblems({ transitions }: WorkflowDefinition, screens: WorkflowPublishContext["screens"]): FoundProblem[] {
+function screenNamingProblems({ transitions }: WorkflowDefinition, screens: WorkflowPublishContext["screens"]): FoundProblem[] {
   if (screens === undefined) return [];
   return transitions.flatMap((t): FoundProblem[] => {
     if (t.screen === undefined) return [];
@@ -226,7 +240,7 @@ function stageProblems({ steps, transitions, categoryOf, isTerminal }: CheckInpu
  * (RP-429), from the Step that issues it when the set offers a choice (two or
  * more closing outcomes); nothing else sets one. A Cancel is checked on its own.
  */
-function outcomeProblems({ steps, transitions, context, stepOf, isTerminal }: CheckInput): FoundProblem[] {
+function outcomeProblems({ steps, transitions, context, stepOf, isTerminal, internalOf }: CheckInput): FoundProblem[] {
   const set: readonly string[] = context.outcomes.filter((o) => o.closing).map((o) => o.code);
   const issues = set.length > 1;
   return [
@@ -243,7 +257,7 @@ function outcomeProblems({ steps, transitions, context, stepOf, isTerminal }: Ch
       if (t.outcome === null) return problemAt("missing_outcome");
       if (!set.includes(t.outcome)) return problemAt("outcome_not_in_set");
       if (issues && from.outcomeMode !== "issue_outcome") return problemAt("outcome_not_from_issuing_step");
-      return itemsTableProblems(t, context);
+      return itemsTableProblems(t, context, internalOf(t.key));
     }),
   ];
 }
@@ -252,14 +266,17 @@ function outcomeProblems({ steps, transitions, context, stepOf, isTerminal }: Ch
  * A close setting an outcome that creates items (WF-11: Code B's Comments) asks for
  * them in its Action Form's `items_to_create` table, with a text column for each
  * item's Subject (its first). Whether a row is required is the Workflow's choice.
+ * The items are shared with the raiser, so the table is never one of its Screen's
+ * internal fields (V5); app.take_transition creates items from the shared answers only.
  */
-function itemsTableProblems(t: WorkflowTransition, context: WorkflowPublishContext): FoundProblem[] {
+function itemsTableProblems(t: WorkflowTransition, context: WorkflowPublishContext, internal: ReadonlySet<string>): FoundProblem[] {
   const outcome = context.outcomes.find((o) => o.code === t.outcome);
   const type = outcome === undefined ? null : itemsToCreate(outcome);
   if (type === null) return [];
   const table = actionFormFields(t.actionForm).get(itemsToCreateKey);
   const fits = table?.type === "table" && table.columns.some((c) => c.type === "text");
-  return fits ? [] : [{ code: "items_table_missing", transition: t.key, detail: type }];
+  if (!fits) return [{ code: "items_table_missing", transition: t.key, detail: type }];
+  return internal.has(itemsToCreateKey) ? [{ code: "items_table_internal", transition: t.key, detail: type }] : [];
 }
 
 /** Checks 4 and 8 (workflowKindProblems) and 7 (workflowActionFormProblems), as built, on the definition. */
@@ -442,12 +459,13 @@ export function transitionFieldScope(t: WorkflowTransition, { steps, transitions
  * of the acting Participant's own (its source Step's role), and a Document rule
  * names a Document field.
  */
-function ruleProblems({ steps, transitions, context, stepOf, categoryOf }: CheckInput): FoundProblem[] {
+function ruleProblems({ steps, transitions, context, stepOf, categoryOf, internalOf }: CheckInput): FoundProblem[] {
   const formFieldOf = new Map(context.form === null ? [] : formFields(context.form).map((f) => [f.key, f]));
   const transitionKeys = new Set(transitions.map((t) => t.key));
 
   return transitions.flatMap((t): FoundProblem[] => {
     const ownActionForm = actionFormFields(t.actionForm);
+    const internal = internalOf(t.key);
     const scope = transitionFieldScope(t, { steps, transitions, form: context.form, categoryOf });
     const problemAt = (code: WorkflowProblemCode, detail: string): FoundProblem => ({ code, transition: t.key, detail });
     const conditionReadProblems = (rule: Condition, readable: ReadonlySet<string>): FoundProblem[] =>
@@ -482,7 +500,10 @@ function ruleProblems({ steps, transitions, context, stepOf, categoryOf }: Check
       ...(t.actions ?? []).flatMap((a): FoundProblem[] => {
         if (a.type === "copy_field") {
           // A move inside one Participant keeps its Action Form answers internal (V5); the Form reaches everyone later.
-          const leaks = internalKinds.includes(t.kind) && ownActionForm.has(a.from) && !ownActionForm.has(a.to) && formFieldOf.has(a.to);
+          // Its Screen's internal answer stays internal too, never copied into a shared field or the Form.
+          const leaks =
+            (internalKinds.includes(t.kind) && ownActionForm.has(a.from) && !ownActionForm.has(a.to) && formFieldOf.has(a.to)) ||
+            (internal.has(a.from) && !internal.has(a.to));
           return [...writeProblems(a.from), ...writeProblems(a.to), ...(leaks ? [problemAt("copy_internal_answer", a.from)] : [])];
         }
         if (a.type !== "set_field") return [];
@@ -667,6 +688,10 @@ const messages: Record<WorkflowProblemCode, (names: Names) => BilingualText> = {
     en: `${names.transition.en} goes to a closed Step, so it must be a close or a Cancel.`,
     ar: `${names.transition.ar} يذهب إلى خطوة مغلقة، لذا يجب أن يكون إغلاقًا أو إلغاءً.`,
   }),
+  items_table_internal: (names) => ({
+    en: `${names.transition.en} creates ${names.detail} items from its items_to_create table, which its Screen keeps internal: the items are shared, so the table must be too.`,
+    ar: `${names.transition.ar} ينشئ عناصر ${names.detail} من جدول items_to_create، وشاشته تجعله داخليًا: العناصر مشتركة، لذا يجب أن يكون الجدول مشتركًا أيضًا.`,
+  }),
   items_table_missing: (names) => ({
     en: `${names.transition.en} sets an outcome whose rows become ${names.detail} items, so its Action Form needs an items_to_create table with a text column.`,
     ar: `${names.transition.ar} يضع نتيجة تتحول صفوفها إلى عناصر ${names.detail}، لذا يحتاج نموذجه المنبثق إلى جدول items_to_create فيه عمود نصي.`,
@@ -756,8 +781,8 @@ const messages: Record<WorkflowProblemCode, (names: Names) => BilingualText> = {
     ar: `${names.transition.ar} يضع الوقت الحالي في الحقل "${names.detail}"، وهو ليس تاريخًا ولا وقتًا.`,
   }),
   copy_internal_answer: (names) => ({
-    en: `${names.transition.en} copies its Action Form answer "${names.detail}" into the Form: on a move inside one Participant that answer stays internal, and the Form is read by every Participant once the item leaves it.`,
-    ar: `${names.transition.ar} ينسخ إجابة النموذج المنبثق "${names.detail}" إلى النموذج: في انتقال داخل المشارك نفسه تبقى هذه الإجابة داخلية، والنموذج يقرؤه كل مشارك بعد خروج العنصر منه.`,
+    en: `${names.transition.en} copies its Action Form answer "${names.detail}" where other Participants read it: that answer stays internal (on a move inside one Participant, or in a field its Screen keeps internal), while the Form and shared answers reach every Participant who sees the item.`,
+    ar: `${names.transition.ar} ينسخ إجابة النموذج المنبثق "${names.detail}" إلى حيث يقرؤها مشاركون آخرون: هذه الإجابة داخلية (في انتقال داخل المشارك نفسه، أو في حقل تجعله شاشته داخليًا)، بينما يصل النموذج والإجابات المشتركة إلى كل مشارك يرى العنصر.`,
   }),
   names_person: (names) => ({
     en: `${names.transition.en} sets Member field "${names.detail}" to one person: a Workflow uses Positions only.`,

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { formSchema } from "./form.ts";
 import { defaultOutcomeSets } from "./outcome.ts";
 import { marRows } from "../test/support/mar-workflow.ts";
+import stepEditsFormCases from "./step-edits-form-cases.json" with { type: "json" };
 import { stepEditsForm, workflowPublishProblems, type WorkflowPublishContext } from "./workflow-checks.ts";
 import { definitionFromRows, type WorkflowDefinition, type WorkflowStep, type WorkflowTransition } from "./workflow-definition.ts";
 
@@ -86,6 +87,16 @@ const problems = (definition: WorkflowDefinition, ctx = context()) =>
     ...(s === undefined ? {} : { step: s }),
     ...(t === undefined ? {} : { transition: t }),
   }));
+
+// The cases app.step_edits_form is tested against too (seam-2 step-edits-form.test.ts;
+// CODING_STANDARDS, Tests: a rule in SQL and in TypeScript, the same cases).
+describe("stepEditsForm, over the cases the database shares", () => {
+  type Case = { name: string; steps: (Pick<WorkflowStep, "key" | "stage" | "actor"> & { editsForm?: boolean })[]; step: string; editsForm: boolean };
+  it.each(stepEditsFormCases as Case[])("$name", ({ steps, step: key, editsForm }) => {
+    const definition = { steps: steps.map((s): WorkflowStep => ({ name: { en: s.key, ar: s.key }, outcomeMode: "none", ...s })) };
+    expect(stepEditsForm(definition, step(definition as WorkflowDefinition, key), submittalStages)).toBe(editsForm);
+  });
+});
 
 describe("workflowPublishProblems", () => {
   it.each([1, 2] as const)("passes MAR Version %i", (version) => {
@@ -669,7 +680,34 @@ describe("workflowPublishProblems", () => {
       });
       return d;
     };
-    const screens = (schema: unknown) => new Map([["code_b_reply", formSchema.parse(schema)]]);
+    const screens = (schema: unknown, internalFields: string[] = []) => new Map([["code_b_reply", { schema: formSchema.parse(schema), internalFields }]]);
+    /** Code B's table of items, with a shared `remarks` and a `note` to mark internal. */
+    const replyWithNote = () => {
+      const form = itemsForm();
+      form.sections[0]!.fields.push(
+        { key: "remarks", type: "textarea", label: { en: "Remarks", ar: "ملاحظات" } } as never,
+        { key: "note", type: "textarea", label: { en: "Note", ar: "ملاحظة" } } as never,
+      );
+      return form;
+    };
+
+    it("refuses copying an answer internal to the acting Participant into a shared field or the Form (V5)", () => {
+      const d = withScreen("code_b_reply");
+      transition(d, "approve_b").actions = [{ type: "copy_field", from: "note", to: "remarks" }];
+      expect(problems(d, context({ screens: screens(replyWithNote(), ["note"]) }))).toEqual([
+        { code: "copy_internal_answer", severity: "error", transition: "approve_b" },
+      ]);
+      // A shared answer may go anywhere the Transition writes, an internal one into another internal field.
+      transition(d, "approve_b").actions = [{ type: "copy_field", from: "remarks", to: "note" }];
+      expect(problems(d, context({ screens: screens(replyWithNote(), ["note"]) }))).toEqual([]);
+      expect(problems(d, context({ screens: screens(replyWithNote(), ["note", "remarks"]) }))).toEqual([]);
+    });
+
+    it("refuses a table of items internal to the acting Participant: the items it creates are shared (V5)", () => {
+      expect(problems(withScreen("code_b_reply"), context({ screens: screens(itemsForm(), ["items_to_create"]) }))).toEqual([
+        { code: "items_table_internal", severity: "error", transition: "approve_b" },
+      ]);
+    });
 
     it("is checked with its Screen's Action Form: Code B's Screen holds the table of items", () => {
       expect(problems(withScreen("code_b_reply"), context({ screens: screens(itemsForm()) }))).toEqual([]);

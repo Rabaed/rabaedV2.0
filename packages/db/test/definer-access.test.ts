@@ -18,7 +18,6 @@ afterAll(() => migrator.destroy());
 const CHECKS_ELSEWHERE: Record<string, string> = {
   "app.sees_work_item(uuid)": "It is the check.",
   "app.answers_autosave(uuid)": "False unless app.can_save_answers, which returns false first for an item the caller can't see.",
-  "app.answers_sha256(uuid)": "Null unless app.can_save_answers, which returns false first for an item the caller can't see.",
   "app.can_change_documents(uuid)": "False unless app.can_change_draft_documents, which requires app.can_save_answers.",
   "app.can_change_links(uuid)": "False unless app.can_save_answers, and joins app.acting_project_member (empty for an unseen item).",
   "app.revision_document_copies(uuid)": "No rows unless app.can_change_documents, which requires app.can_save_answers.",
