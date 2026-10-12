@@ -800,7 +800,8 @@ function PaletteItem({ item, icon, hint, onAdd, children }: { item: string; icon
       )}
     >
       {icon}
-      <span className={cn("min-w-0 truncate", "lg:max-[1439px]:sr-only")}>{children}</span>
+      {/* Whole names, wrapped when long (the reference clipped them at 1920: not copied). */}
+      <span className={cn("min-w-0 leading-snug", "lg:max-[1439px]:sr-only")}>{children}</span>
       <Icon name="grip-vertical" size={14} className={cn("ms-auto text-faint", "lg:max-[1439px]:hidden")} />
     </button>
   );
