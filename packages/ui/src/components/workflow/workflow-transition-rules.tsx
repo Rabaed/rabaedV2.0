@@ -139,7 +139,7 @@ export function TransitionRules({ definition, transition, fields, positions, pro
   return (
     <section aria-label={labels.heading} className="flex flex-col gap-2">
       <h3 className="mt-1.5 mb-0 text-[10.5px] font-bold tracking-wider text-muted uppercase">{labels.heading}</h3>
-      {listed.length === 0 && <p className="m-0 text-[12.5px] text-muted">{labels.noRules}</p>}
+      {listed.length === 0 && <p className="sr-only">{labels.noRules}</p>}
       {groups.map((group) => {
         const rows = listed.filter((r) => r.ref.group === group);
         if (rows.length === 0) return null;
@@ -187,7 +187,7 @@ export function TransitionRules({ definition, transition, fields, positions, pro
           </div>
         );
       })}
-      <Button variant="secondary" size="sm" className="self-start" onClick={() => setDialog({ editing: null })}>
+      <Button variant="secondary" size="sm" className="h-7 self-start px-2.5 text-[12.5px]" onClick={() => setDialog({ editing: null })}>
         <Icon name="plus" />
         {labels.addRule}
       </Button>

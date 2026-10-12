@@ -1,24 +1,36 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
+import { useCallback, useRef, useState } from "react";
 import { expect, fn, userEvent, waitFor, within } from "storybook/test";
+import type { WorkflowDefinition, WorkflowProblem } from "@rabaed/domain";
+import { actionFormLabels } from "../../storybook/form-engine.ts";
 import { storyLocale } from "../../storybook/locale.ts";
 import {
   builderDraft,
+  builderDraftSampled,
   builderForm,
   builderOutcomes,
   builderPositions,
-  builderProblems,
+  builderProblemsOf,
+  builderPublished,
   builderRunning,
   builderScreens,
-  twoTierReview,
   workflowBuilderLabels,
   workflowStages,
 } from "../../storybook/workflow.ts";
-import { WorkflowBuilder, type WorkflowBuilderProps } from "./workflow-builder.tsx";
+import { WorkflowBuilder, type WorkflowBuilderProps, type WorkflowSaveState } from "./workflow-builder.tsx";
 
-// The builder in the states of the owner's reference (RP-555, `Rabaed Settings Workflows`):
-// each story's comment names the reference state it pairs with (builder-ref/NN-…).
+// The builder in the states of the owner's V2 reference (RP-555, `Rabaed Workflow Builder V2`):
+// each story's comment names the V2 state it pairs with (v2/ref/NN-…). The draft is V2's own
+// (6 Steps, 15 Transitions); its problems are the publish checks' own, run on every edit.
 
 const saved = { kind: "saved" as const, at: new Date("2026-10-10T11:32:00Z") };
+
+/** The V2 draft with its errors fixed, as V2's "errors fixed" state: ready to publish. */
+const fixedDraft: WorkflowDefinition = {
+  ...builderDraftSampled,
+  steps: builderDraftSampled.steps.filter((s) => s.key !== "consultant_qa").map((s) => (s.key === "owner_rep" ? { ...s, outcomeMode: "issue_outcome" as const } : s)),
+  transitions: builderDraftSampled.transitions.filter((t) => !["send_to_qa", "return_to_consultant", "owner_return"].includes(t.key)),
+};
 
 const meta = {
   title: "Workflow/WorkflowBuilder",
@@ -26,21 +38,24 @@ const meta = {
   args: {
     name: "Material Submittal – 2-tier review",
     versionNo: 4,
-    published: { versionNo: 3, definition: twoTierReview },
+    published: { versionNo: 3, definition: builderPublished },
     definition: builderDraft,
     stages: workflowStages,
     outcomes: builderOutcomes,
     positions: builderPositions,
     form: builderForm,
+    typeCode: "MAR",
     screens: builderScreens,
     running: builderRunning,
     locale: "en",
     labels: workflowBuilderLabels("en"),
-    problems: builderProblems,
+    problems: builderProblemsOf(builderDraft),
     saveState: saved,
     backHref: "#workflows",
+    versionsHref: (n: number) => `#versions/${n}`,
+    screensHref: "#screens",
     onChange: fn(),
-    onValidate: fn(async () => builderProblems),
+    onValidate: fn(async () => [] as readonly WorkflowProblem[]),
     onPublish: fn(async () => ({ ok: true as const, versionNo: 4 })),
   },
   parameters: { layout: "fullscreen" },
@@ -49,23 +64,54 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-/** The builder at the viewport's size (at least a laptop's height), in the story's language. */
-function Frame(props: WorkflowBuilderProps & { locale: WorkflowBuilderProps["locale"] }) {
+/**
+ * The builder at the viewport's size (at least a laptop's height), in the story's language, as a
+ * page drives it: each edit is "saved" and checked again with the publish checks, and Validate
+ * and Publish see the problems of the draft as it stands.
+ */
+function Frame(props: WorkflowBuilderProps) {
+  const latest = useRef(props.definition);
+  const [problems, setProblems] = useState(() => builderProblemsOf(props.definition));
+  const [saveState, setSaveState] = useState<WorkflowSaveState>(props.saveState);
+  const { onChange, onValidate, onPublish } = props;
+  const change = useCallback(
+    (definition: WorkflowDefinition) => {
+      latest.current = definition;
+      onChange(definition);
+      setProblems(builderProblemsOf(definition));
+      setSaveState({ kind: "unsaved" });
+    },
+    [onChange],
+  );
+  const validate = useCallback(async () => {
+    await onValidate();
+    const found = builderProblemsOf(latest.current);
+    setProblems(found);
+    return found;
+  }, [onValidate]);
+  const publish = useCallback(
+    async (note: string) => {
+      const found = builderProblemsOf(latest.current);
+      if (found.some((p) => p.severity === "error")) return { ok: false as const, problems: found };
+      return onPublish(note);
+    },
+    [onPublish],
+  );
   return (
     <div className="h-dvh max-h-[1080px] min-h-[700px] bg-canvas">
-      <WorkflowBuilder {...props} />
+      <WorkflowBuilder {...props} problems={problems} saveState={saveState} onChange={change} onValidate={validate} onPublish={publish} />
     </div>
   );
 }
 
 const render: Story["render"] = (args, context) => {
   const locale = storyLocale(context);
-  return <Frame {...args} locale={locale} labels={workflowBuilderLabels(locale)} />;
+  return <Frame {...args} locale={locale} labels={workflowBuilderLabels(locale)} actionFormLabels={actionFormLabels[locale]} />;
 };
 
 type Canvas = ReturnType<typeof within>;
 /** React Flow shows a node once it has measured it. */
-const shown = async (canvas: Canvas, text: string) => waitFor(async () => expect(await canvas.findByText(text)).toBeVisible());
+const shown = async (canvas: Canvas, text: string) => waitFor(async () => expect((await canvas.findAllByText(text))[0]).toBeVisible());
 const step = (key: string) => builderDraft.steps.find((s) => s.key === key)!;
 const transition = (key: string) => builderDraft.transitions.find((t) => t.key === key)!;
 const editorOf = (canvas: Canvas, labels: ReturnType<typeof workflowBuilderLabels>) => within(canvas.getByRole("complementary", { name: labels.editor }));
@@ -81,59 +127,94 @@ const pickStep = async (canvas: Canvas, key: string, locale: "en" | "ar") => {
   await shown(canvas, name);
   await userEvent.click(canvas.getAllByText(name)[0]!);
 };
+const ready = (canvas: Canvas, locale: "en" | "ar") => shown(canvas, step("consultant_qa").name[locale]);
 
-/** Ref 20: the draft open, nothing selected: the palette, the canvas, what the draft holds and its problems. */
+/** V2 01: the draft open, nothing selected: the palette, the canvas, how to work it, what the draft holds and its problems. */
 export const Draft: Story = {
   render,
   play: async ({ canvas, context }) => {
     const locale = storyLocale(context);
     const labels = workflowBuilderLabels(locale);
-    await shown(canvas, builderDraft.steps[4]!.name[locale]);
+    await ready(canvas, locale);
     await expect(canvas.getByRole("heading", { level: 1, name: "Material Submittal – 2-tier review" })).toBeVisible();
     await expect(canvas.getByText(labels.draft("4"), { exact: false })).toBeVisible();
     await expect(canvas.getByText(labels.nothingSelected)).toBeVisible();
-    // One error and one warning, in the singular.
-    await expect(canvas.getByText(labels.errors(1, "1"))).toBeVisible();
-    await expect(canvas.getByText(labels.warnings(1, "1"), { exact: false })).toBeVisible();
+    await expect(canvas.getByText(labels.tipsHeading)).toBeVisible();
+    // 6 Steps and 15 Transitions, in each language's plural.
+    await expect(canvas.getByText(labels.counts({ steps: 6, stepsN: "6", transitions: 15, transitionsN: "15" }))).toBeVisible();
+    const errors = builderProblemsOf(builderDraft).filter((p) => p.severity === "error").length;
+    await expect(canvas.getByText(labels.errors(errors, String(errors)))).toBeVisible();
     await expect(canvas.getByRole("button", { name: labels.undo })).toBeDisabled();
     await expect(canvas.getByRole("button", { name: labels.autoLayout })).toBeVisible();
-    // The overview carries no attribution.
+    await expect(canvas.getByRole("radio", { name: labels.curved })).toHaveAttribute("aria-checked", "true");
+    // The Steps with an error wear a badge; the overview carries no attribution.
+    await expect(canvas.getAllByRole("img", { name: labels.map.error! }).length).toBeGreaterThan(0);
     await expect(canvas.queryByText("React Flow")).toBeNull();
   },
 };
 
-/** Ref 21: a Step selected (from its problem): who holds it, and a pool hint that names no one. */
+/** V2 02: a Step selected by its card: who holds it, a pool hint that names no one, and its Transitions. */
 export const StepSelected: Story = {
   render,
   play: async ({ canvas, context }) => {
     const locale = storyLocale(context);
     const labels = workflowBuilderLabels(locale);
-    await shown(canvas, builderDraft.steps[4]!.name[locale]);
-    await userEvent.click(canvas.getByRole("button", { name: labels.showProblem(builderProblems[0]!.message[locale]) }));
+    await pickStep(canvas, "draft", locale);
     const editor = editorOf(canvas, labels);
-    await expect(editor.getByLabelText(labels.nameEn)).toHaveValue("Owner Representative approval");
-    await expect(editor.getByLabelText(labels.nameAr)).toHaveValue("اعتماد ممثل المالك");
-    await expect(editor.getByText(labels.whoHolds)).toBeVisible();
-    await expect(editor.getByText(labels.poolHint(`${labels.map.role("owner_representative")} · ${labels.map.permission("approve")}`))).toBeVisible();
-    // Not the raiser's: no Form editing to offer (ADR 0019).
-    await expect(editor.queryByText(labels.editsForm)).toBeNull();
+    await expect(editor.getByLabelText(labels.nameEn)).toHaveValue("Contractor Engineer");
+    await expect(editor.getByLabelText(labels.nameAr)).toHaveValue("مهندس المقاول");
+    await expect(editor.getByText(labels.poolHint(`${labels.map.role("contractor")} · ${labels.map.permission("create")}`))).toBeVisible();
+    await expect(editor.getByText(labels.transitionsFrom("2"))).toBeVisible();
+    // The raiser's Draft Step: its Form setting (ADR 0019), and who reads Drafts.
+    await expect(editor.getByRole("switch", { name: labels.editsForm })).toBeVisible();
+    await expect(editor.getAllByText(labels.draftsVisibleTo).length).toBeGreaterThan(0);
   },
 };
 
-/** Ref 22: the raiser's internal Step: its one Form setting (ADR 0019), which the reference shows as sections. */
-export const StepContractor: Story = {
+/** V2 05: the deciding Step: its outcome, and its six Transitions, one of which is picked from the list. */
+export const StepManager: Story = {
   render,
   play: async ({ canvas, context }) => {
     const locale = storyLocale(context);
     const labels = workflowBuilderLabels(locale);
-    await pickStep(canvas, "contractor_pm", locale);
+    await pickStep(canvas, "consultant_manager", locale);
     const editor = editorOf(canvas, labels);
-    await expect(editor.getByLabelText(labels.nameEn)).toHaveValue("Contractor PM review");
-    await expect(editor.getByRole("switch", { name: labels.editsForm })).toBeVisible();
+    await expect(editor.getByRole("combobox", { name: labels.outcomeHeading })).toHaveTextContent(labels.outcomeOption("issue_outcome"));
+    await expect(editor.getByText(labels.transitionsFrom("6"))).toBeVisible();
+    // Not the raiser's: no Form editing to offer (ADR 0019).
+    await expect(editor.queryByText(labels.editsForm)).toBeNull();
+    await userEvent.click(editor.getByRole("button", { name: new RegExp(transition("approve_a").label[locale]) }));
+    await expect(editor.getByLabelText(labels.labelEn)).toHaveValue("Approve – Code A");
   },
 };
 
-/** Ref 23: a Send selected: its label, Type, the Screen picker with its preview, and the Notifications inline. */
+/** V2 07: the Step with no way forward: its error badge, and the hint to drag a Transition from it. */
+export const StepDeadEnd: Story = {
+  render,
+  play: async ({ canvas, context }) => {
+    const locale = storyLocale(context);
+    const labels = workflowBuilderLabels(locale);
+    await pickStep(canvas, "consultant_qa", locale);
+    await expect(editorOf(canvas, labels).getByText(labels.deadEndHint)).toBeVisible();
+  },
+};
+
+/** V2 08: an End selected: its name, what an End does, the Transitions into it, and Delete End. */
+export const EndSelected: Story = {
+  render,
+  play: async ({ canvas, context }) => {
+    const locale = storyLocale(context);
+    const labels = workflowBuilderLabels(locale);
+    await shown(canvas, step("consultant_qa").name[locale]);
+    await userEvent.click(canvas.getAllByText(step("approved").name[locale]).at(-1)!);
+    const editor = editorOf(canvas, labels);
+    await expect(editor.getByText(labels.endHint)).toBeVisible();
+    await expect(editor.getByText(labels.incoming("3"))).toBeVisible();
+    await expect(editor.getByRole("button", { name: labels.deleteEnd })).toBeVisible();
+  },
+};
+
+/** V2 10: a Send selected: its route, label, Type, the Action Form's blocks for its Screen (here the Internal Note only), and the Notifications inline. */
 export const TransitionSend: Story = {
   render,
   play: async ({ canvas, context }) => {
@@ -143,106 +224,100 @@ export const TransitionSend: Story = {
     const editor = editorOf(canvas, labels);
     await expect(editor.getByLabelText(labels.labelEn)).toHaveValue("Send for Review");
     await expect(editor.getByRole("radio", { name: labels.map.kind("send") })).toBeChecked();
-    await expect(editor.getByRole("combobox", { name: labels.screen })).toBeVisible();
-    await expect(editor.getByText(labels.internalNoteOnly)).toBeVisible();
+    await expect(editor.getByRole("combobox", { name: labels.screen })).toHaveTextContent(labels.screenNone);
+    await expect(editor.getByText(labels.internalNoteBlock)).toBeVisible();
+    await expect(editor.getByRole("button", { name: labels.previewPopup })).toBeVisible();
     await expect(editor.getByRole("group", { name: labels.rules.recipients })).toBeVisible();
   },
 };
 
-/** Ref 24: the conditional Transition (cost impact over 500,000): its rules, and the filter badge on the Step it enters. */
+/** V2 15: Code B's reply: its Screen's blocks, the table of Comments it creates, and Edit in Screens. */
+export const TransitionCodeB: Story = {
+  render,
+  play: async ({ canvas, context }) => {
+    const locale = storyLocale(context);
+    const labels = workflowBuilderLabels(locale);
+    await pickTransition(canvas, "approve_b", locale);
+    const editor = editorOf(canvas, labels);
+    await expect(editor.getByRole("combobox", { name: labels.outcomeReviewCode })).toBeEnabled();
+    await expect(editor.getByRole("combobox", { name: labels.screen })).toHaveTextContent(builderScreens[2]!.name[locale]);
+    await expect(editor.getByText(labels.createsItems)).toBeVisible();
+    await expect(editor.getByRole("link", { name: labels.editInScreens })).toHaveAttribute("href", "#screens");
+  },
+};
+
+/** V2 17: the conditional Transition: its condition row (field, operator, value as wide as the field), and its error on the canvas. */
 export const TransitionCondition: Story = {
   render,
   play: async ({ canvas, context }) => {
     const locale = storyLocale(context);
     const labels = workflowBuilderLabels(locale);
-    await shown(canvas, builderDraft.steps[4]!.name[locale]);
-    await userEvent.click(canvas.getByRole("button", { name: labels.showProblem(builderProblems[1]!.message[locale]) }));
+    await pickTransition(canvas, "send_to_owner", locale);
     const editor = editorOf(canvas, labels);
     await expect(editor.getByLabelText(labels.labelEn)).toHaveValue("Send to Owner Rep");
     await expect(editor.getByRole("radio", { name: labels.map.kind("submit") })).toBeChecked();
     // Only a Close sets an outcome: on a Submit it is off, and says why.
-    await expect(editor.getByRole("combobox", { name: labels.outcomeCode })).toBeDisabled();
     await expect(editor.getByText(labels.outcomeOnlyOnClose)).toBeVisible();
-    await expect(canvas.getAllByRole("img", { name: labels.map.conditional! }).length).toBeGreaterThan(0);
+    const value = editor.getByRole("spinbutton", { name: new RegExp(labels.rules.value) });
+    await expect(value).toHaveValue(500000);
+    await expect(value.getBoundingClientRect().width).toBeGreaterThan(70);
   },
 };
 
-/** Ref 26: a Close with a Review Code: the preview card shows the codes, the chosen one solid. */
-export const TransitionCode: Story = {
+/** V2 29: "Preview pop-up": the Screen as the holder sees it; Confirm waits for what is required, and saves nothing. */
+export const PreviewPopup: Story = {
   render,
-  play: async ({ canvas, context }) => {
-    const locale = storyLocale(context);
-    const labels = workflowBuilderLabels(locale);
-    await pickTransition(canvas, "approve_a", locale);
-    const editor = editorOf(canvas, labels);
-    await expect(editor.getByRole("radio", { name: labels.map.kind("close") })).toBeChecked();
-    await expect(editor.getByRole("combobox", { name: labels.outcomeCode })).toBeEnabled();
-    await expect(editor.getByRole("combobox", { name: labels.screen })).toHaveTextContent(labels.screenOwn);
-  },
-};
-
-/** Ref 27: a Return asking the Screen "Return with a reason": the picker shows it, the preview asks its field. */
-export const TransitionReturn: Story = {
-  render,
+  parameters: { overlay: true },
   play: async ({ canvas, context }) => {
     const locale = storyLocale(context);
     const labels = workflowBuilderLabels(locale);
     await pickTransition(canvas, "return_to_engineer", locale);
-    const editor = editorOf(canvas, labels);
-    await expect(editor.getByRole("radio", { name: labels.map.kind("return") })).toBeChecked();
-    await expect(editor.getByRole("combobox", { name: labels.screen })).toHaveTextContent(builderScreens[1]!.name[locale]);
+    await userEvent.click(editorOf(canvas, labels).getByRole("button", { name: labels.previewPopup }));
+    const dialog = within(await within(document.body).findByRole("dialog"));
+    await expect(dialog.getByText(labels.requiredMissing(locale === "ar" ? "السبب" : "Reason"))).toBeVisible();
+    await expect(dialog.getByRole("button", { name: labels.confirm })).toBeDisabled();
   },
 };
 
-/** Ref 28: an End selected: its names and Delete. */
-export const EndSelected: Story = {
-  render,
-  play: async ({ canvas, context }) => {
-    const locale = storyLocale(context);
-    const labels = workflowBuilderLabels(locale);
-    await pickStep(canvas, "rejected", locale);
-    const editor = editorOf(canvas, labels);
-    await expect(editor.getByText(labels.endHeading)).toBeVisible();
-    await expect(editor.getByRole("button", { name: labels.deleteStep })).toBeVisible();
-  },
-};
-
-/** Ref 32: Validate: the toast counts the errors to fix. */
+/** V2 36: Validate: the toast counts the errors to fix, and the first error is selected. */
 export const ValidateToast: Story = {
   render,
   play: async ({ canvas, context }) => {
     const locale = storyLocale(context);
     const labels = workflowBuilderLabels(locale);
-    await shown(canvas, builderDraft.steps[0]!.name[locale]);
+    await ready(canvas, locale);
     await userEvent.click(canvas.getByRole("button", { name: labels.validate }));
-    await expect(await within(document.body).findByText(labels.errorsToFix(1, "1"))).toBeVisible();
+    const errors = builderProblemsOf(builderDraft).filter((p) => p.severity === "error").length;
+    await expect(await within(document.body).findByText(labels.errorsToFix(errors, String(errors)))).toBeVisible();
+    await expect(editorOf(canvas, labels).getByText(labels.deadEndHint)).toBeVisible();
   },
 };
 
-/** Ref 33: adding a Step from the palette (by keyboard too): it is selected, and the edit reaches `onChange` and can be undone. */
+/** V2 38: adding a Step from the palette (by keyboard too): it is selected, the draft is unsaved, and the check finds its dead end. */
 export const AddStep: Story = {
   render,
   play: async ({ canvas, context, args }) => {
     const locale = storyLocale(context);
     const labels = workflowBuilderLabels(locale);
-    await shown(canvas, builderDraft.steps[0]!.name[locale]);
+    await ready(canvas, locale);
     const palette = within(canvas.getByRole("complementary", { name: labels.palette }));
     palette.getByRole("button", { name: labels.step }).focus();
     await userEvent.keyboard("{Enter}");
     const editor = editorOf(canvas, labels);
     await expect(editor.getByLabelText(labels.nameEn)).toHaveValue("New step");
     await expect(args.onChange).toHaveBeenCalledWith(expect.objectContaining({ steps: expect.arrayContaining([expect.objectContaining({ key: "new_step" })]) }));
+    await expect(canvas.getByText(labels.unsaved, { exact: false })).toBeVisible();
     await shown(canvas, labels.names.newStep[locale]);
   },
 };
 
-/** Ref 34: a ready-made pair of Steps added from the palette. */
+/** V2 40: a ready-made pair of Steps added from the palette, then undone. */
 export const AddReadyMade: Story = {
   render,
   play: async ({ canvas, context }) => {
     const locale = storyLocale(context);
     const labels = workflowBuilderLabels(locale);
-    await shown(canvas, builderDraft.steps[0]!.name[locale]);
+    await ready(canvas, locale);
     const palette = within(canvas.getByRole("complementary", { name: labels.palette }));
     await userEvent.click(palette.getByRole("button", { name: labels.templateInternal }));
     await shown(canvas, labels.names.engineerReview[locale]);
@@ -251,71 +326,111 @@ export const AddReadyMade: Story = {
   },
 };
 
-/** The sampled field's name (the Form's cost impact), as the bar labels its input. */
-const costLabel = { en: "Cost impact (SAR)", ar: "أثر التكلفة (ريال)" };
-
-/** Takes the test run from the Draft Step to the Consultant Manager's decision. */
-const toManager = async (canvas: Canvas, locale: "en" | "ar") => {
-  const labels = workflowBuilderLabels(locale);
-  await shown(canvas, builderDraft.steps[0]!.name[locale]);
-  await userEvent.click(canvas.getByRole("button", { name: labels.testRun }));
-  const bar = within(canvas.getByRole("region", { name: labels.testRun }));
-  for (const key of ["send_for_review", "submit", "send_to_manager"]) await userEvent.click(bar.getByRole("button", { name: transition(key).label[locale] }));
-  return bar;
-};
-
-/** Refs 36-37: a test run: from the Draft Step, Transitions taken in turn; the path stays lit. */
-export const TestRun: Story = {
+/** V2 47: "Add a Transition to" from a Step: named by its kind, selected, and a toast says so. */
+export const AddTransition: Story = {
   render,
   play: async ({ canvas, context }) => {
     const locale = storyLocale(context);
     const labels = workflowBuilderLabels(locale);
-    await shown(canvas, builderDraft.steps[0]!.name[locale]);
-    await userEvent.click(canvas.getByRole("button", { name: labels.testRun }));
-    const bar = within(canvas.getByRole("region", { name: labels.testRun }));
-    await userEvent.click(bar.getByRole("button", { name: builderDraft.transitions[0]!.label[locale] }));
-    await expect(bar.getByText(builderDraft.steps[1]!.name[locale])).toBeVisible();
+    await pickStep(canvas, "contractor_pm", locale);
+    await userEvent.click(editorOf(canvas, labels).getByRole("combobox", { name: labels.addTransitionTo }));
+    await userEvent.click(within(document.body).getByRole("option", { name: step("cancelled").name[locale] }));
+    await expect(editorOf(canvas, labels).getByLabelText(labels.labelEn)).toHaveValue("Cancel");
+    await expect(editorOf(canvas, labels).getByRole("radio", { name: labels.map.kind("cancel") })).toBeChecked();
+    await expect(await within(document.body).findByText(labels.addedTransition(labels.names.cancel[locale]))).toBeVisible();
   },
 };
 
-/** Ref 38: the sample's cost impact is over 500,000, so the conditional "Send to Owner Rep" is offered. */
-export const TestRunCondition: Story = {
+/** V2 53: the arrows at right angles (each viewer's own choice, kept in the browser). */
+export const Orthogonal: Story = {
   render,
   play: async ({ canvas, context }) => {
     const locale = storyLocale(context);
+    const labels = workflowBuilderLabels(locale);
+    await ready(canvas, locale);
+    await userEvent.click(canvas.getByRole("radio", { name: labels.orthogonal }));
+    await expect(canvas.getByRole("radio", { name: labels.orthogonal })).toHaveAttribute("aria-checked", "true");
+  },
+};
+
+/** The sampled field's name (the Form's cost impact), as the bar labels its input. */
+const costLabel = { en: "Cost impact", ar: "أثر التكلفة" };
+
+/** Takes the test run from the Draft Step to the Consultant Manager's decision, skipping each pop-up. */
+const toManager = async (canvas: Canvas, locale: "en" | "ar") => {
+  const labels = workflowBuilderLabels(locale);
+  await shown(canvas, step("draft").name[locale]);
+  await userEvent.click(canvas.getByRole("button", { name: labels.testRun }));
+  const bar = within(canvas.getByRole("region", { name: labels.testRun }));
+  for (const key of ["send_for_review", "submit", "send_to_manager"]) {
+    await userEvent.click(bar.getByRole("button", { name: transition(key).label[locale] }));
+    await userEvent.click(within(await within(document.body).findByRole("dialog")).getByRole("button", { name: labels.skip }));
+  }
+  return bar;
+};
+
+/** V2 58-60: a test run: each move opens its pop-up in test mode; confirmed, nothing is saved, and the path stays lit. */
+export const TestRun: Story = {
+  render,
+  args: { definition: builderDraftSampled },
+  play: async ({ canvas, context }) => {
+    const locale = storyLocale(context);
+    const labels = workflowBuilderLabels(locale);
+    await shown(canvas, step("draft").name[locale]);
+    await userEvent.click(canvas.getByRole("button", { name: labels.testRun }));
+    await expect(canvas.getByRole("button", { name: labels.testRun })).toHaveAttribute("aria-pressed", "true");
+    const bar = within(canvas.getByRole("region", { name: labels.testRun }));
+    await userEvent.click(bar.getByRole("button", { name: transition("send_for_review").label[locale] }));
+    const dialog = within(await within(document.body).findByRole("dialog"));
+    await userEvent.click(dialog.getByRole("button", { name: labels.confirm }));
+    await expect(await within(document.body).findByText(labels.testRecorded)).toBeVisible();
+    await expect(bar.getByText(step("contractor_pm").name[locale])).toBeVisible();
+  },
+};
+
+/** V2 62: the sample's cost impact (620,000 SAR) is over 500,000, so the conditional "Send to Owner Rep" is offered. */
+export const TestRunCondition: Story = {
+  render,
+  args: { definition: builderDraftSampled },
+  play: async ({ canvas, context }) => {
+    const locale = storyLocale(context);
     const bar = await toManager(canvas, locale);
-    await expect(bar.getByRole("textbox", { name: costLabel[locale] })).toHaveValue("500001");
+    await expect(bar.getByRole("textbox", { name: costLabel[locale] })).toHaveValue("620,000");
     await expect(bar.getByRole("button", { name: transition("send_to_owner").label[locale] })).toBeVisible();
   },
 };
 
-/** Ref 39: a low cost impact: the conditional Transition isn't offered. */
+/** V2 63: a low cost impact: the conditional Transition isn't offered. */
 export const TestRunLowCost: Story = {
   render,
+  args: { definition: builderDraftSampled },
   play: async ({ canvas, context }) => {
     const locale = storyLocale(context);
     const bar = await toManager(canvas, locale);
     const cost = bar.getByRole("textbox", { name: costLabel[locale] });
     await userEvent.clear(cost);
     await userEvent.type(cost, "120000");
+    await userEvent.tab();
     await waitFor(() => expect(bar.queryByRole("button", { name: transition("send_to_owner").label[locale] })).toBeNull());
     await expect(bar.getByRole("button", { name: transition("approve_a").label[locale] })).toBeVisible();
   },
 };
 
-/** Ref 40: the run reaches an outcome: "Finished: Approved". */
+/** V2 66: the run reaches an outcome: "Finished: Approved". */
 export const TestRunFinished: Story = {
   render,
+  args: { definition: builderDraftSampled },
   play: async ({ canvas, context }) => {
     const locale = storyLocale(context);
     const labels = workflowBuilderLabels(locale);
     const bar = await toManager(canvas, locale);
     await userEvent.click(bar.getByRole("button", { name: transition("approve_a").label[locale] }));
+    await userEvent.click(within(await within(document.body).findByRole("dialog")).getByRole("button", { name: labels.skip }));
     await expect(bar.getByText(labels.finished(step("approved").name[locale]))).toBeVisible();
   },
 };
 
-/** Ref 41: publishing refused: the server's check finds an error, and Publish stays off. */
+/** V2 67-68: publishing refused: the server's check finds errors, Publish stays off, and "Show first error" goes to it. */
 export const PublishBlocked: Story = {
   render,
   parameters: {
@@ -327,42 +442,44 @@ export const PublishBlocked: Story = {
   play: async ({ canvas, context }) => {
     const locale = storyLocale(context);
     const labels = workflowBuilderLabels(locale);
-    await shown(canvas, builderDraft.steps[0]!.name[locale]);
+    await ready(canvas, locale);
     await userEvent.click(canvas.getByRole("button", { name: labels.publish }));
     const dialog = within(await within(document.body).findByRole("dialog"));
-    await expect(await dialog.findByText(labels.errorsBlock(1, "1"))).toBeVisible();
+    const errors = builderProblemsOf(builderDraft).filter((p) => p.severity === "error").length;
+    await expect(await dialog.findByText(labels.errorsBlock(errors, String(errors)))).toBeVisible();
     await expect(dialog.getByRole("button", { name: labels.publishVersion("4") })).toBeDisabled();
+    await expect(dialog.getByRole("button", { name: labels.showFirstError })).toBeVisible();
   },
 };
 
-/** Ref 43: publishing: what changed since v3, the check passed, the change note, and how many items keep their Version. */
+/** V2 71: publishing a fixed draft: what changed since v3, the check passed, the change note, and how many items keep their Version. */
 export const Publish: Story = {
   render,
-  args: { onValidate: fn(async () => []) },
+  args: { definition: fixedDraft },
   parameters: { overlay: true },
   play: async ({ canvas, context }) => {
     const locale = storyLocale(context);
     const labels = workflowBuilderLabels(locale);
-    await shown(canvas, builderDraft.steps[0]!.name[locale]);
+    await shown(canvas, step("draft").name[locale]);
     await userEvent.click(canvas.getByRole("button", { name: labels.publish }));
     const dialog = within(await within(document.body).findByRole("dialog"));
     await expect(dialog.getByText(labels.changesSince("3"))).toBeVisible();
     await expect(await dialog.findByText(labels.passed)).toBeVisible();
-    await expect(dialog.getByRole("textbox", { name: labels.changeNote })).toBeVisible();
+    await expect(dialog.getByRole("textbox", { name: labels.changeNote })).toHaveFocus();
     await expect(dialog.getByText(labels.keepVersions({ latest: 31, latestN: "31", older: 16, olderN: "16", version: "3", next: "4" }))).toBeVisible();
     await expect(dialog.getByRole("button", { name: labels.publishVersion("4") })).toBeEnabled();
   },
 };
 
-/** Ref 44: Publish without a change note is refused in the dialog; with one, it publishes with it. */
+/** V2 72: Publish without a change note is refused in the dialog. */
 export const PublishNoteRequired: Story = {
   render,
-  args: { onValidate: fn(async () => []) },
+  args: { definition: fixedDraft },
   parameters: { overlay: true },
   play: async ({ canvas, context, args }) => {
     const locale = storyLocale(context);
     const labels = workflowBuilderLabels(locale);
-    await shown(canvas, builderDraft.steps[0]!.name[locale]);
+    await shown(canvas, step("draft").name[locale]);
     await userEvent.click(canvas.getByRole("button", { name: labels.publish }));
     const dialog = within(await within(document.body).findByRole("dialog"));
     await dialog.findByText(labels.passed);
@@ -372,9 +489,29 @@ export const PublishNoteRequired: Story = {
   },
 };
 
-/** Ref 46: a blank Workflow starts with one Draft Step, selected, and the page saves it. */
+/** V2 73: published with a note: the builder stays, the badge says "Published v4", Publish rests, and the toast links to the Versions. */
+export const Published: Story = {
+  render,
+  args: { definition: fixedDraft },
+  play: async ({ canvas, context, args }) => {
+    const locale = storyLocale(context);
+    const labels = workflowBuilderLabels(locale);
+    await shown(canvas, step("draft").name[locale]);
+    await userEvent.click(canvas.getByRole("button", { name: labels.publish }));
+    const dialog = within(await within(document.body).findByRole("dialog"));
+    await dialog.findByText(labels.passed);
+    await userEvent.type(dialog.getByRole("textbox", { name: labels.changeNote }), "Added the QA check.");
+    await userEvent.click(dialog.getByRole("button", { name: labels.publishVersion("4") }));
+    await expect(args.onPublish).toHaveBeenCalledWith("Added the QA check.");
+    await expect(await canvas.findByText(labels.publishedBadge("4"))).toBeVisible();
+    await expect(canvas.getByRole("button", { name: labels.publish })).toBeDisabled();
+    await expect(await within(document.body).findByRole("link", { name: labels.viewVersions })).toHaveAttribute("href", "#versions/4");
+  },
+};
+
+/** A blank Workflow starts with one Draft Step, selected; the page saves it, and the check says it has no way forward. */
 export const BlankWorkflow: Story = {
-  args: { definition: { steps: [], transitions: [], layout: {} }, published: null, problems: [], running: [] },
+  args: { definition: { steps: [], transitions: [], layout: {} }, published: null, running: [] },
   render,
   play: async ({ canvas, context, args }) => {
     const locale = storyLocale(context);
@@ -382,6 +519,21 @@ export const BlankWorkflow: Story = {
     await shown(canvas, labels.names.firstStep![locale]);
     await expect(editorOf(canvas, labels).getByLabelText(labels.nameEn)).toHaveValue("Contractor Engineer");
     await expect(args.onChange).toHaveBeenCalledWith(expect.objectContaining({ steps: [expect.objectContaining({ key: "contractor_engineer", stage: "draft" })] }));
+    await expect(canvas.getByRole("button", { name: new RegExp(labels.showProblem("").trim()) })).toBeVisible();
+    await expect(canvas.queryByText(labels.noErrors)).toBeNull();
+  },
+};
+
+/** The V2 draft with its condition on the Form's cost impact, as opened: where the V2 test-run states start. */
+export const Sampled: Story = { render, args: { definition: builderDraftSampled } };
+
+/** The V2 draft with its errors fixed (V2 69), as opened: where the V2 publish states start. */
+export const Fixed: Story = {
+  render,
+  args: { definition: fixedDraft },
+  play: async ({ canvas, context }) => {
+    const labels = workflowBuilderLabels(storyLocale(context));
+    await expect(await canvas.findByText(labels.noErrors)).toBeVisible();
   },
 };
 
@@ -399,7 +551,7 @@ export const JustOpened: Story = {
 
 /** A save that failed, as the bar says it, on a draft with no problems. */
 export const SaveStates: Story = {
-  args: { saveState: { kind: "failed" }, problems: [] },
+  args: { saveState: { kind: "failed" }, definition: fixedDraft },
   render,
   play: async ({ canvas, context }) => {
     const labels = workflowBuilderLabels(storyLocale(context));

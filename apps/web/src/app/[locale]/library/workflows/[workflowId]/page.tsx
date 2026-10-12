@@ -47,7 +47,9 @@ export default async function LibraryWorkflowPage({ params }: { params: Promise<
       consultantEngineer: both("consultantEngineer"),
       consultantManager: both("consultantManager"),
       send: both("send"),
+      submit: both("submit"),
       return: both("return"),
+      cancel: both("cancel"),
     };
     return (
       // The builder takes the page's whole width beside the sidebar and the height under the top bar.

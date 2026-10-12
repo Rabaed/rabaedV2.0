@@ -1,4 +1,4 @@
-import { formatDate, formatNumber, type Locale } from "@rabaed/domain";
+import { formatDayMonthYear, formatNumber, type Locale } from "@rabaed/domain";
 import { Badge, Icon, SettingsHeader, SettingsSection } from "@rabaed/ui";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
@@ -68,8 +68,13 @@ export default async function WorkflowVersionsPage({ params, searchParams }: { p
                     <Badge tone="success">{t("historyPublished")}</Badge>
                     {h.versionNo === versionNo && <span className="text-caption font-medium text-muted">{t("historyViewing")}</span>}
                   </p>
-                  <p className="m-0 mt-0.5 text-caption text-muted">{formatDate(new Date(h.publishedAt), locale, { dateStyle: "medium" })}</p>
-                  {h.changeNote && <p className="m-0 mt-1.5 text-sm whitespace-pre-line">{h.changeNote}</p>}
+                  <p className="m-0 mt-0.5 text-caption text-muted">{formatDayMonthYear(new Date(h.publishedAt), locale, { month: "short" })}</p>
+                  {/* Written in either language: isolated in its own direction, so its full stop stays at its end (RP-555 review). */}
+                  {h.changeNote && (
+                    <p className="m-0 mt-1.5 text-sm whitespace-pre-line">
+                      <bdi>{h.changeNote}</bdi>
+                    </p>
+                  )}
                 </div>
                 <span className="rounded-[5px] bg-surface-subtle px-1.5 py-px text-caption font-semibold text-muted shadow-[inset_0_0_0_1px_var(--border-subtle)]">
                   {t("historyRunning", { count: h.running, n: formatNumber(h.running, locale) })}

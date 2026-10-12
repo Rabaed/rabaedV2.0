@@ -33,6 +33,10 @@ export type WorkflowLabels = {
   overview: string;
   /** The builder's badge on a Step entered by a Transition with Restrict rules, e.g. "Entered only when a condition holds". */
   conditional?: string;
+  /** The builder's badge on a Step or Transition with an error, e.g. "Has an error". */
+  error?: string;
+  /** The builder's icon on a Transition whose Screen creates items, e.g. "Creates items in the Snag List". */
+  createsItems?: string;
   zoomIn: string;
   zoomOut: string;
   fit: string;

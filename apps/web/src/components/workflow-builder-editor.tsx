@@ -5,6 +5,7 @@ import { WorkflowBuilder, workflowBuilderLabels, type WorkflowBuilderLabels, typ
 import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useActionFormLabels } from "@/lib/form-labels";
 
 type Props = {
   read: WorkflowBuilderRead;
@@ -126,19 +127,20 @@ export function WorkflowBuilderEditor({ read, locale, backHref, names }: Props) 
       const res = await fetch(`${api}/publish`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ changeNote }) }).catch(() => null);
       const body = ((await res?.json().catch(() => ({}))) ?? {}) as { versionNo?: number; problems?: WorkflowProblem[] };
       if (res?.ok && body.versionNo !== undefined) {
-        // As the reference: a Project's Workflow goes on to its Versions, the new one first (RP-555); a Library's stays here.
-        if (workflow.owner === "project" && workflow.projectId) {
-          router.push(`/${locale}/projects/${workflow.projectId}/settings/workflows/${workflow.id}/versions/${body.versionNo}?published=1`);
-        } else {
-          router.refresh();
-        }
+        // As the reference (owner's decision 4, RP-555): the builder stays, says the draft is published and links to its Versions; the page reads the new Version underneath.
+        router.refresh();
         return { ok: true, versionNo: body.versionNo };
       }
       if (body.problems) show(body.problems);
       return { ok: false, problems: body.problems ?? known.current };
     },
-    [flush, save, workflow.draft, workflow.owner, workflow.projectId, workflow.id, locale, api, router],
+    [flush, save, workflow.draft, api, router],
   );
+
+  const actionFormLabels = useActionFormLabels();
+  // A Project's Workflow has its Versions and Screens pages; a Library one is edited here only.
+  const project = workflow.owner === "project" && workflow.projectId ? `/${locale}/projects/${workflow.projectId}/settings` : null;
+  const versionsHref = useMemo(() => (project ? (n: number) => `${project}/workflows/${workflow.id}/versions/${n}` : undefined), [project, workflow.id]);
 
   const labels = useMemo<WorkflowBuilderLabels>(
     () => workflowBuilderLabels({ t, tMap, tRules, tRoles, positions: read.positions, locale, names }),
@@ -148,8 +150,7 @@ export function WorkflowBuilderEditor({ read, locale, backHref, names }: Props) 
   const name: BilingualText = workflow.draft?.name ?? workflow.name;
   return (
     <WorkflowBuilder
-      // A publish refreshes the page onto the new Version: start again from what the server has.
-      key={`${versionNo}:${workflow.publishedVersions.length}`}
+      // Not keyed by Version: a publish keeps the builder (its "Published" badge) while the page reads the new Version.
       name={name[locale]}
       versionNo={versionNo}
       published={workflow.published}
@@ -158,6 +159,10 @@ export function WorkflowBuilderEditor({ read, locale, backHref, names }: Props) 
       outcomes={read.outcomes}
       positions={read.positions}
       form={read.form}
+      typeCode={read.type.code}
+      actionFormLabels={actionFormLabels}
+      versionsHref={versionsHref}
+      screensHref={project ? `${project}/screens` : undefined}
       screens={read.screens}
       running={read.running}
       locale={locale}

@@ -55,9 +55,10 @@ export function ConditionBuilder(props: ConditionBuilderProps) {
     <div className="flex flex-col gap-2">
       <div className="flex items-start gap-1">
         <div className="min-w-0 flex-1">
-          <ConditionNode {...props} depth={0} onRemove={onRemove ?? null} />
+          {/* The compact row carries its own edit button, so the value keeps the field's width (RP-555 review). */}
+          <ConditionNode {...props} depth={0} onRemove={onRemove ?? null} onEdit={props.compact ? (onEdit ?? null) : null} />
         </div>
-        {onEdit && (
+        {onEdit && !props.compact && (
           <IconButton label={labels.editCondition} size="sm" onClick={onEdit}>
             <Icon name="edit" size={15} />
           </IconButton>
@@ -74,7 +75,7 @@ export function ConditionBuilder(props: ConditionBuilderProps) {
   );
 }
 
-type NodeProps = Omit<ConditionBuilderProps, "onRemove" | "onEdit"> & { depth: number; onRemove: (() => void) | null };
+type NodeProps = Omit<ConditionBuilderProps, "onRemove" | "onEdit"> & { depth: number; onRemove: (() => void) | null; onEdit?: (() => void) | null };
 
 const kinds: ConditionKind[] = ["comparison", "all", "any", "not"];
 
@@ -143,7 +144,7 @@ function ConditionNode(props: NodeProps) {
   );
 }
 
-function ComparisonRow({ comparison, onChange, fields, locale, labels, name, onRemove, compact }: NodeProps & { comparison: Comparison }) {
+function ComparisonRow({ comparison, onChange, fields, locale, labels, name, onRemove, onEdit, compact }: NodeProps & { comparison: Comparison }) {
   const id = useId();
   if (comparison.attr !== undefined) {
     // An item attribute isn't one of the Form's fields: shown as it is, and removable.
@@ -170,7 +171,7 @@ function ComparisonRow({ comparison, onChange, fields, locale, labels, name, onR
   const label = (f: RuleField) => f.label[locale];
 
   return (
-    <div role="group" aria-label={name} className={cn("flex items-center", compact ? "gap-1" : "flex-wrap gap-2")}>
+    <div role="group" aria-label={name} className={cn("items-center", compact ? cn("grid gap-1", onEdit ? "grid-cols-[minmax(0,1fr)_46px_minmax(0,1fr)_24px_24px]" : "grid-cols-[minmax(0,1fr)_46px_minmax(0,1fr)_24px]") : "flex flex-wrap gap-2")}>
       <Select
         aria-label={`${labels.field} · ${name}`}
         value={key}
@@ -182,23 +183,30 @@ function ComparisonRow({ comparison, onChange, fields, locale, labels, name, onR
           ...(known || key === "" ? [] : [{ value: key, label: labels.missingField(key) }]),
           ...fields.map((f) => ({ value: f.key, label: label(f) })),
         ]}
-        className={cn("min-w-0", compact ? "h-[30px] flex-[2_1_0] text-[12px]" : "flex-[2_1_9rem]")}
+        className={cn("min-w-0", compact ? "h-[30px] px-2 text-[12px]" : "flex-[2_1_9rem]")}
       />
       <Select
         aria-label={`${labels.operator} · ${name}`}
         value={comparison.op}
         onValueChange={(next) => set(retargetComparison(comparison, field, next as ConditionOp))}
         options={ops.map((o) => ({ value: o, label: compact ? (opSymbol[o] ?? labels.op(o)) : labels.op(o) }))}
-        className={cn("min-w-0", compact ? cn("h-[30px] shrink-0 text-[12px]", opSymbol[comparison.op] ? "w-[3.25rem]" : "w-[6.5rem]") : "flex-[1_1_7rem]")}
+        className={cn("min-w-0", compact ? "h-[30px] justify-center px-1 text-[12px] [&_svg]:hidden" : "flex-[1_1_7rem]")}
       />
       {input !== "none" && (
-        <div className={cn("min-w-0", compact ? "flex-1 [&_[role=combobox]]:h-[30px] [&_input]:h-[30px] [&_[role=combobox]]:text-[12px] [&_input]:text-[12px]" : "flex-[2_1_9rem]")}>
+        <div className={cn("min-w-0", compact ? "[&_[role=combobox]]:h-[30px] [&_input]:h-[30px] [&_[role=combobox]]:text-[12px] [&_input]:px-2 [&_input]:text-[12px]" : "flex-[2_1_9rem]")}>
           <ValueInput id={`${id}-value`} input={input} comparison={comparison} field={field} locale={locale} labels={labels} name={name} onChange={set} />
         </div>
       )}
+      {/* The reference's row keeps the value's column even when the operator asks none. */}
+      {input === "none" && compact && <span />}
       {onRemove && (
-        <IconButton label={labels.removeCondition} size="sm" onClick={onRemove}>
+        <IconButton label={labels.removeCondition} size="sm" className={compact ? "h-6 w-6 min-w-6" : undefined} onClick={onRemove}>
           <Icon name="x" />
+        </IconButton>
+      )}
+      {compact && onEdit && (
+        <IconButton label={labels.editCondition} size="sm" className="h-6 w-6 min-w-6" onClick={onEdit}>
+          <Icon name="edit" size={15} />
         </IconButton>
       )}
     </div>

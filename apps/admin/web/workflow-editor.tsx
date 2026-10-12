@@ -25,6 +25,8 @@ export function WorkflowEditor({ typeCode, locale }: { typeCode: string; locale:
   const [problems, setProblems] = useState<readonly WorkflowProblem[]>([]);
   const [saveState, setSaveState] = useState<WorkflowSaveState>({ kind: "opened" });
   const [copyFrom, setCopyFrom] = useState("");
+  // A copy starts the builder again from what the server has; a publish keeps it (its "Published" badge, RP-555).
+  const [generation, setGeneration] = useState(0);
   const latest = useRef<WorkflowDefinition | null>(null);
   const dirty = useRef(false);
   const known = useRef<readonly WorkflowProblem[]>([]);
@@ -135,6 +137,7 @@ export function WorkflowEditor({ typeCode, locale }: { typeCode: string; locale:
       await api("POST", `${api_}/duplicate`, { fromTypeCode: copyFrom, reason: reason.trim() });
       opened.current = false;
       await load();
+      setGeneration((g) => g + 1);
       setNotice({ kind: "ok", text: s.duplicated });
     } catch {
       setNotice({ kind: "error", text: s.refused });
@@ -226,8 +229,7 @@ export function WorkflowEditor({ typeCode, locale }: { typeCode: string; locale:
 
       <div className="relative h-[calc(100dvh-14rem)] min-h-[640px] overflow-hidden rounded-sm border border-border">
         <WorkflowBuilder
-          // A publish or a copy starts the builder again from what the server has.
-          key={`${draftVersion}:${workflow.publishedVersions.length}:${workflow.draft ? JSON.stringify(workflow.draft.definition).length : 0}`}
+          key={generation}
           name={(workflow.draft?.name ?? workflow.name)[locale]}
           versionNo={draftVersion}
           published={workflow.published}
@@ -236,6 +238,7 @@ export function WorkflowEditor({ typeCode, locale }: { typeCode: string; locale:
           outcomes={read.outcomes}
           positions={read.positions}
           form={read.form}
+          typeCode={read.type.code}
           screens={read.screens}
           running={read.running}
           locale={locale}

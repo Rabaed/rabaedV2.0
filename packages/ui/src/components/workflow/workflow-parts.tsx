@@ -75,10 +75,11 @@ export function groupTitle(node: Extract<MapNode, { kind: "group" }>, labels: Wo
 /**
  * The builder's dialogs in the reference's look (RP-555; the reference's `.wmdl`): a header
  * row under a rule, 16px bold title, the body padded 16px by 20px, and the footer on the
- * subtle surface (`referenceModalBody`, `referenceModalFooter`).
+ * subtle surface (`referenceModalBody`, `referenceModalFooter`). Radius 16px (`rounded-lg`:
+ * the kit's scale has no `2xl`, which drew square corners).
  */
 export const referenceModal =
-  "gap-0 rounded-2xl p-0 *:first:items-center *:first:border-b *:first:border-border-subtle *:first:px-5 *:first:py-4";
+  "gap-0 rounded-lg p-0 *:first:items-center *:first:border-b *:first:border-border-subtle *:first:px-5 *:first:py-4 [&_h2]:text-lg [&_h2]:leading-snug";
 export const referenceModalBody = "flex flex-col gap-3 px-5 py-4";
 export const referenceModalFooter = "mt-0 border-t border-border-subtle bg-surface-subtle px-5 py-3";
 

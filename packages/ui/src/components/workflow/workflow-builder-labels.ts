@@ -1,10 +1,16 @@
-import type { BilingualText } from "@rabaed/domain";
+import type { BilingualText, OutcomeMode } from "@rabaed/domain";
 import type { WorkflowLabels } from "./workflow-labels.ts";
 import type { WorkflowRuleLabels } from "./workflow-rule-labels.ts";
 
+/** What a Screen field asks, as a block of the Action Form's read-only summary. */
+export type ActionFieldKind = "text" | "choice" | "yesNo" | "number" | "date" | "table" | "files" | "other";
+
+/** What changed on a changed Transition or Step, in the publish dialog's list. */
+export type ChangedPart = "condition" | "kind" | "screen" | "notifications" | "outcome" | "label" | "stage" | "holder" | "name";
+
 /**
- * The Workflow builder's words (RP-439, WF-16), in the viewer's language, from the
- * app's messages: the package has no translations of its own. `names` are the
+ * The Workflow builder's words (RP-439, WF-16; RP-555's V2), in the viewer's language,
+ * from the app's messages: the package has no translations of its own. `names` are the
  * names the builder gives what it adds, in both languages, since a Step and a
  * Transition are always named in English and Arabic.
  */
@@ -16,32 +22,58 @@ export type WorkflowBuilderLabels = {
   back: string;
   /** The draft's badge, e.g. "Draft v4". */
   draft: (version: string) => string;
+  /** The badge once the draft is published, until the next edit, e.g. "Published v4". */
+  publishedBadge: (version: string) => string;
   /** After the draft's badge: "Saved 14:32", "Saving…", "Unsaved changes", "Couldn't save"; nothing before the first save. */
   saved: (time: string) => string;
   saving: string;
   unsaved: string;
   saveFailed: string;
+  /** The arrows' style switch: its name, and its two choices. */
+  arrowStyle: string;
+  curved: string;
+  orthogonal: string;
   undo: string;
   redo: string;
   autoLayout: string;
   testRun: string;
   validate: string;
   publish: string;
-  /** The palette: its headings and items. */
+  /** The palette: its name, headings and items. */
   palette: string;
+  /** The palette's first heading, e.g. "Drag to add". */
   add: string;
+  /** A palette item's hint, e.g. "Drag onto the canvas, or click to add". */
+  dragHint: string;
   step: string;
   /** An outcome to add, e.g. "End · Approved". */
   end: (stage: string) => string;
   templates: string;
   templateInternal: string;
   templateConsultant: string;
+  /** The palette's Canvas switches (each viewer's own). */
+  canvasHeading: string;
+  snapToGrid: string;
+  minimap: string;
   /** The side panel. */
   editor: string;
   nothingSelected: string;
   nothingSelectedHint: string;
+  /** "On the canvas": how to work the canvas. */
+  tipsHeading: string;
+  tipConnect: string;
+  tipPalette: string;
+  tipBoxSelect: string;
+  /** The keys' tip: "Delete removes the selection · ⌘Z undo · ⇧⌘Z redo". */
+  tipDelete: string;
+  tipUndo: string;
+  tipRedo: string;
   thisDraft: string;
-  counts: (steps: string, transitions: string) => string;
+  /** "6 Steps · 15 Transitions": `steps` and `transitions` pick the plurals, the `…N` are them written. */
+  counts: (counts: { steps: number; stepsN: string; transitions: number; transitionsN: string }) => string;
+  /** Several selected together (Shift-drag): "3 selected"; and what the keys do with them. */
+  groupSelected: (count: number, n: string) => string;
+  groupHint: string;
   stepHeading: string;
   nameEn: string;
   nameAr: string;
@@ -57,23 +89,37 @@ export type WorkflowBuilderLabels = {
   editsForm: string;
   editsFormHelp: string;
   outcomeHeading: string;
-  outcomeNone: string;
+  /** The Step's Outcome choices, e.g. "Recommend a code (for the manager)". */
+  outcomeOption: (mode: OutcomeMode) => string;
   draftsVisibleTo: string;
   draftsWholeCompany: string;
   draftsAuthorOnly: string;
   draftsVisibleHelp: string;
+  /** "Transitions from this Step · 3". */
+  transitionsFrom: (n: string) => string;
+  /** A Step with no way out: how to add one. */
+  deadEndHint: string;
   addTransitionTo: string;
+  addTransitionPlaceholder: string;
   addTransitionHelp: string;
   deleteStep: string;
   endHeading: string;
-  transitionHeading: (from: string, to: string) => string;
+  endHint: string;
+  /** "Incoming · 4". */
+  incoming: (n: string) => string;
+  deleteEnd: string;
+  transitionHeading: string;
   labelEn: string;
   labelAr: string;
   kind: string;
   outcomeCode: string;
+  /** The Outcome's name on a Type whose outcomes are Review Codes, e.g. "Outcome · Review Code". */
+  outcomeReviewCode: string;
   noOutcome: string;
   /** Why the outcome is off on any kind but Close. */
   outcomeOnlyOnClose: string;
+  /** The Action Form section: its heading and the Screen picker. */
+  actionFormHeading: string;
   screen: string;
   screenHelp: string;
   /** A Transition without its own Action Form: only the Internal Note is asked. */
@@ -82,8 +128,35 @@ export type WorkflowBuilderLabels = {
   screenNone: string;
   screenOwn: string;
   screenMissing: (key: string) => string;
+  /** The read-only blocks of the chosen Screen: the Internal Note always, then each field. */
+  internalNote: string;
+  internalNoteBlock: string;
+  fieldKind: (kind: ActionFieldKind) => string;
+  required: string;
+  optional: string;
+  /** Under a Screen's table of items to create. */
+  createsItems: string;
+  /** An outcome creating items, and a Screen without the table to list them. */
+  itemsTableMissing: string;
+  editInScreens: string;
+  previewPopup: string;
   confirm: string;
   deleteTransition: string;
+  /** The pop-up: as the holder sees it (a preview), or in a test run. */
+  popupPreview: (route: string) => string;
+  popupTestRun: (route: string) => string;
+  /** "Code A". */
+  codeChip: (code: string) => string;
+  /** The footer while required fields are empty: "Required: Remarks, Reason". */
+  requiredMissing: (names: string) => string;
+  skip: string;
+  previewOnly: string;
+  testRecorded: string;
+  /** A test run's Transition whose Screen creates items: what it would create, nothing being created. */
+  testWouldCreate: (count: number, n: string) => string;
+  /** Toasts on the canvas. */
+  addedTransition: (name: string) => string;
+  endsCannotStart: string;
   /** The validation panel. */
   problemsName: string;
   noErrors: string;
@@ -108,12 +181,12 @@ export type WorkflowBuilderLabels = {
   removed: string;
   changed: string;
   noChanges: string;
-  /** After a changed Transition whose rules changed, e.g. "— condition". */
-  conditionChanged: string;
+  /** After a changed line, what changed, e.g. "condition". */
+  changedPart: (part: ChangedPart) => string;
   checking: string;
   passed: string;
   errorsBlock: (count: number, n: string) => string;
-  showProblems: string;
+  showFirstError: string;
   /** The change note the Version keeps (RP-555): required. */
   changeNote: string;
   changeNotePlaceholder: string;
@@ -125,6 +198,8 @@ export type WorkflowBuilderLabels = {
   cancel: string;
   publishVersion: (version: string) => string;
   published: (version: string) => string;
+  /** The published toast's link to the Workflow's Versions. */
+  viewVersions: string;
   close: string;
   /** The toasts' region, and the button that dismisses one. */
   alertsRegion: string;
@@ -138,8 +213,11 @@ export type WorkflowBuilderLabels = {
     pmReview: BilingualText;
     consultantEngineer: BilingualText;
     consultantManager: BilingualText;
+    /** A new Transition is named by its kind (RP-555): "Send", "Submit", "Return", "Cancel"; a Close by the End it goes to. */
     send: BilingualText;
+    submit: BilingualText;
     return: BilingualText;
+    cancel: BilingualText;
   };
 };
 

@@ -71,7 +71,8 @@ export type WorkflowMapInput = {
 };
 
 const STEP_WIDTH = 200;
-const STEP_HEIGHT = 92;
+/** A Step card's least height, as the reference builder's (RP-555); a long name makes it taller. */
+const STEP_HEIGHT = 78;
 const END_WIDTH = 170;
 const END_HEIGHT = 46;
 const LANE = 310; // One column of Steps in a band: room between cards for a Transition's label.
@@ -253,18 +254,29 @@ function autoLayout(definition: WorkflowDefinition, keys: readonly string[], sta
   return { boxes, bands, width: x + LANE, height };
 }
 
+/**
+ * Bands around Steps placed by hand: a band ends halfway between its last Step and the next
+ * band's first (as the reference builder draws them, RP-555), or past its last Step when the
+ * next one starts before that; an empty band is one column wide.
+ */
 function savedLayout(definition: WorkflowDefinition, keys: readonly string[], stages: readonly MapStage[], terminal: (s: WorkflowStep) => boolean): Layout {
   const boxes: Layout["boxes"] = new Map(definition.steps.map((s) => [s.key, { ...definition.layout[s.key]!, ...size(terminal(s)) }]));
+  const groups = [...keys.map((key) => definition.steps.filter((s) => s.stage === key && !terminal(s))), definition.steps.filter(terminal)];
+  const left = (steps: WorkflowStep[]) => Math.min(...steps.map((s) => boxes.get(s.key)!.x));
+  const right = (steps: WorkflowStep[]) => Math.max(...steps.map((s) => boxes.get(s.key)!.x + boxes.get(s.key)!.width));
   const bands: MapBand[] = [];
   let x = 0;
-  const right = (steps: WorkflowStep[]) => Math.max(x, ...steps.map((s) => boxes.get(s.key)!.x + boxes.get(s.key)!.width));
-  for (const key of keys) {
-    const end = Math.max(x + LANE, right(definition.steps.filter((s) => s.stage === key && !terminal(s))) + 30);
-    bands.push(band(key, stages, x, end - x));
+  groups.forEach((steps, i) => {
+    const last = i === groups.length - 1;
+    const next = groups.slice(i + 1).find((g) => g.length > 0);
+    let end: number;
+    if (steps.length === 0) end = x + LANE;
+    else if (last || !next) end = Math.max(x + LANE / 2, right(steps) + 40);
+    else end = Math.max(x + LANE / 2, right(steps) + 20, Math.round((right(steps) + left(next)) / 20) * 10);
+    bands.push(last ? outcomeBand(x, end - x) : band(keys[i]!, stages, x, end - x));
     x = end;
-  }
-  const end = Math.max(x + LANE, right(definition.steps.filter(terminal)) + 30);
-  bands.push(outcomeBand(x, end - x));
+  });
+  const end = x;
   const bottom = Math.max(...[...boxes.values()].map((b) => b.y + b.height));
   return { boxes, bands, width: end, height: Math.max(MIN_HEIGHT, bottom + 40) };
 }

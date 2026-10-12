@@ -2,12 +2,12 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, fn, userEvent, waitFor, within } from "storybook/test";
 import { storyLocale } from "../../storybook/locale.ts";
 import {
-  builderDraft,
+  rulesDraft as builderDraft,
   builderFields,
   builderForm,
   builderOutcomes,
   builderPositions,
-  builderProblems,
+  rulesProblems as builderProblems,
   twoTierReview,
   workflowBuilderLabels,
   workflowStages,

@@ -45,7 +45,9 @@ export default async function WorkflowBuilderPage({ params }: { params: Promise<
     consultantEngineer: both("consultantEngineer"),
     consultantManager: both("consultantManager"),
     send: both("send"),
+    submit: both("submit"),
     return: both("return"),
+    cancel: both("cancel"),
   };
 
   return (
