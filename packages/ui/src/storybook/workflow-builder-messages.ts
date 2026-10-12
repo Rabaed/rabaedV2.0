@@ -163,7 +163,7 @@ export const builderMessages = {
       "changeNoteRequired": "Write what changed before publishing.",
       "appliesToNew": "Items already running keep their Version. New items will use v{version}.",
       "keepVersions": "{latest, plural, one {1 item on v{version} keeps its Version} other {{latestN} items on v{version} keep their Version}}. New items will use v{next}.",
-      "keepVersionsOlder": "{latest, plural, one {1 item} other {{latestN} items}} on v{version} and {olderN} on older Versions keep their Version. New items will use v{next}.",
+      "keepVersionsOlder": "{latest, plural, one {1 item} other {{latestN} items}} on v{version} and {older, plural, one {1 on an older Version} other {{olderN} on older Versions}} keep their Version. New items will use v{next}.",
       "cancel": "Cancel",
       "publishVersion": "Publish v{version}",
       "published": "v{version} published — new items will use it",

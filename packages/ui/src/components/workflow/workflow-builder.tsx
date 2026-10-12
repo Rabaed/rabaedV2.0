@@ -671,7 +671,7 @@ function Builder(props: WorkflowBuilderProps) {
 
         <aside
           aria-label={labels.editor}
-          className="flex min-w-0 flex-col gap-2.5 overflow-auto rounded-[14px] border border-border bg-surface px-3.5 py-3 lg:col-start-3 lg:row-span-2 lg:row-start-1"
+          className="flex min-w-0 flex-col gap-2.5 overflow-auto rounded-[14px] border border-border bg-surface px-[14px] py-3 lg:col-start-3 lg:row-span-2 lg:row-start-1"
         >
           <SideEditor
             definition={definition}

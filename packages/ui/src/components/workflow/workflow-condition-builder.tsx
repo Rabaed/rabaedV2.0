@@ -189,7 +189,8 @@ function ComparisonRow({ comparison, onChange, fields, locale, labels, name, onR
         aria-label={`${labels.operator} · ${name}`}
         value={comparison.op}
         onValueChange={(next) => set(retargetComparison(comparison, field, next as ConditionOp))}
-        options={ops.map((o) => ({ value: o, label: compact ? (opSymbol[o] ?? labels.op(o)) : labels.op(o) }))}
+        // The operator stays shown when the field (one the Form no longer has) offers no such operator.
+        options={[...(ops.includes(comparison.op) ? [] : [comparison.op]), ...ops].map((o) => ({ value: o, label: compact ? (opSymbol[o] ?? labels.op(o)) : labels.op(o) }))}
         className={cn("min-w-0", compact ? "h-[30px] justify-center px-1 text-[12px] [&_svg]:hidden" : "flex-[1_1_7rem]")}
       />
       {input !== "none" && (

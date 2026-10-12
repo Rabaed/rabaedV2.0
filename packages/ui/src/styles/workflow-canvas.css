@@ -19,8 +19,9 @@
     opacity 0.12s,
     transform 0.12s;
 }
-.wf-edit .react-flow__node-end .react-flow__handle {
-  opacity: 0;
+/* An End's dots only show while a Transition is dragged onto it. */
+.wf-edit:not(.wf-connecting) .react-flow__node-end .react-flow__handle {
+  opacity: 0 !important;
 }
 .wf-edit .react-flow__node:hover .react-flow__handle,
 .wf-edit .react-flow__handle.connectingfrom,
