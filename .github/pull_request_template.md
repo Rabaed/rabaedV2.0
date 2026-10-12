@@ -39,6 +39,7 @@ No Company may see another Company's work beyond `docs/visibility.md`. Tick ever
 - [ ] Workflow definitions and bindings
 - [ ] Home across Projects
 - [ ] Work Item history
+- [ ] A reply's answers in the history (`answersForm`)
 - [ ] Step Age reports
 - [ ] Exports and handover
 - [ ] Document Numbers
