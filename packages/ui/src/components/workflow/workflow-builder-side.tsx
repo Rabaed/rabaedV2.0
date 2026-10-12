@@ -154,11 +154,11 @@ function TransitionList({ items, props, showTarget }: { items: WorkflowTransitio
             )}
           >
             <i aria-hidden="true" className="h-[3px] w-2.5 shrink-0 rounded-sm" style={{ background: transitionColour(t, stages, definition) }} />
-            <bdi className="min-w-0 flex-1 truncate">{t.label[locale]}</bdi>
+            <bdi className="min-w-0 flex-1">{t.label[locale]}</bdi>
             {showTarget && (
               <>
                 <Icon name="arrow-right" size={14} className="text-faint" />
-                <bdi className="max-w-[45%] min-w-0 truncate text-muted">{nameOf(t.to)}</bdi>
+                <bdi className="max-w-[45%] min-w-0 text-muted">{nameOf(t.to)}</bdi>
               </>
             )}
           </button>
