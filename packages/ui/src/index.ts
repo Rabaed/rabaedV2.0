@@ -2,6 +2,8 @@ export { Button, IconButton, buttonVariants, type ButtonProps, type IconButtonPr
 export { SignButton, type SignButtonProps } from "./components/button/sign-button.tsx";
 export { Avatar, CompanyChip, type AvatarProps, type CompanyChipProps } from "./components/data/avatar.tsx";
 export { Badge, type BadgeProps } from "./components/data/badge.tsx";
+export { KeyValues, type KeyValue, type KeyValuesProps } from "./components/data/key-values.tsx";
+export { TitledCard, type TitledCardProps } from "./components/data/titled-card.tsx";
 export { StatTile, type StatTileProps } from "./components/data/stat-tile.tsx";
 export {
   Table,
@@ -142,6 +144,7 @@ export {
   type SettingsSectionProps,
 } from "./components/settings/settings-layout.tsx";
 export { cn } from "./lib/cn.ts";
+export { focusRing, touchBox } from "./components/form/control-styles.ts";
 export {
   themes,
   defaultTheme,

@@ -1,9 +1,10 @@
 "use client";
 
 import { formatDate, moduleKeys, type ActivityFeedEntry, type ActivityFeedQuery, type BilingualText, type Locale, type ModuleKey } from "@rabaed/domain";
-import { useEffect, useId, useRef, type ElementType } from "react";
+import { useEffect, useRef, type ElementType } from "react";
 import { cn } from "../../lib/cn.ts";
 import { Button } from "../button/button.tsx";
+import { TitledCard } from "../data/titled-card.tsx";
 import { DocNo } from "../doc-no/doc-no.tsx";
 import { focusRing, touchBox } from "../form/control-styles.ts";
 import { Field } from "../form/field.tsx";
@@ -89,7 +90,6 @@ export function ActivityFeedPanel({
   linkAs: Link = "a",
 }: ActivityFeedPanelProps) {
   const t = (key: keyof ActivityFeedPanelLabels) => labels[key];
-  const titleId = useId();
   const scroller = useRef<HTMLDivElement>(null);
   const end = useRef<HTMLDivElement>(null);
   const loadMore = useRef(onLoadMore);
@@ -111,18 +111,21 @@ export function ActivityFeedPanel({
   const typeOptions = types.filter((type) => !query.module || type.moduleKey === query.module);
 
   return (
-    <section aria-labelledby={titleId} className="flex min-w-0 flex-col gap-3 rounded-lg border border-border bg-surface p-4">
-      <header className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 id={titleId} className="text-h6 font-semibold">
-          {t("title")}
-        </h2>
-        {viewAllHref && !fullHeight && (
-          <Link href={viewAllHref} className={cn("rounded-sm text-sm text-brand-fg underline underline-offset-4", focusRing, touchBox)}>
+    <TitledCard
+      title={t("title")}
+      bodyClassName="flex flex-col gap-3 px-5 py-[18px]"
+      actions={
+        viewAllHref &&
+        !fullHeight && (
+          <Link
+            href={viewAllHref}
+            className={cn("inline-flex items-center rounded-sm text-[13px] font-semibold text-brand-fg hover:underline underline-offset-4", focusRing, touchBox)}
+          >
             {t("viewAll")}
           </Link>
-        )}
-      </header>
-
+        )
+      }
+    >
       <div className="grid grid-cols-2 gap-3">
         <Field label={t("module")}>
           <Select
@@ -180,7 +183,7 @@ export function ActivityFeedPanel({
           </div>
         )}
       </div>
-    </section>
+    </TitledCard>
   );
 }
 

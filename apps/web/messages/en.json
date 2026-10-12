@@ -413,6 +413,7 @@
     "notCreator": "Only a Project Creator can create a Project.",
     "unavailable": "Something went wrong. Try again.",
     "participants": "Participants",
+    "projectDetails": "Project details",
     "participantCode": "Participant Code",
     "setParticipantCodes": "Set Participant Codes",
     "projectMembers": "Project Members",
