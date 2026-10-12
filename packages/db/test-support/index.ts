@@ -1,3 +1,29 @@
+/*
+ * Test helpers for the seam suites (@rabaed/db/test-support). Look here before writing one.
+ * Renaming or moving any of them is a shared-file change (docs/agents/issue-tracker.md, shared files).
+ *
+ * Re-exported from this file:
+ *   addTestWorkflow(run, options)   test-workflow.ts: the Send Back (test) Rabaed Default Workflow, Contractor
+ *                                   to Consultant with Returns, Send Backs and a Code; options: withApproveB,
+ *                                   withCancel, recommendCode, forward, engineerStep, owner, version, publish,
+ *                                   notifications, draftsVisibleTo, screens. `run` runs SQL as the migrator.
+ *   addTestScreen(run, key, ...)    test-workflow.ts: a Rabaed Default Screen with a published Version, for `screens`.
+ *   approveBActionForm              test-workflow.ts: Code B's Action Form (Remarks and a table of Comments).
+ *   addRulesWorkflow(run)           rules-workflow.ts: a Workflow with Restrict and Validate rules, one per Transition.
+ *   rulesFormSchema                 rules-workflow.ts: the Form that Workflow is published with.
+ *   addActionsWorkflow(run)         actions-workflow.ts: a Workflow whose Transitions carry actions.
+ *   actionsFormSchema               actions-workflow.ts: the Form that Workflow is published with.
+ *   expectedContentSha256, jsonbText   content-hash.ts: the content hash a closed item must carry.
+ * Defined below:
+ *   rolledBack(db, fn)              runs fn in a transaction that is always rolled back.
+ *   testDatabaseUrls()              the environment's URLs, pointed at `<database>_test`.
+ *   joinProject(app, projectId, invite, authorizedPersonId)   invites a Company and accepts as its Authorized Person.
+ *   drainOutbox(db, handlers?)      runs the outbox until nothing is due; emails, digests and reports go nowhere.
+ * Not re-exported (import by path): reset-test-database.ts and global-setup.ts (the test database's lifecycle),
+ *   and the catalogue checks grants.ts, function-grants.ts, definer-*.ts, id-defaults.ts, item-visibility-tables.ts.
+ *
+ * The API tests' helpers are listed in apps/api/test/support/README.md.
+ */
 import { sql } from "kysely";
 import { withMember, type Db } from "../src/client.ts";
 import { notificationDigestHandler, notificationEmailHandler, processOutbox, type OutboxHandler } from "../src/outbox.ts";

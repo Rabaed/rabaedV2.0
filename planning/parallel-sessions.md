@@ -23,7 +23,7 @@ A lane takes work in one of two ways: **one ticket per session** (below), or **a
 
 1. In the Claude desktop app → Code tab → **new session** on `G:\Rabaed Contech` with the **worktree** option on (the app creates the worktree and branch). Never start an implementing session in the main folder, and never run `git worktree add` by hand for it — the app wouldn't see the PR.
    **Session already open on the main folder?** Keep it and recover in place, in this order. The rule above still holds: nothing is implemented in the main folder.
-   1. Call the `EnterWorktree` tool, named after the branch. It creates `.claude/worktrees/<name>` from `origin/main`.
+   1. Call the `EnterWorktree` tool, named after the branch. It creates `.claude/worktrees/<name>` from `origin/main`, but if a worktree of that name already exists it **resumes** it (once it resumed another session's live one). Check the worktree is yours before working in it: `pnpm lane:env` refuses a worktree another live session holds (RP-501's lock check); if it does, stop and use another name.
    2. Rename the branch to the key's name (`git branch -m RP-nnn-...`), then run `pnpm lane:env N --force`.
    3. After `gh pr create`, link the PR to the session with `bind_pr`, so CI and Auto-fix notifications still arrive.
 2. Name it `Agent X – RP-nnn`.
@@ -41,6 +41,8 @@ A lane takes work in one of two ways: **one ticket per session** (below), or **a
 5. After the queue merges the PR, run `pnpm worktrees:prune` (see "Pruning old lanes"), then `/mattpocock-skills:retro` in that session (see below), then archive it. The next ticket gets a fresh session (this replaces `/clear`).
 
 ## Pruning old lanes
+
+Never run `docker compose down -v` (or `--volumes`, or `docker volume rm rabaed-*`) by hand: it deletes a lane's database volume, and the committed `.claude/settings.json` denies those commands for agents. Free a lane only with `pnpm lanes:prune --lane N` (or `pnpm worktrees:prune` after merges), which confirm first and keep a live worktree's lane.
 
 Every worktree that ran `pnpm dev` leaves a `rabaed-*` Docker Compose project behind (its containers, database volume and network), holding its lane's ports. `pnpm lanes:prune` lists those whose worktree no longer exists, that are not running, or that only have volumes left, and removes them with their volumes after you confirm (`--yes` skips the prompt). It never removes the current worktree's project. Run it from the planning session after archiving finished sessions, or in a lane when `lane:env` says a lane is taken. `lane:env` says whether the worktree holding the lane is on a branch already merged into `origin/main`; then `pnpm lanes:prune --merged` also removes the projects of such worktrees, unless a worktree that is not merged names the project in its `.env`. Add `--lane N` (`pnpm lanes:prune --merged --lane 3`) to free only `rabaed-lane3`, with the same confirmation and keep rules; `lane:env` suggests exactly that, so never reach other lanes' databases with a bare `--merged` or a raw `docker compose down`. `pnpm lanes:prune --dry-run` (also with `--merged` or `--lane N`) only lists what it would remove, exits 0 and never prompts or removes.
 
@@ -68,7 +70,7 @@ Use it when a spec's tickets form a chain that one lane would otherwise work thr
 3. Label every ticket of the spec with this lane, so no other lane starts one of them. A ticket marked **own PR** (it changes root `package.json`, `pnpm-lock.yaml` or `.github/workflows/*`; rule 3) is not merged onto the integration branch: its implementer subagent branches from `origin/main`, and it goes up as a PR of its own (RP-331 had to be reverted off spec RP-327's branch and split into PR #130).
 4. The subagents share the lane's Postgres, but each uses its own databases.
    1. In its worktree, each implementer subagent first checks that HEAD is the integration branch's tip, and runs `git reset --hard RP-nnn-<spec-name>` if it isn't: a worktree-isolated subagent starts from `origin/main` (two of seven did on spec RP-361). If the ticket's branch already exists, it stops and reports the worktree it is checked out in (`git worktree list`): a taken branch means another implementer has the ticket (on spec RP-461 one implementer built `RP-451-...-2` beside another session's). Otherwise it branches `RP-nnn-...` from there and runs `pnpm lane:env N --force --db rp<n>` (`<n>` is its ticket number, e.g. `--db rp322`). The three database URLs then name `rabaed_rp<n>`, so its seam suites use `rabaed_rp<n>_test`, and parallel seam suites never migrate the same database.
-   2. `lane:env` still refuses a lane whose ports are taken, but a `--db` run in a second worktree of the same lane is allowed. `--db` is only for the implementer subagents of the session that owns the lane. A session whose lane is held by another session's worktree never shares it with `--db`: it takes a free lane (`--free`) or frees one with `pnpm lanes:prune` (RP-334's session was stopped sharing RP-337's lane).
+   2. `lane:env` still refuses a lane whose ports are taken, but a `--db` run in a second worktree of the same lane is allowed. `--db` is only for the implementer subagents of the session that owns the lane. A session whose lane is held by another session's worktree never shares it with `--db`: it takes a free lane (`--free`) or frees one with `pnpm lanes:prune` (RP-334's session was stopped sharing RP-337's lane). Don't run `pnpm demo` or `pnpm dev` on the lane while implementers run `lane:env --db`: its api port is then held and every `--db` run refuses; start it after they finish, or on another lane (RP-545). `lane:env` names a server of the session's own when it finds one.
    3. Each seam run recreates its `_test` database itself. A second seam run on the same database while one is going refuses with a message; let the first finish.
    4. When the spec is done, run `pnpm lanes:drop-dbs` to list and drop the `rabaed_*` databases of worktrees that no longer exist (`--yes` skips the prompt). It checks only this clone's worktrees, and keeps any database something is connected to.
    5. Migration timestamps: each ticket gets its own day, in the order of the spec's tickets (the first ticket takes `<yyyymmdd>xxxxxx`, the next the following day, and so on), and its migrations use only that range, so parallel migrations never collide. Say the ranges in each subagent's brief. Migrations already on main stay unchanged.
@@ -82,6 +84,15 @@ Use it when a spec's tickets form a chain that one lane would otherwise work thr
    3. It skips, and lists, worktrees with uncommitted changes or unmerged commits, and worktrees with no commits yet, since their subagent may still be running (another lane's, too: all lanes share `.claude/worktrees/agent-*`). `--include-empty` removes those with no commits yet anyway.
    4. Then run `/mattpocock-skills:retro` and archive the session.
    5. When you stop an implementer yourself, remove only its worktree: `pnpm worktrees:clean --only agent-<id> --yes` (several ids may follow `--only`). It removes the named worktree even with no commits, and leaves other sessions' worktrees unlooked at; hand-run `git worktree remove` and `git branch -D` are refused by auto mode.
+
+## Implementer brief
+
+Every implementing session and implementer subagent follows these, on top of the ticket and `CODING_STANDARDS.md`. An `/implement-spec` brief points here instead of repeating them.
+
+- **Isolated worktree shell:** plain, literal commands that act on this worktree only; write scripts with Write and run them; no heredocs, `git -C`, `cd … &&` or variable paths. Run `pnpm lane:env` from PowerShell, not Git Bash.
+- **Fresh worktree:** run `pnpm install --frozen-lockfile` first (a new worktree has no `node_modules`, so `vitest` is missing).
+- **Glossary lint:** run `pnpm lint` before your first commit; scripts and `messages/*.json` are linted against `GLOSSARY.md` _Avoid_ too (`packages/eslint-plugin/README.md` lists the common false hits and how to silence one).
+- **Renames:** renaming a term, label or message key, or removing a group, follows the checklist in `docs/agents/renames.md`.
 
 ## Retro before archiving
 
@@ -113,3 +124,4 @@ Every ticket already gets a `/code-review` inside `/implement`. When all of a sp
    3. A new scenario in the `docs/visibility.md` matrix takes its ID from the ticket key (`RP-412-1`), never the next number (RP-397). When two branches add rows at the end of the table, keep both.
    4. Add a new rule at the end of a numbered list; never renumber, since tickets cite rules by number.
 10. Before opening or updating a PR that adds a migration, run `pnpm check:migrations`. It fetches `origin/main` and runs the drift check (redefinitions, stale overloads, shared timestamps) on `origin/main` and `HEAD`, the check CI runs, so a clash shows before the push (RP-363 learned of one only on merge). It needs the network for the fetch. A pre-push hook is optional, not installed.
+11. To change an `app.*` function, start from its newest body: `pnpm db:fn <name>` prints it with the migration and line (`--list` shows every redefinition). Do not grep the migrations for it; the first hit is rarely the current one.

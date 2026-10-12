@@ -10,6 +10,7 @@ import { workItemSearchParams, type ProjectSummary, type WorkItemList, type Work
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { attachDatasheet, createTestApi, expectHidden, type Caller } from "./support/harness.ts";
+import { defaultModules } from "./support/default-types.ts";
 import { all, bilingual, ok, projectMember, take, type Company } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
@@ -227,8 +228,10 @@ describe("a closed Project", () => {
 });
 
 describe("Module tabs", () => {
-  it("are the Modules the Project has a Work Item Type in: by default the Submittals, the Inspections (WIR, RP-437) and the Snag List (the Comment, RP-434)", async () => {
-    expect((await card(c1Engineer)).modules).toEqual(["submittals", "inspections", "snag_list"]);
+  it("are the Modules the Project has a Work Item Type in: by default those of the Rabaed Default Types", async () => {
+    const modules = await defaultModules(migrator);
+    expect(modules).toContain("submittals");
+    expect((await card(c1Engineer)).modules).toEqual(modules);
   });
 
   it("grow with a Project's own Type in another Module, on that Project only", async () => {
@@ -238,8 +241,9 @@ describe("Module tabs", () => {
       select 'project', ${other}::uuid, 'site_reports', 'DSR', ${JSON.stringify(bilingual("Daily Site Report"))}::jsonb, workflow_definition_id, 'none'
       from work_item_type where code = 'MAR' and project_id is null
     `.execute(migrator);
-    expect((await card(c1.caller, other)).modules).toEqual(["submittals", "inspections", "snag_list", "site_reports"]);
-    expect((await card(c1.caller)).modules).toEqual(["submittals", "inspections", "snag_list"]);
+    expect((await card(c1.caller, other)).modules).toEqual(await defaultModules(migrator, ["site_reports"]));
+    expect((await card(c1.caller, other)).modules).toContain("site_reports");
+    expect((await card(c1.caller)).modules).toEqual(await defaultModules(migrator));
   });
 
   it("each lead to their Module's List and Kanban, of that Module's Types only", async () => {

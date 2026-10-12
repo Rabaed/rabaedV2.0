@@ -2,10 +2,18 @@
 // (RP-189; RP-185 stories 14–17, 26; visibility.md scenario matrix, RP-185 scenario 9).
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { createDb } from "@rabaed/db";
+import { testDatabaseUrls } from "@rabaed/db/test-support";
+import { defaultModules } from "./support/default-types.ts";
 import { createTestApi, expectHidden, type Caller, type OnboardedCompany } from "./support/harness.ts";
 
 const api = await createTestApi();
-afterAll(() => api.close());
+// Reads which Rabaed Default Types there are, so the tests assume none.
+const migrator = createDb(testDatabaseUrls().migrator, { max: 1 });
+afterAll(async () => {
+  await api.close();
+  await migrator.destroy();
+});
 
 let a: { company: OnboardedCompany; caller: Caller };
 beforeAll(async () => {
@@ -36,7 +44,7 @@ describe("creating a Project", () => {
       projectRole: { baseRole: "contractor", name: { en: "Contractor", ar: "المقاول" } },
       isProjectAdmin: true,
       needMyAction: 0,
-      modules: ["submittals", "inspections", "snag_list"],
+      modules: await defaultModules(migrator),
     });
     expect(projectIds(await a.caller.get("/v1/projects"))).toContain(projectId);
   });

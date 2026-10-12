@@ -34,7 +34,15 @@ It starts Postgres, drops and rebuilds the local database (`pnpm db:reset`, whic
 
 `pnpm db:reset` under a running `pnpm dev` or `pnpm demo` no longer needs a restart: the api and worker log that an idle connection failed (class and code `57P01`, no message) and open a fresh one on the next query (`packages/db/src/client.ts`, RP-402).
 
-Everyone signs in with one password, generated on your machine the first time and kept in `.env.demo` (git-ignored; it stays the same across resets). The seed prints the list below.
+Everyone signs in with one password, generated the first time `pnpm demo` (or `pnpm demo:seed`) runs **in that folder** and kept in that folder's own `.env.demo` (git-ignored; it stays the same across resets, but each worktree has its own, and a worktree that never ran `pnpm demo` has none). The seed prints the list below.
+
+**Scripting the demo.** Agents and scripts never need to read `.env.demo`: with the demo running,
+
+```bash
+pnpm demo:session hafiz            # or a full email; --out <file> picks the path
+```
+
+signs in as that person (`hafiz`, `ali`, `saeed`, `omar`, `yousef`, `ahmed`, `sara`, `mohammed`, `faisal`, `nasser`) and prints only the path of a Playwright storage-state file (default `.demo-sessions/<name>.json`, git-ignored), for example `browser.newContext({ storageState })`. The password is read inside the script and never printed. Behind it, sign-in is `POST /api/v1/session` on the web origin with `{email, password}` (204 and the `rabaed_session` cookie). A Transition is `POST /api/v1/work-items/<id>/transitions` with `{transition, idempotencyKey, confirmed: true}` (`idempotencyKey` a UUID; without `confirmed: true` it is refused with `not_confirmed`). Column names for direct SQL are in `docs/data-model.md`.
 
 **Project:** Riyadh Gate Tower – Phase 2 (`TWR`). Trades Electrical Works (`EL`) and Mechanical Works (`ME`); Locations Main Zone › Tower 1 (Floors 01–03) and Tower 2 (Floor 01).
 
