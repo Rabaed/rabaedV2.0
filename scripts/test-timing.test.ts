@@ -150,6 +150,11 @@ describe("summarise with a budget (RP-558)", () => {
     expect(summarise("seam 1", tenMinutes, undefined).markdown).not.toContain("Over budget");
   });
 
+  it("under the budget, the summary still names the budget beside the total; with none, says nothing of one", () => {
+    expect(summarise("seam 1", tenMinutes, undefined, { budgetMinutes: 11 }).markdown).toContain("Total: **10m00s (no run on main to compare with yet)**, budget 11 min");
+    expect(summarise("seam 1", tenMinutes, undefined).markdown).not.toContain("budget");
+  });
+
   it("keeps the comparison with main beside the budget", () => {
     const main = timingOf(report(["apps/a.test.ts", 0, 240_000]));
     const { notice, warning } = summarise("seam 1", tenMinutes, main, { budgetMinutes: 20 });

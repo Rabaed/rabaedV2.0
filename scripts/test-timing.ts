@@ -179,7 +179,8 @@ export function summarise(title: string, current: Timing, main?: Timing, { top =
     warning = `${title} took ${formatDuration(current.totalMs)}, over its budget of ${budgetMinutes} min. Slowest: ${slowestThree.join(", ")}.`;
     lines.push(warning, "");
   }
-  lines.push(`### ${title}: test time`, "", `Total: **${total}**`);
+  // The budget is named even when the total is under it, so every run shows how close it is (RP-558).
+  lines.push(`### ${title}: test time`, "", `Total: **${total}**${budgetMinutes === undefined ? "" : `, budget ${budgetMinutes} min`}`);
   if (current.shards) {
     const n = current.shards.length;
     const each = current.shards.map(({ shard, ms }) => `${shard}/${n} ${ms === undefined ? "missing" : formatDuration(ms)}`);
