@@ -487,7 +487,7 @@ function Builder(props: WorkflowBuilderProps) {
   const popupTransition = popup ? definition.transitions.find((t) => t.key === popup.transition) : undefined;
 
   return (
-    <div className="flex h-full min-h-[640px] flex-col gap-2.5 p-3 sm:px-4">
+    <div className="flex h-full min-h-[520px] flex-col gap-2.5 p-3 sm:px-4">
       <div className="flex items-center gap-2">
         <a
           href={backHref}
@@ -621,7 +621,7 @@ function Builder(props: WorkflowBuilderProps) {
           </div>
         </aside>
 
-        <section className="relative min-h-[420px] lg:col-start-2 lg:row-start-1">
+        <section className="relative min-h-[320px] lg:col-start-2 lg:row-start-1">
           <WorkflowCanvas
             definition={definition}
             stages={stages}
@@ -646,7 +646,7 @@ function Builder(props: WorkflowBuilderProps) {
             minimap={view.minimap && !testRun}
             arrowStyle={view.arrowStyle}
             snapToGrid={view.snap}
-            className="h-full rounded-[14px]"
+            className="h-full min-h-[320px] rounded-[14px]"
           >
             {testRun && (
               <TestRunBar
