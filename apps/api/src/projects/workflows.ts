@@ -60,10 +60,16 @@ export function readWorkflowBuilder(db: Db, memberId: string, definitionId: stri
     `.execute(trx);
     const type = rows[0]!;
     const outcomes = await sql<WorkflowBuilderRead["outcomes"][number]>`
-      select code, name, closing, polarity from outcome
-      where work_item_type_id = ${type.type_id}::uuid
-        and case when ${type.project_id}::uuid is null then project_id is null else project_id = ${type.project_id}::uuid end
-      order by sort, code
+      select o.code, o.name, o.closing, o.polarity,
+        -- The Type a create_items outcome's rows become (Code B's Comments, WF-11): the builder names it (RP-555).
+        (select jsonb_build_object('code', t.code, 'name', t.name)
+           from jsonb_array_elements(o.actions) a
+           join work_item_type t on t.code = a ->> 'type' and t.owner_kind = 'rabaed'
+          where a ->> 'kind' = 'create_items' limit 1) as "createsItems"
+      from outcome o
+      where o.work_item_type_id = ${type.type_id}::uuid
+        and case when ${type.project_id}::uuid is null then o.project_id is null else o.project_id = ${type.project_id}::uuid end
+      order by o.sort, o.code
     `.execute(trx);
     // The Form the rules are checked against (check 6): the pickers list only its fields.
     const check = await readWorkflowCheckContext(trx, definitionId);

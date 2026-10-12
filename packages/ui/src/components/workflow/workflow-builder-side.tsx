@@ -43,7 +43,7 @@ import { edgeLook, stageVars } from "./workflow-parts.tsx";
 import { TransitionNotifications, TransitionRules } from "./workflow-transition-rules.tsx";
 
 /** An outcome of the Type's set, as the builder offers it to a closing Transition. */
-type Outcome = { code: string; name: BilingualText; closing: boolean };
+type Outcome = { code: string; name: BilingualText; closing: boolean; createsItems?: { code: string; name: BilingualText } | null };
 
 export type SideEditorProps = {
   definition: WorkflowDefinition;
@@ -432,7 +432,7 @@ function TransitionEditor(props: SideEditorProps & { transition: WorkflowTransit
           onValueChange={(kind) => set({ kind: kind as WorkflowTransition["kind"], ...(kind === "close" ? {} : { outcome: null }) })}
           options={transitionKinds.map((k) => ({ value: k, label: labels.map.kind(k) }))}
           // Six kinds, Send Back included: a 3 by 2 grid in the 330px panel.
-          className="grid w-full grid-cols-3 [&>button]:h-7 [&>button]:px-1.5 [&>button]:text-xs"
+          className="grid w-full auto-rows-fr grid-cols-3 [&>button]:h-auto [&>button]:min-h-7 [&>button]:px-1.5 [&>button]:py-0.5 [&>button]:text-xs [&>button]:leading-tight"
         />
       </Field>
       <Field label={reviewCodes ? labels.outcomeReviewCode : labels.outcomeCode} help={closes ? undefined : labels.outcomeOnlyOnClose} disabled={!closes}>
@@ -482,7 +482,11 @@ function TransitionEditor(props: SideEditorProps & { transition: WorkflowTransit
               {table && (
                 <p className="m-0 flex items-start gap-1.5 rounded-lg bg-info-tint px-2.5 py-2 text-[12px] leading-[1.45] font-medium text-info-fg">
                   <Icon name="clipboard-list" size={14} className="mt-px" />
-                  {labels.createsItems}
+                  {/* What it creates, as the outcome says (Code B's Comments). */}
+                  {(() => {
+                    const made = outcomes.find((o) => o.code === transition.outcome)?.createsItems;
+                    return made ? labels.createsItemsOf(made.name[locale]) : labels.createsItems;
+                  })()}
                 </p>
               )}
             </Block>

@@ -138,6 +138,7 @@ describe("a Rabaed Default Workflow in Rabaed Admin", () => {
 
   it("is refused with an error, a definition that isn't one, or no reason; nothing is published or logged", async () => {
     const before = (await readLatestPublishedDefinition(adminDb, definitionId))!;
+    const logged = (await actionsOn(definitionId)).length;
     const withError = await engineer.browser.post(`/v1/workflows/${TYPE}/publish`, { definition: broken(before.definition), reason: "Try it" });
     expect(withError.statusCode).toBe(422);
     expect(withError.json()).toMatchObject({ error: "workflow_problems", problems: expect.arrayContaining([expect.objectContaining({ code: "dead_end_step" })]) });
@@ -147,16 +148,17 @@ describe("a Rabaed Default Workflow in Rabaed Admin", () => {
     expect((await engineer.browser.post(`/v1/workflows/${TYPE}/publish`, { definition: before.definition, reason: " " })).statusCode).toBe(400);
     expect((await engineer.browser.post(`/v1/workflows/NOPE/publish`, { definition: before.definition, reason: "Try it" })).statusCode).toBe(404);
     expect((await readLatestPublishedDefinition(adminDb, definitionId))!.versionNo).toBe(before.versionNo);
-    expect((await actionsOn(definitionId)).length).toBe(2);
+    expect((await actionsOn(definitionId)).length).toBe(logged);
   });
 
   it("is published by the workflow:publish CLI as a named Rabaed Engineer, logged with the reason (V9)", async () => {
     const before = (await readLatestPublishedDefinition(adminDb, definitionId))!;
     const { email } = await migrator.selectFrom("rabaed_engineer").select("email").where("id", "=", engineer.id).executeTakeFirstOrThrow();
     const next = renamed(before.definition, "Prepare from the CLI");
+    const logged = (await actionsOn(definitionId)).length;
     const unknown = await publishRabaedWorkflowAs(migrator, { engineerEmail: "nobody@rabaed.test", typeCode: TYPE, definition: next, reason: "CLI" });
     expect(unknown).toEqual({ ok: false, reason: "engineer_not_found" });
-    expect((await actionsOn(definitionId)).length).toBe(2);
+    expect((await actionsOn(definitionId)).length).toBe(logged);
 
     const published = await publishRabaedWorkflowAs(migrator, { engineerEmail: email.toUpperCase(), typeCode: TYPE, definition: next, reason: "Publish from the CLI" });
     expect(published).toMatchObject({ ok: true, versionNo: before.versionNo + 1 });

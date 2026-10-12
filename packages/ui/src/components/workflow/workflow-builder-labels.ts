@@ -134,8 +134,14 @@ export type WorkflowBuilderLabels = {
   fieldKind: (kind: ActionFieldKind) => string;
   required: string;
   optional: string;
-  /** Under a Screen's table of items to create. */
+  /** Under a Screen's table of items to create; with the outcome's Type, "Each row becomes one of the Snag List's Comments". */
   createsItems: string;
+  createsItemsOf: (type: string) => string;
+  /** A table's add-row button in the plain pop-up (Rabaed Admin). */
+  addRow: string;
+  /** The pop-up's Recommended Code, on a Transition from a Step that recommends a code. */
+  recommendCode: string;
+  recommendCodeHelp: string;
   /** An outcome creating items, and a Screen without the table to list them. */
   itemsTableMissing: string;
   editInScreens: string;

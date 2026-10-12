@@ -28,6 +28,8 @@ export type ToastProviderProps = {
   closeLabel: string;
   /** How long a toast stays, in ms. */
   duration?: number;
+  /** Where toasts sit: the bottom inline-end corner (default), or the bottom centre, clear of side panels. */
+  placement?: "end" | "center";
   children: ReactNode;
 };
 
@@ -36,7 +38,7 @@ export type ToastProviderProps = {
  * Toasts appear at the bottom inline-end corner and are announced to screen
  * readers: politely, or at once for `tone: "danger"`.
  */
-export function ToastProvider({ label, closeLabel, duration = 5000, children }: ToastProviderProps) {
+export function ToastProvider({ label, closeLabel, duration = 5000, placement = "end", children }: ToastProviderProps) {
   const [toasts, setToasts] = useState<(ToastInput & { id: number })[]>([]);
   const show = useCallback<ShowToast>((toast) => setToasts((list) => [...list, { ...toast, id: nextToastId++ }]), []);
   // Swiped away towards the inline-end corner they sit in.
@@ -71,7 +73,9 @@ export function ToastProvider({ label, closeLabel, duration = 5000, children }: 
           </ToastPrimitive.Root>
         ))}
         {/* Above dialogs (z-50), so feedback from inside a dialog is visible. */}
-        <ToastPrimitive.Viewport className="fixed bottom-0 end-0 z-[60] flex w-full max-w-sm flex-col gap-2 p-4 outline-none" />
+        <ToastPrimitive.Viewport
+          className={cn("fixed bottom-0 z-[60] flex w-full max-w-sm flex-col gap-2 p-4 outline-none", placement === "center" ? "inset-x-0 mx-auto" : "end-0")}
+        />
       </ToastPrimitive.Provider>
     </ToastContext.Provider>
   );

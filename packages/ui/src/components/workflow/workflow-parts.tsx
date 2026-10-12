@@ -50,20 +50,30 @@ export const endIcon = (colour: StageKey): IconName =>
 export const kindIcon = (kind: TransitionKind): IconName =>
   kind === "submit" ? "send" : kind === "return" || kind === "send_back" ? "arrow-back-up" : kind === "close" ? "circle-check" : kind === "cancel" ? "ban" : "arrow-right";
 
-/** An edge's colour and dash, by its Transition's kind (and the outcome it closes into). */
-export function edgeLook(edge: Pick<MapEdge, "transition" | "targetColour">): { colour: string; dashed: boolean } {
+/**
+ * An edge's colour and dash, by its Transition's kind (and the outcome it closes into), and its
+ * selected label's fill: the same hue darkened only as far as white text needs for 4.5:1 (RP-555
+ * review), so a Return stays orange and a Code A green. The dots are one shade in every theme.
+ */
+export function edgeLook(edge: Pick<MapEdge, "transition" | "targetColour">): { colour: string; dashed: boolean; fill: string } {
+  const shade = (colour: string, percent: number) => (percent === 0 ? colour : `color-mix(in srgb, ${colour}, black ${percent}%)`);
+  // The least black mix reaching 4.5:1 with white, per tone (green 28%, amber 34%, red 9%; slate-600 and the primary pass as they are).
+  const closeShade: Partial<Record<StageKey, number>> = { approved: 28, resubmitted: 34, rejected: 9, draft: 27 };
   switch (edge.transition.kind) {
     case "submit":
-      return { colour: "var(--primary)", dashed: false };
+      return { colour: "var(--primary)", dashed: false, fill: "var(--primary)" };
     case "return":
     case "send_back":
-      return { colour: "var(--stage-resubmitted-dot)", dashed: true };
-    case "close":
-      return { colour: stageVars(edge.targetColour ?? "approved").dot, dashed: false };
+      return { colour: "var(--stage-resubmitted-dot)", dashed: true, fill: shade("var(--stage-resubmitted-dot)", 34) };
+    case "close": {
+      const target = edge.targetColour ?? "approved";
+      return { colour: stageVars(target).dot, dashed: false, fill: shade(stageVars(target).dot, closeShade[target] ?? 30) };
+    }
     case "cancel":
-      return { colour: "var(--stage-cancelled-dot)", dashed: false };
+      return { colour: "var(--stage-cancelled-dot)", dashed: false, fill: "var(--stage-cancelled-dot)" };
     default:
-      return { colour: "var(--text-secondary)", dashed: false };
+      // A Send's arrow is the text colour, light in dark themes: its fill is the neutral slate that reads white text in both.
+      return { colour: "var(--text-secondary)", dashed: false, fill: "var(--stage-cancelled-dot)" };
   }
 }
 
@@ -82,6 +92,9 @@ export const referenceModal =
   "gap-0 rounded-lg p-0 *:first:items-center *:first:border-b *:first:border-border-subtle *:first:px-5 *:first:py-4 [&_h2]:text-lg [&_h2]:leading-snug";
 export const referenceModalBody = "flex flex-col gap-3 px-5 py-4";
 export const referenceModalFooter = "mt-0 border-t border-border-subtle bg-surface-subtle px-5 py-3";
+
+/** A message's straight quotes as the language writes them: “ ” in English, « » in Arabic (RP-555 review). */
+export const typographic = (text: string, locale: Locale): string => text.replace(/"([^"]*)"/g, locale === "ar" ? "«$1»" : "“$1”");
 
 export const hatched: CSSProperties = {
   backgroundImage: "repeating-linear-gradient(135deg, transparent 0 6px, color-mix(in srgb, var(--border) 45%, transparent) 6px 7px)",

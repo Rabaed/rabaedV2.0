@@ -40,14 +40,14 @@ import { askedForm, createsItemsOf, Heading, SideEditor } from "./workflow-build
 import { defaultSample, offeredWith, sampledFields, TestRunBar, type Sample, type TestRun } from "./workflow-builder-test-run.tsx";
 import { canvasDragType, WorkflowCanvas, type ArrowStyle, type CanvasMark, type CanvasMove, type CanvasSelection } from "./workflow-canvas.tsx";
 import { WorkflowChangeList } from "./workflow-changes.tsx";
-import { placedLayout, workflowMap, type MapStage } from "./workflow-map.ts";
-import { referenceModal, referenceModalBody, referenceModalFooter, stageVars } from "./workflow-parts.tsx";
+import { arrangedLayout, placedLayout, workflowMap, type MapStage } from "./workflow-map.ts";
+import { referenceModal, referenceModalBody, referenceModalFooter, stageVars, typographic } from "./workflow-parts.tsx";
 
 /** Where the draft's saving stands, as the page saving it through WF-4's API knows it; `opened` until the first save. */
 export type WorkflowSaveState = { kind: "opened" } | { kind: "saved"; at: Date } | { kind: "saving" } | { kind: "unsaved" } | { kind: "failed" };
 
 /** An outcome of the Work Item Type's set, for a closing Transition: the builder read's, without its polarity. */
-export type WorkflowBuilderOutcome = Pick<WorkflowOutcomeOption, "code" | "name" | "closing">;
+export type WorkflowBuilderOutcome = Pick<WorkflowOutcomeOption, "code" | "name" | "closing" | "createsItems">;
 
 export type WorkflowPublishResult = { ok: true; versionNo: number } | { ok: false; problems: readonly WorkflowProblem[] };
 
@@ -143,7 +143,7 @@ function seedBlank(definition: WorkflowDefinition, stages: readonly MapStage[], 
 }
 
 /** A problem's message as the panel lists it: without a closing full stop, as the reference's. */
-const listed = (message: string) => message.replace(/[.。]\s*$/, "");
+const listed = (message: string, locale: Locale) => typographic(message, locale).replace(/[.。]\s*$/, "");
 
 /**
  * The Workflow builder (RP-439, WF-16; workflow-engine.md §11), as the owner's V2 reference
@@ -157,7 +157,8 @@ const listed = (message: string) => message.replace(/[.。]\s*$/, "");
  */
 export function WorkflowBuilder(props: WorkflowBuilderProps) {
   return (
-    <ToastProvider label={props.labels.alertsRegion} closeLabel={props.labels.dismiss}>
+    // Toasts at the bottom centre, as the reference's, clear of the side panel in both directions.
+    <ToastProvider label={props.labels.alertsRegion} closeLabel={props.labels.dismiss} placement="center">
       <Builder {...props} />
     </ToastProvider>
   );
@@ -384,7 +385,7 @@ function Builder(props: WorkflowBuilderProps) {
   }, [undo, redo, remove, select, selection, group, testRun, publish, popup]);
 
   const autoLayout = () => {
-    commit({ ...definition, layout: placedLayout({ ...definition, layout: {} }, stages, true) });
+    commit({ ...definition, layout: arrangedLayout(definition, stages) });
     setFitNonce((n) => n + 1);
   };
 
@@ -698,7 +699,7 @@ function Builder(props: WorkflowBuilderProps) {
 
         <section aria-label={labels.problemsName} className="max-h-[150px] overflow-auto rounded-[14px] border border-border bg-surface px-3 py-2 lg:col-start-2 lg:row-start-2">
           <div className="mb-1 flex items-center gap-2 text-[12.5px] font-bold">
-            <Icon name={errors.length ? "alert-triangle" : "circle-check"} size={16} style={{ color: errors.length ? "var(--danger)" : "var(--success)" }} />
+            <Icon name={errors.length ? "alert-triangle" : "circle-check"} size={16} style={{ color: errors.length ? "var(--danger-fg)" : "var(--success)" }} />
             {errors.length ? labels.errors(errors.length, v(errors.length)) : labels.noErrors}
             {warnings > 0 && <span className="font-semibold text-muted">· {labels.warnings(warnings, v(warnings))}</span>}
           </div>
@@ -718,9 +719,9 @@ function Builder(props: WorkflowBuilderProps) {
                     name={p.severity === "error" ? "circle-x" : "alert-triangle"}
                     size={15}
                     className="shrink-0"
-                    style={{ color: p.severity === "error" ? "var(--danger)" : "var(--warning-fg)" }}
+                    style={{ color: p.severity === "error" ? "var(--danger-fg)" : "var(--warning-fg)" }}
                   />
-                  <span className="flex-1">{listed(p.message[locale])}</span>
+                  <span className="flex-1">{listed(p.message[locale], locale)}</span>
                   <Icon name="focus-2" size={15} className="shrink-0 text-faint" />
                 </button>
               </li>
@@ -756,6 +757,8 @@ function Builder(props: WorkflowBuilderProps) {
           locale={locale}
           labels={labels}
           actionFormLabels={props.actionFormLabels}
+          // From a Step that recommends a code, the pop-up asks the Recommended Code (the Type's closing outcomes).
+          recommend={stepOf(popupTransition.from)?.outcomeMode === "recommend_code" ? outcomes.filter((o) => o.closing) : null}
           onCancel={() => setPopup(null)}
           onSkip={() => {
             setPopup(null);

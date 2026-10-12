@@ -61,8 +61,8 @@ export const builderMessages = {
       "outcomeHeading": "Outcome",
       "outcomeOptions": {
         "none": "None",
-        "recommend_code": "Recommend a code (for the manager)",
-        "issue_outcome": "Issue the final code"
+        "recommend_code": "Recommends a code",
+        "issue_outcome": "Issues the outcome"
       },
       "draftsVisibleTo": "Drafts visible to",
       "draftsWholeCompany": "The author's whole Company",
@@ -108,6 +108,10 @@ export const builderMessages = {
       "required": "Required",
       "optional": "Optional",
       "createsItems": "Each row becomes an item in the Snag List, linked to this item.",
+      "createsItemsOf": "Each row becomes one of the Snag List's {type}, linked to this item.",
+      "addRow": "Add row",
+      "recommendCode": "Recommended Code",
+      "recommendCodeHelp": "Optional. Your advice to the next reviewer in your Company, with the Internal Note below. Only your Company sees it.",
       "itemsTableMissing": "This outcome creates items in the Snag List, and the chosen Screen has no table to list them.",
       "editInScreens": "Edit in Screens",
       "previewPopup": "Preview pop-up",
@@ -299,8 +303,8 @@ export const builderMessages = {
       "outcomeHeading": "النتيجة",
       "outcomeOptions": {
         "none": "بدون",
-        "recommend_code": "يوصي برمز (للمدير)",
-        "issue_outcome": "يصدر الرمز النهائي"
+        "recommend_code": "يوصي برمز",
+        "issue_outcome": "يصدر النتيجة"
       },
       "draftsVisibleTo": "المسودات مرئية لـ",
       "draftsWholeCompany": "شركة المُنشئ كاملة",
@@ -346,6 +350,10 @@ export const builderMessages = {
       "required": "إلزامي",
       "optional": "اختياري",
       "createsItems": "كل صف يصبح عنصرًا في قائمة الملاحظات، مرتبطًا بهذا العنصر.",
+      "createsItemsOf": "كل صف يصبح من {type} في قائمة الملاحظات، مرتبطًا بهذا العنصر.",
+      "addRow": "إضافة صف",
+      "recommendCode": "الرمز الموصى به",
+      "recommendCodeHelp": "اختياري. توصيتك للمراجع التالي في شركتك، مع الملاحظة الداخلية أدناه. لا يراها إلا شركتك.",
       "itemsTableMissing": "هذه النتيجة تُنشئ عناصر في قائمة الملاحظات، والشاشة المختارة ليس فيها جدول لسردها.",
       "editInScreens": "التعديل في الشاشات",
       "previewPopup": "معاينة النافذة",

@@ -30,6 +30,7 @@ import { focusRing } from "../form/control-styles.ts";
 import { Icon, type IconName } from "../icon/icon.tsx";
 import { ConditionBuilder } from "./workflow-condition-builder.tsx";
 import { WorkflowRuleDialog } from "./workflow-rule-dialog.tsx";
+import { typographic } from "./workflow-parts.tsx";
 import type { WorkflowRuleLabels } from "./workflow-rule-labels.ts";
 
 type CommonProps = {
@@ -196,7 +197,7 @@ export function TransitionRules({ definition, transition, fields, positions, pro
           {mine.map((p, i) => (
             <li key={`${p.code}:${p.detail ?? ""}:${i}`} className={cn("flex items-start gap-1.5 text-[12px]", p.severity === "error" ? "text-danger-fg" : "text-warning-fg")}>
               <Icon name={p.severity === "error" ? "circle-x" : "alert-triangle"} size={14} className="mt-0.5" />
-              {p.message[locale]}
+              {typographic(p.message[locale], locale)}
             </li>
           ))}
         </ul>

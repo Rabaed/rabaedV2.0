@@ -164,5 +164,14 @@ export type LibraryWorkflows = { workflows: LibraryWorkflow[] };
  */
 export type WorkflowMapRead = Pick<WorkflowBuilderRead, "workflow" | "type" | "stages" | "positions">;
 
-/** An outcome of a Work Item Type's set, as the builder offers it to a closing Transition. */
-export type WorkflowOutcomeOption = { code: string; name: BilingualText; closing: boolean; polarity: "positive" | "negative" };
+/**
+ * An outcome of a Work Item Type's set, as the builder offers it to a closing Transition; `createsItems`:
+ * the Type its rows become items of (Code B's Comments, WF-11), so the builder can name it (RP-555).
+ */
+export type WorkflowOutcomeOption = {
+  code: string;
+  name: BilingualText;
+  closing: boolean;
+  polarity: "positive" | "negative";
+  createsItems?: { code: string; name: BilingualText } | null;
+};

@@ -164,7 +164,8 @@ function SampleInput({
 }) {
   const [editing, setEditing] = useState(false);
   const name = field.label[locale];
-  const look = "h-[26px] rounded-[5px] border-0 bg-surface px-1.5 text-[12px] text-text";
+  // A visible edge in dark themes too, where the field and the bar are both dark (RP-555 review).
+  const look = "h-[26px] rounded-[5px] border-0 bg-surface px-1.5 text-[12px] text-text shadow-[inset_0_0_0_1px_var(--control-border)]";
   if (field.type === "yes_no") {
     return (
       <label className="inline-flex items-center gap-1">
@@ -196,7 +197,7 @@ function SampleInput({
   return (
     <label className="inline-flex items-center gap-1">
       {name}
-      <span className={cn(look, "inline-flex items-center gap-1 pe-2")} dir="ltr">
+      <span className={cn(look, "inline-flex items-center gap-1 pe-2 focus-within:outline-2 focus-within:outline-offset-1 focus-within:outline-focus")} dir="ltr">
         <input
           aria-label={name}
           inputMode={numeric ? "decimal" : undefined}

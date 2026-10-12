@@ -190,10 +190,16 @@ function Canvas({
   const dir = directionOf(locale);
   const edit = mode === "edit";
   const flow = useReactFlow<CanvasNode, CanvasEdge>();
-  const model = useMemo(
-    () => workflowMap({ definition, stages, dir, viewerRole, position, everyStage: edit }),
-    [definition, stages, dir, viewerRole, position, edit],
-  );
+  // The builder's bands stay where they stood while each Step is still in its own Stage's band
+  // (workflowMap's fixedBands), so a Step dropped near a boundary never moves them; Auto-layout re-draws them.
+  const frozen = useRef<{ nonce: number | undefined; bands: MapBand[] } | null>(null);
+  const model = useMemo(() => {
+    if (!edit) return workflowMap({ definition, stages, dir, viewerRole, position });
+    if (frozen.current?.nonce !== fitNonce) frozen.current = null;
+    const ltr = workflowMap({ definition, stages, dir: "ltr", everyStage: true, fixedBands: frozen.current?.bands });
+    frozen.current = { nonce: fitNonce, bands: ltr.bands };
+    return workflowMap({ definition, stages, dir, everyStage: true, fixedBands: ltr.bands });
+  }, [definition, stages, dir, viewerRole, position, edit, fitNonce]);
   const ctx = useMemo<Ctx>(
     () => ({
       labels,
@@ -822,15 +828,16 @@ function TransitionEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition
     "wf-label nodrag nopan absolute inline-flex h-[22px] max-w-[220px] items-center gap-[3px] rounded-full bg-surface px-2 text-[11px] font-semibold whitespace-nowrap text-text",
     "shadow-[inset_0_0_0_1.5px_var(--ec)] [&_.wf-label-icon]:text-[var(--ec)]",
     // Selected: filled in the arrow's colour, as the reference's and the owner chose (RP-555).
-    // A shade darker than the arrow, so its white text keeps its contrast (WCAG AA).
-    selected && "!bg-[color-mix(in_srgb,var(--ec),black_45%)] !text-on-primary [&_.wf-label-icon]:!text-on-primary",
+    // Filled in its tone, darkened only as far as its white text needs for AA (edgeLook's fill).
+    selected && "!bg-[var(--ef)] !text-on-primary [&_.wf-label-icon]:!text-on-primary",
     next && "!bg-primary !text-on-primary !shadow-none [&_.wf-label-icon]:!text-on-primary",
     faded && "!text-muted shadow-[inset_0_0_0_1.5px_var(--border)] [&_.wf-label-icon]:!text-faint",
     mark === "removed" && "line-through",
   );
-  const style: CSSProperties & Record<"--ec", string> = {
+  const style: CSSProperties & Record<"--ec" | "--ef", string> = {
     transform: `translate(${x}px, ${y}px) translate(${anchor}, -50%)`,
     "--ec": colour,
+    "--ef": markColour(mark) ?? look.fill,
     zIndex: selected ? 6 : 5,
   };
   return (

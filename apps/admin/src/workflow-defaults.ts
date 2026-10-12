@@ -92,6 +92,15 @@ export async function readRabaedWorkflow(db: Db, typeCode: string): Promise<Admi
     .orderBy("sort")
     .orderBy("code")
     .execute();
+  // The Types create_items outcomes make (Code B's Comments), named for the builder (RP-555).
+  const typeNames = new Map(
+    (await db.selectFrom("work_item_type").select(["code", "name"]).where("owner_kind", "=", "rabaed").execute()).map((t) => [t.code, t.name] as const),
+  );
+  const createsItemsOf = (actions: unknown) => {
+    const action = outcomeActions.parse(actions).find((a) => a.kind === "create_items");
+    const name = action && action.kind === "create_items" ? typeNames.get(action.type) : undefined;
+    return action && action.kind === "create_items" && name ? { code: action.type, name } : null;
+  };
   const check = await readWorkflowCheckContext(db, definitionId);
   return {
     workflow: {
@@ -109,7 +118,7 @@ export async function readRabaedWorkflow(db: Db, typeCode: string): Promise<Admi
     moduleKey: type.module_key,
     form: check?.context.form ?? null,
     stages: await readModuleStages(db, type.module_key, null),
-    outcomes: outcomes.map(({ code, name, closing, polarity }) => ({ code, name, closing, polarity })),
+    outcomes: outcomes.map(({ code, name, closing, polarity, actions }) => ({ code, name, closing, polarity, createsItems: createsItemsOf(actions) })),
     outcomeSet: outcomes.map((o): Outcome => ({ code: o.code, name: o.name, closing: o.closing, polarity: o.polarity, actions: outcomeActions.parse(o.actions) })),
     positions: await readPositions(db),
     screens: await rabaedScreens(db, definitionId),

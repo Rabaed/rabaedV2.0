@@ -24,6 +24,7 @@ import { WorkflowBuilder, type WorkflowBuilderProps, type WorkflowSaveState } fr
 // (6 Steps, 15 Transitions); its problems are the publish checks' own, run on every edit.
 
 const saved = { kind: "saved" as const, at: new Date("2026-10-10T11:32:00Z") };
+const workflowName = { en: "Material Submittal – 2-tier review", ar: "اعتماد المواد – مراجعة على مستويين" };
 
 /** The V2 draft with its errors fixed, as V2's "errors fixed" state: ready to publish. */
 const fixedDraft: WorkflowDefinition = {
@@ -114,7 +115,8 @@ function Frame(props: WorkflowBuilderProps) {
 
 const render: Story["render"] = (args, context) => {
   const locale = storyLocale(context);
-  return <Frame {...args} locale={locale} labels={workflowBuilderLabels(locale)} actionFormLabels={actionFormLabels[locale]} />;
+  // The Workflow's name in the story's language, as a page passes it.
+  return <Frame {...args} name={workflowName[locale]} locale={locale} labels={workflowBuilderLabels(locale)} actionFormLabels={actionFormLabels[locale]} />;
 };
 
 type Canvas = ReturnType<typeof within>;
@@ -144,7 +146,7 @@ export const Draft: Story = {
     const locale = storyLocale(context);
     const labels = workflowBuilderLabels(locale);
     await ready(canvas, locale);
-    await expect(canvas.getByRole("heading", { level: 1, name: "Material Submittal – 2-tier review" })).toBeVisible();
+    await expect(canvas.getByRole("heading", { level: 1, name: workflowName[locale] })).toBeVisible();
     await expect(canvas.getByText(labels.draft("4"), { exact: false })).toBeVisible();
     await expect(canvas.getByText(labels.nothingSelected)).toBeVisible();
     await expect(canvas.getByText(labels.tipsHeading)).toBeVisible();
@@ -249,7 +251,7 @@ export const TransitionCodeB: Story = {
     const editor = editorOf(canvas, labels);
     await expect(editor.getByRole("combobox", { name: labels.outcomeReviewCode })).toBeEnabled();
     await expect(editor.getByRole("combobox", { name: labels.screen })).toHaveTextContent(builderScreens[2]!.name[locale]);
-    await expect(editor.getByText(labels.createsItems)).toBeVisible();
+    await expect(editor.getByText(labels.createsItemsOf(locale === "ar" ? "الملاحظات" : "Comments"))).toBeVisible();
     await expect(editor.getByRole("link", { name: labels.editInScreens })).toHaveAttribute("href", "#screens");
   },
 };
@@ -288,7 +290,24 @@ export const PreviewPopup: Story = {
   },
 };
 
-/** V2 36: Validate: the toast counts the errors to fix, and the first error is selected. */
+/** V2 30: a Transition from a Step that recommends a code: its pop-up asks the Recommended Code, as the Transition dialog does. */
+export const PreviewRecommend: Story = {
+  render,
+  parameters: { overlay: true },
+  play: async ({ canvas, context }) => {
+    const locale = storyLocale(context);
+    const labels = workflowBuilderLabels(locale);
+    await pickTransition(canvas, "send_to_manager", locale);
+    await userEvent.click(editorOf(canvas, labels).getByRole("button", { name: labels.previewPopup }));
+    const dialog = within(await within(document.body).findByRole("dialog"));
+    const codes = within(dialog.getByRole("radiogroup", { name: labels.recommendCode }));
+    await expect(codes.getAllByRole("radio")).toHaveLength(4);
+    await userEvent.click(codes.getByRole("radio", { name: new RegExp(labels.codeChip("B")) }));
+    await expect(codes.getByRole("radio", { name: new RegExp(labels.codeChip("B")) })).toHaveAttribute("aria-checked", "true");
+  },
+};
+
+/** V2 36: Validate:the toast counts the errors to fix, and the first error is selected. */
 export const ValidateToast: Story = {
   render,
   play: async ({ canvas, context }) => {

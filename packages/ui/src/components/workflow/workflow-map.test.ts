@@ -1,7 +1,7 @@
 import type { StageCategory, WorkflowDefinition, WorkflowStep, WorkflowTransition } from "@rabaed/domain";
 import { describe, expect, it } from "vitest";
 import { sameInBoth as name } from "../../storybook/workflow.ts";
-import { bandAt, placedLayout, workflowMap, type MapNode } from "./workflow-map.ts";
+import { arrangedLayout, bandAt, placedLayout, workflowMap, type MapNode } from "./workflow-map.ts";
 
 const step = (key: string, stage: string, role: "contractor" | "consultant" | null): WorkflowStep => ({
   key,
@@ -184,5 +184,32 @@ describe("workflowMap: an item's map, as the viewer may know it (V14)", () => {
     const map = workflowMap({ definition: mar, stages, dir: "ltr", viewerRole: null, position: null });
     expect(map.nodes.filter((n) => n.kind === "group").map((n) => n.id)).toEqual(["role:contractor", "role:consultant"]);
     expect(map.nodes.filter((n) => n.kind === "step")).toEqual([]);
+  });
+});
+
+describe("the builder's bands and Auto-layout (RP-555 review)", () => {
+  const placed = { ...mar, layout: placedLayout(mar, stages, true) };
+
+  it("keeps the bands where they stood when a Step moves within its own band", () => {
+    const before = workflowMap({ definition: placed, stages, dir: "ltr", everyStage: true });
+    const band = before.bands.find((b) => b.key === "internal_review")!;
+    // Moved to the band's far edge: its centre is still inside it.
+    const moved = { ...placed, layout: { ...placed.layout, internal_review: { x: band.x + band.width - 110, y: 80 } } };
+    const after = workflowMap({ definition: moved, stages, dir: "ltr", everyStage: true, fixedBands: before.bands });
+    expect(after.bands.slice(0, -1)).toEqual(before.bands.slice(0, -1));
+  });
+
+  it("lays out a column per step of the route, Steps of one column stacked, the Ends after the last band", () => {
+    const layout = arrangedLayout(mar, stages);
+    // Engineer then manager: two columns in Pending Approval, the manager to the right on the same row.
+    expect(layout.consultant_manager!.x).toBeGreaterThan(layout.consultant_engineer!.x);
+    expect(layout.consultant_manager!.y).toBe(layout.consultant_engineer!.y);
+    const map = workflowMap({ definition: { ...mar, layout }, stages, dir: "ltr", everyStage: true });
+    for (const s of mar.steps) {
+      const node = byKey(map.nodes, s.key);
+      const band = map.bands.find((b) => b.key === (node.kind === "end" ? "outcome" : s.stage))!;
+      expect(node.x + node.width / 2).toBeGreaterThanOrEqual(band.x);
+      expect(node.x + node.width / 2).toBeLessThan(band.x + band.width);
+    }
   });
 });
