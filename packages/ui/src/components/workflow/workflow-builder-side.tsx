@@ -432,7 +432,7 @@ function TransitionEditor(props: SideEditorProps & { transition: WorkflowTransit
           onValueChange={(kind) => set({ kind: kind as WorkflowTransition["kind"], ...(kind === "close" ? {} : { outcome: null }) })}
           options={transitionKinds.map((k) => ({ value: k, label: labels.map.kind(k) }))}
           // Six kinds, Send Back included: a 3 by 2 grid in the 330px panel.
-          className="grid w-full auto-rows-fr grid-cols-3 [&>button]:h-auto [&>button]:min-h-7 [&>button]:px-1.5 [&>button]:py-0.5 [&>button]:text-xs [&>button]:leading-tight"
+          className="grid w-full auto-rows-fr grid-cols-3 [&>button]:h-auto [&>button]:min-h-7 [&>button]:px-1 [&>button]:py-0.5 [&>button]:text-[11px] [&>button]:leading-tight"
         />
       </Field>
       <Field label={reviewCodes ? labels.outcomeReviewCode : labels.outcomeCode} help={closes ? undefined : labels.outcomeOnlyOnClose} disabled={!closes}>

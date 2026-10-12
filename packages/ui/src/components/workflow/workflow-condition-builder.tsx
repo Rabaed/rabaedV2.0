@@ -171,7 +171,7 @@ function ComparisonRow({ comparison, onChange, fields, locale, labels, name, onR
   const label = (f: RuleField) => f.label[locale];
 
   return (
-    <div role="group" aria-label={name} className={cn("items-center", compact ? cn("grid gap-1", onEdit ? "grid-cols-[minmax(0,1fr)_46px_minmax(0,1fr)_24px_24px]" : "grid-cols-[minmax(0,1fr)_46px_minmax(0,1fr)_24px]") : "flex flex-wrap gap-2")}>
+    <div role="group" aria-label={name} className={cn("items-center", compact ? cn("grid gap-1", onEdit ? "grid-cols-[46px_minmax(0,1fr)_24px_24px]" : "grid-cols-[46px_minmax(0,1fr)_24px]") : "flex flex-wrap gap-2")}>
       <Select
         aria-label={`${labels.field} · ${name}`}
         value={key}
@@ -183,7 +183,7 @@ function ComparisonRow({ comparison, onChange, fields, locale, labels, name, onR
           ...(known || key === "" ? [] : [{ value: key, label: labels.missingField(key) }]),
           ...fields.map((f) => ({ value: f.key, label: label(f) })),
         ]}
-        className={cn("min-w-0", compact ? "h-[30px] px-2 text-[12px]" : "flex-[2_1_9rem]")}
+        className={cn("min-w-0", compact ? "col-span-full h-[30px] px-2 text-[12px]" : "flex-[2_1_9rem]")}
       />
       <Select
         aria-label={`${labels.operator} · ${name}`}

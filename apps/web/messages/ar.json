@@ -1142,6 +1142,7 @@
     "previewOnly": "معاينة فقط — لم يُحفظ شيء",
     "testRecorded": "سُجّل في التشغيل التجريبي — لم يُحفظ شيء",
     "testWouldCreate": "{count, plural, one {سيُنشئ عنصرًا واحدًا} two {سيُنشئ عنصرين} few {سيُنشئ {n} عناصر} other {سيُنشئ {n} عنصرًا}} في قائمة الملاحظات — لم يُنشأ شيء",
+    "testWouldCreateOf": "{count, plural, one {سيُنشئ واحدًا من {type}} other {سيُنشئ {n} من {type}}} في قائمة الملاحظات — لم يُنشأ شيء",
     "addedTransition": "أُضيف «{name}» — غيّر نصه بجانب المخطط",
     "endsCannotStart": "لا يبدأ انتقال من نهاية",
     "problemsName": "التحقق",

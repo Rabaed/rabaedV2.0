@@ -20,6 +20,8 @@ let nextToastId = 0;
 
 const icons: Record<ToastTone, IconName> = { info: "info-circle", success: "circle-check", danger: "alert-circle" };
 const iconColour: Record<ToastTone, string> = { info: "text-muted", success: "text-success", danger: "text-danger-fg" };
+/** On the dark pill: light tints that keep 3:1. */
+const darkIconColour: Record<ToastTone, string> = { info: "text-on-primary", success: "text-success-tint", danger: "text-danger-tint" };
 
 export type ToastProviderProps = {
   /** Names the notifications region for screen readers, e.g. "Notifications" / "الإشعارات". */
@@ -30,6 +32,8 @@ export type ToastProviderProps = {
   duration?: number;
   /** Where toasts sit: the bottom inline-end corner (default), or the bottom centre, clear of side panels. */
   placement?: "end" | "center";
+  /** `dark`: a dark pill with light text (the Workflow builder's, as its reference), in every theme. */
+  look?: "default" | "dark";
   children: ReactNode;
 };
 
@@ -38,7 +42,7 @@ export type ToastProviderProps = {
  * Toasts appear at the bottom inline-end corner and are announced to screen
  * readers: politely, or at once for `tone: "danger"`.
  */
-export function ToastProvider({ label, closeLabel, duration = 5000, placement = "end", children }: ToastProviderProps) {
+export function ToastProvider({ label, closeLabel, duration = 5000, placement = "end", look = "default", children }: ToastProviderProps) {
   const [toasts, setToasts] = useState<(ToastInput & { id: number })[]>([]);
   const show = useCallback<ShowToast>((toast) => setToasts((list) => [...list, { ...toast, id: nextToastId++ }]), []);
   // Swiped away towards the inline-end corner they sit in.
@@ -56,17 +60,20 @@ export function ToastProvider({ label, closeLabel, duration = 5000, placement = 
             onOpenChange={(open) => {
               if (!open) setToasts((list) => list.filter((toast) => toast.id !== id));
             }}
-            className="flex items-start gap-3 rounded-sm border border-border bg-surface p-4 text-text shadow-lg"
+            className={cn(
+              "flex items-start gap-3 p-4 shadow-lg",
+              look === "dark" ? "rounded-md bg-sidebar px-4 py-3 text-on-primary" : "rounded-sm border border-border bg-surface text-text",
+            )}
           >
-            <Icon name={icons[tone]} className={cn("mt-0.5", iconColour[tone])} />
+            <Icon name={icons[tone]} className={cn("mt-0.5", look === "dark" ? darkIconColour[tone] : iconColour[tone])} />
             <div className="flex min-w-0 flex-1 flex-col gap-0.5">
               <ToastPrimitive.Title className="text-body font-semibold">{title}</ToastPrimitive.Title>
-              {description && <ToastPrimitive.Description className="text-sm text-muted">{description}</ToastPrimitive.Description>}
+              {description && <ToastPrimitive.Description className={cn("text-sm", look === "dark" ? "text-on-primary [&_a]:text-on-primary" : "text-muted")}>{description}</ToastPrimitive.Description>}
             </div>
             <ToastPrimitive.Close
               aria-label={closeLabel}
               // 24px to look at; a 44px hit area on touch screens.
-              className={cn("-m-1 rounded-xs p-1 text-muted hover:bg-hover hover:text-text", focusRing, touchArea)}
+              className={cn("-m-1 rounded-xs p-1", look === "dark" ? "text-on-primary hover:opacity-80" : "text-muted hover:bg-hover hover:text-text", focusRing, touchArea)}
             >
               <Icon name="x" size={16} />
             </ToastPrimitive.Close>

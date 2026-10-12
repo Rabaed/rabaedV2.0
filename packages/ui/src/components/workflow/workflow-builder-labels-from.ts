@@ -253,6 +253,7 @@ export function workflowBuilderLabels({
     previewOnly: t("previewOnly"),
     testRecorded: t("testRecorded"),
     testWouldCreate: (count, n) => t("testWouldCreate", { count, n }),
+    testWouldCreateOf: (count, n, type) => t("testWouldCreateOf", { count, n, type }),
     addedTransition: (name) => t("addedTransition", { name }),
     endsCannotStart: t("endsCannotStart"),
     problemsName: t("problemsName"),

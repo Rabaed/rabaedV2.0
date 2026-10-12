@@ -53,7 +53,7 @@ export default async function WorkflowBuilderPage({ params }: { params: Promise<
   return (
     // In the page's own flow, in the settings column: an absolutely placed box spanned the
     // viewport and overlapped the app shell's sidebar (RP-441).
-    <div className="h-[calc(100dvh-11rem)] min-h-[640px] min-w-0 md:-ms-[16rem] md:w-[calc(100%+16rem)]">
+    <div data-settings-wide className="h-[calc(100dvh-181px)] min-h-[520px] min-w-0 md:-ms-[16rem] md:w-[calc(100%+16rem)]">
       <WorkflowBuilderEditor read={read} locale={locale} backHref={`/${locale}/projects/${projectId}/settings/workflows`} names={names} />
     </div>
   );
