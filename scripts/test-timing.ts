@@ -1,4 +1,4 @@
-import { appendFileSync, readFileSync } from "node:fs";
+import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 
 // Summarises a vitest JSON report for the job summary of a seam job (RP-321):
 // the slowest test files and the total test time, beside the latest run on main.
@@ -7,17 +7,29 @@ import { appendFileSync, readFileSync } from "node:fs";
 //
 //   node scripts/test-timing.ts <report.json> --title "seam 1" [--main main.json]
 //
+// Seam 1 runs as shards (RP-557); their reports become one first, whose total
+// is the longest shard's span:
+//
+//   node scripts/test-timing.ts --merge seam1-timing.json seam1-timing-1.json ...
+//
 // Timing is a notice, never a failure: this script always exits 0.
 
 /** The part of vitest's JSON report used here. */
 export interface VitestReport {
   testResults: { name: string; startTime: number; endTime: number }[];
+  /** Set on a report merged from shards (RP-557): each shard's first start and last end. */
+  shards?: { startTime: number; endTime: number }[];
 }
 
 export interface Timing {
-  /** From the first file starting to the last file ending, so global setup (seeding) is left out. */
+  /**
+   * From the first file starting to the last file ending, so global setup (seeding) is left out.
+   * For a merged report, the longest shard's span: the shards run side by side.
+   */
   totalMs: number;
   files: { file: string; ms: number }[];
+  /** Each shard's span, in shard order, for a merged report. */
+  shardsMs?: number[];
 }
 
 /** A slowdown above this share of main's total time gets a notice. */
@@ -30,12 +42,31 @@ export function relativeFile(name: string): string {
   return match?.[1] ?? path;
 }
 
+/** First start to last end of these files; 0 without files. */
+function spanOf(results: { startTime: number; endTime: number }[]): { startTime: number; endTime: number } {
+  if (results.length === 0) return { startTime: 0, endTime: 0 };
+  return { startTime: Math.min(...results.map((r) => r.startTime)), endTime: Math.max(...results.map((r) => r.endTime)) };
+}
+
 export function timingOf(report: VitestReport): Timing {
   const files = report.testResults.map((r) => ({ file: relativeFile(r.name), ms: Math.max(0, r.endTime - r.startTime) }));
-  if (report.testResults.length === 0) return { totalMs: 0, files };
-  const start = Math.min(...report.testResults.map((r) => r.startTime));
-  const end = Math.max(...report.testResults.map((r) => r.endTime));
-  return { totalMs: Math.max(0, end - start), files };
+  if (report.shards) {
+    const shardsMs = report.shards.map((s) => Math.max(0, s.endTime - s.startTime));
+    return { totalMs: Math.max(0, ...shardsMs), files, shardsMs };
+  }
+  const { startTime, endTime } = spanOf(report.testResults);
+  return { totalMs: Math.max(0, endTime - startTime), files };
+}
+
+/**
+ * One report from several shards' reports (RP-557): every file of each, and
+ * each shard's span, since shards run side by side on separate runners.
+ */
+export function mergeReports(reports: VitestReport[]): VitestReport {
+  return {
+    testResults: reports.flatMap((r) => r.testResults),
+    shards: reports.map((r) => spanOf(r.testResults)),
+  };
 }
 
 export function formatDuration(ms: number): string {
@@ -69,6 +100,10 @@ export function summarise(title: string, current: Timing, main?: Timing, top = 1
       ? `${formatDuration(current.totalMs)}, main ${formatDuration(main.totalMs)} (${formatChange(current.totalMs, main.totalMs)})`
       : `${formatDuration(current.totalMs)} (no run on main to compare with yet)`;
   const lines = [`### ${title}: test time`, "", `Total: **${total}**`];
+  if (current.shardsMs) {
+    const n = current.shardsMs.length;
+    lines.push("", `Shards: ${current.shardsMs.map((ms, i) => `${i + 1}/${n} ${formatDuration(ms)}`).join(", ")}`);
+  }
 
   let notice: string | undefined;
   if (main && isSlower(current.totalMs, main.totalMs)) {
@@ -96,6 +131,13 @@ export function run(argv: string[], env: NodeJS.ProcessEnv = process.env): void 
     const at = argv.indexOf(flag);
     return at === -1 ? undefined : argv[at + 1];
   };
+  if (argv[0] === "--merge") {
+    const [out, ...shards] = argv.slice(1);
+    if (!out || shards.length === 0) throw new Error("usage: test-timing.ts --merge <out.json> <shard.json>...");
+    const merged = mergeReports(shards.map((path) => JSON.parse(readFileSync(path, "utf8")) as VitestReport));
+    writeFileSync(out, JSON.stringify(merged));
+    return;
+  }
   const report = argv[0];
   if (!report || report.startsWith("--")) throw new Error("usage: test-timing.ts <report.json> --title <title> [--main <main.json>]");
   const title = arg("--title") ?? "tests";

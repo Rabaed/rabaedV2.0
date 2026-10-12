@@ -2,7 +2,17 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { formatChange, formatDuration, isSlower, relativeFile, run, summarise, timingOf, type VitestReport } from "./test-timing.ts";
+import {
+  formatChange,
+  formatDuration,
+  isSlower,
+  mergeReports,
+  relativeFile,
+  run,
+  summarise,
+  timingOf,
+  type VitestReport,
+} from "./test-timing.ts";
 
 // Real vitest reports from the RP-299 retro (seam 1 on main, and on the slowed
 // branch). Set TEST_TIMING_REPORTS to the folder holding them to run those tests.
@@ -33,6 +43,29 @@ describe("timingOf", () => {
 
   it("copes with a report without files", () => {
     expect(timingOf({ testResults: [] })).toEqual({ totalMs: 0, files: [] });
+  });
+});
+
+describe("mergeReports (one report from seam 1's shards, RP-557)", () => {
+  // Shard 1 spans 10s, shard 2 spans 25s; shard 2 started later, on another runner.
+  const shard1 = report(["apps/a.test.ts", 1_000, 5_000], ["apps/b.test.ts", 5_000, 11_000]);
+  const shard2 = report(["apps/c.test.ts", 100_000, 125_000]);
+
+  it("keeps every file of each shard, and the total is the longest shard's span", () => {
+    const t = timingOf(mergeReports([shard1, shard2]));
+    expect(t.files.map((f) => f.file)).toEqual(["apps/a.test.ts", "apps/b.test.ts", "apps/c.test.ts"]);
+    expect(t.totalMs).toBe(25_000);
+    expect(t.shardsMs).toEqual([10_000, 25_000]);
+  });
+
+  it("lists each shard's span in the summary", () => {
+    const { markdown } = summarise("seam 1", timingOf(mergeReports([shard1, shard2])), undefined);
+    expect(markdown).toContain("Total: **25.0s");
+    expect(markdown).toContain("Shards: 1/2 10.0s, 2/2 25.0s");
+  });
+
+  it("gives no shard line for a report from one job", () => {
+    expect(summarise("seam 1", timingOf(shard1), undefined).markdown).not.toContain("Shards:");
   });
 });
 
@@ -96,6 +129,16 @@ describe("run", () => {
     const mainPath = write("main.json", report(["apps/a.test.ts", 0, 10_000]));
     run([current, "--title", "seam 1", "--main", mainPath], { GITHUB_STEP_SUMMARY: summary });
     expect(readFileSync(summary, "utf8")).toContain("seam 1: test time");
+  });
+
+  it("merges shard reports into one file with --merge", () => {
+    const a = write("seam1-timing-1.json", report(["apps/a.test.ts", 0, 4_000]));
+    const b = write("seam1-timing-2.json", report(["apps/b.test.ts", 50_000, 57_000]));
+    const out = join(dir, "seam1-timing.json");
+    run(["--merge", out, a, b]);
+    const t = timingOf(JSON.parse(readFileSync(out, "utf8")) as VitestReport);
+    expect(t.files.map((f) => f.file)).toEqual(["apps/a.test.ts", "apps/b.test.ts"]);
+    expect(t.totalMs).toBe(7_000);
   });
 
   it("still summarises when main's timing is broken", () => {
