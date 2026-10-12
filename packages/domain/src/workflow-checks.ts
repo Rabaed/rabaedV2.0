@@ -55,6 +55,7 @@ export const workflowProblemCodes = [
   // Check 2
   "unknown_stage",
   "terminal_step_has_transitions",
+  "return_to_draft",
   // Check 3
   "no_issuing_step",
   "missing_outcome",
@@ -223,12 +224,23 @@ function graphProblems({ steps, transitions, categoryOf, isTerminal }: CheckInpu
   ];
 }
 
-/** Check 2: every Step's Stage is the Module's; nothing leaves a terminal Step. */
-function stageProblems({ steps, transitions, categoryOf, isTerminal }: CheckInput): FoundProblem[] {
+/**
+ * Check 2: every Step's Stage is the Module's; nothing leaves a terminal Step; and a
+ * Return stays in Internal Review (ADR 0020, RP-437): it never goes into a Step in a
+ * `draft` Stage, which holds only items never sent (a Send Back still may).
+ */
+function stageProblems({ steps, transitions, categoryOf, isTerminal, stepOf }: CheckInput): FoundProblem[] {
   const terminal = new Set(steps.filter(isTerminal).map((s) => s.key));
+  const inDraftStage = (key: string) => {
+    const step = stepOf.get(key);
+    return step !== undefined && categoryOf(step.stage) === "draft";
+  };
   return [
     ...steps.filter((s) => categoryOf(s.stage) === undefined).map((s): FoundProblem => ({ code: "unknown_stage", step: s.key, detail: s.stage })),
     ...transitions.filter((t) => terminal.has(t.from)).map((t): FoundProblem => ({ code: "terminal_step_has_transitions", transition: t.key })),
+    ...transitions
+      .filter((t) => t.kind === "return" && inDraftStage(t.to))
+      .map((t): FoundProblem => ({ code: "return_to_draft", transition: t.key, step: t.to })),
   ];
 }
 
@@ -641,6 +653,10 @@ const messages: Record<WorkflowProblemCode, (names: Names) => BilingualText> = {
   terminal_step_has_transitions: (names) => ({
     en: `${names.transition.en} leaves a closed Step: an item that reaches it is closed.`,
     ar: `${names.transition.ar} يخرج من خطوة مغلقة: العنصر الذي يصلها يُغلق.`,
+  }),
+  return_to_draft: (names) => ({
+    en: `${names.transition.en} goes back to ${names.step.en}, in the Drafts. A Return stays in Internal Review: send it to the engineer's Step there.`,
+    ar: `${names.transition.ar} يعيد إلى ${names.step.ar} في المسودات. تبقى الإعادة في المراجعة الداخلية: وجّهها إلى خطوة المهندس هناك.`,
   }),
   no_issuing_step: () => ({
     en: "No Step issues the outcome: this Work Item Type needs one that does.",

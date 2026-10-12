@@ -5,6 +5,7 @@
 export { asEngineer } from "./admin-action.ts";
 export { createEngineer } from "./engineers.ts";
 export { publishFormVersion, rabaedDefaultFormId, type PublishFormResult } from "./forms.ts";
+export { publishRabaedDefaults, rabaedDefaultTypes, rabaedScreenFile, rabaedWorkflowFile, rabaedFormFile, sameDefinition } from "./rabaed-defaults.ts";
 export { closeOnboardingLead, listOnboardingLeads, type CloseLeadResult } from "./onboarding-leads.ts";
 export { inviteAuthorizedPerson, onboardCompany, type OnboardingResult } from "./onboarding.ts";
 export { addOption, createOptionList, listOptionLists, renameOption, setOptionRetired } from "./option-lists.ts";

@@ -14,6 +14,7 @@ import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { attachDatasheet, createTestApi, type Caller } from "./support/harness.ts";
 import { all, bilingual, memberOnProject, ok, take, type Company } from "./support/tower.ts";
+import { LEGACY_MAR } from "@rabaed/db/test-support";
 
 const api = await createTestApi({ files: true });
 const migrator = createDb(testDatabaseUrls().migrator, { max: 1 });
@@ -150,10 +151,10 @@ beforeAll(async () => {
   k1ManagerA = (await memberOnProject(api, k1.company, k1.participantId, ["manager"])).caller;
   k1ManagerB = (await memberOnProject(api, k1.company, k1.participantId, ["manager"])).caller;
 
-  aDraft = await draft("MAR", "Fire alarm cables");
-  marAtK1 = await atK1("MAR", "Cable trays");
+  aDraft = await draft(LEGACY_MAR, "Fire alarm cables");
+  marAtK1 = await atK1(LEGACY_MAR, "Cable trays");
   twoApprovalsAtK1 = await atK1(TYPE, "Busbars");
-  pooled = await draft("MAR", "Chillers");
+  pooled = await draft(LEGACY_MAR, "Chillers");
   await take(c1Engineer, pooled, "send_for_review");
   await ok(c1Pm.post(`/v1/work-items/${pooled}/pick-up`));
   await take(c1Pm, pooled, "submit");
@@ -227,13 +228,6 @@ describe("dropping", () => {
   it("takes the Transition, and the card is in its new Stage on the next read", async () => {
     const before = await board(k1ManagerA);
     const move = dropTargets(before.moves[marAtK1]!, "pending_approval").get("revise_resubmit")!;
-    // The Consultant's verification is part of the Form, filled before a Code.
-    const answers = (await ok(k1ManagerA.get(`/v1/work-items/${marAtK1}`), 200)).json().answers;
-    await ok(
-      k1ManagerA.request("PUT", `/v1/work-items/${marAtK1}/answers`, {
-        answers: { ...answers, sample_checked: true, matches_specification: false, verification_note: "Below the specified efficacy" },
-      }),
-    );
     await take(k1ManagerA, marAtK1, move.transition,{ remarks: "Resubmit with 110 lm/W luminaires" });
     const after = await board(k1ManagerA);
     const column = after.columns.find((c) => c.stageKey === "revise_resubmit")!;

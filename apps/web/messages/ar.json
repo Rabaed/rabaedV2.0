@@ -246,7 +246,12 @@
       "open": "مفتوحة",
       "closed": "مغلقة",
       "empty": "لا توجد أنواع عناصر عمل في هذا المشروع بعد.",
-      "codeC": "الرمز C",
+      "revisionLine": {
+        "review_code": "الرمز C",
+        "inspection_result": "الراسب",
+        "approval": "التعديلات",
+        "none": "التعديلات"
+      },
       "approved": {
         "review_code": "المعتمد (A+B)",
         "inspection_result": "الناجح، مع ملاحظات أو بدونها",
@@ -408,6 +413,7 @@
     "notCreator": "لا يُنشئ المشاريع إلا منشئ المشاريع.",
     "unavailable": "حدث خطأ. حاول مرة أخرى.",
     "participants": "المشاركون",
+    "projectDetails": "تفاصيل المشروع",
     "participantCode": "رمز المشارك",
     "setParticipantCodes": "تحديد رموز المشاركين",
     "projectMembers": "أعضاء المشروع",
@@ -760,8 +766,7 @@
         "choose": "اختر…",
         "none": "بدون",
         "leftProject": "\u2068{name}\u2069 (لم يعد في المشروع)",
-        "unanswered": "لم تتم الإجابة",
-        "filledBy": "يعبّئه {role}"
+        "unanswered": "لم تتم الإجابة"
       },
       "builtIn": {
         "choose": "اختر…",

@@ -6,7 +6,7 @@ import {
   type DashboardBar,
   type DashboardBarTone,
   type DashboardCard,
-  type DashboardCodeCLine,
+  type DashboardRevisionLine,
   type DashboardFigure,
   type DashboardFigureQuery,
   type FixedChainBucket,
@@ -16,6 +16,7 @@ import {
 import type { ElementType, ReactNode } from "react";
 import { cn } from "../../lib/cn.ts";
 import { moduleName } from "../../lib/module-name.ts";
+import { TitledCard } from "../data/titled-card.tsx";
 import { focusRing, touchBox } from "../form/control-styles.ts";
 
 /** The Dashboard's words, from the app's messages. A number is given already formatted for the locale. */
@@ -26,10 +27,11 @@ export type ProjectDashboardLabels = {
   open: string;
   closed: string;
   empty: string;
-  codeC: string;
+  /** The Revision line's name, by outcome kind: "Code C" for Review Codes, "Failed" for Inspection Results. */
+  revisionLine: Record<OutcomeKind, string>;
   /** The name of each bucket that isn't an outcome (an outcome's bar has its own name from the Type's set). */
   buckets: Record<FixedChainBucket, string>;
-  /** The Code C line's sub-states, as the line and a List filtered from it name them. */
+  /** The Revision line's sub-states, as the line and a List filtered from it name them. */
   codeCStates: Record<CodeCFilter, string>;
   /** The footer's name for the approved share, by outcome kind. */
   approved: Record<OutcomeKind, string>;
@@ -62,20 +64,23 @@ export type ProjectDashboardProps = {
  * under its Module's heading, the Snag List's open/closed cards first. Counts
  * are Revision chains the viewer sees, as the API sends them; every number is a
  * link to the List of exactly those chains. Nothing is measured against time.
+ * Laid out as the design kit's grid of cards (RP-411): a card is never narrower
+ * than its longest label needs, so a row that can't fit another card wraps it.
  */
 export function ProjectDashboard({ dashboard, locale, labels, hrefFor, linkAs: Link = "a" }: ProjectDashboardProps) {
   if (dashboard.modules.length === 0) return <p className="text-muted">{labels.empty}</p>;
   const ctx = { locale, labels, hrefFor, Link };
   return (
-    <div className="space-y-8">
+    <div className="flex flex-col gap-7">
       {dashboard.modules.map((m) => (
-        <section key={m.key} aria-labelledby={`dashboard-${m.key}`} className="space-y-3">
-          <h2 id={`dashboard-${m.key}`} className="text-h6 font-semibold">
+        <section key={m.key} aria-labelledby={`dashboard-${m.key}`} className="flex flex-col gap-3">
+          <h2 id={`dashboard-${m.key}`} className="font-display text-h6 leading-tight font-bold ltr:font-extrabold">
             {moduleName(m.key, locale)}
           </h2>
-          <ul className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,18rem),1fr))] gap-4">
+          {/* 20rem fits the longest bar and figure in English and Arabic beside a 3rem bar (the FiguresWhole stories check it). */}
+          <ul className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,20rem),1fr))] gap-[18px]">
             {m.cards.map((card) => (
-              <li key={card.type.code}>
+              <li key={card.type.code} className="flex min-w-0">
                 <TypeCard card={card} {...ctx} />
               </li>
             ))}
@@ -93,96 +98,97 @@ const linkClass = cn(linkLook, touchBox);
 
 function TypeCard({ card, ...ctx }: { card: DashboardCard } & Ctx) {
   const { locale, labels } = ctx;
-  const headingId = `dashboard-type-${card.type.code}`;
+  const n = (count: number) => formatNumber(count, locale);
   return (
-    <article aria-labelledby={headingId} className="h-full space-y-4 rounded-lg border border-border bg-surface p-4">
-      <header className="flex flex-wrap items-baseline justify-between gap-2">
-        <h3 id={headingId} className="font-semibold">
+    <TitledCard
+      as="article"
+      level={3}
+      className="w-full"
+      title={
+        <>
           {card.type.name[locale]}{" "}
-          <span className="text-muted" translate="no">
+          <span className="font-semibold text-muted" translate="no">
             {card.type.code}
           </span>
-        </h3>
-        <Figure figure={card.total} {...ctx} className="text-muted">
-          {labels.items(formatNumber(card.total.count, locale))}
+        </>
+      }
+      actions={
+        <Figure figure={card.total} {...ctx} className="text-[13px] font-semibold whitespace-nowrap text-muted">
+          {labels.items(n(card.total.count))}
         </Figure>
-      </header>
+      }
+    >
       {card.kind === "open_closed" ? (
         <dl className="grid grid-cols-2 gap-4">
           <BigNumber label={labels.open} figure={card.open} {...ctx} />
           <BigNumber label={labels.closed} figure={card.closed} {...ctx} />
         </dl>
       ) : (
-        <>
-          <ul className="space-y-1">
+        <div className="flex flex-col gap-3">
+          {/* One grid for the card's bars, so every bar starts where the longest name ends. A name too long for the card (a Type's own outcome name) wraps rather than spill. */}
+          <ul className="grid grid-cols-[minmax(0,max-content)_minmax(3rem,1fr)_auto] gap-x-3">
             {card.bars.map((bar) => (
-              <li key={bar.bucket}>
+              <li key={bar.bucket} className="col-span-3 grid grid-cols-subgrid">
                 <Bar label={barLabel(bar, locale, labels)} colour={barColour[bar.tone]} figure={bar} total={card.total.count} {...ctx} />
               </li>
             ))}
           </ul>
-          {card.inPreparation && (
-            <p className="text-caption">
-              <Figure figure={card.inPreparation} {...ctx} className="text-muted">
-                {labels.inPreparation} {formatNumber(card.inPreparation.count, locale)}
-              </Figure>
-            </p>
-          )}
-          <p className="border-t border-border pt-3 text-caption font-semibold">
-            <Figure figure={card.approved} {...ctx}>
-              {labels.approved[card.outcomeKind]} {formatNumber(card.approved.count, locale)} ·{" "}
-              {formatNumber(card.approved.percent / 100, locale, { style: "percent" })}
-            </Figure>
-          </p>
-          {card.codeC && <CodeCLine typeCode={card.type.code} line={card.codeC} {...ctx} />}
-        </>
+          {card.inPreparation && <FigureRow label={labels.inPreparation} value={n(card.inPreparation.count)} figure={card.inPreparation} {...ctx} className="text-muted" />}
+          <div className="border-t border-border-subtle pt-2">
+            <FigureRow
+              label={labels.approved[card.outcomeKind]}
+              value={`${n(card.approved.count)} · ${formatNumber(card.approved.percent / 100, locale, { style: "percent" })}`}
+              figure={card.approved}
+              {...ctx}
+              className="font-semibold"
+            />
+            {card.revisionLine && <RevisionLine typeCode={card.type.code} outcomeKind={card.outcomeKind} line={card.revisionLine} {...ctx} />}
+          </div>
+        </div>
       )}
-    </article>
+    </TitledCard>
   );
 }
 
 /**
- * "Code C 5 · approved on revision 3 (60%) · awaiting revision 2", awaiting
- * revision split for the raiser's own Company, and "rejected after C" when
- * there is any (RP-352). Each figure links to its List.
+ * The Code C figures, a row each (RP-411): "Code C 5", then "approved on
+ * revision 3 (60%)" and "awaiting revision 2", awaiting revision split for the
+ * raiser's own Company, and "rejected after C" when there is any (RP-352). Each
+ * figure links to its List.
  */
-function CodeCLine({ typeCode, line, ...ctx }: { typeCode: string; line: DashboardCodeCLine } & Ctx) {
+function RevisionLine({ typeCode, outcomeKind, line, ...ctx }: { typeCode: string; outcomeKind: OutcomeKind; line: DashboardRevisionLine } & Ctx) {
   const { locale, labels } = ctx;
   const n = (count: number) => formatNumber(count, locale);
-  // Each figure at least 24px tall (44px on a touch screen), so the links on one line are easy to hit.
-  const target = "inline-flex min-h-6 items-center pointer-coarse:min-h-11";
-  const part = (filter: CodeCFilter, figure: DashboardFigure, suffix = "") => (
-    <Figure figure={figure} {...ctx} className={target}>
-      {labels.codeCStates[filter]} {n(figure.count)}
-      {suffix}
-    </Figure>
-  );
-  const separator = (
-    <span aria-hidden="true" className="text-muted">
-      ·
-    </span>
+  const row = (filter: CodeCFilter, figure: DashboardFigure, suffix = "", className?: string) => (
+    <FigureRow label={labels.codeCStates[filter]} value={`${n(figure.count)}${suffix}`} figure={figure} {...ctx} className={className} />
   );
   return (
-    <p data-testid={`code-c-${typeCode}`} className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-caption">
-      <Figure figure={line.total} {...ctx} className={cn(target, "font-semibold")}>
-        {labels.codeC} {n(line.total.count)}
-      </Figure>
-      {separator}
-      {part("approvedOnRevision", line.approvedOnRevision, ` (${formatNumber(line.approvedOnRevision.percent / 100, locale, { style: "percent" })})`)}
-      {separator}
-      {part("awaitingRevision", line.awaitingRevision)}
-      {line.split && (
-        <span className="inline-flex flex-wrap items-center gap-x-1 text-muted">
-          ({part("noRevisionYet", line.split.noRevisionYet)} · {part("revisionInProgress", line.split.revisionInProgress)})
-        </span>
-      )}
-      {line.rejectedAfterC && (
-        <>
-          {separator}
-          {part("rejectedAfterC", line.rejectedAfterC)}
-        </>
-      )}
-    </p>
+    <div data-testid={`revision-line-${typeCode}`}>
+      <FigureRow label={labels.revisionLine[outcomeKind]} value={n(line.total.count)} figure={line.total} {...ctx} className="font-semibold" />
+      <div className="border-s-2 border-border-subtle ps-3">
+        {row("approvedOnRevision", line.approvedOnRevision, ` (${formatNumber(line.approvedOnRevision.percent / 100, locale, { style: "percent" })})`)}
+        {row("awaitingRevision", line.awaitingRevision)}
+        {line.split && (
+          <div className="ps-3 text-muted">
+            {row("noRevisionYet", line.split.noRevisionYet)}
+            {row("revisionInProgress", line.split.revisionInProgress)}
+          </div>
+        )}
+        {line.rejectedAfterC && row("rejectedAfterC", line.rejectedAfterC)}
+      </div>
+    </div>
+  );
+}
+
+/** One figure on a line of its own: its name, and its number at the end; the whole row links to its List. */
+function FigureRow({ label, value, figure, className, ...ctx }: { label: string; value: string; figure: DashboardFigure; className?: string } & Ctx) {
+  return (
+    <ctx.Link
+      href={ctx.hrefFor(figure.query)}
+      className={cn(linkLook, "flex min-h-8 items-center justify-between gap-3 text-caption pointer-coarse:min-h-11", className)}
+    >
+      <span className="min-w-0 break-words">{label}</span> <span className="shrink-0 whitespace-nowrap tabular-nums">{value}</span>
+    </ctx.Link>
   );
 }
 
@@ -201,26 +207,34 @@ function Figure({ figure, hrefFor, Link, className, children }: { figure: Dashbo
   );
 }
 
-/** One bar: its name, a bar as long as its share of the Type's chains, and its number; the whole row links to its List. */
+/**
+ * One bar: its name in full, a bar as long as its share of the Type's chains,
+ * and its number; the whole row links to its List. It lays out on its list's
+ * grid (subgrid), so the bars of a card line up.
+ */
 function Bar({ label, colour, figure, total, ...ctx }: { label: string; colour: string; figure: DashboardFigure; total: number } & Ctx) {
   const share = total === 0 ? 0 : Math.round((figure.count / total) * 100);
   return (
     // A whole-width grid row, so it takes the link's look but not touchBox: it only needs the height.
-    <ctx.Link href={ctx.hrefFor(figure.query)} className={cn(linkLook, "grid min-h-8 grid-cols-[minmax(0,9rem)_1fr_auto] items-center gap-3 text-caption pointer-coarse:min-h-11")}>
-      <span className="truncate">{label}</span>
+    <ctx.Link
+      href={ctx.hrefFor(figure.query)}
+      className={cn(linkLook, "col-span-3 grid min-h-8 grid-cols-subgrid items-center text-caption pointer-coarse:min-h-11")}
+    >
+      <span className="min-w-0 break-words">{label}</span>{" "}
       <span aria-hidden="true" className="h-2 overflow-hidden rounded-full bg-neutral-tint">
         <span className={cn("block h-full rounded-full", colour)} style={{ inlineSize: `${share}%` }} />
-      </span>
-      <span className="font-semibold tabular-nums">{formatNumber(figure.count, ctx.locale)}</span>
+      </span>{" "}
+      <span className="text-end font-semibold whitespace-nowrap tabular-nums">{formatNumber(figure.count, ctx.locale)}</span>
     </ctx.Link>
   );
 }
 
+/** An open or closed count, as the kit's count tiles: its name over a large number. */
 function BigNumber({ label, figure, ...ctx }: { label: string; figure: DashboardFigure } & Ctx) {
   return (
-    <div>
-      <dt className="text-caption text-muted">{label}</dt>
-      <dd className="text-h4 font-semibold">
+    <div className="flex flex-col gap-2.5">
+      <dt className="text-[13.5px] text-muted">{label}</dt>
+      <dd className="text-[28px] leading-none font-bold tabular-nums">
         <Figure figure={figure} {...ctx}>
           <span className="sr-only">{label} </span>
           {formatNumber(figure.count, ctx.locale)}

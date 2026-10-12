@@ -12,6 +12,7 @@ import type { DocumentList, LinkedFrom, RevisionChain, WorkItemLinks } from "@ra
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { attachDatasheet, createTestApi, expectHidden, uploadDocument, type Caller } from "./support/harness.ts";
 import { all, bilingual, detail, ok, only, projectMember, take, type Company } from "./support/tower.ts";
+import { LEGACY_MAR } from "@rabaed/db/test-support";
 
 const api = await createTestApi({ files: true });
 afterAll(() => api.close());
@@ -51,9 +52,8 @@ async function submit(id: string) {
   await take(pm, id, "submit");
 }
 
-/** K1 verifies the submitted item and issues Code C. */
+/** K1 issues Code C on the submitted item. */
 async function codeC(id: string) {
-  await saveOver(k1Engineer, id, { sample_checked: true, matches_specification: false, verification_note: "Below the specified efficacy" });
   await ok(k1Manager.post(`/v1/work-items/${id}/pick-up`));
   await take(k1Manager, id, "revise_c", { remarks: "Resubmit with 110 lm/W luminaires" });
 }
@@ -61,7 +61,7 @@ async function codeC(id: string) {
 /** A MAR with its datasheet, and the Attachments named, closed at Code C. */
 async function closedAtCodeC(title: string, attachments: string[] = []): Promise<string> {
   const res = await ok(
-    engineer.post(`/v1/projects/${projectId}/work-items`, { type: "MAR", title, answers: { ...complete, trade: electrical, location: buildingA } }),
+    engineer.post(`/v1/projects/${projectId}/work-items`, { type: LEGACY_MAR, title, answers: { ...complete, trade: electrical, location: buildingA } }),
     201,
   );
   const id = res.json().id as string;
@@ -107,7 +107,7 @@ describe("C1 creates a Revision of a MAR that got Code C", () => {
     revision = await revisionOf(closed);
   });
 
-  it("is a new Draft with no number yet, Revision 1, with the raiser's answers and an empty Consultant verification (scenario 49)", async () => {
+  it("is a new Draft with no number yet, Revision 1, with the raiser's answers", async () => {
     const d = await detail(engineer, revision);
     expect(d).toMatchObject({
       title: "Fixtures",
@@ -117,7 +117,6 @@ describe("C1 creates a Revision of a MAR that got Code C", () => {
       outcome: null,
       answers: { ...complete, trade: electrical, location: buildingA },
     });
-    for (const key of ["sample_checked", "matches_specification", "verification_note"]) expect(d.answers).not.toHaveProperty(key);
     expect(d.actions.saveAnswers).toBe(true);
     expect(d.actions.discardRevision).toBe(true);
     // What makes its page show an enabled "Save and close" over an autosaved Form (RP-518, UAT A-09): no number, autosave on.
@@ -145,13 +144,13 @@ describe("C1 creates a Revision of a MAR that got Code C", () => {
     expect(await copy.text()).toBe(await source.text());
   });
 
-  it("leaves the closed MAR closed with its Code, its Consultant answers and its number", async () => {
+  it("leaves the closed MAR closed with its Code, its answers and its number", async () => {
     for (const who of [engineer, k1Manager, orEngineer]) {
       expect(await detail(who, closed)).toMatchObject({
         outcome: "C",
         revisionNo: 0,
         documentNumber: expect.stringMatching(/-0001$/),
-        answers: { sample_checked: true, matches_specification: false, verification_note: "Below the specified efficacy" },
+        answers: complete,
       });
     }
   });
@@ -200,7 +199,7 @@ describe("who may create a Revision", () => {
   });
 
   it("is refused for an item without Code C", async () => {
-    const draft = (await ok(engineer.post(`/v1/projects/${projectId}/work-items`, { type: "MAR", title: "Draft", answers: { ...complete, trade: electrical } }), 201)).json()
+    const draft = (await ok(engineer.post(`/v1/projects/${projectId}/work-items`, { type: LEGACY_MAR, title: "Draft", answers: { ...complete, trade: electrical } }), 201)).json()
       .id as string;
     expect((await createRevision(engineer, draft)).statusCode).toBe(409);
     expect((await detail(engineer, draft)).actions.createRevision).toBe(false);
@@ -290,7 +289,7 @@ describe("Documents added during the Draft (RP-399-1; scenarios 61, 74 and 75)",
   it("read no earlier than the Creation Date once numbered, for the C1 PM and for K1, though the C1 engineer saw the real time", async () => {
     const res = await ok(
       engineer.post(`/v1/projects/${projectId}/work-items`, {
-        type: "MAR",
+        type: LEGACY_MAR,
         title: "Cable trays",
         answers: { ...complete, trade: electrical, location: buildingA },
       }),
@@ -378,9 +377,8 @@ describe("the Revision drop-down (RP-318; scenarios 51 and 52)", () => {
       expect(await chain(who, rev1)).toEqual(expected);
       expect(await chain(who, closed)).toEqual(expected);
     }
-    expect(await detail(k1Manager, closed)).toMatchObject({ outcome: "C", answers: { manufacturer: "Philips", sample_checked: true } });
+    expect(await detail(k1Manager, closed)).toMatchObject({ outcome: "C", answers: { manufacturer: "Philips" } });
     expect(await detail(k1Manager, rev1)).toMatchObject({ outcome: null, answers: { manufacturer: "Schneider" } });
-    expect((await detail(k1Manager, rev1)).answers).not.toHaveProperty("sample_checked");
     const documents = async (id: string): Promise<DocumentList> => (await ok(k1Manager.get(`/v1/work-items/${id}/documents`), 200)).json();
     const [originalDocs, revisionDocs] = [await documents(closed), await documents(rev1)];
     expect(originalDocs.documents).toHaveLength(1);
@@ -504,7 +502,7 @@ describe("the Links of a discarded Revision", () => {
     target = await closedAtCodeC("Earthing");
     const res = await ok(
       engineer.post(`/v1/projects/${projectId}/work-items`, {
-        type: "MAR",
+        type: LEGACY_MAR,
         title: "Earthing pits",
         answers: { ...complete, trade: electrical, location: buildingA, related_submittals: [target] },
       }),

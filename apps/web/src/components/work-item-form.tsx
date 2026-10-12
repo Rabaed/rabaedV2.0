@@ -5,7 +5,6 @@ import {
   formVisibility,
   offeredChoices,
   validateAnswers,
-  type BilingualText,
   type FieldError,
   type FormChoices,
   type FormSchema,
@@ -62,8 +61,6 @@ type WorkItemFormState = {
   editable: boolean;
   /** The Form Sections the viewer may change now; the others read (form-engine.md §4). */
   editableSections: readonly string[];
-  /** The Form Sections another Participant fills, by its Project Role. */
-  filledBy: Readonly<Record<string, BilingualText>>;
   /** Typed since the last save. */
   dirty: boolean;
   /** When the item was last saved, if this page saved it or knows (ISO). */
@@ -103,7 +100,6 @@ export function WorkItemFormProvider({
   optionLists,
   editable,
   editableSections,
-  filledBy,
   fieldTimes,
   autosave,
   children,
@@ -122,7 +118,6 @@ export function WorkItemFormProvider({
   /** Save draft is offered (actions.saveAnswers). */
   editable: boolean;
   editableSections: readonly string[];
-  filledBy: Readonly<Record<string, BilingualText>>;
   /** When each answer last changed (detail.fieldTimes); a save is based on these. */
   fieldTimes: FieldTimes;
   /** The first Draft: answers save themselves every few seconds. After it only the button saves. */
@@ -253,7 +248,6 @@ export function WorkItemFormProvider({
         errors,
         editable,
         editableSections,
-        filledBy,
         dirty,
         savedAt,
         changedByOthers,
@@ -305,7 +299,6 @@ export function WorkItemAnswers({ locale, workItemId, documents }: { locale: Loc
         errors={form.errors}
         mode={form.editable ? "edit" : "read"}
         editableSections={form.editableSections}
-        filledBy={form.filledBy}
         locale={locale}
         labels={formLabels}
         onChange={form.change}

@@ -118,10 +118,7 @@ describe("the audit row of a confirmed Transition", () => {
     await ok(at.c1Pm.post(`/v1/work-items/${id}/pick-up`));
     await take(at.c1Pm, id, "submit"); // 5
     await ok(signer.caller.post(`/v1/work-items/${id}/pick-up`));
-    // The Consultant fills its verification (MAR Form Version 4), then issues the Code.
-    const filled = { ...(await detail(signer.caller, id)).answers, sample_checked: true, matches_specification: true };
-    await ok(signer.caller.request("PUT", `/v1/work-items/${id}/answers`, { answers: filled }));
-    await take(signer.caller, id, "approve_a"); // 6: the verification and the outcome set
+    await take(signer.caller, id, "approve_a"); // 6: the outcome set
     trail = await auditTrail(id);
   });
 

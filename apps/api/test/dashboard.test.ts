@@ -15,6 +15,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { attachDatasheet, createTestApi, expectHidden, type Caller } from "./support/harness.ts";
 import { typeCodes } from "./support/default-types.ts";
 import { all, bilingual, buildTower, draft, inInternalReview, ok, projectMember, submitted, take, type Company, type Tower } from "./support/tower.ts";
+import { LEGACY_MAR } from "@rabaed/db/test-support";
 
 const api = await createTestApi({ files: true });
 const migrator = createDb(testDatabaseUrls().migrator, { max: 1 });
@@ -55,7 +56,7 @@ function card(d: Dashboard, code: string): DashboardCard {
 }
 
 function marCard(d: Dashboard) {
-  const c = card(d, "MAR");
+  const c = card(d, LEGACY_MAR);
   if (c.kind !== "outcomes") throw new Error("expected an outcomes card");
   return c;
 }
@@ -73,14 +74,14 @@ function figures(d: Dashboard): [string, DashboardFigure][] {
             ...c.bars.flatMap((b) => named(b.bucket, b)),
             ...named("in preparation", c.inPreparation),
             ...named("approved", c.approved),
-            ...(c.codeC
+            ...(c.revisionLine
               ? [
-                  ...named("Code C", c.codeC.total),
-                  ...named("approved on revision", c.codeC.approvedOnRevision),
-                  ...named("awaiting revision", c.codeC.awaitingRevision),
-                  ...named("no Revision yet", c.codeC.split?.noRevisionYet ?? null),
-                  ...named("Revision in progress", c.codeC.split?.revisionInProgress ?? null),
-                  ...named("rejected after C", c.codeC.rejectedAfterC),
+                  ...named("Code C", c.revisionLine.total),
+                  ...named("approved on revision", c.revisionLine.approvedOnRevision),
+                  ...named("awaiting revision", c.revisionLine.awaitingRevision),
+                  ...named("no Revision yet", c.revisionLine.split?.noRevisionYet ?? null),
+                  ...named("Revision in progress", c.revisionLine.split?.revisionInProgress ?? null),
+                  ...named("rejected after C", c.revisionLine.rejectedAfterC),
                 ]
               : []),
           ]
@@ -111,15 +112,9 @@ async function submittedRevision(at: Tower, id: string): Promise<string> {
   return revision;
 }
 
-/** K1 verifies item `id` and issues a Review Code. */
+/** K1 issues a Review Code on item `id`. */
 async function code(by: Caller, id: string, transition: "approve_a" | "revise_c") {
-  const answers = (await ok(by.get(`/v1/work-items/${id}`), 200)).json().answers as Record<string, unknown>;
   const pass = transition === "approve_a";
-  await ok(
-    by.request("PUT", `/v1/work-items/${id}/answers`, {
-      answers: { ...answers, sample_checked: true, matches_specification: pass, ...(pass ? {} : { verification_note: "Below the specified efficacy" }) },
-    }),
-  );
   await ok(by.post(`/v1/work-items/${id}/pick-up`));
   await ok(
     by.post(`/v1/work-items/${id}/transitions`, {
@@ -226,7 +221,7 @@ describe("scenario 65 and every number equals its List", () => {
     expect(mar.inPreparation?.count).toBe(1);
     expect(mar.bars.every((b) => b.count === 0)).toBe(true);
     expect(mar.approved.count).toBe(0);
-    expect(mar.codeC).toBeNull();
+    expect(mar.revisionLine).toBeNull();
     expect(await listed(c2Engineer, tower.projectId, mar.total.query)).toEqual([c2Item]);
   });
 
@@ -249,10 +244,11 @@ describe("scenario 65 and every number equals its List", () => {
         expect(new Set(ids).size, name).toBe(ids.length);
       }
     }
-  });
+    // One List read per figure, for four readers: about 6 s alone, over 20 s with every seam suite at once.
+  }, 60_000);
 });
 
-describe("scenario 64: the Code C line while C1's Revision is a Draft", () => {
+describe("scenario 64: the Revision line while C1's Revision is a Draft", () => {
   let tower: Tower;
   let unrevised = "";
   let original = "";
@@ -268,7 +264,7 @@ describe("scenario 64: the Code C line while C1's Revision is a Draft", () => {
   });
 
   it("shows K1 both chains as awaiting revision, one figure, without the Draft (V1)", async () => {
-    const line = marCard(await dashboard(tower.k1Manager, tower.projectId)).codeC!;
+    const line = marCard(await dashboard(tower.k1Manager, tower.projectId)).revisionLine!;
     expect(line.total.count).toBe(2);
     expect(line.awaitingRevision.count).toBe(2);
     expect(line.split).toBeNull();
@@ -276,12 +272,12 @@ describe("scenario 64: the Code C line while C1's Revision is a Draft", () => {
     expect(line.rejectedAfterC).toBeNull();
     expect((await listed(tower.k1Manager, tower.projectId, line.awaitingRevision.query)).sort()).toEqual([unrevised, original].sort());
     for (const codeC of ["noRevisionYet", "revisionInProgress"] as const) {
-      expect(await listed(tower.k1Manager, tower.projectId, { module: "submittals", type: ["MAR"], bucket: [], codeC: [codeC] })).toEqual([]);
+      expect(await listed(tower.k1Manager, tower.projectId, { module: "submittals", type: [LEGACY_MAR], bucket: [], codeC: [codeC] })).toEqual([]);
     }
   });
 
   it("shows C1 \"no Revision yet\" and \"Revision in progress\"", async () => {
-    const line = marCard(await dashboard(tower.c1Pm, tower.projectId)).codeC!;
+    const line = marCard(await dashboard(tower.c1Pm, tower.projectId)).revisionLine!;
     expect(line.total.count).toBe(2);
     expect(line.awaitingRevision.count).toBe(2);
     expect(line.split?.noRevisionYet.count).toBe(1);
@@ -294,9 +290,9 @@ describe("scenario 64: the Code C line while C1's Revision is a Draft", () => {
     await take(tower.c1Engineer, revision, "send_for_review");
     await ok(tower.c1Pm.post(`/v1/work-items/${revision}/pick-up`));
     await take(tower.c1Pm, revision, "submit");
-    const c1Line = marCard(await dashboard(tower.c1Pm, tower.projectId)).codeC!;
+    const c1Line = marCard(await dashboard(tower.c1Pm, tower.projectId)).revisionLine!;
     expect(c1Line.split?.revisionInProgress.count).toBe(1);
-    const k1Line = marCard(await dashboard(tower.k1Manager, tower.projectId)).codeC!;
+    const k1Line = marCard(await dashboard(tower.k1Manager, tower.projectId)).revisionLine!;
     expect(k1Line.awaitingRevision.count).toBe(2);
     expect(k1Line.split).toBeNull();
     expect((await listed(tower.k1Manager, tower.projectId, k1Line.awaitingRevision.query)).sort()).toEqual([unrevised, revision].sort());
@@ -319,7 +315,7 @@ describe("a chain with two Code Cs and an approved Rev 2", () => {
 
   it("counts it once, as approved on revision, for both Companies", async () => {
     for (const by of [tower.c1Pm, tower.k1Manager]) {
-      const line = marCard(await dashboard(by, tower.projectId)).codeC!;
+      const line = marCard(await dashboard(by, tower.projectId)).revisionLine!;
       expect(line.total.count).toBe(1);
       expect(line.approvedOnRevision).toMatchObject({ count: 1, percent: 100 });
       expect(line.awaitingRevision.count).toBe(0);
@@ -372,7 +368,7 @@ describe("a Type of another Module: the Snag List", () => {
       insert into work_item_type (owner_kind, module_key, code, name, workflow_definition_id, outcome_kind, form_definition_id)
       select t.owner_kind, 'snag_list', ${SNAG}, ${JSON.stringify(bilingual("Snag (test)"))}::jsonb, t.workflow_definition_id, t.outcome_kind, t.form_definition_id
       from work_item_type t
-      where t.owner_kind = 'rabaed' and t.code = 'MAR'
+      where t.owner_kind = 'rabaed' and t.code = ${LEGACY_MAR}
         and not exists (select 1 from work_item_type x where x.owner_kind = 'rabaed' and x.code = ${SNAG})
     `.execute(migrator);
   }
@@ -447,7 +443,7 @@ describe("a Type of another Module: the Snag List", () => {
 
   it("keeps the Submittals List to the Submittals, and the Snag List to its Stages and Types", async () => {
     const submittals: WorkItemList = (await ok(tower.c1Pm.get(`/v1/projects/${tower.projectId}/work-items`), 200)).json();
-    expect(submittals.items.map((i) => i.type.code)).toEqual(["MAR"]);
+    expect(submittals.items.map((i) => i.type.code)).toEqual([LEGACY_MAR]);
     const snags: WorkItemList = (await ok(tower.c1Pm.get(`/v1/projects/${tower.projectId}/work-items?module=snag_list`), 200)).json();
     expect(snags.items.map((i) => i.type.code)).toEqual([SNAG, SNAG, SNAG]);
     expect(snags.filters.types.map((t) => t.code).sort()).toEqual(await typeCodes(migrator, "snag_list", tower.projectId));

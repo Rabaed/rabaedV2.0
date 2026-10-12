@@ -119,7 +119,6 @@ export function CreateWorkItemForm({
         errors={fieldErrors}
         mode="edit"
         editableSections={form.editableSections}
-        filledBy={form.filledBy}
         locale={locale}
         labels={formLabels}
         choices={choices}

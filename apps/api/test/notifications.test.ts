@@ -12,6 +12,7 @@ import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { attachDatasheet, createTestApi, type Caller, type OnboardedCompany } from "./support/harness.ts";
 import { memberOnProject, take } from "./support/tower.ts";
+import { LEGACY_MAR } from "@rabaed/db/test-support";
 
 const api = await createTestApi({ files: true });
 const urls = testDatabaseUrls();
@@ -65,7 +66,7 @@ async function participant(role: "contractor" | "consultant") {
 
 async function createDraft(title: string, by: Member = engineer): Promise<string> {
   const res = await by.caller.post(`/v1/projects/${projectId}/work-items`, {
-    type: "MAR",
+    type: LEGACY_MAR,
     title,
     answers: { manufacturer: "ACME Cables", description: "Galvanised, 300 mm", trade: electrical, location: buildingA },
   });
@@ -135,7 +136,7 @@ describe("Send for Review", () => {
     await drainOutbox(worker);
 
     const [n] = await about(pm, id);
-    expect(n).toMatchObject({ workItemId: id, title: "Cable trays", documentNumber: "TWR-MAR-01-0001", readAt: null });
+    expect(n).toMatchObject({ workItemId: id, title: "Cable trays", documentNumber: "TWR-MARV-01-0001", readAt: null });
     expect(n!.step).toEqual({ name: { en: "Contractor review", ar: "مراجعة المقاول" } });
     for (const who of [engineer, pmNarrowed, manager, k1Engineer, c2Engineer]) expect(await about(who, id), who.id).toEqual([]);
     expect((await pmRemoved.caller.get("/v1/notifications")).json().notifications).toEqual([]);

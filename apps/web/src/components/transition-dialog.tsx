@@ -21,6 +21,8 @@ export type TransitionChoice = {
   actionForm: FormSchema | null;
   assignTo?: { memberId: string; name: BilingualText }[];
   recommendCode?: { code: string; name: BilingualText }[];
+  /** The answers the pop-up starts from: the reply that brought the item here, inside the taker's own Company (RP-437). */
+  prefill?: Record<string, unknown>;
 };
 
 /** The "Assign to" choice that leaves the next Step to its Step Pool. */
@@ -165,7 +167,8 @@ export function TransitionDialog({
   const actionFormLabels = useActionFormLabels();
   const itemForm = useWorkItemForm();
   const dialog = useRef<HTMLDialogElement>(null);
-  const [answers, setAnswers] = useState<Record<string, unknown>>({});
+  // Pre-filled from the reply that brought the item here, inside the viewer's own Company (RP-437).
+  const [answers, setAnswers] = useState<Record<string, unknown>>(transition.prefill ?? {});
   const [internalNote, setInternalNote] = useState("");
   const [assignTo, setAssignTo] = useState(TO_POOL);
   const [recommendedCode, setRecommendedCode] = useState(NO_RECOMMENDED_CODE);

@@ -1,9 +1,10 @@
 "use client";
 
 import { cardNumber, outcomeLabel, type HomeActivityEntry, type HomeActivityVerb, type HomeWorkItem, type Locale } from "@rabaed/domain";
-import { useId, type ElementType, type ReactNode } from "react";
+import type { ElementType, ReactNode } from "react";
 import { cn } from "../../lib/cn.ts";
 import { Avatar } from "../data/avatar.tsx";
+import { TitledCard } from "../data/titled-card.tsx";
 import { DocNo } from "../doc-no/doc-no.tsx";
 import { focusRing, touchBox } from "../form/control-styles.ts";
 import { Icon } from "../icon/icon.tsx";
@@ -18,19 +19,12 @@ import { StagePill } from "../status/stage-pill.tsx";
 
 const linkClass = cn("inline-flex items-center rounded-sm text-[13px] font-semibold text-brand-fg hover:underline underline-offset-4", focusRing, touchBox);
 
-/** A titled card with links at the end of its 49px heading, as the kit's. Fills its grid cell's height. */
+/** A titled card with links at the end of its 49px heading, as the kit's; its rows sit close under the heading. */
 function HomeCard({ title, actions, children, className }: { title: string; actions?: ReactNode; children: ReactNode; className?: string }) {
-  const titleId = useId();
   return (
-    <section aria-labelledby={titleId} className={cn("flex h-full min-w-0 flex-col rounded-lg border border-border bg-surface", className)}>
-      <header className="flex min-h-[49px] flex-wrap items-center gap-x-2.5 border-b border-border-subtle px-5 py-1.5">
-        <h2 id={titleId} className="text-[16px] leading-tight font-bold">
-          {title}
-        </h2>
-        {actions && <div className="ms-auto flex items-center gap-1">{actions}</div>}
-      </header>
-      <div className="min-w-0 flex-1 px-5 py-1">{children}</div>
-    </section>
+    <TitledCard title={title} actions={actions} className={className} bodyClassName="px-5 py-1">
+      {children}
+    </TitledCard>
   );
 }
 

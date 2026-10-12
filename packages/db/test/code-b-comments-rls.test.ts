@@ -225,8 +225,8 @@ describe("Code B's Comments reach exactly who sees the reviewed item", () => {
     expect(await counts(k1Mechanical, source)).toEqual([]);
     // A Comment closed counts as closed, for everyone who sees it.
     expect(await pickUp(c1Pm, comments[0]!)).toBe("picked_up");
-    await migrator.query("update work_item set data = data || '{\"resolution_note\": \"Done\"}' where id = $1", [comments[0]]);
-    expect(await take(c1Pm, comments[0]!, "resolve")).toBe("applied");
+    // The resolution note is C1's reply, in the Resolve Screen (RP-437, ADR 0019).
+    expect(await take(c1Pm, comments[0]!, "resolve", { resolution_note: "Done" })).toBe("applied");
     expect(await pickUp(k1.member, comments[0]!)).toBe("picked_up");
     expect(await take(k1.member, comments[0]!, "close")).toBe("applied");
     expect(await counts(c1.member, source)).toEqual([{ open_count: 0, closed_count: 1 }]);

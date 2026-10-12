@@ -9,6 +9,7 @@ import type { LightMyRequestResponse } from "fastify";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { attachDatasheet, createTestApi, expectHidden, type Caller, type OnboardedCompany } from "./support/harness.ts";
 import { projectMember, tryTake } from "./support/tower.ts";
+import { LEGACY_MAR } from "@rabaed/db/test-support";
 
 const api = await createTestApi({ files: true });
 afterAll(() => api.close());
@@ -49,7 +50,7 @@ async function draft(answers: Record<string, unknown> = complete): Promise<strin
   const res = await ok(
     // Trade and Location are Built-in Fields: answers like the rest (RP-270).
     engineer.post(`/v1/projects/${projectId}/work-items`, {
-      type: "MAR",
+      type: LEGACY_MAR,
       title: "Cable trays",
       answers: { trade: electrical, location: buildingA, ...answers },
     }),
