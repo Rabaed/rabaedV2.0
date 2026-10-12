@@ -263,6 +263,39 @@ export const FiguresWholeRejectedAfterC: Story = {
   },
 };
 
+/** A Type's own outcome name too long for any card: it wraps inside the card rather than spill past it. */
+export const LongOutcomeName: Story = {
+  parameters: phone,
+  args: {
+    dashboard: {
+      modules: [
+        {
+          key: "submittals",
+          cards: [
+            dashboardCard({
+              type: { code: "MAR", name: copy.mar },
+              moduleKey: "submittals",
+              outcomeKind: "review_code",
+              outcomes: defaultOutcomeSets.review_code.map((o) =>
+                o.code === "B"
+                  ? { ...o, name: b("Approved with Comments, to be closed out on site before handover", "معتمد مع ملاحظات تُغلق في الموقع قبل التسليم والاستلام النهائي") }
+                  : o,
+              ),
+              counts: counts([["A", 3], ["B", 2]]),
+            }),
+          ],
+        },
+      ],
+    },
+  },
+  play: async (context) => {
+    for (const card of context.canvasElement.querySelectorAll<HTMLElement>("article")) {
+      await expect(card.scrollWidth).toBeLessThanOrEqual(card.clientWidth);
+    }
+    await expect(context.canvasElement.scrollWidth).toBeLessThanOrEqual(context.canvasElement.clientWidth);
+  },
+};
+
 /** Narrow: the cards stack, one per row, every figure still whole, and nothing scrolls sideways. */
 export const Narrow: Story = {
   parameters: phone,

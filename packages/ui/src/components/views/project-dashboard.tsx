@@ -124,8 +124,8 @@ function TypeCard({ card, ...ctx }: { card: DashboardCard } & Ctx) {
         </dl>
       ) : (
         <div className="flex flex-col gap-3">
-          {/* One grid for the card's bars, so every bar starts where the longest name ends. */}
-          <ul className="grid grid-cols-[max-content_minmax(3rem,1fr)_auto] gap-x-3">
+          {/* One grid for the card's bars, so every bar starts where the longest name ends. A name too long for the card (a Type's own outcome name) wraps rather than spill. */}
+          <ul className="grid grid-cols-[minmax(0,max-content)_minmax(3rem,1fr)_auto] gap-x-3">
             {card.bars.map((bar) => (
               <li key={bar.bucket} className="col-span-3 grid grid-cols-subgrid">
                 <Bar label={barLabel(bar, locale, labels)} colour={barColour[bar.tone]} figure={bar} total={card.total.count} {...ctx} />
@@ -184,9 +184,9 @@ function FigureRow({ label, value, figure, className, ...ctx }: { label: string;
   return (
     <ctx.Link
       href={ctx.hrefFor(figure.query)}
-      className={cn(linkLook, "flex min-h-8 items-center justify-between gap-3 text-caption whitespace-nowrap pointer-coarse:min-h-11", className)}
+      className={cn(linkLook, "flex min-h-8 items-center justify-between gap-3 text-caption pointer-coarse:min-h-11", className)}
     >
-      <span>{label}</span> <span className="tabular-nums">{value}</span>
+      <span className="min-w-0 break-words">{label}</span> <span className="shrink-0 whitespace-nowrap tabular-nums">{value}</span>
     </ctx.Link>
   );
 }
@@ -217,13 +217,13 @@ function Bar({ label, colour, figure, total, ...ctx }: { label: string; colour: 
     // A whole-width grid row, so it takes the link's look but not touchBox: it only needs the height.
     <ctx.Link
       href={ctx.hrefFor(figure.query)}
-      className={cn(linkLook, "col-span-3 grid min-h-8 grid-cols-subgrid items-center text-caption whitespace-nowrap pointer-coarse:min-h-11")}
+      className={cn(linkLook, "col-span-3 grid min-h-8 grid-cols-subgrid items-center text-caption pointer-coarse:min-h-11")}
     >
-      <span>{label}</span>{" "}
+      <span className="min-w-0 break-words">{label}</span>{" "}
       <span aria-hidden="true" className="h-2 overflow-hidden rounded-full bg-neutral-tint">
         <span className={cn("block h-full rounded-full", colour)} style={{ inlineSize: `${share}%` }} />
       </span>{" "}
-      <span className="text-end font-semibold tabular-nums">{formatNumber(figure.count, ctx.locale)}</span>
+      <span className="text-end font-semibold whitespace-nowrap tabular-nums">{formatNumber(figure.count, ctx.locale)}</span>
     </ctx.Link>
   );
 }

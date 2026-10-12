@@ -1,5 +1,5 @@
 import { workItemListHref, type Locale } from "@rabaed/domain";
-import { KeyValues, TitledCard, ProjectDashboard } from "@rabaed/ui";
+import { cn, focusRing, KeyValues, ProjectDashboard, TitledCard, touchBox } from "@rabaed/ui";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
 import { ActivityFeedView } from "@/components/activity-feed-view";
@@ -9,8 +9,8 @@ import { Link, redirect } from "@/i18n/navigation";
 import { chainLabels } from "@/lib/chain-labels";
 import { getActivityFeed, getDashboard, getMe, getProject, getProjectInvitations, getProjectParticipants } from "@/lib/session";
 
-/** A link in a card, as the kit's (`.ln`). */
-const cardLink = "inline-flex items-center text-[13px] font-semibold text-brand-fg underline-offset-4 hover:underline";
+/** The class of a link in a card, as the kit's (`.ln`), with the shared focus ring and touch size. */
+const cardLinkClass = cn("inline-flex items-center rounded-sm text-[13px] font-semibold text-brand-fg underline-offset-4 hover:underline", focusRing, touchBox);
 
 export default async function ProjectPage({ params }: { params: Promise<{ locale: Locale; projectId: string }> }) {
   const { locale, projectId } = await params;
@@ -87,7 +87,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ locale
         actions={
           // Participant Codes are set in one place, Project Settings → Numbering (RP-381).
           project.isProjectAdmin && (
-            <Link href={`/projects/${project.id}/settings/numbering`} className={cardLink}>
+            <Link href={`/projects/${project.id}/settings/numbering`} className={cardLinkClass}>
               {t("setParticipantCodes")}
             </Link>
           )
@@ -115,7 +115,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ locale
                 <span className="flex flex-col items-start gap-1">
                   {p.company.legalName[locale]}
                   {p.isOwnCompany && (
-                    <Link href={`/participants/${p.id}`} className={cardLink}>
+                    <Link href={`/participants/${p.id}`} className={cardLinkClass}>
                       {t("projectMembers")}
                     </Link>
                   )}

@@ -144,6 +144,7 @@ export {
   type SettingsSectionProps,
 } from "./components/settings/settings-layout.tsx";
 export { cn } from "./lib/cn.ts";
+export { focusRing, touchBox } from "./components/form/control-styles.ts";
 export {
   themes,
   defaultTheme,
