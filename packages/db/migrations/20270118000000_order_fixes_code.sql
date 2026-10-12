@@ -97,6 +97,8 @@ update participant p set code_locked_at = printed.first_at
 from (
   select w.raised_by_participant_id as participant_id, min(w.numbered_at) as first_at
   from work_item w
+  join participant unfixed on unfixed.id = w.raised_by_participant_id
+    and unfixed.code is null and unfixed.code_locked_at is null
   where w.document_number is not null and w.numbered_at is not null
     and exists (
       select 1 from app.numbering_pattern_in_effect(w.project_id, w.work_item_type_id, w.numbered_at) np,
