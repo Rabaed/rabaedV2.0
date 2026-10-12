@@ -288,3 +288,33 @@ describe("app.numbering_counter", () => {
     }
   });
 });
+
+// RP-508: a number that prints the Participant's order (it has no code yet) fixes
+// the Participant Code too, so its later numbers can't switch from 01 to a code.
+describe("app.issue_document_number fixing the Participant Code", () => {
+  const lockedAt = async (participant: string) =>
+    (await migrator.query("select code, code_locked_at from participant where id = $1", [participant])).rows[0] as {
+      code: string | null;
+      code_locked_at: Date | null;
+    };
+  const setCode = (as: string, participant: string, value: string) =>
+    outcome(as, sql`select app.set_participant_code(${participant}::uuid, ${value}) as outcome`);
+
+  it("fixes it under the order: no code can be set after, and the numbers stay on 01", async () => {
+    const t = await tower("NLO");
+    expect(await t.numbered(t.c1.member)).toBe("NLO-MAR-01-0001");
+    expect(await lockedAt(t.p1)).toEqual({ code: null, code_locked_at: expect.any(Date) });
+    expect(await setCode(t.c1.ap, t.p1, "CCM")).toBe("code_in_use");
+    expect(await t.numbered(t.c1.member)).toBe("NLO-MAR-01-0002");
+    // Another Participant's code, unused so far, is still free.
+    expect(await setCode(t.c1.ap, t.p2, "CTW")).toBe("set");
+  });
+
+  it("leaves it free when the pattern has no Participant segment", async () => {
+    const t = await tower("NLP");
+    await t.pattern([{ kind: "project" }, { kind: "type" }], [0, 1]);
+    expect(await t.numbered(t.c1.member)).toBe("NLP-MAR-0001");
+    expect(await lockedAt(t.p1)).toEqual({ code: null, code_locked_at: null });
+    expect(await setCode(t.c1.ap, t.p1, "CCM")).toBe("set");
+  });
+});
