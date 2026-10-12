@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { type AllowListed, type Kind, latestKinds, leakChannelProblems, repoMigrations } from "./check-leak-channels.ts";
+import { type AllowListed, type Kind, latestKinds, leakChannelProblems, prTemplateProblems, repoMigrations } from "./check-leak-channels.ts";
 
 // Kinds that are not channels of their own, with the leak-channel row (its
 // Channel cell, exactly) that covers them. A notification kind is what
@@ -112,7 +112,65 @@ describe("leakChannelProblems", () => {
   });
 });
 
+function template(channels: string[]): string {
+  return [
+    "## What changed",
+    "",
+    "- [ ] Not a checkbox of the channel list",
+    "",
+    "## Leak channels",
+    "",
+    ...channels.map((channel) => `- [ ] ${channel}`),
+    "",
+    "## Scenarios",
+    "",
+    "- [ ] Added or updated",
+  ].join("\n");
+}
+
+describe("prTemplateProblems", () => {
+  it("finds nothing wrong when the template lists every channel row in order, ticked or not", () => {
+    const markdown = visibility(["Search and filters", "Daily email digest"]);
+    expect(prTemplateProblems(markdown, template(["Search and filters", "Daily email digest"]))).toEqual([]);
+    const ticked = template(["Search and filters", "Daily email digest"]).replace("- [ ] Daily", "- [x] Daily");
+    expect(prTemplateProblems(markdown, ticked)).toEqual([]);
+  });
+
+  it("names a channel row the template is missing, with the line to add", () => {
+    expect(prTemplateProblems(visibility(["Search and filters", "Daily email digest"]), template(["Search and filters"]))).toEqual([
+      `leak channel 'Daily email digest' (docs/visibility.md) is missing from .github/pull_request_template.md: add the line "- [ ] Daily email digest" to its Leak channels list`,
+    ]);
+  });
+
+  it("names a channel listed twice, and a list out of the table's order", () => {
+    const markdown = visibility(["Links", "Linked from"]);
+    expect(prTemplateProblems(markdown, template(["Links", "Linked from", "Links"]))).toEqual([
+      "'Links' is listed more than once in .github/pull_request_template.md's Leak channels list: keep one",
+    ]);
+    expect(prTemplateProblems(markdown, template(["Linked from", "Links"]))).toEqual([
+      ".github/pull_request_template.md's Leak channels list is not in docs/visibility.md's table order: Links, Linked from",
+    ]);
+  });
+
+  it("names a channel the template lists that the table no longer has", () => {
+    expect(prTemplateProblems(visibility(["Search and filters"]), template(["Search and filters", "Pins"]))).toEqual([
+      "'Pins' in .github/pull_request_template.md's Leak channels list is not a row of docs/visibility.md's leak-channel table: rename or remove it",
+    ]);
+  });
+
+  it("reads only the Leak channels section's checkboxes", () => {
+    expect(prTemplateProblems(visibility(["Links"]), "## Leak channels\n\n- [ ] Links\n\n## Scenarios\n\n- [ ] Pins\n")).toEqual([]);
+    expect(prTemplateProblems(visibility(["Links"]), "## Summary\n\n- [ ] Links\n")).toEqual([
+      `leak channel 'Links' (docs/visibility.md) is missing from .github/pull_request_template.md: add the line "- [ ] Links" to its Leak channels list`,
+    ]);
+  });
+});
+
 describe("the repository", () => {
+  it("has a PR template whose Leak channels list is docs/visibility.md's leak-channel table (RP-112)", () => {
+    expect(prTemplateProblems(readFileSync("docs/visibility.md", "utf8"), readFileSync(".github/pull_request_template.md", "utf8"))).toEqual([]);
+  });
+
   it("has a leak-channel row in docs/visibility.md for every notification and outbox kind", () => {
     const kinds = latestKinds(repoMigrations(process.cwd()));
     expect(kinds.filter((k) => k.table === "outbox").map((k) => k.kind)).toContain("digest");
