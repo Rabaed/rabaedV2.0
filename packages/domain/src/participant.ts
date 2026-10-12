@@ -74,7 +74,7 @@ export const projectParticipant = z.object({
    * Participant's own would tell how many others there are (visibility.md RP-381-1).
    */
   ordinal: z.number().int().nullable(),
-  /** Whether a Document Number (or a starting number) has fixed its code: it can no longer change. */
+  /** Whether a Document Number (or a starting number) has fixed its code, or its order while it has none: the code can no longer be set or changed. */
   codeLocked: z.boolean(),
   /** The viewer's own Company: its Project Members list is theirs to see. */
   isOwnCompany: z.boolean(),
