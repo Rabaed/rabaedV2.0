@@ -79,6 +79,39 @@ export function leakChannelRows(markdown: string): string[] {
   return rows;
 }
 
+const prTemplateFile = ".github/pull_request_template.md";
+
+/** The checkbox labels of the PR template's "Leak channels" section. */
+function templateChannels(template: string): string[] {
+  const lines = template.split("\n");
+  const heading = lines.findIndex((line) => line.startsWith("## Leak channels"));
+  if (heading < 0) return [];
+  const channels: string[] = [];
+  for (const line of lines.slice(heading + 1)) {
+    if (line.startsWith("#")) break;
+    const box = /^- \[[ xX]\] (.+?)\s*$/.exec(line);
+    if (box) channels.push(box[1]!);
+  }
+  return channels;
+}
+
+/**
+ * What differs between the leak-channel table and the PR template's checklist (RP-112), so the
+ * question "which channels does this change touch?" always offers every channel; empty when nothing.
+ */
+export function prTemplateProblems(markdown: string, template: string): string[] {
+  const rows = leakChannelRows(markdown);
+  const listed = templateChannels(template);
+  return [
+    ...rows
+      .filter((row) => !listed.includes(row))
+      .map((row) => `leak channel '${row}' (${visibilityFile}) is missing from ${prTemplateFile}: add it to its Leak channels list`),
+    ...listed
+      .filter((channel) => !rows.includes(channel))
+      .map((channel) => `'${channel}' in ${prTemplateFile}'s Leak channels list is not a row of ${visibilityFile}'s leak-channel table: rename or remove it`),
+  ];
+}
+
 // "step_age_report" names "Step Age reports": its words, in order, each at the start of a word.
 const namedBy = (kind: string) => new RegExp(String.raw`\b${kind.split("_").join(String.raw`\s+`)}`, "i");
 
