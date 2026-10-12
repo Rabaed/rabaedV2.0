@@ -114,6 +114,32 @@ describe("summarise", () => {
   });
 });
 
+describe("summarise with a budget (RP-558)", () => {
+  // 4 files, 10 minutes in all: 4m, 3m, 2m, 1m.
+  const tenMinutes = timingOf(
+    report(["apps/a.test.ts", 0, 240_000], ["apps/b.test.ts", 240_000, 420_000], ["apps/c.test.ts", 420_000, 540_000], ["apps/d.test.ts", 540_000, 600_000]),
+  );
+
+  it("over the budget, warns with the total, the budget and the three slowest files, at the top of the summary", () => {
+    const { markdown, warning } = summarise("seam 1", tenMinutes, undefined, { budgetMinutes: 8 });
+    expect(warning).toBe("seam 1 took 10m00s, over its budget of 8 min. Slowest files: apps/a.test.ts (4m00s), apps/b.test.ts (3m00s), apps/c.test.ts (2m00s).");
+    expect(markdown.split("\n").slice(0, 3)).toEqual(["### seam 1: test time", "", `> **Over budget:** ${warning}`]);
+  });
+
+  it("under the budget, or with no budget, gives no warning", () => {
+    expect(summarise("seam 1", tenMinutes, undefined, { budgetMinutes: 11 }).warning).toBeUndefined();
+    expect(summarise("seam 1", tenMinutes, undefined).warning).toBeUndefined();
+    expect(summarise("seam 1", tenMinutes, undefined).markdown).not.toContain("Over budget");
+  });
+
+  it("keeps the comparison with main beside the budget", () => {
+    const main = timingOf(report(["apps/a.test.ts", 0, 240_000]));
+    const { notice, warning } = summarise("seam 1", tenMinutes, main, { budgetMinutes: 20 });
+    expect(notice).toContain("+150%");
+    expect(warning).toBeUndefined();
+  });
+});
+
 describe("run", () => {
   let dir: string;
   beforeEach(() => (dir = mkdtempSync(join(tmpdir(), "rabaed-timing-"))));
@@ -129,6 +155,22 @@ describe("run", () => {
     const mainPath = write("main.json", report(["apps/a.test.ts", 0, 10_000]));
     run([current, "--title", "seam 1", "--main", mainPath], { GITHUB_STEP_SUMMARY: summary });
     expect(readFileSync(summary, "utf8")).toContain("seam 1: test time");
+  });
+
+  it("prints an over-budget warning with --budget, and still does not fail", () => {
+    const summary = join(dir, "summary.md");
+    const current = write("cur.json", report(["apps/a.test.ts", 0, 200_000]));
+    const lines: string[] = [];
+    const log = console.log;
+    console.log = (line: string) => lines.push(line);
+    try {
+      run([current, "--title", "seam 2", "--budget", "3"], { GITHUB_STEP_SUMMARY: summary });
+      run([current, "--title", "seam 2"], { GITHUB_STEP_SUMMARY: summary });
+    } finally {
+      console.log = log;
+    }
+    expect(lines).toEqual(["::warning title=seam 2 over budget::seam 2 took 3m20s, over its budget of 3 min. Slowest files: apps/a.test.ts (3m20s)."]);
+    expect(readFileSync(summary, "utf8")).toContain("> **Over budget:** seam 2 took 3m20s");
   });
 
   it("merges shard reports into one file with --merge", () => {

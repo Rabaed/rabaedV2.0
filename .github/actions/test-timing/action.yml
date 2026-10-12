@@ -1,4 +1,5 @@
-# Job summary of a seam job's test time, beside the latest run on main (RP-321).
+# Job summary of a seam job's test time, beside the latest run on main (RP-321),
+# with a warning when it passes a fixed budget (RP-558).
 # Needs the repository checked out, Node set up and the job's
 # `actions: read` permission. Timing is only a notice: no step here fails the job.
 name: Test timing
@@ -13,6 +14,10 @@ inputs:
   artifact:
     description: Name of the artifact main uploads its report as
     required: true
+  budget:
+    description: Minutes the job's tests may take before an "over budget" warning (RP-558); empty for none
+    required: false
+    default: ""
 runs:
   using: composite
   steps:
@@ -37,9 +42,10 @@ runs:
         TITLE: ${{ inputs.title }}
         REPORT: ${{ inputs.report }}
         ARTIFACT: ${{ inputs.artifact }}
+        BUDGET: ${{ inputs.budget }}
       run: |
         main_report="$RUNNER_TEMP/main-timing/$(basename "$REPORT")"
-        node scripts/test-timing.ts "$REPORT" --title "$TITLE" --main "$main_report"
+        node scripts/test-timing.ts "$REPORT" --title "$TITLE" --main "$main_report" ${BUDGET:+--budget "$BUDGET"}
     - name: Keep this run's report for later runs to compare with
       if: github.ref == 'refs/heads/main' && job.status == 'success'
       uses: actions/upload-artifact@v7

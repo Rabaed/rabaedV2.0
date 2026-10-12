@@ -7,4 +7,6 @@
 
 Seam 1 runs as four jobs, `seam 1 (shard 1/4)` to `seam 1 (shard 4/4)`, each with its own Postgres (RP-557). A seam 1 failure is in one of those shards' logs. The job `seam 1 (API as a Member)`, the check the ruleset requires, only reports: it fails when any shard did not pass, and it holds the merged test timing (the total is the slowest shard's time, and each shard's time is listed). To run one shard locally: `pnpm test:seam1 --shard=2/4`.
 
+An "over budget" warning on a seam job (RP-558) means that seam grew past its fixed time budget in `ci.yml`: file a `retro` ticket under RP-12 to split it or speed it up, and don't raise the budget in the same PR.
+
 Screenshots are compared only on Linux CI, so a story failure that passes locally (for example "Could not capture a stable screenshot") shows up only in this log.

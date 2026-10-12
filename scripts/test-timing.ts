@@ -5,7 +5,10 @@ import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 // Slowing a seam shows only as the 5-second test limit firing in unrelated
 // files, so a number on the PR points at the cause sooner (RP-299 retro).
 //
-//   node scripts/test-timing.ts <report.json> --title "seam 1" [--main main.json]
+//   node scripts/test-timing.ts <report.json> --title "seam 1" [--main main.json] [--budget <minutes>]
+//
+// With --budget, a total over that many minutes gets a warning (RP-558): a
+// drift on main is never 25% slower than main, so only a fixed budget sees it.
 //
 // Seam 1 runs as shards (RP-557); their reports become one first, whose total
 // is the longest shard's span:
@@ -89,17 +92,39 @@ export interface Summary {
   markdown: string;
   /** Set when the total is more than 25% above main's. */
   notice?: string;
+  /** Set when the total is over the job's fixed budget (RP-558). */
+  warning?: string;
 }
 
-export function summarise(title: string, current: Timing, main?: Timing, top = 10): Summary {
+export interface SummaryOptions {
+  /** How many of the slowest files the table lists. */
+  top?: number;
+  /**
+   * The job's fixed time budget. Each ticket adds a little, so no run is ever
+   * 25% slower than main while main itself drifts; a budget catches the drift.
+   */
+  budgetMinutes?: number;
+}
+
+export function summarise(title: string, current: Timing, main?: Timing, { top = 10, budgetMinutes }: SummaryOptions = {}): Summary {
   const mainFiles = new Map(main?.files.map((f) => [f.file, f.ms]));
-  const slowest = [...current.files].sort((a, b) => b.ms - a.ms).slice(0, top);
+  const bySlowest = [...current.files].sort((a, b) => b.ms - a.ms);
+  const slowest = bySlowest.slice(0, top);
 
   const total =
     main && main.totalMs > 0
       ? `${formatDuration(current.totalMs)}, main ${formatDuration(main.totalMs)} (${formatChange(current.totalMs, main.totalMs)})`
       : `${formatDuration(current.totalMs)} (no run on main to compare with yet)`;
-  const lines = [`### ${title}: test time`, "", `Total: **${total}**`];
+  const lines = [`### ${title}: test time`, ""];
+
+  let warning: string | undefined;
+  if (budgetMinutes !== undefined && current.totalMs > budgetMinutes * 60_000) {
+    const three = bySlowest.slice(0, 3).map(({ file, ms }) => `${file} (${formatDuration(ms)})`);
+    // eslint-disable-next-line rabaed/no-avoid-terms -- test files, in a CI annotation.
+    warning = `${title} took ${formatDuration(current.totalMs)}, over its budget of ${budgetMinutes} min. Slowest files: ${three.join(", ")}.`;
+    lines.push(`> **Over budget:** ${warning}`, "");
+  }
+  lines.push(`Total: **${total}**`);
   if (current.shardsMs) {
     const n = current.shardsMs.length;
     lines.push("", `Shards: ${current.shardsMs.map((ms, i) => `${i + 1}/${n} ${formatDuration(ms)}`).join(", ")}`);
@@ -119,7 +144,7 @@ export function summarise(title: string, current: Timing, main?: Timing, top = 1
     const before = mainFiles.get(file);
     lines.push(`| \`${file}\` | ${formatDuration(ms)} | ${before === undefined ? "-" : formatDuration(before)} |`);
   }
-  return { markdown: lines.join("\n") + "\n", notice };
+  return { markdown: lines.join("\n") + "\n", notice, warning };
 }
 
 function readTiming(path: string): Timing {
@@ -139,9 +164,12 @@ export function run(argv: string[], env: NodeJS.ProcessEnv = process.env): void 
     return;
   }
   const report = argv[0];
-  if (!report || report.startsWith("--")) throw new Error("usage: test-timing.ts <report.json> --title <title> [--main <main.json>]");
+  if (!report || report.startsWith("--")) throw new Error("usage: test-timing.ts <report.json> --title <title> [--main <main.json>] [--budget <minutes>]");
   const title = arg("--title") ?? "tests";
   const mainPath = arg("--main");
+  const budget = arg("--budget");
+  const budgetMinutes = budget === undefined ? undefined : Number(budget);
+  if (budgetMinutes !== undefined && !(budgetMinutes > 0)) throw new Error(`--budget needs minutes above 0, got "${budget}"`);
 
   const current = readTiming(report);
   let main: Timing | undefined;
@@ -152,9 +180,10 @@ export function run(argv: string[], env: NodeJS.ProcessEnv = process.env): void 
       console.log(`::warning::No usable timing from main to compare with: ${(error as Error).message}`);
     }
   }
-  const { markdown, notice } = summarise(title, current, main);
+  const { markdown, notice, warning } = summarise(title, current, main, { budgetMinutes });
   if (env.GITHUB_STEP_SUMMARY) appendFileSync(env.GITHUB_STEP_SUMMARY, markdown + "\n");
   else console.log(markdown);
+  if (warning) console.log(`::warning title=${title} over budget::${warning}`);
   if (notice) console.log(`::notice title=${title} is slower than main::${notice}`);
 }
 

@@ -245,7 +245,8 @@ jobs:
         run: node scripts/test-timing.ts --merge seam1-timing.json seam1-timing-*.json
       - if: always()
         uses: ./.github/actions/test-timing
-        with: { title: "seam 1", report: seam1-timing.json, artifact: seam1-timing }
+        # about 1.3 x the sharded total measured on PR #189 (RP-558)
+        with: { title: "seam 1", report: seam1-timing.json, artifact: seam1-timing, budget: 8 }
 
   seam2:
     name: seam 2 (database RLS)
@@ -283,7 +284,7 @@ jobs:
       - run: pnpm test:seam2 --reporter=default --reporter=json --outputFile.json=seam2-timing.json
       - if: always()
         uses: ./.github/actions/test-timing
-        with: { title: "seam 2", report: seam2-timing.json, artifact: seam2-timing }
+        with: { title: "seam 2", report: seam2-timing.json, artifact: seam2-timing, budget: 3 }
 
   mail:
     name: mail (mailer against the catcher)
