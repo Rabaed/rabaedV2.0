@@ -1,4 +1,8 @@
+import { lookup as dnsLookup, type LookupAddress } from "node:dns";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { request as httpRequest } from "node:http";
+import { request as httpsRequest } from "node:https";
+import type { LookupFunction } from "node:net";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -126,6 +130,51 @@ export function storageState(setCookies: string[], webUrl: string) {
   return { cookies: setCookies.map((header) => toStateCookie(header, host)), origins: [] };
 }
 
+/**
+ * Whether the host is `localhost` or a name under it (`lane2.localhost`). Browsers and curl send
+ * these to loopback themselves, but Node's resolver on Windows asks DNS and gets ENOTFOUND.
+ */
+export function isLocalhostName(host: string): boolean {
+  const name = host.toLowerCase().replace(/\.$/, "");
+  return name === "localhost" || name.endsWith(".localhost");
+}
+
+/**
+ * A resolver for node:http that answers 127.0.0.1 for `*.localhost` and asks the system for
+ * anything else. Only the connection goes to loopback: the Host header stays the original name,
+ * so the web app sees the same request a browser on `laneN.localhost` makes.
+ */
+export const loopbackForLocalhost: LookupFunction = (hostname, options, callback) => {
+  if (!isLocalhostName(hostname)) return dnsLookup(hostname, options, callback as never);
+  if (options.all) (callback as (error: null, addresses: LookupAddress[]) => void)(null, [{ address: "127.0.0.1", family: 4 }]);
+  else callback(null, "127.0.0.1", 4);
+};
+
+/** POSTs JSON with node:http, so `*.localhost` connects through loopbackForLocalhost (fetch takes no lookup). */
+export function postJson(url: string, body: unknown): Promise<{ status: number; setCookies: string[] }> {
+  const target = new URL(url);
+  const payload = JSON.stringify(body);
+  const send = target.protocol === "https:" ? httpsRequest : httpRequest;
+  return new Promise((resolvePost, reject) => {
+    const req = send(
+      target,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json", "content-length": Buffer.byteLength(payload) },
+        // eslint-disable-next-line rabaed/no-avoid-terms -- `lookup` is the node:http option that resolves the host name.
+        lookup: loopbackForLocalhost,
+      },
+      (res) => {
+        res.resume();
+        res.on("end", () => resolvePost({ status: res.statusCode ?? 0, setCookies: res.headers["set-cookie"] ?? [] }));
+        res.on("error", reject);
+      },
+    );
+    req.on("error", reject);
+    req.end(payload);
+  });
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (!existsSync(passwordFile)) {
@@ -136,18 +185,16 @@ async function main() {
 
   const webUrl = (process.env.WEB_URL ?? "http://127.0.0.1:3000").replace(/\/+$/, "");
   // Through the web app's /api/v1 proxy, so the cookie is the browser's first-party one.
-  const response = await fetch(`${webUrl}/api/v1/session`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ email: args.email, password }),
-  }).catch(() => {
+  // A lane's WEB_URL is http://laneN.localhost:<port>: postJson connects to 127.0.0.1 but keeps
+  // that Host, and the cookies below are for laneN.localhost, the host the README says to open.
+  const response = await postJson(`${webUrl}/api/v1/session`, { email: args.email, password }).catch(() => {
     throw new Error(`Could not reach ${webUrl}. Is the demo running (pnpm demo)?`);
   });
   if (response.status !== 204) {
     const hint = response.status === 401 ? " (wrong email, or the seed used another password: run pnpm demo again)" : "";
     throw new Error(`Sign-in as ${args.email} failed with ${response.status}${hint}.`);
   }
-  const cookies = response.headers.getSetCookie();
+  const cookies = response.setCookies;
   if (cookies.length === 0) throw new Error("Sign-in worked but set no session cookie.");
 
   mkdirSync(dirname(args.out), { recursive: true });
