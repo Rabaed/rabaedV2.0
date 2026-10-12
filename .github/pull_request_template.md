@@ -12,7 +12,7 @@ No Company may see another Company's work beyond `docs/visibility.md`. Tick ever
 
 ## Leak channels
 
-<!-- One per row of the leak-channel table in docs/visibility.md, in its order; scripts/check-leak-channels.test.ts keeps them the same. -->
+<!-- Keep this heading's name: scripts/check-leak-channels.test.ts reads the checkboxes under it and fails unless they are the rows of docs/visibility.md's leak-channel table, once each and in its order. -->
 
 - [ ] Lists, Kanban, Floor/Plan Views
 - [ ] Comments (Code B's action items)

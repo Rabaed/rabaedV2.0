@@ -55,16 +55,22 @@ export type AllowListed = { table: ChannelTable; kind: string; row: string };
 
 const testFile = "scripts/check-leak-channels.test.ts";
 
-/** The Channel cell of every row of the "Leak channels" table. */
-export function leakChannelRows(markdown: string): string[] {
+/** The lines under the "## Leak channels" heading, up to the next heading; empty when there is none. */
+function leakChannelSection(markdown: string): string[] {
   const lines = markdown.split("\n");
   const heading = lines.findIndex((line) => line.startsWith("## Leak channels"));
   if (heading < 0) return [];
+  const end = lines.findIndex((line, i) => i > heading && line.startsWith("#"));
+  return lines.slice(heading + 1, end < 0 ? undefined : end);
+}
+
+/** The Channel cell of every row of the "Leak channels" table. */
+export function leakChannelRows(markdown: string): string[] {
+  const lines = leakChannelSection(markdown);
   const rows: string[] = [];
   let inTable = false;
-  for (let i = heading + 1; i < lines.length; i++) {
+  for (let i = 0; i < lines.length; i++) {
     const line = lines[i]!;
-    if (line.startsWith("#")) break;
     if (!line.startsWith("|")) {
       if (inTable) break;
       continue;
@@ -83,33 +89,31 @@ const prTemplateFile = ".github/pull_request_template.md";
 
 /** The checkbox labels of the PR template's "Leak channels" section. */
 function templateChannels(template: string): string[] {
-  const lines = template.split("\n");
-  const heading = lines.findIndex((line) => line.startsWith("## Leak channels"));
-  if (heading < 0) return [];
-  const channels: string[] = [];
-  for (const line of lines.slice(heading + 1)) {
-    if (line.startsWith("#")) break;
-    const box = /^- \[[ xX]\] (.+?)\s*$/.exec(line);
-    if (box) channels.push(box[1]!);
-  }
-  return channels;
+  return leakChannelSection(template).flatMap((line) => /^- \[[ xX]\] (.+?)\s*$/.exec(line)?.[1] ?? []);
 }
 
 /**
  * What differs between the leak-channel table and the PR template's checklist (RP-112), so the
- * question "which channels does this change touch?" always offers every channel; empty when nothing.
+ * question "which channels does this change touch?" always offers every channel, once each and in
+ * the table's order; empty when nothing does.
  */
 export function prTemplateProblems(markdown: string, template: string): string[] {
   const rows = leakChannelRows(markdown);
   const listed = templateChannels(template);
-  return [
+  const problems = [
     ...rows
       .filter((row) => !listed.includes(row))
-      .map((row) => `leak channel '${row}' (${visibilityFile}) is missing from ${prTemplateFile}: add it to its Leak channels list`),
+      .map((row) => `leak channel '${row}' (${visibilityFile}) is missing from ${prTemplateFile}: add the line "- [ ] ${row}" to its Leak channels list`),
     ...listed
       .filter((channel) => !rows.includes(channel))
       .map((channel) => `'${channel}' in ${prTemplateFile}'s Leak channels list is not a row of ${visibilityFile}'s leak-channel table: rename or remove it`),
+    ...listed
+      .filter((channel, i) => listed.indexOf(channel) !== i)
+      .map((channel) => `'${channel}' is listed more than once in ${prTemplateFile}'s Leak channels list: keep one`),
   ];
+  if (problems.length > 0) return problems;
+  // Same set, once each: then only the order can differ.
+  return listed.join("\n") === rows.join("\n") ? [] : [`${prTemplateFile}'s Leak channels list is not in ${visibilityFile}'s table order: ${rows.join(", ")}`];
 }
 
 // "step_age_report" names "Step Age reports": its words, in order, each at the start of a word.

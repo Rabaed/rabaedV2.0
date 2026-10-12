@@ -129,11 +129,26 @@ function template(channels: string[]): string {
 }
 
 describe("prTemplateProblems", () => {
-  it("finds nothing wrong when the template lists every channel row, ticked or not", () => {
+  it("finds nothing wrong when the template lists every channel row in order, ticked or not", () => {
     const markdown = visibility(["Search and filters", "Daily email digest"]);
     expect(prTemplateProblems(markdown, template(["Search and filters", "Daily email digest"]))).toEqual([]);
-    expect(prTemplateProblems(markdown, template(["Search and filters"]).replace("- [ ] Search", "- [x] Search") + "\n")).toEqual([
-      "leak channel 'Daily email digest' (docs/visibility.md) is missing from .github/pull_request_template.md: add it to its Leak channels list",
+    const ticked = template(["Search and filters", "Daily email digest"]).replace("- [ ] Daily", "- [x] Daily");
+    expect(prTemplateProblems(markdown, ticked)).toEqual([]);
+  });
+
+  it("names a channel row the template is missing, with the line to add", () => {
+    expect(prTemplateProblems(visibility(["Search and filters", "Daily email digest"]), template(["Search and filters"]))).toEqual([
+      `leak channel 'Daily email digest' (docs/visibility.md) is missing from .github/pull_request_template.md: add the line "- [ ] Daily email digest" to its Leak channels list`,
+    ]);
+  });
+
+  it("names a channel listed twice, and a list out of the table's order", () => {
+    const markdown = visibility(["Links", "Linked from"]);
+    expect(prTemplateProblems(markdown, template(["Links", "Linked from", "Links"]))).toEqual([
+      "'Links' is listed more than once in .github/pull_request_template.md's Leak channels list: keep one",
+    ]);
+    expect(prTemplateProblems(markdown, template(["Linked from", "Links"]))).toEqual([
+      ".github/pull_request_template.md's Leak channels list is not in docs/visibility.md's table order: Links, Linked from",
     ]);
   });
 
@@ -146,7 +161,7 @@ describe("prTemplateProblems", () => {
   it("reads only the Leak channels section's checkboxes", () => {
     expect(prTemplateProblems(visibility(["Links"]), "## Leak channels\n\n- [ ] Links\n\n## Scenarios\n\n- [ ] Pins\n")).toEqual([]);
     expect(prTemplateProblems(visibility(["Links"]), "## Summary\n\n- [ ] Links\n")).toEqual([
-      "leak channel 'Links' (docs/visibility.md) is missing from .github/pull_request_template.md: add it to its Leak channels list",
+      `leak channel 'Links' (docs/visibility.md) is missing from .github/pull_request_template.md: add the line "- [ ] Links" to its Leak channels list`,
     ]);
   });
 });
