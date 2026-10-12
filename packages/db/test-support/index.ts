@@ -34,6 +34,7 @@ export { addTestScreen, addTestWorkflow, approveBActionForm, type TestWorkflowOp
 export { expectedContentSha256, jsonbText, type HashedDocument } from "./content-hash.ts";
 export { addRulesWorkflow, rulesFormSchema, type RulesTransition } from "./rules-workflow.ts";
 export { actionsFormSchema, addActionsWorkflow } from "./actions-workflow.ts";
+export { addLegacyMarType, LEGACY_MAR, LEGACY_WORKFLOW_NAME, returnInInternalReview } from "./legacy-mar.ts";
 
 class Rollback extends Error {}
 

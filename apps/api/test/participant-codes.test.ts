@@ -141,7 +141,7 @@ describe("Document Numbers", () => {
   // so a Participant's numbers never switch from 01 to a code.
   it("print the ordinal while no code is set, which fixes it: a code is refused after, and the numbers stay on 01", async () => {
     const at = await project("PC7");
-    const first = await draft(at, at.c1Engineer, "Before the code");
+    const first = await draft(at, at.c1Engineer, "Before the code", { type: "MAR" });
     await sendForReview(at.c1Engineer, first);
     expect(await numberOf(at.c1Engineer, first)).toBe("PC7-MAR-01-0001");
 
@@ -155,7 +155,7 @@ describe("Document Numbers", () => {
     expect(listed.find((p) => p.id === at.c1ParticipantId)).toMatchObject({ code: null, codeLocked: true });
     expect(listed.find((p) => p.id === at.k1ParticipantId)).toMatchObject({ code: null, codeLocked: false });
 
-    const second = await draft(at, at.c1Engineer, "After the refused code");
+    const second = await draft(at, at.c1Engineer, "After the refused code", { type: "MAR" });
     await sendForReview(at.c1Engineer, second);
     expect(await numberOf(at.c1Engineer, second)).toBe("PC7-MAR-01-0002");
   });
@@ -165,7 +165,7 @@ describe("Document Numbers", () => {
     await ok(code(c1.caller, at.c1ParticipantId, "CCM"));
     // A code nothing used yet can still change.
     await ok(code(c1.caller, at.c1ParticipantId, "CMC"));
-    const id = await draft(at, at.c1Engineer, "Uses the code");
+    const id = await draft(at, at.c1Engineer, "Uses the code", { type: "MAR" });
     await sendForReview(at.c1Engineer, id);
     expect(await numberOf(at.c1Engineer, id)).toBe("PC8-MAR-CMC-0001");
 
@@ -191,7 +191,7 @@ describe("Document Numbers", () => {
       sharedCounterAccepted: true,
     };
     await ok(c1.caller.request("PUT", `/v1/projects/${at.projectId}/numbering`, noParticipant));
-    const id = await draft(at, at.c1Engineer, "Numbered without the Participant");
+    const id = await draft(at, at.c1Engineer, "Numbered without the Participant", { type: "MAR" });
     await sendForReview(at.c1Engineer, id);
     expect(await numberOf(at.c1Engineer, id)).toBe("PC9-MAR-0001");
     await ok(code(c1.caller, at.c1ParticipantId, "CCM"));
@@ -230,7 +230,7 @@ describe("a starting number", () => {
     const set = await code(c1.caller, at.c1ParticipantId, "CCM");
     expect({ status: set.statusCode, body: set.json() }).toEqual({ status: 409, body: { error: "code_in_use" } });
     expect((await codesOf(c1.caller, at.projectId))[at.c1ParticipantId]).toBeNull();
-    const id = await draft(at, at.c1Engineer, "Continues the register");
+    const id = await draft(at, at.c1Engineer, "Continues the register", { type: "MAR" });
     await sendForReview(at.c1Engineer, id);
     expect(await numberOf(at.c1Engineer, id)).toBe("PC12-MAR-01-0144");
   });

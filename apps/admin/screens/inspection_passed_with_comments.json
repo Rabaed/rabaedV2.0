@@ -1,0 +1,37 @@
+{
+  "key": "inspection_passed_with_comments",
+  "name": { "en": "Passed with Comments", "ar": "ناجح مع ملاحظات" },
+  "schema": {
+    "sections": [
+      {
+        "key": "result_remarks",
+        "title": { "en": "Remarks and Comments", "ar": "الملاحظات وما يلزم معالجته" },
+        "fields": [
+          {
+            "key": "remarks",
+            "type": "textarea",
+            "required": false,
+            "maxLength": 4000,
+            "label": { "en": "Remarks", "ar": "الملاحظات" },
+            "help": { "en": "Shared with everyone who sees this item.", "ar": "يراها كل من يرى هذا العنصر." }
+          },
+          {
+            "key": "items_to_create",
+            "type": "table",
+            "required": true,
+            "label": { "en": "Comments", "ar": "الملاحظات للمعالجة" },
+            "help": {
+              "en": "Each row becomes a Comment in the Snag List, for the Contractor to resolve.",
+              "ar": "يصبح كل سطر ملاحظة في قائمة الملاحظات ليعالجها المقاول."
+            },
+            "columns": [
+              { "key": "comment", "type": "text", "required": true, "maxLength": 2000, "label": { "en": "Comment", "ar": "الملاحظة" } },
+              { "key": "reference", "type": "text", "required": false, "maxLength": 200, "label": { "en": "Reference", "ar": "المرجع" } }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "internalFields": []
+}

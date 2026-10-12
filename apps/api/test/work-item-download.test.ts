@@ -7,7 +7,8 @@
 import type { SharedWorkItem } from "@rabaed/domain";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { attachDatasheet, createTestApi, expectHidden, type Caller } from "./support/harness.ts";
-import { all, buildTower, detail, ok, projectMember, take, type Tower } from "./support/tower.ts";
+import { all, buildTower, ok, projectMember, take, type Tower } from "./support/tower.ts";
+import { LEGACY_MAR } from "@rabaed/db/test-support";
 
 const api = await createTestApi({ files: true });
 afterAll(() => api.close());
@@ -25,7 +26,7 @@ const shared = async (by: Caller, id: string): Promise<SharedWorkItem> => (await
 async function submitted(title: string) {
   const res = await ok(
     at.c1Engineer.post(`/v1/projects/${at.projectId}/work-items`, {
-      type: "MAR",
+      type: LEGACY_MAR,
       title,
       answers: { manufacturer: "ABB", description: "Busbar", trade: at.electrical, location: at.buildingA },
     }),
@@ -51,22 +52,13 @@ beforeAll(async () => {
 
   open = await submitted("Busbar trunking");
   await ok(at.k1Manager.post(`/v1/work-items/${open}/pick-up`));
-  const d = await detail(at.k1Manager, open);
-  // K1's in-progress answer: its own until the item leaves K1 (V19).
-  await ok(at.k1Manager.request("PUT", `/v1/work-items/${open}/answers`, { answers: { ...d.answers, verification_note: "K1 still checking" } }));
 
   closed = await submitted("Cable trays");
-  const c = await detail(at.k1Manager, closed);
-  await ok(
-    at.k1Manager.request("PUT", `/v1/work-items/${closed}/answers`, {
-      answers: { ...c.answers, sample_checked: true, matches_specification: false, verification_note: "Below spec" },
-    }),
-  );
   await ok(at.k1Manager.post(`/v1/work-items/${closed}/pick-up`));
   await take(at.k1Manager, closed, "revise_c", { remarks: "Resubmit with the tested trays", internalNote: "K1 only: their price is high" });
 
   draft = (
-    await ok(at.c1Engineer.post(`/v1/projects/${at.projectId}/work-items`, { type: "MAR", title: "Draft", answers: { trade: at.electrical } }), 201)
+    await ok(at.c1Engineer.post(`/v1/projects/${at.projectId}/work-items`, { type: LEGACY_MAR, title: "Draft", answers: { trade: at.electrical } }), 201)
   ).json().id;
 });
 
@@ -92,9 +84,9 @@ describe("scenario RP-409-2: Download is the item as shared, the same for every 
     expect(item.history.every((e) => e.companyName === null || typeof e.companyName.en === "string")).toBe(true);
   });
 
-  it("holds the answers as they arrived, never K1's in-progress ones, even for K1", async () => {
-    expect((await shared(at.k1Manager, open)).answers).not.toHaveProperty("verification_note");
-    expect((await shared(at.c1Pm, closed)).answers).toMatchObject({ verification_note: "Below spec" });
+  it("holds the raiser's answers as Submitted, the same for K1 (K1 answers in its replies, never the Form, ADR 0019)", async () => {
+    expect((await shared(at.k1Manager, open)).answers).toEqual((await shared(at.c1Pm, open)).answers);
+    expect((await shared(at.c1Pm, closed)).answers).toMatchObject({ manufacturer: "ABB", description: "Busbar" });
   });
 
   it("has nothing before the first Submit, and nothing for another Contractor or a stranger", async () => {

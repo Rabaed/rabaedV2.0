@@ -53,7 +53,6 @@ export function useFormRendererLabels(): FormRendererLabels {
     none: renderer("none"),
     leftProject: (name) => renderer("leftProject", { name }),
     unanswered: renderer("unanswered"),
-    filledBy: (role) => renderer("filledBy", { role }),
     builtIn: { choose: t("builtIn.choose"), chooseTradeFirst: t("builtIn.chooseTradeFirst"), noScopes: t("builtIn.noScopes") },
     attachments: {
       none: t("attachmentsField.none"),

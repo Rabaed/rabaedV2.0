@@ -10,6 +10,7 @@ import { encodeWorkItemCursor, isOpenStageCategory, workItemSearchParams, type W
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { attachDatasheet, createTestApi, expectHidden, type Caller } from "./support/harness.ts";
 import { all, bilingual, ok, projectMember, take, type Company } from "./support/tower.ts";
+import { LEGACY_MAR } from "@rabaed/db/test-support";
 
 const api = await createTestApi({ files: true });
 afterAll(() => api.close());
@@ -20,7 +21,6 @@ let c1: Company; // Contractor; its Authorized Person created the Project.
 let c1Engineer: Caller;
 let c1Pm: Caller;
 let c2Engineer: Caller; // A second Contractor (V3).
-let k1Engineer: Caller; // Consultant: verifies.
 let k1ManagerA: Caller; // Consultant: in the review Step's pool.
 let k1ManagerB: Caller; // Consultant: in the same pool.
 let outsider: Caller; // A Company on no Project of these.
@@ -48,7 +48,7 @@ const total = (l: WorkItemList) => l.stages.reduce((sum, s) => sum + s.count, 0)
 async function draft(title: string, answers: Record<string, unknown> = {}): Promise<string> {
   const res = await ok(
     c1Engineer.post(`/v1/projects/${projectId}/work-items`, {
-      type: "MAR",
+      type: LEGACY_MAR,
       title,
       answers: { ...complete, trade: trade.electrical, location: loc.buildingA, ...answers },
     }),
@@ -66,18 +66,8 @@ async function submit(id: string) {
   await take(c1Pm, id, "submit");
 }
 
-/** K1 verifies the submitted item and issues Code C. */
+/** K1 issues Code C on the submitted item. */
 async function codeC(id: string) {
-  await ok(
-    k1Engineer.request("PUT", `/v1/work-items/${id}/answers`, {
-      answers: {
-        ...(await ok(k1Engineer.get(`/v1/work-items/${id}`), 200)).json().answers,
-        sample_checked: true,
-        matches_specification: false,
-        verification_note: "Below the specified efficacy",
-      },
-    }),
-  );
   await ok(k1ManagerA.post(`/v1/work-items/${id}/pick-up`));
   await take(k1ManagerA, id, "revise_c", { remarks: "Resubmit with 110 lm/W luminaires" });
 }
@@ -107,7 +97,7 @@ beforeAll(async () => {
   c2Engineer = await projectMember(api, c2.company, c2.participantId, ["engineer"]);
   const k1 = await participant("consultant");
   k1ParticipantId = k1.participantId;
-  k1Engineer = await projectMember(api, k1.company, k1.participantId, ["engineer"]);
+  await projectMember(api, k1.company, k1.participantId, ["engineer"]);
   k1ManagerA = await projectMember(api, k1.company, k1.participantId, ["manager"]);
   k1ManagerB = await projectMember(api, k1.company, k1.participantId, ["manager"]);
   const stranger = await api.authorizedPerson();
@@ -133,7 +123,7 @@ describe("cursor paging", () => {
     await projectMember(api, c1, own, ["project_manager"]); // holds the internal review
     for (let i = 0; i < 53; i++) {
       const answers = i < 3 ? { ...complete, trade: tradeId, location: locationId } : { trade: tradeId };
-      const res = await ok(engineer.post(`/v1/projects/${pagingProject}/work-items`, { type: "MAR", title: `Item ${i}`, answers }), 201);
+      const res = await ok(engineer.post(`/v1/projects/${pagingProject}/work-items`, { type: LEGACY_MAR, title: `Item ${i}`, answers }), 201);
       created.push(res.json().id);
     }
     // A few leave Draft, so they get a Document Number; the rest have none yet, and
@@ -272,7 +262,7 @@ describe("filters and sorts, combined", () => {
   });
 
   it("filters by Type, Stage, Trade and Location, a Location taking in the ones under it", async () => {
-    expect(ids(await list(c1Engineer, { type: ["MAR"] }))).toEqual(expect.arrayContaining([mechanicalInB, electricalInA]));
+    expect(ids(await list(c1Engineer, { type: [LEGACY_MAR] }))).toEqual(expect.arrayContaining([mechanicalInB, electricalInA]));
     expect(ids(await list(c1Engineer, { type: ["SAR"] }))).toEqual([]);
     expect(ids(await list(c1Engineer, { trade: [trade.mechanical] }))).toEqual([mechanicalInB]);
     const inTower = ids(await list(c1Engineer, { location: [loc.tower1] }));
@@ -302,7 +292,7 @@ describe("filters and sorts, combined", () => {
     // A new Draft, without its datasheet: the moved clock spoils an upload's signature.
     const fresh = (
       await ok(
-        c1Engineer.post(`/v1/projects/${projectId}/work-items`, { type: "MAR", title: "Lighting poles", answers: { trade: trade.electrical } }),
+        c1Engineer.post(`/v1/projects/${projectId}/work-items`, { type: LEGACY_MAR, title: "Lighting poles", answers: { trade: trade.electrical } }),
         201,
       )
     ).json().id;
@@ -344,7 +334,7 @@ describe("a second Contractor (V3, scenario 17)", () => {
   beforeAll(async () => {
     const res = await ok(
       c2Engineer.post(`/v1/projects/${projectId}/work-items`, {
-        type: "MAR",
+        type: LEGACY_MAR,
         title: "C2 pumps",
         answers: { ...complete, trade: trade.mechanical, location: loc.buildingB },
       }),

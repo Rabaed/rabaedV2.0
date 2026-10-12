@@ -43,7 +43,13 @@ describe("the Rabaed Default outcome sets", () => {
     expect([a, c, d].map((o) => itemsToCreate(o!))).toEqual([null, null, null]);
     expect([a, b, c, d].map((o) => offersRevision(o!))).toEqual([false, false, true, false]);
     expect([a, b, c, d].map((o) => offersReplacement(o!))).toEqual([false, false, false, true]);
-    expect(Object.values(defaultOutcomeSets).flat().filter((o) => o.actions.length > 0).map((o) => o.code)).toEqual(["B", "C", "D"]);
+    expect(Object.values(defaultOutcomeSets).flat().filter((o) => o.actions.length > 0).map((o) => o.code)).toEqual(["B", "C", "D", "passed_with_comments", "failed"]);
+  });
+
+  it("give Passed with Comments Comments to create and Failed a re-inspection by Revision (RP-437)", () => {
+    const [passed, withComments, failed] = defaultOutcomeSets.inspection_result;
+    expect([passed, withComments, failed].map((o) => itemsToCreate(o!))).toEqual([null, "CMT", null]);
+    expect([passed, withComments, failed].map((o) => offersRevision(o!))).toEqual([false, false, true]);
   });
 });
 
@@ -98,7 +104,7 @@ describe("a Project Admin's outcome", () => {
 describe("dashboardBarOutcomes", () => {
   it("puts outcomes offering a Revision first, then the positive, then the negative, each in the set's order", () => {
     expect(codes(dashboardBarOutcomes(defaultOutcomeSets.review_code))).toEqual(["C", "A", "B", "D"]);
-    expect(codes(dashboardBarOutcomes(defaultOutcomeSets.inspection_result))).toEqual(["passed", "passed_with_comments", "failed"]);
+    expect(codes(dashboardBarOutcomes(defaultOutcomeSets.inspection_result))).toEqual(["failed", "passed", "passed_with_comments"]);
   });
 
   it("takes an outcome a Project Admin added, and leaves out one that doesn't close", () => {
@@ -134,6 +140,7 @@ describe("outcomeLook (RP-410): how a card shows its outcome, from its place in 
 
   it("makes only the set's first positive outcome with no follow-up the clean one", () => {
     const inspection = defaultOutcomeSets.inspection_result;
-    expect(["passed", "passed_with_comments", "failed"].map((c) => look(c, inspection))).toEqual(["a", "b", "d"]);
+    // Failed offers a re-inspection by Revision (RP-437), so it looks as Code C does.
+    expect(["passed", "passed_with_comments", "failed"].map((c) => look(c, inspection))).toEqual(["a", "b", "c"]);
   });
 });

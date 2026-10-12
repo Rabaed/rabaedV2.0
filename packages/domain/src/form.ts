@@ -427,12 +427,10 @@ export type FormSchema = z.infer<typeof formSchema>;
 export const formVersion = z.object({ id: z.uuid(), versionNo: z.number().int().positive(), schema: formSchema });
 export type FormVersion = z.infer<typeof formVersion>;
 
-/** A Form Version as the viewer fills it in: which Form Sections they may change now, and who fills the others (form-engine.md §4). */
+/** A Form Version as the viewer fills it in: which Form Sections they may change now (form-engine.md §4). The Form is the raiser's: no section is another Participant's (ADR 0019). */
 export const formToFill = formVersion.extend({
   /** The sections the viewer may change now, in Form order: none when they may not save at all. */
   editableSections: z.array(formKey),
-  /** Each section filled in by a Participant other than the raiser, by that Participant's Project Role. */
-  filledBy: z.record(z.string(), bilingualText),
 });
 export type FormToFill = z.infer<typeof formToFill>;
 

@@ -6,6 +6,7 @@ import type { VisibilityGrant, WorkItemDetail } from "@rabaed/domain";
 import type { LightMyRequestResponse } from "fastify";
 import { expect } from "vitest";
 import { attachDatasheet, type Caller, type OnboardedCompany, type TestApi } from "./harness.ts";
+import { LEGACY_MAR } from "@rabaed/db/test-support";
 
 /** An onboarded Company and its signed-in Authorized Person. */
 export type Company = { company: OnboardedCompany; caller: Caller };
@@ -117,10 +118,13 @@ export async function buildTower(api: TestApi, { c1, k1 }: { c1: Company; k1: Co
   };
 }
 
-/** A Draft MAR with the Subject `title`, on `at`'s Project, in Building A. */
-export async function draft(at: Tower, engineer: Caller, title: string, trade = at.electrical): Promise<string> {
+/** Which Draft `draft` raises: its Trade (Electrical by default) and Type (by default the legacy MAR, LEGACY_MAR). */
+export type DraftOptions = { trade?: string; type?: string };
+
+/** A Draft MAR (by default the legacy MAR: Form Version 3, Workflow Version 2) with the Subject `title`, on `at`'s Project, in Building A. */
+export async function draft(at: Tower, engineer: Caller, title: string, { trade = at.electrical, type = LEGACY_MAR }: DraftOptions = {}): Promise<string> {
   const res = await engineer.post(`/v1/projects/${at.projectId}/work-items`, {
-    type: "MAR",
+    type,
     title,
     answers: { manufacturer: "ACME Cables", description: "Galvanised, 300 mm", trade, location: at.buildingA },
   });
@@ -130,15 +134,15 @@ export async function draft(at: Tower, engineer: Caller, title: string, trade = 
 }
 
 /** A MAR sent to the raiser's own internal review. */
-export async function inInternalReview(at: Tower, engineer: Caller, title: string): Promise<string> {
-  const id = await draft(at, engineer, title);
+export async function inInternalReview(at: Tower, engineer: Caller, title: string, options: DraftOptions = {}): Promise<string> {
+  const id = await draft(at, engineer, title, options);
   await take(engineer, id, "send_for_review");
   return id;
 }
 
 /** A MAR Submitted to the Consultant. */
 export async function submitted(at: Tower, engineer: Caller, pm: Caller, title: string, trade = at.electrical): Promise<string> {
-  const id = await draft(at, engineer, title, trade);
+  const id = await draft(at, engineer, title, { trade });
   await take(engineer, id, "send_for_review");
   await ok(pm.post(`/v1/work-items/${id}/pick-up`));
   await take(pm, id, "submit");

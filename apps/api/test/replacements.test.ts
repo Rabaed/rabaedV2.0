@@ -15,6 +15,7 @@ import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { attachDatasheet, createTestApi, expectHidden, uploadDocument, type Caller } from "./support/harness.ts";
 import { all, bilingual, detail, ok, projectMember, take, type Company } from "./support/tower.ts";
+import { LEGACY_MAR } from "@rabaed/db/test-support";
 
 const api = await createTestApi({ files: true });
 const migrator = createDb(testDatabaseUrls().migrator, { max: 1 });
@@ -41,8 +42,6 @@ const complete = {
   items: [{ fixture_type: "Downlight", quantity: 120, unit: "pcs" }],
 };
 
-const saveOver = async (by: Caller, id: string, changes: Record<string, unknown>) =>
-  ok(by.request("PUT", `/v1/work-items/${id}/answers`, { answers: { ...(await detail(by, id)).answers, ...changes } }));
 const createReplacement = (by: Caller, id: string, idempotencyKey: string = randomUUID()) =>
   by.post(`/v1/work-items/${id}/replacements`, { idempotencyKey });
 const createRevision = (by: Caller, id: string) => by.post(`/v1/work-items/${id}/revisions`, { idempotencyKey: randomUUID() });
@@ -58,9 +57,8 @@ async function submit(id: string) {
   await take(pm, id, "submit");
 }
 
-/** K1 verifies the submitted item and issues Code C. */
+/** K1 issues Code C on the submitted item. */
 async function codeC(id: string) {
-  await saveOver(k1Engineer, id, { sample_checked: true, matches_specification: false, verification_note: "Below the specified efficacy" });
   await ok(k1Manager.post(`/v1/work-items/${id}/pick-up`));
   await take(k1Manager, id, "revise_c", { remarks: "Resubmit with 110 lm/W luminaires" });
 }
@@ -68,7 +66,7 @@ async function codeC(id: string) {
 /** A MAR with its datasheet, and the Attachments named, closed at Code C. */
 async function closedAtCodeC(title: string, attachments: string[] = []): Promise<string> {
   const res = await ok(
-    engineer.post(`/v1/projects/${projectId}/work-items`, { type: "MAR", title, answers: { ...complete, trade: electrical, location: buildingA } }),
+    engineer.post(`/v1/projects/${projectId}/work-items`, { type: LEGACY_MAR, title, answers: { ...complete, trade: electrical, location: buildingA } }),
     201,
   );
   const id = res.json().id as string;
@@ -140,14 +138,14 @@ describe("what the item page offers follows the outcome's follow-up actions", ()
     }
     await expectHidden(createReplacement(stranger, d));
     await expectHidden(createReplacement(engineer, randomUUID()));
-    const open = (await ok(engineer.post(`/v1/projects/${projectId}/work-items`, { type: "MAR", title: "Open", answers: { ...complete, trade: electrical } }), 201))
+    const open = (await ok(engineer.post(`/v1/projects/${projectId}/work-items`, { type: LEGACY_MAR, title: "Open", answers: { ...complete, trade: electrical } }), 201))
       .json().id as string;
     expect((await createReplacement(engineer, open)).statusCode).toBe(409);
     expect((await detail(engineer, open)).actions.createReplacement).toBe(false);
   });
 
   it("follows the Type's outcome set: a Project Admin makes Code C offer a replacement instead of a Revision", async () => {
-    const base = `/v1/projects/${projectId}/work-item-types/MAR/outcomes`;
+    const base = `/v1/projects/${projectId}/work-item-types/${LEGACY_MAR}/outcomes`;
     const path = `${base}/C`;
     const set: TypeOutcomes = (await ok(c1.caller.get(base), 200)).json();
     const c = set.outcomes.find((o) => o.code === "C")!;
@@ -185,7 +183,6 @@ describe("C1 creates a replacement of a MAR that got Code D", () => {
       outcome: null,
       answers: { ...complete, trade: electrical, location: buildingA },
     });
-    for (const key of ["sample_checked", "matches_specification", "verification_note"]) expect(d.answers).not.toHaveProperty(key);
     expect(d.actions).toMatchObject({ saveAnswers: true, discardRevision: false, createReplacement: false });
     // The rejected item stays closed, with its Code and number.
     expect(await detail(engineer, rejected)).toMatchObject({ outcome: "D", revisionNo: 0, documentNumber: base });

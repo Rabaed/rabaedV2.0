@@ -1,5 +1,5 @@
 import { createDb } from "@rabaed/db";
-import { testDatabaseUrls } from "@rabaed/db/test-support";
+import { addLegacyMarType, LEGACY_MAR, testDatabaseUrls } from "@rabaed/db/test-support";
 import { buildApp } from "../../src/app.ts";
 import { createFileStore, ensureLocalBucket, fileStoreSettingsFromEnv } from "../../src/documents/file-store.ts";
 import { ensureDemo } from "../../src/demo/ensure.ts";
@@ -27,6 +27,8 @@ export default async function setup(): Promise<void> {
       DEFAULT_PASSWORD,
       { files: true },
     );
+    // The MAR as it ran before RP-437, for the tests of the engine's general behaviour.
+    await addLegacyMarType(migrator, LEGACY_MAR);
   } finally {
     await Promise.all([migrator.destroy(), db.destroy(), adminDb.destroy()]);
   }

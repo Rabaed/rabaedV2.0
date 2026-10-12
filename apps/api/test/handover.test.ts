@@ -266,7 +266,7 @@ describe("scenario RP-108-2: an item the Authorized Person doesn't see is listed
     const t = await tower("HO7");
     const khalid = await memberOnProject(api, t.c1, t.at.c1ParticipantId, ["project_manager"], { name: "Khalid Bakr" });
     const seen = await inInternalReview(t.at, t.at.c1Engineer, "Seen trays");
-    const hidden = await draft(t.at, t.at.c1Engineer, "Hidden chillers", t.at.mechanical);
+    const hidden = await draft(t.at, t.at.c1Engineer, "Hidden chillers", { trade: t.at.mechanical });
     await take(t.at.c1Engineer, hidden, "send_for_review");
     for (const id of [seen, hidden]) await ok(t.at.c1Pm.post(`/v1/work-items/${id}/pick-up`));
     const hiddenNumber = (await detail(t.at.c1Pm, hidden)).documentNumber;

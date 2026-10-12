@@ -37,7 +37,6 @@ import {
   type DocumentSummary,
   type OptionList,
   type TableColumn,
-  type BilingualText,
 } from "@rabaed/domain";
 import { useState, type ReactNode } from "react";
 import { cn } from "../../lib/cn.ts";
@@ -104,8 +103,6 @@ export type FormRendererLabels = {
   /** A saved Member or Participant no longer on the Project, named. */
   leftProject: (name: string) => string;
   unanswered: string;
-  /** A Form Section filled in by another Participant, by that Participant's Project Role. */
-  filledBy: (role: string) => string;
   builtIn: BuiltInFieldLabels;
   attachments: AttachmentsFieldLabels;
   photos: PhotosFieldLabels;
@@ -131,12 +128,6 @@ export type FormRendererProps = {
    * others read. Left out, every section (form-engine.md §4).
    */
   editableSections?: readonly string[];
-  /**
-   * The Form Sections filled in by a Participant other than the raiser, each by
-   * that Participant's Project Role: marked "Filled in by the Consultant" while
-   * they hold no answers.
-   */
-  filledBy?: Readonly<Record<string, BilingualText>>;
   /** The viewer's language: labels, help and messages. */
   locale: Locale;
   /**
@@ -568,7 +559,6 @@ export function FormRenderer({
   errors = [],
   mode,
   editableSections,
-  filledBy = {},
   labels,
   locale,
   choices = noChoices,
@@ -824,15 +814,11 @@ export function FormRenderer({
         const fields = section.fields.filter((f) => visibility.fields.has(f.key));
         const headingId = `${idPrefix}-section-${section.key}`;
         const editing = mode === "edit" && (editableSections === undefined || editableSections.includes(section.key));
-        // Another Participant's section, not filled in yet: who fills it, instead of nothing.
-        const filler = filledBy[section.key];
-        const unfilled = filler && section.fields.every((f) => !isAnswerField(f) || isUnanswered(answers[f.key]));
         return (
           <section key={section.key} aria-labelledby={headingId} className="flex flex-col gap-4">
             <h3 id={headingId} className={cn("font-display text-h6 font-semibold text-text", sectionTitles === "hidden" && "sr-only")}>
               {section.title[locale]}
             </h3>
-            {unfilled && <p className="text-body text-muted">{labels.filledBy(filler[locale])}</p>}
             {editing ? (
               fields.map((field) => {
                 if (!isAnswerField(field)) return <Layout key={field.key} field={field} locale={locale} />;

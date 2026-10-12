@@ -1,0 +1,26 @@
+{
+  "key": "inspection_failed",
+  "name": { "en": "Failed", "ar": "راسب" },
+  "schema": {
+    "sections": [
+      {
+        "key": "result_remarks",
+        "title": { "en": "Remarks", "ar": "الملاحظات" },
+        "fields": [
+          {
+            "key": "remarks",
+            "type": "textarea",
+            "required": true,
+            "maxLength": 4000,
+            "label": { "en": "Remarks", "ar": "الملاحظات" },
+            "help": {
+              "en": "Say what failed. Shared with everyone who sees this item; the Contractor asks for a re-inspection with a Revision.",
+              "ar": "اذكر سبب الرسوب. يراها كل من يرى هذا العنصر، ويطلب المقاول إعادة المعاينة بمراجعة جديدة."
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "internalFields": []
+}

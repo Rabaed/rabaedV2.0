@@ -7,7 +7,8 @@ import { randomUUID } from "node:crypto";
 import type { WorkItemDetail, WorkItemHistory } from "@rabaed/domain";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { attachDatasheet, createTestApi, expectHidden, DEFAULT_PASSWORD, type Caller, type OnboardedCompany } from "./support/harness.ts";
-import { detail, memberOnProject, tryTake, type TakeOptions } from "./support/tower.ts";
+import { detail, memberOnProject, tryTake } from "./support/tower.ts";
+import { LEGACY_MAR } from "@rabaed/db/test-support";
 
 const api = await createTestApi({ files: true });
 afterAll(() => api.close());
@@ -79,7 +80,7 @@ async function participant(
 
 async function createDraft(by: Caller, title: string, location = buildingA): Promise<string> {
   const res = await by.post(`/v1/projects/${projectId}/work-items`, {
-    type: "MAR",
+    type: LEGACY_MAR,
     title,
     answers: { manufacturer: "ACME Cables", description: "Galvanised, 300 mm", trade: electrical, location },
   });
@@ -88,22 +89,6 @@ async function createDraft(by: Caller, title: string, location = buildingA): Pro
   await attachDatasheet(by, res.json().id);
   return res.json().id;
 }
-
-/**
- * Issuing a Code needs the MAR Form Version 4's Consultant verification (RP-306): the
- * signer fills it first, as the Consultant does. Left alone by anyone who may not save
- * (the save is then refused and ignored), so the refusals under test stay theirs.
- */
-async function verified(by: Caller, id: string) {
-  const answers = (await by.get(`/v1/work-items/${id}`)).json().answers as Record<string, unknown> | undefined;
-  if (answers) await by.request("PUT", `/v1/work-items/${id}/answers`, { answers: { ...answers, sample_checked: true, matches_specification: true } });
-}
-
-/** `by` takes the Transition, after the signer's verification where a Code is issued; the response as it came. */
-const takeVerifying = async (by: Caller, id: string, transition: string, options: TakeOptions = {}) => {
-  if (transition === "approve_a" || transition === "revise_c") await verified(by, id);
-  return tryTake(by, id, transition, options);
-};
 
 async function history(by: Caller, id: string): Promise<WorkItemHistory["events"]> {
   const res = await by.get(`/v1/work-items/${id}/history`);
@@ -137,10 +122,10 @@ async function everything(by: Caller, id: string) {
 /** A Draft, sent, Returned once with a reason, sent again and picked up by the PM: ready to Submit. */
 async function readyToSubmit(title: string, location = buildingA) {
   const id = await createDraft(engineer, title, location);
-  await ok(takeVerifying(engineer, id, "send_for_review"));
+  await ok(tryTake(engineer, id, "send_for_review"));
   await ok(pm.post(`/v1/work-items/${id}/pick-up`));
-  await ok(takeVerifying(pm, id, "return", { reason: "Wrong tray size" }));
-  await ok(takeVerifying(engineer, id, "send_for_review"));
+  await ok(tryTake(pm, id, "return", { reason: "Wrong tray size" }));
+  await ok(tryTake(engineer, id, "send_for_review"));
   await ok(pm.post(`/v1/work-items/${id}/pick-up`));
   return id;
 }
@@ -200,7 +185,7 @@ describe("Submit", () => {
   });
 
   it("moves the item to Pending Approval, with the Consultant's pool", async () => {
-    await ok(takeVerifying(pm, id, "submit"));
+    await ok(tryTake(pm, id, "submit"));
     const d = await detail(pm, id);
     expect(d).toMatchObject({
       stage: { key: "pending_approval" },
@@ -223,7 +208,7 @@ describe("Submit", () => {
       const { ids, counts } = await listed(caller);
       expect(ids).toEqual([id]);
       expect(counts).toMatchObject({ draft: 0, internal_review: 0, pending_approval: 1 });
-      expect((await detail(caller, id)).documentNumber).toMatch(/^TWR-MAR-01-\d{4}$/);
+      expect((await detail(caller, id)).documentNumber).toMatch(/^TWR-MARV-01-\d{4}$/);
     }
     expect(buttons(await detail(signer, id))).toEqual(["pick_up"]);
     // An Engineer can't issue a Code, so isn't in the pool.
@@ -257,7 +242,7 @@ describe("Submit", () => {
     expect(await listed(c2Engineer)).toMatchObject({ ids: [], counts: { pending_approval: 0 } });
     await expectHidden(c2Engineer.get(`/v1/work-items/${id}`));
     await expectHidden(c2Engineer.get(`/v1/work-items/${id}/history`));
-    await expectHidden(takeVerifying(c2Engineer, id, "approve_a"));
+    await expectHidden(tryTake(c2Engineer, id, "approve_a"));
   });
 
   it("shows the Consultant the Submit, never the Contractor's Return or internal moves (V5)", async () => {
@@ -280,7 +265,7 @@ describe("Submit", () => {
   });
 
   it("is refused to a PM holding nothing, and to the Contractor once the item left it", async () => {
-    expect((await takeVerifying(pm, id, "submit")).json()).toEqual({ error: "not_holder" });
+    expect((await tryTake(pm, id, "submit")).json()).toEqual({ error: "not_holder" });
   });
 });
 
@@ -288,7 +273,7 @@ describe("Approve · A", () => {
   let id = "";
   beforeAll(async () => {
     id = await readyToSubmit("Lighting fixtures");
-    await ok(takeVerifying(pm, id, "submit"));
+    await ok(tryTake(pm, id, "submit"));
   });
 
   it("goes to the Consultant manager who picks it up; the Contractor still sees only the Company", async () => {
@@ -303,11 +288,11 @@ describe("Approve · A", () => {
   });
 
   it("is refused to a Consultant Member who doesn't hold the Step", async () => {
-    expect((await takeVerifying(otherManager, id, "approve_a")).json()).toEqual({ error: "not_holder" });
+    expect((await tryTake(otherManager, id, "approve_a")).json()).toEqual({ error: "not_holder" });
   });
 
   it("closes the item Approved with Code A", async () => {
-    await ok(takeVerifying(signer, id, "approve_a"));
+    await ok(tryTake(signer, id, "approve_a"));
     for (const caller of [engineer, pm, signer, otherManager, orEngineer]) {
       const d = await detail(caller, id);
       expect(d).toMatchObject({ stage: { key: "approved", category: "closed_positive" }, outcome: "A", heldBy: null });
@@ -335,8 +320,6 @@ describe("Approve · A", () => {
     expect(events.map((e) => [e.type, e.by.companyName?.en])).toEqual([
       ["transition", "Test Constructions"],
       ["picked_up", CONSULTANT],
-      // Its own verification, saved before the Code (MAR Form Version 4, RP-306).
-      ["answers_changed", CONSULTANT],
       ["issue_code", CONSULTANT],
     ]);
   });
@@ -347,7 +330,7 @@ describe("Approve · A", () => {
       [signer, "revise_c"],
       [pm, "submit"],
     ] as const) {
-      const res = await takeVerifying(caller, id, key);
+      const res = await tryTake(caller, id, key);
       expect(res.statusCode, res.body).toBe(409);
       expect(res.json()).toEqual({ error: "item_closed" });
     }
@@ -367,12 +350,12 @@ describe("Revise & Resubmit · C", () => {
   let id = "";
   beforeAll(async () => {
     id = await readyToSubmit("Busbars");
-    await ok(takeVerifying(pm, id, "submit"));
+    await ok(tryTake(pm, id, "submit"));
   });
 
   it("closes the item Revise & Resubmit with Code C", async () => {
     await ok(otherManager.post(`/v1/work-items/${id}/pick-up`));
-    await ok(takeVerifying(otherManager, id, "revise_c", { remarks: "Resubmit with the type test certificate" }));
+    await ok(tryTake(otherManager, id, "revise_c", { remarks: "Resubmit with the type test certificate" }));
     const d = await detail(engineer, id);
     expect(d).toMatchObject({ stage: { key: "revise_resubmit", category: "closed_negative" }, outcome: "C", heldBy: null });
     expect((await history(engineer, id)).at(-1)).toMatchObject({
@@ -393,7 +376,7 @@ describe("Remarks with the Code (MAR Workflow Version 2)", () => {
 
   async function submitted(title: string) {
     const id = await readyToSubmit(title);
-    await ok(takeVerifying(pm, id, "submit"));
+    await ok(tryTake(pm, id, "submit"));
     await ok(signer.post(`/v1/work-items/${id}/pick-up`));
     return id;
   }
@@ -413,7 +396,7 @@ describe("Remarks with the Code (MAR Workflow Version 2)", () => {
   it("refuses C without Remarks and leaves the item where it was", async () => {
     const id = await submitted("C without remarks");
     for (const remarks of [undefined, "   "]) {
-      const res = await takeVerifying(signer, id, "revise_c", remarks === undefined ? {} : { remarks });
+      const res = await tryTake(signer, id, "revise_c", remarks === undefined ? {} : { remarks });
       expect(res.statusCode, res.body).toBe(422);
       expect(res.json()).toEqual({ error: "invalid_action_form", fields: [{ key: "remarks", code: "required" }] });
     }
@@ -423,16 +406,16 @@ describe("Remarks with the Code (MAR Workflow Version 2)", () => {
 
   it("accepts A without Remarks, and with them", async () => {
     const plain = await submitted("A without remarks");
-    await ok(takeVerifying(signer, plain, "approve_a"));
+    await ok(tryTake(signer, plain, "approve_a"));
     expect((await history(pm, plain)).at(-1)).toMatchObject({ type: "issue_code", outcome: "A", remarks: null });
     const worded = await submitted("A with remarks");
-    await ok(takeVerifying(signer, worded, "approve_a", { remarks: REMARKS_A }));
+    await ok(tryTake(signer, worded, "approve_a", { remarks: REMARKS_A }));
     expect((await history(pm, worded)).at(-1)).toMatchObject({ type: "issue_code", outcome: "A", remarks: REMARKS_A });
   });
 
   it("shows C's Remarks beside the Code to the Contractor, Owner Representative and Owner, the Internal Note to no one but the Consultant", async () => {
     const id = await submitted("Remarks with a note");
-    await ok(takeVerifying(signer, id, "revise_c", { remarks: REMARKS_C, internalNote: NOTE }));
+    await ok(tryTake(signer, id, "revise_c", { remarks: REMARKS_C, internalNote: NOTE }));
     for (const caller of [engineer, pm, orEngineer, owner, signer, otherManager]) {
       const events = await history(caller, id);
       expect(events.at(-1), "the Code event").toMatchObject({ type: "issue_code", outcome: "C", audience: "shared", remarks: REMARKS_C });
@@ -458,7 +441,7 @@ describe("Submit with no single Consultant to take it (scenario 37)", () => {
   /** Submit isn't offered, and taking it gets the one answer, naming nobody and nothing. */
   async function expectRefused(id: string) {
     expect(buttons(await detail(pm, id))).toEqual(["return"]);
-    const res = await takeVerifying(pm, id, "submit");
+    const res = await tryTake(pm, id, "submit");
     expect(res.statusCode).toBe(409);
     expect(res.body).toBe(ANSWER);
     for (const name of NEVER_IN_REFUSAL) expect(res.body).not.toContain(name);
@@ -507,12 +490,12 @@ describe("Internal Note (V5, scenarios 7 and 34)", () => {
 
   beforeAll(async () => {
     id = await createDraft(engineer, "Cable glands");
-    await ok(takeVerifying(engineer, id, "send_for_review", { internalNote: SENT }));
+    await ok(tryTake(engineer, id, "send_for_review", { internalNote: SENT }));
     await ok(pm.post(`/v1/work-items/${id}/pick-up`));
-    await ok(takeVerifying(pm, id, "return", { reason: "Wrong gland size", internalNote: RETURNED }));
-    await ok(takeVerifying(engineer, id, "send_for_review"));
+    await ok(tryTake(pm, id, "return", { reason: "Wrong gland size", internalNote: RETURNED }));
+    await ok(tryTake(engineer, id, "send_for_review"));
     await ok(pm.post(`/v1/work-items/${id}/pick-up`));
-    await ok(takeVerifying(pm, id, "submit", { internalNote: SUBMITTED }));
+    await ok(tryTake(pm, id, "submit", { internalNote: SUBMITTED }));
   });
 
   it("is recorded with each Transition, Send for Review, Return and Submit, inside the Contractor", async () => {
@@ -540,7 +523,7 @@ describe("Internal Note (V5, scenarios 7 and 34)", () => {
 
   it("written with the Code, stays inside the Consultant (scenario 8)", async () => {
     await ok(signer.post(`/v1/work-items/${id}/pick-up`));
-    await ok(takeVerifying(signer, id, "approve_a", { internalNote: CODED }));
+    await ok(tryTake(signer, id, "approve_a", { internalNote: CODED }));
     expect(await notes(otherManager)).toEqual([["Approve · A", CODED, "internal"]]);
     for (const caller of [engineer, pm, orEngineer]) {
       const events = await history(caller, id);
@@ -558,25 +541,25 @@ describe("Internal Note (V5, scenarios 7 and 34)", () => {
       engineer.post(`/v1/work-items/${other}/transitions`, { transition: "send_for_review", internalNote: SENT, confirmed: true, idempotencyKey });
     await Promise.all([ok(send()), ok(send())]);
     await ok(pm.post(`/v1/work-items/${other}/pick-up`));
-    await ok(takeVerifying(pm, other, "return", { reason: "Again", internalNote: "   " }));
+    await ok(tryTake(pm, other, "return", { reason: "Again", internalNote: "   " }));
     const events = await history(engineer, other);
     expect(events.filter((e) => e.type === "internal_note").map((e) => e.internalNote)).toEqual([SENT]);
   });
 
   it("writes nothing when the Transition is refused", async () => {
     const other = await createDraft(engineer, "Cable ties");
-    expect((await takeVerifying(pm, other, "send_for_review", { internalNote: "Not mine to send" })).statusCode).not.toBe(204);
-    await ok(takeVerifying(engineer, other, "send_for_review"));
+    expect((await tryTake(pm, other, "send_for_review", { internalNote: "Not mine to send" })).statusCode).not.toBe(204);
+    await ok(tryTake(engineer, other, "send_for_review"));
     await ok(pm.post(`/v1/work-items/${other}/pick-up`));
-    expect((await takeVerifying(pm, other, "return", { internalNote: "No reason given" })).json()).toEqual({ error: "invalid_action_form", fields: [{ key: "reason", code: "required" }] });
+    expect((await tryTake(pm, other, "return", { internalNote: "No reason given" })).json()).toEqual({ error: "invalid_action_form", fields: [{ key: "reason", code: "required" }] });
     const events = await history(pm, other);
     expect(events.some((e) => e.type === "internal_note")).toBe(false);
   });
 
   it("is at most 4000 characters", async () => {
     const other = await createDraft(engineer, "Cable clips");
-    expect((await takeVerifying(engineer, other, "send_for_review", { internalNote: "x".repeat(4001) })).statusCode).toBe(400);
-    await ok(takeVerifying(engineer, other, "send_for_review", { internalNote: "x".repeat(4000) }));
+    expect((await tryTake(engineer, other, "send_for_review", { internalNote: "x".repeat(4001) })).statusCode).toBe(400);
+    await ok(tryTake(engineer, other, "send_for_review", { internalNote: "x".repeat(4000) }));
   });
 });
 
@@ -584,7 +567,7 @@ describe("Internal Note (V5, scenarios 7 and 34)", () => {
 describe("Step Age", () => {
   it("counts the weeks at the Consultant's Step, for both sides", async () => {
     const id = await readyToSubmit("Earthing");
-    await ok(takeVerifying(pm, id, "submit"));
+    await ok(tryTake(pm, id, "submit"));
     api.advanceClock(15 * 86_400_000);
     for (const caller of [pm, signer]) {
       const again = await api.signIn(emails.get(caller)!, DEFAULT_PASSWORD);

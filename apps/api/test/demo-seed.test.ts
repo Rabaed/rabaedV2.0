@@ -90,10 +90,10 @@ describe("the demo seed", () => {
   });
 });
 
-describe("the MAR Form Version 4, as the demo uses it", () => {
-  it("lists every field of Version 4, labelled in English and Arabic", async () => {
+describe("the MAR Form Version 5, as the demo uses it", () => {
+  it("lists every field of Version 5, labelled in English and Arabic: the Consultant answers in its replies, not the Form", async () => {
     const form: FormVersion = (await hafiz.get(`/v1/projects/${projectId}/work-item-types/MAR/form`)).json();
-    expect(form.versionNo).toBe(4);
+    expect(form.versionNo).toBe(5);
     const fields = form.schema.sections.flatMap((s) => s.fields).filter((f) => "label" in f);
     expect(fields.map((f) => [f.key, f.type])).toEqual([
       ["manufacturer", "text"],
@@ -105,9 +105,6 @@ describe("the MAR Form Version 4, as the demo uses it", () => {
       ["test_certificate", "attachments"],
       ["sample_photo", "photos"],
       ["related_submittals", "work_item_ref"],
-      ["sample_checked", "yes_no"],
-      ["matches_specification", "yes_no"],
-      ["verification_note", "textarea"],
       ["trade", "trade"],
       ["location", "location"],
       ["scopes", "scopes"],
@@ -148,7 +145,7 @@ describe("the MAR Form Version 4, as the demo uses it", () => {
 });
 
 // Links (RP-294, spec RP-289): the seed leaves an approved MAR in Tower 1, and a
-// MAR on Version 4 in Tower 2 that links it twice: under Related submittals and
+// MAR on Version 5 in Tower 2 that links it twice: under Related submittals and
 // as a free Link. Omar covers Tower 2 only, so he reads the approved MAR as its
 // number and Subject, and nothing more (E1).
 const APPROVED_TITLE = "Exit signage – Tower 1";
@@ -192,9 +189,9 @@ describe("the seeded Links", () => {
     });
   });
 
-  it("include a MAR on Version 4, sent to the Consultant, linking it under Related submittals and as a free Link", async () => {
+  it("include a MAR on Version 5, sent to the Consultant, linking it under Related submittals and as a free Link", async () => {
     const form: FormVersion = (await hafiz.get(`/v1/work-items/${linking}/form`)).json();
-    expect(form.versionNo).toBe(4);
+    expect(form.versionNo).toBe(5);
     const item: WorkItemDetail = (await hafiz.get(`/v1/work-items/${linking}`)).json();
     expect(item).toMatchObject({ stage: { key: "pending_approval" }, answers: { related_submittals: [approved] } });
     const { links: seen } = await links(hafiz, linking);
@@ -239,11 +236,6 @@ describe("the README walkthrough", () => {
     const list = (await who.get(`/v1/projects/${projectId}/work-items`)).json();
     expect(list.items.map((i: { id: string }) => i.id)).not.toContain(mar);
     if (countsZero) expect(list.stages.every((s: { count: number }) => s.count === 0)).toBe(true);
-  };
-  /** The Consultant's verification, saved over the answers `who` reads, as the web form does. */
-  const verify = async (who: Caller, verification: Record<string, unknown>) => {
-    const saved = await who.request("PUT", `/v1/work-items/${mar}/answers`, { answers: { ...(await detail(who, mar)).answers, ...verification } });
-    expect(saved.statusCode, saved.body).toBe(204);
   };
   const pickUp = async (who: Caller) => expect((await who.post(`/v1/work-items/${mar}/pick-up`)).statusCode).toBe(204);
   // The Form of a complete MAR; a function, as the Trade and Location ids come from beforeAll.
@@ -308,47 +300,79 @@ describe("the README walkthrough", () => {
     for (const who of [ahmed, mohammed, faisal]) await hidden(who);
   });
 
-  it("4. Ali picks up and Returns it with a reason; 5. Hafiz re-sends it", async () => {
+  it("4. Ali Returns it with a reason: it stays in Internal Review, at the Contractor Engineer Step, with Hafiz, who wrote it", async () => {
     await pickUp(ali);
+    const number = (await detail(ali, mar)).documentNumber;
     await take(ali, mar, "return", { reason: "Add emergency duration" });
-    expect((await detail(hafiz, mar)).stage.key).toBe("draft");
-    await take(hafiz, mar, "send_for_review");
+    const returned = await detail(hafiz, mar);
+    expect(returned).toMatchObject({ stage: { key: "internal_review" }, documentNumber: number });
+    expect(returned.heldBy?.memberName?.en).toBe("Hafiz Hamdan");
+  });
+
+  it("5. Hafiz replaces the Datasheet, which can change until the Submit, and sends it for review again", async () => {
+    const [old] = (await documents(hafiz)).documents;
+    expect((await hafiz.delete(`/v1/work-items/${mar}/documents/${old!.id}`)).statusCode).toBe(204);
+    await attachDatasheet(hafiz, "CoreLine-datasheet-rev-B.pdf", "%PDF-1.4 Philips CoreLine Panel 600 x 600 datasheet, 3-hour emergency (demo)");
+    await take(hafiz, mar, "send_for_review_again");
     await pickUp(ali);
   });
 
-  it("6. Ali Submits it: With Design Consultants LLC; the Consultant and Al Waha see it, Beta Build never does", async () => {
-    await take(ali, mar, "submit");
+  it("6. Ali Submits it with a Cover Note: With Design Consultants LLC; the Consultant and Al Waha read the Cover Note by TMC, Beta Build sees nothing", async () => {
+    await take(ali, mar, "submit", { answers: { cover_note: "Panels for Level 2, as drawing E-201" }, internalNote: "Quantities checked against the BOQ" });
     expect((await detail(hafiz, mar)).heldBy).toEqual({
       companyName: { en: "Design Consultants LLC", ar: "المصممون الاستشاريون ذ.م.م" },
       memberName: null,
       pool: null,
     });
-    expect((await detail(ahmed, mar)).actions).toMatchObject({ pickUp: false, transitions: [] });
-    // Mohammed is the Consultant's only Manager: he holds it at once, with no Pick up (§3.3 rule 4).
+    // Its Consultant Engineers may pick it up, never its Manager (RP-511 decision 1): nobody holds it yet.
+    expect((await detail(ahmed, mar)).actions.pickUp).toBe(true);
+    expect((await detail(mohammed, mar)).heldBy?.pool?.names.map((n) => n.en).sort()).toEqual(["Ahmed bin Said", "Sara"]);
     expect((await detail(mohammed, mar)).actions.pickUp).toBe(false);
-    expect((await detail(mohammed, mar)).heldBy?.memberName?.en).toBe("Mohammed Al Shamsi");
     expect((await detail(faisal, mar)).stage.key).toBe("pending_approval");
     await hidden(yousef, { countsZero: true });
-    expect((await ahmed.get(`/v1/work-items/${mar}/history`)).body).not.toContain("Add emergency duration");
+    for (const who of [ahmed, faisal]) {
+      const history = (await who.get(`/v1/work-items/${mar}/history`)).json() as WorkItemHistory;
+      expect(history.events.find((e) => e.answers?.cover_note)).toMatchObject({
+        answers: { cover_note: "Panels for Level 2, as drawing E-201" },
+        by: { companyName: { en: "TMC Constructions" }, memberName: null },
+      });
+      expect(JSON.stringify(history)).not.toContain("Add emergency duration");
+      expect(JSON.stringify(history)).not.toContain("Quantities checked against the BOQ");
+    }
   });
 
-  it("7. The Consultant reads the Form's answers and the frozen Datasheet; the other Contractor still sees nothing", async () => {
+  it("7. The Consultant reads the Form's answers and the replaced, frozen Datasheet; the other Contractor still sees nothing", async () => {
+    await pickUp(ahmed);
     expect((await detail(ahmed, mar)).answers).toMatchObject(filled());
     const seen = await documents(ahmed);
-    expect(seen).toMatchObject({ canChange: false, documents: [{ fieldKey: "datasheet", fileName: "CoreLine-datasheet.pdf", frozen: true }] });
+    expect(seen).toMatchObject({ canChange: false, documents: [{ fieldKey: "datasheet", fileName: "CoreLine-datasheet-rev-B.pdf", frozen: true }] });
     const link = (await ahmed.get(`/v1/work-items/${mar}/documents/${seen.documents[0]!.id}/download`)).json().url as string;
-    expect(await (await fetch(link)).text()).toBe("%PDF-1.4 Philips CoreLine Panel 600 x 600 datasheet (demo)");
+    expect(await (await fetch(link)).text()).toBe("%PDF-1.4 Philips CoreLine Panel 600 x 600 datasheet, 3-hour emergency (demo)");
     await expectHidden(yousef.get(`/v1/work-items/${mar}/documents`));
   });
 
-  it("8. Mohammed picks it up and issues Code A; TMC and Al Waha see the Code and its signer", async () => {
-    await pickUp(mohammed);
-    await verify(mohammed, { sample_checked: true, matches_specification: true });
-    await take(mohammed, mar, "approve_a");
+  it("8. Ahmed replies to his Manager, inside the Consultant; Mohammed's Code A starts from that verification; TMC and Al Waha see the Code and its signer only", async () => {
+    const before = (await hafiz.get(`/v1/work-items/${mar}/history`)).body;
+    const unanswered = await ahmed.post(`/v1/work-items/${mar}/transitions`, { transition: "send_to_manager", confirmed: true, idempotencyKey: randomUUID() });
+    expect(unanswered.statusCode, unanswered.body).toBe(422);
+    await take(ahmed, mar, "send_to_manager", { answers: { sample_checked: true, matches_specification: true }, recommendedCode: "A", internalNote: "Sample matches" });
+    expect((await hafiz.get(`/v1/work-items/${mar}/history`)).body).toBe(before);
+    // Mohammed is the Consultant's only Manager: he holds it at once, with no Pick up (§3.3 rule 4).
+    const manager = await detail(mohammed, mar);
+    expect(manager.heldBy?.memberName?.en).toBe("Mohammed Al Shamsi");
+    const approve = manager.actions.transitions.find((t) => t.key === "approve_a")!;
+    expect(approve.prefill).toEqual({ sample_checked: true, matches_specification: true });
+    await take(mohammed, mar, "approve_a", { answers: approve.prefill });
     expect(await detail(hafiz, mar)).toMatchObject({ stage: { key: "approved" }, outcome: "A" });
     for (const who of [hafiz, faisal]) {
-      const events = (await who.get(`/v1/work-items/${mar}/history`)).json().events;
-      expect(events.at(-1)).toMatchObject({ type: "issue_code", by: { memberName: { en: "Mohammed Al Shamsi" } } });
+      const events = (await who.get(`/v1/work-items/${mar}/history`)).json().events as WorkItemHistory["events"];
+      expect(events.at(-1)).toMatchObject({
+        type: "issue_code",
+        by: { memberName: { en: "Mohammed Al Shamsi" } },
+        answers: { sample_checked: true, matches_specification: true },
+      });
+      expect(events.some((e) => e.type === "internal_answers" || e.type === "recommend_code")).toBe(false);
+      expect(JSON.stringify(events)).not.toContain("Sample matches");
     }
     await hidden(yousef, { countsZero: true });
   });
@@ -359,13 +383,14 @@ describe("the README walkthrough", () => {
     await take(hafiz, mar, "send_for_review");
     await pickUp(ali);
     await take(ali, mar, "submit");
-    await pickUp(mohammed);
-    await verify(mohammed, { sample_checked: true, matches_specification: false, verification_note: "Wrong datasheet revision" });
-    await take(mohammed, mar, "revise_c", { remarks: "Submit the 2020 revision of the datasheet" });
+    await pickUp(ahmed);
+    const verification = { sample_checked: true, matches_specification: false, verification_note: "Wrong datasheet revision" };
+    await take(ahmed, mar, "send_to_manager", { answers: verification, recommendedCode: "C" });
+    await take(mohammed, mar, "revise_c", { answers: verification, remarks: "Submit the 2020 revision of the datasheet" });
     expect(await detail(hafiz, mar)).toMatchObject({ stage: { key: "revise_resubmit" }, outcome: "C" });
   });
 
-  it("10. Hafiz opens the seeded MAR on Version 4: its Links open the approved MAR, which lists it under Linked from", async () => {
+  it("10. Hafiz opens the seeded MAR on Version 5: its Links open the approved MAR, which lists it under Linked from", async () => {
     const linking = (await titled(hafiz, LINKING_TITLE))!;
     const approved = (await titled(hafiz, APPROVED_TITLE))!;
     const seen = await links(hafiz, linking);
@@ -406,62 +431,53 @@ describe("the README walkthrough", () => {
     await expectHidden(omar.get(`/v1/work-items/${mar}`));
   });
 
-  it("13. The Consultant verification: empty and marked for the Contractor, filled by the Consultant while the Contractor still sees it empty, then Code C with Remarks", async () => {
+  it("13. The Consultant's replies: Ahmed's verification and the Return to Engineer stay inside the Consultant; Code C shares its Remarks and final verification", async () => {
     mar = await raise("Lighting control – Tower 2");
     await attachDatasheet(hafiz, "lighting-control-datasheet.pdf", "%PDF-1.4 Lighting control datasheet (demo)");
-    // The raiser's Draft on Version 4 (scenario 46): the section is read-only and marked.
+    // The Form is the raiser's (Version 5): no section of it is the Consultant's.
     const draft: FormToFill = (await hafiz.get(`/v1/work-items/${mar}/form`)).json();
-    expect(draft.versionNo).toBe(4);
-    expect(draft.editableSections).not.toContain("consultant_verification");
-    expect(draft.filledBy.consultant_verification).toMatchObject({ en: "Consultant", ar: expect.any(String) });
-    const refused = await hafiz.request("PUT", `/v1/work-items/${mar}/answers`, { answers: { ...filled(), sample_checked: true } });
-    expect(refused.statusCode, refused.body).toBe(409);
+    expect(draft.versionNo).toBe(5);
+    expect(draft.schema.sections.every((s) => s.editable_at === undefined)).toBe(true);
     await take(hafiz, mar, "send_for_review");
     await pickUp(ali);
-    // Leaving Draft and the Contractor's review never needed the Consultant's answers.
     await take(ali, mar, "submit");
-    for (const who of [hafiz, ali, faisal]) {
-      const form: FormToFill = (await who.get(`/v1/work-items/${mar}/form`)).json();
-      expect(form.filledBy.consultant_verification, "marked").toBeDefined();
-      expect(form.editableSections).toEqual([]);
-    }
-    // Ahmed fills it and saves (Sample checked, and Matches specification: No).
-    const consultantForm: FormToFill = (await ahmed.get(`/v1/work-items/${mar}/form`)).json();
-    expect(consultantForm.editableSections).toEqual(["consultant_verification"]);
-    await verify(ahmed, { sample_checked: true, matches_specification: false });
-    expect(await detail(ahmed, mar)).toMatchObject({ answers: { sample_checked: true, matches_specification: false } });
-    // The Contractor and Al Waha still read it empty, and see no change.
-    for (const who of [hafiz, ali, faisal]) {
-      const seen = (await detail(who, mar)).answers;
-      expect(seen).not.toHaveProperty("sample_checked");
-      expect(seen).not.toHaveProperty("matches_specification");
-      const history = (await who.get(`/v1/work-items/${mar}/history`)).json() as WorkItemHistory;
-      expect(history.events.filter((e) => e.type === "answers_changed")).toEqual([]);
-    }
-    // The Code is refused while the verification is incomplete (the note is required for No) ...
-    await pickUp(mohammed);
-    const incomplete = await mohammed.post(`/v1/work-items/${mar}/transitions`, {
-      transition: "revise_c",
-      answers: { remarks: "Fix the specification mismatch" },
+    const contractorSaw = { hafiz: (await hafiz.get(`/v1/work-items/${mar}/history`)).body, faisal: (await faisal.get(`/v1/work-items/${mar}/history`)).body };
+    // Ahmed answers in his reply: Matches specification No needs the Verification note.
+    await pickUp(ahmed);
+    const noNote = await ahmed.post(`/v1/work-items/${mar}/transitions`, {
+      transition: "send_to_manager",
+      answers: { sample_checked: true, matches_specification: false },
       confirmed: true,
       idempotencyKey: randomUUID(),
     });
-    expect(incomplete.statusCode, incomplete.body).toBe(422);
-    expect(incomplete.json()).toMatchObject({ error: "form_incomplete", fields: [{ key: "verification_note", code: "required" }] });
-    // ... and, once complete, Code C needs its Remarks.
-    await verify(mohammed, { verification_note: "Lamp efficacy is below the specified 110 lm/W" });
-    const noRemarks = await mohammed.post(`/v1/work-items/${mar}/transitions`, { transition: "revise_c", answers: {}, confirmed: true, idempotencyKey: randomUUID() });
+    expect(noNote.statusCode, noNote.body).toBe(422);
+    const verification = { sample_checked: true, matches_specification: false, verification_note: "Lamp efficacy is below the specified 110 lm/W" };
+    await take(ahmed, mar, "send_to_manager", { answers: verification, recommendedCode: "C" });
+    // Mohammed Returns it to Ahmed, who sends it to him again.
+    await take(mohammed, mar, "return_to_engineer", { reason: "Check the photometric report" });
+    expect((await detail(ahmed, mar)).heldBy?.memberName?.en).toBe("Ahmed bin Said");
+    await take(ahmed, mar, "send_to_manager", { answers: verification, recommendedCode: "C" });
+    // The Contractor and Al Waha see no change at all until the Code.
+    expect((await hafiz.get(`/v1/work-items/${mar}/history`)).body).toBe(contractorSaw.hafiz);
+    expect((await faisal.get(`/v1/work-items/${mar}/history`)).body).toBe(contractorSaw.faisal);
+    // Code C needs its Remarks; its final verification starts from Ahmed's reply.
+    const revise = (await detail(mohammed, mar)).actions.transitions.find((t) => t.key === "revise_c")!;
+    expect(revise.prefill).toEqual(verification);
+    const noRemarks = await mohammed.post(`/v1/work-items/${mar}/transitions`, { transition: "revise_c", answers: revise.prefill, confirmed: true, idempotencyKey: randomUUID() });
     expect(noRemarks.statusCode, noRemarks.body).toBe(422);
-    await take(mohammed, mar, "revise_c", { remarks: "Replace with 110 lm/W luminaires. / استبدلها بوحدات 110 لومن/واط." });
-    // Both Companies now read the answers and the Remarks (scenario 48).
+    await take(mohammed, mar, "revise_c", { answers: revise.prefill, remarks: "Replace with 110 lm/W luminaires. / استبدلها بوحدات 110 لومن/واط.", internalNote: "Ahmed agrees" });
+    // Both Companies now read the Code, its Remarks and its final verification, nothing of the Consultant's own.
     for (const who of [hafiz, faisal]) {
-      expect(await detail(who, mar)).toMatchObject({
-        stage: { key: "revise_resubmit" },
-        outcome: "C",
-        answers: { sample_checked: true, matches_specification: false, verification_note: "Lamp efficacy is below the specified 110 lm/W" },
-      });
+      expect(await detail(who, mar)).toMatchObject({ stage: { key: "revise_resubmit" }, outcome: "C" });
       const history = (await who.get(`/v1/work-items/${mar}/history`)).json() as WorkItemHistory;
-      expect(history.events.at(-1)).toMatchObject({ type: "issue_code", remarks: "Replace with 110 lm/W luminaires. / استبدلها بوحدات 110 لومن/واط." });
+      expect(history.events.at(-1)).toMatchObject({
+        type: "issue_code",
+        remarks: "Replace with 110 lm/W luminaires. / استبدلها بوحدات 110 لومن/واط.",
+        answers: verification,
+      });
+      expect(history.events.some((e) => e.type === "internal_answers" || e.type === "recommend_code" || e.type === "internal_note")).toBe(false);
+      expect(JSON.stringify(history)).not.toContain("Check the photometric report");
+      expect(JSON.stringify(history)).not.toContain("Ahmed agrees");
     }
     await hidden(yousef, { countsZero: true });
   });
@@ -484,17 +500,19 @@ describe("the README walkthrough", () => {
     }
   });
 
-  it("15. The seeded Code C MAR shows both Companies the verification and its Remarks, in English and Arabic", async () => {
+  it("15. The seeded Code C MAR shows both Companies the Code's final verification and Remarks, in English and Arabic, and only the Consultant its Engineer's reply", async () => {
     const id = (await codeCChain())[0]!.id;
     for (const who of [hafiz, ali, faisal, ahmed, mohammed]) {
       const item: WorkItemDetail = (await who.get(`/v1/work-items/${id}`)).json();
-      expect(item).toMatchObject({
-        stage: { key: "revise_resubmit" },
-        outcome: "C",
+      expect(item).toMatchObject({ stage: { key: "revise_resubmit" }, outcome: "C" });
+      const history = (await who.get(`/v1/work-items/${id}/history`)).json() as WorkItemHistory;
+      expect(history.events.at(-1)).toMatchObject({
+        type: "issue_code",
+        remarks: expect.stringMatching(/EN ISO 1461.*[\u0600-\u06FF]/s),
         answers: { sample_checked: true, matches_specification: false, verification_note: expect.stringMatching(/electro-zinc.*[\u0600-\u06FF]/s) },
       });
-      const history = (await who.get(`/v1/work-items/${id}/history`)).json() as WorkItemHistory;
-      expect(history.events.at(-1)).toMatchObject({ type: "issue_code", remarks: expect.stringMatching(/EN ISO 1461.*[\u0600-\u06FF]/s) });
+      const replies = history.events.filter((e) => e.type === "internal_answers" || e.type === "recommend_code");
+      expect(replies.length, "the Engineer's reply and Recommended Code").toBe(who === ahmed || who === mohammed ? 2 : 0);
     }
     await expectHidden(yousef.get(`/v1/work-items/${id}`));
   });
