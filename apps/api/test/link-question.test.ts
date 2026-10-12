@@ -18,6 +18,7 @@ import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestApi, expectHidden, type Caller } from "./support/harness.ts";
 import { all, bilingual, buildTower, detail, draft, inInternalReview, memberOnProject, ok, only, projectMember, submitted, tryTake, type Company, type Tower } from "./support/tower.ts";
+import { LEGACY_MAR } from "@rabaed/db/test-support";
 
 const api = await createTestApi({ files: true });
 const migrator = createDb(testDatabaseUrls().migrator, { max: 1 });
@@ -73,7 +74,7 @@ async function addType() {
         insert into work_item_type (owner_kind, module_key, code, name, workflow_definition_id, outcome_kind, form_definition_id)
         select 'rabaed', module_key, ${sql.lit(TYPE)}, '{"en": "Link question submittal", "ar": "اعتماد بسؤال ربط"}',
           workflow_definition_id, outcome_kind, v_definition
-        from work_item_type where owner_kind = 'rabaed' and code = 'MAR';
+        from work_item_type where owner_kind = 'rabaed' and code = ${sql.lit(LEGACY_MAR)};
       end
     $$
   `.execute(migrator);
@@ -141,7 +142,6 @@ beforeAll(async () => {
   item.c1Submitted = await submitted(tower, c1Engineer, c1Pm, "Cable trays, submitted");
   item.c1Approved = await submitted(tower, c1Engineer, c1Pm, "Cable trays, approved");
   await ok(k1Manager.post(`/v1/work-items/${item.c1Approved}/pick-up`));
-  await verified(k1Manager, item.c1Approved);
   await ok(tryTake(k1Manager, item.c1Approved, "approve_a"));
   item.c2Submitted = await submitted(tower, c2Engineer, c2Pm, "Cable trays, second contractor");
   item.elsewhere = await submitted(elsewhere, elsewhere.c1Engineer, elsewhere.c1Pm, "Cable trays, another Project");
@@ -307,9 +307,3 @@ describe("an item already chosen that goes back to its raiser's Draft (Sent Back
   });
 });
 
-/** The Consultant's verification (MAR Form Version 4, RP-306), saved by the Code's signer before the Code. */
-async function verified(by: Caller, id: string) {
-  const answers = (await by.get(`/v1/work-items/${id}`)).json().answers as Record<string, unknown>;
-  const saved = await by.request("PUT", `/v1/work-items/${id}/answers`, { answers: { ...answers, sample_checked: true, matches_specification: true } });
-  expect(saved.statusCode, saved.body).toBe(204);
-}

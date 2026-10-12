@@ -80,6 +80,8 @@ beforeAll(async () => {
   c1Pm = await projectMember(api, c1, c1ParticipantId, ["project_manager"]);
   k1Manager = await projectMember(api, k1, k1ParticipantId, ["manager"]);
   k1Mechanical = await projectMember(api, k1, k1ParticipantId, ["manager"], { trade: only(mechanical) });
+  // The Consultant Engineer, who holds a Submitted MAR at once (RP-511 decision 1).
+  await projectMember(api, k1, k1ParticipantId, ["engineer"]);
   c2Engineer = await projectMember(api, c2, c2ParticipantId, ["engineer"]);
 });
 

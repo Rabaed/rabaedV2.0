@@ -6,7 +6,7 @@ import {
   type DashboardBar,
   type DashboardBarTone,
   type DashboardCard,
-  type DashboardCodeCLine,
+  type DashboardRevisionLine,
   type DashboardFigure,
   type DashboardFigureQuery,
   type FixedChainBucket,
@@ -27,10 +27,11 @@ export type ProjectDashboardLabels = {
   open: string;
   closed: string;
   empty: string;
-  codeC: string;
+  /** The Revision line's name, by outcome kind: "Code C" for Review Codes, "Failed" for Inspection Results. */
+  revisionLine: Record<OutcomeKind, string>;
   /** The name of each bucket that isn't an outcome (an outcome's bar has its own name from the Type's set). */
   buckets: Record<FixedChainBucket, string>;
-  /** The Code C line's sub-states, as the line and a List filtered from it name them. */
+  /** The Revision line's sub-states, as the line and a List filtered from it name them. */
   codeCStates: Record<CodeCFilter, string>;
   /** The footer's name for the approved share, by outcome kind. */
   approved: Record<OutcomeKind, string>;
@@ -141,7 +142,7 @@ function TypeCard({ card, ...ctx }: { card: DashboardCard } & Ctx) {
               {...ctx}
               className="font-semibold"
             />
-            {card.codeC && <CodeCRows typeCode={card.type.code} line={card.codeC} {...ctx} />}
+            {card.revisionLine && <RevisionLine typeCode={card.type.code} outcomeKind={card.outcomeKind} line={card.revisionLine} {...ctx} />}
           </div>
         </div>
       )}
@@ -155,15 +156,15 @@ function TypeCard({ card, ...ctx }: { card: DashboardCard } & Ctx) {
  * raiser's own Company, and "rejected after C" when there is any (RP-352). Each
  * figure links to its List.
  */
-function CodeCRows({ typeCode, line, ...ctx }: { typeCode: string; line: DashboardCodeCLine } & Ctx) {
+function RevisionLine({ typeCode, outcomeKind, line, ...ctx }: { typeCode: string; outcomeKind: OutcomeKind; line: DashboardRevisionLine } & Ctx) {
   const { locale, labels } = ctx;
   const n = (count: number) => formatNumber(count, locale);
   const row = (filter: CodeCFilter, figure: DashboardFigure, suffix = "", className?: string) => (
     <FigureRow label={labels.codeCStates[filter]} value={`${n(figure.count)}${suffix}`} figure={figure} {...ctx} className={className} />
   );
   return (
-    <div data-testid={`code-c-${typeCode}`}>
-      <FigureRow label={labels.codeC} value={n(line.total.count)} figure={line.total} {...ctx} className="font-semibold" />
+    <div data-testid={`revision-line-${typeCode}`}>
+      <FigureRow label={labels.revisionLine[outcomeKind]} value={n(line.total.count)} figure={line.total} {...ctx} className="font-semibold" />
       <div className="border-s-2 border-border-subtle ps-3">
         {row("approvedOnRevision", line.approvedOnRevision, ` (${formatNumber(line.approvedOnRevision.percent / 100, locale, { style: "percent" })})`)}
         {row("awaitingRevision", line.awaitingRevision)}

@@ -94,8 +94,9 @@ beforeAll(async () => {
   const c2 = await participant("contractor");
   c2Engineer = await projectMember(api, c2.company, c2.participantId, ["engineer"]);
   const k1 = await participant("consultant");
-  k1A = await projectMember(api, k1.company, k1.participantId, ["manager"]);
-  k1B = await projectMember(api, k1.company, k1.participantId, ["manager"]);
+  // Two Consultant Engineers: the MAR's Consultant Engineer Step waits in their pool (RP-511 decision 1).
+  k1A = await projectMember(api, k1.company, k1.participantId, ["engineer"]);
+  k1B = await projectMember(api, k1.company, k1.participantId, ["engineer"]);
 });
 
 describe("Need My Action", () => {
@@ -237,37 +238,41 @@ describe("Module tabs", () => {
     const other = (await api.createProject(c1.caller, { code: "INS" })).id;
     await sql`
       insert into work_item_type (owner_kind, project_id, module_key, code, name, workflow_definition_id, outcome_kind)
-      select 'project', ${other}::uuid, 'inspections', 'WIR', ${JSON.stringify(bilingual("Work Inspection"))}::jsonb, workflow_definition_id, 'inspection_result'
+      select 'project', ${other}::uuid, 'site_reports', 'DSR', ${JSON.stringify(bilingual("Daily Site Report"))}::jsonb, workflow_definition_id, 'none'
       from work_item_type where code = 'MAR' and project_id is null
     `.execute(migrator);
-    expect((await card(c1.caller, other)).modules).toEqual(await defaultModules(migrator, ["inspections"]));
-    expect((await card(c1.caller, other)).modules).toContain("inspections");
+    expect((await card(c1.caller, other)).modules).toEqual(await defaultModules(migrator, ["site_reports"]));
+    expect((await card(c1.caller, other)).modules).toContain("site_reports");
     expect((await card(c1.caller)).modules).toEqual(await defaultModules(migrator));
   });
 
   it("each lead to their Module's List and Kanban, of that Module's Types only", async () => {
     const path = (module: string, view = "") => `/v1/projects/${projectId}/modules/${module}/work-items${view}`;
-    // Before the Project has an Inspections Type, its Inspections answer as if they didn't exist, like a made-up Module.
-    await expectHidden(c1Engineer.get(path("inspections")));
-    await expectHidden(c1Engineer.get(path("inspections", "/kanban")));
+    // Before the Project has a Site Reports Type, its Site Reports answer as if they didn't exist, like a made-up Module.
+    await expectHidden(c1Engineer.get(path("site_reports")));
+    await expectHidden(c1Engineer.get(path("site_reports", "/kanban")));
     await expectHidden(c1Engineer.get(path("rfis")));
     // The same when the query names the Module (a Dashboard number's link).
-    await expectHidden(c1Engineer.get(`/v1/projects/${projectId}/work-items?module=inspections`));
+    await expectHidden(c1Engineer.get(`/v1/projects/${projectId}/work-items?module=site_reports`));
     const submittals: WorkItemList = (await ok(c1Engineer.get(path("submittals")), 200)).json();
     expect(submittals.items.length).toBeGreaterThan(0);
     expect(submittals.filters.types.map((t) => t.code)).toContain("MAR");
 
     await sql`
       insert into work_item_type (owner_kind, project_id, module_key, code, name, workflow_definition_id, outcome_kind)
-      select 'project', ${projectId}::uuid, 'inspections', 'WIR', ${JSON.stringify(bilingual("Work Inspection"))}::jsonb, workflow_definition_id, 'inspection_result'
+      select 'project', ${projectId}::uuid, 'site_reports', 'DSR', ${JSON.stringify(bilingual("Daily Site Report"))}::jsonb, workflow_definition_id, 'none'
       from work_item_type where code = 'MAR' and project_id is null
     `.execute(migrator);
-    const inspections: WorkItemList = (await ok(c1Engineer.get(path("inspections")), 200)).json();
-    expect(inspections.filters.types.map((t) => t.code)).toEqual(["WIR"]);
+    const reports: WorkItemList = (await ok(c1Engineer.get(path("site_reports")), 200)).json();
+    expect(reports.filters.types.map((t) => t.code)).toEqual(["DSR"]);
     // Not one Submittal.
+    expect(reports.items).toEqual([]);
+    expect((await ok(c1Engineer.get(path("site_reports", "/kanban")), 200)).json().columns.flatMap((c: { lanes: unknown[] }) => c.lanes)).toEqual([]);
+    // The Inspections list holds the Rabaed Default Inspections Types (RP-437), and no Submittal.
+    const inspections: WorkItemList = (await ok(c1Engineer.get(path("inspections")), 200)).json();
+    expect(inspections.filters.types.map((t) => t.code).sort()).toEqual(["WIR"]);
     expect(inspections.items).toEqual([]);
-    expect((await ok(c1Engineer.get(path("inspections", "/kanban")), 200)).json().columns.flatMap((c: { lanes: unknown[] }) => c.lanes)).toEqual([]);
     // Another Company's Member who isn't on the Project: not found, as ever.
-    await expectHidden((await api.authorizedPerson()).caller.get(path("inspections")));
+    await expectHidden((await api.authorizedPerson()).caller.get(path("site_reports")));
   });
 });

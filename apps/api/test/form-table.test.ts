@@ -129,7 +129,7 @@ beforeAll(async () => {
   const k1 = await api.authorizedPerson();
   const k1Participant = await api.addParticipant(c1.caller, projectId, k1.company, "consultant");
   await ok(c1.caller.request("PUT", `/v1/participants/${k1Participant}/visibility`, { trade: all, location: all }));
-  consultant = await projectMember(api, k1, k1Participant, ["manager"]);
+  consultant = await projectMember(api, k1, k1Participant, ["engineer"]);
 });
 
 describe("the Form with a table", () => {

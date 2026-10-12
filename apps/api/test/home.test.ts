@@ -7,7 +7,7 @@
 // Member on two Projects sees each count only for the Projects he is on.
 import { randomUUID } from "node:crypto";
 import { createDb } from "@rabaed/db";
-import { testDatabaseUrls } from "@rabaed/db/test-support";
+import { LEGACY_MAR, testDatabaseUrls } from "@rabaed/db/test-support";
 import { activityFeedSearchParams, workItemSearchParams, type ActivityFeed, type Home, type ProjectSummary, type WorkItemList } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -274,15 +274,9 @@ describe("Waiting with others: my own Company's items another Participant holds 
     return id;
   }
 
-  /** K1's manager verifies a MAR and issues `code`, which closes it. */
+  /** K1's manager issues `code` on a MAR, which closes it. */
   async function coded(id: string, code: "approve_a" | "revise_c") {
     const pass = code === "approve_a";
-    const answers = (await ok(at.k1Manager.get(`/v1/work-items/${id}`), 200)).json().answers as Record<string, unknown>;
-    await ok(
-      at.k1Manager.request("PUT", `/v1/work-items/${id}/answers`, {
-        answers: { ...answers, sample_checked: true, matches_specification: pass, ...(pass ? {} : { verification_note: "Not as specified" }) },
-      }),
-    );
     await ok(at.k1Manager.post(`/v1/work-items/${id}/pick-up`));
     await take(at.k1Manager, id, code, pass ? {} : { remarks: "Resubmit as specified" });
   }
@@ -366,11 +360,11 @@ describe("Waiting with others: my own Company's items another Participant holds 
     // A Review Code: "Code A", so no name of its own.
     expect((await entry())?.outcomeName).toBeNull();
     // The same outcome of a Type whose outcomes are Inspection Results reads by its name.
-    await sql`update work_item_type set outcome_kind = 'inspection_result' where code = 'MAR' and project_id is null`.execute(migrator);
+    await sql`update work_item_type set outcome_kind = 'inspection_result' where code = ${LEGACY_MAR} and project_id is null`.execute(migrator);
     try {
       expect((await entry())?.outcomeName).toEqual({ en: "Approved", ar: "معتمد" });
     } finally {
-      await sql`update work_item_type set outcome_kind = 'review_code' where code = 'MAR' and project_id is null`.execute(migrator);
+      await sql`update work_item_type set outcome_kind = 'review_code' where code = ${LEGACY_MAR} and project_id is null`.execute(migrator);
     }
   });
 
