@@ -6,7 +6,12 @@
 // published Version; review caught it. This test reads pg_catalog so the next table that
 // hangs off a Version can't miss the guard the same way: it goes red until the table has a
 // BEFORE row trigger for INSERT, UPDATE and DELETE that refuses a published Version, or is
-// listed in EXCUSED below with the reason, which is a reviewed choice.
+// listed in EXCUSED below with the reason, which is a reviewed choice. A trigger's name is
+// not taken on trust: each guarded operation is tried for real on a published Version's
+// row (FIXTURES) and must be refused with 42501, so a no-op `*_published_frozen` fails.
+//
+// Everything runs in one transaction that is rolled back at the end, so the fixtures leave
+// no rows behind; each refused statement runs in its own savepoint.
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { testDatabaseUrls } from "../test-support/index.ts";
@@ -22,6 +27,7 @@ const VERSION_TABLES = ["workflow_version", "form_version", "screen_version"];
 const KNOWN_GUARD_FUNCTIONS = ["app.refuse_published_workflow_part_change", "app.refuse_published_workflow_version_change"];
 
 type Operation = "insert" | "update" | "delete";
+const ALL: Operation[] = ["insert", "update", "delete"];
 type Excuse = { reason: string; guards?: Operation[] };
 
 // Tables with a foreign key to a Version (or its Steps or Transitions) that are not part of
@@ -43,8 +49,30 @@ type Catalogue = Map<string, { parents: Set<string>; triggers: TriggerRow[] }>;
 let migrator: pg.Client;
 let catalogue: Catalogue;
 const one = async (text: string, values: unknown[] = []) => (await migrator.query(text, values)).rows[0].id as string;
-const refused = (text: string, values: unknown[]) =>
-  expect(migrator.query(text, values)).rejects.toMatchObject({ code: "42501" });
+
+let savepoints = 0;
+/** Runs `text` in a savepoint and rolls back to it, so a refusal doesn't end the transaction; returns its error code, or null when it ran. */
+async function attempt(text: string, values: unknown[]): Promise<string | null> {
+  const savepoint = `attempt_${++savepoints}`;
+  await migrator.query(`savepoint ${savepoint}`);
+  try {
+    await migrator.query(text, values);
+    return null;
+  } catch (error) {
+    return (error as { code?: string }).code ?? "unknown";
+  } finally {
+    await migrator.query(`rollback to savepoint ${savepoint}`);
+  }
+}
+
+async function triggersOn(table: string): Promise<TriggerRow[]> {
+  const { rows } = await migrator.query(
+    `select t.tgname, t.tgtype::int as tgtype, t.tgfoid::regproc::text as fn, t.tgenabled as enabled
+     from pg_trigger t where t.tgrelid = $1::regclass and not t.tgisinternal order by t.tgname`,
+    [table],
+  );
+  return rows;
+}
 
 async function readCatalogue(): Promise<Catalogue> {
   const result: Catalogue = new Map();
@@ -60,14 +88,7 @@ async function readCatalogue(): Promise<Catalogue> {
     entry.parents.add(parent);
     result.set(child, entry);
   }
-  for (const [child, entry] of result) {
-    const { rows } = await migrator.query(
-      `select t.tgname, t.tgtype::int as tgtype, t.tgfoid::regproc::text as fn, t.tgenabled as enabled
-       from pg_trigger t where t.tgrelid = $1::regclass and not t.tgisinternal order by t.tgname`,
-      [child],
-    );
-    entry.triggers = rows;
-  }
+  for (const [child, entry] of result) entry.triggers = await triggersOn(child);
   return result;
 }
 
@@ -76,49 +97,126 @@ const BIT: Record<Operation, number> = { insert: 4, delete: 8, update: 16 };
 const isGuard = (t: TriggerRow) =>
   t.enabled !== "D" && (t.tgname.endsWith("_published_frozen") || KNOWN_GUARD_FUNCTIONS.includes(t.fn));
 const guardedOperations = (triggers: TriggerRow[]): Operation[] =>
-  (Object.keys(BIT) as Operation[]).filter((op) =>
-    triggers.some((t) => isGuard(t) && (t.tgtype & 1) === 1 && (t.tgtype & 2) === 2 && (t.tgtype & BIT[op]) === BIT[op]),
-  );
+  ALL.filter((op) => triggers.some((t) => isGuard(t) && (t.tgtype & 1) === 1 && (t.tgtype & 2) === 2 && (t.tgtype & BIT[op]) === BIT[op]));
 
-type Fixture = { version: string; fromStep: string; toStep: string };
-let published: Fixture;
+/** The operations a table off a Version must refuse on a published one: all three, or what its excuse still guards. */
+const needed = (table: string): Operation[] => (EXCUSED[table] ? (EXCUSED[table].guards ?? []) : ALL);
 
-// One INSERT per guarded table that points at the published Version. A table that is guarded
-// but not listed here fails the test: write its row here too, so it is tried for real.
-const INSERTS: Record<string, (f: Fixture) => [string, unknown[]]> = {
-  workflow_step: (f) => [
-    `insert into workflow_step (workflow_version_id, key, name, stage_key, actor_rule) values ($1, 'extra', $2, 'draft', '{}')`,
-    [f.version, name],
-  ],
-  workflow_transition: (f) => [
-    `insert into workflow_transition (workflow_version_id, key, from_step_id, to_step_id, label, kind, permission)
-     values ($1, 'extra', $2, $3, $4, 'send', 'create')`,
-    [f.version, f.fromStep, f.toStep, name],
-  ],
+/** Every table off a Version without a guard trigger for an operation it needs, as "table (...) has no before-row guard on ...". */
+function catalogueGaps(of: Catalogue): string[] {
+  const gaps: string[] = [];
+  for (const [table, { parents, triggers }] of of) {
+    const have = guardedOperations(triggers);
+    const missing = needed(table).filter((op) => !have.includes(op));
+    if (missing.length > 0) gaps.push(`${table} (foreign key to ${[...parents].join(", ")}) has no before-row guard on ${missing.join(", ")}`);
+  }
+  return gaps;
+}
+
+type Published = { workflowVersion: string; fromStep: string; toStep: string; transition: string; formVersion: string; screenVersion: string };
+type Statement = [string, unknown[]];
+type Fixture = Partial<Record<Operation, (p: Published) => Statement>>;
+
+// One statement per guarded table and operation, each on a row of (or pointing at) a
+// published Version. A table that must refuse an operation and has no statement here fails
+// the test: write it here too, so the guard is tried for real.
+const FIXTURES: Record<string, Fixture> = {
+  workflow_version: {
+    update: (p) => ["update workflow_version set version_no = version_no + 100 where id = $1", [p.workflowVersion]],
+    delete: (p) => ["delete from workflow_version where id = $1", [p.workflowVersion]],
+  },
+  form_version: {
+    update: (p) => [`update form_version set schema = '{"sections": [{}]}' where id = $1`, [p.formVersion]],
+    delete: (p) => ["delete from form_version where id = $1", [p.formVersion]],
+  },
+  screen_version: {
+    update: (p) => [`update screen_version set schema = '{"changed": true}' where id = $1`, [p.screenVersion]],
+    delete: (p) => ["delete from screen_version where id = $1", [p.screenVersion]],
+  },
+  workflow_step: {
+    insert: (p) => [
+      `insert into workflow_step (workflow_version_id, key, name, stage_key, actor_rule) values ($1, 'extra', $2, 'draft', '{}')`,
+      [p.workflowVersion, name],
+    ],
+    update: (p) => ["update workflow_step set key = 'renamed' where id = $1", [p.fromStep]],
+    delete: (p) => ["delete from workflow_step where id = $1", [p.toStep]],
+  },
+  workflow_transition: {
+    insert: (p) => [
+      `insert into workflow_transition (workflow_version_id, key, from_step_id, to_step_id, label, kind, permission)
+       values ($1, 'extra', $2, $3, $4, 'send', 'create')`,
+      [p.workflowVersion, p.fromStep, p.toStep, name],
+    ],
+    update: (p) => ["update workflow_transition set key = 'renamed' where id = $1", [p.transition]],
+    delete: (p) => ["delete from workflow_transition where id = $1", [p.transition]],
+  },
+  workflow_change_note: {
+    update: (p) => ["update workflow_change_note set change_note = 'changed' where workflow_version_id = $1", [p.workflowVersion]],
+    delete: (p) => ["delete from workflow_change_note where workflow_version_id = $1", [p.workflowVersion]],
+  },
 };
+
+/** Each needed operation on each table, tried on the published Version; returns every one that wasn't refused with 42501. */
+async function behaviourGaps(tables: string[], fixtures: Record<string, Fixture>, needs: (table: string) => Operation[]): Promise<string[]> {
+  const gaps: string[] = [];
+  for (const table of tables) {
+    for (const op of needs(table)) {
+      const statement = fixtures[table]?.[op];
+      if (!statement) {
+        gaps.push(`${table}: no ${op} fixture; add one to FIXTURES`);
+        continue;
+      }
+      const code = await attempt(...statement(published));
+      if (code !== "42501") gaps.push(`${table}: ${op} on a published Version gave ${code ?? "no error"}, not 42501`);
+    }
+  }
+  return gaps;
+}
+
+let published: Published;
 
 beforeAll(async () => {
   migrator = new pg.Client({ connectionString: urls.migrator });
   await migrator.connect();
+  await migrator.query("begin");
   catalogue = await readCatalogue();
+
   const definition = await one("insert into workflow_definition (owner_kind, name) values ('rabaed', $1) returning id", [name]);
-  const version = await one(
+  const workflowVersion = await one(
     "insert into workflow_version (workflow_definition_id, version_no, status) values ($1, 1, 'draft') returning id",
     [definition],
   );
   const step = (key: string) =>
     one(
       `insert into workflow_step (workflow_version_id, key, name, stage_key, actor_rule) values ($1, $2, $3, 'draft', '{}') returning id`,
-      [version, key, name],
+      [workflowVersion, key, name],
     );
   const fromStep = await step("first");
   const toStep = await step("second");
-  await migrator.query("update workflow_version set status = 'published', published_at = now() where id = $1", [version]);
-  await migrator.query("insert into workflow_change_note (workflow_version_id, change_note) values ($1, 'first')", [version]);
-  published = { version, fromStep, toStep };
+  const transition = await one(
+    `insert into workflow_transition (workflow_version_id, key, from_step_id, to_step_id, label, kind, permission)
+     values ($1, 'onward', $2, $3, $4, 'send', 'create') returning id`,
+    [workflowVersion, fromStep, toStep, name],
+  );
+  await migrator.query("update workflow_version set status = 'published', published_at = now() where id = $1", [workflowVersion]);
+  await migrator.query("insert into workflow_change_note (workflow_version_id, change_note) values ($1, 'first')", [workflowVersion]);
+
+  const form = await one("insert into form_definition (owner_kind, name) values ('rabaed', $1) returning id", [name]);
+  const formVersion = await one(
+    `insert into form_version (form_definition_id, version_no, status, schema, published_at)
+     values ($1, 1, 'published', '{"sections": []}', now()) returning id`,
+    [form],
+  );
+  const screen = await one("insert into screen (owner_kind, key, name) values ('rabaed', 'rp453_frozen', $1) returning id", [name]);
+  const screenVersion = await one(
+    `insert into screen_version (screen_id, version_no, status, schema, published_at) values ($1, 1, 'published', '{}', now()) returning id`,
+    [screen],
+  );
+  published = { workflowVersion, fromStep, toStep, transition, formVersion, screenVersion };
 });
 
 afterAll(async () => {
+  await migrator?.query("rollback");
   await migrator?.end();
 });
 
@@ -128,17 +226,7 @@ describe("tables that hang off a Version", () => {
   });
 
   it("each has a before-row guard on INSERT, UPDATE and DELETE, or is excused with a reason", () => {
-    const gaps: string[] = [];
-    for (const [table, { parents, triggers }] of catalogue) {
-      const have = guardedOperations(triggers);
-      const excuse = EXCUSED[table];
-      const need: Operation[] = excuse ? (excuse.guards ?? []) : ["insert", "update", "delete"];
-      const missing = need.filter((op) => !have.includes(op));
-      if (missing.length > 0) {
-        gaps.push(`${table} (foreign key to ${[...parents].join(", ")}) has no before-row guard on ${missing.join(", ")}`);
-      }
-    }
-    expect(gaps).toEqual([]);
+    expect(catalogueGaps(catalogue)).toEqual([]);
   });
 
   it("lists no excuse for a table that no longer hangs off a Version", () => {
@@ -153,31 +241,61 @@ describe("tables that hang off a Version", () => {
 
   it("has Version tables that refuse UPDATE and DELETE once published", async () => {
     for (const table of VERSION_TABLES) {
-      const { rows } = await migrator.query(
-        `select t.tgname, t.tgtype::int as tgtype, t.tgfoid::regproc::text as fn, t.tgenabled as enabled
-         from pg_trigger t where t.tgrelid = $1::regclass and not t.tgisinternal`,
-        [table],
-      );
-      expect(guardedOperations(rows), table).toEqual(expect.arrayContaining(["update", "delete"]));
+      expect(guardedOperations(await triggersOn(table)), table).toEqual(expect.arrayContaining(["update", "delete"]));
+    }
+  });
+
+  // The check run red once, for real: a new table off workflow_version with no guard,
+  // created and dropped inside this test's savepoint.
+  it("goes red for a new table off a Version with no guard", async () => {
+    await migrator.query("savepoint unguarded");
+    try {
+      await migrator.query("create table rp453_unguarded (id int primary key, workflow_version_id uuid references workflow_version (id))");
+      expect(catalogueGaps(await readCatalogue())).toEqual([
+        "rp453_unguarded (foreign key to workflow_version) has no before-row guard on insert, update, delete",
+      ]);
+    } finally {
+      await migrator.query("rollback to savepoint unguarded");
     }
   });
 });
 
 describe("a published Version, behaviour per guarded table", () => {
-  it("refuses an INSERT of a row pointing at it with 42501", async () => {
-    const guarded = [...catalogue].filter(([table, { triggers }]) => !EXCUSED[table] && guardedOperations(triggers).includes("insert"));
-    expect(guarded.map(([table]) => table).sort()).toEqual(expect.arrayContaining(["workflow_step", "workflow_transition"]));
-    for (const [table] of guarded) {
-      const insert = INSERTS[table];
-      expect(insert, `no INSERT fixture for ${table}: add one to INSERTS`).toBeDefined();
-      const [text, values] = insert!(published);
-      await refused(text, values);
-    }
+  const versionNeeds = (table: string): Operation[] => (VERSION_TABLES.includes(table) ? ["update", "delete"] : needed(table));
+
+  it("refuses every guarded INSERT, UPDATE and DELETE on it with 42501", async () => {
+    const tables = [...VERSION_TABLES, ...catalogue.keys()];
+    expect(tables).toEqual(expect.arrayContaining(["workflow_step", "workflow_transition", "workflow_change_note"]));
+    expect(await behaviourGaps(tables, FIXTURES, versionNeeds)).toEqual([]);
   });
 
-  it("refuses an UPDATE or DELETE of a Change Note with 42501", async () => {
-    await refused("update workflow_change_note set change_note = 'changed' where workflow_version_id = $1", [published.version]);
-    await refused("delete from workflow_change_note where workflow_version_id = $1", [published.version]);
+  // A trigger named like a guard that refuses nothing passes the catalogue check; the
+  // behaviour check must catch it.
+  it("goes red for a guard trigger that refuses nothing", async () => {
+    await migrator.query("savepoint no_op_guard");
+    try {
+      await migrator.query("create table rp453_no_op (id int primary key, workflow_version_id uuid references workflow_version (id))");
+      await migrator.query("create function public.rp453_no_op() returns trigger language plpgsql as $$ begin return case when tg_op = 'DELETE' then old else new end; end $$");
+      await migrator.query(
+        "create trigger rp453_no_op_published_frozen before insert or update or delete on rp453_no_op for each row execute function public.rp453_no_op()",
+      );
+      expect(catalogueGaps(await readCatalogue())).toEqual([]);
+      await migrator.query("insert into rp453_no_op values (1, $1)", [published.workflowVersion]);
+      const fixtures: Record<string, Fixture> = {
+        rp453_no_op: {
+          insert: (p) => ["insert into rp453_no_op values (2, $1)", [p.workflowVersion]],
+          update: () => ["update rp453_no_op set id = 3 where id = 1", []],
+          delete: () => ["delete from rp453_no_op where id = 1", []],
+        },
+      };
+      expect(await behaviourGaps(["rp453_no_op"], fixtures, () => ALL)).toEqual([
+        "rp453_no_op: insert on a published Version gave no error, not 42501",
+        "rp453_no_op: update on a published Version gave no error, not 42501",
+        "rp453_no_op: delete on a published Version gave no error, not 42501",
+      ]);
+    } finally {
+      await migrator.query("rollback to savepoint no_op_guard");
+    }
   });
 
   it("still lets a Version's Change Note be written once, at publish", async () => {
@@ -188,8 +306,17 @@ describe("a published Version, behaviour per guarded table", () => {
     );
     await migrator.query("update workflow_version set status = 'published', published_at = now() where id = $1", [version]);
     await migrator.query("insert into workflow_change_note (workflow_version_id, change_note) values ($1, 'once')", [version]);
-    await expect(
-      migrator.query("insert into workflow_change_note (workflow_version_id, change_note) values ($1, 'twice')", [version]),
-    ).rejects.toMatchObject({ code: "23505" });
+    expect(await attempt("insert into workflow_change_note (workflow_version_id, change_note) values ($1, 'twice')", [version])).toBe("23505");
+  });
+
+  it("lets a Change Note of a Version that isn't published change (the guard is on published Versions only)", async () => {
+    const definition = await one("insert into workflow_definition (owner_kind, name) values ('rabaed', $1) returning id", [name]);
+    const version = await one(
+      "insert into workflow_version (workflow_definition_id, version_no, status) values ($1, 1, 'draft') returning id",
+      [definition],
+    );
+    await migrator.query("insert into workflow_change_note (workflow_version_id, change_note) values ($1, 'draft note')", [version]);
+    expect(await attempt("update workflow_change_note set change_note = 'changed' where workflow_version_id = $1", [version])).toBeNull();
+    expect(await attempt("delete from workflow_change_note where workflow_version_id = $1", [version])).toBeNull();
   });
 });
