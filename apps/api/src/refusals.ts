@@ -29,6 +29,8 @@ const answers = {
   type_not_found: () => new HttpError(422, "type_not_found"),
   trade_required: () => new HttpError(422, "trade_required"),
   outside_visibility: () => new HttpError(422, "outside_visibility"),
+  // A Trade or Location the Document Number uses, on a numbered item (RP-581).
+  number_part_fixed: () => new HttpError(409, "number_part_fixed"),
   position_not_found: () => new HttpError(422, "position_not_found"),
   item_closed: () => new HttpError(409, "item_closed"),
   not_holder: () => new HttpError(409, "not_holder"),

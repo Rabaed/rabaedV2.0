@@ -30,7 +30,7 @@ export function WorkItemActions({
   if (none) return null;
 
   return (
-    <section className="space-y-3" aria-label={t("title")}>
+    <section id="work-item-actions" className="space-y-3" aria-label={t("title")}>
       <div className="flex flex-wrap gap-3">
         {actions.transitions.map((tr) => (
           <Button

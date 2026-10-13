@@ -128,6 +128,12 @@ export type FormRendererProps = {
    * others read. Left out, every section (form-engine.md §4).
    */
   editableSections?: readonly string[];
+  /**
+   * In edit mode, the Built-in Fields the item's Document Number uses (RP-581):
+   * they read, never change, and `fixedNotice` stands under each as its help.
+   */
+  fixedByNumber?: readonly ("trade" | "location")[];
+  fixedNotice?: ReactNode;
   /** The viewer's language: labels, help and messages. */
   locale: Locale;
   /**
@@ -559,6 +565,8 @@ export function FormRenderer({
   errors = [],
   mode,
   editableSections,
+  fixedByNumber = [],
+  fixedNotice,
   labels,
   locale,
   choices = noChoices,
@@ -823,6 +831,14 @@ export function FormRenderer({
               fields.map((field) => {
                 if (!isAnswerField(field)) return <Layout key={field.key} field={field} locale={locale} />;
                 const error = errorOf(field.key);
+                if (isBuiltInField(field) && field.type !== "scopes" && fixedByNumber.includes(field.type)) {
+                  const shownAnswer = answer(field);
+                  return (
+                    <Field key={field.key} id={fieldId(field.key)} label={field.label[locale]} help={fixedNotice} group>
+                      <p className={cn("text-body", shownAnswer ? "text-text" : "text-muted")}>{shownAnswer ?? labels.unanswered}</p>
+                    </Field>
+                  );
+                }
                 const { element, group } = isBuiltInField(field)
                   ? builtInControl(field.type)
                   : field.type === "attachments"

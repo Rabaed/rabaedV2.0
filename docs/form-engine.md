@@ -72,6 +72,7 @@ System Fields   Attachments · Links
   - In the schema each is a field whose `key` is its `type` (`trade`, `location`, `scopes`). A schema without them, with one twice, or with Trade or Location optional can't be published (§7).
   - The validator requires Trade even in a Draft (no Work Item exists without one) and Location to leave Draft, whatever the schema says. It refuses Scopes outside the chosen Trade, and Sub-scopes whose Scope isn't chosen. Changing the Trade clears the Scopes that no longer fit.
   - Their answers are ids, stored where visibility reads them (`work_item_dimension_value`, `work_item_scope`), never in `data`. The API returns them among the answers.
+  - **Fixed by the number (RP-581, ADR 0021):** once an item has its Document Number, a Trade the pattern holds, or a Location when the pattern holds a Location level, never changes: a save that changes it is refused `number_part_fixed`. The pattern is the Version the item was numbered under (`work_item.numbered_at`), not the Project's current one; a field the pattern doesn't use is unaffected. The item's detail carries `fixedByNumber` (`["trade"]`, `["location"]`, both or none; a Draft never numbered has none), and the Form shows such a field read-only with the notice "This is part of the Document Number. To change it, cancel this item and raise a new one.", linking to Cancel where the item may still be cancelled.
   - Custom Visibility Dimensions don't exist yet; their Built-in Fields come with them.
 - For Revisions, the "previous revision" panel appears automatically.
 
