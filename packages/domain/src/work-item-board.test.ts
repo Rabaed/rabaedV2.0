@@ -4,6 +4,7 @@ import {
   cardNumber,
   dropTargets,
   lanesInLocale,
+  ownStepCounts,
   workItemViewFromSearchParams,
   type BoardCardInput,
   type WorkItemMove,
@@ -150,6 +151,37 @@ describe("dropTargets", () => {
 
   it("has no targets without Transitions", () => {
     expect(dropTargets([], "draft").size).toBe(0);
+  });
+});
+
+describe("ownStepCounts (RP-519)", () => {
+  it("counts each of the viewer's own Steps and leaves another Company and the closed lane out", () => {
+    const lanes = boardLanes([
+      card(ownStep("engineer", "Contractor Engineer")),
+      card(ownStep("pm", "Contractor PM")),
+      card(ownStep("pm", "Contractor PM")),
+      card(company("Al Waha PMC"), k1),
+      card(null),
+    ]);
+    expect(ownStepCounts(lanes)).toEqual([
+      { key: "engineer", name: b("Contractor Engineer"), count: 1 },
+      { key: "pm", name: b("Contractor PM"), count: 2 },
+    ]);
+    expect(JSON.stringify(ownStepCounts(lanes))).not.toContain("Al Waha");
+  });
+
+  it("counts by Step the cards in my own role lanes (RP-410), whichever role holds them", () => {
+    const lanes = boardLanes([
+      card(ownRole(engineer, "engineer_review")),
+      card(ownRole(pm, "pm_review")),
+      card(ownRole(pm, "pm_review")),
+      card(ownRole(pm, "engineer_review")),
+      card(company("Al Waha PMC"), k1),
+    ]);
+    expect(ownStepCounts(lanes)).toEqual([
+      { key: "engineer_review", name: b("engineer_review"), count: 2 },
+      { key: "pm_review", name: b("pm_review"), count: 2 },
+    ]);
   });
 });
 

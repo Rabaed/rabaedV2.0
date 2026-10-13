@@ -3,20 +3,27 @@ import {
   hasError,
   prepareDraft,
   readLatestPublishedDefinition,
+  readModuleStages,
+  readPositions,
   readWorkflowCheckContext,
   readWorkflowDraft,
   withMember,
   type Db,
 } from "@rabaed/db";
 import {
+  formSchema,
   stageCopyProblems,
+  type WorkflowScreenOption,
   type BilingualText,
   type BindWorkflowRequest,
-  type StageCategory,
   type WorkflowBuilderRead,
   type DefinitionIssue,
   type DuplicateWorkflowRequest,
+  type LibraryWorkflows,
+  type SavedToLibrary,
   type SaveWorkflowDraftRequest,
+  type SaveWorkflowToLibraryRequest,
+  type WorkflowMapRead,
   type StageCopyProblem,
   type UnbindWorkflowQuery,
   type WorkflowProblem,
@@ -46,37 +53,158 @@ export function readWorkflow(db: Db, memberId: string, definitionId: string): Pr
 export function readWorkflowBuilder(db: Db, memberId: string, definitionId: string): Promise<WorkflowBuilderRead | null> {
   return withMember(db, memberId, async (trx): Promise<WorkflowBuilderRead | null> => {
     if (!(await authors(trx, definitionId))) return null;
-    const workflow = await workflowRead(trx, definitionId, true);
-    const { rows } = await sql<{ type_id: string; code: string; name: BilingualText; module_key: string; project_id: string | null }>`
-      select t.id as type_id, t.code, t.name, t.module_key, d.project_id
-      from workflow_definition d join work_item_type t on t.id = app.workflow_type(d.id)
-      where d.id = ${definitionId}::uuid
+    const map = await workflowMap(trx, definitionId, true);
+    if (!map) return null;
+    const { rows } = await sql<{ type_id: string; project_id: string | null }>`
+      select app.workflow_type(d.id) as type_id, d.project_id from workflow_definition d where d.id = ${definitionId}::uuid
     `.execute(trx);
-    const type = rows[0];
-    if (!workflow || !type) return null;
-    const stages = await sql<{ key: string; name: BilingualText; category: StageCategory; own: boolean }>`
-      select key, name, category, project_id is not null as own from stage
-      where module_key = ${type.module_key} and (project_id is null or project_id = ${type.project_id}::uuid)
-      order by sort, key
-    `.execute(trx);
-    const own = stages.rows.some((s) => s.own);
+    const type = rows[0]!;
     const outcomes = await sql<WorkflowBuilderRead["outcomes"][number]>`
-      select code, name, closing, polarity from outcome
-      where work_item_type_id = ${type.type_id}::uuid
-        and case when ${type.project_id}::uuid is null then project_id is null else project_id = ${type.project_id}::uuid end
-      order by sort, code
+      select o.code, o.name, o.closing, o.polarity,
+        -- The Type a create_items outcome's rows become (Code B's Comments, WF-11): the builder names it (RP-555).
+        (select jsonb_build_object('code', t.code, 'name', t.name)
+           from jsonb_array_elements(o.actions) a
+           join work_item_type t on t.code = a ->> 'type' and t.owner_kind = 'rabaed'
+          where a ->> 'kind' = 'create_items' limit 1) as "createsItems"
+      from outcome o
+      where o.work_item_type_id = ${type.type_id}::uuid
+        and case when ${type.project_id}::uuid is null then o.project_id is null else o.project_id = ${type.project_id}::uuid end
+      order by o.sort, o.code
     `.execute(trx);
-    const positions = await trx.selectFrom("position").select(["base_role", "key", "name"]).orderBy("base_role").orderBy("sort").execute();
     // The Form the rules are checked against (check 6): the pickers list only its fields.
     const check = await readWorkflowCheckContext(trx, definitionId);
     return {
-      workflow,
-      type: { code: type.code, name: type.name },
+      ...map,
       form: check?.context.form ?? null,
-      stages: stages.rows.filter((s) => s.own === own).map(({ key, name, category }) => ({ key, name, category })),
       outcomes: outcomes.rows,
-      positions: positions.map((p) => ({ role: p.base_role, key: p.key, name: p.name as BilingualText })),
+      screens: await workflowScreenOptions(trx, definitionId),
+      running: await runningByVersion(trx, definitionId),
     };
+  });
+}
+
+/**
+ * The Screens a Transition of Workflow `definitionId` may show (RP-555's picker): as
+ * publishing pins them (app.workflow_screens), with each Screen's name. Screens are
+ * definitions, read like the Workflows that show them (V20, V18).
+ */
+export async function workflowScreenOptions(trx: Db, definitionId: string): Promise<WorkflowScreenOption[]> {
+  const { rows } = await sql<{ key: string; name: BilingualText; schema: unknown }>`
+    select w.key, s.name, w.schema
+    from app.workflow_screens(${definitionId}::uuid) w
+    join screen_version v on v.id = w.screen_version_id
+    join screen s on s.id = v.screen_id
+    order by w.key
+  `.execute(trx);
+  return rows.flatMap((r) => {
+    const schema = formSchema.safeParse(r.schema);
+    return schema.success ? [{ key: r.key, name: r.name, schema: schema.data }] : [];
+  });
+}
+
+/**
+ * How many open items run on each published Version of Workflow `definitionId`, as the
+ * acting Member sees items (row-level security on work_item: app.sees_work_item), so a
+ * count never tells of an item they don't see (scenario RP-555-1).
+ */
+export async function runningByVersion(trx: Db, definitionId: string): Promise<{ versionNo: number; count: number }[]> {
+  const { rows } = await sql<{ version_no: number; count: string }>`
+    select v.version_no, count(*) as count
+    from work_item w join workflow_version v on v.id = w.workflow_version_id
+    where v.workflow_definition_id = ${definitionId}::uuid and w.closed_at is null
+    group by v.version_no
+    order by v.version_no
+  `.execute(trx);
+  return rows.map((r) => ({ versionNo: r.version_no, count: Number(r.count) }));
+}
+
+/**
+ * A Workflow to look at (RP-442, WF-19), for whoever reads it (V18, V20): the map the builder
+ * opens on, its draft only when the Member authors it; null when they don't read it.
+ */
+export function readWorkflowMap(db: Db, memberId: string, definitionId: string): Promise<WorkflowMapRead | null> {
+  return withMember(db, memberId, (trx) => workflowMap(trx, definitionId));
+}
+
+async function workflowMap(trx: Db, definitionId: string, canAuthorKnown?: boolean): Promise<WorkflowMapRead | null> {
+  const workflow = await workflowRead(trx, definitionId, canAuthorKnown);
+  if (!workflow) return null;
+  const { rows } = await sql<{ code: string; name: BilingualText; module_key: string; project_id: string | null }>`
+    select t.code, t.name, t.module_key, d.project_id
+    from workflow_definition d join work_item_type t on t.id = app.workflow_type(d.id)
+    where d.id = ${definitionId}::uuid
+  `.execute(trx);
+  const type = rows[0];
+  if (!type) return null;
+  // The Project's own Stages for a Project's Workflow (the Rabaed Defaults' while it has none), else the Rabaed Defaults'.
+  const own = type.project_id === null ? [] : await readModuleStages(trx, type.module_key, type.project_id);
+  return {
+    workflow,
+    type: { code: type.code, name: type.name },
+    stages: own.length > 0 ? own : await readModuleStages(trx, type.module_key, null),
+    positions: await readPositions(trx),
+  };
+}
+
+/**
+ * The Member's Company's Library Workflows (RP-442, WF-19). Row-level security keeps it to
+ * their own Company's, and to the published ones unless they are its Authorized Person (V18).
+ */
+export function listLibraryWorkflows(db: Db, memberId: string): Promise<LibraryWorkflows> {
+  return withMember(db, memberId, async (trx) => {
+    const { rows } = await sql<{
+      id: string;
+      name: BilingualText;
+      type_id: string | null;
+      type_code: string | null;
+      type_name: BilingualText | null;
+      versions: number[] | null;
+      updated_at: Date;
+      is_default: boolean;
+    }>`
+      select d.id, d.name, t.id as type_id, t.code as type_code, t.name as type_name,
+        (select array_agg(v.version_no order by v.version_no) from workflow_version v
+         where v.workflow_definition_id = d.id and v.status = 'published') as versions,
+        coalesce((select max(v.published_at) from workflow_version v
+                  where v.workflow_definition_id = d.id and v.status = 'published'), d.created_at) as updated_at,
+        exists (select 1 from company_default cd where cd.kind = 'workflow' and cd.workflow_definition_id = d.id) as is_default
+      from workflow_definition d
+      left join work_item_type t on t.id = app.workflow_type(d.id)
+      where d.owner_kind = 'company' and d.company_id = app.current_company_id()
+      order by t.code, d.created_at, d.id
+    `.execute(trx);
+    return {
+      workflows: rows.map((r) => ({
+        id: r.id,
+        name: r.name,
+        workItemType: r.type_id && r.type_code && r.type_name ? { id: r.type_id, code: r.type_code, name: r.type_name } : null,
+        publishedVersions: r.versions ?? [],
+        updatedAt: r.updated_at.toISOString(),
+        isDefault: r.is_default,
+      })),
+    };
+  });
+}
+
+export type SaveToLibraryResult =
+  | { ok: true; saved: SavedToLibrary }
+  | { ok: false; reason: (typeof duplicateRefusals)[number] };
+
+/**
+ * The Authorized Person saves a Workflow they read to their Company's Library: a copy
+ * (WF-4's duplicate into the Library; nothing records the original, ADR 0016), published at
+ * once so it can be used on a Project straight away. One transaction: the copy and its
+ * publish are saved together. When the Library's checks refuse the copy, it stays a draft
+ * and the problems are returned.
+ */
+export function saveWorkflowToLibrary(db: Db, memberId: string, sourceId: string, input: SaveWorkflowToLibraryRequest, now: Date): Promise<SaveToLibraryResult> {
+  return withMember(db, memberId, async (trx): Promise<SaveToLibraryResult> => {
+    // A copy into the Library has no Project Stages to check, so it never answers stage_missing.
+    const copy = await duplicateIn(trx, sourceId, { projectId: null, name: input.name }, now);
+    if (!copy.ok) return { ok: false, reason: copy.reason };
+    const published = await publishIn(trx, copy.id, now);
+    if (published.ok) return { ok: true, saved: { id: copy.id, published: true, problems: published.warnings } };
+    return { ok: true, saved: { id: copy.id, published: false, problems: published.reason === "workflow_problems" ? published.problems : [] } };
   });
 }
 
@@ -137,24 +265,32 @@ export async function duplicateWorkflow(
   now: Date,
 ): Promise<DuplicateWorkflowResult> {
   try {
-    return await withMember(db, memberId, async (trx): Promise<DuplicateWorkflowResult> => {
-      const { rows } = await sql<{ outcome: string; workflow_definition_id: string | null }>`
-        select outcome, workflow_definition_id from app.duplicate_workflow(
-          ${sourceId}::uuid, ${input.projectId}::uuid, ${JSON.stringify(input.name)}::jsonb, ${now})
-      `.execute(trx);
-      const outcome = checkedOutcome(rows[0]!.outcome, ["duplicated", ...duplicateRefusals]);
-      if (outcome !== "duplicated") return { ok: false, reason: outcome };
-      const id = rows[0]!.workflow_definition_id!;
-      if (input.projectId !== null) {
-        const problems = await copyStageProblems(trx, id, input.projectId);
-        if (problems.length > 0) throw new StageMissing(problems);
-      }
-      return { ok: true, id };
-    });
+    return await withMember(db, memberId, (trx) => duplicateIn(trx, sourceId, input, now));
   } catch (error) {
     if (error instanceof StageMissing) return { ok: false, reason: "stage_missing", problems: error.problems };
     throw error;
   }
+}
+
+/** The copy, in the acting Member's transaction; throws StageMissing (to undo it) when the Project lacks a Stage it uses. */
+async function duplicateIn(
+  trx: Db,
+  sourceId: string,
+  input: DuplicateWorkflowRequest,
+  now: Date,
+): Promise<{ ok: true; id: string } | { ok: false; reason: (typeof duplicateRefusals)[number] }> {
+  const { rows } = await sql<{ outcome: string; workflow_definition_id: string | null }>`
+    select outcome, workflow_definition_id from app.duplicate_workflow(
+      ${sourceId}::uuid, ${input.projectId}::uuid, ${JSON.stringify(input.name)}::jsonb, ${now})
+  `.execute(trx);
+  const outcome = checkedOutcome(rows[0]!.outcome, ["duplicated", ...duplicateRefusals]);
+  if (outcome !== "duplicated") return { ok: false, reason: outcome };
+  const id = rows[0]!.workflow_definition_id!;
+  if (input.projectId !== null) {
+    const problems = await copyStageProblems(trx, id, input.projectId);
+    if (problems.length > 0) throw new StageMissing(problems);
+  }
+  return { ok: true, id };
 }
 
 /** The Stages copy `copyId` (a draft the Member authors) uses that Project `projectId` lacks in its Type's Module. */
@@ -214,28 +350,40 @@ export function validateWorkflow(db: Db, memberId: string, definitionId: string,
   });
 }
 
-const publishRefusals = ["not_found", "project_closed", "no_draft", "workflow_name_names_participant"] as const;
+const publishRefusals = ["not_found", "project_closed", "no_draft", "workflow_name_names_participant", "invalid_change_note", "change_note_names_participant"] as const;
 export type PublishWorkflowResult =
   | { ok: true; versionNo: number; warnings: WorkflowProblem[] }
   | { ok: false; reason: "workflow_problems"; problems: WorkflowProblem[] }
   | { ok: false; reason: (typeof publishRefusals)[number] };
 
-/** Publishes the draft of a Workflow the Member authors, after every publish check: refused on any error, warnings allowed. */
-export function publishWorkflow(db: Db, memberId: string, definitionId: string, now: Date): Promise<PublishWorkflowResult> {
-  return withMember(db, memberId, async (trx): Promise<PublishWorkflowResult> => {
-    const check = await authoredCheckContext(trx, definitionId);
-    if (!check) return { ok: false, reason: "not_found" };
-    // Locks the definition: no save comes between these checks and the publish.
-    const draft = await readWorkflowDraft(trx, definitionId);
-    if (!draft) return { ok: false, reason: "no_draft" };
-    const { problems } = prepareDraft(draft.definition, check);
-    if (hasError(problems)) return { ok: false, reason: "workflow_problems", problems };
-    const { rows } = await sql<{ outcome: string; version_no: number | null }>`
-      select outcome, version_no from app.publish_workflow(${definitionId}::uuid, ${now})
-    `.execute(trx);
-    const outcome = checkedOutcome(rows[0]!.outcome, ["published", ...publishRefusals]);
-    return outcome === "published" ? { ok: true, versionNo: rows[0]!.version_no!, warnings: problems } : { ok: false, reason: outcome };
-  });
+/**
+ * Publishes the draft of a Workflow the Member authors, after every publish check: refused on
+ * any error, warnings allowed. With `changeNote` (the publish dialog's, RP-555) the Version keeps it as
+ * its Change Note; without it (the Library's copy, published at once) it keeps none.
+ */
+export function publishWorkflow(db: Db, memberId: string, definitionId: string, now: Date, changeNote?: string): Promise<PublishWorkflowResult> {
+  return withMember(db, memberId, (trx) => publishIn(trx, definitionId, now, changeNote));
+}
+
+/** The publish, in the acting Member's transaction. */
+async function publishIn(trx: Db, definitionId: string, now: Date, changeNote?: string): Promise<PublishWorkflowResult> {
+  const check = await authoredCheckContext(trx, definitionId);
+  if (!check) return { ok: false, reason: "not_found" };
+  // Locks the definition: no save comes between these checks and the publish.
+  const draft = await readWorkflowDraft(trx, definitionId);
+  if (!draft) return { ok: false, reason: "no_draft" };
+  const { problems } = prepareDraft(draft.definition, check);
+  if (hasError(problems)) return { ok: false, reason: "workflow_problems", problems };
+  const { rows } =
+    changeNote === undefined
+      ? await sql<{ outcome: string; version_no: number | null }>`
+          select outcome, version_no from app.publish_workflow(${definitionId}::uuid, ${now})
+        `.execute(trx)
+      : await sql<{ outcome: string; version_no: number | null }>`
+          select outcome, version_no from app.publish_workflow_with_change_note(${definitionId}::uuid, ${now}, ${changeNote}::text)
+        `.execute(trx);
+  const outcome = checkedOutcome(rows[0]!.outcome, ["published", ...publishRefusals]);
+  return outcome === "published" ? { ok: true, versionNo: rows[0]!.version_no!, warnings: problems } : { ok: false, reason: outcome };
 }
 
 const bindRefusals = ["not_found", "project_closed", "workflow_not_published", "workflow_not_for_type", "workflow_name_names_participant"] as const;

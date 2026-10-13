@@ -14,6 +14,7 @@ export async function PageHeading({ segment }: { segment: string }) {
     "work-items": t("shell.projects"),
     members: t("shell.members"),
     participants: t("shell.participations"),
+    library: t("shell.library"),
     profile: t("profile.title"),
     notifications: t("notifications.title"),
   };

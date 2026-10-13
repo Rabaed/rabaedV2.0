@@ -2,12 +2,12 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, fn, userEvent, waitFor, within } from "storybook/test";
 import { storyLocale } from "../../storybook/locale.ts";
 import {
-  builderDraft,
+  rulesDraft as builderDraft,
   builderFields,
   builderForm,
   builderOutcomes,
   builderPositions,
-  builderProblems,
+  rulesProblems as builderProblems,
   twoTierReview,
   workflowBuilderLabels,
   workflowStages,
@@ -209,15 +209,15 @@ export const RuleRemoved: Story = {
 };
 
 /**
- * The Notifications tab: the next holder or Step Pool is always told; the raiser,
- * watchers and a Position of the acting Participant are chosen; in-app is always on,
- * email follows each Member's settings and SMS is not set up yet.
+ * The Notifications, inline under the Transition as the reference's (RP-555): the next holder
+ * or Step Pool is always told; the raiser, watchers and a Position of the acting Participant
+ * are chosen; the channels are in-app and email (each Member's settings).
  */
 export const NotificationsTab: Story = {
   render,
   play: async ({ canvas, context, args }) => {
     const { rules, editor } = await openTransition(canvas, context);
-    await userEvent.click(editor.getByRole("tab", { name: rules.tabNotifications }));
+    await expect(editor.getByRole("region", { name: rules.notificationsHeading })).toBeVisible();
     const holder = editor.getByRole("button", { name: rules.holder });
     await expect(holder).toHaveAttribute("aria-pressed", "true");
     await expect(editor.getByRole("button", { name: rules.raiser })).toHaveAttribute("aria-pressed", "true");
@@ -225,9 +225,7 @@ export const NotificationsTab: Story = {
     await expect(watchers).toHaveAttribute("aria-pressed", "false");
     await userEvent.click(watchers);
     await waitFor(() => expect(lastTransition(args.onChange as ReturnType<typeof fn>).notifications).toEqual([{ to: "raiser" }, { to: "watchers" }]));
-    await expect(editor.getByText(rules.inAppHelp)).toBeVisible();
-    await expect(editor.getByText(rules.emailHelp)).toBeVisible();
-    await expect(editor.getByText(rules.smsHelp)).toBeVisible();
+    await expect(editor.getByText(`${rules.channels}: ${rules.inApp} · ${rules.email}`)).toBeVisible();
     await userEvent.click(editor.getByRole("button", { name: builderPositions[3]!.name[storyLocale(context)] }));
     await waitFor(() => expect(lastTransition(args.onChange as ReturnType<typeof fn>).notifications).toContainEqual({ to: "position", position: "manager" }));
   },

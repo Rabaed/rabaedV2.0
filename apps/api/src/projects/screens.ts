@@ -81,27 +81,51 @@ const createRefusals = ["not_found", "project_closed", "invalid_name", "key_take
 export type CreateScreenResult =
   | { ok: true; id: string }
   | { ok: false; reason: (typeof createRefusals)[number] }
-  | { ok: false; reason: "invalid_screen"; problems: ScreenProblem[] };
+  | { ok: false; reason: "invalid_screen"; problems: ScreenProblem[] }
+  /** Asked to publish it at once, and the publish was refused: nothing was created. */
+  | Exclude<PublishScreenResult, { ok: true }>;
 
-/** A Project Admin creates a Screen on the Project, its first draft as given. */
-export function createScreen(db: Db, memberId: string, projectId: string, input: CreateScreenRequest, now: Date): Promise<CreateScreenResult> {
-  return withMember(db, memberId, async (trx): Promise<CreateScreenResult> => {
-    const problems = unsavableSchemaProblems(input.schema);
-    if (problems.length > 0) {
-      // Said to its Project Admins only: to anyone else the Project is the plain 404.
-      const { rows } = await sql<{ authors: boolean }>`
-        select ${projectId}::uuid in (select app.current_admin_project_ids()) as authors
+/** Thrown inside the create's transaction to undo it when its publish is refused, carrying why. */
+class PublishRefused extends Error {
+  constructor(readonly result: Exclude<PublishScreenResult, { ok: true }>) {
+    super(result.reason);
+  }
+}
+
+/**
+ * A Project Admin creates a Screen on the Project, its first draft as given; with
+ * `publish`, that draft is published as Version 1 in the same transaction (a Rabaed
+ * Default Screen copied as it is), and a refused publish creates nothing.
+ */
+export async function createScreen(db: Db, memberId: string, projectId: string, input: CreateScreenRequest, now: Date): Promise<CreateScreenResult> {
+  try {
+    return await withMember(db, memberId, async (trx): Promise<CreateScreenResult> => {
+      const problems = unsavableSchemaProblems(input.schema);
+      if (problems.length > 0) {
+        // Said to its Project Admins only: to anyone else the Project is the plain 404.
+        const { rows } = await sql<{ authors: boolean }>`
+          select ${projectId}::uuid in (select app.current_admin_project_ids()) as authors
+        `.execute(trx);
+        return rows[0]!.authors ? { ok: false, reason: "invalid_screen", problems } : { ok: false, reason: "not_found" };
+      }
+      const { rows } = await sql<{ outcome: string; screen_id: string | null }>`
+        select outcome, screen_id from app.create_screen(
+          ${projectId}::uuid, ${input.key}, ${JSON.stringify(input.name)}::jsonb, ${JSON.stringify(input.schema)}::jsonb,
+          ${input.internalFields}::text[], ${now})
       `.execute(trx);
-      return rows[0]!.authors ? { ok: false, reason: "invalid_screen", problems } : { ok: false, reason: "not_found" };
-    }
-    const { rows } = await sql<{ outcome: string; screen_id: string | null }>`
-      select outcome, screen_id from app.create_screen(
-        ${projectId}::uuid, ${input.key}, ${JSON.stringify(input.name)}::jsonb, ${JSON.stringify(input.schema)}::jsonb,
-        ${input.internalFields}::text[], ${now})
-    `.execute(trx);
-    const outcome = checkedOutcome(rows[0]!.outcome, ["created", ...createRefusals]);
-    return outcome === "created" ? { ok: true, id: rows[0]!.screen_id! } : { ok: false, reason: outcome };
-  });
+      const outcome = checkedOutcome(rows[0]!.outcome, ["created", ...createRefusals]);
+      if (outcome !== "created") return { ok: false, reason: outcome };
+      const id = rows[0]!.screen_id!;
+      if (input.publish) {
+        const published = await publishIn(trx, id, now);
+        if (!published.ok) throw new PublishRefused(published);
+      }
+      return { ok: true, id };
+    });
+  } catch (error) {
+    if (error instanceof PublishRefused) return error.result;
+    throw error;
+  }
 }
 
 const saveRefusals = ["not_found", "project_closed"] as const;
@@ -136,19 +160,22 @@ export type PublishScreenResult =
 
 /** Publishes the draft of a Screen the Member authors, after every check: refused on any problem. */
 export function publishScreen(db: Db, memberId: string, screenId: string, now: Date): Promise<PublishScreenResult> {
-  return withMember(db, memberId, async (trx): Promise<PublishScreenResult> => {
-    // Locks the Screen: no save comes between these checks and the publish. Nothing for
-    // anyone who doesn't author it, whom app.publish_screen refuses as 'not_found'.
-    const draft = (await sql<VersionRow>`select version_no, schema, internal_fields from app.screen_draft(${screenId}::uuid)`.execute(trx)).rows[0];
-    if (draft) {
-      const lists = await sql<{ id: string }>`select id from option_list`.execute(trx);
-      const problems = screenProblems(draft.schema, draft.internal_fields, { optionListIds: new Set(lists.rows.map((l) => l.id)) });
-      if (problems.length > 0) return { ok: false, reason: "screen_problems", problems };
-    }
-    const { rows } = await sql<{ outcome: string; version_no: number | null }>`
-      select outcome, version_no from app.publish_screen(${screenId}::uuid, ${now})
-    `.execute(trx);
-    const outcome = checkedOutcome(rows[0]!.outcome, ["published", ...publishRefusals]);
-    return outcome === "published" ? { ok: true, versionNo: rows[0]!.version_no! } : { ok: false, reason: outcome };
-  });
+  return withMember(db, memberId, (trx) => publishIn(trx, screenId, now));
+}
+
+/** The publish, in the acting Member's transaction. */
+async function publishIn(trx: Db, screenId: string, now: Date): Promise<PublishScreenResult> {
+  // Locks the Screen: no save comes between these checks and the publish. Nothing for
+  // anyone who doesn't author it, whom app.publish_screen refuses as 'not_found'.
+  const draft = (await sql<VersionRow>`select version_no, schema, internal_fields from app.screen_draft(${screenId}::uuid)`.execute(trx)).rows[0];
+  if (draft) {
+    const lists = await sql<{ id: string }>`select id from option_list`.execute(trx);
+    const problems = screenProblems(draft.schema, draft.internal_fields, { optionListIds: new Set(lists.rows.map((l) => l.id)) });
+    if (problems.length > 0) return { ok: false, reason: "screen_problems", problems };
+  }
+  const { rows } = await sql<{ outcome: string; version_no: number | null }>`
+    select outcome, version_no from app.publish_screen(${screenId}::uuid, ${now})
+  `.execute(trx);
+  const outcome = checkedOutcome(rows[0]!.outcome, ["published", ...publishRefusals]);
+  return outcome === "published" ? { ok: true, versionNo: rows[0]!.version_no! } : { ok: false, reason: outcome };
 }

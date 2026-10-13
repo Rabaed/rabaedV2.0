@@ -28,7 +28,7 @@ export async function writeRabaedWorkflow(
   let refusal: Refusal | undefined;
   const result = await refusable(() =>
     asEngineer(db, { engineerId, action: publish ? "publish_workflow" : "save_workflow_draft", reason: input.reason }, async (trx) => {
-      const written = await writeRabaedDefaultWorkflow(trx, typeCode, input.definition, { publish });
+      const written = await writeRabaedDefaultWorkflow(trx, typeCode, input.definition, { publish, changeNote: input.changeNote });
       if (!written.ok) {
         refusal = written;
         throw new Refused(written.reason);

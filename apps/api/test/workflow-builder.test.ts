@@ -88,6 +88,8 @@ describe("a Project Admin builds the Project's copy of the MAR", () => {
     expect(read.stages.find((s) => s.key === "approved")).toMatchObject({ category: "closed_positive", name: { en: expect.any(String), ar: expect.any(String) } });
     expect(read.outcomes.map((o) => o.code)).toEqual(expect.arrayContaining(["A", "B", "C", "D"]));
     expect(read.outcomes.find((o) => o.code === "A")).toMatchObject({ closing: true, polarity: "positive" });
+    // Code B makes Comments in the Snag List: the builder names the Type (RP-555 review).
+    expect(read.outcomes.find((o) => o.code === "B")?.createsItems).toMatchObject({ code: "CMT", name: { en: expect.any(String) } });
     expect(read.positions).toContainEqual({ role: "owner_representative", key: APPROVER, name: { en: "Approver (test)", ar: "معتمد (اختبار)" } });
     expect(read.positions).toContainEqual(expect.objectContaining({ role: "consultant", key: "manager" }));
   });

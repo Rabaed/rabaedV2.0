@@ -133,7 +133,14 @@ export interface AdminActionTable {
     | "set_participant_code"
     | "set_numbering_counter_start"
     | "save_workflow_draft"
-    | "publish_workflow";
+    | "publish_workflow"
+    | "duplicate_workflow"
+    | "add_default_outcome"
+    | "change_default_outcome"
+    | "reorder_default_outcomes"
+    | "add_default_stage"
+    | "rename_default_stage"
+    | "reorder_default_stages";
   target_kind: string;
   /** Null for a read of a list. */
   target_id: string | null;
@@ -331,14 +338,16 @@ export interface WorkflowDefinitionTable {
   updated_at: Generated<Timestamp>;
 }
 
-/** A Member's change to a Workflow or a binding, append-only (RP-427). Not granted to the app role. */
-export interface WorkflowEventTable {
+/** A setup change (Workflow, Form, Screen, Stage, Outcome set, Company default), append-only (RP-450). Not granted to the app role. */
+export interface SetupEventTable {
   id: Generated<string>;
+  kind: "workflow" | "form" | "screen" | "stage" | "outcome_set" | "company_default";
   workflow_definition_id: string | null;
+  /** Exactly one of project_id and company_id is set. */
   project_id: string | null;
   company_id: string | null;
   actor_member_id: string;
-  type: "duplicated" | "draft_saved" | "published" | "bound" | "unbound";
+  type: string;
   payload: Json;
   created_at: Generated<Timestamp>;
 }
@@ -365,6 +374,13 @@ export interface WorkflowVersionTable {
   published_at: Timestamp | null;
   created_at: Generated<Timestamp>;
   updated_at: Generated<Timestamp>;
+}
+
+/** A published Version's Change Note (RP-555); read by the Workflow's authors only, written by the publish commands. */
+export interface WorkflowChangeNoteTable {
+  workflow_version_id: string;
+  change_note: string;
+  created_at: Generated<Timestamp>;
 }
 
 export interface WorkflowStepTable {
@@ -671,8 +687,9 @@ export interface Database {
   stage: StageTable;
   workflow_definition: WorkflowDefinitionTable;
   workflow_binding: WorkflowBindingTable;
-  workflow_event: WorkflowEventTable;
+  setup_event: SetupEventTable;
   workflow_version: WorkflowVersionTable;
+  workflow_change_note: WorkflowChangeNoteTable;
   workflow_step: WorkflowStepTable;
   workflow_transition: WorkflowTransitionTable;
   work_item_type: WorkItemTypeTable;

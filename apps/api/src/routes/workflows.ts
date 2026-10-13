@@ -1,9 +1,29 @@
-import { bindWorkflowRequest, duplicateWorkflowRequest, saveWorkflowDraftRequest, unbindWorkflowQuery, validateWorkflowRequest } from "@rabaed/domain";
+import {
+  bindWorkflowRequest,
+  duplicateWorkflowRequest,
+  publishWorkflowRequest,
+  saveWorkflowDraftRequest,
+  saveWorkflowToLibraryRequest,
+  unbindWorkflowQuery,
+  validateWorkflowRequest,
+} from "@rabaed/domain";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import type { AppContext } from "../app.ts";
 import { idOrNotFound, visibleOrNotFound } from "../http-error.ts";
-import { bindWorkflow, duplicateWorkflow, publishWorkflow, readWorkflow, readWorkflowBuilder, saveWorkflowDraft, unbindWorkflow, validateWorkflow } from "../projects/workflows.ts";
+import {
+  bindWorkflow,
+  duplicateWorkflow,
+  listLibraryWorkflows,
+  publishWorkflow,
+  readWorkflow,
+  readWorkflowBuilder,
+  readWorkflowMap,
+  saveWorkflowDraft,
+  saveWorkflowToLibrary,
+  unbindWorkflow,
+  validateWorkflow,
+} from "../projects/workflows.ts";
 import { refusal } from "../refusals.ts";
 
 const workflowParams = z.object({ workflowId: z.string() });
@@ -26,6 +46,30 @@ export const workflowRoutes =
       const memberId = ctx.requireMember(request);
       return visibleOrNotFound(readWorkflowBuilder(ctx.db, memberId, idOrNotFound(request.params.workflowId)));
     });
+
+    // A Workflow to look at (RP-442, WF-19): whoever reads it, the draft only for its authors.
+    app.get("/v1/workflows/:workflowId/map", { schema: { params: workflowParams } }, async (request) => {
+      const memberId = ctx.requireMember(request);
+      return visibleOrNotFound(readWorkflowMap(ctx.db, memberId, idOrNotFound(request.params.workflowId)));
+    });
+
+    // The Company's Library of Workflows (RP-442, WF-19; V18): its own Members only.
+    app.get("/v1/library/workflows", async (request) => {
+      const memberId = ctx.requireMember(request);
+      return listLibraryWorkflows(ctx.db, memberId);
+    });
+
+    // "Save to my Company's Library": a copy of a Workflow the Member reads, for the Authorized Person.
+    app.post(
+      "/v1/workflows/:workflowId/save-to-library",
+      { schema: { params: workflowParams, body: saveWorkflowToLibraryRequest } },
+      async (request, reply) => {
+        const memberId = ctx.requireMember(request);
+        const result = await saveWorkflowToLibrary(ctx.db, memberId, idOrNotFound(request.params.workflowId), request.body, ctx.now());
+        if (!result.ok) throw refusal(result);
+        return reply.code(201).send(result.saved);
+      },
+    );
 
     app.post(
       "/v1/workflows/:workflowId/duplicate",
@@ -50,9 +94,9 @@ export const workflowRoutes =
       return visibleOrNotFound(validateWorkflow(ctx.db, memberId, idOrNotFound(request.params.workflowId), request.body.definition));
     });
 
-    app.post("/v1/workflows/:workflowId/publish", { schema: { params: workflowParams } }, async (request) => {
+    app.post("/v1/workflows/:workflowId/publish", { schema: { params: workflowParams, body: publishWorkflowRequest } }, async (request) => {
       const memberId = ctx.requireMember(request);
-      const result = await publishWorkflow(ctx.db, memberId, idOrNotFound(request.params.workflowId), ctx.now());
+      const result = await publishWorkflow(ctx.db, memberId, idOrNotFound(request.params.workflowId), ctx.now(), request.body?.changeNote);
       if (!result.ok) throw refusal(result);
       return { versionNo: result.versionNo, warnings: result.warnings };
     });

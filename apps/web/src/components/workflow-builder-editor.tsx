@@ -1,10 +1,11 @@
 "use client";
 
-import { conditionOpKey, type BilingualText, type Locale, type WorkflowBuilderRead, type WorkflowDefinition, type WorkflowProblem } from "@rabaed/domain";
-import { WorkflowBuilder, type WorkflowBuilderLabels, type WorkflowPublishResult, type WorkflowSaveState } from "@rabaed/ui";
+import { type BilingualText, type Locale, type WorkflowBuilderRead, type WorkflowDefinition, type WorkflowProblem } from "@rabaed/domain";
+import { WorkflowBuilder, workflowBuilderLabels, type WorkflowBuilderLabels, type WorkflowPublishResult, type WorkflowSaveState } from "@rabaed/ui";
 import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useActionFormLabels } from "@/lib/form-labels";
 
 type Props = {
   read: WorkflowBuilderRead;
@@ -20,8 +21,8 @@ const SAVE_DELAY_MS = 800;
 /**
  * The Workflow builder page's client (RP-439, WF-16): every edit is saved as the
  * Workflow's draft through WF-4's API (`PUT /v1/workflows/:id/draft`) a moment after
- * the last one, then checked (`POST …/validate`), so the problems listed are the
- * server's; Publish saves what is pending, checks again and publishes (`POST …/publish`).
+ * the last one, then checked (`POST â€¦/validate`), so the problems listed are the
+ * server's; Publish saves what is pending, checks again and publishes (`POST â€¦/publish`).
  */
 export function WorkflowBuilderEditor({ read, locale, backHref, names }: Props) {
   const router = useRouter();
@@ -119,231 +120,37 @@ export function WorkflowBuilderEditor({ read, locale, backHref, names }: Props) 
     return check(latest.current);
   }, [flush, check]);
 
-  const onPublish = useCallback(async (): Promise<WorkflowPublishResult> => {
-    // A Workflow opened on its published Version has no draft until it is saved once.
-    if (!(await flush()) || (!workflow.draft && !(await save()))) return { ok: false, problems: known.current };
-    const res = await fetch(`${api}/publish`, { method: "POST" }).catch(() => null);
-    const body = ((await res?.json().catch(() => ({}))) ?? {}) as { versionNo?: number; problems?: WorkflowProblem[] };
-    if (res?.ok && body.versionNo !== undefined) {
-      router.refresh();
-      return { ok: true, versionNo: body.versionNo };
-    }
-    if (body.problems) show(body.problems);
-    return { ok: false, problems: body.problems ?? known.current };
-  }, [flush, save, workflow.draft, api, router]);
+  const onPublish = useCallback(
+    async (changeNote: string): Promise<WorkflowPublishResult> => {
+      // A Workflow opened on its published Version has no draft until it is saved once.
+      if (!(await flush()) || (!workflow.draft && !(await save()))) return { ok: false, problems: known.current };
+      const res = await fetch(`${api}/publish`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ changeNote }) }).catch(() => null);
+      const body = ((await res?.json().catch(() => ({}))) ?? {}) as { versionNo?: number; problems?: WorkflowProblem[] };
+      if (res?.ok && body.versionNo !== undefined) {
+        // As the reference (owner's decision 4, RP-555): the builder stays, says the draft is published and links to its Versions; the page reads the new Version underneath.
+        router.refresh();
+        return { ok: true, versionNo: body.versionNo };
+      }
+      if (body.problems) show(body.problems);
+      return { ok: false, problems: body.problems ?? known.current };
+    },
+    [flush, save, workflow.draft, api, router],
+  );
+
+  const actionFormLabels = useActionFormLabels();
+  // A Project's Workflow has its Versions and Screens pages; a Library one is edited here only.
+  const project = workflow.owner === "project" && workflow.projectId ? `/${locale}/projects/${workflow.projectId}/settings` : null;
+  const versionsHref = useMemo(() => (project ? (n: number) => `${project}/workflows/${workflow.id}/versions/${n}` : undefined), [project, workflow.id]);
 
   const labels = useMemo<WorkflowBuilderLabels>(
-    () => ({
-      map: {
-        canvas: tMap("canvas"),
-        list: tMap("listName"),
-        outcome: tMap("outcome"),
-        role: (role) => tRoles(role),
-        permission: (permission) => tMap(`permissions.${permission}`),
-        outcomeMode: (mode) => tMap(`outcomeModes.${mode}`),
-        kind: (kind) => tMap(`kinds.${kind}`),
-        position: (key, role) => read.positions.find((p) => p.key === key && p.role === role)?.name[locale] ?? key,
-        part: (role) => tMap("part", { role }),
-        withCompany: (company) => tMap("withCompany", { company }),
-        current: tMap("current"),
-        to: tMap("to"),
-        overview: tMap("overview"),
-        zoomIn: tMap("zoomIn"),
-        zoomOut: tMap("zoomOut"),
-        fit: tMap("fit"),
-      },
-      rules: {
-        heading: tRules("heading"),
-        addRule: tRules("addRule"),
-        noRules: tRules("noRules"),
-        and: tRules("and"),
-        edit: (summary) => tRules("edit", { summary }),
-        remove: (summary) => tRules("remove", { summary }),
-        tabsName: tRules("tabsName"),
-        tabSettings: tRules("tabSettings"),
-        tabNotifications: tRules("tabNotifications"),
-        addTitle: (transition) => tRules("addTitle", { transition }),
-        editTitle: (transition) => tRules("editTitle", { transition }),
-        chooseKind: tRules("chooseKind"),
-        next: tRules("next"),
-        back: tRules("back"),
-        add: tRules("add"),
-        save: tRules("save"),
-        cancel: tRules("cancel"),
-        close: tRules("close"),
-        groupTitle: (group) => tRules(`groupTitle.${group}`),
-        groupHelp: (group) => tRules(`groupHelp.${group}`),
-        kindTitle: (kind) => tRules(`kindTitle.${kind}`),
-        kindHelp: (kind) => tRules(`kindHelp.${kind}`),
-        noFields: tRules("noFields"),
-        field: tRules("field"),
-        operator: tRules("operator"),
-        value: tRules("value"),
-        yes: tRules("yes"),
-        no: tRules("no"),
-        op: (op) => tRules(`op.${conditionOpKey[op]}`),
-        missingField: (key) => tRules("missingField", { key }),
-        positions: tRules("positions"),
-        positionsHelp: tRules("positionsHelp"),
-        noPositions: tRules("noPositions"),
-        notSamePersonOf: tRules("notSamePersonOf"),
-        heldStep: tRules("heldStep"),
-        tookTransition: tRules("tookTransition"),
-        step: tRules("step"),
-        transition: tRules("transition"),
-        beenThroughOf: tRules("beenThroughOf"),
-        ownStep: tRules("ownStep"),
-        fact: tRules("fact"),
-        sharedFact: (fact) => tRules(`sharedFact.${fact}`),
-        items: tRules("items"),
-        itemsKind: (items) => tRules(`itemsKind.${items}`),
-        messageHeading: tRules("messageHeading"),
-        messageEn: tRules("messageEn"),
-        messageAr: tRules("messageAr"),
-        messageHelp: tRules("messageHelp"),
-        documentField: tRules("documentField"),
-        anyDocument: tRules("anyDocument"),
-        documentHelp: tRules("documentHelp"),
-        setValue: tRules("setValue"),
-        setNow: tRules("setNow"),
-        copyFrom: tRules("copyFrom"),
-        copyTo: tRules("copyTo"),
-        assignHelp: tRules("assignHelp"),
-        conditionKind: tRules("conditionKind"),
-        conditionKindName: (kind) => tRules(`conditionKindName.${kind}`),
-        conditionKindHelp: (kind) => tRules(`conditionKindHelp.${kind}`),
-        editCondition: tRules("editCondition"),
-        addCondition: tRules("addCondition"),
-        addGroup: tRules("addGroup"),
-        removeCondition: tRules("removeCondition"),
-        emptyGroup: tRules("emptyGroup"),
-        attribute: (name) => tRules("attribute", { name }),
-        summaryCondition: (field, op, value) => tRules("summaryCondition", { field, op, value }),
-        summaryAll: (parts) => tRules("summaryAll", { parts }),
-        summaryAny: (parts) => tRules("summaryAny", { parts }),
-        summaryNot: (part) => tRules("summaryNot", { part }),
-        summaryPositions: (names) => tRules("summaryPositions", { names }),
-        summaryNotSameStep: (step) => tRules("summaryNotSameStep", { step }),
-        summaryNotSameTransition: (transition) => tRules("summaryNotSameTransition", { transition }),
-        summaryBeenStep: (step) => tRules("summaryBeenStep", { step }),
-        summaryFact: (fact) => tRules(`summaryFact.${fact}`),
-        summaryAllClosed: (items) => tRules(`summaryAllClosed.${items}`),
-        summaryDocument: (field) => (field === null ? tRules("summaryDocumentAny") : tRules("summaryDocument", { field })),
-        summaryMessage: (message) => tRules("summaryMessage", { message }),
-        summarySet: (field, value) => tRules("summarySet", { field, value }),
-        summarySetNow: (field) => tRules("summarySetNow", { field }),
-        summaryCopy: (from, to) => tRules("summaryCopy", { from, to }),
-        notificationsHeading: tRules("notificationsHeading"),
-        notificationsHelp: tRules("notificationsHelp"),
-        recipients: tRules("recipients"),
-        holder: tRules("holder"),
-        holderAlways: tRules("holderAlways"),
-        raiser: tRules("raiser"),
-        watchers: tRules("watchers"),
-        positionsOfActing: tRules("positionsOfActing"),
-        noActingPositions: tRules("noActingPositions"),
-        channels: tRules("channels"),
-        inApp: tRules("inApp"),
-        inAppHelp: tRules("inAppHelp"),
-        email: tRules("email"),
-        emailHelp: tRules("emailHelp"),
-        sms: tRules("sms"),
-        smsHelp: tRules("smsHelp"),
-      },
-      back: t("back"),
-      draft: (version) => t("draft", { version }),
-      saved: (time) => t("saved", { time }),
-      saving: t("saving"),
-      unsaved: t("unsaved"),
-      saveFailed: t("saveFailed"),
-      undo: t("undo"),
-      redo: t("redo"),
-      autoLayout: t("autoLayout"),
-      testRun: t("testRun"),
-      validate: t("validate"),
-      publish: t("publish"),
-      palette: t("palette"),
-      add: t("add"),
-      step: t("step"),
-      end: (stage) => t("end", { stage }),
-      templates: t("templates"),
-      templateInternal: t("templateInternal"),
-      templateConsultant: t("templateConsultant"),
-      editor: t("editor"),
-      nothingSelected: t("nothingSelected"),
-      nothingSelectedHint: t("nothingSelectedHint"),
-      thisDraft: t("thisDraft"),
-      counts: (steps, transitions) => t("counts", { steps, transitions }),
-      stepHeading: t("stepHeading"),
-      nameEn: t("nameEn"),
-      nameAr: t("nameAr"),
-      stage: t("stage"),
-      whoHolds: t("whoHolds"),
-      role: t("role"),
-      permission: t("permission"),
-      positions: t("positions"),
-      positionsHelp: t("positionsHelp"),
-      outcomeHeading: t("outcomeHeading"),
-      outcomeNone: t("outcomeNone"),
-      draftsVisibleTo: t("draftsVisibleTo"),
-      draftsWholeCompany: t("draftsWholeCompany"),
-      draftsAuthorOnly: t("draftsAuthorOnly"),
-      draftsVisibleHelp: t("draftsVisibleHelp"),
-      addTransitionTo: t("addTransitionTo"),
-      addTransitionHelp: t("addTransitionHelp"),
-      deleteStep: t("deleteStep"),
-      endHeading: t("endHeading"),
-      transitionHeading: (from, to) => t("transitionHeading", { from, to }),
-      labelEn: t("labelEn"),
-      labelAr: t("labelAr"),
-      kind: t("kind"),
-      outcomeCode: t("outcomeCode"),
-      noOutcome: t("noOutcome"),
-      outcomeOnlyOnClose: t("outcomeOnlyOnClose"),
-      screen: t("screen"),
-      screenHelp: t("screenHelp"),
-      internalNoteOnly: t("internalNoteOnly"),
-      confirm: t("confirm"),
-      deleteTransition: t("deleteTransition"),
-      problemsName: t("problemsName"),
-      noErrors: t("noErrors"),
-      errors: (count) => t("errors", { count }),
-      warnings: (count) => t("warnings", { count }),
-      showProblem: (message) => t("showProblem", { message }),
-      validationPassed: t("validationPassed"),
-      errorsToFix: (count) => t("errorsToFix", { count }),
-      testRunAt: t("testRunAt"),
-      finished: (outcome) => t("finished", { outcome }),
-      restart: t("restart"),
-      closeTestRun: t("closeTestRun"),
-      publishTitle: (version) => t("publishTitle", { version }),
-      changesSince: (version) => t("changesSince", { version }),
-      firstVersion: t("firstVersion"),
-      added: t("added"),
-      removed: t("removed"),
-      changed: t("changed"),
-      noChanges: t("noChanges"),
-      checking: t("checking"),
-      passed: t("passed"),
-      errorsBlock: (count) => t("errorsBlock", { count }),
-      showProblems: t("showProblems"),
-      appliesToNew: (version) => t("appliesToNew", { version }),
-      cancel: t("cancel"),
-      publishVersion: (version) => t("publishVersion", { version }),
-      published: (version) => t("published", { version }),
-      close: t("close"),
-      alertsRegion: t("alertsRegion"),
-      dismiss: t("dismiss"),
-      names,
-    }),
+    () => workflowBuilderLabels({ t, tMap, tRules, tRoles, positions: read.positions, locale, names }),
     [t, tMap, tRoles, tRules, read.positions, locale, names],
   );
 
   const name: BilingualText = workflow.draft?.name ?? workflow.name;
   return (
     <WorkflowBuilder
-      // A publish refreshes the page onto the new Version: start again from what the server has.
-      key={`${versionNo}:${workflow.publishedVersions.length}`}
+      // Not keyed by Version: a publish keeps the builder (its "Published" badge) while the page reads the new Version.
       name={name[locale]}
       versionNo={versionNo}
       published={workflow.published}
@@ -352,6 +159,12 @@ export function WorkflowBuilderEditor({ read, locale, backHref, names }: Props) 
       outcomes={read.outcomes}
       positions={read.positions}
       form={read.form}
+      typeCode={read.type.code}
+      actionFormLabels={actionFormLabels}
+      versionsHref={versionsHref}
+      screensHref={project ? `${project}/screens` : undefined}
+      screens={read.screens}
+      running={read.running}
       locale={locale}
       labels={labels}
       problems={problems}

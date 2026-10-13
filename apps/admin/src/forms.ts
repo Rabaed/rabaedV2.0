@@ -1,4 +1,4 @@
-import type { Db } from "@rabaed/db";
+import { latestPublishedVersionNo, type Db } from "@rabaed/db";
 import { formSchema, publishProblems, type SchemaProblem, type WorkflowStepHolder } from "@rabaed/domain";
 import { sql } from "kysely";
 
@@ -74,9 +74,7 @@ async function typeWorkflows(db: Db, formDefinitionId: string): Promise<Workflow
     select t.id as type_id, s.key, s.actor_rule ->> 'base_role' as role, app.is_draft_step(s.id) as draft
     from work_item_type t
     join workflow_version v on v.workflow_definition_id = t.workflow_definition_id and v.status = 'published'
-      and v.version_no = (
-        select max(o.version_no) from workflow_version o where o.workflow_definition_id = t.workflow_definition_id and o.status = 'published'
-      )
+      and v.version_no = ${latestPublishedVersionNo(sql.ref("t.workflow_definition_id"))}
     join workflow_step s on s.workflow_version_id = v.id
     where t.form_definition_id = ${formDefinitionId}
     order by t.id, s.key

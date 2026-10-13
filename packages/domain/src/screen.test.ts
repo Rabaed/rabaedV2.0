@@ -43,7 +43,9 @@ describe("screenProblems", () => {
 describe("createScreenRequest", () => {
   it("takes a Screen by a snake_case key, its English and Arabic name, its schema and its internal fields", () => {
     const body = { key: "code_reply", name: { en: "Code reply", ar: "رد الرمز" }, schema: codeReply, internalFields: ["verification_note"] };
-    expect(createScreenRequest.parse(body)).toEqual(body);
+    // Created as a draft unless asked to publish it at once (a Rabaed Default Screen copied as it is).
+    expect(createScreenRequest.parse(body)).toEqual({ ...body, publish: false });
+    expect(createScreenRequest.parse({ ...body, publish: true }).publish).toBe(true);
     expect(createScreenRequest.safeParse({ ...body, key: "Code reply" }).success).toBe(false);
     expect(createScreenRequest.parse({ ...body, internalFields: undefined }).internalFields).toEqual([]);
   });

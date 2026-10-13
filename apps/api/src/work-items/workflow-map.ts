@@ -1,11 +1,10 @@
-import { readPublishedVersionDefinition, withMember, type Db } from "@rabaed/db";
+import { latestPublishedVersionNo, readModuleStages, readPositions, readPublishedVersionDefinition, withMember, type Db } from "@rabaed/db";
 import {
   closedStepKey,
   holderRole,
   type BaseRole,
   type BilingualText,
   type ModuleKey,
-  type StageCategory,
   type WorkItemMapPosition,
   type WorkItemWorkflowMap,
 } from "@rabaed/domain";
@@ -52,24 +51,10 @@ export function readWorkItemWorkflowMap(db: Db, memberId: string, workItemId: st
     const definition = await readPublishedVersionDefinition(trx, item.workflow_version_id);
     if (!definition) return null;
 
-    const { rows: latest } = await sql<{ version_no: number }>`
-      select max(v.version_no) as version_no from workflow_version v
-      where v.status = 'published'
-        and v.workflow_definition_id = (select workflow_definition_id from workflow_version where id = ${item.workflow_version_id}::uuid)
+    const { rows: latest } = await sql<{ version_no: number | null }>`
+      select ${latestPublishedVersionNo(sql.ref("v.workflow_definition_id"))} as version_no
+      from workflow_version v where v.id = ${item.workflow_version_id}::uuid
     `.execute(trx);
-    const stages = await trx
-      .selectFrom("stage")
-      .select(["key", "name", "category"])
-      .where("project_id", "=", item.project_id)
-      .where("module_key", "=", item.module_key)
-      .orderBy("sort")
-      .orderBy("key")
-      .execute();
-    const used = [...new Set(definition.steps.flatMap((s) => s.actor?.positions ?? []))];
-    const positions =
-      used.length === 0
-        ? []
-        : await trx.selectFrom("position").select(["base_role", "key", "name"]).where("key", "in", used).orderBy("sort").execute();
     const viewer = await trx
       .selectFrom("participant as p")
       .innerJoin("project_role as r", "r.id", "p.project_role_id")
@@ -83,8 +68,8 @@ export function readWorkItemWorkflowMap(db: Db, memberId: string, workItemId: st
       versionNo: item.version_no,
       latestVersionNo: latest[0]?.version_no ?? item.version_no,
       definition,
-      stages: stages.map((s) => ({ key: s.key, name: s.name as BilingualText, category: s.category as StageCategory })),
-      positions: positions.map((p) => ({ role: p.base_role, key: p.key, name: p.name as BilingualText })),
+      stages: await readModuleStages(trx, item.module_key, item.project_id),
+      positions: await readPositions(trx, [...new Set(definition.steps.flatMap((s) => s.actor?.positions ?? []))]),
       viewerRole: (viewer?.base_role as BaseRole | undefined) ?? null,
       position: position(item, definition),
     };

@@ -37,6 +37,7 @@ export default async function WorkflowBuilderPage({ params }: { params: Promise<
   ]);
   const both = (key: keyof WorkflowBuilderLabels["names"]) => ({ en: en(key), ar: ar(key) });
   const names: WorkflowBuilderLabels["names"] = {
+    firstStep: both("firstStep"),
     newStep: both("newStep"),
     newTransition: both("newTransition"),
     engineerReview: both("engineerReview"),
@@ -44,18 +45,16 @@ export default async function WorkflowBuilderPage({ params }: { params: Promise<
     consultantEngineer: both("consultantEngineer"),
     consultantManager: both("consultantManager"),
     send: both("send"),
+    submit: both("submit"),
     return: both("return"),
+    cancel: both("cancel"),
   };
 
   return (
-    // The builder takes the whole width under the Project's tabs, as the design's does. The outer
-    // box keeps its place in the page; the inner one spans the viewport from there. It is placed
-    // against the viewport (no ancestor is positioned), whose width leaves out the scrollbar, so
-    // unlike `w-screen` (100vw) it never makes the page scroll sideways.
-    <div className="h-[calc(100dvh-11rem)] min-h-[640px]">
-      <div className="absolute inset-x-0 h-[calc(100dvh-11rem)] min-h-[640px]">
-        <WorkflowBuilderEditor read={read} locale={locale} backHref={`/${locale}/projects/${projectId}/settings`} names={names} />
-      </div>
+    // In the page's own flow, in the settings column: an absolutely placed box spanned the
+    // viewport and overlapped the app shell's sidebar (RP-441).
+    <div data-settings-wide className="h-[calc(100dvh-181px)] min-h-[520px] min-w-0 md:-ms-[16rem] md:w-[calc(100%+16rem)]">
+      <WorkflowBuilderEditor read={read} locale={locale} backHref={`/${locale}/projects/${projectId}/settings/workflows`} names={names} />
     </div>
   );
 }

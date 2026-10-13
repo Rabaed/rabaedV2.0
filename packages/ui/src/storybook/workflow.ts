@@ -1,14 +1,29 @@
-import { conditionOpKey, formSchema, ruleFieldsOf } from "@rabaed/domain";
-import type { BaseRole, FunctionPermission, Locale, PositionOption, RuleField, TransitionKind, WorkflowDefinition, WorkflowProblem, WorkflowStep, WorkflowTransition } from "@rabaed/domain";
+import { conditionOpKey, formSchema, ruleFieldsOf, workflowPublishProblems } from "@rabaed/domain";
+import type {
+  Locale,
+  OutcomeAction,
+  PositionOption,
+  RuleField,
+  TransitionKind,
+  WorkflowDefinition,
+  WorkflowProblem,
+  WorkflowScreenOption,
+  WorkflowStep,
+  WorkflowTransition,
+} from "@rabaed/domain";
 import { ruleMessages } from "./workflow-rule-messages.ts";
+import { builderMessages } from "./workflow-builder-messages.ts";
+import { formatIcu, translator } from "./icu.ts";
 import type { WorkflowRuleLabels } from "../components/workflow/workflow-rule-labels.ts";
 import type { WorkflowBuilderOutcome } from "../components/workflow/workflow-builder.tsx";
 import type { WorkflowBuilderLabels, WorkflowCompareLabels } from "../components/workflow/workflow-builder-labels.ts";
+import { workflowBuilderLabels as labelsFromMessages } from "../components/workflow/workflow-builder-labels-from.ts";
 import type { WorkflowLabels } from "../components/workflow/workflow-labels.ts";
 import type { MapStage } from "../components/workflow/workflow-map.ts";
 
-// The design's "Material Submittal – 2-tier review" (ui_kits/app/wf/data.js), for the
-// Workflow canvas stories. Story data only: it is not a visibility test.
+// The design's "Material Submittal – 2-tier review" (ui_kits/app/wf/data.js, and the owner's
+// V2 builder's `script10.js`), for the Workflow canvas and builder stories. Story data only:
+// it is not a visibility test.
 
 const t = (en: string, ar: string) => ({ en, ar });
 
@@ -16,6 +31,7 @@ const t = (en: string, ar: string) => ({ en, ar });
 export const sameInBoth = (text: string) => t(text, text);
 
 export const workflowStages: MapStage[] = [
+  // "Draft", singular: the owner's decision of 2026-10-10 (RP-409; migration draft_stage_singular).
   { key: "draft", name: t("Draft", "مسودة"), category: "draft" },
   { key: "internal_review", name: t("Internal Review", "مراجعة داخلية"), category: "in_progress" },
   { key: "pending_approval", name: t("Pending Approval", "بانتظار الاعتماد"), category: "in_progress" },
@@ -71,107 +87,85 @@ export const twoTierReview: WorkflowDefinition = {
 
 export const consultantCompany = t("Design Consultants LLC", "ديزاين للاستشارات");
 
-const roles: Record<BaseRole, { en: string; ar: string }> = {
-  contractor: t("Contractor", "المقاول"),
-  consultant: t("Consultant", "الاستشاري"),
-  owner: t("Owner", "المالك"),
-  owner_representative: t("Owner Representative", "ممثل المالك"),
-};
-const permissions: Record<FunctionPermission, { en: string; ar: string }> = {
-  view: t("View", "عرض"),
-  create: t("Create", "إنشاء"),
-  submit: t("Submit", "تقديم"),
-  review: t("Review", "مراجعة"),
-  approve: t("Approve", "اعتماد"),
-  assign: t("Assign", "تعيين"),
-  close: t("Close", "إغلاق"),
-  attach: t("Attach", "إرفاق"),
-};
-const kinds: Record<TransitionKind, { en: string; ar: string }> = {
-  send: t("Send", "إرسال"),
-  submit: t("Submit", "تقديم"),
-  return: t("Return", "إرجاع"),
-  send_back: t("Send Back", "إعادة للمُقدِّم"),
-  close: t("Close", "إغلاق"),
-  cancel: t("Cancel", "إلغاء"),
-};
-
 /** The canvas's words, as the web's messages give them. */
 export function workflowLabels(locale: Locale): WorkflowLabels {
-  const ar = locale === "ar";
-  return {
-    canvas: ar ? "خريطة سير العمل" : "Workflow map",
-    list: ar ? "الخطوات والانتقالات" : "Steps and Transitions",
-    outcome: ar ? "النتيجة" : "Outcome",
-    role: (r) => roles[r][locale],
-    permission: (p) => permissions[p][locale],
-    outcomeMode: (m) => (m === "recommend_code" ? (ar ? "يوصي بالرمز" : "Recommends code") : ar ? "يصدر الرمز النهائي" : "Issues final code"),
-    kind: (k) => kinds[k][locale],
-    position: (key) => (key === "manager" ? (ar ? "المدير" : "Manager") : key),
-    part: (role) => (ar ? `مراجعة ${role}` : `${role} review`),
-    withCompany: (company) => (ar ? `لدى ${company}` : `With ${company}`),
-    current: ar ? "الحالية" : "Current",
-    to: ar ? "إلى" : "to",
-    overview: ar ? "نظرة عامة" : "Overview",
-    zoomIn: ar ? "تكبير" : "Zoom in",
-    zoomOut: ar ? "تصغير" : "Zoom out",
-    fit: ar ? "ملاءمة" : "Fit",
-  };
+  return workflowBuilderLabels(locale).map;
 }
 
-// The builder (RP-439) ------------------------------------------------------------
+// The builder (RP-439; RP-555's V2) ------------------------------------------------
 
-/** The design's v4 draft: the two-tier review plus an Owner Representative approval, with the Code A reply's Screen. */
+const owner = step("owner_rep", t("Owner Representative approval", "اعتماد ممثل المالك"), "pending_approval", { role: "owner_representative", permission: "approve" });
+const qa = step("consultant_qa", t("Consultant QA check", "تدقيق الجودة للاستشاري"), "pending_approval", { role: "consultant", permission: "review" });
+const sendToOwner = (field: string): WorkflowTransition => ({
+  ...move("send_to_owner", t("Send to Owner Rep", "إرسال لممثل المالك"), "submit", "consultant_manager", "owner_rep"),
+  rules: { restrict: [{ type: "condition", condition: { field, op: ">", value: 500000 } }] },
+  notifications: [{ to: "raiser" }],
+});
+/** The Screens each reply asks (ADR 0019, RP-555's picker). */
+const screenOf: Record<string, string> = { return_to_engineer: "return_reason", approve_a: "code_reply", approve_b: "code_b_reply", revise_c: "code_reply", reject_d: "code_reply" };
+const withScreens = (transitions: WorkflowTransition[]) => transitions.map((tr) => (screenOf[tr.key] ? { ...tr, screen: screenOf[tr.key]! } : tr));
+const v3Transitions = [
+  ...twoTierReview.transitions.slice(0, 9),
+  sendToOwner("cost_impact"),
+  move("owner_approve", t("Owner Approve", "اعتماد المالك"), "close", "owner_rep", "approved", "A"),
+  move("owner_return", t("Owner Return", "إرجاع المالك"), "return", "owner_rep", "consultant_manager"),
+  twoTierReview.transitions[9]!,
+];
+const v3Steps = [
+  ...twoTierReview.steps.slice(0, 3),
+  { ...twoTierReview.steps[3]!, actor: { role: "consultant" as const, permission: "approve" as const } },
+  owner,
+  ...twoTierReview.steps.slice(4),
+];
+/** Where the V2 reference draws each Step and End (left-to-right units). */
+const v2Layout: WorkflowDefinition["layout"] = {
+  draft: { x: 30, y: 250 },
+  contractor_pm: { x: 280, y: 250 },
+  consultant_engineer: { x: 530, y: 130 },
+  consultant_manager: { x: 810, y: 130 },
+  owner_rep: { x: 810, y: 420 },
+  consultant_qa: { x: 530, y: 420 },
+  approved: { x: 1110, y: 70 },
+  revise: { x: 1110, y: 230 },
+  rejected: { x: 1110, y: 380 },
+  cancelled: { x: 1110, y: 540 },
+};
+
+/** The published v3: the two-tier review plus the Owner Representative's approval over 500,000 SAR. */
+export const builderPublished: WorkflowDefinition = { steps: v3Steps, transitions: withScreens(v3Transitions), layout: v2Layout };
+
+/**
+ * The V2 reference's v4 draft (`script10.js`), seeded with its problems: the QA check has no way
+ * forward, the Owner Rep's condition reads a field the Form lacks (`cost_impact_sar`), and two
+ * Returns cross Participants. Its 6 Steps and 15 Transitions pair the stories with V2's states.
+ */
 export const builderDraft: WorkflowDefinition = {
-  ...twoTierReview,
-  steps: [
-    ...twoTierReview.steps.slice(0, 4),
-    step("owner_rep", t("Owner Representative approval", "اعتماد ممثل المالك"), "pending_approval", { role: "owner_representative", permission: "approve" }, "issue_outcome"),
-    ...twoTierReview.steps.slice(4),
-  ],
-  transitions: [
-    ...twoTierReview.transitions.map((tr) =>
-      tr.key === "approve_a"
-        ? {
-            ...tr,
-            actionForm: {
-              sections: [
-                {
-                  key: "reply",
-                  title: t("Reply", "الرد"),
-                  fields: [
-                    { type: "textarea", key: "remarks", label: t("Remarks", "الملاحظات"), required: false },
-                    { type: "checkbox", key: "final_verification", label: t("Final verification", "التحقق النهائي"), required: true },
-                  ],
-                },
-              ],
-            },
-          }
-        : tr,
-    ),
-    {
-      ...move("send_to_owner", t("Send to Owner Rep", "إرسال لممثل المالك"), "submit", "consultant_manager", "owner_rep"),
-      // The rules the design's Condition shows (cost impact over 500,000), and one of each of the other groups.
-      rules: {
-        restrict: [
-          { type: "condition", condition: { field: "cost_impact", op: ">", value: 500000 } },
-          { type: "positions", positions: ["manager"] },
-        ],
-        validate: [{ type: "condition", condition: { field: "verification_note", op: "not_empty" }, message: t("Add a verification note.", "أضف ملاحظة تحقق.") }],
-      },
-      actions: [{ type: "offer_assign_to" }],
-      notifications: [{ to: "raiser" }],
-    },
-    move("owner_approve", t("Owner Approve", "اعتماد المالك"), "close", "owner_rep", "approved", "A"),
-  ],
+  steps: [...v3Steps.slice(0, 5), qa, ...v3Steps.slice(5)],
+  transitions: withScreens([
+    ...v3Transitions.slice(0, 9),
+    sendToOwner("cost_impact_sar"),
+    ...v3Transitions.slice(10),
+    move("send_to_qa", t("Send to QA", "إرسال للجودة"), "send", "consultant_engineer", "consultant_qa"),
+    move("return_to_consultant", t("Return to Consultant", "إرجاع للاستشاري"), "return", "contractor_pm", "consultant_engineer"),
+  ]),
+  layout: v2Layout,
+};
+
+/** The draft with its condition on the Form's cost impact: the test run samples it (V2's run reads it whatever the field). */
+export const builderDraftSampled: WorkflowDefinition = {
+  ...builderDraft,
+  transitions: builderDraft.transitions.map((tr) => (tr.key === "send_to_owner" ? sendToOwner("cost_impact") : tr)),
 };
 
 export const builderOutcomes: WorkflowBuilderOutcome[] = [
   { code: "A", name: t("Approved", "معتمد"), closing: true },
-  { code: "B", name: t("Approved with Comments", "معتمد مع ملاحظات"), closing: true },
+  { code: "B", name: t("Approved with Comments", "معتمد مع ملاحظات"), closing: true, createsItems: { code: "CMT", name: t("Comment", "ملاحظة") } },
   { code: "C", name: t("Revise & Resubmit", "مراجعة وإعادة تقديم"), closing: true },
   { code: "D", name: t("Rejected", "مرفوض"), closing: true },
 ];
+
+/** The outcomes as the publish checks read them: Code B creates the reviewer's Comments in the Snag List (WF-11). */
+const checkedOutcomes = builderOutcomes.map((o) => ({ ...o, actions: (o.code === "B" ? [{ kind: "create_items", type: "CMT" }] : []) as OutcomeAction[] }));
 
 export const builderPositions: PositionOption[] = [
   { role: "contractor", key: "engineer", name: t("Engineer", "مهندس") },
@@ -179,22 +173,6 @@ export const builderPositions: PositionOption[] = [
   { role: "consultant", key: "engineer", name: t("Engineer", "مهندس") },
   { role: "consultant", key: "manager", name: t("Manager", "مدير") },
   { role: "owner_representative", key: "engineer", name: t("Engineer", "مهندس") },
-];
-
-/** Problems as WF-4's validate gives them: an error on a Step, a warning on a Transition. */
-export const builderProblems: WorkflowProblem[] = [
-  {
-    code: "dead_end_step",
-    severity: "error",
-    step: "owner_rep",
-    message: t("Step “Owner Representative approval” has no way forward.", "الخطوة «اعتماد ممثل المالك» ليس لها مسار للأمام."),
-  },
-  {
-    code: "condition_overlap",
-    severity: "warning",
-    transition: "send_to_owner",
-    message: t("Two Transitions from the same Step can both be offered.", "انتقالان من نفس الخطوة قد يُعرضان معًا."),
-  },
 ];
 
 /**
@@ -208,7 +186,7 @@ export const builderForm = formSchema.parse({
       title: t("Submittal", "التقديم"),
       fields: [
         { key: "manufacturer", type: "text", label: t("Manufacturer", "الشركة المصنعة") },
-        { key: "cost_impact", type: "number", label: t("Cost impact (SAR)", "أثر التكلفة (ريال)") },
+        { key: "cost_impact", type: "currency", currency: "SAR", label: t("Cost impact", "أثر التكلفة") },
         {
           key: "category",
           type: "select",
@@ -237,10 +215,108 @@ export const builderForm = formSchema.parse({
 /** The Form's fields a rule can name. */
 export const builderFields: RuleField[] = ruleFieldsOf(builderForm, null);
 
+/** The Screens the builder offers a Transition (RP-555's picker), as the builder read gives them. */
+export const builderScreens: WorkflowScreenOption[] = [
+  {
+    key: "code_reply",
+    name: t("Code reply", "الرد بالرمز"),
+    schema: formSchema.parse({
+      sections: [{ key: "reply", title: t("Reply", "الرد"), fields: [{ type: "textarea", key: "remarks", label: t("Remarks", "الملاحظات") }] }],
+    }),
+  },
+  {
+    key: "return_reason",
+    name: t("Return with a reason", "إرجاع مع السبب"),
+    schema: formSchema.parse({
+      sections: [{ key: "return", title: t("Reason", "السبب"), fields: [{ type: "textarea", key: "reason", label: t("Reason", "السبب"), required: true }] }],
+    }),
+  },
+  {
+    // Code B's reply: its Comments, each a row, become Comments in the Snag List (WF-11; V2's follow-up tasks).
+    key: "code_b_reply",
+    name: t("Code B reply with Comments", "رد الرمز B مع الملاحظات"),
+    schema: formSchema.parse({
+      sections: [
+        {
+          key: "reply",
+          title: t("Reply", "الرد"),
+          fields: [
+            { type: "textarea", key: "remarks", label: t("Remarks", "الملاحظات"), required: true },
+            {
+              type: "table",
+              key: "items_to_create",
+              label: t("Comments to close out", "ملاحظات للإغلاق"),
+              required: true,
+              columns: [
+                { key: "subject", type: "text", label: t("What needs to be done", "المطلوب") },
+                { key: "location", type: "text", label: t("Location", "الموقع") },
+              ],
+            },
+          ],
+        },
+      ],
+    }),
+  },
+];
+
+const checkedScreens = new Map(builderScreens.map((s) => [s.key, { schema: s.schema, internalFields: [] }]));
+
+/** The publish checks' problems for a draft, as WF-4's validate gives them, its Screens read as publishing reads them. */
+export function builderProblemsOf(definition: WorkflowDefinition): WorkflowProblem[] {
+  return workflowPublishProblems(definition, { outcomes: checkedOutcomes, stages: workflowStages, form: builderForm, screens: checkedScreens });
+}
+
+/** The V2 draft's problems. */
+export const builderProblems: WorkflowProblem[] = builderProblemsOf(builderDraft);
+
+/** The rules stories' Transition (RP-440): "Send to Owner Rep", with one rule of each group and a warning on it. */
+export const rulesDraft: WorkflowDefinition = {
+  ...builderDraft,
+  transitions: builderDraft.transitions.map((tr) =>
+    tr.key === "send_to_owner"
+      ? {
+          ...tr,
+          rules: {
+            restrict: [
+              { type: "condition", condition: { field: "cost_impact", op: ">", value: 500000 } },
+              { type: "positions", positions: ["manager"] },
+            ],
+            validate: [{ type: "condition", condition: { field: "verification_note", op: "not_empty" }, message: t("Add a verification note.", "أضف ملاحظة تحقق.") }],
+          },
+          actions: [{ type: "offer_assign_to" }],
+          notifications: [{ to: "raiser" }],
+        }
+      : tr,
+  ),
+};
+
+/** Problems as WF-4's validate gives them: an error on a Step, a warning on a Transition. */
+export const rulesProblems: WorkflowProblem[] = [
+  {
+    code: "dead_end_step",
+    severity: "error",
+    step: "consultant_qa",
+    message: t("Step “Consultant QA check” has no way forward.", "الخطوة «تدقيق الجودة للاستشاري» ليس لها مسار للأمام."),
+  },
+  {
+    code: "condition_overlap",
+    severity: "warning",
+    transition: "send_to_owner",
+    message: t("Two Transitions from the same Step can both be offered.", "انتقالان من نفس الخطوة قد يُعرضان معًا."),
+  },
+];
+
+/** Items the author sees on each published Version (the publish dialog's counts). */
+export const builderRunning = [
+  { versionNo: 3, count: 31 },
+  { versionNo: 2, count: 14 },
+  { versionNo: 1, count: 2 },
+];
+
 type Messages = Record<string, unknown>;
 
 /** `{name}` placeholders filled in, as the messages' ICU would. */
-const fmt = (template: string, values: Record<string, string> = {}) => template.replaceAll(/\{(\w+)\}/g, (_, name: string) => values[name] ?? "");
+const fmt = (template: string, values: Record<string, string> = {}) => formatIcu(template, values, "en");
 
 /** The rules' and notifications' words, as the web's messages give them. */
 export function workflowRuleLabels(locale: Locale): WorkflowRuleLabels {
@@ -347,108 +423,34 @@ export function workflowRuleLabels(locale: Locale): WorkflowRuleLabels {
   };
 }
 
-/** The builder's words, as the web's messages give them. */
+/** The builder's words, from the web's own messages, as the Project settings page builds them. */
 export function workflowBuilderLabels(locale: Locale): WorkflowBuilderLabels {
-  const ar = locale === "ar";
-  const l = (en: string, arabic: string) => (ar ? arabic : en);
-  return {
-    map: workflowLabels(locale),
-    rules: workflowRuleLabels(locale),
-    back: l("Workflows", "سير العمل"),
-    draft: (v) => l(`Draft v${v}`, `مسودة v${v}`),
-    saved: (time) => l(`Saved ${time}`, `حُفظت ${time}`),
-    saving: l("Saving…", "جارٍ الحفظ…"),
-    unsaved: l("Unsaved changes", "تغييرات غير محفوظة"),
-    saveFailed: l("Couldn't save", "تعذّر الحفظ"),
-    undo: l("Undo", "تراجع"),
-    redo: l("Redo", "إعادة"),
-    autoLayout: l("Auto-arrange", "ترتيب تلقائي"),
-    testRun: l("Test run", "تشغيل تجريبي"),
-    validate: l("Validate", "تحقق"),
-    publish: l("Publish", "نشر"),
-    palette: l("Add to the Workflow", "الإضافة إلى سير العمل"),
-    add: l("Add", "إضافة"),
-    step: l("Step", "خطوة"),
-    end: (stage) => l(`End · ${stage}`, `نهاية · ${stage}`),
-    templates: l("Ready-made Steps", "خطوات جاهزة"),
-    templateInternal: l("2-tier internal review", "مراجعة داخلية على مستويين"),
-    templateConsultant: l("Consultant engineer → manager", "مهندس الاستشاري ← المدير"),
-    editor: l("Edit the selection", "تعديل التحديد"),
-    nothingSelected: l("Nothing selected", "لا يوجد تحديد"),
-    nothingSelectedHint: l("Click a Step or an arrow to edit it. Drag Steps to move them.", "انقر على خطوة أو سهم لتعديله. اسحب الخطوات لنقلها."),
-    thisDraft: l("This draft", "هذه المسودة"),
-    counts: (s, tr) => l(`${s} Steps · ${tr} Transitions`, `${s} خطوات · ${tr} انتقالات`),
-    stepHeading: l("Step", "خطوة"),
-    nameEn: l("Name (English)", "الاسم (بالإنجليزية)"),
-    nameAr: l("Name (Arabic)", "الاسم (بالعربية)"),
-    stage: l("Stage", "المرحلة"),
-    whoHolds: l("Who holds it", "من يتولاها"),
-    role: l("Participant", "المشارك"),
-    permission: l("Permission", "الصلاحية"),
-    positions: l("Positions", "المناصب"),
-    positionsHelp: l("None ticked: anyone of that Participant with the Permission.", "بدون تحديد: أي شخص من ذلك المشارك لديه الصلاحية."),
-    outcomeHeading: l("Outcome", "النتيجة"),
-    outcomeNone: l("None", "بدون"),
-    draftsVisibleTo: l("Drafts visible to", "المسودات مرئية لـ"),
-    draftsWholeCompany: l("The author's whole Company", "شركة المُنشئ كاملة"),
-    draftsAuthorOnly: l("The author only", "المُنشئ فقط"),
-    draftsVisibleHelp: l("A Draft is read by the author's whole Company.", "تُقرأ المسودة من شركة المُنشئ كاملة."),
-    addTransitionTo: l("Add a Transition to", "إضافة انتقال إلى"),
-    addTransitionHelp: l("Or drag from this Step's edge to another Step.", "أو اسحب من حافة هذه الخطوة إلى خطوة أخرى."),
-    deleteStep: l("Delete Step", "حذف الخطوة"),
-    endHeading: l("End", "نهاية"),
-    transitionHeading: (from, to) => l(`Transition · ${from} → ${to}`, `انتقال · ${from} ← ${to}`),
-    labelEn: l("Label (English)", "النص (بالإنجليزية)"),
-    labelAr: l("Label (Arabic)", "النص (بالعربية)"),
-    kind: l("Type", "النوع"),
-    outcomeCode: l("Outcome", "النتيجة"),
-    noOutcome: "—",
-    outcomeOnlyOnClose: l("Only a Close sets an outcome.", "لا يحدد النتيجة إلا انتقال من نوع إغلاق."),
-    screen: l("Screen", "الشاشة"),
-    screenHelp: l("The Screen this Transition asks. Screens are edited in Settings → Screens.", "الشاشة التي يطلبها هذا الانتقال. تُعدَّل الشاشات في الإعدادات ← الشاشات."),
-    internalNoteOnly: l("Internal Note only", "ملاحظة داخلية فقط"),
-    confirm: l("Confirm", "تأكيد"),
-    deleteTransition: l("Delete Transition", "حذف الانتقال"),
-    problemsName: l("Validation", "التحقق"),
-    noErrors: l("No errors", "لا أخطاء"),
-    errors: (n) => l(`${n} errors`, `${n} أخطاء`),
-    warnings: (n) => l(`${n} warnings`, `${n} تحذيرات`),
-    showProblem: (m) => l(`Show: ${m}`, `عرض: ${m}`),
-    validationPassed: l("Validation passed", "اجتاز التحقق"),
-    errorsToFix: (n) => l(`${n} errors to fix`, `${n} أخطاء للإصلاح`),
-    testRunAt: l("At", "عند"),
-    finished: (o) => l(`Finished: ${o}`, `انتهى: ${o}`),
-    restart: l("Restart", "إعادة"),
-    closeTestRun: l("Close the test run", "إغلاق التشغيل التجريبي"),
-    publishTitle: (v) => l(`Publish v${v}`, `نشر v${v}`),
-    changesSince: (v) => l(`Changes since v${v}`, `التغييرات منذ v${v}`),
-    firstVersion: l("The first Version of this Workflow", "أول إصدار لسير العمل هذا"),
-    added: l("Added", "أُضيف"),
-    removed: l("Removed", "أُزيل"),
-    changed: l("Changed", "تغيّر"),
-    noChanges: l("No changes", "لا تغييرات"),
-    checking: l("Checking on the server…", "جارٍ التحقق على الخادم…"),
-    passed: l("Validation passed", "اجتاز التحقق"),
-    errorsBlock: (n) => l(`${n} validation errors — fix them before publishing.`, `${n} أخطاء تحقق — أصلحها قبل النشر.`),
-    showProblems: l("Show problems", "عرض المشكلات"),
-    appliesToNew: (v) => l(`Items already running keep their Version. New items will use v${v}.`, `العناصر الجارية تحتفظ بإصداراتها. العناصر الجديدة ستستخدم v${v}.`),
-    cancel: l("Cancel", "إلغاء"),
-    publishVersion: (v) => l(`Publish v${v}`, `نشر v${v}`),
-    published: (v) => l(`v${v} published — new items will use it`, `تم نشر v${v} — العناصر الجديدة ستستخدمه`),
-    close: l("Close", "إغلاق"),
-    alertsRegion: l("Builder alerts", "تنبيهات المصمم"),
-    dismiss: l("Dismiss", "إخفاء"),
+  const m = builderMessages[locale];
+  const tr = (tree: unknown) => translator(tree as Record<string, string>, locale);
+  const t = tr(m.workflowBuilder);
+  const name = (key: keyof typeof m.workflowBuilder.names) => ({ en: builderMessages.en.workflowBuilder.names[key], ar: builderMessages.ar.workflowBuilder.names[key] });
+  const labels = labelsFromMessages({
+    t,
+    tMap: tr(m.workflowMap),
+    tRules: (key) => key,
+    tRoles: tr(m.roles),
+    positions: builderPositions,
+    locale,
     names: {
-      newStep: t("New step", "خطوة جديدة"),
-      newTransition: t("New transition", "انتقال جديد"),
-      engineerReview: t("Engineer review", "مراجعة المهندس"),
-      pmReview: t("PM review", "مراجعة المدير"),
-      consultantEngineer: t("Consultant engineer", "مهندس الاستشاري"),
-      consultantManager: t("Consultant manager", "مدير الاستشاري"),
-      send: t("Send", "إرسال"),
-      return: t("Return", "إرجاع"),
+      firstStep: name("firstStep"),
+      newStep: name("newStep"),
+      newTransition: name("newTransition"),
+      engineerReview: name("engineerReview"),
+      pmReview: name("pmReview"),
+      consultantEngineer: name("consultantEngineer"),
+      consultantManager: name("consultantManager"),
+      send: name("send"),
+      submit: name("submit"),
+      return: name("return"),
+      cancel: name("cancel"),
     },
-  };
+  });
+  return { ...labels, rules: workflowRuleLabels(locale) };
 }
 
 /** The compare dialog's words. */

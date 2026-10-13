@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { bilingualText } from "./company.ts";
+import { bilingualText, type BilingualText } from "./company.ts";
 import type { Locale } from "./locale.ts";
 import { formSchema } from "./form.ts";
 import { transitionKinds, workItemList, workItemRow, type WorkItemRow } from "./work-item.ts";
@@ -107,7 +107,18 @@ export type BoardCardLayoutChange = z.infer<typeof boardCardLayoutChange>;
  * `closedColumnDays` days; an open one all of them). The cursor is not used.
  */
 export const workItemBoard = workItemList.pick({ stages: true, filters: true }).extend({
-  columns: z.array(z.object({ stageKey: z.string(), shown: z.number().int().nonnegative(), lanes: z.array(workItemBoardLane) })),
+  columns: z.array(
+    z.object({
+      stageKey: z.string(),
+      shown: z.number().int().nonnegative(),
+      /**
+       * The Steps of this Stage that the viewer's own Participant holds items at, each with how many
+       * (RP-519, V14): never another Participant's Steps. Only Steps holding an item are listed.
+       */
+      steps: z.array(z.object({ key: z.string(), name: bilingualText, count: z.number().int().positive() })),
+      lanes: z.array(workItemBoardLane),
+    }),
+  ),
   /**
    * What the viewer may do with a card now (RP-350), by item id: only the
    * Transitions they may take on it at this moment, as the item page's buttons
@@ -164,6 +175,23 @@ export function boardLanes(cards: readonly BoardCardInput[]): WorkItemBoardLane[
     lane.count += 1;
   }
   return lanesInLocale([...roles.values(), ...steps.values(), ...companies.values(), ...(closed.count > 0 ? [closed] : [])], "en");
+}
+
+/** A column's own Steps with their counts, from its lanes: the viewer's own Participant's Steps only (RP-519, V14). */
+export function ownStepCounts(lanes: readonly WorkItemBoardLane[]): { key: string; name: BilingualText; count: number }[] {
+  // The viewer's own cards sit in role lanes (RP-410) or, where no role can be named, Step lanes; another
+  // Company's lane and the closed lane carry no own Step, so they never count.
+  const steps = new Map<string, { key: string; name: BilingualText; count: number }>();
+  for (const lane of lanes) {
+    if (lane.kind !== "role" && lane.kind !== "step") continue;
+    for (const card of lane.cards) {
+      if (card.with?.kind !== "own") continue;
+      const s = steps.get(card.with.step.key) ?? { key: card.with.step.key, name: card.with.step.name, count: 0 };
+      s.count += 1;
+      steps.set(s.key, s);
+    }
+  }
+  return [...steps.values()];
 }
 
 /**

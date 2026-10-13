@@ -1,6 +1,7 @@
 import {
   defaultBoardCardLayout,
   defaultOutcomeSets,
+  ownStepCounts,
   workItemQuery,
   workItemSearchParams,
   type BoardCardLayout,
@@ -137,6 +138,10 @@ const cards = {
   codeD: card(24, { title: "Pump Sets", stage: stages.rejected, trade: trades.mechanical, outcome: "D", stepAgeWeeks: null, location: at(b1), closedBy: { kind: "company", companyName: consultant } }),
 };
 
+// A column, its header's own Steps counted from its lanes as the API does (RP-519).
+type BoardColumn = WorkItemBoardData["columns"][number];
+const column = (stageKey: string, shown: number, lanes: BoardColumn["lanes"]): BoardColumn => ({ stageKey, shown, steps: ownStepCounts(lanes), lanes });
+
 const board: WorkItemBoardData = {
   stages: [
     { ...stages.draft, count: 1 },
@@ -156,32 +161,20 @@ const board: WorkItemBoardData = {
     owners: [],
   },
   columns: [
-    { stageKey: "draft", shown: 1, lanes: [{ kind: "role", position: engineer, projectRole: contractor, count: 1, cards: [cards.draft] }] },
-    {
-      stageKey: "internal_review",
-      shown: 3,
-      lanes: [
-        { kind: "role", position: engineer, projectRole: contractor, count: 2, cards: [cards.hvac, cards.fire] },
-        { kind: "role", position: pm, projectRole: contractor, count: 1, cards: [cards.pool] },
-      ],
-    },
-    {
-      stageKey: "revise_resubmit",
-      shown: 2,
-      lanes: [
-        { kind: "role", position: engineer, projectRole: contractor, count: 1, cards: [cards.r2] },
-        { kind: "role", position: pm, projectRole: contractor, count: 1, cards: [cards.r3] },
-      ],
-    },
-    {
-      stageKey: "pending_approval",
-      shown: 2,
-      lanes: [{ kind: "company", participantId: consultantId, companyName: consultant, count: 2, cards: [cards.pending1, cards.pending2] }],
-    },
-    { stageKey: "approved", shown: 2, lanes: [{ kind: "closed", count: 2, cards: [cards.codeA, cards.codeB] }] },
-    { stageKey: "rejected", shown: 1, lanes: [{ kind: "closed", count: 1, cards: [cards.codeD] }] },
+    column("draft", 1, [{ kind: "role", position: engineer, projectRole: contractor, count: 1, cards: [cards.draft] }]),
+    column("internal_review", 3, [
+      { kind: "role", position: engineer, projectRole: contractor, count: 2, cards: [cards.hvac, cards.fire] },
+      { kind: "role", position: pm, projectRole: contractor, count: 1, cards: [cards.pool] },
+    ]),
+    column("revise_resubmit", 2, [
+      { kind: "role", position: engineer, projectRole: contractor, count: 1, cards: [cards.r2] },
+      { kind: "role", position: pm, projectRole: contractor, count: 1, cards: [cards.r3] },
+    ]),
+    column("pending_approval", 2, [{ kind: "company", participantId: consultantId, companyName: consultant, count: 2, cards: [cards.pending1, cards.pending2] }]),
+    column("approved", 2, [{ kind: "closed", count: 2, cards: [cards.codeA, cards.codeB] }]),
+    column("rejected", 1, [{ kind: "closed", count: 1, cards: [cards.codeD] }]),
     // Three cancelled items, all closed more than 30 days ago.
-    { stageKey: "cancelled", shown: 0, lanes: [] },
+    column("cancelled", 0, []),
   ],
   moves: {},
   layout: defaultBoardCardLayout,
@@ -566,3 +559,61 @@ export const FilterPanelOpen: Story = {
 
 /** The toolbar and the board on a phone. */
 export const WithToolbarNarrow: Story = { ...WithToolbar, parameters: phone, play: undefined };
+
+// Two of my own Steps under Internal Review (RP-519): the Engineer's review and the PM's.
+const pmStep = { key: "pm_review", name: b("PM review", "مراجعة مدير المشروع") };
+const atPmStep = { ...cards.pool, with: own(pm, null, pmStep) };
+const twoStepsBoard = (withPm: boolean): WorkItemBoardData => ({
+  ...board,
+  columns: board.columns.map((c) =>
+    c.stageKey === "internal_review"
+      ? column("internal_review", withPm ? 3 : 2, [
+          { kind: "role", position: engineer, projectRole: contractor, count: 2, cards: [cards.hvac, cards.fire] },
+          ...(withPm ? [{ kind: "role" as const, position: pm, projectRole: contractor, count: 1, cards: [atPmStep] }] : []),
+        ])
+      : c,
+  ),
+});
+
+/** The board as its page refreshes it: the PM's item moves on (its Step leaves the column), then another arrives there. */
+function RefreshedBoard(props: Parameters<typeof WorkItemBoard>[0]) {
+  const [withPm, setWithPm] = useState(true);
+  return (
+    <>
+      <button type="button" onClick={() => setWithPm((w) => !w)}>
+        {withPm ? "Move the PM's item on" : "Bring an item to the PM"}
+      </button>
+      <WorkItemBoard {...props} board={twoStepsBoard(withPm)} />
+    </>
+  );
+}
+
+/**
+ * A column header's own Steps narrow it (RP-519): narrowed, the header counts that Step's
+ * cards (the viewer's own, V14); a Step that leaves the column is cleared, so the column is
+ * whole again, and stays whole when the Step comes back.
+ */
+export const StepFilterNarrows: Story = {
+  render: (args, context) => <RefreshedBoard {...args} locale={storyLocale(context)} labels={workItemBoardLabels[storyLocale(context)]} />,
+  play: async (context) => {
+    const labels = workItemBoardLabels[storyLocale(context)];
+    const internal = () => columnOf(context, stages.internal);
+    const count = () => within(internal()).getByRole("heading", { level: 2 }).textContent ?? "";
+    await expect(count()).toMatch(/3$/);
+
+    await userEvent.click(within(internal()).getByRole("button", { name: labels.showOnlyStep(storyText(context, pmStep.name)) }));
+    await expect(count()).toMatch(/1$/);
+    await expect(context.canvasElement.querySelector(`a[href="#${cards.hvac.id}"]`)).toBeNull();
+
+    // The PM's item moves on: its Step leaves the column, and the column is whole again.
+    await userEvent.click(context.canvas.getByRole("button", { name: "Move the PM's item on" }));
+    await waitFor(() => expect(count()).toMatch(/2$/));
+    await expect(context.canvasElement.querySelector(`a[href="#${cards.hvac.id}"]`)).not.toBeNull();
+
+    // Another arrives at the PM's Step: the column stays whole, nothing pressed.
+    await userEvent.click(context.canvas.getByRole("button", { name: "Bring an item to the PM" }));
+    await waitFor(() => expect(count()).toMatch(/3$/));
+    await expect(context.canvasElement.querySelector(`a[href="#${cards.hvac.id}"]`)).not.toBeNull();
+    await expect(within(internal()).getByRole("button", { name: labels.showOnlyStep(storyText(context, pmStep.name)) })).toHaveAttribute("aria-pressed", "false");
+  },
+};

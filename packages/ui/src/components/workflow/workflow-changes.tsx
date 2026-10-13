@@ -4,15 +4,39 @@ import { definitionChanges, formatNumber, type Locale, type WorkflowDefinition }
 import { useMemo } from "react";
 import { Dialog, DialogContent } from "../overlay/dialog.tsx";
 import { Icon } from "../icon/icon.tsx";
-import type { WorkflowCompareLabels } from "./workflow-builder-labels.ts";
+import type { ChangedPart, WorkflowCompareLabels } from "./workflow-builder-labels.ts";
 import { WorkflowCanvas, type CanvasMark } from "./workflow-canvas.tsx";
 import type { MapStage } from "./workflow-map.ts";
 
-type ChangeWords = { added: string; removed: string; changed: string; noChanges: string };
+type ChangeWords = { added: string; removed: string; changed: string; noChanges: string; changedPart?: (part: ChangedPart) => string };
 
-/** What changed between two definitions, line by line: added, removed, changed (the publish and compare dialogs). */
+/** What a changed Step or Transition's parts are, each compared on its own. */
+const partsOf: Record<"step" | "transition", (x: Record<string, unknown>) => Partial<Record<ChangedPart, unknown>>> = {
+  step: (s) => ({ name: s.name, stage: s.stage, holder: s.actor, outcome: [s.outcomeMode, s.editsForm, s.draftsVisibleTo] }),
+  transition: (t) => ({ label: t.label, kind: t.kind, outcome: [t.outcome, t.permission], condition: [t.rules, t.actions], screen: [t.screen, t.actionForm], notifications: t.notifications }),
+};
+
+/** What changed in one changed Step or Transition, e.g. ["condition", "Screen"]. */
+function changedParts(before: WorkflowDefinition, after: WorkflowDefinition, kind: "step" | "transition", key: string): ChangedPart[] {
+  const find = (d: WorkflowDefinition) => (kind === "step" ? d.steps : d.transitions).find((x) => x.key === key) as Record<string, unknown> | undefined;
+  const [was, now] = [find(before), find(after)];
+  if (!was || !now) return [];
+  const a = partsOf[kind](was);
+  const b = partsOf[kind](now);
+  return (Object.keys(b) as ChangedPart[]).filter((part) => JSON.stringify(a[part] ?? null) !== JSON.stringify(b[part] ?? null));
+}
+
+/**
+ * What changed between two definitions, line by line: added, removed, changed (the publish and
+ * compare dialogs); a changed line says what changed, as the reference's "— condition".
+ */
 export function WorkflowChangeList({ before, after, locale, labels }: { before: WorkflowDefinition; after: WorkflowDefinition; locale: Locale; labels: ChangeWords }) {
   const changes = definitionChanges(before, after);
+  const detail = (c: (typeof changes)[number]) => {
+    if (c.change !== "changed" || !labels.changedPart) return "";
+    const parts = changedParts(before, after, c.kind, c.key);
+    return parts.length === 0 ? "" : ` — ${parts.map(labels.changedPart).join(locale === "ar" ? "، " : ", ")}`;
+  };
   if (changes.length === 0) return <p className="text-sm text-muted">{labels.noChanges}</p>;
   return (
     <ul className="flex flex-col gap-1">
@@ -27,6 +51,7 @@ export function WorkflowChangeList({ before, after, locale, labels }: { before: 
           <span>
             {/* A name may mix scripts ("اعتماد – Code A"): isolated, so its direction never depends on the words around it. */}
             {labels[c.change]} <bdi>{c.name[locale]}</bdi>
+            {detail(c)}
           </span>
         </li>
       ))}

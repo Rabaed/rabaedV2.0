@@ -206,7 +206,7 @@ The part of a Library that holds Saved Fields and Option Lists.
 _Avoid_: Field management (the screen, not the thing)
 
 **Library**:
-A Company's own collection of Forms, its Field Library, its Trade and Scope lists, and its Workflows, Screens and Work Item Types, built or copied. A Project copies a Company's Trade and Scope lists when it is set up, and takes later changes only when its Project Admin pulls them in. A Project takes its Forms, Workflows and Screens from the Rabaed Defaults or from any of its Participants' Libraries, as the Project Admin chooses. Taking or copying one always makes an independent copy that notes where it came from: later changes to the original never reach it.
+A Company's own collection of Forms, its Field Library, its Trade and Scope lists, and its Workflows, Screens and Work Item Types, built or copied. A Project copies a Company's Trade and Scope lists when it is set up, and takes later changes only when its Project Admin pulls them in. A Project takes its Forms, Workflows and Screens from the Rabaed Defaults or from any of its Participants' Libraries, as the Project Admin chooses. Taking or copying one always makes an independent copy that keeps no link to the original (ADR 0016): later changes to the original never reach it.
 _Avoid_: Template library, catalogue
 
 **Company default**:
@@ -219,6 +219,10 @@ The versioned graph of Steps and Transitions, drawn in the visual workflow build
 **Version**:
 A published, unchangeable edition of a Form, a Workflow, a Screen or a Numbering Pattern. A Work Item stays on the Versions it started with (its Workflow Version pins the Screen Versions it uses; its number keeps the pattern it was numbered under); later Versions apply only to new Work Items.
 _Avoid_: Revision (reserved for Work Items), edition
+
+**Change Note**:
+What the author writes when publishing a Workflow Version: what changed and why. Required in the builder's publish dialog, kept with the Version and shown in its Versions history to the Workflow's authors only (RP-555).
+_Avoid_: release note, changelog
 
 **Stage**:
 A named phase that shows where a Work Item is overall, such as Drafts, Internal Review, Revised & Resubmitted, Pending Approval, Approved, Rejected or Cancelled. Each Module has one shared set of Stages (Rabaed Defaults the Project can rename or extend), and every Workflow places its Steps into them; a Stage can hold several Steps, such as Internal Review's Contractor Engineer and Contractor PM. Stages are the Kanban columns. A Participant sees its own Steps inside a Stage, with their counts; other Participants see the Stage only.

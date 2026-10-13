@@ -68,10 +68,16 @@ export type WorkflowMapInput = {
   position?: WorkItemMapPosition | null;
   /** The builder (RP-439): a band for every open Stage, an empty one too, to drop a Step into. */
   everyStage?: boolean;
+  /**
+   * The builder's bands as they stood (left-to-right units): kept while every Step still sits in its
+   * own Stage's band, so dropping a Step near a boundary never moves the bands (RP-555 review).
+   */
+  fixedBands?: readonly MapBand[];
 };
 
 const STEP_WIDTH = 200;
-const STEP_HEIGHT = 92;
+/** A Step card's least height, as the reference builder's (RP-555); a long name makes it taller. */
+const STEP_HEIGHT = 78;
 const END_WIDTH = 170;
 const END_HEIGHT = 46;
 const LANE = 310; // One column of Steps in a band: room between cards for a Transition's label.
@@ -84,7 +90,7 @@ const closed = new Set<StageCategory>(["closed_positive", "closed_negative", "ca
 const forward = new Set<WorkflowTransition["kind"]>(["send", "submit", "close", "cancel"]);
 
 /** Bands, nodes and edges of a Workflow on the canvas. */
-export function workflowMap({ definition, stages, dir, viewerRole, position, everyStage = false }: WorkflowMapInput): WorkflowMapModel {
+export function workflowMap({ definition, stages, dir, viewerRole, position, everyStage = false, fixedBands }: WorkflowMapInput): WorkflowMapModel {
   const stageOf = new Map(stages.map((s) => [s.key, s]));
   const terminal = isTerminal(stageOf);
   const colourOf = (s: WorkflowStep): StageKey => {
@@ -93,7 +99,7 @@ export function workflowMap({ definition, stages, dir, viewerRole, position, eve
   };
 
   const keys = bandKeys(definition, stages, terminal, everyStage);
-  const { boxes, bands, width, height } = placesEvery(definition) ? savedLayout(definition, keys, stages, terminal) : autoLayout(definition, keys, stages, terminal);
+  const { boxes, bands, width, height } = placesEvery(definition) ? savedLayout(definition, keys, stages, terminal, fixedBands) : autoLayout(definition, keys, stages, terminal);
 
   // Fold the other roles' Steps, in the order the Workflow first names each role.
   const folded = new Map<string, BaseRole>();
@@ -253,20 +259,107 @@ function autoLayout(definition: WorkflowDefinition, keys: readonly string[], sta
   return { boxes, bands, width: x + LANE, height };
 }
 
-function savedLayout(definition: WorkflowDefinition, keys: readonly string[], stages: readonly MapStage[], terminal: (s: WorkflowStep) => boolean): Layout {
+/**
+ * Bands around Steps placed by hand: a band ends halfway between its last Step and the next
+ * band's first (as the reference builder draws them, RP-555), or past its last Step when the
+ * next one starts before that; an empty band is one column wide.
+ */
+function savedLayout(
+  definition: WorkflowDefinition,
+  keys: readonly string[],
+  stages: readonly MapStage[],
+  terminal: (s: WorkflowStep) => boolean,
+  fixed?: readonly MapBand[],
+): Layout {
   const boxes: Layout["boxes"] = new Map(definition.steps.map((s) => [s.key, { ...definition.layout[s.key]!, ...size(terminal(s)) }]));
+  const bottom = Math.max(...[...boxes.values()].map((b) => b.y + b.height));
+  // The bands as they stood, while each Step's centre is still in its own Stage's band (the last one stretched to its Steps).
+  if (fixed && fixed.length === keys.length + 1 && keys.every((k, i) => fixed[i]!.key === k)) {
+    const kept = fixed.map((b, i) => {
+      if (i < fixed.length - 1) return b;
+      const right = Math.max(b.x + b.width, ...definition.steps.filter(terminal).map((st) => boxes.get(st.key)!.x + boxes.get(st.key)!.width + 40));
+      return { ...b, width: right - b.x };
+    });
+    const fits = definition.steps.every((st) => {
+      const b = boxes.get(st.key)!;
+      const band = kept[terminal(st) ? kept.length - 1 : keys.indexOf(st.stage)];
+      const centre = b.x + b.width / 2;
+      return band !== undefined && centre >= band.x && centre < band.x + band.width;
+    });
+    if (fits) {
+      const last = kept.at(-1)!;
+      return { boxes, bands: kept, width: last.x + last.width, height: Math.max(MIN_HEIGHT, bottom + 40) };
+    }
+  }
+  const groups = [...keys.map((key) => definition.steps.filter((s) => s.stage === key && !terminal(s))), definition.steps.filter(terminal)];
+  const left = (steps: WorkflowStep[]) => Math.min(...steps.map((s) => boxes.get(s.key)!.x));
+  const right = (steps: WorkflowStep[]) => Math.max(...steps.map((s) => boxes.get(s.key)!.x + boxes.get(s.key)!.width));
   const bands: MapBand[] = [];
   let x = 0;
-  const right = (steps: WorkflowStep[]) => Math.max(x, ...steps.map((s) => boxes.get(s.key)!.x + boxes.get(s.key)!.width));
-  for (const key of keys) {
-    const end = Math.max(x + LANE, right(definition.steps.filter((s) => s.stage === key && !terminal(s))) + 30);
-    bands.push(band(key, stages, x, end - x));
+  groups.forEach((steps, i) => {
+    const last = i === groups.length - 1;
+    const next = groups.slice(i + 1).find((g) => g.length > 0);
+    let end: number;
+    if (steps.length === 0) {
+      // An empty band takes at most a column, and stops short of the next Steps (shared with the empty ones beside it).
+      const empties = groups.slice(i).findIndex((g) => g.length > 0);
+      const room = next ? (left(next) - 20 - x) / Math.max(1, empties) : LANE;
+      end = x + Math.max(120, Math.min(LANE, room));
+    } else if (last || !next) end = Math.max(x + LANE / 2, right(steps) + 40);
+    else if (groups[i + 1]!.length === 0) end = Math.max(x + LANE / 2, right(steps) + 20);
+    else end = Math.max(x + LANE / 2, right(steps) + 20, Math.round((right(steps) + left(next)) / 20) * 10);
+    bands.push(last ? outcomeBand(x, end - x) : band(keys[i]!, stages, x, end - x));
     x = end;
-  }
-  const end = Math.max(x + LANE, right(definition.steps.filter(terminal)) + 30);
-  bands.push(outcomeBand(x, end - x));
-  const bottom = Math.max(...[...boxes.values()].map((b) => b.y + b.height));
+  });
+  const end = x;
   return { boxes, bands, width: end, height: Math.max(MIN_HEIGHT, bottom + 40) };
+}
+
+/**
+ * Auto-layout (RP-555, the reference's): each Step in its Stage's band, a column per step of the
+ * route from the Draft Step (Returns, Send Backs and Cancels don't count), the Steps of one column
+ * stacked around the middle, and the Ends in a column after the last band. Left-to-right units.
+ */
+export function arrangedLayout(definition: WorkflowDefinition, stages: readonly MapStage[], everyStage = true): WorkflowDefinition["layout"] {
+  const terminal = isTerminal(new Map(stages.map((st) => [st.key, st])));
+  const keys = bandKeys(definition, stages, terminal, everyStage);
+  const backwards = new Set<WorkflowTransition["kind"]>(["return", "send_back", "cancel"]);
+  const depth = new Map<string, number>();
+  const start = definition.steps.find((st) => stages.find((x) => x.key === st.stage)?.category === "draft" && !terminal(st)) ?? definition.steps[0];
+  if (start) depth.set(start.key, 0);
+  for (let frontier = start ? [start.key] : []; frontier.length > 0; ) {
+    const from = frontier.shift()!;
+    for (const t of definition.transitions) {
+      const to = definition.steps.find((st) => st.key === t.to);
+      if (t.from !== from || backwards.has(t.kind) || !to || terminal(to) || depth.has(t.to)) continue;
+      depth.set(t.to, depth.get(from)! + 1);
+      frontier.push(t.to);
+    }
+  }
+  const COLUMN = 260;
+  const MIDDLE = 330;
+  const layout: WorkflowDefinition["layout"] = {};
+  let x = 0;
+  for (const key of keys) {
+    const inBand = definition.steps.filter((st) => st.stage === key && !terminal(st));
+    const depths = [...new Set(inBand.map((st) => depth.get(st.key) ?? 99))].toSorted((a, b) => a - b);
+    if (depths.length === 0) {
+      x += 250;
+      continue;
+    }
+    const x0 = x + 25;
+    depths.forEach((d, i) => {
+      const column = inBand.filter((st) => (depth.get(st.key) ?? 99) === d);
+      column.forEach((st, j) => {
+        layout[st.key] = { x: x0 + i * COLUMN, y: Math.round((MIDDLE - (column.length - 1) * 145 + j * 290 - STEP_HEIGHT / 2) / 10) * 10 };
+      });
+    });
+    x = x0 + (depths.length - 1) * COLUMN + STEP_WIDTH + 25;
+  }
+  definition.steps.filter(terminal).forEach((st, j) => {
+    layout[st.key] = { x: x + 40, y: 70 + j * 160 };
+  });
+  return layout;
 }
 
 /** In Arabic the flow runs right to left: every x is mirrored. */

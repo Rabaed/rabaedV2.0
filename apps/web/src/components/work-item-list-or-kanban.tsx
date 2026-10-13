@@ -156,6 +156,7 @@ function useViewLabels(tableLabel: string, module: string): { list: WorkItemList
       moveItem: (subject) => t("board.moveItem", { subject }),
       moveTo: (stage) => t("board.moveTo", { stage }),
       dragging: t("board.dragging"),
+      showOnlyStep: (step) => t("board.showOnlyStep", { step }),
       mixed: t("board.mixed"),
       roleLane: (role, position) => t("board.roleLane", { role, position }),
       revision: (n) => t("board.revision", { n }),

@@ -12,6 +12,7 @@ import {
   isOpenStageCategory,
   listColumnLayout,
   listColumns,
+  ownStepCounts,
   parseActionForm,
   stageCategories,
   sortDirectionOf,
@@ -900,7 +901,7 @@ export function boardWorkItems(db: Db, memberId: string, scope: QueryScope, q: W
     const { stages, filters } = await stagesAndFilters(trx, scope, counts);
     const columns = stages.map((s) => {
       const lanes = boardLanes(cards.get(s.key) ?? []);
-      return { stageKey: s.key, shown: lanes.reduce((sum, l) => sum + l.count, 0), lanes };
+      return { stageKey: s.key, shown: lanes.reduce((sum, l) => sum + l.count, 0), steps: ownStepCounts(lanes), lanes };
     });
     const moves = await boardMoves(trx, [...cards.values()].flatMap((c) => c.map((i) => i.card)));
     return { stages, filters, columns, moves, layout: await readBoardLayout(trx, scope) };

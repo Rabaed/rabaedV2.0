@@ -69,6 +69,8 @@ export const workflowProblemCodes = [
   // Check 4 and 8 (workflowKindProblems)
   "return_crosses_participants",
   "submit_stays_inside",
+  // A Send goes inside one Participant: across, it is a Submit (RP-555)
+  "send_crosses_participants",
   "send_back_not_to_submitter",
   "send_back_sets_outcome",
   "cycle_without_way_back",
@@ -154,6 +156,7 @@ export function workflowPublishProblems(definition: WorkflowDefinition, context:
     ...stageProblems(input),
     ...outcomeProblems(input),
     ...builtCheckProblems(input),
+    ...sendProblems(input),
     ...cancelProblems(input),
     ...formEditingProblems(input),
     ...ruleProblems(input),
@@ -302,6 +305,21 @@ function builtCheckProblems({ steps, transitions, context }: CheckInput): FoundP
     ...kindProblems.map((p): FoundProblem => ({ code: p.code, transition: p.transition })),
     ...formProblems.map((p): FoundProblem => ({ code: "invalid_action_form", transition: p.transition, detail: p.key, reason: p.code })),
   ];
+}
+
+/**
+ * A Send moves the item inside one Participant (RP-555, as the reference builder checks
+ * it): one into another Participant's Step is a Submit. A Send into a closed Step is
+ * left to check 3 (ends_without_close).
+ */
+function sendProblems({ transitions, stepOf, isTerminal }: CheckInput): FoundProblem[] {
+  return transitions
+    .filter((t) => {
+      const [from, to] = [stepOf.get(t.from), stepOf.get(t.to)];
+      if (t.kind !== "send" || !from?.actor || !to?.actor || isTerminal(to)) return false;
+      return from.actor.role !== to.actor.role;
+    })
+    .map((t): FoundProblem => ({ code: "send_crosses_participants", transition: t.key }));
 }
 
 /** A Cancel leaves only the raiser's own Steps (its Draft Step's role), into a cancelled Stage, with no outcome. */
@@ -701,6 +719,10 @@ const messages: Record<WorkflowProblemCode, (names: Names) => BilingualText> = {
   submit_stays_inside: (names) => ({
     en: `${names.transition.en} is a Submit, so it must hand the item to another Participant.`,
     ar: `${names.transition.ar} تقديم، لذا يجب أن يسلّم العنصر إلى مشارك آخر.`,
+  }),
+  send_crosses_participants: (names) => ({
+    en: `${names.transition.en} is a Send but goes to another Participant: use Submit.`,
+    ar: `${names.transition.ar} إرسال لكنه يذهب إلى مشارك آخر: استخدم تقديم.`,
   }),
   send_back_not_to_submitter: (names) => ({
     en: `${names.transition.en} is a Send Back, so it must go back to the Participant that Submitted the item.`,

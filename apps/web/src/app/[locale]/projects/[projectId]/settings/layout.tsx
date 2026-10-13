@@ -26,6 +26,8 @@ export default async function ProjectSettingsLayout({
 
   return (
     <SettingsLayout
+      // A full-width page (the Workflow builder, RP-555) takes the whole content width, as the Library's builder does.
+      className="has-[[data-settings-wide]]:max-w-none"
       nav={<ProjectSettingsNav projectId={project.id} isProjectAdmin={project.isProjectAdmin} ownParticipantId={ownParticipant?.id} />}
     >
       {children}

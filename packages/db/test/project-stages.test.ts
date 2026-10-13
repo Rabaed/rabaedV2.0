@@ -1,8 +1,8 @@
-// Seam 2 for a Project's Stages (RP-428, WF-5; data-model.md stage, project_event).
-// A Project gets its own copy of the Rabaed Default Stages when it is created, and
-// of a Rabaed Default Stage added later; every Member of the Project reads them
+// Seam 2 for a Project's Stages (RP-428, WF-5; data-model.md stage, setup_event).
+// A Project gets its own copy of the Rabaed Default Stages when it is created; a
+// Rabaed Default Stage added later reaches only the Projects created afterwards; every Member of the Project reads them
 // and nobody else (project-rls.test.ts checks the table among every Project
-// table); each change by its Project Admin is audited in project_event, which is
+// table); each change by its Project Admin is audited in setup_event, which is
 // append-only and out of the app role's reach.
 import { randomInt, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
@@ -83,37 +83,46 @@ describe("a new Project's Stages", () => {
     expect(await stagesOf(projectId)).toEqual(defaults);
   });
 
-  it("gain a Rabaed Default Stage added later, kept where the Project has the key", async () => {
-    await migrator.query("begin");
+  // RP-528 review (owner, 2026-10-11): an edit of the Rabaed Default set reaches only the Projects created afterwards.
+  it("stay as they are when a Rabaed Default Stage is added later; a Project created afterwards gets it", async () => {
+    const key = `probe_${randomUUID().slice(0, 8).replaceAll("-", "")}`;
+    const before = await stagesOf(projectId, "inspections");
+    await migrator.query(
+      `insert into stage (owner_kind, module_key, key, name, category, sort)
+       values ('rabaed', 'inspections', $1, '{"en": "Probe", "ar": "تجربة"}', 'in_progress', 1)`,
+      [key],
+    );
     try {
-      await migrator.query(
-        `insert into stage (owner_kind, module_key, key, name, category, sort)
-         values ('rabaed', 'inspections', 'probe_stage', '{"en": "Probe", "ar": "تجربة"}', 'in_progress', 1)`,
+      expect(await stagesOf(projectId, "inspections")).toEqual(before);
+      const later = await withMember(app, creator, (trx) =>
+        sql<{ project_id: string }>`select project_id from app.create_project('{"en": "Later", "ar": "لاحق"}'::jsonb, 'STL', 'contractor')`
+          .execute(trx)
+          .then((r) => r.rows[0]!.project_id),
       );
-      // Other tests may have added Rabaed Default Stages to the Module (workflow-ownership-rls's): each is copied too.
-      expect(await stagesOf(projectId, "inspections")).toContainEqual({ key: "probe_stage", category: "in_progress" });
+      expect(await stagesOf(later, "inspections")).toContainEqual({ key, category: "in_progress" });
     } finally {
-      await migrator.query("rollback");
+      await migrator.query("delete from stage where key = $1", [key]);
     }
   });
 });
 
 describe("the Project Admin's Stage commands", () => {
-  it("are audited in project_event, which the app role can't read and nobody can change", async () => {
+  it("are audited in setup_event, which the app role can't read and nobody can change (scenario RP-450-1)", async () => {
     expect(
       await outcomeAs(creator, sql`select app.rename_stage(${projectId}::uuid, 'submittals', 'approved', '{"en": "Done", "ar": "تم"}'::jsonb) as outcome`),
     ).toBe("renamed");
-    const { rows } = await migrator.query("select type, actor_member_id, payload from project_event where project_id = $1", [projectId]);
+    const { rows } = await migrator.query("select kind, type, actor_member_id, payload from setup_event where project_id = $1", [projectId]);
     expect(rows).toEqual([
       {
+        kind: "stage",
         type: "stage_renamed",
         actor_member_id: creator,
         payload: { module: "submittals", key: "approved", from: { en: "Approved", ar: "معتمد" }, to: { en: "Done", ar: "تم" } },
       },
     ]);
-    await expect(withMember(app, creator, (trx) => sql`select * from project_event`.execute(trx))).rejects.toThrow(/permission denied/);
-    await expect(migrator.query("update project_event set payload = '{}' where project_id = $1", [projectId])).rejects.toThrow(/append-only/);
-    await expect(migrator.query("delete from project_event where project_id = $1", [projectId])).rejects.toThrow(/append-only/);
+    await expect(withMember(app, creator, (trx) => sql`select * from setup_event`.execute(trx))).rejects.toThrow(/permission denied/);
+    await expect(migrator.query("update setup_event set payload = '{}' where project_id = $1", [projectId])).rejects.toThrow(/append-only/);
+    await expect(migrator.query("delete from setup_event where project_id = $1", [projectId])).rejects.toThrow(/append-only/);
   });
 
   it("answer not_found to a Member who isn't the Project's Admin, and change nothing", async () => {

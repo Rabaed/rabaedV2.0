@@ -22,6 +22,7 @@
 
 /* React Flow's structural styles only (the Workflow canvas); its look is ours. */
 @import "@xyflow/react/dist/base.css";
+@import "./workflow-canvas.css";
 
 /* Let Tailwind see the classes used by ui components. */
 @source "../";

@@ -69,6 +69,8 @@ const allowedInText: string[] = [
   "demo environment", // the demo deploy (`DEMO_FLAG`), not a Project's Instance.
   "file store", // the S3 file store (`FILE_STORE_*`) that holds Documents' bytes.
   "both names", // a Member's or Company's name in English and Arabic.
+  "stage category", // a Stage's category (`stage.category`: draft, in progress, closed or cancelled), not a Form's.
+  "follow up actions", // an outcome's follow-up actions (`outcome.actions`, workflow-engine.md "Outcomes"), not a Watch.
   "filters", // the List's own filters ("Clear filters"; docs/data-model.md, List and Dashboard). "Filter" alone names a Visibility Dimension.
 ];
 
@@ -149,6 +151,11 @@ const allowedMessages: Record<string, string> = {
   "workItemViews.list.columns.stage": "owner's anatomy (2026-10-10): the List's \"Status\" column, for the Stage",
   "home.recentActivity": "owner's kit choice (2026-10-10): Home's \"Recent activity\" card, which merges the Projects' Activity Feeds; not the Schedule's Activities",
   "workItemViews.list.filtersApplied": "the filter panel's footer, \"1 filter applied\": the List's own filters, not a Visibility Dimension",
+  // The Workflow builder (RP-555, the owner's V2 reference).
+  "workflowBuilder.autoLayout": "owner's decision 13 (RP-555): the builder's \"Auto-layout\" arranges the Steps on the canvas, not a View",
+  "workflowBuilder.nameEn": "a Step's name in English (V2's \"Name (EN)\"), not a Work Item's Subject",
+  "workflowBuilder.nameAr": "a Step's name in Arabic (V2's \"Name (AR)\"), not a Work Item's Subject",
+  "workflowBuilder.changedParts.name": "a changed Step's name, in the publish dialog's list of changes, not a Subject",
 };
 
 const glossary = readFileSync(glossaryUrl, "utf8");

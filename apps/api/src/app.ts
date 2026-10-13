@@ -26,6 +26,7 @@ import { optionListRoutes } from "./routes/option-lists.ts";
 import { participantRoutes } from "./routes/participants.ts";
 import { projectRoutes } from "./routes/projects.ts";
 import { scopeRoutes } from "./routes/scopes.ts";
+import { companyDefaultRoutes } from "./routes/company-defaults.ts";
 import { screenRoutes } from "./routes/screens.ts";
 import { sessionRoutes } from "./routes/session.ts";
 import { outcomeRoutes } from "./routes/outcomes.ts";
@@ -34,6 +35,7 @@ import { visibilityRoutes } from "./routes/visibility.ts";
 import { watchRoutes } from "./routes/watch.ts";
 import { workItemRoutes } from "./routes/work-items.ts";
 import { workflowRoutes } from "./routes/workflows.ts";
+import { workflowSettingsRoutes } from "./routes/workflow-settings.ts";
 
 export const SESSION_COOKIE = "rabaed_session";
 
@@ -135,6 +137,7 @@ export async function buildApp({
   await app.register(scopeRoutes(context));
   await app.register(workItemRoutes(context));
   await app.register(workflowRoutes(context));
+  await app.register(workflowSettingsRoutes(context));
   await app.register(documentRoutes(context));
   await app.register(notificationRoutes(context));
   await app.register(notificationSettingsRoutes(context));
@@ -145,5 +148,6 @@ export async function buildApp({
   await app.register(stageRoutes(context));
   await app.register(outcomeRoutes(context));
   await app.register(screenRoutes(context));
+  await app.register(companyDefaultRoutes(context));
   return app;
 }

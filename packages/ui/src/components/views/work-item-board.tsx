@@ -54,6 +54,8 @@ export type WorkItemBoardLabels = {
   moveTo: (stage: string) => string;
   /** Announced while a card is dragged. */
   dragging: string;
+  /** A Step button of a column's header, which shows only that Step's cards, e.g. "Show only Contractor PM". */
+  showOnlyStep: (step: string) => string;
   /** The outcome of a cancelled item, as its badge; every other outcome is named by its Type's set (RP-429). */
   cancelled: string;
   /** The lane of closed items, which nobody holds (the anatomy's "Mixed"). */
@@ -140,6 +142,16 @@ export function WorkItemBoard({
   const [over, setOver] = useState<string | null>(null);
   const [collapsed, toggleLane] = useCollapsedLanes(storageKey);
   const places = placesOf(board.filters.locations);
+  // The Step each column is narrowed to by its header (RP-519), by Stage key.
+  const [onlyStep, setOnlyStep] = useState<Record<string, string | undefined>>({});
+  // A Step that leaves its column (its last card moved on) is cleared: coming back later, it doesn't narrow the column again.
+  useEffect(() => {
+    setOnlyStep((current) => {
+      const kept = Object.entries(current).filter(([stageKey, step]) => step !== undefined && columns.get(stageKey)?.steps.some((s) => s.key === step));
+      return kept.length === Object.keys(current).length ? current : Object.fromEntries(kept);
+    });
+    // `columns` is rebuilt from `board` on every render; the board is what changes.
+  }, [board]);
   return (
     <section
       aria-label={labels.board}
@@ -159,6 +171,12 @@ export function WorkItemBoard({
           const shown = column?.shown ?? 0;
           const closed = !isOpenStageCategory(stage.category);
           const headingId = `board-column-${stage.key}`;
+          // The header names the viewer's own Steps with their counts, so a lane need not repeat them; a Stage with only its own Step has nothing to add (RP-519).
+          const stepsShown = column !== undefined && column.steps.length > 0 && !(column.steps.length === 1 && column.steps[0]!.key === stage.key);
+          // The Step the column is narrowed to, while it is still one of the column's (a Step that left it narrows nothing).
+          const narrowedTo = stepsShown ? column!.steps.find((s) => s.key === onlyStep[stage.key]) : undefined;
+          // Narrowed, the header counts the cards it shows: that Step's, one of the viewer's own (V14).
+          const headerCount = narrowedTo ? narrowedTo.count : shown;
           const dropMove = dragging?.targets.get(stage.key);
           return (
             <li
@@ -199,9 +217,18 @@ export function WorkItemBoard({
                 <StageDot stage={stageColour(stage)} />
                 <span className="min-w-0 truncate">{stage.name[locale]}</span>
                 <span className="rounded-full bg-neutral-tint px-2 font-ui text-caption leading-5 font-semibold text-neutral-fg tabular-nums">
-                  {formatNumber(shown, locale)}
+                  {formatNumber(headerCount, locale)}
                 </span>
               </h2>
+              {stepsShown && (
+                <StepFilter
+                  steps={column!.steps}
+                  active={narrowedTo?.key}
+                  locale={locale}
+                  labels={labels}
+                  onChange={(key) => setOnlyStep((prev) => ({ ...prev, [stage.key]: key }))}
+                />
+              )}
               {closed && (
                 <div className="flex flex-col gap-1 border-b border-border-subtle px-4 py-2 text-caption text-muted">
                   <span>{labels.closedSince(formatNumber(closedColumnDays, locale))}</span>
@@ -222,7 +249,9 @@ export function WorkItemBoard({
                 {shown === 0 ? (
                   <p className="px-1 py-4 text-center text-caption text-muted">{labels.noItems}</p>
                 ) : (
-                  lanesInLocale(column!.lanes, locale).map((lane, index) => {
+                  lanesInLocale(column!.lanes, locale)
+                    .flatMap((lane) => laneAtStep(lane, narrowedTo?.key))
+                    .map((lane, index) => {
                     const key = `${stage.key}:${laneKey(lane)}`;
                     return (
                       <Lane
@@ -256,6 +285,65 @@ export function WorkItemBoard({
         })}
       </ol>
     </section>
+  );
+}
+
+/**
+ * A lane narrowed to one of the viewer's own Steps (RP-519): only its cards at that Step, or nothing.
+ * My own cards sit in role lanes (RP-410) or Step lanes; another Company's lane and the closed lane hold none.
+ */
+function laneAtStep(lane: WorkItemBoardLane, stepKey: string | undefined): WorkItemBoardLane[] {
+  if (stepKey === undefined) return [lane];
+  if (lane.kind !== "role" && lane.kind !== "step") return [];
+  const cards = lane.cards.filter((card) => card.with?.kind === "own" && card.with.step.key === stepKey);
+  return cards.length === 0 ? [] : [{ ...lane, cards, count: cards.length }];
+}
+
+/**
+ * A column header's Steps (RP-519, V14): the Steps of the Stage the viewer's own Participant holds
+ * items at, each with its count and a chevron. Choosing one narrows the column to that Step; choosing
+ * it again shows them all. Another Participant's Steps are never in the data.
+ */
+function StepFilter({
+  steps,
+  active,
+  locale,
+  labels,
+  onChange,
+}: {
+  steps: WorkItemBoardData["columns"][number]["steps"];
+  active: string | undefined;
+  locale: Locale;
+  labels: WorkItemBoardLabels;
+  onChange: (key: string | undefined) => void;
+}) {
+  return (
+    <ul className="flex flex-col border-b border-border-subtle px-2 py-1.5">
+      {steps.map((step, i) => {
+        const name = step.name[locale];
+        const on = active === step.key;
+        return (
+          <li key={step.key}>
+            <button
+              type="button"
+              aria-pressed={on}
+              aria-label={labels.showOnlyStep(name)}
+              onClick={() => onChange(on ? undefined : step.key)}
+              className={cn(
+                "flex h-8 w-full items-center gap-2 rounded-sm px-2 text-start text-caption font-semibold text-muted hover:bg-hover pointer-coarse:min-h-11",
+                on && "bg-hover text-text",
+                focusRing,
+              )}
+            >
+              <span aria-hidden="true" className={cn("size-1.5 shrink-0 rounded-full", stepDots[i % stepDots.length])} />
+              <span className="truncate">{name}</span>
+              <span className="font-normal tabular-nums">{formatNumber(step.count, locale)}</span>
+              <Icon name="chevron-down" size={16} className={cn("ms-auto shrink-0 transition-transform", !on && active !== undefined && "-rotate-90 rtl:rotate-90")} />
+            </button>
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 

@@ -28,7 +28,15 @@ Every `page.tsx` under `apps/web/src/app/[locale]/`. There is no `(app)` route g
 | `projects/[projectId]/settings/numbering/page.tsx` | `/projects/:projectId/settings/numbering` | Document Numbering settings |
 | `projects/[projectId]/settings/trades-locations/page.tsx` | `/projects/:projectId/settings/trades-locations` | Trades, Scopes, Sub-scopes and Locations |
 | `projects/[projectId]/settings/visibility/page.tsx` | `/projects/:projectId/settings/visibility` | What each Participant is granted |
+| `projects/[projectId]/settings/workflows/page.tsx` | `/projects/:projectId/settings/workflows` | Each Work Item Type's Workflow, Version, exceptions; duplicate, Library, versions (RP-441) |
 | `projects/[projectId]/settings/workflows/[workflowId]/page.tsx` | `/projects/:projectId/settings/workflows/:workflowId` | Workflow builder |
+| `projects/[projectId]/settings/workflows/[workflowId]/versions/[versionNo]/page.tsx` | `/projects/:projectId/settings/workflows/:workflowId/versions/:versionNo` | One published Version, read-only, with the Screens it pins |
+| `projects/[projectId]/settings/screens/page.tsx` | `/projects/:projectId/settings/screens` | The Project's Screens and their Versions |
+| `projects/[projectId]/settings/screens/[screenId]/page.tsx` | `/projects/:projectId/settings/screens/:screenId` | Screen editor: fields, save draft, publish, pins |
+| `projects/[projectId]/settings/stages/page.tsx` | `/projects/:projectId/settings/stages` | Stages per Module |
+| `projects/[projectId]/settings/outcomes/page.tsx` | `/projects/:projectId/settings/outcomes` | Outcomes per Work Item Type |
+| `library/page.tsx` | `/library` | My Company's Library: Workflows (RP-442) |
+| `library/workflows/[workflowId]/page.tsx` | `/library/workflows/:workflowId` | A Library Workflow: builder for the Authorized Person, map for others |
 | `work-items/[workItemId]/page.tsx` | `/work-items/:workItemId` | One item: Form, Steps, Links, Documents |
 | `work-items/[workItemId]/print/page.tsx` | `/work-items/:workItemId/print` | The item's final output laid out to print (Download) |
 | `work-items/[workItemId]/links/[linkId]/page.tsx` | `/work-items/:workItemId/links/:linkId` | Where a Link opens (the item, or only its number and subject) |
