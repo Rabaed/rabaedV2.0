@@ -69,6 +69,8 @@ export type SideEditorProps = {
   onPick: (selection: CanvasSelection) => void;
   /** Opens the chosen Screen's pop-up as the holder sees it. */
   onPreview: (transition: string) => void;
+  /** Just published (until the next edit): the counts are the published Version's, e.g. "4". */
+  publishedVersion?: string | null;
 };
 
 /** The danger-tint pill a delete takes, as the reference's. */
@@ -129,7 +131,7 @@ export function SideEditor(props: SideEditorProps) {
           </>,
         )}
       </ul>
-      <Heading>{labels.thisDraft}</Heading>
+      <Heading>{props.publishedVersion ? labels.publishedBadge(props.publishedVersion) : labels.thisDraft}</Heading>
       <p className="m-0 text-[13px]">
         {labels.counts({ steps, stepsN: formatNumber(steps, locale), transitions, transitionsN: formatNumber(transitions, locale) })}
       </p>

@@ -497,9 +497,18 @@ function Builder(props: WorkflowBuilderProps) {
         >
           <Icon name="arrow-left" size={16} />
         </a>
-        <h1 className={cn("m-0 min-w-0 truncate rounded-xs text-[17px] font-bold", focusRing)} title={name} tabIndex={0}>
-          {name}
-        </h1>
+        {/* The full name in a tooltip on hover and on keyboard focus, when the bar cuts it short. */}
+        <div className="relative min-w-0">
+          <h1 className={cn("peer m-0 truncate rounded-xs text-[17px] font-bold", focusRing)} tabIndex={0}>
+            {name}
+          </h1>
+          <span
+            role="tooltip"
+            className="pointer-events-none absolute start-0 top-full z-30 mt-1 hidden max-w-[min(32rem,80vw)] rounded-sm bg-inverse px-2 py-1 text-[12.5px] font-medium text-on-inverse shadow-md peer-hover:block peer-focus-visible:block"
+          >
+            {name}
+          </span>
+        </div>
         {publishedNow !== null ? (
           <span className="inline-flex h-[22px] shrink-0 items-center gap-1.5 rounded-md bg-success-tint px-2 text-[11.5px] font-bold whitespace-nowrap text-success-fg">
             <Icon name="check" size={12} />
@@ -697,6 +706,7 @@ function Builder(props: WorkflowBuilderProps) {
             onDelete={remove}
             onPick={(s) => show(s.kind === "step" ? { step: s.key } : { transition: s.key })}
             onPreview={(key) => setPopup({ transition: key, mode: "preview" })}
+            publishedVersion={publishedNow === null ? null : v(publishedNow)}
           />
         </aside>
 

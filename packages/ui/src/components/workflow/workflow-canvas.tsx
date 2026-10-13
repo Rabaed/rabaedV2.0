@@ -21,6 +21,7 @@ import {
   type Edge,
   type EdgeProps,
   type FinalConnectionState,
+  type FitViewOptions,
   type Node,
   type NodeProps,
 } from "@xyflow/react";
@@ -218,14 +219,16 @@ function Canvas({
     [labels, locale, dir, edit, stages, currentDetail, marks, onSelect, definition.transitions, errors, createsItems, arrowStyle],
   );
   const chosen = useMemo(() => new Set([...(selection ? [selection.key] : []), ...group]), [selection, group]);
+  // With the overview shown, the fit keeps the Steps (and a Return's loop under them) above it and the zoom controls.
+  const fitPadding = useMemo<NonNullable<FitViewOptions["padding"]>>(() => (minimap ? { top: "5%", bottom: "122px", left: "4%", right: "4%" } : FIT.padding), [minimap]);
   const box = useRef<HTMLDivElement>(null);
   /** The builder's fit (RP-555, as the reference's): every Step and End in view, the bands behind them. */
   const fit = useCallback(
     (duration = 0) => {
       const items = flow.getNodes().filter((n) => n.type !== "band");
-      if (items.length > 0) void flow.fitView({ nodes: items.map((n) => ({ id: n.id })), ...FIT, maxZoom: 1, duration });
+      if (items.length > 0) void flow.fitView({ nodes: items.map((n) => ({ id: n.id })), ...FIT, padding: fitPadding, maxZoom: 1, duration });
     },
-    [flow],
+    [flow, fitPadding],
   );
   const drawn = useMemo(() => toFlow(model, ctx, edit, chosen), [model, ctx, edit, chosen]);
   // Controlled, so the builder's edits redraw without resetting the view; React Flow moves a dragged node meanwhile.
@@ -393,7 +396,7 @@ function Canvas({
         edgeTypes={edgeTypes}
         // The builder fits its Steps (fit); a map to look at is fitted whole.
         fitView
-        fitViewOptions={edit ? FIT : { padding: 0.04 }}
+        fitViewOptions={edit ? { ...FIT, padding: fitPadding } : { padding: 0.04 }}
         onInit={edit ? () => fit() : undefined}
         // React Flow's MIT licence asks for no attribution; the builder's overview stays clear of it.
         proOptions={{ hideAttribution: true }}
@@ -465,16 +468,26 @@ function Canvas({
 function Bands({ model, ctx }: { model: WorkflowMapModel; ctx: Ctx }) {
   const [x, y, zoom] = useStore((s) => s.transform);
   const paneHeight = useStore((s) => s.height);
+  const paneWidth = useStore((s) => s.width);
   // Top to bottom of the canvas whatever the zoom (as the reference's, and never a strip with blank canvas
   // above or below), with the Stage names at the top of what is in view.
   const visibleTop = -y / zoom;
   const top = Math.min(-60, visibleTop - 4);
   const height = Math.max(model.height + 80, (paneHeight - y) / zoom + 4) - top;
   const labelTop = Math.max(16, visibleTop - top + 16);
+  // Edge to edge too: the first and last bands reach the canvas's sides (a small Workflow fitted at 1:1 leaves room).
+  const visibleLeft = -x / zoom;
+  const visibleRight = (paneWidth - x) / zoom;
+  const first = Math.min(...model.bands.map((b) => b.x));
+  const last = Math.max(...model.bands.map((b) => b.x + b.width));
   return (
     <div aria-hidden="true" className="pointer-events-none absolute start-0 top-0 z-0 origin-top-left" style={{ transform: `translate(${x}px, ${y}px) scale(${zoom})` }}>
       {model.bands.map((band) => {
         const colour = band.colour ? stageVars(band.colour) : null;
+        const left = band.x === first ? Math.min(band.x, visibleLeft - 4) : band.x;
+        const right = band.x + band.width === last ? Math.max(band.x + band.width, visibleRight + 4) : band.x + band.width;
+        // The name stays in view in the stretched band.
+        const inset = ctx.rtl ? Math.max(14, right - visibleRight + 14) : Math.max(14, visibleLeft - left + 14);
         const name = band.key === "outcome" ? ctx.labels.outcome : (band.name?.[ctx.locale] ?? band.key);
         return (
           <div
@@ -482,11 +495,11 @@ function Bands({ model, ctx }: { model: WorkflowMapModel; ctx: Ctx }) {
             className="absolute border-e border-dashed border-border-strong"
             // The canvas is laid out left to right (the model mirrors itself for Arabic).
             // eslint-disable-next-line rabaed/no-physical-direction
-            style={{ left: band.x, top, width: band.width, height, background: colour?.bg, opacity: 0.85 }}
+            style={{ left, top, width: right - left, height, background: colour?.bg, opacity: 0.85 }}
           >
             <span
               className="absolute text-[11px] font-extrabold tracking-[.05em] whitespace-nowrap uppercase"
-              style={{ top: labelTop, color: colour?.fg, ...(ctx.rtl ? { right: 14 } : { left: 14 }) }}
+              style={{ top: labelTop, color: colour?.fg, ...(ctx.rtl ? { right: inset } : { left: inset }) }}
             >
               {name}
             </span>
