@@ -1,4 +1,4 @@
-import { git, migrationsDir } from "./migrations.ts";
+import { git, type Migration, migrationNames, migrationSql } from "./migrations.ts";
 
 // Migration days (RP-560): `planning/migration-days.md` reserves a day of
 // migration timestamps (`yyyymmdd`) for one issue or spec, one line per day:
@@ -20,15 +20,31 @@ export interface Reservation {
 
 const issues = (text: string) => text.match(/\bRP-\d+\b/g) ?? [];
 
-/** The reservations in the file's text: each line that starts with a day, as a table row or a plain line. */
+/** The reservations in the file's text: each table row that starts with a day. */
 export function parseReservations(text: string): Reservation[] {
-  const row = /^\|?\s*(\d{8})\s*\|([^|]*)\|([^|]*)\|([^|]*?)\|?\s*$/;
+  const row = /^\|\s*(\d{8})\s*\|([^|]*)\|([^|]*)\|([^|]*)\|\s*$/;
   return text.split(/\r?\n/).flatMap((line) => {
     const match = row.exec(line);
     if (!match) return [];
     const [, day = "", owner = "", lane = "", purpose = ""] = match;
     return [{ day, owner: owner.trim(), lane: lane.trim(), purpose: purpose.trim() }];
   });
+}
+
+/** A reservation as the file's row says it, for a message. */
+export const formatReservation = ({ day, owner, lane, purpose }: Reservation): string => `${day} | ${owner} | ${lane} | ${purpose}`;
+
+/** A migration on a day reserved for another issue, with that reservation. */
+export interface RefusedMigration {
+  name: string;
+  reservation: Reservation;
+}
+
+/** What the day check finds in a branch's new migrations. */
+export interface DayProblems {
+  refused: RefusedMigration[];
+  /** Migrations on a day nobody reserved. */
+  unreserved: string[];
 }
 
 /**
@@ -63,8 +79,8 @@ function headerIssue(sql: string): string | null {
  * header's first line, so an integration branch's migrations pass on their
  * issues' days.
  */
-export function dayProblems(added: { name: string; sql: string }[], reservations: Reservation[], branch: string | null): { refused: { name: string; reservation: Reservation }[]; unreserved: string[] } {
-  const refused: { name: string; reservation: Reservation }[] = [];
+export function dayProblems(added: Migration[], reservations: Reservation[], branch: string | null): DayProblems {
+  const refused: RefusedMigration[] = [];
   const unreserved: string[] = [];
   for (const { name, sql } of added) {
     const onDay = reservations.filter((r) => r.day === name.slice(0, 8));
@@ -84,15 +100,11 @@ function fileAt(repo: string, commit: string, path: string): string {
 }
 
 /** The day check for the migrations `head` adds over `base`, with `base`'s reservations and `head`'s for the days `base` doesn't reserve. */
-export function migrationDays(repo: string, base: string, head: string, branch: string | null): ReturnType<typeof dayProblems> {
-  const names = (commit: string) =>
-    git(repo, "ls-tree", "--name-only", `${commit}:${migrationsDir}`)
-      .split("\n")
-      .filter((name) => name.endsWith(".sql"));
-  const onBase = new Set(names(base));
-  const added = names(head)
+export function migrationDays(repo: string, base: string, head: string, branch: string | null): DayProblems {
+  const onBase = new Set(migrationNames(repo, base));
+  const added = migrationNames(repo, head)
     .filter((name) => !onBase.has(name))
-    .map((name) => ({ name, sql: git(repo, "show", `${head}:${migrationsDir}/${name}`) }));
+    .map((name) => ({ name, sql: migrationSql(repo, head, name) }));
   const reservations = combineReservations(parseReservations(fileAt(repo, base, reservationsFile)), parseReservations(fileAt(repo, head, reservationsFile)));
   return dayProblems(added, reservations, branch);
 }

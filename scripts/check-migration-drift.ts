@@ -1,5 +1,5 @@
 import { resolve } from "node:path";
-import { git, migrationsDir } from "./migrations.ts";
+import { git, type Migration, migrationBlobs, migrationNames, migrationSql, migrationsDir } from "./migrations.ts";
 
 // Three checks on the migrations a pull request adds (RP-337, from the RP-311 retro):
 //
@@ -27,11 +27,6 @@ import { git, migrationsDir } from "./migrations.ts";
 //        node scripts/check-migration-drift.ts --merge-group <group base> <group head>
 //          (the merge queue, RP-398: the group's base is main plus the entries
 //          ahead; its head merges the PR's head into it, see mergeGroupSides)
-
-export interface Migration {
-  name: string;
-  sql: string;
-}
 
 export interface BranchMigration extends Migration {
   /** The migrations in the tree when the branch added this one: what its author could build on. */
@@ -206,17 +201,6 @@ export function staleOverloads(main: Migration[], branch: BranchMigration[]): St
   return stale;
 }
 
-/** The migrations in a commit's tree, each with its content's blob id. */
-const migrationBlobs = (repo: string, commit: string) =>
-  new Map(
-    git(repo, "ls-tree", `${commit}:${migrationsDir}`)
-      .split("\n")
-      .map((line) => line.split("\t") as [string, string])
-      .filter(([, name]) => name?.endsWith(".sql"))
-      .map(([info, name]) => [name, info.split(" ")[2] as string]),
-  );
-const sqlAt = (repo: string, commit: string, name: string) => git(repo, "show", `${commit}:${migrationsDir}/${name}`);
-
 /** One file a commit adds or writes, in `head`'s first-parent history; `index` orders them, oldest first. */
 interface FileWrite {
   index: number;
@@ -278,7 +262,7 @@ function firstAdded(repo: string, head: string): (name: string) => string | unde
 export function migrationProblems(repo: string, base: string, head: string): { drift: Drift[]; overloads: StaleOverload[]; duplicates: string[][] } {
   const baseBlobs = migrationBlobs(repo, base);
   const onBase = [...baseBlobs.keys()];
-  const onHead = [...migrationBlobs(repo, head).keys()];
+  const onHead = migrationNames(repo, head);
   const added = onHead.filter((name) => !onBase.includes(name));
   const addedInCommit = firstAdded(repo, head);
   const branch = added.map((name) => {
@@ -287,9 +271,9 @@ export function migrationProblems(repo: string, base: string, head: string): { d
     const tree = migrationBlobs(repo, addedIn);
     const blobs = new Set(tree.values());
     const seen = [...new Set([...tree.keys(), ...onBase.filter((m) => blobs.has(baseBlobs.get(m) ?? ""))])];
-    return { name, sql: sqlAt(repo, head, name), seen };
+    return { name, sql: migrationSql(repo, head, name), seen };
   });
-  const main = onBase.map((name) => ({ name, sql: sqlAt(repo, base, name) }));
+  const main = onBase.map((name) => ({ name, sql: migrationSql(repo, base, name) }));
   return {
     drift: redefinitionDrift(main, branch),
     overloads: staleOverloads(main, branch),

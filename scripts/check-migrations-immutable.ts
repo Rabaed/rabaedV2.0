@@ -1,5 +1,5 @@
 import { resolve } from "node:path";
-import { git, migrationsDir } from "./migrations.ts";
+import { git, migrationNames, migrationsDir } from "./migrations.ts";
 
 // A migration that already exists on the base branch is never edited, renamed
 // or deleted: databases that ran it would differ from a fresh one. A change goes
@@ -35,10 +35,7 @@ export function alteredMigrations(repo: string, base: string, head: string = "HE
  * re-defines can bring back an outdated copy (RP-311's take_transition, RP-342).
  */
 export function misorderedMigrations(repo: string, base: string, head: string = "HEAD"): { path: string; latest: string }[] {
-  const names = git(repo, "ls-tree", "--name-only", `${base}:${migrationsDir}`)
-    .split("\n")
-    .filter((name) => name.endsWith(".sql"));
-  const latest = names.reduce((a, b) => (a > b ? a : b), "");
+  const latest = migrationNames(repo, base).reduce((a, b) => (a > b ? a : b), "");
   return changedMigrations(repo, base, head)
     .filter(({ status, path }) => status === "A" && path.slice(path.lastIndexOf("/") + 1) < latest)
     .map(({ path }) => ({ path, latest }));

@@ -11,7 +11,7 @@ const reservations = parseReservations(
     "| Day | Issue | Lane | Note |",
     "| --- | --- | --- | --- |",
     "| 20270117 | spec RP-525 | B | review fixes |",
-    "20270118 | RP-437 | B | Rabaed Default Workflows",
+    "| 20270118 | RP-437 | B | Rabaed Default Workflows |",
     "| 20270119 | RP-514 | B | Screen answers |",
   ].join("\n"),
 );
@@ -19,7 +19,7 @@ const reservations = parseReservations(
 const migration = (name: string, sql = "select 1;\n") => ({ name, sql });
 
 describe("parseReservations", () => {
-  it("reads a line per day, in a table or as plain lines, and skips everything else", () => {
+  it("reads a table row per day, and skips everything else", () => {
     expect(reservations).toEqual([
       { day: "20270117", owner: "spec RP-525", lane: "B", purpose: "review fixes" },
       { day: "20270118", owner: "RP-437", lane: "B", purpose: "Rabaed Default Workflows" },

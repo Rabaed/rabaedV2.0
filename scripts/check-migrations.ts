@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
-import { branchIssue, migrationDays, reservationsFile } from "./check-migrations-days.ts";
+import { branchIssue, formatReservation, migrationDays, reservationsFile } from "./check-migrations-days.ts";
 import { git } from "./migrations.ts";
 
 // `pnpm check:migrations` (RP-384): the CI drift check, run before a push or
@@ -22,10 +22,11 @@ const checked = spawnSync(process.execPath, [join(import.meta.dirname, "check-mi
 const branch = git(repo, "rev-parse", "--abbrev-ref", "HEAD").trim();
 const { refused, unreserved } = migrationDays(repo, "origin/main", "HEAD", branchIssue(branch));
 for (const { name, reservation } of refused) {
-  console.error(`${name} is on a day ${reservationsFile} reserves for another issue: ${reservation.day} | ${reservation.owner} | ${reservation.lane} | ${reservation.purpose}`);
+  console.error(`${name} is on a day ${reservationsFile} reserves for another issue: ${formatReservation(reservation)}`);
   console.error("  Move it to a day reserved for this issue (its branch name or its header names the issue), or ask the planning session for one.");
 }
 if (unreserved.length > 0) console.error(`Warning: no day in ${reservationsFile} is reserved for ${unreserved.join(", ")}. Ask the planning session to reserve it, so another lane doesn't take it.`);
 if (refused.length === 0) console.log("Every new migration is on a day reserved for its issue, or on an unreserved one.");
 
-process.exit(checked.status !== 0 ? (checked.status ?? 1) : refused.length > 0 ? 1 : 0);
+if (checked.status !== 0) process.exit(checked.status ?? 1);
+if (refused.length > 0) process.exit(1);
