@@ -21,9 +21,8 @@ const REVIEWED: Record<string, string> = {
     "The item itself, read column by column; each granted column passed the grant rule (grants.test.ts). created_at, data and field_times are not granted (RP-309, RP-392).",
   work_item_access:
     "Which Participants have access, by random id, and why (raised, handling, oversight by Project role, V2); names come only through app.work_item_companies. `since` is not granted: the raiser's is the Draft's start (RP-309).",
-  work_item_dimension_value:
-    "The item's Visibility values (Trade, Location), shown on the item; app.sees_work_item already requires the viewer's grants to cover each one.",
-  work_item_scope: "The item's Scopes, shown on the item; every Project Member reads the Project's Scopes anyway.",
+  // work_item_dimension_value and work_item_scope left this shape in RP-582: while a Sent Back item
+  // has its snapshot (work_item.built_ins_as_arrived), their rows as they are now are its holder's only.
   document:
     "The item's Documents (V19 arrivals apply). created_at and confirmed_at are not granted: they keep the real time of a Document added during the Draft; app.document_times gives the upload time, no earlier than the Creation Date once numbered (RP-399).",
   work_item_link:

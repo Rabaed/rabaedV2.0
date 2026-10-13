@@ -423,11 +423,12 @@ function visibleItems(trx: Trx, where: RawBuilder<unknown>) {
     cross join lateral app.step_as_seen(w.id) seen
     join work_item_type t on t.id = w.work_item_type_id
     join stage st on st.project_id = w.project_id and st.module_key = t.module_key and st.key = seen.stage_key
+    -- Trade and Location as the viewer may know them: as at a Send Back for everyone but the holder (RP-582, V19).
     join visibility_dimension td on td.project_id = w.project_id and td.kind = 'trade'
-    join work_item_dimension_value tdv on tdv.work_item_id = w.id and tdv.dimension_id = td.id
+    join work_item_dimension_value_seen tdv on tdv.work_item_id = w.id and tdv.dimension_id = td.id
     join dimension_value tv on tv.id = tdv.dimension_value_id
     join visibility_dimension ld on ld.project_id = w.project_id and ld.kind = 'location'
-    left join work_item_dimension_value ldv on ldv.work_item_id = w.id and ldv.dimension_id = ld.id
+    left join work_item_dimension_value_seen ldv on ldv.work_item_id = w.id and ldv.dimension_id = ld.id
     left join dimension_value lv on lv.id = ldv.dimension_value_id
     where ${where}
     order by seen.entered_at desc, w.id desc
@@ -664,10 +665,11 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
 
 /** A visible item's Scopes and Sub-scopes, each Scope before its Sub-scopes. */
 async function itemScopes(trx: Trx, workItemId: string): Promise<WorkItemDetail["scopes"]> {
-  // work_item_scope shows only a visible item's; every Project Member reads the Project's Scopes.
+  // work_item_scope_seen shows only a visible item's, as at a Send Back for everyone but the holder (RP-582);
+  // every Project Member reads the Project's Scopes.
   const { rows } = await sql<{ id: string; parent_id: string | null; name: BilingualText }>`
     select s.id, s.parent_id, s.name
-    from work_item_scope ws
+    from work_item_scope_seen ws
     join scope s on s.id = ws.scope_id
     left join scope parent on parent.id = s.parent_id
     where ws.work_item_id = ${workItemId}
