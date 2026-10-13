@@ -69,6 +69,14 @@ create or replace function app.check_work_item_built_ins(
     end
   $$;
 
--- The api reads it for the item's Form (fixedByNumber); the check stays internal.
-revoke all on function app.number_fixed_fields(uuid) from public;
-grant execute on function app.number_fixed_fields(uuid) to rabaed_app;
+-- The api reads it for the item's Form (fixedByNumber), only for an item the
+-- caller sees (V1); the helper and the check stay internal.
+create function app.work_item_fixed_fields(p_work_item_id uuid) returns text[]
+  language sql stable security definer
+  set search_path = pg_catalog, public
+  as $$
+    select case when app.sees_work_item(p_work_item_id) then app.number_fixed_fields(p_work_item_id) else '{}'::text[] end
+  $$;
+
+revoke all on function app.number_fixed_fields(uuid), app.work_item_fixed_fields(uuid) from public;
+grant execute on function app.work_item_fixed_fields(uuid) to rabaed_app;

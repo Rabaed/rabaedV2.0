@@ -608,7 +608,7 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
       select field_key, label from app.revision_dropped_fields(${workItemId}::uuid)
     `.execute(trx);
     const { rows: fixed } = await sql<{ fields: ("trade" | "location")[] }>`
-      select app.number_fixed_fields(${workItemId}::uuid) as fields
+      select app.work_item_fixed_fields(${workItemId}::uuid) as fields
     `.execute(trx);
     const { rows: auto } = await sql<{ autosave: boolean }>`select app.answers_autosave(${workItemId}::uuid) as autosave`.execute(trx);
     const { rows: source } = await sql<{ work_item_id: string; document_number: string | null; subject: string }>`

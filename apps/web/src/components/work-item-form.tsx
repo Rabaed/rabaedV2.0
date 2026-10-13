@@ -214,6 +214,7 @@ export function WorkItemFormProvider({
           not_editable: t("notEditable"),
           outside_visibility: tItems("outsideVisibility"),
           value_not_found: t("valueNotFound"),
+          number_part_fixed: t("fixedByNumber"),
         };
         setMessage(messages[body.error ?? ""] ?? t("unavailable"));
         if (res.status === 404 || res.status === 409 || body.error === "value_not_found") router.refresh();
