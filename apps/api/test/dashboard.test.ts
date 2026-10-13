@@ -236,16 +236,21 @@ describe("scenario 65 and every number equals its List", () => {
   });
 
   it("opens, from every number, the List of exactly that many chains", async () => {
+    // One List read per figure, for four readers. Read one after another they took
+    // about 6 s alone and 19 s in the full seam 1 run (RP-565), where the database
+    // already holds the earlier files' items, so it needed a 60 s limit; read at
+    // once, the app's pool serves them side by side, and the seam default does.
     for (const by of [tower.c1Pm, tower.c1Engineer, tower.k1Manager, c2Engineer]) {
       const d = await dashboard(by, tower.projectId);
-      for (const [name, f] of figures(d)) {
-        const ids = await listed(by, tower.projectId, f.query);
-        expect(ids.length, name).toBe(f.count);
-        expect(new Set(ids).size, name).toBe(ids.length);
-      }
+      await Promise.all(
+        figures(d).map(async ([name, f]) => {
+          const ids = await listed(by, tower.projectId, f.query);
+          expect(ids.length, name).toBe(f.count);
+          expect(new Set(ids).size, name).toBe(ids.length);
+        }),
+      );
     }
-    // One List read per figure, for four readers: about 6 s alone, over 20 s with every seam suite at once.
-  }, 60_000);
+  });
 });
 
 describe("scenario 64: the Revision line while C1's Revision is a Draft", () => {

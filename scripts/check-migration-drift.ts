@@ -1,5 +1,5 @@
 import { resolve } from "node:path";
-import { git, migrationsDir } from "./migrations.ts";
+import { git, type Migration, migrationBlobs, migrationNames, migrationSql, migrationsDir } from "./migrations.ts";
 
 // Three checks on the migrations a pull request adds (RP-337, from the RP-311 retro):
 //
@@ -27,11 +27,6 @@ import { git, migrationsDir } from "./migrations.ts";
 //        node scripts/check-migration-drift.ts --merge-group <group base> <group head>
 //          (the merge queue, RP-398: the group's base is main plus the entries
 //          ahead; its head merges the PR's head into it, see mergeGroupSides)
-
-export interface Migration {
-  name: string;
-  sql: string;
-}
 
 export interface BranchMigration extends Migration {
   /** The migrations in the tree when the branch added this one: what its author could build on. */
@@ -206,29 +201,79 @@ export function staleOverloads(main: Migration[], branch: BranchMigration[]): St
   return stale;
 }
 
-const migrationsAt = (repo: string, commit: string) =>
-  git(repo, "ls-tree", "--name-only", `${commit}:${migrationsDir}`)
-    .split("\n")
-    .filter((name) => name.endsWith(".sql"));
-const sqlAt = (repo: string, commit: string, name: string) => git(repo, "show", `${commit}:${migrationsDir}/${name}`);
+/** One file a commit adds or writes, in `head`'s first-parent history; `index` orders them, oldest first. */
+interface FileWrite {
+  index: number;
+  commit: string;
+  path: string;
+  blob: string;
+}
+
+/**
+ * The commit that first added each migration on `head`'s first-parent history,
+ * by name. A merge's diff is against its first parent, so a migration a merge
+ * brings in counts as added there. A migration is judged by the commit that
+ * added its file, not by its latest edit (an edit after merging main, even of a
+ * comment, doesn't make an old body new), and a rename is followed back by
+ * content: the blob the file was added with is traced to the earliest commit
+ * that wrote it under any name, and that file to the commit that added it,
+ * until that stops moving. Matching content, not `git log --follow`: --follow
+ * takes one redefinition of a function for a rename of another.
+ */
+function firstAdded(repo: string, head: string): (name: string) => string | undefined {
+  const log = git(repo, "log", "--first-parent", "--diff-merges=first-parent", "--no-renames", "--diff-filter=AM", "--raw", "--no-abbrev", "--reverse", "--format=commit %H", head, "--", `${migrationsDir}/`);
+  const pathAdded = new Map<string, FileWrite>();
+  const blobWritten = new Map<string, FileWrite>();
+  let commit = "";
+  let index = 0;
+  for (const line of log.split("\n")) {
+    if (line.startsWith("commit ")) commit = line.slice("commit ".length);
+    if (!line.startsWith(":")) continue;
+    // `:<old mode> <new mode> <old blob> <new blob> <status>\t<path>`
+    const [info = "", path = ""] = line.split("\t");
+    const [, , , blob = "", status = ""] = info.split(" ");
+    const write = { index: index++, commit, path, blob };
+    if (status === "A" && !pathAdded.has(path)) pathAdded.set(path, write);
+    if (!blobWritten.has(blob)) blobWritten.set(blob, write);
+  }
+  return (name) => {
+    let added = pathAdded.get(`${migrationsDir}/${name}`);
+    while (added) {
+      const written = blobWritten.get(added.blob);
+      const earlier = written && written.index < added.index ? pathAdded.get(written.path) : undefined;
+      if (!earlier || earlier.index >= added.index) return added.commit;
+      added = earlier;
+    }
+    return undefined;
+  };
+}
 
 /**
  * The three checks for a pull request from `head` into `base`. Its migrations
  * are those in `head` and not in `base`; each saw the migrations in the tree of
- * the commit that added it on the branch's first-parent history.
+ * the commit that first added its file on the branch's first-parent history,
+ * following renames back by content (RP-560: renaming a migration after its
+ * timestamp clashed, or editing it after merging main, doesn't make an old body
+ * new; see firstAdded). A migration on `base` counts as seen when that
+ * tree held it under its name or, renamed since, its content: a branch that
+ * rebuilt a function from another branch's migration saw it, even when that
+ * branch renamed the file before it merged (PR #180, RP-437).
  */
 export function migrationProblems(repo: string, base: string, head: string): { drift: Drift[]; overloads: StaleOverload[]; duplicates: string[][] } {
-  const onBase = migrationsAt(repo, base);
-  const onHead = migrationsAt(repo, head);
+  const baseBlobs = migrationBlobs(repo, base);
+  const onBase = [...baseBlobs.keys()];
+  const onHead = migrationNames(repo, head);
   const added = onHead.filter((name) => !onBase.includes(name));
+  const addedInCommit = firstAdded(repo, head);
   const branch = added.map((name) => {
-    // A merge's diff is against its first parent, so a migration a merge brings in counts as added there.
-    const log = git(repo, "log", "--first-parent", "--diff-merges=first-parent", "--diff-filter=A", "--no-patch", "-1", "--format=%H", head, "--", `${migrationsDir}/${name}`);
-    const addedIn = log.trim();
+    const addedIn = addedInCommit(name);
     if (!addedIn) throw new Error(`No commit on ${head}'s first-parent history adds ${name}`);
-    return { name, sql: sqlAt(repo, head, name), seen: migrationsAt(repo, addedIn) };
+    const tree = migrationBlobs(repo, addedIn);
+    const blobs = new Set(tree.values());
+    const seen = [...new Set([...tree.keys(), ...onBase.filter((m) => blobs.has(baseBlobs.get(m) ?? ""))])];
+    return { name, sql: migrationSql(repo, head, name), seen };
   });
-  const main = onBase.map((name) => ({ name, sql: sqlAt(repo, base, name) }));
+  const main = onBase.map((name) => ({ name, sql: migrationSql(repo, base, name) }));
   return {
     drift: redefinitionDrift(main, branch),
     overloads: staleOverloads(main, branch),

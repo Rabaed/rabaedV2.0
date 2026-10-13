@@ -51,6 +51,25 @@ describe("check-migrations", () => {
     expect(check().status).toBe(0);
   });
 
+  it("refuses a migration on a day planning/migration-days.md reserves for another ticket, naming the reservation", () => {
+    commit(origin, { "planning/migration-days.md": "| 20261212 | RP-525 | B | review fixes |\n" }, "reserve");
+    git(clone, "switch", "-q", "-c", "RP-410-card-layout");
+    commit(clone, { [`${dir}/20261212000100_card_layout.sql`]: "-- Card view layout (RP-410).\nselect 3;\n" }, "branch");
+    const result = check();
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("20261212000100_card_layout.sql");
+    expect(result.stderr).toContain("20261212 | RP-525 | B | review fixes");
+  });
+
+  it("passes a migration on its own ticket's day, and warns of an unreserved one", () => {
+    commit(origin, { "planning/migration-days.md": "| 20261212 | RP-525 | B | review fixes |\n" }, "reserve");
+    git(clone, "switch", "-q", "-c", "RP-525-review-fixes");
+    commit(clone, { [`${dir}/20261212000000_review_fixes.sql`]: "select 3;\n", [`${dir}/20261213000000_unplanned.sql`]: "select 4;\n" }, "branch");
+    const result = check();
+    expect(result.status).toBe(0);
+    expect(result.stderr).toContain("20261213000000_unplanned.sql");
+  });
+
   it("passes on main itself", () => {
     git(clone, "switch", "-q", "main");
     expect(check().status).toBe(0);
