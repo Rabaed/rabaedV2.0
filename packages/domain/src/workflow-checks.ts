@@ -87,6 +87,8 @@ export const workflowProblemCodes = [
   // Who edits the raiser's Form (ADR 0019, RP-514)
   "form_edited_after_submit",
   "drafts_visible_to_not_on_draft",
+  // What the raiser may change after a Send Back (ADR 0021, RP-580)
+  "edit_form_not_after_send_back",
   // Check 6, and what rules and actions name
   "unknown_field",
   "unknown_attribute",
@@ -360,12 +362,14 @@ export function stepEditsForm(
  * Nobody edits the raiser's Form at or after a Submit (ADR 0019), but where a Send Back
  * leads (ADR 0014, as built RP-309): a Step reached from a Submit's target without a
  * Send Back may not edit it. Back at the raiser by a Send Back, its Steps may, until the
- * next Submit. "Drafts visible to" is set on the Draft Step only.
+ * next Submit, when the Step the Send Back led to says "Edit the Form" (ADR 0021): only a
+ * raiser's Step a Send Back leads to says it. "Drafts visible to" is set on the Draft Step only.
  */
 function formEditingProblems({ steps, transitions, context, categoryOf }: CheckInput): FoundProblem[] {
   const forward = transitions.filter((t) => t.kind !== "send_back");
   const afterSubmit = new Set<string>();
   for (const t of transitions.filter((t) => t.kind === "submit")) for (const key of reachable(forward, t.to)) afterSubmit.add(key);
+  const sentBackTo = sendBackSteps({ steps, transitions }, context.stages);
   return [
     ...steps
       .filter((s) => afterSubmit.has(s.key) && stepEditsForm({ steps }, s, context.stages))
@@ -373,7 +377,34 @@ function formEditingProblems({ steps, transitions, context, categoryOf }: CheckI
     ...steps
       .filter((s) => s.draftsVisibleTo !== undefined && categoryOf(s.stage) !== "draft")
       .map((s): FoundProblem => ({ code: "drafts_visible_to_not_on_draft", step: s.key })),
+    ...steps
+      .filter((s) => s.afterSendBack === "edit_form" && !sentBackTo.has(s.key))
+      .map((s): FoundProblem => ({ code: "edit_form_not_after_send_back", step: s.key })),
   ];
+}
+
+/**
+ * The raiser's Steps a Send Back leads to (ADR 0021): those of the Draft Step's role that
+ * a `send_back` Transition goes to. "After a Send Back" is set on these only.
+ */
+export function sendBackSteps(definition: Pick<WorkflowDefinition, "steps" | "transitions">, stages: WorkflowPublishContext["stages"]): Set<string> {
+  const draftStages = new Set(stages.filter((s) => s.category === "draft").map((s) => s.key));
+  const raiser = definition.steps.find((s) => draftStages.has(s.stage))?.actor?.role;
+  const targets = new Set(definition.transitions.filter((t) => t.kind === "send_back").map((t) => t.to));
+  return new Set(definition.steps.filter((s) => targets.has(s.key) && raiser !== undefined && s.actor?.role === raiser).map((s) => s.key));
+}
+
+/**
+ * `definition` with "After a Send Back" set to `comment` where it is left out on a Step a
+ * Send Back leads to (ADR 0021): every saved Version gets it, so only a Version published
+ * before it reads as `edit_form` (null in the database, app.can_save_answers).
+ */
+export function withAfterSendBackDefault(definition: WorkflowDefinition, stages: WorkflowPublishContext["stages"]): WorkflowDefinition {
+  const reached = sendBackSteps(definition, stages);
+  return {
+    ...definition,
+    steps: definition.steps.map((s) => (reached.has(s.key) && s.afterSendBack === undefined ? { ...s, afterSendBack: "comment" } : s)),
+  };
 }
 
 /** The item attributes a rule may read (`attr`, §4). */
@@ -771,6 +802,10 @@ const messages: Record<WorkflowProblemCode, (names: Names) => BilingualText> = {
   drafts_visible_to_not_on_draft: (names) => ({
     en: `${names.step.en} sets who reads a Draft, which only the Draft Step does.`,
     ar: `${names.step.ar} تحدد من يقرأ المسودة، ولا يحدد ذلك إلا خطوة المسودة.`,
+  }),
+  edit_form_not_after_send_back: (names) => ({
+    en: `${names.step.en} opens the Form after a Send Back, but no Send Back leads to it. Only the raiser's Steps a Send Back leads to may.`,
+    ar: `${names.step.ar} تفتح النموذج بعد الإرجاع إلى المقدّم، لكن لا يصلها أي إرجاع إلى المقدّم. لا يجوز ذلك إلا لخطوات مُنشئ العنصر التي يصلها الإرجاع إلى المقدّم.`,
   }),
   unknown_field: (names) => ({
     en: `${names.transition.en} reads field "${names.detail}", which the Form doesn't have where the rule is checked.`,

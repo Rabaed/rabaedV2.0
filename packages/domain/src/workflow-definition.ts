@@ -47,6 +47,13 @@ export type ActorRule = z.infer<typeof actorRule>;
 export const draftsVisibleTo = ["company", "author"] as const;
 export type DraftsVisibleTo = (typeof draftsVisibleTo)[number];
 
+/**
+ * What the raiser may change once a Send Back brings an item back to it (ADR 0021): only
+ * reply with a comment, or edit the Form again until the next Submit.
+ */
+export const afterSendBackOptions = ["comment", "edit_form"] as const;
+export type AfterSendBack = (typeof afterSendBackOptions)[number];
+
 const step = z.strictObject({
   key,
   name: bilingualText,
@@ -62,6 +69,12 @@ const step = z.strictObject({
   editsForm: z.boolean().optional(),
   /** On the Draft Step: who of the raiser's Company reads a Draft (V1). Left out: `company`. */
   draftsVisibleTo: z.enum(draftsVisibleTo).optional(),
+  /**
+   * On a raiser's Step a Send Back leads to: what the raiser may change, until the next
+   * Submit, after a Send Back to it (ADR 0021). Left out (every Version published before
+   * it): `edit_form`; a new or edited Version gets `comment` (withAfterSendBackDefault).
+   */
+  afterSendBack: z.enum(afterSendBackOptions).optional(),
 });
 export type WorkflowStep = z.infer<typeof step>;
 
@@ -195,6 +208,8 @@ export type WorkflowStepRow = {
   edits_form?: boolean | null;
   /** On the Draft Step; null (left out): `company`. */
   drafts_visible_to?: DraftsVisibleTo | null;
+  /** On a raiser's Step a Send Back leads to; null (left out): `edit_form` (ADR 0021). */
+  after_send_back?: AfterSendBack | null;
 };
 
 /**
@@ -236,6 +251,7 @@ export function definitionFromRows(rows: WorkflowVersionRows): WorkflowDefinitio
       outcomeMode: s.outcome_mode === "issue_code" || s.outcome_mode === "inspection_result" ? "issue_outcome" : s.outcome_mode,
       ...(s.edits_form == null ? {} : { editsForm: s.edits_form }),
       ...(s.drafts_visible_to == null ? {} : { draftsVisibleTo: s.drafts_visible_to }),
+      ...(s.after_send_back == null ? {} : { afterSendBack: s.after_send_back }),
     })),
     transitions: [...rows.transitions]
       .sort((a, b) => a.sort - b.sort)
@@ -273,6 +289,7 @@ export function definitionToRows(definition: WorkflowDefinition, outcomeKind: Ou
       outcome_mode: s.outcomeMode === "issue_outcome" ? (outcomeKind === "inspection_result" ? "inspection_result" : "issue_code") : s.outcomeMode,
       ...(s.editsForm === undefined ? {} : { edits_form: s.editsForm }),
       ...(s.draftsVisibleTo === undefined ? {} : { drafts_visible_to: s.draftsVisibleTo }),
+      ...(s.afterSendBack === undefined ? {} : { after_send_back: s.afterSendBack }),
     })),
     transitions: definition.transitions.map((t, index) => ({
       key: t.key,

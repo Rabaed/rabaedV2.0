@@ -302,8 +302,14 @@ describe("a Rabaed Default published by the workflow:publish CLI", () => {
     const after = await raise(engineer);
     expect(after).toEqual({ definition: rabaedDefault, versionNo: current.versionNo + 1 });
     expect(before.versionNo).toBe(current.versionNo);
-    // What it published reads back as it was given.
-    expect((await readLatestPublishedDefinition(migratorDb, rabaedDefault))!.definition).toEqual(next);
+    // What it published reads back as it was given, with "After a Send Back: Comment only" on
+    // the raiser's Steps its Send Backs lead to, which every saved Version says (ADR 0021, RP-580).
+    const sentBackTo = new Set(next.transitions.filter((t) => t.kind === "send_back").map((t) => t.to));
+    expect(sentBackTo).toEqual(new Set(["draft", "internal_review"]));
+    expect((await readLatestPublishedDefinition(migratorDb, rabaedDefault))!.definition).toEqual({
+      ...next,
+      steps: next.steps.map((s) => (sentBackTo.has(s.key) ? { ...s, afterSendBack: "comment" } : s)),
+    });
   });
 
   it("refuses a definition with an error, publishing nothing", async () => {

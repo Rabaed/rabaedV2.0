@@ -3,7 +3,7 @@ import { formSchema } from "./form.ts";
 import { defaultOutcomeSets } from "./outcome.ts";
 import { marRows } from "../test/support/mar-workflow.ts";
 import stepEditsFormCases from "./step-edits-form-cases.json" with { type: "json" };
-import { stepEditsForm, workflowPublishProblems, type WorkflowPublishContext } from "./workflow-checks.ts";
+import { sendBackSteps, stepEditsForm, withAfterSendBackDefault, workflowPublishProblems, type WorkflowPublishContext } from "./workflow-checks.ts";
 import { definitionFromRows, type WorkflowDefinition, type WorkflowStep, type WorkflowTransition } from "./workflow-definition.ts";
 
 // Pure domain: every publish check of workflow-engine.md §1 (but check 5, dropped
@@ -410,6 +410,46 @@ describe("workflowPublishProblems", () => {
       expect(transition(d, "return").to).toBe("contractor_engineer");
       expect(problems(d)).toEqual([]);
       expect(d.steps.filter((s) => stepEditsForm(d, s, submittalStages)).map((s) => s.key)).toEqual(["draft", "contractor_engineer"]);
+    });
+
+    it("after a Send Back the raiser's Step it leads to comments only by default, in a new or edited Version (ADR 0021)", () => {
+      const d = mar();
+      add(d, { key: "send_back", from: "consultant_review", to: "internal_review", kind: "send_back" });
+      add(d, { key: "send_back_to_draft", from: "consultant_review", to: "draft", kind: "send_back" });
+      expect(sendBackSteps(d, submittalStages)).toEqual(new Set(["draft", "internal_review"]));
+      step(d, "draft").afterSendBack = "edit_form";
+      const filled = withAfterSendBackDefault(d, submittalStages);
+      expect(step(filled, "internal_review").afterSendBack).toBe("comment");
+      // What a Step says stays; a Step no Send Back leads to gets nothing.
+      expect(step(filled, "draft").afterSendBack).toBe("edit_form");
+      expect(step(filled, "contractor_engineer").afterSendBack).toBeUndefined();
+      expect(step(filled, "consultant_review").afterSendBack).toBeUndefined();
+      expect(problems(filled)).toEqual([]);
+      // The definition it was given is not changed.
+      expect(step(d, "internal_review").afterSendBack).toBeUndefined();
+    });
+
+    it("a Workflow without a Send Back gets no setting", () => {
+      expect(withAfterSendBackDefault(mar(), submittalStages)).toEqual(mar());
+    });
+
+    it("refuses \"Edit the Form\" on a Step no Send Back leads to, or on another Participant's", () => {
+      const d = mar();
+      step(d, "contractor_engineer").afterSendBack = "edit_form";
+      expect(problems(d)).toEqual([{ code: "edit_form_not_after_send_back", severity: "error", step: "contractor_engineer" }]);
+      expect(workflowPublishProblems(d, context())[0]!.message).toEqual({
+        en: `"Contractor Engineer" opens the Form after a Send Back, but no Send Back leads to it. Only the raiser's Steps a Send Back leads to may.`,
+        ar: `"مهندس المقاول" تفتح النموذج بعد الإرجاع إلى المقدّم، لكن لا يصلها أي إرجاع إلى المقدّم. لا يجوز ذلك إلا لخطوات مُنشئ العنصر التي يصلها الإرجاع إلى المقدّم.`,
+      });
+      const across = mar();
+      addStep(across, { key: "or_review", stage: "pending_approval", actor: { role: "owner_representative", permission: "review" } });
+      add(across, { key: "forward", from: "consultant_review", to: "or_review", kind: "submit" });
+      add(across, { key: "or_send_back", from: "or_review", to: "consultant_review", kind: "send_back" });
+      step(across, "consultant_review").afterSendBack = "edit_form";
+      expect(problems(across)).toContainEqual({ code: "edit_form_not_after_send_back", severity: "error", step: "consultant_review" });
+      // "Comment only" there changes nothing, so it passes.
+      step(across, "consultant_review").afterSendBack = "comment";
+      expect(problems(across)).not.toContainEqual(expect.objectContaining({ code: "edit_form_not_after_send_back" }));
     });
 
     it("refuses \"Drafts visible to\" on a Step that isn't the Draft Step", () => {

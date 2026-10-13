@@ -84,6 +84,17 @@ describe("the Workflow definition format", () => {
     expect(definitionFromRows(rows)).toEqual(definition);
   });
 
+  it("keeps a Step's \"After a Send Back\" through the rows, only when set (ADR 0021, RP-580)", () => {
+    const definition = definitionFromRows(marRows(2));
+    definition.steps[1] = { ...definition.steps[1]!, afterSendBack: "comment" };
+    const rows = definitionToRows(definition, "review_code");
+    expect(rows.steps[1]).toMatchObject({ after_send_back: "comment" });
+    // Null on a Version published before it: left out, read as "Edit the Form" (stepAfterSendBack).
+    expect(rows.steps[0]).not.toHaveProperty("after_send_back");
+    expect(definitionFromRows({ ...rows, steps: rows.steps.map((s) => ({ ...s, after_send_back: null })) }).steps[1]).not.toHaveProperty("afterSendBack");
+    expect(definitionFromRows(rows)).toEqual(definition);
+  });
+
   it("keeps the Screen a Transition shows through the rows, only when it names one (ADR 0019, RP-516)", () => {
     const definition = definitionFromRows(marRows(2));
     definition.transitions[3] = { ...definition.transitions[3]!, actionForm: null, screen: "code_reply" };

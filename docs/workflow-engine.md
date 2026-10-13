@@ -17,7 +17,8 @@ A Workflow version is a directed graph.
   - an **actor rule**: who may hold it (§3);
   - an `outcome_mode`: `none`, `recommend_code`, `issue_code` or `inspection_result`;
   - whether the raiser's Form is edited there (`edits_form`, ADR 0019; RP-514), by the Member holding it, before the first Submit (form-engine.md §4). Left out (null), the default: a Step of the Draft Step's role held with the Draft Step's Function Permission (the Draft, the Contractor Engineer Step), never the internal reviewer's;
-  - on the Draft Step, **Drafts visible to** (`drafts_visible_to`, ADR 0019; RP-514): `company` (the default) or `author` (visibility.md V1).
+  - on the Draft Step, **Drafts visible to** (`drafts_visible_to`, ADR 0019; RP-514): `company` (the default) or `author` (visibility.md V1);
+  - on a raiser's Step a `send_back` leads to, **After a Send Back** (`after_send_back`, ADR 0021; as built, RP-580): `comment` (the raiser only replies with a comment and Submits again) or `edit_form` (its Form reopens until the next Submit). Every Version saved since RP-580 has it on those Steps: left out, `prepareDraft` sets `comment` (`withAfterSendBackDefault`, `workflow-checks.ts`). Null, on a Version published before (they never change, RP-424) or a draft saved before, reads as `edit_form`, as ADR 0014 built it. The builder shows it in the Step panel of a raiser's Step a Send Back leads to ("Comment only" / "Edit the Form").
 
   There is no per-Step or per-Transition signing choice: every Transition is confirmed and recorded (§7, ADR 0017). The old `workflow_step.is_signing` column is read by nothing; the definition format (WF-2) and the builder leave it out.
 - **Transitions** are edges. Each has:
@@ -118,8 +119,9 @@ And, from spec RP-423 (`workflow-checks.ts`):
 
 And, from ADR 0019 (as built, RP-514; `formEditingProblems` in `workflow-checks.ts`):
 
-- **Nobody edits the raiser's Form at or after a Submit.** A Step that edits the Form (`stepEditsForm`) and is reachable from a `submit`'s target Step without a `send_back` is refused (`form_edited_after_submit`): another Participant's Step, or a raiser's Step a `send` crosses back to. An item Sent Back to its raiser is edited at the raiser's Steps that edit the Form, by their holder, until the next Submit (ADR 0014): the Step the Send Back leads to, and the Draft after a Return from it. At run time `app.can_save_answers` keeps to it (form-engine.md §4).
+- **Nobody edits the raiser's Form at or after a Submit.** A Step that edits the Form (`stepEditsForm`) and is reachable from a `submit`'s target Step without a `send_back` is refused (`form_edited_after_submit`): another Participant's Step, or a raiser's Step a `send` crosses back to. An item Sent Back to its raiser is edited at the raiser's Steps that edit the Form, by their holder, until the next Submit (ADR 0014), only when the Step the Send Back led to says **After a Send Back: Edit the Form** (ADR 0021, as built RP-580): then the Step the Send Back leads to, and the Draft after a Return from it. At "Comment only" nothing of the Form changes until the next Submit, wherever the raiser moves the item inside its Participant. At run time `app.can_save_answers` keeps to it, through `app.after_send_back_now` (form-engine.md §4).
 - **"Drafts visible to"** is set on the Draft Step only (`drafts_visible_to_not_on_draft`).
+- **"Edit the Form" after a Send Back** is set only on a raiser's Step (the Draft Step's role) a `send_back` leads to (`edit_form_not_after_send_back`, ADR 0021; RP-580). "Comment only" elsewhere changes nothing and passes.
 
 As built (RP-334): checks 4 and 8 are `workflowKindProblems`, which `workflowPublishProblems` runs. A Step's role is its actor rule's `base_role`; a `send_back` is valid from a Step of role A to a Step of role B when some `submit` goes from a Step of B to a Step of A. The database also refuses a `send_back` with an outcome (`workflow_transition_send_back_no_outcome`), and `take_transition` raises on a `return` that would cross Participants. The seam suites' test Workflow with a Send Back is `addTestWorkflow` (`packages/db/test-support`).
 

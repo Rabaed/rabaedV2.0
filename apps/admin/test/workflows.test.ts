@@ -110,7 +110,12 @@ describe("a Rabaed Default Workflow in Rabaed Admin", () => {
     const published = await engineer.browser.post(`/v1/workflows/${TYPE}/publish`, { definition: next, reason: "Rename the Draft Step" });
     expect(published.statusCode, published.body).toBe(200);
     expect(published.json()).toEqual({ versionNo: current.versionNo + 1 });
-    expect(await readLatestPublishedDefinition(adminDb, definitionId)).toEqual({ versionNo: current.versionNo + 1, definition: next });
+    // As given, with "After a Send Back: Comment only" where its Send Backs lead, as every saved Version says (ADR 0021, RP-580).
+    const sentBackTo = new Set(next.transitions.filter((t) => t.kind === "send_back").map((t) => t.to));
+    expect(await readLatestPublishedDefinition(adminDb, definitionId)).toEqual({
+      versionNo: current.versionNo + 1,
+      definition: { ...next, steps: next.steps.map((s) => (sentBackTo.has(s.key) ? { ...s, afterSendBack: "comment" } : s)) },
+    });
     expect(await actionsOn(definitionId)).toEqual([
       { engineer_id: engineer.id, action: "save_workflow_draft", reason: "Draft the new Draft Step name" },
       { engineer_id: engineer.id, action: "publish_workflow", reason: "Rename the Draft Step" },

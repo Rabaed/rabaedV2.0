@@ -5,6 +5,7 @@ import { expect, screen, userEvent, waitFor } from "storybook/test";
 import { storyLocale, storyText } from "../../storybook/locale.ts";
 import { formRendererLabels } from "../../storybook/form-engine.ts";
 import type { BuiltInChoices } from "./built-in-fields.tsx";
+import { SentBackNotice } from "../status/sent-back-notice.tsx";
 import { FormRenderer } from "./form-renderer.tsx";
 
 // A Form like the MAR Form Version 1, with the Built-in Fields (Trade, Location,
@@ -250,6 +251,32 @@ export const WithErrors: Story = {
     await expect(summary).toHaveTextContent(storyText(context, copy.summary));
     const link = context.canvas.getByRole("link", { name: storyText(context, copy.manufacturer) });
     await expect(link).toHaveAttribute("href", `#${manufacturer.id}`);
+  },
+};
+
+const sentBackForComment = {
+  en: "Sent back for comment: reply and Submit it again.",
+  ar: "أُرجع إليك للتعليق: اكتب ردّك ثم قدّمه مرة أخرى.",
+};
+
+/**
+ * The raiser's Form Sent Back to a "Comment only" Step (ADR 0021), as the item page shows it to
+ * the raiser's Members: read only, no Save, and the note saying why.
+ */
+export const SentBackForComment: Story = {
+  args: { mode: "read", answers },
+  render: (args, context) => (
+    <div className="space-y-4">
+      <SentBackNotice>{storyText(context, sentBackForComment)}</SentBackNotice>
+      <FormRenderer {...args} locale={storyLocale(context)} labels={formRendererLabels[storyLocale(context)]} choices={choices(context)} />
+    </div>
+  ),
+  play: async (context) => {
+    await expect(context.canvas.getByRole("note")).toHaveTextContent(storyText(context, sentBackForComment));
+    await expect(context.canvas.queryAllByRole("textbox")).toEqual([]);
+    await expect(context.canvas.queryAllByRole("combobox")).toEqual([]);
+    await expect(context.canvas.queryAllByRole("button")).toEqual([]);
+    await expect(context.canvas.getByText("ACME Cables")).toBeVisible();
   },
 };
 
