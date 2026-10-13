@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
-import { selectSteps, tail } from "./verify-steps.ts";
+import { finalLine, selectSteps, tail } from "./verify-steps.ts";
 
 // `pnpm verify` (RP-459): every check an implementer runs before pushing, in one
 // command. Stops at the first failing step and names it. Each step is judged by
@@ -36,4 +36,6 @@ for (const { name, script } of steps) {
   console.error(`\npnpm verify stopped at ${name}.`);
   process.exit(result.status ?? 1);
 }
-console.log(`\npnpm verify passed: ${steps.map((s) => s.name).join(", ")}.`);
+const sha = spawnSync("git", ["rev-parse", "--short", "HEAD"], { cwd: root, encoding: "utf8" }).stdout.trim();
+const status = spawnSync("git", ["status", "--porcelain"], { cwd: root, encoding: "utf8" }).stdout.trim();
+console.log(`\n${finalLine({ sha, dirty: status !== "", steps: steps.map((s) => s.name) })}`);
