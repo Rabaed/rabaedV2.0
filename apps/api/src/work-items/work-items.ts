@@ -116,7 +116,7 @@ function toFormVersion(r: FormVersionRow): FormVersion {
  * one: the latest published Version of the Project's own Form for the Type, else of the
  * Type's Rabaed Default Form (RP-554), as app.create_work_item checks it.
  */
-async function latestForm(trx: Trx, projectId: string, typeCode: string): Promise<FormVersion | null> {
+async function newItemForm(trx: Trx, projectId: string, typeCode: string): Promise<FormVersion | null> {
   const { rows } = await sql<FormVersionRow>`
     select id, version_no, schema from form_version where id = app.new_item_form_version(${projectId}::uuid, ${typeCode})
   `.execute(trx);
@@ -302,7 +302,7 @@ function formToFillAt(form: FormVersion, { steps }: WorkflowSteps, at: SectionEd
 /**
  * The Form for a new item of the Rabaed Default Type `typeCode` on one of the
  * Member's Projects: the latest published Version of the Project's own Form for the
- * Type, else of its Rabaed Default Form (latestForm), as it is filled in at the
+ * Type, else of its Rabaed Default Form (newItemForm), as it is filled in at the
  * Draft of the Workflow Version it would start on (draftOf). Null when it isn't one of
  * their Projects, or there is no such Type.
  */
@@ -310,7 +310,7 @@ export function getNewWorkItemForm(db: Db, memberId: string, projectId: string, 
   return withMember(db, memberId, async (trx) => {
     const onProject = await trx.selectFrom("project").select("id").where("id", "=", projectId).executeTakeFirst();
     if (!onProject) return null;
-    const form = await latestForm(trx, projectId, typeCode);
+    const form = await newItemForm(trx, projectId, typeCode);
     return form && formToFillAt(form, ...(await draftOf(trx, projectId, typeCode)));
   });
 }
@@ -474,7 +474,7 @@ export function createWorkItem(
 async function createWorkItemIn(trx: Trx, projectId: string, input: Required<CreateWorkItemRequest>, now: Date): Promise<CreateWorkItemResult> {
   const onProject = await trx.selectFrom("project").select("id").where("id", "=", projectId).executeTakeFirst();
   if (!onProject) return { ok: false, reason: "not_found" };
-  const form = await latestForm(trx, projectId, input.type);
+  const form = await newItemForm(trx, projectId, input.type);
   if (!form) return { ok: false, reason: "type_not_found" };
   // Only the Form Sections editable at the Draft take answers (form-engine.md §4).
   const atDraft = formToFillAt(form, ...(await draftOf(trx, projectId, input.type)));
@@ -794,14 +794,14 @@ function duplicateIn({
       if (!item.can_duplicate) return { ok: false, reason: "duplicate_not_allowed" };
       const pinned = formSchema.parse(item.schema);
       const answers = answersFromDb(pinned, item.data);
-      const latest = await latestForm(trx, item.project_id, item.type_code);
-      if (!latest) return { ok: false, reason: "duplicate_not_allowed" };
+      const newForm = await newItemForm(trx, item.project_id, item.type_code);
+      if (!newForm) return { ok: false, reason: "duplicate_not_allowed" };
       const { rows: own } = await sql<{ key: string }>`select app.own_written_fields(${workItemId}::uuid) as key`.execute(trx);
       const ownWritten = new Set(own.map((r) => r.key));
-      const atDraft = formToFillAt(latest, ...(await draftOf(trx, item.project_id, item.type_code)));
+      const atDraft = formToFillAt(newForm, ...(await draftOf(trx, item.project_id, item.type_code)));
       const editable = new Set(atDraft.editableSections);
       const wasType = new Map(answerFields(pinned).map((f) => [f.key, f.type]));
-      const atDraftFields = latest.schema.sections
+      const atDraftFields = newForm.schema.sections
         .filter((s) => editable.has(s.key))
         .flatMap((s) => s.fields)
         .filter((f) => isAnswerField(f) && wasType.get(f.key) === f.type);

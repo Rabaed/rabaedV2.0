@@ -305,6 +305,7 @@ Layout is not fixed to the Form: a Form can have **several PDF Templates**, and 
 - Every new item takes it, whoever raises it: a Company that joins the Project raises on the Project's Form too (nothing of its own is copied in, ADR 0016). So does every command that starts a new item: creating one (and Duplicate), a Revision, a replacement of a rejected item, and the items an outcome creates (Code B Comments).
 - Items already raised keep the Version they are pinned to (ADR 0006): a Form the Project gains later, or a newer Version of it, reaches new items only.
 - `app.new_item_form_version(project, type)` answers it, and `app.create_work_item` refuses any other Version (`form_version_not_latest`); the api's new-item Form reads the same function. It is security definer, and names the Project's own Form only to a Member on that Project; anyone else gets the Rabaed Default's, never another Project's Form (V13, V18). Who reads a Form is unchanged.
+- A Project has one Form of its own per Type today (the copy). Nothing in the schema stops a second; if one appears, new items take the newest Form that has a published Version.
 
 ### Publish-time validation
 
