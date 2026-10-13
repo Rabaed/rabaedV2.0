@@ -229,15 +229,19 @@ function Canvas({
       const items = flow.getNodes().filter((n) => n.type !== "band");
       if (items.length === 0) return;
       void flow.fitView({ nodes: items.map((n) => ({ id: n.id })), ...FIT, padding: fitPadding, maxZoom: 1, duration }).then(() => {
-        // Fitted to its width with height to spare: the Steps go up to just under the Stage names, so a Return's
-        // loop under them (which the fit doesn't measure) stays clear of the overview and the zoom controls.
+        // A Return's loop under the Steps isn't measured by the fit: when it would reach the overview and the zoom
+        // controls, the Steps go up as far as needed (never above the Stage names) so it stays clear of them.
+        const height = box.current?.clientHeight ?? 0;
+        if (!minimap || height === 0) return;
         const { x, y, zoom } = flow.getViewport();
-        const top = getNodesBounds(items).y * zoom + y;
-        const room = 44;
-        if (top > room + 1) void flow.setViewport({ x, y: y - (top - room), zoom });
+        const bounds = getNodesBounds(items);
+        const top = bounds.y * zoom + y;
+        const loopBottom = (bounds.y + bounds.height + 64) * zoom + y;
+        const shift = Math.min(loopBottom - (height - 122), top - 44);
+        if (shift > 1) void flow.setViewport({ x, y: y - shift, zoom });
       });
     },
-    [flow, fitPadding],
+    [flow, fitPadding, minimap],
   );
   const drawn = useMemo(() => toFlow(model, ctx, edit, chosen), [model, ctx, edit, chosen]);
   // Controlled, so the builder's edits redraw without resetting the view; React Flow moves a dragged node meanwhile.
