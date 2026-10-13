@@ -26,11 +26,33 @@ import { WorkflowBuilder, type WorkflowBuilderProps, type WorkflowSaveState } fr
 const saved = { kind: "saved" as const, at: new Date("2026-10-10T11:32:00Z") };
 const workflowName = { en: "Material Submittal – 2-tier review", ar: "اعتماد المواد – مراجعة على مستويين" };
 
-/** The V2 draft with its errors fixed, as V2's "errors fixed" state: ready to publish. */
+/**
+ * The V2 draft with its errors fixed, as V2's "errors fixed" state: ready to publish. Its Return
+ * stays in Internal Review, as publishing asks since RP-437 (ADR 0020, `return_to_draft`): it goes
+ * to a Contractor Engineer Step there, which sends it for review again (as the MAR's Version 3).
+ */
 const fixedDraft: WorkflowDefinition = {
   ...builderDraftSampled,
-  steps: builderDraftSampled.steps.filter((s) => s.key !== "consultant_qa").map((s) => (s.key === "owner_rep" ? { ...s, outcomeMode: "issue_outcome" as const } : s)),
-  transitions: builderDraftSampled.transitions.filter((t) => !["send_to_qa", "return_to_consultant", "owner_return"].includes(t.key)),
+  steps: [
+    ...builderDraftSampled.steps.filter((s) => s.key !== "consultant_qa").map((s) => (s.key === "owner_rep" ? { ...s, outcomeMode: "issue_outcome" as const } : s)),
+    { key: "contractor_engineer", name: { en: "Contractor Engineer", ar: "مهندس المقاول" }, stage: "internal_review", actor: { role: "contractor", permission: "create" }, outcomeMode: "none" },
+  ],
+  transitions: [
+    ...builderDraftSampled.transitions
+      .filter((t) => !["send_to_qa", "return_to_consultant", "owner_return"].includes(t.key))
+      .map((t) => (t.key === "return" ? { ...t, to: "contractor_engineer" } : t)),
+    {
+      key: "send_for_review_again",
+      label: { en: "Send for Review", ar: "إرسال للمراجعة" },
+      kind: "send",
+      from: "contractor_engineer",
+      to: "contractor_pm",
+      outcome: null,
+      permission: "review",
+      actionForm: null,
+    },
+  ],
+  layout: { ...builderDraftSampled.layout, contractor_engineer: { x: 280, y: 420 } },
 };
 
 const meta = {

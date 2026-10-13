@@ -58,7 +58,7 @@ describe("which Workflow each Type runs", () => {
     expect(marOf(asAdmin)).toMatchObject({
       code: "MAR",
       moduleKey: "submittals",
-      workflow: { id: marWorkflowId, versionNo: 2, source: "rabaed_default" },
+      workflow: { id: marWorkflowId, versionNo: 3, source: "rabaed_default" }, // MAR v3 since RP-437 (ADR 0020)
       exceptions: [],
       copies: [],
     });
@@ -130,7 +130,7 @@ describe("View versions", () => {
     // A Rabaed Default's Versions too, with the Rabaed Stage set.
     const mar: WorkflowVersionRead = (await ok(at.k1Manager.get(`/v1/workflows/${marWorkflowId}/versions/1`), 200)).json();
     expect(mar.versionNo).toBe(1);
-    expect(mar.publishedVersions).toEqual([1, 2]);
+    expect(mar.publishedVersions).toEqual([1, 2, 3]);
   });
 
   it("is the plain 404 for a Version that isn't published, another Project's Workflow, and a made-up one", async () => {
@@ -159,7 +159,7 @@ describe("which Screen Versions the Workflow Versions pin", () => {
     await ok(c1.caller.request("PUT", `/v1/workflows/${route}/draft`, { definition: withScreen }), 200);
     await ok(c1.caller.post(`/v1/workflows/${route}/publish`), 200); // Workflow Version 2 pins Screen Version 1
     // A running item on Workflow Version 2, raised before the Screen changes.
-    const running = await draft(at, at.c1Engineer, "Pinned while running");
+    const running = await draft(at, at.c1Engineer, "Pinned while running", { type: "MAR" });
     const sendForm = async () => (await detail(at.c1Engineer, running)).actions.transitions.find((t) => t.key === sendKey)?.actionForm;
     expect(await sendForm()).toMatchObject(schema("Remarks"));
 

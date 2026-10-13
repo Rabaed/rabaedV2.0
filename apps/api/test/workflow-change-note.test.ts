@@ -103,8 +103,9 @@ describe("items that keep their Version", () => {
   // Scenario RP-555-1.
   it("are counted as each reader sees them: the Project Admin counts no Draft it doesn't see", async () => {
     await ok(c1.caller.request("PUT", `/v1/projects/${at.projectId}/workflow-bindings`, { workItemTypeId: marTypeId, raisingParticipantId: null, workflowId: route }));
-    const own = await draft(at, at.c1Engineer, "C1's MAR on the noted route");
-    const other = await draft(at, c2Engineer, "C2's MAR on the noted route");
+    // The MAR itself (`draft` raises the legacy MAR by default, RP-437), which the route is bound for.
+    const own = await draft(at, at.c1Engineer, "C1's MAR on the noted route", { type: "MAR" });
+    const other = await draft(at, c2Engineer, "C2's MAR on the noted route", { type: "MAR" });
     // Two MARs run on Version 1, and the Project Admin (on no Participant's team) sees neither.
     for (const id of [own, other]) expect((await c1.caller.get(`/v1/work-items/${id}`)).statusCode).toBe(404);
     expect((await builder(c1.caller)).running).toEqual([]);

@@ -21,7 +21,9 @@ afterAll(async () => {
 });
 
 const label = (en: string) => ({ en, ar: en });
-const MAR = { name: { en: "Material Submittal (MAR)", ar: "اعتماد المواد (MAR)" }, versionNo: 2 };
+// The MAR's Rabaed Default, on Workflow Version 3 since RP-437 (ADR 0020). The tests raise the
+// MAR itself (`{ type: "MAR" }`): `draft` raises the legacy MAR by default, a Type of its own.
+const MAR = { name: { en: "Material Submittal (MAR)", ar: "اعتماد المواد (MAR)" }, versionNo: 3 };
 const TMC_ROUTE = label("TMC MAR route");
 const reply = {
   sections: [{ key: "reply", title: label("Reply"), fields: [{ key: "remarks", type: "textarea", label: label("Remarks") }] }],
@@ -151,7 +153,7 @@ describe("a Project starts from its creator's Company defaults", () => {
   });
 
   it("runs TMC's copy of the Workflow for its MARs; Beta Build joining gets the Project's copy, no exception", async () => {
-    const id = await draft(at, at.c1Engineer, "Cable tray");
+    const id = await draft(at, at.c1Engineer, "Cable tray", { type: "MAR" });
     expect((await detail(at.c1Engineer, id)).workflow).toEqual({ name: TMC_ROUTE, versionNo: 1 });
 
     // One Workflow and one binding on the Project, for every raiser: nothing of Beta Build's followed it.
@@ -173,20 +175,20 @@ describe("a Project starts from its creator's Company defaults", () => {
 
   it("is independent of the Library: a later Library change or a cleared default leaves the Project's copy", async () => {
     await ok(tmc.caller.request("DELETE", `/v1/company-defaults?kind=workflow&workItemTypeId=${marTypeId}`));
-    const id = await draft(at, at.c1Engineer, "Conduit");
+    const id = await draft(at, at.c1Engineer, "Conduit", { type: "MAR" });
     expect((await detail(at.c1Engineer, id)).workflow).toEqual({ name: TMC_ROUTE, versionNo: 1 });
     expect((await defaults(tmc)).defaults.map((d) => d.kind)).toEqual(["form", "screen"]);
 
     // A Project created now has no Workflow default for the Type: the Rabaed Default again.
     const later = await buildTower(api, { c1: tmc, k1 }, "CD2");
-    expect((await detail(later.c1Engineer, await draft(later, later.c1Engineer, "Pipes"))).workflow).toEqual(MAR);
+    expect((await detail(later.c1Engineer, await draft(later, later.c1Engineer, "Pipes", { type: "MAR" }))).workflow).toEqual(MAR);
     expect((await projectWorkflows(later.projectId)).bindings).toEqual([]);
     await ok(setDefault(tmc, "workflow", tmcRoute));
   });
 
   it("leaves a Company with no defaults on the Rabaed Defaults, as before", async () => {
     const plain = await buildTower(api, { c1: nobody, k1 }, "CD3");
-    expect((await detail(plain.c1Engineer, await draft(plain, plain.c1Engineer, "Ducts"))).workflow).toEqual(MAR);
+    expect((await detail(plain.c1Engineer, await draft(plain, plain.c1Engineer, "Ducts", { type: "MAR" }))).workflow).toEqual(MAR);
     const { definitions, bindings } = await projectWorkflows(plain.projectId);
     expect({ definitions, bindings }).toEqual({ definitions: [], bindings: [] });
     const screens: ScreenList = (await ok(plain.c1Engineer.get(`/v1/projects/${plain.projectId}/screens`), 200)).json();
