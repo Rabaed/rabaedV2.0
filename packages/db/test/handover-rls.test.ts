@@ -221,6 +221,33 @@ describe("scenario RP-108-1: a Handover reads and moves only the Authorized Pers
   });
 });
 
+describe("RP-552: the refusal of a non-Authorized-Person never depends on the plan", () => {
+  it("refuses a Member of a Company with no Steps at all, for any Member, Participant or none", async () => {
+    // A Company that holds no Participant and no assignment: nothing for the planner to evaluate.
+    const engineer = await one("select id from rabaed_engineer limit 1", []);
+    const empty = await company(engineer, "Empty");
+    for (const who of [empty.member, ali]) {
+      for (const p of [null, participant.c1]) {
+        await expect(pooledBefore(empty.member, who, p)).rejects.toMatchObject({ code: "42501" });
+        await expect(needed(empty.member, who, p)).rejects.toMatchObject({ code: "42501" });
+      }
+    }
+    // And the guard is stated up front in each function, so no plan can skip it: the planner
+    // runs app.handover_participants only for candidate rows, and an empty set never would.
+    for (const fn of ["handover_pooled_before", "handovers_needed"]) {
+      const { rows } = await migrator.query(
+        "select prosrc from pg_proc where pronamespace = 'app'::regnamespace and proname = $1",
+        [fn],
+      );
+      expect(rows, fn).toHaveLength(1);
+      expect(rows[0].prosrc as string, fn).toMatch(/require_authorized_company_id\(\)/);
+    }
+    // Its Authorized Person is let in, and reads nothing.
+    expect(await pooledBefore(empty.ap, empty.member, null)).toEqual([]);
+    expect(await needed(empty.ap, empty.member, null)).toEqual([]);
+  });
+});
+
 /** Runs `fn` as `as` in a transaction that is rolled back. */
 async function rolledBack(as: string, fn: (trx: Parameters<Parameters<typeof withMember>[2]>[0]) => Promise<void>): Promise<void> {
   const rollBack = new Error("roll back");
