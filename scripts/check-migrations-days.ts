@@ -31,6 +31,16 @@ export function parseReservations(text: string): Reservation[] {
   });
 }
 
+/**
+ * The reservations a check goes by: origin/main's, plus the branch's for the
+ * days main doesn't reserve. Main's reservation of a day wins, so a branch
+ * can't add its own line for a day main reserves for another issue.
+ */
+export function combineReservations(onMain: Reservation[], onBranch: Reservation[]): Reservation[] {
+  const mainDays = new Set(onMain.map((r) => r.day));
+  return [...onMain, ...onBranch.filter((r) => !mainDays.has(r.day))];
+}
+
 /** The issue a branch named `RP-nnn-…` is for; null for any other name. */
 export function branchIssue(branch: string): string | null {
   return /^(RP-\d+)-/.exec(branch)?.[1] ?? null;
@@ -73,7 +83,7 @@ function fileAt(repo: string, commit: string, path: string): string {
   return git(repo, "ls-tree", "--name-only", commit, "--", path).trim() ? git(repo, "show", `${commit}:${path}`) : "";
 }
 
-/** The day check for the migrations `head` adds over `base`, with the reservations of both. */
+/** The day check for the migrations `head` adds over `base`, with `base`'s reservations and `head`'s for the days `base` doesn't reserve. */
 export function migrationDays(repo: string, base: string, head: string, branch: string | null): ReturnType<typeof dayProblems> {
   const names = (commit: string) =>
     git(repo, "ls-tree", "--name-only", `${commit}:${migrationsDir}`)
@@ -83,6 +93,6 @@ export function migrationDays(repo: string, base: string, head: string, branch: 
   const added = names(head)
     .filter((name) => !onBase.has(name))
     .map((name) => ({ name, sql: git(repo, "show", `${head}:${migrationsDir}/${name}`) }));
-  const reservations = [...parseReservations(fileAt(repo, base, reservationsFile)), ...parseReservations(fileAt(repo, head, reservationsFile))];
+  const reservations = combineReservations(parseReservations(fileAt(repo, base, reservationsFile)), parseReservations(fileAt(repo, head, reservationsFile)));
   return dayProblems(added, reservations, branch);
 }

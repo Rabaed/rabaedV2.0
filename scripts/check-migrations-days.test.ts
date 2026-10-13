@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { branchIssue, dayProblems, parseReservations } from "./check-migrations-days.ts";
+import { branchIssue, combineReservations, dayProblems, parseReservations } from "./check-migrations-days.ts";
 
 // Migration days (RP-560): planning/migration-days.md reserves a day of
 // migration timestamps for one issue or spec, and a migration another issue
@@ -25,6 +25,15 @@ describe("parseReservations", () => {
       { day: "20270118", owner: "RP-437", lane: "B", purpose: "Rabaed Default Workflows" },
       { day: "20270119", owner: "RP-514", lane: "B", purpose: "Screen answers" },
     ]);
+  });
+});
+
+describe("combineReservations", () => {
+  it("keeps origin/main's reservation of a day, and takes from the branch only days main doesn't reserve", () => {
+    const own = parseReservations(["| 20270117 | RP-410 | C | card layout |", "| 20270120 | RP-508 | A | order fixes |"].join("\n"));
+    const combined = combineReservations(reservations, own);
+    expect(combined).toEqual([...reservations, own[1]]);
+    expect(dayProblems([migration("20270117000100_board_card_layout.sql")], combined, "RP-410").refused).toHaveLength(1);
   });
 });
 
