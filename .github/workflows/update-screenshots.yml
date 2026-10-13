@@ -164,7 +164,10 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.workflow_run.head_sha || needs.render.outputs.sha }}
-          fetch-depth: 0 # the flip-flop check lists the PR's commits against origin/main (RP-561)
+          # Kept at full depth: the flip-flop check runs "git log origin/main..HEAD", which
+          # needs the history down to the merge base, and its depth is not known up front
+          # (a shallow fetch would list the whole branch as new commits).
+          fetch-depth: 0 # (RP-561)
       - if: env.MODE == 'all'
         uses: actions/download-artifact@v8
         with:
@@ -206,7 +209,7 @@ jobs:
       # made below). The script comes from main, never from the PR's checkout:
       # this job holds a write token and runs no PR code. Until the script is on
       # main, or if anything here fails, the step only warns.
-      - name: Check for a baseline that flip-flops
+      - name: Check out main's scripts
         uses: actions/checkout@v7
         with:
           ref: main
@@ -214,13 +217,15 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@v7
         with: { node-version: 24 }
-      - name: Warn about a baseline that flip-flops
+      - name: Check for a baseline that flip-flops
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           case "$BRANCH" in
             gh-readonly-queue/*) exit 0 ;;
           esac
+          # Stage the new baselines: the script reads them with "git diff --cached".
+          # This staging is kept (and repeated, harmlessly, by the commit step below).
           git add -A "$SCREENSHOTS"
           comment="$RUNNER_TEMP/flip-flop.md"
           rm -f "$comment"
@@ -233,7 +238,7 @@ jobs:
           pr=$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$BRANCH" --state open --json number --jq '.[0].number // empty')
           [ -n "$pr" ] || { echo "::notice::No open PR for $BRANCH; not commenting."; exit 0; }
           existing=$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$pr/comments" \
-            --jq '[.[] | select(.user.login == "github-actions[bot]" and (.body | startswith("<!-- screenshot-flip-flop -->")))] | .[0].id // empty')
+            --jq '.[] | select(.user.login == "github-actions[bot]" and (.body | startswith("<!-- screenshot-flip-flop -->"))) | .id' | head -n 1 || true)
           if [ -n "$existing" ]; then
             gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$existing" -F "body=@$comment" > /dev/null || echo "::warning::Could not update the flip-flop comment."
           else

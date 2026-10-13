@@ -20,23 +20,30 @@ import { resolve } from "node:path";
 export const COMMENT_TAG = "<!-- screenshot-flip-flop -->";
 export const BOT = "github-actions[bot]";
 
+// eslint-disable-next-line rabaed/no-avoid-terms -- GitHub's own bot address, not our term
+export const BOT_EMAIL ="41898282+github-actions[bot]@users.noreply.github.com";
+
 export interface CommitFiles {
   author: string;
+  email: string;
   files: string[];
 }
 
 /** The files about to be committed that a commit by the bot on this PR already changed, in the given order. */
 export function findFlipFlops(commits: CommitFiles[], changing: string[]): string[] {
-  const set = new Set(commits.filter((commit) => commit.author === BOT).flatMap((commit) => commit.files));
-  return [...new Set(changing)].filter((file) => set.has(file));
+  const botChanged = new Set(
+    commits.filter((commit) => commit.author === BOT && commit.email === BOT_EMAIL).flatMap((commit) => commit.files),
+  );
+  return [...new Set(changing)].filter((file) => botChanged.has(file));
 }
 
-/** Parses `git log --format=@@%H%x09%an --name-only`. */
+/** Parses `git log --format=%x00%H%x00%an%x00%ae --name-only`: a header starts with NUL, which no path can contain. */
 export function parseLog(log: string): CommitFiles[] {
   const commits: CommitFiles[] = [];
   for (const line of log.split("\n")) {
-    if (line.startsWith("@@")) {
-      commits.push({ author: line.split("\t")[1]?.trim() ?? "", files: [] });
+    if (line.startsWith("\0")) {
+      const [, , author, email] = line.split("\0");
+      commits.push({ author: author ?? "", email: email?.trim() ?? "", files: [] });
     } else if (line.trim() !== "") {
       commits.at(-1)?.files.push(line.trim());
     }
@@ -45,12 +52,12 @@ export function parseLog(log: string): CommitFiles[] {
 }
 
 /** A file name from the PR's artifact is untrusted: one short line that cannot close the code span. */
-const name = (file: string) => file.replace(/[`\r\n]/g, "'").slice(0, 300);
+const safeName = (file: string) => file.replace(/[`\r\n]/g, "'").slice(0, 300);
 
 export function buildComment(files: string[]): string {
   return [
     COMMENT_TAG,
-    `These baselines changed again after the bot set them on this PR — the story may render unstably: ${files.map((file) => `\`${name(file)}\``).join(", ")}. See RP-556 / docs/agents/ci-logs.md.`,
+    `These baselines changed again after the bot set them on this PR — the story may render unstably: ${files.map((file) => `\`${safeName(file)}\``).join(", ")}. See RP-556 / docs/agents/ci-logs.md.`,
   ].join("\n");
 }
 
@@ -59,7 +66,7 @@ const git = (...args: string[]) => execFileSync("git", args, { encoding: "utf8",
 function main() {
   const out = process.argv[2];
   if (!out) throw new Error("Usage: node screenshot-flip-flop.ts <comment-file>");
-  const commits = parseLog(git("log", "--format=@@%H%x09%an", "--name-only", "origin/main..HEAD"));
+  const commits = parseLog(git("log", "--format=%x00%H%x00%an%x00%ae", "--name-only", "origin/main..HEAD"));
   const changing = git("diff", "--cached", "--name-only").split("\n").filter((line) => line.trim() !== "");
   const files = findFlipFlops(commits, changing);
   if (files.length === 0) {
