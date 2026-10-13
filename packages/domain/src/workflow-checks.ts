@@ -324,9 +324,13 @@ function sendProblems({ transitions, stepOf, isTerminal }: CheckInput): FoundPro
     .map((t): FoundProblem => ({ code: "send_crosses_participants", transition: t.key }));
 }
 
+/** The raiser's Participant role: its Draft Step's (ADR 0019). Undefined without a Draft Step. */
+const raiserRole = (steps: readonly WorkflowStep[], categoryOf: (stage: string) => StageCategory | undefined) =>
+  steps.find((s) => categoryOf(s.stage) === "draft")?.actor?.role;
+
 /** A Cancel leaves only the raiser's own Steps (its Draft Step's role), into a cancelled Stage, with no outcome. */
 function cancelProblems({ steps, transitions, stepOf, categoryOf }: CheckInput): FoundProblem[] {
-  const raiser = steps.find((s) => categoryOf(s.stage) === "draft")?.actor?.role;
+  const raiser = raiserRole(steps, categoryOf);
   return transitions
     .filter((t) => t.kind === "cancel")
     .flatMap((t): FoundProblem[] => {
@@ -388,8 +392,7 @@ function formEditingProblems({ steps, transitions, context, categoryOf }: CheckI
  * a `send_back` Transition goes to. "After a Send Back" is set on these only.
  */
 export function sendBackSteps(definition: Pick<WorkflowDefinition, "steps" | "transitions">, stages: WorkflowPublishContext["stages"]): Set<string> {
-  const draftStages = new Set(stages.filter((s) => s.category === "draft").map((s) => s.key));
-  const raiser = definition.steps.find((s) => draftStages.has(s.stage))?.actor?.role;
+  const raiser = raiserRole(definition.steps, (stage) => stages.find((s) => s.key === stage)?.category);
   const targets = new Set(definition.transitions.filter((t) => t.kind === "send_back").map((t) => t.to));
   return new Set(definition.steps.filter((s) => targets.has(s.key) && raiser !== undefined && s.actor?.role === raiser).map((s) => s.key));
 }

@@ -89,7 +89,7 @@ describe("the Workflow definition format", () => {
     definition.steps[1] = { ...definition.steps[1]!, afterSendBack: "comment" };
     const rows = definitionToRows(definition, "review_code");
     expect(rows.steps[1]).toMatchObject({ after_send_back: "comment" });
-    // Null on a Version published before it: left out, read as "Edit the Form" (stepAfterSendBack).
+    // Null on a Version published before it: left out (the database reads it as "Edit the Form", app.after_send_back_setting).
     expect(rows.steps[0]).not.toHaveProperty("after_send_back");
     expect(definitionFromRows({ ...rows, steps: rows.steps.map((s) => ({ ...s, after_send_back: null })) }).steps[1]).not.toHaveProperty("afterSendBack");
     expect(definitionFromRows(rows)).toEqual(definition);
