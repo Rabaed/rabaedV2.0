@@ -158,6 +158,8 @@ describe("a Contractor engineer's Draft MAR", () => {
       // A Draft with no number: its Step began when it was started, which nobody sees.
       stepEnteredAt: null,
       stepAgeWeeks: null,
+      // Never numbered, so nothing is fixed by a Document Number (RP-581).
+      fixedByNumber: [],
     });
   });
 
