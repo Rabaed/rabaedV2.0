@@ -94,7 +94,8 @@ beforeAll(async () => {
       returning id
     ), fv as (
       insert into form_version (form_definition_id, version_no, status, schema, published_at)
-      select id, 1, 'published', '{"sections": [{"key": "material", "title": {"en": "Material", "ar": "المادة"}, "fields": [{"key": "model", "type": "text", "label": {"en": "Model", "ar": "الطراز"}}]}]}'::jsonb, now() from f
+      -- The Rabaed Default MAR Form's fields: new MARs on a Project created from it are filled in on it (RP-554).
+      select f.id, 1, 'published', r.schema, now() from f, form_version r where r.id = app.latest_form_version('MAR')
     )
     select (select id from s) as screen_id, (select id from f) as form_id
   `.execute(migrator);

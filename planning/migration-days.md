@@ -8,3 +8,5 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 
 | Day | Issue or spec | Lane | Purpose |
 | --- | --- | --- | --- |
+| 20270212 | RP-554 | lane 5 | Project's own Form for new items |
+| 20270213 | RP-566 | lane 5 | Default Version refused when a Project lacks its outcome or Stage |

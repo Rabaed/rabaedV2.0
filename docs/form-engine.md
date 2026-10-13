@@ -299,6 +299,13 @@ Layout is not fixed to the Form: a Form can have **several PDF Templates**, and 
 - **A Revision onto a newer Form version** copies values by matching key and type. Values for fields that no longer exist stay visible in the previous revision only. The new revision shows a notice listing them.
   - As built (RP-316, RP-311 review): `app.revision_dropped_fields(item)` (security definer, granted to the app role) returns, for a Revision the caller sees, the fields (key and label) of the revised item's Form Version that the Revision's Version doesn't have with the same type, in schema order, layout fields aside; nothing for an original or an unchanged Version. It reads the two schemas only, never the revised item's answers. `WorkItemDetail.droppedFields` carries them, and the item page lists them under the `versionsChanged` notice, in English and Arabic.
 
+### Which Form a new item gets (as built, RP-554)
+
+- A new item of a Type on a Project is pinned to the latest published Version of **the Project's own Form for that Type**, if the Project has one, else of the Type's **Rabaed Default Form**. A Project gets its own Form when the Company that creates it has a default Form for the Type (RP-517, workflow-engine.md "Company defaults"): it is copied as the Project's Version 1.
+- Every new item takes it, whoever raises it: a Company that joins the Project raises on the Project's Form too (nothing of its own is copied in, ADR 0016). So does every command that starts a new item: creating one (and Duplicate), a Revision, a replacement of a rejected item, and the items an outcome creates (Code B Comments).
+- Items already raised keep the Version they are pinned to (ADR 0006): a Form the Project gains later, or a newer Version of it, reaches new items only.
+- `app.latest_form_version(project, type)` answers it, and `app.create_work_item` refuses any other Version (`form_version_not_latest`); the api's new-item Form reads the same function. It is security definer, and names the Project's own Form only to a Member on that Project; anyone else gets the Rabaed Default's, never another Project's Form (V13, V18). Who reads a Form is unchanged.
+
 ### Publish-time validation
 
 - Keys are unique, and conditions and formulas reference existing keys with no circular references.
