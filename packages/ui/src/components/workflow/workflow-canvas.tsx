@@ -9,16 +9,18 @@ import {
   ConnectionMode,
   EdgeLabelRenderer,
   getBezierPath,
-  getNodesBounds,
   getSmoothStepPath,
+  getViewportForBounds,
   Handle,
   MarkerType,
   MiniMap,
   Position,
   ReactFlow,
   ReactFlowProvider,
+  useNodesInitialized,
   useReactFlow,
   useStore,
+  useStoreApi,
   type Edge,
   type EdgeProps,
   type FinalConnectionState,
@@ -27,7 +29,7 @@ import {
   type NodeProps,
 } from "@xyflow/react";
 import { directionOf, type BaseRole, type Locale, type WorkItemMapPosition, type WorkflowDefinition } from "@rabaed/domain";
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type ReactNode } from "react";
 import { cn } from "../../lib/cn.ts";
 import { IconButton } from "../button/button.tsx";
 import { Icon } from "../icon/icon.tsx";
@@ -157,6 +159,8 @@ const noKeys: ReadonlySet<string> = new Set();
 const noGroup: readonly string[] = [];
 /** The builder's fit, as the reference's: the Steps fill the canvas, with a little room around. */
 const FIT = { padding: 0.08, minZoom: 0.25 } as const;
+/** A canvas move's duration in ms: none for those who ask for reduced motion. */
+const motion = (ms: number) => (matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : ms);
 /** The builder's grid, for the dots behind and for snapping. */
 const GRID = 20;
 
@@ -222,27 +226,41 @@ function Canvas({
   const chosen = useMemo(() => new Set([...(selection ? [selection.key] : []), ...group]), [selection, group]);
   // With the overview shown, the fit keeps the Steps (and a Return's loop under them) above it and the zoom controls.
   const fitPadding = useMemo<NonNullable<FitViewOptions["padding"]>>(() => (minimap ? { top: "5%", bottom: "122px", left: "4%", right: "4%" } : FIT.padding), [minimap]);
+  // React Flow's own first fit, with the builder's options. Memoised: React Flow copies the prop into its store
+  // whenever it is a new object, and a fit still queued there would take it instead of the options it was given.
+  const fitViewOptions = useMemo<FitViewOptions>(() => (edit ? { ...FIT, padding: fitPadding, maxZoom: 1 } : { padding: 0.04 }), [edit, fitPadding]);
   const box = useRef<HTMLDivElement>(null);
-  /** The builder's fit (RP-555, as the reference's): every Step and End in view, the bands behind them. */
+  const store = useStoreApi<CanvasNode, CanvasEdge>();
+  /**
+   * The builder's fit (RP-555, as the reference's): every Step and End in view, the bands behind them. Worked out
+   * here and set in one go, not left to React Flow's fitView, which waits for a later frame: a click in between
+   * (a problem picked, the test run started) would otherwise be undone, or the fit made with the next render's options.
+   */
   const fit = useCallback(
     (duration = 0) => {
       const items = flow.getNodes().filter((n) => n.type !== "band");
-      if (items.length === 0) return;
-      void flow.fitView({ nodes: items.map((n) => ({ id: n.id })), ...FIT, padding: fitPadding, maxZoom: 1, duration }).then(() => {
-        // A Return's loop under the Steps isn't measured by the fit: when it would reach the overview and the zoom
-        // controls, the Steps go up as far as needed (never above the Stage names) so it stays clear of them.
-        const height = box.current?.clientHeight ?? 0;
-        if (!minimap || height === 0) return;
-        const { x, y, zoom } = flow.getViewport();
-        const bounds = getNodesBounds(items);
-        const top = bounds.y * zoom + y;
-        const loopBottom = (bounds.y + bounds.height + 64) * zoom + y;
-        const shift = Math.min(loopBottom - (height - 122), top - 44);
-        if (shift > 1) void flow.setViewport({ x, y: y - shift, zoom });
-      });
+      const { width, height, minZoom } = store.getState();
+      if (items.length === 0 || width === 0 || height === 0) return;
+      const bounds = flow.getNodesBounds(items);
+      const { x, y, zoom } = getViewportForBounds(bounds, width, height, minZoom, 1, fitPadding);
+      // A Return's loop under the Steps isn't measured by the fit: when it would reach the overview and the zoom
+      // controls, the Steps go up as far as needed (never above the Stage names) so it stays clear of them.
+      const top = bounds.y * zoom + y;
+      const loopBottom = (bounds.y + bounds.height + 64) * zoom + y;
+      const shift = minimap ? Math.min(loopBottom - (height - 122), top - 44) : 0;
+      void flow.setViewport({ x, y: shift > 1 ? y - shift : y, zoom }, { duration });
     },
-    [flow, fitPadding, minimap],
+    [flow, store, fitPadding, minimap],
   );
+  // The first fit, as soon as every Step is measured (React Flow shows a node only then): in the same commit, so
+  // nothing can be clicked on the canvas before it.
+  const measured = useNodesInitialized();
+  const fitted = useRef(false);
+  useLayoutEffect(() => {
+    if (!edit || !measured || fitted.current) return;
+    fitted.current = true;
+    fit();
+  }, [edit, measured, fit]);
   const drawn = useMemo(() => toFlow(model, ctx, edit, chosen), [model, ctx, edit, chosen]);
   // Controlled, so the builder's edits redraw without resetting the view; React Flow moves a dragged node meanwhile.
   const [nodes, setNodes] = useState(drawn.nodes);
@@ -263,13 +281,16 @@ function Canvas({
     if (!focus) return;
     const node = flow.getInternalNode(focus.key);
     if (!node) return;
-    const duration = matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 450;
     const { width = 200, height = 78 } = node.measured;
-    void flow.setCenter(node.internals.positionAbsolute.x + width / 2, node.internals.positionAbsolute.y + height / 2, { zoom: Math.max(flow.getZoom(), 1), duration });
+    void flow.setCenter(node.internals.positionAbsolute.x + width / 2, node.internals.positionAbsolute.y + height / 2, { zoom: Math.max(flow.getZoom(), 1), duration: motion(450) });
   }, [focus, flow]);
 
+  // Once per Auto-layout: not again when the fit itself changes (the overview hidden for a test run).
+  const laidOut = useRef(fitNonce);
   useEffect(() => {
-    if (edit && fitNonce !== undefined && fitNonce > 0) fit(matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 400);
+    if (!edit || fitNonce === undefined || fitNonce === laidOut.current) return;
+    laidOut.current = fitNonce;
+    fit(motion(400));
   }, [edit, fitNonce, fit]);
 
   // As the reference's: fitted again when the canvas gets noticeably wider or narrower.
@@ -409,8 +430,7 @@ function Canvas({
         edgeTypes={edgeTypes}
         // The builder fits its Steps (fit); a map to look at is fitted whole.
         fitView
-        fitViewOptions={edit ? { ...FIT, padding: fitPadding } : { padding: 0.04 }}
-        onInit={edit ? () => fit() : undefined}
+        fitViewOptions={fitViewOptions}
         // React Flow's MIT licence asks for no attribution; the builder's overview stays clear of it.
         proOptions={{ hideAttribution: true }}
         minZoom={edit ? FIT.minZoom : 0.2}
@@ -448,7 +468,7 @@ function Canvas({
         key={edit ? dir : `${dir}:${definition.steps.length}:${viewerRole ?? ""}:${JSON.stringify(position ?? null)}`}
       >
         <Background variant={BackgroundVariant.Dots} gap={edit ? GRID : 18} size={edit ? 1.2 : 1.4} color="var(--border-strong)" />
-        <Zoom labels={labels} rtl={dir === "rtl"} onFit={edit ? () => fit(400) : undefined} />
+        <Zoom labels={labels} rtl={dir === "rtl"} onFit={edit ? () => fit(motion(400)) : undefined} />
         {minimap && (
           <MiniMap
             position={dir === "rtl" ? "bottom-right" : "bottom-left"}
