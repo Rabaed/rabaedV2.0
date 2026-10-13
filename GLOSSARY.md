@@ -174,7 +174,7 @@ _Avoid_: Deleted, voided
 
 
 **Form**:
-The customisable middle of a Work Item, built in the form builder: the fields a Work Item Type captures between the System Fields above and below it. Field labels are in Arabic and English. A Form is a Rabaed Default, kept in a Company's Library, or copied into a Project. The Form belongs to the raiser: only the raiser's Member holding the current Step edits it, at the Steps its Workflow allows, before the first Submit or after a Send Back; otherwise a change needs a Revision. Every other Participant answers in its reply Screen, never in the Form.
+The customisable middle of a Work Item, built in the form builder: the fields a Work Item Type captures between the System Fields above and below it. Field labels are in Arabic and English. A Form is a Rabaed Default, kept in a Company's Library, or copied into a Project. The Form belongs to the raiser: only the raiser's Member holding the current Step edits it, at the Steps its Workflow allows, before the first Submit, or after a Send Back to a Step the Workflow lets edit the Form; otherwise a change needs a Revision. A field the Document Number is built from never changes once the item is numbered. Every other Participant answers in its reply Screen, never in the Form.
 _Avoid_: Template (on its own), general template
 
 **Form Section**:
@@ -255,7 +255,7 @@ A Transition that sends a Work Item back to an earlier step within the same Part
 _Avoid_: Reject, RFI
 
 **Send Back**:
-A Transition that hands a Work Item back to the Participant that Submitted it, with a comment saying what to change and no Review Code. It stays the same item with the same Document Number, and carries on when that Participant Submits it again. Unlike Code C, it neither closes the item nor starts a Revision. A Workflow may offer it; the Rabaed Default submittal Workflows don't, and use Code C instead.
+A Transition that hands a Work Item back to the Participant that Submitted it, with a comment and no Review Code. It stays the same item with the same Document Number, and carries on when that Participant Submits it again. That Participant only replies with a comment, unless the Workflow lets the Step it lands on edit the Form, as a Site Report's does; others see its changes only once it is Submitted again. Unlike Code C, it neither closes the item nor starts a Revision. A Workflow may offer it; the Rabaed Default submittal Workflows don't, and use Code C instead.
 _Avoid_: Return (which stays inside one Participant), RFI, Reject
 
 **Creation Date**:
