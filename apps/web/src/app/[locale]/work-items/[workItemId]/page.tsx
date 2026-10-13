@@ -1,5 +1,5 @@
 import { answerFields, formatNumber, isOpenStageCategory, sortedByName, stepAgeLabel, watchOutcomeNames, type Locale } from "@rabaed/domain";
-import { AgeDots, DocNo, Outcome, outcomesOfType, StagePill, stageColour } from "@rabaed/ui";
+import { AgeDots, DocNo, Outcome, outcomesOfType, SentBackNotice, StagePill, stageColour } from "@rabaed/ui";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
 import { WorkItemActions } from "@/components/work-item-actions";
@@ -182,6 +182,8 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
           )}
         </dl>
 
+        {/* Sent Back to a "Comment only" Step (ADR 0021): why its Form is read-only, for the raiser's Members only. */}
+        {item.sentBackForComment && <SentBackNotice>{t("sentBackForComment")}</SentBackNotice>}
         <WorkItemAnswers locale={locale} workItemId={item.id} documents={documents} />
 
         {/* The System Fields below the Form. */}

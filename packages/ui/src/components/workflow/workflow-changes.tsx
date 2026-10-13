@@ -12,7 +12,7 @@ type ChangeWords = { added: string; removed: string; changed: string; noChanges:
 
 /** What a changed Step or Transition's parts are, each compared on its own. */
 const partsOf: Record<"step" | "transition", (x: Record<string, unknown>) => Partial<Record<ChangedPart, unknown>>> = {
-  step: (s) => ({ name: s.name, stage: s.stage, holder: s.actor, outcome: [s.outcomeMode, s.editsForm, s.draftsVisibleTo] }),
+  step: (s) => ({ name: s.name, stage: s.stage, holder: s.actor, outcome: [s.outcomeMode, s.editsForm, s.draftsVisibleTo, s.afterSendBack] }),
   transition: (t) => ({ label: t.label, kind: t.kind, outcome: [t.outcome, t.permission], condition: [t.rules, t.actions], screen: [t.screen, t.actionForm], notifications: t.notifications }),
 };
 

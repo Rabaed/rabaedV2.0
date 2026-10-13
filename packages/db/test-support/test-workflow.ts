@@ -130,6 +130,14 @@ export async function addTestWorkflow(
       where key = 'draft' and workflow_version_id = '${row.version_id}'
     `);
   }
+  // "After a Send Back" on the Steps a Send Back leads to (ADR 0021, RP-580); null (as on
+  // every Version published before it, read as `edit_form`) when left out.
+  for (const [key, setting] of Object.entries(options.afterSendBack ?? {})) {
+    await run(`
+      update workflow_step set after_send_back = '${setting}'
+      where key = '${key}' and workflow_version_id = '${row.version_id}'
+    `);
+  }
   // The Screen a Transition shows, pinned as publishing pins it (RP-516): its key, its
   // Version and that Version's schema as the Transition's Action Form.
   for (const [key, screenVersionId] of Object.entries(options.screens ?? {})) {
@@ -187,6 +195,8 @@ export type TestWorkflowOptions = {
   notifications?: Record<string, unknown[]>;
   /** The Draft Step's "Drafts visible to" (RP-514): the author only, or (left out) the author's whole Company. */
   draftsVisibleTo?: "company" | "author";
+  /** "After a Send Back" (ADR 0021, RP-580) by Step key (`draft`, `internal_review`); left out, null: `edit_form`. */
+  afterSendBack?: Partial<Record<"draft" | "internal_review", "comment" | "edit_form">>;
   /** The published Screen Version a Transition shows, by the Transition's key (RP-516; addTestScreen). */
   screens?: Record<string, string>;
 };

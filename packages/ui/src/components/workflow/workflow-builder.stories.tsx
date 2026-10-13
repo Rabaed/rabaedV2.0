@@ -203,6 +203,48 @@ export const StepSelected: Story = {
   },
 };
 
+/** A Send Back to the Draft Step (ADR 0021): what the raiser may change after it, "Comment only" until set. */
+const sentBackDraft: WorkflowDefinition = {
+  ...builderDraft,
+  transitions: [
+    ...builderDraft.transitions,
+    {
+      key: "send_back_for_comment",
+      label: { en: "Return for Comment", ar: "إرجاع للتعليق" },
+      kind: "send_back",
+      from: "consultant_manager",
+      to: "draft",
+      outcome: null,
+      permission: "approve",
+      actionForm: null,
+    },
+  ],
+};
+
+/** The raiser's Step a Send Back leads to: "After a Send Back", set to "Edit the Form". */
+export const StepAfterSendBack: Story = {
+  args: { definition: sentBackDraft, problems: builderProblemsOf(sentBackDraft) },
+  render,
+  play: async ({ args, canvas, context }) => {
+    const locale = storyLocale(context);
+    const labels = workflowBuilderLabels(locale);
+    await pickStep(canvas, "draft", locale);
+    const editor = editorOf(canvas, labels);
+    const setting = editor.getByRole("combobox", { name: labels.afterSendBack });
+    await expect(setting).toHaveTextContent(labels.afterSendBackComment);
+    await expect(editor.getByText(labels.afterSendBackHelp)).toBeVisible();
+    await userEvent.click(setting);
+    await userEvent.click(within(document.body).getByRole("option", { name: labels.afterSendBackEditForm }));
+    await expect(args.onChange).toHaveBeenCalledWith(
+      expect.objectContaining({ steps: expect.arrayContaining([expect.objectContaining({ key: "draft", afterSendBack: "edit_form" })]) }),
+    );
+    await expect(editorOf(canvas, labels).getByRole("combobox", { name: labels.afterSendBack })).toHaveTextContent(labels.afterSendBackEditForm);
+    // A Step no Send Back leads to has no such setting.
+    await pickStep(canvas, "contractor_pm", locale);
+    await expect(editorOf(canvas, labels).queryByRole("combobox", { name: labels.afterSendBack })).toBeNull();
+  },
+};
+
 /** V2 05: the deciding Step: its outcome, and its six Transitions, one of which is picked from the list. */
 export const StepManager: Story = {
   render,

@@ -560,6 +560,7 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
       outcome: WorkItemOutcome | null;
       closed_at: Date | null;
       can_save_answers: boolean;
+      sent_back_for_comment: boolean;
       revision_no: number;
       versions_changed: boolean;
       can_create_revision: boolean;
@@ -579,7 +580,7 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
         w.submitted_at, w.outcome, w.closed_at, s.key as step_key, s.name as step_name,
         raiser.legal_name as raised_by, holder.legal_name as held_by, m.full_name as holder_name,
         pool.names as pool_names,
-        app.can_save_answers(w.id) as can_save_answers, w.revision_no, app.revision_versions_changed(w.id) as versions_changed,
+        app.can_save_answers(w.id) as can_save_answers, app.sent_back_for_comment(w.id) as sent_back_for_comment, w.revision_no, app.revision_versions_changed(w.id) as versions_changed,
         app.can_create_revision(w.id) as can_create_revision, app.can_discard_revision(w.id) as can_discard_revision,
         app.can_create_replacement(w.id) as can_create_replacement,
         ${canDuplicate(sql.ref("w"))} as can_duplicate, app.can_discard_draft(w.id) as can_discard_draft
@@ -627,6 +628,7 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
       namedAnswers: named,
       fieldTimes: fieldTimesFor(stamps, memberId),
       autosave: auto[0]!.autosave,
+      sentBackForComment: d.sent_back_for_comment,
       scopes,
       step: { key: d.step_key, name: d.step_name },
       raisedBy: { companyName: d.raised_by },

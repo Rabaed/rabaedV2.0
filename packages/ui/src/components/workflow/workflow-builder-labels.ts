@@ -95,6 +95,11 @@ export type WorkflowBuilderLabels = {
   draftsWholeCompany: string;
   draftsAuthorOnly: string;
   draftsVisibleHelp: string;
+  /** A raiser's Step a Send Back leads to: what the raiser may change after it (ADR 0021). */
+  afterSendBack: string;
+  afterSendBackComment: string;
+  afterSendBackEditForm: string;
+  afterSendBackHelp: string;
   /** "Transitions from this Step · 3". */
   transitionsFrom: (n: string) => string;
   /** A Step with no way out: how to add one. */

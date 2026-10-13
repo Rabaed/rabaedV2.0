@@ -4,6 +4,7 @@ import {
   formSchema,
   outcomeActions,
   parseWorkflowDefinition,
+  withAfterSendBackDefault,
   workflowPublishProblems,
   type DefinitionIssue,
   type OutcomeKind,
@@ -93,16 +94,18 @@ export type PreparedDraft =
 /**
  * Parses `input` as a definition and runs every publish check on it in `check`'s
  * context: the one sequence every save, check and publish of a Workflow runs, in the
- * api and in Rabaed Admin.
+ * api and in Rabaed Admin. A Step a Send Back leads to that doesn't say what the raiser
+ * may change after it gets "Comment only" (ADR 0021), so every saved Version says it.
  */
 export function prepareDraft(input: unknown, check: WorkflowCheckContext): PreparedDraft {
   const parsed = parseWorkflowDefinition(input);
   if (!parsed.ok) return { ok: false, issues: parsed.issues, problems: [] };
-  const problems = workflowPublishProblems(parsed.definition, check.context);
-  const rows = definitionToRows(parsed.definition, check.outcomeKind);
+  const definition = withAfterSendBackDefault(parsed.definition, check.context.stages);
+  const problems = workflowPublishProblems(definition, check.context);
+  const rows = definitionToRows(definition, check.outcomeKind);
   return {
     ok: true,
-    definition: parsed.definition,
+    definition,
     args: { layout: JSON.stringify(rows.layout), steps: JSON.stringify(rows.steps), transitions: JSON.stringify(rows.transitions) },
     problems,
   };

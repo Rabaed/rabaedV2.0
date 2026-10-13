@@ -563,6 +563,12 @@ export const workItemDetail = workItemSummary.extend({
   fieldTimes: z.record(z.string(), fieldTime),
   /** The web autosaves it: only the first Draft, where saves write no history. */
   autosave: z.boolean(),
+  /**
+   * It is back at the raiser after a Send Back to a Step that says "Comment only" (ADR
+   * 0021): its Form, Documents and checklist are read-only, and the raiser replies and
+   * Submits again. Only for a Member of the raiser's Participant; false for everyone else.
+   */
+  sentBackForComment: z.boolean(),
   /** The item's Scopes and Sub-scopes, each Scope before its Sub-scopes. */
   scopes: z.array(z.object({ id: z.uuid(), parentId: z.uuid().nullable(), name: bilingualText })),
   step: z.object({ key: z.string(), name: bilingualText }),

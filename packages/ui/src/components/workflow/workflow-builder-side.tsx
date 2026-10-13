@@ -8,11 +8,13 @@ import {
   itemsToCreateKey,
   outcomeModes,
   parseActionForm,
+  sendBackSteps,
   stepEditsForm,
   transitionKinds,
   transitionRuleFields,
   updateStep,
   updateTransition,
+  type AfterSendBack,
   type BaseRole,
   type BilingualText,
   type FormField,
@@ -284,6 +286,22 @@ function StepEditor(props: SideEditorProps & { step: WorkflowStep }) {
         <Field label={labels.editsForm} help={labels.editsFormHelp} layout="inline">
           <Switch checked={stepEditsForm(definition, step, stages)} onCheckedChange={(on) => set({ editsForm: on })} />
         </Field>
+      )}
+      {sendBackSteps(definition, stages).has(step.key) && (
+        <>
+          <Heading>{labels.afterSendBack}</Heading>
+          {/* Left out, a saved Version gets "Comment only" (ADR 0021; withAfterSendBackDefault). */}
+          <Field label={labels.afterSendBack} help={labels.afterSendBackHelp} className="[&>label]:sr-only">
+            <Select
+              value={step.afterSendBack ?? "comment"}
+              onValueChange={(setting) => set({ afterSendBack: setting as AfterSendBack })}
+              options={[
+                { value: "comment", label: labels.afterSendBackComment },
+                { value: "edit_form", label: labels.afterSendBackEditForm },
+              ]}
+            />
+          </Field>
+        </>
       )}
       {isDraft && (
         <>
