@@ -37,6 +37,12 @@ const en = {
   saveFailed: "Couldn't save the draft.",
   unsavedLeave: "The builder has changes that are not saved as a draft.",
   published: (v: number) => `Version ${v} published. New items of this Type start on it.`,
+  // RP-566: how many Projects and which outcomes and Stages, never which Projects (V9).
+  projectsLack: (projects: number, outcomes: string[], stages: string[]) =>
+    `Not published: ${projects === 1 ? "1 Project running this Default lacks" : `${projects} Projects running this Default lack`} ${[
+      ...outcomes.map((o) => `outcome ${o}`),
+      ...stages.map((k) => `Stage ${k}`),
+    ].join(", ")}. Edits of the Rabaed Defaults reach only new Projects: publish once their Project Admins have added it to their Project's set, or leave it out of this Version.`,
   duplicateHeading: "Start from another Workflow",
   duplicateFrom: "Copy the Workflow of",
   duplicateHelp: "Copies its draft, else its latest Version, in as this Type's draft. It replaces the draft this Type has.",
@@ -125,6 +131,11 @@ const ar: Strings = {
   saveFailed: "تعذّر حفظ المسودة.",
   unsavedLeave: "في المحرّر تغييرات غير محفوظة كمسودة.",
   published: (v: number) => `نُشرت النسخة ${v}. تبدأ بها العناصر الجديدة من هذا النوع.`,
+  projectsLack: (projects: number, outcomes: string[], stages: string[]) =>
+    `لم تُنشر: ${projects === 1 ? "مشروع واحد يعمل بهذا الإعداد الافتراضي تنقصه" : `${projects} من المشاريع التي تعمل بهذا الإعداد الافتراضي تنقصها`} ${[
+      ...outcomes.map((o) => `النتيجة ${o}`),
+      ...stages.map((k) => `المرحلة ${k}`),
+    ].join("، ")}. تعديلات الإعدادات الافتراضية من رباد تصل إلى المشاريع الجديدة فقط: انشر بعد أن يضيفها مسؤول المشروع إلى مجموعة مشروعه، أو اتركها خارج هذه النسخة.`,
   duplicateHeading: "البدء من سير عمل آخر",
   duplicateFrom: "نسخ سير عمل",
   duplicateHelp: "ينسخ مسودته، أو آخر نسخة منه، مسودةً لهذا النوع، ويحل محل مسودته الحالية.",

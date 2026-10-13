@@ -1,5 +1,6 @@
 import {
   definitionFromRows,
+  definitionSetEntries,
   definitionToRows,
   formSchema,
   outcomeActions,
@@ -170,7 +171,11 @@ export type RabaedDefaultResult =
   | { ok: true; definitionId: string; versionNo: number; warnings: WorkflowProblem[] }
   | { ok: false; reason: "type_not_found" }
   | { ok: false; reason: "invalid_definition"; issues: DefinitionIssue[] }
-  | { ok: false; reason: "workflow_problems"; problems: WorkflowProblem[] };
+  | { ok: false; reason: "workflow_problems"; problems: WorkflowProblem[] }
+  | ({ ok: false; reason: "projects_lack_entries" } & ProjectsLackingEntries);
+
+/** How many Projects running a Rabaed Default lack outcomes or Stages a Version would use, and which: never which Projects (V9). */
+export type ProjectsLackingEntries = { projects: number; outcomes: string[]; stages: string[] };
 
 /**
  * Saves `input` (a definition document) as the draft of the Rabaed Default Workflow of
@@ -192,6 +197,10 @@ export async function writeRabaedDefaultWorkflow(
   const prepared = prepareDraft(input, check);
   if (!prepared.ok) return { ok: false, reason: "invalid_definition", issues: prepared.issues };
   if (publish && hasError(prepared.problems)) return { ok: false, reason: "workflow_problems", problems: prepared.problems };
+  if (publish) {
+    const lacking = await projectsLackingEntries(trx, definitionId, check.workItemTypeId, definitionSetEntries(prepared.definition));
+    if (lacking.projects > 0) return { ok: false, reason: "projects_lack_entries", ...lacking };
+  }
   const { args } = prepared;
   const saved = await sql<{ outcome: string; version_no: number }>`
     select outcome, version_no from app.write_workflow_draft(
@@ -204,6 +213,54 @@ export async function writeRabaedDefaultWorkflow(
   `.execute(trx);
   if (published.rows[0]?.outcome !== "published") throw new Error(`mark_workflow_published: ${published.rows[0]?.outcome}`);
   return { ok: true, definitionId, versionNo: published.rows[0].version_no, warnings: prepared.problems };
+}
+
+/**
+ * The open Projects that run Rabaed Default `definitionId` of Rabaed Work Item Type `typeId`
+ * and lack one of `entries` in their own sets, counted, with the entries they lack (RP-566).
+ * A Project runs the Default when it uses the Rabaed Type (no Type of its own of that code,
+ * `app.project_type_id`) and binds no other Workflow to it for every raiser
+ * (`app.new_item_workflow_version`; an exception for one Participant leaves the others on the
+ * Default). It lacks an outcome its copy of the Type's set holds no closing outcome of
+ * (`work_item_outcome_in_set`), and a Stage its Module's Stage set has no key of. A closed
+ * Project raises no items, so it is not counted. Read across every Company, as Rabaed Admin
+ * and the migrator read (V9): the answer names no Project.
+ */
+export async function projectsLackingEntries(
+  db: Db,
+  definitionId: string,
+  typeId: string,
+  entries: { outcomes: string[]; stages: string[] },
+): Promise<ProjectsLackingEntries> {
+  const { rows } = await sql<ProjectsLackingEntries>`
+    with rabaed_type as (
+      select id, code, module_key from work_item_type where id = ${typeId}::uuid and owner_kind = 'rabaed'
+    ), on_default as (
+      select p.id from project p cross join rabaed_type t
+      where p.status = 'active'
+        and not exists (select 1 from work_item_type own where own.project_id = p.id and own.code = t.code)
+        and not exists (
+          select 1 from workflow_binding b
+          where b.project_id = p.id and b.work_item_type_id = t.id and b.raising_participant_id is null
+            and b.workflow_definition_id <> ${definitionId}::uuid
+        )
+    ), lacks as (
+      select d.id, 'outcome' as kind, e.entry from on_default d cross join rabaed_type t
+      cross join unnest(${entries.outcomes}::text[]) e(entry)
+      where not exists (
+        select 1 from outcome o where o.project_id = d.id and o.work_item_type_id = t.id and o.code = e.entry and o.closing
+      )
+      union all
+      select d.id, 'stage', e.entry from on_default d cross join rabaed_type t
+      cross join unnest(${entries.stages}::text[]) e(entry)
+      where not exists (select 1 from stage s where s.project_id = d.id and s.module_key = t.module_key and s.key = e.entry)
+    )
+    select count(distinct id)::int as projects,
+      coalesce(array_agg(distinct entry order by entry) filter (where kind = 'outcome'), '{}') as outcomes,
+      coalesce(array_agg(distinct entry order by entry) filter (where kind = 'stage'), '{}') as stages
+    from lacks
+  `.execute(db);
+  return rows[0]!;
 }
 
 /** Whether any of `problems` refuses a publish (warnings don't). */

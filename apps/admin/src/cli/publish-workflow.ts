@@ -40,7 +40,10 @@ try {
     if (result.reason === "engineer_not_found") console.error(`No active Rabaed Engineer ${input.engineer}.`);
     else if (result.reason === "type_not_found") console.error(`No Rabaed Default Work Item Type ${input.type} with a Workflow.`);
     else if (result.reason === "invalid_definition") console.error(`Not a Workflow definition:\n${lines(result.issues.map((i) => `${i.path || "(definition)"}: ${i.message}`))}`);
-    else console.error(`Refused, nothing published:\n${lines(result.problems.map(problemLine))}`);
+    else if (result.reason === "projects_lack_entries") {
+      const lacking = [...result.outcomes.map((o) => `outcome ${o}`), ...result.stages.map((s) => `Stage ${s}`)];
+      console.error(`Refused, nothing published: ${result.projects} Projects running this Default lack:\n${lines(lacking)}`);
+    } else console.error(`Refused, nothing published:\n${lines(result.problems.map(problemLine))}`);
   }
 } finally {
   await db.destroy();

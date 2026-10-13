@@ -321,3 +321,16 @@ function transitionParts<T extends TransitionParts>({ rules, actions, notificati
     ...(notifications === undefined ? {} : { notifications }),
   } as Pick<T, keyof TransitionParts>;
 }
+
+/**
+ * The outcomes and Stages `definition` uses: every outcome a Transition sets and every Stage a
+ * Step sits in, each once, sorted. A Rabaed Default Version is published only when every Project
+ * running that Default holds them all in its own sets (RP-566).
+ */
+export function definitionSetEntries(definition: Pick<WorkflowDefinition, "steps" | "transitions">): { outcomes: string[]; stages: string[] } {
+  const sorted = (xs: Iterable<string>) => [...new Set(xs)].sort();
+  return {
+    outcomes: sorted(definition.transitions.flatMap((t) => (t.outcome === null ? [] : [t.outcome]))),
+    stages: sorted(definition.steps.map((s) => s.stage)),
+  };
+}

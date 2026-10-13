@@ -124,6 +124,11 @@ export function WorkflowEditor({ typeCode, locale }: { typeCode: string; locale:
       await load();
       return { ok: true, versionNo };
     } catch (error) {
+      if (error instanceof ApiError && error.body.error === "projects_lack_entries") {
+        const { projects, outcomes, stages } = error.body as { projects: number; outcomes: string[]; stages: string[] };
+        setNotice({ kind: "error", text: s.projectsLack(projects, outcomes, stages) });
+        return { ok: false, problems: known.current };
+      }
       const found = error instanceof ApiError ? (error.body.problems as WorkflowProblem[] | undefined) : undefined;
       if (found) show(found);
       return { ok: false, problems: found ?? known.current };
