@@ -37,5 +37,5 @@ for (const { name, script } of steps) {
   process.exit(result.status ?? 1);
 }
 const sha = spawnSync("git", ["rev-parse", "--short", "HEAD"], { cwd: root, encoding: "utf8" }).stdout.trim();
-const status = spawnSync("git", ["status", "--porcelain"], { cwd: root, encoding: "utf8" }).stdout.trim();
+const status = spawnSync("git", ["status", "--porcelain", "--untracked-files=no"], { cwd: root, encoding: "utf8" }).stdout.trim();
 console.log(`\n${finalLine({ sha, dirty: status !== "", steps: steps.map((s) => s.name) })}`);

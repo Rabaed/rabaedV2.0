@@ -46,6 +46,10 @@ describe("finalLine", () => {
     expect(finalLine({ sha: "abc1234", dirty: false, steps })).toBe("pnpm verify passed on abc1234: lint, typecheck.");
   });
 
+  it("does not print an empty commit when git could not name it", () => {
+    expect(finalLine({ sha: "", dirty: false, steps })).toBe("pnpm verify passed on unknown commit: lint, typecheck.");
+  });
+
   it("says dirty when the tree has uncommitted changes", () => {
     expect(finalLine({ sha: "abc1234", dirty: true, steps })).toBe("pnpm verify passed on abc1234 (dirty: uncommitted changes): lint, typecheck.");
   });

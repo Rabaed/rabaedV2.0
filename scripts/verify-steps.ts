@@ -28,7 +28,7 @@ export function selectSteps(changed: string[]): { steps: Step[]; skipped: Skippe
 
 /** The line `pnpm verify` ends with when every step passed: the verified commit, "dirty" if the tree has uncommitted changes (RP-563). */
 export function finalLine({ sha, dirty, steps }: { sha: string; dirty: boolean; steps: string[] }): string {
-  return `pnpm verify passed on ${sha}${dirty ? " (dirty: uncommitted changes)" : ""}: ${steps.join(", ")}.`;
+  return `pnpm verify passed on ${sha === "" ? "unknown commit" : sha}${dirty ? " (dirty: uncommitted changes)" : ""}: ${steps.join(", ")}.`;
 }
 
 /** The last `count` lines of `output`. */

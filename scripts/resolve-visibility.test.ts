@@ -46,13 +46,40 @@ describe("mergeVisibility", () => {
     expect(text).toBe(doc(baseChannels, [...baseScenarios, "| RP-407-1 | C2 opens Home | C2 | Sees nothing of C1 |", "| RP-439-1 | Builder opened | K1 | 404 |"]));
   });
 
-  it("merges two sentences added to different places of the same long row", () => {
-    const base = doc(["| Search | Filtered by RLS. Covers Subject only. |"], baseScenarios);
-    const ours = doc(["| Search | Filtered by RLS. Never answers. Covers Subject only. |"], baseScenarios);
-    const theirs = doc(["| Search | Filtered by RLS. Covers Subject only. As built (RP-410): finds the owner. |"], baseScenarios);
+  it("stops when both sides changed the same row, even in different words, and never merges inside the row", () => {
+    const base = doc(["| Search | C2 sees the title only. Owners see all. |"], baseScenarios);
+    const ours = doc(["| Search | C2 sees nothing. Owners see all. |"], baseScenarios);
+    const theirs = doc(["| Search | C2 sees the title only. Owners see all. C2 also sees the status. |"], baseScenarios);
     const { text, stuck } = mergeVisibility(base, ours, theirs);
+    expect(stuck).toEqual(["Search"]);
+    expect(text).toContain("<<<<<<<");
+  });
+
+  it("stops when both sides edited the same prose line or V-bullet continuation line", () => {
+    const base = doc(baseChannels, baseScenarios, ["- **V1.** Drafts stay inside.", "  Continued here."]);
+    const ours = doc(baseChannels, baseScenarios, ["- **V1.** Drafts stay inside.", "  Continued by us."]);
+    const theirs = doc(baseChannels, baseScenarios, ["- **V1.** Drafts stay inside.", "  Continued by them."]);
+    const { text, stuck } = mergeVisibility(base, ours, theirs);
+    expect(stuck).toHaveLength(1);
+    expect(stuck[0]).toContain("Continued");
+    expect(text).toContain("<<<<<<<");
+  });
+
+  it("never names an empty row when a blank line is part of the stuck hunk", () => {
+    const base = doc(baseChannels, baseScenarios, ["- **V1.** Drafts stay inside.", "", "Intro."]);
+    const ours = doc(baseChannels, baseScenarios, ["- **V1.** Drafts stay inside.", "", "Intro ours."]);
+    const theirs = doc(baseChannels, baseScenarios, ["- **V1.** Drafts stay inside.", "", "Intro theirs."]);
+    const { stuck } = mergeVisibility(base, ours, theirs);
+    expect(stuck.length).toBeGreaterThan(0);
+    expect(stuck.every((name) => name.trim() !== "")).toBe(true);
+  });
+
+  it("accepts the same change made on both sides", () => {
+    const base = doc(baseChannels, baseScenarios);
+    const same = doc(["| Lists | Show only visible items. |", "| Search | Filtered by RLS, always. |"], [...baseScenarios, "| 2 | A | B | one |"]);
+    const { text, stuck } = mergeVisibility(base, same, same);
     expect(stuck).toEqual([]);
-    expect(text).toBe(doc(["| Search | Filtered by RLS. Never answers. Covers Subject only. As built (RP-410): finds the owner. |"], baseScenarios));
+    expect(text).toBe(same);
   });
 
   it("takes a row one side changed and the other left alone, next to a row the other side added", () => {

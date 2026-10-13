@@ -5,23 +5,25 @@ import { join } from "node:path";
 
 // `node scripts/resolve-visibility.ts` (RP-562), run in the middle of a merge that conflicted in
 // docs/visibility.md. Git merges by line, so two branches that each add a row at the end of a
-// table, or each add a sentence to the same long row, conflict (five of the last 40 merges). This
-// merges what is certain and leaves git's markers, for those rows only, where it is not:
+// table conflict (five of the last 40 merges). This merges what is certain and leaves git's markers,
+// for those places only, where it is not:
 //   - rows (a table row, keyed by its first cell; a "- **Vn." bullet, keyed by Vn) that only one
-//     side added or changed are taken; rows both sides added or changed are kept, once each;
-//   - a row both sides changed is merged word by word when the changes do not touch the same
-//     words; the same words changed two ways, or a row one side deleted and the other changed,
-//     stop it and the row is named. A rule is never silently rewritten.
+//     side added or changed are taken; rows both sides added or changed identically are kept once;
+//   - a row both sides changed differently, a row one side deleted and the other changed, and any
+//     other line (prose, headings, bullet continuation lines) both sides changed differently stop
+//     it, and are named. A rule is never silently rewritten: nothing is merged inside a row.
 // The text of docs/visibility.md is unchanged by this: it only decides how the merge is made.
 
 const file = "docs/visibility.md";
 
 export type Merged = { text: string; stuck: string[] };
 
+const labels = ["ours", "base", "theirs"];
+
 type MergeFile = { text: string; clean: boolean };
 
 /** `git merge-file -p` of three texts (works outside a repository); `clean` is false when it left conflict markers. */
-function gitMergeFile(ours: string, base: string, theirs: string, labels: [string, string, string]): MergeFile {
+function gitMergeFile(ours: string, base: string, theirs: string): MergeFile {
   const dir = mkdtempSync(join(tmpdir(), "rabaed-merge-file-"));
   try {
     const paths = [ours, base, theirs].map((text, i) => {
@@ -29,7 +31,7 @@ function gitMergeFile(ours: string, base: string, theirs: string, labels: [strin
       writeFileSync(path, text);
       return path;
     });
-    const result = spawnSync("git", ["merge-file", "-p", "--diff3", "-L", labels[0], "-L", labels[1], "-L", labels[2], ...paths], { encoding: "utf8" });
+    const result = spawnSync("git", ["merge-file", "-p", "--diff3", ...labels.flatMap((label) => ["-L", label]), ...paths], { encoding: "utf8" });
     if (result.status === null || result.status < 0 || result.status > 127) throw new Error(`git merge-file failed: ${result.stderr}`);
     return { text: result.stdout, clean: result.status === 0 };
   } finally {
@@ -37,31 +39,30 @@ function gitMergeFile(ours: string, base: string, theirs: string, labels: [strin
   }
 }
 
-/** The words of a row, one per line, so git merges inside the row. */
-const words = (row: string) => `${row.split(" ").join("\n")}\n`;
-
-/** One row merged word by word; null when the two sides changed the same words. */
-function mergeRow(base: string, ours: string, theirs: string): string | null {
-  const merged = gitMergeFile(words(ours), words(base), words(theirs), ["ours", "base", "theirs"]);
-  return merged.clean ? merged.text.replace(/\n$/, "").split("\n").join(" ") : null;
-}
-
-/** What names a row across versions: a table row's first cell, a rule bullet's V number, else the whole line. */
-export function rowKey(line: string): string {
+/** What names a row across versions: a table row's first cell, a rule bullet's V number; undefined for any other line. */
+function rowKey(line: string): string | undefined {
   const cell = /^\|\s*(.*?)\s*\|/.exec(line);
   if (cell) return cell[1]!;
-  const rule = /^- \*\*(V\d+)\b/.exec(line);
-  return rule ? rule[1]! : line;
+  return /^- \*\*(V\d+)\b/.exec(line)?.[1];
 }
 
 type Hunk = { base: string[]; ours: string[]; theirs: string[] };
 
-/** A hunk of rows resolved, or the key of the row it cannot decide. */
+/** A hunk resolved, or the name of the row or line it cannot decide. */
 function resolveHunk({ base, ours, theirs }: Hunk): { lines: string[] } | { stuck: string } {
+  const same = (a: string[], b: string[]) => a.length === b.length && a.every((line, i) => line === b[i]);
+  const keyed = [base, ours, theirs].every((lines) => lines.every((line) => rowKey(line) !== undefined));
+  if (!keyed) {
+    // Not only rows (prose, a continuation line, a blank line): no per-row merge, only a whole-hunk one.
+    if (same(ours, theirs) || same(theirs, base)) return { lines: ours };
+    if (same(ours, base)) return { lines: theirs };
+    const named = [...ours, ...theirs].find((line) => line.trim() !== "" && !base.includes(line));
+    return { stuck: (named ?? "(blank line)").trim().slice(0, 60) };
+  }
   const maps = [base, ours, theirs].map((lines) => {
     const map = new Map<string, string>();
     for (const line of lines) {
-      const key = rowKey(line);
+      const key = rowKey(line)!;
       if (map.has(key)) return key;
       map.set(key, line);
     }
@@ -82,8 +83,6 @@ function resolveHunk({ base, ours, theirs }: Hunk): { lines: string[] } | { stuc
     else if (base.length === 0) order.push(key);
     else order.unshift(key);
   });
-  // A row that only theirs kept and ours deleted still has its place via the base order.
-  for (const key of b!.keys()) if (!order.includes(key) && t!.has(key)) order.push(key);
 
   const lines: string[] = [];
   for (const key of order) {
@@ -92,12 +91,7 @@ function resolveHunk({ base, ours, theirs }: Hunk): { lines: string[] } | { stuc
     if (ko === kt) line = ko;
     else if (ko === kb) line = kt;
     else if (kt === kb) line = ko;
-    else if (kb === undefined || ko === undefined || kt === undefined) return { stuck: key };
-    else {
-      const merged = mergeRow(kb, ko, kt);
-      if (merged === null) return { stuck: key };
-      line = merged;
-    }
+    else return { stuck: key };
     if (line !== undefined) lines.push(line);
   }
   return { lines };
@@ -105,7 +99,7 @@ function resolveHunk({ base, ours, theirs }: Hunk): { lines: string[] } | { stuc
 
 /** The three versions of docs/visibility.md merged: `stuck` names the rows left between conflict markers in `text`. */
 export function mergeVisibility(base: string, ours: string, theirs: string): Merged {
-  const first = gitMergeFile(ours, base, theirs, ["ours", "base", "theirs"]);
+  const first = gitMergeFile(ours, base, theirs);
   if (first.clean) return { text: first.text, stuck: [] };
 
   const out: string[] = [];
@@ -134,8 +128,17 @@ export function mergeVisibility(base: string, ours: string, theirs: string): Mer
   return { text: out.join("\n"), stuck };
 }
 
+const root = () => {
+  const result = spawnSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" });
+  if (result.status !== 0) {
+    console.error("Not inside a git repository.");
+    process.exit(2);
+  }
+  return result.stdout.trim();
+};
+
 const show = (stage: number) => {
-  const result = spawnSync("git", ["show", `:${stage}:${file}`], { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+  const result = spawnSync("git", ["show", `:${stage}:${file}`], { cwd: root(), encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
   return result.status === 0 ? result.stdout : null;
 };
 
@@ -147,7 +150,7 @@ function main() {
     process.exit(2);
   }
   const { text, stuck } = mergeVisibility(base ?? "", ours, theirs);
-  writeFileSync(file, text);
+  writeFileSync(join(root(), file), text);
   if (stuck.length > 0) {
     console.error(`${file}: merged what both sides left apart; still in conflict, between <<<<<<< and >>>>>>>: ${stuck.map((k) => `'${k}'`).join(", ")}. Resolve those by hand, then git add ${file}.`);
     process.exit(1);
