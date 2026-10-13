@@ -160,6 +160,8 @@ export type WorkflowBuilderLabels = {
   testRecorded: string;
   /** A test run's Transition whose Screen creates items: what it would create, nothing being created. */
   testWouldCreate: (count: number, n: string) => string;
+  /** The same, naming the Type its rows become: "Would create 2 of the Snag List's Comments". */
+  testWouldCreateOf: (count: number, n: string, type: string) => string;
   /** Toasts on the canvas. */
   addedTransition: (name: string) => string;
   endsCannotStart: string;

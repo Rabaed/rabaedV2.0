@@ -223,7 +223,7 @@ function Canvas({
   const fit = useCallback(
     (duration = 0) => {
       const items = flow.getNodes().filter((n) => n.type !== "band");
-      if (items.length > 0) void flow.fitView({ nodes: items.map((n) => ({ id: n.id })), ...FIT, maxZoom: 1.25, duration });
+      if (items.length > 0) void flow.fitView({ nodes: items.map((n) => ({ id: n.id })), ...FIT, maxZoom: 1, duration });
     },
     [flow],
   );
@@ -464,7 +464,13 @@ function Canvas({
 /** The Stage bands behind the builder's canvas, moving with it (not nodes: the fit and the overview leave them out). */
 function Bands({ model, ctx }: { model: WorkflowMapModel; ctx: Ctx }) {
   const [x, y, zoom] = useStore((s) => s.transform);
-  const height = Math.max(model.height + 140, 820);
+  const paneHeight = useStore((s) => s.height);
+  // Top to bottom of the canvas whatever the zoom (as the reference's, and never a strip with blank canvas
+  // above or below), with the Stage names at the top of what is in view.
+  const visibleTop = -y / zoom;
+  const top = Math.min(-60, visibleTop - 4);
+  const height = Math.max(model.height + 80, (paneHeight - y) / zoom + 4) - top;
+  const labelTop = Math.max(16, visibleTop - top + 16);
   return (
     <div aria-hidden="true" className="pointer-events-none absolute start-0 top-0 z-0 origin-top-left" style={{ transform: `translate(${x}px, ${y}px) scale(${zoom})` }}>
       {model.bands.map((band) => {
@@ -476,11 +482,11 @@ function Bands({ model, ctx }: { model: WorkflowMapModel; ctx: Ctx }) {
             className="absolute border-e border-dashed border-border-strong"
             // The canvas is laid out left to right (the model mirrors itself for Arabic).
             // eslint-disable-next-line rabaed/no-physical-direction
-            style={{ left: band.x, top: -60, width: band.width, height, background: colour?.bg, opacity: 0.85 }}
+            style={{ left: band.x, top, width: band.width, height, background: colour?.bg, opacity: 0.85 }}
           >
             <span
-              className="absolute top-4 text-[11px] font-extrabold tracking-[.05em] whitespace-nowrap uppercase"
-              style={{ color: colour?.fg, ...(ctx.rtl ? { right: 14 } : { left: 14 }) }}
+              className="absolute text-[11px] font-extrabold tracking-[.05em] whitespace-nowrap uppercase"
+              style={{ top: labelTop, color: colour?.fg, ...(ctx.rtl ? { right: 14 } : { left: 14 }) }}
             >
               {name}
             </span>

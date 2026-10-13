@@ -158,7 +158,7 @@ const listed = (message: string, locale: Locale) => typographic(message, locale)
 export function WorkflowBuilder(props: WorkflowBuilderProps) {
   return (
     // Toasts at the bottom centre, as the reference's, clear of the side panel in both directions.
-    <ToastProvider label={props.labels.alertsRegion} closeLabel={props.labels.dismiss} placement="center">
+    <ToastProvider label={props.labels.alertsRegion} closeLabel={props.labels.dismiss} placement="center" look="dark">
       <Builder {...props} />
     </ToastProvider>
   );
@@ -175,7 +175,10 @@ function Builder(props: WorkflowBuilderProps) {
   const [history, setHistory] = useState<History>(() => ({
     past: [],
     // Pinned where the canvas draws it, so the first Step moved keeps every other one in place.
-    present: { ...seeded.definition, layout: placedLayout(seeded.definition, stages, true) },
+    present: {
+      ...seeded.definition,
+      layout: seeded.definition.steps.every((s) => seeded.definition.layout[s.key]) ? placedLayout(seeded.definition, stages, true) : arrangedLayout(seeded.definition, stages),
+    },
     future: [],
   }));
   const definition = history.present;
@@ -484,7 +487,7 @@ function Builder(props: WorkflowBuilderProps) {
   const popupTransition = popup ? definition.transitions.find((t) => t.key === popup.transition) : undefined;
 
   return (
-    <div className="flex h-full min-h-[640px] flex-col gap-2.5 p-3 sm:px-4">
+    <div className="flex h-full min-h-[520px] flex-col gap-2.5 p-3 sm:px-4">
       <div className="flex items-center gap-2">
         <a
           href={backHref}
@@ -494,7 +497,7 @@ function Builder(props: WorkflowBuilderProps) {
         >
           <Icon name="arrow-left" size={16} />
         </a>
-        <h1 className="m-0 min-w-0 truncate text-[17px] font-bold" title={name}>
+        <h1 className={cn("m-0 min-w-0 truncate rounded-xs text-[17px] font-bold", focusRing)} title={name} tabIndex={0}>
           {name}
         </h1>
         {publishedNow !== null ? (
@@ -618,7 +621,7 @@ function Builder(props: WorkflowBuilderProps) {
           </div>
         </aside>
 
-        <section className="relative min-h-[420px] lg:col-start-2 lg:row-start-1">
+        <section className="relative min-h-[320px] lg:col-start-2 lg:row-start-1">
           <WorkflowCanvas
             definition={definition}
             stages={stages}
@@ -643,7 +646,7 @@ function Builder(props: WorkflowBuilderProps) {
             minimap={view.minimap && !testRun}
             arrowStyle={view.arrowStyle}
             snapToGrid={view.snap}
-            className="h-full rounded-[14px]"
+            className="h-full min-h-[320px] rounded-[14px]"
           >
             {testRun && (
               <TestRunBar
@@ -771,7 +774,11 @@ function Builder(props: WorkflowBuilderProps) {
               return;
             }
             take(popupTransition);
-            toast({ title: items > 0 ? labels.testWouldCreate(items, v(items)) : labels.testRecorded, tone: "info" });
+            const made = outcomes.find((o) => o.code === popupTransition.outcome)?.createsItems;
+            toast({
+              title: items === 0 ? labels.testRecorded : made ? labels.testWouldCreateOf(items, v(items), made.name[locale]) : labels.testWouldCreate(items, v(items)),
+              tone: "info",
+            });
           }}
         />
       )}
