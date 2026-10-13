@@ -1,0 +1,10 @@
+# Migration days
+
+Each line reserves one day of migration timestamps (`yyyymmdd`, the first eight digits of a migration's name) for one ticket or spec: `yyyymmdd | RP-nnn (or spec) | lane | note`. The planning session writes the lines with the spec, beside its ticket table's Migration days column (`planning/parallel-sessions.md` step 4.5), and lands them on `main` before the spec starts.
+
+`pnpm check:migrations` refuses a migration a branch adds on a day reserved for another ticket, and names the reservation. A migration is its branch's ticket's (a branch named `RP-nnn-…`) and every ticket the first paragraph of its header comment names, so an integration branch's migrations pass on their tickets' days, and a spec's review fixes pass on a day reserved for the spec when their header names it (`-- Review fixes for spec RP-525 …`). A migration on a day nobody reserved passes with a warning. The check reads this file from `origin/main` and from the branch.
+
+Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a comment on RP-525; another lane used `20270117000000`–`000600` on `main`, and PR #180 had to rename its migration.
+
+| Day | Ticket or spec | Lane | Note |
+| --- | --- | --- | --- |
