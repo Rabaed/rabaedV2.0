@@ -544,6 +544,12 @@ export const workItemDetail = workItemSummary.extend({
    */
   droppedFields: z.array(z.object({ key: z.string(), label: bilingualText })),
   /**
+   * The Built-in Fields (`trade`, `location`) the item's Document Number uses,
+   * read from the pattern Version it was numbered under: they never change once
+   * numbered (cancel and raise a new one). Empty for a Draft never numbered.
+   */
+  fixedByNumber: z.array(z.enum(["trade", "location"])),
+  /**
    * The Form's answers by field key, exactly as typed. The Built-in Fields hold
    * ids: `trade` and `location` the item's `trade` and `location`, `scopes` its `scopes`.
    * A `member` answer naming another Company's Member, or a `participant` one

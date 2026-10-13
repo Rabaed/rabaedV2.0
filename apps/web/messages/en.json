@@ -733,6 +733,8 @@
     "unavailable": "Something went wrong. Try again.",
     "form": {
       "title": "Form",
+      "fixedByNumber": "This is part of the Document Number. To change it, cancel this item and raise a new one.",
+      "fixedByNumberCancel": "Cancel this item",
       "toFix": "Fix these fields:",
       "saved": "Draft saved.",
       "save": "Save",

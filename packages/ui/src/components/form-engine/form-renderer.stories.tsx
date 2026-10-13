@@ -280,6 +280,31 @@ export const SentBackForComment: Story = {
   },
 };
 
+const fixedNotice = {
+  en: "This is part of the Document Number. To change it, cancel this item and raise a new one.",
+  ar: "هذا جزء من رقم المستند. لتغييره، ألغِ هذا البند وأنشئ بنداً جديداً.",
+};
+
+/** A Trade the Document Number uses: read, with the notice, while the Location and Scopes still change (RP-581). */
+export const FixedByNumber: Story = {
+  args: { answers, fixedByNumber: ["trade"] },
+  render: (args, context) => (
+    <FormRenderer
+      {...args}
+      locale={storyLocale(context)}
+      labels={formRendererLabels[storyLocale(context)]}
+      choices={choices(context)}
+      fixedNotice={storyText(context, fixedNotice)}
+    />
+  ),
+  play: async (context) => {
+    await expect(context.canvas.queryByRole("combobox", { name: storyText(context, copy.trade) })).toBeNull();
+    await expect(context.canvas.getByText(storyText(context, copy.electrical))).toBeVisible();
+    await expect(context.canvas.getByText(storyText(context, fixedNotice))).toBeVisible();
+    await expect(combobox(context, copy.location)).toBeVisible();
+  },
+};
+
 /** Read only: labels and answers, line breaks kept, chosen values by name; an empty field says so. No controls. */
 export const ReadOnly: Story = {
   args: { mode: "read", answers },

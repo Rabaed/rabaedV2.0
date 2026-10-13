@@ -608,6 +608,9 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
     const { rows: dropped } = await sql<{ field_key: string; label: BilingualText }>`
       select field_key, label from app.revision_dropped_fields(${workItemId}::uuid)
     `.execute(trx);
+    const { rows: fixed } = await sql<{ fields: ("trade" | "location")[] }>`
+      select app.work_item_fixed_fields(${workItemId}::uuid) as fields
+    `.execute(trx);
     const { rows: auto } = await sql<{ autosave: boolean }>`select app.answers_autosave(${workItemId}::uuid) as autosave`.execute(trx);
     const { rows: source } = await sql<{ work_item_id: string; document_number: string | null; subject: string }>`
       select work_item_id, document_number, subject from app.work_item_duplicated_from(${workItemId}::uuid)
@@ -619,6 +622,7 @@ export function getWorkItem(db: Db, memberId: string, workItemId: string, now: D
       revisionNo: d.revision_no,
       versionsChanged: d.versions_changed,
       droppedFields: dropped.map((f) => ({ key: f.field_key, label: f.label })),
+      fixedByNumber: fixed[0]!.fields,
       // Another Company's people, and a Company the viewer may not see, are never identified, not even by an id (V14, V15).
       answers: Object.fromEntries(Object.entries(answers).filter(([key]) => !unnamed.has(key))),
       namedAnswers: named,
@@ -1348,6 +1352,7 @@ const saveAnswersRefusals = [
   "trade_required",
   "value_not_found",
   "outside_visibility",
+  "number_part_fixed",
   "target_not_found",
 ] as const;
 export type SaveAnswersResult =

@@ -61,6 +61,10 @@ type WorkItemFormState = {
   editable: boolean;
   /** The Form Sections the viewer may change now; the others read (form-engine.md §4). */
   editableSections: readonly string[];
+  /** The Built-in Fields the Document Number uses: they read once numbered (RP-581). */
+  fixedByNumber: readonly ("trade" | "location")[];
+  /** The item may still be cancelled here, so the notice links to Cancel. */
+  canCancel: boolean;
   /** Typed since the last save. */
   dirty: boolean;
   /** When the item was last saved, if this page saved it or knows (ISO). */
@@ -100,6 +104,8 @@ export function WorkItemFormProvider({
   optionLists,
   editable,
   editableSections,
+  fixedByNumber = [],
+  canCancel = false,
   fieldTimes,
   autosave,
   children,
@@ -118,6 +124,8 @@ export function WorkItemFormProvider({
   /** Save draft is offered (actions.saveAnswers). */
   editable: boolean;
   editableSections: readonly string[];
+  fixedByNumber?: readonly ("trade" | "location")[];
+  canCancel?: boolean;
   /** When each answer last changed (detail.fieldTimes); a save is based on these. */
   fieldTimes: FieldTimes;
   /** The first Draft: answers save themselves every few seconds. After it only the button saves. */
@@ -206,6 +214,7 @@ export function WorkItemFormProvider({
           not_editable: t("notEditable"),
           outside_visibility: tItems("outsideVisibility"),
           value_not_found: t("valueNotFound"),
+          number_part_fixed: t("fixedByNumber"),
         };
         setMessage(messages[body.error ?? ""] ?? t("unavailable"));
         if (res.status === 404 || res.status === 409 || body.error === "value_not_found") router.refresh();
@@ -248,6 +257,8 @@ export function WorkItemFormProvider({
         errors,
         editable,
         editableSections,
+        fixedByNumber,
+        canCancel,
         dirty,
         savedAt,
         changedByOthers,
@@ -299,6 +310,22 @@ export function WorkItemAnswers({ locale, workItemId, documents }: { locale: Loc
         errors={form.errors}
         mode={form.editable ? "edit" : "read"}
         editableSections={form.editableSections}
+        fixedByNumber={form.fixedByNumber}
+        fixedNotice={
+          form.fixedByNumber.length > 0 && (
+            <>
+              {t("fixedByNumber")}
+              {form.canCancel && (
+                <>
+                  {" "}
+                  <a href="#work-item-actions" className="text-brand-fg underline underline-offset-4">
+                    {t("fixedByNumberCancel")}
+                  </a>
+                </>
+              )}
+            </>
+          )
+        }
         locale={locale}
         labels={formLabels}
         onChange={form.change}
