@@ -1,4 +1,4 @@
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, rmSync } from "node:fs";
 import { basename } from "node:path";
 import { normalPath, samePath } from "./paths.ts";
@@ -288,15 +288,13 @@ export const deleteBranch = (branch: string, cwd: string) => git(["branch", "-D"
 /** `git fetch --prune origin`. */
 export const fetchPrune = (cwd: string) => git(["fetch", "--prune", "origin"], cwd);
 
-/** Whether every commit of the branch is in the target. */
-export function inTarget(branch: string, target: string, cwd: string): boolean {
-  try {
-    git(["merge-base", "--is-ancestor", `refs/heads/${branch}`, target], cwd);
-    return true;
-  } catch {
-    return false;
-  }
+/** Whether `ancestor` is an ancestor of `commit`, or the same commit (`git merge-base --is-ancestor`). */
+export function isAncestor(ancestor: string, commit: string, cwd: string, spawn: typeof spawnSync = spawnSync): boolean {
+  return spawn("git", ["merge-base", "--is-ancestor", ancestor, commit], { cwd, stdio: "ignore" }).status === 0;
 }
+
+/** Whether every commit of the branch is in the target. */
+export const inTarget = (branch: string, target: string, cwd: string): boolean => isAncestor(`refs/heads/${branch}`, target, cwd);
 
 export function pruneWorktrees(mainRoot: string): void {
   git(["worktree", "prune"], mainRoot);

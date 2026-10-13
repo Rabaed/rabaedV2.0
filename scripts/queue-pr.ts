@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { join, resolve } from "node:path";
 import { classify, type RemovalKind } from "./queue-drop-comment.ts";
+import { isAncestor } from "./worktrees.ts";
 
 // `pnpm queue <pr>` (RP-400, from the PR #149 retro): checks the branch against
 // today's origin/main, then queues the PR. A PR whose CI went green hours ago
@@ -187,7 +188,7 @@ export function realSeam(cwd: string = process.cwd(), spawn: typeof spawnSync = 
     },
     head: () => must("git", ["rev-parse", "HEAD"]).trim(),
     branch: () => must("git", ["rev-parse", "--abbrev-ref", "HEAD"]).trim(),
-    isAncestor: (ancestor, commit) => run("git", ["merge-base", "--is-ancestor", ancestor, commit]).status === 0,
+    isAncestor: (ancestor, commit) => isAncestor(ancestor, commit, cwd, spawn),
     pullRequest: (pr) => JSON.parse(must("gh", ["pr", "view", String(pr), "--json", "id,headRefOid,headRefName"])) as { id: string; headRefOid: string; headRefName: string },
     mergeTree: (commit) => run("git", ["merge-tree", "--write-tree", "origin/main", commit]),
     changedFiles: (commit) =>

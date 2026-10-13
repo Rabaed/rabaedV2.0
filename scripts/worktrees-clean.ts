@@ -22,11 +22,10 @@
 // out of the run. Uncommitted changes or unmerged commits still skip a named one.
 //
 // The default branch is main; --yes skips the confirmation.
-import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
 import { confirmOrExit } from "./confirm.ts";
 import { DEFAULT_STALE_DAYS, printStale, staleDaysAt } from "./worktrees-stale.ts";
-import { CURRENT_WORKTREE, chooseWorktrees, currentRoot, fetchPrune, gatherFacts, gitError, isAgentWorktree, isNamed, listWorktrees, pruneWorktrees, refExists, removeWorktree, reportRemoval } from "./worktrees.ts";
+import { CURRENT_WORKTREE, chooseWorktrees, currentRoot, fetchPrune, gatherFacts, gitError, isAgentWorktree, isAncestor, isNamed, listWorktrees, pruneWorktrees, refExists, removeWorktree, reportRemoval } from "./worktrees.ts";
 
 /** The git queries resolveTarget needs; injected so tests run without a repository. */
 export interface TargetGit {
@@ -51,27 +50,25 @@ export function resolveTarget(target: string, git: TargetGit): { ref: string | u
     lines.push(`git fetch origin failed (${gitError(error)}); ${remote} may be behind.`);
   }
   const hasRemote = git.exists(remote);
-  if (remote === target) return { ref: hasRemote ? remote : undefined, lines: hasRemote ? [...lines, `Checking against ${remote}.`] : lines };
-  const hasLocal = git.exists(target);
+  const hasLocal = remote !== target && git.exists(target);
+  let ref: string | undefined;
+  let why = "";
   if (hasRemote && hasLocal && !git.isAncestor(target, remote) && git.isAncestor(remote, target)) {
-    return { ref: target, lines: [...lines, `Checking against ${target} (ahead of ${remote}).`] };
+    ref = target;
+    why = ` (ahead of ${remote})`;
+  } else if (hasRemote) ref = remote;
+  else if (hasLocal) {
+    ref = target;
+    why = ` (no ${remote})`;
   }
-  if (hasRemote) return { ref: remote, lines: [...lines, `Checking against ${remote}.`] };
-  if (hasLocal) return { ref: target, lines: [...lines, `Checking against ${target} (no ${remote}).`] };
-  return { ref: undefined, lines };
+  if (ref !== undefined) lines.push(`Checking against ${ref}${why}.`);
+  return { ref, lines };
 }
 
 const gitTarget = (cwd: string): TargetGit => ({
   fetch: () => fetchPrune(cwd),
   exists: (ref) => refExists(ref, cwd),
-  isAncestor: (a, b) => {
-    try {
-      execFileSync("git", ["merge-base", "--is-ancestor", a, b], { cwd, stdio: "ignore" });
-      return true;
-    } catch {
-      return false;
-    }
-  },
+  isAncestor: (a, b) => isAncestor(a, b, cwd),
 });
 
 async function main(): Promise<void> {
