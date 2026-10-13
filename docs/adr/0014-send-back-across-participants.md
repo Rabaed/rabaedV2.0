@@ -1,5 +1,7 @@
 # Send Back: the one way a Work Item goes back across Participants
 
+Amended by ADR 0021: what the raiser may change after a Send Back is now set per Step (comment only by default).
+
 The Workflow engine allowed a `return` only inside one Participant and had no loops through Submit (workflow-engine.md, publish rules 4 and 8). The Consultant's way to send a submittal back to the Contractor is Code C (Revise and Resubmit): the item closes and the Contractor resubmits it as a Revision, a new Work Item with the same number and ` Rev n`. That is how KSA submittals are tracked, and the Rabaed Default submittal Workflows keep it.
 
 Some Work Items need a lighter way back. A Site Report carries no Review Code, so a Consultant who finds a wrong manpower count has no Code C to issue; it needs "Return for Comment", and the same report Submitted again. A Project may also want a Consultant to send back a submittal that is merely incomplete, without spending a Revision on it.
