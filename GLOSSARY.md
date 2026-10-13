@@ -206,7 +206,7 @@ The part of a Library that holds Saved Fields and Option Lists.
 _Avoid_: Field management (the screen, not the thing)
 
 **Library**:
-A Company's own collection of Forms, its Field Library, its Trade and Scope lists, and its Workflows, Screens and Work Item Types, built or copied. A Project copies a Company's Trade and Scope lists when it is set up, and takes later changes only when its Project Admin pulls them in. A Project takes its Forms, Workflows and Screens from the Rabaed Defaults or from any of its Participants' Libraries, as the Project Admin chooses. Taking or copying one always makes an independent copy that notes where it came from: later changes to the original never reach it.
+A Company's own collection of Forms, its Field Library, its Trade and Scope lists, and its Workflows, Screens and Work Item Types, built or copied. A Project copies a Company's Trade and Scope lists when it is set up, and takes later changes only when its Project Admin pulls them in. A Project takes its Forms, Workflows and Screens from the Rabaed Defaults or from any of its Participants' Libraries, as the Project Admin chooses. Taking or copying one always makes an independent copy that keeps no link to the original (ADR 0016): later changes to the original never reach it.
 _Avoid_: Template library, catalogue
 
 **Company default**:
