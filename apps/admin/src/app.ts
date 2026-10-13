@@ -2,7 +2,7 @@ import cookie, { type CookieSerializeOptions } from "@fastify/cookie";
 import { dummyHash } from "@rabaed/auth";
 import type { Db } from "@rabaed/db";
 import type { Mailer } from "@rabaed/mailer";
-import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
+import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest, type RouteOptions } from "fastify";
 import { hasZodFastifySchemaValidationErrors, serializerCompiler, validatorCompiler, type ZodTypeProvider } from "fastify-type-provider-zod";
 import type { AdminConfig } from "./config.ts";
 import { companyRoutes } from "./routes/companies.ts";
@@ -51,6 +51,8 @@ export interface AdminAppOptions {
   /** The current time; tests move it to check expiry. */
   now?: () => Date;
   logger?: boolean;
+  /** Sees every route as it is registered; test/sign-in-first.test.ts lists them this way. */
+  onRoute?: (route: RouteOptions) => void;
 }
 
 /** What route plugins get from the app. */
@@ -77,7 +79,7 @@ const securityHeaders = {
   "cross-origin-resource-policy": "same-origin",
 };
 
-export async function buildAdminApp({ db, config, mailer, now = () => new Date(), logger = true }: AdminAppOptions): Promise<FastifyInstance> {
+export async function buildAdminApp({ db, config, mailer, now = () => new Date(), logger = true, onRoute }: AdminAppOptions): Promise<FastifyInstance> {
   await dummyHash();
   // Only the load balancer reaches the service (network stack). Trusting one
   // hop takes the address it saw, not one a client wrote into X-Forwarded-For.
@@ -86,6 +88,7 @@ export async function buildAdminApp({ db, config, mailer, now = () => new Date()
     // The immediate peer (hop 0) is the load balancer; nothing before it is trusted.
     trustProxy: (_address: string, hop: number) => hop === 0,
   }).withTypeProvider<ZodTypeProvider>();
+  if (onRoute) app.addHook("onRoute", onRoute);
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);
   await app.register(cookie);
