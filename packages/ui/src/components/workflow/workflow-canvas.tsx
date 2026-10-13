@@ -9,6 +9,7 @@ import {
   ConnectionMode,
   EdgeLabelRenderer,
   getBezierPath,
+  getNodesBounds,
   getSmoothStepPath,
   Handle,
   MarkerType,
@@ -226,7 +227,15 @@ function Canvas({
   const fit = useCallback(
     (duration = 0) => {
       const items = flow.getNodes().filter((n) => n.type !== "band");
-      if (items.length > 0) void flow.fitView({ nodes: items.map((n) => ({ id: n.id })), ...FIT, padding: fitPadding, maxZoom: 1, duration });
+      if (items.length === 0) return;
+      void flow.fitView({ nodes: items.map((n) => ({ id: n.id })), ...FIT, padding: fitPadding, maxZoom: 1, duration }).then(() => {
+        // Fitted to its width with height to spare: the Steps go up to just under the Stage names, so a Return's
+        // loop under them (which the fit doesn't measure) stays clear of the overview and the zoom controls.
+        const { x, y, zoom } = flow.getViewport();
+        const top = getNodesBounds(items).y * zoom + y;
+        const room = 44;
+        if (top > room + 1) void flow.setViewport({ x, y: y - (top - room), zoom });
+      });
     },
     [flow, fitPadding],
   );
