@@ -52,10 +52,7 @@ const allow: GrantAllowList = {
 // Function names with more than one overload on purpose. Empty: a second
 // overload is almost always a stale copy left by `create or replace` with a
 // changed signature (RP-341).
-// - app.latest_form_version: (type) is the Type's Rabaed Default Form's latest Version;
-//   (project, type) the Form a new item on that Project gets, the Project's own else that
-//   one (RP-554). Both are current.
-const overloadsAllowed: readonly string[] = ["app.latest_form_version"];
+const overloadsAllowed: readonly string[] = [];
 
 const grantOf = (fn: string, grantees: string[], owner = "rabaed_migrator") => ({
   fn: `${fn}()`,

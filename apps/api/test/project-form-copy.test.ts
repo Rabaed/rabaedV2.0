@@ -173,7 +173,7 @@ describe("another Project's Form (V13, V18)", () => {
     try {
       const ask = (memberId: string) =>
         withMember(appDb, memberId, (trx) =>
-          sql<{ id: string }>`select app.latest_form_version(${at.projectId}::uuid, 'MAR') as id`.execute(trx).then((r) => r.rows[0]!.id),
+          sql<{ id: string }>`select app.new_item_form_version(${at.projectId}::uuid, 'MAR') as id`.execute(trx).then((r) => r.rows[0]!.id),
         );
       // TMC's Authorized Person is on the Project; Nobody's is not, and gets the Rabaed Default's.
       expect(await ask(tmc.company.authorizedPerson.id)).toBe((await latestOf(copy.MAR!)).id);

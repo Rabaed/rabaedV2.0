@@ -1,7 +1,7 @@
 -- RP-554: new items use the Project's own Form for their Type, from the Company defaults
 -- (RP-517; form-engine.md §7 "Which Form a new item gets"; ADR 0006; visibility.md V13, V18).
 --
--- * app.latest_form_version(p_project_id, p_type_code): the Form a new item of the Rabaed
+-- * app.new_item_form_version(p_project_id, p_type_code): the Form a new item of the Rabaed
 --   Default Type p_type_code on Project p_project_id is pinned to. The latest published
 --   Version of the Project's own Form for that Type (owner_kind `project`, its
 --   work_item_type_id; app.seed_project_from_company_defaults copies it from the creating
@@ -20,7 +20,7 @@
 -- app.create_replacement (20270110000000_pick_up_rename.sql), app.transition_follow_up_items
 -- (20270111000000_pool_of_one.sql).
 
-create function app.latest_form_version(p_project_id uuid, p_type_code text) returns uuid
+create function app.new_item_form_version(p_project_id uuid, p_type_code text) returns uuid
   language plpgsql stable security definer
   set search_path = pg_catalog, public
   as $$
@@ -40,8 +40,8 @@ create function app.latest_form_version(p_project_id uuid, p_type_code text) ret
     end
   $$;
 
-revoke all on function app.latest_form_version(uuid, text) from public;
-grant execute on function app.latest_form_version(uuid, text) to rabaed_app;
+revoke all on function app.new_item_form_version(uuid, text) from public;
+grant execute on function app.new_item_form_version(uuid, text) to rabaed_app;
 
 -- app.create_work_item
 CREATE OR REPLACE FUNCTION app.create_work_item(p_project_id uuid, p_type_code text, p_title text, p_form_version_id uuid, p_data jsonb, p_trade_id uuid, p_location_id uuid, p_now timestamp with time zone, p_scope_ids uuid[] DEFAULT '{}'::uuid[])
@@ -86,7 +86,7 @@ AS $function$
       end if;
       -- New items use the latest published Version of the Project's own Form for the Type,
       -- else of its Rabaed Default Form (RP-554), and stay on it.
-      if p_form_version_id is distinct from app.latest_form_version(p_project_id, p_type_code) then
+      if p_form_version_id is distinct from app.new_item_form_version(p_project_id, p_type_code) then
         return query select 'form_version_not_latest'::text, null::uuid;
         return;
       end if;
@@ -195,7 +195,7 @@ AS $function$
       end if;
 
       select * into v_draft from app.revision_draft_step(p_work_item_id);
-      v_form_version_id := app.latest_form_version(v_item.project_id, v_item.type_code);
+      v_form_version_id := app.new_item_form_version(v_item.project_id, v_item.type_code);
       insert into work_item (
         project_id, work_item_type_id, raised_by_participant_id, created_by_member_id, title, data,
         workflow_version_id, form_version_id, current_step_id, current_stage_key, step_entered_at,
@@ -326,7 +326,7 @@ AS $function$
       from workflow_step s
       where s.workflow_version_id = app.new_item_workflow_version(v_item.project_id, v_item.work_item_type_id, v_item.raised_by_participant_id)
         and app.is_draft_step(s.id);
-      v_form_version_id := app.latest_form_version(v_item.project_id, (select t.code from work_item_type t where t.id = v_item.work_item_type_id));
+      v_form_version_id := app.new_item_form_version(v_item.project_id, (select t.code from work_item_type t where t.id = v_item.work_item_type_id));
       -- A new original: not a Revision (no revision_of_id; the trigger makes it its own chain's root).
       insert into work_item (
         project_id, work_item_type_id, raised_by_participant_id, created_by_member_id, title, data,
@@ -471,7 +471,7 @@ AS $function$
         raise exception '% items do not start with the raiser''s role %', v_type.code, v_source.raiser_base_role;
       end if;
 
-      v_form_version_id := app.latest_form_version(v_source.project_id, v_type.code);
+      v_form_version_id := app.new_item_form_version(v_source.project_id, v_type.code);
       -- The answers a row gives: its cells of the fields the raiser fills at the Draft
       -- (sections with no `editable_at`, or naming the Draft Step), never a section
       -- another Participant fills later, such as the Comment's Resolution (WF-8). The

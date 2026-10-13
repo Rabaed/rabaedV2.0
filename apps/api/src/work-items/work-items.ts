@@ -118,7 +118,7 @@ function toFormVersion(r: FormVersionRow): FormVersion {
  */
 async function latestForm(trx: Trx, projectId: string, typeCode: string): Promise<FormVersion | null> {
   const { rows } = await sql<FormVersionRow>`
-    select id, version_no, schema from form_version where id = app.latest_form_version(${projectId}::uuid, ${typeCode})
+    select id, version_no, schema from form_version where id = app.new_item_form_version(${projectId}::uuid, ${typeCode})
   `.execute(trx);
   return rows[0] ? toFormVersion(rows[0]) : null;
 }

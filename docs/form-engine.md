@@ -304,7 +304,7 @@ Layout is not fixed to the Form: a Form can have **several PDF Templates**, and 
 - A new item of a Type on a Project is pinned to the latest published Version of **the Project's own Form for that Type**, if the Project has one, else of the Type's **Rabaed Default Form**. A Project gets its own Form when the Company that creates it has a default Form for the Type (RP-517, workflow-engine.md "Company defaults"): it is copied as the Project's Version 1.
 - Every new item takes it, whoever raises it: a Company that joins the Project raises on the Project's Form too (nothing of its own is copied in, ADR 0016). So does every command that starts a new item: creating one (and Duplicate), a Revision, a replacement of a rejected item, and the items an outcome creates (Code B Comments).
 - Items already raised keep the Version they are pinned to (ADR 0006): a Form the Project gains later, or a newer Version of it, reaches new items only.
-- `app.latest_form_version(project, type)` answers it, and `app.create_work_item` refuses any other Version (`form_version_not_latest`); the api's new-item Form reads the same function. It is security definer, and names the Project's own Form only to a Member on that Project; anyone else gets the Rabaed Default's, never another Project's Form (V13, V18). Who reads a Form is unchanged.
+- `app.new_item_form_version(project, type)` answers it, and `app.create_work_item` refuses any other Version (`form_version_not_latest`); the api's new-item Form reads the same function. It is security definer, and names the Project's own Form only to a Member on that Project; anyone else gets the Rabaed Default's, never another Project's Form (V13, V18). Who reads a Form is unchanged.
 
 ### Publish-time validation
 
