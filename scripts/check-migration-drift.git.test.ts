@@ -87,6 +87,45 @@ describe("migrationProblems", () => {
   });
 });
 
+// RP-560: PR #180 renamed its migration after RP-437 had rebuilt a function
+// from it; RP-437's rebuild, written from that very body, must still count as
+// having seen it.
+describe("migrationProblems, when a migration is renamed", () => {
+  beforeEach(() => {
+    git("switch", "-q", "main");
+    git("switch", "-q", "-c", "a");
+    commit({ [`${dir}/20261201000000_old.sql`]: takeTransition("A") }, "A adds its migration");
+  });
+
+  it("passes a branch that rebuilt from another branch's migration, renamed before it merged", () => {
+    git("switch", "-q", "-c", "b");
+    commit({ [`${dir}/20261202000000_rebuild.sql`]: takeTransition("B, from A's") }, "B rebuilds from A's");
+    git("switch", "-q", "a");
+    git("mv", `${dir}/20261201000000_old.sql`, `${dir}/20261201100000_new.sql`);
+    git("commit", "-q", "-m", "A renames its migration");
+    git("switch", "-q", "main");
+    git("merge", "-q", "--no-ff", "--no-edit", "a");
+    git("switch", "-q", "b");
+    git("merge", "-q", "--no-edit", "main");
+    expect(migrationProblems(repo, "main", "b")).toEqual({ drift: [], overloads: [], duplicates: [] });
+  });
+
+  it("judges a branch's renamed migration by the commit that first added its content", () => {
+    // B's rebuild is written before main redefines the function, then only renamed after the merge.
+    git("switch", "-q", "-c", "b", "main");
+    commit({ [`${dir}/20261202000000_rebuild.sql`]: takeTransition("B") }, "B rebuilds");
+    git("switch", "-q", "main");
+    commit({ [`${dir}/20261203000000_main.sql`]: takeTransition("main") }, "main redefines");
+    git("switch", "-q", "b");
+    git("merge", "-q", "--no-edit", "main");
+    git("mv", `${dir}/20261202000000_rebuild.sql`, `${dir}/20261204000000_rebuild.sql`);
+    git("commit", "-q", "-m", "B renames its rebuild");
+    expect(migrationProblems(repo, "main", "b").drift).toEqual([
+      { object: "function app.take_transition", branch: ["20261204000000_rebuild.sql"], main: ["20261203000000_main.sql"] },
+    ]);
+  });
+});
+
 // The merge queue (RP-398) tests a commit that merges the PR's head into the
 // queue's base: main plus the entries ahead of it.
 describe("mergeGroupSides", () => {

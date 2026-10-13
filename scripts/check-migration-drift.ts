@@ -206,27 +206,61 @@ export function staleOverloads(main: Migration[], branch: BranchMigration[]): St
   return stale;
 }
 
-const migrationsAt = (repo: string, commit: string) =>
-  git(repo, "ls-tree", "--name-only", `${commit}:${migrationsDir}`)
-    .split("\n")
-    .filter((name) => name.endsWith(".sql"));
+/** The migrations in a commit's tree, each with its content's blob id. */
+const migrationBlobs = (repo: string, commit: string) =>
+  new Map(
+    git(repo, "ls-tree", `${commit}:${migrationsDir}`)
+      .split("\n")
+      .map((line) => line.split("\t") as [string, string])
+      .filter(([, name]) => name?.endsWith(".sql"))
+      .map(([info, name]) => [name, info.split(" ")[2] as string]),
+  );
 const sqlAt = (repo: string, commit: string, name: string) => git(repo, "show", `${commit}:${migrationsDir}/${name}`);
+
+/**
+ * For each migration content (blob id) on `head`'s first-parent history, the
+ * oldest commit that added it under any name or wrote it into a file. A merge's
+ * diff is against its first parent, so a migration a merge brings in counts as
+ * added there. Matching content, not `git log --follow`: --follow takes one
+ * redefinition of a function for a rename of another.
+ */
+function contentFirstAdded(repo: string, head: string): Map<string, string> {
+  const log = git(repo, "log", "--first-parent", "--diff-merges=first-parent", "--no-renames", "--diff-filter=AM", "--raw", "--no-abbrev", "--reverse", "--format=commit %H", head, "--", `${migrationsDir}/`);
+  const firstAdded = new Map<string, string>();
+  let commit = "";
+  for (const line of log.split("\n")) {
+    if (line.startsWith("commit ")) commit = line.slice("commit ".length);
+    // `:<old mode> <new mode> <old blob> <new blob> <status>\t<path>`
+    const blob = line.startsWith(":") ? line.split(" ")[3] : undefined;
+    if (blob && !firstAdded.has(blob)) firstAdded.set(blob, commit);
+  }
+  return firstAdded;
+}
 
 /**
  * The three checks for a pull request from `head` into `base`. Its migrations
  * are those in `head` and not in `base`; each saw the migrations in the tree of
- * the commit that added it on the branch's first-parent history.
+ * the commit that first added its content on the branch's first-parent history,
+ * under any name (RP-560: renaming a migration after its timestamp clashed
+ * doesn't make an old body new). A migration on `base` counts as seen when that
+ * tree held it under its name or, renamed since, its content: a branch that
+ * rebuilt a function from another branch's migration saw it, even when that
+ * branch renamed the file before it merged (PR #180, RP-437).
  */
 export function migrationProblems(repo: string, base: string, head: string): { drift: Drift[]; overloads: StaleOverload[]; duplicates: string[][] } {
-  const onBase = migrationsAt(repo, base);
-  const onHead = migrationsAt(repo, head);
+  const baseBlobs = migrationBlobs(repo, base);
+  const onBase = [...baseBlobs.keys()];
+  const onHead = [...migrationBlobs(repo, head).keys()];
   const added = onHead.filter((name) => !onBase.includes(name));
+  const headBlobs = migrationBlobs(repo, head);
+  const firstAdded = contentFirstAdded(repo, head);
   const branch = added.map((name) => {
-    // A merge's diff is against its first parent, so a migration a merge brings in counts as added there.
-    const log = git(repo, "log", "--first-parent", "--diff-merges=first-parent", "--diff-filter=A", "--no-patch", "-1", "--format=%H", head, "--", `${migrationsDir}/${name}`);
-    const addedIn = log.trim();
+    const addedIn = firstAdded.get(headBlobs.get(name) ?? "");
     if (!addedIn) throw new Error(`No commit on ${head}'s first-parent history adds ${name}`);
-    return { name, sql: sqlAt(repo, head, name), seen: migrationsAt(repo, addedIn) };
+    const tree = migrationBlobs(repo, addedIn);
+    const blobs = new Set(tree.values());
+    const seen = [...new Set([...tree.keys(), ...onBase.filter((m) => blobs.has(baseBlobs.get(m) ?? ""))])];
+    return { name, sql: sqlAt(repo, head, name), seen };
   });
   const main = onBase.map((name) => ({ name, sql: sqlAt(repo, base, name) }));
   return {
