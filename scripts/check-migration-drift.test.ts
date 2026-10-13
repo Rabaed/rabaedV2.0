@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { takeTransition } from "./check-migration-drift.fixtures.ts";
-import { definedObjects, duplicateTimestamps, redefinitionDrift, staleOverloads } from "./check-migration-drift.ts";
+import { branchOrderDrift, definedObjects, duplicateTimestamps, redefinitionDrift, staleOverloads } from "./check-migration-drift.ts";
 
 describe("duplicateTimestamps", () => {
   const files = [
@@ -108,6 +108,34 @@ describe("redefinitionDrift", () => {
     expect(redefinitionDrift([mainBefore, ...mainLater], [oldTimestamp])).toEqual([
       { object: "function app.take_transition", branch: [oldTimestamp.name], main: [mainBefore.name, ...mainLater.map((m) => m.name)] },
     ]);
+  });
+});
+
+// RP-457: two implementers build in parallel and each redefine app.take_transition
+// from the same old body; the later-sorting one silently replaces the other.
+describe("branchOrderDrift", () => {
+  const wf7 = { name: "20270201000000_wf7.sql", sql: takeTransition("WF-7"), seen: forkPoint };
+  const unrelated = { name: "20270202000000_other.sql", sql: "create or replace function app.other() returns int language sql as $$ select 1 $$;", seen: forkPoint };
+
+  it("fails two branch migrations redefining a function from the same base, naming both", () => {
+    const wf8 = { name: "20270203000000_wf8.sql", sql: takeTransition("WF-8"), seen: forkPoint };
+    expect(branchOrderDrift([wf7, wf8])).toEqual([{ object: "function app.take_transition", earlier: wf7.name, later: wf8.name }]);
+  });
+
+  it("passes a sequential chain, each built on the previous", () => {
+    const wf8 = { name: "20270203000000_wf8.sql", sql: takeTransition("WF-8"), seen: [...forkPoint, wf7.name] };
+    const wf9 = { name: "20270204000000_wf9.sql", sql: takeTransition("WF-9"), seen: [...forkPoint, wf7.name, wf8.name] };
+    expect(branchOrderDrift([wf7, wf8, wf9])).toEqual([]);
+  });
+
+  it("judges each migration against the previous one that defines the object, in name order", () => {
+    const wf8 = { name: "20270203000000_wf8.sql", sql: takeTransition("WF-8"), seen: [...forkPoint, wf7.name] };
+    const wf9 = { name: "20270204000000_wf9.sql", sql: takeTransition("WF-9"), seen: [...forkPoint, wf7.name, unrelated.name] };
+    expect(branchOrderDrift([wf9, unrelated, wf8, wf7])).toEqual([{ object: "function app.take_transition", earlier: wf8.name, later: wf9.name }]);
+  });
+
+  it("passes migrations that define different objects, however unseen", () => {
+    expect(branchOrderDrift([wf7, unrelated])).toEqual([]);
   });
 });
 
