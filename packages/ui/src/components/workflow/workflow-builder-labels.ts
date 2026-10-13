@@ -134,7 +134,7 @@ export type WorkflowBuilderLabels = {
   fieldKind: (kind: ActionFieldKind) => string;
   required: string;
   optional: string;
-  /** Under a Screen's table of items to create; with the outcome's Type, "Each row becomes one of the Snag List's Comments". */
+  /** Under a Screen's table of items to create; with the outcome's Type, "Each row becomes a Comment in the Snag List". */
   createsItems: string;
   createsItemsOf: (type: string) => string;
   /** A table's add-row button in the plain pop-up (Rabaed Admin). */
@@ -160,7 +160,7 @@ export type WorkflowBuilderLabels = {
   testRecorded: string;
   /** A test run's Transition whose Screen creates items: what it would create, nothing being created. */
   testWouldCreate: (count: number, n: string) => string;
-  /** The same, naming the Type its rows become: "Would create 2 of the Snag List's Comments". */
+  /** The same, naming the Type its rows become: "Would create 2 items (Comment) in the Snag List". */
   testWouldCreateOf: (count: number, n: string, type: string) => string;
   /** Toasts on the canvas. */
   addedTransition: (name: string) => string;

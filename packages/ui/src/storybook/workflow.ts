@@ -159,7 +159,7 @@ export const builderDraftSampled: WorkflowDefinition = {
 
 export const builderOutcomes: WorkflowBuilderOutcome[] = [
   { code: "A", name: t("Approved", "معتمد"), closing: true },
-  { code: "B", name: t("Approved with Comments", "معتمد مع ملاحظات"), closing: true, createsItems: { code: "CMT", name: t("Comments", "الملاحظات") } },
+  { code: "B", name: t("Approved with Comments", "معتمد مع ملاحظات"), closing: true, createsItems: { code: "CMT", name: t("Comment", "ملاحظة") } },
   { code: "C", name: t("Revise & Resubmit", "مراجعة وإعادة تقديم"), closing: true },
   { code: "D", name: t("Rejected", "مرفوض"), closing: true },
 ];

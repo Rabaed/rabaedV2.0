@@ -273,7 +273,7 @@ export const TransitionCodeB: Story = {
     const editor = editorOf(canvas, labels);
     await expect(editor.getByRole("combobox", { name: labels.outcomeReviewCode })).toBeEnabled();
     await expect(editor.getByRole("combobox", { name: labels.screen })).toHaveTextContent(builderScreens[2]!.name[locale]);
-    await expect(editor.getByText(labels.createsItemsOf(locale === "ar" ? "الملاحظات" : "Comments"))).toBeVisible();
+    await expect(editor.getByText(labels.createsItemsOf(locale === "ar" ? "ملاحظة" : "Comment"))).toBeVisible();
     await expect(editor.getByRole("link", { name: labels.editInScreens })).toHaveAttribute("href", "#screens");
   },
 };
