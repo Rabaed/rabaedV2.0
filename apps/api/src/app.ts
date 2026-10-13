@@ -1,7 +1,7 @@
 import cookie from "@fastify/cookie";
 import { dummyHash } from "@rabaed/auth";
 import type { Db } from "@rabaed/db";
-import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
+import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest, type RouteOptions } from "fastify";
 import {
   hasZodFastifySchemaValidationErrors,
   serializerCompiler,
@@ -44,6 +44,10 @@ declare module "fastify" {
     principal: Principal | null;
     sessionToken: string | null;
   }
+  interface FastifyContextConfig {
+    /** Anyone may call the route, signed in or not. Every other route answers 401 first. */
+    public?: boolean;
+  }
 }
 
 // The customer api: what every Member's browser talks to, through web. It
@@ -60,6 +64,8 @@ export interface AppOptions {
   /** The current time; tests move it to check expiry. */
   now?: () => Date;
   logger?: boolean;
+  /** Sees every route as it is registered; test/sign-in-first.test.ts lists them this way. */
+  onRoute?: (route: RouteOptions) => void;
 }
 
 /** What route plugins get from the app. */
@@ -80,9 +86,11 @@ export async function buildApp({
   files = noFileStore,
   now = () => new Date(),
   logger = true,
+  onRoute,
 }: AppOptions): Promise<FastifyInstance> {
   await dummyHash();
   const app = Fastify({ logger: logger && loggerOptions() }).withTypeProvider<ZodTypeProvider>();
+  if (onRoute) app.addHook("onRoute", onRoute);
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);
   await app.register(cookie);
@@ -94,6 +102,14 @@ export async function buildApp({
     if (!token) return;
     request.sessionToken = token;
     request.principal = await resolveSession(db, token, now());
+  });
+  // Signed in before anything else (RP-452): a caller who isn't gets 401 before the
+  // body, query or path is validated, so a stranger never learns a route's schema.
+  // A route anyone may call says so with `config: { public: true }`, and
+  // test/sign-in-first.test.ts lists it with its reason.
+  app.addHook("preValidation", async (request) => {
+    if (request.is404 || request.routeOptions.config.public || request.principal) return;
+    throw notSignedIn();
   });
 
   app.setErrorHandler((error, request, reply) => {
