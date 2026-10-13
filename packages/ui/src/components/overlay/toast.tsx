@@ -62,7 +62,7 @@ export function ToastProvider({ label, closeLabel, duration = 5000, placement = 
             }}
             className={cn(
               "flex items-start gap-3 p-4 shadow-lg",
-              look === "dark" ? "rounded-md bg-sidebar px-4 py-3 text-on-primary" : "rounded-sm border border-border bg-surface text-text",
+              look === "dark" ? "rounded-md border border-[color-mix(in_srgb,var(--on-primary)_22%,transparent)] bg-sidebar px-4 py-3 text-on-primary" : "rounded-sm border border-border bg-surface text-text",
             )}
           >
             <Icon name={icons[tone]} className={cn("mt-0.5", look === "dark" ? darkIconColour[tone] : iconColour[tone])} />

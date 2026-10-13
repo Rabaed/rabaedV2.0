@@ -553,7 +553,8 @@ export const Published: Story = {
     await userEvent.type(dialog.getByRole("textbox", { name: labels.changeNote }), "Added the QA check.");
     await userEvent.click(dialog.getByRole("button", { name: labels.publishVersion("4") }));
     await expect(args.onPublish).toHaveBeenCalledWith("Added the QA check.");
-    await expect(await canvas.findByText(labels.publishedBadge("4"))).toBeVisible();
+    // The badge, and the side panel's heading over the counts.
+    await expect(await canvas.findAllByText(labels.publishedBadge("4"))).toHaveLength(2);
     await expect(canvas.getByRole("button", { name: labels.publish })).toBeDisabled();
     await expect(await within(document.body).findByRole("link", { name: labels.viewVersions })).toHaveAttribute("href", "#versions/4");
   },
