@@ -10,7 +10,7 @@ import {
 } from "fastify-type-provider-zod";
 import type { ApiConfig } from "./config.ts";
 import { noFileStore, type FileStore } from "./documents/file-store.ts";
-import { HttpError, notSignedIn } from "./http-error.ts";
+import { HttpError, notFound, notSignedIn } from "./http-error.ts";
 import { resolveSession, type Principal, type Session } from "./identity/sessions.ts";
 import { loggerOptions } from "./logging.ts";
 import { companyRoutes } from "./routes/companies.ts";
@@ -97,18 +97,20 @@ export async function buildApp({
 
   app.decorateRequest("principal", null);
   app.decorateRequest("sessionToken", null);
+  // Signed in before anything else (RP-452): a caller who isn't gets 401 here, in
+  // onRequest, before the body is even parsed (so no 400, 413 or 415 for a stranger)
+  // and before the query or path is validated, so a stranger never learns a route's
+  // schema. A route anyone may call says so with `config: { public: true }`, and
+  // test/sign-in-first.test.ts lists it with its reason. An unknown url is 404 for
+  // everyone, also answered before its body is parsed.
   app.addHook("onRequest", async (request) => {
+    if (request.is404) throw notFound();
     const token = request.cookies[SESSION_COOKIE];
-    if (!token) return;
-    request.sessionToken = token;
-    request.principal = await resolveSession(db, token, now());
-  });
-  // Signed in before anything else (RP-452): a caller who isn't gets 401 before the
-  // body, query or path is validated, so a stranger never learns a route's schema.
-  // A route anyone may call says so with `config: { public: true }`, and
-  // test/sign-in-first.test.ts lists it with its reason.
-  app.addHook("preValidation", async (request) => {
-    if (request.is404 || request.routeOptions.config.public || request.principal) return;
+    if (token) {
+      request.sessionToken = token;
+      request.principal = await resolveSession(db, token, now());
+    }
+    if (request.routeOptions.config.public || request.principal) return;
     throw notSignedIn();
   });
 

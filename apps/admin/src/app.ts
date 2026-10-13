@@ -41,7 +41,14 @@ declare module "fastify" {
   interface FastifyRequest {
     engineerId: string | null;
   }
+  interface FastifyContextConfig {
+    /** Anyone may call the route, signed in or not. Every other route answers 401 first. */
+    public?: boolean;
+  }
 }
+
+/** The options a route anyone may call carries; test/sign-in-first.test.ts lists each with its reason. */
+export const publicRoute = { config: { public: true } } as const;
 
 export interface AdminAppOptions {
   /** Connects as rabaed_admin. */
@@ -99,9 +106,16 @@ export async function buildAdminApp({ db, config, mailer, now = () => new Date()
   });
 
   app.decorateRequest("engineerId", null);
+  // Signed in before anything else (RP-452), as in the api: a caller who isn't a
+  // signed-in Rabaed Engineer gets 401 here, in onRequest, before the body is parsed
+  // and before the query or path is validated. A route anyone may call says so with
+  // `publicRoute` (`config: { public: true }`). An unknown url is 404 for everyone.
   app.addHook("onRequest", async (request) => {
+    if (request.is404) throw new HttpError(404, "not_found");
     const token = request.cookies[cookieNames.session];
     if (token) request.engineerId = await resolveSession(db, token, seen(request), now());
+    if (request.routeOptions.config.public || request.engineerId) return;
+    throw new HttpError(401, "not_signed_in");
   });
   app.addHook("onSend", async (request, reply) => {
     reply.headers(securityHeaders);

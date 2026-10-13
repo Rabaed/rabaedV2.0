@@ -1,8 +1,10 @@
 // Seam 1: every api route that isn't public on purpose refuses a caller who isn't
-// signed in with 401 `not_signed_in`, before it reads the body, query or path
-// (RP-452). A route that validated first would answer 400 and tell a stranger its
-// schema. The test lists the routes from the app itself, so a new route is covered
-// the day it is added; one meant to be public goes in `PUBLIC` with its reason.
+// signed in with 401 `not_signed_in` (RP-452). The refusal happens in onRequest: before
+// the body is parsed (so malformed JSON, an unsupported content type or an oversized
+// body still get 401, not 400, 415 or 413) and before the query and path params are
+// validated (so a stranger never learns a route's schema). An unknown url stays 404.
+// The test lists the routes from the app itself, so a new route is covered the day it
+// is added; one meant to be public goes in `PUBLIC` with its reason.
 import { createDb } from "@rabaed/db";
 import { testDatabaseUrls } from "@rabaed/db/test-support";
 import type { RouteOptions } from "fastify";
@@ -42,18 +44,26 @@ const guarded = routes.filter((r) => !(key(r.method, r.url) in PUBLIC));
 /** The route's url with junk in every path param and wildcard, and a query no schema accepts. */
 const junkUrl = (url: string) => `${url.replace(/:[A-Za-z0-9_]+(\([^)]*\))?/g, "junk").replace(/\*/g, "junk")}?reason=&page=junk&limit=-1`;
 
+/**
+ * The bodies sent to every route that takes one: JSON no schema accepts, JSON that
+ * doesn't parse (400 if parsed), and a content type the api has no parser for (415 if
+ * parsed). The 401 comes before parsing, so each must get it.
+ */
+const junkBodies = [
+  { payload: "[1, 2, 3]", headers: { "content-type": "application/json" } },
+  { payload: '{"not json', headers: { "content-type": "application/json" } },
+  { payload: "<junk/>", headers: { "content-type": "application/xml" } },
+];
+
 /** Each guarded route called with junk; returns "METHOD url -> status body" for every answer that isn't the 401. */
 async function refusals(cookies: Record<string, string>): Promise<string[]> {
   const wrong: string[] = [];
   for (const { method, url } of guarded) {
-    const res = await app.inject({
-      method: method as "GET",
-      url: junkUrl(url),
-      cookies,
-      ...(method === "GET" || method === "HEAD" ? {} : { payload: "[1, 2, 3]", headers: { "content-type": "application/json" } }),
-    });
-    const body = method === "HEAD" ? "" : JSON.stringify({ error: "not_signed_in" });
-    if (res.statusCode !== 401 || res.body !== body) wrong.push(`${method} ${url} -> ${res.statusCode} ${res.body.slice(0, 120)}`);
+    for (const body of method === "GET" || method === "HEAD" ? [{}] : junkBodies) {
+      const res = await app.inject({ method: method as "GET", url: junkUrl(url), cookies, ...body });
+      const expected = method === "HEAD" ? "" : JSON.stringify({ error: "not_signed_in" });
+      if (res.statusCode !== 401 || res.body !== expected) wrong.push(`${method} ${url} ${JSON.stringify(body)} -> ${res.statusCode} ${res.body.slice(0, 120)}`);
+    }
   }
   return wrong;
 }
@@ -69,6 +79,22 @@ describe("a caller who isn't signed in", () => {
   it("is marked public in the app exactly where PUBLIC says", () => {
     const marked = [...new Set(routes.filter((r) => r.isPublic).map((r) => key(r.method, r.url)))].sort();
     expect(marked).toEqual(Object.keys(PUBLIC).sort());
+  });
+
+  it("gets 404 for a url the api doesn't have, whatever the body", async () => {
+    const res = await app.inject({ method: "POST", url: "/v1/no-such-route", payload: '{"not json', headers: { "content-type": "application/json" } });
+    expect([res.statusCode, res.body]).toEqual([404, JSON.stringify({ error: "not_found" })]);
+  });
+
+  it("gets 401, not 413, for a body over the size limit", async () => {
+    const post = guarded.find((r) => r.method === "POST")!;
+    const res = await app.inject({
+      method: "POST",
+      url: junkUrl(post.url),
+      payload: JSON.stringify({ junk: "x".repeat(2 * 1024 * 1024) }),
+      headers: { "content-type": "application/json" },
+    });
+    expect([res.statusCode, res.body]).toEqual([401, JSON.stringify({ error: "not_signed_in" })]);
   });
 
   it("gets 401 not_signed_in from every other route, whatever the body, query or path", async () => {
