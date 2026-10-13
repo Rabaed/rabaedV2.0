@@ -36,22 +36,22 @@ export function branchIssue(branch: string): string | null {
   return /^(RP-\d+)-/.exec(branch)?.[1] ?? null;
 }
 
-/** The issues a migration's header names: the `--` lines it starts with, up to the first empty one. */
-function headerIssues(sql: string): string[] {
-  const header: string[] = [];
-  for (const line of sql.split(/\r?\n/)) {
-    const comment = /^\s*--(.*)$/.exec(line)?.[1];
-    if (comment === undefined || !comment.trim()) break;
-    header.push(comment);
-  }
-  return issues(header.join("\n"));
+/**
+ * The issue a migration's header is for: the first issue on its first line,
+ * when that is a `--` comment. Issues named after it, or further down, are
+ * mentions, not owners ("-- … rebuilt from RP-437's …").
+ */
+function headerIssue(sql: string): string | null {
+  const comment = /^\s*--(.*)$/.exec(sql.split(/\r?\n/, 1)[0] ?? "")?.[1];
+  return comment === undefined ? null : (issues(comment)[0] ?? null);
 }
 
 /**
  * The added migrations on a day reserved for another issue, each with the
  * reservation, and those on a day nobody reserved. A migration is the
- * branch's issue's (from its name, `RP-nnn-…`) and every issue its header
- * names, so an integration branch's migrations pass on their issues' days.
+ * branch's issue's (from its name, `RP-nnn-…`) and the first issue on its
+ * header's first line, so an integration branch's migrations pass on their
+ * issues' days.
  */
 export function dayProblems(added: { name: string; sql: string }[], reservations: Reservation[], branch: string | null): { refused: { name: string; reservation: Reservation }[]; unreserved: string[] } {
   const refused: { name: string; reservation: Reservation }[] = [];
@@ -62,7 +62,7 @@ export function dayProblems(added: { name: string; sql: string }[], reservations
       unreserved.push(name);
       continue;
     }
-    const own = new Set([...(branch ? [branch] : []), ...headerIssues(sql)]);
+    const own = new Set([branch, headerIssue(sql)].filter((issue) => issue !== null));
     if (!onDay.some((r) => issues(r.owner).some((issue) => own.has(issue)))) refused.push({ name, reservation: onDay[0] as Reservation });
   }
   return { refused, unreserved };

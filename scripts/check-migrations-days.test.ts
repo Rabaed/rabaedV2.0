@@ -12,6 +12,7 @@ const reservations = parseReservations(
     "| --- | --- | --- | --- |",
     "| 20270117 | spec RP-525 | B | review fixes |",
     "20270118 | RP-437 | B | Rabaed Default Workflows",
+    "| 20270119 | RP-514 | B | Screen answers |",
   ].join("\n"),
 );
 
@@ -22,6 +23,7 @@ describe("parseReservations", () => {
     expect(reservations).toEqual([
       { day: "20270117", owner: "spec RP-525", lane: "B", purpose: "review fixes" },
       { day: "20270118", owner: "RP-437", lane: "B", purpose: "Rabaed Default Workflows" },
+      { day: "20270119", owner: "RP-514", lane: "B", purpose: "Screen answers" },
     ]);
   });
 });
@@ -44,13 +46,22 @@ describe("dayProblems", () => {
     expect(dayProblems([migration("20270118000000_rabaed_default_types.sql")], reservations, "RP-437")).toEqual({ refused: [], unreserved: [] });
   });
 
+  const reviewFixes = "-- Review fixes for spec RP-525 (RP-514, RP-515): a Screen's internal answers\n-- never reach a follow-up item.\n\nselect 1;\n";
+
   it("takes the issue from the migration's header when the branch names another (an integration branch)", () => {
-    const sql = "-- Review fixes for spec RP-525 (RP-514, RP-515): a Screen's internal answers\n-- never reach a follow-up item.\n\nselect 1;\n";
-    expect(dayProblems([migration("20270117100000_review_fixes.sql", sql)], reservations, "RP-511").refused).toEqual([]);
+    expect(dayProblems([migration("20270117100000_review_fixes.sql", reviewFixes)], reservations, "RP-511").refused).toEqual([]);
   });
 
-  it("reads only the header's first paragraph, not an issue it mentions further down", () => {
-    const sql = "-- Card view layout (RP-410).\n--\n-- Unlike RP-525's review fixes, ...\nselect 1;\n";
+  it("owns the day only for the first issue on the header's first line, not the others it names", () => {
+    expect(dayProblems([migration("20270119100000_review_fixes.sql", reviewFixes)], reservations, "RP-511").refused).toEqual([
+      { name: "20270119100000_review_fixes.sql", reservation: reservations[2] },
+    ]);
+    const rebuilt = "-- Card view layout (RP-410), rebuilt from RP-437's take_transition.\nselect 1;\n";
+    expect(dayProblems([migration("20270118000100_board_card_layout.sql", rebuilt)], reservations, "RP-410").refused).toHaveLength(1);
+  });
+
+  it("reads only the header's first line, not an issue it mentions further down", () => {
+    const sql = "-- Card view layout,\n-- unlike RP-525's review fixes, ...\nselect 1;\n";
     expect(dayProblems([migration("20270117000100_board_card_layout.sql", sql)], reservations, null).refused).toHaveLength(1);
   });
 
