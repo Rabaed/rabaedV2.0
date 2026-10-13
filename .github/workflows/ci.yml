@@ -159,10 +159,16 @@ jobs:
           path: packages/ui/.vitest/attachments/
           if-no-files-found: ignore
 
+  # Seam 1's files share one test database, so they run one after another
+  # (fileParallelism: false). Four shards, each with its own Postgres and file
+  # store, run a quarter of the files each, side by side (RP-557).
   seam1:
-    name: seam 1 (API as a Member)
+    name: seam 1 (shard ${{ matrix.shard }}/4)
     runs-on: ubuntu-latest
-    permissions: { contents: read, actions: read } # actions: finds main's timing report (RP-321)
+    strategy:
+      fail-fast: false # every shard reports its own failures
+      matrix:
+        shard: [1, 2, 3, 4]
     services:
       postgres:
         image: postgres:16
@@ -192,10 +198,58 @@ jobs:
       - uses: actions/setup-node@v7
         with: { node-version: 24, cache: pnpm }
       - run: pnpm install --frozen-lockfile
-      - run: pnpm test:seam1 --reporter=default --reporter=json --outputFile.json=seam1-timing.json
+      - run: pnpm test:seam1 --shard="$SHARD/4" --reporter=default --reporter=json --outputFile.json="seam1-timing-$SHARD.json"
+        env:
+          SHARD: ${{ matrix.shard }}
       - if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: seam1-timing-shard-${{ matrix.shard }}
+          path: seam1-timing-${{ matrix.shard }}.json
+          if-no-files-found: ignore
+          retention-days: 1
+
+  # The ruleset on main requires this check by name, and a matrix renames its
+  # jobs: this job keeps the name and fails unless every shard passed. It only
+  # reports; a seam 1 failure is in a shard's log (RP-557).
+  seam1-result:
+    name: seam 1 (API as a Member)
+    needs: seam1
+    # Not always(): a superseded, cancelled run reports nothing, not a shard failure.
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    permissions: { contents: read, actions: read } # actions: finds main's timing report (RP-321)
+    steps:
+      # First, so the timing steps below see the job failed and main keeps no
+      # report of a failing run.
+      - name: Every seam 1 shard passed
+        env:
+          RESULT: ${{ needs.seam1.result }}
+        run: |
+          if [ "$RESULT" != success ]; then
+            echo "::error::A seam 1 shard did not pass ($RESULT): see the seam 1 (shard k/4) jobs."
+            exit 1
+          fi
+      - if: ${{ !cancelled() }}
+        uses: actions/checkout@v7
+        with: { persist-credentials: false }
+      - if: ${{ !cancelled() }}
+        uses: actions/setup-node@v7
+        with: { node-version: 24 }
+      - if: ${{ !cancelled() }}
+        uses: actions/download-artifact@v8
+        with:
+          pattern: seam1-timing-shard-*
+          merge-multiple: true
+      # One report in vitest's shape; its total is the slowest shard's span, and
+      # each shard keeps its number from its file name. With no shard report
+      # (every shard died early) the timing steps skip, leaving the one real error.
+      - if: ${{ !cancelled() && hashFiles('seam1-timing-*.json') != '' }}
+        run: node scripts/test-timing.ts --merge seam1-timing.json --of 4 seam1-timing-*.json
+      - if: ${{ !cancelled() && hashFiles('seam1-timing-*.json') != '' }}
         uses: ./.github/actions/test-timing
-        with: { title: "seam 1", report: seam1-timing.json, artifact: seam1-timing }
+        # About 1.3 x the sharded total measured on PR #189: 5m58s, the slowest shard (RP-558).
+        with: { title: "seam 1", report: seam1-timing.json, artifact: seam1-timing, budget: 8 }
 
   seam2:
     name: seam 2 (database RLS)
@@ -233,7 +287,7 @@ jobs:
       - run: pnpm test:seam2 --reporter=default --reporter=json --outputFile.json=seam2-timing.json
       - if: always()
         uses: ./.github/actions/test-timing
-        with: { title: "seam 2", report: seam2-timing.json, artifact: seam2-timing }
+        with: { title: "seam 2", report: seam2-timing.json, artifact: seam2-timing, budget: 3 }
 
   mail:
     name: mail (mailer against the catcher)
