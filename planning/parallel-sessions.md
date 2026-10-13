@@ -92,6 +92,7 @@ Every implementing session and implementer subagent follows these, on top of the
 - **Isolated worktree shell:** plain, literal commands that act on this worktree only; write scripts with Write and run them; no heredocs, `git -C`, `cd … &&` or variable paths. Run `pnpm lane:env` from PowerShell, not Git Bash.
 - **Fresh worktree:** run `pnpm install --frozen-lockfile` first (a new worktree has no `node_modules`, so `vitest` is missing).
 - **Glossary lint:** run `pnpm lint` before your first commit; scripts and `messages/*.json` are linted against `GLOSSARY.md` _Avoid_ too (`packages/eslint-plugin/README.md` lists the common false hits and how to silence one).
+- **Report ends with the verify line:** the report ends with the last line of `pnpm verify`, verbatim (`pnpm verify passed on <sha>: <steps>.`), from one complete run on the pushed commit, or names the step it stopped at and why. A fix after the run means a new run.
 - **Renames:** renaming a term, label or message key, or removing a group, follows the checklist in `docs/agents/renames.md`.
 
 ## Retro before archiving

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { selectSteps, tail } from "./verify-steps.ts";
+import { finalLine, selectSteps, tail } from "./verify-steps.ts";
 
 const names = (changed: string[]) => selectSteps(changed).steps.map((step) => step.name);
 
@@ -36,5 +36,17 @@ describe("tail", () => {
   it("keeps the last lines only", () => {
     expect(tail("a\nb\nc\nd\n", 2)).toBe("c\nd");
     expect(tail("a\nb", 5)).toBe("a\nb");
+  });
+});
+
+describe("finalLine", () => {
+  const steps = ["lint", "typecheck"];
+
+  it("names the verified commit and the steps that passed", () => {
+    expect(finalLine({ sha: "abc1234", dirty: false, steps })).toBe("pnpm verify passed on abc1234: lint, typecheck.");
+  });
+
+  it("says dirty when the tree has uncommitted changes", () => {
+    expect(finalLine({ sha: "abc1234", dirty: true, steps })).toBe("pnpm verify passed on abc1234 (dirty: uncommitted changes): lint, typecheck.");
   });
 });
