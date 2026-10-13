@@ -7,16 +7,20 @@
 -- definition, 20261012000000) refuses a change to one of them: number_part_fixed.
 
 create function app.number_fixed_fields(p_work_item_id uuid) returns text[]
-  language sql stable security definer
+  language plpgsql stable security definer
   set search_path = pg_catalog, public
   as $$
-    select coalesce(array_agg(distinct f), '{}'::text[])
-    from work_item w
-    cross join lateral app.numbering_pattern_in_effect(w.project_id, w.work_item_type_id, w.numbered_at) np
-    cross join lateral jsonb_array_elements(np.segments) s
-    cross join lateral (select case s ->> 'kind' when 'trade' then 'trade' when 'location' then 'location' end) k (f)
-    where w.id = p_work_item_id and w.document_number is not null and w.numbered_at is not null
-      and k.f is not null
+    begin
+      return coalesce((
+        select array_agg(distinct k.f)
+        from work_item w
+        cross join lateral app.numbering_pattern_in_effect(w.project_id, w.work_item_type_id, w.numbered_at) np
+        cross join lateral jsonb_array_elements(np.segments) s
+        cross join lateral (select case s ->> 'kind' when 'trade' then 'trade' when 'location' then 'location' end) k (f)
+        where w.id = p_work_item_id and w.document_number is not null and w.numbered_at is not null
+          and k.f is not null
+      ), '{}'::text[]);
+    end
   $$;
 
 create or replace function app.check_work_item_built_ins(
@@ -72,10 +76,15 @@ create or replace function app.check_work_item_built_ins(
 -- The api reads it for the item's Form (fixedByNumber), only for an item the
 -- caller sees (V1); the helper and the check stay internal.
 create function app.work_item_fixed_fields(p_work_item_id uuid) returns text[]
-  language sql stable security definer
+  language plpgsql stable security definer
   set search_path = pg_catalog, public
   as $$
-    select case when app.sees_work_item(p_work_item_id) then app.number_fixed_fields(p_work_item_id) else '{}'::text[] end
+    begin
+      if not app.sees_work_item(p_work_item_id) then
+        return '{}'::text[];
+      end if;
+      return app.number_fixed_fields(p_work_item_id);
+    end
   $$;
 
 revoke all on function app.number_fixed_fields(uuid), app.work_item_fixed_fields(uuid) from public;
