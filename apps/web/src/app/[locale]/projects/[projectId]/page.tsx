@@ -1,5 +1,5 @@
 import { workItemListHref, type Locale } from "@rabaed/domain";
-import { ProjectDashboard } from "@rabaed/ui";
+import { cn, focusRing, KeyValues, ProjectDashboard, TitledCard, touchBox } from "@rabaed/ui";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
 import { ActivityFeedView } from "@/components/activity-feed-view";
@@ -8,6 +8,9 @@ import { WithdrawInvitationButton } from "@/components/withdraw-invitation-butto
 import { Link, redirect } from "@/i18n/navigation";
 import { chainLabels } from "@/lib/chain-labels";
 import { getActivityFeed, getDashboard, getMe, getProject, getProjectInvitations, getProjectParticipants } from "@/lib/session";
+
+/** The class of a link in a card, as the kit's (`.ln`), with the shared focus ring and touch size. */
+const cardLinkClass = cn("inline-flex items-center rounded-sm text-[13px] font-semibold text-brand-fg underline-offset-4 hover:underline", focusRing, touchBox);
 
 export default async function ProjectPage({ params }: { params: Promise<{ locale: Locale; projectId: string }> }) {
   const { locale, projectId } = await params;
@@ -27,12 +30,14 @@ export default async function ProjectPage({ params }: { params: Promise<{ locale
   const invitations = project.isProjectAdmin ? await getProjectInvitations(project.id) : null;
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-h4 font-semibold">{project.name[locale]}</h1>
+    <div className="flex flex-col gap-[18px]">
+      {/* The shell's header already shows the Project's name (the kit draws no title here); the heading stays for screen readers. */}
+      <h1 className="sr-only">{project.name[locale]}</h1>
 
-      {/* The Dashboard comes first: Type cards over the items the Member can see, each number a link to the List behind it. */}
+      {/* The Dashboard comes first: Type cards over the items the Member can see, each number a link to the List behind it.
+          The Activity Feed sits beside them on a wide screen, as the kit's two-to-one grid, and under them below 1101px. */}
       {dashboard && (
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_24rem]">
+        <div className="grid items-start gap-[18px] min-[1101px]:grid-cols-[minmax(0,2fr)_minmax(280px,1fr)]">
           <section aria-label={t("dashboard")} data-testid="dashboard" className="min-w-0">
             <ProjectDashboard
               dashboard={dashboard}
@@ -43,7 +48,12 @@ export default async function ProjectPage({ params }: { params: Promise<{ locale
                 open: tViews("dashboard.open"),
                 closed: tViews("dashboard.closed"),
                 empty: tViews("dashboard.empty"),
-                codeC: tViews("dashboard.codeC"),
+                revisionLine: {
+                  review_code: tViews("dashboard.revisionLine.review_code"),
+                  inspection_result: tViews("dashboard.revisionLine.inspection_result"),
+                  approval: tViews("dashboard.revisionLine.approval"),
+                  none: tViews("dashboard.revisionLine.none"),
+                },
                 ...chainLabels(tViews),
                 approved: {
                   review_code: tViews("dashboard.approved.review_code"),
@@ -60,64 +70,68 @@ export default async function ProjectPage({ params }: { params: Promise<{ locale
           {activity && <ActivityFeedView projectId={project.id} initial={activity} locale={locale} />}
         </div>
       )}
-      <dl className="grid grid-cols-[max-content_1fr] gap-x-6 gap-y-2">
-        <dt className="text-muted">{t("code")}</dt>
-        <dd>
-          <bdi dir="ltr">{project.code}</bdi>
-        </dd>
-        <dt className="text-muted">{t("projectNumber")}</dt>
-        <dd>{project.projectNumber}</dd>
-        {participants && (
-          <>
-            <dt className="text-muted">{t("hostCompany")}</dt>
-            <dd>{participants.hostCompany.legalName[locale]}</dd>
-          </>
-        )}
-        <dt className="text-muted">{t("yourRole")}</dt>
-        <dd>
-          {project.projectRole.name[locale]}
-          {project.isProjectAdmin && ` · ${t("projectAdmin")}`}
-        </dd>
-      </dl>
+      {/* The Project's facts, as the kit's "Project details" card. */}
+      <TitledCard title={t("projectDetails")}>
+        <KeyValues
+          items={[
+            { key: "code", label: t("code"), value: <bdi dir="ltr">{project.code}</bdi> },
+            { key: "number", label: t("projectNumber"), value: project.projectNumber },
+            ...(participants ? [{ key: "host", label: t("hostCompany"), value: participants.hostCompany.legalName[locale] }] : []),
+            {
+              key: "role",
+              label: t("yourRole"),
+              value: `${project.projectRole.name[locale]}${project.isProjectAdmin ? ` · ${t("projectAdmin")}` : ""}`,
+            },
+          ]}
+        />
+      </TitledCard>
 
-      <section className="space-y-4">
-        <h2 className="text-h6 font-semibold">{t("participants")}</h2>
-        {/* Every Participant for a Project Admin; otherwise only your own Company's (V15). */}
+      <TitledCard
+        title={t("participants")}
+        bodyClassName="flex flex-col gap-[18px] px-5 py-[18px]"
+        actions={
+          // Participant Codes are set in one place, Project Settings → Numbering (RP-381).
+          project.isProjectAdmin && (
+            <Link href={`/projects/${project.id}/settings/numbering`} className={cardLinkClass}>
+              {t("setParticipantCodes")}
+            </Link>
+          )
+        }
+      >
+        {/* Every Participant for a Project Admin; otherwise only your own Company's (V15). A Company under its Project Role. */}
         {participants && (
-          <ul className="divide-y divide-border border-y border-border" data-testid="participants">
-            {participants.participants.map((p) => (
-              <li key={p.id} className="space-y-3 py-3">
-                <div className="flex flex-wrap items-baseline justify-between gap-4">
-                  <span>
-                    <span className="font-medium">{p.company.legalName[locale]}</span>{" "}
-                    <span className="text-muted">· {p.projectRole.name[locale]}</span>
-                    {/* The Participant Code, as in Document Numbers: always left-to-right. */}
-                    {p.code && (
-                      <span className="text-muted">
-                        {" "}
-                        · {t("participantCode")} <bdi dir="ltr">{p.code}</bdi>
-                      </span>
-                    )}
-                  </span>
+          <KeyValues
+            data-testid="participants"
+            items={participants.participants.map((p) => ({
+              key: p.id,
+              label: (
+                <>
+                  {p.projectRole.name[locale]}
+                  {/* The Participant Code, as in Document Numbers: always left-to-right. */}
+                  {p.code && (
+                    <>
+                      {" "}
+                      · {t("participantCode")} <bdi dir="ltr">{p.code}</bdi>
+                    </>
+                  )}
+                </>
+              ),
+              value: (
+                <span className="flex flex-col items-start gap-1">
+                  {p.company.legalName[locale]}
                   {p.isOwnCompany && (
-                    <Link href={`/participants/${p.id}`} className="text-sm text-brand-fg underline underline-offset-4">
+                    <Link href={`/participants/${p.id}`} className={cardLinkClass}>
                       {t("projectMembers")}
                     </Link>
                   )}
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-        {/* Participant Codes are set in one place, Project Settings → Numbering (RP-381). */}
-        {project.isProjectAdmin && (
-          <Link href={`/projects/${project.id}/settings/numbering`} className="text-sm text-brand-fg underline underline-offset-4">
-            {t("setParticipantCodes")}
-          </Link>
+                </span>
+              ),
+            }))}
+          />
         )}
         {/* Pending invitations, for the Project Admin only: by CR number, never by Company name (ADR 0009). */}
         {invitations && invitations.invitations.length > 0 && (
-          <div className="space-y-2">
+          <div className="space-y-2 border-t border-border-subtle pt-[18px]">
             <h3 className="text-sm font-semibold">{t("pendingInvitations")}</h3>
             <ul className="divide-y divide-border border-y border-border" data-testid="pending-invitations">
               {invitations.invitations.map((i) => (
@@ -136,7 +150,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ locale
           </div>
         )}
         {project.isProjectAdmin && <AddParticipantForm projectId={project.id} />}
-      </section>
+      </TitledCard>
     </div>
   );
 }

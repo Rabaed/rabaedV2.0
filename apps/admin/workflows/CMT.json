@@ -48,7 +48,8 @@
       "to": "resolved",
       "outcome": null,
       "permission": "submit",
-      "actionForm": null
+      "actionForm": null,
+      "screen": "comment_resolution"
     },
     {
       "key": "close",

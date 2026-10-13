@@ -1,0 +1,66 @@
+{
+  "key": "code_b",
+  "name": { "en": "Approve with Comments · B", "ar": "اعتماد مع ملاحظات · B" },
+  "schema": {
+    "sections": [
+      {
+        "key": "final_verification",
+        "title": { "en": "Final verification", "ar": "التحقق النهائي" },
+        "fields": [
+          {
+            "key": "sample_checked",
+            "type": "yes_no",
+            "required": true,
+            "label": { "en": "Sample checked", "ar": "تم فحص العينة" }
+          },
+          {
+            "key": "matches_specification",
+            "type": "yes_no",
+            "required": true,
+            "label": { "en": "Matches specification", "ar": "مطابق للمواصفات" }
+          },
+          {
+            "key": "verification_note",
+            "type": "textarea",
+            "required": { "field": "matches_specification", "op": "=", "value": false },
+            "maxLength": 4000,
+            "label": { "en": "Verification note", "ar": "ملاحظة التحقق" },
+            "help": {
+              "en": "Filled in from your Engineer's review; correct it if needed. Shared with the Code.",
+              "ar": "مأخوذ من مراجعة مهندسك، صحّحه إن لزم. يُشارك مع الرمز."
+            }
+          }
+        ]
+      },
+      {
+        "key": "code_remarks",
+        "title": { "en": "Remarks and Comments", "ar": "الملاحظات وما يلزم معالجته" },
+        "fields": [
+          {
+            "key": "remarks",
+            "type": "textarea",
+            "required": true,
+            "maxLength": 4000,
+            "label": { "en": "Remarks", "ar": "الملاحظات" },
+            "help": { "en": "Shared with everyone who sees this item.", "ar": "يراها كل من يرى هذا العنصر." }
+          },
+          {
+            "key": "items_to_create",
+            "type": "table",
+            "required": true,
+            "label": { "en": "Comments", "ar": "الملاحظات للمعالجة" },
+            "help": {
+              "en": "Each row becomes a Comment in the Snag List, for the Contractor to resolve.",
+              "ar": "يصبح كل سطر ملاحظة في قائمة الملاحظات ليعالجها المقاول."
+            },
+            "columns": [
+              { "key": "comment", "type": "text", "required": true, "maxLength": 2000, "label": { "en": "Comment", "ar": "الملاحظة" } },
+              { "key": "reference", "type": "text", "required": false, "maxLength": 200, "label": { "en": "Reference", "ar": "المرجع" } }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "internalFields": []
+}

@@ -56,7 +56,7 @@ async function addType(): Promise<{ typeId: string; workflowId: string }> {
       },
     ],
   };
-  const workflowId = await addTestWorkflow((text) => migrator.query(text), { name: { en: "Authoring default (test)", ar: "افتراضي التأليف" } });
+  const workflowId = await addTestWorkflow((text) => migrator.query(text), { name: { en: "Authoring default (test)", ar: "افتراضي التأليف" }, engineerStep: true });
   const form = await one("insert into form_definition (owner_kind, name) values ('rabaed', $1) returning id", [
     JSON.stringify({ en: "Authoring", ar: "التأليف" }),
   ]);

@@ -53,7 +53,6 @@ export default async function WorkItemPrintPage({ params }: { params: Promise<{ 
       named={item.namedAnswers}
       editable={false}
       editableSections={[]}
-      filledBy={form.filledBy}
       fieldTimes={{}}
       autosave={false}
     >

@@ -98,7 +98,7 @@ beforeAll(async () => {
   engineer = await projectMember(api, c1, own, ["engineer"]);
   pm = await projectMember(api, c1, own, ["project_manager"]);
   // Holds the Consultant Step that Submit leads to.
-  await projectMember(api, { caller: k1Caller }, k1Participant, ["manager"]);
+  await projectMember(api, { caller: k1Caller }, k1Participant, ["engineer"]);
 });
 
 describe("the MAR Form Version 3", () => {

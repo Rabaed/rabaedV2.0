@@ -40,12 +40,13 @@ export type DashboardFigure = z.infer<typeof figure>;
 const cardType = z.object({ code: z.string(), name: bilingualText });
 
 /**
- * The Code C line (RP-352, codeCState): "Code C 5 · approved on revision 3
- * (60%) · awaiting revision 2", rejected after C when there is any, and
- * awaiting revision split into "no Revision yet" and "Revision in progress"
- * when the viewer's own Participant raised any of those chains.
+ * The Revision line (RP-352, codeCState): the chains that had an outcome offering a
+ * Revision (Code C; a Failed inspection, RP-437): "Code C 5 · approved on revision 3
+ * (60%) · awaiting revision 2", rejected after C when there is any, and awaiting
+ * revision split into "no Revision yet" and "Revision in progress" when the viewer's
+ * own Participant raised any of those chains. The app names it by the outcome kind.
  */
-const codeCLine = z.object({
+const revisionLine = z.object({
   total: figure,
   approvedOnRevision: figure.extend({ percent: z.number().int().min(0).max(100) }),
   awaitingRevision: figure,
@@ -53,7 +54,7 @@ const codeCLine = z.object({
   split: z.object({ noRevisionYet: figure, revisionInProgress: figure }).nullable(),
   rejectedAfterC: figure.nullable(),
 });
-export type DashboardCodeCLine = z.infer<typeof codeCLine>;
+export type DashboardRevisionLine = z.infer<typeof revisionLine>;
 
 const bar = figure.extend({
   bucket: chainBucketSchema,
@@ -76,7 +77,7 @@ export const dashboardCardSchema = z.discriminatedUnion("kind", [
     /** Its percent is of the Submitted chains only (In preparation left out), so it is the same for every Company that sees them. */
     approved: figure.extend({ percent: z.number().int().min(0).max(100) }),
     /** Null on a Type with no outcome offering a Revision, or when no chain the viewer sees has had one. */
-    codeC: codeCLine.nullable(),
+    revisionLine: revisionLine.nullable(),
   }),
   z.object({
     kind: z.literal("open_closed"),
@@ -124,8 +125,8 @@ function barsOf(outcomes: readonly Outcome[]): BarOf[] {
   return [{ bucket: "pending", name: null, tone: "pending" }, ...closed];
 }
 
-/** The Code C line from its state counts, or null when it has no chain. */
-function codeCLineOf(module: ModuleKey, typeCode: string, counts: ReadonlyMap<CodeCState | null, number>): DashboardCodeCLine | null {
+/** The Revision line from its state counts, or null when it has no chain. */
+function revisionLineOf(module: ModuleKey, typeCode: string, counts: ReadonlyMap<CodeCState | null, number>): DashboardRevisionLine | null {
   const of = (filter: CodeCFilter[]): DashboardFigure => ({
     count: codeCFilterStates(filter).reduce((sum, s) => sum + (counts.get(s) ?? 0), 0),
     query: { module, type: [typeCode], bucket: [], codeC: filter },
@@ -168,6 +169,6 @@ export function dashboardCard({ type, moduleKey, outcomeKind, outcomes, counts, 
     bars: bars.map((b) => ({ ...b, ...of([b.bucket]) })),
     inPreparation: inPreparation.count > 0 ? inPreparation : null,
     approved: { ...approved, percent: percentOf(approved.count, submitted) },
-    codeC: outcomes.some(offersRevision) ? codeCLineOf(moduleKey, type.code, codeCCounts) : null,
+    revisionLine: outcomes.some(offersRevision) ? revisionLineOf(moduleKey, type.code, codeCCounts) : null,
   };
 }

@@ -44,7 +44,7 @@ beforeAll(async () => {
   definitionId =
     existing.rows[0]?.workflow_definition_id ??
     (await (async () => {
-      const id = await addTestWorkflow((text) => sql.raw(text).execute(migrator), { name: { en: "Admin default (test)", ar: "افتراضي الإدارة" } });
+      const id = await addTestWorkflow((text) => sql.raw(text).execute(migrator), { name: { en: "Admin default (test)", ar: "افتراضي الإدارة" }, engineerStep: true });
       const schema = {
         sections: [{ key: "material", title: { en: "Material", ar: "المادة" }, fields: [{ key: "model", type: "text", label: { en: "Model", ar: "الطراز" } }] }],
       };

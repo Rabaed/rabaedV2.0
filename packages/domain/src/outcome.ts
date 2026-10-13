@@ -78,7 +78,8 @@ const outcome = (code: string, en: string, ar: string, polarity: OutcomePolarity
 
 /**
  * The Rabaed Default sets, by outcome kind. `CMT` is the Snag List's Comment
- * Type (RP-434, WF-11): Code B's action items become Comments.
+ * Type (RP-434, WF-11): Code B's action items become Comments, and so do Passed with
+ * Comments' (RP-437); a Failed inspection is re-inspected as a Revision (RP-437).
  */
 export const defaultOutcomeSets: Record<OutcomeKind, readonly Outcome[]> = {
   review_code: [
@@ -89,8 +90,8 @@ export const defaultOutcomeSets: Record<OutcomeKind, readonly Outcome[]> = {
   ],
   inspection_result: [
     outcome("passed", "Passed", "ناجح", "positive"),
-    outcome("passed_with_comments", "Passed with Comments", "ناجح مع ملاحظات", "positive"),
-    outcome("failed", "Failed", "راسب", "negative"),
+    outcome("passed_with_comments", "Passed with Comments", "ناجح مع ملاحظات", "positive", [{ kind: "create_items", type: "CMT" }]),
+    outcome("failed", "Failed", "راسب", "negative", [{ kind: "offer_revision" }]),
   ],
   approval: [outcome("approved", "Approved", "معتمد", "positive"), outcome("rejected", "Rejected", "مرفوض", "negative")],
   none: [outcome("closed", "Closed", "مغلق", "positive")],

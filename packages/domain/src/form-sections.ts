@@ -1,3 +1,4 @@
+import { compareStrings } from "./canonical-json.ts";
 import { isUnanswered } from "./condition.ts";
 import type { FieldError, FormSection } from "./form.ts";
 
@@ -99,7 +100,7 @@ function canonical(value: unknown): unknown {
       Object.entries(value)
         .map(([k, v]) => [k, canonical(v)] as const)
         .filter(([, v]) => v !== undefined)
-        .sort(([a], [b]) => (a < b ? -1 : 1)),
+        .sort(([a], [b]) => compareStrings(a, b)),
     );
   }
   return value;

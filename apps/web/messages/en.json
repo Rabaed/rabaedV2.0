@@ -246,7 +246,12 @@
       "open": "Open",
       "closed": "Closed",
       "empty": "No Work Item Types on this Project yet.",
-      "codeC": "Code C",
+      "revisionLine": {
+        "review_code": "Code C",
+        "inspection_result": "Failed",
+        "approval": "Revisions",
+        "none": "Revisions"
+      },
       "approved": {
         "review_code": "Approved (A+B)",
         "inspection_result": "Passed, with or without Comments",
@@ -408,6 +413,7 @@
     "notCreator": "Only a Project Creator can create a Project.",
     "unavailable": "Something went wrong. Try again.",
     "participants": "Participants",
+    "projectDetails": "Project details",
     "participantCode": "Participant Code",
     "setParticipantCodes": "Set Participant Codes",
     "projectMembers": "Project Members",
@@ -511,7 +517,7 @@
     },
     "participantCodes": {
       "title": "Participant Codes",
-      "intro": "Each Participant's code in Document Numbers: 2 to 6 letters or digits, at least one a letter. Until a code is set, numbers show the Participant's order on the Project. A code is fixed once a number uses it or a starting number is set for a counter that holds it.",
+      "intro": "Each Participant's code in Document Numbers: 2 to 6 letters or digits, at least one a letter. Until a code is set, numbers show the Participant's order on the Project. A code is fixed once a number uses it or a starting number is set for a counter that holds it. A number that shows the order fixes it the same way: no code can be set after.",
       "participants": "Participants",
       "noCode": "No code yet",
       "editOf": "Change the Participant Code of {company}",
@@ -519,7 +525,7 @@
       "saved": "Participant Code saved.",
       "invalid": "Use 2 to 6 letters or digits, with at least one letter.",
       "duplicateCode": "Another Participant on this Project already has that code.",
-      "codeInUse": "A Document Number or a counter's starting number already uses this code, so it can no longer change.",
+      "codeInUse": "A Document Number or a counter's starting number already uses this Participant's code, or its order while it had none, so the code can no longer change.",
       "forbidden": "Only a Project Admin can set Participant Codes.",
       "unavailable": "Something went wrong. Try again.",
       "colParticipant": "Participant",
@@ -760,8 +766,7 @@
         "choose": "Choose…",
         "none": "None",
         "leftProject": "\u2068{name}\u2069 (no longer on the Project)",
-        "unanswered": "Not answered",
-        "filledBy": "Filled in by the {role}"
+        "unanswered": "Not answered"
       },
       "builtIn": {
         "choose": "Choose…",

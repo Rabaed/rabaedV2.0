@@ -276,18 +276,16 @@ describe("Validate: a condition", () => {
 });
 
 describe("Validate: the Form complete", () => {
-  it("refuses Escalate until the verdict a cost impact over 1,000,000 requires is given", async () => {
-    const id = await atConsultant("Verdict", k1Engineer, { cost: 2_000_000 });
+  it("reads the whole Form, beyond the sections of the Step it leaves: refused while the review's verdict a cost impact over 1,000,000 requires is missing", async () => {
     const incomplete = { en: "Complete the Form before you take this step.", ar: "أكمل النموذج قبل اتخاذ هذه الخطوة." };
-    expect(await offered(k1Engineer, id)).toContain("escalate");
-    await expectRefusedWith(tryTake(k1Engineer, id, "escalate"), incomplete);
-    await take(k1Engineer, id, "send_to_manager");
-    await pickUp(k1Manager, id);
-    expect((await detail(k1Manager, id)).step.key).toBe("senior_approval");
-    const answers = (await detail(k1Manager, id)).answers;
-    await ok(k1Manager.request("PUT", `/v1/work-items/${id}/answers`, { answers: { ...answers, verdict: "Fit for use" } }));
-    await take(k1Manager, id, "return_from_senior");
-    await take(k1Engineer, id, "escalate");
+    const big = await newDraft(engineer, "Verdict", { cost: 2_000_000 });
+    expect(await offered(engineer, big)).toContain("escalate");
+    await expectRefusedWith(tryTake(engineer, big, "escalate"), incomplete);
+    // Leaving the Draft by another Transition checks only the Draft's own sections.
+    await take(engineer, big, "send_for_review");
+    const small = await newDraft(engineer, "No verdict needed", { cost: 100 });
+    await take(engineer, small, "escalate");
+    expect((await detail(engineer, small)).stage.key).toBe("internal_review");
   });
 });
 

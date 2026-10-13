@@ -9,4 +9,6 @@ Seam 1 runs as four jobs, `seam 1 (shard 1/4)` to `seam 1 (shard 4/4)`, each wit
 
 An "over budget" warning on a seam job (RP-558) means that seam grew past its fixed time budget in `ci.yml`: file a `retro` ticket under RP-12 to split it or speed it up, and don't raise the budget in the same PR.
 
+If the update-screenshots bot comments "These baselines changed again after the bot set them on this PR" (RP-561), a story renders unstably: the bot and CI keep disagreeing and the merge queue will drop the PR. Find the cause of the instability (RP-556 is the known case) and fix the story; widening a screenshot tolerance needs the product owner. Do not just re-run the label.
+
 Screenshots are compared only on Linux CI, so a story failure that passes locally (for example "Could not capture a stable screenshot") shows up only in this log.

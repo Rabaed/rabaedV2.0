@@ -5,7 +5,7 @@
 // raising Participant; an Authorized Person copies Workflows to and from the Company
 // Library. Every refusal to anyone else is the plain 404.
 import { createDb } from "@rabaed/db";
-import { testDatabaseUrls } from "@rabaed/db/test-support";
+import { LEGACY_MAR, LEGACY_WORKFLOW_NAME, returnInInternalReview, testDatabaseUrls } from "@rabaed/db/test-support";
 import type { WorkflowDefinition, WorkflowRead } from "@rabaed/domain";
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -36,10 +36,21 @@ let marDefault = "";
 
 const read = async (by: Caller, id: string): Promise<WorkflowRead> => (await ok(by.get(`/v1/workflows/${id}`), 200)).json();
 
-async function duplicate(by: Caller, sourceId: string, projectId: string | null, name = TOWER_ROUTE): Promise<string> {
+async function copied(by: Caller, sourceId: string, projectId: string | null, name = TOWER_ROUTE): Promise<string> {
   const res = await by.post(`/v1/workflows/${sourceId}/duplicate`, { projectId, name });
   expect(res.statusCode, res.body).toBe(201);
   return res.json().id;
+}
+
+/**
+ * A copy, as `copied`, its draft's Return kept in Internal Review: the legacy MAR's route
+ * Returns to the Draft, which publishing refuses since RP-437 (ADR 0020, return_to_draft).
+ */
+async function duplicate(by: Caller, sourceId: string, projectId: string | null, name = TOWER_ROUTE): Promise<string> {
+  const id = await copied(by, sourceId, projectId, name);
+  const draft = (await read(by, id)).draft!;
+  await ok(by.request("PUT", `/v1/workflows/${id}/draft`, { definition: returnInInternalReview(draft.definition) }), 200);
+  return id;
 }
 
 const bind = (by: Caller, projectId: string, workflowId: string, raisingParticipantId: string | null = null) =>
@@ -67,7 +78,7 @@ beforeAll(async () => {
     .participants.find((p: { isOwnCompany: boolean; id: string }) => !p.isOwnCompany && p.id !== c2ParticipantId).id;
   k1Engineer = await projectMember(api, k1, k1ParticipantId, ["engineer"]);
   const mar = await sql<{ id: string; workflow_definition_id: string }>`
-    select id, workflow_definition_id from work_item_type where owner_kind = 'rabaed' and code = 'MAR'
+    select id, workflow_definition_id from work_item_type where owner_kind = 'rabaed' and code = ${LEGACY_MAR}
   `.execute(migrator);
   marTypeId = mar.rows[0]!.id;
   marDefault = mar.rows[0]!.workflow_definition_id;
@@ -77,13 +88,15 @@ describe("a Project Admin authors the Project's own Workflow", () => {
   let route = "";
 
   it("duplicates the Rabaed Default into the Project as an independent draft", async () => {
-    route = await duplicate(c1.caller, marDefault, at.projectId);
+    route = await copied(c1.caller, marDefault, at.projectId);
     const copy = await read(c1.caller, route);
     const original = await read(c1.caller, marDefault);
     expect(copy).toMatchObject({ name: TOWER_ROUTE, owner: "project", projectId: at.projectId, workItemTypeId: marTypeId });
     expect(copy.publishedVersions).toEqual([]);
     expect(copy.draft).toEqual({ versionNo: 1, name: TOWER_ROUTE, definition: original.published!.definition });
     expect(copy.canAuthor).toBe(true);
+    // Publishable: its Return kept in Internal Review (ADR 0020).
+    await ok(c1.caller.request("PUT", `/v1/workflows/${route}/draft`, { definition: returnInInternalReview(copy.draft!.definition) }), 200);
   });
 
   it("saves an edited draft, and only its authors read it (scenario RP-427-3)", async () => {
@@ -162,7 +175,7 @@ describe("a Project Admin authors the Project's own Workflow", () => {
     await ok(bind(c1.caller, at.projectId, route));
     const after = await draft(at, at.c1Engineer, "After the binding");
     expect((await detail(at.c1Engineer, after)).workflow).toEqual({ name: TOWER_ROUTE, versionNo: 1 });
-    expect((await detail(at.c1Engineer, before)).workflow.name.en).toBe("Material Submittal (MAR)");
+    expect((await detail(at.c1Engineer, before)).workflow.name.en).toBe(LEGACY_WORKFLOW_NAME.en);
     expect((await detail(at.c1Engineer, after)).step.name.en).toBe("Prepare");
   });
 
@@ -193,7 +206,7 @@ describe("a Project Admin authors the Project's own Workflow", () => {
     const res = await c1.caller.delete(`/v1/projects/${at.projectId}/workflow-bindings?workItemTypeId=${marTypeId}`);
     expect(res.statusCode, res.body).toBe(204);
     const id = await draft(at, at.c1Engineer, "Unbound");
-    expect((await detail(at.c1Engineer, id)).workflow.name.en).toBe("Material Submittal (MAR)");
+    expect((await detail(at.c1Engineer, id)).workflow.name.en).toBe(LEGACY_WORKFLOW_NAME.en);
     await ok(bind(c1.caller, at.projectId, route));
   });
 });
@@ -350,8 +363,6 @@ describe("a Revision starts on its chain's own Workflow (ADR 0016)", () => {
     await take(at.c1Engineer, id, "send_for_review");
     await ok(at.c1Pm.post(`/v1/work-items/${id}/pick-up`));
     await take(at.c1Pm, id, "submit");
-    const answers = { ...(await detail(k1Engineer, id)).answers, sample_checked: true, matches_specification: false, verification_note: "Below spec" };
-    await ok(k1Engineer.request("PUT", `/v1/work-items/${id}/answers`, { answers }));
     await ok(at.k1Manager.post(`/v1/work-items/${id}/pick-up`));
     await take(at.k1Manager, id, "revise_c", { remarks: "Resubmit with the datasheet" });
     // The Project goes back to the Rabaed Default.

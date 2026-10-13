@@ -25,6 +25,7 @@ import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { attachDatasheet, createTestApi, expectHidden, type Caller, type TestApi } from "./support/harness.ts";
 import { buildTower, ok, type Company, type Tower } from "./support/tower.ts";
+import { LEGACY_MAR, returnInInternalReview } from "@rabaed/db/test-support";
 
 let api: TestApi;
 let c1: Company;
@@ -149,7 +150,7 @@ async function projectType(at: Tower, code: string): Promise<string> {
     )
     insert into work_item_type (owner_kind, module_key, code, name, workflow_definition_id, outcome_kind, form_definition_id)
     select 'rabaed', 'submittals', ${code}, '{"en": "Material Submittal with E", "ar": "اعتماد المواد مع E"}', d.id, 'review_code', t.form_definition_id
-    from definition d, work_item_type t where t.code = 'MAR' and t.owner_kind = 'rabaed'
+    from definition d, work_item_type t where t.code = ${LEGACY_MAR} and t.owner_kind = 'rabaed'
     returning workflow_definition_id as id
   `.execute(migrator);
   return rows[0]!.id;
@@ -161,7 +162,7 @@ async function draftWithE(definitionId: string): Promise<string> {
     with mar as (
       select v.id, v.layout from workflow_version v
       join work_item_type t on t.workflow_definition_id = v.workflow_definition_id
-      where t.code = 'MAR' and t.owner_kind = 'rabaed' and v.status = 'published'
+      where t.code = ${LEGACY_MAR} and t.owner_kind = 'rabaed' and v.status = 'published'
       order by v.version_no desc limit 1
     ), version as (
       insert into workflow_version (workflow_definition_id, version_no, status, layout)
@@ -224,7 +225,8 @@ async function publishProblems(at: Tower, versionId: string, code: string, outco
     steps: steps.rows,
     transitions: transitions.rows.map(({ rules, actions, ...t }) => ({ ...t, ...(rules === null ? {} : { rules }), ...(actions === null ? {} : { actions }) })),
   };
-  return workflowPublishProblems(definitionFromRows(rows), { outcomes, stages: stages.rows, form: formSchema.parse(form.rows[0]!.schema) }).map((p) => p.code);
+  // Its Return to the Draft is the legacy MAR's, published as data: kept in Internal Review here, as publishing asks (ADR 0020).
+  return workflowPublishProblems(returnInInternalReview(definitionFromRows(rows)), { outcomes, stages: stages.rows, form: formSchema.parse(form.rows[0]!.schema) }).map((p) => p.code);
 }
 
 describe("an outcome the Project Admin added", () => {
@@ -254,8 +256,6 @@ describe("an outcome the Project Admin added", () => {
     await ok(t.c1Engineer.post(`/v1/work-items/${item}/transitions`, { transition: "send_for_review", confirmed: true, idempotencyKey: randomUUID() }));
     await ok(t.c1Pm.post(`/v1/work-items/${item}/pick-up`));
     await ok(t.c1Pm.post(`/v1/work-items/${item}/transitions`, { transition: "submit", confirmed: true, idempotencyKey: randomUUID() }));
-    const answers = (await ok(t.k1Manager.get(`/v1/work-items/${item}`), 200)).json().answers as Record<string, unknown>;
-    await ok(t.k1Manager.request("PUT", `/v1/work-items/${item}/answers`, { answers: { ...answers, sample_checked: true, matches_specification: true } }));
     await ok(t.k1Manager.post(`/v1/work-items/${item}/pick-up`));
     await ok(t.k1Manager.post(`/v1/work-items/${item}/transitions`, { transition: "approve_e", answers: {}, confirmed: true, idempotencyKey: randomUUID() }));
   });

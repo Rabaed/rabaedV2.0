@@ -1,14 +1,15 @@
 // Seam 1 for the Activity Feed (RP-353, spec RP-344; visibility.md "Activity
-// Feed" and "Work Item history", V5, V14, V19, scenarios 34, 35 and 47 through
-// the feed). The feed is the Project's `work_item_event`s through the same rules
+// Feed" and "Work Item history", V5, V14, V19, scenarios 34 and 35 through the
+// feed). The feed is the Project's `work_item_event`s through the same rules
 // as an item's history: another Participant's internal events and Internal Notes
 // never reach it, another Company is named by its name only and its people never,
 // and answer changes are left out for everyone. Paged by cursor, newest first,
 // filtered by Module, Type and "items I'm on".
 //
 // A test-only Type runs on the Send Back test Workflow, whose Consultant has
-// internal Steps (scenario 35), with a Form whose "Consultant verification"
-// section the Consultant fills at its own Step (scenario 47).
+// internal Steps (scenario 35). The raiser's changes to the answers after its Draft
+// (answers_changed, internal to it) reach no feed. (Scenario 47, the Consultant's own
+// Form Section, retired with ADR 0019, RP-437: the Consultant answers in its reply.)
 import { randomUUID } from "node:crypto";
 import { publishFormVersion } from "@rabaed/admin/services";
 import { createDb } from "@rabaed/db";
@@ -18,6 +19,7 @@ import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestApi, expectHidden, type Caller } from "./support/harness.ts";
 import { all, bilingual, buildTower, detail, ok, projectMember, submitted, take, type Company, type Tower } from "./support/tower.ts";
+import { LEGACY_MAR } from "@rabaed/db/test-support";
 
 const api = await createTestApi({ files: true });
 const migrator = createDb(testDatabaseUrls().migrator, { max: 1 });
@@ -30,20 +32,11 @@ const TYPE = "MARAF";
 const C1_NAME = "Feed Contractor Co";
 const K1_NAME = "Feed Consultants LLC";
 const NOTE = "Internal: checked against the drawings";
-const VERIFICATION = "Matches the sample in the site office";
+const CHANGED = "Changed after the Return in the site office";
 
 const schema = {
   sections: [
     { key: "material", title: bilingual("Material"), fields: [{ key: "model", type: "text", label: bilingual("Model") }] },
-    {
-      key: "verification",
-      title: bilingual("Consultant verification"),
-      editable_at: ["consultant_review"],
-      fields: [
-        { key: "sample_checked", type: "yes_no", label: bilingual("Sample checked") },
-        { key: "verification_note", type: "textarea", label: bilingual("Verification note") },
-      ],
-    },
     {
       key: "classification",
       title: bilingual("Classification"),
@@ -234,28 +227,27 @@ describe("scenario 35 through the feed: K1 moves the Submitted item internally",
   });
 });
 
-describe("scenario 47 through the feed: K1 fills its section and saves twice", () => {
+describe("answer changes through the feed: C1 changes its Returned item twice", () => {
   let id = "";
   beforeAll(async () => {
     id = await atContractorReview(tower.c1Engineer, "Feed FD-47");
     await ok(tower.c1Pm.post(`/v1/work-items/${id}/pick-up`));
-    await take(tower.c1Pm, id, "submit");
-    await ok(k1Engineer.post(`/v1/work-items/${id}/pick-up`));
-    const save = async (by: Caller, changes: Record<string, unknown>) =>
-      ok(by.request("PUT", `/v1/work-items/${id}/answers`, { answers: { ...(await detail(by, id)).answers, ...changes } }));
-    await save(k1Engineer, { sample_checked: true });
-    await save(k1Pm, { verification_note: VERIFICATION });
-    // K1's own history holds both changes: the feed leaves them out for everyone.
-    const history = (await ok(k1Engineer.get(`/v1/work-items/${id}/history`), 200)).json().events as { type: string }[];
+    await take(tower.c1Pm, id, "return");
+    const save = async (changes: Record<string, unknown>) =>
+      ok(tower.c1Engineer.request("PUT", `/v1/work-items/${id}/answers`, { answers: { ...(await detail(tower.c1Engineer, id)).answers, ...changes } }));
+    await save({ model: "FD-48" });
+    await save({ model: CHANGED });
+    // C1's own history holds both changes: the feed leaves them out for everyone.
+    const history = (await ok(tower.c1Engineer.get(`/v1/work-items/${id}/history`), 200)).json().events as { type: string }[];
     expect(history.filter((e) => e.type === "answers_changed")).toHaveLength(2);
   });
 
-  it("gives no answers_changed to C1, OR or OW, nor to K1 itself", async () => {
-    for (const by of [tower.c1Pm, orEngineer, owner, k1Engineer, k1Pm]) {
+  it("gives no answers_changed to C1 itself, K1, OR or OW", async () => {
+    for (const by of [tower.c1Engineer, tower.c1Pm, orEngineer, owner, k1Engineer, k1Pm]) {
       const { entries, body } = await feed(by);
       expect(ofItem(entries, id).map((e) => e.type)).not.toContain("answers_changed");
       expect(entries.map((e) => e.type)).not.toContain("answers_changed");
-      expect(body).not.toContain(VERIFICATION);
+      expect(body).not.toContain(CHANGED);
     }
   });
 });
@@ -329,18 +321,18 @@ describe("paging and filters", () => {
     const everything = (await feed(tower.c1Pm)).entries;
     expect((await feed(tower.c1Pm, { module: "submittals" })).entries).toEqual(everything);
     expect((await feed(tower.c1Pm, { module: "inspections" })).entries).toEqual([]);
-    const mars = (await feed(tower.c1Pm, { type: ["MAR"] })).entries;
+    const mars = (await feed(tower.c1Pm, { type: [LEGACY_MAR] })).entries;
     expect(new Set(mars.map((e) => e.workItem.id))).toEqual(new Set([marId]));
-    expect((await feed(tower.c1Pm, { type: ["MAR", TYPE] })).entries).toEqual(everything);
-    expect((await feed(tower.c1Pm, { module: "inspections", type: ["MAR"] })).entries).toEqual([]);
+    expect((await feed(tower.c1Pm, { type: [LEGACY_MAR, TYPE] })).entries).toEqual(everything);
+    expect((await feed(tower.c1Pm, { module: "inspections", type: [LEGACY_MAR] })).entries).toEqual([]);
   });
 
   it("keeps \"items I'm on\" to the ones I raised, held or acted on, combined with the other filters", async () => {
-    // K1's engineer acted on (and held) the scenario items and k1Acted; the K1 PM only saved answers on one.
+    // K1's engineer acted on (and held) the scenario items and k1Acted; the K1 PM acted on none.
     const engineerOn = new Set((await feed(k1Engineer, { mine: true })).entries.map((e) => e.workItem.id));
     expect(engineerOn).toContain(k1Acted);
     expect(engineerOn).not.toContain(marId);
-    expect((await feed(k1Engineer, { mine: true, type: ["MAR"] })).entries).toEqual([]);
+    expect((await feed(k1Engineer, { mine: true, type: [LEGACY_MAR] })).entries).toEqual([]);
     // The manager held and acted on the scenario 35 item, and holds k1Acted and the MAR:
     // K1's only manager holds a Step whose pool is them alone at once (§3.3 rule 4).
     const managerOn = new Set((await feed(tower.k1Manager, { mine: true })).entries.map((e) => e.workItem.id));
@@ -348,7 +340,7 @@ describe("paging and filters", () => {
     expect(managerOn).toContain(k1Acted);
     expect(managerOn).toContain(marId);
     // C1's engineer raised every C1 item: the MAR among them.
-    expect(new Set((await feed(tower.c1Engineer, { mine: true, type: ["MAR"] })).entries.map((e) => e.workItem.id))).toEqual(new Set([marId]));
+    expect(new Set((await feed(tower.c1Engineer, { mine: true, type: [LEGACY_MAR] })).entries.map((e) => e.workItem.id))).toEqual(new Set([marId]));
     // Nobody at the Owner acted on anything.
     expect((await feed(owner, { mine: true })).entries).toEqual([]);
   });
@@ -357,7 +349,7 @@ describe("paging and filters", () => {
     await ok(owner.request("PUT", `/v1/work-items/${marId}/watch`));
     const watched = (await feed(owner, { mine: true })).entries;
     expect(new Set(watched.map((e) => e.workItem.id))).toEqual(new Set([marId]));
-    expect(watched).toEqual((await feed(owner, { type: ["MAR"] })).entries);
+    expect(watched).toEqual((await feed(owner, { type: [LEGACY_MAR] })).entries);
     await ok(owner.delete(`/v1/work-items/${marId}/watch`));
     expect((await feed(owner, { mine: true })).entries).toEqual([]);
   });
