@@ -112,8 +112,9 @@ beforeAll(async () => {
   await addSendBackType(migrator, EDIT, bilingual("Edit the Form (test)"), schema, {
     afterSendBack: { draft: "edit_form", internal_review: "edit_form" },
   });
-  // A Version published before the setting: its Steps say nothing (null).
-  await addSendBackType(migrator, BEFORE, bilingual("Published before (test)"), schema);
+  // A Version published before the setting: its Steps say nothing (null). With the Contractor
+  // Engineer Step, so a copy of it passes today's publish checks (ADR 0020).
+  await addSendBackType(migrator, BEFORE, bilingual("Published before (test)"), schema, { engineerStep: true });
   c1 = await api.projectCreator();
   projectId = (await api.createProject(c1.caller)).id;
   const post = async (path: string, body: unknown) => (await ok(c1.caller.post(`/v1/projects/${projectId}/${path}`, body), 201)).json().id as string;
@@ -258,6 +259,7 @@ describe("an edited Workflow says \"Comment only\" where a Send Back leads, unle
       internal_review: "comment",
       consultant_review: null,
       consultant_approval: null,
+      contractor_engineer: null,
     });
   });
 
