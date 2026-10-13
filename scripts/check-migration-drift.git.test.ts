@@ -124,6 +124,34 @@ describe("migrationProblems, when a migration is renamed", () => {
       { object: "function app.take_transition", branch: ["20261204000000_rebuild.sql"], main: ["20261203000000_main.sql"] },
     ]);
   });
+
+  it("judges a branch's migration edited after the merge by the commit that first added the file", () => {
+    // B's rebuild is written before main redefines the function; after the merge only a comment changes.
+    git("switch", "-q", "-c", "b", "main");
+    commit({ [`${dir}/20261204000000_rebuild.sql`]: takeTransition("B") }, "B rebuilds");
+    git("switch", "-q", "main");
+    commit({ [`${dir}/20261203000000_main.sql`]: takeTransition("main") }, "main redefines");
+    git("switch", "-q", "b");
+    git("merge", "-q", "--no-edit", "main");
+    commit({ [`${dir}/20261204000000_rebuild.sql`]: `-- RP-560: a comment.\n${takeTransition("B")}` }, "B edits a comment");
+    expect(migrationProblems(repo, "main", "b").drift).toEqual([
+      { object: "function app.take_transition", branch: ["20261204000000_rebuild.sql"], main: ["20261203000000_main.sql"] },
+    ]);
+  });
+
+  it("follows a rename back by content, then the renamed file back to the commit that added it", () => {
+    // B writes its rebuild, edits it, all before main redefines; after the merge it only renames it.
+    git("switch", "-q", "-c", "b", "main");
+    commit({ [`${dir}/20261202000000_rebuild.sql`]: takeTransition("B") }, "B rebuilds");
+    commit({ [`${dir}/20261202000000_rebuild.sql`]: `-- RP-560.\n${takeTransition("B")}` }, "B edits it");
+    git("switch", "-q", "main");
+    commit({ [`${dir}/20261203000000_main.sql`]: takeTransition("main") }, "main redefines");
+    git("switch", "-q", "b");
+    git("merge", "-q", "--no-edit", "main");
+    git("mv", `${dir}/20261202000000_rebuild.sql`, `${dir}/20261204000000_rebuild.sql`);
+    git("commit", "-q", "-m", "B renames its rebuild");
+    expect(migrationProblems(repo, "main", "b").drift).toHaveLength(1);
+  });
 });
 
 // The merge queue (RP-398) tests a commit that merges the PR's head into the
