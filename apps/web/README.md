@@ -22,7 +22,7 @@ Every `page.tsx` under `apps/web/src/app/[locale]/`. There is no `(app)` route g
 | `projects/[projectId]/page.tsx` | `/projects/:projectId` | Project dashboard |
 | `projects/[projectId]/activity/page.tsx` | `/projects/:projectId/activity` | Activity Feed at full height |
 | `projects/[projectId]/work-items/page.tsx` | `/projects/:projectId/work-items` | Submittals tab: List or Kanban |
-| `projects/[projectId]/work-items/new/page.tsx` | `/projects/:projectId/work-items/new` | Create a MAR in Draft |
+| `projects/[projectId]/work-items/new/page.tsx` | `/projects/:projectId/work-items/new` | Create a Submittal in Draft: Type picker, `?type=` (RP-590) |
 | `projects/[projectId]/[moduleTab]/page.tsx` | `/projects/:projectId/:moduleTab` | Any other Module's tab (Inspections, Snag List...), same List or Kanban |
 | `projects/[projectId]/settings/page.tsx` | `/projects/:projectId/settings` | Redirects to Document Numbering |
 | `projects/[projectId]/settings/numbering/page.tsx` | `/projects/:projectId/settings/numbering` | Document Numbering settings |
