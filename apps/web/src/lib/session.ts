@@ -1,5 +1,6 @@
 import "server-only";
 import type {
+  ApprovedSuppliers,
   SharedWorkItem,
   ActivityFeed,
   ActivityFeedQuery,
@@ -130,6 +131,11 @@ export function getProjectDimensions(projectId: string): Promise<DimensionValues
 /** A Project's Scopes and Sub-scopes; null if it isn't one of the signed-in Member's Projects. */
 export function getProjectScopes(projectId: string): Promise<Scopes | null> {
   return apiGet<Scopes>(`/v1/projects/${encodeURIComponent(projectId)}/scopes`);
+}
+
+/** The Project's Approved Supplier List (RP-592), for its Members; null for anyone else. */
+export function getApprovedSuppliers(projectId: string): Promise<ApprovedSuppliers | null> {
+  return apiGet<ApprovedSuppliers>(`/v1/projects/${encodeURIComponent(projectId)}/approved-suppliers`);
 }
 
 /** A Project's Numbering Pattern and per-Type overrides, for its Project Members; null otherwise. */

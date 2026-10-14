@@ -1461,6 +1461,7 @@
     "heading": "Project settings",
     "numbering": "Document Numbering",
     "tradesLocations": "Trades & Locations",
+    "approvedSuppliers": "Approved Supplier List",
     "visibility": "Visibility",
     "membersVisibility": "Your Members' Visibility",
     "readOnly": "Only Project Admins can change this",
@@ -1470,6 +1471,46 @@
     "outcomes": "Outcomes"
   },
   "projectSettings": {
+    "approvedSuppliers": {
+      "title": "Approved Supplier List",
+      "intro": "The suppliers and manufacturers that may be used on this Project, per Trade. Material submittals choose their supplier from here. Every company on the Project sees this list.",
+      "add": "Add supplier",
+      "addHelp": "Add a supplier the Project has already approved. A supplier approved through a submittal is added to the list for you.",
+      "addSubmit": "Add supplier",
+      "nameEn": "Supplier (English)",
+      "nameAr": "Supplier (Arabic)",
+      "trade": "Trade",
+      "scope": "Scope",
+      "scopeHelp": "Leave it for the whole Trade, or narrow it to one Scope.",
+      "allScopes": "Whole Trade",
+      "supplier": "Supplier",
+      "approval": "Approval",
+      "statuses": {
+        "approved": "Approved",
+        "withdrawn": "Withdrawn"
+      },
+      "approvedCount": "{count, plural, =0 {No approved suppliers} one {# approved} other {# approved}}",
+      "tableLabel": "Approved suppliers for {trade}",
+      "noSuppliers": "No suppliers for this Trade yet.",
+      "noTrades": "This Project has no Trades yet. Add them in Trades & Locations first.",
+      "withdraw": "Withdraw",
+      "withdrawNamed": "Withdraw {supplier}",
+      "withdrawTitle": "Withdraw {supplier}?",
+      "withdrawHelp": "It stays on the items that already chose it, and can't be chosen on new ones. You can add it again later.",
+      "withdrawSubmit": "Withdraw supplier",
+      "cancel": "Cancel",
+      "close": "Close",
+      "added": "The supplier was added.",
+      "withdrawn": "The supplier was withdrawn.",
+      "errors": {
+        "unavailable": "That could not be done. Try again.",
+        "notFound": "This is no longer available to you.",
+        "projectClosed": "This Project is closed.",
+        "tradeNotFound": "That Trade is no longer on this Project. Reload the page.",
+        "scopeNotFound": "That Scope is no longer offered for this Trade. Choose another.",
+        "exists": "This Trade already lists that supplier as approved."
+      }
+    },
     "workflows": {
       "title": "Workflows",
       "intro": "Each Work Item Type runs one Workflow. Publishing a new Version, or choosing another Workflow, reaches items created afterwards; running items keep the Version they started on.",
