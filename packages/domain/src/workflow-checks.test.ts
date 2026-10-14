@@ -850,6 +850,7 @@ describe("workflowPublishProblems", () => {
       expect(problems(d)).toEqual([
         { code: "confirm_without_recommended_code", severity: "error", transition: "approve_a" },
         { code: "confirm_without_recommended_code", severity: "error", transition: "revise_c" },
+        { code: "confirm_send_back_not_to_recommender", severity: "error", transition: "owner_send_back" },
       ]);
     });
 
@@ -857,6 +858,12 @@ describe("workflowPublishProblems", () => {
       const d = ownerReview();
       d.transitions = d.transitions.filter((t) => t.key !== "confirm_c");
       expect(problems(d)).toContainEqual({ code: "confirm_close_missing", severity: "error", transition: "revise_c" });
+    });
+
+    it("refuses a Send Back from the Owner's review to anyone but a Step that Recommends a Code to it", () => {
+      const d = ownerReview();
+      transition(d, "owner_send_back").to = "internal_review";
+      expect(problems(d)).toContainEqual({ code: "confirm_send_back_not_to_recommender", severity: "error", transition: "owner_send_back" });
     });
 
     it("refuses a Code carried to a Step that doesn't confirm it, as before", () => {

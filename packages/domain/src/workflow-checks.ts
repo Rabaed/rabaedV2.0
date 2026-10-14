@@ -69,6 +69,7 @@ export const workflowProblemCodes = [
   // The Owner's review (ADR 0022, RP-593)
   "confirm_without_recommended_code",
   "confirm_close_missing",
+  "confirm_send_back_not_to_recommender",
   // Check 4 and 8 (workflowKindProblems)
   "return_crosses_participants",
   "submit_stays_inside",
@@ -296,6 +297,11 @@ function ownerReviewProblems({ transitions, context, stepOf }: CheckInput): Foun
   const set: readonly string[] = context.outcomes.filter((o) => o.closing).map((o) => o.code);
   return transitions.flatMap((t): FoundProblem[] => {
     const [from, to] = [stepOf.get(t.from), stepOf.get(t.to)];
+    // The Owner's Send Back goes to the Step that Recommends the Code, the other party of the exchange.
+    if (from?.outcomeMode === "confirm_code" && t.kind === "send_back") {
+      const recommends = to?.outcomeMode === "recommend_code" && transitions.some((r) => r.from === t.to && r.to === t.from);
+      return recommends ? [] : [{ code: "confirm_send_back_not_to_recommender", transition: t.key }];
+    }
     if (from === undefined || to?.outcomeMode !== "confirm_code") return [];
     if (t.kind !== "submit" || t.outcome === null || from.outcomeMode !== "recommend_code") {
       return [{ code: "confirm_without_recommended_code", transition: t.key }];
@@ -788,6 +794,10 @@ const messages: Record<WorkflowProblemCode, (names: Names) => BilingualText> = {
   confirm_close_missing: (names) => ({
     en: `${names.transition.en} recommends Code ${names.detail}, but the Step it goes to has no close that confirms it.`,
     ar: `${names.transition.ar} يوصي بالرمز ${names.detail}، لكن الخطوة التي يذهب إليها ليس فيها إغلاق يؤكده.`,
+  }),
+  confirm_send_back_not_to_recommender: (names) => ({
+    en: `${names.transition.en} Sends Back from a Step that confirms a Recommended Code, so it must go to the Step that Recommends it.`,
+    ar: `${names.transition.ar} يُرجع من خطوة تؤكد رمزًا موصى به، لذا يجب أن يذهب إلى الخطوة التي توصي به.`,
   }),
   return_crosses_participants: (names) => ({
     en: `${names.transition.en} is a Return, so it must stay inside one Participant.`,

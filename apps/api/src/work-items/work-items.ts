@@ -1173,6 +1173,9 @@ async function ownArrivalAnswers(trx: Trx, workItemId: string): Promise<Record<s
       select e.seq, e.transition_id, e.audience_participant_id, e.payload - 'document_number' - 'outcome' as answers
       from work_item_event e
       where e.work_item_id = ${workItemId}::uuid and e.type = 'transition' and e.audience = 'internal'
+        -- Taken by that Participant itself: the Owner's review writes the moves between the
+        -- Consultant and the Owner internal to each (ADR 0022), and those cross Participants.
+        and e.actor_participant_id = e.audience_participant_id
         and e.seq = (
           select max(m.seq) from work_item_event m
           where m.work_item_id = e.work_item_id and m.type in ('transition', 'issue_code') and m.to_step_id is not null

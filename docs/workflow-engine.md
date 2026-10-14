@@ -121,6 +121,7 @@ And, from ADR 0022 (as built, RP-593; `ownerReviewProblems` and check 3 in `work
 
 - **A confirming Step is reached only with a Recommended Code:** every Transition into a `confirm_code` Step is a `submit` carrying a closing outcome of the Type's set, from a `recommend_code` Step (`confirm_without_recommended_code`). Check 3 lets that Submit set an outcome though it doesn't close the item, and asks Code B's `items_to_create` table of it, since the Comments are made from its rows.
 - **Every Code Recommended can be confirmed:** for each outcome a Transition into a confirming Step carries, the Step has a close setting it (`confirm_close_missing`). A confirming Step issues the outcome for check 3, and its closes need no table of items. Its closes may share one label ("Confirm"): the engine picks the one of the Recommended Code, so no routing warning is given for them.
+- **The Owner's Send Back goes to the Step that Recommends the Code** (a `recommend_code` Step with a Transition into the confirming Step), the other party of the exchange (`confirm_send_back_not_to_recommender`). The api pre-fills no Action Form from a move of the review (`ownArrivalAnswers` reads only moves taken by the viewer's own Participant), since its events are internal to both sides.
 
 And, from ADR 0019 (as built, RP-514; `formEditingProblems` in `workflow-checks.ts`):
 

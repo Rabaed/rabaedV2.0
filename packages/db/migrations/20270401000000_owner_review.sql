@@ -47,26 +47,40 @@ join position p on p.owner_kind = 'rabaed' and p.base_role in ('owner', 'owner_r
 
 -- The Code to confirm ---------------------------------------------------------------------------
 
--- The Code item p_work_item_id holds a confirming Step with: the outcome of the Transition
--- that last brought it there (the latest Recommendation). Null at any other Step. Internal:
--- its callers (security definer) check who asks.
+-- The Recommendation item p_work_item_id holds a confirming Step with: the latest move that
+-- brought it there (either copy: they are the same move), its Transition, who took it, its
+-- shared answers and the Code it carries. No row at any other Step. Internal: its callers
+-- (security definer) check who asks.
+create function app.recommendation_to_confirm(p_work_item_id uuid)
+  returns table (transition_id uuid, actor_participant_id uuid, actor_member_id uuid, answers jsonb, code text)
+  language plpgsql stable
+  set search_path = pg_catalog, public
+  as $$
+    #variable_conflict use_column
+    begin
+      return query
+        select last.transition_id, last.actor_participant_id, last.actor_member_id,
+          last.payload - 'document_number' - 'outcome', tr.outcome
+        from work_item w
+        join workflow_step s on s.id = w.current_step_id and s.outcome_mode = 'confirm_code'
+        cross join lateral (
+          select e.transition_id, e.actor_participant_id, e.actor_member_id, e.payload from work_item_event e
+          where e.work_item_id = w.id and e.type = 'transition' and e.to_step_id = w.current_step_id
+          order by e.seq desc limit 1
+        ) last
+        join workflow_transition tr on tr.id = last.transition_id
+        where w.id = p_work_item_id;
+    end
+  $$;
+
+-- The Code item p_work_item_id holds a confirming Step with (its Recommendation's); null at
+-- any other Step. Internal.
 create function app.code_to_confirm(p_work_item_id uuid) returns text
   language plpgsql stable
   set search_path = pg_catalog, public
   as $$
     begin
-      return (
-        select tr.outcome
-        from work_item w
-        join workflow_step s on s.id = w.current_step_id and s.outcome_mode = 'confirm_code'
-        cross join lateral (
-          select e.transition_id from work_item_event e
-          where e.work_item_id = w.id and e.type = 'transition' and e.to_step_id = w.current_step_id
-          order by e.seq desc limit 1
-        ) last
-        join workflow_transition tr on tr.id = last.transition_id
-        where w.id = p_work_item_id
-      );
+      return (select r.code from app.recommendation_to_confirm(p_work_item_id) r);
     end
   $$;
 
@@ -87,6 +101,7 @@ create function app.confirm_allowed(p_work_item_id uuid, p_transition_id uuid) r
     end
   $$;
 
+revoke all on function app.recommendation_to_confirm(uuid) from public;
 revoke all on function app.code_to_confirm(uuid) from public;
 revoke all on function app.confirm_allowed(uuid, uuid) from public;
 
@@ -268,7 +283,8 @@ as $function$
       -- the two Participants of the exchange only, each event written once internal to each.
       v_review := p_next_participant_id is not null and p_next_participant_id <> p_participant_id and (
         (v_transition.to_outcome_mode = 'confirm_code' and v_transition.outcome is not null)
-        or (v_transition.from_outcome_mode = 'confirm_code' and v_transition.kind = 'send_back'));
+        or (v_transition.from_outcome_mode = 'confirm_code' and v_transition.kind = 'send_back'
+          and v_transition.to_outcome_mode = 'recommend_code'));
       v_audiences := case when v_review then array[p_participant_id, p_next_participant_id] else array[p_participant_id] end;
 
       -- The Recommended Code is Internal Communication (V5): its own event, internal to
@@ -711,11 +727,7 @@ create or replace function app.take_transition(
       -- Confirming the Owner's review: the Recommendation it confirms (its latest move there),
       -- read before the item moves on.
       if v_next.outcome = 'terminal' then
-        select e.transition_id, e.actor_participant_id, e.actor_member_id, e.payload into v_recommendation
-        from work_item_event e
-        join workflow_step s on s.id = v_item.current_step_id and s.outcome_mode = 'confirm_code'
-        where e.work_item_id = p_work_item_id and e.type = 'transition' and e.to_step_id = v_item.current_step_id
-        order by e.seq desc limit 1;
+        select * into v_recommendation from app.recommendation_to_confirm(p_work_item_id);
         v_recommendation_found := found;
       end if;
 
@@ -730,7 +742,7 @@ create or replace function app.take_transition(
       if v_next.outcome = 'terminal' and v_recommendation_found then
         perform app.transition_follow_up_items(
           p_work_item_id, v_recommendation.transition_id, v_recommendation.actor_participant_id,
-          v_recommendation.payload - 'document_number' - 'outcome', v_at, v_recommendation.actor_member_id);
+          v_recommendation.answers, v_at, v_recommendation.actor_member_id);
       elsif v_next.outcome = 'terminal' then
         perform app.transition_follow_up_items(
           p_work_item_id, v_transition.id, v_me.participant_id, coalesce(v_actions.answers, '{}') - v_internal, v_at);
