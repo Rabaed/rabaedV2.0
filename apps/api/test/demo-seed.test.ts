@@ -50,6 +50,7 @@ let omar: Caller; // TMC Contractor Engineer who covers Tower 2 only
 let projectId = "";
 let electrical = "";
 let tower1Floor2 = "";
+let supplier = ""; // The Project's approved Electrical supplier: the MAR Form asks for one to leave Draft (RP-595).
 
 beforeAll(async () => {
   hafiz = await signIn("hafiz");
@@ -64,6 +65,7 @@ beforeAll(async () => {
   const dimensions = (await hafiz.get(`/v1/projects/${projectId}/dimensions`)).json();
   electrical = dimensions.trade.find((v: { code: string }) => v.code === "EL").id;
   tower1Floor2 = dimensions.location.find((v: { code: string }) => v.code === "T1F02").id;
+  supplier = (await hafiz.get(`/v1/projects/${projectId}/approved-suppliers`)).json().suppliers.find((s: { tradeId: string }) => s.tradeId === electrical).id;
 });
 
 describe("the demo seed", () => {
@@ -97,6 +99,7 @@ describe("the MAR Form Version 5, as the demo uses it", () => {
     const fields = form.schema.sections.flatMap((s) => s.fields).filter((f) => "label" in f);
     expect(fields.map((f) => [f.key, f.type])).toEqual([
       ["manufacturer", "text"],
+      ["supplier", "approved_supplier"],
       ["model", "text"],
       ["specification_section", "text"],
       ["description", "textarea"],
@@ -241,6 +244,7 @@ describe("the README walkthrough", () => {
   // The Form of a complete MAR; a function, as the Trade and Location ids come from beforeAll.
   const filled = () => ({
     manufacturer: "Philips",
+    supplier,
     model: "CoreLine Panel",
     specification_section: "26 51 00",
     description: "LED panel fixtures, 600 × 600",
@@ -262,7 +266,7 @@ describe("the README walkthrough", () => {
   const documents = async (who: Caller): Promise<DocumentList> => (await who.get(`/v1/work-items/${mar}/documents`)).json();
 
   it("1. Hafiz creates a MAR with the Form half filled: a Draft only TMC sees", async () => {
-    mar = await raise("Lighting Fixtures", { manufacturer: "Philips", trade: electrical, location: tower1Floor2 });
+    mar = await raise("Lighting Fixtures", { manufacturer: "Philips", supplier, trade: electrical, location: tower1Floor2 });
     expect((await detail(ali, mar)).stage.key).toBe("draft");
     await hidden(yousef, { countsZero: true });
     for (const who of [ahmed, mohammed, faisal]) await hidden(who);

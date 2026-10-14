@@ -100,6 +100,7 @@ export function useFormRendererLabels(): FormRendererLabels {
       unavailable: t("optionListField.unavailable"),
     },
     linkQuestion: { remove: (number) => t("linkQuestion.remove", { number }), item, search },
+    approvedSupplier: { none: t("approvedSupplierField.none"), withdrawn: (name) => t("approvedSupplierField.withdrawn", { name }) },
   };
 }
 

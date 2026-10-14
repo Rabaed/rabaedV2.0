@@ -10,6 +10,7 @@ import {
   type FormToFill,
   type Locale,
   type OptionList,
+  type SupplierChoice,
 } from "@rabaed/domain";
 import { Button, Field, FormRenderer, Input, type BuiltInChoices } from "@rabaed/ui";
 import { useTranslations } from "next-intl";
@@ -31,6 +32,7 @@ export function CreateWorkItemForm({
   choices,
   people,
   optionLists,
+  suppliers,
   locale,
 }: {
   projectId: string;
@@ -42,6 +44,8 @@ export function CreateWorkItemForm({
   people: FormChoices;
   /** The Option Lists its `option_list` fields offer. */
   optionLists: readonly OptionList[];
+  /** The Project's Approved Supplier List: its `approved_supplier` fields offer the Trade's approved ones. */
+  suppliers: readonly SupplierChoice[];
   locale: Locale;
 }) {
   const t = useTranslations("workItems");
@@ -62,6 +66,7 @@ export function CreateWorkItemForm({
       offered: offeredChoices(people),
       // Lists that didn't load (empty) aren't checked here: the server is the authority.
       optionLists: optionLists.length > 0 ? optionLists : undefined,
+      suppliers: suppliers.length > 0 ? suppliers : undefined,
     });
     setFieldErrors(checked.ok ? [] : checked.errors.filter((e) => e.code !== "required"));
   }
@@ -127,6 +132,7 @@ export function CreateWorkItemForm({
         choices={choices}
         people={people}
         optionLists={optionLists}
+        suppliers={suppliers}
         onChange={change}
         idPrefix="answer"
         links={{ targets: {}, search: linkSearch(projectId), hrefFor: (choice) => (typeof choice === "string" ? `/work-items/${choice}` : null), linkAs: Link }}

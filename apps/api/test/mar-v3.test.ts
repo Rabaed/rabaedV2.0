@@ -35,8 +35,10 @@ let mohammed: Caller; // K1's only Manager: holds Consultant Manager at once.
 let faisal: Caller; // O1, Owner Representative: oversight.
 let yousef: Caller; // C2, a second Contractor covering the same.
 
+let supplier = ""; // Electrical's approved supplier: the MAR Form asks for one to leave Draft (RP-595).
 const answers = (title: string) => ({
   manufacturer: "Philips",
+  supplier,
   model: title,
   description: "LED panels",
   items: [{ fixture_type: "Recessed panel", quantity: 10, unit: "pcs" }],
@@ -75,6 +77,7 @@ beforeAll(async () => {
   const post = async (path: string, body: unknown) => (await ok(c1.caller.post(`/v1/projects/${projectId}/${path}`, body), 201)).json().id as string;
   electrical = await post("trades", { code: "EL", name: bilingual("Electrical") });
   buildingA = await post("locations", { code: "BA", name: bilingual("Building A"), parentId: null });
+  supplier = await post("approved-suppliers", { tradeId: electrical, scopeId: null, name: bilingual("Philips Lighting") });
   const c1ParticipantId = (await c1.caller.get(`/v1/projects/${projectId}/participants`))
     .json()
     .participants.find((p: { isOwnCompany: boolean }) => p.isOwnCompany).id as string;
@@ -408,7 +411,7 @@ describe("items in flight on a retired Version", () => {
   });
 
   it("an open MAR on the Form Version 4 at the Consultant moves to the Workflow Version 3's Consultant Engineer Step, whose reply records the verification", async () => {
-    const id = (await ok(hafiz.post(`/v1/projects/${projectId}/work-items`, { type: "MAR", title: "MAR in flight", answers: answers("MAR in flight") }), 201)).json()
+    const id = (await ok(hafiz.post(`/v1/projects/${projectId}/work-items`, { type: "MAR", title: "MAR in flight", answers: { ...answers("MAR in flight"), supplier: undefined } }), 201)).json()
       .id as string;
     await datasheet(hafiz, id, "in-flight.pdf");
     await pinTo(id, "MAR", 2, 4);

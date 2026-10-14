@@ -8,6 +8,7 @@ import {
   type ChecklistCount,
   type HiddenLinkChoice,
   type NamedAnswer,
+  type SupplierChoice,
   type TableColumn,
 } from "./form.ts";
 import { formatDate, formatNumber, timeZone, type Locale } from "./locale.ts";
@@ -158,6 +159,7 @@ export function formatFormValue(
   named?: NamedAnswer,
   optionLists: readonly OptionList[] = [],
   linkTargets: Readonly<Record<string, HiddenLinkChoice>> = {},
+  suppliers: readonly SupplierChoice[] = [],
 ): string {
   switch (field.type) {
     case "date":
@@ -218,6 +220,9 @@ export function formatFormValue(
       };
       return Array.isArray(value) ? value.flatMap((v) => read(v) ?? []).join(listSeparator[locale]) : "";
     }
+    // The supplier's name only, whatever its status (V10); one the list doesn't name is left out, never shown as an id.
+    case "approved_supplier":
+      return suppliers.find((s) => s.id === value)?.name?.[locale] ?? "";
     case "member":
     case "participant":
       return (named?.memberName ?? named?.companyName)?.[locale] ?? anotherCompany[locale];

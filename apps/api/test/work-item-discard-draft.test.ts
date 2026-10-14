@@ -6,7 +6,7 @@
 // the raiser included. An item that was numbered is never discarded.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { attachDatasheet, createTestApi, expectHidden } from "./support/harness.ts";
-import { buildTower, detail, ok, take, type Company, type Tower } from "./support/tower.ts";
+import { approvedSupplier, buildTower, detail, ok, take, type Company, type Tower } from "./support/tower.ts";
 
 const api = await createTestApi({ files: true });
 afterAll(() => api.close());
@@ -26,7 +26,7 @@ beforeAll(async () => {
         at.c1Engineer.post(`/v1/projects/${at.projectId}/work-items`, {
           type: "MAR",
           title,
-          answers: { manufacturer: "ABB", description: "Busbar", trade: at.electrical, location: at.buildingA },
+          answers: { manufacturer: "ABB", supplier: await approvedSupplier(at.admin, at.projectId, at.electrical), description: "Busbar", trade: at.electrical, location: at.buildingA },
         }),
         201,
       )

@@ -21,6 +21,7 @@ import {
   getMe,
   getMyVisibility,
   getOptionLists,
+  getSupplierChoices,
   getProjectScopes,
   getRevisionChain,
   getTypeOutcomes,
@@ -60,6 +61,7 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
   ]);
   if (!me) return redirect({ href: "/sign-in", locale });
   if (!item || !form || !people || !documents || !links || !linkedFrom) notFound();
+  const suppliers = await getSupplierChoices(item.projectId);
   // Editable: the Built-in Fields offer what a new item's do. Otherwise they only name the item's own values.
   // The closed item's Issued Code: the same badge as the List and the Kanban, from its Type's outcome set (RP-429, RP-522).
   const typeOutcomes = item.outcome ? await getTypeOutcomes(item.projectId, item.type.code) : null;
@@ -81,6 +83,7 @@ export default async function WorkItemPage({ params }: { params: Promise<{ local
       choices={choices}
       people={people}
       optionLists={optionLists}
+      suppliers={suppliers}
       answers={item.answers}
       named={item.namedAnswers}
       editable={editable && !!mine && !!scopes}

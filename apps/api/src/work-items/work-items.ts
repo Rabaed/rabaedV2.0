@@ -15,6 +15,7 @@ import {
   formSchema,
   isHiddenLinkChoice,
   offeredChoices,
+  type SupplierChoice,
   parseActionForm,
   stepAgeWeeks,
   checklistItemFilesKey,
@@ -142,6 +143,19 @@ async function optionListsFor(trx: Trx, schema: FormSchema) {
     (f) => f.type === "option_list" || (f.type === "table" && f.columns.some((c) => c.type === "option_list")),
   );
   return uses ? readOptionLists(trx) : undefined;
+}
+
+/**
+ * The Project's Approved Supplier List as the validator reads it, when the Form
+ * has an `approved_supplier` field (RP-595). Read through RLS: every Project
+ * Member reads it (V10).
+ */
+async function suppliersFor(trx: Trx, schema: FormSchema, projectId: string): Promise<SupplierChoice[] | undefined> {
+  if (!formFields(schema).some((f) => f.type === "approved_supplier")) return undefined;
+  const { rows } = await sql<{ id: string; trade_value_id: string; status: "approved" | "withdrawn" }>`
+    select id, trade_value_id, status from approved_supplier where project_id = ${projectId}::uuid
+  `.execute(trx);
+  return rows.map((r) => ({ id: r.id, tradeId: r.trade_value_id, status: r.status }));
 }
 
 /** Checked answers as the database functions take them: the Form's own, and the Built-in Fields apart. */
@@ -527,6 +541,7 @@ async function createWorkItemIn(trx: Trx, projectId: string, input: Required<Cre
     offered: await offeredFor(trx, form.schema, projectId, null),
     optionLists: await optionListsFor(trx, form.schema),
     linkable: await linkableIds(trx, form.schema, projectId, null, input.answers),
+    suppliers: await suppliersFor(trx, form.schema, projectId),
   });
   if (!checked.ok) return { ok: false, reason: "invalid_answers", errors: checked.errors };
   // A link question's items are saved with their Links, by app.save_work_item_answers below.
@@ -1356,6 +1371,7 @@ export function takeTransition(
         scopes: await projectScopes(trx, pinned.projectId),
         optionLists: await optionListsFor(trx, pinned.form.schema),
         held: pinned.data,
+        suppliers: await suppliersFor(trx, pinned.form.schema, pinned.projectId),
         files: await fieldFileCounts(trx, workItemId),
       });
     // Moving on by a Member who may save the answers now (other than a cancel or a Return),
@@ -1448,6 +1464,7 @@ export function saveAnswers(
       optionLists: await optionListsFor(trx, pinned.form.schema),
       held: pinned.data,
       linkable: await linkableIds(trx, pinned.form.schema, pinned.projectId, workItemId, answers, pinned.data),
+      suppliers: await suppliersFor(trx, pinned.form.schema, pinned.projectId),
     });
     if (!checked.ok) return { ok: false, reason: "invalid_answers", errors: checked.errors };
     const stored = storedAnswers(answersToDb(pinned.form.schema, checked.answers));

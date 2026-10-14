@@ -24,6 +24,16 @@ export async function ok(res: Promise<LightMyRequestResponse>, status = 204) {
   return r;
 }
 
+/**
+ * A new approved supplier for Trade `tradeId` on `projectId`, added by `admin` (a Project Admin), and its id: the
+ * MAR Form Version 6 (RP-595) asks for one to leave Draft. Each call adds its own, so names never clash.
+ */
+export async function approvedSupplier(admin: Caller, projectId: string, tradeId: string): Promise<string> {
+  const name = bilingual(`Supplier ${randomUUID().slice(0, 8)}`);
+  const res = await ok(admin.post(`/v1/projects/${projectId}/approved-suppliers`, { tradeId, scopeId: null, name }), 201);
+  return res.json().id as string;
+}
+
 /** What sets a Member on a Project apart: their Trade Visibility (all by default) and their name. */
 export type MemberOptions = { trade?: VisibilityGrant; name?: string };
 
@@ -91,6 +101,8 @@ export type Tower = {
   c1Engineer: Caller;
   c1Pm: Caller;
   k1Manager: Caller;
+  /** C1's Authorized Person, the Project's Admin: keeps its Approved Supplier List. */
+  admin: Caller;
 };
 
 /** A Project of C1's, with a C1 engineer and PM, and K1 as its Consultant with a manager; both see all of it. */
@@ -115,6 +127,7 @@ export async function buildTower(api: TestApi, { c1, k1 }: { c1: Company; k1: Co
     c1Engineer: await projectMember(api, c1, c1ParticipantId, ["engineer"]),
     c1Pm: await projectMember(api, c1, c1ParticipantId, ["project_manager"]),
     k1Manager: await projectMember(api, k1, k1ParticipantId, ["manager"]),
+    admin: c1.caller,
   };
 }
 
@@ -123,10 +136,15 @@ export type DraftOptions = { trade?: string; type?: string };
 
 /** A Draft MAR (by default the legacy MAR: Form Version 3, Workflow Version 2) with the Subject `title`, on `at`'s Project, in Building A. */
 export async function draft(at: Tower, engineer: Caller, title: string, { trade = at.electrical, type = LEGACY_MAR }: DraftOptions = {}): Promise<string> {
+  // The current MAR Form asks for an approved supplier of the Trade to leave Draft (RP-595); the legacy one has none.
+  // Only where the Project's MAR Form has the field (a Company's own Form copy may not).
+  const form = type === "MAR" ? (await engineer.get(`/v1/projects/${at.projectId}/work-item-types/MAR/form`)).json() : null;
+  const asksSupplier = JSON.stringify(form?.schema ?? "").includes('"approved_supplier"');
+  const supplier = asksSupplier ? { supplier: await approvedSupplier(at.admin, at.projectId, trade) } : {};
   const res = await engineer.post(`/v1/projects/${at.projectId}/work-items`, {
     type,
     title,
-    answers: { manufacturer: "ACME Cables", description: "Galvanised, 300 mm", trade, location: at.buildingA },
+    answers: { manufacturer: "ACME Cables", description: "Galvanised, 300 mm", trade, location: at.buildingA, ...supplier },
   });
   expect(res.statusCode, res.body).toBe(201);
   await attachDatasheet(engineer, res.json().id);

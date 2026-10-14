@@ -838,6 +838,10 @@
         "none": "بدون",
         "unavailable": "هذه القائمة غير متاحة."
       },
+      "approvedSupplierField": {
+        "none": "لا يوجد مورّد معتمد لهذا التخصص بعد",
+        "withdrawn": "\u2068{name}\u2069 (مسحوب)"
+      },
       "linkQuestion": {
         "remove": "إزالة \u2066{number}\u2069"
       }

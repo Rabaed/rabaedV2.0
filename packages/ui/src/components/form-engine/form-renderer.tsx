@@ -36,6 +36,7 @@ import {
   type NamedAnswers,
   type DocumentSummary,
   type OptionList,
+  type SupplierChoice,
   type TableColumn,
 } from "@rabaed/domain";
 import { useState, type ReactNode } from "react";
@@ -110,6 +111,12 @@ export type FormRendererLabels = {
   table: TableFieldLabels;
   optionList: OptionListLabels;
   linkQuestion: LinkQuestionLabels;
+  approvedSupplier: {
+    /** Shown in place of the choice when the Trade has no approved supplier yet. */
+    none: string;
+    /** A saved supplier since withdrawn, named: it stays the choice until another is chosen. */
+    withdrawn: (name: string) => string;
+  };
 };
 
 export type FormRendererProps = {
@@ -161,6 +168,12 @@ export type FormRendererProps = {
   files?: FormFiles;
   /** Link search and the chosen items' names, for `work_item_ref` fields (RP-293). */
   links?: FormLinks;
+  /**
+   * The Project's Approved Supplier List, for `approved_supplier` fields (RP-595):
+   * the approved suppliers of the chosen Trade are offered (edit mode), and every
+   * supplier, withdrawn too, is named (read mode).
+   */
+  suppliers?: readonly SupplierChoice[];
   /**
    * Called as the filler answers (edit mode), with every answer that changed:
    * one field's, or a new Trade's with the Scopes that still fit it. `undefined` clears one.
@@ -336,6 +349,7 @@ function currencySymbol(currency: string, locale: Locale): string {
 
 const noPeople: FormChoices = { members: [], participants: [] };
 const noOptionLists: readonly OptionList[] = [];
+const noSuppliers: readonly SupplierChoice[] = [];
 
 /** A choice field's options as a control takes them, labelled in the viewer's language. */
 const optionsOf = (field: { options: FormOption[] }, locale: Locale) =>
@@ -358,7 +372,7 @@ const withNone = (field: { required: unknown }, options: { value: string; label:
 function control(
   // A file field holds files, not a value, and a checklist's photos are files too: FormRenderer draws them
   // (attachmentsControl, photosControl, checklistControl), and a link question too (linkQuestionControl).
-  field: Exclude<OwnField, { type: "attachments" | "photos" | "checklist" | "work_item_ref" }> | TableColumn,
+  field: Exclude<OwnField, { type: "attachments" | "photos" | "checklist" | "work_item_ref" | "approved_supplier" }> | TableColumn,
   value: unknown,
   locale: Locale,
   text: FormRendererLabels,
@@ -575,6 +589,7 @@ export function FormRenderer({
   named = {},
   files,
   links = noLinks,
+  suppliers = noSuppliers,
   onChange,
   idPrefix = "form",
   sectionTitles = "shown",
@@ -604,7 +619,13 @@ export function FormRenderer({
               choices={choices.trades}
               labels={labels.builtIn}
               // A new Trade keeps only the Scopes that fit it.
-              onChange={(trade) => onChange?.({ trade, scopes: scopesFittingTrade(idsOf(answers.scopes), trade, choices.scopes) })}
+              onChange={(trade) =>
+                onChange?.({
+                  trade,
+                  scopes: scopesFittingTrade(idsOf(answers.scopes), trade, choices.scopes),
+                  ...suppliersOfOtherTrades(trade),
+                })
+              }
             />
           ),
         };
@@ -650,6 +671,45 @@ export function FormRenderer({
           onUpload={(file) => files?.onUpload?.(field.key, [file])}
           onOpen={files?.onOpen}
           onRemove={(documentId) => files?.onRemove?.(field.key, documentId)}
+        />
+      ),
+    };
+  }
+
+  /** Clears the suppliers chosen for another Trade than `trade`: changing the Trade clears them (form-engine.md §2.12). */
+  function suppliersOfOtherTrades(trade: string): Record<string, undefined> {
+    const cleared: Record<string, undefined> = {};
+    for (const field of byKey.values()) {
+      const chosen = suppliers.find((s) => s.id === answers[field.key]);
+      if (field.type === "approved_supplier" && chosen && chosen.tradeId !== trade) cleared[field.key] = undefined;
+    }
+    return cleared;
+  }
+
+  /** An `approved_supplier` field: the approved suppliers of the chosen Trade, and the one already chosen, withdrawn or not. */
+  function supplierControl(field: Extract<AnswerField, { type: "approved_supplier" }>): { element: ReactNode; group?: boolean } {
+    const tradeId = textOf(answers.trade);
+    const current = textOf(answers[field.key]);
+    const collator = new Intl.Collator(intlLocaleOf(locale));
+    const options = suppliers
+      .filter((s) => s.status === "approved" && s.tradeId === tradeId && s.name)
+      .map((s) => ({ value: s.id, label: s.name![locale] }))
+      .toSorted((a, b) => collator.compare(a.label, b.label));
+    const held = suppliers.find((s) => s.id === current);
+    if (held?.name && !options.some((o) => o.value === current)) {
+      options.unshift({ value: current, label: held.status === "withdrawn" ? labels.approvedSupplier.withdrawn(held.name[locale]) : held.name[locale] });
+    }
+    if (options.length === 0) {
+      return { group: true, element: <p className="text-body text-muted">{labels.approvedSupplier.none}</p> };
+    }
+    return {
+      element: (
+        <Select
+          name={field.key}
+          placeholder={labels.choose}
+          options={withNone(field, options, labels)}
+          value={current}
+          onValueChange={(v) => onChange?.({ [field.key]: v === noChoice ? undefined : v })}
         />
       ),
     };
@@ -789,7 +849,7 @@ export function FormRenderer({
     const naming = named[field.key];
     if (isUnanswered(value) && !naming) return null;
     if (field.type === "table") return <TableRead field={field} value={value} locale={locale} labels={labels.table} optionLists={optionLists} />;
-    const shown = formatFormValue(field, value, locale, naming, optionLists);
+    const shown = formatFormValue(field, value, locale, naming, optionLists, {}, suppliers);
     // A number reads in the page's direction, so its unit follows it; an address or a phone number left to right.
     if (field.type === "number" || field.type === "currency" || field.type === "calculated") {
       return <bdi dir={directionOf(locale)}>{shown}</bdi>;
@@ -849,7 +909,9 @@ export function FormRenderer({
                         ? checklistControl(field)
                         : field.type === "work_item_ref"
                           ? linkQuestionControl(field)
-                          : control(
+                          : field.type === "approved_supplier"
+                            ? supplierControl(field)
+                            : control(
                         field,
                         // A calculated field shows the result worked out from the answers now, never one given.
                         field.type === "calculated" ? visibility.answers[field.key] : answers[field.key],
