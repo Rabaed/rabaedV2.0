@@ -168,11 +168,13 @@ function visibleRows({ projectId, moduleKey }: QueryScope, allRevisions: boolean
     left join outcome oc on oc.project_id = w.project_id and oc.work_item_type_id = t.id and oc.code = w.outcome
     -- The Project's own Stages (RP-428): their names, order and categories, never the Rabaed Defaults'.
     join stage st on st.project_id = w.project_id and st.module_key = t.module_key and st.key = seen.stage_key
+    -- Its Trade and Location as the viewer may know them: while it is Sent Back to its raiser, as at
+    -- the Send Back for everyone but the holder (RP-582, V19), so rows, filters, sorts and counts agree.
     join visibility_dimension td on td.project_id = w.project_id and td.kind = 'trade'
-    join work_item_dimension_value tdv on tdv.work_item_id = w.id and tdv.dimension_id = td.id
+    join work_item_dimension_value_seen tdv on tdv.work_item_id = w.id and tdv.dimension_id = td.id
     join dimension_value tv on tv.id = tdv.dimension_value_id
     join visibility_dimension ld on ld.project_id = w.project_id and ld.kind = 'location'
-    left join work_item_dimension_value ldv on ldv.work_item_id = w.id and ldv.dimension_id = ld.id
+    left join work_item_dimension_value_seen ldv on ldv.work_item_id = w.id and ldv.dimension_id = ld.id
     left join dimension_value lv on lv.id = ldv.dimension_value_id
     -- One holder: a closed item has none.
     left join lateral (select * from app.work_item_holder(w.id) limit 1) h on true
