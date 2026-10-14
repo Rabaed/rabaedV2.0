@@ -1,6 +1,6 @@
 "use client";
 
-import type { AdminWorkflowRead, AdminWorkflowSummary, Locale, WorkflowDefinition, WorkflowProblem } from "@rabaed/domain";
+import type { AdminWorkflowRead, AdminWorkflowSummary, Locale, RabaedDefaultLackRefusal, WorkflowDefinition, WorkflowProblem } from "@rabaed/domain";
 import { Badge, Button, Field, Input, Select, WorkflowBuilder, workflowBuilderLabels, type WorkflowBuilderLabels, type WorkflowPublishResult, type WorkflowSaveState } from "@rabaed/ui";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, ApiError } from "./api.ts";
@@ -125,8 +125,7 @@ export function WorkflowEditor({ typeCode, locale }: { typeCode: string; locale:
       return { ok: true, versionNo };
     } catch (error) {
       if (error instanceof ApiError && error.body.error === "projects_lack_entries") {
-        const { projects, outcomes, stages } = error.body as { projects: number; outcomes: string[]; stages: string[] };
-        setNotice({ kind: "error", text: s.projectsLack(projects, outcomes, stages) });
+        setNotice({ kind: "error", text: s.projectsLack(error.body as RabaedDefaultLackRefusal) });
         return { ok: false, problems: known.current };
       }
       const found = error instanceof ApiError ? (error.body.problems as WorkflowProblem[] | undefined) : undefined;

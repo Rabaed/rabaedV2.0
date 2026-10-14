@@ -2,6 +2,7 @@ import { z } from "zod";
 import { bilingualText, type BilingualText } from "./company.ts";
 import type { OutcomeKind } from "./outcome.ts";
 import { condition } from "./condition.ts";
+import type { Locale } from "./locale.ts";
 import { baseRoles } from "./project.ts";
 import { transitionKinds, type TransitionKind } from "./work-item.ts";
 
@@ -322,15 +323,37 @@ function transitionParts<T extends TransitionParts>({ rules, actions, notificati
   } as Pick<T, keyof TransitionParts>;
 }
 
+/** Outcome codes and Stage keys: those a Workflow Version uses, or those a Project's sets lack (RP-566). */
+export type OutcomesAndStages = { outcomes: string[]; stages: string[] };
+
 /**
  * The outcomes and Stages `definition` uses: every outcome a Transition sets and every Stage a
  * Step sits in, each once, sorted. A Rabaed Default Version is published only when every Project
- * running that Default holds them all in its own sets (RP-566).
+ * running that Rabaed Default holds them all in its own sets (RP-566).
  */
-export function definitionSetEntries(definition: Pick<WorkflowDefinition, "steps" | "transitions">): { outcomes: string[]; stages: string[] } {
+export function definitionOutcomesAndStages(definition: Pick<WorkflowDefinition, "steps" | "transitions">): OutcomesAndStages {
   const sorted = (xs: Iterable<string>) => [...new Set(xs)].sort();
   return {
     outcomes: sorted(definition.transitions.flatMap((t) => (t.outcome === null ? [] : [t.outcome]))),
     stages: sorted(definition.steps.map((s) => s.stage)),
   };
 }
+
+/** Whether `value` (an API answer's body) carries outcome codes and Stage keys. */
+export function isOutcomesAndStages(value: unknown): value is OutcomesAndStages {
+  const strings = (x: unknown) => Array.isArray(x) && x.every((s) => typeof s === "string");
+  return typeof value === "object" && value !== null && strings((value as OutcomesAndStages).outcomes) && strings((value as OutcomesAndStages).stages);
+}
+
+/** "outcome X, Stage Y" in `locale`: the codes and keys stay as they are (Latin). */
+export function outcomesAndStagesList({ outcomes, stages }: OutcomesAndStages, locale: Locale): string {
+  const words = locale === "ar" ? { outcome: "النتيجة", stage: "المرحلة", separator: "، " } : { outcome: "outcome", stage: "Stage", separator: ", " };
+  return [...outcomes.map((o) => `${words.outcome} ${o}`), ...stages.map((k) => `${words.stage} ${k}`)].join(words.separator);
+}
+
+/**
+ * Rabaed Admin's refusal of a Rabaed Default Version some Active Project running that Rabaed
+ * Default couldn't run (RP-566): how many Projects, and which outcomes and Stages they lack.
+ * Never which Projects or Companies (V9).
+ */
+export type RabaedDefaultLackRefusal = { error: "projects_lack_entries"; projects: number } & OutcomesAndStages;

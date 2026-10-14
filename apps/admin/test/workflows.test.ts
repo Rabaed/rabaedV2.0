@@ -443,11 +443,33 @@ describe("a Rabaed Default Version that uses an outcome or Stage some Project la
     );
     movedStep = original.definition.steps.find((s) => inProgress.has(s.stage))!.key;
   });
-  // The Rabaed Default sets are shared by every suite: leave them as they were found.
+  // The outcome stays: nothing deletes an outcome, and its code is this run's own. The Stage would
+  // reach every later Project's Stage set, which other suites list, so the Type moves off it (a
+  // newer Version without it) and the Rabaed Default set drops it, as no product path does.
   afterAll(async () => {
-    await migrator.deleteFrom("outcome").where("code", "=", code).execute();
-    await migrator.deleteFrom("stage").where("key", "=", key).execute();
+    const back = await engineer.browser.post(`/v1/workflows/${TYPE}/publish`, { definition: original.definition, reason: "Move off the test's Stage" });
+    expect(back.statusCode, back.body).toBe(200);
+    await migrator.deleteFrom("stage").where("owner_kind", "=", "rabaed").where("key", "=", key).execute();
   });
+
+  /** Gives every Project but `except` its own copy of the Rabaed Default outcome `code` of the Type, or of the Submittals Stage `key`. */
+  const copyIntoEveryProjectBut = async (except: string[], entry: { outcome: string } | { stage: string }) => {
+    const others = sql`p.id <> all(${except}::uuid[])`;
+    await ("outcome" in entry
+      ? sql`
+          insert into outcome (owner_kind, project_id, work_item_type_id, code, name, closing, polarity, actions, sort)
+          select 'project', p.id, d.work_item_type_id, d.code, d.name, d.closing, d.polarity, d.actions, d.sort
+          from project p cross join (select * from outcome where owner_kind = 'rabaed' and work_item_type_id = ${typeId}::uuid and code = ${entry.outcome}) d
+          where ${others} and not exists (select 1 from outcome o where o.project_id = p.id and o.work_item_type_id = d.work_item_type_id and o.code = d.code)
+        `
+      : sql`
+          insert into stage (owner_kind, project_id, module_key, key, name, category, sort)
+          select 'project', p.id, d.module_key, d.key, d.name, d.category, d.sort
+          from project p cross join (select * from stage where owner_kind = 'rabaed' and module_key = 'submittals' and key = ${entry.stage}) d
+          where ${others} and not exists (select 1 from stage x where x.project_id = p.id and x.module_key = d.module_key and x.key = d.key)
+        `
+    ).execute(migrator);
+  };
 
   const withCloseUsing = (outcome: string): WorkflowDefinition => {
     const a = original.definition.transitions.find((t) => t.key === "approve_a")!;
@@ -463,6 +485,15 @@ describe("a Rabaed Default Version that uses an outcome or Stage some Project la
   const latestVersionNo = async () => (await readLatestPublishedDefinition(adminDb, definitionId))!.versionNo;
   const publishActions = () =>
     adminDb.selectFrom("admin_action").select("reason").where("target_id", "=", definitionId).where("action", "=", "publish_workflow").execute();
+  /** The Type's refused publishes in admin_action: each with its reason and how many Projects lack which outcomes and Stages (V9). */
+  const refusedPublishes = () =>
+    adminDb
+      .selectFrom("admin_action")
+      .select(["engineer_id", "reason", "after"])
+      .where("target_id", "=", definitionId)
+      .where("action", "=", "refuse_workflow_publish")
+      .orderBy("at")
+      .execute();
   /** The outcomes and Stages of the Version a new item of the Type on Project `projectId` starts on that the Project's own sets lack. */
   const outsideSets = async (projectId: string) =>
     (
@@ -485,28 +516,28 @@ describe("a Rabaed Default Version that uses an outcome or Stage some Project la
       code, name: { en: "Approved on site", ar: "معتمد في الموقع" }, closing: true, polarity: "positive", actions: [], reason: "Add an outcome for RP-566",
     });
     expect(add.statusCode, add.body).toBe(200);
-    // Every other open Project already holds it, so `existing` is the one that lacks it (a closed Project raises nothing).
-    await sql`
-      insert into outcome (owner_kind, project_id, work_item_type_id, code, name, closing, polarity, actions, sort)
-      select 'project', p.id, d.work_item_type_id, d.code, d.name, d.closing, d.polarity, d.actions, d.sort
-      from project p
-      cross join (select * from outcome where owner_kind = 'rabaed' and work_item_type_id = ${typeId}::uuid and code = ${code}) d
-      where p.id not in (${existing.projectId}::uuid, ${closed}::uuid)
-        and not exists (select 1 from outcome o where o.project_id = p.id and o.work_item_type_id = d.work_item_type_id and o.code = d.code)
-    `.execute(migrator);
+    // Every other Active Project already holds it, so `existing` is the one that lacks it (a Closed Project raises nothing).
+    await copyIntoEveryProjectBut([existing.projectId, closed], { outcome: code });
     const logged = (await publishActions()).length;
+    const refusals = (await refusedPublishes()).length;
 
     const refused = await engineer.browser.post(`/v1/workflows/${TYPE}/publish`, { definition: withCloseUsing(code), reason: "Close with the new outcome" });
     expect(refused.statusCode, refused.body).toBe(422);
     // How many Projects and which entries: no Project or Company is named.
-    expect(refused.json()).toEqual({ error: "projects_lack_entries", projects: 1, outcomes: [code], stages: [] });
+    const lacking = { projects: 1, outcomes: [code], stages: [] };
+    expect(refused.json()).toEqual({ error: "projects_lack_entries", ...lacking });
     expect(await latestVersionNo()).toBe(original.versionNo);
     expect((await publishActions()).length).toBe(logged);
     // The workflow:publish CLI is refused alike.
     const { email } = await migrator.selectFrom("rabaed_engineer").select("email").where("id", "=", engineer.id).executeTakeFirstOrThrow();
     expect(await publishRabaedWorkflowAs(migrator, { engineerEmail: email, typeCode: TYPE, definition: withCloseUsing(code), reason: "From the CLI" })).toEqual({
-      ok: false, reason: "projects_lack_entries", projects: 1, outcomes: [code], stages: [],
+      ok: false, reason: "projects_lack_entries", ...lacking,
     });
+    // Each refusal is logged with the Engineer's reason, the count and the entries, and nothing else (V9).
+    expect((await refusedPublishes()).slice(refusals)).toEqual([
+      { engineer_id: engineer.id, reason: "Close with the new outcome", after: { typeCode: TYPE, ...lacking } },
+      { engineer_id: engineer.id, reason: "From the CLI", after: { typeCode: TYPE, ...lacking } },
+    ]);
     expect(await outsideSets(existing.projectId)).toEqual([]);
 
     const added = await withMember(appDb, existing.memberId, (trx) =>
@@ -527,24 +558,28 @@ describe("a Rabaed Default Version that uses an outcome or Stage some Project la
     expect(await outsideSets(existing.projectId)).toEqual([]);
   });
 
-  it("is refused while a Project created before a Stage was added lacks it, naming the Stage", async () => {
-    const existing = await newProject();
+  it("is refused while a Project created before a Stage was added lacks it, naming the Stage; it publishes once the Project Admin adds it", async () => {
+    const existing = await newProjectWithAdmin();
     const add = await engineer.browser.post(`/v1/stages/submittals`, { key, name: { en: "Held", ar: "معلق" }, category: "in_progress", reason: "Add a Stage for RP-566" });
     expect(add.statusCode, add.body).toBe(200);
-    await sql`
-      insert into stage (owner_kind, project_id, module_key, key, name, category, sort)
-      select 'project', p.id, d.module_key, d.key, d.name, d.category, d.sort
-      from project p
-      cross join (select * from stage where owner_kind = 'rabaed' and module_key = 'submittals' and key = ${key}) d
-      where p.id <> ${existing}::uuid
-        and not exists (select 1 from stage x where x.project_id = p.id and x.module_key = d.module_key and x.key = d.key)
-    `.execute(migrator);
+    await copyIntoEveryProjectBut([existing.projectId], { stage: key });
     const before = await latestVersionNo();
 
     const refused = await engineer.browser.post(`/v1/workflows/${TYPE}/publish`, { definition: withStepIn(key), reason: "Hold at the new Stage" });
     expect(refused.statusCode, refused.body).toBe(422);
     expect(refused.json()).toEqual({ error: "projects_lack_entries", projects: 1, outcomes: [], stages: [key] });
     expect(await latestVersionNo()).toBe(before);
-    expect(await outsideSets(existing)).toEqual([]);
+    expect(await outsideSets(existing.projectId)).toEqual([]);
+
+    const added = await withMember(appDb, existing.memberId, (trx) =>
+      sql<{ outcome: string }>`
+        select app.add_stage(${existing.projectId}::uuid, 'submittals', ${key}, '{"en": "Held", "ar": "معلق"}'::jsonb, 'in_progress') as outcome
+      `.execute(trx),
+    );
+    expect(added.rows).toEqual([{ outcome: "added" }]);
+    const published = await engineer.browser.post(`/v1/workflows/${TYPE}/publish`, { definition: withStepIn(key), reason: "Hold at the new Stage" });
+    expect(published.statusCode, published.body).toBe(200);
+    expect(published.json()).toEqual({ versionNo: before + 1 });
+    expect(await outsideSets(existing.projectId)).toEqual([]);
   });
 });
