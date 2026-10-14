@@ -16,6 +16,7 @@ function fakeSeam(overrides: Partial<NewMigrationSeam> = {}) {
     localMigrations: () => ["20270327000000_after_send_back_review_fixes.sql"],
     reservations: () => [table, table],
     lane: () => "5",
+    today: () => "20261015",
     write: (path, text) => {
       written.set(path, text);
     },
@@ -35,6 +36,7 @@ describe("nextDay", () => {
 describe("laneOf", () => {
   it("reads the lane from the .env's compose project, else blank", () => {
     expect(laneOf("A=1\nCOMPOSE_PROJECT_NAME=rabaed-lane5\n")).toBe("5");
+    expect(laneOf('COMPOSE_PROJECT_NAME="rabaed-lane2"')).toBe("2");
     expect(laneOf("COMPOSE_PROJECT_NAME=rabaed\n")).toBe("");
     expect(laneOf("")).toBe("");
   });
@@ -72,10 +74,23 @@ describe("migration:new", () => {
     expect(written.has("packages/db/migrations/20270329000000_second.sql")).toBe(true);
   });
 
-  it("leaves the lane blank without one, and adds a newline the file lacks", () => {
-    const { seam, written } = fakeSeam({ lane: () => "", reservations: () => [table, table.trimEnd()] });
+  it("leaves the lane blank without one", () => {
+    const { seam, written } = fakeSeam({ lane: () => "" });
     newMigration(["b", "--issue", "RP-583"], seam);
     expect(written.get("planning/migration-days.md")).toBe(`${table}| 20270328 | RP-583 |  | b |\n`);
+  });
+
+  it("puts the row after the table's last row, before any text after the table", () => {
+    const { seam, written } = fakeSeam({ reservations: () => [table, `${table}\nA note.\n`] });
+    newMigration(["b", "--issue", "RP-583"], seam);
+    expect(written.get("planning/migration-days.md")).toBe(`${table}| 20270328 | RP-583 | 5 | b |\n\nA note.\n`);
+  });
+
+  it("takes today in a repository with no migrations or reservations", () => {
+    const { seam, written } = fakeSeam({ remoteMigrations: () => [], localMigrations: () => [], reservations: () => ["", ""] });
+    newMigration(["first", "--issue", "RP-583"], seam);
+    expect(written.has("packages/db/migrations/20261015000000_first.sql")).toBe(true);
+    expect(written.get("planning/migration-days.md")).toBe("| 20261015 | RP-583 | 5 | first |\n");
   });
 
   it("refuses a name that isn't snake_case, writing nothing", () => {

@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { parseReservations, reservationsFile } from "./check-migrations-days.ts";
+import { composeProjectOfEnv } from "./lanes.ts";
 import { migrationsDir } from "./migrations.ts";
 
 // `pnpm migration:new <name> --issue RP-nnn` (RP-583, from the RP-580 / RP-582
@@ -24,6 +25,8 @@ export interface NewMigrationSeam {
   reservations(): [onMain: string, here: string];
   /** This worktree's lane, from its .env; "" when it has none. */
   lane(): string;
+  /** Today as `yyyymmdd`, for a repository with no migrations or reservations yet. */
+  today(): string;
   /** Writes a file, relative to the repository root. */
   write(path: string, text: string): void;
 }
@@ -37,40 +40,43 @@ export interface NewMigrationResult {
 const usage = "Usage: pnpm migration:new <name> --issue RP-nnn   (name in snake_case, e.g. card_layout)";
 const fail = (...lines: string[]): NewMigrationResult => ({ ok: false, lines });
 
+/** A date's UTC day as `yyyymmdd`. */
+export const dayOfDate = (date: Date): string => date.toISOString().slice(0, 10).replaceAll("-", "");
+
 /** The calendar day after `day` (`yyyymmdd`). */
-export function nextDay(day: string): string {
-  const date = new Date(Date.UTC(Number(day.slice(0, 4)), Number(day.slice(4, 6)) - 1, Number(day.slice(6, 8)) + 1));
-  return date.toISOString().slice(0, 10).replaceAll("-", "");
-}
+export const nextDay = (day: string): string => dayOfDate(new Date(Date.UTC(Number(day.slice(0, 4)), Number(day.slice(4, 6)) - 1, Number(day.slice(6, 8)) + 1)));
 
 /** The lane a .env's compose project names (`rabaed-lane5` → `5`); "" for any other. */
-export function laneOf(env: string): string {
-  return /^COMPOSE_PROJECT_NAME=rabaed-lane(\w+)\s*$/m.exec(env)?.[1] ?? "";
+export const laneOf = (env: string): string => /^rabaed-lane(\w+)$/.exec(composeProjectOfEnv(env) ?? "")?.[1] ?? "";
+
+/** The text with `row` after its last table row (so text after the table stays after it); at the end when it has no table. */
+export function withRow(text: string, row: string): string {
+  const lines = text.split("\n");
+  const last = lines.findLastIndex((line) => line.startsWith("|"));
+  if (last === -1) return `${text}${text === "" || text.endsWith("\n") ? "" : "\n"}${row}\n`;
+  return [...lines.slice(0, last + 1), row, ...lines.slice(last + 1)].join("\n");
 }
 
-const dayOf = (name: string) => (/^(\d{8})\d{6}_/.exec(name)?.[1] ?? null);
-
 export function newMigration(args: string[], seam: NewMigrationSeam): NewMigrationResult {
-  const at = args.indexOf("--issue");
-  const issue = at === -1 ? undefined : args[at + 1];
-  const name = args.find((arg, index) => !arg.startsWith("--") && (at === -1 || index !== at + 1));
+  const issueFlag = args.indexOf("--issue");
+  const issue = issueFlag === -1 ? undefined : args[issueFlag + 1];
+  const name = args.find((arg, index) => !arg.startsWith("--") && (issueFlag === -1 || index !== issueFlag + 1));
   if (name === undefined || issue === undefined || !/^RP-\d+$/.test(issue)) return fail(usage);
   if (!/^[a-z][a-z0-9]*(_[a-z0-9]+)*$/.test(name)) return fail(`"${name}" is not snake_case: lowercase letters and digits, words joined by single underscores.`, usage);
 
   if (!seam.fetch()) return fail("git fetch origin failed; the free day needs today's main and branches. Get online and run `pnpm migration:new` again.");
 
-  const [onMain, here] = seam.reservations();
+  const [onMain, onBranch] = seam.reservations();
   const days = [
-    ...[...seam.remoteMigrations(), ...seam.localMigrations()].map(dayOf).filter((day) => day !== null),
-    ...[...parseReservations(onMain), ...parseReservations(here)].map((r) => r.day),
+    ...[...seam.remoteMigrations(), ...seam.localMigrations()].map((file) => file.slice(0, 8)).filter((day) => /^\d{8}$/.test(day)),
+    ...[...parseReservations(onMain), ...parseReservations(onBranch)].map((r) => r.day),
   ];
   const latest = days.reduce((max, day) => (day > max ? day : max), "");
-  const day = latest === "" ? new Date().toISOString().slice(0, 10).replaceAll("-", "") : nextDay(latest);
+  const day = latest === "" ? seam.today() : nextDay(latest);
 
   const file = `${migrationsDir}/${day}000000_${name}.sql`;
   seam.write(file, `-- ${issue}: ${name.replaceAll("_", " ")}.\n`);
-  const reserved = here === "" || here.endsWith("\n") ? here : `${here}\n`;
-  seam.write(reservationsFile, `${reserved}| ${day} | ${issue} | ${seam.lane()} | ${name} |\n`);
+  seam.write(reservationsFile, withRow(onBranch, `| ${day} | ${issue} | ${seam.lane()} | ${name} |`));
   return { ok: true, lines: [`Created ${file}`, `Reserved ${day} for ${issue} in ${reservationsFile}; commit both together.`] };
 }
 
@@ -90,6 +96,7 @@ export function realSeam(repo: string = process.cwd()): NewMigrationSeam {
     localMigrations: () => readdirSync(join(repo, migrationsDir)).filter((name) => name.endsWith(".sql")),
     reservations: () => [git("show", `origin/main:${reservationsFile}`).stdout ?? "", read(reservationsFile)],
     lane: () => laneOf(read(".env")),
+    today: () => dayOfDate(new Date()),
     write: (path, text) => writeFileSync(join(repo, path), text),
   };
 }
