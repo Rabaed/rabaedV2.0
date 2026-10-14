@@ -33,6 +33,7 @@ import {
   type LinkKind,
   type FormToFill,
   type FormVersion,
+  type RaisableTypes,
   type SectionEditContext,
   type WorkflowStepHolder,
   type LinkSearchQuery,
@@ -311,7 +312,42 @@ export function getNewWorkItemForm(db: Db, memberId: string, projectId: string, 
     const onProject = await trx.selectFrom("project").select("id").where("id", "=", projectId).executeTakeFirst();
     if (!onProject) return null;
     const form = await newItemForm(trx, projectId, typeCode);
-    return form && formToFillAt(form, ...(await draftOf(trx, projectId, typeCode)));
+    if (!form) return null;
+    const draft = await draftOf(trx, projectId, typeCode);
+    return draft && formToFillAt(form, ...draft);
+  });
+}
+
+/**
+ * The Submittals Types the Member may raise on one of their Projects (RP-590): each
+ * has a published Workflow bound for their Participant (app.new_item_workflow_version),
+ * whose Draft Step their base role holds, as app.create_work_item checks it. The MAR
+ * first, then the SAR and DAR. Null when it isn't one of their Projects.
+ */
+export function getRaisableTypes(db: Db, memberId: string, projectId: string): Promise<RaisableTypes | null> {
+  return withMember(db, memberId, async (trx) => {
+    const onProject = await trx.selectFrom("project").select("id").where("id", "=", projectId).executeTakeFirst();
+    if (!onProject) return null;
+    const { rows } = await sql<{ code: string; name: BilingualText; workflow_version_id: string | null; base_role: string }>`
+      select t.code, t.name, r.base_role,
+        app.new_item_workflow_version(${projectId}::uuid, t.id, pm.participant_id) as workflow_version_id
+      from work_item_type t
+      cross join project_member pm
+      join participant p on p.id = pm.participant_id
+      join project_role r on r.id = p.project_role_id
+      where t.owner_kind = 'rabaed' and t.module_key = 'submittals'
+        and pm.project_id = ${projectId}::uuid and pm.member_id = app.current_member_id() and pm.status = 'active'
+        and pm.participant_id in (select app.current_participant_ids())
+        and p.status = 'active' and p.company_id = app.current_company_id()
+      order by array_position(array['MAR', 'SAR', 'DAR'], t.code::text), t.code
+    `.execute(trx);
+    const types: RaisableTypes["types"] = [];
+    for (const r of rows) {
+      if (!r.workflow_version_id) continue;
+      const draft = (await workflowSteps(trx, r.workflow_version_id)).steps.find((s) => s.draft);
+      if (draft?.role === r.base_role) types.push({ code: r.code, name: r.name });
+    }
+    return { types };
   });
 }
 
@@ -320,7 +356,7 @@ export function getNewWorkItemForm(db: Db, memberId: string, projectId: string, 
  * on `projectId` starts on, and its Draft: the latest published Version of the
  * Workflow bound for their Participant, as app.create_work_item resolves it (RP-426).
  */
-async function draftOf(trx: Trx, projectId: string, typeCode: string): Promise<[WorkflowSteps, SectionEditContext]> {
+async function draftOf(trx: Trx, projectId: string, typeCode: string): Promise<[WorkflowSteps, SectionEditContext] | null> {
   const { rows } = await sql<{ type_id: string; workflow_version_id: string | null }>`
     select t.id as type_id, app.new_item_workflow_version(${projectId}::uuid, t.id, (
       select pm.participant_id from project_member pm
@@ -331,7 +367,8 @@ async function draftOf(trx: Trx, projectId: string, typeCode: string): Promise<[
     where t.owner_kind = 'rabaed' and t.code = ${typeCode}
   `.execute(trx);
   const r = rows[0];
-  if (!r?.workflow_version_id) throw new Error(`Work Item Type ${typeCode} has no published Workflow Version`);
+  // No Workflow for the raiser's Participant: the Type isn't theirs to raise (RP-590).
+  if (!r?.workflow_version_id) return null;
   const workflow = await workflowSteps(trx, r.workflow_version_id);
   const draft = workflow.steps.find((s) => s.draft);
   if (!draft) throw new Error(`The Workflow of Work Item Type ${typeCode} has no Draft Step`);
@@ -478,7 +515,10 @@ async function createWorkItemIn(trx: Trx, projectId: string, input: Required<Cre
   const form = await newItemForm(trx, projectId, input.type);
   if (!form) return { ok: false, reason: "type_not_found" };
   // Only the Form Sections editable at the Draft take answers (form-engine.md §4).
-  const atDraft = formToFillAt(form, ...(await draftOf(trx, projectId, input.type)));
+  const draft = await draftOf(trx, projectId, input.type);
+  // A Type with no Workflow for the raiser's Participant isn't theirs to raise (RP-590).
+  if (!draft) return { ok: false, reason: "type_not_found" };
+  const atDraft = formToFillAt(form, ...draft);
   if (changedOutside(form.schema, new Set(atDraft.editableSections), {}, input.answers).length > 0) {
     return { ok: false, reason: "not_editable" };
   }
@@ -800,7 +840,9 @@ function duplicateIn({
       if (!newForm) return { ok: false, reason: "duplicate_not_allowed" };
       const { rows: own } = await sql<{ key: string }>`select app.own_written_fields(${workItemId}::uuid) as key`.execute(trx);
       const ownWritten = new Set(own.map((r) => r.key));
-      const atDraft = formToFillAt(newForm, ...(await draftOf(trx, item.project_id, item.type_code)));
+      const draft = await draftOf(trx, item.project_id, item.type_code);
+      if (!draft) return { ok: false, reason: "duplicate_not_allowed" };
+      const atDraft = formToFillAt(newForm, ...draft);
       const editable = new Set(atDraft.editableSections);
       const wasType = new Map(answerFields(pinned).map((f) => [f.key, f.type]));
       const atDraftFields = newForm.schema.sections

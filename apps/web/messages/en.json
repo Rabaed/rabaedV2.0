@@ -705,7 +705,9 @@
   },
   "workItems": {
     "title": "Submittals",
-    "newMar": "New Material Submittal",
+    "newItem": "New Submittal",
+    "typePicker": "Type",
+    "noRaisableType": "You can't raise a Submittal on this Project: no Submittal Type has a Workflow for your Participant.",
     "addSubmittal": "Add Submittal",
     "noNumber": "No number yet",
     "sentBackForComment": "Sent back for comment: reply and Submit it again.",
@@ -727,7 +729,7 @@
       "commentCounts": "{open} open / {closed} closed"
     },
     "invalid": "Give a Subject and a Trade.",
-    "notContractor": "Only a Contractor can raise a Material Submittal.",
+    "notContractor": "Only a Contractor can raise this Submittal.",
     "outsideVisibility": "Choose a Trade and Location your Visibility covers.",
     "projectClosed": "This Project is closed.",
     "unavailable": "Something went wrong. Try again.",

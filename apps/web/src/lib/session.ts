@@ -25,6 +25,7 @@ import type {
   ProjectInvitations,
   ProjectParticipants,
   ProjectSummary,
+  RaisableTypes,
   RevisionChain,
   Scopes,
   SignedInMember,
@@ -216,6 +217,11 @@ export function getNewWorkItemForm(projectId: string, typeCode: string): Promise
   return apiGet<FormToFill>(
     `/v1/projects/${encodeURIComponent(projectId)}/work-item-types/${encodeURIComponent(typeCode)}/form`,
   );
+}
+
+/** The Submittals Types the signed-in Member may raise on a Project (the Type picker, the MAR first); null when hidden. */
+export function getRaisableTypes(projectId: string): Promise<RaisableTypes | null> {
+  return apiGet<RaisableTypes>(`/v1/projects/${encodeURIComponent(projectId)}/raisable-types`);
 }
 
 /** Who and which Companies the Member may choose in a new item's Form (only those they can see); null when hidden. */
