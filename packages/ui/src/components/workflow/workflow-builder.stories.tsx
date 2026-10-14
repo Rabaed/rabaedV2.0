@@ -159,6 +159,11 @@ const pickStep = async (canvas: Canvas, key: string, locale: "en" | "ar") => {
   await shown(canvas, name);
   await userEvent.click(canvas.getAllByText(name)[0]!);
 };
+/** Opens a Select and picks one of its options (they open in a portal). */
+const pickOption = async (select: HTMLElement, option: string) => {
+  await userEvent.click(select);
+  await userEvent.click(within(document.body).getByRole("option", { name: option }));
+};
 const ready = (canvas: Canvas, locale: "en" | "ar") => shown(canvas, step("consultant_qa").name[locale]);
 
 /** V2 01: the draft open, nothing selected: the palette, the canvas, how to work it, what the draft holds and its problems. */
@@ -233,8 +238,7 @@ export const StepAfterSendBack: Story = {
     const setting = editor.getByRole("combobox", { name: labels.afterSendBack });
     await expect(setting).toHaveTextContent(labels.afterSendBackComment);
     await expect(editor.getByText(labels.afterSendBackHelp)).toBeVisible();
-    await userEvent.click(setting);
-    await userEvent.click(within(document.body).getByRole("option", { name: labels.afterSendBackEditForm }));
+    await pickOption(setting, labels.afterSendBackEditForm);
     await expect(args.onChange).toHaveBeenCalledWith(
       expect.objectContaining({ steps: expect.arrayContaining([expect.objectContaining({ key: "draft", afterSendBack: "edit_form" })]) }),
     );
@@ -262,16 +266,12 @@ export const StepDraftsAuthorOnly: Story = {
     const setting = () => editorOf(canvas, labels).getByRole("combobox", { name: labels.draftsVisibleTo });
     await expect(setting()).toHaveTextContent(labels.draftsAuthorOnly);
     await expect(editorOf(canvas, labels).getByText(labels.draftsAuthorOnlyHelp)).toBeVisible();
-    const pick = async (option: string) => {
-      await userEvent.click(setting());
-      await userEvent.click(within(document.body).getByRole("option", { name: option }));
-    };
-    await pick(labels.draftsWholeCompany);
+    await pickOption(setting(), labels.draftsWholeCompany);
     await expect(args.onChange).toHaveBeenLastCalledWith(
       expect.objectContaining({ steps: expect.arrayContaining([expect.objectContaining({ key: "draft", draftsVisibleTo: "company" })]) }),
     );
     await expect(editorOf(canvas, labels).getByText(labels.draftsVisibleHelp)).toBeVisible();
-    await pick(labels.draftsAuthorOnly);
+    await pickOption(setting(), labels.draftsAuthorOnly);
     await expect(args.onChange).toHaveBeenLastCalledWith(
       expect.objectContaining({ steps: expect.arrayContaining([expect.objectContaining({ key: "draft", draftsVisibleTo: "author" })]) }),
     );
@@ -363,16 +363,12 @@ export const TransitionSwitchScreen: Story = {
     await pickTransition(canvas, "approve_b", locale);
     const screen = () => editorOf(canvas, labels).getByRole("combobox", { name: labels.screen });
     await expect(screen()).toHaveTextContent(builderScreens[2]!.name[locale]);
-    const pick = async (option: string) => {
-      await userEvent.click(screen());
-      await userEvent.click(within(document.body).getByRole("option", { name: option }));
-    };
-    await pick(builderScreens[0]!.name[locale]);
+    await pickOption(screen(), builderScreens[0]!.name[locale]);
     await expect(args.onChange).toHaveBeenLastCalledWith(
       expect.objectContaining({ transitions: expect.arrayContaining([expect.objectContaining({ key: "approve_b", screen: builderScreens[0]!.key })]) }),
     );
     await expect(screen()).toHaveTextContent(builderScreens[0]!.name[locale]);
-    await pick(labels.screenNone);
+    await pickOption(screen(), labels.screenNone);
     const saved = (args.onChange as ReturnType<typeof fn>).mock.lastCall![0] as WorkflowDefinition;
     await expect(saved.transitions.find((t) => t.key === "approve_b")).toMatchObject({ actionForm: null });
     await expect(saved.transitions.find((t) => t.key === "approve_b")).not.toHaveProperty("screen");
