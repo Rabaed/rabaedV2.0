@@ -1013,7 +1013,8 @@
     "grouped": "Some Steps are grouped because they are internal to another company.",
     "outcomeModes": {
       "recommend_code": "Recommends a code",
-      "issue_outcome": "Issues the outcome"
+      "issue_outcome": "Issues the outcome",
+      "confirm_code": "Confirms the Recommended Code"
     },
     "kinds": {
       "send": "Send",
@@ -1093,7 +1094,8 @@
     "outcomeOptions": {
       "none": "None",
       "recommend_code": "Recommends a code",
-      "issue_outcome": "Issues the outcome"
+      "issue_outcome": "Issues the outcome",
+      "confirm_code": "Confirms the Recommended Code"
     },
     "draftsVisibleTo": "Drafts visible to",
     "draftsWholeCompany": "The author's whole Company",

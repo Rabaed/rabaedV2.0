@@ -25,7 +25,7 @@ for (const { name, reservation } of refused) {
   console.error(`${name} is on a day ${reservationsFile} reserves for another issue: ${formatReservation(reservation)}`);
   console.error("  Move it to a day reserved for this issue (its branch name or its header names the issue), or ask the planning session for one.");
 }
-if (unreserved.length > 0) console.error(`Warning: no day in ${reservationsFile} is reserved for ${unreserved.join(", ")}. Ask the planning session to reserve it, so another lane doesn't take it.`);
+if (unreserved.length > 0) console.error(`Warning: no day in ${reservationsFile} is reserved for ${unreserved.join(", ")}. Create migrations with \`pnpm migration:new <name> --issue RP-nnn\`: it takes the next free day and reserves it, so another lane doesn't take it.`);
 if (refused.length === 0) console.log("Every new migration is on a day reserved for its issue, or on an unreserved one.");
 
 if (checked.status !== 0) process.exit(checked.status ?? 1);

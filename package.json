@@ -19,6 +19,7 @@
     "demo:seed": "node scripts/pnpm.ts --filter @rabaed/api run demo:seed",
     "db:reset": "node scripts/pnpm.ts --filter @rabaed/db run reset",
     "check:migrations": "node scripts/check-migrations.ts",
+    "migration:new": "node scripts/migration-new.ts",
     "db:fn": "node scripts/db-fn.ts",
     "queue": "node scripts/queue-pr.ts",
     "verify": "node scripts/verify.ts",

@@ -66,6 +66,10 @@ export const workflowProblemCodes = [
   "ends_without_close",
   "items_table_missing",
   "items_table_internal",
+  // The Owner's review (ADR 0022, RP-593)
+  "confirm_without_recommended_code",
+  "confirm_close_missing",
+  "confirm_send_back_not_to_recommender",
   // Check 4 and 8 (workflowKindProblems)
   "return_crosses_participants",
   "submit_stays_inside",
@@ -157,6 +161,7 @@ export function workflowPublishProblems(definition: WorkflowDefinition, context:
     ...graphProblems(input),
     ...stageProblems(input),
     ...outcomeProblems(input),
+    ...ownerReviewProblems(input),
     ...builtCheckProblems(input),
     ...sendProblems(input),
     ...cancelProblems(input),
@@ -257,23 +262,54 @@ function stageProblems({ steps, transitions, categoryOf, isTerminal, stepOf }: C
 function outcomeProblems({ steps, transitions, context, stepOf, isTerminal, internalOf }: CheckInput): FoundProblem[] {
   const set: readonly string[] = context.outcomes.filter((o) => o.closing).map((o) => o.code);
   const issues = set.length > 1;
+  // A Step confirming a Recommended Code issues it too (ADR 0022).
+  const issuing = (s: WorkflowStep) => s.outcomeMode === "issue_outcome" || s.outcomeMode === "confirm_code";
   return [
-    ...(issues && !steps.some((s) => s.outcomeMode === "issue_outcome") ? [{ code: "no_issuing_step" } as const] : []),
+    ...(issues && !steps.some(issuing) ? [{ code: "no_issuing_step" } as const] : []),
     ...transitions.flatMap((t): FoundProblem[] => {
       const [from, to] = [stepOf.get(t.from), stepOf.get(t.to)];
       if (from === undefined || to === undefined || t.kind === "cancel") return [];
       const problemAt = (code: WorkflowProblemCode): FoundProblem[] => [{ code, transition: t.key, ...(t.outcome === null ? {} : { detail: t.outcome }) }];
       if (!isTerminal(to)) {
         if (t.kind === "close") return problemAt("close_to_open_step");
+        // Into the Owner's review the Code is the Recommended Code (ownerReviewProblems), and
+        // its rows become items when the Owner confirms it: the table is asked of it.
+        if (to.outcomeMode === "confirm_code") return t.outcome !== null && set.includes(t.outcome) ? itemsTableProblems(t, context, internalOf(t.key)) : [];
         return t.outcome !== null && t.kind !== "send_back" ? problemAt("outcome_on_open_step") : [];
       }
       if (t.kind !== "close") return problemAt("ends_without_close");
       if (t.outcome === null) return problemAt("missing_outcome");
       if (!set.includes(t.outcome)) return problemAt("outcome_not_in_set");
-      if (issues && from.outcomeMode !== "issue_outcome") return problemAt("outcome_not_from_issuing_step");
-      return itemsTableProblems(t, context, internalOf(t.key));
+      if (issues && !issuing(from)) return problemAt("outcome_not_from_issuing_step");
+      // The Owner's Confirm creates the items from the Recommendation's rows, never its own.
+      return from.outcomeMode === "confirm_code" ? [] : itemsTableProblems(t, context, internalOf(t.key));
     }),
   ];
+}
+
+/**
+ * The Owner's review (ADR 0022): a Step that confirms a Code is reached only with a
+ * Recommended Code, a Submit carrying a closing outcome of the Type's set from a Step that
+ * Recommends a Code; and for every Code so Recommended it has a close setting it, which is
+ * the one the engine offers (the Owner picks no Code of its own).
+ */
+function ownerReviewProblems({ transitions, context, stepOf }: CheckInput): FoundProblem[] {
+  const set: readonly string[] = context.outcomes.filter((o) => o.closing).map((o) => o.code);
+  return transitions.flatMap((t): FoundProblem[] => {
+    const [from, to] = [stepOf.get(t.from), stepOf.get(t.to)];
+    // The Owner's Send Back goes to the Step that Recommends the Code, the other party of the exchange.
+    if (from?.outcomeMode === "confirm_code" && t.kind === "send_back") {
+      const recommends = to?.outcomeMode === "recommend_code" && transitions.some((r) => r.from === t.to && r.to === t.from);
+      return recommends ? [] : [{ code: "confirm_send_back_not_to_recommender", transition: t.key }];
+    }
+    if (from === undefined || to?.outcomeMode !== "confirm_code") return [];
+    if (t.kind !== "submit" || t.outcome === null || from.outcomeMode !== "recommend_code") {
+      return [{ code: "confirm_without_recommended_code", transition: t.key }];
+    }
+    if (!set.includes(t.outcome)) return [{ code: "outcome_not_in_set", transition: t.key, detail: t.outcome }];
+    const confirmed = transitions.some((c) => c.from === t.to && c.kind === "close" && c.outcome === t.outcome);
+    return confirmed ? [] : [{ code: "confirm_close_missing", transition: t.key, detail: t.outcome }];
+  });
 }
 
 /**
@@ -579,14 +615,19 @@ const maxCombinations = 4096;
  * when some match two or more (`condition_overlap`) or none (`condition_gap`),
  * once per group, on its first Transition.
  */
-function routingWarnings({ transitions }: CheckInput): FoundProblem[] {
+function routingWarnings({ transitions, stepOf }: CheckInput): FoundProblem[] {
   const groups = new Map<string, WorkflowTransition[]>();
   for (const t of transitions) {
     const group = labelGroupOf(t);
     groups.set(group, [...(groups.get(group) ?? []), t]);
   }
+  // The Owner's one "Confirm": its closes, one per Code, are picked by the Recommended Code (ADR 0022).
+  const confirmsByCode = (group: readonly WorkflowTransition[]) =>
+    stepOf.get(group[0]!.from)?.outcomeMode === "confirm_code" &&
+    group.every((t) => t.kind === "close" && t.outcome !== null && routingCondition(t) === null) &&
+    new Set(group.map((t) => t.outcome)).size === group.length;
   return [...groups.values()]
-    .filter((group) => group.length > 1)
+    .filter((group) => group.length > 1 && !confirmsByCode(group))
     .flatMap((group): FoundProblem[] => {
       const rules = group.map(routingCondition);
       let overlap = false;
@@ -745,6 +786,18 @@ const messages: Record<WorkflowProblemCode, (names: Names) => BilingualText> = {
   items_table_missing: (names) => ({
     en: `${names.transition.en} sets an outcome whose rows become ${names.detail} items, so its Action Form needs an items_to_create table with a text column.`,
     ar: `${names.transition.ar} يضع نتيجة تتحول صفوفها إلى عناصر ${names.detail}، لذا يحتاج نموذجه المنبثق إلى جدول items_to_create فيه عمود نصي.`,
+  }),
+  confirm_without_recommended_code: (names) => ({
+    en: `${names.transition.en} goes to a Step that confirms a Recommended Code, so it must be a Submit carrying a Code, from a Step that Recommends a Code.`,
+    ar: `${names.transition.ar} يذهب إلى خطوة تؤكد رمزًا موصى به، لذا يجب أن يكون تقديمًا يحمل رمزًا، من خطوة توصي برمز.`,
+  }),
+  confirm_close_missing: (names) => ({
+    en: `${names.transition.en} recommends Code ${names.detail}, but the Step it goes to has no close that confirms it.`,
+    ar: `${names.transition.ar} يوصي بالرمز ${names.detail}، لكن الخطوة التي يذهب إليها ليس فيها إغلاق يؤكده.`,
+  }),
+  confirm_send_back_not_to_recommender: (names) => ({
+    en: `${names.transition.en} Sends Back from a Step that confirms a Recommended Code, so it must go to the Step that Recommends it.`,
+    ar: `${names.transition.ar} يُرجع من خطوة تؤكد رمزًا موصى به، لذا يجب أن يذهب إلى الخطوة التي توصي به.`,
   }),
   return_crosses_participants: (names) => ({
     en: `${names.transition.en} is a Return, so it must stay inside one Participant.`,

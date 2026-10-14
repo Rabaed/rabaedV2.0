@@ -13,6 +13,7 @@
  *   rulesFormSchema                 rules-workflow.ts: the Form that Workflow is published with.
  *   addActionsWorkflow(run)         actions-workflow.ts: a Workflow whose Transitions carry actions.
  *   actionsFormSchema               actions-workflow.ts: the Form that Workflow is published with.
+ *   addOwnerReviewWorkflow(run)     owner-review-workflow.ts: a 1→1→1 Workflow ending with the Owner's review (ADR 0022).
  *   expectedContentSha256, jsonbText   content-hash.ts: the content hash a closed item must carry.
  * Defined below:
  *   rolledBack(db, fn)              runs fn in a transaction that is always rolled back.
@@ -34,6 +35,7 @@ export { addTestScreen, addTestWorkflow, approveBActionForm, type TestWorkflowOp
 export { expectedContentSha256, jsonbText, type HashedDocument } from "./content-hash.ts";
 export { addRulesWorkflow, rulesFormSchema, type RulesTransition } from "./rules-workflow.ts";
 export { actionsFormSchema, addActionsWorkflow } from "./actions-workflow.ts";
+export { addOwnerReviewWorkflow } from "./owner-review-workflow.ts";
 export { addLegacyMarType, LEGACY_MAR, LEGACY_WORKFLOW_NAME, returnInInternalReview } from "./legacy-mar.ts";
 
 class Rollback extends Error {}
