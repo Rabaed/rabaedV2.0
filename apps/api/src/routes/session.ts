@@ -17,7 +17,7 @@ export const sessionRoutes =
   (ctx: AppContext): FastifyPluginAsyncZod =>
   async (app) => {
     // Sign-in for Members.
-    app.post("/v1/session", { schema: { body: signInRequest } }, async (request, reply) => {
+    app.post("/v1/session", { config: { public: true }, schema: { body: signInRequest } }, async (request, reply) => {
       const { email, password, locale } = request.body;
       const session = await signIn(ctx.db, email, password, ctx.now(), ctx.config.sessionTtlMs);
       // Every failure is the same 401, so registered emails can't be discovered.
@@ -28,14 +28,14 @@ export const sessionRoutes =
     });
 
     // Sign out: the session ends on the server, not just in the browser.
-    app.delete("/v1/session", async (request, reply) => {
+    app.delete("/v1/session", { config: { public: true } }, async (request, reply) => {
       if (request.sessionToken) await endSession(ctx.db, request.sessionToken, ctx.now());
       ctx.clearSessionCookie(reply);
       return reply.code(204).send();
     });
 
     // Accept an invitation: set a password and sign in.
-    app.post("/v1/invitations/accept", { schema: { body: acceptInvitationRequest } }, async (request, reply) => {
+    app.post("/v1/invitations/accept", { config: { public: true }, schema: { body: acceptInvitationRequest } }, async (request, reply) => {
       const now = ctx.now();
       const memberId = await acceptInvitation(ctx.db, request.body.token, request.body.password, now);
       if (!memberId) throw new HttpError(400, "invalid_invitation");

@@ -1,7 +1,7 @@
 import { resolve } from "node:path";
 import { git, type Migration, migrationBlobs, migrationNames, migrationSql, migrationsDir } from "./migrations.ts";
 
-// Three checks on the migrations a pull request adds (RP-337, from the RP-311 retro):
+// Four checks on the migrations a pull request adds (RP-337, from the RP-311 retro):
 //
 // - Redefinition drift. Migrations run in name order, so for each function,
 //   view or policy the newest-sorting definition wins. When the branch and main
@@ -11,6 +11,14 @@ import { git, type Migration, migrationBlobs, migrationNames, migrationSql, migr
 //   every main definition, and must have been added after the branch merged them.
 //   Fix: merge main, then add a new migration, later than every one named,
 //   that starts from the newest definition and re-applies the branch's change.
+// - Branch order (RP-457). Two migrations on one branch that redefine the same
+//   object (two implementers building in parallel, merged onto an integration
+//   branch) can each start from the same old body; the one that sorts later
+//   silently replaces the other (RP-449's WF-7 and WF-8 both redefining
+//   app.take_transition). Each must have seen the previous one that defines the
+//   object. Fix: add a new migration, sorting after both and written with both in
+//   the tree, that starts from the later one's body and re-applies the earlier one's
+//   change (editing the later one doesn't count: it is judged by the commit that added it).
 // - Stale overloads. Postgres tells functions apart by argument types, so a
 //   `create or replace` with another signature adds a second function. When
 //   the branch creates a signature main dropped (RP-312 re-created
@@ -33,6 +41,14 @@ export interface BranchMigration extends Migration {
   seen: string[];
 }
 
+export interface OrderDrift {
+  object: string;
+  /** The earlier branch migration that defines the object. */
+  earlier: string;
+  /** The later one, added without seeing the earlier. */
+  later: string;
+}
+
 export interface Drift {
   object: string;
   branch: string[];
@@ -52,6 +68,14 @@ export function definedObjects(sql: string): string[] {
   return [...new Set(objects)];
 }
 
+const parsed = new WeakMap<Migration, string[]>();
+/** definedObjects of a migration, parsed once. */
+function objectsIn(m: Migration): string[] {
+  const objects = parsed.get(m) ?? definedObjects(m.sql);
+  parsed.set(m, objects);
+  return objects;
+}
+
 /**
  * Groups of migrations sharing a `YYYYMMDDHHMMSS` prefix, where the group holds
  * a migration the change adds. A pair already on main stays: it can't be renamed.
@@ -69,12 +93,29 @@ export function duplicateTimestamps(files: string[], added: string[]): string[][
  */
 export function redefinitionDrift(main: Migration[], branch: BranchMigration[]): Drift[] {
   const drifts: Drift[] = [];
-  for (const object of new Set(branch.flatMap((m) => definedObjects(m.sql)))) {
-    const defines = (m: Migration) => definedObjects(m.sql).includes(object);
+  for (const object of new Set(branch.flatMap(objectsIn))) {
+    const defines = (m: Migration) => objectsIn(m).includes(object);
     const onBranch = branch.filter(defines).toSorted((a, b) => (a.name < b.name ? -1 : 1));
     const newest = onBranch.at(-1)!;
     const conflicting = main.filter((m) => defines(m) && (m.name > newest.name || !newest.seen.includes(m.name)));
     if (conflicting.length > 0) drifts.push({ object, branch: onBranch.map((m) => m.name), main: conflicting.map((m) => m.name).toSorted() });
+  }
+  return drifts;
+}
+
+/**
+ * Each object two or more branch migrations define, where one was added without
+ * seeing the previous (by name order) that defines it: both started from an older
+ * body, so the later one replaces the earlier one's change.
+ */
+export function branchOrderDrift(branch: BranchMigration[]): OrderDrift[] {
+  const drifts: OrderDrift[] = [];
+  for (const object of new Set(branch.flatMap(objectsIn))) {
+    const onBranch = branch.filter((m) => objectsIn(m).includes(object)).toSorted((a, b) => (a.name < b.name ? -1 : 1));
+    for (const [i, later] of onBranch.entries()) {
+      const earlier = onBranch[i - 1];
+      if (earlier && !later.seen.includes(earlier.name)) drifts.push({ object, earlier: earlier.name, later: later.name });
+    }
   }
   return drifts;
 }
@@ -220,7 +261,7 @@ interface FileWrite {
  * until that stops moving. Matching content, not `git log --follow`: --follow
  * takes one redefinition of a function for a rename of another.
  */
-function firstAdded(repo: string, head: string): (name: string) => string | undefined {
+function firstAdded(repo: string, head: string): (name: string) => { commit: string; name: string } | undefined {
   const log = git(repo, "log", "--first-parent", "--diff-merges=first-parent", "--no-renames", "--diff-filter=AM", "--raw", "--no-abbrev", "--reverse", "--format=commit %H", head, "--", `${migrationsDir}/`);
   const pathAdded = new Map<string, FileWrite>();
   const blobWritten = new Map<string, FileWrite>();
@@ -241,7 +282,7 @@ function firstAdded(repo: string, head: string): (name: string) => string | unde
     while (added) {
       const written = blobWritten.get(added.blob);
       const earlier = written && written.index < added.index ? pathAdded.get(written.path) : undefined;
-      if (!earlier || earlier.index >= added.index) return added.commit;
+      if (!earlier || earlier.index >= added.index) return { commit: added.commit, name: added.path.slice(`${migrationsDir}/`.length) };
       added = earlier;
     }
     return undefined;
@@ -249,33 +290,65 @@ function firstAdded(repo: string, head: string): (name: string) => string | unde
 }
 
 /**
- * The three checks for a pull request from `head` into `base`. Its migrations
+ * The commit a migration was written in: the one that first added its file on
+ * `head`'s first-parent history (see firstAdded) or, when that is a merge that
+ * brought the file in from another parent, the commit that first added it on that
+ * parent's own first-parent history, and so on down (RP-457). A merge's tree is
+ * not what the author saw: their branch may have merged the integration branch
+ * (bringing in another's migration) after writing theirs, and one merge of a
+ * sub-integration branch, or an octopus, brings in parallel migrations together.
+ */
+function writtenIn(repo: string, head: string, name: string, logs: Map<string, ReturnType<typeof firstAdded>>): string {
+  if (!logs.has(head)) logs.set(head, firstAdded(repo, head));
+  const added = logs.get(head)!(name);
+  if (!added) throw new Error(`No commit on ${head}'s first-parent history adds ${name}`);
+  const [, , ...others] = git(repo, "rev-list", "--parents", "-n", "1", added.commit).trim().split(" ");
+  // A file in no other parent was written in the merge itself (a conflict resolution).
+  const from = others.find((parent) => migrationBlobs(repo, parent).has(added.name));
+  return from ? writtenIn(repo, from, added.name, logs) : added.commit;
+}
+
+/** What the drift check finds: each list empty when there is nothing to fix. */
+export interface MigrationProblems {
+  drift: Drift[];
+  ordering: OrderDrift[];
+  overloads: StaleOverload[];
+  duplicates: string[][];
+}
+
+/** Whether any check found something. */
+export const hasProblems = (problems: MigrationProblems): boolean => Object.values(problems).some((found: unknown[]) => found.length > 0);
+
+/**
+ * The four checks for a pull request from `head` into `base`. Its migrations
  * are those in `head` and not in `base`; each saw the migrations in the tree of
- * the commit that first added its file on the branch's first-parent history,
- * following renames back by content (RP-560: renaming a migration after its
- * timestamp clashed, or editing it after merging main, doesn't make an old body
- * new; see firstAdded). A migration on `base` counts as seen when that
+ * the commit it was written in (writtenIn: the commit that first added its file,
+ * following renames back by content and merges down to the branch it was written
+ * on; RP-560: renaming a migration after its timestamp clashed, or editing it after
+ * merging main, doesn't make an old body new). A migration counts as seen when that
  * tree held it under its name or, renamed since, its content: a branch that
  * rebuilt a function from another branch's migration saw it, even when that
- * branch renamed the file before it merged (PR #180, RP-437).
+ * branch renamed the file before it merged (PR #180, RP-437), and so for two
+ * migrations of the same branch.
  */
-export function migrationProblems(repo: string, base: string, head: string): { drift: Drift[]; overloads: StaleOverload[]; duplicates: string[][] } {
+export function migrationProblems(repo: string, base: string, head: string): MigrationProblems {
   const baseBlobs = migrationBlobs(repo, base);
   const onBase = [...baseBlobs.keys()];
   const onHead = migrationNames(repo, head);
   const added = onHead.filter((name) => !onBase.includes(name));
-  const addedInCommit = firstAdded(repo, head);
+  const logs = new Map<string, ReturnType<typeof firstAdded>>();
+  const headBlobs = migrationBlobs(repo, head);
   const branch = added.map((name) => {
-    const addedIn = addedInCommit(name);
-    if (!addedIn) throw new Error(`No commit on ${head}'s first-parent history adds ${name}`);
-    const tree = migrationBlobs(repo, addedIn);
+    const tree = migrationBlobs(repo, writtenIn(repo, head, name, logs));
     const blobs = new Set(tree.values());
-    const seen = [...new Set([...tree.keys(), ...onBase.filter((m) => blobs.has(baseBlobs.get(m) ?? ""))])];
+    const seenByContent = (names: string[], blobsOf: Map<string, string>) => names.filter((m) => blobs.has(blobsOf.get(m) ?? ""));
+    const seen = [...new Set([...tree.keys(), ...seenByContent(added, headBlobs), ...seenByContent(onBase, baseBlobs)])];
     return { name, sql: migrationSql(repo, head, name), seen };
   });
   const main = onBase.map((name) => ({ name, sql: migrationSql(repo, base, name) }));
   return {
     drift: redefinitionDrift(main, branch),
+    ordering: branchOrderDrift(branch),
     overloads: staleOverloads(main, branch),
     duplicates: duplicateTimestamps([...new Set([...onBase, ...onHead])], added),
   };
@@ -306,16 +379,21 @@ if (import.meta.filename && resolve(process.argv[1] ?? "") === import.meta.filen
     process.exit(2);
   }
   const { base, head } = mergeGroup ? mergeGroupSides(process.cwd(), first, second) : { base: first, head: second };
-  const { drift, overloads, duplicates } = migrationProblems(process.cwd(), base, head);
+  const problems = migrationProblems(process.cwd(), base, head);
+  const { drift, ordering, overloads, duplicates } = problems;
   for (const { object, branch, main } of drift) {
     console.error(`${object} is redefined on this branch (${branch.join(", ")}) and on main (${main.join(", ")}).`);
     console.error("  Merge main, then redefine it in a new migration that sorts after all of these: start from the newest body and re-apply this branch's change.");
+  }
+  for (const { object, earlier, later } of ordering) {
+    console.error(`${object} is redefined by ${later} without its seeing ${earlier}, the previous migration on this branch that defines it; the later one replaces the earlier one's change.`);
+    console.error(`  Add a new migration that sorts after both, written with both in the tree: start from ${later}'s body and re-apply ${earlier}'s change.`);
   }
   for (const { signature, branch, main } of overloads) {
     console.error(`${signature} is created on this branch (${branch.join(", ")}) beside another overload; main dropped that signature, or redefined the function out of this branch's sight (${main.join(", ")}).`);
     console.error("  A different argument list makes a second function, so the stale one stays with its old body and grants. Make this branch's change on main's signature instead: rewrite the branch's migration (it isn't on main yet), or drop the stale signature in a new, later migration.");
   }
   for (const group of duplicates) console.error(`These migrations share a timestamp; rename this branch's (it isn't on main yet) to a new, later one: ${group.join(", ")}`);
-  if (drift.length > 0 || overloads.length > 0 || duplicates.length > 0) process.exit(1);
-  console.log("No migration redefined on both sides of a merge, no stale overloads, and no shared timestamps.");
+  if (hasProblems(problems)) process.exit(1);
+  console.log("No migration redefined on both sides of a merge, none on the branch redefining another's object unseen, no stale overloads, and no shared timestamps.");
 }
