@@ -128,6 +128,22 @@ _Avoid_: Ticket, request, form (for the instance)
 A kind of Work Item within a Module, such as Material Submittal, Inspection Request, Snag or Comment, with a short code (e.g. MAR, SAR, DAR) used in filters and Document Numbers. It fixes which Form and which Workflow its Work Items use.
 _Avoid_: Form type, category
 
+**Submittal**:
+A Work Item in the Submittals Module in which the Contractor asks the Consultant to approve something before it is used, and which ends with a Review Code. The Types are the Material Approval Request (MAR), the Supplier Approval Request (SAR) and the Document Approval Request (DAR).
+_Avoid_: Transmittal
+
+**Material Approval Request (MAR)**:
+A Submittal asking approval of a material or product for the works, from a supplier on the Approved Supplier List for its Trade.
+_Avoid_: Material submittal form
+
+**Supplier Approval Request (SAR)**:
+A Submittal asking approval of a supplier or manufacturer; approved with Code A or B, the supplier joins the Approved Supplier List.
+_Avoid_: Prequalification, vendor approval, Shop Drawing Submittal
+
+**Document Approval Request (DAR)**:
+A Submittal asking approval of a document, such as a report, a calculation or a plan.
+_Avoid_: Document submittal
+
 **Subtask**:
 A Work Item created under another Work Item, of any Type in the same Module and with its own Workflow. There is only one level, and the parent cannot close while a Subtask is open.
 _Avoid_: Child item
@@ -309,11 +325,11 @@ How a Work Item ends, set by the Transition that closes it: a Review Code, an In
 _Avoid_: Status, result
 
 **Recommended Code**:
-A Review Code a reviewer proposes to the next reviewer, for information only; the next reviewer can accept it, override it, or send it back.
+A Review Code a reviewer proposes to the next reviewer: inside the Consultant, for information, and the next reviewer can accept it, override it, or send it back; to the Owner, where the Workflow ends with the Owner's review, the Owner confirms it, which issues it, or Sends the item Back to the Consultant. Nobody else sees a Recommended Code.
 _Avoid_: Draft code, proposed status
 
 **Issued Code**:
-The Review Code given at the Workflow's final review step, which is the one that counts and appears on the Documental Record. Which step is final depends on the Workflow (e.g. the Consultant manager, or an Owner Representative after them).
+The Review Code given at the Workflow's final review step, which is the one that counts and appears on the Documental Record. Which step is final depends on the Workflow (e.g. the Consultant manager, or the Owner confirming the Consultant's Recommended Code).
 _Avoid_: Final status
 
 **Remarks**:
@@ -341,7 +357,7 @@ A named group of submittals covering one piece of work (e.g. bathrooms), submitt
 _Avoid_: Bundle, batch, transmittal
 
 **Approved Supplier List**:
-A Project's register of suppliers and manufacturers that may be used, either loaded as a pre-approved list or built up as supplier submittals are approved through their Workflow.
+A Project's register of suppliers and manufacturers that may be used, per Trade: a Supplier Approval Request closed at Code A or B adds its supplier, and a Project Admin can add one by hand or withdraw one. A Material Approval Request chooses its supplier from it; every Participant sees who is on it, never the submittal that put them there.
 _Avoid_: Vendor list, AVL
 
 **Chat**:

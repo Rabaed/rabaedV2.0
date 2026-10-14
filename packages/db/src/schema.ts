@@ -309,6 +309,21 @@ export interface ScopeTable {
   updated_at: Generated<Timestamp>;
 }
 
+/**
+ * A supplier on a Project's Approved Supplier List (RP-592). Only the columns
+ * the app role may read (V10); `source`, `source_work_item_id` and who added or
+ * withdrew it, and when, are the database's own. Written through
+ * `app.add_approved_supplier` and `app.withdraw_approved_supplier`.
+ */
+export interface ApprovedSupplierTable {
+  id: Generated<string>;
+  project_id: string;
+  name: ColumnType<Bilingual, string, string>;
+  trade_value_id: string;
+  scope_id: string | null;
+  status: Generated<"approved" | "withdrawn">;
+}
+
 export type ModuleKey = "submittals" | "inspections" | "snag_list" | "site_reports" | "drawings";
 export type StageCategory = "draft" | "in_progress" | "closed_positive" | "closed_negative" | "cancelled";
 type OwnerKind = "rabaed" | "project";
@@ -685,6 +700,7 @@ export interface Database {
   visibility_grant: VisibilityGrantTable;
   visibility_grant_value: VisibilityGrantValueTable;
   scope: ScopeTable;
+  approved_supplier: ApprovedSupplierTable;
   stage: StageTable;
   workflow_definition: WorkflowDefinitionTable;
   workflow_binding: WorkflowBindingTable;

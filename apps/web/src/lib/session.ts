@@ -1,5 +1,6 @@
 import "server-only";
 import type {
+  ApprovedSuppliers,
   SharedWorkItem,
   ActivityFeed,
   ActivityFeedQuery,
@@ -25,6 +26,7 @@ import type {
   ProjectInvitations,
   ProjectParticipants,
   ProjectSummary,
+  RaisableTypes,
   RevisionChain,
   Scopes,
   SignedInMember,
@@ -132,6 +134,11 @@ export function getProjectScopes(projectId: string): Promise<Scopes | null> {
   return apiGet<Scopes>(`/v1/projects/${encodeURIComponent(projectId)}/scopes`);
 }
 
+/** The Project's Approved Supplier List (RP-592), for its Members; null for anyone else. */
+export function getApprovedSuppliers(projectId: string): Promise<ApprovedSuppliers | null> {
+  return apiGet<ApprovedSuppliers>(`/v1/projects/${encodeURIComponent(projectId)}/approved-suppliers`);
+}
+
 /** A Project's Numbering Pattern and per-Type overrides, for its Project Members; null otherwise. */
 export function getNumberingSettings(projectId: string): Promise<NumberingSettings | null> {
   return apiGet<NumberingSettings>(`/v1/projects/${encodeURIComponent(projectId)}/numbering`);
@@ -216,6 +223,11 @@ export function getNewWorkItemForm(projectId: string, typeCode: string): Promise
   return apiGet<FormToFill>(
     `/v1/projects/${encodeURIComponent(projectId)}/work-item-types/${encodeURIComponent(typeCode)}/form`,
   );
+}
+
+/** The Submittals Types the signed-in Member may raise on a Project (the Type picker, the MAR first); null when hidden. */
+export function getRaisableTypes(projectId: string): Promise<RaisableTypes | null> {
+  return apiGet<RaisableTypes>(`/v1/projects/${encodeURIComponent(projectId)}/raisable-types`);
 }
 
 /** Who and which Companies the Member may choose in a new item's Form (only those they can see); null when hidden. */

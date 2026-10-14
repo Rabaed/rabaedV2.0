@@ -32,15 +32,15 @@ export const rabaedDefaultScreens = [
 ] as const;
 
 /**
- * A Rabaed Default Type's Form and Workflow documents, by file. The Shop Drawing (SAR) and
- * Document (DAR) submittals have the MAR's shape and, until their own Forms exist, the
- * MAR's Form (their Types point at its Form definition): so they run the MAR's Workflow
- * document and publish no Form of their own.
+ * A Rabaed Default Type's Form and Workflow documents, by file. The three submittals (MAR,
+ * SAR, DAR) have a Form each (RP-591, form-engine.md §2.11) and, until the eight Default
+ * Workflows exist (RP-596), run the MAR's Workflow document. A Type whose `form` is null
+ * publishes no Form.
  */
 export const rabaedDefaultTypes = [
   { type: "MAR", form: "MAR.json", workflow: "MAR.json" },
-  { type: "SAR", form: null, workflow: "MAR.json" },
-  { type: "DAR", form: null, workflow: "MAR.json" },
+  { type: "SAR", form: "SAR.json", workflow: "MAR.json" },
+  { type: "DAR", form: "DAR.json", workflow: "MAR.json" },
   { type: "WIR", form: "WIR.json", workflow: "WIR.json" },
   { type: "CMT", form: "CMT.json", workflow: "CMT.json" },
 ] as const;

@@ -19,13 +19,14 @@ import { useFormRendererLabels } from "@/lib/form-labels";
 import { linkSearch } from "@/lib/link-search";
 
 /**
- * Creates a MAR in Draft, then opens it: its Subject, then its Form (the latest
+ * Creates a Submittal of `typeCode` in Draft, then opens it: its Subject, then its Form (the latest
  * published Version), with Trade, Location and Scopes where the Form places
  * them. Required fields may stay empty in a Draft, except the Trade; the rest
  * are checked when it leaves Draft.
  */
 export function CreateWorkItemForm({
   projectId,
+  typeCode,
   form,
   choices,
   people,
@@ -33,6 +34,8 @@ export function CreateWorkItemForm({
   locale,
 }: {
   projectId: string;
+  /** The Type being raised: the Form is its own. */
+  typeCode: string;
   form: FormToFill;
   choices: BuiltInChoices;
   /** Who and which Companies its `member` and `participant` fields offer. */
@@ -73,7 +76,7 @@ export function CreateWorkItemForm({
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          type: "MAR",
+          type: typeCode,
           title: data.get("title"),
           // Hidden fields' answers are cleared on save, here as on the server. Trade and Location are among them.
           answers: formVisibility(form.schema, answers).answers,
