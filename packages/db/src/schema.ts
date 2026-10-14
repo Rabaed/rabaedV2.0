@@ -140,7 +140,8 @@ export interface AdminActionTable {
     | "reorder_default_outcomes"
     | "add_default_stage"
     | "rename_default_stage"
-    | "reorder_default_stages";
+    | "reorder_default_stages"
+    | "refuse_workflow_publish";
   target_kind: string;
   /** Null for a read of a list. */
   target_id: string | null;

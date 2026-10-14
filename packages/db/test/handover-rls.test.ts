@@ -261,22 +261,30 @@ async function rolledBack(as: string, fn: (trx: Parameters<Parameters<typeof wit
 
 describe("scenario RP-108-2: an item the Authorized Person doesn't see is its Step and Project only", () => {
   it("names no item id, Document Number or Subject, but its holder and Step", async () => {
-    // Ali is an engineer by now: Khalid, the only PM, holds it on arrival.
-    const id = await inReview("Unseen by the AP");
-    if ((await migrator.query("select status from step_assignment where work_item_id = $1 and status = 'pooled'", [id])).rowCount) {
-      expect(await pickUp(khalid, id)).toBe("picked_up");
+    // Two items of its own, each held by Khalid (RP-572: nothing left by an earlier scenario or file is relied on).
+    const mine: string[] = [];
+    const unseen: string[] = [];
+    for (const title of ["Unseen by the AP", "Also unseen by the AP"]) {
+      const id = await inReview(title);
+      if ((await migrator.query("select status from step_assignment where work_item_id = $1 and status = 'pooled'", [id])).rowCount) {
+        expect(await pickUp(khalid, id)).toBe("picked_up");
+      }
+      mine.push(await openAssignment(id));
+      unseen.push(id);
     }
     await rolledBack(c1.ap, async (trx) => {
       // C1's Authorized Person narrowed off every Trade: the item is out of their sight.
       expect((await sql<{ outcome: string }>`select app.set_member_visibility(${participant.c1}::uuid, ${c1.ap}::uuid, 'trade', false, '{}'::uuid[], now()) as outcome`.execute(trx)).rows[0]!.outcome).toBe("set");
-      expect((await sql<{ sees: boolean }>`select app.sees_work_item(${id}::uuid) as sees`.execute(trx)).rows[0]!.sees).toBe(false);
+      for (const id of unseen) {
+        expect((await sql<{ sees: boolean }>`select app.sees_work_item(${id}::uuid) as sees`.execute(trx)).rows[0]!.sees).toBe(false);
+      }
       await sql`select app.set_project_member_positions(${participant.c1}::uuid, ${khalid}::uuid, '{engineer}')`.execute(trx);
       const rows = (
-        await sql<{ work_item_id: string | null; document_number: string | null; title: string | null; step_name: unknown; holder: { id: string } }>`
+        await sql<{ assignment_id: string; work_item_id: string | null; document_number: string | null; title: string | null; step_name: unknown; holder: { id: string } }>`
           select * from app.handovers_needed(${khalid}::uuid, null, '{}')`.execute(trx)
       ).rows;
-      // This one and the one handed to Khalid above: neither in the AP's sight now.
-      expect(rows).toHaveLength(2);
+      // Both of ours are there (others Khalid holds may be too), none in the AP's sight now.
+      expect(rows.map((r) => r.assignment_id)).toEqual(expect.arrayContaining(mine));
       for (const row of rows) {
         expect(row).toMatchObject({ work_item_id: null, document_number: null, title: null, holder: { id: khalid } });
         expect(row.step_name).toBeTruthy();
@@ -287,6 +295,17 @@ describe("scenario RP-108-2: an item the Authorized Person doesn't see is its St
 
 describe("scenario RP-108-3: another Company's Participant narrowed reads how many Steps wait, and whose, only", () => {
   it("C1's Admin reads K1's count and name, never its Steps or Members; nobody else reads even that", async () => {
+    // A Step of K1's held by Nadia, built here (RP-572: not left by RP-108-1).
+    const own = await inReview("Held by Nadia");
+    if ((await migrator.query("select status from step_assignment where work_item_id = $1 and status = 'pooled'", [own])).rowCount) {
+      expect(await pickUp(khalid, own)).toBe("picked_up");
+    }
+    expect(await take(khalid, own, "submit")).toBe("applied");
+    // Nadia holds it, whether it arrived pooled with K1's engineer or already hers.
+    if ((await migrator.query("select status from step_assignment where work_item_id = $1 and status = 'pooled'", [own])).rowCount) {
+      expect(await pickUp(nadia, own)).toBe("picked_up");
+    }
+    expect((await migrator.query("select assignee_member_id from step_assignment where id = $1", [await openAssignment(own)])).rows[0].assignee_member_id).toBe(nadia);
     await rolledBack(c1.ap, async (trx) => {
       // K1 narrowed off Electrical: Nadia leaves the pool of the Step she holds.
       expect((await sql<{ outcome: string }>`select app.set_participant_visibility(${participant.k1}::uuid, 'trade', false, '{}'::uuid[], now()) as outcome`.execute(trx)).rows[0]!.outcome).toBe("set");
@@ -296,7 +315,7 @@ describe("scenario RP-108-3: another Company's Participant narrowed reads how ma
       // Nothing of which: no Step, item or Member, and no Handover of K1's Step.
       expect((await sql`select * from app.handovers_needed(null, ${participant.k1}::uuid, '{}')`.execute(trx)).rows).toEqual([]);
       expect((await sql<{ ids: string[] }>`select app.handover_pooled_before(null, ${participant.k1}::uuid) as ids`.execute(trx)).rows[0]!.ids).toEqual([]);
-      const held = (await migrator.query("select id from step_assignment where participant_id = $1 and status = 'picked_up' and assignee_member_id = $2", [participant.k1, nadia])).rows[0].id as string;
+      const held = await openAssignment(own);
       expect((await sql<{ outcome: string }>`select app.hand_over_step(${held}::uuid, ${nadia}::uuid, ${k1.member}::uuid, 'visibility', now()) as outcome`.execute(trx)).rows[0]!.outcome).toBe("not_offered");
       // Its own Participant: no count (it gets the Handover list instead).
       expect((await sql`select * from app.handovers_waiting(${participant.c1}::uuid)`.execute(trx)).rows).toEqual([]);
