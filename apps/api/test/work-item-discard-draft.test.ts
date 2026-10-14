@@ -26,7 +26,7 @@ beforeAll(async () => {
         at.c1Engineer.post(`/v1/projects/${at.projectId}/work-items`, {
           type: "MAR",
           title,
-          answers: { manufacturer: "ABB", supplier: await approvedSupplier(at.admin, at.projectId, at.electrical), description: "Busbar", trade: at.electrical, location: at.buildingA },
+          answers: { manufacturer: "ABB", supplier: await approvedSupplier(c1.caller, at.projectId, at.electrical), description: "Busbar", trade: at.electrical, location: at.buildingA },
         }),
         201,
       )

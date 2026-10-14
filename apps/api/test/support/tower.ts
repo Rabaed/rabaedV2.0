@@ -101,8 +101,8 @@ export type Tower = {
   c1Engineer: Caller;
   c1Pm: Caller;
   k1Manager: Caller;
-  /** C1's Authorized Person, the Project's Admin: keeps its Approved Supplier List. */
-  admin: Caller;
+  /** C1's Authorized Person, the Project's Admin: keeps its Approved Supplier List (set by buildTower; a Tower built by hand may lack it). */
+  admin?: Caller;
 };
 
 /** A Project of C1's, with a C1 engineer and PM, and K1 as its Consultant with a manager; both see all of it. */
@@ -140,7 +140,8 @@ export async function draft(at: Tower, engineer: Caller, title: string, { trade 
   // Only where the Project's MAR Form has the field (a Company's own Form copy may not).
   const form = type === "MAR" ? (await engineer.get(`/v1/projects/${at.projectId}/work-item-types/MAR/form`)).json() : null;
   const asksSupplier = JSON.stringify(form?.schema ?? "").includes('"approved_supplier"');
-  const supplier = asksSupplier ? { supplier: await approvedSupplier(at.admin, at.projectId, trade) } : {};
+  if (asksSupplier && !at.admin) throw new Error("This Tower has no admin to keep an Approved Supplier List: build it with buildTower.");
+  const supplier = asksSupplier && at.admin ? { supplier: await approvedSupplier(at.admin, at.projectId, trade) } : {};
   const res = await engineer.post(`/v1/projects/${at.projectId}/work-items`, {
     type,
     title,
