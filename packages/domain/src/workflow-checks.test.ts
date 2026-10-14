@@ -815,4 +815,76 @@ describe("workflowPublishProblems", () => {
       });
     });
   });
+
+  describe("the Owner's review (ADR 0022, RP-593)", () => {
+    const confirm = { en: "Confirm", ar: "تأكيد" };
+    /**
+     * The MAR ending with the Owner's review: the Consultant Recommends A or C to the
+     * Owner (a Submit carrying the Code), who confirms it (one "Confirm" button, a close
+     * per Code) or Sends the item Back to the Consultant.
+     */
+    const ownerReview = (): WorkflowDefinition => {
+      const d = mar();
+      step(d, "consultant_review").outcomeMode = "recommend_code";
+      addStep(d, { key: "owner_review", stage: "pending_approval", actor: { role: "owner", permission: "approve" }, outcomeMode: "confirm_code" });
+      for (const key of ["approve_a", "revise_c"]) Object.assign(transition(d, key), { kind: "submit", to: "owner_review" });
+      add(d, { key: "confirm_a", label: confirm, from: "owner_review", to: "approved", kind: "close", outcome: "A", permission: "approve" });
+      add(d, { key: "confirm_c", label: confirm, from: "owner_review", to: "revise_resubmit", kind: "close", outcome: "C", permission: "approve" });
+      add(d, { key: "owner_send_back", from: "owner_review", to: "consultant_review", kind: "send_back", permission: "approve" });
+      return d;
+    };
+
+    it("passes the Consultant's Recommended Code to the Owner, who confirms it with one button or Sends it Back", () => {
+      expect(problems(ownerReview())).toEqual([]);
+    });
+
+    it("refuses a way into the confirming Step that carries no Recommended Code", () => {
+      const d = ownerReview();
+      transition(d, "approve_a").outcome = null;
+      expect(problems(d)).toContainEqual({ code: "confirm_without_recommended_code", severity: "error", transition: "approve_a" });
+    });
+
+    it("refuses a Recommended Code from a Step that doesn't Recommend a Code", () => {
+      const d = ownerReview();
+      step(d, "consultant_review").outcomeMode = "none";
+      expect(problems(d)).toEqual([
+        { code: "confirm_without_recommended_code", severity: "error", transition: "approve_a" },
+        { code: "confirm_without_recommended_code", severity: "error", transition: "revise_c" },
+      ]);
+    });
+
+    it("refuses a Recommended Code the Owner has no confirming close for", () => {
+      const d = ownerReview();
+      d.transitions = d.transitions.filter((t) => t.key !== "confirm_c");
+      expect(problems(d)).toContainEqual({ code: "confirm_close_missing", severity: "error", transition: "revise_c" });
+    });
+
+    it("refuses a Code carried to a Step that doesn't confirm it, as before", () => {
+      const d = ownerReview();
+      step(d, "owner_review").outcomeMode = "none";
+      expect(problems(d)).toEqual(
+        expect.arrayContaining([
+          { code: "outcome_on_open_step", severity: "error", transition: "approve_a" },
+          { code: "outcome_not_from_issuing_step", severity: "error", transition: "confirm_a" },
+        ]),
+      );
+    });
+
+    it("asks Code B's table of items of the Recommendation, which the Comments are made from, not of the Owner's Confirm", () => {
+      const d = ownerReview();
+      add(d, { key: "recommend_b", from: "consultant_review", to: "owner_review", kind: "submit", outcome: "B", permission: "approve" });
+      add(d, { key: "confirm_b", label: confirm, from: "owner_review", to: "approved", kind: "close", outcome: "B", permission: "approve" });
+      expect(problems(d)).toEqual([{ code: "items_table_missing", severity: "error", transition: "recommend_b" }]);
+      transition(d, "recommend_b").actionForm = itemsForm();
+      expect(problems(d)).toEqual([]);
+    });
+
+    it("says so in English and Arabic", () => {
+      const d = ownerReview();
+      transition(d, "approve_a").outcome = null;
+      const found = workflowPublishProblems(d, context()).find((p) => p.code === "confirm_without_recommended_code");
+      expect(found?.message.en).toContain('"Approve · A"');
+      expect(found?.message.ar).toContain('"اعتماد · A"');
+    });
+  });
 });

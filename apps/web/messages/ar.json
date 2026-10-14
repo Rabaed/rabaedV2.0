@@ -1007,7 +1007,8 @@
     "grouped": "بعض الخطوات مجمّعة لأنها داخلية لشركة أخرى.",
     "outcomeModes": {
       "recommend_code": "يوصي برمز",
-      "issue_outcome": "يصدر النتيجة"
+      "issue_outcome": "يصدر النتيجة",
+      "confirm_code": "يؤكد الرمز الموصى به"
     },
     "kinds": {
       "send": "إرسال",
@@ -1087,7 +1088,8 @@
     "outcomeOptions": {
       "none": "بدون",
       "recommend_code": "يوصي برمز",
-      "issue_outcome": "يصدر النتيجة"
+      "issue_outcome": "يصدر النتيجة",
+      "confirm_code": "يؤكد الرمز الموصى به"
     },
     "draftsVisibleTo": "المسودات مرئية لـ",
     "draftsWholeCompany": "شركة المُنشئ كاملة",
