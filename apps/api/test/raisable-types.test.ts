@@ -34,10 +34,13 @@ beforeAll(async () => {
   outsider = (await api.member(c1.caller)).caller;
 });
 
-/** The test database also holds `MARV`, the MAR as it was before RP-437 (db test-support): not a Rabaed Default. */
+/**
+ * The test database also holds other tests' Submittals Types (`MARV`, the MAR as it was before
+ * RP-437, `HWT` and others from db test-support): only the Rabaed Defaults and this test's `NWF` count.
+ */
 const raisable = async (by: Caller): Promise<RaisableTypes> => {
   const { types } = (await ok(by.get(`/v1/projects/${projectId}/raisable-types`), 200)).json() as RaisableTypes;
-  return { types: types.filter((t) => t.code !== "MARV") };
+  return { types: types.filter((t) => ["MAR", "SAR", "DAR", "NWF"].includes(t.code)) };
 };
 
 describe("the Types a Member may raise", () => {
