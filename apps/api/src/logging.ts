@@ -26,7 +26,7 @@ function errorLog(error: LoggedError) {
   return { type, message: `database error ${String(error.code)}`, code: error.code, constraint: error.constraint, stack: frames };
 }
 
-/** Fastify's logger settings; `stream` is for tests (stdout otherwise). */
-export function loggerOptions(stream?: NodeJS.WritableStream): FastifyServerOptions["logger"] {
-  return { serializers: { req: requestLog, err: errorLog }, ...(stream ? { stream } : {}) };
+/** Fastify's logger settings; `stream` is for tests (stdout otherwise), `level` for setups that want errors only. */
+export function loggerOptions(stream?: NodeJS.WritableStream, level?: "error"): FastifyServerOptions["logger"] {
+  return { serializers: { req: requestLog, err: errorLog }, ...(stream ? { stream } : {}), ...(level ? { level } : {}) };
 }
