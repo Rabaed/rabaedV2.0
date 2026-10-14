@@ -245,6 +245,40 @@ export const StepAfterSendBack: Story = {
   },
 };
 
+/** A Draft Step whose Drafts only their author sees (RP-514): the setting shows it, and is changed and saved. */
+const authorOnlyDraft: WorkflowDefinition = {
+  ...builderDraft,
+  steps: builderDraft.steps.map((s) => (s.key === "draft" ? { ...s, draftsVisibleTo: "author" as const } : s)),
+};
+
+/** The Draft Step's "Drafts visible to", set to "The author only" (RP-551), switched to the whole Company and back. */
+export const StepDraftsAuthorOnly: Story = {
+  args: { definition: authorOnlyDraft, problems: builderProblemsOf(authorOnlyDraft) },
+  render,
+  play: async ({ args, canvas, context }) => {
+    const locale = storyLocale(context);
+    const labels = workflowBuilderLabels(locale);
+    await pickStep(canvas, "draft", locale);
+    const setting = () => editorOf(canvas, labels).getByRole("combobox", { name: labels.draftsVisibleTo });
+    await expect(setting()).toHaveTextContent(labels.draftsAuthorOnly);
+    await expect(editorOf(canvas, labels).getByText(labels.draftsAuthorOnlyHelp)).toBeVisible();
+    const pick = async (option: string) => {
+      await userEvent.click(setting());
+      await userEvent.click(within(document.body).getByRole("option", { name: option }));
+    };
+    await pick(labels.draftsWholeCompany);
+    await expect(args.onChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({ steps: expect.arrayContaining([expect.objectContaining({ key: "draft", draftsVisibleTo: "company" })]) }),
+    );
+    await expect(editorOf(canvas, labels).getByText(labels.draftsVisibleHelp)).toBeVisible();
+    await pick(labels.draftsAuthorOnly);
+    await expect(args.onChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({ steps: expect.arrayContaining([expect.objectContaining({ key: "draft", draftsVisibleTo: "author" })]) }),
+    );
+    await expect(setting()).toHaveTextContent(labels.draftsAuthorOnly);
+  },
+};
+
 /** V2 05: the deciding Step: its outcome, and its six Transitions, one of which is picked from the list. */
 export const StepManager: Story = {
   render,
@@ -317,6 +351,33 @@ export const TransitionCodeB: Story = {
     await expect(editor.getByRole("combobox", { name: labels.screen })).toHaveTextContent(builderScreens[2]!.name[locale]);
     await expect(editor.getByText(labels.createsItemsOf(locale === "ar" ? "ملاحظة" : "Comment"))).toBeVisible();
     await expect(editor.getByRole("link", { name: labels.editInScreens })).toHaveAttribute("href", "#screens");
+  },
+};
+
+/** A Transition's Screen switched (RP-551): to another Screen, then to none (its Internal Note only). */
+export const TransitionSwitchScreen: Story = {
+  render,
+  play: async ({ args, canvas, context }) => {
+    const locale = storyLocale(context);
+    const labels = workflowBuilderLabels(locale);
+    await pickTransition(canvas, "approve_b", locale);
+    const screen = () => editorOf(canvas, labels).getByRole("combobox", { name: labels.screen });
+    await expect(screen()).toHaveTextContent(builderScreens[2]!.name[locale]);
+    const pick = async (option: string) => {
+      await userEvent.click(screen());
+      await userEvent.click(within(document.body).getByRole("option", { name: option }));
+    };
+    await pick(builderScreens[0]!.name[locale]);
+    await expect(args.onChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({ transitions: expect.arrayContaining([expect.objectContaining({ key: "approve_b", screen: builderScreens[0]!.key })]) }),
+    );
+    await expect(screen()).toHaveTextContent(builderScreens[0]!.name[locale]);
+    await pick(labels.screenNone);
+    const saved = (args.onChange as ReturnType<typeof fn>).mock.lastCall![0] as WorkflowDefinition;
+    await expect(saved.transitions.find((t) => t.key === "approve_b")).toMatchObject({ actionForm: null });
+    await expect(saved.transitions.find((t) => t.key === "approve_b")).not.toHaveProperty("screen");
+    await expect(screen()).toHaveTextContent(labels.screenNone);
+    await expect(editorOf(canvas, labels).getByText(labels.internalNoteBlock)).toBeVisible();
   },
 };
 

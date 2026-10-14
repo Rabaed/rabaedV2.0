@@ -1083,6 +1083,8 @@
     "poolHint": "Pool: anyone holding {holders}",
     "editsForm": "Edits the raiser's Form",
     "editsFormHelp": "Whoever holds this Step edits the raiser's Form. Nobody edits it after a Submit.",
+    "editsFormDefaultOn": "Default: on (this Step has the Draft Step's Participant and Permission).",
+    "editsFormDefaultOff": "Default: off (this Step's Permission differs from the Draft Step's).",
     "outcomeHeading": "Outcome",
     "outcomeOptions": {
       "none": "None",
@@ -1090,9 +1092,10 @@
       "issue_outcome": "Issues the outcome"
     },
     "draftsVisibleTo": "Drafts visible to",
-    "draftsWholeCompany": "The author's whole Company",
+    "draftsWholeCompany": "The author's whole Company (default)",
     "draftsAuthorOnly": "The author only",
     "draftsVisibleHelp": "A Draft is read by the author's whole Company.",
+    "draftsAuthorOnlyHelp": "Only the Member holding a Draft sees it, until it leaves the Draft Step. Other Companies never see a Draft.",
     "afterSendBack": "After a Send Back",
     "afterSendBackComment": "Comment only",
     "afterSendBackEditForm": "Edit the Form",

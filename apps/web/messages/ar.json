@@ -1083,6 +1083,8 @@
     "poolHint": "المجموعة: أي شخص يتولى {holders}",
     "editsForm": "يعدّل نموذج المُنشئ",
     "editsFormHelp": "من يتولى هذه الخطوة يعدّل نموذج المُنشئ. لا يعدّله أحد بعد التقديم.",
+    "editsFormDefaultOn": "الافتراضي: مفعّل (لهذه الخطوة مشارك خطوة المسودة وصلاحيتها).",
+    "editsFormDefaultOff": "الافتراضي: غير مفعّل (صلاحية هذه الخطوة تختلف عن صلاحية خطوة المسودة).",
     "outcomeHeading": "النتيجة",
     "outcomeOptions": {
       "none": "بدون",
@@ -1090,9 +1092,10 @@
       "issue_outcome": "يصدر النتيجة"
     },
     "draftsVisibleTo": "المسودات مرئية لـ",
-    "draftsWholeCompany": "شركة المُنشئ كاملة",
+    "draftsWholeCompany": "شركة المُنشئ كاملة (الافتراضي)",
     "draftsAuthorOnly": "المُنشئ فقط",
     "draftsVisibleHelp": "تُقرأ المسودة من شركة المُنشئ كاملة.",
+    "draftsAuthorOnlyHelp": "لا يرى المسودة إلا من يتولاها، حتى تغادر خطوة المسودة. لا ترى الشركات الأخرى أي مسودة.",
     "afterSendBack": "بعد الإرجاع إلى المُقدِّم",
     "afterSendBackComment": "تعليق فقط",
     "afterSendBackEditForm": "تعديل النموذج",
