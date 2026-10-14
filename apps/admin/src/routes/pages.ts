@@ -2,6 +2,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { extname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { FastifyPluginAsync } from "fastify";
+import { publicRoute } from "../app.ts";
 
 // Rabaed Admin's screens: static pages and their scripts and styles, which call the JSON
 // API above. Read once at start; nothing in them is per request. The home page is plain
@@ -41,7 +42,9 @@ function builtAssets(dir: string): Record<string, Page> {
 
 export const pageRoutes = (): FastifyPluginAsync => async (app) => {
   const built = builtAssets(fileURLToPath(new URL("../../dist", import.meta.url)));
+  // Public: static, the same for everyone; their scripts ask the API, which checks.
+  // Each file is its own route, so nothing else under /assets/ is public.
   for (const [path, page] of Object.entries({ ...built, ...pages })) {
-    app.get(path, async (_request, reply) => reply.type(page.type).header("cache-control", "no-cache").send(page.body));
+    app.get(path, publicRoute, async (_request, reply) => reply.type(page.type).header("cache-control", "no-cache").send(page.body));
   }
 };

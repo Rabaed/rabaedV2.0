@@ -1,7 +1,7 @@
 import { signInRequest } from "@rabaed/domain";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { cookieNames, HttpError, type AdminContext } from "../app.ts";
+import { cookieNames, HttpError, publicRoute, type AdminContext } from "../app.ts";
 import { checkCode, checkPassword, endSession } from "../sign-in.ts";
 
 // Browsers drop a cookie after 400 days at most.
@@ -13,7 +13,7 @@ export const sessionRoutes =
     // Step one: the password. The code goes to the Engineer's email.
     app.post(
       "/v1/sign-in",
-      { schema: { body: signInRequest, response: { 202: z.object({ codeSentTo: z.string() }) } } },
+      { ...publicRoute, schema: { body: signInRequest, response: { 202: z.object({ codeSentTo: z.string() }) } } },
       async (request, reply) => {
         const outcome = await checkPassword(ctx.db, ctx.mailer, request.body, ctx.seen(request), ctx.now());
         if (outcome.kind === "invalid_credentials") throw new HttpError(401, "invalid_credentials");
@@ -24,7 +24,7 @@ export const sessionRoutes =
     );
 
     // Step two: the code, in the same browser.
-    app.post("/v1/sign-in/code", { schema: { body: z.object({ code: z.string().trim().regex(/^\d{6}$/) }) } }, async (request, reply) => {
+    app.post("/v1/sign-in/code", { ...publicRoute, schema: { body: z.object({ code: z.string().trim().regex(/^\d{6}$/) }) } }, async (request, reply) => {
       const { cookies } = request;
       const outcome = await checkCode(
         ctx.db,
@@ -41,7 +41,7 @@ export const sessionRoutes =
       return reply.code(204).send();
     });
 
-    app.delete("/v1/session", async (request, reply) => {
+    app.delete("/v1/session", publicRoute, async (request, reply) => {
       const token = request.cookies[cookieNames.session];
       if (token) await endSession(ctx.db, token, ctx.seen(request), ctx.now());
       ctx.clearCookie(reply, "session");

@@ -26,17 +26,11 @@ const refusedCode = (reason: NumberingRefusal) => (reason === "invalid_code" ? n
 export const numberingRoutes =
   (ctx: AdminContext): FastifyPluginAsyncZod =>
   async (app) => {
-    const signedIn = {
-      onRequest: async (request: Parameters<AdminContext["requireEngineer"]>[0]) => {
-        ctx.requireEngineer(request);
-      },
-    };
     const projectParams = z.object({ projectId: z.uuid() });
 
     app.get(
       "/v1/projects/:projectId/numbering",
       {
-        ...signedIn,
         schema: { params: projectParams, querystring: z.object({ reason: engineerReason }), response: { 200: adminNumbering } },
       },
       async (request) => {
@@ -49,7 +43,7 @@ export const numberingRoutes =
 
     app.post(
       "/v1/projects/:projectId/numbering-pattern",
-      { ...signedIn, schema: { params: projectParams, body: adminSaveNumberingPatternRequest } },
+      { schema: { params: projectParams, body: adminSaveNumberingPatternRequest } },
       async (request, reply) => {
         const engineerId = ctx.requireEngineer(request);
         const result = await saveNumberingPattern(ctx.db, engineerId, request.params.projectId, request.body, ctx.now());
@@ -60,7 +54,7 @@ export const numberingRoutes =
 
     app.post(
       "/v1/participants/:participantId/code",
-      { ...signedIn, schema: { params: z.object({ participantId: z.uuid() }), body: adminSetParticipantCodeRequest } },
+      { schema: { params: z.object({ participantId: z.uuid() }), body: adminSetParticipantCodeRequest } },
       async (request, reply) => {
         const engineerId = ctx.requireEngineer(request);
         const result = await setParticipantCode(ctx.db, engineerId, request.params.participantId, request.body);
@@ -71,7 +65,7 @@ export const numberingRoutes =
 
     app.post(
       "/v1/projects/:projectId/numbering-counters/start",
-      { ...signedIn, schema: { params: projectParams, body: adminCounterStartRequest, response: { 200: counterStart } } },
+      { schema: { params: projectParams, body: adminCounterStartRequest, response: { 200: counterStart } } },
       async (request) => {
         const engineerId = ctx.requireEngineer(request);
         const result = await setNumberingCounterStart(ctx.db, engineerId, request.params.projectId, request.body, ctx.now());

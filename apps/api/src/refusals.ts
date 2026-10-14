@@ -1,4 +1,4 @@
-import type { BilingualText, DefinitionIssue, FieldError, HandoverStep, ScreenProblem, StageCopyProblem, WorkflowProblem } from "@rabaed/domain";
+import type { BilingualText, DefinitionIssue, FieldError, HandoverStep, OutcomesAndStages, ScreenProblem, StageCopyProblem, WorkflowProblem } from "@rabaed/domain";
 import { forbidden, HttpError, notFound } from "./http-error.ts";
 
 // Every refusal the API's commands answer with, as the API's HTTP answer.
@@ -117,6 +117,9 @@ const answers = {
   workflow_not_published: () => new HttpError(409, "workflow_not_published"),
   workflow_not_for_type: () => new HttpError(422, "workflow_not_for_type"),
   workflow_name_names_participant: () => new HttpError(422, "workflow_name_names_participant"),
+  // Binding to, or unbinding back onto, a Rabaed Default whose latest Version uses an outcome or
+  // Stage the Project lacks (RP-566): the body names them, the Project's own sets only.
+  default_lacks_entries: () => new HttpError(409, "default_lacks_entries"),
   // A publish's Change Note (RP-555): blank or too long; on an exception's Workflow, naming a Participant (V15).
   invalid_change_note: () => new HttpError(422, "invalid_change_note"),
   change_note_names_participant: () => new HttpError(422, "change_note_names_participant"),
@@ -163,6 +166,7 @@ export function refusal(result: {
   project?: BilingualText;
   steps?: number;
   company?: BilingualText;
+  lacking?: OutcomesAndStages;
 }): HttpError {
   const error = answers[result.reason]();
   const details = {
@@ -172,6 +176,7 @@ export function refusal(result: {
     ...(result.handovers ? { handovers: result.handovers } : {}),
     ...(result.step && result.project ? { step: result.step, project: result.project } : {}),
     ...(result.steps !== undefined && result.company ? { steps: result.steps, company: result.company } : {}),
+    ...(result.lacking ? { outcomes: result.lacking.outcomes, stages: result.lacking.stages } : {}),
   };
   return Object.keys(details).length > 0 ? new HttpError(error.statusCode, error.code, details) : error;
 }

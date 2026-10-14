@@ -1,4 +1,4 @@
-import { writeRabaedDefaultWorkflow, type Db, type RabaedDefaultResult } from "@rabaed/db";
+import { rabaedDefaultWorkflowId, writeRabaedDefaultWorkflow, type Db, type RabaedDefaultResult } from "@rabaed/db";
 import type { RabaedWorkflowRequest } from "@rabaed/domain";
 import { asEngineer } from "./admin-action.ts";
 import { Refused, refusable } from "./refusals.ts";
@@ -16,7 +16,8 @@ type Refusal = Exclude<RabaedDefaultResult, { ok: true }>;
  * Rabaed Engineer `engineerId` saves the definition as the draft of Type `typeCode`'s
  * Rabaed Default or, with `publish`, publishes it as its next Version after every
  * publish check, logged in admin_action with the reason. A refusal rolls back and logs
- * nothing.
+ * nothing, but a publish refused because Projects running the Rabaed Default lack an
+ * outcome or Stage it uses, which is logged as `refuse_workflow_publish` (RP-566).
  */
 export async function writeRabaedWorkflow(
   db: Db,
@@ -41,6 +42,17 @@ export async function writeRabaedWorkflow(
     }),
   );
   if (result.ok) return result.value;
+  // A publish refused because Projects running the Rabaed Default lack what it uses is logged on
+  // its own (the refused one rolled back): the reason, how many Projects and which outcomes and
+  // Stages, never which Projects (RP-566, V9).
+  if (refusal!.reason === "projects_lack_entries") {
+    const { projects, outcomes, stages } = refusal!;
+    await asEngineer(db, { engineerId, action: "refuse_workflow_publish", reason: input.reason }, async (trx) => ({
+      target: { kind: "workflow_definition", id: await rabaedDefaultWorkflowId(trx, typeCode) },
+      after: { typeCode, projects, outcomes, stages },
+      result: null,
+    }));
+  }
   return refusal!;
 }
 
