@@ -421,33 +421,30 @@ describe("Rabaed Admin's Workflows screen (visibility scenario RP-443-1)", () =>
 // RP-566 (decided 2026-10-14, option 1): an edit of a Rabaed Default set reaches only the Projects
 // created afterwards, so publishing a Rabaed Default Version is refused while a Project running
 // that Default lacks an outcome or Stage it uses. The refusal names how many Projects and which
-// entries, never which Projects or Companies (visibility scenario RP-566-1, V9).
+// entries, never which Projects or Companies (visibility scenario RP-566-1, V9). The ticket's MAR is
+// played by this file's own Rabaed Default Type, a copy of MAR's shape: MAR's published Versions are
+// every other suite's (they count them), and a published Version can't be taken back.
 describe("a Rabaed Default Version that uses an outcome or Stage some Project lacks (visibility scenario RP-566-1)", () => {
   const suffix = Math.random().toString(36).slice(2, 8);
   const code = `Z${suffix}`;
   const key = `held_${suffix}`;
-  let marTypeId = "";
-  let marDefinitionId = "";
+  let typeId = "";
   let original: { versionNo: number; definition: WorkflowDefinition };
+  // The Step moved into the new Stage: one in a Stage of the same category, so only the Stage's absence refuses it.
+  let movedStep = "";
 
   beforeAll(async () => {
-    const mar = await migrator
-      .selectFrom("work_item_type")
-      .select(["id", "workflow_definition_id"])
-      .where("owner_kind", "=", "rabaed")
-      .where("code", "=", "MAR")
-      .executeTakeFirstOrThrow();
-    marTypeId = mar.id;
-    marDefinitionId = mar.workflow_definition_id!;
-    original = (await readLatestPublishedDefinition(adminDb, marDefinitionId))!;
+    typeId = (await migrator.selectFrom("work_item_type").select("id").where("owner_kind", "=", "rabaed").where("code", "=", TYPE).executeTakeFirstOrThrow()).id;
+    original = (await readLatestPublishedDefinition(adminDb, definitionId))!;
+    const inProgress = new Set(
+      (await migrator.selectFrom("stage").select("key").where("owner_kind", "=", "rabaed").where("module_key", "=", "submittals").where("category", "=", "in_progress").execute()).map(
+        (s) => s.key,
+      ),
+    );
+    movedStep = original.definition.steps.find((s) => inProgress.has(s.stage))!.key;
   });
-  // MAR's Rabaed Default is every suite's: publish its definition again, then drop the test's entries.
+  // The Rabaed Default sets are shared by every suite: leave them as they were found.
   afterAll(async () => {
-    const latest = (await readLatestPublishedDefinition(adminDb, marDefinitionId))!;
-    if (latest.versionNo !== original.versionNo) {
-      const back = await engineer.browser.post(`/v1/workflows/MAR/publish`, { definition: original.definition, reason: "Put MAR back after RP-566's test" });
-      expect(back.statusCode, back.body).toBe(200);
-    }
     await migrator.deleteFrom("outcome").where("code", "=", code).execute();
     await migrator.deleteFrom("stage").where("key", "=", key).execute();
   });
@@ -461,19 +458,19 @@ describe("a Rabaed Default Version that uses an outcome or Stage some Project la
   };
   const withStepIn = (stage: string): WorkflowDefinition => ({
     ...original.definition,
-    steps: original.definition.steps.map((s) => (s.key === "contractor_engineer" ? { ...s, stage } : s)),
+    steps: original.definition.steps.map((s) => (s.key === movedStep ? { ...s, stage } : s)),
   });
-  const latestVersionNo = async () => (await readLatestPublishedDefinition(adminDb, marDefinitionId))!.versionNo;
+  const latestVersionNo = async () => (await readLatestPublishedDefinition(adminDb, definitionId))!.versionNo;
   const publishActions = () =>
-    adminDb.selectFrom("admin_action").select("reason").where("target_id", "=", marDefinitionId).where("action", "=", "publish_workflow").execute();
-  /** The outcomes and Stages of the Version a new MAR on Project `projectId` starts on that the Project's own sets lack. */
+    adminDb.selectFrom("admin_action").select("reason").where("target_id", "=", definitionId).where("action", "=", "publish_workflow").execute();
+  /** The outcomes and Stages of the Version a new item of the Type on Project `projectId` starts on that the Project's own sets lack. */
   const outsideSets = async (projectId: string) =>
     (
       await sql<{ entry: string }>`
-        with v as (select app.new_item_workflow_version(${projectId}::uuid, ${marTypeId}::uuid, null) as id)
+        with v as (select app.new_item_workflow_version(${projectId}::uuid, ${typeId}::uuid, null) as id)
         select t.outcome as entry from workflow_transition t join v on t.workflow_version_id = v.id
         where t.outcome is not null
-          and not exists (select 1 from outcome o where o.project_id = ${projectId}::uuid and o.work_item_type_id = ${marTypeId}::uuid and o.code = t.outcome and o.closing)
+          and not exists (select 1 from outcome o where o.project_id = ${projectId}::uuid and o.work_item_type_id = ${typeId}::uuid and o.code = t.outcome and o.closing)
         union
         select s.stage_key from workflow_step s join v on s.workflow_version_id = v.id
         where not exists (select 1 from stage x where x.project_id = ${projectId}::uuid and x.module_key = 'submittals' and x.key = s.stage_key)
@@ -484,7 +481,7 @@ describe("a Rabaed Default Version that uses an outcome or Stage some Project la
     const existing = await newProjectWithAdmin();
     const closed = await newProject();
     await migrator.updateTable("project").set({ status: "closed", closed_at: new Date().toISOString() }).where("id", "=", closed).execute();
-    const add = await engineer.browser.post(`/v1/workflows/MAR/outcomes`, {
+    const add = await engineer.browser.post(`/v1/workflows/${TYPE}/outcomes`, {
       code, name: { en: "Approved on site", ar: "معتمد في الموقع" }, closing: true, polarity: "positive", actions: [], reason: "Add an outcome for RP-566",
     });
     expect(add.statusCode, add.body).toBe(200);
@@ -493,13 +490,13 @@ describe("a Rabaed Default Version that uses an outcome or Stage some Project la
       insert into outcome (owner_kind, project_id, work_item_type_id, code, name, closing, polarity, actions, sort)
       select 'project', p.id, d.work_item_type_id, d.code, d.name, d.closing, d.polarity, d.actions, d.sort
       from project p
-      cross join (select * from outcome where owner_kind = 'rabaed' and work_item_type_id = ${marTypeId}::uuid and code = ${code}) d
+      cross join (select * from outcome where owner_kind = 'rabaed' and work_item_type_id = ${typeId}::uuid and code = ${code}) d
       where p.id not in (${existing.projectId}::uuid, ${closed}::uuid)
         and not exists (select 1 from outcome o where o.project_id = p.id and o.work_item_type_id = d.work_item_type_id and o.code = d.code)
     `.execute(migrator);
     const logged = (await publishActions()).length;
 
-    const refused = await engineer.browser.post(`/v1/workflows/MAR/publish`, { definition: withCloseUsing(code), reason: "Close with the new outcome" });
+    const refused = await engineer.browser.post(`/v1/workflows/${TYPE}/publish`, { definition: withCloseUsing(code), reason: "Close with the new outcome" });
     expect(refused.statusCode, refused.body).toBe(422);
     // How many Projects and which entries: no Project or Company is named.
     expect(refused.json()).toEqual({ error: "projects_lack_entries", projects: 1, outcomes: [code], stages: [] });
@@ -507,24 +504,24 @@ describe("a Rabaed Default Version that uses an outcome or Stage some Project la
     expect((await publishActions()).length).toBe(logged);
     // The workflow:publish CLI is refused alike.
     const { email } = await migrator.selectFrom("rabaed_engineer").select("email").where("id", "=", engineer.id).executeTakeFirstOrThrow();
-    expect(await publishRabaedWorkflowAs(migrator, { engineerEmail: email, typeCode: "MAR", definition: withCloseUsing(code), reason: "From the CLI" })).toEqual({
+    expect(await publishRabaedWorkflowAs(migrator, { engineerEmail: email, typeCode: TYPE, definition: withCloseUsing(code), reason: "From the CLI" })).toEqual({
       ok: false, reason: "projects_lack_entries", projects: 1, outcomes: [code], stages: [],
     });
     expect(await outsideSets(existing.projectId)).toEqual([]);
 
     const added = await withMember(appDb, existing.memberId, (trx) =>
       sql<{ outcome: string }>`
-        select app.add_outcome(${existing.projectId}::uuid, 'MAR', ${code}, '{"en": "Approved on site", "ar": "معتمد في الموقع"}'::jsonb, true, 'positive', '[]'::jsonb) as outcome
+        select app.add_outcome(${existing.projectId}::uuid, ${TYPE}, ${code}, '{"en": "Approved on site", "ar": "معتمد في الموقع"}'::jsonb, true, 'positive', '[]'::jsonb) as outcome
       `.execute(trx),
     );
     expect(added.rows).toEqual([{ outcome: "added" }]);
 
-    const published = await engineer.browser.post(`/v1/workflows/MAR/publish`, { definition: withCloseUsing(code), reason: "Close with the new outcome" });
+    const published = await engineer.browser.post(`/v1/workflows/${TYPE}/publish`, { definition: withCloseUsing(code), reason: "Close with the new outcome" });
     expect(published.statusCode, published.body).toBe(200);
     expect(published.json()).toEqual({ versionNo: original.versionNo + 1 });
-    // A new MAR on the Project starts on it, and every outcome and Stage it may reach is in the Project's sets.
+    // A new item on the Project starts on it, and every outcome and Stage it may reach is in the Project's sets.
     const startsOn = await sql<{ version_no: number }>`
-      select v.version_no from workflow_version v where v.id = app.new_item_workflow_version(${existing.projectId}::uuid, ${marTypeId}::uuid, null)
+      select v.version_no from workflow_version v where v.id = app.new_item_workflow_version(${existing.projectId}::uuid, ${typeId}::uuid, null)
     `.execute(migrator);
     expect(startsOn.rows).toEqual([{ version_no: original.versionNo + 1 }]);
     expect(await outsideSets(existing.projectId)).toEqual([]);
@@ -544,7 +541,7 @@ describe("a Rabaed Default Version that uses an outcome or Stage some Project la
     `.execute(migrator);
     const before = await latestVersionNo();
 
-    const refused = await engineer.browser.post(`/v1/workflows/MAR/publish`, { definition: withStepIn(key), reason: "Hold at the new Stage" });
+    const refused = await engineer.browser.post(`/v1/workflows/${TYPE}/publish`, { definition: withStepIn(key), reason: "Hold at the new Stage" });
     expect(refused.statusCode, refused.body).toBe(422);
     expect(refused.json()).toEqual({ error: "projects_lack_entries", projects: 1, outcomes: [], stages: [key] });
     expect(await latestVersionNo()).toBe(before);
