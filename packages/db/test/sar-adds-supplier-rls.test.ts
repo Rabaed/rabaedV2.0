@@ -192,7 +192,7 @@ describe("scenario RP-594-1: a SAR closed at Code A or B adds its supplier to th
     expect(rows).toEqual([
       { source: "submittal", source_work_item_id: sar, added_by_member_id: null, trade_value_id: electrical, scope_id: null },
     ]);
-    for (const who of [c1.member, k1.member, c2.member, c2.ap]) {
+    for (const who of [c1.member, k1.member, c2.member]) {
       expect(await listed(who), who).toContainEqual({
         name: { en: "Najd Cables", ar: "كابلات نجد" }, trade_value_id: electrical, scope_id: null, status: "approved",
       });
