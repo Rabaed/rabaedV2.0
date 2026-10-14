@@ -167,8 +167,10 @@ describe("scenario RP-580-1: an item Sent Back to a \"Comment only\" Step", () =
   it("refuses adding or removing a Document, and changing the Links", async () => {
     expect((await documents(engineer, id)).canChange).toBe(false);
     await refused(engineer.post(`/v1/work-items/${id}/documents`, { ...pdf("CMT-1-new.pdf"), body: undefined, sizeBytes: 20 }));
+    // Every Document it had at the Send Back was frozen at the Submit before it, and none can be added.
     const removed = await engineer.delete(`/v1/work-items/${id}/documents/${datasheet}`);
     expect(removed.statusCode, removed.body).toBe(409);
+    expect(removed.json()).toMatchObject({ error: "document_frozen" });
     await refused(engineer.post(`/v1/work-items/${id}/links`, { workItemId: other }));
     expect((await documents(engineer, id)).documents.map((d) => d.id)).toEqual([datasheet]);
   });
@@ -259,6 +261,29 @@ describe("an edited Workflow says \"Comment only\" where a Send Back leads, unle
       internal_review: "comment",
       consultant_review: null,
       consultant_approval: null,
+      contractor_engineer: null,
+    });
+  });
+
+  it("a copy published without a save says \"Comment only\" there too: every Version published from now on says it", async () => {
+    const type = await sql<{ workflow_definition_id: string }>`
+      select workflow_definition_id from work_item_type where owner_kind = 'rabaed' and code = ${BEFORE}
+    `.execute(migrator);
+    const copied = await c1.caller.post(`/v1/workflows/${type.rows[0]!.workflow_definition_id}/duplicate`, {
+      projectId,
+      name: bilingual("Sent Back route, published at once"),
+    });
+    expect(copied.statusCode, copied.body).toBe(201);
+    const id = copied.json().id as string;
+    const published = await c1.caller.post(`/v1/workflows/${id}/publish`);
+    expect(published.statusCode, published.body).toBe(200);
+    expect(settings((await readWorkflow(id)).published!.definition)).toEqual({
+      draft: "comment",
+      internal_review: "comment",
+      consultant_review: null,
+      consultant_approval: null,
+      approved: null,
+      revise_resubmit: null,
       contractor_engineer: null,
     });
   });

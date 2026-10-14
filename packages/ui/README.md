@@ -25,7 +25,7 @@ Find a component here before reading the rest of this file. Paths are under `pac
 | `revision/` | `RevisionPicker`, `RevisionActions`, `ReplacementActions` |
 | `settings/` | `SettingsLayout` (the Project Settings frame) |
 | `shell/` | `AppShell`, `TopBar`, `Sidebar`, `PageFrame`, `PageHeader`, `ProjectTabs`, `MemberMenu` |
-| `status/` | `StagePill`, `StageDot`, `AgeDots`, `CodeBadge`, `SaveStatus`, `WithChip`, `WorkItemCard`, `stageColour` |
+| `status/` | `StagePill`, `StageDot`, `AgeDots`, `CodeBadge`, `SaveStatus`, `SentBackNotice`, `WithChip`, `WorkItemCard`, `stageColour` |
 | `views/` | Whole views: `WorkItemList`, `WorkItemTable`, `WorkItemBoard` (Kanban), `ProjectDashboard`, `ProjectCards`, `ProjectsBrowser`, `ActivityFeedPanel`, Home cards, `ColumnSettings` |
 | `watch/` | `WatchButton` |
 | `workflow/` | The Workflow builder: `WorkflowBuilder`, `WorkflowCanvas`, `WorkflowStepList`, `WorkflowCompareDialog`, rule dialog and labels |
