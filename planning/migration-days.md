@@ -8,3 +8,12 @@ Why (RP-560): `20270117` was reserved for RP-525's review fixes only in a commen
 
 | Day | Issue or spec | Lane | Purpose |
 | --- | --- | --- | --- |
+| 20270401 | RP-593 | B | The Owner's review |
+| 20270402 | RP-592 | B | Approved Supplier List |
+| 20270403 | RP-590 | B | Submittal Type names |
+| 20270404 | RP-591 | B | SAR and DAR Forms |
+| 20270405 | RP-594 | B | A SAR at A or B adds its supplier |
+| 20270406 | RP-595 | B | MAR supplier field |
+| 20270407 | RP-596 | B | Eight default Workflows |
+| 20270408 | RP-597 | B | Demo |
+| 20270409 | spec RP-598 | B | Review fixes |

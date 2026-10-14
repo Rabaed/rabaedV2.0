@@ -22,11 +22,12 @@ Every `page.tsx` under `apps/web/src/app/[locale]/`. There is no `(app)` route g
 | `projects/[projectId]/page.tsx` | `/projects/:projectId` | Project dashboard |
 | `projects/[projectId]/activity/page.tsx` | `/projects/:projectId/activity` | Activity Feed at full height |
 | `projects/[projectId]/work-items/page.tsx` | `/projects/:projectId/work-items` | Submittals tab: List or Kanban |
-| `projects/[projectId]/work-items/new/page.tsx` | `/projects/:projectId/work-items/new` | Create a MAR in Draft |
+| `projects/[projectId]/work-items/new/page.tsx` | `/projects/:projectId/work-items/new` | Create a Submittal in Draft: Type picker, `?type=` (RP-590) |
 | `projects/[projectId]/[moduleTab]/page.tsx` | `/projects/:projectId/:moduleTab` | Any other Module's tab (Inspections, Snag List...), same List or Kanban |
 | `projects/[projectId]/settings/page.tsx` | `/projects/:projectId/settings` | Redirects to Document Numbering |
 | `projects/[projectId]/settings/numbering/page.tsx` | `/projects/:projectId/settings/numbering` | Document Numbering settings |
 | `projects/[projectId]/settings/trades-locations/page.tsx` | `/projects/:projectId/settings/trades-locations` | Trades, Scopes, Sub-scopes and Locations |
+| `projects/[projectId]/settings/approved-suppliers/page.tsx` | `/projects/:projectId/settings/approved-suppliers` | The Approved Supplier List: suppliers per Trade; a Project Admin adds and withdraws (RP-592) |
 | `projects/[projectId]/settings/visibility/page.tsx` | `/projects/:projectId/settings/visibility` | What each Participant is granted |
 | `projects/[projectId]/settings/workflows/page.tsx` | `/projects/:projectId/settings/workflows` | Each Work Item Type's Workflow, Version, exceptions; duplicate, Library, versions (RP-441) |
 | `projects/[projectId]/settings/workflows/[workflowId]/page.tsx` | `/projects/:projectId/settings/workflows/:workflowId` | Workflow builder |
