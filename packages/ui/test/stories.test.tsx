@@ -9,8 +9,7 @@
  *   5. in a phone story, give every interactive element a 44 x 44px hit area (inline text
  *      links are exempt; anything else needs `parameters.touchTargets.exempt` with a reason,
  *      see src/storybook/touch-target.ts),
- *   6. match its committed screenshot (Linux only; see vitest.config.ts) exactly, unless
- *      `parameters.screenshot` allows a few pixels with a reason (a render that varies run to run).
+ *   6. match its committed screenshot (Linux only; see vitest.config.ts) exactly.
  * Stories with `parameters.phone` render 390px wide on a touch screen
  * (pointer: coarse), so they can check 44px touch targets. Stories with
  * `parameters.overlay` (dialogs, sheets, toasts) leave their overlay open and
@@ -28,9 +27,6 @@ import { beforeAll, describe, expect, inject, test } from "vitest";
 import { cdp, page } from "vitest/browser";
 import preview from "../.storybook/preview.tsx";
 import { type TouchTargetExemption, touchTargetOffenders } from "../src/storybook/touch-target.ts";
-
-/** A story's allowance for a render that varies by a few pixels from run to run; `reason` says why. */
-type ScreenshotTolerance = { allowedMismatchedPixels: number; reason: string };
 
 declare module "vitest" {
   export interface ProvidedContext {
@@ -136,12 +132,6 @@ for (const locale of locales) {
           }
 
           if (inject("compareScreenshots")) {
-            // Exact match, unless the story allows a few pixels and says why (`parameters.screenshot`).
-            const tolerance = Story.parameters.screenshot as ScreenshotTolerance | undefined;
-            if (tolerance) expect(tolerance.reason.trim()).not.toBe("");
-            const options = tolerance
-              ? { comparatorName: "pixelmatch" as const, comparatorOptions: { allowedMismatchedPixels: tolerance.allowedMismatchedPixels } }
-              : undefined;
             if (overlay) {
               // The whole viewport, overlays included: a transparent box over it to screenshot
               // (the test iframe's <html> can't be located).
@@ -151,12 +141,12 @@ for (const locale of locales) {
               frame.style.cssText = "position: fixed; inset: 0; pointer-events: none;";
               document.body.append(frame);
               try {
-                await expect.element(page.getByTestId("viewport")).toMatchScreenshot(`${Story.id}--${locale}`, options);
+                await expect.element(page.getByTestId("viewport")).toMatchScreenshot(`${Story.id}--${locale}`);
               } finally {
                 frame.remove();
               }
             } else {
-              await expect.element(page.getByTestId("story")).toMatchScreenshot(`${Story.id}--${locale}`, options);
+              await expect.element(page.getByTestId("story")).toMatchScreenshot(`${Story.id}--${locale}`);
             }
           }
         });
