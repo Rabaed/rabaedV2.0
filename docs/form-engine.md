@@ -182,6 +182,13 @@ The part-1 MAR is a Rabaed Default written as data (migration `mar_quantity` com
 - New MARs pin Version 3. MARs on Version 1 or 2 keep showing and validating with theirs, leaving Draft included; Version 2 knows no `related_submittals`.
 - The demo (README, "Demo: the MAR journey") seeds an approved MAR in Tower 1 and a Submitted MAR on Version 3 in Tower 2 that links it under Related submittals and as a free Link, plus a TMC engineer (Omar) who covers Tower 2 only, so he reads the approved MAR as its Document Number and Subject (E1). The walkthrough's steps 10–12 show the Links, the hidden Link and Linked from (E3), and `apps/api/test/demo-seed.test.ts` follows them through the API.
 
+### 2.11 The three Rabaed Default submittal Forms (as built, RP-591, spec RP-598)
+
+- One Form per Submittal Type: the MAR's (above), the SAR's and the DAR's. Migration `20270404000000_sar_dar_forms.sql` gave the SAR and DAR Types a Form definition each (they pointed at the MAR's until then); `apps/admin/forms/SAR.json` and `DAR.json` are published into them by `pnpm defaults:publish` as Version 1 (`rabaed-defaults.ts`). Items already raised keep the MAR Form Version they were pinned to (ADR 0006). The Forms are drafted from typical KSA practice for the owner's review; the owner rebuilds them later in the form builder (RP-19). Every label is in English and Arabic.
+- **SAR** (Supplier Approval Request), sections: **Supplier details** (`supplier_name_en` and `supplier_name_ar`, text, both required: the name that becomes the Approved Supplier List entry, so **these two keys are the ones "a SAR adds its supplier" (RP-594) reads**; `commercial_registration_number`, required; `country_of_origin`; `contact_person`; `contact_email` (`email`); `contact_phone` (`phone`)), **Proposal** (`proposed_supply`, textarea, required; `additional_information`), **Experience** (`past_projects`, a `table` of project name (required), client, city, year, what was supplied), **Documents** (`company_profile`, PDF, required; `iso_certificates`; `saso_certificates`) and **Classification** (Trade, Location, Scopes: the Scopes are the ones the supplier is proposed for).
+- **DAR** (Document Approval Request), sections: **Document details** (`document_type`, `select` of Report, Calculation, Plan, Procedure, Other, required; `document_title`, required; `document_revision`, the document's own revision; `specification_section`), **Documents** (`document`, `attachments`, one file, required; `supporting_files`) and **Classification** (Trade, Location, Scopes).
+- Seam 1: `apps/api/test/sar-dar-forms.test.ts` runs the publish checks on both files, and raises a SAR and a DAR on a Project on their own Form Version (a MAR's answers are refused on either).
+
 ---
 
 ## 3. Checklists
