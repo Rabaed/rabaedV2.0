@@ -24,6 +24,14 @@ export type CreateWorkItemRequest = z.input<typeof createWorkItemRequest>;
 
 export const createdWorkItem = z.object({ id: z.uuid() });
 
+/**
+ * The Types of a Module (the Submittals') the viewer's Participant may raise on a
+ * Project: each is bound to a published Workflow for it, whose Draft Step their
+ * base role holds. The New item's Type picker lists them, the MAR first (RP-590).
+ */
+export const raisableTypes = z.object({ types: z.array(z.object({ code: workItemTypeCode, name: bilingualText })) });
+export type RaisableTypes = z.infer<typeof raisableTypes>;
+
 /** Save draft: the Draft's answers so far, checked in draft mode (types, not required). */
 export const saveAnswersRequest = z.object({
   answers: formAnswers,

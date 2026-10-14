@@ -319,7 +319,7 @@ A Module's Work Items and the Member's Projects, as the API returns them. Presen
   itemHref={itemHref}
   linkAs={Link}
   onQueryChange={(q) => router.push(hrefFor(q))}
-  action={<Link href={newHref} className={buttonVariants()}>{t("newMar")}</Link>}
+  action={<Link href={newHref} className={buttonVariants()}>{t("newItem")}</Link>}
   viewSwitch={<WorkItemViewSwitch view={view} labels={switchLabels} hrefFor={(v) => hrefIn(v, query)} linkAs={Link} />}
   board={view === "kanban" ? <WorkItemBoard board={board} query={query} locale={locale} labels={boardLabels} listHrefFor={listHrefFor} itemHref={itemHref} linkAs={Link} onMove={openActionForm} /> : undefined}
 />

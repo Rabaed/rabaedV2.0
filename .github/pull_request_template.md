@@ -51,6 +51,7 @@ No Company may see another Company's work beyond `docs/visibility.md`. Tick ever
 - [ ] Screens and replies
 - [ ] Visibility Gap warnings
 - [ ] Rabaed Admin
+- [ ] Approved Supplier List
 - [ ] Participant Invitation by CR number
 
 ## Scenarios

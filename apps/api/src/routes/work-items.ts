@@ -19,6 +19,7 @@ import {
   linkSearchResults,
   listColumnLayout,
   moduleKeys,
+  raisableTypes,
   revisionChain,
   saveAnswersRequest,
   savedAnswers,
@@ -54,6 +55,7 @@ import {
   createWorkItem,
   getNewWorkItemForm,
   getNewWorkItemFormChoices,
+  getRaisableTypes,
   getWorkItem,
   getWorkItemForm,
   getWorkItemFormChoices,
@@ -183,6 +185,16 @@ export const workItemRoutes =
       async (request) => {
         const memberId = ctx.requireMember(request);
         return visibleOrNotFound(getWorkItem(ctx.db, memberId, idOrNotFound(request.params.workItemId), ctx.now()));
+      },
+    );
+
+    // The Types the Member may raise on a Project: the New item's Type picker (RP-590).
+    app.get(
+      "/v1/projects/:projectId/raisable-types",
+      { schema: { params: projectParams, response: { 200: raisableTypes } } },
+      async (request) => {
+        const memberId = ctx.requireMember(request);
+        return visibleOrNotFound(getRaisableTypes(ctx.db, memberId, idOrNotFound(request.params.projectId)));
       },
     );
 

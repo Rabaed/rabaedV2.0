@@ -64,8 +64,8 @@ As built (RP-437, WF-14): the Rabaed Default Workflows, Forms and Screens are JS
 | Type | Module | Workflow | Form | Outcomes |
 |---|---|---|---|---|
 | MAR, Material Submittal | Submittals | `MAR.json`, Version 3 | `MAR.json`, Version 5 | Review Codes |
-| SAR, Shop Drawing Submittal | Submittals | `MAR.json` (the MAR's shape) | the MAR's Form, until its own exists | Review Codes |
-| DAR, Document Submittal | Submittals | `MAR.json` (the MAR's shape) | the MAR's Form, until its own exists | Review Codes |
+| SAR, Supplier Approval Request | Submittals | `MAR.json` (the MAR's shape) | the MAR's Form, until its own exists | Review Codes |
+| DAR, Document Approval Request | Submittals | `MAR.json` (the MAR's shape) | the MAR's Form, until its own exists | Review Codes |
 | WIR, Work Inspection Request | Inspections | `WIR.json`: Draft → Contractor PM (Return to Contractor Engineer) → Submit (Cover Note) → Consultant inspection → Passed, Passed with Comments (its `items_to_create` rows become Comments) or Failed (re-inspection by Revision) | `WIR.json` | Inspection Results |
 | CMT, Comment | Snag List | `CMT.json`, Version 2 (Version 1 migrated), its Resolve showing the Screen `comment_resolution` | `CMT.json`, Version 2: no Resolution section (Version 1 migrated) | None |
 
